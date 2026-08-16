@@ -68,7 +68,7 @@ The `render/` subdirectory implements the Mustache rendering engine used by `res
 
 Attaches `res.renderView(viewName, next, callback)` to the response. When called:
 
-1. Fetches the full view directly from `Template.getFullView()` using the blog ID, template ID, and view name.
+1. Fetches the full view from `Template.getFullView()` via an in-process LRU cache (`full-view-cache.js`). The cache key includes `blogID`, `cacheID`, `templateID`, and `viewName`. A changed `blog.cacheID` invalidates all cached views for that blog.
 2. Merges view-level locals, query parameters, template locals, and blog locals into `res.locals`.
 3. Calls `render/retrieve/index.js` to fetch any named locals declared as required by the view.
 4. Calls `render/load/index.js` to augment every entry object found in `res.locals`.
@@ -108,7 +108,7 @@ Each file in this directory is a named retriever. The retrieve system (`render/r
 | `is` / `is_active` / `isActive` | `is.js`, `is_active.js` | Boolean helpers for conditional rendering. |
 | `latest_entry` / `latestEntry` | `latest_entry.js` | The most recently published entry. |
 | `plugin` | `plugin.js` | CSS and JS URLs for individually requested plugins. |
-| `popular_tags` | `popular_tags.js` | Tags fetched directly through `Tags.popular` on each invocation, formatted for rendering, sorted by entry count, and limited to 100. |
+| `popular_tags` | `popular_tags.js` | Tags sorted by entry count (top 100), cached with an LRU cache keyed by `blogID` and `cacheID`. |
 | `posts` | `posts.js` | A paginated page of entries, respecting template `sort_by`, `sort_order`, `page_size`, and `path_prefix` locals. |
 | `recent_entries` / `recentEntries` | `recent_entries.js` | A small list of recent entries (`Entries.getRecent`). |
 | `rgb` | `rgb.js` | Lambda that converts a CSS color value to an RGB component string (e.g. `255, 128, 0`) for use in `rgba()`. |
@@ -245,7 +245,7 @@ The `static/` directory contains global assets served to all blogs under paths s
 | `models/blog` | `vhosts.js`, `render/view.js` |
 | `models/entry` | `draft.js`, `entry.js`, `search.js`, `render/retrieve/tagged.js`, `render/load/augment.js` |
 | `models/entries` | `entries.js`, `draft.js`, `entry.js`, `random.js`, `render/retrieve/` |
-| `models/template` | `loadTemplate.js`, `view.js`, `render/middleware.js`, `render/view.js` |
+| `models/template` | `loadTemplate.js`, `view.js`, `render/full-view-cache.js`, `render/view.js` |
 | `models/tags` | `render/retrieve/all_tags.js`, `render/retrieve/tagged.js`, `render/retrieve/popular_tags.js`, `render/load/augment.js` |
 | `models/redirects` | `error.js` |
 | `models/user` | `robots.js` |
@@ -266,6 +266,7 @@ The `static/` directory contains global assets served to all blogs under paths s
 | `parse5` | HTML parsing for CDN link rewriting |
 | `cheerio` | HTML manipulation in `absolute_urls.js` and `encode_xml.js` |
 | `moment` / `moment-timezone` | Date formatting in augment and retrieve functions |
+| `lru-cache` | In-process LRU caches for full view and popular tags |
 | `lodash` | Utility functions in retrieve and augment |
 | `async` | Parallel/series async control |
 | `mime-types` | Content-Type detection in `assets.js` |
@@ -289,4 +290,4 @@ Integration tests live in `app/blog/tests/`. The shared test setup in `tests/uti
 
 Test files cover: archives, assets, CDN manifest, dates, draft rendering and SSE streaming, entries listing, entry rendering, error handling, robots.txt, routing edge cases, search, tagged pages, template rendering, domain verification, and vhost resolution logic.
 
-Render-specific tests live in `app/blog/render/tests/` and cover: locals rendering, main Mustache rendering, entry augmentation, and the complete middleware pipeline.
+Render-specific tests live in `app/blog/render/tests/` and cover: full-view caching, locals rendering, main Mustache rendering, entry augmentation, and the complete middleware pipeline.
