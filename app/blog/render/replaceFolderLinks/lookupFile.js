@@ -37,8 +37,11 @@ const pathCache = new Cache();
 const globalStaticFiles = new Set();
 
 async function lookupFile(blogID, cacheID, value) {
-  // strip any hash from the value
-  value = value.split("#")[0];
+  // strip any hash from the value, but keep it so we can
+  // reattach it to whichever URL we end up returning
+  const hashIndex = value.indexOf("#");
+  const hash_ = hashIndex > -1 ? value.slice(hashIndex) : "";
+  value = hashIndex > -1 ? value.slice(0, hashIndex) : value;
 
   // if the value contains url-encoded characters, decode it
   if (value.includes("%")) {
@@ -66,13 +69,13 @@ async function lookupFile(blogID, cacheID, value) {
     try {
       // check  if the file exists in the global static files set
       if (globalStaticFiles.has(pathFromValue)) {
-        return `${config.cdn.origin}${value}`;
+        return `${config.cdn.origin}${value}${hash_}`;
       }
       await fs.stat(filePath);
       // store the pathFromValue in set of valid static files
       // so we can use it later
       globalStaticFiles.add(pathFromValue);
-      return `${config.cdn.origin}${value}`;
+      return `${config.cdn.origin}${value}${hash_}`;
     } catch (err) {}
   }
 
@@ -106,7 +109,7 @@ async function lookupFile(blogID, cacheID, value) {
     }
   }
 
-  return `${config.cdn.origin}/folder/${result}${query}`;
+  return `${config.cdn.origin}/folder/${result}${query}${hash_}`;
 }
 
 async function getStat(blogFolder, path) {

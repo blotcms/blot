@@ -65,6 +65,50 @@ describe("backlinks", function () {
   });
 
 
+  it("does not create a backlink from a resolved link to a plain local file", async function () {
+    const fs = require("fs-extra");
+    await fs.outputFile(this.blogDirectory + "/beach.jpg", "fake image data");
+
+    await this.write({
+      path: "/vacation.txt",
+      content: "Title: Vacation\n\n[Download](beach.jpg)",
+    });
+    await this.template(backlinksTemplate);
+
+    // The link resolves to /beach.jpg (a real file, not a post),
+    // so it must not show up as a backlink anywhere.
+    const body = await this.text("/vacation");
+    expect(body).not.toContain("Backlinks:");
+  });
+
+  it("still creates a backlink from an anchor sharing a path with one the autoImage plugin removed", async function () {
+    // /photo.jpg is a real file, but also deliberately set as another
+    // entry's custom permalink, so the two collide.
+    const fs = require("fs-extra");
+    await fs.outputFile(this.blogDirectory + "/photo.jpg", "fake image data");
+
+    await this.write({
+      path: "/other.txt",
+      content: "Title: Other\nLink: /photo.jpg\n\nContent.",
+    });
+    await this.write({
+      path: "/linker.txt",
+      content:
+        // The bare [photo.jpg](photo.jpg) link resolves to /photo.jpg
+        // and gets converted by the default autoImage plugin into an
+        // <img> - removing that anchor entirely. The second, separate
+        // link is unrelated and must still register as a real
+        // backlink to Other, even though it shares the same resolved
+        // path with the anchor that was just removed.
+        "Title: Linker\n\n[photo.jpg](photo.jpg)\n\n[See other](/photo.jpg)",
+    });
+    await this.template(backlinksTemplate);
+
+    const body = await this.text("/photo.jpg");
+    expect(body).toContain("Backlinks:");
+    expect(body).toContain("Linker");
+  });
+
   it("resolves backlinks from double-encoded href values", async function () {
     await this.write({
       path: "/target.txt",

@@ -378,6 +378,37 @@ describe("asset middleware", function () {
     }
   });
 
+  it("resolves a relative link to a local file even when the post's URL differs from its folder location", async function () {
+    await this.template({ "entry.html": "{{{entry.html}}}" });
+    await fs.outputFile(this.blogDirectory + "/Photos/beach.jpg", "fake image data");
+
+    await this.write({
+      path: "/Photos/vacation.txt",
+      content: [
+        "Title: Vacation",
+        "Link: /totally/different/url",
+        "",
+        "[Download](beach.jpg)",
+      ].join("\n"),
+    });
+
+    // The post's published URL has nothing to do with the folder
+    // it lives in, so a naive "resolve relative to the current
+    // page" (the old, broken behavior) would 404. The link should
+    // resolve against the file's real location instead - the render
+    // pipeline then rewrites that into a versioned CDN URL, same as
+    // it would for an <img src>.
+    const body = await this.text("/totally/different/url");
+    expect(body).toContain("/Photos/beach.jpg");
+
+    const hrefMatch = body.match(/href="([^"]+\/Photos\/beach\.jpg)"/);
+    expect(hrefMatch).not.toBeNull();
+
+    const res = await this.fetch(hrefMatch[1]);
+    expect(res.status).toEqual(200);
+    expect(await res.text()).toEqual("fake image data");
+  });
+
   it("does not crash on malformed percent-encoding in asset requests", async function () {
     await this.write({ path: "/malformed.txt", content: "Bad" });
 

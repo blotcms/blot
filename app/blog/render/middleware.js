@@ -3,7 +3,7 @@ var loadView = require("./load");
 var renderLocals = require("./locals");
 var finalRender = require("./main");
 var retrieve = require("./retrieve");
-var Template = require("models/template");
+var getCachedFullView = require("./full-view-cache");
 
 var ensure = require("helper/ensure");
 var extend = require("helper/extend");
@@ -48,10 +48,8 @@ module.exports = function (req, res, _next) {
 
     if (callback) callback = callOnce(callback);
 
-    Template.getFullView(
-      blog.id,
-      templateID,
-      name,
+    getCachedFullView(
+      { blog: blog, template: req.template, viewName: name },
       function (err, response) {
         if (err) {
           return next(err);

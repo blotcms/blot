@@ -53,4 +53,68 @@ describe("autoImage plugin", function () {
       expect(newHTML).toContain(`<a href`);
     }
   });
+
+  it("converts a link whose href was resolved to an absolute path but whose text is still the original relative reference", async () => {
+    const html = '<p><a href="/posts/photo.jpg">photo.jpg</a></p>';
+    const newHTML = await runTest(html);
+    expect(newHTML).toContain('<img src="/posts/photo.jpg"');
+    expect(newHTML).not.toContain("<a href");
+  });
+
+  it("converts a link whose text is a relative path in a subdirectory", async () => {
+    const html = '<p><a href="/posts/2024/photo.jpg">2024/photo.jpg</a></p>';
+    const newHTML = await runTest(html);
+    expect(newHTML).toContain('<img src="/posts/2024/photo.jpg"');
+    expect(newHTML).not.toContain("<a href");
+  });
+
+  it("does not touch a link with a custom label, even nested markup", async () => {
+    const html = '<p><a href="/posts/photo.jpg"><em>My photo</em></a></p>';
+    const newHTML = await runTest(html);
+    expect(newHTML).toContain("<em>My photo</em>");
+    expect(newHTML).not.toContain("<img src");
+  });
+
+  it("converts a link whose text is a parent-relative reference", async () => {
+    const html = '<p><a href="/posts/photo.jpg">../photo.jpg</a></p>';
+    const newHTML = await runTest(html);
+    expect(newHTML).toContain('<img src="/posts/photo.jpg"');
+    expect(newHTML).not.toContain("<a href");
+  });
+
+  it("converts a link whose text has internal dot-segments", async () => {
+    const html = '<p><a href="/posts/photo.jpg">foo/../photo.jpg</a></p>';
+    const newHTML = await runTest(html);
+    expect(newHTML).toContain('<img src="/posts/photo.jpg"');
+    expect(newHTML).not.toContain("<a href");
+  });
+
+  it("converts a bare link whose label has surrounding whitespace", async () => {
+    // The href is already trimmed and resolved by the time this
+    // plugin runs, but the label's text is never touched.
+    const html = '<p><a href="/posts/photo.jpg"> photo.jpg </a></p>';
+    const newHTML = await runTest(html);
+    expect(newHTML).toContain('<img src="/posts/photo.jpg"');
+    expect(newHTML).not.toContain("<a href");
+  });
+
+  it("converts a bare link whose label has an embedded newline", async () => {
+    // The href is already stripped of embedded tab/newline
+    // characters by the time this plugin runs, but the label's
+    // text is never touched.
+    const html = '<p><a href="/posts/photo.jpg">photo.\njpg</a></p>';
+    const newHTML = await runTest(html);
+    expect(newHTML).toContain('<img src="/posts/photo.jpg"');
+    expect(newHTML).not.toContain("<a href");
+  });
+
+  it("converts a bare link whose label uses backslashes", async () => {
+    // The href is already normalized from backslashes to forward
+    // slashes and resolved by the time this plugin runs, but the
+    // label's text is never touched.
+    const html = '<p><a href="/posts/photos/photo.jpg">photos\\photo.jpg</a></p>';
+    const newHTML = await runTest(html);
+    expect(newHTML).toContain('<img src="/posts/photos/photo.jpg"');
+    expect(newHTML).not.toContain("<a href");
+  });
 });

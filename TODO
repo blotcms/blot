@@ -256,6 +256,11 @@ Fix bug with huge draft crashing the sync server /a327ex/drafts/it_follows.txt
 
 Fix bug linking to relative pdf in subfolders, e.g. Pages/File.md '[](./file.pdf)' breaks
 
+Fix bug: relative <a href> resolution in app/build/dependencies/index.js doesn't percent-encode filesystem-derived path segments before writing them into the href
+- e.g. a post inside a folder named "folder#1" linking to a relative report.pdf resolves to /folder#1/report.pdf, which browsers parse as path /folder plus fragment 1/report.pdf, so the sibling file is never requested (same issue with "?" in a folder name)
+- pre-existing issue, also affects img src/link href resolution in the same module, not just anchors
+- flagged by Codex review on PR #1643 (https://github.com/davidmerfield/blot/pull/1643#discussion_r3789725057 area)
+
 Fix possible bug with changing folder name in Google Drive from uppercase to lowercase (what happens to file inside?). Is this related to entry lookup for deleted files? How was the missing ghost file undeleteable? the case of one variant was deleted but the other was not. The case of the ID mismatched. The folder lock was stuck.
 
 Fix bug with Elizabeth's Google Docs (export 403 file exceeds...)

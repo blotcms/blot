@@ -50,6 +50,7 @@
     "http-auth": "3.2.3",
     "katex": "0.16.21",
     "lodash": "4.17.21",
+    "lru-cache": "^11.2.6",
     "mailgun.js": "11.0.0",
     "marked": "12.0.1",
     "mime-types": "3.0.1",
