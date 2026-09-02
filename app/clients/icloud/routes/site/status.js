@@ -119,7 +119,38 @@ module.exports = async function (req, res) {
       await initialTransfer(blogID);
     } catch (err) {
       return handle("Error in initialTransfer", err);
-    } 
+    }
+  } else if (status.error) {
+    // The macserver reported a setup failure (e.g. an invalid sharing link, or
+    // the shared folder never appeared). The error is already persisted by the
+    // database.store() call above, which drives the dashboard error UI; here we
+    // also push it onto the live status line. Reply before taking the sync lock
+    // so we never hold the macserver's status request open while it waits on us.
+    try {
+      res.send("ok");
+
+      const { done, folder } = await establishSyncLock(blogID);
+
+      try {
+        folder.status("Error: " + status.error);
+        console.log("Setup failed", { blogID, error: status.error });
+      } finally {
+        await done();
+      }
+    } catch (err) {
+      if (
+        handleSyncLockError({
+          err,
+          res,
+          blogID,
+          action: "status setup error",
+        })
+      ) {
+        return;
+      }
+
+      return handle("Error handling setup failure status", err);
+    }
   } else {
     try {
       const { done, folder } = await establishSyncLock(blogID);

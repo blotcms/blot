@@ -98,7 +98,7 @@ try
     end tell
 
     -- Wait for the iCloud sharing system dialog to appear
-    set timeoutSeconds to 5 -- Set the timeout (in seconds)
+    set timeoutSeconds to 10 -- Set the timeout (in seconds)
     set startTime to (current date) -- Track the start time
 
     tell application "System Events"
@@ -137,8 +137,8 @@ try
         end tell
     end tell
 
-    -- wait 1 second for the Finder to process the new folder if it was created
-    delay 1
+    -- wait 2 seconds for the Finder to process the new folder if it was created
+    delay 2
     
     -- Close all Finder windows after interacting with the sharing dialog
     tell application "Finder"
@@ -157,7 +157,7 @@ async function acceptSharingLink(sharingLink) {
     ({ stdout, stderr } = await exec(
       "osascript",
       ["-e", appleScript(escapedSharingLink)],
-      { timeout: 15000 }
+      { timeout: 25000 }
     ));
   } catch (error) {
     console.error(
@@ -199,18 +199,39 @@ export default async (req, res) => {
     return res.status(400).send("Missing sharingLink header");
   }
 
-  console.log(clfdate(), 
+  console.log(clfdate(),
     `Received setup request for blogID: ${blogID}, sharingLink: ${sharingLink}`
   );
 
-  try {
-    await setupBlog(blogID, sharingLink);
-    console.log(clfdate(), `Setup complete for blogID: ${blogID}`);
-    await status(blogID, { acceptedSharingLink: true, error: null });
-    return res.sendStatus(200);
-  } catch (error) {
-    console.error(clfdate(), `Setup failed for blogID (${blogID}):`, error);
-    await status(blogID, { acceptedSharingLink: false, error: error.message });
-    return res.status(500).json({ error: error.message });
-  }
+  // Setting up a folder involves driving the Finder UI via AppleScript and then
+  // waiting for iCloud to materialise the shared folder, which can take tens of
+  // seconds. Rather than holding the HTTP connection open for the whole
+  // operation, acknowledge the request immediately and report the outcome
+  // asynchronously via the status client (POST /status on the remote server).
+  const reportStatus = async (payload) => {
+    try {
+      await status(blogID, payload);
+    } catch (error) {
+      console.error(
+        clfdate(),
+        `Failed to report setup status for blogID (${blogID}):`,
+        error
+      );
+    }
+  };
+
+  setupBlog(blogID, sharingLink)
+    .then(() => {
+      console.log(clfdate(), `Setup complete for blogID: ${blogID}`);
+      return reportStatus({ acceptedSharingLink: true, error: null });
+    })
+    .catch((error) => {
+      console.error(clfdate(), `Setup failed for blogID (${blogID}):`, error);
+      return reportStatus({
+        acceptedSharingLink: false,
+        error: error.message,
+      });
+    });
+
+  return res.status(202).json({ accepted: true });
 };
