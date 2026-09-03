@@ -20,8 +20,15 @@ site.locals.cdn = cdnURLHelper({cacheID, viewDirectory: VIEW_DIRECTORY});
 // Hide the header added by Express
 site.disable("x-powered-by");
 
-// Trusts secure requests terminated by NGINX, as far as I know
-site.set("trust proxy", true);
+// Trust exactly one proxy hop (the NGINX/OpenResty edge on 127.0.0.1).
+//
+// This is the app that actually handles /sites/log-in (mounted via vhost in
+// server.js), so Express resolves req.ip using this app's trust setting. NGINX
+// appends the real client address to X-Forwarded-For, so `true` would trust the
+// whole chain and let a client spoof req.ip via the left-most XFF entry,
+// bypassing the log-in rate limiter. A hop count of 1 pins req.ip to the
+// address NGINX appended. Keep this in sync with server.js.
+site.set("trust proxy", 1);
 
 // Register the engine we will use to
 // render the views.
