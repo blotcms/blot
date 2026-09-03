@@ -30,21 +30,16 @@ site.get("/authenticate", cookieParser(), function (req, res, next) {
   }
   let redirect =
     "/sites/" +
-    handle +
+    encodeURIComponent(handle) +
     "/client/dropbox/authenticate?code=" +
-    req.query.code;
+    encodeURIComponent(req.query.code || "");
   if (req.query.full_access) redirect += "&full_access=true";
 
   res.clearCookie("blogToAuthenticate");
-  res.send(`<html>
-<head>
-<meta http-equiv="refresh" content="0;URL='${redirect}'"/>
-<script type="text/javascript">window.location='${redirect}'</script>
-</head>
-<body>
-<noscript><p>Continue to <a href="${redirect}">${redirect}</a>.</p></noscript>
-</body>
-</html>`);
+  // redirect is a same-origin path with all user input percent-encoded, so
+  // no untrusted value is interpolated into HTML or JS. res.redirect emits a
+  // Location header plus a safe default body.
+  res.redirect(redirect);
 });
 
 // We keep a dictionary of synced blogs for testing
