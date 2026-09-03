@@ -1,5 +1,16 @@
 # iCloud Client
 
+Set up a VNC tunnel (port 5900 not public):
+ssh -N remote-vnc
+
+Connect from development mac:
+open vnc://127.0.0.1:5901
+
+ssh macserver
+
+***
+
+
 The iCloud client integrates Blot with Apple's iCloud Drive, enabling users to synchronize their blog content with a shared iCloud Drive folder. This client manages bidirectional synchronization between Blot's local file storage and a user's iCloud Drive, handling file uploads, downloads, deletions, and conflict resolution.
 
 ## Purpose and Role
