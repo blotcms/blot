@@ -185,7 +185,7 @@ module.exports = function (options = {}) {
             return reject(new Error("CSRF token not found in form"));
           }
 
-          if (this.cookies.csrf !== csrfTokenMatch[1]) {
+          if (this.cookies["__Host-csrf"] !== csrfTokenMatch[1]) {
             return reject(
               new Error("CSRF token mismatch between form and cookie")
             );
@@ -242,7 +242,7 @@ module.exports = function (options = {}) {
         return done(new Error("CSRF token not found in login page"));
       }
 
-      if (this.cookies.csrf !== csrfTokenMatch[1]) {
+      if (this.cookies["__Host-csrf"] !== csrfTokenMatch[1]) {
         return done(
           new Error("CSRF token mismatch between login form and cookie")
         );
