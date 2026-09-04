@@ -3,6 +3,8 @@
 /* Injected styles from templates and external sources */
 {{{app_css}}}
 {{{body_font.styles}}}
+{{{heading_font.styles}}}
+{{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 {{> toc-styles.css}}
 {{> multi-lingual-styles.css}}
@@ -18,6 +20,14 @@
   --font-size: {{{font_size}}}px;
   --line-height: {{{line_height}}};
   {{/body_font}}
+  {{#heading_font}}
+  --heading-font-family: {{{stack}}};
+  --heading-font-size: {{{font_size}}}px;
+  --heading-line-height: {{{line_height}}};
+  {{/heading_font}}
+  {{#syntax_highlighter_font}}
+  --code-font-family: {{{stack}}};
+  {{/syntax_highlighter_font}}
   --red-color: rgba({{#rgb}}{{red_color}}{{/rgb}}, 1);
   --red-color-border: rgba({{#rgb}}{{red_color}}{{/rgb}}, 0.1);
   --red-color-background: rgba({{#rgb}}{{red_color}}{{/rgb}}, 0.02);
@@ -35,7 +45,8 @@
   --border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.06);
   --link-color: {{link_color}};
 
-  --padding: 1.4rem;
+  --padding: {{spacing}}rem;
+  --navigation-width: {{navigation_width}}px;
 
   --navigation-height: 3em;
   --navigation-background-color: var(--background-color);
@@ -83,9 +94,9 @@ hr {
 }
 
 .column {
-  width: 250px; /* Fixed width for sidebars */
+  width: var(--navigation-width);
   flex-shrink: 0;
-  padding: 15px;
+  padding: calc({{spacing}} * 15px);
   box-sizing: border-box;
   align-items: stretch;
   position: relative;
@@ -106,7 +117,7 @@ hr {
 
 .main {
   flex-grow: 1; /* Main content takes up remaining space */
-  padding: 0 4em 10em;
+  padding: 0 calc({{spacing}} * 4em) calc({{spacing}} * 10em);
   min-height: 100vh;
   box-sizing: border-box;
 }
@@ -128,7 +139,7 @@ hr {
 .control-label {
   visibility: hidden;
   cursor: pointer;
-  color: #007BFF;
+  color: var(--link-color);
   text-decoration: none;
 }
 
@@ -191,7 +202,7 @@ hr {
   }
 
   .main {
-    padding: 0 1em;
+    padding: 0 calc({{spacing}} * 1em);
   }
 }
 
@@ -210,6 +221,20 @@ hr {
   overflow: hidden;
   position: relative;
   z-index: 2;
+  background-color: var(--navigation-background-color);
+  {{#sticky_navigation}}
+  position: sticky;
+  top: 0;
+  {{/sticky_navigation}}
+  {{#is.navigation_alignment.left}}
+  justify-content: flex-start;
+  {{/is.navigation_alignment.left}}
+  {{#is.navigation_alignment.right}}
+  justify-content: flex-end;
+  {{/is.navigation_alignment.right}}
+  {{#is.navigation_alignment.center}}
+  justify-content: center;
+  {{/is.navigation_alignment.center}}
 }
 
 /* This forces the navigation links to wrap when they would
@@ -291,15 +316,28 @@ hr {
   flex-wrap: none;
   gap: 1rem;
   margin-right: 1em;
+  {{#is.navigation_alignment.justified}}
+  flex-grow: 1;
+  {{/is.navigation_alignment.justified}}
 }
 
 .index-link a {
   color:var(--text-color);
   font-weight: 600;
+  font-family: var(--heading-font-family);
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.index-link .site-logo {
+  height: 1.4em;
+  width: auto;
+  display: block;
 }
 
 .nav-container {
-  padding: 0 1em;
+  padding: 0 var(--padding);
 }
 
 .nav-label {
@@ -383,6 +421,11 @@ code.hljs {
 code {
   border: 1px solid var(--border-color);
   border-radius: 4px;
+  font-family: var(--code-font-family);
+}
+
+pre {
+  font-family: var(--code-font-family);
 }
 
 .code-group, code {
@@ -400,7 +443,7 @@ code {
 details {
   max-width: 600px;
   border-top: 1px solid var(--border-color);
-  background: white;
+  background: var(--background-color);
 }
 
 summary {
@@ -430,7 +473,7 @@ summary::after {
   top: 50%;
   width: 12px;
   height: 2px;
-  background-color: #4b5563;
+  background-color: var(--medium-text-color);
   transition: all 0.3s ease;
 }
 
@@ -520,24 +563,47 @@ a {
   widows: 2;
 }
 
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--heading-font-family);
+  line-height: var(--heading-line-height);
+}
+
 h1 {
-  font-size: 24px;
-font-weight: 550;
-line-height: 28.6333px;
-margin-bottom: 24px;
+  font-size: calc(var(--heading-font-size) * 1.5);
+  font-weight: 550;
+  margin-bottom: 24px;
 }
 
 h2 {
-  font-size: 20px;
-  line-height: 22.67px;
+  font-size: calc(var(--heading-font-size) * 1.25);
   font-weight: 550;
   margin-bottom: 24px;
   margin-top: 36px;
 }
 
 h3 {
-  font-size: 18px;
-  line-height: 22.67px;
+  font-size: calc(var(--heading-font-size) * 1.125);
+  font-weight: 550;
+  margin-bottom: 24px;
+  margin-top: 24px;
+}
+
+h4 {
+  font-size: var(--heading-font-size);
+  font-weight: 550;
+  margin-bottom: 24px;
+  margin-top: 24px;
+}
+
+h5 {
+  font-size: calc(var(--heading-font-size) * 0.875);
+  font-weight: 550;
+  margin-bottom: 24px;
+  margin-top: 24px;
+}
+
+h6 {
+  font-size: calc(var(--heading-font-size) * 0.75);
   font-weight: 550;
   margin-bottom: 24px;
   margin-top: 24px;

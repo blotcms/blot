@@ -1,8 +1,8 @@
 {{> head}}
 
 <nav class="nav-container">
-  <div class="index-link" style="flex-grow: 1;">
-    <a href="/">{{title}}</a>
+  <div class="index-link">
+    <a href="/">{{#logo_url}}<img src="{{{logo_url}}}" alt="" class="site-logo">{{/logo_url}}{{title}}</a>
   </div>
 
   <ul class="nav-links menubar">
@@ -40,7 +40,7 @@
 
     <p>
       {{#entries}}
-      <a class="full-line" href="{{{url}}}"><em>{{title}}</em> &nbsp;<span class="small">{{date}}</span></a>
+      <a class="full-line" href="{{{url}}}"><em>{{title}}</em> &nbsp;{{^hide_dates}}{{#date}}<span class="small">{{#formatDate}}{{date_display}}{{/formatDate}}</span>{{/date}}{{/hide_dates}}</a>
       {{/entries}}
     </p>
 

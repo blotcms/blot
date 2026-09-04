@@ -10,7 +10,7 @@
     list-style: none;
     padding: 0;
     margin: 0;
-    font-family: system-ui, -apple-system, sans-serif;
+    font-family: var(--font-family);
   }
   
   .sidebar li {

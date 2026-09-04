@@ -16,7 +16,7 @@
     {{#entries}}
       <li>
         <a href="{{{url}}}">{{title}}</a>
-        <span class="small">{{#formatDate}}MMM D, YYYY{{/formatDate}}</span>
+        {{^hide_dates}}<span class="small">{{#formatDate}}{{date_display}}{{/formatDate}}</span>{{/hide_dates}}
       </li>
     {{/entries}}
     </ul>

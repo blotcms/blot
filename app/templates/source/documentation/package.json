@@ -2,9 +2,10 @@
 	"name": "Documentation",
 	"locals": {
 		"page_size": 100,
+		"page_size_range": [1, 100],
 		"sort_by": "id",
 		"spacing": 1,
-		"dark_slides_background": true,
+		"spacing_range": [0, 4],
 		"background_color": "#fff",
 		"text_color": "#000",
 		"link_color": "#007bff",
@@ -28,6 +29,21 @@
 		"body_font": {
 			"id": "system-sans"
 		},
+		"heading_font": {
+			"id": "system-sans"
+		},
+		"favicon_url": "",
+		"logo_url": "",
+		"sticky_navigation": false,
+		"navigation_alignment": "justified",
+		"navigation_alignment_options": [
+			"justified",
+			"left",
+			"right",
+			"center"
+		],
+		"navigation_width": 250,
+		"navigation_width_range": [160, 400],
 		"demo_folder": "documentation"
 	},
 	"enabled": true,

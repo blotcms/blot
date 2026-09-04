@@ -20,19 +20,19 @@
     border-bottom: 1px solid transparent;
     cursor: pointer;
     font-size: 0.8em;
-    font-family: system-ui, -apple-system, sans-serif;
-    color: #6b7280;
+    font-family: var(--font-family);
+    color: var(--light-text-color);
     transition: all 0.2s;
   }
   
   .code-tab.active {
-    color: #3b82f6;
-    border-bottom-color: #3b82f6;
+    color: var(--link-color);
+    border-bottom-color: var(--link-color);
   }
   
   .code-tab:hover:not(.active) {
-    color: #374151;
-    border-bottom-color: #e5e7eb;
+    color: var(--text-color);
+    border-bottom-color: var(--border-color);
   }
   
   .copy-button {
@@ -43,14 +43,14 @@
     border: none;
     background: none;
     font-size: 0.8em;
-    color: #6b7280;
+    color: var(--light-text-color);
     cursor: pointer;
     transition: all 0.2s;
   }
   
   .copy-button:hover {
-    background: #f9fafb;
-    color: #374151;
+    background: var(--off-background-color);
+    color: var(--text-color);
   }
   
   .code-block-wrapper {
