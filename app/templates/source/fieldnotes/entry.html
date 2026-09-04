@@ -34,7 +34,7 @@
 								<div
 									id="jp-relatedposts"
 									class="jp-relatedposts"
-									style="display: block;"
+									{{#show_related_posts}}style="display: block;"{{/show_related_posts}}
 								>
 									<h3 class="jp-relatedposts-headline"><em>Related</em></h3>
 									<div
@@ -44,6 +44,7 @@
 										{{#recent_entries}} {{> related}} {{/recent_entries}}
 									{{#entry}}
 									</div>
+									{{#show_related_posts}}
 									<script type="text/javascript">
 										var related = document.querySelector(
 											".jp-relatedposts-items"
@@ -58,18 +59,20 @@
 											related.removeChild(related.lastChild);
 										}
 									</script>
+									{{/show_related_posts}}
 								</div>
 							</div>
 							<!-- .entry-content -->
 
 							<footer class="entry-footer">
 								<div class="entry-meta">
+									{{#date}}
 									<span class="posted-on"
 										><a href="{{{url}}}" rel="bookmark"
 											><time
 												class="entry-date published"
 												datetime="{{#formatDate}}YYYY-MM-DD[T]HH:mm:ssZ{{/formatDate}}"
-												>{{#date}}{{date}}{{/date}}</time
+												>{{date}}</time
 											><time
 												class="updated"
 												datetime="{{#formatUpdated}}YYYY-MM-DD[T]HH:mm:ssZ{{/formatUpdated}}"
@@ -77,6 +80,14 @@
 											></a
 										></span
 									>
+									{{/date}}
+									{{#author}}
+									<span class="byline">
+										<span class="author vcard">
+											<a class="url fn n" href="{{{siteURL}}}">{{author}}</a>
+										</span>
+									</span>
+									{{/author}}
 								</div>
 								{{#tags.length}}
 								<span class="tags-links">

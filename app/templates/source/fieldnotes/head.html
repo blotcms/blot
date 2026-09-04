@@ -12,18 +12,11 @@
 	{{^entry}}<meta name="description" content="{{> description}}">{{/entry}}
 
 	<link rel="profile" href="http://gmpg.org/xfn/11" />
-	<link rel="dns-prefetch" href="//fonts.googleapis.com" />
 	<link rel="alternate" type="application/rss+xml" title="RSS Feed for {{title}}" href="{{{siteURL}}}{{{feedURL}}}">
-	{{#avatar}}<link rel="icon" href="{{{avatar}}}" type="image/x-icon">{{/avatar}}
+	{{#favicon_url}}<link rel="icon" href="{{{favicon_url}}}" type="image/x-icon">{{/favicon_url}}
+	{{^favicon_url}}{{#avatar}}<link rel="icon" href="{{{avatar}}}" type="image/x-icon">{{/avatar}}{{/favicon_url}}
 	<link rel="preconnect" href="{{{cdn}}}" />
 	<link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}" type="text/css" media="all" />
-	<link
-		rel="stylesheet"
-		id="isola-source-sans-pro-css"
-		href="https://fonts.googleapis.com/css?family=Source+Sans+Pro%3A400%2C600%2C700%2C300italic%2C400italic%2C600italic%2C700italic&#038;subset=latin%2Clatin-ext&#038;ver=5.3.2"
-		type="text/css"
-		media="all"
-	/>
 
 	{{#entry}}
 	{{#absoluteURL}}

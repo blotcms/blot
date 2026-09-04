@@ -1,5 +1,22 @@
 {{{app_css}}}
 
+{{{body_font.styles}}}
+{{{syntax_highlighter_font.styles}}}
+
+:root {
+	--background-color: {{background_color}};
+	--text-color: {{text_color}};
+	--link-color: {{link_color}};
+	--header-background-color: {{header_background_color}};
+	--muted-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55);
+	--divider-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1);
+	{{#body_font}}
+	--body-font-family: {{{stack}}};
+	--body-font-size: {{{font_size}}}px;
+	--body-line-height: {{{line_height}}};
+	{{/body_font}}
+}
+
 /* START wp emoji */
 
 img.wp-smiley,
@@ -2990,3 +3007,159 @@ div#respond,
 }
 
 /* END relatedposts */
+
+{{{syntax_highlighter.styles}}}
+
+/* Dashboard-controlled Isola theme tokens. Later rules override the
+   hardcoded WordPress/Isola colors and type above. */
+body {
+	background: var(--background-color);
+	color: var(--text-color);
+	font-family: var(--body-font-family);
+	font-size: var(--body-font-size);
+	line-height: var(--body-line-height);
+}
+
+button,
+input,
+select,
+textarea {
+	background: var(--background-color);
+	font-family: var(--body-font-family);
+}
+
+button,
+input[type="button"],
+input[type="reset"],
+input[type="submit"],
+#infinite-handle span {
+	background-color: var(--muted-color);
+	color: var(--background-color);
+}
+
+a,
+a:visited {
+	color: var(--link-color);
+}
+
+a:hover,
+a:focus,
+a:active {
+	color: color-mix(in srgb, var(--link-color) 75%, white);
+}
+
+.site-header {
+	background: var(--header-background-color);
+}
+
+{{#header_image_url}}
+.site-header-image div {
+	background-image: url("{{{header_image_url}}}");
+}
+{{/header_image_url}}
+
+.site-title a,
+.site-footer,
+.site-footer a,
+.main-navigation a,
+.page-title,
+.entry-footer,
+.entry-footer a,
+.widget-title,
+.widget-title a,
+#menu-close,
+#infinite-footer .container,
+#infinite-footer .container a {
+	color: var(--muted-color);
+}
+
+.main-navigation a:hover,
+.main-navigation .current_page_item > a,
+.main-navigation .current-menu-item > a {
+	color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.35);
+}
+
+.entry-title a {
+	color: var(--text-color);
+}
+
+.toggle .menu-toggle-image,
+.header-search .search-icon .icon {
+	fill: var(--muted-color);
+}
+
+.toggle:hover .menu-toggle-image,
+.toggle:focus .menu-toggle-image,
+.toggle:active .menu-toggle-image {
+	fill: var(--text-color);
+}
+
+#toggle-sidebar {
+	background-color: var(--header-background-color);
+}
+
+hr {
+	background-color: var(--divider-color);
+}
+
+.page-header,
+.main-navigation a {
+	border-color: var(--divider-color);
+}
+
+.byline a,
+.edit-link a,
+.tags-links a,
+.posted-on a,
+.reply a,
+.comments-link a {
+	background: var(--divider-color);
+	border-color: var(--divider-color);
+}
+
+.archive-date {
+	color: var(--muted-color);
+}
+
+{{#author}}
+.byline {
+	display: inline-block;
+}
+{{/author}}
+
+#infinite-footer .container {
+	background: var(--background-color);
+}
+
+@media screen and (min-width: 60em) {
+	.site-content,
+	.site-footer {
+		border-color: var(--divider-color);
+	}
+
+	.site-footer {
+		border-top-color: var(--divider-color);
+	}
+}
+
+pre {
+	{{#syntax_highlighter_font}}
+	font-family: {{{stack}}};
+	font-size: {{{font_size}}}px;
+	{{/syntax_highlighter_font}}
+}
+
+code,
+kbd,
+tt,
+var {
+	{{#syntax_highlighter_font}}
+	font-family: {{{stack}}};
+	{{/syntax_highlighter_font}}
+}
+
+pre code.hljs {
+	display: block;
+	overflow-x: auto;
+	padding: 26px;
+}

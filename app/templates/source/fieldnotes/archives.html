@@ -16,7 +16,7 @@
               <h2>{{year}}</h2>
               {{#months}}
               {{#entries}}
-            <a href="{{{url}}}">{{title}}</a>&nbsp;&nbsp;<span style="color:#777">{{date}}</span>
+            <a href="{{{url}}}">{{title}}</a>{{#date}}&nbsp;&nbsp;<span class="archive-date">{{date}}</span>{{/date}}
               <br>
                 {{/entries}}
                 {{/months}}

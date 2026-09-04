@@ -7,7 +7,27 @@
     "hide_dates": false,
     "date_display": "MMMM D, Y",
     "author": "",
-    "subtitle": ""
+    "subtitle": "",
+    "background_color": "#ffffff",
+    "text_color": "#333333",
+    "link_color": "#44c2b2",
+    "header_background_color": "#efefef",
+    "body_font": {
+      "id": "source-sans",
+      "font_size": 16,
+      "line_height": 1.625
+    },
+    "favicon_url": "",
+    "header_image_url": "",
+    "infinite_scroll": true,
+    "show_related_posts": true,
+    "syntax_highlighter": {
+      "id": "stackoverflow-light"
+    },
+    "syntax_highlighter_font": {
+      "id": "courier-new",
+      "font_size": 13
+    }
   },
   "views": {
     "archives.html": {
