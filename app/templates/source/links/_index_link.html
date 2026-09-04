@@ -1,8 +1,13 @@
 <div style="flex-basis:25%;flex-grow:1">
   <a href="/" title="Index of {{title}}" class="light index-link">
+    {{#logo_url}}
+    <span class="site-logo" style="display:inline-block;width:1.25em;height:1.25em;margin-right:0.5em;flex-shrink:0;background: url({{{logo_url}}}) no-repeat center center;background-size: cover;"></span>
+    {{/logo_url}}
+    {{^logo_url}}
     {{#avatar}}
     <span style="display:inline-block;width:1.25em;height:1.25em;margin-right:0.5em;flex-shrink:0;background: url({{{avatar_url}}}) no-repeat center center;background-size: cover;"></span>
     {{/avatar}}
+    {{/logo_url}}
     {{title}}
   </a>
 </div>

@@ -10,8 +10,8 @@
   </div>
 </div>
 <div style="visibility:hidden">
-  <a href="/" style="display:block;font-weight:300;color:rgba(0,0,0,.4);text-decoration:none;padding:0rem 3rem;margin-right:6rem">
-      {{#avatar}}<img style="max-width:1.65rem;max-height:1.65rem;margin-right:1rem;vertical-align:middle" src="{{avatar}}">{{/avatar}}{{title}}</a>
+  <a href="/" style="display:block;font-weight:300;color:var(--light-text-color);text-decoration:none;padding:0rem 3rem;margin-right:6rem">
+      {{#logo_url}}<img style="max-width:1.65rem;max-height:1.65rem;margin-right:1rem;vertical-align:middle" src="{{{logo_url}}}">{{/logo_url}}{{^logo_url}}{{#avatar}}<img style="max-width:1.65rem;max-height:1.65rem;margin-right:1rem;vertical-align:middle" src="{{avatar}}">{{/avatar}}{{/logo_url}}{{title}}</a>
   {{! This blocks out the neccessary width for the sidebar so the grid lines up}}
 
 </div>

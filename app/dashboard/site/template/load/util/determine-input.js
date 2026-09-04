@@ -15,17 +15,22 @@ module.exports = (key, locals, map) => {
 
   if (locals[key + "_range"] !== undefined || key === "page_size") {
     const range = locals[key + "_range"];
+    const mapEntry = map && map[key];
 
-    // Use != null so an explicit 0 bound is respected rather than
-    // treated as absent by a truthy check.
+    // Use != null so a legitimate zero bound is preserved rather than
+    // falling through to the defaults (e.g. a spacing range of [0, 3]).
     const min =
       range && range[0] != null
         ? range[0]
-        : (map[key] && map[key].min) || 1;
+        : mapEntry && mapEntry.min != null
+        ? mapEntry.min
+        : 1;
     const max =
       range && range[1] != null
         ? range[1]
-        : (map[key] && map[key].max) || 60;
+        : mapEntry && mapEntry.max != null
+        ? mapEntry.max
+        : 60;
 
     return {
       key,

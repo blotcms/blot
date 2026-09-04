@@ -7,10 +7,45 @@
     "hide_dates": false,
     "date_display": "MMMM D, Y",
     "infinite_scroll": true,
-    "body_font": {},
+    "sticky_navigation": false,
+    "footer_navigation": true,
+    "show_tags": true,
+    "navigation_alignment": "right",
+    "navigation_alignment_options": [
+      "left",
+      "center",
+      "right"
+    ],
+    "spacing": 1,
+    "spacing_range": [
+      0,
+      3
+    ],
+    "columns": 4,
+    "columns_range": [
+      1,
+      6
+    ],
+    "body_font": {
+      "id": "system-sans",
+      "font_size": 16,
+      "line_height": 1.4
+    },
+    "heading_font": {
+      "id": "system-sans",
+      "font_size": 16,
+      "line_height": 1.2
+    },
     "syntax_highlighter": {
       "id": "stackoverflow-light"
     },
+    "syntax_highlighter_font": {
+      "id": "system-mono",
+      "font_size": 16,
+      "line_height": 1.6
+    },
+    "favicon_url": "",
+    "logo_url": "",
     "demo_folder": "bjorn"
   },
   "isPublic": true,

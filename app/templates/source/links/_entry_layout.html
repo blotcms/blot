@@ -78,7 +78,7 @@
       {{/FocalLength}}
   </div>
   {{/exif}}
-    <p style="margin:0 0 0.7rem"><small>Added {{date}} under {{#tags}} {{#last}}{{^first}}and{{/first}}{{/last}} <a href="/tagged/{{slug}}">{{tag}}</a>{{^last}},{{/last}} {{/tags}}</small></p>
+    <p style="margin:0 0 0.7rem"><small>{{#date}}Added {{date}}{{#tags.length}} under{{/tags.length}}{{/date}} {{#tags}} {{#last}}{{^first}}and{{/first}}{{/last}} <a href="/tagged/{{slug}}">{{tag}}</a>{{^last}},{{/last}} {{/tags}}</small></p>
   </div>
   <br>
   <br>

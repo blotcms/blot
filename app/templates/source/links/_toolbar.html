@@ -2,12 +2,14 @@
 
   <div class="tags-container">
 
+    {{#show_tags}}
     {{#popular_tags.length}}
     <div id="tags" style="padding-left:0.325rem">
       {{#popular_tags}}<a href="/{{^active}}tagged/{{slug}}{{/active}}" class="{{active}}"><strong>{{tag}}</strong><span>{{tag}}</span></a>{{/popular_tags}}
     </div>
 
     {{/popular_tags.length}}
+    {{/show_tags}}
   </div>
 
   {{^infinite_scroll}}

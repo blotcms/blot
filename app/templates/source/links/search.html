@@ -1,7 +1,7 @@
 {{> header}}
 
-<div style="flex-grow:1">
-  <hr style="border:none;margin:0;border-top:1px solid #f2f2f2">
+<div class="search-results" style="flex-grow:1">
+  <hr style="border:none;margin:0;border-top:1px solid var(--light-border-color)">
   <div style="padding:1.3rem 2rem">
     {{#query}}
     <h1>Search results for {{query}}</h1>
@@ -28,7 +28,7 @@
         {{title}}
       </span>
       <br>
-      {{date}}
+      {{#date}}{{date}}{{/date}}
       {{/thumbnail.medium}}
     </span>
   </span>
@@ -36,7 +36,7 @@
   <br>
   {{#thumbnail.medium}}
   <span>{{title}}</span>
-  <span class="date">Added {{date}}</span>
+  {{#date}}<span class="date">Added {{date}}</span>{{/date}}
   {{/thumbnail.medium}}
 </a>
 

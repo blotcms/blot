@@ -2,6 +2,8 @@
 on the services page of the dashboard */
 {{{app_css}}}
 {{{body_font.styles}}}
+{{{heading_font.styles}}}
+{{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
 /* CSS CUSTOM PROPERTIES */
@@ -16,13 +18,26 @@ on the services page of the dashboard */
   --text-color-05: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.05);
   --text-color-07: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.07);
   --text-color-08: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.08);
-  --font-stack: {{{body_font.stack}}};
-  --font-size: {{body_font.font_size}}px;
-  --line-height: {{body_font.line_height}};
+  {{#body_font}}
+  --font-stack: {{{stack}}};
+  --font-size: {{font_size}}px;
+  --line-height: {{line_height}};
+  {{/body_font}}
+  {{#heading_font}}
+  --heading-font-stack: {{{stack}}};
+  --heading-font-size: {{font_size}}px;
+  --heading-line-height: {{line_height}};
+  {{/heading_font}}
+  {{#syntax_highlighter_font}}
+  --code-font-stack: {{{stack}}};
+  --code-font-size: {{font_size}}px;
+  --code-line-height: {{line_height}};
+  {{/syntax_highlighter_font}}
   --font-size-small: 0.875em;
   --border-width: 0.0625em;
   --border-width-thick: calc(var(--border-width) * 2);
-  --spacing: 1;
+  --spacing: {{spacing}};
+  --columns: {{columns}};
   --space: calc(var(--spacing) * 1em);
   --space-033: calc(var(--space) * 0.33);
   --space-065: calc(var(--space) * 0.65);
@@ -59,6 +74,12 @@ body.entry-container {
 .header {
   display: flex;
   min-height: 3.4em;
+  background: var(--background-color);
+  {{#sticky_navigation}}
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  {{/sticky_navigation}}
 }
 
 .header>* {
@@ -73,7 +94,9 @@ body.entry-container {
   padding: var(--space-065) var(--space-13);
   white-space: nowrap;
   text-rendering: optimizeLegibility;
-  font-size: 1em;
+  font-family: var(--heading-font-stack, var(--font-stack));
+  font-size: var(--heading-font-size, 1em);
+  line-height: var(--heading-line-height, var(--line-height));
   font-weight: 600
 }
 
@@ -143,7 +166,7 @@ a.light:active img {
   position: relative;
   padding: 0.8em;
   margin-bottom: var(--space-2);
-  width: 25%;
+  width: calc(100% / var(--columns));
   box-sizing: border-box;
   font-size: 0.8125em;
   color: var(--medium-text-color);
@@ -365,9 +388,50 @@ form input:focus,
 
 /* ENTRY/ARTICLE STYLES */
 
+.entry h1,
+.entry h2,
+.entry h3,
+.entry h4,
+.entry h5,
+.entry h6,
+.archives h1,
+.tags h1,
+.tags h3,
+.search-results h1,
+.error-page h1 {
+  font-family: var(--heading-font-stack, var(--font-stack));
+  line-height: var(--heading-line-height, 1.2);
+}
+
+/* Heading scale, expressed as multiples of the configurable heading
+   font size so the dashboard size / line-height controls reach every
+   heading this template styles, not just the entry h1/h2. */
+.entry h1,
+.archives h1,
+.tags h1,
+.search-results h1,
+.error-page h1 {
+  font-size: calc(2 * var(--heading-font-size, 1em));
+}
+
+.entry h3,
+.tags h3 {
+  font-size: calc(1.17 * var(--heading-font-size, 1em));
+}
+
+.entry h4 {
+  font-size: var(--heading-font-size, 1em);
+}
+
+.entry h5 {
+  font-size: calc(0.83 * var(--heading-font-size, 1em));
+}
+
+.entry h6 {
+  font-size: calc(0.67 * var(--heading-font-size, 1em));
+}
+
 .entry h1 {
-  font-size: 2em;
-  line-height: 1.2;
   margin-top: var(--space-2);
   margin-bottom: 1em;
 }
@@ -430,11 +494,17 @@ form input:focus,
 }
 
 .entry h2 {
-  font-size: 1.5em;
+  font-size: calc(1.5 * var(--heading-font-size, 1em));
   text-rendering: optimizelegibility;
   font-weight: bold;
   margin: .75em 0;
-  line-height: 1.6em;
+}
+
+.entry pre,
+.entry code {
+  font-family: var(--code-font-stack, monospace);
+  font-size: var(--code-font-size, 1em);
+  line-height: var(--code-line-height, 1.5);
 }
 
 .entry pre {
@@ -686,6 +756,16 @@ table a {
   color: var(--medium-text-color);
 }
 
+{{^show_tags}}
+{{#infinite_scroll}}
+/* Nothing left to show in the toolbar: no tags bar and no pagination
+   controls (those only render when infinite scroll is off). */
+.toolbar {
+  display: none;
+}
+{{/infinite_scroll}}
+{{/show_tags}}
+
 /* used by infinite scroll */
 .next-page {
   display: none;
@@ -697,10 +777,17 @@ label {
 
 .nav {
   display: flex;
-  justify-content: flex-end;
   flex-basis: 25%;
   flex-grow: 1;
   align-items: center;
+  /* Defaults to flex-end; navigation_alignment overrides it below */
+  justify-content: flex-end;
+  {{#is.navigation_alignment.left}}
+  justify-content: flex-start;
+  {{/is.navigation_alignment.left}}
+  {{#is.navigation_alignment.center}}
+  justify-content: center;
+  {{/is.navigation_alignment.center}}
 }
 
 .nav a {
@@ -840,7 +927,7 @@ input#toggle {
 /* 1200px and below */
 @media screen and (max-width: 1200px) {
   .post {
-    width: 33.3333%
+    width: calc(100% / min(3, var(--columns)));
   }
 }
 
@@ -912,7 +999,7 @@ input#toggle {
 /* 900px and below */
 @media screen and (max-width: 900px) {
   .post {
-    width: 50%
+    width: calc(100% / min(2, var(--columns)));
   }
 }
 

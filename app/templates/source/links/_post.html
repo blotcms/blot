@@ -13,7 +13,7 @@
   font-size:24px">
         {{title}}
       </span>
-      <span style="font-size:13px;display:block;">Added <span date-from-now="{{dateStamp}}" >{{date}}</span></span>
+      {{#date}}<span style="font-size:13px;display:block;">Added <span date-from-now="{{dateStamp}}" >{{date}}</span></span>{{/date}}
     </span>
       {{/thumbnail.medium}}
     </span>
@@ -22,7 +22,7 @@
   <span style="display:block;box-sizing:border-box;padding:0 2rem;width:100%;white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;">{{title}}</span>
-  <span class="date">Added       <span date-from-now="{{dateStamp}}">{{date}}</span>
-  </span>
+  {{#date}}<span class="date">Added       <span date-from-now="{{dateStamp}}">{{date}}</span>
+  </span>{{/date}}
   {{/thumbnail.medium}}
 </a>
