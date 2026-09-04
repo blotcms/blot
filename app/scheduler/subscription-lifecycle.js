@@ -12,12 +12,35 @@ function deleteUserAccount(user, callback) {
   callback();
 }
 
+function periodEndedAtISO(details) {
+  return details.periodEndedAt
+    ? new Date(details.periodEndedAt).toISOString()
+    : "unknown";
+}
+
 module.exports = function processSubscriptionLifecycle(callback) {
   callback = callback || function () {};
 
   var disabled = 0;
   var deleted = 0;
   var enabled = 0;
+  var cancelledDueForDeletion = [];
+
+  function queueCancelledDeletion(user, details, next) {
+    if (!subscriptionLifecycle.deletionDue(user)) return next();
+
+    cancelledDueForDeletion.push({
+      email: user.email,
+      subscriptionExpiredOn: periodEndedAtISO(details),
+    });
+
+    deleteUserAccount(user, function (deleteErr) {
+      if (deleteErr) return next(deleteErr);
+
+      deleted += 1;
+      next();
+    });
+  }
 
   eachUser(
     function (user, next) {
@@ -104,44 +127,11 @@ module.exports = function processSubscriptionLifecycle(callback) {
         return User.disable(user, function (disableErr) {
           if (disableErr) return next(disableErr);
           disabled += 1;
-
-          if (!subscriptionLifecycle.deletionDue(user)) return next();
-
-          var periodEndedAtISO = details.periodEndedAt
-            ? new Date(details.periodEndedAt).toISOString()
-            : "unknown";
-
-          deleteUserAccount(user, function (deleteErr) {
-            if (deleteErr) return next(deleteErr);
-
-            email.DELETED_CANCELLED_SUBSCRIPTION_EXPIRED("", {
-              email: user.email,
-              subscriptionExpiredOn: periodEndedAtISO,
-            });
-
-            deleted += 1;
-            next();
-          });
+          queueCancelledDeletion(user, details, next);
         });
       }
 
-      if (!subscriptionLifecycle.deletionDue(user)) return next();
-
-      var periodEndedAtISO = details.periodEndedAt
-        ? new Date(details.periodEndedAt).toISOString()
-        : "unknown";
-
-      deleteUserAccount(user, function (deleteErr) {
-        if (deleteErr) return next(deleteErr);
-
-        email.DELETED_CANCELLED_SUBSCRIPTION_EXPIRED("", {
-          email: user.email,
-          subscriptionExpiredOn: periodEndedAtISO,
-        });
-
-        deleted += 1;
-        next();
-      });
+      queueCancelledDeletion(user, details, next);
     },
     function (err) {
       if (err) {
@@ -157,7 +147,29 @@ module.exports = function processSubscriptionLifecycle(callback) {
         "deleted=" + deleted
       );
 
-      callback();
+      if (!cancelledDueForDeletion.length) return callback();
+
+      email.DELETED_CANCELLED_SUBSCRIPTION_EXPIRED(
+        "",
+        {
+          users: cancelledDueForDeletion,
+          count: cancelledDueForDeletion.length,
+          singular: cancelledDueForDeletion.length === 1,
+        },
+        function (emailErr) {
+          // Log and swallow: the lifecycle work already succeeded by this
+          // point, so a transient email failure shouldn't fail the job.
+          if (emailErr) {
+            console.log(
+              clfdate(),
+              "Subscription lifecycle job failed to send cancelled deletion summary",
+              emailErr
+            );
+          }
+
+          callback();
+        }
+      );
     }
   );
 };

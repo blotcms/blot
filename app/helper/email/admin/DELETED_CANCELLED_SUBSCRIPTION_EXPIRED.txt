@@ -1,9 +1,15 @@
-Blot did not delete cancelled user account (safe mode)
+{{count}} cancelled account{{^singular}}s{{/singular}} due for deletion
 
-Blot would have deleted user {{email}} because they had cancelled their subscription and their subscription expired on {{subscriptionExpiredOn}}, but account deletion is currently running in safe mode as a no-op while we verify production behavior.
+The following cancelled user accounts have passed the grace period and are due to be removed:
 
-To actually delete this account manually, run:
+{{#users}}
+- {{email}} (subscription expired {{subscriptionExpiredOn}})
+{{/users}}
 
+To remove these users, run:
+
+```
 ssh blot
 login
-node scripts/user/remove {{email}}
+node scripts/user/delete-cancelled-after-grace.js -fast
+```
