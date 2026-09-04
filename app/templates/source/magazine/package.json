@@ -8,10 +8,25 @@
     "hide_dates": false,
     "date_display": "MMMM D, Y",
     "relative_dates": false,
+    "sticky_navigation": true,
+    "show_tags_in_navigation": true,
+    "show_featured_entry": true,
     "syntax_highlighter": {
       "id": "stackoverflow-light"
     },
-    "body_font": {},
+    "syntax_highlighter_font": {
+      "id": "system-mono",
+      "font_size": 15
+    },
+    "body_font": {
+      "font_size": 16,
+      "line_height": 1.5
+    },
+    "heading_font": {
+      "id": "system-sans",
+      "font_size": 36,
+      "line_height": 1.15
+    },
     "demo_folder": "bjorn",
     "template_categories": [
       "writing"

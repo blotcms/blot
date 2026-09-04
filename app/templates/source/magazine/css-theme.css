@@ -1,5 +1,6 @@
-{{{coding_font.styles}}}
+{{{syntax_highlighter_font.styles}}}
 {{{body_font.styles}}}
+{{{heading_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
 /* This template tag is replaced by CSS when this file is rendered */
@@ -19,7 +20,11 @@
 html {
   margin: 0;
   padding: 0;
-  font-size: {{body_font.font_size}}px;
+  {{#body_font}}
+  font-size: {{font_size}}px;
+  line-height: {{line_height}};
+  font-family: {{{stack}}};
+  {{/body_font}}
   width: 100%;
   height: 100%;
 }
@@ -28,7 +33,9 @@ html {
 .bg-sidebar {background:{{background_color}}}
 
 html,body {
-  font-family: {{{body_font.stack}}}
+  {{#body_font}}
+  font-family: {{{stack}}};
+  {{/body_font}}
 }
 
 body {
@@ -57,12 +64,24 @@ body {
     color: rgba({{#rgb}}{{text_color}}{{/rgb}},.8);
 }
 
+.black-60 {
+    color: rgba({{#rgb}}{{text_color}}{{/rgb}},.6);
+}
+
 .black-50 {
     color: rgba({{#rgb}}{{text_color}}{{/rgb}},.5);
 }
 
 .black-30 {
     color: rgba({{#rgb}}{{text_color}}{{/rgb}},.3);
+}
+
+.white {
+    color: {{background_color}};
+}
+
+.bg-black-20 {
+    background-color: rgba({{#rgb}}{{text_color}}{{/rgb}},.2);
 }
 
 .b--black-10 {border-color:rgba({{#rgb}}{{text_color}}{{/rgb}},.10);}
@@ -77,15 +96,15 @@ body {
   }
 
 .bigfoot-footnote.is-scrollable .bigfoot-footnote__wrapper:before {
-    background-image: -webkit-gradient(linear, left top, left bottom, from({{background_color}}), to(rgba(250, 250, 250, 0)));
-    background-image: -webkit-linear-gradient(top, {{background_color}} 50%, rgba(250, 250, 250, 0) 100%);
-    background-image: linear-gradient(to bottom, {{background_color}} 50%, rgba(250, 250, 250, 0) 100%);
+    background-image: -webkit-gradient(linear, left top, left bottom, from({{background_color}}), to(rgba({{#rgb}}{{background_color}}{{/rgb}}, 0)));
+    background-image: -webkit-linear-gradient(top, {{background_color}} 50%, rgba({{#rgb}}{{background_color}}{{/rgb}}, 0) 100%);
+    background-image: linear-gradient(to bottom, {{background_color}} 50%, rgba({{#rgb}}{{background_color}}{{/rgb}}, 0) 100%);
 }
 
 .bigfoot-footnote.is-scrollable .bigfoot-footnote__wrapper:after {
-    background-image: -webkit-gradient(linear, left bottom, left top, from({{background_color}}), to(rgba(250, 250, 250, 0)));
-    background-image: -webkit-linear-gradient(bottom, {{background_color}}  50%, rgba(250, 250, 250, 0) 100%);
-    background-image: linear-gradient(to top, {{background_color}}  50%, rgba(250, 250, 250, 0) 100%);
+    background-image: -webkit-gradient(linear, left bottom, left top, from({{background_color}}), to(rgba({{#rgb}}{{background_color}}{{/rgb}}, 0)));
+    background-image: -webkit-linear-gradient(bottom, {{background_color}}  50%, rgba({{#rgb}}{{background_color}}{{/rgb}}, 0) 100%);
+    background-image: linear-gradient(to top, {{background_color}}  50%, rgba({{#rgb}}{{background_color}}{{/rgb}}, 0) 100%);
 }
 
 .bigfoot-footnote { 
@@ -167,8 +186,8 @@ table {
   line-height:1.5;
 }
 th {text-align:left}
-tr {border-bottom: 1px solid #eee}
-thead tr {border-color: #444}
+tr {border-bottom: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}},.08)}
+thead tr {border-color: rgba({{#rgb}}{{text_color}}{{/rgb}},.73)}
 td, th {padding-right: 2rem;padding-left:2rem} 
 td:first-child, th:first-child  {padding-left:0}
 td:last-child, th:last-child {padding-right:0}  
@@ -177,17 +196,21 @@ b, strong, h1, h2, h3, h4, h5, h6, th {font-weight:500}
   
 .entry b, .entry strong {font-weight: 600}
   
+pre, code {
+  {{#syntax_highlighter_font}}
+  font-family: {{{stack}}};
+  font-size: {{font_size}}px;
+  line-height: {{line_height}};
+  {{/syntax_highlighter_font}}
+}
+
 code {
-  font-family: {{{coding_font.stack}}};
   padding: .2rem .4rem;
   margin: 0;
-  font-size: 85%;
-  background-color: rgba(0,0,0,.04);
+  background-color: rgba({{#rgb}}{{text_color}}{{/rgb}},.04);
   border-radius: 3px;
   font-weight: 400;
 }
-  
-pre, code {font-size:.92rem}
   
 pre {margin:2rem 0}
   
@@ -201,7 +224,7 @@ a {
 
 a:not(.no-underline) {color:{{accent_color}};border-bottom:1px solid rgba({{#rgb}}{{accent_color}}{{/rgb}},0.25)}
 a:not(.no-underline):hover {border-color: rgba({{#rgb}}{{accent_color}}{{/rgb}},1)}
-a:hover {color:rgba({{accent_color}}, 1)}
+a:hover {color:{{accent_color}}}
 
 a.dim {transition: opacity .2s linear;opacity:1}
 a.dim:hover {opacity:0.8}
@@ -211,7 +234,7 @@ a.dim:visited {opacity:0.3}
 hr {
   margin: 3em auto;
   height: 2px;
-  background-color: #e7e7e5;
+  background-color: rgba({{#rgb}}{{text_color}}{{/rgb}},.1);
   border: none;
 }
   
@@ -219,6 +242,10 @@ hr {
 
 .nav {overflow:hidden;}
 .nav a.no-wrap {width:1000%;text-decoration:none;}
+.thumbnail-frame {
+  outline: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}},.12);
+  outline-offset: -1px;
+}
 
 /* 
 
@@ -278,7 +305,7 @@ blockquote, ol, ul {
   padding-left:4rem;
 }
 blockquote {
-  color:#676767;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}},.6);
 }
   
 .tracked-tight {letter-spacing:-0.01em}
@@ -299,7 +326,21 @@ h1, h2, h3 {margin: 3rem 0 2rem}
 
 h4, h5, h6, p, blockquote, ul, ol, table {margin:2rem 0}
   
-h1 {font-weight:900;margin:0;padding:0;font-size:2.25rem;}
+h1, h2, h3, h4, h5, h6, .fw9 {
+  {{#heading_font}}
+  font-family: {{{stack}}};
+  line-height: {{line_height}};
+  {{/heading_font}}
+}
+
+h1 {
+  font-weight:900;
+  margin:0;
+  padding:0;
+  {{#heading_font}}
+  font-size: {{font_size}}px;
+  {{/heading_font}}
+}
 
 /* Italic style sucks in font-weight: 900 */ 
 h1 em {font-style:normal}
@@ -332,20 +373,40 @@ h1 em {font-style:normal}
 .lh-title.f2, .lh-title.f1 {line-height:1}
 
 figure {margin:3rem 0;}
-figcaption, .caption {font-size:0.9rem;color:#666;margin:0rem 0 0;}
-figure cite, figure cite a {font-size:0.8rem;color:#999;font-style:normal;border:none!important;}
+figcaption, .caption {font-size:0.9rem;color:rgba({{#rgb}}{{text_color}}{{/rgb}},.6);margin:0rem 0 0;}
+figure cite, figure cite a {font-size:0.8rem;color:rgba({{#rgb}}{{text_color}}{{/rgb}},.4);font-style:normal;border:none!important;}
 
 .caption {display: block;margin-bottom: 3rem}
   
 
 /* Tachyons customizations */
-.lh-title.tracked-tight {line-height:1.15}
+.lh-title.tracked-tight {
+  {{#heading_font}}
+  line-height: {{line_height}};
+  {{/heading_font}}
+}
+
+/* Let the configured body line height reach the article body, which
+   Tachyons' .lh-copy would otherwise pin to 1.5 */
+.entry .lh-copy {
+  {{#body_font}}
+  line-height: {{line_height}};
+  {{/body_font}}
+}
 
 .pv2-5 {padding-top:0.75rem;padding-bottom:0.75rem}
 .w-15 {width:15%}
 .w-85 {width:85%}
 
-.nav {width:12rem}
+.nav {
+  width:12rem;
+  {{#sticky_navigation}}
+  position: fixed;
+  {{/sticky_navigation}}
+  {{^sticky_navigation}}
+  position: absolute;
+  {{/sticky_navigation}}
+}
 
 /* Month baseline fix on Archives page */
 h3.f6 {line-height:1.25;}
@@ -373,8 +434,8 @@ h3.f6 {line-height:1.25;}
   .nav {width:100%;padding-left:4rem}
   #open-nav, #open-nav-container {display:block}
   .nav {display:none} 
-  .nav-is-open #close-nav {display:block;right:1rem}
-  .nav-is-open .nav {display:block;z-index:668;left:0}
+  .nav-is-open #close-nav {display:block;right:1rem;position:fixed}
+  .nav-is-open .nav {display:block;z-index:668;left:0;position:fixed}
 }
 
 @media (max-width:500px) {

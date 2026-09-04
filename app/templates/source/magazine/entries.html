@@ -24,6 +24,7 @@
 {{! First page}}
 {{^pagination.previous}}
 
+{{#show_featured_entry}}
 <div class="clip-1 mt3 featured-entry" style="display:flex;flex-direction:row;flex-wrap:  wrap">
   {{#posts}}
   {{#first}}
@@ -33,8 +34,9 @@
   {{/first}}
   {{/posts}}
 </div>
+{{/show_featured_entry}}
 
-<div style="display:flex;flex-direction:row;flex-wrap:wrap"   {{#posts}} {{#first}} {{#thumbnail.large}} class="skip-1" {{/thumbnail.large}} {{/first}} {{/posts}}>
+<div style="display:flex;flex-direction:row;flex-wrap:wrap"   {{#show_featured_entry}}{{#posts}} {{#first}} {{#thumbnail.large}} class="skip-1" {{/thumbnail.large}} {{/first}} {{/posts}}{{/show_featured_entry}}>
 
   {{#posts}}
   {{> entry_line}}

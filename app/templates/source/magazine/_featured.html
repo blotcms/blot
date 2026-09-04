@@ -4,14 +4,14 @@
        <span class="db fr w-two-thirds">
         <span class="db" style="max-height:23.4375rem;overflow:hidden">
         {{#thumbnail.medium}}
-       <img style="width:100%;outline: 1px solid rgba(0,0,0,.12); outline-offset: -1px;vertical-align:bottom" src="{{{url}}}">
+       <img class="thumbnail-frame" style="width:100%;vertical-align:bottom" src="{{{url}}}">
         {{/thumbnail.medium}}
         </span>
 
       </span>
       
       <span class="db fl w-third" style="">
-      <span class="mr4 fw9 black-80 db lh-title f3 mb3 tracked-tight" style="line-height:1.1675">{{title}}</span>
+      <span class="mr4 fw9 black-80 db lh-title f3 mb3 tracked-tight">{{title}}</span>
       <span class="mr4 black-50 mr3 f6 lh-copy db" style="text-overflow:ellipsis;max-height:9.1875rem;overflow:hidden">{{summary}}</span>      
      <span class=" db f6 mt4 " style="height:1.5em;overflow:hidden">
         {{#date}}<span date-from-now="{{dateStamp}}" class="dib black-50 mr2">{{date}}</span>{{/date}}
@@ -22,7 +22,7 @@
 
       {{^summary}}
       <span class="w-100" style="">
-        <span class=" fw9 black-80 db lh-title f3 tracked-tight" style="line-height:1.1675">{{title}}</span>
+        <span class=" fw9 black-80 db lh-title f3 tracked-tight">{{title}}</span>
 
        <span class=" db f6 mt1 mb3" style="height:1.5em;overflow:hidden">
           {{#date}}<span date-from-now="{{dateStamp}}" class="dib black-50 mr2">{{date}}</span>{{/date}}
@@ -32,7 +32,7 @@
 
         <span class="db">
         {{#thumbnail.large}}
-       <img style="width:100%;outline: 1px solid rgba(0,0,0,.12); outline-offset: -1px;vertical-align:bottom" src="{{{url}}}">
+       <img class="thumbnail-frame" style="width:100%;vertical-align:bottom" src="{{{url}}}">
         {{/thumbnail.large}}
         </span>
       </span>

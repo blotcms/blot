@@ -20,17 +20,19 @@
           <a href="/"  id="open-nav" class="dib no-underline pa3 fr" style="transform:rotate(90deg);"><span class="bg-background black-50  w2 h2 lh2 tc black relative db fr f2 fw2" style="box-sizing:border-box"><span class="tc" style="">|||</span></span></a>
       </div>
       
-		<div class="nav fixed bg-sidebar br b--black-10 lh-copy pr5 " style="top:-10rem;bottom:-10rem;padding-top:10rem;padding-bottom:10rem;">
-			<a href="/" id="close-nav" style="z-index:2" class="relative no-underline fixed black-50 mt3  w2 h2 tc black db fl f2 fw1">✕</a>
+		<div class="nav bg-sidebar br b--black-10 lh-copy pr5 " style="top:-10rem;bottom:-10rem;padding-top:10rem;padding-bottom:10rem;">
+			<a href="/" id="close-nav" style="z-index:2" class="relative no-underline {{#sticky_navigation}}fixed{{/sticky_navigation}} black-50 mt3  w2 h2 tc black db fl f2 fw1">✕</a>
 			<a href="/" class="no-underline dim mv4 db f3 fw3 black-80" title="The homepage of {{title}}">
 				{{#avatar}}<img class="avatar v-btm" src="{{{avatar}}}">{{/avatar}}
 				{{^avatar}}{{title}}{{/avatar}}
 			</a>
+			{{#show_tags_in_navigation}}
 			<div class="clip-tags mt5 mb5">
 			{{#popular_tags}}
 				<a href="/tagged/{{slug}}"  class="no-underline no-wrap db f3 fw3 black-50"  title="{{slug}}">{{name}}</a>
 			{{/popular_tags}}
 			</div>
+			{{/show_tags_in_navigation}}
 			{{#menu}}
 			<a href="{{{url}}}"  class="no-underline no-wrap db black-80 f6 fw6 "  title="{{label}}">{{label}}</a>
 			{{/menu}}
