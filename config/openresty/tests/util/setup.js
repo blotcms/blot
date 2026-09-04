@@ -2,9 +2,30 @@ const server = require("./upstream-server");
 const fetch = require("node-fetch");
 const child_process = require("child_process");
 const mustache = require("mustache");
+const os = require("os");
 const { basename, resolve } = require("path");
 const fs = require("fs-extra");
 const { cache_directory } = require("../../..");
+
+function openrestyIdentity() {
+  // os.userInfo() throws when the running uid has no /etc/passwd entry (some
+  // sandboxed CI/agent environments), so only call it when the env var is
+  // absent and fall back to "root" if it still blows up.
+  let username = process.env.BLOT_OPENRESTY_TEST_USER;
+  if (!username) {
+    try {
+      username = os.userInfo().username;
+    } catch (e) {
+      username = "root";
+    }
+  }
+  // nginx `user` must exist. Root in Docker/CI uses group root; the original
+  // macOS default is staff.
+  const group =
+    process.env.BLOT_OPENRESTY_TEST_GROUP ||
+    (username === "root" ? "root" : "staff");
+  return { username, group };
+}
 
 const CACHER_DIRECTORY = resolve(__dirname + "/../../");
 const DATA_DIRECTORY = CACHER_DIRECTORY + "/tests/data";
@@ -68,10 +89,11 @@ module.exports = configFile => {
 
     this.cache_directory = cache_directory;
 
+    const identity = openrestyIdentity();
     const result = mustache.render(await fs.readFile(configInput, "utf8"), {
       ...config,
-      user: process.env.BLOT_OPENRESTY_TEST_USER || "David",
-      group: process.env.BLOT_OPENRESTY_TEST_GROUP || "staff",
+      user: identity.username,
+      group: identity.group,
       lua_directory: CACHER_DIRECTORY + "/conf",
       data_directory: DATA_DIRECTORY,
       cache_directory
