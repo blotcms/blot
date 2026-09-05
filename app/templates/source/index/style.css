@@ -1,6 +1,13 @@
 /* This template tag is replaced by CSS when this file is rendered */
 {{{app_css}}}
 
+/* Root background fills the canvas (body is only 32em wide). Needed for
+   screenshots with a transparent default background, and for dark-mode UAs. */
+html {
+  color-scheme: light;
+  background: #fff;
+}
+
 body {
   font: 1.125rem / 1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   word-wrap: break-word;
@@ -8,6 +15,7 @@ body {
   margin: 0 auto;
   padding: 2.5em 1.25em 10em;
   color: #333;
+  background: #fff;
 }
 
 /* Text */
@@ -31,7 +39,7 @@ blockquote,
 figcaption {orphans: 2; widows: 2;}
 
 small, .menu, .caption {color: #9e9e9e;font-weight: 400;}
-sup {font-size: 0.83;line-height: 0;vertical-align: super;}
+sup {font-size: 0.83em;line-height: 0;vertical-align: super;}
 
 .entry {position: relative;}
 .entry a {text-decoration: underline;}
@@ -107,7 +115,7 @@ input[type=submit] {
 
 }
 
-input#search:focus {
+input[name=q]:focus {
   outline: none;
 }
 
