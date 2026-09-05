@@ -3018,6 +3018,11 @@ body {
 	font-family: var(--body-font-family);
 	font-size: var(--body-font-size);
 	line-height: var(--body-line-height);
+	/* Isola sets `font-weight: 300` on body, which used to fall back to the
+	   Regular face because Source Sans Pro Light was never loaded. Now that a
+	   real 300 face ships with the self-hosted font, pin body copy to 400 to
+	   keep the original rendered weight. */
+	font-weight: 400;
 }
 
 button,
