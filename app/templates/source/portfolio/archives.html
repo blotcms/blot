@@ -3,7 +3,8 @@
 <style type="text/css">
   form {
     padding: {{spacing}}rem;
-    display: none;
+    {{#show_search}}display: block;{{/show_search}}
+    {{^show_search}}display: none;{{/show_search}}
   }
 
   input{
