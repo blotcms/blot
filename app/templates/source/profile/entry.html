@@ -74,14 +74,14 @@
       <header>
         <ul class="h-card p-author author hidden">
           <li>
-            <a class="u-url" href="/about" rel="me"><span class="p-author">{{author}}</span></a>
+            <a class="u-url" href="/" rel="me"><span class="p-name">{{#author}}{{author}}{{/author}}{{^author}}{{title}}{{/author}}</span></a>
           </li>
           {{#avatar}}<li>
             <img class="u-photo" src="{{{avatar}}}" alt="">
       </li>{{/avatar}}
-          <li>
+          {{#email}}<li>
             <a href="mailto:{{email}}" class="u-email" rel="me">{{email}}</a>
-          </li>
+          </li>{{/email}}
         </ul>
         {{{titleTag}}}
         <h2 class="headline">
@@ -99,8 +99,8 @@
       <a href="/">
     {{#avatar}}<img class="avatar" src="{{{avatar}}}">{{/avatar}}
     <div>
-      <span class="dark">{{author}}</span>
-      <span>{{description}}</span>
+      <span class="dark">{{#author}}{{author}}{{/author}}{{^author}}{{title}}{{/author}}</span>
+      {{#description}}<span>{{description}}</span>{{/description}}
     </div>
   </a>
     </section>
