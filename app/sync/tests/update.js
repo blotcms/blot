@@ -2,6 +2,14 @@ describe("update", function () {
   var sync = require("../index");
   var fs = require("fs-extra");
 
+  // The "rebuilds an entry if the source file changes" spec below writes
+  // the source file every 10ms for ~3 seconds while sync.update recurses
+  // to catch up (see app/sync/update/index.js), so it can legitimately take
+  // longer than Jasmine's 5 second default under load, causing an
+  // intermittent timeout (and a stray late failure attributed to whichever
+  // spec runs next).
+  global.test.timeout(15 * 1000);
+
   // Set up a test blog before each test
   global.test.blog();
 
