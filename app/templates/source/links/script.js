@@ -191,10 +191,10 @@ function loadResults() {
   dropdown.style.display = "block";
 
   linkToSearch.innerHTML = searchInput.value;
-  linkToSearch.parentNode.href =
-    "/search?q=" + encode_uri_component(searchInput.value);
+  var encodedQuery = encodeURIComponent(searchInput.value);
+  linkToSearch.parentNode.href = "/search?q=" + encodedQuery;
 
-  httpGetAsync("/search?q=" + query + "&debug=true", function(res) {
+  httpGetAsync("/search?q=" + encodedQuery + "&debug=true", function(res) {
     if (searchInput.value !== query) return;
 
     res = JSON.parse(res);
