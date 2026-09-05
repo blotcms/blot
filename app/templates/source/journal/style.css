@@ -75,15 +75,28 @@ text-decoration:underline;
 
 a:hover {text-decoration: underline}
 
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .logo, .nav {
 font-style: italic;
 font-size:1.4rem;
+line-height: 1;
 }
 
-.logo {float: left; text-decoration: none}
+.logo {text-decoration: none}
 
-.nav {float: right; text-decoration: none}
-.nav a {margin: 0 0 0 2em; text-decoration: none}
+.nav {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}
+.nav a {margin: 0 0 0 2em; text-decoration: none; line-height: 1;}
+
+.index-date {white-space: nowrap}
 
 .small, .light {color: {{text_color}}}
 
@@ -173,6 +186,7 @@ input[type="submit"] {
 @media screen and (max-width: 900px) {
   .index .margin {display: block;width: 100%}
   .container {margin: 1em 0 2em;padding-top:1.5em;border-top:1px solid rgba(0,0,0,0.1);min-width: auto}
+  .site-header {flex-wrap: wrap}
   .nav {float: none;display: block;margin: 0;width: 100%}
   .nav a {margin: 0 1em 0 0;color:{{text_color}};}
   
