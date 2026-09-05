@@ -14063,3 +14063,40 @@ div.a2a_full_footer {
 .show-5> :nth-child(5) {
   display: block !important;
 }
+
+/* Hide the Search menu item when the header already has a search form */
+#MagicMenu .navbar-nav.mr-auto .nav-item[data-url="/search" i],
+#MagicMenu .navbar-nav.mr-auto .nav-item[data-url="/search/" i],
+#MagicMenu .navbar-nav.mr-auto .nav-item[data-label="Search" i] {
+  display: none;
+}
+
+/* List rows mixed d-flex (nowrap) with col-md-* thumbs. Below md, those
+   columns are width:100%, so empty thumb boxes shoved copy into a sliver.
+   Flex only from md up; omit empty thumbs in markup; copy fills leftover space. */
+.entry-list-copy {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (max-width: 767.98px) {
+  .entry-list-item .entry-list-thumb,
+  .main-loop-card .entry-list-thumb {
+    width: 100%;
+    max-width: 100%;
+    flex-basis: 100%;
+    padding-left: 0;
+    margin-bottom: 0.75rem;
+  }
+
+  .main-loop-card .entry-list-copy {
+    padding-right: 0;
+  }
+}
+
+@media (min-width: 768px) {
+  .entry-list-item .entry-list-thumb,
+  .main-loop-card .entry-list-thumb {
+    flex-shrink: 0;
+  }
+}

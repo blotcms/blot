@@ -9,7 +9,7 @@
         <ul class="navbar-nav mr-auto d-flex align-items-center">
           <!--  Replace menu links here -->
           {{#menu}}
-          <li class="nav-item">
+          <li class="nav-item" data-url="{{{url}}}" data-label="{{label}}">
             <a class="nav-link" href="{{{url}}}">{{label}}</a>
           </li>
           {{/menu}}

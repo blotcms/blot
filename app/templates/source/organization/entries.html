@@ -31,6 +31,7 @@
                 <a class="excerpt" href="{{{url}}}">{{summary}}</a>
               </p>
               <div>
+                {{#tags.length}}
                 <small class="d-block text-muted">
             In <span class="catlist">
 
@@ -40,6 +41,7 @@
 
                 </span>
         </small>
+                {{/tags.length}}
                 <small class="text-muted">
             {{#date}}{{date}}{{/date}}
         </small>
@@ -55,18 +57,21 @@
 
           {{#posts}}
           {{^first}}
-          <div class="mb-3 d-flex align-items-center">
+          <div class="mb-3 d-md-flex align-items-center entry-list-item">
 
-            <div class="col-md-4">
+            {{#thumbnail.large.url}}
+            <div class="col-md-4 entry-list-thumb">
               <a href="{{{url}}}" class="w-100">
     <div style="background-image: url( {{{thumbnail.large.url}}}); height: 80px;    background-size: cover;    background-repeat: no-repeat;"></div>
     </a>
             </div>
+            {{/thumbnail.large.url}}
 
-            <div>
+            <div class="entry-list-copy">
               <h2 class="mb-2 h6 font-weight-bold">
                     <a class="text-dark" href="{{{url}}}">{{title}}</a>
                     </h2>
+              {{#tags.length}}
               <small class="d-block text-muted">
                         In <span class="catlist">
 
@@ -77,6 +82,7 @@
 
                         </span>
                     </small>
+              {{/tags.length}}
               <small class="text-muted">
             {{#date}}{{date}}{{/date}}
                     </small>
@@ -119,14 +125,15 @@
           <h4 class="font-weight-bold spanborder"><span>All Stories</span></h4>
 
           {{#posts}}
-          <div class="mb-5 d-flex justify-content-between main-loop-card">
-            <div class="pr-3">
+          <div class="mb-5 d-md-flex justify-content-between main-loop-card">
+            <div class="pr-3 entry-list-copy">
               <h2 class="mb-1 h4 font-weight-bold">
   <a class="text-dark" href="{{{url}}}">{{title}}</a>
   </h2>
               <p class="excerpt">
                 {{summary}}
               </p>
+              {{#tags.length}}
               <small class="d-block text-muted">
     In <span class="catlist">
 
@@ -135,15 +142,18 @@
       {{/tags}}
     </span>
   </small>
+              {{/tags.length}}
               <small class="text-muted">
             {{#date}}{{date}}{{/date}}
   </small>
             </div>
-            <div class="col-md-3 pr-0 text-right">
+            {{#thumbnail.large.url}}
+            <div class="col-md-3 pr-0 text-right entry-list-thumb">
               <a href="{{{url}}}">
-  <img class="w-100" src="{{{thumbnail.large.url}}}" alt="Red Riding Hood">
+  <img class="w-100" src="{{{thumbnail.large.url}}}" alt="{{title}}">
   </a>
             </div>
+            {{/thumbnail.large.url}}
           </div>
           {{/posts}}
 
@@ -188,6 +198,7 @@
                 <h6 class="font-weight-bold">
                     <a href="{{{url}}}" class="text-dark">{{title}}</a>
                 </h6>
+                {{#tags.length}}
                 <span class="d-block text-muted">
                     In <span class="catlist">
 
@@ -196,6 +207,7 @@
                 {{/tags}}
                 </span>
                 </span>
+                {{/tags.length}}
                 </span>
               </li>
               {{/tagged.featured}}
