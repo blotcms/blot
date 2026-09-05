@@ -31,10 +31,12 @@
 <div class="profile">
 <section id="wrapper">
 <header class="h-card">
-<a class="u-url" href="/">
-<img id="avatar" src="{{{avatar}}}">
+{{#avatar}}
+<a href="/">
+<img id="avatar" class="u-photo" src="{{{avatar}}}" alt="">
 </a>
-<h1 class="p-name" rel="me">{{title}}</h1>
+{{/avatar}}
+<h1 class="p-name"><a class="u-url" href="/" rel="me">{{title}}</a></h1>
 <h4 class="p-role">{{description}}</h4>
 </header>
 </section>
