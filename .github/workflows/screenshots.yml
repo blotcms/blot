@@ -30,7 +30,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [21.7.3]
+        node-version: [22.14.0]
         # Matches the version installed in the Dockerfile. The macOS build must
         # be arm64: the runners are Apple silicon and an x86_64 pandoc would be
         # translated by Rosetta on every conversion, which the folder build does
