@@ -43,6 +43,14 @@ describe("update", function () {
       }, 10);
 
       folder.update(path, function (err) {
+        // Stop the background writes as soon as update() has read the file.
+        // Left running, this interval can keep writing into the blog's
+        // folder well past this test's own completion (or a slow-CI
+        // Jasmine timeout), racing a later test's teardown and causing an
+        // ENOTEMPTY when it tries to remove a directory this interval is
+        // still writing into.
+        clearInterval(poll);
+
         if (err) testDone.fail(err);
 
         checkEntry(

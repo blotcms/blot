@@ -7,6 +7,33 @@ describe("Blogger importer", function () {
   const legacyFixture = path.join(__dirname, "fixtures", "export.xml");
   const atomFixture = path.join(__dirname, "fixtures", "export.atom");
 
+  // The full import pipeline runs helper.download_images / download_pdfs, which
+  // fetch() the external asset URLs embedded in export.xml (e.g.
+  // https://blogger.googleusercontent.com/...). Those real network calls make
+  // the pipeline specs depend on CI egress and time out intermittently
+  // (helper/download_images.js has its own 5s timeout that collides with
+  // Jasmine's). Stub fetch so downloads fail fast and offline; none of these
+  // specs assert on downloaded asset content.
+  let realFetch;
+
+  beforeAll(function () {
+    realFetch = global.fetch;
+    global.fetch = function () {
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        headers: { get: () => null },
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+        text: () => Promise.resolve(""),
+        json: () => Promise.resolve({}),
+      });
+    };
+  });
+
+  afterAll(function () {
+    global.fetch = realFetch;
+  });
+
   it("selects published posts and pages and maps Atom fields", async function () {
     const entries = await blogger.parse(await fs.readFile(legacyFixture, "utf8"));
     expect(entries.length).toBe(5);

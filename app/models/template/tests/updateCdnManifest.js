@@ -134,8 +134,16 @@ describe("updateCdnManifest", function () {
 
     expect(newHash).not.toBe(oldHash);
 
-    // Verify old rendered output is removed
-    const oldOutputAfter = await getAsync(oldRenderedKey);
+    // updateCdnManifest deletes the previous hash's rendered output in the
+    // background without awaiting it (util/updateCdnManifest.js: "Run cleanup
+    // in background - don't await"), so the delete can land just after
+    // getMetadata resolves. Poll rather than assume it completed synchronously.
+    let oldOutputAfter = await getAsync(oldRenderedKey);
+    const deadline = Date.now() + 5000;
+    while (oldOutputAfter !== null && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      oldOutputAfter = await getAsync(oldRenderedKey);
+    }
     expect(oldOutputAfter).toBeNull();
 
     // Verify new rendered output exists
