@@ -20,31 +20,33 @@
         {{#first}}
         <div class="col-md-6">
           <div class="card border-0 mb-4 box-shadow">
+            {{#thumbnail.large.url}}
             <a href="{{{url}}}">
-    <div style="background-image: url( {{{thumbnail.large.url}}}); height: 200px;    background-size: cover;    background-repeat: no-repeat;"></div>
-    </a>
+              <div class="entry-hero-thumb" style="background-image: url({{{thumbnail.large.url}}});"></div>
+            </a>
+            {{/thumbnail.large.url}}
             <div class="card-body px-0 pb-0 d-flex flex-column align-items-start">
               <h2 class="h4 font-weight-bold">
-    <a class="text-dark" href="{{{url}}}">{{title}}</a>
-    </h2>
+                <a class="text-dark" href="{{{url}}}">{{title}}</a>
+              </h2>
+              {{#summary}}
               <p class="card-text">
                 <a class="excerpt" href="{{{url}}}">{{summary}}</a>
               </p>
+              {{/summary}}
               <div>
                 {{#tags.length}}
                 <small class="d-block text-muted">
-            In <span class="catlist">
-
-                  {{#tags}}
-                <a class="text-capitalize text-muted smoothscroll" href="/tagged/{{slug}}">{{tag}}</a><span class="sep">, </span>
-                  {{/tags}}
-
-                </span>
-        </small>
+                  In <span class="catlist">
+                    {{#tags}}
+                    <a class="text-capitalize text-muted smoothscroll" href="/tagged/{{slug}}">{{tag}}</a><span class="sep">, </span>
+                    {{/tags}}
+                  </span>
+                </small>
                 {{/tags.length}}
                 <small class="text-muted">
-            {{#date}}{{date}}{{/date}}
-        </small>
+                  {{#date}}{{date}}{{/date}}
+                </small>
               </div>
             </div>
           </div>
@@ -62,30 +64,27 @@
             {{#thumbnail.large.url}}
             <div class="col-md-4 entry-list-thumb">
               <a href="{{{url}}}" class="w-100">
-    <div style="background-image: url( {{{thumbnail.large.url}}}); height: 80px;    background-size: cover;    background-repeat: no-repeat;"></div>
-    </a>
+                <div class="entry-list-thumb-image" style="background-image: url({{{thumbnail.large.url}}});"></div>
+              </a>
             </div>
             {{/thumbnail.large.url}}
 
             <div class="entry-list-copy">
               <h2 class="mb-2 h6 font-weight-bold">
-                    <a class="text-dark" href="{{{url}}}">{{title}}</a>
-                    </h2>
+                <a class="text-dark" href="{{{url}}}">{{title}}</a>
+              </h2>
               {{#tags.length}}
               <small class="d-block text-muted">
-                        In <span class="catlist">
-
-                        {{#tags}}
-                        <a class="text-capitalize text-muted smoothscroll" href="/tagged/{{slug}}">{{tag}}</a>{{^last}}, {{/last}}
-                        {{/tags}}
-
-
-                        </span>
-                    </small>
+                In <span class="catlist">
+                  {{#tags}}
+                  <a class="text-capitalize text-muted smoothscroll" href="/tagged/{{slug}}">{{tag}}</a>{{^last}}, {{/last}}
+                  {{/tags}}
+                </span>
+              </small>
               {{/tags.length}}
               <small class="text-muted">
-            {{#date}}{{date}}{{/date}}
-                    </small>
+                {{#date}}{{date}}{{/date}}
+              </small>
             </div>
           </div>
           {{/first}}
@@ -95,19 +94,23 @@
 
       </div>
 
-      <!-- Highlight (your own choice of highlighting a link, no post here) -->
+      <!-- Fifth post as a banner; hidden when the page has fewer than five posts -->
       <div class="jumbotron jumbotron-fluid jumbotron-home pt-0 pb-0 mb-2rem bg-lightblue position-relative show-5">
         {{#posts}}
-        <div class="pl-4 pr-0 h-100 tofront ">
-          <div class="row justify-content-between ">
-            <div class="col-md-6 pt-6 pb-6 align-self-center">
+        <div class="pl-4 pr-0 h-100 tofront">
+          <div class="row justify-content-between">
+            <div class="{{#thumbnail.large.url}}col-md-6{{/thumbnail.large.url}}{{^thumbnail.large.url}}col-12{{/thumbnail.large.url}} pt-6 pb-6 align-self-center">
               <h1 class="mb-3">{{title}}</h1>
+              {{#summary}}
               <p class="mb-3 lead">
                 {{summary}}
               </p>
+              {{/summary}}
               <a href="{{{url}}}" class="btn btn-dark">Read More</a>
             </div>
-            <div class="col-md-6 d-none d-md-block pr-0" style="background-size:cover;background-image:url({{{thumbnail.large.url}}});"> </div>
+            {{#thumbnail.large.url}}
+            <div class="col-md-6 d-none d-md-block pr-0 jumbotron-home-image" style="background-size:cover;background-image:url({{{thumbnail.large.url}}});"></div>
+            {{/thumbnail.large.url}}
           </div>
         </div>
         {{/posts}}
@@ -116,7 +119,7 @@
 
       <!--endif page url is / -->
 
-      <!-- Now the rest of the posts with the usual loop but with an offset:4 on the first page so we can skeep the first 4 posts displayed above -->
+      <!-- Remaining posts: the first page already showed 1 + 3 + the banner -->
 
       <div class="row mt-3">
 
@@ -128,30 +131,31 @@
           <div class="mb-5 d-md-flex justify-content-between main-loop-card">
             <div class="pr-3 entry-list-copy">
               <h2 class="mb-1 h4 font-weight-bold">
-  <a class="text-dark" href="{{{url}}}">{{title}}</a>
-  </h2>
+                <a class="text-dark" href="{{{url}}}">{{title}}</a>
+              </h2>
+              {{#summary}}
               <p class="excerpt">
                 {{summary}}
               </p>
+              {{/summary}}
               {{#tags.length}}
               <small class="d-block text-muted">
-    In <span class="catlist">
-
-      {{#tags}}
-    <a class="text-capitalize text-muted smoothscroll" href="/tagged/{{summary}}">{{tag}}</a><span class="sep">, </span>
-      {{/tags}}
-    </span>
-  </small>
+                In <span class="catlist">
+                  {{#tags}}
+                  <a class="text-capitalize text-muted smoothscroll" href="/tagged/{{slug}}">{{tag}}</a><span class="sep">, </span>
+                  {{/tags}}
+                </span>
+              </small>
               {{/tags.length}}
               <small class="text-muted">
-            {{#date}}{{date}}{{/date}}
-  </small>
+                {{#date}}{{date}}{{/date}}
+              </small>
             </div>
             {{#thumbnail.large.url}}
             <div class="col-md-3 pr-0 text-right entry-list-thumb">
               <a href="{{{url}}}">
-  <img class="w-100" src="{{{thumbnail.large.url}}}" alt="{{title}}">
-  </a>
+                <img class="w-100" src="{{{thumbnail.large.url}}}" alt="{{title}}">
+              </a>
             </div>
             {{/thumbnail.large.url}}
           </div>
@@ -188,30 +192,27 @@
 
         <div class="col-md-4">
           <div class="sticky-top sticky-top-offset">
-            <h4 class="font-weight-bold spanborder"><span>Featured</span></h4>
+            <h4 class="font-weight-bold spanborder"><span>Latest</span></h4>
             <ol class="list-featured clip-5">
 
-              {{#all_entries}}
-              {{#tagged.featured}}
+              {{#recent_entries}}
               <li class="mb-4">
                 <span>
-                <h6 class="font-weight-bold">
+                  <h6 class="font-weight-bold">
                     <a href="{{{url}}}" class="text-dark">{{title}}</a>
-                </h6>
-                {{#tags.length}}
-                <span class="d-block text-muted">
+                  </h6>
+                  {{#tags.length}}
+                  <span class="d-block text-muted">
                     In <span class="catlist">
-
-                    {{#tags}}
-                    <a class="text-capitalize text-muted smoothscroll" href="{{{url}}}">{{tag}}</a><span class="sep">, </span>
-                {{/tags}}
-                </span>
-                </span>
-                {{/tags.length}}
+                      {{#tags}}
+                      <a class="text-capitalize text-muted smoothscroll" href="/tagged/{{slug}}">{{tag}}</a><span class="sep">, </span>
+                      {{/tags}}
+                    </span>
+                  </span>
+                  {{/tags.length}}
                 </span>
               </li>
-              {{/tagged.featured}}
-              {{/all_entries}}
+              {{/recent_entries}}
 
             </ol>
           </div>
