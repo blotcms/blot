@@ -188,7 +188,7 @@ blockquote {
 }
 
 .entry a {
-  text-decoration: underlink;
+  text-decoration: underline;
   color: {{links_color}};
 }
 

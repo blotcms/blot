@@ -195,3 +195,29 @@ p, div, section {position: relative;overflow: visible;}
 
   .wide, .wide.left, .wide.right {width: 100%;margin: 0}
 }
+
+/* Phone: unfloat Tufte sidenotes and stack multi-column figures.
+   The 933px query above keeps a 30% float for tablets; at ~400px
+   that becomes a 3–5 word column with body text wrapping around it. */
+@media screen and (max-width: 600px) {
+
+  .margin,
+  .margin.right,
+  .margin.left {
+    width: 100%;
+    float: none;
+    padding-left: 0;
+    padding-right: 0;
+    text-align: left;
+  }
+
+  .column,
+  .column.two,
+  .column.three,
+  .column.four,
+  .column.two + .column.two {
+    width: 100%;
+    float: none;
+    padding: 0;
+  }
+}
