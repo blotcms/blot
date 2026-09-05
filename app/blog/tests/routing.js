@@ -76,4 +76,11 @@ describe("routing", function () {
     expect(res3.status).toEqual(200);
     expect(body3.trim()).toEqual("FILE");
   });
+
+  it("does not 500 on malformed percent-encoding in the URL", async function () {
+    await this.template({ "entries.html": "ok" });
+
+    const res = await this.getWithRawPath("/%E0%A4%A");
+    expect(res.status).not.toEqual(500);
+  });
 });

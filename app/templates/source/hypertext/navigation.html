@@ -25,7 +25,7 @@
       <line x1="4" y1="6" x2="20" y2="6"></line>
       <line x1="4" y1="18" x2="20" y2="18"></line></svg>
     </label>
-  <a href="/">{{title}}</a>
+  <a href="/">{{#logo_url}}<img src="{{{logo_url}}}" alt="" class="site-logo">{{/logo_url}}{{title}}</a>
 </div>
 
 <div class="column-container">
@@ -33,13 +33,17 @@
       <div class="navigation">
         <a href="/">
           <h2>
+            {{#logo_url}}
+            <img src="{{{logo_url}}}" class="site-logo" alt="" />
+            {{/logo_url}}
+            {{^logo_url}}
             {{#avatar}}
             <img width="16" height="16" src="{{{avatar}}}" class="avatar" title="{{title}}" />
             {{/avatar}}
             {{^avatar}}
             <span style="display: inline-block;width:8px;"></span>
             {{/avatar}}
-            
+            {{/logo_url}}
             {{title}}
           </h2>
         </a>

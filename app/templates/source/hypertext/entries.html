@@ -11,6 +11,12 @@
         {{#posts}}
         {{#first}}
             {{{html}}}
+            {{^hide_dates}}
+            {{#dateStamp}}
+            <p class="entry-date">{{#formatDate}}{{date_display}}{{/formatDate}}</p>
+            {{/dateStamp}}
+            {{/hide_dates}}
+            {{#show_backlinks}}
             {{#backlinks.length}}
             <br>
             <hr>
@@ -21,6 +27,7 @@
             {{/backlinks}}
             </p>
             {{/backlinks.length}}
+            {{/show_backlinks}}
         {{/first}}
         {{/posts}}
         </div>

@@ -2,16 +2,23 @@
    Columns / Main layout
    ============================== */
 .column:first-child {
+  {{#sticky_navigation}}
   position: sticky;
   top: 0;
+  height: 100vh;
+  overflow: hidden;
+  {{/sticky_navigation}}
+  {{^sticky_navigation}}
+  position: relative;
+  height: auto;
+  overflow: visible;
+  {{/sticky_navigation}}
   display: flex;
   justify-content: flex-end;
   box-sizing: border-box;
   min-width: var(--sidebar-width);
   flex-basis: calc((100vw - var(--main-width)) / 1.8);
-  height: 100vh;
-  overflow: hidden;
-  padding: 42px 0 0;
+  padding: calc({{spacing}} * 42px) 0 0;
   font-size: var(--small-font-size);
 }
 
@@ -30,7 +37,12 @@
 .navigation {
   /* Fixed sidebar column; inner .sidebar includes +scrollbar width */
   width: var(--sidebar-width);
+  {{#sticky_navigation}}
   overflow: hidden;
+  {{/sticky_navigation}}
+  {{^sticky_navigation}}
+  overflow: visible;
+  {{/sticky_navigation}}
   margin-left: 12px;
 }
 
@@ -55,22 +67,45 @@
   display: flex;
   align-items: center;
   color: var(--text-color);
+  font-family: var(--heading-font-family, var(--font-family));
   font-weight: 600;
   margin: 0;
   font-size: inherit;
 }
 
-.navigation h2 img {
+.navigation h2 img,
+.navigation .site-logo {
   margin: 0 7px 0 1px;
+  height: 1.2em;
+  width: auto;
+}
+
+.control-bar a {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  font-family: var(--heading-font-family, var(--font-family));
+}
+
+.control-bar .site-logo {
+  height: 1.2em;
+  width: auto;
 }
 
 /* Scrollable sidebar column. Extra 17px ensures no layout shift when scrollbar appears */
 .navigation .sidebar {
   visibility: hidden;
+  {{#sticky_navigation}}
   width: calc(var(--sidebar-width) + 17px); /* keep to accommodate scrollbar */
   height: 100vh;
   overflow-y: scroll;
   overflow-x: hidden;
+  {{/sticky_navigation}}
+  {{^sticky_navigation}}
+  width: var(--sidebar-width);
+  height: auto;
+  overflow: visible;
+  {{/sticky_navigation}}
 }
 
 .navigation .sidebar > :last-child {

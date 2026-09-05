@@ -3,6 +3,8 @@
 /* Injected styles from templates and external sources */
 {{{app_css}}}
 {{{body_font.styles}}}
+{{{heading_font.styles}}}
+{{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 {{> navigation-css.css}}
 {{> heading-anchor.css}}
@@ -16,6 +18,16 @@
   --small-font-size: calc({{{font_size}}}px * 0.875);
   --line-height: {{{line_height}}};
   {{/body_font}}
+  {{#heading_font}}
+  --heading-font-family: {{{stack}}};
+  --heading-font-size: {{{font_size}}}px;
+  --heading-line-height: {{{line_height}}};
+  {{/heading_font}}
+  {{#syntax_highlighter_font}}
+  --code-font-family: {{{stack}}};
+  --code-font-size: {{{font_size}}}px;
+  --code-line-height: {{{line_height}}};
+  {{/syntax_highlighter_font}}
   --background-color: {{background_color}};
   --text-color: {{text_color}};
   --off-background-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.02);
@@ -24,10 +36,10 @@
   --border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.06);
   --dark-border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.12);
   --link-color: {{link_color}};
-  --padding: 1.4rem;
+  --padding: calc({{spacing}} * 1.4rem);
   --navigation-height: 3em;
-  --sidebar-width: 280px;
-  --main-width: 800px;
+  --sidebar-width: {{navigation_width}}px;
+  --main-width: {{content_width}}px;
 }
 
 /* General resets */
@@ -53,7 +65,7 @@ hr {
 }
 
 .column, main {
-  padding: 34px 16px;
+  padding: calc({{spacing}} * 34px) calc({{spacing}} * 16px);
 }
 
 .entry {
@@ -105,9 +117,9 @@ html.is-loading main::after {
 
 main {
   flex-grow: 1; /* Main content takes up remaining space */
-  padding-right: 4em;
-  padding-left: 48px;
-  padding-bottom: 10em;
+  padding-right: calc({{spacing}} * 4em);
+  padding-left: calc({{spacing}} * 48px);
+  padding-bottom: calc({{spacing}} * 10em);
   min-height: 100vh;
   box-sizing: border-box;
 }
@@ -122,7 +134,7 @@ main {
   display: none; /* Hidden by default on large screens */
   border-bottom: 1px solid var(--dark-border-color);
   z-index: 20;
-  padding: 12px 15px;
+  padding: calc({{spacing}} * 12px) calc({{spacing}} * 15px);
   box-sizing: border-box;
 }
 
@@ -200,7 +212,7 @@ main {
   }
 
   main {
-    padding: 0 1em;
+    padding: 0 calc({{spacing}} * 1em);
   }
 }
 
@@ -272,6 +284,12 @@ code.hljs {
 code {
   border: 1px solid var(--border-color);
   border-radius: 4px;
+  font-family: var(--code-font-family, inherit);
+  font-size: var(--code-font-size, inherit);
+}
+
+pre {
+  font-family: var(--code-font-family, inherit);
 }
 
 a {
@@ -292,11 +310,16 @@ main ul li {
 }
 
 p, h1, h2, h3, h4, h5, h6, ol, ul, pre, hr, .videoContainer, table, details {
-  max-width: 704px;
+  max-width: calc(var(--main-width) - 96px);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--heading-font-family, var(--font-family));
 }
 
 pre code {
-  font-size: 14px;
+  font-size: var(--code-font-size, 14px);
+  line-height: var(--code-line-height, 1.5);
   overflow-x: auto;
   display: block;
   overflow: auto;
@@ -380,19 +403,19 @@ figcaption {
 }
 
 .entry h1, .entry h2, .entry h3 {
-  font-size: 17.6px;
+  font-size: var(--heading-font-size);
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border-color);
 font-weight: 550;
-line-height: 28.6333px;
+line-height: var(--heading-line-height);
 margin-block-end: 8.8px;
 margin-block-start: 40px;
 font-weight: 700;
 }
 
 .entry h2, .entry h3 {font-weight: 600;}
-.entry h2 {font-size: 16px;}
-.entry h3 {font-size: 14px;}
+.entry h2 {font-size: calc(var(--heading-font-size) * 0.91);}
+.entry h3 {font-size: calc(var(--heading-font-size) * 0.8);}
 
 .entry > :first-child
  {
@@ -553,6 +576,12 @@ kbd {
   align-items: baseline;
 }
 
+{{#hide_dates}}
+.archives-grid {
+  grid-template-columns: 1fr;
+}
+{{/hide_dates}}
+
 .archive-item {
   display: contents;
 }
@@ -586,7 +615,7 @@ kbd {
 /* Search form styles */
 .search-form {
   margin: 2rem 0;
-  max-width: 704px;
+  max-width: calc(var(--main-width) - 96px);
 }
 
 .search-input-wrapper {

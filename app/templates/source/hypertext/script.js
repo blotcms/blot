@@ -14,6 +14,23 @@ class PageTransitioner {
     this.init();
   }
 
+  parsePageUrl(url) {
+    const parsed = new URL(url, window.location.href);
+    const hash = parsed.hash;
+    const displayUrl = parsed.href;
+    const cacheUrl = new URL(parsed.href);
+    cacheUrl.hash = "";
+    const fetchUrl = new URL(parsed.href);
+    fetchUrl.hash = "";
+    fetchUrl.searchParams.set("partial", "true");
+    return {
+      hash,
+      displayUrl,
+      cacheKey: cacheUrl.href,
+      fetchUrl: fetchUrl.href,
+    };
+  }
+
   init() {
     function isModified(e) {
       // Cmd (mac), Ctrl, Shift, Alt, or non-left mouse button
@@ -37,6 +54,14 @@ class PageTransitioner {
         linkURL.origin === window.location.origin &&
         linkURL.pathname === window.location.pathname &&
         linkURL.hash.length > 1 // has a fragment
+      );
+    }
+
+    if (!history.state?.url) {
+      history.replaceState(
+        { url: window.location.href },
+        "",
+        window.location.href
       );
     }
 
@@ -79,15 +104,37 @@ class PageTransitioner {
   }
 
   async prefetch(url) {
-    if (this.pageCache.has(url)) return;
+    const { cacheKey, fetchUrl } = this.parsePageUrl(url);
+    if (this.pageCache.has(cacheKey)) return;
 
     try {
-      const response = await fetch(url + "?partial=true");
+      const response = await fetch(fetchUrl);
+      if (!response.ok) return;
       const text = await response.text();
-      this.pageCache.set(url, text);
+      this.pageCache.set(cacheKey, text);
     } catch (err) {
       console.warn("Prefetch failed:", err);
     }
+  }
+
+  scrollToHash(hash) {
+    if (!hash) {
+      window.scrollTo(0, 0);
+      return;
+    }
+    let target = null;
+    try {
+      const id = decodeURIComponent(hash.replace(/^#/, ""));
+      if (id) {
+        target =
+          document.getElementById(id) ||
+          document.querySelector(`[name="${CSS.escape(id)}"]`);
+      }
+    } catch (err) {
+      console.warn("Invalid hash:", err);
+    }
+    if (target) target.scrollIntoView();
+    else window.scrollTo(0, 0);
   }
 
   async navigate(url, pushState = true) {
@@ -99,73 +146,96 @@ class PageTransitioner {
 
     if (!content) return;
 
-    // clear the existing content
-    content.innerHTML = '';
+    const previousHTML = content.innerHTML;
+    const { hash, displayUrl, cacheKey, fetchUrl } = this.parsePageUrl(url);
+
     content.classList.add("loading");
     document.documentElement.classList.add("is-loading");
     
     // close the mobile nav when a link is clicked
-    document.querySelector('#toggle-left').checked = false;
+    const toggle = document.querySelector("#toggle-left");
+    if (toggle) toggle.checked = false;
+
+    const fallback = () => {
+      content.innerHTML = previousHTML;
+      window.location.assign(displayUrl);
+    };
 
     try {
       let html;
 
-      if (this.pageCache.has(url)) {
-        html = this.pageCache.get(url);
+      if (this.pageCache.has(cacheKey)) {
+        html = this.pageCache.get(cacheKey);
       } else {
         const controller = new AbortController();
         this.currentXHR = controller;
 
-        const response = await fetch(url + "?partial=true", {
+        const response = await fetch(fetchUrl, {
           signal: controller.signal,
         });
+        if (!response.ok) {
+          fallback();
+          return;
+        }
         html = await response.text();
-        this.pageCache.set(url, html);
       }
 
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, "text/html");
 
       const newContent = doc.querySelector(this.contentSelector);
-      if (newContent) {
-
-        content.innerHTML = newContent.innerHTML;
-        document.title = doc.title;
-
-        if (pushState) {
-          history.pushState({ url }, "", url);
-        }
-
-        // Re-run scripts
-        content.querySelectorAll("script").forEach((oldScript) => {
-          const newScript = document.createElement("script");
-          Array.from(oldScript.attributes).forEach((attr) => {
-            newScript.setAttribute(attr.name, attr.value);
-          });
-          newScript.textContent = oldScript.textContent;
-          oldScript.parentNode.replaceChild(newScript, oldScript);
-        });
-
-        // remove class 'active' from all links
-        document.querySelectorAll(".sidebar a").forEach((link) => {
-          link.classList.remove("active");
-        });
-
-        // add class 'active' to the current link
-        document.querySelectorAll(".sidebar a").forEach((link) => {
-          if (link.href === url) {
-            link.classList.add("active");
-            SidebarNavigation.saveCache();
-          }
-        });
-
-        window.scrollTo(0, 0);
-        renderHeadingAnchors();
-        preCopy();
+      if (!newContent) {
+        fallback();
+        return;
       }
+
+      this.pageCache.set(cacheKey, html);
+      content.innerHTML = newContent.innerHTML;
+      document.title = doc.title;
+
+      if (pushState) {
+        history.pushState({ url: displayUrl }, "", displayUrl);
+      }
+
+      // Re-run scripts
+      content.querySelectorAll("script").forEach((oldScript) => {
+        const newScript = document.createElement("script");
+        Array.from(oldScript.attributes).forEach((attr) => {
+          newScript.setAttribute(attr.name, attr.value);
+        });
+        newScript.textContent = oldScript.textContent;
+        oldScript.parentNode.replaceChild(newScript, oldScript);
+      });
+
+      const targetUrl = new URL(displayUrl, window.location.href);
+      const normalize = (pathname) =>
+        !pathname || pathname === "/" ? "/" : pathname.replace(/\/+$/, "") || "/";
+
+      document.querySelectorAll(".sidebar a").forEach((link) => {
+        let isActive = false;
+        try {
+          const linkUrl = new URL(link.href, window.location.href);
+          isActive =
+            normalize(linkUrl.pathname) === normalize(targetUrl.pathname);
+        } catch (err) {
+          console.warn("Invalid sidebar href:", err);
+        }
+        link.classList.toggle("active", isActive);
+      });
+
+      try {
+        window.SidebarNavigation?.saveCache?.();
+      } catch (err) {
+        console.warn("Sidebar cache save failed:", err);
+      }
+
+      this.scrollToHash(hash);
+      renderHeadingAnchors();
+      preCopy();
     } catch (err) {
       if (err.name === "AbortError") return;
       console.error("Navigation failed:", err);
+      fallback();
     } finally {
       content.classList.remove("loading");
       document.documentElement.classList.remove("is-loading");

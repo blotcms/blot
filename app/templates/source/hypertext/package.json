@@ -2,20 +2,46 @@
   "name": "Hypertext",
   "locals": {
     "page_size": 100,
+    "page_size_range": [1, 200],
     "lang": "en",
     "sort_by": "id",
+    "sort_by_options": ["id", "date"],
+    "sort_order": "asc",
+    "sort_order_options": ["asc", "desc"],
     "background_color": "#fff",
     "text_color": "rgb(0, 0, 0)",
     "link_color": "rgb(48, 84, 235)",
+    "hide_dates": false,
+    "date_display": "MMMM D, Y",
+    "show_backlinks": true,
     "syntax_highlighter": {
       "id": "solarized-light"
     },
     "syntax_highlighter_font": {
-      "id": "plex-mono"
+      "id": "plex-mono",
+      "font_size": 14,
+      "line_height": 1.5
     },
     "body_font": {
-      "id": "system-sans"
+      "id": "system-sans",
+      "font_size": 16,
+      "line_height": 1.4
     },
+    "heading_font": {
+      "id": "system-sans",
+      "font_size": 18,
+      "line_height": 1.6
+    },
+    "favicon_url": "",
+    "logo_url": "",
+    "sticky_navigation": true,
+    "collapse_navigation_by_default": true,
+    "navigation_width": 280,
+    "navigation_width_range": [180, 420],
+    "content_width": 800,
+    "content_width_range": [560, 1200],
+    "spacing": 1,
+    "spacing_range": [0, 3],
     "demo_folder": "hypertext"
   },
   "views": {

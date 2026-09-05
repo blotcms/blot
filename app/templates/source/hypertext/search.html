@@ -12,7 +12,7 @@
         {{#entries}}
         <div class="archive-item">
            <a href="{{{url}}}" class="archive-title">{{title}}</a>
-           <span class="archive-date">{{#date}}{{date}}{{/date}}</span>
+           {{^hide_dates}}{{#date}}<span class="archive-date">{{#formatDate}}{{date_display}}{{/formatDate}}</span>{{/date}}{{/hide_dates}}
          </div>
         {{/entries}}
         </div>

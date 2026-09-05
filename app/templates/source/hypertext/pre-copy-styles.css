@@ -9,7 +9,7 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #6b7280; /* neutral icon color */
+  color: var(--medium-text-color); /* neutral icon color */
   opacity: 0;
   cursor: pointer;
   display: inline-flex;
@@ -25,8 +25,8 @@ pre:hover .pre-copy-btn,
 
 .pre-copy-btn:hover,
 .pre-copy-btn:focus-visible {
-  background-color: rgba(0,0,0,0.06);
-  color: #1a73e8; /* blue on hover/focus */
+  background-color: var(--off-background-color);
+  color: var(--link-color); /* blue on hover/focus */
   outline: none;
 }
 

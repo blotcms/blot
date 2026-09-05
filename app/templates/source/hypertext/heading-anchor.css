@@ -23,7 +23,7 @@
 .entry h6:hover .heading-anchor
  {
   opacity: 1;
-  color: #aaa; 
+  color: var(--light-text-color);
   outline: none;
 
 }
@@ -35,7 +35,7 @@
 .entry h5 .heading-anchor:hover,
 .entry h6 .heading-anchor:hover,
 .heading-anchor:focus-visible {
-  color: {{link_color}}; /* blue on hover */
+  color: var(--link-color); /* blue on hover */
 }
 
 /* Store the SVG in CSS via mask so it adopts currentColor */
@@ -67,8 +67,8 @@
   max-width: 320px;
   padding: 10px 12px;
   border-radius: 6px;
-  background: #111;
-  color: #fff;
+  background: var(--text-color);
+  color: var(--background-color);
   font: 14px/1.3 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   box-shadow: 0 6px 20px rgba(0,0,0,0.18);
   opacity: 0;

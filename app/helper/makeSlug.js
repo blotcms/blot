@@ -15,9 +15,7 @@ module.exports = function makeSlug(string) {
   // Remove query sluging
   if (slug.indexOf("?=") > -1) slug = slug.slice(0, slug.indexOf("?="));
 
-  slug = slug
-    .trim()
-    .slice(0, MAX_LENGTH + 10)
+  slug = sliceWithoutSplittingSurrogates(slug.trim(), MAX_LENGTH + 10)
 
     // Removes 'object replacement character' which unexpectedly
     // entered a file created on Ulysses. Perhaps an embedded image?
@@ -101,6 +99,16 @@ module.exports = function makeSlug(string) {
 
   return slug;
 };
+
+// Truncate by UTF-16 length without splitting a surrogate pair, which
+// would make encodeURI throw URIError.
+function sliceWithoutSplittingSurrogates(str, maxUnits) {
+  if (str.length <= maxUnits) return str;
+  let end = maxUnits;
+  const last = str.charCodeAt(end - 1);
+  if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+  return str.slice(0, end);
+}
 
 function trimLeadingAndTrailing(str, characters) {
   while (str.length > 1 && characters.indexOf(str[0]) > -1) str = str.slice(1);

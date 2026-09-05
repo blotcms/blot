@@ -76,4 +76,30 @@ describe("makeSlug", function () {
       "french-tech-communaut%C3%A9-quelle-opportunit%C3%A9-pour-l-%C3%A9tat"
     );
   });
+
+  it("does not throw when truncation would split a surrogate pair", function () {
+    const emoji = "😀"; // one code point, two UTF-16 units
+    // MAX_LENGTH + 10 is 110; 109 ASCII chars + emoji is 111 units
+    const input = "a".repeat(109) + emoji;
+
+    expect(function () {
+      encodeURI(input.slice(0, 110));
+    }).toThrowError(URIError);
+
+    expect(function () {
+      makeSlug(input);
+    }).not.toThrow();
+
+    const result = makeSlug(input);
+    expect(typeof result).toBe("string");
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it("does not throw on a long string of supplementary-plane characters", function () {
+    const input = "😀".repeat(80);
+    expect(function () {
+      makeSlug(input);
+    }).not.toThrow();
+    expect(typeof makeSlug(input)).toBe("string");
+  });
 });

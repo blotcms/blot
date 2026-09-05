@@ -1,5 +1,6 @@
 // Map folder [Eg] to 'Eg'
 const STRIP_TAG_TOKENS = true;
+const COLLAPSE_NAVIGATION_BY_DEFAULT = {{#collapse_navigation_by_default}}true{{/collapse_navigation_by_default}}{{^collapse_navigation_by_default}}false{{/collapse_navigation_by_default}};
 
 class SidebarNavigation {
   constructor() {
@@ -15,19 +16,66 @@ class SidebarNavigation {
   _loadCache() {
     try {
       return localStorage.getItem(this.cacheKey);
-    } catch {
+    } catch (err) {
+      console.warn("Sidebar cache read failed:", err);
       return null;
     }
   }
   _saveCache() {
     try {
       localStorage.setItem(this.cacheKey, this.root.innerHTML);
-    } catch {}
+    } catch (err) {
+      console.warn("Sidebar cache write failed:", err);
+    }
   }
   _clearCache() {
     try {
       localStorage.removeItem(this.cacheKey);
-    } catch {}
+    } catch (err) {
+      console.warn("Sidebar cache clear failed:", err);
+    }
+  }
+
+  _normalizePathname(pathname) {
+    if (!pathname || pathname === "/") return "/";
+    return pathname.replace(/\/+$/, "") || "/";
+  }
+
+  _pathsFromHTML(html) {
+    const t = document.createElement("template");
+    t.innerHTML = html;
+    return new Set(
+      Array.from(t.content.querySelectorAll("[data-path]"))
+        .map((el) => el.getAttribute("data-path"))
+        .filter(Boolean)
+    );
+  }
+
+  _cacheIsStale(serverHTML, cachedHTML) {
+    const serverPaths = this._pathsFromHTML(serverHTML);
+    const cachedPaths = this._pathsFromHTML(cachedHTML);
+    for (const path of serverPaths) {
+      if (!cachedPaths.has(path)) return true;
+    }
+    return false;
+  }
+
+  syncActiveFromLocation() {
+    if (!this.root) return;
+    const currentPath = this._normalizePathname(window.location.pathname);
+    this.root.querySelectorAll("a").forEach((link) => {
+      let linkPath = "";
+      try {
+        const href = link.getAttribute("href") || link.href;
+        linkPath = this._normalizePathname(
+          new URL(href, window.location.href).pathname
+        );
+      } catch (err) {
+        console.warn("Invalid sidebar href:", err);
+        return;
+      }
+      link.classList.toggle("active", linkPath === currentPath);
+    });
   }
 
   // ------- pagination -------
@@ -39,6 +87,7 @@ class SidebarNavigation {
       return t.content;
     };
 
+    const seen = new Set();
     let guard = 0;
     while (true) {
       if (++guard > this.maxPages) break;
@@ -48,11 +97,23 @@ class SidebarNavigation {
       const token = nextEl.getAttribute("data-next");
       nextEl.remove();
 
+      if (!token) continue;
+
+      this.root.querySelectorAll(":scope span[data-next]").forEach((el) => {
+        if (el.getAttribute("data-next") === token) el.remove();
+      });
+
+      if (seen.has(token)) continue;
+      seen.add(token);
+
       try {
         const res = await fetch(`/pagination/${encodeURIComponent(token)}`, {
           credentials: "same-origin",
         });
-        if (!res.ok) continue;
+        if (!res.ok) {
+          console.warn("Pagination fetch failed:", res.status, token);
+          continue;
+        }
         const html = await res.text();
         const frag = parseHTML(html);
 
@@ -61,7 +122,10 @@ class SidebarNavigation {
             continue;
           this.root.appendChild(node);
         }
-      } catch {}
+      } catch (err) {
+        console.warn("Pagination fetch failed:", err);
+        break;
+      }
     }
 
     this.items = Array.from(this.root.querySelectorAll(":scope > li"));
@@ -159,6 +223,7 @@ class SidebarNavigation {
       parentNode.submenu.appendChild(li);
     });
 
+    this.applyFolderTitles();
     this.sortTree(this.root);
 
     // append menu items flat, in original order
@@ -166,6 +231,28 @@ class SidebarNavigation {
       menuItems[0].classList.add("menu-separator");
       menuItems.forEach((li) => this.root.appendChild(li));
     }
+  }
+
+  applyFolderTitles() {
+    if (!this.root) return;
+    const indexName = /^(?:\d+[.\s_-]+)?(index|overview)$/i;
+    const basename = (filePath) => {
+      const last = (filePath || "").split("/").filter(Boolean).at(-1) || "";
+      return last.replace(/\.[^.]+$/, "");
+    };
+
+    this.root.querySelectorAll("li.folder").forEach((folder) => {
+      const submenu = folder.querySelector(":scope > ul.submenu");
+      if (!submenu) return;
+      const indexLi = Array.from(submenu.children).find((li) => {
+        if (li.classList.contains("folder")) return false;
+        return indexName.test(basename(li.getAttribute("data-path") || ""));
+      });
+      if (!indexLi) return;
+      const title = indexLi.querySelector(":scope > a")?.textContent?.trim();
+      const label = folder.querySelector(":scope > .folder-label");
+      if (title && label) label.textContent = title;
+    });
   }
 
   // ------- sorting -------
@@ -179,13 +266,23 @@ class SidebarNavigation {
     return a?.textContent?.trim() || li.getAttribute("data-filename") || "";
   }
 
+  sortLocale() {
+    const lang = (
+      document.documentElement.lang ||
+      document.querySelector('meta[name="language"]')?.content ||
+      ""
+    ).trim();
+    return lang || undefined;
+  }
+
   sortTree(ul) {
     const children = Array.from(ul.children).filter((n) => n.tagName === "LI");
     const folders = children.filter((li) => li.classList.contains("folder"));
     const files = children.filter((li) => !li.classList.contains("folder"));
+    const locale = this.sortLocale();
 
     const cmp = (a, b) =>
-      this.labelForLi(a).localeCompare(this.labelForLi(b), undefined, {
+      this.labelForLi(a).localeCompare(this.labelForLi(b), locale, {
         sensitivity: "base",
       });
 
@@ -214,6 +311,12 @@ class SidebarNavigation {
 
   // ------- default expand -------
   expandToActiveIfAny() {
+    if (!this.root) return;
+    if (!COLLAPSE_NAVIGATION_BY_DEFAULT) {
+      this.root.querySelectorAll("li.folder").forEach((li) => this.setFolder(li, true));
+      return;
+    }
+    this.root.querySelectorAll("li.folder").forEach((li) => this.setFolder(li, false));
     const active = this.root.querySelector("a.active");
     if (!active) return;
     let ul = active.closest("ul");
@@ -249,17 +352,24 @@ class SidebarNavigation {
   async init() {
     if (!this.root) return;
 
+    const serverHTML = this.root.innerHTML;
     const cached = this._loadCache();
 
-    if (cached) {
+    if (cached && !this._cacheIsStale(serverHTML, cached)) {
       this.root.innerHTML = cached;
+      this.syncActiveFromLocation();
+      this.expandToActiveIfAny();
       this._bindEvents();
       this.root.classList.add("initialized");
+      this._saveCache();
       return;
     }
 
+    if (cached) this._clearCache();
+
     await this.loadAllPages();
     this.build();
+    this.syncActiveFromLocation();
     this.expandToActiveIfAny();
     this._bindEvents();
     this.root.classList.add("initialized");
@@ -268,12 +378,16 @@ class SidebarNavigation {
 
   static saveCache() {
     try {
+      const sidebar = document.querySelector(".sidebar");
+      if (!sidebar) return;
       localStorage.setItem(
         "sidebarState:" +
           document.querySelector('meta[name="blot-cache-id"]')?.content,
-        document.querySelector(".sidebar").innerHTML
+        sidebar.innerHTML
       );
-    } catch {}
+    } catch (err) {
+      console.warn("Sidebar cache save failed:", err);
+    }
   }
 }
 

@@ -6,6 +6,12 @@
     <main>
       <div class="entry">
       {{{entry.html}}}
+      {{^hide_dates}}
+      {{#entry.dateStamp}}
+      <p class="entry-date">{{#formatDate}}{{date_display}}{{/formatDate}}</p>
+      {{/entry.dateStamp}}
+      {{/hide_dates}}
+      {{#show_backlinks}}
       {{#entry.backlinks.length}}
       <br>
       <hr>
@@ -16,6 +22,7 @@
       {{/entry.backlinks}}
       </p>
       {{/entry.backlinks.length}}
+      {{/show_backlinks}}
       </div>
     </main>
     {{> footer}}
