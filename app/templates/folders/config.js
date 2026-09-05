@@ -11,6 +11,10 @@ module.exports = {
     title: "David",
     template: "SITE:blog",
   },
+  notes: {
+    title: "David",
+    template: "SITE:blog",
+  },
   documentation: {
     title: "Documentation",
     template: "SITE:documentation",

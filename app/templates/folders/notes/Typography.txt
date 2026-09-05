@@ -1,0 +1,9 @@
+Tags: Typography, Layout
+
+# Typography and layout
+
+Type works best when it is left alone. A page that is easy to read is usually a page that has been given enough margin, a steady line length, and one good size for the body.
+
+{|<} A line of twenty words is plenty.
+
+I like a layout that does not announce itself. The photographs, when they appear, can carry the weight; the text just has to get out of the way.

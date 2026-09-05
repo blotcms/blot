@@ -21,6 +21,18 @@
 
     {{/posts}}
 
+    {{#pagination}}
+    <div class="pagination">
+      {{#previous}}
+      <a href="/page/{{previous}}">&larr; Newer</a>
+      {{/previous}}
+      Page {{current}} of {{total}}
+      {{#next}}
+      <a href="/page/{{next}}">Older &rarr;</a>
+      {{/next}}
+    </div>
+    {{/pagination}}
+
     <p class="entry" style="text-align:center">View <a href="/archives">the archives</a></p>
 
     {{> footer}}

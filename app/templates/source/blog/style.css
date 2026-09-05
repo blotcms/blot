@@ -147,7 +147,7 @@ hr {
 /* This is used between articles in list view */
 hr.full {
   color: var(--border-color);
-  margin: 7em 0 11em 1em; /* We add 1em to the left due to letter spacing*/
+  margin: 3.5em 0 4.5em 1em; /* We add 1em to the left due to letter spacing*/
   height: 0;
   width: 100%;
   text-align: center;
@@ -156,6 +156,11 @@ hr.full {
 }
 
 hr.full:after {content: "··•··";}
+
+.pagination {
+  text-align: center;
+  margin: 2em 0 3em;
+}
 
 
 
