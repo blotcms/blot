@@ -23,9 +23,50 @@ on:
         description: "Reset cache"
         type: boolean
         default: false
+  pull_request:
+    paths:
+      - "app/templates/source/**"
 
 jobs:
+  # Figures out which template(s) a pull request touched, so the screenshot
+  # job below only re-renders those templates' previews instead of every
+  # template. Skipped entirely for workflow_dispatch, which picks its
+  # templates from the "templates" input instead.
+  detect-templates:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      templates: ${{ steps.detect.outputs.templates }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Detect changed templates
+        id: detect
+        run: |
+          templates=$(git diff --name-only \
+              "${{ github.event.pull_request.base.sha }}" \
+              "${{ github.event.pull_request.head.sha }}" \
+              -- app/templates/source |
+            sed -E 's#^app/templates/source/([^/]+)/.*#\1#' |
+            sort -u | paste -sd, -)
+          echo "Changed templates: $templates"
+          echo "templates=$templates" >> "$GITHUB_OUTPUT"
+
   test:
+    needs: [detect-templates]
+    # workflow_dispatch always runs; a pull_request run only proceeds once
+    # detect-templates has found at least one changed template (it is always
+    # skipped for workflow_dispatch, so a plain success() check would skip
+    # this job too - hence the explicit !cancelled()).
+    if: |
+      !cancelled() &&
+      (github.event_name == 'workflow_dispatch' ||
+        (needs.detect-templates.result == 'success' &&
+          needs.detect-templates.outputs.templates != ''))
     runs-on: macos-latest
 
     strategy:
@@ -42,7 +83,7 @@ jobs:
       # rather than something to vary per run, so it lives here rather than
       # as a workflow_dispatch input - edit this line to change it.
       BLOT_SCREENSHOT_CONCURRENCY: 4
-      TEMPLATES: ${{ inputs.templates }}
+      TEMPLATES: ${{ github.event_name == 'pull_request' && needs.detect-templates.outputs.templates || inputs.templates }}
 
     steps:
       # GITHUB_TOKEN is deliberately not used here: GitHub does not let a
@@ -56,7 +97,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          # github.ref is a non-pushable merge ref (refs/pull/N/merge) on
+          # pull_request events, so check out the actual head branch there;
+          # github.head_ref is unset for workflow_dispatch, which falls back
+          # to github.ref as before.
+          ref: ${{ github.head_ref || github.ref }}
           token: ${{ secrets.SCREENSHOTS_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
 
       # hashFiles() only works inside a step (job-level env can't see the
