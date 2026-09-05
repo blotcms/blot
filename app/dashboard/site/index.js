@@ -82,9 +82,14 @@ site.get("/settings/services", load.plugins, (req, res) => {
   res.render("dashboard/site/settings/services");
 });
 
-site.get("/settings/redirects", load.redirects, (req, res) => {
-  res.render("dashboard/site/settings/redirects");
-});
+site.get(
+  "/settings/redirects",
+  load.redirects,
+  load.redirectWarnings,
+  (req, res) => {
+    res.render("dashboard/site/settings/redirects");
+  }
+);
 
 site.get("/settings/flags", flags.get);
 

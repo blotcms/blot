@@ -4,5 +4,6 @@ module.exports = {
   clients: require("./clients"),
   fourOhFour: require("./404"),
   redirects: require("./redirects"),
+  redirectWarnings: require("./redirectWarnings"),
   plugins: require("./plugins"),
 };

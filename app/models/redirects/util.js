@@ -1,3 +1,5 @@
+var RE2 = require("re2");
+
 function isRegex(string) {
   return (
     string &&
@@ -9,7 +11,9 @@ function isRegex(string) {
 
 function is(input, from) {
   try {
-    from = new RegExp(from, "i");
+    // RE2 matches in linear time, so a redirect's 'from' pattern can't be
+    // crafted to hang the process the way a backtracking RegExp can.
+    from = new RE2(from, "i");
   } catch (e) {
     return false;
   }
@@ -22,7 +26,7 @@ function notRegex(string) {
 
 function map(input, from, to) {
   try {
-    from = new RegExp(from, "i");
+    from = new RE2(from, "i");
   } catch (e) {
     return null;
   }

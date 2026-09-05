@@ -319,6 +319,57 @@ span.file {
   border-right: 1px solid #eeeeec;
 }
 
+.redirectWarningsNotice {
+  font-size: var(--small-font-size);
+  line-height: 1.5;
+  color: var(--warning-text-color);
+  background-color: #fdf6ee;
+  border-radius: var(--border-radius);
+  padding: 12px 16px;
+  margin: 0 0 16px;
+}
+
+.redirectWarningsNotice a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+#redirects .redirectWarning {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  cursor: help;
+  color: var(--warning-text-color);
+}
+
+#redirects .redirectWarning:focus {
+  outline: none;
+}
+
+#redirects .redirectWarningMessage {
+  display: none;
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 6px);
+  right: -1px;
+  width: 240px;
+  padding: 10px 12px;
+  font-size: var(--small-font-size);
+  line-height: 1.4;
+  color: var(--text-color);
+  background-color: var(--background-color);
+  border: 1px solid #eeeeec;
+  border-radius: var(--border-radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  cursor: auto;
+}
+
+#redirects .redirectWarning:hover .redirectWarningMessage,
+#redirects .redirectWarning:focus .redirectWarningMessage {
+  display: block;
+}
+
 
 .pageLink {
 line-height: 48px;

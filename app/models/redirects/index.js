@@ -1,5 +1,6 @@
 module.exports = {
   check: require("./check"),
+  conflicts: require("./conflicts"),
   drop: require("./drop"),
   get: require("./get"),
   key: require("./key"),
