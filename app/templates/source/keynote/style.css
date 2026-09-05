@@ -79,3 +79,52 @@ hr {width: 100%;border: none;border-bottom: 1px solid rgba(0,0,0,0.15)}
 .margin a {font-weight: normal;}
 
 .videoContainer {margin: 1em 0}
+
+@media screen and (max-width: 800px) {
+  #header {
+    padding: 1.25em 1.25em 1em;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 0.4em;
+    flex: 0 0 auto;
+  }
+
+  #header a {
+    margin: 0 0.35em 0 0;
+    padding: 0.4em 0.5em;
+  }
+
+  #header #title {
+    float: none;
+    position: static;
+    top: auto;
+    flex: 0 0 100%;
+    order: -1;
+    margin: 0;
+    padding: 0.15em 0;
+    font-size: 26px;
+    overflow-wrap: anywhere;
+  }
+
+  body:has(.gallery) {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .gallery {
+    position: relative;
+    top: auto;
+    bottom: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    padding: 0 1.25em;
+  }
+
+  .contents {
+    margin: 0 1.25em 2em;
+  }
+}
