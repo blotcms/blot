@@ -56,8 +56,8 @@
     },
     "entries.html": {
       "partials": {
-        "title": "{{#entries}}{{#first}}{{{title}}} -  {{/first}}{{/entries}}{{{title}}}",
-        "description": "{{#entries}}{{#first}}{{{title}}} -  {{/first}}{{/entries}}{{{title}}}"
+        "title": "{{#posts}}{{#first}}{{{title}}} -  {{/first}}{{/posts}}{{{title}}}",
+        "description": "{{#posts}}{{#first}}{{{title}}} -  {{/first}}{{/posts}}{{{title}}}"
       }
     },
     "entry.html": {

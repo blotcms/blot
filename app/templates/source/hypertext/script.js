@@ -57,6 +57,26 @@ class PageTransitioner {
       );
     }
 
+    function isDocumentNavigation(link) {
+      if (!link || !link.href) return false;
+      try {
+        const url = new URL(link.href, window.location.href);
+        if (url.origin !== window.location.origin) return false;
+        const path = url.pathname.toLowerCase();
+        // Feeds and static files should not be loaded into <main>.
+        if (
+          /\.(rss|xml|atom|json|css|js|png|jpe?g|gif|webp|svg|pdf|zip|txt)$/i.test(
+            path
+          )
+        ) {
+          return false;
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
     if (!history.state?.url) {
       history.replaceState(
         { url: window.location.href },
@@ -68,7 +88,11 @@ class PageTransitioner {
     // Hover prefetch: skip hashes
     document.addEventListener("mouseover", (e) => {
       const link = e.target.closest(this.linkSelector);
-      if (isInternal(link) && !isSameDocumentHash(link))
+      if (
+        isInternal(link) &&
+        isDocumentNavigation(link) &&
+        !isSameDocumentHash(link)
+      )
         this.prefetch(link.href);
     });
 
@@ -88,7 +112,7 @@ class PageTransitioner {
       // Let the browser handle same-page anchors (footnotes/backrefs)
       if (isSameDocumentHash(link)) return;
 
-      if (isInternal(link)) {
+      if (isInternal(link) && isDocumentNavigation(link)) {
         e.preventDefault();
         link.blur();
         this.navigate(link.href);

@@ -289,7 +289,10 @@ class SidebarNavigation {
     folders.sort(cmp);
     files.sort(cmp);
 
-    [...folders, ...files].forEach((li) => ul.appendChild(li));
+    // Root pages must come before folders. Folders-first leaves those pages
+    // under the last directory, where they look like an expanded submenu.
+    const ordered = ul === this.root ? [...files, ...folders] : [...folders, ...files];
+    ordered.forEach((li) => ul.appendChild(li));
 
     folders.forEach((li) => {
       const sub = li.querySelector(":scope > ul.submenu");
