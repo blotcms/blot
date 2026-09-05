@@ -10,6 +10,10 @@ module.exports = [
     "--disk-cache-size=0",
     // performance
     "--disable-infobars",
+    // Containers get a 64MB /dev/shm by default, which a couple of tabs
+    // rendering at 2x device scale exhaust; Chromium then hangs in
+    // page.screenshot() rather than failing. Write shared memory to /tmp.
+    "--disable-dev-shm-usage",
     "--no-sandbox",
     "--disable-gpu",
     "--disable-setuid-sandbox",

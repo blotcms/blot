@@ -8,10 +8,14 @@ const clfdate = require("helper/clfdate");
 const prefix = () => `${clfdate()} Screenshot:`;
 
 // CONSTANTS
+// The defaults are deliberately conservative because most callers screenshot
+// live sites one at a time. Batch jobs against a server we control should
+// raise them with configure() rather than pay the pacing per screenshot.
 const CONCURRENT_SCREENSHOTS = 1;
 const MIN_TIME_BETWEEN_OPS = 2000; // 2 seconds
 const DEFAULT_RESTART_INTERVAL = 1000 * 60 * 60; // 1 hour
 const PAGE_TIMEOUT = 20000;
+// Per-screenshot budgets, sized for one screenshot at a time. See configure().
 const CLOSE_PAGE_TIMEOUT = 2000;
 const SCREENSHOT_TIMEOUT = 2000;
 const BROWSER_ARGS = require("./args");
@@ -25,130 +29,219 @@ const VIEWPORT = {
 };
 
 // State
-let browser = null;
-let lastRestartTime = Date.now();
-let isRestarting = false;
-let browserInitializationPromise = null;
+//
+// Browsers are pooled rather than shared: Chromium deadlocks in
+// Page.captureScreenshot when several tabs of one instance capture at the same
+// time, so a screenshot never shares an instance with another screenshot. At
+// the default concurrency of one that is a single long-lived browser.
+const idle = [];
+let poolSize = CONCURRENT_SCREENSHOTS;
+// Bumped by restart() and shutdown() so browsers currently taking a
+// screenshot are closed when they come back rather than being reused.
+let generation = 0;
+let closePageTimeout = CLOSE_PAGE_TIMEOUT;
+let screenshotTimeout = SCREENSHOT_TIMEOUT;
 
 const limiter = new Bottleneck({
   maxConcurrent: CONCURRENT_SCREENSHOTS,
   minTime: MIN_TIME_BETWEEN_OPS,
 });
 
+// Lets a batch caller trade the production pacing for throughput. Anything
+// omitted keeps its current value.
+function configure({ concurrency, minTime } = {}) {
+  const settings = {};
+
+  if (concurrency !== undefined) {
+    if (!Number.isInteger(concurrency) || concurrency < 1) {
+      throw new Error("Screenshot concurrency must be a positive integer");
+    }
+
+    settings.maxConcurrent = concurrency;
+    poolSize = concurrency;
+
+    // Browsers rendering at the same time compete for the same cores, so each
+    // screenshot and page close takes roughly as many times longer as there
+    // are of them. Scaling the budgets keeps them a guard against a wedged
+    // page rather than a limit on how many screenshots can run at once.
+    closePageTimeout = CLOSE_PAGE_TIMEOUT * concurrency;
+    screenshotTimeout = SCREENSHOT_TIMEOUT * concurrency;
+  }
+
+  if (minTime !== undefined) {
+    if (!Number.isFinite(minTime) || minTime < 0) {
+      throw new Error("Screenshot minTime must be zero or greater");
+    }
+    settings.minTime = minTime;
+  }
+
+  if (Object.keys(settings).length) limiter.updateSettings(settings);
+
+  return { ...settings, closePageTimeout, screenshotTimeout };
+}
+
 function validateOptions(options) {
   const validatedOptions = { ...options };
-  if (options.width && typeof options.width !== 'number') {
-    throw new Error('Width must be a number');
+  if (options.width && typeof options.width !== "number") {
+    throw new Error("Width must be a number");
   }
-  if (options.height && typeof options.height !== 'number') {
-    throw new Error('Height must be a number');
+  if (options.height && typeof options.height !== "number") {
+    throw new Error("Height must be a number");
   }
   return validatedOptions;
 }
 
-async function initialize() {
-  if (!browserInitializationPromise) {
-    browserInitializationPromise = (async () => {
-      try {
-        if (!browser) {
-          browser = await puppeteer.launch({
-            headless: "new",
-            devtools: false,
-            args: BROWSER_ARGS,
-            ignoreDefaultArgs: ["--disable-extensions"],
-          });
-          const page = await browser.newPage();
-          await page.goto("about:blank");
-        }
-      } catch (error) {
-        browserInitializationPromise = null;
-        throw error;
-      }
-    })();
+async function launch() {
+  console.log(prefix(), "Launching browser");
+
+  const instance = await puppeteer.launch({
+    headless: "new",
+    devtools: false,
+    args: BROWSER_ARGS,
+    ignoreDefaultArgs: ["--disable-extensions"],
+  });
+
+  // Chrome exits once its last tab closes, so hold one open for the lifetime
+  // of the instance.
+  const blank = await instance.newPage();
+  await blank.goto("about:blank");
+
+  return { instance, launchedAt: Date.now(), generation };
+}
+
+async function close(browser, reason) {
+  console.log(prefix(), "Closing browser:", reason);
+
+  try {
+    await browser.instance.close();
+  } catch (error) {
+    console.error(prefix(), "Error closing browser:", error);
   }
-  return browserInitializationPromise;
+}
+
+async function acquire() {
+  let browser;
+
+  // A browser can also die while sitting idle (e.g. it crashed mid-screenshot
+  // and was returned to the pool before that was noticed - see release()).
+  // Skip past any dead entries rather than handing one out.
+  while ((browser = idle.pop())) {
+    if (browser.instance.connected) return browser;
+    await close(browser, "found disconnected in the pool");
+  }
+
+  return launch();
+}
+
+// Returns a browser to the pool, or closes it if it should not be used again.
+async function release(browser, { unresponsive } = {}) {
+  if (unresponsive) return close(browser, "browser stopped responding");
+
+  // A crash or disconnect (e.g. OOM) throws a plain Error from whatever
+  // puppeteer call was in flight, not the local TimeoutError, so
+  // `unresponsive` is never set for it. Check the browser itself: putting a
+  // dead instance back in the pool would fail every screenshot that
+  // acquire()s it next, since nothing else ever notices it is gone.
+  if (!browser.instance.connected) {
+    return close(browser, "browser is no longer connected");
+  }
+
+  if (browser.generation !== generation) {
+    return close(browser, "restarted since this browser was launched");
+  }
+
+  if (Date.now() - browser.launchedAt >= DEFAULT_RESTART_INTERVAL) {
+    return close(browser, "scheduled restart");
+  }
+
+  // More browsers than the pool holds means the concurrency was lowered, or
+  // that something ran outside the limiter. Either way, don't keep the extras.
+  if (idle.length >= poolSize) {
+    return close(browser, "surplus to the configured concurrency");
+  }
+
+  idle.push(browser);
 }
 
 async function restart() {
-  console.log(prefix(), "Attempting browser restart");
+  // Browsers busy taking a screenshot are closed by release() instead, so a
+  // restart never pulls a page out from under a screenshot in progress.
+  generation++;
 
-  if (isRestarting) {
-    console.log(prefix(), "Already restarting, skipping");
-    return;
-  }
-
-  isRestarting = true;
-  browserInitializationPromise = null;
-
-  try {
-    console.log(prefix(), "Closing browser");
-    await cleanup();
-
-    console.log(prefix(), "Browser closed, restarting now");
-    await initialize();
-
-    console.log(prefix(), "Browser restarted successfully");
-    lastRestartTime = Date.now();
-  } catch (error) {
-    console.error(prefix(), "Error during restart:", error);
-    throw error;
-  } finally {
-    isRestarting = false;
-  }
+  await Promise.all(
+    idle.splice(0).map((browser) => close(browser, "restart requested"))
+  );
 }
 
 async function cleanup() {
-  if (browser) {
-    try {
-      const pages = await browser.pages();
-      await Promise.all(pages.map(page => closePageWithTimeout(page).catch(() => {})));
-      await browser.close().catch(() => {});
-    } catch (error) {
-      console.error(prefix(), "Error during cleanup:", error);
-    } finally {
-      browser = null;
-    }
-  }
+  generation++;
+
+  await Promise.all(
+    idle.splice(0).map((browser) => close(browser, "shutting down"))
+  );
 }
 
+class TimeoutError extends Error {}
+
+// Clearing the timer matters: a timeout left running after the operation it
+// guarded succeeded would report a healthy browser as wedged later on.
+function withTimeout(promise, ms, description) {
+  let timer;
+
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(new TimeoutError(`Timeout calling ${description} after ${ms}ms`)),
+      ms
+    );
+  });
+
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+// Resolves to true if the page could not be closed in time, which means the
+// browser has stopped answering and has to be thrown away.
 async function closePageWithTimeout(page) {
   try {
-    await Promise.race([
-      page.close(),
-      new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Timeout calling page.close() after 2 seconds")),
-          CLOSE_PAGE_TIMEOUT
-        )
-      ),
-    ]);
+    await withTimeout(page.close(), closePageTimeout, "page.close()");
+    return false;
   } catch (error) {
     console.error(prefix(), "Error closing page:", error);
-    // Attempt forced cleanup
+
+    if (error instanceof TimeoutError) {
+      // Coaxing the page through the same unresponsive connection would hang
+      // too. Closing the browser is what reclaims it.
+      return true;
+    }
+
+    // Otherwise the page may well still be open. Try once more to stop it,
+    // under a deadline of its own so this cannot become the hang it is
+    // recovering from.
     try {
-      await page.evaluate(() => window.stop());
-      await page.close();
+      await withTimeout(
+        page.evaluate(() => window.stop()).then(() => page.close()),
+        closePageTimeout,
+        "forced page cleanup"
+      );
+      return false;
     } catch (e) {
       console.error(prefix(), "Failed forced page cleanup:", e);
+      return e instanceof TimeoutError;
     }
   }
 }
 
 async function screenshotWithTimeout(page, path) {
   try {
-    await Promise.race([
+    await withTimeout(
       page.screenshot({
         path,
         type: "png",
         omitBackground: true,
       }),
-      new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Timeout calling page.screenshot() after 2 seconds")),
-          SCREENSHOT_TIMEOUT
-        )
-      ),
-    ]);
+      screenshotTimeout,
+      "page.screenshot()"
+    );
   } catch (error) {
     // Cleanup partial screenshot file
     try {
@@ -156,17 +249,24 @@ async function screenshotWithTimeout(page, path) {
     } catch (e) {
       console.error(prefix(), "Error cleaning up partial screenshot:", e);
     }
-    throw new Error(`Failed to take screenshot: ${error.message}`);
+
+    const failure = new Error(`Failed to take screenshot: ${error.message}`);
+    // A screenshot that never comes back is the browser's fault, not the
+    // site's, so let the caller retry against a fresh one.
+    failure.unresponsive = error instanceof TimeoutError;
+    throw failure;
   }
 }
 
 async function takeScreenshot(site, path, options = {}) {
-  let page = null;
-  try {
-    options = validateOptions(options);
-    await initialize();
+  options = validateOptions(options);
 
-    page = await browser.newPage();
+  const browser = await acquire();
+  let page = null;
+  let unresponsive = false;
+
+  try {
+    page = await browser.instance.newPage();
     await page.setUserAgent(DEFAULT_USER_AGENT);
 
     const viewport = options.mobile ? VIEWPORT.mobile : VIEWPORT.desktop;
@@ -186,21 +286,17 @@ async function takeScreenshot(site, path, options = {}) {
 
     console.log(prefix(), "Taking screenshot of", site, "to", path);
     await screenshotWithTimeout(page, path);
-
   } catch (error) {
     console.error(prefix(), "Error during screenshot:", error);
-    await restart();
+    if (error.unresponsive) unresponsive = true;
     throw error;
   } finally {
     if (page) {
       console.log(prefix(), "closing page");
-      await closePageWithTimeout(page);
+      if (await closePageWithTimeout(page)) unresponsive = true;
     }
 
-    // Check if restart is needed after the screenshot is complete
-    if (Date.now() - lastRestartTime >= DEFAULT_RESTART_INTERVAL) {
-      await restart();
-    }
+    await release(browser, { unresponsive });
   }
 }
 
@@ -223,5 +319,6 @@ const screenshot = async (site, path, options = {}) => {
 };
 
 module.exports = screenshot;
+module.exports.configure = configure;
 module.exports.restart = restart;
 module.exports.shutdown = shutdown;

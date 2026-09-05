@@ -15,4 +15,4 @@
 4. Cool in fat. Reheat skin-side-down in a skillet to crisp before serving.
 5. Serve with lentils or bitter greens.
 
-![Duck confit with roasted brussels sprouts, celery root-apple puree, bacon, chili gastrique at the girl & the fig in Sonoma, California.](https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/Duck_confit_-_the_girl_and_the_fig_-_2021-11-10_-_Sarah_Stierch.jpg/1280px-Duck_confit_-_the_girl_and_the_fig_-_2021-11-10_-_Sarah_Stierch.jpg)
+![Duck confit with roasted brussels sprouts, celery root-apple puree, bacon, chili gastrique at the girl & the fig in Sonoma, California.](https://upload.wikimedia.org/wikipedia/commons/b/b1/Duck_confit_-_the_girl_and_the_fig_-_2021-11-10_-_Sarah_Stierch.jpg)

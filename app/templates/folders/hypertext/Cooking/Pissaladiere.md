@@ -15,4 +15,4 @@
 3. Arrange anchovies in a lattice pattern, place an olive in each diamond.
 4. Bake at 200°C for 20–25 minutes. Serve warm or at room temperature.
 
-![Pissaladière from Patrice Table](https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Pissaladi%C3%A8re_from_Patrice_Table.jpg/1024px-Pissaladi%C3%A8re_from_Patrice_Table.jpg)
+![Pissaladière from Patrice Table](https://upload.wikimedia.org/wikipedia/commons/2/2a/Pissaladi%C3%A8re_from_Patrice_Table.jpg)

@@ -11,4 +11,4 @@
 2. Toast pepper in butter until fragrant.
 3. Add pasta and splash of water, then fold in cheese gradually.
 
-![Tonnarelli cacio e pepe by Camelia Boban](https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Tonnarelli_cacio_e_pepe.jpg/1280px-Tonnarelli_cacio_e_pepe.jpg)
+![Tonnarelli cacio e pepe by Camelia Boban](https://upload.wikimedia.org/wikipedia/commons/e/e6/Tonnarelli_cacio_e_pepe.jpg)

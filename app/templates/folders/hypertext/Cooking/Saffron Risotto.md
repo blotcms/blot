@@ -17,4 +17,4 @@
 4. Add stock one ladle at a time, stirring constantly until creamy.
 5. Stir in saffron infusion, Parmesan, and a final knob of butter.
 
-![ Risotto with safran](https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Risotto_med_safran_%286977872494%29.jpg/1280px-Risotto_med_safran_%286977872494%29.jpg)
+![ Risotto with safran](https://upload.wikimedia.org/wikipedia/commons/3/3b/Risotto_med_safran_%286977872494%29.jpg)

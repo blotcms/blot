@@ -16,4 +16,4 @@ A Provençal spread of olives and anchovies. Serve with bread or alongside grill
 3. Stir in olive oil and lemon juice until glossy.
 4. Keeps for one week in a sealed jar under a film of oil.
 
-![The tapenade served with crostini](https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/Terroirs%2C_Strand%2C_London_%283428776482%29.jpg/1280px-Terroirs%2C_Strand%2C_London_%283428776482%29.jpg)
+![The tapenade served with crostini](https://upload.wikimedia.org/wikipedia/commons/2/23/Terroirs%2C_Strand%2C_London_%283428776482%29.jpg)

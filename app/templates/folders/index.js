@@ -12,6 +12,7 @@ const fix = promisify(require("sync/fix"));
 
 const setupUser = require("./setupUser");
 const setupBlogs = require("./setupBlogs");
+const demoFolders = require("../demoFolders");
 
 async function getChangedFiles(sourcePath, destPath) {
   const changes = {
@@ -140,6 +141,16 @@ async function applyChanges(blog, changes) {
 async function main(options = {}) {
   let folders = await loadFoldersToBuild(DIR);
 
+  if (options.templates !== undefined) {
+    // Screenshotting a template only needs the one folder it is previewed on,
+    // so let callers name templates instead of working out the folders.
+    const wanted = demoFolders.forTemplates(
+      demoFolders.parse(options.templates)
+    );
+    console.log("Building folders for templates:", wanted.join(", "));
+    folders = folders.filter((path) => wanted.includes(basename(path)));
+  }
+
   if (options.filter) {
     folders = folders.filter(options.filter);
   }
@@ -177,8 +188,16 @@ async function main(options = {}) {
 
 if (require.main === module) {
   const options = {};
-  if (process.argv[2]) {
-    options.filter = (path) => path.includes(process.argv[2]);
+  const args = process.argv.slice(2);
+  const forTemplates = args
+    .find((arg) => arg.startsWith("--for-templates="))
+    ?.slice("--for-templates=".length);
+  const positional = args.find((arg) => !arg.startsWith("--"));
+
+  if (forTemplates) {
+    options.templates = forTemplates;
+  } else if (positional) {
+    options.filter = (path) => path.includes(positional);
   }
 
   main(options).catch((err) => {
