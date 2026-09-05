@@ -30,6 +30,16 @@ body {
   font-size: calc({{{body_font.font_size}}}px * 1.25);
 }
 
+.entries .entry {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
+}
+
+.entries .entry-date {
+  white-space: nowrap;
+}
+
 .entries a + span {opacity:0.75}
 
 .light {

@@ -6,10 +6,12 @@
 
     <p class="entries">
       {{#posts}}
-      <a href="{{{url}}}"
-        ><span>{{title}}</span>
-      </a>
-      <span class="light">{{date}} {{^last}}//{{/last}}</span>
+      <span class="entry"
+        ><a href="{{{url}}}"><span>{{title}}</span></a
+        > <span class="entry-date"
+          ><span class="light">{{date}}{{^last}} //{{/last}}</span></span
+        ></span
+      >
       {{/posts}}
     </p>
 
