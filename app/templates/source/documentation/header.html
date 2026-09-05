@@ -10,9 +10,9 @@
 
   <ul class="nav-links menubar">
     {{#menu}}
-    <li data-path="{{{id}}}"><a href="{{{url}}}">{{{label}}}</a></li>
+    <li data-path="{{{id}}}" data-url="{{{url}}}" data-label="{{{label}}}"><a href="{{{url}}}">{{{label}}}</a></li>
     {{/menu}}
-    <li><a href="/search"><span class="icon-search"></span></a></li>
+    <li class="nav-search"><a href="/search" aria-label="Search"><span class="icon-search"></span></a></li>
   </ul>
 </nav>
 <label for="nav-toggle" class="popup-cover"></label>

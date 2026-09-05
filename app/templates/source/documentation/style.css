@@ -278,6 +278,13 @@ hr {
   z-index: 3;
 }
 
+/* Hide the Search menu item when the header already has a search icon */
+.nav-links.menubar > li:not(.nav-search)[data-url="/search" i],
+.nav-links.menubar > li:not(.nav-search)[data-url="/search/" i],
+.nav-links.menubar > li:not(.nav-search)[data-label="Search" i] {
+  display: none;
+}
+
 .nav-container a {
   white-space: nowrap; /* Prevents breaking individual links */
   text-decoration: none;
