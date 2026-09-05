@@ -77,6 +77,18 @@ Run templates through [lighthouse](https://web.dev/measure/) and [observatory](h
 
 Create a new folder in this directory, name it whatever you want.
 
+# Tests
+
+Do not add test files (e.g. app/templates/tests/<template-name>-*.js) that
+assert on a single template's source via string/regex matching against its
+HTML, CSS or JS. These tests couple to incidental implementation details, do
+not verify actual rendered/visual output, and break or go stale the moment
+the template is next edited. Fix and verify template changes by rendering
+and inspecting the template (e.g. via the screenshots workflow), not by
+adding a template-specific spec file. If you need automated coverage,
+prefer real end-to-end checks in app/templates/tests/index.js that apply
+across all templates.
+
 # About
 
 I struggled initially with theme design because I was trying to design a themes for all blogs and all material. I think the major things which complicate designs. Some sites have many posts (thousands) and are updated frequently. Some sites have few posts (ten) and are updated infrequently. The quantity of posts has a big effect on the design of the archive page in particular.

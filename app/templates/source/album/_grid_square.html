@@ -17,7 +17,6 @@
   .post {
     position: relative;
     padding: 0.8rem;
-    margin-bottom: 2rem;
     width: 25%;
     cursor: zoom-in;
     box-sizing: border-box;
@@ -38,7 +37,7 @@
     {{#medium}}
     .post {width: 50%;}
     @media screen and (min-width: 540px) {.post {width: 33.3333%;}}
-    @media screen and (min-width: 800px) {.post {width: 33.3333%%;}}
+    @media screen and (min-width: 800px) {.post {width: 33.3333%;}}
     @media screen and (min-width: 1000px) {.post {width: 25%;}}
     @media screen and (min-width: 1200px) {.post {width: 20%;}}
     {{/medium}}
@@ -79,7 +78,6 @@
     display: block;
     overflow: hidden;
     position: relative;
-    margin-bottom: 1.3rem
   }
 
   .post .thumbnail:after {
@@ -160,7 +158,7 @@
           sizes="(max-width: 540px) 33vw, (max-width: 800px) 25vw, (max-width: 1000px) 20vw, (max-width: 1200px) 16vw, 14vw"
           {{/small}}
           {{#medium}}
-          sizes="(max-width: 540px) 50vw, (max-width: 800px) 33.3333vw, (max-width: 1000px) 33.3333vw, 20vw"
+          sizes="(max-width: 540px) 50vw, (max-width: 800px) 33.3333vw, (max-width: 1000px) 33.3333vw, (max-width: 1200px) 25vw, 20vw"
           {{/medium}}
           {{#large}}
           sizes="(max-width: 540px) 100vw, (max-width: 800px) 100vw, (max-width: 1000px) 50vw, (max-width: 1200px) 50vw"

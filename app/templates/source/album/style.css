@@ -211,6 +211,7 @@ nav a:not([href]) {
 }
 
 #toggle {
+  display: none;
   position: absolute;
   top: calc({{spacing}}rem/2);
   right:  {{spacing}}rem;
@@ -313,7 +314,17 @@ font-feature-settings: 'tnum';
 
     .yield.flex {display: block}
 
+  #toggle {
+    display: block;
+  }
+
 }
+
+{{#infinite_scroll}}
+a.next-page {
+  display: none;
+}
+{{/infinite_scroll}}
 
 
 .edge a {

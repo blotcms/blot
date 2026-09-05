@@ -100,9 +100,12 @@ let infScroll = new InfiniteScroll( '.posts', {
 
 infScroll.on( 'history', function( title, path ) {
   const pageNumber = parseInt(path.split('/').pop()) || 1;
-  document.getElementById('current-page').innerHTML = pageNumber;
-  document.querySelector('.next-page').href = '/page/' + (pageNumber+1);
-  document.querySelector('.previous-page').href = '/page/'  + (pageNumber-1);
+  const current = document.getElementById('current-page');
+  if (current) current.innerHTML = pageNumber;
+  const next = document.querySelector('.next-page');
+  if (next) next.href = '/page/' + (pageNumber+1);
+  const previous = document.querySelector('.previous-page');
+  if (previous) previous.href = '/page/'  + (pageNumber-1);
 });
 
 
