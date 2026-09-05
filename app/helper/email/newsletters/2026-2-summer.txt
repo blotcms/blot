@@ -10,6 +10,10 @@ Summer newsletter
 - Obsidian callout support: /how/files/markdown#callouts
 
 **Changes**
+- Improved many of the built-in templates and fixed a batch of mobile layout bugs across the template collection
+- The web template editor has clearer controls for the Links, Documentation, Magazine and Fieldnotes templates
+- The [redirects settings page](https://blot.im/sites/default/settings/redirects) now warns you when two redirects conflict
+- iCloud folder setup no longer times out during the initial connection and reports progress on the sync status line
 - Relative links in your posts are now resolved based on the location of the source file, not the post's URL (previously relative links, unlike images, were resolved against the post's URL, which often broke them)
 - Google Docs now support superscript, subscript, strike, underline
 - Support Wikilink lookup by title for pages as well as posts
@@ -33,6 +37,9 @@ Summer newsletter
 - Fixed a bug that allowed unauthorized access to another site’s files by submitting a crafted site ID
 - Fixed an authorization bug that let you install and view another site’s private template
 - Fixed the HTML produced for blockquotes in [Google Docs](https://blot.im/how/files/google-docs), which could make quoted text wider than the rest of your writing
+- Fixed a reflected cross-site scripting flaw on the Dropbox authentication page
+- Hardened the dashboard against cross-site request forgery
+- Closed a way to bypass the login rate limiter with a forged X-Forwarded-For header
 
 **Questions**
 
