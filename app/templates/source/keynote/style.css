@@ -1,23 +1,43 @@
 {{{app_css}}}
 
+html,
+body {
+  background: {{background_color}};
+  color-scheme: light;
+}
+
 body {
   font: normal 16px / 1.5 sans-serif;
   margin: 0;
   padding: 0;
-  color: #111
+  color: #111;
+}
+
+/* Fill the viewport below the header; paint a background so screenshots are opaque. */
+body:has(.gallery) {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .gallery {
   overflow-x: scroll;
   overflow-y: hidden !important;
   white-space: nowrap;
-  position: absolute;
-  bottom: 0;
-  top: 8em;
-  padding:0 3.66em
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 3.66em;
+  background: {{background_color}};
 }
 
-.gallery .entry {display: inline-block;vertical-align: top;width: 320px;white-space: normal;
+.gallery .entry {
+  display: inline-block;
+  vertical-align: top;
+  width: 320px;
+  box-sizing: border-box;
+  white-space: normal;
 }
 
 img {max-width: 100%;height: auto;}
@@ -47,11 +67,24 @@ hr {width: 100%;border: none;border-bottom: 1px solid rgba(0,0,0,0.15)}
   margin:1em 0;color: #aaa;font-size: 13px}
 
 
-#header {padding: 4em;font-size: 14px;}
+#header {
+  padding: 4em;
+  font-size: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  flex: 0 0 auto;
+  background: {{background_color}};
+}
 #header a {padding: 0.5em;margin: 0 0.5em;border: 1px solid transparent}
 #header a:hover {border-color: #000}
 
-#title {font-size: 30px;float: right;position:relative;top: -1em;padding: 0.25em}
+#title {
+  font-size: 30px;
+  margin-left: auto;
+  position: relative;
+  padding: 0.25em;
+}
 
 .avatar {
   width:36px;
@@ -66,7 +99,8 @@ hr {width: 100%;border: none;border-bottom: 1px solid rgba(0,0,0,0.15)}
 .entry {font-size:14px;padding: 1em;color: #777}
 .entry h1:first-of-type {margin-top: 0.3em}
 
-.contents {margin: 0 4em 0 8em;max-width: 800px}
+.contents,
+.container {margin: 0 4em 0 8em;max-width: 800px}
 
 .caption {
   font: 14px / 1.4333 sans-serif;
@@ -83,11 +117,7 @@ hr {width: 100%;border: none;border-bottom: 1px solid rgba(0,0,0,0.15)}
 @media screen and (max-width: 800px) {
   #header {
     padding: 1.25em 1.25em 1em;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
     row-gap: 0.4em;
-    flex: 0 0 auto;
   }
 
   #header a {
@@ -96,9 +126,6 @@ hr {width: 100%;border: none;border-bottom: 1px solid rgba(0,0,0,0.15)}
   }
 
   #header #title {
-    float: none;
-    position: static;
-    top: auto;
     flex: 0 0 100%;
     order: -1;
     margin: 0;
@@ -107,24 +134,12 @@ hr {width: 100%;border: none;border-bottom: 1px solid rgba(0,0,0,0.15)}
     overflow-wrap: anywhere;
   }
 
-  body:has(.gallery) {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    overflow: hidden;
-  }
-
   .gallery {
-    position: relative;
-    top: auto;
-    bottom: auto;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
     padding: 0 1.25em;
   }
 
-  .contents {
+  .contents,
+  .container {
     margin: 0 1.25em 2em;
   }
 }
