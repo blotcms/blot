@@ -167,7 +167,7 @@ function determineBackIndex () {
   }
 
   localHistory = localHistory.slice(-50);
-  localHistory.push(window.location);
+  localHistory.push({ pathname: window.location.pathname });
   sessionStorage.setItem("localHistory", JSON.stringify(localHistory));
 
   // we go back in the list of visited pages until we find
@@ -210,7 +210,7 @@ try {
   candidates = JSON.parse(candidates);  
   candidates = candidates.filter(function(pathname){
     return articles.indexOf(pathname) > -1 && 
-    pathname !== window.location
+    pathname !== window.location.pathname
   });
   if (candidates.length === 0) candidates = articles;
 } catch (e) {

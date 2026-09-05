@@ -14,6 +14,7 @@ html {
   font-size: {{{font_size}}}px;
   line-height: {{{line_height}}};
   {{/body_font}}
+  background: {{background_color}};
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
@@ -38,8 +39,8 @@ body {
   position: absolute;
   {{/sticky_navigation}}
   top: 0;
+  bottom: 0;
   width: {{navigation_width}}px;
-  height: 100vh;
   padding: {{spacing}}rem;
 }
 
@@ -69,9 +70,13 @@ body.position-left .navigation-container {
 
 .navigation {
   flex-grow: 1;
-  height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+.navigation .menu {
+  margin-top: auto;
 }
 
 .navigation a.index-link {
@@ -160,6 +165,7 @@ body.position-top .posts {
 body.position-top .navigation-container {
   width: 100%;
     height: auto;
+    bottom: auto;
     display: flex;
     box-sizing: border-box;
     z-index: 1;
@@ -211,6 +217,7 @@ body.position-top label[for="toggle"] {
   .navigation-container {
     width: 100%;
     height: auto;
+    bottom: auto;
     display: flex;
     box-sizing: border-box;
     z-index: 3;
@@ -343,16 +350,16 @@ body.position-top label[for="toggle"] {
 .post.text .date,
 .archives a .date,
 .nav a[href] {
-  color: {{navigation_link_color}};
+  color: {{text_color}};
 }
 
 .entry a {
-  color: {{text_link_color}}
+  color: {{accent_color}};
 }
 
 .entry .caption {display: block;margin:1em 0;}
 .entry a:visited {
-  color: {{text_link_visited_color}}
+  color: {{accent_color}};
 }
 
 
@@ -373,6 +380,13 @@ body.position-top label[for="toggle"] {
   display: flex;
   flex-wrap: wrap;
   padding: calc({{spacing}}rem * 2 / 3);
+}
+
+/* Absorb leftover space on the last row so the final photos
+   keep the same row height as complete rows above them. */
+.posts::after {
+  content: "";
+  flex-grow: 999999999;
 }
 
 .post {
@@ -431,6 +445,7 @@ body.position-top label[for="toggle"] {
 .post img {
   position: absolute;
   top: 0;
+  left: 0;
   width: 100%;
   vertical-align: bottom;
 }

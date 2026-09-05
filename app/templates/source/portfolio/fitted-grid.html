@@ -4,12 +4,12 @@
   <!-- These posts have photos -->
   {{#thumbnail.large.url}}
   <a class="post photo" href="{{{url}}}" style="
-    max-width:{{thumbnail.large.width}};
-    max-height:{{thumbnail.large.height}};
+    max-width:{{thumbnail.large.width}}px;
+    max-height:{{thumbnail.large.height}}px;
     width:calc({{thumbnail.large.width}}px*{{thumbnail_size}}/{{thumbnail.large.height}});
     flex-grow:calc({{thumbnail.large.width}}*{{thumbnail_size}}/{{thumbnail.large.height}})">
     <i style="padding-bottom:{{thumbnail.large.ratio}}"></i>
-    <img src="{{{thumbnail.large.url}}}" class="pre-loaded" onload="this.className+=' loaded';" />
+    <img src="{{{thumbnail.large.url}}}" alt="{{title}}" class="pre-loaded" onload="this.className+=' loaded';" />
     <noscript>  
     <img src="{{{thumbnail.large.url}}}">
     </noscript>
