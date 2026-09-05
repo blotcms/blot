@@ -21,7 +21,7 @@
   --border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.06);
   --link-color: {{link_color}};
   --dots-height: 2.8rem;
-  --caption-height: 1.4rem;
+  --caption-height: 2.6rem;
   --slides-width: 50vw;
   --slides-height: 100vh;
   --padding: 1.4rem;
@@ -90,17 +90,21 @@ hr { border: none; border-bottom: 1px solid var(--border-color); clear: both; }
 
 .collapse-on-mobile { display: flex; flex-direction: row; }
 
+.site-header { display: flex; }
+
 
 /* NAVIGATION */
 .navigation {
-  display: flex; justify-content: flex-start; gap: 0.5em;
-  align-items: baseline; position: sticky; background: var(--background-color);
+  display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 0.5em;
+  align-items: center; position: sticky; background: var(--background-color);
   padding: 0.75em 0; top: 0; z-index: 1000;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
 }
 .navigation a {
   text-decoration: none; font-size: 0.9em; margin-bottom: -1px;
   color: var(--light-text-color); background: var(--off-background-color);
-  border-radius: 2em; display: inline-block; padding: 0.25em 0.75em; text-wrap: nowrap;
+  border-radius: 2em; display: inline-block; padding: 0.25em 0.75em;
+  flex: 0 0 auto; white-space: nowrap; text-wrap: nowrap;
 }
 .navigation a.active {
   color: var(--text-color); background-color: var(--border-color);
@@ -275,10 +279,16 @@ kbd {
 .slide-caption {
   color: var(--text-color); position: absolute; height: var(--caption-height);
   bottom: 0; left: 0; font-size: 0.85em; right: 0; text-align: center; cursor: auto;
-  margin: 0 2rem;
+  margin: 0 2rem; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 0.15em; line-height: 1.25; box-sizing: border-box;
 }
-.slide-caption a {
-  color: var(--text-color); font-size: 0.75em; text-transform: uppercase; opacity: 0.5;
+.slide-caption-text {
+  display: block; max-width: 100%;
+}
+.slide-caption a,
+.slide-caption-credit {
+  display: block; color: var(--text-color); font-size: 0.75em;
+  text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.5;
 }
 
 .flickity-page-dots {
@@ -361,4 +371,12 @@ kbd {
   }
   
   .main { width: 100%; }
+}
+
+@media screen and (max-width: 640px) {
+  /* Wrapped nav is two rows; keep slide-less pages (Speakers, FAQs) clear too. */
+  .slides,
+  .site-header {
+    margin-top: 5.75em;
+  }
 }
