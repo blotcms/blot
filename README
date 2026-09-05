@@ -12,36 +12,11 @@ The internet <> Reverse proxy (Openresty) <> Blot (express.js node application) 
 
 Self-hosting Blot is currently unsupported. Please don’t file issues or contact support about it. I hope to support this properly someday, but not yet.
 
-That said, to get Blot running locally, you will need Docker, mkcert and dnsmasq. 
-
-Once you have Docker installed and running, clone the repository:
+To run Blot locally, you will need Docker, mkcert and dnsmasq. Then:
 
 git clone https://github.com/davidmerfield/blot --depth 1
-
-Blot requires a huge number of subdomains to work e.g.
-
-https://local.blot
-https://cdn.local.blot
-https://site.local.blot
-https://preview-of-blog-on-site.local.blot
-https://preview-of-hypertext-on-site.local.blot
-
-etc...
-
-We use dnsmasq to point all requests to the fake TLD '.blot' to the loopback:
-
-brew install dnsmasq
-mkdir -pv $(brew --prefix)/etc/
-echo 'address=/.blot/127.0.0.1' >> $(brew --prefix)/etc/dnsmasq.conf
-echo 'port=53' >> $(brew --prefix)/etc/dnsmasq.conf
-sudo brew services start dnsmasq
-sudo mkdir -v /etc/resolver
-sudo bash -c 'echo "nameserver 127.0.0.1" > /etc/resolver/blot'
-
-To create the SSL certificate required for this to work locally, we use:
-
-brew install mkcert nss
-
-Then start the server:
-
 npm start
+
+The dashboard is https://local.blot and the example site is https://example.local.blot. For the full setup, see:
+
+https://blot.im/developers/guides/run-blot-locally

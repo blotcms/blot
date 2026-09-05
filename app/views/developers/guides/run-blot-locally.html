@@ -5,27 +5,38 @@
 <h2>1. Install Docker</h2>
 <p>You will need <a href="https://www.docker.com/" target="_blank">Docker</a>. Ensure that Docker is installed and running on your machine before proceeding.</p>
 
-<h2>2. Clone the repository</h2>
-<p>Use <a href="https://git-scm.com/" target="_blank">Git</a> to clone Blot’s source code:</p>
-<pre class="bash"><code>git clone https://github.com/davidmerfield/blot</code></pre>
+<h2>2. Install dnsmasq and mkcert</h2>
+<p>Blot requires a huge number of subdomains to work, for example:</p>
+<pre><code>https://local.blot
+https://cdn.local.blot
+https://site.local.blot
+https://preview-of-blog-on-site.local.blot
+https://preview-of-hypertext-on-site.local.blot
+</code></pre>
+<p>We use dnsmasq to point all requests for the fake TLD <code>.blot</code> to the loopback address:</p>
+<pre class="bash"><code>brew install dnsmasq
+mkdir -pv $(brew --prefix)/etc/
+echo 'address=/.blot/127.0.0.1' >> $(brew --prefix)/etc/dnsmasq.conf
+echo 'port=53' >> $(brew --prefix)/etc/dnsmasq.conf
+sudo brew services start dnsmasq
+sudo mkdir -v /etc/resolver
+sudo bash -c 'echo "nameserver 127.0.0.1" > /etc/resolver/blot'</code></pre>
+<p>We use mkcert to create a locally-trusted SSL certificate. Install it, then <code>npm start</code> will generate and trust the certificate:</p>
+<pre class="bash"><code>brew install mkcert nss</code></pre>
 
-<h2>3. Start the server</h2>
+<h2>3. Clone the repository</h2>
+<p>Use <a href="https://git-scm.com/" target="_blank">Git</a> to clone Blot’s source code:</p>
+<pre class="bash"><code>git clone https://github.com/davidmerfield/blot --depth 1</code></pre>
+
+<h2>4. Start the server</h2>
 <p>In the cloned repository, start the server:</p>
 <pre class="bash"><code>npm start</code></pre>
 
-<h2>4. Trust local SSL certificates</h2>
-<p>Before you start editing code, open these URLs and trust the self-signed certificates:</p>
-<ul>
-    <li><a href="https://localhost" target="_blank">https://localhost/</a></li>
-    <li><a href="https://cdn.localhost" target="_blank">https://cdn.localhost/</a></li>
-    <li><a href="https://example.localhost" target="_blank">https://example.localhost/</a></li>
-</ul>
-
 <h2>5. Open the dashboard and example site</h2>
-<p>After trusting the certificates, open:</p>
+<p>When the server starts it prints a dashboard login URL. You can also open:</p>
 <ul>
-    <li>The dashboard: <a href="https://localhost" target="_blank">https://localhost</a></li>
-    <li>The example site: <a href="https://example.localhost" target="_blank">https://example.localhost</a></li>
+    <li>The dashboard: <a href="https://local.blot" target="_blank">https://local.blot</a></li>
+    <li>The example site: <a href="https://example.local.blot" target="_blank">https://example.local.blot</a></li>
 </ul>
 
 <h2>6. Edit the example blog</h2>
