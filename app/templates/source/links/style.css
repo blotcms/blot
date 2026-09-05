@@ -975,6 +975,8 @@ input#toggle {
     align-items: normal;
   }
 
+  /* flex-basis: 100% belongs on header children (full-width menu rows),
+     not .header — body is a column flex, so that would fill the viewport. */
   .header>*,
   .header {
     z-index: 1;
@@ -982,6 +984,9 @@ input#toggle {
     max-width: none !important;
     width: 100% !important;
     min-height: 3.4em;
+  }
+
+  .header>* {
     flex-basis: 100% !important;
   }
 
