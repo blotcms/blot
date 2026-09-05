@@ -1,50 +1,27 @@
-<a class="dim  pv4 db lh-copy no-underline   "  href="{{{url}}}">
-
-      {{#summary}}
-       <span class="db fr w-two-thirds">
-        <span class="db" style="max-height:23.4375rem;overflow:hidden">
-        {{#thumbnail.medium}}
-       <img class="thumbnail-frame" style="width:100%;vertical-align:bottom" src="{{{url}}}">
-        {{/thumbnail.medium}}
-        </span>
-
-      </span>
-      
-      <span class="db fl w-third" style="">
-      <span class="mr4 fw9 black-80 db lh-title f3 mb3 tracked-tight">{{title}}</span>
-      <span class="mr4 black-50 mr3 f6 lh-copy db" style="text-overflow:ellipsis;max-height:9.1875rem;overflow:hidden">{{summary}}</span>      
-     <span class=" db f6 mt4 " style="height:1.5em;overflow:hidden">
-        {{#date}}<span date-from-now="{{dateStamp}}" class="dib black-50 mr2">{{date}}</span>{{/date}}
-        <span class="dib fw6 clip-2 black-80">{{#tags}}<span class="dib">{{^first}} &amp; {{/first}}{{tag}}</span>{{/tags}}</span>
+<a class="dim pv4 db lh-copy no-underline" href="{{{url}}}">
+  <span class="db fr w-two-thirds">
+    <span class="db thumbnail-frame" style="max-height:23.4375rem;overflow:hidden">
+      {{#thumbnail.large}}
+      <img style="width:100%;vertical-align:bottom" src="{{{url}}}">
+      {{/thumbnail.large}}
+      {{^thumbnail.large}}
+      {{#thumbnail.medium}}
+      <img style="width:100%;vertical-align:bottom" src="{{{url}}}">
+      {{/thumbnail.medium}}
+      {{/thumbnail.large}}
     </span>
-      </span>
-      {{/summary}}
+  </span>
 
-      {{^summary}}
-      <span class="w-100" style="">
-        <span class=" fw9 black-80 db lh-title f3 tracked-tight">{{title}}</span>
+  <span class="db fl w-third">
+    <span class="mr4 fw9 black-80 db lh-title f3 mb3 tracked-tight">{{title}}</span>
+    {{#summary}}
+    <span class="mr4 black-50 f6 lh-copy db" style="text-overflow:ellipsis;max-height:9.1875rem;overflow:hidden">{{summary}}</span>
+    {{/summary}}
+    <span class="db f6 {{#summary}}mt4{{/summary}}{{^summary}}mt1{{/summary}}" style="height:1.5em;overflow:hidden">
+      {{#date}}<span date-from-now="{{dateStamp}}" class="dib black-50 mr2">{{date}}</span>{{/date}}
+      <span class="dib fw6 clip-2 black-80">{{#tags}}<span class="dib">{{^first}}&nbsp;&amp;&nbsp;{{/first}}{{tag}}</span>{{/tags}}</span>
+    </span>
+  </span>
 
-       <span class=" db f6 mt1 mb3" style="height:1.5em;overflow:hidden">
-          {{#date}}<span date-from-now="{{dateStamp}}" class="dib black-50 mr2">{{date}}</span>{{/date}}
-          <span class="dib fw6 clip-2 black-80">{{#tags}}<span class="dib">{{^first}} &amp; {{/first}}{{tag}}</span>{{/tags}}</span>
-      </span>
-
-
-        <span class="db">
-        {{#thumbnail.large}}
-       <img class="thumbnail-frame" style="width:100%;vertical-align:bottom" src="{{{url}}}">
-        {{/thumbnail.large}}
-        </span>
-      </span>
-      
-
-
-      {{/summary}}
-
-
-     
-      </span>
-
-
-      <span class="cf"></span>
-      </a>
+  <span class="cf"></span>
+</a>
