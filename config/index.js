@@ -22,6 +22,25 @@ const reverse_proxies = process.env.BLOT_REVERSE_PROXY_URLS
   ? ["http://127.0.0.1:80"]
   : [];
 
+// See the "airlock" config block below. This PR deploys the airlock sidecar
+// but deliberately does NOT set these two yet (only the BLOT_AIRLOCK_PROBE_*
+// pair) - the follow-up cutover PR does. So this warning is *expected* to
+// fire on every production boot until then; it's a reminder, not an error
+// that would crash every container. What it means: bookmark screenshots and
+// remote-image downloads are still fetching user-controlled URLs directly,
+// with no SSRF protection.
+if (
+  environment === "production" &&
+  !(process.env.BLOT_AIRLOCK_BROWSER_URL && process.env.BLOT_AIRLOCK_PROXY_URL)
+) {
+  console.warn(
+    "WARNING: BLOT_AIRLOCK_BROWSER_URL / BLOT_AIRLOCK_PROXY_URL are not both " +
+      "set in production. Bookmark-link screenshots and remote-image " +
+      "downloads are fetching user-controlled URLs directly, with no SSRF " +
+      "protection. See config/airlock/README.md."
+  );
+}
+
 module.exports = {
   // codebase expects either 'production' or 'development'
   environment,
@@ -116,6 +135,36 @@ module.exports = {
     bin: process.env.BLOT_PANDOC_PATH || "pandoc",
     maxmemory: "500M", // 500mb
     timeout: 10000, // 10s
+  },
+
+  // The "airlock" container (config/airlock) is the single egress point for
+  // fetching untrusted, user-supplied URLs: bookmark-link screenshots and
+  // remote images referenced in posts. When these are unset the app talks to
+  // the network directly - fine for local development, but with no SSRF
+  // protection (see the production warning above). See config/airlock/README.md.
+  airlock: {
+    // Chromium DevTools endpoint, e.g. http://airlock:9222 - consumed by
+    // app/helper/screenshot.
+    browser_url: process.env.BLOT_AIRLOCK_BROWSER_URL || null,
+    // HTTP(S) forward proxy, e.g. http://airlock:8888 - consumed by
+    // app/helper/transformer/download.
+    proxy: process.env.BLOT_AIRLOCK_PROXY_URL || null,
+  },
+
+  // TEMPORARY, for the airlock rollout only - remove this block,
+  // BLOT_AIRLOCK_PROBE_*, and app/helper/airlock/probe.js together once the
+  // follow-up PR switches helper/screenshot / helper/transformer/download
+  // over to the `airlock` block above.
+  //
+  // Deliberately a separate namespace from `airlock`: the deploy script
+  // sets these on every app container once the airlock sidecar exists, so
+  // app/helper/airlock/probe.js can verify it's reachable and actually
+  // filtering traffic - without touching `airlock.browser_url`/`.proxy`,
+  // which would switch real production traffic through it before that's
+  // been verified. See config/airlock/README.md.
+  airlockProbe: {
+    browserUrl: process.env.BLOT_AIRLOCK_PROBE_BROWSER_URL || null,
+    proxy: process.env.BLOT_AIRLOCK_PROBE_PROXY_URL || null,
   },
 
   paypal: {

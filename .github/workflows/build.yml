@@ -23,6 +23,7 @@ permissions:
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/blot
+  AIRLOCK_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/blot-airlock
 
 jobs:
   build:
@@ -127,6 +128,160 @@ jobs:
             "$IMAGE:$SHA-arm64"
 
           # Optional: tag branch and latest on default branch
+          if [ "${{ github.ref_name }}" = "master" ]; then
+            docker buildx imagetools create \
+              -t "$IMAGE:latest" \
+              "$IMAGE:$SHA"
+          fi
+
+  # Builds the airlock image (config/airlock) - the egress boundary the
+  # deploy script (scripts/deploy) now brings up alongside the app
+  # containers. See config/airlock/README.md for what it's for; nothing in
+  # production reads config.airlock yet (see config.airlockProbe), so this
+  # image isn't in the request path - but scripts/deploy/index.js expects a
+  # manifest for every commit's SHA to exist, same as the app image.
+  build-airlock:
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runs-on: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runs-on }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push airlock (${{ matrix.arch }})
+        uses: docker/build-push-action@v6
+        with:
+          context: config/airlock
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: |
+            ${{ env.AIRLOCK_IMAGE_NAME }}:${{ github.sha }}-${{ matrix.arch }}
+          cache-from: |
+            type=registry,ref=${{ env.AIRLOCK_IMAGE_NAME }}:cache-${{ matrix.arch }}
+          cache-to: |
+            type=registry,ref=${{ env.AIRLOCK_IMAGE_NAME }}:cache-${{ matrix.arch }},mode=max
+
+      - name: Verify egress filter (${{ matrix.arch }})
+        env:
+          IMAGE: ${{ env.AIRLOCK_IMAGE_NAME }}:${{ github.sha }}-${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          # A user-defined network, not the default bridge: DNS is Docker's
+          # embedded resolver on 127.0.0.11, which the egress filter allows
+          # over loopback; the default bridge's resolver is a private
+          # address the filter would drop. See config/airlock/README.md.
+          docker network create airlock_test_network
+
+          # 169.254.169.254 and 10.0.0.1 have no route at all from a
+          # GitHub-hosted runner's network, egress filter or not - curl
+          # fails against them regardless of whether egress.nft is loaded,
+          # wrong, or missing entirely (verified: a stock, unfiltered
+          # alpine container on this same network also can't reach them).
+          # Testing against them here would prove nothing. Instead, put a
+          # real listener on a THIRD, plain sibling container: its IP is
+          # assigned from Docker's default pool, which sits entirely inside
+          # 172.16.0.0/12 - the exact range egress.nft blocks - so it is
+          # genuinely reachable in this topology unless something is
+          # actively filtering it. A second, unfiltered sibling establishes
+          # that baseline before the airlock is asked to reach the same
+          # target, so a pass here means the filter did something, not
+          # that the address was already dead.
+          docker run -d --name airlock_test_target --network airlock_test_network \
+            alpine:3.20 sh -c 'while true; do nc -l -p 80; done'
+
+          target_ip=$(docker inspect --format='{{(index .NetworkSettings.Networks "airlock_test_network").IPAddress}}' airlock_test_target)
+          echo "Target container is at $target_ip"
+
+          docker run -d --name airlock_test_control --network airlock_test_network \
+            alpine:3.20 sleep 300
+
+          echo "Sanity check: an unfiltered sibling container CAN reach the target..."
+          docker exec airlock_test_control sh -c "nc -z -w3 $target_ip 80"
+
+          airlock_id=$(docker run -d --network airlock_test_network --cap-add=NET_ADMIN "$IMAGE")
+
+          timeout=30; interval=2; elapsed=0
+          until [ "$(docker inspect --format='{{json .State.Health.Status}}' "$airlock_id")" = '"healthy"' ]; do
+            if [ $elapsed -ge $timeout ]; then
+              echo "Airlock health check failed"
+              docker logs "$airlock_id" || true
+              exit 1
+            fi
+            sleep $interval; elapsed=$((elapsed+interval))
+          done
+
+          echo "Checking the airlock CANNOT reach that same, genuinely-reachable target..."
+          if docker exec "$airlock_id" sh -c "curl -fsS -m3 http://$target_ip/"; then
+            echo "FAIL: a private IP a sibling container can reach was reachable from inside the airlock"
+            exit 1
+          fi
+
+          # -f, not just -sS: a rejected connection isn't the only way this
+          # can fail. tinyproxy answers with its OWN valid HTTP response
+          # (e.g. "500 Unable to connect") when it can't reach an upstream,
+          # and curl without -f treats any completed HTTP response as
+          # success regardless of status - so a plain -sS check here would
+          # falsely PASS a broken filter that let tinyproxy's own error page
+          # through, and would misreport a working `reject`-style rule (an
+          # immediate refusal, answered fast enough for tinyproxy to relay
+          # its error page inside curl's own timeout) as "reachable". -f
+          # treats that error page as the failure it represents.
+          echo "Checking the airlock's own DevTools endpoint is unreachable through its proxy..."
+          if docker exec "$airlock_id" sh -c 'curl -fsS -m3 -x http://127.0.0.1:8888 http://127.0.0.1:9221/json/version'; then
+            echo "FAIL: loopback was reachable through the proxy"
+            exit 1
+          fi
+
+          echo "Checking the public internet is reachable, direct and via the proxy..."
+          docker exec "$airlock_id" sh -c 'curl -m8 -sSf -o /dev/null https://example.com'
+          docker exec "$airlock_id" sh -c 'curl -m8 -sSf -x http://127.0.0.1:8888 -o /dev/null https://example.com'
+
+          docker rm -f "$airlock_id" airlock_test_target airlock_test_control
+          docker network rm airlock_test_network
+
+  manifest-airlock:
+    needs: build-airlock
+    runs-on: ubuntu-latest
+    if: ${{ always() && needs.build-airlock.result == 'success' }}
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create and push multi-arch manifest
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${{ github.repository_owner }}/blot-airlock"
+          SHA="${{ github.sha }}"
+          docker buildx imagetools create \
+            -t "$IMAGE:$SHA" \
+            "$IMAGE:$SHA-amd64" \
+            "$IMAGE:$SHA-arm64"
+
           if [ "${{ github.ref_name }}" = "master" ]; then
             docker buildx imagetools create \
               -t "$IMAGE:latest" \

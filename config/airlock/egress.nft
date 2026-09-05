@@ -1,0 +1,89 @@
+#!/usr/sbin/nft -f
+#
+# Airlock egress filter.
+#
+# Applied by entrypoint.sh before Chromium or the proxy start. Every packet
+# the container sends is matched against its real destination IP, in-kernel,
+# at connect() time - so this also defeats DNS-rebinding and covers redirects
+# and sub-resources that application-level URL checks miss.
+#
+# Private, loopback, link-local, ULA, carrier-grade-NAT, documentation,
+# benchmarking, 6to4/Teredo/NAT64 (which embed a v4 address and would
+# otherwise route around the v4 list) and multicast/reserved ranges are
+# dropped. The cloud instance metadata address (169.254.169.254) falls
+# inside 169.254.0.0/16.
+#
+# `reject` (not `drop`) so a blocked destination fails a connect() attempt
+# immediately instead of costing the caller a full timeout - a post with a
+# hundred blocked <img> URLs would otherwise take minutes to build.
+#
+# The `table {}` + `delete table` prelude makes `nft -f` idempotent so the
+# entrypoint can be re-run without erroring on an already-present table.
+
+table inet airlock {}
+delete table inet airlock
+
+table inet airlock {
+    chain output {
+        type filter hook output priority 0; policy accept;
+
+        # Let replies to already-vetted connections back in/out.
+        ct state established,related accept
+
+        # Loopback is NOT blanket-accepted. Chromium and tinyproxy run as the
+        # unprivileged 'airlock' user and handle user-supplied URLs - if they
+        # could reach 127.0.0.1 freely, "http://127.0.0.1:9221/json/version"
+        # in a bookmark or <img src> would reach this container's own
+        # unauthenticated DevTools endpoint and leak/replay it as a
+        # "downloaded asset". Only Docker's embedded DNS resolver (anyone),
+        # nginx's own uid (the nginx -> Chromium hop), and root (this
+        # entrypoint and the container HEALTHCHECK) may use loopback.
+        oif "lo" ip daddr 127.0.0.11 accept
+        oif "lo" meta skuid 0 accept
+        oif "lo" meta skuid 1002 accept    # 'airlockfwd', nginx's uid
+        # reject, not drop, matching every other rule below - for the same
+        # reason: a post with several <img src="http://127.0.0.1/..."> URLs
+        # would otherwise burn each caller's full network timeout budget
+        # (5s per transformer download, up to 20s per screenshot attempt)
+        # waiting for a connection nothing will ever answer.
+        oif "lo" reject
+
+        # --- IPv4: drop every non-public destination ---
+        ip daddr {
+            0.0.0.0/8,
+            10.0.0.0/8,
+            100.64.0.0/10,
+            127.0.0.0/8,
+            169.254.0.0/16,
+            172.16.0.0/12,
+            192.0.0.0/24,
+            192.0.2.0/24,
+            192.88.99.0/24,
+            192.168.0.0/16,
+            192.175.48.0/24,
+            198.18.0.0/15,
+            198.51.100.0/24,
+            203.0.113.0/24,
+            224.0.0.0/4,
+            240.0.0.0/4,
+            255.255.255.255/32
+        } reject
+
+        # --- IPv6: drop every non-public destination ---
+        ip6 daddr {
+            ::1/128,
+            ::/128,
+            ::/96,
+            ::ffff:0:0/96,
+            64:ff9b::/96,
+            64:ff9b:1::/48,
+            100::/64,
+            2001::/32,
+            2001:db8::/32,
+            2002::/16,
+            fc00::/7,
+            fe80::/10,
+            ff00::/8
+        } reject
+    }
+}

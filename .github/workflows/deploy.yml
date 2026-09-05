@@ -8,6 +8,7 @@ permissions:
 
 env:
   REGISTRY_URL: ghcr.io/davidmerfield/blot
+  AIRLOCK_REGISTRY_URL: ghcr.io/davidmerfield/blot-airlock
   BLOT_DEPLOY_SSH_HOST: ${{ secrets.BLOT_DEPLOY_SSH_HOST }}
 
 jobs:
@@ -34,29 +35,43 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Wait for build image to be available
+      - name: Wait for build images to be available
         run: |
-          echo "Waiting for build image to be available..."
-          
           IMAGE="${{ env.REGISTRY_URL }}:${{ github.sha }}"
-          MAX_WAIT_MINUTES=30
+          AIRLOCK_IMAGE="${{ env.AIRLOCK_REGISTRY_URL }}:${{ github.sha }}"
           WAIT_INTERVAL=10
-          MAX_ITERATIONS=$((MAX_WAIT_MINUTES * 60 / WAIT_INTERVAL))
-          ITERATION=0
-          
-          while [ $ITERATION -lt $MAX_ITERATIONS ]; do
+
+          # The app image is required.
+          echo "Waiting for app image: $IMAGE"
+          for i in $(seq 1 150); do   # up to 25 min
             if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
-              echo "✅ Build image found: $IMAGE"
+              echo "✅ App image found: $IMAGE"
+              break
+            fi
+            if [ "$i" -eq 150 ]; then
+              echo "❌ Timeout: app image not found after 25 minutes: $IMAGE"
+              exit 1
+            fi
+            echo "  not ready yet ($i/150)..."; sleep $WAIT_INTERVAL
+          done
+
+          # The airlock image is best-effort. build-airlock runs in parallel
+          # with the app build and is usually a little slower (Alpine +
+          # Chromium + the verify step), so give it a bounded grace window
+          # once the app image is up - but do NOT let it block the deploy:
+          # deployAirlockIfNeeded() in scripts/deploy already skips a missing
+          # airlock manifest non-fatally, and an airlock build failure must
+          # not be able to hold up an app hotfix.
+          echo "Waiting (best-effort) for airlock image: $AIRLOCK_IMAGE"
+          for i in $(seq 1 30); do   # up to 5 min
+            if docker manifest inspect "$AIRLOCK_IMAGE" > /dev/null 2>&1; then
+              echo "✅ Airlock image found: $AIRLOCK_IMAGE"
               exit 0
             fi
-            
-            echo "Image not found yet. Waiting ${WAIT_INTERVAL} seconds... (attempt $((ITERATION + 1))/$MAX_ITERATIONS)"
-            sleep $WAIT_INTERVAL
-            ITERATION=$((ITERATION + 1))
+            echo "  not ready yet ($i/30)..."; sleep $WAIT_INTERVAL
           done
-          
-          echo "❌ Timeout: Build image not found after ${MAX_WAIT_MINUTES} minutes: $IMAGE"
-          exit 1
+
+          echo "::warning::Airlock image $AIRLOCK_IMAGE not available after the grace period - the deploy will run, but scripts/deploy will skip the airlock update for this commit (see deployAirlockIfNeeded). Re-deploy this commit once build-airlock succeeds."
 
   deploy:
     needs: wait-for-build
