@@ -135,11 +135,12 @@ jobs:
           fi
 
   # Builds the airlock image (config/airlock) - the egress boundary the
-  # deploy script (scripts/deploy) now brings up alongside the app
-  # containers. See config/airlock/README.md for what it's for; nothing in
-  # production reads config.airlock yet (see config.airlockProbe), so this
-  # image isn't in the request path - but scripts/deploy/index.js expects a
-  # manifest for every commit's SHA to exist, same as the app image.
+  # deploy script (scripts/deploy) brings up alongside the app containers.
+  # See config/airlock/README.md for what it's for. Production routes
+  # bookmark-link screenshots and remote-image downloads through it
+  # (config.airlock), so a broken image here degrades those; and
+  # scripts/deploy/index.js expects a manifest for every commit's SHA to
+  # exist, same as the app image.
   build-airlock:
     strategy:
       matrix:

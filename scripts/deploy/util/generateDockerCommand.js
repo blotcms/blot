@@ -195,18 +195,14 @@ async function generateDockerCommand(container, platform, commitHash) {
     `-e BLOT_RELEASE_ID=${commitHash}`,
     // Configure the maximum memory usage for the node process
     `-e NODE_OPTIONS='--max-old-space-size=${oldSpaceSize}'`,
-    // TEMPORARY (airlock rollout): lets app/helper/airlock/probe.js verify
-    // the airlock is reachable and actually filtering traffic after boot.
-    // Deliberately NOT config.airlock.{browser_url,proxy} - those are what
-    // helper/screenshot and helper/transformer/download read, and wiring
-    // them here would switch production traffic through the airlock before
-    // that's been verified. This container is connected to AIRLOCK.network
-    // after it starts (see deployContainer/connectToAirlockNetwork in
-    // ../index.js), not via --network here - see the comment on AIRLOCK in
-    // ../constants.js for why. Remove this line, the probe module, and
-    // config.airlockProbe together once the follow-up PR switches over.
-    `-e BLOT_AIRLOCK_PROBE_BROWSER_URL=http://${AIRLOCK.name}:9222`,
-    `-e BLOT_AIRLOCK_PROBE_PROXY_URL=http://${AIRLOCK.name}:8888`,
+    // Routes bookmark-link screenshots (helper/screenshot) and remote-image
+    // downloads (helper/transformer/download) through the airlock - see
+    // config/airlock/README.md. This container is connected to
+    // AIRLOCK.network after it starts (see deployContainer/
+    // connectToAirlockNetwork in ../index.js), not via --network here - see
+    // the comment on AIRLOCK in ../constants.js for why.
+    `-e BLOT_AIRLOCK_BROWSER_URL=http://${AIRLOCK.name}:9222`,
+    `-e BLOT_AIRLOCK_PROXY_URL=http://${AIRLOCK.name}:8888`,
     // Mount the data directory on the host to the container
     // Every container has access to the same data directory
     `-v ${DATA_DIRECTORY_ON_SERVER}:${DATA_DIRECTORY_ON_CONTAINER}`,

@@ -60,13 +60,15 @@ module.exports = {
   // container to it after it starts, so they keep their original network
   // and gain a second interface that can reach `blot-airlock`.
   //
-  // memory is deliberately tight: in this PR the airlock is idle (only the
-  // once-per-boot probe and the 15s HEALTHCHECK touch it), and idle
-  // headless Chromium + nginx + tinyproxy sit comfortably under ~300m.
-  // The traffic cutover puts real bookmark-screenshot rendering here and
-  // should re-evaluate this upward (and take the corresponding memory off
-  // the app containers, which stop running Chromium then). It's taken out
-  // of siteConfig/blogsConfig above, not added on top - see the note there.
+  // memory is deliberately tight. Idle (nginx + tinyproxy + a headless
+  // Chromium with no page open) this sits under ~300m; it held up in
+  // testing to three back-to-back full 1200x1200 @2x screenshots with no
+  // OOM. Real bookmark-screenshot rendering and remote-image downloads run
+  // here now (config.airlock), serialized across the app containers by the
+  // lock in app/helper/screenshot, so concurrent load on it stays low. This
+  // 512m is taken out of siteConfig/blogsConfig above, not added on top -
+  // see the note there; the app containers can shed more of their own
+  // Chromium overhead once the follow-up PR drops that binary.
   AIRLOCK: {
     name: "blot-airlock",
     registry: "ghcr.io/davidmerfield/blot-airlock",

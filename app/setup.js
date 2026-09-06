@@ -17,9 +17,6 @@ const purgeCdnUrls = require("helper/purgeCdnUrls");
 const log = (...args) =>
   console.log.apply(null, [clfdate(), "Setup:", ...args]);
 
-// TEMPORARY: see the airlock probe block in runPostListenTasks below.
-const AIRLOCK_PROBE_DELAY_MS = 60 * 1000; // 1 minute
-
 async function runPostListenTasks() {
   log("Running post-listen tasks asynchronously");
   const logError = (message, error) => {
@@ -61,25 +58,6 @@ async function runPostListenTasks() {
     }
   } catch (err) {
     logError("Failed to start scheduler", err);
-  }
-
-  // TEMPORARY: airlock rollout signal only, see app/helper/airlock/probe.js.
-  // Gated to config.master, like the scheduler above, so the three
-  // containers on a host don't all log the same result for the one airlock
-  // sidecar they share. The delay gives the airlock's own HEALTHCHECK and
-  // this container's `docker network connect` (scripts/deploy/index.js) a
-  // moment to land before we try to use it.
-  try {
-    if (config.master) {
-      log("Scheduling airlock probe");
-      setTimeout(() => {
-        require("helper/airlock/probe")().catch((err) =>
-          logError("Airlock probe failed unexpectedly", err)
-        );
-      }, AIRLOCK_PROBE_DELAY_MS);
-    }
-  } catch (err) {
-    logError("Failed to schedule airlock probe", err);
   }
 
   try {

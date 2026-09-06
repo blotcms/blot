@@ -83,21 +83,13 @@ identity.
 ## Configuration (the app side)
 
 `config/index.js` reads two env vars; both unset ⇒ the app fetches directly
-with **no SSRF protection** (fine for local dev, not for production):
+with **no SSRF protection** (fine for local dev; production sets both real
+values, see "Production" below):
 
 | Env var | Example | Used by |
 | --- | --- | --- |
 | `BLOT_AIRLOCK_BROWSER_URL` | `http://airlock:9222` | `app/helper/screenshot` |
 | `BLOT_AIRLOCK_PROXY_URL` | `http://airlock:8888` | `app/helper/transformer/download` |
-
-**These are currently unset in production on purpose** - see "Rollout plan"
-below. What production sets today is a separate, temporary pair that only
-feed the post-boot probe, never real traffic:
-
-| Env var | Example | Used by |
-| --- | --- | --- |
-| `BLOT_AIRLOCK_PROBE_BROWSER_URL` | `http://blot-airlock:9222` | `app/helper/airlock/probe.js` |
-| `BLOT_AIRLOCK_PROBE_PROXY_URL` | `http://blot-airlock:8888` | `app/helper/airlock/probe.js` |
 
 ## Local development
 
@@ -110,31 +102,28 @@ docker compose -f scripts/development/docker-compose.yml up
 
 Comment out the two `BLOT_AIRLOCK_*` lines to bypass it.
 
-## Rollout plan: infrastructure now, cutover later
+## Rollout history
 
-This lands in two PRs on purpose, so a mistake in the (untestable-without-a-
-real-host) deploy plumbing can't take down blue/green/yellow:
+This landed in two PRs on purpose, so a mistake in the (untestable-without-a-
+real-host) deploy plumbing couldn't take down blue/green/yellow:
 
-* **This PR** builds and deploys the `airlock` image/container/network in
-  production, and connects the app containers to it - but nothing in
-  production *uses* it for real traffic yet. `helper/screenshot` and
-  `helper/transformer/download` still fetch directly, exactly as before this
-  PR. Instead, a temporary post-boot check
-  ([`app/helper/airlock/probe.js`](../../app/helper/airlock/probe.js)) opens
-  a real connection to the deployed airlock, takes a real screenshot through
-  it, makes a real fetch through its proxy, and confirms the metadata
-  address is blocked on both paths - logging the result so a few days of
-  production deploys give a real signal, not just a local one, before
-  anything depends on it.
-* **The follow-up PR** (once the probe has been green in production for a
-  while) is the actual cutover: set `BLOT_AIRLOCK_BROWSER_URL` /
-  `BLOT_AIRLOCK_PROXY_URL` (see "Configuration" above) in
-  [`generateDockerCommand.js`](../../scripts/deploy/util/generateDockerCommand.js)
-  the same way `BLOT_AIRLOCK_PROBE_*` is set today, and delete
-  `app/helper/airlock/probe.js`, its call site in
-  [`app/setup.js`](../../app/setup.js), `config.airlockProbe`, and the
-  `BLOT_AIRLOCK_PROBE_*` env vars. Nothing about the airlock container or
-  network itself needs to change for that PR.
+* **The infrastructure PR** built and deployed the `airlock`
+  image/container/network in production and connected the app containers to
+  it, but didn't route any real traffic through it yet -
+  `helper/screenshot`/`helper/transformer/download` still fetched directly.
+  A temporary post-boot probe (`app/helper/airlock/probe.js`, since deleted)
+  opened a real connection to the deployed airlock, took a real screenshot
+  through it, made a real fetch through its proxy, and confirmed the
+  metadata address was blocked on both paths - logging the result so a few
+  days of production deploys gave a real signal, not just a local one,
+  before anything depended on it.
+* **This PR is the cutover**, made once that probe had been green in
+  production for a while: `generateDockerCommand.js` now sets the real
+  `BLOT_AIRLOCK_BROWSER_URL`/`BLOT_AIRLOCK_PROXY_URL` (mechanically the same
+  way the temporary `BLOT_AIRLOCK_PROBE_*` vars were set before), and the
+  probe module, its call site in `app/setup.js`, and `config.airlockProbe`
+  are gone. Nothing about the airlock container or network itself changed
+  for this PR.
 
 ## Production (implemented in `scripts/deploy`)
 
@@ -202,9 +191,9 @@ it".
    instead of looking identical to success. The container keeps its
    original bridge network and gateway untouched, and gains the ability to
    resolve and reach `blot-airlock` via `blotnet`'s embedded DNS.
-   `generateDockerCommand.js` sets `BLOT_AIRLOCK_PROBE_BROWSER_URL` /
-   `BLOT_AIRLOCK_PROBE_PROXY_URL` to `http://blot-airlock:9222` /
-   `:8888` on every app container so the probe (above) can reach it.
+   `generateDockerCommand.js` sets `BLOT_AIRLOCK_BROWSER_URL` /
+   `BLOT_AIRLOCK_PROXY_URL` to `http://blot-airlock:9222` / `:8888` on
+   every app container - see "Configuration" above.
 
 4. **Harden the instance metadata service** while you're here — defence in
    depth for any other fetch in the app, independent of all of this:
@@ -272,21 +261,29 @@ metadata address is deliberately *not* refused at that layer), not just "the
 HTML wasn't rewritten," which a plugin that rejected everything would also
 satisfy.
 
-**In production**, once this PR is deployed, check for the probe's log lines
-(one `Airlock probe:` block per host, from the `config.master` container,
-about a minute after boot/deploy):
+**In production**, after a deploy, two different things can go wrong and
+they look different in the logs - only one is a security regression:
 
-```sh
-ssh blot "docker logs blot-container-green 2>&1 | grep 'Airlock probe:'"
-```
+* **The env vars are missing entirely** (e.g. a stale container from before
+  this PR that hasn't been redeployed). `config.airlock.browser_url`/`.proxy`
+  are `null`, so the code takes the direct-fetch branch - bookmark
+  screenshots and remote-image downloads work, but with **no SSRF
+  protection**. `config/index.js`'s startup warning catches this:
 
-A healthy rollout looks like `browser check passed (…)` and `proxy check
-passed (…)`. `skipping - BLOT_AIRLOCK_PROBE_* not set` means the container
-was created before this PR's `generateDockerCommand.js` change and hasn't
-been redeployed since (the env vars are baked in at `docker run` time); a
-failure logs which step it failed at (e.g. `FAILED at step "connect"` most
-likely means `docker network connect blotnet <container>` didn't happen or
-didn't take - check the `Connecting … to blotnet` line in the deploy log).
+  ```sh
+  ssh blot "docker logs blot-container-green 2>&1 | grep 'BLOT_AIRLOCK_BROWSER_URL'"
+  ```
+
+* **The env vars are set but the airlock isn't reachable** (most likely
+  `docker network connect blotnet <container>` didn't happen or didn't take
+  for that container - check the `Connecting … to blotnet` line in the
+  deploy log). This is *not* a security regression - there's no fallback to
+  an unprotected fetch, the connection attempt itself just fails - but
+  screenshots/downloads on that container fail outright until it's
+  redeployed or reconnected. Look for `helper/screenshot`'s own
+  `Screenshot failed after retries` log line, or a callback error out of
+  `helper/transformer/download` in whatever build step invoked it, rather
+  than the config warning above (which won't fire in this case).
 
 ## Limitations
 
@@ -327,13 +324,15 @@ didn't take - check the `Connecting … to blotnet` line in the deploy log).
 * **Memory** (`AIRLOCK.memory` in
   [`scripts/deploy/constants.js`](../../scripts/deploy/constants.js)) is
   `512m`, and it's paid for out of the three app containers, not on top of
-  them — `~512/3` is taken off each so the host's total is unchanged. That
-  `512m` is generous for what this PR does (the airlock is idle bar the
-  probe and healthcheck), but tight for the traffic cutover, when real
-  bookmark-screenshot rendering runs here. Raise it then, and take the
-  extra back off the app containers — they stop running Chromium for
-  screenshots at that point, so the overhead they need shrinks by roughly
-  the same amount.
+  them — `~512/3` is taken off each so the host's total is unchanged. `512m`
+  held up in testing to three back-to-back full 1200×1200 @2× screenshots
+  with no OOM (peak well under the cap, and Chromium released it right
+  after) — but a very JS-heavy page could still push higher, so watch
+  `docker stats` on the host. The app containers can shed some of their
+  own overhead — the half of it that covered running Chromium locally — in
+  the follow-up PR that drops the Chromium binary from the app image;
+  `helper/screenshot`'s `puppeteer.launch()` path (dev and the macOS
+  `screenshots.yml` job) still needs it until then.
 * The `172.16.0.0/12` drop also stops `airlock` reaching sibling containers on
   a Docker bridge — intended.
 * `app/templates/screenshots.js` (the template-gallery build tool) has **no**
@@ -345,20 +344,12 @@ didn't take - check the `Connecting … to blotnet` line in the deploy log).
   with in `/etc/airlock/chromium-version` (also logged at container start)
   precisely so a drift shows up there before it shows up as bookmark
   screenshots silently failing in production after an image rebuild.
-* [`app/helper/airlock/probe.js`](../../app/helper/airlock/probe.js) runs
-  once per boot (gated to `config.master`, so the three containers on a host
-  don't triple-log the same result), not on a timer - each deploy or
-  container restart is a fresh check. If you want continuous monitoring
-  during the observation window instead of relying on deploy cadence, wrap
-  its call in `app/setup.js` with `setInterval` instead of a single
-  `setTimeout`; it wasn't done here to keep this scaffolding as small as
-  possible, since it's meant to be deleted soon.
 * In production, `config/index.js` only **warns** (`console.warn`, on
-  startup) if `BLOT_AIRLOCK_BROWSER_URL` / `BLOT_AIRLOCK_PROXY_URL` are unset
-  - it does not refuse to start. Right now that warning is *expected* to
-  fire on every boot, since this PR deliberately leaves those two unset (see
-  "Rollout plan"); it stops being expected once the follow-up cutover PR
-  sets them. A hard failure was rejected even for that later PR: a bad
-  deploy or a crashed airlock shouldn't be able to take every app container
+  startup) if `BLOT_AIRLOCK_BROWSER_URL` / `BLOT_AIRLOCK_PROXY_URL` are
+  unset - it does not refuse to start. After this PR the warning is *not*
+  expected to fire; if it does, the deploy set the vars on some containers
+  but not this one (see "Verifying" above). A hard failure was rejected on
+  purpose: a bad deploy or a crashed airlock shouldn't be able to take every
+  app container
   down over a feature this size - if you do tighten it, make it fail closed
   only after confirming the airlock, not unconditionally.

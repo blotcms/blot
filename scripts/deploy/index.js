@@ -204,10 +204,15 @@ async function deployContainer(container, platform, imageHash) {
 //
 // Deployed as a standalone container, not part of the blue/green/yellow
 // rotation. Every step here is best-effort and non-fatal to the overall
-// deploy: nothing in production reads config.airlock yet (see the comment
-// on the probe env vars in generateDockerCommand.js), so a bug here must
-// not be able to take down blue/green/yellow. It only affects whether
-// app/helper/airlock/probe.js's post-boot check can reach the airlock.
+// deploy: a bug deploying or connecting the airlock must not be able to
+// take down blue/green/yellow. Since the cutover (BLOT_AIRLOCK_BROWSER_URL /
+// PROXY_URL are set on the app containers - see generateDockerCommand.js),
+// an app container that comes up without a working connection to the
+// airlock will fail bookmark screenshots and remote-image downloads (both
+// already degrade gracefully - the post builds without the image), but it
+// still shouldn't fail the app deploy itself. config/index.js's own
+// startup warning surfaces the "env vars unset" case; watch for it, and for
+// "Screenshot failed after retries", in the container logs after a deploy.
 
 async function ensureAirlockNetwork() {
   console.log(`Ensuring Docker network ${AIRLOCK.network} exists...`);
@@ -355,10 +360,10 @@ async function connectToAirlockNetwork(containerName) {
     // swallowing "already exists" with `|| true`: that would also swallow
     // every OTHER failure (missing network, missing container, ...),
     // meaning a genuine attach failure logged nothing and looked identical
-    // to success in the deploy log - discoverable only much later, from
-    // the probe or from screenshots/downloads failing once real traffic
-    // depends on this. A real failure here now propagates to the catch
-    // below instead of being hidden.
+    // to success in the deploy log - discoverable only much later, when
+    // screenshots/downloads on that container start failing. A real
+    // failure here now propagates to the catch below instead of being
+    // hidden.
     const members = await sshCommand(
       `docker network inspect ${AIRLOCK.network} --format='{{range .Containers}}{{.Name}} {{end}}'`
     );
