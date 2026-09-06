@@ -48,6 +48,21 @@ table inet airlock {
         # waiting for a connection nothing will ever answer.
         oif "lo" reject
 
+        # Docker's embedded resolver at 127.0.0.11 (allowed above) does not
+        # answer from cache alone - it forwards cache misses to the host's
+        # upstream nameservers, and on a cloud host those are themselves at a
+        # private / link-local address (the VPC resolver, e.g. 172.30.0.2 on
+        # this EC2 host, or 169.254.169.253) that the rules below reject. So
+        # a bare 127.0.0.11 accept still leaves every name lookup returning
+        # SERVFAIL. That forwarding socket is opened by dockerd itself, as
+        # root (uid 0), so let uid 0 reach port 53 on any address. Untrusted
+        # code (Chromium, tinyproxy) runs as uid 1001, cannot match this, and
+        # must still resolve via 127.0.0.11 - and any name it does resolve is
+        # re-checked by real destination IP at connect() time below, so this
+        # does not widen what it can actually reach.
+        meta skuid 0 udp dport 53 accept
+        meta skuid 0 tcp dport 53 accept
+
         # --- IPv4: drop every non-public destination ---
         ip daddr {
             0.0.0.0/8,

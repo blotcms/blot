@@ -312,6 +312,14 @@ didn't take - check the `Connecting … to blotnet` line in the deploy log).
   default bridge `/etc/resolv.conf` points at a private address that the
   filter drops, so name resolution fails. Dev compose and the production
   steps above both use a named network.
+  * `127.0.0.11` only proxies DNS - it forwards cache misses to the host's
+    upstream nameservers, which on a cloud host are themselves at a private
+    or link-local address the filter would otherwise reject (on the prod
+    EC2 host it's the VPC resolver at `172.30.0.2`). `egress.nft` allows
+    **uid 0** (the dockerd-owned forwarding socket) to reach port 53
+    anywhere so that forward can complete; untrusted uid 1001 code still
+    can't, and still resolves only via `127.0.0.11`. Without that rule
+    every lookup inside the container returns `SERVFAIL`.
 * `airlock` becomes a build-pipeline dependency: if it's down, bookmark
   screenshots and remote-image transforms fail (they already degrade
   gracefully — the post builds without the image). Give it a restart policy

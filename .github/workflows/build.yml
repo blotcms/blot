@@ -216,7 +216,29 @@ jobs:
           echo "Sanity check: an unfiltered sibling container CAN reach the target..."
           docker exec airlock_test_control sh -c "nc -z -w3 $target_ip 80"
 
-          airlock_id=$(docker run -d --network airlock_test_network --cap-add=NET_ADMIN "$IMAGE")
+          # Docker's embedded resolver (127.0.0.11) only proxies DNS - it
+          # forwards cache misses to the host's upstream nameservers. On the
+          # production cloud host that upstream is the VPC resolver, itself
+          # at a private address egress.nft rejects, so a bare "127.0.0.11
+          # accept" still leaves every lookup returning SERVFAIL (this is a
+          # real incident the probe caught). A GitHub runner's upstream
+          # happens to be reachable, so to actually exercise that path here
+          # we stand up our own resolver on a sibling container - its IP is
+          # from Docker's default pool, entirely inside the 172.16.0.0/12
+          # range egress.nft blocks - and point the airlock at it. The
+          # forward can only succeed via the `meta skuid 0 udp/tcp dport 53`
+          # rules in egress.nft; drop those and this step goes red.
+          docker run -d --name airlock_test_dns --network airlock_test_network \
+            alpine:3.20 sh -c 'apk add --no-cache dnsmasq >/dev/null && exec dnsmasq -k --no-resolv --server=1.1.1.1 --server=8.8.8.8'
+          dns_ip=$(docker inspect --format='{{(index .NetworkSettings.Networks "airlock_test_network").IPAddress}}' airlock_test_dns)
+          echo "Sibling resolver (in the blocked range) is at $dns_ip"
+          for i in $(seq 1 20); do
+            if docker exec airlock_test_control sh -c "nslookup example.com $dns_ip >/dev/null 2>&1"; then break; fi
+            [ "$i" = 20 ] && { echo "sibling resolver never came up"; docker logs airlock_test_dns || true; exit 1; }
+            sleep 1
+          done
+
+          airlock_id=$(docker run -d --network airlock_test_network --cap-add=NET_ADMIN --dns "$dns_ip" "$IMAGE")
 
           timeout=30; interval=2; elapsed=0
           until [ "$(docker inspect --format='{{json .State.Health.Status}}' "$airlock_id")" = '"healthy"' ]; do
@@ -250,11 +272,14 @@ jobs:
             exit 1
           fi
 
+          # These also confirm DNS works: the airlock's only resolver is the
+          # sibling at $dns_ip, in a range egress.nft blocks, so a resolved
+          # name proves the uid-0 :53 forward rules are in place.
           echo "Checking the public internet is reachable, direct and via the proxy..."
           docker exec "$airlock_id" sh -c 'curl -m8 -sSf -o /dev/null https://example.com'
           docker exec "$airlock_id" sh -c 'curl -m8 -sSf -x http://127.0.0.1:8888 -o /dev/null https://example.com'
 
-          docker rm -f "$airlock_id" airlock_test_target airlock_test_control
+          docker rm -f "$airlock_id" airlock_test_target airlock_test_control airlock_test_dns
           docker network rm airlock_test_network
 
   manifest-airlock:
