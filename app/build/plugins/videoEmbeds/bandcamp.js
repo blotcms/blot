@@ -1,15 +1,32 @@
 const fetch = require("node-fetch");
 const cheerio = require("cheerio");
-const { parse } = require("url");
 
 const ERROR_MESSAGE = "Could not retrieve song properties";
 
+// bandcamp.com or <artist>.bandcamp.com, nothing else.
+const BANDCAMP_HOST = /^([a-z0-9-]+\.)*bandcamp\.com$/i;
+
+// Bandcamp is not an oEmbed provider, so unlike the other video embeds this
+// one scrapes the target page itself. To keep that from being an SSRF sink
+// (it is not routed through the airlock - see config/airlock/README.md) it
+// never fetches the raw user href: the host is pinned to bandcamp.com, the
+// URL is rebuilt from just the validated host + path (no scheme downgrade,
+// no credentials, no port, no query), and redirects are not followed - a
+// 3xx (or anything non-2xx) is treated as "not a bandcamp track".
 module.exports = async function (href, callback) {
   try {
-    const { hostname, pathname } = parse(href);
-    const path = pathname.toLowerCase();
+    let parsed;
 
-    if (!hostname.endsWith("bandcamp.com")) {
+    try {
+      parsed = new URL(href);
+    } catch (e) {
+      return callback(new Error(ERROR_MESSAGE));
+    }
+
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+
+    if (!BANDCAMP_HOST.test(host)) {
       return callback(new Error(ERROR_MESSAGE));
     }
 
@@ -17,7 +34,15 @@ module.exports = async function (href, callback) {
       return callback(new Error(ERROR_MESSAGE));
     }
 
-    const res = await fetch(href);
+    // Rebuild from validated parts - never fetch `href` directly.
+    const safeUrl = "https://" + host + parsed.pathname;
+
+    const res = await fetch(safeUrl, { redirect: "manual" });
+
+    if (!res.ok) {
+      return callback(new Error(ERROR_MESSAGE));
+    }
+
     const body = await res.text();
     const $ = cheerio.load(body, null, false);
 

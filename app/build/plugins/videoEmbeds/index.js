@@ -4,7 +4,10 @@ var eachEl = require("build/plugins/eachEl");
 var Players = {
   bandcamp: {
     module: require("./bandcamp"),
-    regex: /.bandcamp.com$/m,
+    // bandcamp.com or an <artist>.bandcamp.com subdomain only - the old
+    // /.bandcamp.com$/ also matched notbandcamp.com / evil-bandcamp.com.
+    // bandcamp.js re-checks this before it fetches anything.
+    regex: /^([a-z0-9-]+\.)*bandcamp\.com$/i,
   },
   youtube: {
     module: require("./youtube"),
