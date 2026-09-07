@@ -1,7 +1,7 @@
 <div class="terminal-header">
   <input class="terminal-nav-toggle" type="checkbox" id="terminal-nav-toggle" aria-controls="terminal-nav" />
   <header class="terminal-header__bar">
-    <a class="terminal-header__title" href="/" title="">{{title}}</a>
+    <a class="terminal-header__title" href="/" title="">{{#logo_url}}<img src="{{{logo_url}}}" alt="{{title}}" class="site-logo">{{/logo_url}}{{^logo_url}}{{title}}{{/logo_url}}</a>
     <label class="terminal-nav-toggle__label" for="terminal-nav-toggle">
       <span class="terminal-nav-toggle__sr">Menu</span>
       <span class="terminal-nav-toggle__icon"></span>

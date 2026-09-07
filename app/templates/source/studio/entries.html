@@ -3,25 +3,25 @@
   {{> head}}
   <body>
     {{> header}}
-    <div style="margin:0 -1em">
-
-    <div class="grid">
+    <div class="grid grid-bleed">
 
         <div class="grid-sizer"></div>
 
       {{#posts}}
         <div class="grid-item">
 
-          <a href="{{{url}}}" style="line-height:1.5;display:block;margin:1em 0;font-size:16px">
+          <a href="{{{url}}}">
 
+          {{#show_thumbnails}}
           {{#thumbnail.medium}}
           <span style="width:100%;display:block;height:0;padding-bottom:{{ratio}};margin: 0 0 1em 0;">
             <img src="{{{url}}}"/>
           </span>
           {{/thumbnail.medium}}
+          {{/show_thumbnails}}
 
 
-          {{title}} <span style="color:gray">  – {{summary}}</span>
+          {{title}}{{#show_summaries}} <span class="light">  – {{summary}}</span>{{/show_summaries}}
           </a>
 
         </div>
@@ -49,7 +49,6 @@
 
       </p>
       {{/pagination}}
-    </div>
     {{> footer}}
   </body>
 </html>

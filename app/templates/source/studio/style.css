@@ -1,11 +1,25 @@
 {{{app_css}}}
+{{{body_font.styles}}}
+{{{heading_font.styles}}}
+{{{syntax_highlighter_font.styles}}}
+{{{syntax_highlighter.styles}}}
 
 body {
-  font: 20px / 1.7 sans-serif;
+  {{#body_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  line-height: {{{line_height}}};
+  {{#weight}}
+  font-weight: {{{.}}};
+  {{/weight}}
+  {{#style}}
+  font-style: {{{.}}};
+  {{/style}}
+  {{/body_font}}
   -webkit-font-smoothing: antialiased;
-  background: black;
-  color: gray;
-  padding: 1em 4em 5em;
+  background: {{background_color}};
+  color: {{text_color}};
+  padding: {{spacing}}em calc({{spacing}}em * 4) calc({{spacing}}em * 5);
   word-wrap: break-word; /* for long words & urls */
 }
 
@@ -18,25 +32,67 @@ figcaption {
 }
 
 .container {
-  max-width: 960px;
+  max-width: {{max_width}}px;
   min-width: 320px;
-  margin: 4em auto 2em;
+  margin: calc({{spacing}}em * 4) auto calc({{spacing}}em * 2);
 }
 
 .clear {width: 100%;clear: both;}
 
-h1, h2, h3, h4, h5, h6 {font-weight: 400}
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 400;
+  {{#heading_font}}
+  font-family: {{{stack}}};
+  line-height: {{{line_height}}};
+  {{#weight}}
+  font-weight: {{{.}}};
+  {{/weight}}
+  {{#style}}
+  font-style: {{{.}}};
+  {{/style}}
+  {{/heading_font}}
+}
 
 h2, h3 {margin-top: 2em}
 
-h1 {line-height: 1.4}
+h1 {
+  {{#heading_font}}
+  font-size: {{{font_size}}}px;
+  {{/heading_font}}
+}
 
-a {color: white;text-decoration: none;}
+h2 { font-size: calc({{{heading_font.font_size}}}px * 0.83); }
+h3 { font-size: calc({{{heading_font.font_size}}}px * 0.67); }
+h4 { font-size: calc({{{heading_font.font_size}}}px * 0.56); }
+h5 { font-size: calc({{{heading_font.font_size}}}px * 0.46); }
+h6 { font-size: calc({{{heading_font.font_size}}}px * 0.38); }
 
+a {color: {{link_color}};text-decoration: none;}
+
+.light,
+.small {
+  color: {{text_color}};
+}
+
+.small {
+  font-size: 0.75em;
+}
+
+.site-logo {
+  max-height: 1.2em;
+  width: auto;
+  vertical-align: middle;
+}
 
 .terminal-header {
   position: relative;
   padding: 1em 0;
+  {{#sticky_navigation}}
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: {{background_color}};
+  {{/sticky_navigation}}
 }
 
 .terminal-header__bar {
@@ -44,7 +100,18 @@ a {color: white;text-decoration: none;}
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  {{#is.navigation_alignment.justified}}
+  justify-content: space-between;
+  {{/is.navigation_alignment.justified}}
+  {{#is.navigation_alignment.left}}
   justify-content: flex-start;
+  {{/is.navigation_alignment.left}}
+  {{#is.navigation_alignment.right}}
+  justify-content: flex-end;
+  {{/is.navigation_alignment.right}}
+  {{#is.navigation_alignment.center}}
+  justify-content: center;
+  {{/is.navigation_alignment.center}}
   gap: 1.5em;
   box-sizing: border-box;
   width: 100%;
@@ -55,6 +122,9 @@ a {color: white;text-decoration: none;}
 
 .terminal-header__title {
   white-space: nowrap;
+  {{#heading_font}}
+  font-family: {{{stack}}};
+  {{/heading_font}}
 }
 
 .terminal-nav-toggle {
@@ -131,13 +201,24 @@ a {color: white;text-decoration: none;}
   flex-wrap: nowrap;
   flex-shrink: 0;
   gap: 2em;
+  {{#is.navigation_alignment.justified}}
   margin-left: auto;
+  {{/is.navigation_alignment.justified}}
+  {{^is.navigation_alignment.justified}}
+  margin-left: 0;
+  {{/is.navigation_alignment.justified}}
   padding: 0;
   white-space: nowrap;
   position: relative;
   z-index: 1;
-  background: black;
+  background: {{background_color}};
 }
+
+{{#collapse_navigation_by_default}}
+.terminal-header__bar .nav {
+  display: none;
+}
+{{/collapse_navigation_by_default}}
 
 .terminal-header__bar .nav a {
   margin: 0;
@@ -153,6 +234,7 @@ a {color: white;text-decoration: none;}
 }
 
 .terminal-nav-toggle:checked ~ .terminal-header__bar .nav {
+  display: flex;
   width: 100%;
   margin-left: 0;
   flex-direction: column;
@@ -188,7 +270,7 @@ hr {
   width: 200px;
   margin: 1.5em auto;
   border: none;
-  border-top: 1px solid #aaa;
+  border-top: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.45);
   display: block;
 }
 
@@ -202,8 +284,8 @@ table {
   line-height: 24px;
 }
 
-tr {box-sizing: border-box;border-top: 1px solid #aaa;padding: 0}
-th, td {box-sizing: border-box;border: 1px solid #aaa;padding: 5px 12px 6px}
+tr {box-sizing: border-box;border-top: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.45);padding: 0}
+th, td {box-sizing: border-box;border: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.45);padding: 5px 12px 6px}
 
 input[type="text"],
 input[type="submit"] {
@@ -212,7 +294,7 @@ input[type="submit"] {
   color: inherit;
   line-height: 3;
   margin: 1em 0;
-  border: 1px solid #aaa;
+  border: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.45);
 }
 
 input[type="text"] {
@@ -222,61 +304,85 @@ input[type="text"] {
 }
 
 input[type="submit"] {
-  color: black;
-  background: white;
+  color: {{background_color}};
+  background: {{link_color}};
   cursor: pointer;
   margin-left: -1px;
-  border-color: white;
+  border-color: {{link_color}};
 }
 
 input:focus {outline: none;}
 
 {{> plugin}}
 
+pre code.hljs {
+  padding: 0;
+  margin: 0;
+}
+
+.grid-bleed {
+  margin: 0 calc({{spacing}}em * -1);
+}
+
+.grid {
+  max-width: calc({{max_width}}px + ({{spacing}}em * 2));
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .grid-sizer,
 .grid-item {
-  width: 20%;
-  padding: 0 1em;
+  width: calc(100% / {{grid_columns}});
+  padding: 0 {{spacing}}em;
   box-sizing: border-box;
+}
+
+.grid-item a {
+  line-height: 1.5;
+  display: block;
+  margin: {{spacing}}em 0;
+  font-size: 0.8em;
 }
 
 @media (max-width: 1200px) {
   .grid-sizer,
   .grid-item {
-    width: 25%;
+    width: calc(100% / min(4, {{grid_columns}}));
   }
 }
 
 @media (max-width: 900px) {
   .grid-sizer,
   .grid-item {
-    width: 33.3333%;
+    width: calc(100% / min(3, {{grid_columns}}));
   }
 }
 
 @media (max-width: 700px) {
   .grid-sizer,
   .grid-item {
-    width: 50%;
+    width: calc(100% / min(2, {{grid_columns}}));
   }
 }
 
 @media (max-width: 600px) {
   body {
-    padding: 2.5em 1em 3.5em;
+    padding: calc({{spacing}}em * 2.5) {{spacing}}em calc({{spacing}}em * 3.5);
   }
 
   .container {
     min-width: 0;
     width: 100%;
-    margin: 2em 0 1.5em;
+    margin: calc({{spacing}}em * 2) 0 calc({{spacing}}em * 1.5);
+  }
+
+  .grid-bleed {
+    margin: 0;
   }
 
   .grid-sizer,
   .grid-item {
     width: 100%;
-    padding-bottom: 1.5em;
+    padding-bottom: calc({{spacing}}em * 1.5);
   }
 }
-
-/*.grid-item:nth-child(4n) {width: 40%}*/

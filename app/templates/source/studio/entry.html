@@ -9,13 +9,15 @@
         {{{titleTag}}}
 
         <p class="light">
-          {{date}}
+          {{#date}}{{date}}{{/date}}
 
+          {{#show_tags}}
           {{#tags.length}}
             {{#tags}}
             ☼ <a class="light" href="/tagged/{{slug}}">{{name}}</a>
             {{/tags}}
           {{/tags.length}}
+          {{/show_tags}}
         </p>
 
         {{{body}}}

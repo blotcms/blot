@@ -2,8 +2,49 @@
   "name": "Studio",
   "locals": {
     "page_size": 36,
+    "page_size_range": [6, 72],
     "hide_dates": false,
     "date_display": "MMMM D, Y",
+    "background_color": "#000000",
+    "text_color": "#808080",
+    "link_color": "#ffffff",
+    "body_font": {
+      "id": "system-sans",
+      "font_size": 20,
+      "line_height": 1.7
+    },
+    "heading_font": {
+      "id": "system-sans",
+      "font_size": 20,
+      "line_height": 1.4
+    },
+    "syntax_highlighter": {
+      "id": "solarized-dark"
+    },
+    "syntax_highlighter_font": {
+      "id": "system-mono",
+      "font_size": 19
+    },
+    "favicon_url": "",
+    "logo_url": "",
+    "navigation_alignment": "justified",
+    "navigation_alignment_options": [
+      "justified",
+      "left",
+      "right",
+      "center"
+    ],
+    "sticky_navigation": false,
+    "collapse_navigation_by_default": false,
+    "show_tags": true,
+    "show_summaries": true,
+    "show_thumbnails": true,
+    "max_width": 960,
+    "max_width_range": [640, 1400],
+    "spacing": 1,
+    "spacing_range": [0, 4],
+    "grid_columns": 5,
+    "grid_columns_range": [2, 6],
     "demo_folder": "thoughtforms"
   },
   "isPublic": false,

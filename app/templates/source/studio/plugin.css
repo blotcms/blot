@@ -26,10 +26,15 @@ img {max-width: 100%;height: auto;}
 
 pre {
   padding: 0.7em 1em;
-  margin: 0 -1em;
+  margin: 0 calc({{spacing}}em * -1);
 }
 
-pre, code {font-family: 'Roboto Mono', Menlo;font-size: 0.95em}
+pre, code {
+  {{#syntax_highlighter_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  {{/syntax_highlighter_font}}
+}
 
 
 /* LAYOUT */
@@ -104,88 +109,4 @@ pre, code {font-family: 'Roboto Mono', Menlo;font-size: 0.95em}
   .margin {width: 40%;}
   .margin.right {padding-left: 16px;}
   .margin.left {padding-right: 16px;}
-}
-
-
-/*
-
-Orginal Style from ethanschoonover.com/solarized (c) Jeremy Hull <sourdrums@gmail.com>
-
-*/
-
-.hljs {
-  display: block;
-  overflow-x: auto;
-  color: #b8bebf;
-}
-
-.hljs-comment,
-.hljs-quote {
-  color: #586e75;
-}
-
-/* Solarized Green */
-.hljs-keyword,
-.hljs-selector-tag,
-.hljs-addition {
-  color: #59b75c;
-}
-
-/* Solarized Cyan */
-.hljs-number,
-.hljs-string,
-.hljs-meta .hljs-meta-string,
-.hljs-literal,
-.hljs-doctag,
-.hljs-regexp {
-  color: #2aa198;
-}
-
-/* Solarized Blue */
-.hljs-title,
-.hljs-section,
-.hljs-name,
-.hljs-selector-id,
-.hljs-selector-class {
-  color: #268bd2;
-}
-
-/* Solarized Yellow */
-.hljs-attribute,
-.hljs-attr,
-.hljs-variable,
-.hljs-template-variable,
-.hljs-class .hljs-title,
-.hljs-type {
-  color: #b58900;
-}
-
-/* Solarized Orange */
-.hljs-symbol,
-.hljs-bullet,
-.hljs-subst,
-.hljs-meta,
-.hljs-meta .hljs-keyword,
-.hljs-selector-attr,
-.hljs-selector-pseudo,
-.hljs-link {
-  color: #d18d61;
-}
-
-/* Solarized Red */
-.hljs-built_in,
-.hljs-deletion {
-  color: #da3c40;
-}
-
-.hljs-formula {
-  background: #073642;
-}
-
-.hljs-emphasis {
-  font-style: italic;
-}
-
-.hljs-strong {
-  font-weight: bold;
 }
