@@ -1,0 +1,38 @@
+<h1>Bluesky comments</h1>
+
+<p>
+  Blot’s Bluesky comments plugin shows the replies to a Bluesky post at the end
+  of an entry. Blot looks for the Bluesky post that links to the page and renders
+  its thread as a comment section, following the approach described in
+  <a href="https://emilyliu.me/blog/comments" rel="nofollow">Emily Liu’s write-up</a>.
+</p>
+
+<ol>
+  <li>Open the <a href="/sites/default/settings/services">Services</a> page and enable <strong>Bluesky comments</strong>.</li>
+  <li>
+    Enter your Bluesky profile URL (for example
+    <code>https://bsky.app/profile/example.bsky.social</code>). Blot uses this to
+    find the post you made linking to each page.
+  </li>
+  <li>
+    Publish a post on Bluesky that links to the entry’s URL. Once it is live, the
+    replies appear beneath the entry. Until then, nothing is shown.
+  </li>
+</ol>
+
+<h2>Pinning a specific thread</h2>
+<p>
+  To attach a particular Bluesky post to an entry instead of relying on the
+  automatic lookup, add a <code>Bluesky</code> field to the entry’s
+  <a href="/how/metadata">metadata</a> set to the post’s URL or AT URI, for
+  example:
+</p>
+
+<pre><code>Bluesky: https://bsky.app/profile/example.bsky.social/post/3k7abcde2fg2h</code></pre>
+
+<p>
+  Comments follow the usual rules: they are shown on posts and hidden on pages
+  unless you set <code>Comments: Yes</code> in the page’s metadata, and any entry
+  with <code>Comments: No</code> hides them. You can switch between comment
+  systems at any time from the Services page.
+</p>

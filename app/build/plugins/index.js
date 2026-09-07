@@ -23,6 +23,7 @@ var loaded = loadPlugins({
   analytics: require("./analytics"),
   autoImage: require("./autoImage"),
   bluesky: require("./bluesky"),
+  blueskyComments: require("./blueskyComments"),
   codeHighlighting: require("./codeHighlighting"),
   disqus: require("./disqus"),
   externalLinks: require("./externalLinks"),

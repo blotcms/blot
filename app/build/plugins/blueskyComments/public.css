@@ -1,0 +1,85 @@
+.comment-container {
+  display: flex;
+}
+
+#comments .bluesky-comments-error {
+  opacity: 0.7;
+}
+
+.comment-container > a {
+  flex-shrink: 0;
+}
+
+/* Post Actions */
+.comment-container a,
+#main-post-actions {
+  text-decoration: none;
+  color: var(--highlight2, var(--link, currentColor));
+}
+
+.post-actions {
+  display: flex;
+  gap: 1em;
+}
+
+.post-actions svg {
+  width: 12px;
+  height: 12px;
+}
+
+.post-actions div svg,
+.post-actions div span {
+  vertical-align: middle;
+  display: inline-block;
+}
+
+.post-actions div:hover,
+.post-actions div:hover svg {
+  color: var(--accent, inherit);
+  fill: currentColor;
+}
+
+/* Comment Section */
+#comments .comment {
+  position: relative; /* Needed for pseudo-element positioning */
+}
+
+#comments .comment .comment-container {
+  margin-bottom: 24px;
+}
+
+#comments .comment-container img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  margin-right: 16px;
+}
+
+#comments .comment .comment-container p {
+  color: var(--accent, inherit);
+  margin: 0.25em 0;
+}
+
+#comments .comment .replies {
+  padding-left: calc(32px + 16px);
+}
+
+#comments #see-more {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%);
+  padding: 24px;
+}
+
+.comment:has(.replies)::after {
+  content: "";
+  position: absolute;
+  top: calc(32px + 0.5em);
+  left: 16px;
+  width: 20px;
+  height: calc(100% - 41px - 0.5em);
+  border: 2px solid var(--highlight, currentColor);
+  border-top: none;
+  border-right: none;
+  border-radius: 0 0 0 20px;
+}

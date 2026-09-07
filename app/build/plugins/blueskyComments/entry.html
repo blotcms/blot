@@ -1,0 +1,55 @@
+<div id="comments"
+    data-uri="{{entry.metadataLowercase.bluesky}}"
+    data-author="{{plugins.blueskyComments.options.authorURI}}"></div>
+
+<!-- Hidden templates -->
+<template id="template-post-actions">
+    <div class="post-actions">
+        <div>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="m8 14.25.345.666a.75.75 0 0 1-.69 0l-.008-.004-.018-.01a7.152 7.152 0 0 1-.31-.17 22.055 22.055 0 0 1-3.434-2.414C2.045 10.731 0 8.35 0 5.5 0 2.836 2.086 1 4.25 1 5.797 1 7.153 1.802 8 3.02 8.847 1.802 10.203 1 11.75 1 13.914 1 16 2.836 16 5.5c0 2.85-2.045 5.231-3.885 6.818a22.066 22.066 0 0 1-3.744 2.584l-.018.01-.006.003h-.002ZM4.25 2.5c-1.336 0-2.75 1.164-2.75 3 0 2.15 1.58 4.144 3.365 5.682A20.58 20.58 0 0 0 8 13.393a20.58 20.58 0 0 0 3.135-2.211C12.92 9.644 14.5 7.65 14.5 5.5c0-1.836-1.414-3-2.75-3-1.373 0-2.609.986-3.029 2.456a.749.749 0 0 1-1.442 0C6.859 3.486 5.623 2.5 4.25 2.5Z"></path></svg>
+            <span data-like-count></span>
+        </div>
+        <div>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z"></path></svg>
+            <span data-repost-count></span>
+        </div>
+        <div>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M6.78 1.97a.75.75 0 0 1 0 1.06L3.81 6h6.44A4.75 4.75 0 0 1 15 10.75v2.5a.75.75 0 0 1-1.5 0v-2.5a3.25 3.25 0 0 0-3.25-3.25H3.81l2.97 2.97a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L1.47 7.28a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z"></path></svg>
+            <span data-reply-count></span>
+        </div>
+    </div>
+</template>
+
+<template id="template-comment-container">
+    <div class="comment-container">
+        <a href="" target="_blank" rel="noopener" data-post-url>
+            <img alt="avatar" data-avatar>
+        </a>
+        <div>
+            <a href="" target="_blank" rel="noopener" data-post-url>
+                <strong class="author" data-display-name></strong>
+            </a>
+            <p data-text></p>
+        </div>
+    </div>
+</template>
+
+<template id="template-comment">
+    <div class="comment">
+        <div class="comment-container" data-comment-container></div>
+        <div class="replies" data-replies></div>
+    </div>
+</template>
+
+<template id="template-reply-link">
+    <a href="" target="_blank" rel="noopener" id="see-more" data-post-url>See more on Bluesky</a>
+</template>
+
+<template id="template-comments-header">
+    <h2>Comments</h2>
+    <p><a href="" target="_blank" rel="noopener" data-post-url>Reply on Bluesky</a></p>
+</template>
+
+<template id="template-error-message">
+    <p class="bluesky-comments-error" data-message></p>
+</template>
