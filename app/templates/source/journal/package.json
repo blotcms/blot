@@ -9,10 +9,33 @@
     "date_display": "Y-MM-DD",
     "body_font": {
       "id": "et-book",
-      "font_size": "18",
-      "line_height": "1.4",
-      "line_width": 38
-    }
+      "font_size": 18,
+      "line_height": 1.4
+    },
+    "heading_font": {
+      "id": "et-book",
+      "font_size": 48,
+      "line_height": 1
+    },
+    "syntax_highlighter": {
+      "id": "stackoverflow-light"
+    },
+    "syntax_highlighter_font": {
+      "id": "source-code",
+      "font_size": 15
+    },
+    "favicon_url": "",
+    "logo_url": "",
+    "navigation_alignment": "justified",
+    "navigation_alignment_options": [
+      "justified",
+      "left",
+      "right",
+      "center"
+    ],
+    "sticky_navigation": false,
+    "max_width": 640,
+    "max_width_range": [400, 960]
   },
   "views": {
     "search.html": {

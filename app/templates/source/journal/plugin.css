@@ -22,110 +22,19 @@ blockquote.twitter-tweet p {margin: 0}
 /* IMAGE SIZE */
 img {max-width: 100%;height: auto;}
 
-/* CODE HIGHLIGHTING */
-
+/* CODE */
 pre {
   padding: 0.7em 1em;
-  background: {{light_background}};
   margin: 0 -1em;
 }
 
-pre, code {font: inherit;}
-
-.hljs {
-  display: block;
-  overflow-x: auto;
+pre, code {
+  {{#syntax_highlighter_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  line-height: {{{line_height}}};
+  {{/syntax_highlighter_font}}
 }
-
-.hljs-comment,
-.hljs-quote {
-  color: {{medium_text}};
-  font-style: italic;
-}
-
-.hljs-keyword,
-.hljs-selector-tag,
-.hljs-subst {
-  color: {{body_text_color}};
-  font-weight: bold;
-}
-
-.hljs-number,
-.hljs-literal {
-  color: {{medium_text}};
-}
-
-.hljs-string,
-.hljs-doctag,
-.hljs-formula {
-  color: {{medium_text}};
-  background: {{light_background}}
-}
-
-.hljs-title,
-.hljs-section,
-.hljs-selector-id {
-  color: {{body_text_color}};
-  font-weight: bold;
-}
-
-.hljs-subst {
-  font-weight: normal;
-}
-
-.hljs-class .hljs-title,
-.hljs-type,
-.hljs-name {
-  color: {{medium_text}};
-  font-weight: bold;
-}
-
-.hljs-tag {
-  color: {{medium_text}};
-}
-
-.hljs-regexp {
-    color: {{medium_text}};
-    background: {{light_background}}
-}
-
-.hljs-symbol,
-.hljs-bullet,
-.hljs-link {
-  color: {{body_text_color}};
-  background: {{light_background}}
-}
-
-.hljs-built_in,
-.hljs-builtin-name {
-  color: {{body_text_color}};
-  text-decoration: underline;
-}
-
-.hljs-meta {
-  color: {{body_text_color}};
-  opacity: 0.5;
-  font-weight: bold;
-}
-
-.hljs-deletion {
-  color: {{background_color}};
-  background: {{light_background}}
-}
-
-.hljs-addition {
-  color: {{body_text_color}};
-  background: {{light_background}}
-}
-
-.hljs-emphasis {
-  font-style: italic;
-}
-
-.hljs-strong {
-  font-weight: bold;
-}
-
 
 /* LAYOUT */
 

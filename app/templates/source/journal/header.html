@@ -1,8 +1,8 @@
 <header class="site-header">
-  <a href="/" title="" class="logo">{{title}}</a>
-  <div class="nav">
+  <a href="/" title="{{title}}" class="logo">{{#logo_url}}<img src="{{{logo_url}}}" alt="{{title}}">{{/logo_url}}{{^logo_url}}{{title}}{{/logo_url}}</a>
+  <nav class="nav">
     {{#menu}}
     <a href="{{{url}}}" title="{{label}}">{{label}}</a>
     {{/menu}}
-  </div>
+  </nav>
 </header>

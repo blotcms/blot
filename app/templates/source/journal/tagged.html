@@ -7,7 +7,7 @@
       <h1>{{tag}}</h1>
       {{#entries}}
       <a href="{{{url}}}">{{title}}</a>
-      <span class="small">{{date}}</span>
+      {{#date}}<span class="small">{{date}}</span>{{/date}}
       <br>
       {{/entries}}
     </div>
