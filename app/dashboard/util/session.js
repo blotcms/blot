@@ -3,7 +3,6 @@ const guid = require("helper/guid");
 const session = require("express-session");
 const { RedisStore } = require("connect-redis");
 const redis = require("redis");
-const reconnectStrategy = require("helper/redisReconnectStrategy");
 
 // connect-redis 9 uses the promise API (get/set/del with options), so use
 // a native redis client, not the shared application singleton from models/client.
@@ -11,13 +10,7 @@ const sessionClient = redis.createClient({
   url: `redis://${config.redis.host}:${config.redis.port}`,
   RESP: 2,
   commandOptions: { timeout: undefined },
-  socket: { keepAliveInitialDelay: 5000, reconnectStrategy },
-});
-// node-redis emits 'error' for every runtime socket failure after connecting
-// (e.g. an idle connection reaped with ETIMEDOUT shortly after a deploy). Without
-// a listener Node rethrows it as an uncaught exception and the process crashes.
-sessionClient.on("error", (err) => {
-  console.error("Session Redis error:", err);
+  socket: { keepAliveInitialDelay: 5000 },
 });
 sessionClient.connect().catch((err) => {
   console.error("Session Redis connect error:", err);
