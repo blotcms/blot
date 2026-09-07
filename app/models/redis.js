@@ -1,5 +1,6 @@
 const config = require("config");
 const redis = require("redis");
+const instrumentRedis = require("helper/instrumentRedis");
 
 const url = `redis://${config.redis.host}:${config.redis.port}`;
 const clientSideCaches = new WeakMap();
@@ -22,14 +23,7 @@ function createRedisClient() {
 
   clientSideCaches.set(client, clientSideCache);
 
-  client.on("error", function (err) {
-    console.log("Redis Error:");
-    console.log(err);
-    if (err.trace) console.log(err.trace);
-    if (err.stack) console.log(err.stack);
-  });
-
-  return client;
+  return instrumentRedis("models", client, url);
 }
 
 // Only expose an immutable stats snapshot, rather than the controllable cache.
