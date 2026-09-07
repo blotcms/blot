@@ -83,12 +83,13 @@ module.exports = function (url, headers, callback) {
       const lastModified = res.headers.get(LAST_MODIFIED);
       const expires = res.headers.get("expires");
       const etag = res.headers.get("etag");
+      const age = res.headers.get("age");
 
       headers[LAST_MODIFIED] = lastModified || headers[LAST_MODIFIED] || "";
       headers.etag = etag || headers.etag || "";
       headers.expires =
         tidy.date(expires) ||
-        tidy.expire(cacheControl) ||
+        tidy.expire(cacheControl, age) ||
         headers.expires ||
         "";
       headers.url = headers.url || url;
@@ -101,15 +102,116 @@ module.exports = function (url, headers, callback) {
 
       if (!res.ok) {
         debug("  it has a bad status code:", res.status);
+        // Nobody consumes the body on this path; drop it so the socket
+        // isn't held open.
+        res.body.destroy();
         throw new Error(res.status);
       }
 
       debug("  updated latest response headers for status", res.status);
-      res.body.pipe(file); // start piping the response body to the file
+
+      // node-fetch transparently decompresses gzip/deflate/br bodies but
+      // leaves Content-Length describing the *encoded* payload, so a
+      // decoded byte count can legitimately differ from it. Only use the
+      // header for the truncation check when the body is served identity.
+      var contentEncoding = res.headers.get("content-encoding");
+      var canCompareLength =
+        !contentEncoding || /^identity$/i.test(contentEncoding.trim());
+
+      var expectedLength = Number(res.headers.get("content-length"));
+      if (
+        !canCompareLength ||
+        !Number.isFinite(expectedLength) ||
+        expectedLength < 0
+      )
+        expectedLength = null;
 
       return new Promise((resolve, reject) => {
-        file.on("finish", () => resolve({ status: res.status, path, headers }));
-        file.on("error", reject);
+        var settled = false;
+        var received = 0;
+        var idleTimer = null;
+
+        function clearIdle() {
+          if (idleTimer) {
+            clearTimeout(idleTimer);
+            idleTimer = null;
+          }
+        }
+
+        // Independent streaming watchdog. We do not rely solely on
+        // res.body emitting 'error': node-fetch's `timeout` option does
+        // not arm a body timer when the stream is consumed via pipe(), and
+        // some truncated-body cases (socket destroyed after a partial
+        // chunk) can leave the PassThrough open without 'error'/'end'/
+        // 'close'. Without this, the promise never settles and the build
+        // hangs. This is the ESOCKETIMEDOUT case the old TODO referred to.
+        function armIdle() {
+          clearIdle();
+          idleTimer = setTimeout(function () {
+            onError(
+              new Error("Download stalled: no data for " + TIMEOUT + "ms")
+            );
+          }, TIMEOUT);
+        }
+
+        function cleanup() {
+          clearIdle();
+          res.body.removeListener("data", onData);
+          file.removeListener("error", onError);
+          file.removeListener("finish", onFinish);
+          // Deliberately keep the res.body 'error' listener: destroy() and
+          // late premature-close errors can still fire after we've settled,
+          // and an unhandled 'error' on the stream would crash the process.
+          // onError's `settled` guard makes the extra call a no-op.
+        }
+
+        function onError(err) {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          res.body.unpipe(file);
+          // Destroy the response stream, not just unpipe it: an unpiped,
+          // unconsumed PassThrough stays paused and backpressures - and so
+          // holds open - the underlying HTTP socket, and node-fetch has
+          // already cleared its request timeout once headers arrived.
+          res.body.destroy();
+          file.destroy();
+          reject(err);
+        }
+
+        function onData(chunk) {
+          received += chunk.length;
+          armIdle();
+        }
+
+        function onFinish() {
+          if (settled) return;
+          // A body that ends short of its advertised Content-Length is a
+          // truncated download, not a success - node-fetch does not always
+          // surface this as an 'error'.
+          if (expectedLength !== null && received < expectedLength) {
+            return onError(
+              new Error(
+                "Download truncated: received " +
+                  received +
+                  " of " +
+                  expectedLength +
+                  " bytes"
+              )
+            );
+          }
+          settled = true;
+          cleanup();
+          resolve({ status: res.status, path, headers });
+        }
+
+        res.body.on("error", onError);
+        res.body.on("data", onData);
+        file.on("error", onError);
+        file.on("finish", onFinish);
+
+        armIdle();
+        res.body.pipe(file); // start piping the response body to the file
       });
     })
     .then(result => {
@@ -129,7 +231,7 @@ module.exports = function (url, headers, callback) {
     })
     .catch(err => {
       debug("Download error:", err);
-      file.close();
+      if (!file.destroyed) file.destroy();
       fs.unlink(path).catch(() => {});
       callback(err);
     });

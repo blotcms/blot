@@ -8,7 +8,12 @@ function render($, callback, options) {
   var blogID = options.blogID;
   var cache = new Transformer(blogID, "image-cache");
 
-  // Process 5 images concurrently
+  // eachEl walks the <img> tags with async.eachOfSeries, so images in one
+  // entry are transformed one at a time - the same image referenced twice
+  // in a post does not race here. Concurrent transforms of one source can
+  // still happen across independent builds (e.g. parallel entry rebuilds);
+  // the transformer does not de-duplicate in-flight lookups by design (see
+  // helper/transformer/readme.txt).
   eachEl(
     $,
     "img",
