@@ -1,4 +1,8 @@
 {{{app_css}}}
+{{{body_font.styles}}}
+{{{heading_font.styles}}}
+{{{syntax_highlighter_font.styles}}}
+{{{syntax_highlighter.styles}}}
 
 html,
 body {
@@ -7,10 +11,15 @@ body {
 }
 
 body {
-  font: normal 16px / 1.5 sans-serif;
+  {{#body_font}}
+  font-size: {{{font_size}}}px;
+  line-height: {{{line_height}}};
+  font-family: {{{stack}}};
+  {{/body_font}}
   margin: 0;
   padding: 0;
-  color: #111;
+  color: {{text_color}};
+  background: {{background_color}};
 }
 
 /* Fill the viewport below the header; paint a background so screenshots are opaque. */
@@ -28,14 +37,14 @@ body:has(.gallery) {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  padding: 0 3.66em;
+  padding: 0 {{spacing}}em;
   background: {{background_color}};
 }
 
 .gallery .entry {
   display: inline-block;
   vertical-align: top;
-  width: 320px;
+  width: {{slide_width}}px;
   box-sizing: border-box;
   white-space: normal;
 }
@@ -45,45 +54,89 @@ img {max-width: 100%;height: auto;}
 .clear {width: 100%;display: block;clear: both;}
 
 h1, h2, h3, h4, h5, h6 {
-  color: #000;
-  font-size: 16px;
+  {{#heading_font}}
+  font-family: {{{stack}}};
+  {{/heading_font}}
+  color: {{text_color}};
+  font-size: 1em;
   margin: 26px 0
 }
 
-h1 {font-size: 20px;font-family: sans-serif;line-height: 1.3}
+h1 {
+  {{#heading_font}}
+  font-size: {{{font_size}}}px;
+  line-height: {{{line_height}}};
+  {{/heading_font}}
+}
 
-a {color: inherit;text-decoration: none;}
+a {color: {{link_color}};text-decoration: none;}
 
-blockquote {color: #585858;margin-left: 52px}
+blockquote {color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55);margin-left: 52px}
 
 p,
 li,
 blockquote,
 figcaption {orphans: 2; widows: 2;}
 
-hr {width: 100%;border: none;border-bottom: 1px solid rgba(0,0,0,0.15)}
+hr {width: 100%;border: none;border-bottom: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15)}
 
-.date {font-family: Menlo, monospace;
-  margin:1em 0;color: #aaa;font-size: 13px}
-
+.date {
+  {{#syntax_highlighter_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  {{/syntax_highlighter_font}}
+  margin:1em 0;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.45);
+}
 
 #header {
-  padding: 4em;
-  font-size: 14px;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
+  flex-wrap: wrap;
   flex: 0 0 auto;
+  gap: 0.5em 1em;
+  padding: {{spacing}}em;
+  font-size: 0.875em;
   background: {{background_color}};
 }
+
+{{#is.navigation_alignment.justified}}
+#header {justify-content: space-between;}
+{{/is.navigation_alignment.justified}}
+{{#is.navigation_alignment.left}}
+#header {justify-content: flex-start;}
+{{/is.navigation_alignment.left}}
+{{#is.navigation_alignment.right}}
+#header {justify-content: flex-end;}
+{{/is.navigation_alignment.right}}
+{{#is.navigation_alignment.center}}
+#header {justify-content: center;}
+{{/is.navigation_alignment.center}}
+
+{{#sticky_navigation}}
+#header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+{{/sticky_navigation}}
+
 #header a {padding: 0.5em;margin: 0 0.5em;border: 1px solid transparent}
-#header a:hover {border-color: #000}
+#header a:hover {border-color: {{link_color}}}
 
 #title {
-  font-size: 30px;
-  margin-left: auto;
+  {{#heading_font}}
+  font-family: {{{stack}}};
+  {{/heading_font}}
+  font-size: 1.875em;
   position: relative;
-  padding: 0.25em;
+  padding: 0.25em
+}
+
+#title .logo {
+  max-height: 1.2em;
+  width: auto;
+  vertical-align: middle;
 }
 
 .avatar {
@@ -91,28 +144,51 @@ hr {width: 100%;border: none;border-bottom: 1px solid rgba(0,0,0,0.15)}
   {{#roundAvatar}}
   border-radius:50%;
   {{/roundAvatar}}
-  position:absolute;
-  top:-3px;
-  left:-48px
+  vertical-align: middle;
+  margin-right: 0.75em;
 }
 
-.entry {font-size:14px;padding: 1em;color: #777}
-.entry h1:first-of-type {margin-top: 0.3em}
+.entry {font-size:0.875em;padding: 1em;color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55)}
+.entry h1:first-of-type {margin-top: 0.3em;color: {{text_color}}}
 
-.contents,
-.container {margin: 0 4em 0 8em;max-width: 800px}
+.contents {margin: 0 {{spacing}}em 0 calc({{spacing}}em * 2);max-width: {{content_width}}px}
+
+.list {
+  margin: 0 {{spacing}}em {{spacing}}em calc({{spacing}}em * 2);
+  max-width: {{content_width}}px;
+}
+
+.list a {border-bottom: 1px solid {{link_color}}}
 
 .caption {
-  font: 14px / 1.4333 sans-serif;
-  color: gray;
+  {{#body_font}}
+  font-family: {{{stack}}};
+  {{/body_font}}
+  font-size: 0.875em;
+  line-height: 1.4333;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.5);
   display: block;
   margin: 0 0 13px 0
 }
 
-.contents a {border-bottom: 1px solid black}
+.contents a {border-bottom: 1px solid {{link_color}}}
 .margin a {font-weight: normal;}
 
 .videoContainer {margin: 1em 0}
+
+pre {
+  overflow-x: auto;
+  padding: 0.7em 1em;
+}
+
+pre, code {
+  {{#syntax_highlighter_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  {{/syntax_highlighter_font}}
+}
+
+.pagination {margin: 2em 0;color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55)}
 
 @media screen and (max-width: 800px) {
   #header {
@@ -139,7 +215,7 @@ hr {width: 100%;border: none;border-bottom: 1px solid rgba(0,0,0,0.15)}
   }
 
   .contents,
-  .container {
+  .list {
     margin: 0 1.25em 2em;
   }
 }

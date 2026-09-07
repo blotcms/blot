@@ -4,7 +4,42 @@
     "page_size": 12,
     "hide_dates": false,
     "date_display": "MMMM D, Y",
-    "background_color": "#ffffff"
+    "background_color": "#ffffff",
+    "text_color": "#111111",
+    "link_color": "#111111",
+    "body_font": {
+      "id": "system-sans",
+      "font_size": 16,
+      "line_height": 1.5
+    },
+    "heading_font": {
+      "id": "system-sans",
+      "font_size": 20,
+      "line_height": 1.3
+    },
+    "syntax_highlighter": {
+      "id": "stackoverflow-light"
+    },
+    "syntax_highlighter_font": {
+      "id": "menlo",
+      "font_size": 13
+    },
+    "favicon_url": "",
+    "logo_url": "",
+    "navigation_alignment": "justified",
+    "navigation_alignment_options": [
+      "justified",
+      "left",
+      "right",
+      "center"
+    ],
+    "sticky_navigation": false,
+    "slide_width": 320,
+    "slide_width_range": [200, 560],
+    "content_width": 800,
+    "content_width_range": [480, 1200],
+    "spacing": 4,
+    "spacing_range": [1, 8]
   },
   "isPublic": false,
   "views": {

@@ -7,7 +7,7 @@
 
       {{> header}}
 
-      <div class="header-area">
+      <div class="list">
 
       <span class="pull-left">
         Search
@@ -16,7 +16,6 @@
       <form>
         <input placeholder="Search for an entry..." value="{{#query}}{{query}}{{/query}}" name="q" id="search" type="text" /><input type="submit" value="Go"/>
       </form>
-      </div>
 
 
       <br>
@@ -33,10 +32,10 @@
         {{/query}}
 
         {{#entries}}
-          <a href="{{{url}}}">{{title}}</a> {{date}}<br>
+          <a href="{{{url}}}">{{title}}</a>{{#date}} {{date}}{{/date}}<br>
         {{/entries}}
 
-
+      </div>
 
 
 

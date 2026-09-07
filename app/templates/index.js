@@ -158,6 +158,13 @@ function build(directory, callback) {
       );
     }
 
+    if (template.locals.heading_font !== undefined) {
+      template.locals.heading_font = _.merge(
+        _.cloneDeep(DEFAULT_FONT),
+        template.locals.heading_font
+      );
+    }
+
     if (template.locals.font !== undefined) {
       template.locals.font = _.merge(
         _.cloneDeep(DEFAULT_FONT),

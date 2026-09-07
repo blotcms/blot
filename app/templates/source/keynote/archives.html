@@ -9,18 +9,19 @@
       {{> header}}
 
 
-      <div class="header-area">
+      <div class="list">
 
       <span class="pull-left">
         All posts
       </span>
 
-      </div>
       <p>
       {{#all_entries}}
-      <a href="{{{url}}}">{{title}}</a> {{date}}<br>
+      <a href="{{{url}}}">{{title}}</a>{{#date}} {{date}}{{/date}}<br>
       {{/all_entries}}
     </p>
+
+      </div>
 
    </div>
    {{> footer}}

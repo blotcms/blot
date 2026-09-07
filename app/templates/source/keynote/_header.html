@@ -1,13 +1,11 @@
 <div id="header">
 
-  {{#avatar}}
-  <img id="avatar" class="avatar" src="{{{avatar}}}" alt="" />
-  {{/avatar}}
+  <nav class="nav">
+    {{#menu}}
+    <a href="{{{url}}}" title="{{label}}">{{label}}</a>
+    {{/menu}}
+  </nav>
 
-  {{#menu}}
-  <a href="{{{url}}}" title="{{label}}">{{label}}</a>
-  {{/menu}}
-
-  <a id="title" href="/" title="The homepage of {{title}}">{{title}}</a>
+  <a id="title" href="/" title="The homepage of {{title}}">{{#logo_url}}<img src="{{{logo_url}}}" alt="{{title}}" class="logo">{{/logo_url}}{{^logo_url}}{{#avatar}}<img class="avatar" src="{{{avatar}}}" alt="">{{/avatar}}{{title}}{{/logo_url}}</a>
 
 </div>
