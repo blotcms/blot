@@ -11,10 +11,12 @@ describe("linkScreenshot plugin", function () {
     cheerio.load(`<p><a class="bookmark" href="${href}">Example</a></p>`);
 
   let calls;
+  let optionsSeen;
   let render;
 
   beforeEach(function () {
     calls = [];
+    optionsSeen = [];
 
     // Stub helper/screenshot in require's cache before (re-)requiring the
     // plugin, so we can assert exactly which URLs this plugin hands to the
@@ -29,8 +31,9 @@ describe("linkScreenshot plugin", function () {
       filename: screenshotPath,
       loaded: true,
       exports: Object.assign(
-        function (site) {
+        function (site, path, options) {
           calls.push(site);
+          optionsSeen.push(options);
           return Promise.reject(new Error("stub: no real screenshot in tests"));
         },
         { restart: function () {}, shutdown: function () {} }
@@ -50,6 +53,16 @@ describe("linkScreenshot plugin", function () {
 
     render(doc(href), function () {
       expect(calls).toEqual([href]);
+      done();
+    }, opts);
+  });
+
+  it("marks the screenshot untrusted so it must run in the airlock", function (done) {
+    const href = "https://example.com/";
+
+    render(doc(href), function () {
+      expect(optionsSeen.length).toBe(1);
+      expect(optionsSeen[0].untrusted).toBe(true);
       done();
     }, opts);
   });

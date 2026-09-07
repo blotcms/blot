@@ -22,16 +22,19 @@ const reverse_proxies = process.env.BLOT_REVERSE_PROXY_URLS
   ? ["http://127.0.0.1:80"]
   : [];
 
-// See the "airlock" config block below. A warning, not a thrown error that
-// would crash every container on boot over a single misconfigured/down
-// dependency - but the consequences differ by variable:
+// See the "airlock" config block below. This is a warning, not a thrown
+// error: a misconfigured/down airlock must not crash every container on
+// boot. It does NOT mean user-controlled URLs are fetched directly -
+// helper/airlock fails those operations closed in production (the post
+// builds without the image, the domain check errors) rather than falling
+// back to an unprotected fetch. The warning just flags that this container
+// missed the env vars, so those features are broken until it is redeployed:
 //   - BLOT_AIRLOCK_BROWSER_URL unset: the production image ships no Chromium
-//     of its own (see the Dockerfile), so bookmark-link screenshots do not
-//     just lose SSRF protection - they cannot run at all.
-//   - BLOT_AIRLOCK_PROXY_URL unset: remote-image downloads fetch
-//     user-controlled URLs directly, with no SSRF protection.
-// Once the airlock deploy has been stable for a while, consider tightening
-// this to fail closed (but only after confirming the airlock, not blindly).
+//     of its own (see the Dockerfile), and helper/screenshot will not fall
+//     back to a local launch for a user URL - bookmark-link screenshots
+//     cannot run at all.
+//   - BLOT_AIRLOCK_PROXY_URL unset: remote-image downloads and user-domain
+//     checks error out (fail closed) instead of fetching directly.
 if (
   environment === "production" &&
   !(process.env.BLOT_AIRLOCK_BROWSER_URL && process.env.BLOT_AIRLOCK_PROXY_URL)
@@ -40,8 +43,9 @@ if (
     "WARNING: BLOT_AIRLOCK_BROWSER_URL / BLOT_AIRLOCK_PROXY_URL are not both " +
       "set in production. Without BLOT_AIRLOCK_BROWSER_URL, bookmark-link " +
       "screenshots will fail (the prod image has no local Chromium). Without " +
-      "BLOT_AIRLOCK_PROXY_URL, remote-image downloads fetch user-controlled " +
-      "URLs directly, with no SSRF protection. See config/airlock/README.md."
+      "BLOT_AIRLOCK_PROXY_URL, remote-image downloads and user-domain checks " +
+      "fail closed (no unprotected fetch). Both stay broken until this " +
+      "container is redeployed. See config/airlock/README.md."
   );
 }
 
@@ -151,8 +155,13 @@ module.exports = {
     // app/helper/screenshot.
     browser_url: process.env.BLOT_AIRLOCK_BROWSER_URL || null,
     // HTTP(S) forward proxy, e.g. http://airlock:8888 - consumed by
-    // app/helper/transformer/download.
+    // app/helper/transformer/download and every other user-controlled fetch
+    // via helper/airlock.
     proxy: process.env.BLOT_AIRLOCK_PROXY_URL || null,
+    // When true (production), helper/airlock refuses a user-controlled fetch
+    // that isn't going through the airlock instead of falling back to a
+    // direct one. Read this rather than re-deriving from environment.
+    required: environment === "production",
   },
 
   paypal: {

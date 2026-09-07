@@ -1,4 +1,6 @@
-const fetch = require("node-fetch");
+// host is a user-set custom domain (blog.domain); fetch it through the
+// airlock proxy so an internal address can't be reached. See helper/airlock.
+const fetch = require("helper/airlock").fetch;
 
 module.exports = async function fetchSubscriptionDuration(host) {
   try {

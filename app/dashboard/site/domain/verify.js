@@ -26,7 +26,12 @@
 // for every exception after the first, the exception should contain a property 'nameservers' that contains the nameserver addresses of the domain
 
 const dns = require('dns').promises;
-const fetch = require('node-fetch');
+// The domain-setup check connects to an A-record this function resolved
+// itself and sends Host: <hostname>. It goes through the airlock's proxy
+// (helper/airlock.getViaIP, config/airlock/README.md) so the egress filter
+// rejects an A-record that resolves to an internal address, while still
+// pinning the exact resolved IP rather than letting the proxy re-resolve.
+const airlock = require('helper/airlock');
 const { parse } = require('tldts');
 
 const VERIFICATION_TIMEOUT_MS = 5000;
@@ -172,14 +177,14 @@ async function validate({ hostname, handle, ourIP, ourIPv6, ourHost }) {
         : null;
 
     try {
-        const response = await fetch(`http://${aRecordIPs[0]}/verify/domain-setup`, {
-            headers: { Host: hostname },
+        const response = await airlock.getViaIP(aRecordIPs[0], '/verify/domain-setup', {
+            host: hostname,
             ...(controller
                 ? { signal: controller.signal }
                 : { timeout: VERIFICATION_TIMEOUT_MS })
         });
 
-        text = await response.text();
+        text = response.text;
 
     } catch (err) {
         const error = new Error('HANDLE_VERIFICATION_REQUEST_FAILED');

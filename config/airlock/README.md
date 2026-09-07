@@ -82,14 +82,26 @@ identity.
 
 ## Configuration (the app side)
 
-`config/index.js` reads two env vars; both unset ⇒ the app fetches directly
-with **no SSRF protection** (fine for local dev; production sets both real
-values, see "Production" below):
+`config/index.js` reads two env vars. `app/helper/airlock` is the single
+app-side entry point that consumes them: it builds the proxy agent and
+enforces **fail-closed** in production. Outside production (`config.environment
+!== "production"`), or with an explicit local override, nothing is required
+and fetches go direct — fine for local dev.
 
 | Env var | Example | Used by |
 | --- | --- | --- |
-| `BLOT_AIRLOCK_BROWSER_URL` | `http://airlock:9222` | `app/helper/screenshot` |
-| `BLOT_AIRLOCK_PROXY_URL` | `http://airlock:8888` | `app/helper/transformer/download` |
+| `BLOT_AIRLOCK_BROWSER_URL` | `http://airlock:9222` | `app/helper/screenshot` (via `helper/airlock`) |
+| `BLOT_AIRLOCK_PROXY_URL` | `http://airlock:8888` | `app/helper/transformer/download` and every other user-controlled fetch, via `helper/airlock` |
+
+**Fail-closed:** in production, a caller that hands `helper/airlock` a
+user-controlled URL when the airlock is not configured gets an **error**, not
+a direct fetch. `helper/screenshot` likewise refuses to fall back to a
+locally-launched Chromium for a screenshot flagged `untrusted` (the
+bookmark-link plugin sets it). The affected operation fails and its caller
+degrades gracefully — the app still boots and serves. `config/index.js` still
+only **warns** on startup when the vars are missing: that is the signal that
+this container missed the deploy and those features are down until it is
+redeployed, not that anything is fetching unprotected.
 
 ## Local development
 
@@ -203,28 +215,57 @@ it".
      --http-tokens required --http-put-response-hop-limit 1 --http-endpoint enabled
    ```
 
-## Known sinks not covered
+## Also routed through the airlock
 
-Besides [`app/templates/screenshots.js`](../../app/templates/screenshots.js)
-(template-gallery previews - **no** user input, its URLs are built entirely
-from `config.host`; deliberately left on a locally-launched Chromium, don't
-set `BLOT_AIRLOCK_BROWSER_URL` for that job), two more places take a
-user-controlled hostname and fetch it from the app container, not routed
-through `airlock`:
+Beyond the two read primitives above, these user-controlled fetches go
+through the proxy via `helper/airlock` (`.fetch`, which applies the proxy
+agent and the fail-closed assertion). Most are **blind** — the response is
+compared against a handle, or discarded — so not read primitives, but they
+can still reach an internal address from a user-supplied host:
 
 * [`app/dashboard/site/domain/verify.js`](../../app/dashboard/site/domain/verify.js)
-  — a hostname the user typed into the dashboard, `fetch("http://" + hostname + "/verify/domain-setup")`.
+  — connects to an A-record it resolved itself (authoritative nameservers +
+  public fallback resolvers), `Host:` the dashboard-entered domain. Uses
+  `helper/airlock.getViaIP`, not `.fetch`: the proxied request line targets
+  `http://<ip>/verify/domain-setup` so the exact resolved IP is kept (the
+  egress filter still re-checks it) instead of the proxy re-resolving the
+  name, which would defeat the point of resolving it here.
 * [`app/documentation/featured/verifySiteIsOnline.js`](../../app/documentation/featured/verifySiteIsOnline.js)
-  — same shape, `https://<host>/verify/domain-setup`.
+  and [`fetchSubscriptionDuration.js`](../../app/documentation/featured/fetchSubscriptionDuration.js)
+  — `https://<blog.domain>/verify/*`.
+* [`app/dashboard/site/domain/index.js`](../../app/dashboard/site/domain/index.js)
+  `triggerAutoSSL()` and
+  [`app/dashboard/account/create-site.js`](../../app/dashboard/account/create-site.js)
+  — fire-and-forget SSL warmups against a user-set domain.
 
-Both are **blind**: the response body is compared against the blog's handle,
-never echoed back to the user, so they're not a read primitive the way
-`linkScreenshot` and `transformer/download` are. They can still reach an
-internal address from a user-supplied hostname, though, so routing them
-through `airlock`'s proxy is worth doing - just not done in this PR. Treat
-this list as "known and accepted for now," not exhaustive; grep for
-user-controlled `fetch`/`request` calls in `app/build` and `app/dashboard`
-before relying on it.
+The `featured` scripts run via `docker exec … node app/documentation/featured/build`
+inside an app container, so they inherit `BLOT_AIRLOCK_PROXY_URL` — no extra
+wiring.
+
+## Deliberately not routed
+
+* [`app/templates/screenshots.js`](../../app/templates/screenshots.js) —
+  template-gallery previews, **no** user input (URLs built from `config.host`);
+  left on a locally-launched Chromium, don't set `BLOT_AIRLOCK_BROWSER_URL`
+  for that job.
+* `app/build/plugins/videoEmbeds/{vimeo,youtube}.js`,
+  `app/build/plugins/bluesky/index.js`, `app/build/plugins/flickr/index.js`,
+  `app/build/plugins/videoEmbeds/bandcamp.js` — fetch a **fixed third-party
+  host** (an oEmbed endpoint, or bandcamp.com); only a query string / path is
+  user-controlled, not the destination host.
+* `app/documentation/build/tools.js` — `link` comes from a repo YAML file at
+  doc-build time, not runtime user input.
+* [`app/dashboard/site/import/sources/arena/parse.js`](../../app/dashboard/site/import/sources/arena/parse.js)
+  — `image.original.url` from the are.na API is pinned to are.na's own image
+  hosts (`d2w9rnfcy7mm78.cloudfront.net`, `*.are.na`), so the destination
+  host isn't user-controlled. The generic imported-HTML image/PDF
+  downloaders (`app/dashboard/site/import/helper/download_{images,pdfs}.js`)
+  do fetch arbitrary URLs from imported content and are **not** yet routed
+  or pinned — a known gap across all importers.
+
+Treat this as "known", not exhaustive; grep for user-controlled
+`fetch`/`request` calls in `app/build` and `app/dashboard` before relying on
+it.
 
 ## Verifying
 
@@ -346,10 +387,13 @@ they look different in the logs - only one is a security regression:
   screenshots silently failing in production after an image rebuild.
 * In production, `config/index.js` only **warns** (`console.warn`, on
   startup) if `BLOT_AIRLOCK_BROWSER_URL` / `BLOT_AIRLOCK_PROXY_URL` are
-  unset - it does not refuse to start. After this PR the warning is *not*
-  expected to fire; if it does, the deploy set the vars on some containers
-  but not this one (see "Verifying" above). A hard failure was rejected on
-  purpose: a bad deploy or a crashed airlock shouldn't be able to take every
-  app container
-  down over a feature this size - if you do tighten it, make it fail closed
-  only after confirming the airlock, not unconditionally.
+  unset - it does not refuse to start. A hard startup failure was rejected
+  on purpose: a bad deploy or a crashed airlock shouldn't take every app
+  container down. Instead the failure is **per operation and fail-closed**:
+  `helper/airlock` throws when a user-controlled fetch/screenshot would
+  otherwise go direct, so the bookmark screenshot / remote image / domain
+  check fails and its caller degrades gracefully, while the rest of the app
+  keeps serving. The startup warning is not expected to fire after a clean
+  deploy; if it does, the deploy set the vars on some containers but not
+  this one (see "Verifying"), and those features are down on it until it is
+  redeployed.

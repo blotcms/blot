@@ -6,6 +6,7 @@ const config = require("config");
 const lockfile = require("proper-lockfile");
 const retry = require("./retry");
 const clfdate = require("helper/clfdate");
+const airlock = require("helper/airlock");
 
 // When set, screenshots run in the shared "airlock" container (config/airlock)
 // instead of a Chromium we launch ourselves: we attach to its DevTools
@@ -432,6 +433,16 @@ async function shutdown() {
 
 // Export main function
 const screenshot = async (site, path, options = {}) => {
+  // Fail closed: a user-controlled URL (options.untrusted, set by
+  // build/plugins/linkScreenshot) must be screenshotted inside the airlock
+  // container, never a Chromium we launch ourselves. In production, refuse
+  // rather than fall back to puppeteer.launch(). Trusted callers
+  // (app/templates/screenshots.js - URLs built from config.host, no user
+  // input) don't set the flag and are unaffected.
+  if (options.untrusted && !REMOTE_BROWSER_URL) {
+    airlock.assertBrowserReady("build/plugins/linkScreenshot");
+  }
+
   try {
     return await retry(() =>
       limiter.schedule(() => takeScreenshot(site, path, options))

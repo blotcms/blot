@@ -61,7 +61,11 @@ function render($, callback, { blogID, path }) {
   screenshot(
     href,
     localPathToScreenshot,
-    { width: SCREENSHOT_WIDTH, height: SCREENSHOT_HEIGHT },
+    // untrusted: href comes from a user-uploaded .webloc/.url file, so this
+    // must run in the airlock container - see helper/airlock and
+    // config/airlock/README.md. In production helper/screenshot refuses to
+    // fall back to a locally-launched Chromium for this.
+    { width: SCREENSHOT_WIDTH, height: SCREENSHOT_HEIGHT, untrusted: true },
     function (err) {
       if (err) {
         console.log(prefix(), "Error fetching screenshot", err);
