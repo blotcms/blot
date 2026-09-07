@@ -13,17 +13,16 @@ ENV NODE_PATH=/usr/src/app/app
 # Set the working directory in the Docker container
 WORKDIR /usr/src/app
 
-# Install necessary packages for Puppeteer, the git client, and HEIF-enabled libvips
+# Install the git client and a few runtime basics. Chromium is NOT installed
+# here: production takes screenshots by connecting to the shared "airlock"
+# container's headless Chromium over the Docker network (see
+# app/helper/screenshot and config/airlock), so the prod image ships no
+# browser. The dev stage below adds Chromium back for the test suite.
 RUN apk add --no-cache --update \
     git \
     tini \
     curl \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont
+    ca-certificates
 
 # Configure git to handle lots of large binary files in memory-constrained environments.
 RUN git config --system pack.threads 1 \
@@ -34,8 +33,11 @@ RUN git config --system pack.threads 1 \
 # Use tini as the init process so simple-git child processes are reaped instead of becoming zombies.
 ENTRYPOINT ["/sbin/tini", "--"]
 
-# Set the Puppeteer executable path
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# Puppeteer is used only as a CDP client (it connect()s to the airlock's
+# Chromium), so don't let `npm install` download its ~130MB bundled browser.
+# The dev stage, which does launch() a local Chromium for tests, installs the
+# system package and points Puppeteer at it instead.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 # Install Pandoc
 RUN ARCH=$(echo ${TARGETPLATFORM} | sed -nE 's/^linux\/(amd64|arm64)$/\1/p') \
@@ -86,6 +88,12 @@ FROM base AS dev
 
 ENV NODE_ENV=development
 ENV PATH=/usr/src/app/node_modules/.bin:$PATH
+
+# The test suite (app/site/tests) and scripts/development/translate launch a
+# local headless Chromium via Puppeteer. Production does not - it connects to
+# the airlock - so the browser and its font/nss deps live in this stage only.
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 RUN npm install --no-package-lock && npm cache clean --force
     

@@ -24,19 +24,24 @@ const reverse_proxies = process.env.BLOT_REVERSE_PROXY_URLS
 
 // See the "airlock" config block below. A warning, not a thrown error that
 // would crash every container on boot over a single misconfigured/down
-// dependency - but it means bookmark screenshots and remote-image downloads
-// are fetching user-controlled URLs directly, with no SSRF protection. Once
-// the airlock deploy has been stable for a while, consider tightening this
-// to fail closed (but only after confirming the airlock, not blindly).
+// dependency - but the consequences differ by variable:
+//   - BLOT_AIRLOCK_BROWSER_URL unset: the production image ships no Chromium
+//     of its own (see the Dockerfile), so bookmark-link screenshots do not
+//     just lose SSRF protection - they cannot run at all.
+//   - BLOT_AIRLOCK_PROXY_URL unset: remote-image downloads fetch
+//     user-controlled URLs directly, with no SSRF protection.
+// Once the airlock deploy has been stable for a while, consider tightening
+// this to fail closed (but only after confirming the airlock, not blindly).
 if (
   environment === "production" &&
   !(process.env.BLOT_AIRLOCK_BROWSER_URL && process.env.BLOT_AIRLOCK_PROXY_URL)
 ) {
   console.warn(
     "WARNING: BLOT_AIRLOCK_BROWSER_URL / BLOT_AIRLOCK_PROXY_URL are not both " +
-      "set in production. Bookmark-link screenshots and remote-image " +
-      "downloads are fetching user-controlled URLs directly, with no SSRF " +
-      "protection. See config/airlock/README.md."
+      "set in production. Without BLOT_AIRLOCK_BROWSER_URL, bookmark-link " +
+      "screenshots will fail (the prod image has no local Chromium). Without " +
+      "BLOT_AIRLOCK_PROXY_URL, remote-image downloads fetch user-controlled " +
+      "URLs directly, with no SSRF protection. See config/airlock/README.md."
   );
 }
 
