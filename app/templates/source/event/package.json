@@ -5,6 +5,7 @@
     "call_to_action": "/tickets",
     "page_size": 18,
     "spacing": 1,
+    "spacing_range": [0, 4],
     "dark_slides_background": true,
     "background_color": "#fff",
     "text_color": "#000",
@@ -22,6 +23,21 @@
       "line_height": 1.6,
       "font_size": 15
     },
+    "heading_font": {
+      "id": "system-sans",
+      "font_size": 45,
+      "line_height": 1.2
+    },
+    "favicon_url": "",
+    "logo_url": "",
+    "sticky_navigation": true,
+    "navigation_alignment": "left",
+    "navigation_alignment_options": [
+      "left",
+      "right",
+      "center",
+      "justified"
+    ],
     "demo_folder": "lecture"
   },
   "enabled": true,

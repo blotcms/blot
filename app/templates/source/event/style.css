@@ -3,6 +3,7 @@
 /* Injected styles from templates and external sources */
 {{{app_css}}}
 {{{body_font.styles}}}
+{{{heading_font.styles}}}
 {{{syntax_highlighter.styles}}}
 {{> flickity.css}}
 
@@ -13,6 +14,11 @@
   --font-size: {{{font_size}}}px;
   --line-height: {{{line_height}}};
   {{/body_font}}
+  {{#heading_font}}
+  --heading-font-family: {{{stack}}};
+  --heading-font-size: {{{font_size}}}px;
+  --heading-line-height: {{{line_height}}};
+  {{/heading_font}}
   --background-color: {{background_color}};
   --text-color: {{text_color}};
   --off-background-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.02);
@@ -24,7 +30,7 @@
   --caption-height: 2.6rem;
   --slides-width: 50vw;
   --slides-height: 100vh;
-  --padding: 1.4rem;
+  --padding: calc({{spacing}} * 1.4rem);
 }
 
 /* Dark mode variables */
@@ -62,14 +68,16 @@ small { color: var(--light-text-color); }
 }
 
 /* TYPOGRAPHY */
+h1, h2 {
+  font-family: var(--heading-font-family);
+  font-size: clamp(9px, 3.5vw, var(--heading-font-size));
+  line-height: var(--heading-line-height);
+}
 h1 {
-  margin: 0; font-weight: 400; line-height: 1.2;
+  margin: 0; font-weight: 400;
 }
 h1 + h2 {
-  opacity: 0.3333; margin: 0; line-height: 1.2; margin-bottom: clamp(2em, 3.5vw, 3em);
-}
-h1, h2 {
-  font-size: clamp(2em, 3.5vw, 3em);
+  opacity: 0.3333; margin: 0; margin-bottom: clamp(2em, 3.5vw, 3em);
 }
 h2 {
   font-weight: 400; margin: 4em 0 0 0;
@@ -93,12 +101,49 @@ hr { border: none; border-bottom: 1px solid var(--border-color); clear: both; }
 .site-header { display: flex; }
 
 
+/* SITE HEADER */
+.site-header {
+  display: flex;
+}
+.site-title {
+  text-decoration: none;
+  padding: 1em 0;
+  font-size: 0.9em;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-family: var(--heading-font-family);
+}
+.site-logo {
+  height: 1.4em;
+  width: auto;
+  display: block;
+}
+
 /* NAVIGATION */
 .navigation {
-  display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 0.5em;
-  align-items: center; position: sticky; background: var(--background-color);
-  padding: 0.75em 0; top: 0; z-index: 1000;
+  display: flex; flex-wrap: wrap; gap: 0.5em;
+  align-items: center; background: var(--background-color);
+  padding: 0.75em 0; z-index: 1000;
   overflow-x: auto; -webkit-overflow-scrolling: touch;
+  {{#sticky_navigation}}
+  position: sticky; top: 0;
+  {{/sticky_navigation}}
+  {{^sticky_navigation}}
+  position: relative;
+  {{/sticky_navigation}}
+  {{#is.navigation_alignment.left}}
+  justify-content: flex-start;
+  {{/is.navigation_alignment.left}}
+  {{#is.navigation_alignment.right}}
+  justify-content: flex-end;
+  {{/is.navigation_alignment.right}}
+  {{#is.navigation_alignment.center}}
+  justify-content: center;
+  {{/is.navigation_alignment.center}}
+  {{#is.navigation_alignment.justified}}
+  justify-content: space-between;
+  {{/is.navigation_alignment.justified}}
 }
 .navigation a {
   text-decoration: none; font-size: 0.9em; margin-bottom: -1px;
@@ -110,7 +155,10 @@ hr { border: none; border-bottom: 1px solid var(--border-color); clear: both; }
   color: var(--text-color); background-color: var(--border-color);
 }
 .navigation a[href="{{{call_to_action}}}"] {
-  margin-left: auto; font-weight: 600; color: var(--background-color); background: var(--link-color);
+  font-weight: 600; color: var(--background-color); background: var(--link-color);
+  {{#is.navigation_alignment.left}}
+  margin-left: auto;
+  {{/is.navigation_alignment.left}}
 }
 
 /* IMAGE STYLING */
@@ -261,6 +309,9 @@ kbd {
   position: sticky; top: 0; background: var(--off-background-color);
   box-sizing: border-box;
   border-right: 1px solid var(--border-color);
+  {{#dark_slides_background}}
+  background: {{dark_background_color}};
+  {{/dark_slides_background}}
 }
 
 .main-carousel {
@@ -281,6 +332,9 @@ kbd {
   bottom: 0; left: 0; font-size: 0.85em; right: 0; text-align: center; cursor: auto;
   margin: 0 2rem; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 0.15em; line-height: 1.25; box-sizing: border-box;
+  {{#dark_slides_background}}
+  color: {{dark_text_color}};
+  {{/dark_slides_background}}
 }
 .slide-caption-text {
   display: block; max-width: 100%;
@@ -289,6 +343,9 @@ kbd {
 .slide-caption-credit {
   display: block; color: var(--text-color); font-size: 0.75em;
   text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.5;
+  {{#dark_slides_background}}
+  color: {{dark_text_color}};
+  {{/dark_slides_background}}
 }
 
 .flickity-page-dots {
@@ -307,13 +364,25 @@ kbd {
   background-color: var(--border-color);
   border-radius: 50%;
   transition: background-color 0.2s;
+  {{#dark_slides_background}}
+  background-color: rgba({{#rgb}}{{dark_text_color}}{{/rgb}}, 0.25);
+  {{/dark_slides_background}}
 }
 
 .flickity-page-dots .dot:hover:after { background-color: var(--light-text-color); }
 
 .flickity-page-dots .dot.is-selected:after {
   background-color: var(--light-text-color);
+  {{#dark_slides_background}}
+  background-color: {{dark_text_color}};
+  {{/dark_slides_background}}
 }
+
+{{#dark_slides_background}}
+.flickity-page-dots .dot:hover:after {
+  background-color: {{dark_text_color}};
+}
+{{/dark_slides_background}}
 
 .flickity-prev-next-button.previous, .flickity-prev-next-button.next {
   top: 0; width: auto; height: auto; bottom: calc(var(--dots-height) + var(--caption-height)); background: transparent;
@@ -355,7 +424,10 @@ kbd {
 /* RESPONSIVE STYLES */
 @media screen and (max-width: 1000px) {
   .navigation {
-    position: fixed; left: 0; padding-left: var(--padding); padding-right: var(--padding); right: 0;
+    left: 0; padding-left: var(--padding); padding-right: var(--padding); right: 0;
+    {{#sticky_navigation}}
+    position: fixed;
+    {{/sticky_navigation}}
   }
   .collapse-on-mobile { flex-direction: column; }
 
@@ -366,7 +438,12 @@ kbd {
 
   .slides {
     position: relative; 
+    {{#sticky_navigation}}
     margin: 3.5em 0 1em;
+    {{/sticky_navigation}}
+    {{^sticky_navigation}}
+    margin: 0 0 1em;
+    {{/sticky_navigation}}
     border-right: none; border-bottom: 1px solid var(--border-color); border-top: 1px solid var(--border-color);
   }
   
@@ -375,8 +452,10 @@ kbd {
 
 @media screen and (max-width: 640px) {
   /* Wrapped nav is two rows; keep slide-less pages (Speakers, FAQs) clear too. */
+  {{#sticky_navigation}}
   .slides,
   .site-header {
     margin-top: 5.75em;
   }
+  {{/sticky_navigation}}
 }
