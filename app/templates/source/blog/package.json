@@ -17,7 +17,43 @@
       "id": "gill-sans",
       "font_size": 19
     },
-    "demo_folder": "notes"
+    "demo_folder": "notes",
+    "syntax_highlighter": {
+      "id": "solarized-light"
+    },
+    "syntax_highlighter_font": {
+      "id": "menlo",
+      "font_size": 10
+    },
+    "favicon_url": "",
+    "logo_url": "",
+    "navigation_alignment": "right",
+    "navigation_alignment_options": [
+      "left",
+      "right",
+      "center"
+    ],
+    "navigation_location": "left",
+    "navigation_location_options": [
+      "left",
+      "right"
+    ],
+    "sticky_navigation": false,
+    "uppercase_navigation": true,
+    "show_tags": true,
+    "show_adjacent_posts": true,
+    "index_layout": "post_in_full",
+    "index_layout_options": [
+      "titles",
+      "title_and_summary",
+      "post_in_full"
+    ],
+    "spacing": 7,
+    "spacing_range": [2, 14],
+    "content_width": 39,
+    "content_width_range": [24, 64],
+    "sidebar_width": 15,
+    "sidebar_width_range": [8, 24]
   },
   "views": {
     "archives.html": {

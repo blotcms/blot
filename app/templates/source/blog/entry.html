@@ -12,14 +12,11 @@
         {{{html}}}
       </div>
 
-      <div class="light">{{#date}}
-        <a href="{{{url}}}" title="Permalink for {{title}}">{{date}}</a>
-        {{/date}}{{#tags}}
-        · <a title="Everything tagged {{name}}" href="/tagged/{{slug}}">{{name}}</a>
-      {{/tags}}</div>
+      {{> meta}}
 
       <br>
 
+      {{#show_adjacent_posts}}
       {{#adjacent}}
       <br>
       <p class="entry">
@@ -37,6 +34,7 @@
       <br>
       <br>
       {{/adjacent}}
+      {{/show_adjacent_posts}}
 
       {{> pluginHTML}}
 

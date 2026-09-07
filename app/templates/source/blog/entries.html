@@ -7,17 +7,30 @@
 
     {{#posts}}
 
+      {{#is.index_layout.titles}}
+      <div class="entry listing">
+        <a href="{{{url}}}" title="{{title}}">{{title}}</a>
+        {{> meta}}
+      </div>
+      {{/is.index_layout.titles}}
+
+      {{#is.index_layout.title_and_summary}}
+      <div class="entry listing">
+        <a href="{{{url}}}" title="{{title}}">{{title}}</a>
+        {{#summary}}<p class="summary">{{{summary}}}</p>{{/summary}}
+        {{> meta}}
+      </div>
+      {{/is.index_layout.title_and_summary}}
+
+      {{#is.index_layout.post_in_full}}
       <div class="entry">
         {{{html}}}
       </div>
 
-      <div class="light">{{#date}}
-        <a href="{{{url}}}" title="{{title}}">{{date}}</a>
-        {{/date}}{{#tags}}
-        · <a title="Everything tagged {{name}}" href="/tagged/{{slug}}">{{name}}</a>
-      {{/tags}}</div>
+      {{> meta}}
 
       <hr class="full"/>
+      {{/is.index_layout.post_in_full}}
 
     {{/posts}}
 
@@ -33,7 +46,7 @@
     </div>
     {{/pagination}}
 
-    <p class="entry" style="text-align:center">View <a href="/archives">the archives</a></p>
+    <p class="entry archives-link">View <a href="/archives">the archives</a></p>
 
     {{> footer}}
   </body>

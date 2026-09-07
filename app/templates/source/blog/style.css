@@ -12,13 +12,22 @@ TO DO:
 /* Inserts the @font-face rules required to load whichever fonts are selected. */
 {{{font.styles}}}
 {{{title_font.styles}}}
+{{{syntax_highlighter_font.styles}}}
+{{{syntax_highlighter.styles}}}
 
 :root {
   --background-color: {{background_color}};
   --text-color: {{text_color}};
+  --links-color: {{links_color}};
   --light-text-color: rgba({{#rgb}}{{text_color}}{{/rgb}},0.5);
   --border-color: rgba({{#rgb}}{{text_color}}{{/rgb}},0.2);
   --base-font-size: {{#font}}{{{font_size}}}{{/font}}px;
+  --spacing: calc(var(--base-font-size) * {{spacing}});
+  --content-width: calc(var(--base-font-size) * {{content_width}});
+  --sidebar-width: calc(var(--base-font-size) * {{sidebar_width}});
+  --sidebar-gap: calc(var(--base-font-size) * 5.637);
+  --gutter-padding: calc(var(--base-font-size) * 6.727);
+  --body-outer-width: calc(var(--content-width) + var(--sidebar-width) + var(--sidebar-gap) + var(--gutter-padding));
 }
 
 html, body {
@@ -32,21 +41,66 @@ html, body {
 body {
   word-wrap: break-word; /* for long words & urls */
   position: relative;
-  width: calc(var(--base-font-size) * 38.636);
-  margin: 7em auto;
-  padding: 0 calc(var(--base-font-size) * 6.727) 0 calc(var(--base-font-size) * 20.182);
+  /* Never let the fixed sidebar + gutters push the outer width past the
+     viewport (which the {{{spacing}}}/{{{content_width}}}/{{{sidebar_width}}}
+     controls can do at their maxima or with a large body font). Above that
+     point this resolves to --content-width and the layout is unchanged. */
+  width: min(
+    var(--content-width),
+    100vw - var(--sidebar-width) - var(--sidebar-gap) - var(--gutter-padding)
+  );
+  margin: var(--spacing) auto;
+  padding: 0 var(--gutter-padding) 0 calc(var(--sidebar-width) + var(--sidebar-gap));
   color: var(--text-color);
   background-color: var(--background-color);
 }
 
+{{#is.navigation_location.right}}
+body {
+  padding: 0 calc(var(--sidebar-width) + var(--sidebar-gap)) 0 var(--gutter-padding);
+}
+{{/is.navigation_location.right}}
+
 .sidebar {
-  width: calc(var(--base-font-size) * 14.545);
-  position:absolute;
-  left:0;
-  text-align:right;
+  width: var(--sidebar-width);
+  left: 0;
+  text-align: right;
+  {{^sticky_navigation}}
+  position: absolute;
+  {{/sticky_navigation}}
+  {{#sticky_navigation}}
+  position: fixed;
+  top: var(--spacing);
+  left: calc(50% - var(--body-outer-width) / 2);
+  z-index: 2;
+  background: var(--background-color);
+  /* A long title or menu can outgrow the viewport; keep every link reachable. */
+  max-height: 100vh;
+  overflow-y: auto;
+  {{/sticky_navigation}}
+  {{#is.navigation_alignment.left}}
+  text-align: left;
+  {{/is.navigation_alignment.left}}
+  {{#is.navigation_alignment.right}}
+  text-align: right;
+  {{/is.navigation_alignment.right}}
+  {{#is.navigation_alignment.center}}
+  text-align: center;
+  {{/is.navigation_alignment.center}}
 }
 
+{{#is.navigation_location.right}}
+.sidebar {
+  left: auto;
+  right: 0;
+  {{#sticky_navigation}}
+  right: calc(50% - var(--body-outer-width) / 2);
+  {{/sticky_navigation}}
+}
+{{/is.navigation_location.right}}
+
 .light {color: var(--light-text-color); }
+.light:empty {display: none;}
 
 .entry + .light {margin: 1.7em 0}
 
@@ -63,10 +117,18 @@ h1 + .light:empty {display: none;}
   {{/title_font}}
 }
 
-.sidebar, h1 a, h2, h3, h4, h5, h6 {
+h1 a, h2, h3, h4, h5, h6 {
   font-size: calc(var(--base-font-size) * 1.091);
   text-transform: uppercase;
   letter-spacing: calc(var(--base-font-size) * 0.1575);
+}
+
+.sidebar {
+  font-size: calc(var(--base-font-size) * 1.091);
+  {{#uppercase_navigation}}
+  text-transform: uppercase;
+  letter-spacing: calc(var(--base-font-size) * 0.1575);
+  {{/uppercase_navigation}}
 }
 
 .sidebar a {display: block;}
@@ -120,14 +182,32 @@ hr {
 
 .logo {
   display:block;
-  text-align: right;
+  text-align: inherit;
   margin-bottom: 3em;
   margin-top:0.3em;
 }
 
+.site-title {display:block}
+
 /* We want each word on its own
    line if theres an image */
-.logo.hasAvatar {word-spacing:160px}
+.logo.hasAvatar,
+.logo.hasLogo {word-spacing:160px}
+
+.logo-image {
+  max-width: 100%;
+  max-height: calc(var(--base-font-size) * 4);
+  height: auto;
+  display: block;
+  margin-bottom: 0.5em;
+}
+
+{{#is.navigation_alignment.right}}
+.logo-image {margin-left: auto;}
+{{/is.navigation_alignment.right}}
+{{#is.navigation_alignment.center}}
+.logo-image {margin-left: auto; margin-right: auto;}
+{{/is.navigation_alignment.center}}
 
 .avatar {margin: -0.1em 0.1em 0 0}
 
@@ -147,7 +227,8 @@ hr {
 /* This is used between articles in list view */
 hr.full {
   color: var(--border-color);
-  margin: 3.5em 0 4.5em 1em; /* We add 1em to the left due to letter spacing*/
+  /* master tightened this from 7em/11em; keep it proportional to --spacing (default 7) */
+  margin: calc(var(--spacing) * 0.5) 0 calc(var(--spacing) * 0.643) 1em; /* We add 1em to the left due to letter spacing*/
   height: 0;
   width: 100%;
   text-align: center;
@@ -161,7 +242,6 @@ hr.full:after {content: "··•··";}
   text-align: center;
   margin: 2em 0 3em;
 }
-
 
 
 
@@ -194,13 +274,40 @@ blockquote {
 
 .entry a {
   text-decoration: underline;
-  color: {{links_color}};
+  color: var(--links-color);
 }
 
 .entry a:hover {
   text-decoration: none;
 }
 
+.entry.listing {
+  margin-bottom: 2em;
+}
+
+.entry.listing > a {
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+  font-size: 1.2em;
+}
+
+.entry .summary {
+  margin: 0.4em 0 0.6em;
+}
+
+.archives-link {text-align:center}
+
+.pagination {
+  margin: 3em 0;
+  text-align: center;
+  color: var(--light-text-color);
+}
+
+.pagination a {
+  color: var(--links-color);
+  margin: 0 0.75em;
+}
 
 
 /* Tables */
@@ -231,7 +338,7 @@ input[type="text"] {
   background: none;
   max-width: 100%;
   min-width: calc(var(--base-font-size) * 18.182);
-  box-shadow: inset 0 1px 2px 0 rgba(0,0,0,.075);
+  box-shadow: inset 0 1px 2px 0 rgba({{#rgb}}{{text_color}}{{/rgb}},.075);
 }
 
 input[type="submit"] {

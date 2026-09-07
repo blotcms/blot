@@ -1,10 +1,15 @@
 <div class="sidebar">
 
-  <a href="/" title="The homepage of {{title}}" class="logo {{#avatar}}hasAvatar{{/avatar}}">
+  <a href="/" title="The homepage of {{title}}" class="logo {{#logo_url}}hasLogo{{/logo_url}}{{^logo_url}}{{#avatar}}hasAvatar{{/avatar}}{{/logo_url}}">
+    {{#logo_url}}
+    <img src="{{{logo_url}}}" alt="{{title}}" class="logo-image">
+    {{/logo_url}}
+    {{^logo_url}}
     {{#avatar}}
     <img width="42" height="42" src="{{{avatar}}}" class="avatar {{#roundAvatar}}round{{/roundAvatar}}">
     {{/avatar}}
-    <span style="display:block">{{title}}</span>
+    {{/logo_url}}
+    <span class="site-title">{{title}}</span>
   </a>
 
   {{#menu}}

@@ -10,7 +10,7 @@
 }
 
 a.footnote-back {background: none;margin-left: 0.33em;position: relative;top: 0.06em}
-ol.footnotes {padding: 0;font-size: 10px;color: #333}
+ol.footnotes {padding: 0;font-size: 10px;color: var(--text-color)}
 hr.footnote-seperator {margin: 4em 0 1em;width: 8em;}
 
 
@@ -33,87 +33,15 @@ img {max-width: 100%;height: auto;}
 pre {
   padding: 0.7em 1em;
   margin: 0 -1em;
-  background: rgba(0,0,0,0.03)
-}
-
-pre, code {font-family: Menlo, Monaco, Lucida Console, Liberation Mono, DejaVu Sans Mono, Bitstream Vera Sans Mono, monospace;}
-
-.hljs {
-  display: block;
   overflow-x: auto;
-  padding: 0.5em;
-  color: #444;
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.03);
 }
 
-.hljs-comment,
-.hljs-quote {
-  color: #777;
-}
-
-/* Solarized Green */
-.hljs-keyword,
-.hljs-selector-tag,
-.hljs-addition {
-  color: #859900;
-}
-
-/* Solarized Cyan */
-.hljs-number,
-.hljs-string,
-.hljs-meta .hljs-meta-string,
-.hljs-literal,
-.hljs-doctag,
-.hljs-regexp {
-  color: #2aa198;
-}
-
-/* Solarized Blue */
-.hljs-title,
-.hljs-section,
-.hljs-name,
-.hljs-selector-id,
-.hljs-selector-class {
-  color: #268bd2;
-}
-
-/* Solarized Yellow */
-.hljs-attribute,
-.hljs-attr,
-.hljs-variable,
-.hljs-template-variable,
-.hljs-class .hljs-title,
-.hljs-type {
-  color: #b58900;
-}
-
-/* Solarized Orange */
-.hljs-symbol,
-.hljs-bullet,
-.hljs-subst,
-.hljs-meta,
-.hljs-meta .hljs-keyword,
-.hljs-selector-attr,
-.hljs-selector-pseudo,
-.hljs-link {
-  color: #cb4b16;
-}
-
-/* Solarized Red */
-.hljs-built_in,
-.hljs-deletion {
-  color: #dc322f;
-}
-
-.hljs-formula {
-  background: #eee8d5;
-}
-
-.hljs-emphasis {
-  font-style: italic;
-}
-
-.hljs-strong {
-  font-weight: bold;
+pre, code {
+  {{#syntax_highlighter_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  {{/syntax_highlighter_font}}
 }
 
 
@@ -161,6 +89,24 @@ p, div, section {position: relative;overflow: visible;}
   margin: 0 -29.3333333% 0 0;
 }
 
+{{#is.navigation_location.right}}
+/* With the navigation moved into the right gutter there is no longer any
+   room to the right of the text column, so keep margin notes and wide
+   figures inside it rather than letting them slide under the nav. */
+.right.margin {
+  position: static;
+  right: auto;
+  width: auto;
+  padding-left: 0;
+}
+.wide,
+.wide.left,
+.wide.right {
+  width: 100%;
+  margin: 0;
+}
+{{/is.navigation_location.right}}
+
 .column {box-sizing: border-box;float: left;}
 
 .column.two {width: 50%;padding-right: 11px;}
@@ -185,13 +131,16 @@ p, div, section {position: relative;overflow: visible;}
 
   body {padding: 0 2em;margin: 2em auto;width: auto;}
 
-  .sidebar {position: relative;width: 100%;text-align: center;margin: 0 0 2.5em}
+  .sidebar {position: relative;width: 100%;text-align: center;margin: 0 0 2.5em;left: auto;right: auto;top: auto;background: none;}
 
   .sidebar a {display: inline-block; margin: 0 0.45em;}
 
   .sidebar .logo {margin: 0 0 0.85em;display: block;text-align: center;}
 
-  .logo.hasAvatar {word-spacing: 0}
+  .logo.hasAvatar,
+  .logo.hasLogo {word-spacing: 0}
+
+  .logo-image {margin-left: auto; margin-right: auto;}
 
   .margin,
   .margin.right,
