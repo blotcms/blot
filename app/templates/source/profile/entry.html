@@ -17,7 +17,8 @@
 
   <link rel="preconnect" href="{{{cdn}}}" />
   <link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">
-  {{#avatar}}<link rel="icon" href="{{{avatar}}}" type="image/x-icon">{{/avatar}}
+  {{#favicon_url}}<link rel="icon" href="{{{favicon_url}}}" type="image/x-icon">{{/favicon_url}}
+  {{^favicon_url}}{{#avatar}}<link rel="icon" href="{{{avatar}}}" type="image/x-icon">{{/avatar}}{{/favicon_url}}
   <link href="/feed.json" title="{{title}}" type="application/json" rel="alternate">
   <link href="/feed.rss" title="RSS Feed for {{title}}" type="application/rss+xml" rel="alternate">
 
@@ -84,11 +85,13 @@
           </li>{{/email}}
         </ul>
         {{{titleTag}}}
+        {{^hide_dates}}{{#date}}
         <h2 class="headline">
       <time class="dt-published" datetime="{{date}}">
-        <a class="u-url dates" href="{{{url}}}">{{date}}</a>
+        <a class="u-url dates" href="{{{url}}}">{{#formatDate}}{{date_display}}{{/formatDate}}</a>
       </time>
     </h2>
+        {{/date}}{{/hide_dates}}
       </header>
       <section class="e-content post-body">
         {{{body}}}

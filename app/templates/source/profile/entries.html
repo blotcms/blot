@@ -10,7 +10,8 @@
   <meta content="{{author}}" name="author">
   <meta name="description" content="{{description}}">
   <title>{{> title}}</title>
-  {{#avatar}}<link rel="icon" href="{{{avatar}}}" type="image/x-icon">{{/avatar}}
+  {{#favicon_url}}<link rel="icon" href="{{{favicon_url}}}" type="image/x-icon">{{/favicon_url}}
+  {{^favicon_url}}{{#avatar}}<link rel="icon" href="{{{avatar}}}" type="image/x-icon">{{/avatar}}{{/favicon_url}}
   <link rel="preconnect" href="{{{cdn}}}" />
   <link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">
   <link href="/feed.rss" title="RSS Feed for {{title}}" type="application/rss+xml" rel="alternate">

@@ -10,7 +10,8 @@
   <meta content="{{author}}" name="author">
   <meta name="description" content="{{description}}">
   <title>{{> title}}</title>
-  {{#avatar}}<link rel="icon" href="{{{avatar}}}" type="image/x-icon">{{/avatar}}
+  {{#favicon_url}}<link rel="icon" href="{{{favicon_url}}}" type="image/x-icon">{{/favicon_url}}
+  {{^favicon_url}}{{#avatar}}<link rel="icon" href="{{{avatar}}}" type="image/x-icon">{{/avatar}}{{/favicon_url}}
   <link rel="preconnect" href="{{{cdn}}}" />
   <link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">
   <link href="/feed.rss" title="RSS Feed for {{title}}" type="application/rss+xml" rel="alternate">
@@ -48,9 +49,9 @@
     {{/entries.length}}
     {{/query}} {{#entries}}
     <p class="h-entry">
-      <a href="{{{url}}}" class="u-url"><span class="dt-published" datetime="{{date}}">{{date}}</span></a>:
+      {{^hide_dates}}{{#date}}<a href="{{{url}}}" class="u-url"><span class="dt-published" datetime="{{date}}">{{#formatDate}}{{date_display}}{{/formatDate}}</span></a>: {{/date}}{{/hide_dates}}
       <span class="p-name"><b></b></span>
-      <span class="p-summary">{{title}}</span>
+      <span class="p-summary"><a href="{{{url}}}" class="u-url">{{title}}</a></span>
     </p>
     {{/entries}}
   </section>

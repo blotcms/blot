@@ -1,5 +1,37 @@
 {{{app_css}}}
 
+{{{body_font.styles}}}
+{{{heading_font.styles}}}
+{{{syntax_highlighter_font.styles}}}
+{{{syntax_highlighter.styles}}}
+
+:root {
+  --background-color: {{background_color}};
+  --text-color: {{text_color}};
+  --link-color: {{link_color}};
+  --accent-color: {{accent_color}};
+  --highlight-color: {{highlight_color}};
+  --muted-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.5);
+  --border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.12);
+  --max-width: {{max_width}}px;
+  {{#body_font}}
+  --body-font-family: {{{stack}}};
+  --body-font-size: {{{font_size}}}px;
+  --body-line-height: {{{line_height}}};
+  {{/body_font}}
+  {{#heading_font}}
+  --heading-font-family: {{{stack}}};
+  --heading-font-size: {{{font_size}}}px;
+  --heading-line-height: {{{line_height}}};
+  {{/heading_font}}
+  {{#syntax_highlighter_font}}
+  --code-font-family: {{{stack}}};
+  --code-font-size: {{{font_size}}}px;
+  --code-line-height: {{{line_height}}};
+  {{/syntax_highlighter_font}}
+}
+
+
 /*! normalize.css v2.0.1 | MIT License | git.io/normalize */
 
 /* ==========================================================================
@@ -400,14 +432,15 @@ html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abb
 /* Base */
 html, body {
   height: 100%;
-  background: #fff;
+  background: var(--background-color);
 }
 
 body {
-  font-size: 17px;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  color: #424a52;
-  background: #fff;
+  font-size: var(--body-font-size);
+  font-family: var(--body-font-family);
+  line-height: var(--body-line-height);
+  color: var(--text-color);
+  background: var(--background-color);
   text-rendering: optimizeLegibility;
 }
 
@@ -428,7 +461,7 @@ body {
 }
 
 .profile h4 {
-  color: #aaa;
+  color: var(--muted-color);
         margin-top: 10px;
         font-weight: 400;
         line-height: 22px;
@@ -446,39 +479,43 @@ body {
 
 nav.main-nav {
   padding: 20px 20px 0;
-  background: #fff;
-  background: rgba(255,255,255,.90);
+  background: var(--background-color);
+  background: rgba({{#rgb}}{{background_color}}{{/rgb}},.90);
   margin: 0 auto;
-  text-align: right;
+  text-align: {{navigation_alignment}};
   z-index: 100;
+  {{#sticky_navigation}}
+  position: sticky;
+  top: 0;
+  {{/sticky_navigation}}
 }
 
 nav.main-nav a {
   top: 8px;
   right: 6px;
-  color: #000;
+  color: var(--link-color);
   font-size: 13px;
   line-height: 1.35;
   font-weight: 500;
   margin-left: 12px;
 }
 nav.main-nav a.cta {
-  background: #fff;
-  color: #ee4792;
+  background: var(--background-color);
+  color: var(--accent-color);
   padding: 6px 14px;
-  border: 2px solid #fcdae9;
+  border: 2px solid var(--highlight-color);
   border-bottom: none;
   border-radius: 20px;
 }
 
 nav.main-nav a.cta:hover {
-  background: #fcdae9;
-  color: #ee4792;
+  background: var(--highlight-color);
+  color: var(--accent-color);
   margin-left: 12px;
 }
 
 #wrapper {
-  max-width: 600px;
+  max-width: var(--max-width);
   margin: 0 auto;
   padding: 25px;
 }
@@ -492,27 +529,29 @@ nav.main-nav a.cta:hover {
 /* Typography */
 
 p, li {
-  line-height: 1.7;
+  line-height: var(--body-line-height);
   orphans: 2;
   widows: 2;
 }
 
-h1, h2, h3 {
-  color: #000;
+h1, h2, h3, h4, h5, h6 {
+  color: var(--link-color);
+  font-family: var(--heading-font-family);
+  line-height: var(--heading-line-height);
 }
 
 h1 {
-  font-size: 30px;
+  font-size: var(--heading-font-size);
   font-weight: bold;
 }
 
 h2 {
-  font-size: 25px;
+  font-size: calc(var(--heading-font-size) * 0.83);
   font-weight: 600;
 }
 
 h3 {
-  font-size: 20px;
+  font-size: calc(var(--heading-font-size) * 0.67);
   font-weight: 500;
 }
 
@@ -522,13 +561,14 @@ p.small {
 }
 
 code.highlighter-rouge {
-  background-color: #F5F5F5;
+  background-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.06);
   border-radius: 5px;
   display: inline-block;
   padding: 5px 8px;
-  color: #7F7F7F;
+  color: var(--muted-color);
+  font-family: var(--code-font-family);
   font-size: 15px;
-  line-height: 1.35;
+  line-height: var(--code-line-height, 1.5);
   font-style: normal;
 }
 
@@ -536,19 +576,19 @@ code.highlighter-rouge {
 
 a {
   text-decoration: none;
-  color: #000;
+  color: var(--link-color);
 }
 
 nav.main-nav a, #footer a, #post-nav a, p a {
-  color: #000;
+  color: var(--link-color);
   font-weight: 500;
-  box-shadow: inset 0 -2px 0 #fcdae9;
+  box-shadow: inset 0 -2px 0 var(--highlight-color);
   transition: all .35s;
   transition-timing-function: cubic-bezier(.7, 0, .3, 1);
 }
 
 nav.main-nav a:hover, #footer a:hover, #post-nav a:hover, p a:hover {
-  box-shadow: inset 0 -25px 0 #fcdae9;
+  box-shadow: inset 0 -25px 0 var(--highlight-color);
 }
 
 
@@ -568,7 +608,7 @@ li  { list-style-type:circle; list-style-position:outside;}
 
 b, strong {
   font-weight: 500;
-  color: #1E2025;
+  color: var(--link-color);
 }
 em, i {
   font-style: italic;
@@ -580,7 +620,7 @@ em, i {
 
 blockquote {
   padding-left: 15px;
-  border-left: 2px solid #eee;
+  border-left: 2px solid var(--border-color);
   opacity: 0.8;
   font-style: italic;
 }
@@ -590,7 +630,7 @@ hr {
   border: none;
   height: 2px;
   margin: 34px 0 40px 0;
-  background: #eee;
+  background: var(--border-color);
   width: 30%;
   text-align: center;
 }
@@ -604,7 +644,7 @@ span.separator {
 span.divider {
   display: block;
   width: 100%;
-  background-color: #eee;
+  background-color: var(--border-color);
   height: 1px;
   margin: 0 auto;
 }
@@ -613,22 +653,19 @@ span.separator:last-child {
   display: none;
 }
 
-span.code { font-family:Menlo, Monaco, Courier; background-color:#EEE; font-size:14px; }
+span.code { font-family: var(--code-font-family); background-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.06); font-size:14px; }
 
 pre {
-  font-family:Menlo, Monaco, Courier;
+  font-family: var(--code-font-family);
+  background-color: var(--background-color);
+  color: var(--text-color);
   white-space:pre-wrap;
   padding:20px;
-  background-color:#fdfdfd;
   overflow:auto;
   border-radius: 5px;
-  background: #272b2d;
-  font-family: "Source Code Pro",Menlo,monospace;
-  font-size: 13px;
-  line-height: 1.5em;
+  font-size: var(--code-font-size);
+  line-height: var(--code-line-height, 1.5);
   font-weight: 500;
-  color: #d0d4d7;
-
 }
 
 table {
@@ -653,11 +690,11 @@ table td,td {
 }
 
 tr>td {
-  border-top: 1px solid #eaeaea;
+  border-top: 1px solid var(--border-color);
 }
 
 tr:nth-child(odd)>td {
-  background: #fcfcfc;
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.03);
 }
 
 thead th,th {
@@ -666,8 +703,8 @@ thead th,th {
   height: 20px;
   font-size: 13px;
   font-weight: bold;
-  color: #444;
-  border-bottom: 1px solid #dadadc;
+  color: var(--text-color);
+  border-bottom: 1px solid var(--border-color);
   cursor: default;
   white-space: nowrap;
 }
@@ -699,7 +736,7 @@ Post List
 
 #post-list h2 {
   margin-top: 0;
-  line-height: 1.35;
+  line-height: var(--heading-line-height);
 }
 
 /* Footer */
@@ -715,7 +752,7 @@ footer #wrapper {
 }
 
 #footer a {
-  color: #000;
+  color: var(--link-color);
   font-size: 13px;
   line-height: 1.35;
   font-weight: 500;
@@ -730,22 +767,22 @@ footer #wrapper {
   font-size: 13px;
   font-weight: bold;
   line-height: 1.5;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--border-color);
   padding-top: 40px;
   padding-bottom: 40px;
   margin-top: 60px;
-  color:#444;
-  border-bottom: 1px solid #eee;
+  color: var(--text-color);
+  border-bottom: 1px solid var(--border-color);
 }
 
 #post-meta div span {
-  color: #aaa;
+  color: var(--muted-color);
   font-weight: 500;
   display: block;
 }
 
 #post-meta div span.dark {
-  color: #1E2025;
+  color: var(--link-color);
   font-weight: bold
 
 }
@@ -756,7 +793,7 @@ footer #wrapper {
 
 /* Post Page */
 #header {
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .post {
@@ -794,7 +831,7 @@ footer #wrapper {
   width: 36px;
   float: left;
   margin-right: 15px;
-  box-shadow: 0 0 0 3px #fff, 0 0 0 4px #eee;
+  box-shadow: 0 0 0 3px var(--background-color), 0 0 0 4px var(--border-color);
   border-radius: 50%;
 }
 
@@ -803,7 +840,7 @@ footer #wrapper {
 .dates {
   font-weight: 500;
   font-size: 13px;
-  color: #bbb;
+  color: var(--muted-color);
   width: 100%;
   text-transform: uppercase;
   padding-top: 5px;
@@ -822,9 +859,11 @@ h2.headline {
   font-size: 13px;
   font-weight: 400;
   padding-left: 12px;
-  border: 2px solid #eee;
+  border: 2px solid var(--border-color);
   margin-top: 20px;
   border-radius: 17px;
+  background: var(--background-color);
+  color: var(--text-color);
   -webkit-appearance: none;
 }
 
@@ -852,126 +891,23 @@ h2.headline {
   }
 
   h1 {
-    font-size: 24px;
+    font-size: calc(var(--heading-font-size) * 0.8);
   }
 
   h2 {
-    font-size: 22px;
+    font-size: calc(var(--heading-font-size) * 0.73);
   }
 
   h3 {
-    font-size: 19px;
+    font-size: calc(var(--heading-font-size) * 0.63);
   }
 
 }
 
-/*
-  IR_Black style (c) Vasily Mikhailitchenko <vaskas@programica.ru>
-*/
-
-.hljs {
+pre code.hljs {
   display: block;
   overflow-x: auto;
-  /*padding: 0.5em;*/
-  background: #272b2d;
-  color: #d0d0d0;
-  -webkit-text-size-adjust: none;
 }
-
-.hljs-shebang,
-.hljs-comment {
-  color: #777279;
-}
-
-.hljs-keyword,
-.hljs-tag,
-.tex .hljs-command,
-.hljs-request,
-.hljs-status,
-.clojure .hljs-attribute {
-  color: #ebde68;
-}
-
-.hljs-sub .hljs-keyword,
-.method,
-.hljs-list .hljs-title,
-.nginx .hljs-title {
-  color: #ffffb6;
-}
-
-.hljs-string,
-.hljs-tag .hljs-value,
-.hljs-cdata,
-.hljs-filter .hljs-argument,
-.hljs-attr_selector,
-.apache .hljs-cbracket,
-.hljs-date,
-.coffeescript .hljs-attribute {
-  color: #c1ef65;
-}
-
-.hljs-subst {
-  color: #daefa3;
-}
-
-.hljs-regexp {
-  color: #e9c062;
-}
-
-.hljs-title,
-.hljs-sub .hljs-identifier,
-.hljs-pi,
-.hljs-decorator,
-.tex .hljs-special,
-.hljs-type,
-.hljs-constant,
-.smalltalk .hljs-class,
-.hljs-doctag,
-.nginx .hljs-built_in {
-  color: #c1ef65;
-}
-
-.hljs-symbol,
-.ruby .hljs-symbol .hljs-string,
-.hljs-number,
-.hljs-variable,
-.vbscript,
-.hljs-literal,
-.hljs-name {
-  color: #77bcd7;
-}
-
-.css .hljs-tag {
-  color: #96cbfe;
-}
-
-.css .hljs-rule .hljs-property,
-.css .hljs-id {
-  color: #ffffb6;
-}
-
-.css .hljs-class {
-  color: #fff;
-}
-
-.hljs-hexcolor {
-  color: #c6c5fe;
-}
-
-.hljs-number {
-  color:#77bcd7;
-}
-
-.coffeescript .javascript,
-.javascript .xml,
-.tex .hljs-formula,
-.xml .javascript,
-.xml .vbscript,
-.xml .css,
-.xml .hljs-cdata {
-  opacity: 0.7;
-}
-
 
 /* Blot changes */
 

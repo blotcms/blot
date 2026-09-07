@@ -8,7 +8,36 @@
     "microblog_user": "",
     "page_size": 20,
     "hide_dates": false,
-    "date_display": "MMMM D, Y"
+    "date_display": "MMMM D, Y",
+    "background_color": "#ffffff",
+    "text_color": "#424a52",
+    "link_color": "#000000",
+    "accent_color": "#ee4792",
+    "highlight_color": "#fcdae9",
+    "body_font": {
+      "id": "system-sans",
+      "font_size": 17,
+      "line_height": 1.7
+    },
+    "heading_font": {
+      "id": "system-sans",
+      "font_size": 30,
+      "line_height": 1.35
+    },
+    "syntax_highlighter": {
+      "id": "ir-black"
+    },
+    "syntax_highlighter_font": {
+      "id": "source-code",
+      "font_size": 13,
+      "line_height": 1.5
+    },
+    "favicon_url": "",
+    "max_width": 600,
+    "max_width_range": [400, 900],
+    "navigation_alignment": "right",
+    "navigation_alignment_options": ["left", "center", "right"],
+    "sticky_navigation": false
   },
   "views": {
     "tagged": {
