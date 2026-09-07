@@ -2,6 +2,8 @@
 on the services page of the dashboard */
 {{{app_css}}}
 {{{body_font.styles}}}
+{{{heading_font.styles}}}
+{{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
 /* Colors */
@@ -21,7 +23,7 @@ hr {
 }
 
 .entry .body a:visited,
-.archives a:visited {color: purple;}
+.archives a:visited {color: rgba({{#rgb}}{{link_color}}{{/rgb}}, 0.65);}
 
 
 
@@ -92,7 +94,13 @@ body {
 
 .archives a {
   text-decoration: none;
+  {{#heading_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  {{/heading_font}}
+  {{^heading_font}}
   font-size: 28px
+  {{/heading_font}}
 }
 
 .archives a .thumbnail {
@@ -126,7 +134,18 @@ header {
   display: flex;
   background: {{background_color}};
   flex-wrap: wrap;
+  {{#is.navigation_alignment.justified}}
   justify-content: space-between;
+  {{/is.navigation_alignment.justified}}
+  {{#is.navigation_alignment.left}}
+  justify-content: flex-start;
+  {{/is.navigation_alignment.left}}
+  {{#is.navigation_alignment.right}}
+  justify-content: flex-end;
+  {{/is.navigation_alignment.right}}
+  {{#is.navigation_alignment.center}}
+  justify-content: center;
+  {{/is.navigation_alignment.center}}
   position: relative;
   padding: calc({{spacing}}rem/2) calc({{spacing}}rem);
   {{^sticky_navigation}}
@@ -151,8 +170,43 @@ header {
   {{#is.navigation_alignment.right}}
   right:0;
   {{/is.navigation_alignment.right}}
+  {{#is.navigation_alignment.center}}
+  left:0;
+  right:0;
+  {{/is.navigation_alignment.center}}
   z-index: 1;
   {{/sticky_navigation}}
+}
+
+{{#is.navigation_position.bottom}}
+{{^sticky_navigation}}
+header {
+  order: 1;
+  margin-top: auto;
+}
+{{/sticky_navigation}}
+{{/is.navigation_position.bottom}}
+
+{{#hide_dates}}
+.post .date,
+#hyperlist .date {
+  display: none
+}
+{{/hide_dates}}
+
+.site-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  {{#heading_font}}
+  font-family: {{{stack}}};
+  {{/heading_font}}
+}
+
+.site-logo {
+  height: 1.2em;
+  width: auto;
+  vertical-align: middle;
 }
 
 
@@ -196,7 +250,9 @@ header > a:first-child {
   margin-left: 0;
 }
 
+{{^show_search}}
 nav a[href="/search"] {display: none}
+{{/show_search}}
 
 nav .spacer {
     height: 22px;
@@ -229,7 +285,7 @@ nav a:not([href]) {
 
 #hidden-toggle:checked~header {
   height: auto;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1)
+  border-bottom: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1)
 }
 
 #hidden-toggle:checked~header nav {
@@ -318,6 +374,13 @@ font-feature-settings: 'tnum';
     display: block;
   }
 
+  {{#is.navigation_alignment.right}}
+  header {
+    justify-content: flex-start;
+    padding-right: calc({{spacing}}rem + 2.8em);
+  }
+  {{/is.navigation_alignment.right}}
+
 }
 
 {{#infinite_scroll}}
@@ -346,7 +409,7 @@ a.next-page {
   display: flex;
   max-height: 100vh;
   flex-direction: column;
-  font-size: 14px
+  font-size: {{body_font.font_size}}px
 }
 
 .edge.left {
@@ -399,7 +462,6 @@ a.next-page {
 .entry .body {
   flex-grow: 1;
   text-align: center;
-  font-size: 23px;
   -webkit-font-smoothing: auto;
 }
 
@@ -434,6 +496,21 @@ a.next-page {
 
 .body h2 {margin: 2.8em 0 1.4em; font-size: inherit;font-weight: 600}
 
+h1, h2, h3, h4, h5, h6 {
+  {{#heading_font}}
+  font-family: {{{stack}}};
+  line-height: {{{line_height}}};
+  {{/heading_font}}
+}
+
+pre, code {
+  {{#syntax_highlighter_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  line-height: {{{line_height}}};
+  {{/syntax_highlighter_font}}
+}
+
 .entry.page .body {
   text-align: left;
 }
@@ -442,7 +519,7 @@ a.next-page {
 
 
 .entry.page .body>* {
-  max-width: 35em;
+  max-width: {{max_width}}px;
 }
 
 hr {
@@ -458,7 +535,13 @@ hr {
 }
 
 .entry .title h1 {
+  {{#heading_font}}
+  font-size: {{{font_size}}}px;
+  line-height: {{{line_height}}};
+  {{/heading_font}}
+  {{^heading_font}}
   font-size: 23px;
+  {{/heading_font}}
   font-weight: normal;
 }
 
@@ -511,7 +594,7 @@ the absolutely positioned stuff is off the viewport.
 .margin,
 .inside {
   width: 33%;
-  font-size: 15px;
+  font-size: {{body_font.font_size}}px;
   box-sizing: border-box;
 }
 

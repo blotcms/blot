@@ -28,6 +28,9 @@
     #hyperlist > a .thumbnail {width: 80px;height:80px;}
     #hyperlist > a .title {flex-grow: 1;margin:0 calc({{spacing}}rem*0.5);white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
     #hyperlist > a .date {flex-shrink: 0;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
+    {{#hide_dates}}
+    #hyperlist > a .date {display: none}
+    {{/hide_dates}}
 
 #hyperlist > a .thumbnail img {
   max-width: 80px;max-height: 80px;width:auto;height: auto;
@@ -35,7 +38,7 @@
 
 input[type=radio] {display: none;}
 .filter {list-style-type: none;padding: 0;display: flex;}
-.filter label {cursor: pointer;padding:{{spacing_size}}px;margin:{{spacing_size}}px;background:#eee}
+.filter label {cursor: pointer;padding:{{spacing}}rem;margin:{{spacing}}rem;background:rgba({{#rgb}}{{text_color}}{{/rgb}},0.06)}
 </style>
 
 
@@ -49,7 +52,7 @@ input[type=radio] {display: none;}
           </noscript>
       </span>
       <span class="title">{{title}}</span>
-      <span class="date">{{date}}</span>
+      {{^hide_dates}}{{#date}}<span class="date">{{date}}</span>{{/date}}{{/hide_dates}}
         </a>
         {{/entries}}
         </div>

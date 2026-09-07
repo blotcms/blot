@@ -65,7 +65,7 @@ const list = HyperList.create(container, {
           </noscript>` : ''}
       </span>
       <span class="title">${articles[index].title}</span>
-      <span class="date">${articles[index].date}</span>
+      {{^hide_dates}}<span class="date">${articles[index].date}</span>{{/hide_dates}}
     `;
     return el;
   },

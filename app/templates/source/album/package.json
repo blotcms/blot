@@ -2,10 +2,11 @@
   "name": "Album",
   "isPublic": true,
   "locals": {
-    "background_color": "#fff",
-    "text_color": "rgba(0, 0, 0, 0.85)",
+    "background_color": "#ffffff",
+    "text_color": "#262626",
     "link_color": "#00008B",
     "hide_dates": false,
+    "date_display": "MMMM D, Y",
     "infinite_scroll": true,
     "sticky_navigation": false,
     "collapse_navigation_by_default": false,
@@ -16,6 +17,11 @@
       "right",
       "center"
     ],
+    "navigation_position": "top",
+    "navigation_position_options": [
+      "top",
+      "bottom"
+    ],
     "thumbnail_size": "medium",
     "thumbnail_size_options": [
       "small",
@@ -23,26 +29,46 @@
       "large",
       "huge"
     ],
-    "navigation_position": "top",
-    "navigation_position_options": [
-      "top",
-      "bottom"
+    "grid_layout": "square",
+    "grid_layout_options": [
+      "square",
+      "bookshelf"
     ],
     "page_size": 42,
-    "syntax_highlighter": {
-      "id": "stackoverflow-light"
-    },
-    "date_display": "MMMM D, Y",
-    "body_font": {},
+    "page_size_range": [
+      6,
+      96
+    ],
     "spacing": 2,
     "spacing_range": [
       0,
       5
     ],
-    "grid_layout": "square",
-    "grid_layout_options": [
-      "square",
-      "bookshelf"
+    "body_font": {
+      "id": "system-sans",
+      "font_size": 16,
+      "line_height": 1.4
+    },
+    "heading_font": {
+      "id": "system-sans",
+      "font_size": 23,
+      "line_height": 1.3
+    },
+    "syntax_highlighter": {
+      "id": "stackoverflow-light"
+    },
+    "syntax_highlighter_font": {
+      "id": "system-mono",
+      "font_size": 14,
+      "line_height": 1.5
+    },
+    "favicon_url": "",
+    "logo_url": "",
+    "show_search": false,
+    "max_width": 800,
+    "max_width_range": [
+      400,
+      1200
     ],
     "demo_folder": "sergey"
   },

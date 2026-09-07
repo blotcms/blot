@@ -6,14 +6,14 @@ form input {
   padding-left: 0rem;
   padding-right: 2.7rem;
   font: inherit;
-  font-size: 16px;
+  font-size: {{body_font.font_size}}px;
   border: none;
   line-height: inherit;
 }
 
 form input[type="text"] {
   flex-grow: 1;
-  color: rgba(0, 0, 0, .85);
+  color: {{text_color}};
   background: url('/icons/search.svg') no-repeat 1rem center;
   background-size: 0.95rem;
   background-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.03);
@@ -34,7 +34,7 @@ form input:focus,
 
 ::placeholder {
   /* Most modern browsers support this now. */
-  color: rgba(0, 0, 0, .35);
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, .35);
 }
 
 #dropdown {
@@ -43,9 +43,9 @@ form input:focus,
   top: 100%;
   left: 0;
   right: 0;
-  background: #fff;
+  background: {{background_color}};
   z-index: 1;
-  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, rgba(15, 15, 15, 0.05) 0px 3px 6px, rgba(15, 15, 15, 0.1) 0px 9px 24px;
+  box-shadow: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.05) 0px 0px 0px 1px, rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.05) 0px 3px 6px, rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1) 0px 9px 24px;
   margin-top: 1px
 }
 
@@ -53,9 +53,9 @@ form input:focus,
   display: block;
   padding: 1rem 1.3rem 1rem 1.3rem;
   overflow: hidden;
-  border-bottom: 1px solid #f2f2f2;
-  color: rgba(0, 0, 0, .85);
-  font-size: 16px;
+  border-bottom: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.08);
+  color: {{text_color}};
+  font-size: {{body_font.font_size}}px;
   text-decoration: none;
 }
 
@@ -65,7 +65,7 @@ form input:focus,
  */
 #dropdown a:focus {
   outline: none;
-  background: #f0f0f0;
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.06);
 }
 
 #dropdown a .thumbnail {
@@ -91,7 +91,7 @@ form input:focus,
 }
 
 #dropdown .date {
-  color: rgba(0, 0, 0, .4);
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, .4);
   flex-shrink: 0;
 }
 
@@ -101,6 +101,6 @@ form input:focus,
   <div id="dropdown">
     <a href="/search?q=">
         <span class="thumbnail"><img src="/icons/search.svg"></span>
-        <span id="link-to-search"></span><span style="color:rgba(0,0,0,.4)">&puncsp;–&puncsp;Search</span></a>
+        <span id="link-to-search"></span><span style="color:rgba({{#rgb}}{{text_color}}{{/rgb}},.4)">&puncsp;–&puncsp;Search</span></a>
   </div>
 </form>

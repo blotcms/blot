@@ -21,7 +21,7 @@
     cursor: zoom-in;
     box-sizing: border-box;
     font-size: 13px;
-    color: #aaa;
+    color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.45);
     text-decoration: none;
     text-align: center;
 
@@ -103,16 +103,16 @@
   }
 
   .post.no-thumbnail .thumbnail:after {
-    border-color: rgba(0, 0, 0, .15);
+    border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, .15);
     border-width: 2px
   }
 
   .post.no-thumbnail:hover .thumbnail:after {
-    border-color: rgba(0, 0, 0, 0.4);
+    border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.4);
   }
 
   .post.no-thumbnail .thumbnail {
-    color: rgba(0, 0, 0, .4);
+    color: rgba({{#rgb}}{{text_color}}{{/rgb}}, .4);
     text-align: center;
   }
 
@@ -187,14 +187,18 @@
               margin: 0.65em 1.3rem;
               box-sizing: border-box;
               overflow: hidden;
-              color: rgba(0, 0, 0, 0.5);
-              font-size: 24px;
+              color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.5);
+              font-size: {{heading_font.font_size}}px;
             ">
             {{ title }}
           </span>
-          <span style="font-size: 13px; display: block"
+          {{^hide_dates}}
+          {{#date}}
+          <span class="date" style="font-size: 13px; display: block"
             >Added <span date-from-now="{{ dateStamp }}">{{ date }}</span></span
           >
+          {{/date}}
+          {{/hide_dates}}
         </span>
         {{/thumbnail.medium}}
       </span>

@@ -230,6 +230,8 @@ Fix bugs with templates:
 Dashboard control follow-ups (found while reviewing the per-template dashboard-control PRs):
 - Portfolio template: the new show_search boolean only toggles the search box on archives.html. If search should be hideable everywhere it appears (e.g. the toolbar / nav), wire show_search into those views too.
 - Portfolio template: heading_font control emits {{#weight}}/{{#style}} rules; confirm the fonts static data actually carries weight/style so the control does something, otherwise drop those blocks.
+- Album template: the new max_width control replaces `.entry.page .body>* { max-width: 35em }` (~560px) with a px default of 800. That widens the text measure on page entries for every existing site on next rebuild. Double-check the default reads well, or lower it toward the old ~560px.
+- Album template: several rules use `{{^heading_font}} ... 28px/23px fallback {{/heading_font}}`, but heading_font is always a populated object so the fallback is dead. Harmless, but could be tidied.
 
 Fix bug with the website preview on the dashboard does not scroll, at least on FireFox on MacOS and tell Omar
 

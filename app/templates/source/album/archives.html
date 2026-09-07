@@ -37,6 +37,9 @@
     #hyperlist > a .thumbnail {width: 80px;height:80px;}
     #hyperlist > a .title {flex-grow: 1;margin:0 calc({{spacing}}rem*0.5);white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
     #hyperlist > a .date {flex-shrink: 0;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
+    {{#hide_dates}}
+    #hyperlist > a .date {display: none}
+    {{/hide_dates}}
 
 #hyperlist > a .thumbnail img {
   max-width: 80px;max-height: 80px;width:auto;height: auto;
@@ -44,14 +47,14 @@
 
 input[type=radio] {display: none;}
 .filter {list-style-type: none;padding: 0;display: flex;}
-.filter label {cursor: pointer;padding:{{spacing_size}}px;margin:{{spacing_size}}px;background:#eee}
+.filter label {cursor: pointer;padding:{{spacing}}rem;margin:{{spacing}}rem;background:rgba({{#rgb}}{{text_color}}{{/rgb}},0.06)}
 </style>
 
 <div style="position: absolute;top:calc({{spacing}}rem + 1.4em);left: 0;right: 0;  
 padding: 0 {{spacing}}rem;    
 box-sizing: border-box;
 width: 100vw">
-  {{> search_form}}
+  {{#show_search}}{{> search_form}}{{/show_search}}
   </div>
     <div id="hyperlist" class="container"></div>
     <script type="text/javascript" src="{{#asset}}/archive.js{{/asset}}"></script>
