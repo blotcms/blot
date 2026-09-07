@@ -2,6 +2,7 @@
   "name": "Text",
   "locals": {
     "max_width": 700,
+    "max_width_range": [400, 1200],
     "page_size": 6,
     "text_color": "#000000",
     "background_color": "#FFFFFF",
@@ -10,14 +11,29 @@
     "hide_dates": false,
     "date_display": "MMMM D, Y",
     "font": {
-      "font_size": 19
+      "id": "system-sans",
+      "font_size": 19,
+      "line_height": 1.4
+    },
+    "heading_font": {
+      "id": "system-sans",
+      "font_size": 30,
+      "line_height": 1.2
+    },
+    "navigation_font": {
+      "id": "system-sans",
+      "font_size": 19,
+      "line_height": 1.4
     },
     "syntax_highlighter": {
       "id": "stackoverflow-light"
     },
     "syntax_highlighter_font": {
+      "id": "system-mono",
       "font_size": 18
     },
+    "favicon_url": "",
+    "logo_url": "",
     "index_layout": "post_in_full",
     "index_layout_options": [
       "titles",
@@ -30,7 +46,17 @@
       "left",
       "right"
     ],
+    "navigation_alignment": "justified",
+    "navigation_alignment_options": [
+      "justified",
+      "left",
+      "right",
+      "center"
+    ],
+    "navigation_width": 300,
+    "navigation_width_range": [180, 420],
     "spacing": 0,
+    "spacing_range": [0, 5],
     "sticky_navigation": false,
     "collapse_navigation_by_default": false,
     "demo_folder": "david",

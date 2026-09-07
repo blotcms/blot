@@ -3,16 +3,18 @@
 
 /* Inserts the @font-face rules required to load whichever fonts are selected. */
 {{{font.styles}}}
+{{{heading_font.styles}}}
+{{{navigation_font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
 :root {
   --sidebar-width: 0px;
   {{#is.navigation_location.left}}
-  --sidebar-width: 300px;
+  --sidebar-width: {{navigation_width}}px;
   {{/is.navigation_location.left}}
   {{#is.navigation_location.right}}
-  --sidebar-width: 300px;
+  --sidebar-width: {{navigation_width}}px;
   {{/is.navigation_location.right}}
 }
 
@@ -66,13 +68,45 @@ header > a {
 }
 
 header {
+  {{#navigation_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  line-height: {{{line_height}}};
+  height: {{{line_height}}}em;
+  {{/navigation_font}}
+  {{^navigation_font}}
   height: {{font.line_height}}em;
+  {{/navigation_font}}
   overflow: hidden;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
+  {{#is.navigation_alignment.left}}
+  justify-content: flex-start;
+  {{/is.navigation_alignment.left}}
+  {{#is.navigation_alignment.right}}
+  justify-content: flex-end;
+  {{/is.navigation_alignment.right}}
+  {{#is.navigation_alignment.center}}
+  justify-content: center;
+  {{/is.navigation_alignment.center}}
   position: relative;
   padding: calc({{spacing}}rem/2) calc({{spacing}}rem);
+}
+
+.site-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  {{#heading_font}}
+  font-family: {{{stack}}};
+  {{/heading_font}}
+}
+
+.site-logo {
+  height: 1.2em;
+  width: auto;
+  vertical-align: middle;
 }
 
 
@@ -109,6 +143,9 @@ nav {
   position: relative;
   {{#collapse_navigation_by_default}}
   width: 100%;
+  {{#is.navigation_alignment.left}}text-align: left;{{/is.navigation_alignment.left}}
+  {{#is.navigation_alignment.right}}text-align: right;{{/is.navigation_alignment.right}}
+  {{#is.navigation_alignment.center}}text-align: center;{{/is.navigation_alignment.center}}
   {{/collapse_navigation_by_default}}
 }
 
@@ -209,10 +246,20 @@ nav a:not([href]) {
   justify-content: flex-start;
   gap: calc({{spacing}}rem/2);
   padding: 0;
+  {{#is.navigation_alignment.right}}
+  align-items: flex-end;
+  {{/is.navigation_alignment.right}}
+  {{#is.navigation_alignment.center}}
+  align-items: center;
+  {{/is.navigation_alignment.center}}
 }
 
 .navigation-location-right header {
+  {{^is.navigation_alignment.left}}
+  {{^is.navigation_alignment.center}}
   align-items: flex-end;
+  {{/is.navigation_alignment.center}}
+  {{/is.navigation_alignment.left}}
 }
 
 .navigation-location-left header > a,
@@ -238,10 +285,20 @@ nav a:not([href]) {
   width: 100%;
   background: none;
   padding: 0;
+  {{#is.navigation_alignment.right}}
+  align-items: flex-end;
+  {{/is.navigation_alignment.right}}
+  {{#is.navigation_alignment.center}}
+  align-items: center;
+  {{/is.navigation_alignment.center}}
 }
 
 .navigation-location-right nav {
+  {{^is.navigation_alignment.left}}
+  {{^is.navigation_alignment.center}}
   align-items: flex-end;
+  {{/is.navigation_alignment.center}}
+  {{/is.navigation_alignment.left}}
 }
 
 .navigation-location-left nav .spacer,
@@ -297,7 +354,14 @@ nav a:not([href]) {
   .navigation-location-right header {
     flex-direction: row;
     align-items: center;
+    {{#navigation_font}}
+    font-size: {{{font_size}}}px;
+    line-height: {{{line_height}}};
+    height: {{{line_height}}}em;
+    {{/navigation_font}}
+    {{^navigation_font}}
     height: {{font.line_height}}em;
+    {{/navigation_font}}
     justify-content: space-between;
     padding: calc({{spacing}}rem/2) calc({{spacing}}rem);
   }
@@ -370,12 +434,16 @@ nav a:not([href]) {
 #hidden-toggle:checked~header nav {
   width: 100%;
   padding: 2em 0;
+  {{#is.navigation_alignment.left}}text-align: left;{{/is.navigation_alignment.left}}
+  {{#is.navigation_alignment.right}}text-align: right;{{/is.navigation_alignment.right}}
+  {{#is.navigation_alignment.center}}text-align: center;{{/is.navigation_alignment.center}}
 }
 
 #hidden-toggle:checked~header nav a {
   display: block;
   margin-left: 0;
   padding: 0.5em 0;
+  text-align: inherit;
 }
 
 #hidden-toggle:checked~header .hamburger-inner:after {
@@ -505,7 +573,11 @@ border-radius: 4px;padding:0.75em 1.25em;font-size:0.9em}
 
 .wide {
     width: calc(100vw - var(--scrollbar-width) - var(--sidebar-width) - 2em);
-    margin-left: calc((100vw - var(--scrollbar-width) - var(--sidebar-width) - {{max_width}}px) * -0.5);
+    /* Centre within the space left of the sidebar. min() keeps the pull-out
+       from turning into a positive (rightward) margin when the configured
+       max-width is wider than the viewport minus the sidebar, which would
+       otherwise push wide content off the right edge. */
+    margin-left: min(-2em, calc((100vw - var(--scrollbar-width) - var(--sidebar-width) - {{max_width}}px) * -0.5));
     margin-right: 0;
 }
 
@@ -519,7 +591,7 @@ border-radius: 4px;padding:0.75em 1.25em;font-size:0.9em}
 
 .wide.left, .wide.right {
   width: calc(100vw - var(--scrollbar-width) - var(--sidebar-width) - 2em);
-  margin-left: calc((100vw - var(--scrollbar-width) - var(--sidebar-width) - {{max_width}}px) * -0.5);
+  margin-left: min(-2em, calc((100vw - var(--scrollbar-width) - var(--sidebar-width) - {{max_width}}px) * -0.5));
   margin-right: -25%;
   float: none;
   overflow: auto; /* collapse internal margins */
@@ -567,9 +639,16 @@ p, li {
   widows: 2;
 }
 
-h1 {font-size: 1.5625em;line-height: 36px;font-weight: bold;margin-bottom: 24px;text-wrap:balance}
+h1, h2, h3, h4, h5, h6 {
+  {{#heading_font}}
+  font-family: {{{stack}}};
+  line-height: {{{line_height}}};
+  {{/heading_font}}
+}
 
-h2, h3, h4, h5, h6 {font-size: 1.0625em;font-weight: bold;line-height: 24px;margin: 48px 0 24px;text-wrap:balance}
+h1 {font-size: 1.5625em;line-height: 36px;font-weight: bold;margin-bottom: 24px;text-wrap:balance;{{#heading_font}}font-size: {{{font_size}}}px;line-height: {{{line_height}}};{{/heading_font}}}
+
+h2, h3, h4, h5, h6 {font-size: 1.0625em;font-weight: bold;line-height: 24px;margin: 48px 0 24px;text-wrap:balance;{{#heading_font}}line-height: {{{line_height}}};{{/heading_font}}}
 
 blockquote {
   padding: 0 0 0 12px;
@@ -631,7 +710,7 @@ code {
   font-family: {{{syntax_highlighter_font.stack}}};
   margin: 0;
   font-size: 0.85em;
-  background: rgba(0,0,0,.03);
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}},.03);
   border-radius: 3px;
   line-height: 24px;
 }
@@ -651,7 +730,7 @@ pre code {
 pre code {
   display: block;padding: 12px 18px;
   margin: 0 0 0 0;
-  background-color: rgba(0,0,0,.02);
+  background-color: rgba({{#rgb}}{{text_color}}{{/rgb}},.02);
 }
 
 /* TABLES */
