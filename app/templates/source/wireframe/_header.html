@@ -1,5 +1,8 @@
-<a href="/" title="The homepage of {{title}}">{{title}}</a>&nbsp;
-{{#menu}}
-<a href="{{{url}}}" title="{{label}}">{{label}}</a>&nbsp;
-{{/menu}}
-<br>
+<header class="site-header">
+  <a href="/" class="site-title" title="The homepage of {{title}}">{{#logo_url}}<img src="{{{logo_url}}}" alt="{{title}}" class="site-logo">{{/logo_url}}{{^logo_url}}{{title}}{{/logo_url}}</a>
+  <nav class="site-nav">
+    {{#menu}}
+    <a href="{{{url}}}" title="{{label}}">{{label}}</a>
+    {{/menu}}
+  </nav>
+</header>

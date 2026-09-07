@@ -4,6 +4,7 @@
   <body>
     {{> header}}
 
+    <div class="container">
     <br>
     <form>
       <input placeholder="Search for an entry..." value="{{#query}}{{query}}{{/query}}" name="q" id="search" type="text" /><input type="submit" value="Go"/>
@@ -17,8 +18,9 @@
     {{/query}}
 
     {{#entries}}
-      <a href="{{{url}}}">{{title}}</a> {{date}}<br>
+      <a href="{{{url}}}">{{title}}</a>{{#date}} {{date}}{{/date}}<br>
     {{/entries}}
+    </div>
 
     {{> footer}}
   </body>

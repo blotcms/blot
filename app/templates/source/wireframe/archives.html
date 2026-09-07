@@ -3,6 +3,7 @@
   {{> head}}
   <body>
     {{> header}}
+    <div class="container">
     <h1>Archive</h1>
 
     {{#archives}}
@@ -12,12 +13,13 @@
 
         <p>
         {{#entries}}
-        <a href="{{{url}}}">{{title}}</a><br>
+        <a href="{{{url}}}">{{title}}</a>{{#date}} {{date}}{{/date}}<br>
         {{/entries}}
         </p>
 
       {{/months}}
     {{/archives}}
+    </div>
 
     {{> footer}}
   </body>

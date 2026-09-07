@@ -17,12 +17,14 @@
           <p>Published on {{date}}.</p>
         {{/date}}
 
+        {{#show_tags}}
         {{#tags.length}}
           <p>Tagged:
           {{#tags}}
            <a href="/tagged/{{slug}}">{{name}}</a> &nbsp;
           {{/tags}}</p>
         {{/tags.length}}
+        {{/show_tags}}
 
         <br>
 

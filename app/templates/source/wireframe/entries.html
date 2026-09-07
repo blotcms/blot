@@ -5,13 +5,29 @@
 
     {{> header}}
 
+    <div class="container">
     <p>All entries:</p>
 
     <p>
-    {{#all_entries}}
-    <a href="{{{url}}}">{{title}}</a> {{date}}<br>
-    {{/all_entries}}
+    {{#posts}}
+    <a href="{{{url}}}">{{title}}</a>{{#date}} {{date}}{{/date}}<br>
+    {{/posts}}
     </p>
+
+    {{#posts.length}}
+    {{#pagination}}
+    <div class="pagination">
+      {{#previous}}
+      <a href="/page/{{previous}}">&larr; Newer</a>
+      {{/previous}}
+      Page {{current}} of {{total}}
+      {{#next}}
+      <a href="/page/{{next}}">Older &rarr;</a>
+      {{/next}}
+    </div>
+    {{/pagination}}
+    {{/posts.length}}
+    </div>
 
     <br><br>
 

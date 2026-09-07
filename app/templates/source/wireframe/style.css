@@ -1,4 +1,105 @@
 {{{app_css}}}
+{{{body_font.styles}}}
+{{{heading_font.styles}}}
+{{{syntax_highlighter_font.styles}}}
+{{{syntax_highlighter.styles}}}
+
+body {
+  {{#body_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  line-height: {{{line_height}}};
+  {{/body_font}}
+  color: {{text_color}};
+  background: {{background_color}};
+  margin: 0;
+  padding: {{spacing}}em;
+}
+
+.container {
+  max-width: {{max_width}}px;
+}
+
+a {
+  color: {{link_color}};
+}
+
+h1, h2, h3, h4, h5, h6 {
+  {{#heading_font}}
+  font-family: {{{stack}}};
+  line-height: {{{line_height}}};
+  {{/heading_font}}
+}
+
+h1 {
+  {{#heading_font}}
+  font-size: {{{font_size}}}px;
+  line-height: {{{line_height}}};
+  {{/heading_font}}
+}
+
+h2 { font-size: calc({{{heading_font.font_size}}}px * 0.83); }
+h3 { font-size: calc({{{heading_font.font_size}}}px * 0.67); }
+h4 { font-size: calc({{{heading_font.font_size}}}px * 0.56); }
+h5 { font-size: calc({{{heading_font.font_size}}}px * 0.46); }
+h6 { font-size: calc({{{heading_font.font_size}}}px * 0.38); }
+
+.site-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5em 1em;
+  max-width: {{max_width}}px;
+  margin-bottom: {{spacing}}em;
+}
+
+{{#is.navigation_alignment.justified}}
+.site-header {justify-content: space-between;}
+{{/is.navigation_alignment.justified}}
+{{#is.navigation_alignment.left}}
+.site-header {justify-content: flex-start;}
+{{/is.navigation_alignment.left}}
+{{#is.navigation_alignment.right}}
+.site-header {justify-content: flex-end;}
+{{/is.navigation_alignment.right}}
+{{#is.navigation_alignment.center}}
+.site-header {justify-content: center;}
+{{/is.navigation_alignment.center}}
+
+{{#sticky_navigation}}
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: {{background_color}};
+  margin: calc(-1 * {{spacing}}em) calc(-1 * {{spacing}}em) {{spacing}}em;
+  padding: {{spacing}}em;
+  max-width: none;
+}
+{{/sticky_navigation}}
+
+.site-title {
+  color: inherit;
+  text-decoration: none;
+}
+
+.site-logo {
+  max-height: 1.4em;
+  width: auto;
+  vertical-align: middle;
+}
+
+.site-nav a,
+.site-footer a {
+  margin-right: 1em;
+}
+
+.site-footer {
+  margin-top: {{spacing}}em;
+  padding-top: {{spacing}}em;
+  max-width: {{max_width}}px;
+  border-top: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.2);
+}
 
 p,
 li,
@@ -6,4 +107,20 @@ blockquote,
 figcaption {
   orphans: 2;
   widows: 2;
+}
+
+pre {
+  overflow-x: auto;
+  padding: 0.7em 1em;
+}
+
+pre, code {
+  {{#syntax_highlighter_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  {{/syntax_highlighter_font}}
+}
+
+.pagination {
+  margin: {{spacing}}em 0;
 }
