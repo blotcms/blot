@@ -1,8 +1,11 @@
 {{{app_css}}}
 {{{body_font.styles}}}
+{{{heading_font.styles}}}
+{{{syntax_highlighter_font.styles}}}
+{{{syntax_highlighter.styles}}}
 
 body {
-  margin: 2em;
+  margin: {{spacing}}em;
   text-rendering: optimizelegibility;
   background: {{background_color}};
   color: {{text_color}};
@@ -27,9 +30,85 @@ figcaption {
   widows: 2;
 }
 
-header {margin: 2em 0}
+{{#heading_font}}
+h1, h2, h3, .site-title {
+  font-family: {{{stack}}};
+  {{#weight}}
+  font-weight: {{{.}}};
+  {{/weight}}
+  {{#style}}
+  font-style: {{{.}}};
+  {{/style}}
+}
 
-.pagination {text-align: center;margin: 2em 0}
+h1, h2, h3 {
+  line-height: {{{line_height}}};
+}
+
+h1 { font-size: {{{font_size}}}px; }
+h2 { font-size: calc({{{font_size}}}px * 0.83); }
+h3 { font-size: calc({{{font_size}}}px * 0.67); }
+{{/heading_font}}
+
+header {
+  margin: {{spacing}}em 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5em 1em;
+  {{#is.navigation_alignment.justified}}
+  justify-content: space-between;
+  {{/is.navigation_alignment.justified}}
+  {{#is.navigation_alignment.left}}
+  justify-content: flex-start;
+  {{/is.navigation_alignment.left}}
+  {{#is.navigation_alignment.right}}
+  justify-content: flex-end;
+  {{/is.navigation_alignment.right}}
+  {{#is.navigation_alignment.center}}
+  justify-content: center;
+  {{/is.navigation_alignment.center}}
+}
+
+{{#sticky_navigation}}
+header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: {{background_color}};
+  margin: calc(-1 * {{spacing}}em) calc(-1 * {{spacing}}em) {{spacing}}em;
+  padding: {{spacing}}em;
+}
+{{/sticky_navigation}}
+
+.site-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  color: inherit;
+  text-decoration: none;
+}
+
+.site-logo {
+  height: 1.4em;
+  width: auto;
+  display: block;
+}
+
+header nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 1em;
+}
+
+{{#is.navigation_alignment.justified}}
+header .tags {
+  flex: 1;
+}
+{{/is.navigation_alignment.justified}}
+
+.pagination {text-align: center;margin: {{spacing}}em 0}
 .pagination a {margin: 0 1em;display: inline-block;}
 
 a {color: {{accent_color}};}
@@ -38,16 +117,38 @@ a.active {color: inherit;text-decoration: none;}
 
 img {max-width: 100%;height: auto;vertical-align: middle;}
 
+pre {
+  overflow-x: auto;
+  padding: 0.7em 1em;
+}
+
+pre, code {
+  {{#syntax_highlighter_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  {{/syntax_highlighter_font}}
+}
+
 .clear {width: 100%;clear: both;display: block;}
 
+.search-form {
+  text-align: center;
+  margin: {{spacing}}em 0;
+}
+
+.search-results {
+  max-width: 600px;
+  text-align: center;
+  margin: 0 auto;
+}
+
 .entry {
-  margin: 1em auto;
-  width: 120px;
-  height: 120px;
+  width: {{thumbnail_size}}px;
+  height: {{thumbnail_size}}px;
   display: block;
   float: left;
   overflow: hidden;
-  margin: 2em;
+  margin: {{spacing}}em;
   position: relative;
 }
 
@@ -72,7 +173,8 @@ img {max-width: 100%;height: auto;vertical-align: middle;}
 
 .entry .teaser {
   padding: 0.33em;
-  max-width:120px;max-height:160px;
+  max-width: {{thumbnail_size}}px;
+  max-height: calc({{thumbnail_size}}px * 4 / 3);
   overflow: hidden;
   border: 1px solid {{text_color}};
   border-radius: 4px;

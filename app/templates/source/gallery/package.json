@@ -2,14 +2,44 @@
   "name": "Gallery",
   "locals": {
     "page_size": 96,
+    "page_size_range": [12, 192],
     "hide_dates": false,
     "date_display": "MMMM D, Y",
     "text_color": "#000000",
     "background_color": "#FFFFFF",
-    "accent_color": "blue",
+    "accent_color": "#0000FF",
     "body_font": {
-      "font_size": 14
+      "id": "system-sans",
+      "font_size": 14,
+      "line_height": 1.4
     },
+    "heading_font": {
+      "id": "system-sans",
+      "font_size": 28,
+      "line_height": 1.2
+    },
+    "syntax_highlighter": {
+      "id": "stackoverflow-light"
+    },
+    "syntax_highlighter_font": {
+      "id": "system-mono",
+      "font_size": 13
+    },
+    "favicon_url": "",
+    "logo_url": "",
+    "sticky_navigation": false,
+    "navigation_alignment": "justified",
+    "navigation_alignment_options": [
+      "justified",
+      "left",
+      "right",
+      "center"
+    ],
+    "show_tags_in_navigation": true,
+    "thumbnail_size": 120,
+    "thumbnail_size_range": [60, 160],
+    "spacing": 2,
+    "spacing_range": [0, 5],
     "demo_folder": "bjorn"
   },
   "isPublic": false,

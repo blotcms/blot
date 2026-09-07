@@ -4,13 +4,11 @@
   <body>
     <div class="container">
       {{> header}}
-      <br><br>
-        <form action='/search' style="text-align:center">
+        <form class="search-form" action='/search'>
           <input placeholder="Type your search..." value="{{#query}}{{query}}{{/query}}" name="q" id="search" type="text" />
           <input type="submit" value="Search"/>
         </form>
-        <br><br><br>
-        <div class="results" style="max-width:600px;text-align:center;margin:0 auto">
+        <div class="search-results">
           {{#query}}
             {{^entries}}
             <p>Sorry, nothing found for “{{query}}”</p>
@@ -19,10 +17,11 @@
 
           {{#entries}}
             <a href="{{{url}}}">{{title}}</a>
-            <span class="small">{{date}}</span>
+            {{#date}}<span class="small">{{date}}</span>{{/date}}
             <br>
           {{/entries}}
         </div>
+    {{> footer}}
     </div>
   </body>
 </html>

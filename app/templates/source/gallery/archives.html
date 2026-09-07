@@ -7,7 +7,7 @@
     <h1>Archives</h1>
 
     {{#all_entries}}
-    {{date}} <a href="{{{url}}}"><strong>{{title}}</strong></a><br>
+    {{#date}}{{date}} {{/date}}<a href="{{{url}}}"><strong>{{title}}</strong></a><br>
     {{/all_entries}}
 
     {{> footer}}
