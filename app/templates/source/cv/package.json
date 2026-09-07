@@ -3,6 +3,9 @@
   "locals": {
     "page_size": 18,
     "spacing": 1,
+    "spacing_range": [0, 4],
+    "content_width": 40,
+    "content_width_range": [24, 64],
     "background_color": "#fff",
     "text_color": "#000",
     "link_color": "#000",
@@ -12,16 +15,22 @@
     "hide_dates": false,
     "date_display": "MMM D",
     "syntax_highlighter": {
-      "id": "stackoverflow-light"
-    },
-    "syntax_highlighter": {
       "id": "arduino-light"
+    },
+    "syntax_highlighter_font": {
+      "id": "system-mono"
     },
     "body_font": {
       "id": "system-sans",
       "line_height": 1.6,
       "font_size": 15
     },
+    "heading_font": {
+      "id": "system-sans"
+    },
+    "favicon_url": "",
+    "navigation_alignment": "left",
+    "navigation_alignment_options": ["left", "center"],
     "demo_folder": "clara"
   },
   "enabled": true,

@@ -5,7 +5,7 @@
 {{> /Profile.txt}}
 </div>  
 
-<h2>
+<h2 class="section-nav">
 <a href="/">About</a>
 <a href="/writing" class="selected">Writing</a>
 </h2>
@@ -16,7 +16,7 @@
 <h2>{{year}}</h2>
 {{#months}}
 {{#entries}}
-<h3>{{date}}</h3>
+<h3 class="date-heading">{{#formatDate}}{{date_display}}{{/formatDate}}</h3>
 <p><a href="{{{url}}}">{{title}}</a></p>
 {{#thumbnail.small}}
 <p><img src="{{url}}" width="{{width}}" height="{{height}}"></p>

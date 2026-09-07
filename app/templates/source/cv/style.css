@@ -2,6 +2,8 @@
 on the services page of the dashboard */
 {{{app_css}}}
 {{{body_font.styles}}}
+{{{heading_font.styles}}}
+{{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
 :root {
@@ -10,12 +12,20 @@ on the services page of the dashboard */
   --font-size: {{{font_size}}}px;
   --line-height: {{{line_height}}};
   {{/body_font}}
+  {{#heading_font}}
+  --heading-font-family: {{{stack}}};
+  {{/heading_font}}
+  {{#syntax_highlighter_font}}
+  --code-font-family: {{{stack}}};
+  {{/syntax_highlighter_font}}
   --background-color: {{background_color}};
   --text-color: {{text_color}};
   --off-background-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.08);
   --light-text-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.3333);
   --medium-text-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6666);
   --link-color: {{link_color}};
+  --content-width: {{content_width}}em;
+  --spacing: {{spacing}};
 }
 
 @media (prefers-color-scheme: dark) {
@@ -33,7 +43,7 @@ html,
 body {
   width: 100%;
   padding: 0;
-  max-width: 40em;
+  max-width: var(--content-width);
   margin: 0 auto;
   -webkit-font-smoothing: antialiased;
   color: var(--text-color);
@@ -44,7 +54,7 @@ body {
 }
 
 body {
-  padding: clamp(1.6em,calc((100vw - 40em) / 2), 4.8em) 2em;
+  padding: clamp(calc(var(--spacing) * 1.6em), calc((100vw - var(--content-width)) / 2), calc(var(--spacing) * 4.8em)) calc(var(--spacing) * 2em);
   box-sizing: border-box;
 }
 
@@ -65,6 +75,10 @@ a:hover {
   text-decoration: underline;
 }
 
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--heading-font-family, var(--font-family));
+}
+
 h1 {
   margin-bottom: 0;
   font-size: 1.33333333em;
@@ -73,8 +87,14 @@ h1 {
 h2 {
   font-size: 100%;
   font-weight: 600;
-  margin: 4em 0 0 0;
+  margin: calc(var(--spacing) * 4em) 0 0 0;
 }
+
+{{#is.navigation_alignment.center}}
+h2.section-nav {
+  text-align: center;
+}
+{{/is.navigation_alignment.center}}
 
 h2 a {display:inline-block;margin-right: 2em;padding-bottom: 0.5em;color:var(--light-text-color);font-weight: normal;margin-bottom: 1em;}
 h2 a:hover {text-decoration: none;}
@@ -91,7 +111,7 @@ h2 a.selected {border-bottom: 1px solid var(--link-color);color:var(--link-color
   list-style-type: none;
   margin: 0.5em 0;
   padding: 0;
-  margin-bottom: 3em;
+  margin-bottom: calc(var(--spacing) * 3em);
 }
 
 .header h1 + p + ul li {
@@ -109,7 +129,7 @@ h2 a.selected {border-bottom: 1px solid var(--link-color);color:var(--link-color
 
 .header.subpage a:hover {text-decoration: none;}
 .header.subpage ul {display: none!important;}
-.header.subpage h1 {font-size: 15px;color:var(--light-text-color);font-weight: normal;}
+.header.subpage h1 {font-size: var(--font-size);color:var(--light-text-color);font-weight: normal;}
 .header.subpage h1 + p {display: none;}
 .header.subpage p:first-of-type img {width:3em;height:3em;float:none;font-size: 18px;}
 
@@ -166,6 +186,17 @@ h3 {
   }
 }
 
+{{#hide_dates}}
+.subheading-column h3.date-heading {
+  display: none;
+}
+
+.subheading-column h3.date-heading ~ p,
+.subheading-column h3.date-heading ~ ul {
+  margin-left: 0;
+}
+{{/hide_dates}}
+
 p img, .entry img {
   max-width: 100%;
   width: 100%;
@@ -182,11 +213,11 @@ p img, .entry img {
 }
 
 .subheading-column h3 + p {
-  color: #000
+  color: var(--text-color)
 }
 
 .subheading-column h3, .subheading-column h3 + p {
-  padding-top: 1.6em;
+  padding-top: calc(var(--spacing) * 1.6em);
   margin-top: 0;
   margin-bottom: 0;
 }
@@ -204,6 +235,10 @@ kbd {
   font-size: 0.9em;
 }
 
+pre, code {
+  font-family: var(--code-font-family, monospace);
+}
+
 
 /* add an arrow to the right of the links */
 .arrow-after-link h3 + p a:after {
@@ -215,7 +250,7 @@ kbd {
   border-radius:100%;
   overflow:hidden;
   text-align: center;
-  background:#f0f0f0;
+  background: var(--off-background-color);
   transform: rotate(-45deg);
   display:inline-block;
   text-indent: 0px;
