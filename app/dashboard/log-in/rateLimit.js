@@ -2,6 +2,7 @@ const { rateLimit}  = require("express-rate-limit");
 const { RedisStore } = require('rate-limit-redis')
 const redis = require("redis");
 const config = require("config");
+const reconnectStrategy = require("helper/redisReconnectStrategy");
 
 // rate-limit-redis uses the promise API (get/set/del with options), so use
 // a native redis client, not the shared application singleton from models/client.
@@ -9,7 +10,13 @@ const client = redis.createClient({
   url: `redis://${config.redis.host}:${config.redis.port}`,
   RESP: 2,
   commandOptions: { timeout: undefined },
-  socket: { keepAliveInitialDelay: 5000 },
+  socket: { keepAliveInitialDelay: 5000, reconnectStrategy },
+});
+// node-redis emits 'error' for every runtime socket failure after connecting
+// (e.g. an idle connection reaped with ETIMEDOUT shortly after a deploy). Without
+// a listener Node rethrows it as an uncaught exception and the process crashes.
+client.on("error", (err) => {
+  console.error("Rate limit Redis error:", err);
 });
 client.connect().catch((err) => {
   console.error("Rate limit Redis connect error:", err);
