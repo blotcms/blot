@@ -17,97 +17,12 @@ blockquote.twitter-tweet p {margin: 0}
 /* IMAGE SIZE */
 img {max-width: 100%;height: auto;}
 
-/* CODE HIGHLIGHTING */
-
-
-pre, code {font: inherit;}
-
-.hljs {
-  display: block;
-  overflow-x: auto;
-}
-
-.hljs-comment,
-.hljs-quote {
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
-  font-style: italic;
-}
-
-.hljs-keyword,
-.hljs-selector-tag,
-.hljs-subst {
-  color: {{text_color}};
-  font-weight: bold;
-}
-
-.hljs-number,
-.hljs-literal {
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
-}
-
-.hljs-string,
-.hljs-doctag,
-.hljs-formula {
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
-}
-
-.hljs-title,
-.hljs-section,
-.hljs-selector-id {
-  color: {{text_color}};
-  font-weight: bold;
-}
-
-.hljs-subst {
-  font-weight: normal;
-}
-
-.hljs-class .hljs-title,
-.hljs-type,
-.hljs-name {
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
-  font-weight: bold;
-}
-
-.hljs-tag {
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
-}
-
-.hljs-regexp {
-    color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
-}
-
-.hljs-symbol,
-.hljs-bullet,
-.hljs-link {
-  color: {{text_color}};
-}
-
-.hljs-built_in,
-.hljs-builtin-name {
-  color: {{text_color}};
-  text-decoration: underline;
-}
-
-.hljs-meta {
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.4);
-  font-weight: bold;
-}
-
-.hljs-deletion {
-  color: {{background_color}};
-}
-
-.hljs-addition {
-  color: {{text_color}};
-}
-
-.hljs-emphasis {
-  font-style: italic;
-}
-
-.hljs-strong {
-  font-weight: bold;
+/* CODE */
+pre, code {
+  {{#syntax_highlighter_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  {{/syntax_highlighter_font}}
 }
 
 

@@ -1,7 +1,7 @@
 <header class="site-header">
   <input type="checkbox" id="site-nav-toggle" class="site-nav-toggle-input" aria-label="Toggle navigation" aria-controls="site-menu" />
   <div class="site-header-bar">
-    <h1 class="site-title"><a href="/">{{title}}</a></h1>
+    <h1 class="site-title"><a href="/">{{#logo_url}}<img src="{{{logo_url}}}" alt="{{title}}">{{/logo_url}}{{^logo_url}}{{title}}{{/logo_url}}</a></h1>
     <label for="site-nav-toggle" class="site-menu-toggle">menu</label>
   </div>
   <nav id="site-menu" class="site-nav" aria-label="Main menu">

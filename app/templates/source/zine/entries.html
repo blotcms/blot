@@ -6,11 +6,9 @@
 
     <p class="entries">
       {{#posts}}
-      <span class="entry"
+      <span class="entry entry-item"
         ><a href="{{{url}}}"><span>{{title}}</span></a
-        > <span class="entry-date"
-          ><span class="light">{{date}}{{^last}} //{{/last}}</span></span
-        ></span
+        >{{#date}} <span class="entry-date"><span class="light">{{date}}</span></span>{{/date}}{{#show_tags}}{{#tags.length}} <span class="entry-tags">{{#tags}}<a class="light" href="/tagged/{{slug}}">{{name}}</a>{{^last}}, {{/last}}{{/tags}}</span>{{/tags.length}}{{/show_tags}}{{^last}} <span class="light entry-sep">//</span>{{/last}}</span
       >
       {{/posts}}
     </p>
