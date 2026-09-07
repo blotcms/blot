@@ -108,8 +108,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: "npm"
+          cache-dependency-path: ./package.json
+
+      - name: Cache Node modules and the Puppeteer browser
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            ~/.cache/puppeteer
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-22-${{ hashFiles('package.json') }}
 
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm install
 
       - name: Deploy via npm script
@@ -127,4 +139,3 @@ jobs:
           echo "=========================================="
           echo "Commit SHA: ${{ github.sha }}"
           echo "Deployment completed successfully! 🚀"
-
