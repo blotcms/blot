@@ -1,9 +1,8 @@
-
 # Klein bottle
 
 {>} ![](_Klein2.png)
 
-In [mathematics](/wiki/Mathematics "Mathematics"), the **Klein bottle** <span class="nowrap">[/ˈkl](/wiki/Help:IPA_for_English "Help:IPA for English")</span>[<span title="/aɪ/ long 'i' in 'tide'">aɪn/</span>](/wiki/Help:IPA_for_English "Help:IPA for English") is an example of a [non-orientable](/wiki/Orientability "Orientability") [surface](/wiki/Surface_(topology) "Surface (topology)"); it is a [two-dimensional](/wiki/Two-dimensional "Two-dimensional") [manifold](/wiki/Manifold "Manifold") against which a system for determining a [normal vector](/wiki/Normal_vector "Normal vector") cannot be consistently defined. Informally, it is a one-sided surface which, if traveled upon, could be followed back to the point of origin while flipping the traveler upside down. Other related non-orientable objects include the [Möbius strip](/wiki/M%C3%B6bius_strip "Möbius strip") and the [real projective plane](/wiki/Real_projective_plane "Real projective plane"). Whereas a Möbius strip is a surface with [boundary](/wiki/Boundary_(topology) "Boundary (topology)"), a Klein bottle has no boundary (for comparison, a [sphere](/wiki/Sphere "Sphere") is an orientable surface with no boundary).
+In [mathematics](https://en.wikipedia.org/wiki/Mathematics), the **Klein bottle** is an example of a [non-orientable](https://en.wikipedia.org/wiki/Orientability) [surface](https://en.wikipedia.org/wiki/Surface_(topology)); it is a [two-dimensional](https://en.wikipedia.org/wiki/Surface_(topology)) [manifold](https://en.wikipedia.org/wiki/Manifold) against which a system for determining a [normal vector](https://en.wikipedia.org/wiki/Normal_(geometry)) cannot be consistently defined. Informally, it is a one-sided surface which, if traveled upon, could be followed back to the point of origin while flipping the traveler upside down. Other related non-orientable objects include the [[Mobius strip]] and the [real projective plane](https://en.wikipedia.org/wiki/Real_projective_plane). Whereas a Möbius strip is a surface with [boundary](https://en.wikipedia.org/wiki/Boundary_(topology)), a Klein bottle has no boundary (for comparison, a [sphere](https://en.wikipedia.org/wiki/Sphere) is an orientable surface with no boundary).
 
 $$
 z(\theta, \varphi) = r \sin \theta \cos({\varphi/2})
@@ -13,7 +12,7 @@ $$
 w(\theta, \varphi) = r \sin \theta \sin({\varphi/2})
 $$
 
-The Klein bottle was first described in 1882 by the [German](/wiki/Germany "Germany") mathematician [Felix Klein](/wiki/Felix_Klein "Felix Klein"). It may have been originally named the _Kleinsche Fläche_ ("Klein surface") and then misinterpreted as _Kleinsche Flasche_ ("Klein bottle"), which ultimately may have led to the adoption of this term in the German language as well.
+The Klein bottle was first described in 1882 by the [German](https://en.wikipedia.org/wiki/Germany) mathematician [Felix Klein](https://en.wikipedia.org/wiki/Felix_Klein). It may have been originally named the _Kleinsche Fläche_ ("Klein surface") and then misinterpreted as _Kleinsche Flasche_ ("Klein bottle"), which ultimately may have led to the adoption of this term in the German language as well.
 
 {>} ![](_Klein.png)
 
@@ -43,4 +42,3 @@ z(u,v) = \frac{2}{15} (3+5 \cos{u} \sin{u}) \sin{v}
 $$
 
 Source: [Wikipedia](https://en.wikipedia.org/wiki/Klein_bottle)
-

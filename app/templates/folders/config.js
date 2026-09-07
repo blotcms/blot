@@ -11,6 +11,10 @@ module.exports = {
     title: "David",
     template: "SITE:blog",
   },
+  notes: {
+    title: "David",
+    template: "SITE:blog",
+  },
   documentation: {
     title: "Documentation",
     template: "SITE:documentation",
@@ -47,6 +51,10 @@ module.exports = {
         options: {}
       },
       linebreaks: {
+        enabled: true,
+        options: {}
+      },
+      wikilinks: {
         enabled: true,
         options: {}
       },

@@ -17,6 +17,8 @@ services:
         condition: service_healthy
       toxiproxy:
         condition: service_started
+      airlock:
+        condition: service_healthy
     env_file:
       - ../../.env
     environment:
@@ -24,6 +26,11 @@ services:
       - BLOT_REDIS_HOST=${BLOT_REDIS_HOST:-toxiproxy}
       - CONTAINER_NAME=blot-container-green
       - DEBUG=${DEBUG:-}
+      # Route bookmark screenshots and remote-image downloads through the
+      # egress-filtered airlock container. Comment these two out to have the
+      # app hit the network directly (no SSRF protection).
+      - BLOT_AIRLOCK_BROWSER_URL=http://airlock:9222
+      - BLOT_AIRLOCK_PROXY_URL=http://airlock:8888
     volumes:
       - ../../data:/usr/src/app/data
       - ../../.git:/usr/src/app/.git
@@ -61,6 +68,23 @@ services:
       - "8474:8474"
     expose:
       - "26379"
+
+  # Single egress boundary for fetching untrusted, user-supplied URLs
+  # (bookmark screenshots, remote images in posts). See config/airlock.
+  airlock:
+    build:
+      context: ../../config/airlock
+      dockerfile: Dockerfile
+    # entrypoint.sh exits non-zero (fail closed) if any of its services go
+    # down, relying on the restart policy to bring it back - matches
+    # --restart unless-stopped in the production docker run (see README.md).
+    restart: unless-stopped
+    # Needed so the entrypoint can install the nftables egress filter.
+    cap_add:
+      - NET_ADMIN
+    expose:
+      - "9222"
+      - "8888"
 
   nginx:
     build:

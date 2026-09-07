@@ -1,0 +1,34 @@
+# Mathematics and code
+
+I like to keep a formula next to a function. One is a claim about a surface; the other is just a way to count.
+
+$$
+\theta ;\ \mapsto \; \frac{1}{N} \sum_{i=1}^N \left| y_i - \mu_{\theta}(x_i) \right|^2 + \log[ \,  \sigma^2_{\theta}(x_i) \, ].
+$$
+
+Here is the same idea as a loop, which is easier to read and harder to trust:
+
+```python
+def fib(n):
+    a, b = 0, 1
+    for i in range(n):
+        a, b = b, a + b
+    return a
+```
+
+{<>} https://upload.wikimedia.org/wikipedia/commons/2/21/Adams_The_Tetons_and_the_Snake_River.jpg
+
+{|<} Material from the official personnel file of Ansel E. Adams from the US National Archives
+
+{||||} https://upload.wikimedia.org/wikipedia/commons/2/23/Appointment_Form_for_Ansel_Adams_-_NARA_-_7582610_%28page_1%29.jpg
+{||||} https://upload.wikimedia.org/wikipedia/commons/9/92/Letter_from_Ansel_Adams_to_E._K._Burlew_-_NARA_-_7582629.jpg
+{||||} https://upload.wikimedia.org/wikipedia/commons/8/8d/Adams%2C_Ansel_File_for_23_Alphabetical_Park_Service_-_NARA_-_7582611_%28page_6%29.jpg
+{||||} https://upload.wikimedia.org/wikipedia/commons/c/c9/Note_-_NARA_-_7582647.jpg
+
+| Title          | Looking across lake toward mountains, Evening, McDonald Lake, Glacier National Park, Montana |
+|----------------|--------------------------------------------------------------------------------|
+| Author         | Ansel Adams                                                                                  |
+| Record creator | Department of the Interior. National Park Service. Branch of Still and Motion Pictures.      |
+| Date           | between 1933 and 1942                                                                        |
+| Collection     | National Archives at College Park                                                            |
+| Source         | NARA record: 1332556                                                                         |

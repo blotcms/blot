@@ -48,6 +48,7 @@ html, body {
   color: var(--text-color); background: var(--background-color);
   font-family: var(--font-family); font-size: var(--font-size); line-height: var(--line-height);
   text-rendering: optimizelegibility;
+  -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale
 }
 
@@ -69,7 +70,7 @@ hr {
 }
 
 .entry {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .entry-date {
@@ -341,7 +342,6 @@ pre code {
   max-width: 100%;
   max-height: calc(100vh - 5.75rem);
   height: auto;
-  width: auto;
   outline: none;
 }
 
@@ -406,11 +406,10 @@ figcaption {
   font-size: var(--heading-font-size);
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border-color);
-font-weight: 550;
-line-height: var(--heading-line-height);
-margin-block-end: 8.8px;
-margin-block-start: 40px;
-font-weight: 700;
+  line-height: var(--heading-line-height);
+  margin-block-end: 8.8px;
+  margin-block-start: 40px;
+  font-weight: 700;
 }
 
 .entry h2, .entry h3 {font-weight: 600;}
@@ -423,7 +422,42 @@ font-weight: 700;
 }
 
 p:has(img) {
-  margin: 2.5em 0;
+  margin: 1.25em 0;
+}
+
+/* Image layout markers from the markdown converter, e.g. {>} */
+.clear {
+  width: 100%;
+  clear: both;
+  display: block;
+  height: 0;
+}
+
+.entry .right { float: right; }
+.entry .left { float: left; }
+
+.entry .right.inside {
+  margin: 0 0 1em 1.5em;
+  max-width: 46%;
+}
+
+.entry .left.inside {
+  margin: 0 1.5em 1em 0;
+  max-width: 46%;
+}
+
+.entry .right.inside img,
+.entry .left.inside img {
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .entry .right,
+  .entry .left {
+    float: none;
+    max-width: 100%;
+    margin: 0 0 1em;
+  }
 }
 
 h4 {

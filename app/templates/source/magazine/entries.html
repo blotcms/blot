@@ -25,7 +25,7 @@
 {{^pagination.previous}}
 
 {{#show_featured_entry}}
-<div class="clip-1 mt3 featured-entry" style="display:flex;flex-direction:row;flex-wrap:  wrap">
+<div class="clip-1 mt3 featured-entry">
   {{#posts}}
   {{#first}}
   {{#thumbnail.large.url}}
@@ -36,7 +36,7 @@
 </div>
 {{/show_featured_entry}}
 
-<div style="display:flex;flex-direction:row;flex-wrap:wrap"   {{#show_featured_entry}}{{#posts}} {{#first}} {{#thumbnail.large}} class="skip-1" {{/thumbnail.large}} {{/first}} {{/posts}}{{/show_featured_entry}}>
+<div class="magazine-posts{{#show_featured_entry}}{{#posts}}{{#first}}{{#thumbnail.large}} skip-1{{/thumbnail.large}}{{/first}}{{/posts}}{{/show_featured_entry}}">
 
   {{#posts}}
   {{> entry_line}}

@@ -1,15 +1,5 @@
-# _Marfa_ for Jekyll
+# Profile
 
-#### Demo: [mmarfil.com/micro](http://mmarfil.com/micro)
+A personal site: name, optional photo, and a short bio on the homepage, then posts.
 
-## Screenshot
-
-![screenshot](screenshot/home.png)
-
-This Jekyll theme started as a port of [Cactus](https://github.com/eudicots/Cactus) to my own needs, but I ended up performing a lot more modifications than expected. Some people reached me out and asked if I could share it, so here we are.
-
-#### Disclaimer: I'm only a designer, so please don't expect the code to be pretty.
-
-## Usage
-To start your project, [fork this respository](https://github.com/mmarfil/marfa/fork), put in your content, and go!
-
+Set **Author**, **Description**, **Email**, and **Micro.blog username** in the template settings if you want them shown. Upload a photo on the dashboard for the avatar.

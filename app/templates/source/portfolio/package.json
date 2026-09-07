@@ -2,17 +2,37 @@
   "name": "Portfolio",
   "locals": {
     "page_size": 20,
+    "page_size_range": [6, 60],
     "hide_dates": true,
     "date_display": "MMMM D, Y",
     "background_color": "#FFFFFF",
     "text_color": "#000000",
     "accent_color": "#0078D9",
-    "body_font": {},
-    "show_title": false,
-    "sticky_navigation": true,
+    "navigation_link_color": "#000000",
+    "text_link_color": "#0078D9",
+    "text_link_visited_color": "#0078D9",
+    "body_font": {
+      "id": "system-sans",
+      "font_size": 16,
+      "line_height": 1.4
+    },
+    "heading_font": {
+      "id": "system-sans"
+    },
     "syntax_highlighter": {
       "id": "stackoverflow-light"
     },
+    "syntax_highlighter_font": {
+      "id": "system-mono",
+      "font_size": 14
+    },
+    "favicon_url": "",
+    "logo_url": "",
+    "show_title": false,
+    "show_search": false,
+    "show_adjacent_posts": true,
+    "sticky_navigation": true,
+    "collapse_navigation_by_default": false,
     "in_navigation": "popular_tags",
     "in_navigation_options": [
       "popular_tags",

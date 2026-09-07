@@ -14064,6 +14064,47 @@ div.a2a_full_footer {
   display: block !important;
 }
 
+.jumbotron-home.show-5:not(:has(> :nth-child(5))) {
+  display: none;
+}
+
+.entry-hero-thumb {
+  height: 200px;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.entry-list-thumb-image {
+  height: 80px;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.jumbotron-home .lead {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.site-search {
+  padding-left: 1.5rem;
+  max-width: 16rem;
+  flex-grow: 0;
+}
+
+@media (min-width: 768px) {
+  .jumbotron-home .row {
+    min-height: 280px;
+  }
+
+  .jumbotron-home-image {
+    min-height: 280px;
+  }
+}
+
 /* Hide the Search menu item when the header already has a search form */
 #MagicMenu .navbar-nav.mr-auto .nav-item[data-url="/search" i],
 #MagicMenu .navbar-nav.mr-auto .nav-item[data-url="/search/" i],

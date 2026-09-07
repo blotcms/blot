@@ -16,7 +16,8 @@
     "title_font": {
       "id": "gill-sans",
       "font_size": 19
-    }
+    },
+    "demo_folder": "notes"
   },
   "views": {
     "archives.html": {

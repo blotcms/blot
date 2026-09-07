@@ -9,6 +9,7 @@
         <line x1="26" y1="10" x2="10" y2="26"></line>
       </svg>
     </a>
+    {{#show_adjacent_posts}}
     {{^entry.page}}
     <div>
       <a {{#entry.previous}}href="{{entry.previous.url}}"{{/entry.previous}}>
@@ -20,6 +21,7 @@
     </div>
     <a>&nbsp;</a>
     {{/entry.page}}
+    {{/show_adjacent_posts}}
   </div>    
   
   <div class="contents">
@@ -27,7 +29,7 @@
     {{{html}}}
     {{> pluginHTML}}
   
-  
+    {{#show_adjacent_posts}}
     <script type="text/javascript">
 
 document.onkeydown = checkKey;
@@ -48,7 +50,8 @@ function checkKey(e) {
     }
 
 }
-    </script>    
+    </script>
+    {{/show_adjacent_posts}}
   {{/entry}}
   </div>
 
@@ -59,6 +62,7 @@ function checkKey(e) {
         <line x1="26" y1="10" x2="10" y2="26"></line>
       </svg>
     </a>
+    {{#show_adjacent_posts}}
     {{^entry.page}}
     <div>
       <a {{#entry.next}}href="{{entry.next.url}}"{{/entry.next}} >
@@ -70,6 +74,7 @@ function checkKey(e) {
     </div>
     <a>&nbsp;</a>
     {{/entry.page}}
+    {{/show_adjacent_posts}}
   </div>  
 </div>
 

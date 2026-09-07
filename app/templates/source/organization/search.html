@@ -3,7 +3,7 @@
 
 {{> head}}
 
-<body class=" {{^pagination.previous}}homefirstpage{{/pagination.previous}}">
+<body>
 
   {{> header}}
 
@@ -23,15 +23,8 @@
           {{#entries}}
           <div class="mb-2 d-flex justify-content-between main-loop-card">
             <div class="pr-3">
-  <a class="text-dark" href="{{{url}}}">{{title}} <small class="text-muted">
-            {{#date}}{{date}}{{/date}}
-  </small></a>
-             
-              
-  </small>
-              
+              <a class="text-dark" href="{{{url}}}">{{title}} <small class="text-muted">{{#date}}{{date}}{{/date}}</small></a>
             </div>
-            
           </div>
           {{/entries}}
 

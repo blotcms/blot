@@ -165,9 +165,18 @@ p, div, section {position: relative;overflow: visible;}
 
 .column.two {width: 50%;padding-right: 11px;}
 
-.column.three {width: 33%;padding-right: 22px;}
-
 .column.two + .column.two {padding: 0 0 0 11px;}
+
+.column.three {width: 33.333333%;padding: 0 16px 0 0;}
+.column.three + .column.three {padding: 0 8px}
+.column.three + .column.three + .column.three {padding: 0 0 0 16px}
+
+.column.four {width: 25%;padding-right: 18px;}
+.column.four + .column.four {padding: 0 12px 0 6px;}
+.column.four + .column.four + .column.four {padding: 0 6px 0 12px;}
+.column.four + .column.four + .column.four + .column.four {padding: 0 0 0 18px;}
+
+.clear {width: 100%;clear: both;float: none;display: block;height: 0}
 
 
 
@@ -176,11 +185,11 @@ p, div, section {position: relative;overflow: visible;}
 
   body {padding: 0 2em;margin: 2em auto;width: auto;}
 
-  .sidebar {position: relative;width: 100%;text-align: center;margin: 0 0 3em}
+  .sidebar {position: relative;width: 100%;text-align: center;margin: 0 0 2.5em}
 
-  .sidebar a {display: inline-block;}
+  .sidebar a {display: inline-block; margin: 0 0.45em;}
 
-  .sidebar .logo {margin: 0;display: block;text-align: center;}
+  .sidebar .logo {margin: 0 0 0.85em;display: block;text-align: center;}
 
   .logo.hasAvatar {word-spacing: 0}
 

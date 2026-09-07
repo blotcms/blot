@@ -1,18 +1,16 @@
 <a class="entry-line dim pb4 db lh-copy no-underline w-100" href="{{{url}}}">
-    
-  
-  <span class="{{^first}}bt{{/first}} mb4 db b--black-10"></span>
-  
-    
+
+  <span class="entry-line-rule {{^first}}bt{{/first}} mb4 db b--black-10"></span>
+
   <span class="w-third fl db mb2 title-block">
       <span class="mr4 db fw9 black-80  lh-title tracked-tight f4 pb2">{{title}}</span>
       <span class="mr3 db f6 " style="height:1.5em;overflow:hidden">
-          {{#date}}<span date-from-now="{{dateStamp}}" class="dib black-50 mr2">{{date}}</span>{{/date}} 
-          <span class="fw6 clip-2 black-80">{{#tags}}<span class="dib">{{^first}} &amp; {{/first}}{{tag}}</span>{{/tags}}</span>
+          {{#date}}<span date-from-now="{{dateStamp}}" class="dib black-50 mr2">{{date}}</span>{{/date}}
+          <span class="fw6 clip-2 black-80">{{#tags}}<span class="dib">{{^first}}&nbsp;&amp;&nbsp;{{/first}}{{tag}}</span>{{/tags}}</span>
       </span>
     </span>
 
-  
+
   {{#summary}}
 
   <span class="w-third db fr">
@@ -22,10 +20,10 @@
     {{/thumbnail.medium}}
     </span>
    </span>
-    
+
   <span class="w-third fl db">
     <span class="mr3 black-50 f6 db" style="text-overflow:ellipsis;max-height:9.1875rem;overflow:hidden">
-      {{summary}}  
+      {{summary}}
     </span>
   </span>
   {{/summary}}
@@ -33,17 +31,14 @@
   {{^summary}}
 
   <span class="w-two-thirds db fr">
-    <span class="db thumbnail-frame" style="overflow:hidden;">
+    <span class="db thumbnail-frame" style="max-height:14rem;overflow:hidden;">
     {{#thumbnail.large}}
     <img style="width:100%;vertical-align:bottom" src="{{{url}}}">
     {{/thumbnail.large}}
     </span>
    </span>
-    
+
   {{/summary}}
-
-
-   
 
   <span class="cf"></span>
 </a> 

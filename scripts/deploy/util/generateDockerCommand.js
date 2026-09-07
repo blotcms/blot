@@ -8,6 +8,7 @@ const { DATA_DIRECTORY_ON_CONTAINER } = CONSTANTS;
 const { ENV_FILE_ON_SERVER } = CONSTANTS;
 const { REGISTRY_URL } = CONSTANTS;
 const { LOG_MAX_SIZE, LOG_MAX_FILE } = CONSTANTS;
+const { AIRLOCK } = CONSTANTS;
 
 const VALID_PLATFORMS = {
   linux: ["amd64", "arm64"],
@@ -194,6 +195,14 @@ async function generateDockerCommand(container, platform, commitHash) {
     `-e BLOT_RELEASE_ID=${commitHash}`,
     // Configure the maximum memory usage for the node process
     `-e NODE_OPTIONS='--max-old-space-size=${oldSpaceSize}'`,
+    // Routes bookmark-link screenshots (helper/screenshot) and remote-image
+    // downloads (helper/transformer/download) through the airlock - see
+    // config/airlock/README.md. This container is connected to
+    // AIRLOCK.network after it starts (see deployContainer/
+    // connectToAirlockNetwork in ../index.js), not via --network here - see
+    // the comment on AIRLOCK in ../constants.js for why.
+    `-e BLOT_AIRLOCK_BROWSER_URL=http://${AIRLOCK.name}:9222`,
+    `-e BLOT_AIRLOCK_PROXY_URL=http://${AIRLOCK.name}:8888`,
     // Mount the data directory on the host to the container
     // Every container has access to the same data directory
     `-v ${DATA_DIRECTORY_ON_SERVER}:${DATA_DIRECTORY_ON_CONTAINER}`,

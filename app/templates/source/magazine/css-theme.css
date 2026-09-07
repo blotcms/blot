@@ -229,7 +229,6 @@ a:hover {color:{{accent_color}}}
 a.dim {transition: opacity .2s linear;opacity:1}
 a.dim:hover {opacity:0.8}
 a.dim:active {opacity:0.5}
-a.dim:visited {opacity:0.3}
   
 hr {
   margin: 3em auto;
@@ -386,6 +385,48 @@ figure cite, figure cite a {font-size:0.8rem;color:rgba({{#rgb}}{{text_color}}{{
   {{/heading_font}}
 }
 
+/* Homepage hero titles should follow the heading size control.
+   They are spans (not h1), so they otherwise stay at Tachyons .f3. */
+.featured-entry .lh-title {
+  {{#heading_font}}
+  font-size: {{font_size}}px;
+  line-height: {{line_height}};
+  {{/heading_font}}
+}
+
+/* Index rows used floats inside an inline flex wrapper, so percentage
+   columns sized against their contents and the hero/grid collapsed.
+   Flex with a definite width keeps title | image side by side. */
+.featured-entry > a,
+.entry-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  width: 100%;
+  min-width: 0;
+}
+
+.featured-entry > a > .w-third,
+.featured-entry > a > .w-two-thirds,
+.entry-line > .w-third,
+.entry-line > .w-two-thirds {
+  float: none;
+}
+
+.featured-entry > a > .cf,
+.entry-line > .cf {
+  display: none;
+}
+
+/* Image is first in the featured markup (it used to float right). */
+.featured-entry > a > .w-third { order: 1; }
+.featured-entry > a > .w-two-thirds { order: 2; }
+
+.entry-line-rule {
+  flex-basis: 100%;
+  width: 100%;
+}
+
 /* Let the configured body line height reach the article body, which
    Tachyons' .lh-copy would otherwise pin to 1.5 */
 .entry .lh-copy {
@@ -416,6 +457,7 @@ h3.f6 {line-height:1.25;}
   .featured-entry .w-two-thirds,
   .featured-entry .w-third {width:50%}
   .entry-line .title-block {width:100%}
+  .entry-line .w-two-thirds {width:100%}
   .entry.w-80 {width:100%}
   /* Date and tags on entry page */
   .w-20.bl.fr {margin-top:0;padding-top:0;border:none;width:100%;float:none;padding-left:0;padding-bottom:2rem}
@@ -441,6 +483,7 @@ h3.f6 {line-height:1.25;}
 @media (max-width:500px) {
   .w-80.pr4 {padding-right:0;width:100%}
   .featured-entry .w-two-thirds,
+  .entry-line .w-two-thirds,
   .entry-line .w-third,    
   .featured-entry .w-third {width:100%}
   .entry-line .ml3,
@@ -450,7 +493,7 @@ h3.f6 {line-height:1.25;}
     margin-bottom:0.5rem;
     margin-top:0.5rem;
   }
-  .featured-entry .lh-title {margin-top:1rem}
+  .featured-entry .w-two-thirds {margin-top:1rem}
   .featured-entry a {padding-top:0}
   
   h3.f6 {font-size: 0.7rem;line-height: 1.8}

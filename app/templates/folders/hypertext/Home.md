@@ -1,8 +1,10 @@
 Link: /
 
-![](./_TeintesSaturationCercle.png){width=400px}
+![](./_TeintesSaturationCercle.png){width=280px}
 
 Richard Waller is a programmer and physicist whose work centers on the formal and computational treatment of color. Trained in mathematical physics and software engineering, he approaches color as a problem spanning measurement, representation, and perception, with particular attention to the limits imposed by devices, encodings, and human vision. His technical practice integrates numerical methods, signal processing, and systems design.
+
+Notes on this site include [[Imagination]], [[On Type Safety]], [[Quasar]], and [[Rainbow]].
 
 # About
 

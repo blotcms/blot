@@ -82,6 +82,25 @@ body.entry-container {
   {{/sticky_navigation}}
 }
 
+/* Title stays content-sized; the search field absorbs leftover space and
+   is allowed to shrink so the nav labels (Home / Archives / Feed) are not
+   clipped at the gallery screenshot width (1060px). */
+.header .site-title {
+  flex: 0 1 auto;
+}
+
+.header .search {
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 42rem;
+}
+
+.header .search input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .header>* {
   display: flex;
   align-items: center;
@@ -297,6 +316,14 @@ form input:focus,
   background-color: transparent;
 }
 
+/* Hide the Search menu item: the header already has a search field.
+   Match href and data-* so trailing slashes / capitalization still hide it.
+   (.menu is unused in the markup; .nav is the actual menu container.) */
+.nav a[href="/search" i],
+.nav a[href="/search/" i],
+.nav a[data-url="/search" i],
+.nav a[data-url="/search/" i],
+.nav a[data-label="Search" i],
 .menu a[href="/search"] {
   display: none;
 }
@@ -777,8 +804,7 @@ label {
 
 .nav {
   display: flex;
-  flex-basis: 25%;
-  flex-grow: 1;
+  flex: 1 0 auto;
   align-items: center;
   /* Defaults to flex-end; navigation_alignment overrides it below */
   justify-content: flex-end;
