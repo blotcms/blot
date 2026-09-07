@@ -2,6 +2,11 @@ name: Deploy to EC2
 
 on:
   workflow_dispatch:
+    inputs:
+      commit:
+        description: "Optional commit hash or short code on master (defaults to the dispatched commit)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -15,9 +20,16 @@ jobs:
   wait-for-build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      custom: ${{ steps.resolve.outputs.custom }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Need full history so an older commit or short code can be
+          # resolved and verified against master.
+          fetch-depth: 0
 
       - name: Check branch
         run: |
@@ -28,6 +40,41 @@ jobs:
           fi
           echo "✅ Branch check passed: running on master branch"
 
+      - name: Resolve target commit
+        id: resolve
+        env:
+          # Bind inputs to the environment so a dispatcher cannot inject
+          # shell syntax into the script below.
+          COMMIT_INPUT: ${{ github.event.inputs.commit }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          git fetch --quiet origin master
+
+          if [ -z "$COMMIT_INPUT" ]; then
+            # Default: the immutable commit the run was dispatched against.
+            SHA="$DISPATCH_SHA"
+            CUSTOM=false
+          else
+            SHA=$(git rev-parse --verify --quiet "${COMMIT_INPUT}^{commit}") || {
+              echo "❌ Error: could not resolve commit '$COMMIT_INPUT'"
+              exit 1
+            }
+            CUSTOM=true
+          fi
+
+          # The deploy environment's branch policy is evaluated against the
+          # run ref (master), so the target must live on master too - both to
+          # honour that policy and because build.yml only publishes images
+          # for master commits.
+          if ! git merge-base --is-ancestor "$SHA" origin/master; then
+            echo "❌ Error: commit $SHA is not on master"
+            exit 1
+          fi
+
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "custom=$CUSTOM" >> "$GITHUB_OUTPUT"
+          echo "✅ Target commit: $SHA (custom=$CUSTOM)"
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -36,23 +83,42 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Wait for build images to be available
+        env:
+          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
+          CUSTOM: ${{ steps.resolve.outputs.custom }}
         run: |
-          IMAGE="${{ env.REGISTRY_URL }}:${{ github.sha }}"
-          AIRLOCK_IMAGE="${{ env.AIRLOCK_REGISTRY_URL }}:${{ github.sha }}"
+          IMAGE="${{ env.REGISTRY_URL }}:${TARGET_SHA}"
+          AIRLOCK_IMAGE="${{ env.AIRLOCK_REGISTRY_URL }}:${TARGET_SHA}"
           WAIT_INTERVAL=10
 
+          # For the default (dispatched) commit the build workflow may still
+          # be running, so wait up to 25 min. For an explicitly chosen commit
+          # the image should already exist - build.yml tags only the push-tip
+          # github.sha of each master push, so an intermediate or merged-in
+          # commit never gets one. Fail fast with a clear reason instead of
+          # polling 25 min for a tag that will never appear.
+          if [ "$CUSTOM" = "true" ]; then
+            MAX_APP_TRIES=12   # ~2 min grace
+          else
+            MAX_APP_TRIES=150  # ~25 min
+          fi
+
           # The app image is required.
-          echo "Waiting for app image: $IMAGE"
-          for i in $(seq 1 150); do   # up to 25 min
+          echo "Waiting for app image: $IMAGE (up to $((MAX_APP_TRIES * WAIT_INTERVAL / 60)) min)"
+          for i in $(seq 1 "$MAX_APP_TRIES"); do
             if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
               echo "✅ App image found: $IMAGE"
               break
             fi
-            if [ "$i" -eq 150 ]; then
-              echo "❌ Timeout: app image not found after 25 minutes: $IMAGE"
+            if [ "$i" -eq "$MAX_APP_TRIES" ]; then
+              echo "❌ App image not found: $IMAGE"
+              if [ "$CUSTOM" = "true" ]; then
+                echo "   build.yml only publishes an image for the tip commit of each master push."
+                echo "   Pick a commit that was a push tip on master (not an intermediate or merge parent)."
+              fi
               exit 1
             fi
-            echo "  not ready yet ($i/150)..."; sleep $WAIT_INTERVAL
+            echo "  not ready yet ($i/$MAX_APP_TRIES)..."; sleep $WAIT_INTERVAL
           done
 
           # The airlock image is best-effort. build-airlock runs in parallel
@@ -78,10 +144,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: deploy
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.wait-for-build.outputs.sha }}
+          fetch-depth: 0
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
@@ -125,17 +194,20 @@ jobs:
         run: npm install
 
       - name: Deploy via npm script
-        run: npm run deploy-node -- ${{ github.sha }}
         env:
+          TARGET_SHA: ${{ needs.wait-for-build.outputs.sha }}
           # Skip branch check since we're in CI and may be checking out a specific commit
           SKIP_BRANCH_CHECK: true
+        run: npm run deploy-node -- "$TARGET_SHA"
 
       - name: Deployment summary
         if: success()
+        env:
+          TARGET_SHA: ${{ needs.wait-for-build.outputs.sha }}
         run: |
           echo ""
           echo "=========================================="
           echo "Deployment Summary"
           echo "=========================================="
-          echo "Commit SHA: ${{ github.sha }}"
+          echo "Commit SHA: ${TARGET_SHA}"
           echo "Deployment completed successfully! 🚀"
