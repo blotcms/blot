@@ -17,12 +17,11 @@ env:
   BLOT_DEPLOY_SSH_HOST: ${{ secrets.BLOT_DEPLOY_SSH_HOST }}
 
 jobs:
-  wait-for-build:
+  deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    outputs:
-      sha: ${{ steps.resolve.outputs.sha }}
-      custom: ${{ steps.resolve.outputs.custom }}
+    timeout-minutes: 60
+    environment: deploy
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -129,28 +128,26 @@ jobs:
           # airlock manifest non-fatally, and an airlock build failure must
           # not be able to hold up an app hotfix.
           echo "Waiting (best-effort) for airlock image: $AIRLOCK_IMAGE"
+          AIRLOCK_AVAILABLE=false
           for i in $(seq 1 30); do   # up to 5 min
             if docker manifest inspect "$AIRLOCK_IMAGE" > /dev/null 2>&1; then
               echo "✅ Airlock image found: $AIRLOCK_IMAGE"
-              exit 0
+              AIRLOCK_AVAILABLE=true
+              break
             fi
             echo "  not ready yet ($i/30)..."; sleep $WAIT_INTERVAL
           done
 
-          echo "::warning::Airlock image $AIRLOCK_IMAGE not available after the grace period - the deploy will run, but scripts/deploy will skip the airlock update for this commit (see deployAirlockIfNeeded). Re-deploy this commit once build-airlock succeeds."
+          if [ "$AIRLOCK_AVAILABLE" = false ]; then
+            echo "::warning::Airlock image $AIRLOCK_IMAGE not available after the grace period - the deploy will run, but scripts/deploy will skip the airlock update for this commit (see deployAirlockIfNeeded). Re-deploy this commit once build-airlock succeeds."
+          fi
 
-  deploy:
-    needs: wait-for-build
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: deploy
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.wait-for-build.outputs.sha }}
-          fetch-depth: 0
+      # Keep the single checkout above, but switch the existing workspace to
+      # the requested commit before running the deploy script.
+      - name: Switch workspace to target commit
+        env:
+          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
+        run: git checkout --detach "$TARGET_SHA"
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
@@ -195,7 +192,7 @@ jobs:
 
       - name: Deploy via npm script
         env:
-          TARGET_SHA: ${{ needs.wait-for-build.outputs.sha }}
+          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
           # Skip branch check since we're in CI and may be checking out a specific commit
           SKIP_BRANCH_CHECK: true
         run: npm run deploy-node -- "$TARGET_SHA"
@@ -203,7 +200,7 @@ jobs:
       - name: Deployment summary
         if: success()
         env:
-          TARGET_SHA: ${{ needs.wait-for-build.outputs.sha }}
+          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
         run: |
           echo ""
           echo "=========================================="
