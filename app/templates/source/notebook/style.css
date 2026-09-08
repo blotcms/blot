@@ -1,0 +1,722 @@
+{{{app_css}}}
+
+/* Inserts the @font-face rules required to load whichever fonts are selected. */
+{{{font.styles}}}
+{{{title_font.styles}}}
+
+:root {
+  --content-background: {{background_color}};
+  --text-color: {{text_color}};
+  --text-rgb: {{#rgb}}{{text_color}}{{/rgb}};
+  /* The header/footer/submit-button are dark (--text-color), so their
+     text reuses --content-background - already the palette's near-white
+     tone - rather than a separate hardcoded hex doing the same job. */
+  --header-text-color: var(--content-background);
+
+  /* One accent color drives the page background, links, and the entire
+     secondary palette below — each is either the accent at full strength
+     or a tint of it, composited at paint time against whatever sits
+     behind it (content background for most of these, the implicit page
+     background for the canvas itself). No Sass, no color-mix() — just
+     rgba() over the --accent-rgb channels where a tint is needed, the
+     same technique other Blot templates use for tints of text_color.
+
+     Alpha-blending toward a light background can only ever get as dark
+     as the base color itself (alpha 1) - it can't exceed that color's
+     own contrast ceiling. The default accent (#9A3412) is deliberately
+     picked to give real headroom there: ~6.9:1 against
+     background_color at full strength, so the tints below (all
+     text - sidebar links/headings, dates, footer metadata) can sit at
+     0.9+ alpha and still clear WCAG AA's 4.5:1 for small text, which a
+     lighter/brighter accent (the original #6A9718 default only reached
+     ~3.2:1 even at alpha 1) can't. Background/border tints stay much
+     lower alpha since non-text contrast requirements are looser. */
+  --accent-color: {{accent_color}};
+  --accent-rgb: {{#rgb}}{{accent_color}}{{/rgb}};
+
+  --page-background: var(--accent-color);
+  --link-color: var(--accent-color);
+  --title-color: var(--accent-color);
+  --sidebar-link-hover-color: var(--accent-color);
+  --sidebar-link-color: rgba(var(--accent-rgb), 0.95);
+  --sidebar-heading-color: rgba(var(--accent-rgb), 0.9);
+  --light-text-color: rgba(var(--accent-rgb), 0.9);
+  --sidebar-border-color: rgba(var(--accent-rgb), 0.2);
+  --border-color: rgba(var(--accent-rgb), 0.15);
+  --sidebar-background: rgba(var(--accent-rgb), 0.08);
+
+  --base-font-size: {{#font}}{{{font_size}}}{{/font}}px;
+  /* font.line_height drives line-height almost everywhere; title_font's
+     own line_height is kept separate and only applied to actual titles
+     (site title, post titles, page titles, post subheadings) - not the
+     sidebar, even though the sidebar borrows title_font's family. */
+  --line-height: {{#font}}{{{line_height}}}{{/font}};
+  --title-line-height: {{#title_font}}{{{line_height}}}{{/title_font}};
+
+  /* Everything below is in rem, not px, so the whole layout - column
+     widths, header/content/main/sidebar padding, section spacing - scales
+     with --base-font-size instead of staying fixed while only the type
+     grows. rem (not em) so nothing compounds through nested font-size
+     contexts like .sidebar's 90%: doubling the base font size exactly
+     doubles every one of these, regardless of where it's used. Hairline
+     borders (1px) and the two viewport-width breakpoints are deliberately
+     left in px - a 1px border scaling to a fractional pixel isn't
+     desirable, and breakpoints respond to physical screen size, not type
+     size. The pixel equivalents below use the current 16px base font. */
+  --page-width: 54rem;         /* 864px */
+  --main-width: 36.6875rem;    /* 587px */
+  --sidebar-width: 16.8125rem; /* 269px */
+}
+
+* {box-sizing: border-box;}
+
+html, body {
+  {{#font}}
+  font-family: {{{stack}}};
+  font-size: var(--base-font-size);
+  {{/font}}
+  line-height: var(--line-height);
+}
+
+body {
+  word-wrap: break-word;
+  margin: 0;
+  padding: 0;
+  background: var(--page-background);
+  color: var(--text-color);
+  text-align: center;
+}
+
+a {color: var(--link-color); font-weight: normal;}
+b, strong {font-weight: 600;}
+/* filter: brightness(), not opacity: opacity blends the link color
+   toward whatever's behind it, which - for a dark accent on a light
+   background - only ever reduces contrast (verified: ~6:1 down to
+   ~3.5:1, failing WCAG AA on hover). brightness() darkens the color
+   itself instead, which increases contrast here (up to ~9:1). */
+a:hover {filter: brightness(0.75);}
+
+.light {
+  color: var(--light-text-color);
+  font-weight: normal;
+  /* Now nested inside the row's <a> (so the whole row is clickable, not
+     just the title) - explicitly turn off the underline it would
+     otherwise inherit from the surrounding link. */
+  text-decoration: none;
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+}
+
+.clear {clear: both;}
+
+/* ---------- Wrapper ---------- */
+
+.wrapper {
+  width: var(--page-width);
+  max-width: 100%;
+  margin: 0 auto;
+  text-align: left;
+  font-size: 97%;
+  line-height: var(--line-height);
+}
+
+/* ---------- Header ---------- */
+
+.site-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--text-color);
+  padding: 1.5rem 1.25rem 1.125rem 2rem;
+}
+
+.site-title {
+  margin: 0;
+  font-weight: bold;
+  font-size: 200%;
+  line-height: var(--title-line-height);
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+}
+
+.site-title a {
+  color: var(--header-text-color);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.site-title a:hover {filter: brightness(0.75);}
+
+.site-avatar {
+  /* Fixed width AND height reserve the box before the image has loaded and
+     its natural size is known, so there's no layout shift once it arrives
+     - same technique other Blot templates use (see profile/style.css).
+     object-fit: contain scales the image down to fit that box without
+     cropping or distorting its aspect ratio. */
+  width: 1.5em;
+  height: 1.5em;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* ---------- Header layout: stripe ----------
+   header_layout has two options (see package.json): "block", the
+   default above - a distinct dark header band - and "stripe": a thin
+   accent-color bar across the very top of the page, followed by a
+   compact, light header that merges into --content-background (the
+   same color .content-wrapper uses) instead of standing apart as its
+   own block. */
+
+.header-stripe {
+  height: 0.375rem;
+  background: var(--accent-color);
+}
+
+.site-header--stripe {
+  background: var(--content-background);
+  padding: 1rem 1.25rem;
+}
+
+.site-header--stripe .site-title {
+  font-size: 100%;
+  font-weight: normal;
+}
+
+.site-header--stripe .site-title a {
+  color: var(--text-color);
+}
+
+.site-header--stripe .site-avatar {
+  width: 1.2em;
+  height: 1.2em;
+}
+
+.site-header--stripe .hamburger {
+  color: var(--text-color);
+}
+
+.site-header--stripe .hamburger-inner,
+.site-header--stripe .hamburger-inner:before,
+.site-header--stripe .hamburger-inner:after {
+  background: var(--text-color);
+}
+
+/* ---------- Sidebar toggle (mobile) ----------
+   Same pure-CSS technique as the album template: a hidden checkbox, a
+   <label> as the button, and #sidebar-toggle:checked ~ sibling selectors
+   for all the show/hide logic. No JS. The checkbox sits before
+   .content-wrapper in header.html so it can reach into .sidebar with
+   `~ .content-wrapper .sidebar`. Hidden entirely above the 640px
+   breakpoint, where the sidebar is already shown inline. */
+
+.sidebar-toggle {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The checkbox itself is invisible (see above), and its <label> isn't
+   independently focusable - it's the checkbox a keyboard user actually
+   tabs to. Without this, Tab would land on the toggle with no visible
+   indication at all. color: currentColor here so the outline matches
+   whichever icon color is active (light on the dark "block" header,
+   dark on the light "stripe" one) without duplicating that logic. */
+.sidebar-toggle:focus-visible ~ .site-header .hamburger {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.hamburger {
+  display: none;
+  position: relative;
+  color: var(--header-text-color);
+  width: 1.5em;
+  height: 1.5em;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.hamburger-inner,
+.hamburger-inner:before,
+.hamburger-inner:after {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--header-text-color);
+  transition: transform 0.2s ease, opacity 0.2s ease, top 0.2s ease, bottom 0.2s ease;
+}
+
+.hamburger-inner {top: 50%; margin-top: -1px;}
+.hamburger-inner:before {content: ""; top: -0.4em;}
+.hamburger-inner:after {content: ""; bottom: -0.4em;}
+
+.sidebar-toggle:checked ~ .site-header .hamburger-inner {transform: rotate(45deg);}
+.sidebar-toggle:checked ~ .site-header .hamburger-inner:before {top: 0; opacity: 0;}
+.sidebar-toggle:checked ~ .site-header .hamburger-inner:after {bottom: 0; transform: rotate(-90deg);}
+
+/* ---------- Layout ---------- */
+
+.content-wrapper {
+  background: var(--content-background);
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+}
+
+.content-wrapper > .clear {display: none;}
+
+.main {
+  /* flex-shrink 1 (not 0): .main + .sidebar's combined basis (~53.5rem) can
+     exceed .wrapper's own width before the 640px stacking breakpoint
+     kicks in - worse the larger --base-font-size is configured, since
+     these are rem-based but the breakpoint is a fixed viewport px value.
+     Letting both columns shrink under pressure avoids overflow/clipping
+     in that gap instead of relying on the breakpoint to catch every case. */
+  flex: 0 1 var(--main-width);
+  width: var(--main-width);
+  min-width: 0;
+  padding: 1.375rem 1.25rem;
+}
+
+.sidebar {
+  flex: 0 1 var(--sidebar-width);
+  width: var(--sidebar-width);
+  min-width: 0;
+  font-size: 90%;
+  line-height: var(--line-height);
+  padding: 1rem 0.6875rem 0 1.8125rem;
+  background: var(--sidebar-background);
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+}
+
+@media (max-width: 640px) {
+  .content-wrapper {flex-direction: column; padding: 0 0.5rem; justify-content: flex-start;}
+  .main, .sidebar {flex-basis: auto; width: 100%;}
+  .main {padding-right: 0.5rem; padding-left: 0.5rem;}
+  .sidebar {box-shadow: 0 -1px 0 var(--sidebar-border-color);}
+}
+
+/* ---------- Date header ---------- */
+
+.date-header {
+  margin: 0;
+}
+
+.date-header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  font-size: 80%;
+  font-weight: normal;
+  color: var(--sidebar-link-color);
+  padding: 0;
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+}
+
+.date-header span:before {
+  /* Same masking technique as app/views/css/icons.css: the SVG is only
+     used for its shape (alpha channel), and background-color: currentColor
+     supplies the actual color, so this inherits the date text's color
+     automatically. */
+  content: "";
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+  transform: translateY(-0.0625em);
+  background-color: currentColor;
+  mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMiIgaGVpZ2h0PSIxMiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJpbmxpbmUiPiA8Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCI+PC9jaXJjbGU+IDxwb2x5bGluZSBwb2ludHM9IjEyIDYgMTIgMTIgMTYgMTQiPjwvcG9seWxpbmU+IDwvc3ZnPg==");
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+}
+
+/* ---------- Posts ---------- */
+
+.post {
+  margin: 0 0.5rem 0.875rem 1.3125rem;
+  padding: 0 0 0.875rem;
+  border-bottom: 0.1875rem solid var(--border-color);
+}
+
+.post:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.post-title {
+  margin: 0.8125rem 0;
+  color: var(--title-color);
+  font-weight: bold;
+  font-size: 140%;
+  line-height: var(--title-line-height);
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+}
+
+.post-title a {color: inherit; font-weight: inherit; text-decoration: none;}
+.post-title a:hover {text-decoration: underline;}
+
+.post-body p,
+.post-body ul,
+.post-body ol,
+.post-body blockquote {
+  line-height: var(--line-height);
+  margin: 0 0 1em;
+}
+
+.post-body blockquote {
+  margin: 1em 0.5em;
+  padding: 0 1em;
+  border-left: 0.375rem solid var(--border-color);
+  color: var(--light-text-color);
+}
+
+.post-body ul {list-style-type: square; padding-left: 1.6em;}
+.post-body ol {padding-left: 1.6em;}
+
+.post-body img {max-width: 100%; height: auto;}
+
+/* The post's title is rendered separately (.post-title) using the
+   already-title-stripped `body` field, not `html` (which still has the
+   title inlined) - so there's no leftover h1 to hide here. See
+   app/build/prepare/title.js: it only strips the extracted h1 from
+   `body`, not from `html`, and the h1 isn't guaranteed to be
+   .post-body's first child if the post has content before its title. */
+
+.post-body h1,
+.post-body h2,
+.post-body h3,
+.post-body h4,
+.post-body h5,
+.post-body h6 {
+  line-height: var(--title-line-height);
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+}
+
+.post-body h2 {
+  margin: 2em 0 0.5em;
+  font-size: 1.25em;
+  font-weight: normal;
+}
+
+.post-body h3,
+.post-body h4,
+.post-body h5,
+.post-body h6 {
+  margin: 2em 0 0.5em;
+  font-size: 1.1em;
+  font-weight: normal;
+}
+
+.post-footer {
+  margin-top: 1.2em;
+  font-size: 0.8em;
+  color: var(--light-text-color);
+}
+
+.post-author + .post-date:before {
+  content: "\00b7";
+  margin: 0 0.6em;
+}
+
+.post-tag-separator {margin: 0 0.6em;}
+
+.post-date {
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+}
+
+.post-tag {
+  color: var(--light-text-color);
+  font-weight: normal;
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+}
+
+/* ---------- Pagers ---------- */
+
+.pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 1em 0 0.5em;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.blog-pager {
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  margin: 1em 0.5rem 0.5em 1.3125rem;
+}
+
+.blog-pager .pager-newer {float: left;}
+.blog-pager .pager-older {float: right;}
+.blog-pager a {text-decoration: underline;}
+
+.pager-home {
+  color: var(--link-color);
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+/* ---------- Sidebar widgets ---------- */
+
+.widget {margin-bottom: 1.25rem;}
+
+.widget h2,
+.widget h2 a {
+  margin: 0;
+  padding: 1px 0 0;
+  color: var(--sidebar-heading-color);
+  font-size: 100%;
+  font-weight: bold;
+  text-decoration: none;
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+}
+
+.widget h2 {margin: 0 0 0.5em;}
+
+.sidebar a {color: var(--sidebar-link-color); font-weight: normal; text-decoration: underline;}
+.sidebar a:hover {color: var(--sidebar-link-hover-color);}
+.sidebar .widget h2 a {color: var(--sidebar-heading-color); font-weight: bold; text-decoration: none;}
+
+.sidebar ul {list-style: none; margin: 0; padding: 0; line-height: 1.2em;}
+.sidebar li {padding: 0 0 0.25rem; list-style: none;}
+
+.tag-list {margin: 0; line-height: 1.4em;}
+
+.link-list li:before {
+  content: "\2022";
+  display: inline-block;
+  width: 0.9375rem;
+  margin-left: -0.9375rem;
+  margin-right: 0;
+  color: var(--sidebar-heading-color);
+}
+
+/* Keep years and their months at separate levels, but align post titles
+   with their month label. Wrapped title lines retain a small hanging indent. */
+.sidebar ul.archive-months {padding-left: 1.2em;}
+.sidebar ul.archive-posts {
+  margin-top: 0.4em;
+  padding-left: 0;
+}
+.archive-posts li {
+  padding-left: 0.9375rem;
+  text-indent: -0.9375rem;
+}
+
+.archive-list details {margin: 0;}
+
+.archive-list summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0;
+}
+
+.archive-list summary::-webkit-details-marker {display: none;}
+
+.archive-list summary:before {
+  content: "\25B8";
+  display: inline-block;
+  width: 0.9375rem;
+  margin-left: -0.9375rem;
+  color: var(--sidebar-heading-color);
+}
+
+.archive-list details[open] > summary:before {content: "\25BE";}
+
+.archive-label {font-weight: normal; color: var(--sidebar-link-color);}
+.archive-count {color: var(--sidebar-heading-color);}
+
+/* ---------- Standalone lists (archives / tagged / search) ---------- */
+
+.page-body {
+  margin: 0 0.5rem 0.875rem 1.3125rem;
+}
+
+.page-title {
+  color: var(--title-color);
+  font-size: 1.6em;
+  line-height: var(--title-line-height);
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+}
+
+.full-archive {
+  list-style: none;
+  margin: 1.5em 0;
+  padding: 0;
+}
+
+.full-archive a {
+  display: block;
+  padding: 0.4em 0;
+  text-decoration: none;
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+}
+
+.full-archive .archive-title {text-decoration: underline;}
+
+.full-archive li {
+  padding: 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* ---------- Search / forms ---------- */
+
+.search-form {
+  display: flex;
+  align-items: stretch;
+  gap: 0.3em;
+  margin: 1.5em 0;
+}
+
+input[type="text"],
+input[type="submit"] {
+  font: inherit;
+  font-size: 0.9em;
+  padding: 0.5em 0.7em 0.3em;
+  border: 1px solid var(--border-color);
+  border-radius: 0.3em;
+  background: var(--content-background);
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+}
+
+input[type="text"] {
+  flex: 1 1 16em;
+  min-width: 0;
+  max-width: 100%;
+}
+
+input[type="submit"] {
+  background: var(--text-color);
+  color: var(--header-text-color);
+  border-color: var(--text-color);
+  font-weight: bold;
+  cursor: pointer;
+  margin-left: 0;
+}
+
+/* ---------- Footer ---------- */
+
+.feed-links {
+  clear: both;
+  line-height: 2.5em;
+  margin: 0 0.5rem 0.5em 1.3125rem;
+}
+
+.feed-links a {text-decoration: underline;}
+
+.site-footer {
+  position: relative;
+  z-index: 1;
+  min-height: 2em;
+  /* A darkened text_color, without color-mix(): a flat 15%-opacity black
+     sheet layered over the solid color via a two-stop gradient. */
+  background: linear-gradient(rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.15)),
+              rgb(var(--text-rgb));
+}
+
+/* ---------- Tables ---------- */
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  margin: 1em 0;
+}
+
+tr {border-top: 1px solid var(--border-color);}
+th, td {border: 1px solid var(--border-color); padding: 0.3em 0.7em;}
+
+{{> plugin}}
+
+/* Blot's margin-note markdown feature ({|<}) assumes a single, wide
+   content column with open space beside it: plugin.css positions
+   .right.margin by floating it 40% further right, absolutely
+   positioned. In Notebook's two-column layout that space is always
+   .sidebar, so a margin note overlaps it (and .main is only 587px
+   wide to begin with - nowhere near enough room to spare 40% besides).
+   plugin.css already has a safe, inline fallback for exactly this
+   problem, normally reserved for its own sub-933px breakpoint; apply
+   it unconditionally here since Notebook's sidebar sits alongside
+   .main at every width the two-column layout is active. */
+.margin,
+.margin.right,
+.margin.left {
+  width: 100%;
+  position: relative;
+  display: block;
+  top: auto;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  float: none;
+  padding: 0;
+  text-align: left;
+}
+
+.wide,
+.wide.left,
+.wide.right {
+  width: 100%;
+  margin: 0;
+}
+
+/* plugin.css sets a top margin on body below 933px and restyles the
+   sidebar; keep Notebook's 864px column layout intact. */
+@media screen and (max-width: 933px) {
+  body {margin: 0; padding: 0; width: auto;}
+  .sidebar {
+    width: var(--sidebar-width);
+    text-align: left;
+    margin: 0;
+    background: var(--sidebar-background);
+  }
+  .sidebar a {display: inline;}
+}
+
+@media (max-width: 640px) {
+  .sidebar {
+    width: 100%;
+    flex-basis: auto;
+    box-shadow: 0 -1px 0 var(--sidebar-border-color);
+    /* Visually move the sidebar above .main (regardless of DOM order,
+       which stays .main then .sidebar for source/reading order and SEO)
+       so opening it reveals it right below the header, not after a full
+       scroll past every post. */
+    order: -1;
+    display: none;
+  }
+
+  .hamburger {display: block;}
+
+  .sidebar-toggle:checked ~ .content-wrapper .sidebar {display: block;}
+}

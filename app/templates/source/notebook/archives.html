@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+  {{> head}}
+  <body>
+    <div class="wrapper">
+      {{> header}}
+
+      <div class="content-wrapper">
+        <main class="main">
+          <div class="page-body">
+          <h1 class="page-title">Archives</h1>
+
+          <form action="/search" class="search-form">
+            <input placeholder="Search..." value="{{#query}}{{query}}{{/query}}" name="q" id="search" type="text" />
+            <input type="submit" value="Go" />
+          </form>
+
+          <ul class="full-archive">
+            {{#archives}}
+              {{#months}}
+                {{#entries}}
+                <li><a href="{{{url}}}" title="{{title}}"><span class="archive-title">{{title}}</span> <span class="light">{{date}}</span></a></li>
+                {{/entries}}
+              {{/months}}
+            {{/archives}}
+          </ul>
+          </div>
+          {{> feed-links}}
+        </main>
+
+        {{> sidebar}}
+        <div class="clear"></div>
+      </div>
+
+      {{> footer}}
+    </div>
+  </body>
+</html>

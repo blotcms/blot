@@ -1,0 +1,76 @@
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="index, follow">
+    <meta property="og:site_name" content="{{title}}">
+  
+    <title>{{> title}}</title>
+    {{#entry}}
+    {{#summary}}<meta name="description" content="{{summary}}">{{/summary}}
+    {{^summary}}<meta name="description" content="{{title}}">{{/summary}}
+    {{/entry}}
+    {{^entry}}<meta name="description" content="{{> description}}">{{/entry}}
+  
+    <link rel="alternate" type="application/rss+xml" title="RSS Feed for {{title}}" href="{{{siteURL}}}{{{feedURL}}}">
+    {{#avatar}}<link rel="icon" href="{{{avatar}}}" type="image/x-icon">{{/avatar}}
+    <link rel="preconnect" href="{{{cdn}}}" />
+    <link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">
+  
+    {{#entry}}
+    <!-- (A) URL / identity -->
+    {{#absoluteURL}}
+    <link rel="canonical" href="{{{absoluteURL}}}">
+    <meta property="og:url" content="{{{absoluteURL}}}">
+    {{/absoluteURL}}
+  
+    <!-- (B) Title -->
+    <meta property="og:title" content="{{title}}">
+  
+    <!-- (C) Summary (fallback to title if no summary) -->
+    {{#summary}}<meta property="og:description" content="{{summary}}">{{/summary}}{{^summary}}<meta property="og:description" content="{{title}}">{{/summary}}
+  
+    <!-- (D) Preview image (prefer large for 1200x) and fallback to avatar -->
+    {{#thumbnail.large}}
+    <meta property="og:image" content="{{{url}}}">
+    <meta property="og:image:width" content="{{width}}">
+    <meta property="og:image:height" content="{{height}}">
+    {{/thumbnail.large}}
+    {{^thumbnail.large}}
+    {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
+    {{/thumbnail.large}}
+  
+    <!-- (E) Content type (article for posts) -->
+    <meta property="og:type" content="article">
+    {{#thumbnail.large}}<meta name="twitter:card" content="summary_large_image">{{/thumbnail.large}}{{^thumbnail.large}}<meta name="twitter:card" content="summary">{{/thumbnail.large}}
+    <meta name="twitter:title" content="{{title}}">
+    {{#summary}}<meta name="twitter:description" content="{{summary}}">{{/summary}}{{^summary}}<meta name="twitter:description" content="{{title}}">{{/summary}}
+    {{#thumbnail.large}}<meta name="twitter:image" content="{{{url}}}">{{/thumbnail.large}}
+    {{^thumbnail.large}}
+    {{#avatar}}<meta name="twitter:image" content="{{{avatar}}}">{{/avatar}}
+    {{/thumbnail.large}}
+  
+    <!-- (F) Author (defaults to siteURL) -->
+    <meta property="article:author" content="{{{siteURL}}}">
+  
+    <!-- (G) Dates (auto from Blot entry; ISO 8601 via formatDate/formatUpdated) -->
+    <meta property="article:published_time" content="{{#formatDate}}YYYY-MM-DDTHH:mm:ssZ{{/formatDate}}">
+    <meta property="article:modified_time" content="{{#formatUpdated}}YYYY-MM-DDTHH:mm:ssZ{{/formatUpdated}}">
+  
+    <!-- (H) Tags -->
+    {{#tags}}
+    <meta property="article:tag" content="{{name}}">
+    {{/tags}}
+    {{/entry}}
+  
+    <!-- Non-entry pages: og:type website; canonical/og:url if view exposes url; og:image fallback to avatar -->
+    {{^entry}}
+    <meta property="og:type" content="website">
+    {{#url}}
+    <link rel="canonical" href="{{{url}}}">
+    <meta property="og:url" content="{{{url}}}">
+    {{/url}}
+    <meta property="og:title" content="{{> title}}">
+    <meta property="og:description" content="{{> description}}">
+    {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
+    {{/entry}}
+  </head>

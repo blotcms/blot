@@ -1,0 +1,197 @@
+{{{app_css}}}
+
+/* FOOTNOTES */
+.footnote-ref {
+  font-size: 9px;
+  line-height: 0.5em;
+  vertical-align: baseline;
+  position: relative;
+  top: -0.4em;
+}
+
+a.footnote-back {background: none;margin-left: 0.33em;position: relative;top: 0.06em}
+ol.footnotes {padding: 0;font-size: 10px;color: #333}
+hr.footnote-seperator {margin: 4em 0 1em;width: 8em;}
+
+
+/* MATHS */
+.katex {font-size: 1.2em}
+
+/* IMAGE CAPTION */
+.caption {display: block;}
+
+/* TWITTER PLUGIN */
+blockquote.twitter-tweet {padding: 2em;}
+blockquote.twitter-tweet p {margin: 0}
+
+
+/* IMAGE SIZE */
+img {max-width: 100%;height: auto;}
+
+/* CODE HIGHLIGHTING */
+
+pre {
+  padding: 0.7em 1em;
+  margin: 0 -1em;
+  background: rgba(0,0,0,0.03)
+}
+
+pre, code {font-family: Menlo, Monaco, Lucida Console, Liberation Mono, DejaVu Sans Mono, Bitstream Vera Sans Mono, monospace;}
+
+.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 0.5em;
+  color: #444;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: #777;
+}
+
+/* Solarized Green */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-addition {
+  color: #859900;
+}
+
+/* Solarized Cyan */
+.hljs-number,
+.hljs-string,
+.hljs-meta .hljs-meta-string,
+.hljs-literal,
+.hljs-doctag,
+.hljs-regexp {
+  color: #2aa198;
+}
+
+/* Solarized Blue */
+.hljs-title,
+.hljs-section,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: #268bd2;
+}
+
+/* Solarized Yellow */
+.hljs-attribute,
+.hljs-attr,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-class .hljs-title,
+.hljs-type {
+  color: #b58900;
+}
+
+/* Solarized Orange */
+.hljs-symbol,
+.hljs-bullet,
+.hljs-subst,
+.hljs-meta,
+.hljs-meta .hljs-keyword,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-link {
+  color: #cb4b16;
+}
+
+/* Solarized Red */
+.hljs-built_in,
+.hljs-deletion {
+  color: #dc322f;
+}
+
+.hljs-formula {
+  background: #eee8d5;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: bold;
+}
+
+
+/* LAYOUT */
+
+/* Ensure consistency in the layout.css for users with the image zoom plugin
+   and those without. What a nightmare! */
+p, div, section {position: relative;overflow: visible;} 
+
+.container {position: relative;}
+
+.margin {
+  box-sizing: border-box;
+  width: 33%;
+  overflow: auto;
+}
+
+.margin h1, .margin h2, .margin h3 {margin-top:0}
+
+.margin p {font-style: italic;margin-top: 0;}
+
+.margin p img {margin-top: 5px}
+
+.left.margin {
+  float: left;
+  padding-right: 20px;
+  text-align: right;
+}
+
+.right.margin {
+  position: absolute;
+  right: -40%;
+  width: 40%;
+  padding-left: 20px;
+}
+
+.wide {
+  width: 142%;
+  overflow: auto; /* collapse internal margins */
+}
+
+.wide.left, .wide.right {
+  width: 129.3333333%;
+  float: none;
+  margin: 0 -29.3333333% 0 0;
+}
+
+.column {box-sizing: border-box;float: left;}
+
+.column.two {width: 50%;padding-right: 11px;}
+
+.column.three {width: 33%;padding-right: 22px;}
+
+.column.two + .column.two {padding: 0 0 0 11px;}
+
+
+
+
+@media screen and (max-width: 933px) {
+
+  body {padding: 0 2em;margin: 2em auto;width: auto;}
+
+  .sidebar {position: relative;width: 100%;text-align: center;margin: 0 0 3em}
+
+  .sidebar a {display: inline-block;}
+
+  .sidebar .logo {margin: 0;display: block;text-align: center;}
+
+  .logo.hasAvatar {word-spacing: 0}
+
+  .margin,
+  .margin.right,
+  .margin.left {
+    width: 30%;
+    position: relative;display: block;top: auto;left: auto;right: auto;bottom: auto;}
+
+  .margin.right {float: right;}
+  .margin.left {text-align: left;float: left;}
+
+  .wide, .wide.left, .wide.right {width: 100%;margin: 0}
+}

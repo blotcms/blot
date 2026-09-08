@@ -1,0 +1,13 @@
+<input type="checkbox" id="sidebar-toggle" class="sidebar-toggle">
+{{#is.header_layout.stripe}}<div class="header-stripe"></div>{{/is.header_layout.stripe}}
+<div class="site-header site-header--{{header_layout}}">
+  <h1 class="site-title">
+    <a href="/" title="The homepage of {{title}}">
+      {{#avatar}}<img class="site-avatar" src="{{{avatar}}}" alt="">{{/avatar}}
+      {{title}}
+    </a>
+  </h1>
+  <label for="sidebar-toggle" class="hamburger" aria-label="Toggle menu">
+    <span class="hamburger-inner"></span>
+  </label>
+</div>

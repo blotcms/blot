@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+  {{> head}}
+  <body>
+    <div class="wrapper">
+      {{> header}}
+
+      <div class="content-wrapper">
+        <main class="main">
+          <div class="page-body">
+          <h1 class="page-title">{{error.title}}</h1>
+          <p>Something has gone wrong. {{error.message}}</p>
+          </div>
+          {{> feed-links}}
+        </main>
+
+        {{> sidebar}}
+        <div class="clear"></div>
+      </div>
+
+      {{> footer}}
+    </div>
+  </body>
+</html>

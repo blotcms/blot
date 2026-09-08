@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+  {{> head}}
+  <body>
+    <div class="wrapper">
+      {{> header}}
+
+      <div class="content-wrapper">
+        <main class="main">
+          <div class="page-body">
+          <h1 class="page-title">{{tag}}</h1>
+
+          <ul class="full-archive">
+            {{#entries}}
+            <li><a href="{{{url}}}"><span class="archive-title">{{title}}</span> <span class="light">{{date}}</span></a></li>
+            {{/entries}}
+          </ul>
+
+          {{#pagination}}
+          <div class="pager">
+            <span class="pager-newer">{{#previous}}<a href="/tagged/{{slug}}/page/{{previous}}">&larr; Newer</a>{{/previous}}</span>
+            <span class="pager-page">Page {{current}} of {{total}}</span>
+            <span class="pager-older">{{#next}}<a href="/tagged/{{slug}}/page/{{next}}">Older &rarr;</a>{{/next}}</span>
+          </div>
+          {{/pagination}}
+          </div>
+          {{> feed-links}}
+        </main>
+
+        {{> sidebar}}
+        <div class="clear"></div>
+      </div>
+
+      {{> footer}}
+    </div>
+  </body>
+</html>

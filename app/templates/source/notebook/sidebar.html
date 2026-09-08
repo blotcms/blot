@@ -1,0 +1,56 @@
+<aside class="sidebar">
+
+  <div class="widget">
+    <h2><a href="/archives">Archives</a></h2>
+    <ul class="archive-list">
+      {{#archives}}
+      <li>
+        <details data-archive-id="{{year}}"{{#first}} open{{/first}}>
+          <summary><span class="archive-label">{{year}}</span> <span class="archive-count">({{total}})</span></summary>
+          <ul class="archive-list archive-months">
+            {{#months}}
+            <li>
+              <details data-archive-id="{{year}}/{{month}}"{{#first}} open{{/first}}>
+                <summary><span class="archive-label">{{month}}</span></summary>
+                <ul class="archive-list archive-posts">
+                  {{#entries}}
+                  <li><a href="{{{url}}}" title="{{title}}">{{title}}</a></li>
+                  {{/entries}}
+                </ul>
+              </details>
+            </li>
+            {{/months}}
+          </ul>
+        </details>
+      </li>
+      {{/archives}}
+    </ul>
+  </div>
+
+  {{#menu}}
+  {{#first}}
+  <div class="widget">
+    <h2>Links</h2>
+    <ul class="link-list">
+  {{/first}}
+      <li><a href="{{{url}}}">{{label}}</a></li>
+  {{#last}}
+    </ul>
+  </div>
+  {{/last}}
+  {{/menu}}
+
+  {{#all_tags}}
+  {{#first}}
+  <div class="widget">
+    <h2>Tags</h2>
+    <p class="tag-list">
+  {{/first}}
+      <a href="/tagged/{{slug}}">{{name}}</a>{{^last}}, {{/last}}
+  {{#last}}
+    </p>
+  </div>
+  {{/last}}
+  {{/all_tags}}
+
+</aside>

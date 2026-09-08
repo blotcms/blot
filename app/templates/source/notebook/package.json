@@ -1,0 +1,81 @@
+{
+  "name": "Notebook",
+  "locals": {
+    "page_size": 20,
+    "hide_dates": false,
+    "date_display": "dddd, MMMM D, YYYY",
+    "author": "",
+    "background_color": "#FFF7ED",
+    "text_color": "#431407",
+    "accent_color": "#9A3412",
+    "header_layout": "block",
+    "header_layout_options": [
+      "block",
+      "stripe"
+    ],
+    "font": {
+      "name": "Source Serif",
+      "id": "source-serif",
+      "stack": "'Source Serif'",
+      "tags": [
+        "serif"
+      ],
+      "line_height": 1.435,
+      "line_width": 38,
+      "font_size": 16,
+      "styles": "@font-face{font-family:'Source Serif';font-style:normal;font-weight:200;src:url('{{{config.cdn.origin}}}/fonts/source-serif/extra-light.eot?version=721eb7&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/source-serif/extra-light.eot?version=721eb7&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/source-serif/extra-light.woff?version=689a6a&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/source-serif/extra-light.ttf?version=fe4ee2&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/source-serif/extra-light.otf?version=6250db&extension=.otf') format('opentype')}@font-face{font-family:'Source Serif';font-style:italic;font-weight:200;src:url('{{{config.cdn.origin}}}/fonts/source-serif/extra-light-italic.eot?version=a2db0c&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/source-serif/extra-light-italic.eot?version=a2db0c&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/source-serif/extra-light-italic.woff?version=ddcb76&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/source-serif/extra-light-italic.ttf?version=c1a79c&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/source-serif/extra-light-italic.otf?version=3a9dd9&extension=.otf') format('opentype')}@font-face{font-family:'Source Serif';font-style:normal;font-weight:300;src:url('{{{config.cdn.origin}}}/fonts/source-serif/light.eot?version=9ba003&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/source-serif/light.eot?version=9ba003&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/source-serif/light.woff?version=cc2257&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/source-serif/light.ttf?version=8919ab&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/source-serif/light.otf?version=e12136&extension=.otf') format('opentype')}@font-face{font-family:'Source Serif';font-style:italic;font-weight:300;src:url('{{{config.cdn.origin}}}/fonts/source-serif/light-italic.eot?version=b32e82&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/source-serif/light-italic.eot?version=b32e82&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/source-serif/light-italic.woff?version=cace29&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/source-serif/light-italic.ttf?version=ef2586&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/source-serif/light-italic.otf?version=4fd463&extension=.otf') format('opentype')}@font-face{font-family:'Source Serif';font-style:normal;font-weight:400;src:url('{{{config.cdn.origin}}}/fonts/source-serif/regular.eot?version=414a0f&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/source-serif/regular.eot?version=414a0f&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/source-serif/regular.woff?version=7729cd&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/source-serif/regular.ttf?version=c21adc&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/source-serif/regular.otf?version=ecde29&extension=.otf') format('opentype')}@font-face{font-family:'Source Serif';font-style:italic;font-weight:400;src:url('{{{config.cdn.origin}}}/fonts/source-serif/italic.eot?version=9e592c&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/source-serif/italic.eot?version=9e592c&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/source-serif/italic.woff?version=462182&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/source-serif/italic.ttf?version=d519ce&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/source-serif/italic.otf?version=78132f&extension=.otf') format('opentype')}@font-face{font-family:'Source Serif';font-style:normal;font-weight:500;src:url('{{{config.cdn.origin}}}/fonts/source-serif/semi-bold.eot?version=058b73&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/source-serif/semi-bold.eot?version=058b73&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/source-serif/semi-bold.woff?version=b542dd&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/source-serif/semi-bold.ttf?version=f7e388&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/source-serif/semi-bold.otf?version=a0e56d&extension=.otf') format('opentype')}@font-face{font-family:'Source Serif';font-style:italic;font-weight:500;src:url('{{{config.cdn.origin}}}/fonts/source-serif/semi-bold-italic.eot?version=7c9f98&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/source-serif/semi-bold-italic.eot?version=7c9f98&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/source-serif/semi-bold-italic.woff?version=2cd60f&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/source-serif/semi-bold-italic.ttf?version=d188d2&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/source-serif/semi-bold-italic.otf?version=bcd380&extension=.otf') format('opentype')}@font-face{font-family:'Source Serif';font-style:normal;font-weight:600;src:url('{{{config.cdn.origin}}}/fonts/source-serif/bold.eot?version=f26a98&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/source-serif/bold.eot?version=f26a98&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/source-serif/bold.woff?version=0dafdc&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/source-serif/bold.ttf?version=3f8d5c&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/source-serif/bold.otf?version=b925ad&extension=.otf') format('opentype')}@font-face{font-family:'Source Serif';font-style:italic;font-weight:600;src:url('{{{config.cdn.origin}}}/fonts/source-serif/bold-italic.eot?version=30d5e8&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/source-serif/bold-italic.eot?version=30d5e8&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/source-serif/bold-italic.woff?version=c8f546&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/source-serif/bold-italic.ttf?version=495e43&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/source-serif/bold-italic.otf?version=60c68d&extension=.otf') format('opentype')}@font-face{font-family:'Source Serif';font-style:normal;font-weight:900;src:url('{{{config.cdn.origin}}}/fonts/source-serif/black.eot?version=718be8&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/source-serif/black.eot?version=718be8&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/source-serif/black.woff?version=063d2a&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/source-serif/black.ttf?version=6c5b4b&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/source-serif/black.otf?version=b4f9f6&extension=.otf') format('opentype')}@font-face{font-family:'Source Serif';font-style:italic;font-weight:900;src:url('{{{config.cdn.origin}}}/fonts/source-serif/black-italic.eot?version=1b3743&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/source-serif/black-italic.eot?version=1b3743&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/source-serif/black-italic.woff?version=6b7479&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/source-serif/black-italic.ttf?version=8d8556&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/source-serif/black-italic.otf?version=6757cf&extension=.otf') format('opentype')}.pull-double{margin-left:-.356em}.push-double{margin-right:.356em}.pull-single{margin-left:-.183em}.push-single{margin-right:.183em}.push-double,.push-single{display:inline-block}"
+    },
+    "title_font": {
+      "name": "Standard",
+      "id": "standard",
+      "stack": "'Standard'",
+      "tags": [
+        "sans"
+      ],
+      "line_height": 1.4,
+      "line_width": 38,
+      "font_size": 16,
+      "styles": "@font-face{font-family:Standard;font-style:normal;font-weight:400;src:url('{{{config.cdn.origin}}}/fonts/standard/400.eot?version=3bb1dc&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/standard/400.eot?version=3bb1dc&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/standard/400.woff?version=bbe891&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/standard/400.ttf?version=33777d&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/standard/400.otf?version=3a22ef&extension=.otf') format('opentype')}@font-face{font-family:Standard;font-style:italic;font-weight:400;src:url('{{{config.cdn.origin}}}/fonts/standard/400-italic.eot?version=73b762&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/standard/400-italic.eot?version=73b762&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/standard/400-italic.woff?version=764223&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/standard/400-italic.ttf?version=ea393e&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/standard/400-italic.otf?version=9795aa&extension=.otf') format('opentype')}@font-face{font-family:Standard;font-style:normal;font-weight:700;src:url('{{{config.cdn.origin}}}/fonts/standard/700.eot?version=f8407b&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/standard/700.eot?version=f8407b&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/standard/700.woff?version=f74ecc&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/standard/700.ttf?version=b2cebd&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/standard/700.otf?version=eadff8&extension=.otf') format('opentype')}@font-face{font-family:Standard;font-style:italic;font-weight:700;src:url('{{{config.cdn.origin}}}/fonts/standard/700-italic.eot?version=269a90&extension=.eot');src:url('{{{config.cdn.origin}}}/fonts/standard/700-italic.eot?version=269a90&extension=.eot#iefix') format('embedded-opentype'),url('{{{config.cdn.origin}}}/fonts/standard/700-italic.woff?version=9838fc&extension=.woff') format('woff'),url('{{{config.cdn.origin}}}/fonts/standard/700-italic.ttf?version=7300a0&extension=.ttf') format('truetype'),url('{{{config.cdn.origin}}}/fonts/standard/700-italic.otf?version=fc5433&extension=.otf') format('opentype')}.pull-double{margin-left:-.428em}.push-double{margin-right:.428em}.pull-single{margin-left:-.228em}.push-single{margin-right:.228em}.push-double,.push-single{display:inline-block}"
+    }
+  },
+  "enabled": true,
+  "views": {
+    "entries.html": {
+      "partials": {
+        "title": "{{{title}}}",
+        "description": "The latest entries posted on {{{title}}}"
+      }
+    },
+    "archives.html": {
+      "url": "/archives",
+      "partials": {
+        "title": "Archives - {{{title}}}",
+        "description": "All the entries posted on {{{title}}}"
+      }
+    },
+    "search.html": {
+      "partials": {
+        "title": "Search - {{{title}}}",
+        "description": "Search all the entries posted on {{{title}}}"
+      }
+    },
+    "error.html": {
+      "partials": {
+        "title": "{{{error.title}}} - {{{title}}}",
+        "description": "Error on {{{title}}}"
+      }
+    },
+    "entry.html": {
+      "partials": {
+        "title": "{{{entry.title}}} - {{{title}}}",
+        "description": "{{{entry.summary}}}"
+      }
+    },
+    "tagged.html": {
+      "partials": {
+        "title": "{{{tag}}} - {{{title}}}",
+        "description": "All of the entries posted on {{{title}}} tagged {{{tag}}}"
+      }
+    }
+  }
+}
