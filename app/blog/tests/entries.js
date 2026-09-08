@@ -82,6 +82,22 @@ describe("entries", function () {
         expect(body2).toEqual('<p>Hello, A!</p><p>Hello, B!</p><p>Hello, C!</p>');
     });
 
+    it("supports sort config nested under locals.sort", async function () {
+
+        await this.write({path: '/a.txt', content: 'Hello, A!'});
+        await this.write({path: '/b.txt', content: 'Hello, B!'});
+        await this.write({path: '/c.txt', content: 'Hello, C!'});
+
+        await this.template({ "entries.html": "{{#entries}}{{{html}}}{{/entries}}" }, {
+            locals: {sort: {by: 'id', direction: 'desc'}}
+        });
+
+        const res = await this.get('/');
+        const body = await res.text();
+
+        expect(body).toEqual('<p>Hello, C!</p><p>Hello, B!</p><p>Hello, A!</p>');
+    });
+
     it("paginates sort_by=id lexicographically when publish dates are out of order", async function () {
 
         await this.write({path: '/b.txt', content: 'Hello, B!'});

@@ -90,6 +90,14 @@
 	</div>
 	{{/index_page.length}}
 
+	{{#post_sorting}}
+	<div class="settings-group">
+	<h2 class="template-heading">Post sorting</h2>
+	{{> template-editor-group}}
+	<p class="template-heading-note">Applies to the index page, tag pages, search results and feeds.</p>
+	</div>
+	{{/post_sorting}}
+
 	{{> date}}
 
 {{#syntax_themes}}

@@ -1,5 +1,7 @@
 const Entry = require("models/entry");
 const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
+const getTemplateSortOptions = require("blog/sortOptions");
+const { sortEntries } = getTemplateSortOptions;
 
 module.exports = function (req, res, callback) {
   const blogID = req.blog.id;
@@ -16,6 +18,7 @@ module.exports = function (req, res, callback) {
   const templateLocals = (req.template && req.template.locals) || {};
   const pathPrefix =
     (res.locals && res.locals.path_prefix) ?? templateLocals.path_prefix;
+  const sortOptions = getTemplateSortOptions(templateLocals);
 
   let preferredLimit;
 
@@ -32,30 +35,35 @@ module.exports = function (req, res, callback) {
 
   const offset = (page - 1) * limit;
 
-  fetchTaggedEntries(blogID, tags, { limit, offset, pathPrefix }, function (err, result) {
-    if (err) return callback(err);
+  fetchTaggedEntries(
+    blogID,
+    tags,
+    { limit, offset, pathPrefix, ...sortOptions },
+    function (err, result) {
+      if (err) return callback(err);
 
-    Entry.get(blogID, result.entryIDs || [], function (entries) {
-      entries.sort((a, b) => b.dateStamp - a.dateStamp);
+      Entry.get(blogID, result.entryIDs || [], function (entries) {
+        entries = sortEntries(entries, sortOptions);
 
-      const totalEntries =
-        result.total !== undefined
-          ? result.total
-          : (result.entryIDs || []).length;
+        const totalEntries =
+          result.total !== undefined
+            ? result.total
+            : (result.entryIDs || []).length;
 
-      res.locals.pagination = res.locals.pagination || result.pagination || {};
+        res.locals.pagination = res.locals.pagination || result.pagination || {};
 
-      callback(null, {
-        tag: result.tag,
-        tagged: result.tagged,
-        is: result.tagged, // alias
-        entries,
-        pagination: result.pagination,
-        total: totalEntries,
-        entryIDs: result.entryIDs || [],
-        slugs: result.slugs,
-        prettyTags: result.prettyTags,
+        callback(null, {
+          tag: result.tag,
+          tagged: result.tagged,
+          is: result.tagged, // alias
+          entries,
+          pagination: result.pagination,
+          total: totalEntries,
+          entryIDs: result.entryIDs || [],
+          slugs: result.slugs,
+          prettyTags: result.prettyTags,
+        });
       });
-    });
-  });
+    }
+  );
 };

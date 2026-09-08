@@ -1,11 +1,14 @@
 const { getPage } = require("models/entries");
+const getTemplateSortOptions = require("./sortOptions");
 
 module.exports = function (req, res, next) {
   const blogID = req?.blog?.id;
 
+  const sortOptions = getTemplateSortOptions(req?.template?.locals);
+
   const options = {
-    sortBy: req?.template?.locals?.sort_by,
-    order: req?.template?.locals?.sort_order,
+    sortBy: sortOptions.sortBy,
+    order: sortOptions.order,
     pageNumber: req?.params?.page ?? req?.query?.page,
     pageSize: req?.template?.locals?.page_size,
     pathPrefix: req?.template?.locals?.path_prefix,

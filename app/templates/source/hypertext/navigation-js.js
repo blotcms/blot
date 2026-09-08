@@ -2,13 +2,22 @@
 const STRIP_TAG_TOKENS = true;
 const COLLAPSE_NAVIGATION_BY_DEFAULT = {{#collapse_navigation_by_default}}true{{/collapse_navigation_by_default}}{{^collapse_navigation_by_default}}false{{/collapse_navigation_by_default}};
 
+function sidebarCacheKey(root) {
+  return (
+    "sidebarState:" +
+    document.querySelector('meta[name="blot-cache-id"]')?.content +
+    ":sort:" +
+    (root?.dataset.sortBy || "id") +
+    ":" +
+    (root?.dataset.sortOrder || "asc")
+  );
+}
+
 class SidebarNavigation {
   constructor() {
     this.root = document.querySelector(".sidebar");
     if (!this.root) return;
-    this.cacheKey =
-      "sidebarState:" +
-      document.querySelector('meta[name="blot-cache-id"]')?.content;
+    this.cacheKey = sidebarCacheKey(this.root);
     this.maxPages = 100;
   }
 
@@ -256,35 +265,35 @@ class SidebarNavigation {
   }
 
   // ------- sorting -------
-  labelForLi(li) {
-    if (li.classList.contains("folder")) {
-      return (
-        li.querySelector(":scope > .folder-label")?.textContent?.trim() || ""
-      );
-    }
-    const a = li.querySelector(":scope > a");
-    return a?.textContent?.trim() || li.getAttribute("data-filename") || "";
+  // Return the key the post listing sorts on: the entry's normalised path,
+  // case preserved. models/entries orders these with Redis' byte-wise
+  // lexicographic sorted set (entries:lex), so compare them the same way
+  // rather than with a locale collation or a case fold.
+  pathForLi(li) {
+    const raw = li.classList.contains("folder")
+      ? li.getAttribute("data-folder")
+      : li.getAttribute("data-path");
+    return raw || "";
   }
 
-  sortLocale() {
-    const lang = (
-      document.documentElement.lang ||
-      document.querySelector('meta[name="language"]')?.content ||
-      ""
-    ).trim();
-    return lang || undefined;
+  shouldReverseSort() {
+    const sortBy = this.root?.dataset.sortBy || "id";
+    const sortOrder = this.root?.dataset.sortOrder || "asc";
+    return sortBy === "id" && sortOrder === "desc";
   }
 
   sortTree(ul) {
     const children = Array.from(ul.children).filter((n) => n.tagName === "LI");
     const folders = children.filter((li) => li.classList.contains("folder"));
     const files = children.filter((li) => !li.classList.contains("folder"));
-    const locale = this.sortLocale();
+    const reverse = this.shouldReverseSort();
 
-    const cmp = (a, b) =>
-      this.labelForLi(a).localeCompare(this.labelForLi(b), locale, {
-        sensitivity: "base",
-      });
+    const cmp = (a, b) => {
+      const pa = this.pathForLi(a);
+      const pb = this.pathForLi(b);
+      const result = pa < pb ? -1 : pa > pb ? 1 : 0;
+      return reverse ? -result : result;
+    };
 
     folders.sort(cmp);
     files.sort(cmp);
@@ -383,11 +392,7 @@ class SidebarNavigation {
     try {
       const sidebar = document.querySelector(".sidebar");
       if (!sidebar) return;
-      localStorage.setItem(
-        "sidebarState:" +
-          document.querySelector('meta[name="blot-cache-id"]')?.content,
-        sidebar.innerHTML
-      );
+      localStorage.setItem(sidebarCacheKey(sidebar), sidebar.innerHTML);
     } catch (err) {
       console.warn("Sidebar cache save failed:", err);
     }

@@ -81,6 +81,25 @@ describe("tags.get", function () {
     });
   });
 
+  it("returns oldest-first when rev is false", function (done) {
+    const blogID = this.blog.id;
+    const entries = [
+      { id: "old", blogID, path: "/old", tags: ["Tag Rev"], dateStamp: 1000 },
+      { id: "mid", blogID, path: "/mid", tags: ["Tag Rev"], dateStamp: 2000 },
+      { id: "new", blogID, path: "/new", tags: ["Tag Rev"], dateStamp: 3000 },
+    ];
+
+    saveEntries(blogID, entries, function (err) {
+      if (err) return done.fail(err);
+
+      get(blogID, "Tag Rev", { rev: false, limit: 2 }, function (err, entryIDs) {
+        if (err) return done.fail(err);
+        expect(entryIDs).toEqual(["old", "mid"]);
+        done();
+      });
+    });
+  });
+
   it("supports offsets for pagination", function (done) {
     const blogID = this.blog.id;
     const entries = [

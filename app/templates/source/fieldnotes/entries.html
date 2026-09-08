@@ -15,16 +15,16 @@
 					<h1 class="screen-reader-text">Posts navigation</h1>
 					<div class="nav-links">
 						{{#pagination}}
-						{{#next}}
-						<div class="nav-previous">
-							<a href="/page/{{next}}"><span class="meta-nav">&larr;</span> Older posts</a>
-						</div>
-						{{/next}}
 						{{#previous}}
-						<div class="nav-next">
-							<a href="/page/{{previous}}">Newer posts <span class="meta-nav">&rarr;</span> </a>
+						<div class="nav-previous">
+							<a href="/page/{{previous}}"><span class="meta-nav">&larr;</span> Previous</a>
 						</div>
 						{{/previous}}
+						{{#next}}
+						<div class="nav-next">
+							<a href="/page/{{next}}">Next <span class="meta-nav">&rarr;</span> </a>
+						</div>
+						{{/next}}
 						{{/pagination}}
 					</div><!-- .nav-links -->
 				</nav><!-- .navigation -->

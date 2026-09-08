@@ -212,6 +212,74 @@ describe("posts cache", function () {
     delete require.cache[helperPath];
   });
 
+  it("passes nested sort locals into getPage", function (done) {
+    const posts = loadPostsWithTaggedStub(function () {});
+    posts._clear();
+
+    spyOn(entriesModel, "getPage").and.callFake(function (blogID, options, callback) {
+      expect(options.sortBy).toBe("id");
+      expect(options.order).toBe("desc");
+      callback(null, [], { page: 1, pages: 1 });
+    });
+
+    posts(
+      {
+        blog: { id: "blog-1", cacheID: 100 },
+        query: {},
+        params: {},
+        template: { locals: { sort: { by: "id", direction: "desc" } } },
+        log: function () {},
+      },
+      { locals: {} },
+      function (err) {
+        expect(err).toBeNull();
+        expect(entriesModel.getPage).toHaveBeenCalledTimes(1);
+        done();
+      }
+    );
+  });
+
+  it("forwards the resolved sort selection to fetchTaggedEntries and orders the page", function (done) {
+    let received;
+    const posts = loadPostsWithTaggedStub(function (blogID, tags, options, cb) {
+      received = { blogID, tags, options };
+      cb(null, { entryIDs: ["a.txt", "m.txt", "z.txt"], pagination: {} });
+    });
+    posts._clear();
+
+    spyOn(Entry, "get").and.callFake(function (blogID, ids, cb) {
+      // Entry.get preserves input order; return the hydrated entries shuffled
+      // to prove posts.js re-applies the selected order.
+      cb([
+        { id: "m.txt", dateStamp: 2 },
+        { id: "z.txt", dateStamp: 1 },
+        { id: "a.txt", dateStamp: 3 },
+      ]);
+    });
+
+    posts(
+      {
+        blog: { id: "blog-1", cacheID: 100 },
+        query: { tag: "foo" },
+        params: {},
+        template: { locals: { sort_by: "id", sort_order: "asc" } },
+        log: function () {},
+      },
+      { locals: {} },
+      function (err, entries) {
+        expect(err).toBeNull();
+        expect(received.options.sortBy).toBe("id");
+        expect(received.options.order).toBe("asc");
+        expect(entries.map((entry) => entry.id)).toEqual([
+          "a.txt",
+          "m.txt",
+          "z.txt",
+        ]);
+        done();
+      }
+    );
+  });
+
   it("reuses cached untagged responses for identical inputs", function (done) {
     const posts = loadPostsWithTaggedStub(function () {});
     posts._clear();

@@ -7,6 +7,7 @@ var getCachedFullView = require("./full-view-cache");
 
 var ensure = require("helper/ensure");
 var extend = require("helper/extend");
+var getTemplateSortOptions = require("blog/sortOptions");
 var callOnce = require("helper/callOnce");
 var config = require("config");
 var CACHE = config.cache;
@@ -77,6 +78,17 @@ module.exports = function (req, res, _next) {
           .and(viewLocals)
           .and(req.template.locals)
           .and(blog.locals);
+
+        // Templates may configure sorting as nested `sort: { by, direction }`.
+        // Expose the resolved selection as flat sort_by / sort_order so views
+        // (e.g. Hypertext's navigation) don't have to re-derive it.
+        if (req.template.locals && req.template.locals.sort) {
+          var resolvedSort = getTemplateSortOptions(req.template.locals);
+          if (resolvedSort.sortBy !== undefined)
+            res.locals.sort_by = resolvedSort.sortBy;
+          if (resolvedSort.order !== undefined)
+            res.locals.sort_order = resolvedSort.order;
+        }
 
         extend(res.locals.partials).and(viewPartials);
 

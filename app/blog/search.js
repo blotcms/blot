@@ -1,5 +1,6 @@
 const Entry = require("models/entry");
 const search = require("util").promisify(Entry.search);
+const getTemplateSortOptions = require("blog/sortOptions");
 
 module.exports = async (req, res, next) => {
 
@@ -25,7 +26,9 @@ module.exports = async (req, res, next) => {
 
     if (query) {
       res.locals.query = query;
-      res.locals.entries = await search(req.blog.id, query) || [];  
+      const sortOptions = getTemplateSortOptions(req.template && req.template.locals);
+      // Entry.search sorts and caps by the selection before returning.
+      res.locals.entries = (await search(req.blog.id, query, sortOptions)) || [];
     }
 
     // Don't cache search results

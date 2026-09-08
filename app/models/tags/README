@@ -74,8 +74,9 @@ Retrieves the entry IDs associated with a tag, tolerating URL-encoded or non-nor
 - Delegates each attempt to `_get` (the internal function).
 - `options.limit` (number): maximum number of entry IDs to return. Omitting this returns all IDs.
 - `options.offset` (number): zero-based index to start from. Defaults to `0`.
+- `options.rev` (boolean): read direction over the `dateStamp`-scored set. Defaults to `true` (newest first); pass `false` for oldest first. Pagination stays in Redis (`ZRANGE start stop`) either way.
 - Calls back with `(err, entryIDs, prettyTag, total)`:
-  - `entryIDs`: array of entry ID strings, ordered by `dateStamp` descending.
+  - `entryIDs`: array of entry ID strings, ordered by `dateStamp` (descending unless `rev: false`).
   - `prettyTag`: the original display-form tag name as stored, or the queried tag string if no display name is recorded.
   - `total`: total number of entries associated with the tag regardless of `limit`/`offset`.
 

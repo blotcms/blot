@@ -389,6 +389,13 @@ h2.template-heading:not(:first-child) {
   border-top: 1px solid var(--border-color);
 }
 
+p.template-heading-note {
+  margin: 0;
+  padding: 0.5em 1em 0.75em;
+  font-size: 11px;
+  color: var(--light-text-color);
+}
+
 .template-grid {
   display: grid;
   grid-template-columns: var(--template-grid-columns);

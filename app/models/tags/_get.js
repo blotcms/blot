@@ -18,6 +18,11 @@ module.exports = function get(blogID, tag, options, callback) {
   if (options.limit !== undefined) ensure(options.limit, "number");
   if (options.offset !== undefined) ensure(options.offset, "number");
 
+  // The tag's sorted set is scored by dateStamp. REV (the default) gives
+  // newest-first; pass rev:false for oldest-first. Either way pagination stays
+  // in Redis via zRange start/stop.
+  const rev = options.rev !== false;
+
   var limit =
     options.limit !== undefined
       ? Math.max(0, Math.floor(options.limit))
@@ -36,7 +41,7 @@ module.exports = function get(blogID, tag, options, callback) {
 
     const [totalResult, entryIDsResult] = await Promise.all([
       client.zCard(sortedTagKey),
-      client.zRange(sortedTagKey, start, stop, { REV: true }),
+      client.zRange(sortedTagKey, start, stop, { REV: rev }),
     ]);
 
     const total = totalResult || 0;

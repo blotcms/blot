@@ -3,6 +3,8 @@ const EntryInstance = require("models/entry/instance");
 const entriesModel = require("models/entries");
 const LRUCache = require("lru-cache").LRUCache;
 const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
+const getTemplateSortOptions = require("blog/sortOptions");
+const { sortEntries } = getTemplateSortOptions;
 
 const postsCache = new LRUCache({
   max: 1000,
@@ -76,9 +78,11 @@ module.exports = function (req, res, callback) {
   const blogID = req?.blog?.id;
   const log = typeof req?.log === "function" ? req.log.bind(req) : () => {};
 
+  const sortOptions = getTemplateSortOptions(req?.template?.locals);
+
   const options = {
-    sortBy: req?.template?.locals?.sort_by,
-    order: req?.template?.locals?.sort_order,
+    sortBy: sortOptions.sortBy,
+    order: sortOptions.order,
     pageNumber: req?.params?.page ?? req?.query?.page,
     pageSize: res.locals?.page_size ?? req?.template?.locals?.page_size,
     pathPrefix: res.locals?.path_prefix ?? req?.template?.locals?.path_prefix,
@@ -141,16 +145,23 @@ module.exports = function (req, res, callback) {
   fetchTaggedEntries(
     blogID,
     tags,
-    { limit, offset, pathPrefix: options.pathPrefix },
+    {
+      limit,
+      offset,
+      pathPrefix: options.pathPrefix,
+      sortBy: options.sortBy,
+      order: options.order,
+    },
     (err, result) => {
       if (err) {
         return callback(err);
       }
 
       Entry.get(blogID, result.entryIDs || [], (entries) => {
-        entries.sort((a, b) => b.dateStamp - a.dateStamp);
         const payload = {
-          entries,
+          // fetchTaggedEntries paginated in the selected order; re-apply it to
+          // the hydrated page so Entry.get's ordering can't drift.
+          entries: sortEntries(entries, options),
           pagination: result.pagination || {},
         };
         const immutableCopy = deepFreeze(cloneDeep(payload));
