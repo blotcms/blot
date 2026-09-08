@@ -18,16 +18,78 @@ const SUBSCRIPTION_EVENTS = [
 
 const prefix = () => `${clfdate()} PayPal Webhook:`;
 
+// Verify an incoming PayPal webhook via PayPal's verify-webhook-signature API.
+// Returns true when verification succeeds - or when no webhook id is configured,
+// in which case verification is skipped and the previous behaviour preserved,
+// so this is safe to deploy before BLOT_PAYPAL_WEBHOOK_ID is set.
+const verifyPayPalWebhook = async req => {
+  const webhookId = config.paypal.webhook_id;
+
+  if (!webhookId) {
+    console.warn(
+      prefix(),
+      "signature NOT verified - set BLOT_PAYPAL_WEBHOOK_ID to enable"
+    );
+    return true;
+  }
+
+  const response = await fetch(
+    `${config.paypal.api_base}/v1/notifications/verify-webhook-signature`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Basic ${Buffer.from(
+          `${config.paypal.client_id}:${config.paypal.secret}`
+        ).toString("base64")}`
+      },
+      body: JSON.stringify({
+        auth_algo: req.headers["paypal-auth-algo"],
+        cert_url: req.headers["paypal-cert-url"],
+        transmission_id: req.headers["paypal-transmission-id"],
+        transmission_sig: req.headers["paypal-transmission-sig"],
+        transmission_time: req.headers["paypal-transmission-time"],
+        webhook_id: webhookId,
+        webhook_event: req.body
+      })
+    }
+  );
+
+  const json = await response.json();
+
+  return json.verification_status === "SUCCESS";
+};
+
 paypal.post("/", parser.json(), async (req, res) => {
-  // if the webhook is for a subscription-related event
-  // update the subscription
-  if (SUBSCRIPTION_EVENTS.includes(req.body.event_type)) {
-    // pass the subscription ID to the updateSubscription function
-    console.log(prefix(), req.body.event_type, req.body.resource.id);
+  // Verify the webhook signature when a webhook id is configured (see above).
+  try {
+    const verified = await verifyPayPalWebhook(req);
+    if (!verified) {
+      console.log(prefix(), "signature verification failed");
+      return res.status(400).send("Invalid signature");
+    }
+  } catch (err) {
+    console.log(prefix(), "signature verification error", err);
+    return res.sendStatus(400);
+  }
+
+  const eventType = req.body && req.body.event_type;
+  // resource.id used to be read unconditionally, which threw - and crashed the
+  // process via an unhandled rejection - on any request without a resource.
+  const subscriptionID =
+    req.body && req.body.resource && req.body.resource.id;
+
+  // if the webhook is for a subscription-related event, update the subscription
+  if (SUBSCRIPTION_EVENTS.includes(eventType)) {
+    if (!subscriptionID) {
+      console.log(prefix(), "missing resource.id for", eventType);
+      return res.sendStatus(400);
+    }
+
+    console.log(prefix(), eventType, subscriptionID);
 
     try {
-      console.log(prefix(), "Updating subscriptionID=", req.body.resource.id);
-      await updateSubscription(req.body.resource.id);
+      await updateSubscription(subscriptionID);
       console.log(prefix(), "Updated subscription successfully");
     } catch (err) {
       console.log(prefix(), err);

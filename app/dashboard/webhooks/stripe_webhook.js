@@ -79,14 +79,64 @@ function getStripeClient() {
 //   state from Stripe.
 // - There are probably other things I'm missing....
 
-webhooks.post("/", parser.json(), function (req, res) {
+// If a signing secret is configured we verify Stripe's signature over the raw
+// request body and construct the event via the Stripe SDK. If it is not
+// configured we fall back to parsing the (unverified) body, so this change is
+// safe to deploy before BLOT_STRIPE_WEBHOOK_SECRET is set. Returns the event,
+// or null after already sending an error response.
+function verifyStripeEvent(req, res) {
+  var rawBody = req.body;
+  var signingSecret = config.stripe && config.stripe.webhook_secret;
+
+  if (signingSecret) {
+    var stripe = getStripeClient();
+
+    if (!stripe || !stripe.webhooks || !stripe.webhooks.constructEvent) {
+      console.error(NO_STRIPE_CLIENT);
+      res.sendStatus(500);
+      return null;
+    }
+
+    try {
+      return stripe.webhooks.constructEvent(
+        rawBody,
+        req.headers["stripe-signature"],
+        signingSecret
+      );
+    } catch (err) {
+      console.error("Stripe webhook signature verification failed:", err.message);
+      res.sendStatus(400);
+      return null;
+    }
+  }
+
+  // No signing secret configured: preserve the previous, unverified behaviour.
+  console.warn(
+    "Stripe webhook signature NOT verified - set BLOT_STRIPE_WEBHOOK_SECRET to enable"
+  );
+
+  try {
+    return Buffer.isBuffer(rawBody)
+      ? JSON.parse(rawBody.toString("utf8"))
+      : rawBody;
+  } catch (err) {
+    console.error("Stripe webhook body is not valid JSON");
+    res.sendStatus(400);
+    return null;
+  }
+}
+
+webhooks.post("/", parser.raw({ type: "application/json" }), function (req, res) {
   // Down for maintenance, Stripe should
   // back off and try again later.
   if (config.maintenance) return res.sendStatus(503);
 
-  var event = req.body;
+  var event = verifyStripeEvent(req, res);
 
-  if (!event || !event.type) {
+  // verifyStripeEvent has already sent a response if it returned null.
+  if (!event) return;
+
+  if (!event.type) {
     console.error("Stripe webhook missing event type");
     return res.sendStatus(400);
   }

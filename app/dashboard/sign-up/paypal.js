@@ -29,7 +29,28 @@ paypal.get("/", async (req, res, next) => {
       }
     );
 
+    if (!response.ok) {
+      return next(new Error("Could not verify subscription with PayPal"));
+    }
+
     const json = await response.json();
+
+    // Only accept an active subscription on a plan Blot actually sells - a
+    // cancelled, suspended or legacy-plan subscription id must not create an
+    // account.
+    const configuredPlans = Object.values(config.paypal.plans || {}).filter(
+      Boolean
+    );
+    if (
+      !["ACTIVE", "APPROVED"].includes(json.status) ||
+      (configuredPlans.length && !configuredPlans.includes(json.plan_id))
+    ) {
+      return next(new Error("Subscription is not active on a valid plan"));
+    }
+
+    if (!json.subscriber || !json.subscriber.email_address) {
+      return next(new Error("No subscriber email from PayPal"));
+    }
 
     req.session.paypal = json;
     req.session.email = json.subscriber.email_address;

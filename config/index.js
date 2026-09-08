@@ -115,6 +115,10 @@ module.exports = {
   stripe: {
     key: process.env.BLOT_STRIPE_KEY,
     secret: process.env.BLOT_STRIPE_SECRET,
+    // When set, incoming Stripe webhooks are verified against this signing
+    // secret (see app/dashboard/webhooks/stripe_webhook). Leave it unset to
+    // skip verification, preserving the previous behaviour.
+    webhook_secret: process.env.BLOT_STRIPE_WEBHOOK_SECRET,
     // Ensure that each monthly plan has a corresponding
     // annual plan, and vice versa, and that these IDs
     // correspond to plans on Stripe in both live and
@@ -167,6 +171,10 @@ module.exports = {
   paypal: {
     client_id: process.env.BLOT_PAYPAL_CLIENT_ID,
     secret: process.env.BLOT_PAYPAL_SECRET,
+    // When set, incoming PayPal webhooks are verified via PayPal's
+    // verify-webhook-signature API (see app/dashboard/webhooks/paypal_webhook).
+    // Leave it unset to skip verification, preserving the previous behaviour.
+    webhook_id: process.env.BLOT_PAYPAL_WEBHOOK_ID,
 
     plan: process.env.BLOT_PAYPAL_MONTHLY_6,
 
