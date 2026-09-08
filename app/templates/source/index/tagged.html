@@ -13,7 +13,7 @@
     </small>
 
       {{#entries}}
-      <a href="{{{url}}}" class="row"><b>{{title}}</b> {{#date}}&nbsp;·&nbsp; <span style="white-space: nowrap;">{{date}}</span>{{/date}}</a>
+      {{> post_row}}
       {{/entries}}
 
       {{#pagination}}
