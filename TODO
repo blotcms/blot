@@ -1,14 +1,4 @@
-Resolve [app user reports](https://mail.google.com/mail/u/0/#inbox/FMfcgzQhVqzPNVcFNjRcMcsZPqrMJQKp)
-
-Repackage new notebook template
-
-Send out summer newsletter
-
----
-
-Fix bug with hypertext template and follow up with [31](https://mail.google.com/mail/u/0/#inbox/FMfcgzQgLPVXLRDkJTLCsKnMBRZdTklb)
-
-Fix bug with studio template and tell [Metta](https://mail.google.com/mail/u/0/#inbox/FMfcgzQgLXxhzdkjnSDVQSCnzLsSWmJK)
+Release new notebook template
 
 ---
 
@@ -17,14 +7,6 @@ Add a link to how section on pages to menu links settings page to guide new user
 Hitting the save changes button under typeset settings spits you back out to homepage! Bug!
 
 Debug issue with warwickmostyn
-
-Move GitHub repo to own organization
-
-Check in that fail2ban is now correctly purging the db of old bans:
-- sudo sqlite3 /var/lib/fail2ban/fail2ban.sqlite3 \
-  "SELECT COUNT(*) FROM bans WHERE timeofban < $(date -d 'now -1 day' +%s);"
-- output of command above should be 0
-- was 113 on thu aug 13
 
 Write useful benchmark tool for Blot
 - Add performance tests which output something like this for PRs (compare against master branch, fail if over threshold):
