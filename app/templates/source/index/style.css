@@ -1,44 +1,74 @@
 /* This template tag is replaced by CSS when this file is rendered */
 {{{app_css}}}
+{{{body_font.styles}}}
+{{{heading_font.styles}}}
+{{{navigation_font.styles}}}
+{{{syntax_highlighter_font.styles}}}
+{{{syntax_highlighter.styles}}}
 
-/* Root background fills the canvas (body is only 32em wide). Needed for
+:root {
+  --background-color: {{background_color}};
+  --text-color: {{text_color}};
+  --link-color: {{link_color}};
+  --caption-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.5);
+  --border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.12);
+  --max-width: {{max_width}}em;
+  --spacing: {{spacing}}em;
+  --heading-font-size: {{#heading_font}}{{{font_size}}}{{/heading_font}}px;
+  --heading-line-height: {{#heading_font}}{{{line_height}}}{{/heading_font}};
+}
+
+/* Root background fills the canvas (body is only --max-width wide). Needed for
    screenshots with a transparent default background, and for dark-mode UAs. */
 html {
   color-scheme: light;
-  background: #fff;
+  background: var(--background-color);
 }
 
 body {
-  font: 1.125rem / 1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  {{#body_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  line-height: {{{line_height}}};
+  {{/body_font}}
   word-wrap: break-word;
-  max-width: 32em;
+  max-width: var(--max-width);
   margin: 0 auto;
-  padding: 2.5em 1.25em 10em;
-  color: #333;
-  background: #fff;
+  padding: var(--spacing) calc(var(--spacing) * 0.5) calc(var(--spacing) * 4);
+  color: var(--text-color);
+  background: var(--background-color);
 }
 
 /* Text */
 
 a {color: inherit;text-decoration: none;padding: 0.25em 0.5em;background: none;margin: -0.25em -0.5em;border-radius: 4px;transition: background 0.2s ease;}
-a:hover {background: rgba(0,0,0,0.02);color: #468CC7;}
+a:hover {background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.02);color: var(--link-color);}
 a:active {opacity: 0.9}
 
-h1 {font-size: 2.25em;line-height:1.2;}
-h2 {font-size: 1.25em;}
-h3, h4, h5, h6 {font-size: 1em}
+h1, h2, h3, h4, h5, h6 {
+  {{#heading_font}}
+  font-family: {{{stack}}};
+  {{/heading_font}}
+  line-height: var(--heading-line-height);
+}
 
-hr {margin: 1.25em 0;border: 0;border-top: 1px solid #eee;}
+/* Sized off the Heading Font size control (defaults reproduce the old
+   body-relative 2.25 / 1.25 / 1 ratios). */
+h1 {font-size: calc(var(--heading-font-size) * 2.25);}
+h2 {font-size: calc(var(--heading-font-size) * 1.25);}
+h3, h4, h5, h6 {font-size: var(--heading-font-size);}
+
+hr {margin: 1.25em 0;border: 0;border-top: 1px solid var(--border-color);}
 br {width: 100%;clear: both;float: none;}
 
-blockquote {padding: 0 0 0 0.75em;color: #777}
+blockquote {padding: 0 0 0 0.75em;color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55)}
 
 p,
 li,
 blockquote,
 figcaption {orphans: 2; widows: 2;}
 
-small, .menu, .caption {color: #9e9e9e;font-weight: 400;}
+small, .menu, .caption {color: var(--caption-color);font-weight: 400;}
 sup {font-size: 0.83em;line-height: 0;vertical-align: super;}
 
 .entry {position: relative;}
@@ -49,14 +79,113 @@ sup {font-size: 0.83em;line-height: 0;vertical-align: super;}
 
 /* Theme specific styles */
 
-#logo {font-weight: bold;display: inline-block;line-height: 1.75}
+#logo {
+  font-weight: bold;
+  display: inline-block;
+  {{#heading_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  line-height: {{{line_height}}};
+  {{/heading_font}}
+}
 #logo img {max-width: 8em;max-height:8em;margin-bottom: 0.25em}
 #logo img.rounded {border-radius: 50%;margin-left: -1em}
 
 #logo:hover {opacity: 0.8;background: none;color: inherit;}
 #logo:active {opacity: 0.75}
 
+.site-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25em;
+  margin-bottom: var(--spacing);
+}
+
+{{#is.navigation_alignment.right}}
+.site-header {align-items: flex-end;text-align: right;}
+{{/is.navigation_alignment.right}}
+{{#is.navigation_alignment.center}}
+.site-header {align-items: center;text-align: center;}
+{{/is.navigation_alignment.center}}
+{{#is.navigation_alignment.justified}}
+.site-header {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+}
+{{/is.navigation_alignment.justified}}
+
+{{#sticky_navigation}}
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--background-color);
+  padding: calc(var(--spacing) * 0.35) 0;
+  margin: calc(var(--spacing) * -0.35) 0 var(--spacing);
+}
+{{/sticky_navigation}}
+
+.site-nav {
+  {{#navigation_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  line-height: {{{line_height}}};
+  {{/navigation_font}}
+}
+
+.site-footer {
+  margin-top: var(--spacing);
+}
+
+.site-footer .menu {
+  {{#navigation_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  line-height: {{{line_height}}};
+  {{/navigation_font}}
+}
+
 a.menu {margin-right: 0em;line-height: 1.75}
+
+/* The generic a.menu line-height above otherwise shadows the Navigation Font
+   line-height on the header/footer nav links (higher specificity than
+   .site-nav / .site-footer .menu). */
+.site-nav a.menu,
+.site-footer a.menu {
+  {{#navigation_font}}
+  line-height: {{{line_height}}};
+  {{/navigation_font}}
+}
+
+{{#uppercase_navigation}}
+.site-nav a,
+.site-footer .menu {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+{{/uppercase_navigation}}
+
+.row-summary {
+  display: block;
+  color: var(--caption-color);
+  font-weight: 400;
+  font-size: 0.9em;
+  margin-top: 0.15em;
+  white-space: normal;
+}
+
+.row-with-summary {
+  padding-top: 0.35em;
+  padding-bottom: 0.35em;
+}
+
+.listing-entry {
+  margin: var(--spacing) 0;
+}
+
 
 
 a.row {
@@ -64,22 +193,22 @@ a.row {
   position: relative;
   margin-top: 0.25em;
   margin-bottom: 0.25em;
-  padding-right: 16em;
+  padding-right: calc(var(--max-width) / 2);
   width: 50vw;
   left: 50%;
-  margin-left: -16.5em;
+  margin-left: calc((var(--max-width) / -2) - 0.5em);
 }
 
 /* This allows the horizontal rules and full-width links on the index page to fill the entire screen without triggering a scrollbar */
 hr.full {
   width: 50vw;
-  padding-left: 16em;
+  padding-left: calc(var(--max-width) / 2);
   position: relative;
   left: 50%;
-  margin-left: -16em;
+  margin-left: calc(var(--max-width) / -2);
 }
 
-.archive {color: black;line-height: 1.75;margin-bottom: 0}
+.archive {color: var(--text-color);line-height: 1.75;margin-bottom: 0}
 
 input[name=q] {
   display: inline-block;
@@ -87,10 +216,10 @@ input[name=q] {
   box-sizing: border-box;
   width: 70%;
   padding: 0.444em 0.666em;
-  color: #555;
-  background-color: #fff;
+  color: var(--text-color);
+  background-color: var(--background-color);
   background-image: none;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   -webkit-box-shadow: inset 0 1px 1px rgba(0,0,0,.075);
   box-shadow: inset 0 1px 1px rgba(0,0,0,.075);
@@ -110,7 +239,7 @@ input[type=submit] {
     border: 1px solid transparent;
     border-radius: 4px;
     padding-left: 2em;
-    border: 1px solid #ccc;
+    border: 1px solid var(--border-color);
     background: url(data:image/svg+xml;base64,PHN2ZyBpZD0iaWNvbi1zZWFyY2giIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4IiB2aWV3Qm94PSIwIDAgOCA4IiB4bWw6c3BhY2U9InByZXNlcnZlIj4NCjxwYXRoIGlkPSJzZWFyY2giIGQ9Ik03Ljk5LDYuOTI4TDUuODQ3LDQuNzg0YzAuMjg5LTAuNDc2LDAuNDU4LTEuMDMzLDAuNDU4LTEuNjNDNi4zMDUsMS40MTIsNC44OTUsMCwzLjE1MiwwDQoJQzEuNDExLDAsMCwxLjQxMiwwLDMuMTU0YzAsMS43NDEsMS40MTIsMy4xNTEsMy4xNTMsMy4xNTFjMC41OTcsMCwxLjE1NC0wLjE2OSwxLjYzLTAuNDU4bDIuMTQ1LDIuMTQ2TDcuOTksNi45Mjh6IE0xLjIwMywzLjE1NA0KCWMwLjAwMi0xLjA3NywwLjg3NC0xLjk0OSwxLjk1MS0xLjk1MWMxLjA3NiwwLjAwMiwxLjk0OCwwLjg3NCwxLjk0OSwxLjk1MUM1LjEwMSw0LjIzLDQuMjI5LDUuMTAzLDMuMTUzLDUuMTAzDQoJQzIuMDc1LDUuMTAzLDEuMjA1LDQuMjMsMS4yMDMsMy4xNTR6Ii8+DQo8L3N2Zz4=) 0.8em center/0.8em no-repeat;
 
 }
@@ -119,20 +248,22 @@ input[name=q]:focus {
   outline: none;
 }
 
-:-moz-placeholder {color: #ccc;}
-::-moz-placeholder {color: #ccc;}
-:-ms-input-placeholder {color: #ccc;}
-::-webkit-input-placeholder {color: #ccc;}
+:-moz-placeholder {color: var(--caption-color);}
+::-moz-placeholder {color: var(--caption-color);}
+:-ms-input-placeholder {color: var(--caption-color);}
+::-webkit-input-placeholder {color: var(--caption-color);}
 
 a.footnote-ref {margin-left: 0;margin-right: 0;text-decoration: none;}
 
 /* CODE */
 
 code {
-  font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace;
-  background: rgba(0,0,0,.03);
+  {{#syntax_highlighter_font}}
+  font-family: {{{stack}}};
+  font-size: {{{font_size}}}px;
+  {{/syntax_highlighter_font}}
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.03);
   border-radius: 4px;
-  font-size: smaller;
   line-height: inherit;
   margin: 0;
 }
@@ -147,7 +278,7 @@ p code {
 pre code {
   display: block;padding: 12px 18px;
   margin: 0 0 0 -18px;
-  background-color: rgba(0,0,0,.02)
+  background-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.02)
 }
 
 /* TABLES */
@@ -165,8 +296,8 @@ table {
   line-height: inherit;
 }
 
-tr {box-sizing: border-box;border-top: 1px solid #ccc;padding: 0}
-th, td {box-sizing: border-box;border: 1px solid #ddd;padding: 5px 12px 6px}
+tr {box-sizing: border-box;border-top: 1px solid var(--border-color);padding: 0}
+th, td {box-sizing: border-box;border: 1px solid var(--border-color);padding: 5px 12px 6px}
 
 /* LISTS */
 
@@ -235,7 +366,7 @@ iframe {width: 100%;}
 .left.inside {margin-right: 2em}
 .right.inside {margin-left: 2em}
 
-.margin blockquote {margin: 3px 0;color:#232323;padding: 3px 6px;font-size: smaller;}
+.margin blockquote {margin: 3px 0;color: var(--text-color);padding: 3px 6px;font-size: smaller;}
 .margin blockquote p {margin: 0}
 
 .margin h1, .margin h2, .margin h3 {margin-top:0}
@@ -292,19 +423,6 @@ iframe {width: 100%;}
 .column h2,
 .column h3 {margin-bottom: -12px}
 
-/* The theme used by the syntax highlighting app */
-.hljs {display: block;overflow-x: auto;}
-.hljs-comment, .hljs-quote, .hljs-variable {color: #008000;}
-.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-name, .hljs-tag {color: #00f;}
-.hljs-string, .hljs-title, .hljs-section, .hljs-attribute, .hljs-literal, .hljs-template-tag, .hljs-template-variable, .hljs-type, .hljs-addition {color: #a31515;}
-.hljs-deletion, .hljs-selector-attr, .hljs-selector-pseudo, .hljs-meta {color: #2b91af;}
-.hljs-doctag {color: #808080;}
-.hljs-attr {color: #f00;}
-.hljs-symbol, .hljs-bullet, .hljs-link {color: #00b0e8;}
-.hljs-emphasis {font-style: italic;}
-.hljs-strong {font-weight: bold;}
-
-
 @media screen and (max-width: 952px) {
 
   .entry .margin {position: relative;top: auto;left: auto;right: auto;bottom: auto;}
@@ -318,7 +436,10 @@ iframe {width: 100%;}
   .wide.left .caption {margin-left: 0}
 }
 
-@media screen and (max-width: 34em) {
+/* Drop the 50vw full-bleed trick once the viewport is narrower than the
+   configured content width - past that point the fixed --max-width/2 offset
+   pushes rows and rules off-screen. Tracks the max_width control. */
+@media screen and (max-width: {{max_width}}em) {
 
   hr.full, a.row {width: 100%;margin-left: 0;margin-right:0;padding-right: 0;padding-left:0;position: relative;left: 0;}
 
@@ -330,10 +451,10 @@ iframe {width: 100%;}
   ul ul, ol ul, ol ol, ul ol {margin-left: 0}
   .nav .right {clear: both;float: none;margin-top: 3px}
   a.search {margin-left: 0}
-  body {font-size: 1rem;padding: 1rem}
+  body {padding: calc(var(--spacing) * 0.35)}
 
 }
 
 @media screen and (max-width: 400px) {
-  body {font-size: 0.9rem;padding: 0.5rem;margin: 0}
+  body {padding: calc(var(--spacing) * 0.2);margin: 0}
 }

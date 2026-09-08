@@ -1,0 +1,32 @@
+{{#is.index_layout.titles}}
+<a href="{{{url}}}" class="row"><b>{{title}}</b>{{#date}}&nbsp;·&nbsp;&nbsp;<span style="white-space: nowrap;">{{date}}</span>{{/date}}</a>
+{{/is.index_layout.titles}}
+
+{{#is.index_layout.title_and_summary}}
+<a href="{{{url}}}" class="row row-with-summary">
+  <b>{{title}}</b>{{#date}}&nbsp;·&nbsp;&nbsp;<span style="white-space: nowrap;">{{date}}</span>{{/date}}
+  {{#summary}}<span class="row-summary">{{summary}}</span>{{/summary}}
+</a>
+{{/is.index_layout.title_and_summary}}
+
+{{#is.index_layout.post_in_full}}
+<article class="entry listing-entry">
+  {{{html}}}
+  {{#date}}
+  <small><a href="{{{url}}}">Posted on {{date}}</a></small>
+  {{/date}}
+  {{^date}}
+  <small><a href="{{{url}}}">Permalink</a></small>
+  {{/date}}
+  {{#show_tags}}
+  {{#tags.length}}
+  <small>
+    {{#tags}}
+    &nbsp;&nbsp;<a href="/tagged/{{slug}}">#{{name}}</a>&nbsp;&nbsp;
+    {{/tags}}
+  </small>
+  {{/tags.length}}
+  {{/show_tags}}
+</article>
+<hr class="full">
+{{/is.index_layout.post_in_full}}

@@ -2,8 +2,59 @@
   "name": "Index",
   "locals": {
     "page_size": 20,
+    "page_size_range": [5, 40],
     "hide_dates": false,
-    "date_display": "MMMM D, Y"
+    "date_display": "MMMM D, Y",
+    "background_color": "#ffffff",
+    "text_color": "#333333",
+    "link_color": "#468CC7",
+    "body_font": {
+      "id": "system-sans",
+      "font_size": 18,
+      "line_height": 1.4
+    },
+    "heading_font": {
+      "id": "system-sans",
+      "font_size": 18,
+      "line_height": 1.75
+    },
+    "navigation_font": {
+      "id": "system-sans",
+      "font_size": 18,
+      "line_height": 1.75
+    },
+    "syntax_highlighter": {
+      "id": "vs"
+    },
+    "syntax_highlighter_font": {
+      "id": "system-mono",
+      "font_size": 16
+    },
+    "favicon_url": "",
+    "logo_url": "",
+    "navigation_alignment": "left",
+    "navigation_alignment_options": [
+      "left",
+      "right",
+      "center",
+      "justified"
+    ],
+    "sticky_navigation": false,
+    "footer_navigation": false,
+    "uppercase_navigation": false,
+    "show_title": true,
+    "show_tags": true,
+    "show_adjacent_posts": true,
+    "index_layout": "titles",
+    "index_layout_options": [
+      "titles",
+      "title_and_summary",
+      "post_in_full"
+    ],
+    "max_width": 32,
+    "max_width_range": [20, 48],
+    "spacing": 3,
+    "spacing_range": [1, 8]
   },
   "isPublic": false,
   "views": {

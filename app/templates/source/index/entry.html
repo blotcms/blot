@@ -13,6 +13,7 @@
       <small>Posted on {{date}}</small>
       {{/date}}
 
+      {{#show_tags}}
       {{#tags.length}}
       <small>
         {{#tags}}
@@ -20,19 +21,20 @@
         {{/tags}}
       </small>
       {{/tags.length}}
+      {{/show_tags}}
 
       {{> pluginHTML}}
 
       <br><br>
       </div>
 
+      {{#show_adjacent_posts}}
       <br><br><br>
       <hr class="full">
 
       {{#adjacent}}
       <br>
       {{/adjacent}}
-
 
       {{#next}}
       <small><a href="{{{url}}}">&larr;&nbsp;Next post</a></small>
@@ -45,6 +47,7 @@
       {{/previous}}
 
       <br>
+      {{/show_adjacent_posts}}
 
     {{/entry}}
 

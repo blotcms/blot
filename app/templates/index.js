@@ -230,7 +230,7 @@ function build(directory, callback) {
         name: name,
         description: description,
         isPublic: isPublic,
-        locals: snapshot.locals,
+        locals: normalizeLocalsForComparison(snapshot.locals),
       };
 
       var storedMetadataSnapshot = storedMetadata
@@ -238,7 +238,7 @@ function build(directory, callback) {
             name: storedMetadata.name,
             description: storedMetadata.description,
             isPublic: storedMetadata.isPublic,
-            locals: storedMetadata.locals || {},
+            locals: normalizeLocalsForComparison(storedMetadata.locals || {}),
           }
         : null;
 
@@ -338,6 +338,26 @@ function buildViews(id, definitions, callback) {
       });
     }
   );
+}
+
+// The build expands `syntax_highlighter` to the full theme object, but
+// models/template/injectLocals strips these volatile fields before the
+// metadata is stored (see SYNTAX_HIGHLIGHTER_PROPS_TO_DELETE). Comparing the
+// two representations directly would never match, so every startup would take
+// the Template.drop/recreate path and flush the cache for every blog using a
+// template that declares a syntax highlighter. Normalise both sides first.
+var SYNTAX_HIGHLIGHTER_VOLATILE_PROPS = ["background", "tags", "name", "colors"];
+
+function normalizeLocalsForComparison(locals) {
+  var normalized = _.cloneDeep(locals || {});
+
+  if (normalized.syntax_highlighter && typeof normalized.syntax_highlighter === "object") {
+    SYNTAX_HIGHLIGHTER_VOLATILE_PROPS.forEach(function (prop) {
+      delete normalized.syntax_highlighter[prop];
+    });
+  }
+
+  return normalized;
 }
 
 function assembleTemplateSnapshot(directory, templatePackage, locals) {

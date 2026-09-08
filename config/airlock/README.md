@@ -188,21 +188,35 @@ it".
    bad airlock build can't leave nothing running at all.
 
 3. **Connecting app containers.** Deliberately **not** `--network blotnet`
-   on the app containers at creation - that would move them off the default
-   `bridge` network entirely, changing their gateway from `172.17.0.1` to
-   `blotnet`'s gateway, which could silently break a hardcoded
-   `BLOT_REDIS_HOST` or `BLOT_REVERSE_PROXY_URLS` on the live host (neither
-   is visible from this repo). Instead, after each app container starts (or
-   is confirmed already up to date), `connectToAirlockNetwork()` checks
-   `blotnet`'s membership first and only runs `docker network connect
-   blotnet <container>` if it isn't already a member - Docker's supported
-   way to give a running container a *second* network interface. Checking
-   membership first (rather than attempting the connect and swallowing
-   "already exists" with `|| true`) means a genuine attach failure - a
-   missing network, a renamed container - surfaces in the deploy log
-   instead of looking identical to success. The container keeps its
-   original bridge network and gateway untouched, and gains the ability to
-   resolve and reach `blot-airlock` via `blotnet`'s embedded DNS.
+   on the app containers - that would move them off the default `bridge`
+   network entirely, changing their gateway from `172.17.0.1` to `blotnet`'s
+   gateway, which could silently break a hardcoded `BLOT_REDIS_HOST` or
+   `BLOT_REVERSE_PROXY_URLS` on the live host (neither is visible from this
+   repo). Instead, each app container is created stopped (`docker create`),
+   `connectToAirlockNetwork()` runs `docker network connect blotnet
+   <container>`, and only then is it started (`docker start`) - so the app
+   process starts up with `blotnet` already in place and opens its Redis
+   connections once, against the final network shape.
+
+   This attach step used to run *after* `docker run`, on the
+   already-running container. Connecting a network to a running container
+   reprograms its routing table and drops in-flight conntrack entries: it
+   was tearing down the app's established connections to the off-box Redis
+   instance a few seconds into every deploy, which node-redis surfaced as an
+   unhandled `read ETIMEDOUT` `error` event that crash-restarted each
+   container exactly once per deploy. The restart "fixed" it only because
+   the restarted container came up already attached to both networks - which
+   is now what a first start does too.
+
+   `connectToAirlockNetwork()` checks `blotnet`'s membership first and only
+   connects if the container isn't already a member - Docker's supported way
+   to give a container a *second* network interface. Checking membership
+   first (rather than attempting the connect and swallowing "already exists"
+   with `|| true`) means a genuine attach failure - a missing network, a
+   renamed container - surfaces in the deploy log instead of looking
+   identical to success. The container keeps its original bridge network and
+   gateway untouched, and gains the ability to resolve and reach
+   `blot-airlock` via `blotnet`'s embedded DNS.
    `generateDockerCommand.js` sets `BLOT_AIRLOCK_BROWSER_URL` /
    `BLOT_AIRLOCK_PROXY_URL` to `http://blot-airlock:9222` / `:8888` on
    every app container - see "Configuration" above.

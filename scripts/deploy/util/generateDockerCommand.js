@@ -171,11 +171,19 @@ async function generateDockerCommand(container, platform, commitHash) {
   // Sanitize inputs for command construction
   const sanitizedName = sanitizeString(containerName);
 
-  // Construct command string
+  // Construct command string.
+  //
+  // `docker create`, not `docker run`: the container is created stopped so the
+  // deploy script can attach it to AIRLOCK.network (see connectToAirlockNetwork
+  // in ../index.js) *before* it is started. Attaching a second network to an
+  // already-running container reprograms its routing table and drops in-flight
+  // conntrack entries - which killed the app's established connections to the
+  // off-box Redis instance seconds after every deploy, surfacing as an
+  // unhandled `read ETIMEDOUT` that crash-restarted each container exactly once.
+  // Creating stopped, connecting the network, then starting means the app opens
+  // its Redis connections once, after the network is already in its final shape.
   return [
-    "docker run",
-    // Run the container in the background
-    "-d",
+    "docker create",
     // If the container stops, restart it unless explicitly stopped
     "--restart unless-stopped",
     `--name ${sanitizedName}`,
@@ -198,9 +206,9 @@ async function generateDockerCommand(container, platform, commitHash) {
     // Routes bookmark-link screenshots (helper/screenshot) and remote-image
     // downloads (helper/transformer/download) through the airlock - see
     // config/airlock/README.md. This container is connected to
-    // AIRLOCK.network after it starts (see deployContainer/
-    // connectToAirlockNetwork in ../index.js), not via --network here - see
-    // the comment on AIRLOCK in ../constants.js for why.
+    // AIRLOCK.network between `docker create` and `docker start` (see
+    // deployContainer/connectToAirlockNetwork in ../index.js), not via
+    // --network here - see the comment on AIRLOCK in ../constants.js for why.
     `-e BLOT_AIRLOCK_BROWSER_URL=http://${AIRLOCK.name}:9222`,
     `-e BLOT_AIRLOCK_PROXY_URL=http://${AIRLOCK.name}:8888`,
     // Mount the data directory on the host to the container

@@ -53,12 +53,17 @@ module.exports = {
   // fetching untrusted, user-supplied URLs. See config/airlock/README.md.
   //
   // Deployed as a single, standalone container - not blue/green/yellow -
-  // on its own Docker network. App containers are NOT switched onto this
-  // network at creation (that would move their default gateway off the
-  // bridge they're on today - see config/airlock/README.md's production
+  // on its own Docker network. App containers are NOT given `--network
+  // blotnet` at `docker create` (that would move their default gateway off
+  // the bridge they're on today - see config/airlock/README.md's production
   // note); instead the deploy script `docker network connect`s each app
-  // container to it after it starts, so they keep their original network
-  // and gain a second interface that can reach `blot-airlock`.
+  // container to it between `docker create` and `docker start`, so they keep
+  // their original bridge network and gateway and gain a second interface
+  // that can reach `blot-airlock`. Attaching the network before start (not
+  // after, as originally written) matters: connecting a network to an
+  // already-running container drops its in-flight connections - it was
+  // killing the app's established connections to the off-box Redis instance
+  // seconds after each deploy, one crash-restart per container.
   //
   // memory is deliberately tight. Idle (nginx + tinyproxy + a headless
   // Chromium with no page open) this sits under ~300m; it held up in
