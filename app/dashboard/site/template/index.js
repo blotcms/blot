@@ -12,7 +12,12 @@ const writeChangeToFolder = require('./save/writeChangeToFolder');
 // so docs can deep link to e.g. /sites/gitt/template/default/links
 TemplateEditor.use("/default", (req, res, next) => {
   const slug = res.locals.template?.slug;
-  if (!slug) return next();
+  // When the installed template's own slug is literally "default" (the user
+  // named a local template "default") there is nothing to disambiguate: fall
+  // through to the /:templateSlug route, which loads it directly. Redirecting
+  // here would point /template/default at itself and loop until the browser
+  // bails with ERR_TOO_MANY_REDIRECTS.
+  if (!slug || slug === "default") return next();
   const pathSuffix = req.path || "";
   res.redirect(`${res.locals.base}/template/${slug}${pathSuffix}`);
 });
