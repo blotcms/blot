@@ -159,7 +159,7 @@ async function getCurrentImageHash(containerName) {
 }
 
 async function deployContainer(container, platform, imageHash) {
-  const dockerRunCommand = await generateDockerCommand(
+  const dockerCreateCommand = await generateDockerCommand(
     container,
     platform,
     imageHash
@@ -167,7 +167,7 @@ async function deployContainer(container, platform, imageHash) {
 
   console.log(`Deploying ${container.name}... with command:`);
   console.log();
-  console.log(dockerRunCommand);
+  console.log(dockerCreateCommand);
   console.log();
 
   console.log("Pulling new image...");
@@ -194,8 +194,19 @@ async function deployContainer(container, platform, imageHash) {
     );
   }
   await removeContainer(container.name);
+
+  // Create the container stopped, attach the airlock network, THEN start it -
+  // so the app process finds its network in final shape and opens its Redis
+  // connections once. Connecting a network to an already-running container
+  // (the previous behaviour) dropped the app's in-flight connections to the
+  // off-box Redis instance, which surfaced as an unhandled `read ETIMEDOUT`
+  // that crash-restarted every container once per deploy. See
+  // generateDockerCommand.js and the AIRLOCK comment in ./constants.js.
+  console.log("Creating new container...");
+  await sshCommand(dockerCreateCommand);
+  await connectToAirlockNetwork(container.name);
   console.log("Starting new container...");
-  await sshCommand(dockerRunCommand);
+  await sshCommand(`docker start ${container.name}`);
   console.log("Checking health of new container...");
   await checkHealth(container.name, container.port);
 }
@@ -455,7 +466,11 @@ async function main() {
           `Image for ${container.name} is already deployed. Skipping...`
         );
         // Still ensure the network hookup exists even when we skip
-        // redeploying the container itself (e.g. a re-run of this script).
+        // redeploying the container itself (e.g. a re-run of this script, or a
+        // container whose create-time attach failed on the previous deploy).
+        // This is the one path that may attach the network to an
+        // already-running container; a normal deploy attaches it between
+        // `docker create` and `docker start` (see deployContainer).
         await connectToAirlockNetwork(container.name);
         continue;
       }
@@ -467,8 +482,8 @@ async function main() {
       }
 
       try {
+        // deployContainer attaches AIRLOCK.network between create and start.
         await deployContainer(container, platform, imageHash);
-        await connectToAirlockNetwork(container.name);
       } catch (error) {
         console.error(`Deployment failed for ${container.name}`);
 
@@ -489,7 +504,6 @@ async function main() {
         console.error("Rolling back...");
         try {
           await deployContainer(container, platform, rollbackHash);
-          await connectToAirlockNetwork(container.name);
           console.error("Rollback succeeded.");
         } catch (rollbackError) {
           console.error("Rollback failed:", rollbackError);
