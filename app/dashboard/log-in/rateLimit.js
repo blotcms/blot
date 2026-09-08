@@ -2,19 +2,15 @@ const { rateLimit}  = require("express-rate-limit");
 const { RedisStore } = require('rate-limit-redis')
 const redis = require("redis");
 const config = require("config");
-const instrumentRedis = require("helper/instrumentRedis");
-
-const redisUrl = `redis://${config.redis.host}:${config.redis.port}`;
 
 // rate-limit-redis uses the promise API (get/set/del with options), so use
 // a native redis client, not the shared application singleton from models/client.
 const client = redis.createClient({
-  url: redisUrl,
+  url: `redis://${config.redis.host}:${config.redis.port}`,
   RESP: 2,
   commandOptions: { timeout: undefined },
   socket: { keepAliveInitialDelay: 5000 },
 });
-instrumentRedis("dashboard-login-rate-limit", client, redisUrl);
 client.connect().catch((err) => {
   console.error("Rate limit Redis connect error:", err);
 });

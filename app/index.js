@@ -1,17 +1,5 @@
 const config = require("config");
 const clfdate = require("helper/clfdate");
-
-// Observes fatal exceptions without installing an uncaughtException handler:
-// Node still follows its normal exit path. This is a last-resort breadcrumb
-// when a crash happens before a subsystem can identify itself.
-process.on("uncaughtExceptionMonitor", (error, origin) => {
-  console.error(clfdate(), "Uncaught exception", {
-    origin,
-    pid: process.pid,
-    release: process.env.BLOT_RELEASE_ID || process.env.GIT_SHA,
-  }, error);
-});
-
 const email = require("helper/email");
 const redis = require("models/client");
 const setup = require("./setup");
