@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+  {{> head}}
+  <body>
+    <div class="wrapper">
+      {{> header}}
+
+      <div class="content-wrapper">
+        <main class="main">
+
+          {{#posts}}
+          <article class="post">
+            {{^hide_dates}}{{#date}}<div class="date-header"><span>{{date}}</span></div>{{/date}}{{/hide_dates}}
+            <h2 class="post-title"><a href="{{{url}}}">{{title}}</a></h2>
+            <div class="post-body">{{{body}}}</div>
+            <div class="post-footer">
+              {{#author}}<span class="post-author">Posted by {{.}}</span>{{/author}}
+              {{^hide_dates}}{{#date}}<span class="post-date">{{date}}</span>{{/date}}{{/hide_dates}}
+              {{#tags}}<span class="post-tag-separator">&middot;</span><a href="/tagged/{{slug}}" class="post-tag">{{tag}}</a>{{/tags}}
+            </div>
+          </article>
+          {{/posts}}
+
+          {{#pagination}}
+          <div class="blog-pager">
+            <span class="pager-newer">{{#previous}}<a href="/page/{{previous}}">Newer Posts</a>{{/previous}}</span>
+            <a class="pager-home" href="/">Home</a>
+            <span class="pager-older">{{#next}}<a href="/page/{{next}}">Older Posts</a>{{/next}}</span>
+          </div>
+          {{/pagination}}
+
+          {{> feed-links}}
+        </main>
+
+        {{> sidebar}}
+        <div class="clear"></div>
+      </div>
+
+      {{> footer}}
+    </div>
+  </body>
+</html>

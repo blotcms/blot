@@ -1,0 +1,242 @@
+# Notebook
+
+A Blot template, started from the "Translated" template as a base.
+
+This file is also the brief for whoever — or whatever — edits this template next.
+
+## How a Blot template works
+
+Every file here is a **view**. Views are rendered with
+[Mustache](https://mustache.github.io/mustache.5.html), whatever their extension:
+HTML, CSS, JavaScript, RSS and XML views are all rendered the same way, so a
+stylesheet can use `{{text_color}}` just as a page can.
+
+`package.json` is the configuration:
+
+- `locals` — variables available to every view.
+- `views` — per-view settings: `url` for routing, and `partials` for small
+  inline strings such as the page title.
+- `enabled: true` — installs this template when the folder is added to a site.
+  Leave it in place.
+
+## Which view renders which page
+
+| View | When it renders |
+|---|---|
+| `entries.html` | The homepage, and `/page/2`, `/page/3`… |
+| `entry.html` | A single post |
+| `archives.html` | The archives listing |
+| `tagged.html` | `/tagged/some-tag` |
+| `search.html` | `/search?q=…` |
+| `error.html` | 404s and render failures |
+| `feed.rss`, `sitemap.xml`, `robots.txt` | Exactly what they say |
+
+**A view's default URL keeps its file extension.** `archives.html` is served at
+`/archives.html`, not `/archives`. That is why `package.json` maps it explicitly:
+
+```json
+"views": { "archives.html": { "url": "/archives" } }
+```
+
+If you add a view and cannot find it at the URL you expected, this is why.
+
+## Partials
+
+`{{> header}}` includes the view named `header.html`. Partials inherit the
+surrounding context, so they can use the same variables as the view including
+them.
+
+`{{> /Pages/About.txt}}` — a partial whose name starts with `/` includes the
+rendered HTML of that file from the site's folder.
+
+## Rules that are easy to trip over
+
+- **No subdirectories.** Every view lives in this folder's root. Files in
+  subdirectories are ignored.
+- **No Sass or SCSS.** Plain CSS only; nothing is compiled.
+- **Escaping.** `{{value}}` escapes HTML. Use `{{{value}}}` for anything
+  containing markup or slashes — `{{{url}}}`, `{{{html}}}`, `{{{body}}}`.
+- **No duplicate basenames.** `feed.xml` and `feed.rss` collide, because views
+  are also resolved with their extension stripped.
+- **2 MB per view.** Larger files are skipped.
+
+## Gotchas found the hard way
+
+These cost real debugging time while building this template - read them
+before repeating the mistake.
+
+- **`feed.rss`'s URL is not really configurable.** `blog.feedURL` is
+  hardcoded to `/feed.rss` platform-wide
+  (`app/models/blog/extend.js`) - every "Subscribe to RSS" link,
+  `<link rel="alternate">`, and default menu entry point there
+  regardless of what URL the view itself maps to. Remapping the
+  `feed.rss` view's `url` in `package.json` (e.g. to preserve a
+  Blogger-style `/feeds/posts/default` path during a migration) makes
+  the feed exist at that URL while every advertised link still points
+  at `/feed.rss` and 404s. If you need a legacy alias, add it as a
+  *second* URL pattern for the same view rather than moving the view
+  off `/feed.rss`.
+
+- **Tag objects don't have a `url` field.** The `tags` section (on an
+  entry, or via `all_tags`) gives you `name`, `tag`, `slug`, and
+  `total` - no `url`. Writing `<a href="{{{url}}}">` inside a `tags`
+  loop silently falls through to whatever `url` the *surrounding*
+  context provides (the post's own URL, if you're inside `entry` /
+  `recent_entries`), producing a link that looks right but goes to
+  the wrong place. Build the link yourself: `/tagged/{{slug}}`.
+
+- **A shadowed local doesn't fall back to the outer one.** Inside a
+  `recent_entries` or `entry` loop, the bare `title` tag is that
+  entry's title, not the site's - even though the site's own title is
+  available under the same name at the page's top level. Mustache has
+  no "go to the parent context" operator, and a dotted path like
+  `blog.title` (a pattern copied from `text`/`magazine`'s `feed.rss`)
+  does *not* work here either - `blog` isn't exposed as a nested
+  object to Mustache in this render path, so it silently resolves to
+  nothing (verify with `?json=true` before trusting a dotted path
+  like that). There's no reliable way to reach the site title from
+  inside an entries loop; design around it instead of fighting it -
+  `feed.rss`'s `dc:creator` now omits the element entirely when
+  `author` is unset, rather than guessing at a fallback.
+
+- **Fixed-width flex columns don't stack until the media query fires.**
+  `.main` + `.sidebar` are sized in `rem` off the configurable
+  `--base-font-size` (see below), but the `@media (max-width: 640px)`
+  breakpoint that stacks them is a fixed viewport px value. At the
+  default font size the two columns already sum to just under the
+  640px gap they have to clear, so there's very little headroom - a
+  larger configured font size can push their combined width past the
+  viewport before the breakpoint kicks in, causing overflow/clipping
+  in between. `flex: 0 1 var(--width)` (shrink allowed, don't grow) on
+  both columns is the fix that doesn't depend on guessing a breakpoint
+  large enough for every configured font size.
+
+- **Alpha-blending a color toward a lighter background has a ceiling:
+  the base color's own contrast, at alpha 1.** It can never get darker
+  than that no matter how high the alpha goes. `accent_color`'s
+  original default (`#6A9718`) only reached ~3.2:1 against
+  `background_color` even at full strength - short of WCAG
+  AA's 4.5:1 for small text no matter what alpha the sidebar
+  links/headings and date/footer metadata used. The default is now
+  `#9A3412` (~6.9:1 at full strength), which leaves enough room for
+  those tints to sit at 0.9+ alpha and actually clear 4.5:1. If you
+  change the default again, check the ceiling first, not just the
+  alphas.
+
+## Working on the design
+
+Append `?json=true` to any page on the site to see the exact data the template is
+rendered with. That is the fastest way to find out what is available.
+
+Keep the template portable. It will be used on other people's sites, so never
+hardcode a hostname, a CDN address, or a site ID. Reference template assets with
+`{{#cdn}}/style.css{{/cdn}}`, and folder assets with ordinary relative paths.
+
+## Locals this template uses
+
+See `package.json`. This template only exposes two standalone color
+controls — `text_color` (body text, and the header/footer background) and
+`background_color` (the reading pane behind the post list and
+sidebar) — plus `font` / `title_font`. Every other color in the design
+comes from a single `accent_color` local (default a dark orange,
+`#9A3412` - picked to leave headroom for WCAG contrast, see below):
+
+- `--page-background` (the outer canvas) and `--link-color` are the accent
+  color at full strength, unchanged.
+- The whole secondary palette — post-title color, the column edge, sidebar
+  heading/link colors, borders, and the sidebar background — is a tint of
+  the same accent, each at a different alpha.
+
+`style.css` computes `--accent-rgb` once from `accent_color` and builds
+every tint with `rgba(var(--accent-rgb), A)`. No Sass, no `color-mix()` —
+just the `rgb` retrieve helper (`{{#rgb}}{{accent_color}}{{/rgb}}`) other
+Blot templates (`text`, `magazine`) already use for tinting `text_color`.
+Change `accent_color`
+alone and the entire palette (canvas, links, titles, borders, sidebar)
+reworks itself in one move.
+
+Two hover states don't derive from `accent_color`, using `opacity`
+instead: `a:hover` (general body links) and `.site-title a:hover` (the
+near-white header title). Alpha-blending an orange accent under either
+can't reliably darken/dim them the way it works for accent-on-accent
+tints sitting on a lighter background — `opacity` sidesteps the problem
+entirely and needs no color math.
+
+Other locals:
+
+- `date_display` defaults to `"dddd, MMMM D, YYYY"` (e.g. "Tuesday, August
+  11, 2026").
+- `author` — shown as "Posted by …" in the post footer (and as the RSS
+  `dc:creator`). Empty hides the byline, so the template still works on
+  sites that don't want one.
+
+Layout and type are still those of the Translated base template and have
+not yet been redesigned for Notebook.
+
+`sidebar.html`'s "Blog Archive" widget renders the `archives` list (year >
+month > entries) as nested `<details>`/`<summary>` trees — collapsible with
+no JavaScript. Its "Links" widget iterates `{{#menu}}{{/menu}}` (dashboard Links plus
+any Pages on the menu). The widget is omitted when the menu is empty.
+
+## QA checklist
+
+Run through this before considering the template production-ready, and again
+after any significant design change.
+
+**Responsive**
+
+- [ ] Test on mobile devices
+  - [ ] iPhone portrait
+  - [ ] iPhone landscape
+  - [ ] iPad / tablet portrait
+
+**Content**
+
+- [ ] Test kitchen sink post styles
+- [ ] Test empty and edge states
+  - [ ] A blog with zero posts
+  - [ ] A tag with only one entry
+  - [ ] Search with no results
+- [ ] Test pagination (first page, a middle page, the last page)
+- [ ] Check the template has good error pages (missing, invalid)
+- [ ] Check light and dark mode looks good
+
+**Configuration**
+
+- [ ] Check fonts can be changed
+- [ ] Check date format can be changed
+- [ ] Check colors can be changed
+- [ ] Check publishing options
+  - [ ] Image zoom
+  - [ ] Image captions
+  - [ ] Syntax highlighting
+  - [ ] Typeset
+
+**Resilience**
+
+- [ ] Check the site still works with JavaScript disabled (the archive
+      widget in particular should degrade to plain `<details>`/`<summary>`)
+- [ ] Verify no third party assets loaded
+
+**Performance**
+
+- [ ] Minify and optimize any images used
+- [ ] Minify and optimize any third party CSS embedded
+- [ ] Minify and optimize any third party JS embedded
+
+**SEO**
+
+- [ ] H1 on index pages should be site title
+- [ ] H1 on permalink pages should be post title
+- [ ] Open Graph / Twitter card meta tags present and correct
+- [ ] Favicon renders
+- [ ] Validate `feed.rss` and `sitemap.xml` are well-formed
+
+**Cross-browser**
+
+- [ ] Spot check in Safari, Firefox, and Chrome
+
+**Automated**
+
+- [ ] Validate template using Lighthouse (performance, accessibility, SEO,
+      best practices)

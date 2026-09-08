@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+  {{> head}}
+  <body>
+    <div class="wrapper">
+      {{> header}}
+
+      <div class="content-wrapper">
+        <main class="main">
+          <div class="page-body">
+          <h1 class="page-title">Search</h1>
+
+          <form class="search-form">
+            <input placeholder="Search for an entry..." value="{{#query}}{{query}}{{/query}}" name="q" id="search" type="text" />
+            <input type="submit" value="Go" />
+          </form>
+
+          <ul class="full-archive">
+          {{#query}}
+            {{^entries}}
+            <li class="no-results">Sorry, no results for &ldquo;{{query}}&rdquo;</li>
+            {{/entries}}
+          {{/query}}
+
+          {{#entries}}
+            <li><a href="{{{url}}}"><span class="archive-title">{{title}}</span> <span class="light">{{date}}</span></a></li>
+          {{/entries}}
+          </ul>
+          </div>
+          {{> feed-links}}
+        </main>
+
+        {{> sidebar}}
+        <div class="clear"></div>
+      </div>
+
+      {{> footer}}
+    </div>
+
+    <script type="text/javascript">document.getElementById('search').focus();</script>
+  </body>
+</html>
