@@ -2,6 +2,8 @@ Release new notebook template
 
 ---
 
+Todo verify we're still processing Stripe and PayPal webhooks now they are verified
+
 Add a link to how section on pages to menu links settings page to guide new users! 
 
 Hitting the save changes button under typeset settings spits you back out to homepage! Bug!
