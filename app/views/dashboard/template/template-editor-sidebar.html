@@ -22,7 +22,23 @@
         {{> upload}}
         {{/uploads}}
         </div>
-        {{/uploads.length}}
+	{{/uploads.length}}
+
+	<div class="settings-group">
+		<h2 class="template-heading">Favicon</h2>
+		<a class="line" href="{{{base}}}/favicon" style="padding: 11px 14px;border-bottom: none;">
+			{{#favicon}}
+			<span class="center" style="width:48px;height:48px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;">
+				<img style="width:32px;height:32px;image-rendering:pixelated;" src="{{{png32}}}" alt="Favicon preview" />
+			</span>
+			<span class="link">Edit favicon</span>
+			{{/favicon}}
+			{{^favicon}}
+			<span class="center" style="border:1px dashed var(--border-color);width:48px;height:48px;display:inline-block;vertical-align:middle;margin-right:0.5rem;border-radius:var(--border-radius);"></span>
+			<span class="link">Choose a favicon</span>
+			{{/favicon}}
+		</a>
+	</div>
 
         <div class="settings-group">
                 <h2 class="template-heading">Menu</h2>
@@ -90,4 +106,3 @@
 	<div class="settings-group template-docs-support-links-group">
 		{{> template-docs-support-links}}
 	</div>
-

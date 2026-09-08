@@ -28,7 +28,6 @@
     "heading_font": {
       "id": "system-sans"
     },
-    "favicon_url": "",
     "navigation_alignment": "left",
     "navigation_alignment_options": ["left", "center"],
     "demo_folder": "clara"

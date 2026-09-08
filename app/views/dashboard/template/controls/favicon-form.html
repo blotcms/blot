@@ -1,0 +1,40 @@
+{{> template-settings-back}}
+
+<form method="post" action="{{{base}}}/favicon" enctype="multipart/form-data" class="dashboard-form favicon-form" data-favicon-form>
+  <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+  <input type="hidden" name="redirect" value="{{{base}}}/favicon" />
+  <input type="hidden" name="crop_x" value="" data-favicon-crop-x />
+  <input type="hidden" name="crop_y" value="" data-favicon-crop-y />
+  <input type="hidden" name="crop_size" value="" data-favicon-crop-size />
+
+  <div class="settings-group">
+    <h2 class="template-heading">Favicon</h2>
+    <div class="favicon-form__body">
+      <p class="favicon-form__help">Choose an image, then position the square over the part that should appear in your site icon.</p>
+
+      <label class="favicon-form__file">
+        <span>Select an image</span>
+        <input type="file" name="favicon" accept="image/*,.svg" data-favicon-input />
+      </label>
+
+      <div class="favicon-cropper" hidden data-favicon-cropper>
+        <div class="favicon-cropper__image" data-favicon-image-wrap>
+          <img alt="Crop your favicon" data-favicon-image />
+          <div class="favicon-cropper__selection" data-favicon-selection></div>
+        </div>
+        <p class="favicon-form__help">Drag the square to reposition it. Drag its lower-right corner to resize it.</p>
+      </div>
+
+      <div class="favicon-previews" data-favicon-previews {{^favicon}}hidden{{/favicon}}>
+        <span>Preview</span>
+        <img width="16" height="16" src="{{#favicon}}{{{png16}}}{{/favicon}}" alt="16 pixel favicon" data-favicon-preview="16" />
+        <img width="32" height="32" src="{{#favicon}}{{{png32}}}{{/favicon}}" alt="32 pixel favicon" data-favicon-preview="32" />
+        <img width="64" height="64" src="{{#favicon}}{{{appleTouch}}}{{/favicon}}" alt="Large favicon preview" data-favicon-preview="180" />
+      </div>
+
+      {{#favicon}}
+      <button type="submit" name="remove" value="1">Delete favicon</button>
+      {{/favicon}}
+      {{> form-footer}}
+    </div>
+  </div>

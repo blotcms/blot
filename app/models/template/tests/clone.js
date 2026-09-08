@@ -7,6 +7,17 @@ describe("template", function () {
   const setView = promisify(require("../setView"));
   const create = promisify(require("../create"));
 
+  it("keeps the favicon local when cloning within the same blog", async function () {
+    const favicon = {
+      prefix: "favicon-11111111-1111-1111-1111-111111111111",
+      ico: "https://cdn.example/" + this.blog.id + "/_template_assets/favicon.ico",
+    };
+    const source = await create(this.blog.id, "faviconsource", { locals: { favicon } });
+    const copy = await create(this.blog.id, "faviconcopy", { cloneFrom: source.id });
+    const meta = await getMetadataAsync(copy.id);
+    expect(meta.locals.favicon).toEqual(favicon);
+  });
+
   it("generates different CDN hashes for cloned templates", async function () {
     // Create source template with a view that has CDN retrieval
     const sourceTemplateName = "templatename";
@@ -420,5 +431,37 @@ describe("template", function () {
     expect(clonedUrl).toContain(clonedHash.substring(4));
     expect(clonedUrl).toContain("style.css");
     expect(clonedUrl).not.toContain("/style.css/"); // Should not have extra slashes
+  });
+});
+
+describe("template clone across blogs", function () {
+  global.test.templates();
+  global.test.blogs(2);
+
+  const { promisify } = require("util");
+  const create = promisify(require("../create"));
+  const clone = promisify(require("../clone"));
+  const getMetadataAsync = promisify(require("../getMetadata"));
+
+  it("drops the favicon local so a copy never references another blog's assets", async function () {
+    const [source, recipient] = this.blogs;
+    const favicon = {
+      prefix: "favicon-22222222-2222-2222-2222-222222222222",
+      ico: "https://cdn.example/" + source.id + "/_template_assets/favicon.ico",
+    };
+    const sourceTemplate = await create(source.id, "shared", { locals: { favicon, color: "red" } });
+
+    const toID = recipient.id + ":shared";
+    await clone(sourceTemplate.id, toID, {
+      id: toID,
+      owner: recipient.id,
+      name: "shared",
+      slug: "shared",
+      locals: {},
+    });
+
+    const copyMeta = await getMetadataAsync(toID);
+    expect(copyMeta.locals.favicon).toBeUndefined();
+    expect(copyMeta.locals.color).toEqual("red");
   });
 });

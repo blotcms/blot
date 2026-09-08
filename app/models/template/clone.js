@@ -32,6 +32,20 @@ module.exports = function clone(fromID, toID, metadata, callback) {
         // source of the clone, if its not set
         extend(metadata).and(existingMetadata);
 
+        // A favicon's generated files live under the source blog's asset
+        // directory. Cloning into a different blog would leave the copy
+        // referencing files it neither owns nor can clean up, so drop the
+        // favicon local and let the new owner upload their own. Same-blog
+        // duplicates keep it (upload-favicon guards shared prefixes).
+        if (
+          metadata.locals &&
+          metadata.locals.favicon &&
+          existingMetadata.owner &&
+          metadata.owner !== existingMetadata.owner
+        ) {
+          delete metadata.locals.favicon;
+        }
+
         // Don't copy the CDN manifest - it will be regenerated with new hashes
         // based on the new template ID to ensure hashes reflect the new template
         // and files are stored on disk with the correct hash

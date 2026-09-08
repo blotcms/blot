@@ -174,6 +174,7 @@ TemplateEditor.route("/:templateSlug")
   .all(require("./load/syntax-highlighter"))
   .all(require("./load/color-inputs"))
   .all(require("./load/url-inputs"))
+  .all(require("./load/favicon"))
   .all(require("./load/index-inputs"))
   .all(require("./load/navigation-inputs"))
   .all(require("./load/dates"))
@@ -197,6 +198,14 @@ TemplateEditor.route("/:templateSlug/uploads/:key")
     res.render("dashboard/template/controls/upload-form");
   })
   .post(require("./save/fork-if-needed"), require("./save/upload-local"));
+
+TemplateEditor.route("/:templateSlug/favicon")
+  .get(require("./load/favicon"), function (req, res) {
+    res.locals.title = `Favicon - ${req.template.name}`;
+    res.locals.selected = { ...res.locals.selected, settings: "selected" };
+    res.render("dashboard/template/controls/favicon-form");
+  })
+  .post(require("./save/fork-if-needed"), require("./save/upload-favicon"));
 
 // Catch-all for /uploads/ without a key - redirect to template settings
 // This must come AFTER the specific route above

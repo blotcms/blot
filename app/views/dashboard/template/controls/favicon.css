@@ -1,0 +1,11 @@
+.favicon-form__body { padding: 2em; }
+.favicon-form__help { color: var(--heading-color); font-size: 14px; }
+.favicon-form__file { display: block; margin: 1em 0; }
+.favicon-cropper__image { position: relative; display: inline-block; max-width: min(100%, 480px); line-height: 0; overflow: hidden; }
+.favicon-cropper__image img { display: block; max-width: 100%; max-height: 360px; }
+.favicon-cropper__selection { box-sizing: border-box; position: absolute; border: 2px solid white; box-shadow: 0 0 0 9999px rgb(0 0 0 / 45%); cursor: move; touch-action: none; }
+.favicon-cropper__selection::after { content: ""; position: absolute; width: 14px; height: 14px; right: -7px; bottom: -7px; border-radius: 50%; background: white; cursor: nwse-resize; }
+.favicon-previews { align-items: center; display: flex; gap: 16px; margin: 1em 0; }
+.favicon-previews img { object-fit: contain; background: var(--background-color); }
+.favicon-previews img[data-favicon-preview="16"],
+.favicon-previews img[data-favicon-preview="32"] { image-rendering: pixelated; }

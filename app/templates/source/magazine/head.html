@@ -12,7 +12,13 @@
     {{^entry}}<meta name="description" content="{{> description}}">{{/entry}}
 
     <link rel="alternate" type="application/rss+xml" title="RSS Feed for {{title}}" href="{{{siteURL}}}{{{feedURL}}}">
-    {{#avatar}}<link rel="icon" href="{{{avatar}}}" type="image/x-icon">{{/avatar}}
+    {{#favicon}}
+    <link rel="icon" href="{{{ico}}}" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{{png32}}}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{{png16}}}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{{appleTouch}}}">
+    {{/favicon}}
+    {{^favicon}}{{#avatar}}<link rel="icon" href="{{{avatar}}}">{{/avatar}}{{/favicon}}
     <link rel="preconnect" href="{{{cdn}}}" />
     <link rel="stylesheet" href="{{#asset}}/css-theme.css{{/asset}}">
 
