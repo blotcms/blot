@@ -65,7 +65,7 @@ CreateBlog.route("/inform-paypal")
     });
   })
 
-  .post(saveBlog, (req, res) => {
+  .post(requirePaidPayPalSeat, saveBlog, (req, res) => {
     res.message('/sites/' + req.blog.handle, 'Created site');
   });
 
@@ -199,6 +199,48 @@ function validateSubscription (req, res, next) {
 }
 
 
+
+function getUserById (uid) {
+  return new Promise(function (resolve, reject) {
+    User.getById(uid, function (err, user) {
+      if (err) return reject(err);
+      resolve(user);
+    });
+  });
+}
+
+// The /inform-paypal page is shown precisely when the user has NOT yet paid
+// for the seat they're trying to create. Its POST used to call saveBlog with
+// no further check, so a PayPal user could create unlimited sites for free by
+// POSTing here directly (bypassing the PayPal "revise" step). Before creating
+// the site, refetch the live subscription from PayPal and require the paid
+// quantity to actually exceed the current blog count - the same entitlement
+// the main create-site route enforces. If they still haven't paid, send them
+// back to the pay page instead of creating the site.
+async function requirePaidPayPalSeat (req, res, next) {
+  // The blog count is stable for the duration of this request.
+  var blogCount = req.user.blogs.length;
+
+  try {
+    if (req.user.paypal && req.user.paypal.id) {
+      // updatePayPalSubscription refetches from PayPal and persists it.
+      await updatePayPalSubscription(req.user.paypal.id);
+      // Reload so we read the freshly-persisted quantity, not the stale one.
+      var fresh = await getUserById(req.user.uid);
+      if (fresh && fresh.paypal) req.user.paypal = fresh.paypal;
+    }
+  } catch (err) {
+    return next(err);
+  }
+
+  var paidQuantity = req.user.paypal
+    ? parseInt(req.user.paypal.quantity, 10)
+    : 0;
+
+  if (paidQuantity > blogCount) return next();
+
+  res.redirect(req.baseUrl + "/inform-paypal");
+}
 
 function saveBlog (req, res, next) {
   var title, handle;
