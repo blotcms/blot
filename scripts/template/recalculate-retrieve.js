@@ -17,10 +17,47 @@ if (require.main === module) {
       stats.updated,
       "views",
       "(skipped",
-      stats.skipped + ")"
+      stats.skipped,
+      "invalid,",
+      stats.alreadyMigrated,
+      "already migrated)"
     );
 
     process.exit(0);
+  });
+}
+
+// Projected-entry retrieve locals. parseTemplate records references to a heavy
+// entry field under `retrieve.<local>.fields.<field>`; the old parser stored
+// these locals as a bare `true`. A stored view whose retrieve already carries
+// that `fields` projection metadata was therefore written by the new parser,
+// and setView persists retrieve atomically, so recalculating it would be a
+// no-op. Skipping those views makes an interrupted run cheap to resume.
+var PROJECTED_ENTRY_LOCALS = [
+  "allEntries",
+  "all_entries",
+  "recentEntries",
+  "recent_entries",
+  "latestEntry",
+  "latest_entry",
+  "posts",
+  "search_results",
+  "tagged",
+  "archives",
+];
+
+function hasProjectionMetadata(retrieve) {
+  if (!retrieve || typeof retrieve !== "object") return false;
+
+  return PROJECTED_ENTRY_LOCALS.some(function (local) {
+    var value = retrieve[local];
+    return (
+      !!value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      !!value.fields &&
+      typeof value.fields === "object"
+    );
   });
 }
 
@@ -28,6 +65,7 @@ function main(callback) {
   var stats = {
     updated: 0,
     skipped: 0,
+    alreadyMigrated: 0,
   };
 
   // Blog-owned template views.
@@ -69,6 +107,14 @@ function main(callback) {
 function recalcView(templateID, view, stats, next) {
   if (!view || !view.name || !view.content) {
     stats.skipped++;
+    return next(null, false);
+  }
+
+  // Idempotency: a view whose stored retrieve already carries field-projection
+  // metadata was rewritten by the new parser on an earlier run. Skip it so an
+  // interrupted run can be restarted without redoing completed work.
+  if (hasProjectionMetadata(view.retrieve)) {
+    stats.alreadyMigrated++;
     return next(null, false);
   }
 
