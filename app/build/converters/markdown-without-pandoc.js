@@ -7,17 +7,29 @@ const extname = require("path").extname;
 const localPath = require("helper/localPath");
 const cheerio = require("cheerio");
 const { normalizeLiteralDollarMath } = require("build/math/normalizeLiteralDollars");
+const postSourceSize = require("build/converters/post-source-size");
 
 module.exports = {
   read: function (blog, path, callback) {
     path = localPath(blog.id, path);
 
-    const text = fs.readFileSync(path, "utf-8");
-    const stat = fs.statSync(path);
-    const $ = cheerio.load(marked.parse(text), { decodeEntities: false }, false);
-    normalizeLiteralDollarMath($);
+    fs.stat(path, function (err, stat) {
+      if (err) return callback(err);
+      if (stat.size > postSourceSize.MARKDOWN.bytes)
+        return callback(postSourceSize.tooLargeError(postSourceSize.MARKDOWN));
 
-    callback(null, $.html(), stat);
+      fs.readFile(path, "utf-8", function (err, text) {
+        if (err) return callback(err);
+        const $ = cheerio.load(
+          marked.parse(text),
+          { decodeEntities: false },
+          false
+        );
+        normalizeLiteralDollarMath($);
+
+        callback(null, $.html(), stat);
+      });
+    });
   },
   is: function is (path) {
     return (

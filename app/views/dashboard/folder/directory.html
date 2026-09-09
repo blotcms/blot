@@ -72,6 +72,7 @@
                 {{/entry}}
                 {{/directory}}
                 <span class="truncate">{{name}}</span>
+                {{#tooLarge}}<strong title="This file remains available, but cannot become a post or page until reduced below the {{postSizeLimit}} post size limit." style="color:var(--error-text-color, #c72503); margin-left:0.5em;">Exceeds {{postSizeLimit}} post limit</strong>{{/tooLarge}}
                 </a>
               </div>
             </td>

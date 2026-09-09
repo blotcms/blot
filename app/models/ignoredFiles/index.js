@@ -101,6 +101,34 @@ module.exports = (function () {
     });
   }
 
+  // Look up the ignored status for a specific set of paths in one round
+  // trip, rather than transferring the entire ignored-files hash. Returns
+  // an object mapping normalized path -> reason for the paths that are
+  // ignored (paths that aren't ignored are omitted).
+  function getStatuses(blogID, paths, callback) {
+    ensure(blogID, "string").and(paths, "array").and(callback, "function");
+
+    if (!paths.length) return callback(null, {});
+
+    var normalizedPaths = paths.map(normalize);
+
+    (async function () {
+      try {
+        var reasons = await redis.hmGet(
+          ignoredFilesKey(blogID),
+          normalizedPaths
+        );
+        var result = {};
+        normalizedPaths.forEach(function (path, i) {
+          if (reasons[i]) result[path] = reasons[i];
+        });
+        callback(null, result);
+      } catch (err) {
+        callback(err);
+      }
+    })();
+  }
+
   function getStatus(blogID, path, callback) {
     ensure(blogID, "string").and(path, "string").and(callback, "function");
 
@@ -141,6 +169,7 @@ module.exports = (function () {
     get: get,
     getArray: getArray,
     getStatus: getStatus,
+    getStatuses: getStatuses,
     isIt: isIt,
     flush: flush,
   };

@@ -150,6 +150,29 @@ describe("folder", function () {
     });
   }
 
+  it("shows the post size warning on the directory and file pages", async function () {
+    const { MARKDOWN } = require("build/converters/post-source-size");
+    await this.write({
+      path: "oversized.md",
+      content: Buffer.alloc(MARKDOWN.bytes + 1, 32),
+    });
+    await this.blog.rebuild();
+
+    const directory = await this.parse(`/sites/${this.blog.handle}`);
+    expect(directory.text()).toContain(
+      `Exceeds ${MARKDOWN.label} post limit`
+    );
+
+    const file = await this.parse(
+      directory("a:contains('oversized.md')").attr("href")
+    );
+    expect(file.text()).toContain(
+      `exceeds the ${MARKDOWN.label} post size limit`
+    );
+    expect(file.text()).toContain("remains available as a file");
+    expect(file.text()).toContain("cannot become a post or page until it is reduced");
+  });
+
   function findElementByText(selector, text, $) {
     return $(selector)
       .filter(function () {

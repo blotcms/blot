@@ -69,7 +69,7 @@
   <!-- File is not a post or page -->
   <p><i><span class="icon-small-no-entry"></span></i><b>File is not a post or page</b>.
     {{#ignored}}
-    {{#tooLarge}}File is too large{{/tooLarge}}
+    {{#tooLarge}}This file exceeds the {{postSizeLimit}} post size limit. It remains available as a file, but cannot become a post or page until it is reduced below the limit.{{/tooLarge}}
     {{#wrongType}}{{kind}} files are not a file type which can become a post or page.{{/wrongType}}
     {{#underscorePath}}It's inside a folder whose name starts with an underscore. {{/underscorePath}}
     {{#underscoreName}}It is ignored because its name starts with an underscore.{{/underscoreName}}

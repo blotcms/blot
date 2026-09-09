@@ -10,6 +10,7 @@ var extractMetadata = require("build/metadata");
 var yaml = require("yaml");
 var extractBibAndCSL = require("./extractBibAndCSL");
 var linebreaks = require("./linebreaks");
+var postSourceSize = require("build/converters/post-source-size");
 
 function is (path) {
   return (
@@ -31,6 +32,8 @@ function read (blog, path, callback) {
     time.end("stat");
 
     if (err) return callback(err);
+    if (stat.size > postSourceSize.MARKDOWN.bytes)
+      return callback(postSourceSize.tooLargeError(postSourceSize.MARKDOWN));
 
     time("readFile");
 

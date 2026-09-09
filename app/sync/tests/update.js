@@ -114,4 +114,52 @@ describe("update", function () {
       });
     });
   });
+
+  it("ignores oversized sources, removes their entries, and recovers after shrinking", function (testDone) {
+    const IgnoredFiles = require("models/ignoredFiles");
+    const Entry = require("models/entry");
+    const limit = require("build/converters/post-source-size").MARKDOWN.bytes;
+    const entryPath = "/size-limit.md";
+    const localPath = this.blogDirectory + entryPath;
+    const blogID = this.blog.id;
+
+    sync(blogID, function (err, folder, done) {
+      if (err) return testDone.fail(err);
+      fs.outputFileSync(localPath, "published");
+
+      folder.update(entryPath, function (err) {
+        if (err) return testDone.fail(err);
+        fs.outputFileSync(localPath, Buffer.alloc(limit + 1, 32));
+
+        folder.update(entryPath, function (err) {
+          if (err) return testDone.fail(err);
+
+          IgnoredFiles.getStatus(blogID, entryPath, function (err, reason) {
+            if (err) return testDone.fail(err);
+            expect(reason).toBe("TOO_LARGE");
+            Entry.get(blogID, entryPath, function (entry) {
+              // Entry.drop leaves a deleted tombstone rather than removing
+              // the record outright.
+              expect(entry).toBeTruthy();
+              expect(entry.deleted).toBe(true);
+              fs.outputFileSync(localPath, "published again");
+
+              folder.update(entryPath, function (err) {
+                if (err) return testDone.fail(err);
+                IgnoredFiles.getStatus(blogID, entryPath, function (err, reason) {
+                  if (err) return testDone.fail(err);
+                  expect(reason).toBeFalsy();
+                  Entry.get(blogID, entryPath, function (entry) {
+                    expect(entry).toBeTruthy();
+                    expect(entry.html).toContain("published again");
+                    done(null, testDone);
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+  });
 });

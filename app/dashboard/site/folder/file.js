@@ -6,6 +6,7 @@ const IgnoredFiles = require("models/ignoredFiles");
 const moment = require("moment");
 const converters = require("build/converters");
 const enabledConverters = require("build/converters/enabled");
+const postSourceSize = require("build/converters/post-source-size");
 
 require("moment-timezone");
 
@@ -32,6 +33,13 @@ module.exports = async function (blog, path) {
       }),
     ])
       .then(([ignoredReason, entry]) => {
+        // Entry.drop keeps a deleted tombstone (deleted: true) around for
+        // 24 hours rather than removing the record outright. For the
+        // dashboard a deleted entry is not a post/page, so treat it as
+        // absent — otherwise the "too large" / "wrong type" messaging for
+        // a previously published file stays hidden behind `if (!entry)`.
+        if (entry && entry.deleted) entry = null;
+
         const matchingConverter = converters.find((converter) => {
           return converter.is(path);
         });
@@ -66,6 +74,7 @@ module.exports = async function (blog, path) {
             ignored.underscoreName = true;
           } else if (ignoredReason && ignoredReason === 'TOO_LARGE') {
             ignored.tooLarge = true;
+            ignored.postSizeLimit = postSourceSize.limitForPath(path).label;
           } else  {
             ignored.syncing = true;
           }

@@ -6,6 +6,7 @@ const cheerio = require("cheerio");
 const Metadata = require("build/metadata");
 const extend = require("helper/extend");
 const yaml = require("yaml");
+const postSourceSize = require("build/converters/post-source-size");
 
 const blockquotes = require("./blockquotes");
 const footnotes = require("./footnotes");
@@ -80,10 +81,11 @@ async function read(blog, path, callback) {
 
     const stat = await fs.stat(localPath);
 
-    // Don't try and turn HTML exported from a google doc into posts
-    // if it's over 10MB in size
-    if (stat && stat.size > 10 * 1000 * 1000)
-      return callback(new Error("Google Doc export HTML too big"));
+    // Don't try and turn HTML exported from a Google Doc into posts if it's
+    // over the limit — surface the same structured TOO_LARGE error the other
+    // converters use so sync ignores it and the dashboard explains why.
+    if (stat.size > postSourceSize.GDOC.bytes)
+      return callback(postSourceSize.tooLargeError(postSourceSize.GDOC));
 
     const contents = await fs.readFile(localPath, "utf-8");
 

@@ -526,9 +526,12 @@ describe("replaceFolderLinks", function () {
   });
 
   it("should preserve large base64 data URIs without locking up", async function () {
-    // Generate a 2MB base64-encoded string
-    const twoMB = 2 * 1024 * 1024; // 2MB in bytes
-    const randomData = Buffer.alloc(twoMB, "A"); // Fill with 'A' characters
+    // A data URI big enough to expose catastrophic regex backtracking, but
+    // comfortably under the HTML post source size limit (see
+    // build/converters/post-source-size.js) so the source still becomes an
+    // entry.
+    const oneMB = 1000 * 1000; // bytes of raw data -> ~1.33 MB once base64-encoded
+    const randomData = Buffer.alloc(oneMB, "A"); // Fill with 'A' characters
     const base64Data = randomData.toString("base64");
     const dataUri = `data:image/png;base64,${base64Data}`;
 

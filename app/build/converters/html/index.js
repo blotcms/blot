@@ -5,6 +5,7 @@ var extname = require("path").extname;
 var cheerio = require("cheerio");
 var Metadata = require("build/metadata");
 var normalizeLiteralDollarMath = require("build/math/normalizeLiteralDollars").normalizeLiteralDollarMath;
+var postSourceSize = require("build/converters/post-source-size");
 
 function is(path) {
   return [".html", ".htm"].indexOf(extname(path).toLowerCase()) > -1;
@@ -19,9 +20,8 @@ function read(blog, path, callback) {
 
   fs.stat(localPath, function (err, stat) {
     if (err) return callback(err);
-    // Don't try and turn HTML files larger than 5mb into posts
-    if (stat && stat.size > 5 * 1000 * 1000)
-      return callback(new Error("HTML File too big"));
+    if (stat.size > postSourceSize.HTML.bytes)
+      return callback(postSourceSize.tooLargeError(postSourceSize.HTML));
 
     fs.readFile(localPath, "utf-8", function (err, contents) {
       if (err) return callback(err);

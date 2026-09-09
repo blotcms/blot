@@ -289,9 +289,6 @@ Fix bugs with custom domain setup
 - Disable redirect to HTTPS for blogs by default (to ensure old browsers without SNI work) but ensure all prominent links to the blog on dashboard use HTTPS
 - cache domain validity and display checkmark on dashboard
 
-Fix bug with huge tiddlywiki post that crashed site by enforcing a size limit on txt and markdown files and html files for them to become posts
-- Ensure the error for files too large is made clearly visible
-
 Fix bug with incorrect date of files by path and follow up with [Ashish](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbgJMGBfxXGrhsDPbNJfnbZVCW)
 - `/posts/2021/Dec 2021/12-01 - Snow envy/Snow envy.txt` isn't dated correctly (should be first of december rather than january 12th)
 
