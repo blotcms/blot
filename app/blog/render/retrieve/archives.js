@@ -1,10 +1,14 @@
 var Entries = require("models/entries");
 var arrayify = require("helper/arrayify");
+var projectEntryFields = require("./helpers/projectEntryFields");
 var moment = require("moment");
 require("moment-timezone");
 
 module.exports = function (req, res, callback) {
   Entries.getAll(req.blog.id, function (allEntries) {
+    // dateStamp is always kept, so the year/month grouping below is unaffected.
+    projectEntryFields(allEntries, req.retrieve, ["archives"]);
+
     var years = {};
 
     for (var x in allEntries) {

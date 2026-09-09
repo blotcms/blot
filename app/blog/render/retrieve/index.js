@@ -91,3 +91,7 @@ module.exports = function (req, res, retrieve, callback) {
     }
   );
 };
+
+// Every name (canonical + alias) blot knows how to fetch. Exposed so
+// models/template can tell a real retrieve dependency from stale metadata.
+module.exports.dictionary = dictionary;

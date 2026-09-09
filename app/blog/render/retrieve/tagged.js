@@ -1,5 +1,6 @@
 const Entry = require("models/entry");
 const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
+const projectEntryFields = require("./helpers/projectEntryFields");
 const getTemplateSortOptions = require("blog/sortOptions");
 const { sortEntries } = getTemplateSortOptions;
 
@@ -44,6 +45,8 @@ module.exports = function (req, res, callback) {
 
       Entry.get(blogID, result.entryIDs || [], function (entries) {
         entries = sortEntries(entries, sortOptions);
+
+        projectEntryFields(entries, req.retrieve, ["tagged"]);
 
         const totalEntries =
           result.total !== undefined

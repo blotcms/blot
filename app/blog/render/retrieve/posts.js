@@ -3,6 +3,7 @@ const EntryInstance = require("models/entry/instance");
 const entriesModel = require("models/entries");
 const LRUCache = require("lru-cache").LRUCache;
 const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
+const projectEntryFields = require("./helpers/projectEntryFields");
 const getTemplateSortOptions = require("blog/sortOptions");
 const { sortEntries } = getTemplateSortOptions;
 
@@ -111,7 +112,10 @@ module.exports = function (req, res, callback) {
     const cachedPayload = cloneDeep(postsCache.get(key));
     log("Retrieved posts from cache");
     res.locals.pagination = cachedPayload.pagination;
-    return callback(null, cachedPayload.entries);
+    return callback(
+      null,
+      projectEntryFields(cachedPayload.entries, req.retrieve, ["posts"])
+    );
   }
 
   if (!tags) {
@@ -128,7 +132,10 @@ module.exports = function (req, res, callback) {
 
       res.locals.pagination = responsePayload.pagination;
 
-      callback(null, responsePayload.entries);
+      callback(
+        null,
+        projectEntryFields(responsePayload.entries, req.retrieve, ["posts"])
+      );
     });
   }
 
@@ -169,7 +176,10 @@ module.exports = function (req, res, callback) {
         const responsePayload = cloneDeep(immutableCopy);
 
         res.locals.pagination = responsePayload.pagination;
-        callback(null, responsePayload.entries);
+        callback(
+          null,
+          projectEntryFields(responsePayload.entries, req.retrieve, ["posts"])
+        );
       });
     }
   );

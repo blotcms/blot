@@ -57,6 +57,170 @@ describe("template", function () {
     });
   });
 
+
+  it("merges projected allEntries fields from nested partials", function (done) {
+    var test = this;
+
+    var itemTitle = {
+      name: "item-title.html",
+      content: "{{#allEntries}}{{title}}{{/allEntries}}",
+    };
+
+    var itemURL = {
+      name: "item-url.html",
+      content: "{{#allEntries}}{{url}}{{/allEntries}}",
+    };
+
+    var parentView = {
+      name: "parent-merged.html",
+      content: "{{> " + itemTitle.name + "}}{{> " + itemURL.name + "}}",
+    };
+
+    setView(test.template.id, itemTitle, function (err) {
+      if (err) return done.fail(err);
+      setView(test.template.id, itemURL, function (err) {
+        if (err) return done.fail(err);
+        setView(test.template.id, parentView, function (err) {
+          if (err) return done.fail(err);
+
+          var partials = {};
+          partials[parentView.name] = "";
+
+          getPartials(test.blog.id, test.template.id, partials, function (
+            err,
+            partials,
+            retrieve
+          ) {
+            if (err) return done.fail(err);
+
+            expect(retrieve).toEqual({
+              allEntries: { fields: { title: true, url: true } },
+            });
+
+            done();
+          });
+        });
+      });
+    });
+  });
+
+  it("projects fields from a partial used inside tagged.entries", function (done) {
+    var test = this;
+
+    var itemTitle = {
+      name: "tagged-item-title.html",
+      content: "{{title}}",
+    };
+
+    var parentView = {
+      name: "tagged-parent.html",
+      content:
+        "{{#tagged.entries}}{{> " + itemTitle.name + "}}{{/tagged.entries}}",
+    };
+
+    setView(test.template.id, itemTitle, function (err) {
+      if (err) return done.fail(err);
+      setView(test.template.id, parentView, function (err) {
+        if (err) return done.fail(err);
+
+        var partials = {};
+        partials[parentView.name] = "";
+
+        getPartials(test.blog.id, test.template.id, partials, function (
+          err,
+          partials,
+          retrieve
+        ) {
+          if (err) return done.fail(err);
+
+          expect(retrieve).toEqual({
+            tagged: { fields: { title: true } },
+          });
+
+          done();
+        });
+      });
+    });
+  });
+
+  it("does not attribute a partial in an explicit dotted section to the root list", function (done) {
+    var test = this;
+
+    var item = {
+      name: "dotted-item.html",
+      content: "{{{html}}}",
+    };
+
+    // {{#author.posts}} iterates author's `posts`, not the root posts local.
+    var parentView = {
+      name: "dotted-parent.html",
+      content: "{{#author.posts}}{{> " + item.name + "}}{{/author.posts}}",
+    };
+
+    setView(test.template.id, item, function (err) {
+      if (err) return done.fail(err);
+      setView(test.template.id, parentView, function (err) {
+        if (err) return done.fail(err);
+
+        var partials = {};
+        partials[parentView.name] = "";
+
+        getPartials(test.blog.id, test.template.id, partials, function (
+          err,
+          partials,
+          retrieve
+        ) {
+          if (err) return done.fail(err);
+
+          expect(retrieve.posts).toBeUndefined();
+
+          done();
+        });
+      });
+    });
+  });
+
+  it("keeps a partial's stored dependency when it is used inside a section", function (done) {
+    var test = this;
+
+    // `item` is used inside {{#posts}}, so it inherits the posts context.
+    // Its explicit retrieve.latestEntry (a real retrieve local) must still
+    // reach the merged retrieve even though the contextual parse never sees it.
+    var item = {
+      name: "dep-item.html",
+      content: "{{title}}",
+      retrieve: { latestEntry: true },
+    };
+
+    var parentView = {
+      name: "dep-parent.html",
+      content: "{{#posts}}{{> " + item.name + "}}{{/posts}}",
+    };
+
+    setView(test.template.id, item, function (err) {
+      if (err) return done.fail(err);
+      setView(test.template.id, parentView, function (err) {
+        if (err) return done.fail(err);
+
+        var partials = {};
+        partials[parentView.name] = "";
+
+        getPartials(test.blog.id, test.template.id, partials, function (
+          err,
+          resolved,
+          retrieve
+        ) {
+          if (err) return done.fail(err);
+
+          expect(retrieve.latestEntry).toBe(true);
+          expect(retrieve.posts).toEqual({ fields: { title: true } });
+
+          done();
+        });
+      });
+    });
+  });
+
   it("resolves file-backed partial paths case-insensitively", async function () {
     await this.set("/Pages/Home.txt", "Hello from home");
 
