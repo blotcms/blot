@@ -122,6 +122,20 @@ Heading Here
     this.buildAndCheck({ path, contents }, { html }, done);
   });
 
+  // Regression test for https://blot.im/questions/2670 - a wikilink to a
+  // same-page anchor with no matching heading used to be reported as
+  // breaking the build ("File is not a post or page"). The build should
+  // succeed and the unresolved link should be left in place.
+  it("will not break the build for an unresolved same-page anchor", function (done) {
+    const contents = "Hello world\n\nSee [[#missing-heading]] and [[#text]] here.";
+    const path = "/hello.txt";
+    const html =
+      '<p>Hello world</p>\n<p>See <a href="#missing-heading" class="wikilink">#missing-heading</a> and <a href="#text" class="wikilink">#text</a> here.</p>';
+
+    this.blog.plugins.wikilinks = { enabled: true, options: {} };
+    this.buildAndCheck({ path, contents }, { html }, done);
+  });
+
   it("will convert wikilinks next to ignored nodes", function (done) {
     const contents =
       "<script>console.log('hey');</script>\n\nA **[[wikilink elsewhere]]** ";
