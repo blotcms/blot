@@ -401,8 +401,6 @@ Fix bug with Client.write which does not propogate sync errors... to demonstrate
 
 Fix bug with pages not appearing in backlinks and [tell questioner](https://blot.im/questions/2913)
 
-Fix bug with magic text in posts which breaks backend and tell [Victor](https://mail.google.com/mail/u/0/#inbox/FMfcgzQVxRMzjBtRWVwLWtlBcFGsSVCQ)
-
 Fix bug with Google Drive client and [Stephen's large blog](https://mail.google.com/mail/u/0/#inbox/QgrcJHsBsbkNkMkkkMmLWBxRfnGnWPVwLHl)
   - It also seems like server crashes when a massive google drive folder is synced, with a directory containing 6772 items
 
