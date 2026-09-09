@@ -1247,9 +1247,6 @@ Adjust length of slug to use as few words as possible until collision and tell [
 
 --- 
 
-Metadata parser
-- Removing Date metadata from a post should reset its date to the file's creation date. Currently nothing changes.
-
 Improve 404 log page on Dashboard
 - Make the 404 page more useful (see Netlify site)
 - Add button to clear 404 log and tell [Jamie](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVDLzTVpVZHfgwRgcmtGXFHXx)
