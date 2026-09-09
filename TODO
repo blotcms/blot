@@ -40,12 +40,6 @@ Add info on /usr/local/bin/check_docker_health.sh to the server restart email
 - upstream-errors -> upstream_errors
 - add 'unresponded'
 
-Write useful benchmark tool for Blot
-- Add performance tests which output something like this for PRs (compare against master branch, fail if over threshold):
-    Total CPU  29.90%          -> 11.64%
-    Syscalls   3.10s           -> 0.66s
-    Bandwidth  ~6.5 Mbit/sec   -> ~3 Mbit/sec
-
 Move to redis hashes for entry storage
 0. This is designed to improve all multi-entry list performance
 1. Modify templates to store the entry properties they require to render for each list in retrieve, e.g. {{#allEntries}} {{title}} {{/allEntries}} -> retrieve: allEntries: ['title']
