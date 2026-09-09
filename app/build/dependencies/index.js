@@ -6,6 +6,38 @@ var is_path = require("./is_path");
 var extname = require("path").extname;
 var metadataCaseInsensitive = require("helper/metadataCaseInsensitive");
 
+// Make a resolved filesystem path safe to drop into an HTML attribute
+// without changing which file it points at. We only percent-encode the
+// characters a browser would otherwise read as URL syntax or that can't
+// appear in an attribute value at all:
+//
+//   - "#" and "?", which would start a fragment or query;
+//   - a "%" that isn't already the start of a valid "%HH" escape, so
+//     paths that already contain percent-encoding (e.g. "%20", "%C3%A9"
+//     from the Markdown converter or a hand-written link) round-trip
+//     unchanged instead of being double-encoded;
+//   - spaces, control characters and the HTML-significant < > " ` .
+//
+// Everything else - "/" separators, reserved characters that are still
+// legal inside a path segment (: @ + = & ; ,), and non-ASCII
+// characters - is left untouched so the value still decodes back to the
+// exact path recorded as a dependency.
+//
+// Two accepted edge cases. First: static asset requests are decoded
+// with decodeURIComponent (app/blog/assets.js), which restores every
+// escape, but Entry.getByUrl and the image transformer use decodeURI,
+// which leaves "%23"/"%3F" encoded - so a folder whose name literally
+// contains "#" or "?" is still served as a static file but misses
+// image-cache optimization. Second: an existing "%HH" is assumed to be
+// pre-encoding rather than a literal "%", so a file literally named
+// e.g. "50%FF.png" would need its "%" doubled by hand.
+function serializePath (path) {
+  // eslint-disable-next-line no-control-regex
+  return path.replace(/%(?![0-9A-Fa-f]{2})|[\x00-\x20"#<>?\x60]/g, function (char) {
+    return encodeURIComponent(char);
+  });
+}
+
 // The purpose of this module is to take the HTML for
 // a given blog post and work out if it references any
 // files in the user's folder. For example, this image
@@ -109,7 +141,6 @@ function dependencies (path, html, metadata) {
   // links to any local file.
   $("link[href], a[href], [src]").each(function () {
     var $el = $(this);
-    var isAnchor = $el.is("a");
     var isWikilink = $el.attr("title") === "wikilink";
     var suffix = "";
 
@@ -131,46 +162,43 @@ function dependencies (path, html, metadata) {
       return;
     }
 
-    if (isAnchor) {
-      // Anchors are also used for in-page navigation (footnotes,
-      // tables of contents), which isn't a file path – strip any
-      // #fragment or ?query before resolving and reattach it after.
-      var cutIndex = -1;
-      var hashIndex = value.indexOf("#");
-      var queryIndex = value.indexOf("?");
+    // A #fragment or ?query is URL syntax, never part of the filesystem
+    // path: <a href> uses it for in-page navigation (footnotes, tables
+    // of contents), while <img src>/<link href> use it for cache-
+    // busters ("photo.jpg?v=2") or SVG sprite ids ("icons.svg#home").
+    // Strip it before resolving and reattach it, untouched, after - so
+    // the suffix keeps its literal ? / # rather than being encoded into
+    // the path.
+    var cutIndex = value.search(/[#?]/);
+    var pathPart = cutIndex === -1 ? value : value.slice(0, cutIndex);
 
-      if (hashIndex > -1) cutIndex = hashIndex;
-      if (queryIndex > -1 && (cutIndex === -1 || queryIndex < cutIndex))
-        cutIndex = queryIndex;
+    suffix = cutIndex === -1 ? "" : value.slice(cutIndex);
 
-      var pathPart = cutIndex === -1 ? value : value.slice(0, cutIndex);
+    // Browsers treat a backslash the same as a forward slash when
+    // parsing a URL for an http(s) page - e.g. "\Files\report.pdf"
+    // is root-relative ("/Files/report.pdf") and "\\host\report.pdf"
+    // is an external network-path reference ("//host/report.pdf").
+    // Normalizing here means the existing is_url/absolute-path checks
+    // below already handle both cases correctly, and (for a local path)
+    // that serializePath never emits a "%5C" the asset handler and the
+    // transformer's backslash fallback would then fail to match.
+    pathPart = pathPart.replace(/\\/g, "/");
 
-      suffix = cutIndex === -1 ? "" : value.slice(cutIndex);
-
-      // Browsers treat a backslash the same as a forward slash when
-      // parsing a URL for an http(s) page - e.g. "\Files\report.pdf"
-      // is root-relative ("/Files/report.pdf") and "\\host\report.pdf"
-      // is an external network-path reference ("//host/report.pdf").
-      // Normalizing here means the existing is_url/absolute-path
-      // checks below already handle both cases correctly.
-      pathPart = pathPart.replace(/\\/g, "/");
-
-      if (!pathPart) {
-        debug(path, attribute, value, "is a fragment or query only");
-        return;
-      }
-
-      // Anchors are also used for URI schemes we don't otherwise
-      // recognize (javascript:, geo:, magnet:, etc.) - treat any
-      // recognizable URI scheme as non-local, not just the specific
-      // ones is_url knows about.
-      if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(pathPart) && !is_url(pathPart)) {
-        debug(path, attribute, value, "has an unrecognized URI scheme");
-        return;
-      }
-
-      value = pathPart;
+    if (!pathPart) {
+      debug(path, attribute, value, "is a fragment or query only");
+      return;
     }
+
+    // Attributes are also used for URI schemes we don't otherwise
+    // recognize (javascript:, geo:, magnet:, etc.) - treat any
+    // recognizable URI scheme as non-local, not just the specific
+    // ones is_url knows about.
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(pathPart) && !is_url(pathPart)) {
+      debug(path, attribute, value, "has an unrecognized URI scheme");
+      return;
+    }
+
+    value = pathPart;
 
     if (is_url(value)) {
       debug(path, attribute, value, "is a URL");
@@ -219,7 +247,10 @@ function dependencies (path, html, metadata) {
     // target text, including deliberately leaving it untouched when
     // it can't find a match.
     if (!isWikilink) {
-      $el.attr(attribute, resolved_value + suffix);
+      var serialized = serializePath(resolved_value);
+      if (serialized !== resolved_value)
+        debug(path, attribute, resolved_value, "encoded to", serialized);
+      $el.attr(attribute, serialized + suffix);
     }
 
     if (isSelfReference) {
