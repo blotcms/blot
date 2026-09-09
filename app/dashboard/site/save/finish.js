@@ -16,7 +16,10 @@ var dictionary = {
 
 module.exports = function (req, res, next) {
   var updates = req.updates || {};
-  var redirect = req.body.redirect || req.path;
+  // req.path is relative to the router mount, so fall back to the full
+  // dashboard path (req.baseUrl + req.path) rather than "/", which would
+  // bounce the user out to the site homepage.
+  var redirect = req.body.redirect || (req.baseUrl || "") + req.path;
 
   Blog.set(req.blog.id, updates, function (errors, changes) {
     if (errors)
