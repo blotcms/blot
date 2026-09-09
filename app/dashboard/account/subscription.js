@@ -354,6 +354,8 @@ function requireSubscription (req, res, next) {
 const { updateSubscription } = require("dashboard/webhooks/paypal_webhook");
 
 async function cancelPaypalSubscription (req, res, next) {
+  // The cancel button is hidden for PayPal subscribers. They must delete their
+  // account to end their subscription immediately through the deletion flow.
   next();
 }
 
