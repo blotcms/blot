@@ -31,20 +31,38 @@ jobs:
       image_hash: ${{ steps.hash.outputs.image_hash }}
       image_tag: ${{ steps.set-image-tag.outputs.image_tag }}
     env:
-      # Define test suites here - single source of truth
+      # Define test suites here - single source of truth.
+      #
+      # Format is "<path>[|<exclude>,<exclude>...]:<shards>". Each entry is
+      # split into <shards> jobs that run in parallel; the runner
+      # (scripts/tests) takes --shard=i/n and runs a deterministic 1/n slice
+      # of that path's spec files. An optional "|"-separated exclude list is
+      # passed as --exclude= so a heavy sub-tree can be carved out into its
+      # own entry (e.g. app/models/entry, which holds the slow
+      # entry/tests/search.js fixtures, runs separately from the rest of
+      # app/models).
+      #
+      # Bump a path's shard count when its jobs become the long pole; the
+      # per-job "Slowest specs" list printed at the end shows where the time
+      # goes. Keep the total job count within the account's concurrent-job
+      # limit (20 on GitHub Free) with headroom for build.yml.
+      #
+      # A bare "<path>" (no ":") is treated as ":1".
       TEST_SUITES: |
-        - app/blog
-        - app/build
-        - app/clients
-        - app/dashboard
-        - app/documentation
-        - app/helper
-        - app/models
-        - app/site
-        - app/sync
-        - app/templates
-        - config/openresty
-        - proxy
+        - app/blog:2
+        - app/build:1
+        - app/clients|app/clients/git:1
+        - app/clients/git:2
+        - app/dashboard:1
+        - app/documentation:1
+        - app/helper:1
+        - app/models|app/models/entry:2
+        - app/models/entry:1
+        - app/site:1
+        - app/sync:1
+        - app/templates:1
+        - config/openresty:1
+        - proxy:1
     steps:
       - name: Sparse checkout for hash calculation
         uses: actions/checkout@v4
@@ -127,17 +145,29 @@ jobs:
           # Read test suites from environment variable
           echo "Test suites defined:"
           echo "$TEST_SUITES"
-          
-          # Clean the input - remove any leading/trailing whitespace from each line
-          CLEANED_TEST_SUITES=$(echo "$TEST_SUITES" | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')
-          
-          # Process the YAML list into a proper JSON array 
-          TEST_SUITES_JSON=$(echo "$CLEANED_TEST_SUITES" | grep '^- ' | sed 's/^- /"/g' | sed 's/$/"/g' | tr '\n' ',' | sed 's/,$//' | sed 's/^/[/' | sed 's/$/]/')
-          
-          # Format as JSON for GitHub Actions matrix - ensure it's valid JSON
+
+          # Expand each "<path>:<shards>" line into <shards> matrix entries of
+          # the form {test_suite, shard}. A matrix.include with no base keys
+          # produces exactly these combinations (no cross-product).
+          MATRIX_JSON=$(printf '%s\n' "$TEST_SUITES" | jq -R -s -c '
+            [ splits("\n")
+              | gsub("^\\s*-?\\s*|\\s*$"; "")
+              | select(length > 0)
+              | (split(":") + ["1"]) as $p
+              | ($p[1] | if test("^[0-9]+$") then tonumber else 1 end) as $shards
+              | ($p[0] | split("|")) as $paths
+              | range(1; $shards + 1) as $i
+              | {
+                  test_suite: $paths[0],
+                  exclude: ($paths[1:] | join(",")),
+                  shard: "\($i)/\($shards)"
+                }
+            ] | { include: . }
+          ')
+
           echo "Creating matrix JSON..."
-          MATRIX_JSON="{\"test_suite\":$TEST_SUITES_JSON}"
           echo "$MATRIX_JSON" | jq '.' # Validate JSON format
+          echo "Total test jobs: $(echo "$MATRIX_JSON" | jq '.include | length')"
           echo "matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
 
   detect-unused-dependencies:
@@ -175,8 +205,9 @@ jobs:
           MATRIX_JSON='${{ needs.setup-tests.outputs.matrix }}'
           echo "$MATRIX_JSON"
           
-          # Extract the test_suite array from the matrix JSON
-          TEST_SUITES=$(echo "$MATRIX_JSON" | jq -r '.test_suite[]')
+          # Extract the distinct suite paths from the matrix JSON (one entry
+          # per shard, so de-duplicate).
+          TEST_SUITES=$(echo "$MATRIX_JSON" | jq -r '.include[].test_suite' | sort -u)
           echo "Extracted test suites:"
           echo "$TEST_SUITES"
           
@@ -275,13 +306,20 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run tests - ${{ matrix.test_suite }}
+      - name: Run tests - ${{ matrix.test_suite }} (shard ${{ matrix.shard }})
         env:
           BLOT_STRIPE_KEY: ${{ secrets.BLOT_STRIPE_KEY }}
           BLOT_STRIPE_SECRET: ${{ secrets.BLOT_STRIPE_SECRET }}
           BLOT_STRIPE_PRODUCT: ${{ secrets.BLOT_STRIPE_PRODUCT }}
           IMAGE_TAG: ${{ needs.setup-tests.outputs.image_tag }}
+          TEST_SUITE: ${{ matrix.test_suite }}
+          TEST_SHARD: ${{ matrix.shard }}
+          TEST_EXCLUDE: ${{ matrix.exclude }}
         run: |
+          EXCLUDE_ARG=""
+          if [ -n "$TEST_EXCLUDE" ]; then
+            EXCLUDE_ARG="--exclude=$TEST_EXCLUDE"
+          fi
           docker run --rm \
             --network host \
             -e BLOT_REDIS_HOST=localhost \
@@ -293,4 +331,4 @@ jobs:
             -v ${{ github.workspace }}/config:/usr/src/app/config \
             -v ${{ github.workspace }}/proxy:/usr/src/app/proxy \
             $IMAGE_TAG \
-            sh -c "node scripts/tests ${{ matrix.test_suite }}"
+            sh -c "node scripts/tests '$TEST_SUITE' --shard='$TEST_SHARD' $EXCLUDE_ARG"

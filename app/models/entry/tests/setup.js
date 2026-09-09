@@ -1,5 +1,6 @@
 module.exports = function () {
   const fs = require("fs-extra");
+  const async = require("async");
   const build = require("build");
   const get = require("../get");
   const set = require("../set");
@@ -57,6 +58,25 @@ module.exports = function () {
             });
           });
         });
+      });
+    };
+
+    // Build many fixture entries with bounded concurrency. Used by the
+    // large-dataset search specs, where the serial `await this.set(...)`
+    // loop dominated the runtime. The concurrency cap keeps the shared
+    // per-blog bookkeeping in set() (URL assignment, tag/list indexes)
+    // from being hammered flat-out. Rejects on the first failure so a
+    // spec that expects N indexed entries still sees N.
+    this.setMany = async (entries, concurrency = 8) => {
+      await new Promise((resolve, reject) => {
+        async.eachLimit(
+          entries,
+          concurrency,
+          ({ path, contents }, next) => {
+            this.set(path, contents).then(() => next(), next);
+          },
+          err => (err ? reject(err) : resolve())
+        );
       });
     };
   });

@@ -6,7 +6,16 @@ TEST_PATH=$1
 # Set the optional test seed
 TEST_SEED=$2
 
-echo "Running tests in path: $TEST_PATH with seed $TEST_SEED"
+# Everything after the path (seed and/or flags such as --shard=/--exclude=)
+# is forwarded verbatim to `node tests`, so a command printed by the runner
+# for reproducing a CI shard actually reproduces it.
+RUNNER_ARGS=""
+if [ "$#" -gt 0 ]; then
+  shift
+  RUNNER_ARGS="$*"
+fi
+
+echo "Running tests in path: $TEST_PATH with args: $RUNNER_ARGS"
 
 # Unique run ID so multiple invocations can run in parallel (containers named per run)
 BLOT_TEST_ID="${BLOT_TEST_ID:-blot-test-$$-${RANDOM}}"
@@ -67,7 +76,7 @@ docker run --rm \
   -v "$TESTS_DIR:/usr/src/app/tests" \
   -v "$CONFIG_DIR:/usr/src/app/config" \
   $TEST_IMAGE \
-  sh -c "rm -rf /usr/src/app/data && mkdir /usr/src/app/data && node -v && npm -v && nyc --include $TEST_PATH node tests $TEST_PATH $TEST_SEED"
+  sh -c "rm -rf /usr/src/app/data && mkdir /usr/src/app/data && node -v && npm -v && nyc --include $TEST_PATH node tests $TEST_PATH $RUNNER_ARGS"
 TEST_EXIT=$?
 
 # Stop Redis container

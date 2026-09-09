@@ -5,7 +5,8 @@ var client = require("models/client");
 var clfdate = require("helper/clfdate");
 var seedrandom = require("seedrandom");
 var async = require("async");
-const { before } = require("lodash");
+var fs = require("fs");
+var path = require("path");
 var seed;
 var config = {
   spec_dir: "",
@@ -19,11 +20,90 @@ var config = {
   stopSpecOnExpectationFailure: false,
   random: true,
 };
+
 // Collect only the user-passed args.
 // If "--" is present, only consider args after it.
 const rawArgs = process.argv.slice(2);
 const dashdash = rawArgs.indexOf("--");
-const args = dashdash >= 0 ? rawArgs.slice(dashdash + 1) : rawArgs;
+const cliArgs = dashdash >= 0 ? rawArgs.slice(dashdash + 1) : rawArgs;
+
+// Split flags (--foo=bar / --foo) from positionals ([path, seed]).
+const flags = {};
+const args = [];
+for (const arg of cliArgs) {
+  const m = /^--([^=]+)=(.*)$/.exec(arg);
+  if (m) {
+    flags[m[1]] = m[2];
+  } else if (arg.startsWith("--")) {
+    flags[arg.slice(2)] = true;
+  } else {
+    args.push(arg);
+  }
+}
+
+// --shard=INDEX/TOTAL runs a deterministic 1/TOTAL slice of the spec files
+// under the given path, so CI can fan one suite out across several jobs.
+// Selection is round-robin (file i -> shard i % TOTAL) after a stable sort,
+// spreading a directory's heavy files across shards rather than piling them
+// into one contiguous chunk.
+let shard = null;
+if (flags.shard) {
+  const parts = String(flags.shard).split("/");
+  const index = parseInt(parts[0], 10);
+  const total = parseInt(parts[1], 10);
+  if (!(total >= 1) || !(index >= 1) || index > total) {
+    throw new Error(
+      `Invalid --shard=${flags.shard} (expected INDEX/TOTAL, 1-based, INDEX <= TOTAL)`
+    );
+  }
+  shard = { index, total };
+}
+
+// --exclude=path[,path...] drops any spec file at or below one of these
+// paths (relative to the project root), so a heavy sub-tree of a suite can
+// be carved out into its own matrix entry.
+const excludePrefixes = (flags.exclude ? String(flags.exclude).split(",") : [])
+  .map((p) => p.trim())
+  .filter(Boolean)
+  .map((p) => path.relative(process.cwd(), path.resolve(process.cwd(), p)));
+
+function isExcluded(rel) {
+  return excludePrefixes.some(
+    (prefix) => rel === prefix || rel.startsWith(prefix + path.sep)
+  );
+}
+
+// Recursively list the spec files the runner would pick up under `rootDir`,
+// mirroring the spec_files globs above: any *.js inside a `tests/` directory
+// or any file named `tests.js`, excluding node_modules and --exclude paths.
+function listSpecFiles(rootDir) {
+  const out = [];
+  (function walk(dir) {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (e) {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name === "node_modules") continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.isFile() && entry.name.endsWith(".js")) {
+        const rel = path.relative(process.cwd(), full);
+        const segments = rel.split(path.sep);
+        if (
+          (segments.includes("tests") || entry.name === "tests.js") &&
+          !isExcluded(rel)
+        ) {
+          out.push(rel);
+        }
+      }
+    }
+  })(rootDir);
+  return out.sort();
+}
 
 // Pass in a custom test glob for running only specific tests
 if (args[0]) {
@@ -46,6 +126,62 @@ if (args[0]) {
   );
 }
 
+// --shard / --exclude only make sense against a directory (or the whole
+// tree). A specific spec file was already pinned into config.spec_files
+// above, so leave it alone and ignore the flags.
+const targetIsFile = !!(args[0] && args[0].endsWith(".js"));
+if (targetIsFile && (shard || excludePrefixes.length > 0)) {
+  console.log(
+    clfdate(),
+    colors.yellow(
+      `Ignoring --shard/--exclude: a specific spec file was given (${args[0]}).`
+    )
+  );
+  shard = null;
+  excludePrefixes.length = 0;
+}
+
+// Build an explicit spec-file list when sharding and/or excluding - both
+// need the same discovery + exclude filter (listSpecFiles applies
+// isExcluded), and a shard then takes a round-robin slice of it. This
+// replaces the spec_dir / spec_files globs; the list is added after
+// loadConfig() below.
+let shardFiles = null;
+if (!targetIsFile && (shard || excludePrefixes.length > 0)) {
+  const root = path.resolve(process.cwd(), args[0] || ".");
+  const filteredFiles = listSpecFiles(root);
+
+  if (shard) {
+    shardFiles = filteredFiles.filter(
+      (_, i) => i % shard.total === shard.index - 1
+    );
+    console.log(
+      clfdate(),
+      `Shard ${shard.index}/${shard.total}:`,
+      colors.cyan(`${shardFiles.length} of ${filteredFiles.length} spec files`)
+    );
+    if (shardFiles.length === 0) {
+      console.log(
+        clfdate(),
+        colors.yellow(
+          `Shard ${shard.index}/${shard.total} matched no spec files - ` +
+            `TOTAL (${shard.total}) is larger than the file count for this path.`
+        )
+      );
+    }
+  } else {
+    shardFiles = filteredFiles;
+    console.log(
+      clfdate(),
+      `Excluding ${excludePrefixes.join(", ")}:`,
+      colors.cyan(`${shardFiles.length} spec files`)
+    );
+  }
+
+  config.spec_dir = "";
+  config.spec_files = [];
+}
+
 // Seed: 2nd positional arg, or env, or random
 if (args[1]) {
   seed = args[1];
@@ -65,11 +201,22 @@ seedrandom(seed, { global: true });
 jasmine.seed(seed);
 jasmine.loadConfig(config);
 
+if (shardFiles) {
+  shardFiles.forEach((f) =>
+    jasmine.addSpecFile(path.resolve(process.cwd(), f))
+  );
+}
+
 // Build command for re-running with DEBUG
 function buildDebugCommand() {
   var cmd = "DEBUG=blot* npm test";
   if (args[0]) cmd += " " + args[0];
   if (args[1]) cmd += " " + args[1];
+  if (flags.shard || flags.exclude) {
+    cmd += " --";
+    if (flags.shard) cmd += " --shard=" + flags.shard;
+    if (flags.exclude) cmd += " --exclude=" + flags.exclude;
+  }
   return cmd;
 }
 
@@ -110,7 +257,7 @@ jasmine.addReporter({
       .map((fullName) => durations[fullName] + "ms " + colors.dim(fullName))
       .slice(0, 10)
       .forEach((line) => console.log(line));
-    
+
     // If tests failed, show how to re-run with DEBUG (only if DEBUG is not already set)
     if (result.overallStatus === "failed" && !process.env.DEBUG) {
       console.log();

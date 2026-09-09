@@ -213,9 +213,12 @@ describe("entry.search", function () {
   });
 
   it("returns a maximum of 25 results", async function (done) {
-    for (let i = 0; i < 100; i++) {
-      await this.set(`/post${i}.txt`, `Hello, world ${i}!`);
-    }
+    await this.setMany(
+      Array.from({ length: 100 }, (_, i) => ({
+        path: `/post${i}.txt`,
+        contents: `Hello, world ${i}!`,
+      }))
+    );
 
     expect((await this.search("Hello")).length).toEqual(25);
 
@@ -223,10 +226,13 @@ describe("entry.search", function () {
   });
 
   it("returns results within timeout even with large dataset", async function (done) {
-    for (let i = 0; i < 1000; i++) {
-      await this.set(`/post${i}.txt`, `Hello, world ${i}! Some more content to search through.`);
-    }
-  
+    await this.setMany(
+      Array.from({ length: 1000 }, (_, i) => ({
+        path: `/post${i}.txt`,
+        contents: `Hello, world ${i}! Some more content to search through.`,
+      }))
+    );
+
     const startTime = Date.now();
     const results = await this.search("Hello");
     const duration = Date.now() - startTime;
@@ -257,18 +263,21 @@ describe("entry.search", function () {
   });
   
   it("maintains performance with complex multi-term searches", async function (done) {
-    for (let i = 0; i < 100; i++) {
-      await this.set(`/complex${i}.txt`, `
+    await this.setMany(
+      Array.from({ length: 100 }, (_, i) => ({
+        path: `/complex${i}.txt`,
+        contents: `
         Title: Complex Post ${i}
         Tags: tag${i}, common1, common2
         Custom: custom${i}
-        
+
         This is a complex post with multiple searchable terms.
         It contains various words like specific${i} and common words.
         Some entries will have unique${i} terms while others share terms.
-      `);
-    }
-  
+      `,
+      }))
+    );
+
     const startTime = Date.now();
     const results = await this.search("complex specific50 unique50");
     const duration = Date.now() - startTime;
@@ -280,16 +289,19 @@ describe("entry.search", function () {
   });
   
   it("returns partial results if timeout occurs mid-search", async function (done) {
-    for (let i = 0; i < 500; i++) {
-      await this.set(`/slow${i}.txt`, `
+    await this.setMany(
+      Array.from({ length: 500 }, (_, i) => ({
+        path: `/slow${i}.txt`,
+        contents: `
         Title: Slow Search Test ${i}
-        Tags: ${Array(100).fill(`tag${i}`).join(', ')}
-        Custom: ${Array(100).fill(`custom${i}`).join(' ')}
-        
-        ${Array(100).fill(`This is entry ${i}`).join(' ')}
-      `);
-    }
-  
+        Tags: ${Array(100).fill(`tag${i}`).join(", ")}
+        Custom: ${Array(100).fill(`custom${i}`).join(" ")}
+
+        ${Array(100).fill(`This is entry ${i}`).join(" ")}
+      `,
+      }))
+    );
+
     const startTime = Date.now();
     const results = await this.search("entry");
     const duration = Date.now() - startTime;
@@ -302,10 +314,13 @@ describe("entry.search", function () {
   });
   
   it("performs well with concurrent searches", async function (done) {
-    for (let i = 0; i < 200; i++) {
-      await this.set(`/concurrent${i}.txt`, `Post ${i} with some searchable content`);
-    }
-  
+    await this.setMany(
+      Array.from({ length: 200 }, (_, i) => ({
+        path: `/concurrent${i}.txt`,
+        contents: `Post ${i} with some searchable content`,
+      }))
+    );
+
     const startTime = Date.now();
     const searches = [
       this.search("Post"),
