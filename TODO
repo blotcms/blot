@@ -240,8 +240,6 @@ Fix bug with huge draft crashing the sync server /a327ex/drafts/it_follows.txt
 
 Fix possible bug with changing folder name in Google Drive from uppercase to lowercase (what happens to file inside?). Is this related to entry lookup for deleted files? How was the missing ghost file undeleteable? the case of one variant was deleted but the other was not. The case of the ID mismatched. The folder lock was stuck.
 
-Fix bug with Elizabeth's Google Docs (export 403 file exceeds...)
-
 Fix bug with crash loop for page rendering issue
 - cache 502 responses in proxy cache for X mins?
 - how to handle this at a high level?
