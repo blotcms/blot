@@ -1,18 +1,10 @@
 const makeSlug = require("helper/makeSlug");
-const makeID = require("models/template/util/makeID");
+const slugForName = require("models/template/util/slugForName");
 const createTemplate = require("./create-template");
 const { MAX_DEDUPLICATION_ATTEMPTS } = require("./constants");
 
 // Template.create derives the id from makeSlug(name).slice(0, 30)
 const MAX_SLUG_LENGTH = 30;
-
-// The id is what routing resolves a template by, and writeToFolder names the
-// template's directory after the stored slug — which readFromFolder then turns
-// back into an id. Let those disagree and a template written to the folder can
-// be read back as a different one, so derive the slug from the id itself
-// rather than accepting one which may not survive the same truncation.
-const slugFor = (owner, name) =>
-  makeID(owner, name).split(":").slice(1).join(":");
 
 // A suffix appended to a name whose slug already fills those 30 characters
 // leaves them unchanged, so every attempt derives the same id, collides
@@ -78,7 +70,7 @@ async function createTemplateWithUniqueName ({
         ...properties,
         owner,
         name: attemptName,
-        slug: slugFor(owner, attemptName),
+        slug: slugForName(owner, attemptName),
       });
     } catch (error) {
       if (

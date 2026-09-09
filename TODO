@@ -217,6 +217,69 @@ iCloud:
 
 ---
 
+Fix bug with local editing and template slugs
+- Forward fix landed in PR #1749: models/template/create.js now keeps a
+  template's stored slug in step with its id (makeID), and newTemplate.js /
+  fork-if-needed.js / create-template-with-unique-name.js derive the slug via
+  the new models/template/util/slugForName.js helper. No template created from
+  now on can be stored with a slug that makeID maps to a different id.
+- STILL TODO: a one-off migration for records created *before* that fix. A
+  draft script (scripts/template/fix-divergent-slugs.js) was dropped from
+  #1749 because getting the on-disk folder move right (under the sync lock,
+  losslessly, across every provider) is its own piece of work. Agent prompt to
+  do it properly:
+
+    Write scripts/template/fix-divergent-slugs.js: a one-off, dry-run-by-default
+    migration that repairs every existing template whose stored slug no longer
+    resolves to its id, i.e. makeID(blog.id, template.slug) !== template.id.
+    Read models/template/{create,writeToFolder,readFromFolder,buildFromFolder,
+    determineTemplateFolder}.js and util/{makeID,slugForName}.js first, plus
+    scripts/dropbox/resync.js and scripts/icloud/resync.js for the
+    establishSyncLock(blog.id) / syncLock.done() pattern, and scripts/each/blog
+    + scripts/get/blog for iteration. Requirements:
+      * CLI: `node scripts/template/fix-divergent-slugs.js [--apply] [<blog>]`.
+        Dry run prints every change it WOULD make and an accurate count
+        (increment the would-repair counter before any early return — the
+        earlier draft always printed "would repair 0"). <blog> is anything
+        scripts/get/blog accepts.
+      * The target slug is the id's own suffix, but ONLY when
+        makeID(blog.id, suffix) === template.id. A legacy id that does not
+        round-trip (a non-ASCII name from before any makeID cap) cannot be
+        repaired here — report it for a manual rename and skip.
+      * Do the whole per-blog repair inside establishSyncLock(blog.id) so no
+        buildFromFolder can run against a half-migrated state (that cleanup
+        drops any local template whose stored slug is absent from the folder).
+        Release the lock in a finally.
+      * Persist the corrected slug (setMetadata) only AFTER the folder is
+        durable under the new name — a failed folder step must leave the stored
+        slug untouched so a rerun retries identically rather than skipping the
+        record.
+      * MOVE the on-disk directory, never delete-and-regenerate: copy every
+        file under Templates/<oldSlug>/ (or templates/<oldSlug>/ — check BOTH
+        roots, buildFromFolder scans both) to Templates/<newSlug>/ through the
+        blog's client (require("clients")[blog.client]; fall back to fs for a
+        blog with no client), walking the real directory so nested, dotfile and
+        shouldIgnoreFile-ignored local-only files are preserved, then remove
+        the old files/dir through the client. Propagate any copy/remove error,
+        do not count the record as repaired, and leave it for a rerun.
+      * Constrain the stale slug as a path component before touching the
+        filesystem: reject "." / ".." / anything that resolves outside the
+        blog's template root.
+      * If the stale slug resolves (via makeID) to a *different* real template
+        that owns Templates/<oldSlug>/, do not move or delete it — report the
+        collision and skip, leaving both records for manual handling.
+      * Handle localEditing === false too: a divergent record can still have a
+        stale folder (the disable route sets the flag even when removeFromFolder
+        failed). Reconcile an actual on-disk directory independently of the flag.
+      * Bump blog.cacheID after a successful repair. Print a per-blog and a
+        grand-total summary (blogs, templates, divergent, repaired, skipped,
+        collisions).
+    Add a spec under app/models/template/tests/ or scripts/tests/ that seeds a
+    divergent locally-edited template with an extra ignored/nested file, runs
+    the script with --apply against a test blog, and asserts: the stored slug
+    now round-trips, the folder moved to the new name, and the extra file
+    survived the move.
+
 Fix bugs with templates:
 - Fix responsive thumbnail component on photo template (it loads large thumbnail every time)
 - Fix 'back' button in photo template and tell [Bibi](https://mail.google.com/mail/u/0/#inbox/FMfcgzGrcPJTmPXxWvhbmFpvwdfVzhpn)

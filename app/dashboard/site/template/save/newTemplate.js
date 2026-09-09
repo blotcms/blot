@@ -1,5 +1,5 @@
 var Template = require("models/template");
-var makeSlug = require("helper/makeSlug");
+var slugForName = require("models/template/util/slugForName");
 const Blog = require("models/blog");
 const { MAX_DEDUPLICATION_ATTEMPTS } = require("./constants");
 var NO_NAME = "Please choose a name for your new template.";
@@ -8,8 +8,8 @@ var SUCCESS = "Created your template succesfully!";
 var SUCCESS_FROM_SHARED_TEMPLATE = "Added template to your blog succesfully!";
 
 module.exports = function (req, res, next) {
-  var template, slug, name;
-  var deduplicatedName, deduplicatedSlug;
+  var template, name;
+  var deduplicatedName;
   var deduplicatingCounter = 1;
   var redirect = req.body.redirect || req.path;
 
@@ -38,12 +38,14 @@ module.exports = function (req, res, next) {
     }
   }
 
-  slug = makeSlug(name.slice(0, 30));
-
+  // The slug has to resolve, through makeID, back to the id Template.create
+  // derives from the name — otherwise a locally edited copy can be read back
+  // from its folder as the template it was cloned from. Derive it rather than
+  // building one which the 30-character truncation might shorten differently.
   template = {
     isPublic: false,
     name: name,
-    slug: slug,
+    slug: slugForName(req.blog.id, name),
     cloneFrom: req.body.cloneFrom
   };
 
@@ -63,9 +65,8 @@ module.exports = function (req, res, next) {
       ) {
         deduplicatingCounter++;
         deduplicatedName = name + " " + deduplicatingCounter;
-        deduplicatedSlug = slug + "-" + deduplicatingCounter;
         template.name = deduplicatedName;
-        template.slug = deduplicatedSlug;
+        template.slug = slugForName(req.blog.id, deduplicatedName);
         return Template.create(req.blog.id, deduplicatedName, template, then);
       }
 
