@@ -235,8 +235,6 @@ Fix bug with [~/gitbug folder](https://mail.google.com/mail/u/0/#inbox/KtbxLxgKJ
 
 Fix bug with auto heading injector and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQgKvJFLPslvxmlmMBnmcQQTqzq)
 
-Fix bug where pages where appearing in the list of posts filtered by path_prefix AND tag – e.g. /work/tagged/automotive and tell Chuck
-
 Fix bug with huge draft crashing the sync server /a327ex/drafts/it_follows.txt
 - Chunk large drafts into multiple messages to avoid memory issues? 
 

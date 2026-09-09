@@ -112,7 +112,7 @@ describe("tagged block", function () {
         locals: {
           path_prefix: "/blog/",
         },
-      }
+      },
     );
 
     const res = await this.get("/tagged/foo");
@@ -122,7 +122,39 @@ describe("tagged block", function () {
     expect(body.trim()).toEqual("<ul><li>Three</li><li>One</li></ul>");
   });
 
+  it("excludes pages from tagged listings and pagination totals", async function () {
+    await this.write({
+      path: "/work/post.txt",
+      content: "Title: Car post\nTags: automotive\n\nPost body",
+    });
+    await this.write({
+      path: "/work/page.txt",
+      content: "Title: Car page\nTags: automotive\nPage: yes\n\nPage body",
+    });
 
+    await this.template(
+      {
+        "tagged.html": `{{#tagged}}{{total}}|{{pagination.total}}|{{#entries}}{{title}}{{/entries}}{{/tagged}}`,
+      },
+      {
+        views: {
+          "tagged.html": {
+            url: ["/work/tagged/:tag", "/work/tagged/:tag/page/:page"],
+          },
+        },
+        locals: {
+          path_prefix: "/work/",
+          tagged_page_size: 1,
+        },
+      },
+    );
+
+    const res = await this.get("/work/tagged/automotive");
+    const body = await res.text();
+
+    expect(res.status).toEqual(200);
+    expect(body.trim()).toEqual("1|1|Car post");
+  });
 
   it("treats empty and whitespace path_prefix as disabled filtering", async function () {
     await this.write({
@@ -142,7 +174,7 @@ describe("tagged block", function () {
         locals: {
           path_prefix: "   ",
         },
-      }
+      },
     );
 
     const res = await this.get("/tagged/foo");
@@ -170,7 +202,7 @@ describe("tagged block", function () {
         locals: {
           path_prefix: "blog/",
         },
-      }
+      },
     );
 
     const res = await this.get("/tagged/foo");
@@ -198,7 +230,7 @@ describe("tagged block", function () {
         locals: {
           path_prefix: "/blog/",
         },
-      }
+      },
     );
 
     const res = await this.get("/tagged/foo");
@@ -264,7 +296,7 @@ describe("tagged block", function () {
           path_prefix: "/blog/",
           tagged_page_size: 1,
         },
-      }
+      },
     );
 
     const res = await this.get("/tagged/foo/page/2");
@@ -296,7 +328,7 @@ describe("tagged block", function () {
         locals: {
           tagged_page_size: 1,
         },
-      }
+      },
     );
 
     const res = await this.get("/tagged/foo/page/2?tag=foo&tag=bar");
@@ -329,7 +361,7 @@ describe("tagged block", function () {
           path_prefix: "/blog/",
           tagged_page_size: 1,
         },
-      }
+      },
     );
 
     const res = await this.get("/tagged/foo/page/2?tag=foo&tag=bar");

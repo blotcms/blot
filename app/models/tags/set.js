@@ -91,7 +91,10 @@ module.exports = function (blogID, entry, callback) {
         }
 
         multi.set(key.name(blogID, tag), prettyTags[i]);
-        multi.zAdd(key.sortedTag(blogID, tag), { score: score, value: entry.id });
+        multi.zAdd(key.sortedTag(blogID, tag), {
+          score: score,
+          value: entry.id,
+        });
       });
 
       // For each tagName in the list of tags which the
@@ -129,6 +132,8 @@ function shouldHide(entry) {
     entry.deleted ||
     entry.draft ||
     entry.scheduled ||
+    entry.page ||
+    entry.menu ||
     entry.path.split("/").filter(function (i) {
       return i[0] === "_";
     }).length
