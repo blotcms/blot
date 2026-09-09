@@ -126,6 +126,8 @@ CreateBlog.route("/")
   }
   })
 
+  // As a matter of policy, we do not prorate the cost of an extra site when it
+  // is created; the additional cost is reflected at the next renewal.
   .post(chargeForRemaining, updateSubscription, saveBlog, (req, res) => {
 
     // For the first site, we immediately redirect to the client
