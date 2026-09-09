@@ -42,3 +42,8 @@ sudo bash -c 'echo "nameserver 127.0.0.1" > /etc/resolver/blot'</code></pre>
 <h2>6. Edit the example blog</h2>
 <p>The example blog folder is inside <code>data</code>:</p>
 <pre><code>./data/blogs/blog_$ID</code></pre>
+
+<h2>7. Configure the session secret</h2>
+<p>Production deployments should set <code>BLOT_SESSION_SECRET</code> to a stable random value, for example, the output of:</p>
+<pre class="bash"><code>openssl rand -hex 32</code></pre>
+<p>If it is not set, Blot logs a warning and uses a cryptographically secure process-local fallback. This is safe for signing, but existing dashboard sessions expire whenever the process restarts.</p>

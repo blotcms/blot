@@ -49,6 +49,10 @@ export PUPPETEER_EXECUTABLE_PATH=
 #               S E C R E T S               #
 #############################################
 
+# Set this to a stable, randomly generated secret in production, for example:
+#   openssl rand -hex 32
+# If omitted, Blot warns and generates a secure process-local fallback; because
+# that fallback changes at each restart, all existing dashboard sessions expire.
 export BLOT_SESSION_SECRET=
 export BLOT_BACKUP_SECRET=
 export BLOT_WEBHOOKS_SECRET=
