@@ -1,0 +1,248 @@
+name: benchmarks
+
+# What this workflow does
+# ----------------------
+# pull_request (once marked "ready for review", i.e. not draft)
+#   - runs the benchmark on amd64 only, a few times, and posts / updates a
+#     single sticky comment comparing the PR against the rolling master median
+#   - never fails the check: GitHub-hosted runners are too noisy to gate on
+#
+# push to master
+#   - runs the benchmark on amd64 + arm64, a few times each
+#   - appends the result to a per-arch rolling history (Actions cache, backed
+#     up as an artifact)
+#   - if the SAME metric has regressed for the last N consecutive master
+#     commits, opens a `benchmark-regression` issue (amd64 only for now;
+#     arm64 is detect-and-log until its noise profile is known)
+#
+# workflow_dispatch
+#   - ad-hoc run with custom knobs; uploads an artifact, no comment, no issue
+#
+# See scripts/benchmarks/README.md for the whole picture.
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      sites:
+        description: "Number of sites"
+        default: "5"
+      files:
+        description: "Number of generated files"
+        default: "1000"
+      iterations:
+        description: "Iterations to run and aggregate"
+        default: "3"
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  # Serialise master runs so history writes don't race; collapse superseded PR runs.
+  group: benchmarks-${{ github.event_name == 'push' && 'master' || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    outputs:
+      matrix: ${{ steps.matrix.outputs.value }}
+      iterations: ${{ steps.matrix.outputs.iterations }}
+    steps:
+      - id: matrix
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo 'value={"include":[{"arch":"amd64","runner":"ubuntu-24.04","alert":"--alert"},{"arch":"arm64","runner":"ubuntu-24.04-arm","alert":""}]}' >> "$GITHUB_OUTPUT"
+            echo "iterations=3" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo 'value={"include":[{"arch":"amd64","runner":"ubuntu-24.04","alert":""}]}' >> "$GITHUB_OUTPUT"
+            echo "iterations=${{ github.event.inputs.iterations }}" >> "$GITHUB_OUTPUT"
+          else
+            echo 'value={"include":[{"arch":"amd64","runner":"ubuntu-24.04","alert":""}]}' >> "$GITHUB_OUTPUT"
+            echo "iterations=2" >> "$GITHUB_OUTPUT"
+          fi
+
+  benchmark:
+    needs: setup
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+
+    services:
+      redis:
+        image: redis:6
+        ports:
+          - 6379:6379
+
+    env:
+      ARCH: ${{ matrix.arch }}
+      ITERATIONS: ${{ needs.setup.outputs.iterations }}
+      HISTORY_DIR: .benchmarks/history
+      RESULT_FILE: .benchmarks/result-${{ matrix.arch }}.json
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The commit actually being benchmarked (PR head, not the merge commit).
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Flip the sticky comment to a loading state straight away, before the
+      # (slow) image build, so the PR shows the run is in flight.
+      - name: Mark PR benchmark comment as running
+        if: github.event_name == 'pull_request'
+        run: |
+          node scripts/benchmarks/pr-comment.js \
+            --pr "${{ github.event.pull_request.number }}" \
+            --arch "$ARCH" \
+            --status running \
+            --sha "$HEAD_SHA"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build benchmark image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: dev
+          load: true
+          tags: blot-bench:latest
+          # Reuse node.yml's registry buildcache when it applies (amd64), plus a
+          # per-arch GHA layer cache so repeat runs on either arch stay fast.
+          cache-from: |
+            type=gha,scope=benchmarks-${{ matrix.arch }}
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:buildcache
+          cache-to: type=gha,scope=benchmarks-${{ matrix.arch }},mode=max
+
+      - name: Restore benchmark history
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.HISTORY_DIR }}
+          key: benchmarks-history-${{ matrix.arch }}-${{ github.run_id }}
+          restore-keys: |
+            benchmarks-history-${{ matrix.arch }}-
+
+      - name: Seed history from artifact if cache missed
+        run: node scripts/benchmarks/seed-history.js --arch "$ARCH" --history-dir "$HISTORY_DIR"
+
+      - name: Run benchmark (${{ env.ITERATIONS }} iterations)
+        run: |
+          mkdir -p .benchmarks/runs
+          for i in $(seq 1 "$ITERATIONS"); do
+            echo "::group::benchmark iteration $i/$ITERATIONS"
+            # Each iteration expects an empty Redis (the runner's redis service
+            # is shared across the job), so wipe it between runs.
+            docker run --rm --network host redis:6 \
+              redis-cli -h 127.0.0.1 -p 6379 flushall
+            docker run --rm \
+              --network host \
+              -e BLOT_REDIS_HOST=localhost \
+              -e BLOT_HOST=localhost \
+              -e BLOT_PROTOCOL=https \
+              -e GITHUB_SHA=${{ github.sha }} \
+              -e SITES_ARG="${{ github.event.inputs.sites }}" \
+              -e FILES_ARG="${{ github.event.inputs.files }}" \
+              -v ${{ github.workspace }}/app:/usr/src/app/app \
+              -v ${{ github.workspace }}/scripts:/usr/src/app/scripts \
+              -v ${{ github.workspace }}/config:/usr/src/app/config \
+              -v ${{ github.workspace }}/.benchmarks:/benchmarks \
+              blot-bench:latest \
+              sh -c '
+                rm -rf /usr/src/app/data && mkdir /usr/src/app/data
+                ARGS="--output /benchmarks/runs/run-'"$i"'.json"
+                [ -n "$SITES_ARG" ] && ARGS="$ARGS --sites $SITES_ARG"
+                [ -n "$FILES_ARG" ] && ARGS="$ARGS --files $FILES_ARG"
+                npm run benchmark:ci -- $ARGS
+              '
+            echo "::endgroup::"
+          done
+
+      - name: Aggregate iterations
+        run: |
+          node scripts/benchmarks/aggregate.js \
+            --output "$RESULT_FILE" \
+            .benchmarks/runs/run-*.json
+
+      # --- pull request: post the comparison comment -----------------------
+      - name: Post PR benchmark comment
+        if: github.event_name == 'pull_request'
+        run: |
+          node scripts/benchmarks/pr-comment.js \
+            --pr "${{ github.event.pull_request.number }}" \
+            --arch "$ARCH" \
+            --status done \
+            --sha "$HEAD_SHA" \
+            --result "$RESULT_FILE" \
+            --history-dir "$HISTORY_DIR"
+
+      - name: Mark PR benchmark comment as failed
+        if: github.event_name == 'pull_request' && failure()
+        run: |
+          node scripts/benchmarks/pr-comment.js \
+            --pr "${{ github.event.pull_request.number }}" \
+            --arch "$ARCH" \
+            --status failed \
+            --sha "$HEAD_SHA"
+
+      # --- master: update history + maybe open a regression issue ----------
+      - name: Update rolling history
+        if: github.event_name == 'push'
+        run: |
+          node scripts/benchmarks/update-history.js \
+            --result "$RESULT_FILE" --arch "$ARCH" --history-dir "$HISTORY_DIR"
+
+      - name: Detect sustained regression
+        if: github.event_name == 'push'
+        run: |
+          node scripts/benchmarks/detect-regression.js \
+            --history-dir "$HISTORY_DIR" --arch "$ARCH" ${{ matrix.alert }}
+
+      - name: Save benchmark history
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.HISTORY_DIR }}
+          key: benchmarks-history-${{ matrix.arch }}-${{ github.run_id }}
+
+      # --- artifacts (always) --------------------------------------------
+      - name: Upload benchmark result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-result-${{ matrix.arch }}
+          path: |
+            .benchmarks/result-${{ matrix.arch }}.json
+            .benchmarks/runs/
+          if-no-files-found: warn
+
+      - name: Upload benchmark history
+        if: always() && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-history-${{ matrix.arch }}
+          path: ${{ env.HISTORY_DIR }}
+          retention-days: 90
+          if-no-files-found: warn

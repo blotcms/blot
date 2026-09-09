@@ -1,4 +1,5 @@
 const createTemplate = require("./create-template");
+const slugForName = require("models/template/util/slugForName");
 const Blog = require("models/blog");
 
 const updateBlog = (blogID, updates) => {
@@ -23,8 +24,10 @@ module.exports = async (req, res, next) => {
     const template = await createTemplate({
         isPublic: false,
         owner: req.blog.id,
+        // Derive the slug from the name so it stays in step with the id the
+        // fork is stored under; the source template's slug may not.
+        slug: slugForName(req.blog.id, req.template.name),
         name: req.template.name,
-        slug: req.template.slug,
         cloneFrom: req.template.id,
     });
 

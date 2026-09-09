@@ -193,7 +193,9 @@ jobs:
     needs: setup-tests
     runs-on: ubuntu-latest
     # Every file with describe()/it() must sit in a <suite>/tests/ directory
-    # (or be named tests.js) so the runner picks it up; nothing is exempt.
+    # (or be named tests.js) so the runner picks it up. The only exception is
+    # app/blog/benchmarks/benchmarks.js: it is a Jasmine spec run by its own
+    # workflow (benchmarks.yml), never by the unit-test matrix.
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -231,7 +233,11 @@ jobs:
           else
             SPEC_FILES=""
           fi
-          
+
+          # app/blog/benchmarks is a benchmark spec run by benchmarks.yml, not
+          # the unit-test matrix - exclude it from this check.
+          SPEC_FILES=$(echo "$SPEC_FILES" | grep -v "app/blog/benchmarks/" || true)
+
           echo "Files with both describe() and it():"
           echo "$SPEC_FILES"
 

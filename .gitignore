@@ -15,6 +15,7 @@
 
 data
 app/views-built
+.benchmarks
 
 # Eventually merge into one 'data' folder
 blogs/*

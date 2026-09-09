@@ -4,7 +4,7 @@ var colors = require("colors");
 var client = require("models/client");
 var clfdate = require("helper/clfdate");
 var seedrandom = require("seedrandom");
-var async = require("async");
+var registerGlobalTest = require("./register-global-test");
 var fs = require("fs");
 var path = require("path");
 var seed;
@@ -268,98 +268,7 @@ jasmine.addReporter({
   },
 });
 
-global.test = {
-  CheckEntry: require("./util/checkEntry"),
-  SyncAndCheck: require("./util/syncAndCheck"),
-
-  compareDir: require("./util/compareDir"),
-
-  fake: require("./util/fake"),
-
-  user: function () {
-    beforeEach(function (done) {
-      require("./util/createUser").call(this, function (err) {
-        done(err);
-      });
-    });
-
-    afterEach(function (done) {
-      require("./util/removeUser").call(this, function (err) {
-        done(err);
-      });
-    });
-  },
-
-  server: require("./util/server"),
-
-  site: require("./util/site"),
-
-  templates: require("./util/templates"),
-
-  timeout: function (ms) {
-    // Store original value
-    let originalTimeout;
-
-    beforeAll(function () {
-      // In your setup, jasmine.DEFAULT_TIMEOUT_INTERVAL isn't available
-      // We need to access the timeout through the Jasmine instance
-      originalTimeout = jasmine.jasmine.DEFAULT_TIMEOUT_INTERVAL;
-      jasmine.jasmine.DEFAULT_TIMEOUT_INTERVAL = ms;
-    });
-
-    afterAll(function () {
-      jasmine.jasmine.DEFAULT_TIMEOUT_INTERVAL = originalTimeout || 5000;
-    });
-  },
-
-  blogs: function (total) {
-    beforeEach(require("./util/createUser"));
-    afterEach(require("./util/removeUser"));
-
-    beforeEach(function (done) {
-      var context = this;
-      context.blogs = [];
-      async.times(
-        total,
-        function (blog, next) {
-          var result = { user: context.user };
-          require("./util/createBlog").call(result, function () {
-            context.blogs.push(result.blog);
-            next();
-          });
-        },
-        done
-      );
-    });
-
-    afterEach(function (done) {
-      var context = this;
-      async.each(
-        this.blogs,
-        function (blog, next) {
-          require("./util/removeBlog").call(
-            { user: context.user, blog: blog },
-            next
-          );
-        },
-        done
-      );
-    });
-  },
-
-  blog: function () {
-    beforeEach(require("./util/createUser"));
-    afterEach(require("./util/removeUser"));
-
-    beforeEach(require("./util/createBlog"));
-    afterEach(require("./util/removeBlog"));
-  },
-
-  tmp: function () {
-    beforeEach(require("./util/createTmpDir"));
-    afterEach(require("./util/removeTmpDir"));
-  },
-};
+registerGlobalTest();
 
 // get the number of keys in the database
 (async function ensureEmptyDatabase() {
