@@ -17,8 +17,21 @@ function backlinksToUpdate(
 	entry,
 	previousInternalLinks,
 	previousPermalink,
+	previousUrl,
 	callback
 ) {
+	if (typeof previousUrl === "function") {
+		callback = previousUrl;
+		previousUrl = undefined;
+	}
+
+	// The value we record on other entries' backlinks lists to point back
+	// at this entry. Pages (and any entry without an explicit Permalink/
+	// Link/Url in their metadata) have an empty entry.permalink, so fall
+	// back to entry.url - the URL the entry is actually served from - or
+	// they can never appear as the *source* of a backlink.
+	const permalink = entry.permalink || entry.url;
+	const formerPermalink = previousPermalink || previousUrl;
 	// Since this post is no longer available, none of its current or former
 	// links are present. Remove everything.
 	// Since this post exists, we need to work out which dependencies were
@@ -64,18 +77,17 @@ function backlinksToUpdate(
 				.filter((link) => validInternalLinks.indexOf(link) > -1)
 				.forEach((link) => {
 					changes[link].backlinks = changes[link].backlinks.filter(
-						(link) =>
-							link !== entry.permalink && link !== entry.previousPermalink
+						(link) => link !== permalink && link !== formerPermalink
 					);
 				});
 
 			currentInternalLinks
 				.filter((link) => validInternalLinks.indexOf(link) > -1)
 				.forEach((link) => {
-					changes[link].backlinks.push(entry.permalink);
-					if (entry.permalink !== previousPermalink) {
+					if (permalink) changes[link].backlinks.push(permalink);
+					if (permalink !== formerPermalink) {
 						changes[link].backlinks = changes[link].backlinks.filter(
-							(link) => link !== previousPermalink
+							(link) => link !== formerPermalink
 						);
 					}
 				});

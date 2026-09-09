@@ -196,6 +196,7 @@ module.exports = function set (blogID, path, updates, callback) {
                 entry,
                 previousInternalLinks,
                 previousPermalink,
+                previousUrl,
                 function (err, changes) {
                   if (err) return callback(err);
 

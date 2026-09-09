@@ -399,8 +399,6 @@ Fix bug parsing ISO8601 date format and tell [Thomas](https://mail.google.com/ma
 
 Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
 
-Fix bug with pages not appearing in backlinks and [tell questioner](https://blot.im/questions/2913)
-
 Fix bug with Google Drive client and [Stephen's large blog](https://mail.google.com/mail/u/0/#inbox/QgrcJHsBsbkNkMkkkMmLWBxRfnGnWPVwLHl)
   - It also seems like server crashes when a massive google drive folder is synced, with a directory containing 6772 items
 

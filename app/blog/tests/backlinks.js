@@ -6,6 +6,47 @@ describe("backlinks", function () {
       "{{#entry}}{{#backlinks.length}}Backlinks: {{#backlinks}}{{title}}{{/backlinks}}{{/backlinks.length}}{{/entry}}",
   };
 
+  it("renders a backlink when a page links to another page", async function () {
+    // Pages have no entry.permalink (only posts and entries with an
+    // explicit Permalink/Link/Url do), so the linking page has to be
+    // attributed by its entry.url instead or it never registers as
+    // the source of a backlink.
+    await this.write({
+      path: "/pages/target.txt",
+      content: "Page: yes\nTitle: Target Page\n\nContent.",
+    });
+    await this.write({
+      path: "/pages/linker.txt",
+      content: "Page: yes\nTitle: Linker Page\n\n[see target](/target-page)",
+    });
+    await this.template(backlinksTemplate);
+
+    const body = await this.text("/target-page");
+    expect(body).toContain("Backlinks:");
+    expect(body).toContain("Linker Page");
+  });
+
+  it("renders multiple backlinks when several pages link to the same page", async function () {
+    await this.write({
+      path: "/pages/target.txt",
+      content: "Page: yes\nTitle: Target Page\n\nContent.",
+    });
+    await this.write({
+      path: "/pages/linker-a.txt",
+      content: "Page: yes\nTitle: Linker A\n\n[target](/target-page)",
+    });
+    await this.write({
+      path: "/pages/linker-b.txt",
+      content: "Page: yes\nTitle: Linker B\n\n[target](/target-page)",
+    });
+    await this.template(backlinksTemplate);
+
+    const body = await this.text("/target-page");
+    expect(body).toContain("Backlinks:");
+    expect(body).toContain("Linker A");
+    expect(body).toContain("Linker B");
+  });
+
   it("renders backlinks when another post links via markdown", async function () {
     await this.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
     await this.write({
