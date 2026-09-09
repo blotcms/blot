@@ -1,0 +1,136 @@
+name: integration
+
+# End-to-end tests for the proxy container. Build-only scaffolding still -
+# nothing here is deployed.
+#
+#  proxy-behaviour : the built image vs a stub upstream (routing, caching,
+#                    gzip, hardening). Proves the generated production config.
+#  app-e2e         : a real round trip through the proxy to a Blot app
+#                    container (site loads, sign in / sign out). Not yet
+#                    hardened - see TODO "Proxy container (OpenResty)" - so it
+#                    is allowed to fail without failing the workflow.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/integration.yml"
+      - "proxy/**"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/integration.yml"
+      - "proxy/**"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
+
+env:
+  BLOT_HOST: localhost
+  BLOT_REPO: ${{ github.workspace }}
+
+jobs:
+  proxy-behaviour:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 21.7.3
+
+      - name: Install config generator dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/gendeps"
+          cd "$RUNNER_TEMP/gendeps"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+
+      - name: Generate proxy config (BLOT_HOST=localhost)
+        run: bash proxy/build/build.sh
+        env:
+          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+
+      - name: Build proxy image
+        run: docker build -f proxy/Dockerfile -t blot-proxy:e2e proxy/
+
+      - name: Start proxy + stub upstream
+        run: |
+          docker run -d --name proxy -p 8080:80 -p 8443:443 \
+            -e BLOT_HOST=localhost blot-proxy:e2e
+          docker run -d --name stub --network container:proxy \
+            -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" \
+            node:22-alpine node /s.js
+          for i in $(seq 1 30); do
+            docker exec proxy sh -c 'wget -qO- -T1 http://127.0.0.1:8090/ >/dev/null 2>&1' && break
+            sleep 1
+          done
+
+      - name: Run behavioural checks
+        env:
+          PROXY_HTTP: http://127.0.0.1:8080
+          PROXY_HTTPS: https://127.0.0.1:8443
+        run: bash proxy/e2e/checks.sh
+
+      - name: Proxy logs
+        if: always()
+        run: docker logs proxy || true
+
+  app-e2e:
+    runs-on: ubuntu-latest
+    needs: proxy-behaviour
+    # The real-app round trip is still being stabilised; surface its result
+    # without blocking the scaffolding.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 21.7.3
+
+      - name: Install config generator dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/gendeps"
+          cd "$RUNNER_TEMP/gendeps"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+
+      - name: Generate proxy config (BLOT_HOST=localhost)
+        run: bash proxy/build/build.sh
+        env:
+          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+
+      - name: Build proxy image
+        run: docker build -f proxy/Dockerfile -t blot-proxy:e2e proxy/
+
+      - name: Pull Blot app image
+        run: docker pull ghcr.io/davidmerfield/blot:test-latest
+
+      - name: Start the stack
+        run: docker compose -f proxy/e2e/docker-compose.yml up -d --wait --wait-timeout 420
+
+      - name: Seed a user
+        run: |
+          docker compose -f proxy/e2e/docker-compose.yml cp \
+            proxy/e2e/seed-user.js app:/tmp/seed-user.js
+          docker compose -f proxy/e2e/docker-compose.yml exec -T app \
+            node /tmp/seed-user.js e2e@example.com e2e-password
+
+      - name: Run end-to-end checks
+        env:
+          PROXY_ORIGIN: https://127.0.0.1
+          E2E_EMAIL: e2e@example.com
+          E2E_PASSWORD: e2e-password
+        run: node proxy/e2e/run.js
+
+      - name: Stack logs
+        if: always()
+        run: docker compose -f proxy/e2e/docker-compose.yml logs --no-color --tail 300 || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f proxy/e2e/docker-compose.yml down -v || true

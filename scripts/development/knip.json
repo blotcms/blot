@@ -16,6 +16,8 @@
     "app/documentation/featured/build.js",
     "app/documentation/featured/candidates.js",
     "config/openresty/build-config.js",
+    "proxy/build/index.js",
+    "proxy/e2e/*.js",
     "app/blog/static/fonts/test.js",
     "app/blog/static/syntax-highlighter/build.js",
     "app/build/plugins/katex/preview.js"

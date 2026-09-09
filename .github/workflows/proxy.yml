@@ -1,0 +1,78 @@
+name: proxy
+
+# Build-only CI for the containerised OpenResty proxy (see proxy/README.md).
+# It generates the config, builds the image, checks the config parses and
+# checks the container boots and answers a health check. It does NOT deploy
+# anything and does not yet run the proxy/tests integration suite.
+
+# The path filters include the external inputs the config generator reads
+# directly (root package.json for mustache/fs-extra, app/config.js ->
+# config/index.js for icloud/webhooks limits), not just proxy/.
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/proxy.yml"
+      - "proxy/**"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/proxy.yml"
+      - "proxy/**"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 21.7.3
+
+      # The repo has no committed package-lock.json, so `npm ci` / cache: npm
+      # are not usable, and `npm install` in the repo root would build the
+      # whole native dependency tree. The config generator only needs these
+      # two packages; require("config") resolves to app/config.js, which has
+      # no third-party dependencies.
+      - name: Install config generator dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/gendeps"
+          cd "$RUNNER_TEMP/gendeps"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+
+      - name: Generate OpenResty config
+        run: bash proxy/build/build.sh
+        env:
+          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+
+      - name: Build proxy image
+        run: docker build -f proxy/Dockerfile -t blot-proxy:ci proxy/
+
+      - name: Validate generated OpenResty config
+        run: docker run --rm --entrypoint /usr/local/openresty/bin/openresty blot-proxy:ci -t
+
+      - name: Boot container and check health endpoint
+        run: |
+          docker run -d --name blot-proxy-ci --cap-add SYS_NICE \
+            -p 8080:80 -e BLOT_HOST=example.com blot-proxy:ci
+          ok=""
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health || true)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            sleep 1
+          done
+          echo "--- container logs ---"
+          docker logs blot-proxy-ci || true
+          docker rm -f blot-proxy-ci >/dev/null 2>&1 || true
+          if [ -z "$ok" ]; then
+            echo "proxy container did not serve /health with 200"
+            exit 1
+          fi

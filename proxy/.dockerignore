@@ -1,0 +1,7 @@
+# Build context is proxy/. Only the Dockerfile, entrypoint and the generated
+# proxy/build/data/latest tree are needed to build the image.
+tests/
+build/index.js
+build/build.sh
+build/data/*-previous-*
+*.md

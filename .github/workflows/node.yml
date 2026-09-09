@@ -44,6 +44,7 @@ jobs:
         - app/sync
         - app/templates
         - config/openresty
+        - proxy
     steps:
       - name: Sparse checkout for hash calculation
         uses: actions/checkout@v4
@@ -290,5 +291,6 @@ jobs:
             -v ${{ github.workspace }}/app:/usr/src/app/app \
             -v ${{ github.workspace }}/scripts:/usr/src/app/scripts \
             -v ${{ github.workspace }}/config:/usr/src/app/config \
+            -v ${{ github.workspace }}/proxy:/usr/src/app/proxy \
             $IMAGE_TAG \
             sh -c "node scripts/tests ${{ matrix.test_suite }}"

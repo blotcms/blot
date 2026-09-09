@@ -39,15 +39,20 @@ function fromMetadata(dateString, userFormat) {
   } catch (e) {}
 
   try {
+    // Blot deliberately supports an RFC 3339-style subset here rather than
+    // every ISO 8601 representation. In addition to RFC 3339 timestamps, the
+    // enumerated formats accept the same timestamps without a timezone and
+    // interpret them as UTC. Date-only, reduced-precision, ordinal-date, and
+    // week-date forms are not handled by this parser.
     let rfcNormalized = moment.utc(
       dateString,
       [
         "YYYY-MM-DD[T]HH:mm:ssZ",
+        "YYYY-MM-DD[T]HH:mm:ss",
         "YYYY-MM-DD[T]HH:mm:ss.SSSZ",
         "YYYY-MM-DD[T]HH:mm:ss.SSS",
-        "YYYY-MM-DD[T]HH:mm:ssZ[Z]",
       ],
-      true
+      true,
     );
 
     if (rfcNormalized.isValid()) {

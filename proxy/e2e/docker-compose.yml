@@ -1,0 +1,74 @@
+name: blot-proxy-e2e
+
+# Brings up the proxy container in front of a real Blot app container so
+# proxy/e2e/run.js can drive requests through it. See
+# .github/workflows/integration.yml.
+#
+# Everything runs on the host network so the proxy's hard-coded upstream
+# addresses (127.0.0.1:8088-8091) resolve with no extra plumbing. Meant for a
+# CI runner, not a shared machine (it binds :80 and :443).
+
+services:
+  redis:
+    image: redis:6.2.12-alpine
+    network_mode: host
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  app:
+    # The dev image ships node_modules only; the source is mounted in, exactly
+    # like .github/workflows/node.yml's test job. BLOT_REPO is the repo root
+    # (absolute in CI); it defaults to this file's ../.. for local use.
+    image: ${BLOT_APP_IMAGE:-ghcr.io/davidmerfield/blot:test-latest}
+    network_mode: host
+    working_dir: /usr/src/app
+    command: ["node", "/usr/src/app/app/index.js"]
+    environment:
+      NODE_ENV: development
+      BLOT_HOST: ${BLOT_HOST:-localhost}
+      BLOT_REDIS_HOST: "127.0.0.1"
+      BLOT_PORT: "8081"
+    volumes:
+      - ${BLOT_REPO:-../..}/app:/usr/src/app/app
+      - ${BLOT_REPO:-../..}/config:/usr/src/app/config
+      - ${BLOT_REPO:-../..}/scripts:/usr/src/app/scripts
+    depends_on:
+      redis:
+        condition: service_healthy
+    # The app routes by Host: an unknown host is treated as a blog and /health
+    # 404s. Probe as the site host instead.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-H", "Host: localhost", "http://127.0.0.1:8081/health"]
+      interval: 3s
+      timeout: 5s
+      retries: 90
+      start_period: 60s
+
+  # The generated proxy config has four hard-coded upstream addresses
+  # (127.0.0.1:8088-8091 - blue/green/yellow/purple). Point all of them at
+  # the single app instance on :8081.
+  upstream-mux:
+    image: alpine/socat
+    network_mode: host
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        for p in 8088 8089 8090 8091; do
+          socat TCP-LISTEN:$$p,fork,reuseaddr TCP:127.0.0.1:8081 &
+        done; wait
+    depends_on:
+      app:
+        condition: service_healthy
+
+  proxy:
+    image: ${BLOT_PROXY_IMAGE:-blot-proxy:e2e}
+    network_mode: host
+    environment:
+      BLOT_HOST: ${BLOT_HOST:-localhost}
+    depends_on:
+      app:
+        condition: service_healthy

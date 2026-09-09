@@ -5,6 +5,10 @@
  **/
 
 function generate() {
+  // This produces convenient, non-security-sensitive identifiers only. It is
+  // Math.random-based and must not be used for secrets, tokens, signatures, or
+  // any value whose unpredictability is a security requirement. Use crypto's
+  // randomBytes/randomUUID APIs for those purposes instead.
   var d = Date.now();
 
   //use high-precision timer if available
@@ -13,7 +17,7 @@ function generate() {
   }
 
   var guid = "xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx".replace(/[xy]/g, function (c) {
-    var r = (d + Math.random() * 16) % 16 | 0;
+    var r = ((d + Math.random() * 16) % 16) | 0;
     d = Math.floor(d / 16);
     return (c == "x" ? r : (r & 0x3) | 0x8).toString(16);
   });
