@@ -3,6 +3,9 @@ var getTemplateList = require("models/template/index").getTemplateList;
 var setView = require("models/template/index").setView;
 var dropView = require("models/template/index").dropView;
 var getViewByURL = require("models/template/index").getViewByURL;
+var build = require("build");
+var Entry = require("models/entry");
+var fs = require("fs-extra");
 
 module.exports = function setup(options) {
   options = options || {};
@@ -16,6 +19,21 @@ module.exports = function setup(options) {
   // Expose methods for creating fake files, paths, etc.
   beforeEach(function () {
     this.fake = global.test.fake;
+
+    // Write a file into the test blog folder and build it into an entry, so
+    // specs can exercise file-backed template partials (e.g. {{> /pages/home.txt}}).
+    this.set = (path, contents) => {
+      return new Promise((resolve, reject) => {
+        fs.outputFileSync(this.blogDirectory + path, contents);
+        build(this.blog, path, (err, entry) => {
+          if (err) return reject(err);
+          Entry.set(this.blog.id, path, entry, (err) => {
+            if (err) return reject(err);
+            Entry.get(this.blog.id, path, (entry) => resolve(entry));
+          });
+        });
+      });
+    };
   });
 
   // Create a test template

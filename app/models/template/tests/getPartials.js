@@ -56,4 +56,22 @@ describe("template", function () {
       });
     });
   });
+
+  it("resolves file-backed partial paths case-insensitively", async function () {
+    await this.set("/Pages/Home.txt", "Hello from home");
+
+    await new Promise((resolve, reject) => {
+      getPartials(
+        this.blog.id,
+        this.template.id,
+        { "/pages/home.txt": null },
+        function (err, partials) {
+          if (err) return reject(err);
+          expect(partials["/pages/home.txt"]).toContain("Hello from home");
+          expect(partials["/Pages/Home.txt"]).toBeUndefined();
+          resolve();
+        }
+      );
+    });
+  });
 });

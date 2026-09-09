@@ -275,6 +275,26 @@ module.exports = function setView(templateID, updates, callback) {
 					view.partials = _partials;
 				}
 
+				// Drop file-backed partial markers this save no longer references -
+				// neither parsed from the current content nor explicitly passed in
+				// updates.partials - so a "{{> /old.txt}}" edited out of the view
+				// doesn't linger in the persisted map forever. Markers the caller
+				// still declares are kept: they may back a file referenced only
+				// inside an inline partial's body, which parseTemplate can't see.
+				for (var storedPartial in view.partials) {
+					if (
+						storedPartial.charAt(0) === "/" &&
+						!view.partials[storedPartial] &&
+						!(parseResult.partials && storedPartial in parseResult.partials) &&
+						!(
+							updates.partials &&
+							type(updates.partials, "object") &&
+							storedPartial in updates.partials
+						)
+					)
+						delete view.partials[storedPartial];
+				}
+
 				extend(view.partials).and(parseResult.partials);
 
 						detectInfinitePartialDependency(

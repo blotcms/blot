@@ -29,6 +29,76 @@ describe("template", () => {
 		expect(savedView.content).toEqual(view.content);
 	});
 
+	it("stores file-backed partials under the literal reference from the content", async function () {
+		// The key must stay verbatim: Mustache resolves "{{> /pages/home.txt}}"
+		// by that exact string, so rewriting it (e.g. to a true-case entry path)
+		// would break the reference at render time.
+		await this.set("/Pages/Home.txt", "Hello from home");
+		await setView(this.template.id, {
+			name: "literal-partial.html",
+			content: "{{> /pages/home.txt}}",
+		});
+
+		const savedView = await getView(this.template.id, "literal-partial.html");
+		expect(savedView.partials).toEqual({ "/pages/home.txt": null });
+	});
+
+	it("recomputes file-backed partials from content instead of accumulating stale keys", async function () {
+		await this.set("/pages/home.txt", "Hello from home");
+		await this.set("/pages/about.txt", "About us");
+
+		await setView(this.template.id, {
+			name: "swap-partial.html",
+			content: "{{> /pages/home.txt}}",
+		});
+		await setView(this.template.id, {
+			name: "swap-partial.html",
+			content: "{{> /pages/about.txt}}",
+		});
+
+		const savedView = await getView(this.template.id, "swap-partial.html");
+		expect(savedView.partials).toEqual({ "/pages/about.txt": null });
+	});
+
+	it("keeps an explicitly declared file marker that backs an inline partial", async function () {
+		await this.set("/pages/foo.txt", "Foo body");
+
+		// parseTemplate(content) only sees "{{> wrapper}}", so the file marker
+		// has to survive the save for getPartials to fetch /pages/foo.txt.
+		await setView(this.template.id, {
+			name: "inline-dep.html",
+			content: "{{> wrapper}}",
+			partials: {
+				wrapper: "{{> /pages/foo.txt}}",
+				"/pages/foo.txt": null,
+			},
+		});
+
+		const savedView = await getView(this.template.id, "inline-dep.html");
+		expect(savedView.partials.wrapper).toEqual("{{> /pages/foo.txt}}");
+		expect(savedView.partials["/pages/foo.txt"]).toEqual(null);
+	});
+
+	it("short-circuits an unchanged view whose content references a file-backed partial", async function () {
+		await this.set("/pages/home.txt", "Hello from home");
+
+		await setView(this.template.id, {
+			name: "sc-partial.html",
+			content: "{{> /pages/home.txt}}",
+			partials: {},
+		});
+
+		const before = await promisify(Blog.get)({ id: this.template.owner });
+		await setView(this.template.id, {
+			name: "sc-partial.html",
+			content: "{{> /pages/home.txt}}",
+			partials: {},
+		});
+		const after = await promisify(Blog.get)({ id: this.template.owner });
+
+		expect(after.cacheID).toEqual(before.cacheID);
+	});
+
 	it("sets changes to an existing view", async function () {
 		const test = this;
 		const view = {

@@ -285,11 +285,6 @@ Fix bug with menu which occur when multiple pages are added at once Menu needs c
 Fix bug where one bad page can take down upstream repeatedly 
 – perhaps we need to cache in proxy cache timeouts? or somehow detect if a request causes upstream to crash?
 
-Fix template partial embeddings which no longer work because of switch from lowercase to true case:
-- write script to find these
-- e.g. {{> /pages/home.txt}} when pages is really Pages
-- we should resolve the case-insensitive path to file when saving a template and parsing its partials
-
 Fix bug with [many twitter embeds and tell Nash](https://mail.google.com/mail/u/0/#inbox/FMfcgzGllMNfjvRBthVncQtPJQpmrksx)
 
 Fix bug with filtering paginated list of entries and tell [Roy](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVgrQJWNPHHvdxnMtWCGJkZdM) and [Josh](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVzrFNFzLzbWrssWzbrSvtpTm) and [Logan](https://twitter.com/LoganGreer)
