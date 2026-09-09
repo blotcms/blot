@@ -251,29 +251,6 @@ Fix bug with crash loop for entry build
 Fix bug with folder viewer which crashes server for large number of entries
 - add pagination
 
-Fix bug with 'failed to update folder lock' that throws an error – is the issue ebs?
-- I can't reproduce the problem locally.
-- Problem occurs with all the clients it seems
-- Can we reproduce by attempting to acquire 50 locks in parallel in production?
-  - I tried this and it didn't seem to trigger the bug
-  - Is this correlated with high disk activity?
-
-Add diagnostic logging for ECOMPROMISED lock errors:
-- Add onCompromised handler to lockfile.lock() in app/sync/index.js (line 45)
-- Track lock acquisition time (lockAcquiredAt) when lock is successfully acquired
-- Create diagnostic function to gather: blogID, lockDuration, system load (os.loadavg), memory usage (process.memoryUsage), disk space (freeDiskSpace helper), lock file stats, process info (pid, uptime), lock config values
-- In onCompromised handler: gather diagnostics (with 2s timeout), log structured error with console.error(), re-throw error to crash server
-- Use clfdate() for logging format consistency
-
-Fix bug with cancelled subscriptions that keeps the account around
-- finish script to identify long-expired customers with blogs to safely delete and free up space. 
-- Sort by date expired
-- Write script to safely delete blogs
-  - wipe blog folder
-  - wipe static directory
-  - wipe all keys
-- Automate the deletion of canceled /  failed accounts after a 2 month grace period, with warning emails  
-
 Fix bug with overdue subscription payment form not working
 - Possible bug introduced by recent stripe upgrade
 - Migrate [Stripe library to v7](https://github.com/stripe/stripe-node/wiki/Migration-guide-for-v7)
@@ -304,8 +281,6 @@ Fix bugs with git client
 
 Fix bug with menu which occur when multiple pages are added at once Menu needs concurrency or atomic operations (so we can build posts in parallel)
 - move menu into its own model (it's possible to add thousands of entries to it...)
-
-Fix bug with the typeset settings do not actually affect anything (you can only disable/enable)
 
 Fix bug where one bad page can take down upstream repeatedly 
 – perhaps we need to cache in proxy cache timeouts? or somehow detect if a request causes upstream to crash?
