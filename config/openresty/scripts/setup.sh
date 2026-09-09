@@ -69,8 +69,12 @@ systemctl start crond
 systemctl enable crond
 chkconfig crond on
 
-# every day at 1am, run the script to reload the wildcard certificate
-echo  "0 0 1 * * REDIS_IP=$REDIS_IP ./home/ec2-user/scripts/reload-wildcard-cert.sh" | crontab -
+# /etc/cron.d entries require a user field, hence root appears between the schedule and command.
+# The absolute /home/ec2-user/scripts/renew-wildcard-ssl.sh path is required because cron does not run relative to the repository or filesystem root.
+# REDIS_IP must not be added to this command: renew-wildcard-ssl.sh sources /etc/blot/wildcard-ssl-env.sh and uses BLOT_REDIS_HOST.
+# Installing a dedicated /etc/cron.d file avoids replacing root's existing crontab.
+echo "0 1 * * * root /home/ec2-user/scripts/renew-wildcard-ssl.sh >> /home/ec2-user/renew-wildcard.log 2>&1" > /etc/cron.d/blot-wildcard-renewal
+chmod 0644 /etc/cron.d/blot-wildcard-renewal
 
 # Start openresty and enable it to start on boot
 systemctl start openresty
