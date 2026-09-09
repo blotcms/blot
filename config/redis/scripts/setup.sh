@@ -67,11 +67,13 @@ systemctl enable fail2ban
 systemctl start fail2ban
 
 # install the backup scripts in cron
-echo  '0 * * * * /home/ec2-user/scripts/hourly-backup.sh  >> /home/ec2-user/backup.log 2>&1' | crontab -
-echo  '0 3 * * * /home/ec2-user/scripts/daily-backup.sh  >> /home/ec2-user/backup.log 2>&1' | crontab -
-
-# reset backup.log to an empty file every month
-echo  '0 0 1 * * echo "" > /home/ec2-user/backup.log' | crontab -
+cat > /etc/cron.d/blot-redis-backups <<'EOF'
+# m h dom mon dow user command
+0 * * * * root /home/ec2-user/scripts/hourly-backup.sh >> /home/ec2-user/backup.log 2>&1
+0 3 * * * root /home/ec2-user/scripts/daily-backup.sh >> /home/ec2-user/backup.log 2>&1
+0 0 1 * * root : > /home/ec2-user/backup.log
+EOF
+chmod 0644 /etc/cron.d/blot-redis-backups
 
 # run the script /home/ec2-user/scripts/mount-instance-store.sh
 # to mount the instance store if it's not already
