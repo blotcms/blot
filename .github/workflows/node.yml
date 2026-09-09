@@ -130,7 +130,13 @@ jobs:
           platforms: linux/amd64
           target: dev
           context: .
-          push: true
+          # Push zstd-compressed layers instead of gzip. Every one of the ~17
+          # matrix jobs pays a fresh `docker run` image pull; zstd decompresses
+          # several times faster than gzip (and packs a little smaller), which
+          # is the bulk of that per-job overhead. force-compression re-encodes
+          # layers restored from the gzip build cache. Needs a runner Docker
+          # >= 23 to pull, which GitHub-hosted ubuntu images satisfy.
+          outputs: type=image,push=true,compression=zstd,force-compression=true,oci-mediatypes=true
           cache-from: |
             type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:buildcache
             type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:${{ github.sha }}
