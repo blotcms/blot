@@ -1,5 +1,13 @@
 Debug issue with warwickmostyn
 
+Improve the ux of set subscription script, make it accept multi inputs or prompt for input
+- make it look up the customer based on the email, then look up the subscription based on the customer. allow user override
+
+Add info on /usr/local/bin/check_docker_health.sh to the server restart email
+- tail -100 ~/docker-health-check.log
+- upstream-errors -> upstream_errors
+- add 'unresponded'
+
 Write useful benchmark tool for Blot
 - Add performance tests which output something like this for PRs (compare against master branch, fail if over threshold):
     Total CPU  29.90%          -> 11.64%
@@ -310,8 +318,6 @@ Fix bug with potentially TeX-related escaping issues and tell [Anthony](https://
 Fix issue with variable passed to dateFormat function and tell [Leo](https://mail.google.com/mail/u/0/#inbox/FMfcgzGqQJlfVpSBNBwDxcSlGGqHXQbh)
 
 Fix bug with handling of queries and tell [this person](https://mail.google.com/mail/u/0/?zx=tqp989l7y4yi#inbox/15b575fbc8d80ad1).
-
-Fix bug with Work out why Pandoc cannot handle 'linked' images (instead of conventionally embedded images). For instructiosn on reproducing bug, see [SG's email](https://mail.google.com/mail/u/0/#inbox/FMfcgxvzLhcqMVrZbNlKTcVmxVHwRmJC) and follow up when resolved.
 
 Fix bug with tags that contain slashes and tell [Jack](https://mail.google.com/mail/u/0/#inbox/FMfcgzGpFgzpsCkCMGqnClfqMkWZqNNz)
 
