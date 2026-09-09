@@ -32,14 +32,6 @@ production. Remaining before it can replace the bare-metal `config/openresty`:
 
 Debug issue with warwickmostyn
 
-Improve the ux of set subscription script, make it accept multi inputs or prompt for input
-- make it look up the customer based on the email, then look up the subscription based on the customer. allow user override
-
-Add info on /usr/local/bin/check_docker_health.sh to the server restart email
-- tail -100 ~/docker-health-check.log
-- upstream-errors -> upstream_errors
-- add 'unresponded'
-
 Move to redis hashes for entry storage
 0. This is designed to improve all multi-entry list performance
 1. Modify templates to store the entry properties they require to render for each list in retrieve, e.g. {{#allEntries}} {{title}} {{/allEntries}} -> retrieve: allEntries: ['title']

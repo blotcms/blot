@@ -4,13 +4,21 @@ Log in to server and grep:
 
 logs {{container}} | grep -B 100 "Starting server on"
 
-To find recently killed services for memory reasons, log in to server and run:
+Identify recently restarted docker containers because they were unhealthy:
+
+tail -10 ~/docker-health-check.log
+
+To find recently killed services for memory reasons:
 
 kills
 
-Keep an eye on upstream errors by logging in and running:
+Keep an eye on upstream errors:
 
-upstream-errors
+upstream_errors
+
+Identify requests without responses:
+
+unresponded
 
 View the docker containers and the resources they're using:
 
