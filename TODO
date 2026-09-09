@@ -391,15 +391,11 @@ Fix bug with indented code in pre tags and tell [Michael](https://mail.google.co
 
 Fix bug with nested Markdown and tell [Martin](https://mail.google.com/mail/u/0/#inbox/FMfcgxwDqnhgBjBSKzvtclvqcFcMptMR):
 
-Fix bug with with initial transfer and [Michael's folder](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTptZPWFlcHhJCqZRTxThqvKn)
-
 Fix bug with [Rodrigo's Word Document files](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVWRXqnjmjBDmcRXKcdxjcDfr)
 
 Fix bug with image minification which produces larger file than source file and tell [Jan](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBTkHlNvhcJLGVRCPvXvjbwsWR)
 
 Fix bug parsing ISO8601 date format and tell [Thomas](https://mail.google.com/mail/u/0/#inbox/1625012def221a8f)
-
-Fix bug when the customer's blog does not have a client, client.write and client.remove need to remove the files from the source folder. Create some kind of local client which we fall back and use when none is configured?
 
 Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
 
@@ -409,8 +405,6 @@ Fix bug with magic text in posts which breaks backend and tell [Victor](https://
 
 Fix bug with Google Drive client and [Stephen's large blog](https://mail.google.com/mail/u/0/#inbox/QgrcJHsBsbkNkMkkkMmLWBxRfnGnWPVwLHl)
   - It also seems like server crashes when a massive google drive folder is synced, with a directory containing 6772 items
-
-Fix issue with template settings and tell [Dirt](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbdrQRPKNbMkwscffXLqSLGqjr)
 
 Fix bug with Bruce's local template, [possibly related to Ryan's issue](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbdrKgBjjDKTqMbltHHhplfZsr). The template switches from 3 to 2 after each sync.
 - Also affecting [Chris](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbdrRbHMFllcTBGXPJBNKBcLjr)
