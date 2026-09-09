@@ -1,3 +1,5 @@
+Run this in prod: node scripts/template/recalculate-retrieve.js
+
 Proxy container (OpenResty) - deferred work after the build-only scaffolding PR
 
 The `proxy/` directory is build-only scaffolding: the image builds, the
