@@ -1,7 +1,3 @@
-Release new notebook template
-
----
-
 Verify we're still processing Stripe and PayPal webhooks now they are verified
 
 Add a link to how section on pages to menu links settings page to guide new users! 
@@ -235,8 +231,6 @@ Fix bug with repeat resyncs of specific sites via Google Drive:
 
 Fix bug with CDN replaceFolder not working with relative path to CSS file on wall.blot.im
 
-Fix bug with camelCase custom metadata and tell [questioner](https://blot.im/questions/2294)
-
 Fix bug with [~/gitbug folder](https://mail.google.com/mail/u/0/#inbox/KtbxLxgKJJfmhMNplLBcTcFCPgBVNlGtHL) during setup
 - surface setup errors with git client
 - handle these errors nicely through sync status
@@ -247,8 +241,6 @@ Fix bug where pages where appearing in the list of posts filtered by path_prefix
 
 Fix bug with huge draft crashing the sync server /a327ex/drafts/it_follows.txt
 - Chunk large drafts into multiple messages to avoid memory issues? 
-
-Fix bug linking to relative pdf in subfolders, e.g. Pages/File.md '[](./file.pdf)' breaks
 
 Fix bug: relative <a href> resolution in app/build/dependencies/index.js doesn't percent-encode filesystem-derived path segments before writing them into the href
 - e.g. a post inside a folder named "folder#1" linking to a relative report.pdf resolves to /folder#1/report.pdf, which browsers parse as path /folder plus fragment 1/report.pdf, so the sibling file is never requested (same issue with "?" in a folder name)
