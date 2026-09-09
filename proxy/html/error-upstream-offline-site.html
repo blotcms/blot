@@ -1,0 +1,81 @@
+<!DOCTYPE html><html lang=en><head><meta charset=utf-8><title>Error</title></head><body>
+  <style type="text/css">
+  
+  html, body {height: 100%}
+  
+  body {
+  color: #000;
+  line-height: 1.4;
+  margin: 0 auto;
+  max-width: 30em;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica,
+    "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+  font-size: 18px;
+  font-weight: 400;
+  justify-content:center;
+  color: #111;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  }
+
+  h1 {font-weight: 600;font-size: inherit;}
+
+  h1, p {margin: 0.7em 0;}
+
+  a {color: var(--accent-color);border:1px solid;border-radius: 4px;padding: 4px 8px 5px;text-decoration: none;font-weight: 400;display: inline-block;margin-bottom: 1em;margin-right: 1em}
+
+.status {
+  position: relative;
+}
+
+.status:before {
+  content: " ";
+  width: 1em;
+  height: 1em;
+  font-size: 0.8em;
+  border-radius: 100%;
+  position: absolute;
+  left: -2em;
+  top: 50%;
+  margin-top:-0.5em;  
+}
+
+.status.syncing:before,
+.status.working:before {
+  background: #ff9800;
+  -webkit-animation: bounce 1.4s infinite ease-in-out both;
+  animation: bounce 1.4s infinite ease-in-out both;
+}
+
+
+@-webkit-keyframes bounce {
+  0%, 40%, 100% { 
+    -webkit-transform: scale(0.8);
+    transform: scale(0.8);
+  } 70% { 
+    -webkit-transform: scale(0.3);
+    transform: scale(0.3);
+  }
+}
+
+@keyframes bounce {
+  0%, 40%, 100% { 
+    -webkit-transform: scale(0.8);
+    transform: scale(0.8);
+  } 70% { 
+    -webkit-transform: scale(0.3);
+    transform: scale(0.3);
+  }
+}
+  </style>
+
+  <h1 class="status working">Blot is offline</h1>
+  <p>Our server failed to respond to your request. We have been notified and will fix the problem as soon as possible.</p>
+  <p>
+    <a style="color:#005bbd" href="mailto:support@blot.im">Contact us</a>
+    <a style="color:#005bbd" href="https://status.blot.im">Status page</a><br>
+  </p>
+</body>
+</html>
