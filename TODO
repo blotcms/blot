@@ -1,7 +1,5 @@
 Add a link to how section on pages to menu links settings page to guide new users! 
 
-Hitting the save changes button under typeset settings spits you back out to homepage! Bug!
-
 Debug issue with warwickmostyn
 
 Write useful benchmark tool for Blot
@@ -183,8 +181,6 @@ iCloud:
 
 ---
 
-Fix bug with local editing and template slugs
-
 Fix bugs with templates:
 - Fix responsive thumbnail component on photo template (it loads large thumbnail every time)
 - Fix 'back' button in photo template and tell [Bibi](https://mail.google.com/mail/u/0/#inbox/FMfcgzGrcPJTmPXxWvhbmFpvwdfVzhpn)
@@ -216,11 +212,6 @@ Dashboard control follow-ups (found while reviewing the per-template dashboard-c
 - Album template: several rules use `{{^heading_font}} ... 28px/23px fallback {{/heading_font}}`, but heading_font is always a populated object so the fallback is dead. Harmless, but could be tidied.
 
 Fix bug with the website preview on the dashboard does not scroll, at least on FireFox on MacOS and tell Omar
-
-Fix bug with template slugs / local templates
-- Slugs should be derived from template.name and unique per owner
-- Local editing should use folder name ↔ name ↔ slug consistently
-- Add slug lookup utility and update dashboard/template load paths
 
 Fix bug with the paypal next bill dates are not syncing correctly for some users (e.g.slopserve)
 
