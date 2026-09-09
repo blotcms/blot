@@ -423,8 +423,6 @@ Record new video
 
 Handle content negotiation headers for accept markdown from [LLM bots](https://blog.cloudflare.com/markdown-for-agents/) and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBsvRjgTvbGqmqtSfCQZZNpdM)
 
-Add comments from Bluesky feature and tell [John](https://mail.google.com/mail/u/0/#inbox/KtbxLzFrMrLsxTzRKrfFWQBgXxBHCVbGTg)
-
 New templates:
 - Release [Fede](https://wordpress.org/themes/kanso/)'s theme as profile template
 - Transfer theme for [John](https://mail.google.com/mail/u/0/#inbox/KtbxLzFrMrLsxTzRKrfFWQBgXxBHCVbGTg)
@@ -500,9 +498,6 @@ Improvements to docs and documentation:
   - explain image compression and thumbnails
 - Add a documentation page on typography and fonts
   - explain typeset
-
-New plugins:
-- Add [preload=none](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/audio#preload) to all audio and video tags without it defined or maybe preload="metadata"? 
 
 Improvements to dashboard:
 - Add affordance for drag-and-drop to upload
@@ -757,7 +752,6 @@ Improvements to template engine:
 - Add way to allow all entry lists to access {{#months}} sorting options just like the archives page.
 - Tell [Marco](https://mail.google.com/mail/u/0/#inbox/FMfcgxwHNWCgxHCttPshJRSPCMTPffMP) when arbirary list sorting is ready
 - Add support for fetching only some properties of an entry (ideally only those that are used). prevent some properties from being fetched in some lists (html, for example in all_entries). Would be a good candidate for hgetall or hget?
-- Incorporate some of [notebook](https://github.com/WesleyAC/notebook)'s features in a template
 
 Launch new server and test that the new scripts to mount the instance store and data ebs-disk work
 
@@ -943,8 +937,6 @@ Use [thumbhash](https://github.com/evanw/thumbhash?tab=readme-ov-file) to genera
 Surface recently edited posts on the sites tab of the dashboard
 
 Can we support white-label cdn subdomain so there are no Blot CDN links?
-
-Change dashboard cookies: Set-Cookie: mycookie=value; Path=/; SameSite=Lax; Secure;
 
 Write tests for animated gif thumbnail
 
