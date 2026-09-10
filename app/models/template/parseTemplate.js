@@ -51,7 +51,7 @@ var projectedEntryLocals = {
 // data context. e.g. {{#encode_xml}}{{{body}}}{{/encode_xml}} inside an entry
 // list still references the entry's `body`, so field projection has to see
 // through them. Without this, feeds that wrap {{{body}}}/{{{html}}} in an
-// encoder would have those fields projected away by recalculate-retrieve.
+// encoder would have those fields projected away at retrieve time.
 var transparentSectionHelpers = {
   encode_xml: true,
   encodeXML: true,

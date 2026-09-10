@@ -24,13 +24,9 @@ describe("applyUserRetrieveOptions", function () {
     ).toEqual({ latest_entry: true });
   });
 
-  it("drops __ sentinels and non-system keys from the stored retrieve", function () {
+  it("drops non-system keys from the stored retrieve", function () {
     expect(
-      applyUserRetrieveOptions(
-        {},
-        { __recalculateRetrieve: 123 },
-        { foo: true, __stale: 1 }
-      )
+      applyUserRetrieveOptions({}, { foo: true }, { bar: 1, months: true })
     ).toEqual({});
   });
 

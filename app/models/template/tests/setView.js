@@ -219,24 +219,6 @@ describe("template", () => {
 		});
 	});
 
-	it("does not persist the recalculate retrieve sentinel", async function () {
-		await setView(this.template.id, {
-			name: "entries.html",
-			content: "{{#allEntries}}{{title}}{{/allEntries}}",
-			retrieve: {
-				includeDraft: true,
-				__recalculateRetrieve: Date.now(),
-			},
-		});
-
-		const view = await getView(this.template.id, "entries.html");
-		expect(view.retrieve).toEqual({
-			allEntries: { fields: { title: true } },
-			includeDraft: true,
-		});
-		expect(view.retrieve.__recalculateRetrieve).toBeUndefined();
-	});
-
 	it("keeps an explicit retrieve dependency the parser can't see", async function () {
 		// `latest_entry` is only reached indirectly (via a local), so the
 		// parser never meets it - the explicit retrieve key must survive.

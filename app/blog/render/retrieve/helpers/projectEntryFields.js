@@ -5,16 +5,16 @@
 //
 //   retrieve.allEntries === { fields: { title: true, url: true } }
 //
-// When that metadata is present we can safely drop the large, unreferenced
-// body fields from each entry before they enter res.locals. This keeps
-// list/archive pages from holding megabytes of entry HTML in memory for
+// When that metadata carries a `fields` map we can safely drop the large,
+// unreferenced body fields from each entry before they enter res.locals. This
+// keeps list/archive pages from holding megabytes of entry HTML in memory for
 // content the template never renders.
 //
-// Backwards compatibility:
-//   - Views whose retrieve metadata has not been recalculated yet still store
-//     `allEntries: true` (or `{ length: true }`). Without an explicit `fields`
-//     map we cannot know which fields are safe to drop, so we strip nothing
-//     and behaviour is identical to before.
+// Notes:
+//   - A local without a `fields` map is left untouched: `retrieve.posts === {}`
+//     (the list is referenced but no heavy field is) and
+//     `retrieve.allEntries === { length: true }` (non-field access only) both
+//     mean "nothing to project", so we strip nothing.
 //   - Only the fields in HEAVY_FIELDS are ever removed. Everything the render
 //     pipeline relies on (url, tags, dateStamp, metadata, thumbnail, ...) is
 //     always kept, so augment() and friends keep working.
@@ -26,8 +26,8 @@ var HEAVY_FIELDS = ["html", "body", "teaser", "teaserBody", "summary"];
 // Given the full retrieve object and the alias keys a retrieve module answers
 // to (e.g. ["allEntries", "all_entries"]), work out the union of referenced
 // entry fields. Returns null when projection must be skipped: either no alias
-// is referenced, or an alias is referenced without a `fields` map (legacy
-// boolean metadata, or non-field access such as `allEntries.length`).
+// is referenced, or an alias is referenced without a `fields` map (an empty
+// `{}`, or non-field access such as `allEntries.length`).
 function resolveFields(retrieve, keys) {
   if (!retrieve || typeof retrieve !== "object") return null;
 

@@ -9,12 +9,12 @@ var parseTemplate = require("../parseTemplate");
 //   1. Real retrieve locals (ones blot knows how to fetch) that the caller or
 //      the previously stored view asked for - e.g. a dependency reached only
 //      through a string local. Non-local keys (stale output from an older
-//      parser, internal __sentinels) are dropped: they fetch nothing.
+//      parser) are dropped: they fetch nothing.
 //   2. User-set options on the retrieve object (includeDraft, filters).
 //
-// setView persists exactly what this returns, so scripts that recalculate
-// retrieve metadata in bulk compare a view's stored retrieve against a fresh
-// run of this to decide whether a rewrite is needed.
+// setView persists exactly what this returns, so a bulk recalculation can
+// compare a view's stored retrieve against a fresh run of this to decide
+// whether a rewrite is needed.
 
 var USER_RETRIEVE_KEYS = ["includeDraft", "filters"];
 
@@ -30,7 +30,6 @@ module.exports = function applyUserRetrieveOptions(
 	[requestedRetrieve, existingRetrieve].forEach(function (source) {
 		if (!source) return;
 		Object.keys(source).forEach(function (key) {
-			if (key.indexOf("__") === 0) return;
 			if (!parseTemplate.isSystemRetrieveLocal(key)) return;
 
 			var sourceVal = source[key];

@@ -19,22 +19,8 @@ var clfdate = require("helper/clfdate");
 var applyUserRetrieveOptions = require("./util/applyUserRetrieveOptions");
 const MAX_VIEW_PAYLOAD_SIZE = 2 * 1024 * 1024;
 
-module.exports = function setView(templateID, updates, options, callback) {
-        if (typeof options === "function") {
-                callback = options;
-                options = {};
-        }
-
-        options = options || {};
-
+module.exports = function setView(templateID, updates, callback) {
         ensure(templateID, "string").and(updates, "object").and(callback, "function");
-
-        // When set, skip the owner-blog cacheID bump and CDN manifest refresh
-        // that a content/retrieve change normally triggers. Bulk callers (e.g.
-        // scripts/template/recalculate-retrieve.js) that touch many views of
-        // many templates use this to defer that work and do it once per
-        // template instead of once per view.
-        var deferCacheBump = options.deferCacheBump === true;
 
         if (updates.partials !== undefined && type(updates.partials) !== "object") {
 		updates.partials = {};
@@ -351,15 +337,12 @@ module.exports = function setView(templateID, updates, options, callback) {
 
 								// Clear this view from template metadata.errors when saving
 								// via the dashboard so fixing a view clears its error state.
-								// Propagate deferCacheBump so setMetadata doesn't bump the
-								// owner cache / rebuild the manifest behind our back.
 								var clearErrorsIfNeeded = () => {
 									if (metadata.errors && metadata.errors[name]) {
 										delete metadata.errors[name];
 										return setMetadata(
 											templateID,
 											{ errors: metadata.errors },
-											{ deferCacheBump: deferCacheBump },
 											callback
 										);
 									}
@@ -367,7 +350,7 @@ module.exports = function setView(templateID, updates, options, callback) {
 									callback();
 								};
 
-								if (!changes || deferCacheBump) {
+								if (!changes) {
 									return clearErrorsIfNeeded();
 								}
 

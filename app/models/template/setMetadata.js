@@ -9,24 +9,12 @@ var injectLocals = require("./injectLocals");
 var updateCdnManifest = require("./util/updateCdnManifest");
 var serializeRedisHashValues = require("models/redisHashSerializer");
 
-module.exports = function setMetadata(id, updates, options, callback) {
-  if (typeof options === "function") {
-    callback = options;
-    options = {};
-  }
-
-  options = options || {};
-
+module.exports = function setMetadata(id, updates, callback) {
   try {
     ensure(id, "string").and(updates, "object").and(callback, "function");
   } catch (e) {
     return callback(e);
   }
-
-  // When set, skip the owner-blog cacheID bump and CDN manifest rebuild that a
-  // metadata change normally triggers. Bulk callers that touch many templates
-  // use this to batch that work themselves. See setView's deferCacheBump.
-  var deferCacheBump = options.deferCacheBump === true;
 
   getMetadata(id, function (err, metadata) {
     if (err && err.code !== "ENOENT") return callback(err);
@@ -65,9 +53,6 @@ module.exports = function setMetadata(id, updates, options, callback) {
 
         await client.sAdd(key.blogTemplates(owner), id);
         await client.hSet(key.metadata(id), metadata);
-
-        // Caller batches cache invalidation and manifest rebuilds itself.
-        if (deferCacheBump) return callback(null, changes);
 
         if (!changes) {
           return updateCdnManifest(id, function (manifestErr) {
