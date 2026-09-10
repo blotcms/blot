@@ -159,10 +159,14 @@ WORKDIR /usr/src/app
 # Runtime dependencies only (no devDependencies, no toolchain).
 COPY --from=deps /usr/src/app/node_modules ./node_modules
 
-# Copy files and set ownership for non-root user
+# Copy files and set ownership for non-root user.
+# `app` is chown'd at COPY time rather than with a later `RUN chown -R`: a
+# recursive chown rewrites every inode, so it would duplicate the whole ~380MB
+# `app` tree into an extra layer that every deploy then has to pull. config,
+# scripts and node_modules stay root-owned (the app only reads them).
 COPY ./config ./config
 COPY ./scripts ./scripts
-COPY ./app ./app
+COPY --chown=1000:1000 ./app ./app
 COPY ./TODO ./TODO
 
 ## Stage 6 (default, production)
@@ -172,12 +176,10 @@ FROM source AS prod
 HEALTHCHECK --interval=10s --timeout=5s --start-period=120s --start-interval=5s --retries=3 \
   CMD curl --fail http://localhost:8080/health || exit 1
 
-# Ensure the data directory exists
-# In production we mount the shared data directory to this location
-RUN mkdir -p /usr/src/app/data
-
-# Give the non-root user ownership of the app directory and data directory
-RUN chown -R 1000:1000 /usr/src/app/app && chown -R 1000:1000 /usr/src/app/data
+# Ensure the data directory exists (empty; in production the shared data
+# directory is mounted over this location). `app` is already owned by 1000:1000
+# from the COPY --chown above, so no recursive chown is needed here.
+RUN mkdir -p /usr/src/app/data && chown 1000:1000 /usr/src/app/data
 
 # Change to the non-root user for the rest of the Dockerfile (ec2-user)
 USER 1000

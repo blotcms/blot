@@ -26,9 +26,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Need full history so an older commit or short code can be
-          # resolved and verified against master.
+          # Need full commit history so an older commit or short code can be
+          # resolved and verified against master. blob:none makes this a
+          # treeless partial clone: all commits/trees, but file contents are
+          # fetched on demand - this repo's blob history is multiple GB and
+          # the deploy only needs rev-parse / merge-base / a single checkout.
           fetch-depth: 0
+          filter: blob:none
 
       - name: Check branch
         run: |

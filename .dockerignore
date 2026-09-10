@@ -13,3 +13,9 @@ package-lock.json
 app/views-built/
 data/
 config/openresty/tests/data/
+
+# Test and benchmark fixtures (~45MB) are never used at runtime. The dev/CI
+# image bind-mounts the working tree instead of copying it, so these are still
+# present for the test matrix - this only trims the prod build context.
+app/**/tests/
+app/**/benchmarks/
