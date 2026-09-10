@@ -1,4 +1,5 @@
 Run this in prod: node scripts/template/recalculate-retrieve.js
+Run this as well: node scripts/template/migrate-font-urls.js
 
 Proxy container (OpenResty) - deferred work after the build-only scaffolding PR
 
