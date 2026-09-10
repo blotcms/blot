@@ -25,15 +25,16 @@
     <div class="folder-top"></div>
     {{/root}}
 
-    <div class="folder-box {{#root}}root{{/root}} {{#directory}}directory{{/directory}}" style="position:relative;{{^root}}min-height:calc(100vh - 11rem){{/root}}">
+    <div class="folder-box {{#root}}root{{/root}} {{#directory}}directory{{/directory}}" style="position:relative;">
     <div class="folder-drop-target" aria-hidden="true" style="display:none;position:absolute;inset:0;z-index:10;align-items:center;justify-content:center;background:rgba(0, 112, 232, 0.08);border:2px dashed rgba(0, 112, 232, 0.6);border-radius:6px;color:var(--text-color);font-weight:600;pointer-events:none;">Drop files to upload</div>
     {{#directory}}
+    <div class="directory-scroll">
     <table class="directory-list {{^contents.length}}empty{{/contents.length}}">
         <thead style="height: 1.4em;">
           <tr>
-            <th>Name</th>
-            <th>Date modified</th>
-            <th>Size</th>
+            <th data-sort-key="name">Name</th>
+            <th data-sort-key="modified">Date modified</th>
+            <th data-sort-key="size">Size</th>
           </tr>
         </thead>
         <tbody class="live-updates">
@@ -95,6 +96,35 @@
           </tr>
           {{/contents}}
         </table>
+        <div class="directory-fade" aria-hidden="true"></div>
+        </div>
+
+        <button type="button" class="directory-expand">View all {{pagination.total}} files</button>
+
+        <script type="application/json" id="folder-pagination-data">{{#pagination}}{ "page": {{page}}, "pageSize": {{pageSize}}, "sort": "{{sort}}", "order": "{{order}}", "total": {{total}}, "hasNext": {{#hasNext}}true{{/hasNext}}{{^hasNext}}false{{/hasNext}} }{{/pagination}}{{^pagination}}{}{{/pagination}}</script>
+
+        {{#pagination.multiplePages}}
+        <nav class="directory-pagination" aria-label="Folder pages">
+          {{#pagination.hasPrevious}}
+          <a class="directory-pagination__link" href="{{{pagination.previousUrl}}}" rel="prev">Previous</a>
+          {{/pagination.hasPrevious}}
+          {{^pagination.hasPrevious}}
+          <span class="directory-pagination__link is-disabled" aria-disabled="true">Previous</span>
+          {{/pagination.hasPrevious}}
+
+          <span class="directory-pagination__status">
+            {{pagination.rangeStart}}&ndash;{{pagination.rangeEnd}} of {{pagination.total}}
+            &middot; page {{pagination.page}} of {{pagination.totalPages}}
+          </span>
+
+          {{#pagination.hasNext}}
+          <a class="directory-pagination__link" href="{{{pagination.nextUrl}}}" rel="next">Next</a>
+          {{/pagination.hasNext}}
+          {{^pagination.hasNext}}
+          <span class="directory-pagination__link is-disabled" aria-disabled="true">Next</span>
+          {{/pagination.hasNext}}
+        </nav>
+        {{/pagination.multiplePages}}
 
         <div id="folder-file-action-menu" class="template-action-menu row-action-menu" aria-hidden="true">
           <ul>
@@ -156,20 +186,6 @@
           const csrfToken = '{{csrftoken}}';
           const currentFolderPrefix = normalizeCurrentFolderPrefix(window.location.pathname);
           
-          const state = {
-            column: null,
-            order: null
-          };
-
-          // on page load restore the sort order from local storage
-          var storedColumn = localStorage.getItem('sort-column');
-
-          if (storedColumn) state.column = storedColumn;
-
-          var storedOrder = localStorage.getItem('sort-order');
-
-          if (storedOrder) state.order = storedOrder;
-
           // Restore the width of each column from local storage
           document.querySelectorAll('.directory-list th').forEach(function (th, index) {
             var width = localStorage.getItem('column-width-' + index);
@@ -182,9 +198,6 @@
               }
             }
           });
-      
-
-          sortTable();
 
           if (folderBox) {
             Array.from(folderBox.querySelectorAll('.row-action-menu__trigger')).forEach(function (trigger) {
@@ -506,85 +519,217 @@
           }
           
            
-          function sortTable() {
-            
-            var order = state.order || 'sorted';
-            var column = state.column || 0;
+          // ---------------------------------------------------------------
+          // Server-side sort + paginated infinite scroll.
+          //
+          // The server orders and paginates the whole folder, so the client
+          // no longer reorders rows. It reflects the active sort in the
+          // headers, height-clamps the list behind a "View all files" button
+          // until the reader expands it, then fetches and appends the next
+          // page as they scroll. The plain Previous/Next <nav> stays as the
+          // no-JS fallback and is hidden once this runs.
+          // ---------------------------------------------------------------
+          var scrollBox = folderBox && folderBox.querySelector('.directory-scroll');
+          var expandButton = folderBox && folderBox.querySelector('.directory-expand');
 
-            var reverse = order === 'reverse';
-            var header = table.querySelector('th:nth-child(' + (parseInt(column) + 1) + ')');
+          function readPaginationMeta(root) {
+            var el = (root || document).querySelector('#folder-pagination-data');
+            if (!el) return {};
+            try { return JSON.parse(el.textContent) || {}; } catch (e) { return {}; }
+          }
 
-            var index = Array.from(header.parentNode.children).indexOf(header);
-            var rows = Array.from(table.querySelectorAll('tbody tr'));
+          var meta = readPaginationMeta();
+          var listState = {
+            page: meta.page || 1,
+            pageSize: meta.pageSize || null,
+            sort: meta.sort || 'name',
+            order: meta.order || 'asc',
+            hasNext: !!meta.hasNext,
+            total: meta.total || 0,
+            loading: false,
+            expanded: false
+          };
 
-            if (rows.length === 1 && rows[0].querySelector('td').textContent.trim() === 'Folder is empty.') {
-              document.querySelector('.directory-list').classList.add('empty');
-            } else {
-              document.querySelector('.directory-list').classList.remove('empty');
-            }
+          function updateEmptyState() {
+            if (!table) return;
+            var rows = table.querySelectorAll('tbody tr.directory-row');
+            table.classList.toggle('empty', rows.length === 0);
+          }
 
-            if (rows.length < 2) {
-              return;
-            }
-
-            header.classList.add(order);
-
-
-            var sorted = rows.sort(function (a, b) {
-              var aText = a.children[index].getAttribute('data-sort') ? parseInt(a.children[index].getAttribute('data-sort')) : a.children[index].textContent.toLocaleLowerCase().trim();
-              var bText = b.children[index].getAttribute('data-sort') ? parseInt(b.children[index].getAttribute('data-sort')) : b.children[index].textContent.toLocaleLowerCase().trim();
-      
-              if (reverse) {
-                return aText < bText ? 1 : -1;
-              } else {
-                return aText > bText ? 1 : -1;
-              }
-            });
-      
-            table.querySelectorAll('th').forEach(function (th) {
+          function applySortIndicators() {
+            if (!table) return;
+            Array.from(table.querySelectorAll('th')).forEach(function (th) {
+              var key = th.getAttribute('data-sort-key');
               th.classList.remove('sorted', 'reverse');
-            });
-      
-            header.classList.add('sorted');
-            if (reverse) {
-              header.classList.add('reverse');
-            }
-      
-            rows.forEach(function (row) {
-              row.remove();
-            });
-      
-            sorted.forEach(function (row) {
-              table.querySelector('tbody').appendChild(row);
+              if (key && key === listState.sort) {
+                th.classList.add('sorted');
+                if (listState.order === 'desc') th.classList.add('reverse');
+              }
             });
           }
 
+          // Kept for callers elsewhere in this file (upload / remove flows).
+          function sortTable() {
+            updateEmptyState();
+            applySortIndicators();
+          }
           window.sortTable = sortTable;
 
-          function refreshFolderContents(callback) {
-            var xhr = new XMLHttpRequest();
+          function bindRowTriggers() {
+            if (!folderBox) return;
+            Array.from(folderBox.querySelectorAll('.row-action-menu__trigger')).forEach(function (trigger) {
+              var rowUrl = trigger.getAttribute('data-url') || '';
+              trigger.setAttribute('data-encoded-url', encodeURIComponent(rowUrl));
+            });
+          }
 
-            xhr.onreadystatechange = function () {
-              if (xhr.readyState !== 4) return;
+          function buildPageUrl(page) {
+            var url = new URL(window.location.href);
+            url.searchParams.set('page', page);
+            if (listState.sort && listState.sort !== 'name') {
+              url.searchParams.set('sort', listState.sort);
+            } else {
+              url.searchParams.delete('sort');
+            }
+            if (listState.order && listState.order !== 'asc') {
+              url.searchParams.set('order', listState.order);
+            } else {
+              url.searchParams.delete('order');
+            }
+            if (listState.pageSize) url.searchParams.set('pageSize', listState.pageSize);
+            return url.toString();
+          }
 
-              if (xhr.status === 200) {
-                var parser = new DOMParser();
-                var xml = parser.parseFromString(xhr.responseText, 'text/html');
-                var currentNode = document.querySelector('.live-updates');
-                var newNode = xml.querySelector('.live-updates');
+          function fetchPage(page) {
+            return fetch(buildPageUrl(page), {
+              headers: { 'X-Requested-With': 'XMLHttpRequest' },
+              credentials: 'same-origin'
+            }).then(function (res) {
+              if (!res.ok) throw new Error('Failed to load folder page ' + page);
+              return res.text();
+            }).then(function (html) {
+              var doc = new DOMParser().parseFromString(html, 'text/html');
+              return {
+                rows: doc.querySelector('.live-updates'),
+                meta: readPaginationMeta(doc)
+              };
+            });
+          }
 
-                if (currentNode && newNode) {
-                  currentNode.innerHTML = newNode.innerHTML;
-                  sortTable();
+          function loadPage(page, append) {
+            if (listState.loading) return Promise.resolve();
+            listState.loading = true;
+            if (folderBox) folderBox.classList.add('is-loading');
+
+            return fetchPage(page).then(function (result) {
+              var tbody = table && table.querySelector('tbody');
+              if (tbody && result.rows) {
+                if (append) {
+                  Array.from(result.rows.children).forEach(function (row) {
+                    if (row.nodeType === 1 && row.classList.contains('directory-row')) {
+                      tbody.appendChild(row);
+                    }
+                  });
+                } else {
+                  tbody.innerHTML = result.rows.innerHTML;
                 }
               }
 
-              if (typeof callback === 'function') callback();
-            };
+              listState.page = typeof result.meta.page === 'number' ? result.meta.page : page;
+              if ('hasNext' in result.meta) listState.hasNext = !!result.meta.hasNext;
+              if (result.meta.sort) listState.sort = result.meta.sort;
+              if (result.meta.order) listState.order = result.meta.order;
+              if (typeof result.meta.total === 'number') listState.total = result.meta.total;
 
-            xhr.open('GET', window.location.href, true);
-            xhr.send();
+              updateEmptyState();
+              applySortIndicators();
+              bindRowTriggers();
+            }).catch(function (err) {
+              console.error(err);
+            }).then(function () {
+              listState.loading = false;
+              if (folderBox) folderBox.classList.remove('is-loading');
+            });
           }
+
+          function setSort(key) {
+            if (!key) return;
+            if (listState.sort === key) {
+              listState.order = listState.order === 'asc' ? 'desc' : 'asc';
+            } else {
+              listState.sort = key;
+              // Names read best A–Z; dates and sizes read best largest first.
+              listState.order = key === 'name' ? 'asc' : 'desc';
+            }
+
+            applySortIndicators();
+            if (scrollBox) scrollBox.scrollTop = 0;
+            if (folderBox && folderBox.scrollIntoView) {
+              folderBox.scrollIntoView({ block: 'nearest' });
+            }
+            loadPage(1, false).then(maybeLoadMore);
+          }
+
+          function nearViewportBottom() {
+            if (!scrollBox) return false;
+            var rect = scrollBox.getBoundingClientRect();
+            return rect.bottom - window.innerHeight < 500;
+          }
+
+          function maybeLoadMore() {
+            if (!listState.expanded || listState.loading || !listState.hasNext) return;
+            if (!nearViewportBottom()) return;
+            var pageBefore = listState.page;
+            loadPage(listState.page + 1, true).then(function () {
+              // Keep filling until the viewport is covered or the folder
+              // ends — but stop if the server didn't advance us a page (a
+              // failed fetch) so this can't spin into a tight loop.
+              if (listState.page !== pageBefore) maybeLoadMore();
+            });
+          }
+
+          function expandList() {
+            if (listState.expanded) return;
+            listState.expanded = true;
+            if (folderBox) {
+              folderBox.classList.remove('is-clamped');
+              folderBox.classList.add('is-expanded');
+            }
+            maybeLoadMore();
+          }
+
+          function refreshFolderContents(callback) {
+            // Reload from page 1 with the current sort; if the reader had
+            // expanded the list, refill enough pages to cover the viewport.
+            loadPage(1, false).then(function () {
+              if (listState.expanded) maybeLoadMore();
+              if (typeof callback === 'function') callback();
+            });
+          }
+
+          if (folderBox) folderBox.classList.add('js-enhanced');
+          if (listState.hasNext && folderBox) folderBox.classList.add('is-clamped');
+          applySortIndicators();
+          updateEmptyState();
+
+          if (expandButton) {
+            expandButton.addEventListener('click', function (event) {
+              event.preventDefault();
+              expandList();
+            });
+          }
+
+          if (table) {
+            Array.from(table.querySelectorAll('th[data-sort-key]')).forEach(function (th) {
+              th.addEventListener('click', function (event) {
+                if (event.target.classList.contains('resize-handle')) return;
+                setSort(th.getAttribute('data-sort-key'));
+              });
+            });
+          }
+
+          window.addEventListener('scroll', maybeLoadMore, { passive: true });
+          window.addEventListener('resize', maybeLoadMore, { passive: true });
 
           function readAllDirectoryEntries(directoryReader) {
             return new Promise(function (resolve, reject) {
@@ -1016,26 +1161,9 @@
             });
           }
       
-          // add sorting to the directory list
-          document.querySelectorAll('.directory-list th').forEach(function (header) {
-            header.addEventListener('mousedown', function (event) {
-              // ignore clicks on the resize handle
-              if (event.target.classList.contains('resize-handle')) {
-                return;
-              }
-      
-              var reverse = header.classList.contains('sorted') && !header.classList.contains('reverse');
+          // Column-header sorting is wired up above (setSort), which asks the
+          // server to re-sort and re-paginate the whole folder.
 
-              state.column = Array.from(header.parentNode.children).indexOf(header);
-              state.order = reverse ? 'reverse' : 'sorted';
-
-              sortTable();
-      
-              localStorage.setItem('sort-column', state.column);
-              localStorage.setItem('sort-order', state.order);
-            });
-          });
-      
           // append the node '<span class="resize-handle">|</span>' to each th element
           document.querySelectorAll('.directory-list th:not(:last-child)').forEach(function (th) {
             var handle = document.createElement('span');

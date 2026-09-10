@@ -298,6 +298,133 @@
   background: url('data:image/svg+xml, <svg xmlns="http://www.w3.org/2000/svg" style="opacity:0.3" viewBox="0 0 12 12" width="12" height="12"><path d="M6 8.825c-.2 0-.4-.1-.5-.2l-3.3-3.3c-.3-.3-.3-.8 0-1.1.3-.3.8-.3 1.1 0l2.7 2.7 2.7-2.7c.3-.3.8-.3 1.1 0 .3.3.3.8 0 1.1l-3.2 3.2c-.2.2-.4.3-.6.3Z"></path></svg> ');
 }
 
+.directory-scroll {
+  position: relative;
+}
+
+/* Collapsed: clip the list to a preview height with a fade over the last
+   rows and reveal the "View all files" button. JS adds .is-clamped only
+   when there is more than one page, so without JS the full first page and
+   the Previous/Next nav below remain usable.
+
+   The preview height is viewport-relative and leaves room for the page
+   chrome above, the sticky table header, the "View all files" button and
+   the sync-status line below it, so "View all files" always sits just
+   under the visible rows without pushing anything off screen. */
+.folder-box.is-clamped .directory-scroll {
+  overflow: hidden;
+}
+
+/* Root listing: embedded in the site dashboard below other cards, so the
+   page still scrolls. Keep the preview short enough that "View all files"
+   stays above the fold on a laptop viewport. */
+.folder-box.root.is-clamped .directory-scroll {
+  max-height: max(220px, calc(100vh - 24rem));
+}
+
+/* Subfolder listing: its own full-height page with a sync-status line
+   pinned below. Drop the tall min-height so the button rests directly on
+   top of that line instead of floating in the middle of the viewport, and
+   size the preview so the list + button + status line clear the fold. */
+.folder-box:not(.root).directory {
+  min-height: calc(100vh - 11rem);
+}
+
+.folder-box:not(.root).directory.is-clamped {
+  min-height: 0;
+}
+
+.folder-box:not(.root).directory.is-clamped .directory-scroll {
+  max-height: max(220px, calc(100vh - 19rem));
+}
+
+.folder-box.is-expanded .directory-scroll {
+  max-height: none;
+  overflow: visible;
+}
+
+.directory-fade {
+  display: none;
+}
+
+.folder-box.is-clamped .directory-fade {
+  display: block;
+  position: sticky;
+  bottom: 0;
+  height: 90px;
+  /* overlay the last rows instead of adding height */
+  margin-top: -90px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0),
+    var(--background-color)
+  );
+}
+
+.directory-expand {
+  display: none;
+}
+
+.folder-box.is-clamped .directory-expand {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  border-top: 1px solid #eeeeec;
+  background: var(--background-color);
+  font: inherit;
+  font-size: 13px;
+  color: var(--link-color, #0070e8);
+  text-align: center;
+  cursor: pointer;
+}
+
+.folder-box.is-clamped .directory-expand:hover {
+  background: var(--light-background-color);
+}
+
+/* When JS runs, infinite scroll + the expand button replace the plain nav. */
+.folder-box.js-enhanced .directory-pagination {
+  display: none;
+}
+
+.directory-list th[data-sort-key] {
+  cursor: pointer;
+}
+
+.directory-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid #eeeeec;
+  font-size: 13px;
+  color: var(--light-text-color);
+}
+
+.directory-pagination__link {
+  text-decoration: none;
+  color: var(--link-color, #0070e8);
+  white-space: nowrap;
+}
+
+.directory-pagination__link.is-disabled {
+  color: var(--light-text-color);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.directory-pagination__status {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
 .upload-preview-modal {
   position: fixed;
   inset: 0;

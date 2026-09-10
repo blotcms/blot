@@ -243,3 +243,19 @@ module.exports = function (array, opts) {
 
   return result;
 };
+
+// Comparator form of the same natural-order sort, for callers that need to
+// plug it into Array.prototype.sort directly (e.g. paginating a folder
+// listing without materialising the whole sorted array first).
+module.exports.compare = function (a, b, opts) {
+  opts = typeof opts === "object" && opts !== null ? opts : {};
+  opts.sign = !!opts.sign;
+  var va = String(a);
+  var vb = String(b);
+  if (opts.insensitive) {
+    va = va.toLowerCase();
+    vb = vb.toLowerCase();
+  }
+  // `compare` returns undefined when the two strings are exactly equal.
+  return compare(opts, va, vb) || 0;
+};

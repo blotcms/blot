@@ -326,8 +326,27 @@ Fix bug with crash loop for page rendering issue
 Fix bug with crash loop for entry build
 - add a timeout for entry build process which is solid
 
-Fix bug with folder viewer which crashes server for large number of entries
-- add pagination
+[DONE] Fix bug with folder viewer which crashes server for large number of entries
+- [DONE] add pagination
+  - app/dashboard/site/folder/folder.js sorts + paginates the whole folder
+    server-side and only stats / checks Redis / renders one small page
+    (DEFAULT_PAGE_SIZE = 100, overridable smaller via ?pageSize=).
+  - Sorting works for large folders: ?sort=name|modified|size&order=asc|desc.
+    name sort needs no stat; modified/size sweep every entry once with
+    bounded concurrency (32) and cache the sweep per folder so infinite
+    scroll reuses it. Cache is invalidated alongside the folder cache.
+  - app/dashboard/site/folder/index.js threads page/pageSize/sort/order
+    through loadFolder, caches per (page,pageSize,sort,order), and renders
+    the directory partial alone for XHR (infinite-scroll / sort) fetches.
+  - directory.html: the list starts height-clamped with a fade + "View all
+    files" button; expanding arms infinite scroll (fetch next page, append
+    rows). Column headers ask the server to re-sort. The Previous/Next nav
+    stays as the no-JS fallback (hidden once JS enhances). folder.css styles
+    the clamp / fade / button.
+  - Also fixed: a single entry vanishing between readdir and stat (common
+    while a big folder is still syncing) used to reject the whole listing and
+    render the folder as empty; per-file ENOENT is now skipped, and name-sort
+    pages backfill so they are never left short.
 
 Fix bug with overdue subscription payment form not working
 - Possible bug introduced by recent stripe upgrade
