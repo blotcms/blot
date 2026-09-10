@@ -1,5 +1,4 @@
 Run this in prod: node scripts/template/recalculate-retrieve.js
-Run this as well: node scripts/template/migrate-font-urls.js
 
 ---
 
@@ -79,11 +78,6 @@ Not removable - reword stale comments only:
 
 5. app/models/template/parseTemplate.js:54 and setView.js:34 mention
    recalculate-retrieve by name in comments; adjust if the script is deleted.
-
-migrate-font-urls.js is also a one-shot (retire after its prod run) but
-introduced no backward-compat branches to unwind - rewriteContent is a pure
-content rewrite, idempotent on re-run, so there is nothing else to clean up
-for it.
 
 ---
 
