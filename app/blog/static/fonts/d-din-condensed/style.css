@@ -2,21 +2,15 @@
   font-family: 'D Din Condensed';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/d-din-condensed/400.eot?version=f03733&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/d-din-condensed/400.eot?version=f03733&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/d-din-condensed/400.woff?version=b4eedb&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/d-din-condensed/400.ttf?version=849dfb&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/d-din-condensed/400.otf?version=2c8b34&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/d-din-condensed/400.woff2?version=2cf1c1&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/d-din-condensed/400.woff?version=b4eedb&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'D Din Condensed';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/d-din-condensed/700.eot?version=b6ac22&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/d-din-condensed/700.eot?version=b6ac22&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/d-din-condensed/700.woff?version=60f4ef&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/d-din-condensed/700.ttf?version=8c602d&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/d-din-condensed/700.otf?version=193107&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/d-din-condensed/700.woff2?version=0e5772&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/d-din-condensed/700.woff?version=60f4ef&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.28em}
 .push-double{margin-right:0.28em}

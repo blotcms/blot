@@ -2,128 +2,112 @@
   font-family: 'Plex Sans';
   font-style: normal;
   font-weight: 100;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/thin.eot?version=6b265a&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/thin.eot?version=6b265a&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/thin.woff2?version=b77f77&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/thin.woff?version=bafe09&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: italic;
   font-weight: 100;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/thin-italic.eot?version=c7d830&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/thin-italic.eot?version=c7d830&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/thin-italic.woff2?version=e86136&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/thin-italic.woff?version=3c3082&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: normal;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/extra-light.eot?version=314ce1&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/extra-light.eot?version=314ce1&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/extra-light.woff2?version=1e46f7&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/extra-light.woff?version=da3ade&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: italic;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/extra-light-italic.eot?version=db77cd&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/extra-light-italic.eot?version=db77cd&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/extra-light-italic.woff2?version=f6ec6f&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/extra-light-italic.woff?version=7090d2&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/light.eot?version=12c684&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/light.eot?version=12c684&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/light.woff2?version=a85c43&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/light.woff?version=5b1e7c&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: italic;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/light-italic.eot?version=7372bc&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/light-italic.eot?version=7372bc&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/light-italic.woff2?version=9aac04&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/light-italic.woff?version=8044ae&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/regular.eot?version=9c294c&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/regular.eot?version=9c294c&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/regular.woff2?version=c5c740&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/regular.woff?version=b1f1c6&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/italic.eot?version=b16407&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/italic.eot?version=b16407&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/italic.woff2?version=1cc35b&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/italic.woff?version=f3d22b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: normal;
   font-weight: 450;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/text.eot?version=e91cd5&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/text.eot?version=e91cd5&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/text.woff2?version=c8f47b&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/text.woff?version=965cef&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: italic;
   font-weight: 450;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/text-italic.eot?version=2e7cce&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/text-italic.eot?version=2e7cce&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/text-italic.woff2?version=717292&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/text-italic.woff?version=cfc50a&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/medium.eot?version=97b657&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/medium.eot?version=97b657&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/medium.woff2?version=40e53a&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/medium.woff?version=934e01&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/semi-bold.eot?version=273196&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/semi-bold.eot?version=273196&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/semi-bold.woff2?version=63fe0b&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/semi-bold.woff?version=4f35d8&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: italic;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/medium-italic.eot?version=8e4ba6&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/medium-italic.eot?version=8e4ba6&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/medium-italic.woff2?version=bb9019&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/medium-italic.woff?version=f507b6&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: italic;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/semi-bold-italic.eot?version=00b961&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/semi-bold-italic.eot?version=00b961&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/semi-bold-italic.woff2?version=e4d6d6&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/semi-bold-italic.woff?version=40a921&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/bold.eot?version=d80f3f&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/bold.eot?version=d80f3f&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/bold.woff2?version=d7b232&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/bold.woff?version=21cb2e&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Sans';
   font-style: italic;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/bold-italic.eot?version=8c4cff&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/bold-italic.eot?version=8c4cff&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-sans/bold-italic.woff2?version=6b709c&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-sans/bold-italic.woff?version=a183af&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.419em}

@@ -2,8 +2,7 @@
   font-family: 'IA Writer Duospace';
   font-weight: normal;
   font-style: normal;
-  src: url('/fonts/ia-writer/400.eot') format('embedded-opentype'),
-       url('/fonts/ia-writer/400.woff2') format('woff2'),
+  src: url('/fonts/ia-writer/400.woff2') format('woff2'),
        url('/fonts/ia-writer/400.woff') format('woff');
 }
 
@@ -11,8 +10,7 @@
   font-family: 'IA Writer Duospace';
   font-weight: normal;
   font-style: italic;
-  src: url('/fonts/ia-writer/400-italic.eot') format('embedded-opentype'),
-       url('/fonts/ia-writer/400-italic.woff2') format('woff2'),
+  src: url('/fonts/ia-writer/400-italic.woff2') format('woff2'),
        url('/fonts/ia-writer/400-italic.woff') format('woff');
 }
 
@@ -20,8 +18,7 @@
   font-family: 'IA Writer Duospace';
   font-weight: bold;
   font-style: normal;
-  src: url('/fonts/ia-writer/600.eot') format('embedded-opentype'),
-       url('/fonts/ia-writer/600.woff2') format('woff2'),
+  src: url('/fonts/ia-writer/600.woff2') format('woff2'),
        url('/fonts/ia-writer/600.woff') format('woff');
 }
 
@@ -29,7 +26,6 @@
   font-family: 'IA Writer Duospace';
   font-weight: bold;
   font-style: italic;
-  src: url('/fonts/ia-writer/600-italic.eot') format('embedded-opentype'),
-       url('/fonts/ia-writer/600-italic.woff2') format('woff2'),
+  src: url('/fonts/ia-writer/600-italic.woff2') format('woff2'),
        url('/fonts/ia-writer/600-italic.woff') format('woff');
 }

@@ -2,11 +2,8 @@
   font-family: 'Quicksand';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/quicksand/400.eot?version=0e240c&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/quicksand/400.eot?version=0e240c&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/quicksand/400.woff?version=c3bfa9&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/quicksand/400.ttf?version=191a40&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/quicksand/400.otf?version=583749&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/quicksand/400.woff2?version=5b3d99&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/quicksand/400.woff?version=c3bfa9&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.367em}
 .push-double{margin-right:0.367em}

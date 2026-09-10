@@ -2,181 +2,127 @@
   font-family: 'Fira Sans';
   font-style: normal;
   font-weight: 100;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/100.eot?version=f110f5&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/100.eot?version=f110f5&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/100.woff?version=f82d7e&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/100.ttf?version=bcd5f3&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/100.otf?version=6ee5e2&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/100.woff2?version=7281df&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/100.woff?version=f82d7e&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: italic;
   font-weight: 100;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/100italic.eot?version=51c987&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/100italic.eot?version=51c987&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/100italic.woff?version=883de1&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/100italic.ttf?version=72b498&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/100italic.otf?version=2d7817&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/100italic.woff2?version=0e8c60&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/100italic.woff?version=883de1&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: normal;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/200.eot?version=b600a0&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/200.eot?version=b600a0&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/200.woff?version=d31cdb&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/200.ttf?version=37a80b&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/200.otf?version=3142bb&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/200.woff2?version=d3ceae&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/200.woff?version=d31cdb&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: italic;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/200italic.eot?version=ccc16f&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/200italic.eot?version=ccc16f&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/200italic.woff?version=ef80c6&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/200italic.ttf?version=31b50a&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/200italic.otf?version=3c67fc&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/200italic.woff2?version=b9cebf&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/200italic.woff?version=ef80c6&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/300.eot?version=4d4f1f&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/300.eot?version=4d4f1f&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/300.woff?version=891485&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/300.ttf?version=dc46d9&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/300.otf?version=8c61fe&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/300.woff2?version=e13cb0&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/300.woff?version=891485&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: italic;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/300italic.eot?version=975501&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/300italic.eot?version=975501&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/300italic.woff?version=a63b59&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/300italic.ttf?version=cc87c3&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/300italic.otf?version=c6bb25&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/300italic.woff2?version=05cc3e&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/300italic.woff?version=a63b59&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/regular.eot?version=9720cc&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/regular.eot?version=9720cc&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/regular.woff?version=baa3b5&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/regular.ttf?version=ff3395&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/regular.otf?version=882b20&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/regular.woff2?version=2d2814&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/regular.woff?version=baa3b5&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/italic.eot?version=e5ca85&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/italic.eot?version=e5ca85&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/italic.woff?version=cd0194&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/italic.ttf?version=2c48ec&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/italic.otf?version=51085a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/italic.woff2?version=6790fb&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/italic.woff?version=cd0194&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/500.eot?version=8f3299&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/500.eot?version=8f3299&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/500.woff?version=6f0d36&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/500.ttf?version=896896&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/500.otf?version=b4b108&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/500.woff2?version=7380c1&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/500.woff?version=6f0d36&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: italic;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/500italic.eot?version=72e56f&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/500italic.eot?version=72e56f&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/500italic.woff?version=920bd3&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/500italic.ttf?version=e2c138&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/500italic.otf?version=5d0018&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/500italic.woff2?version=67cf88&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/500italic.woff?version=920bd3&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/600.eot?version=6dbd54&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/600.eot?version=6dbd54&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/600.woff?version=a90c72&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/600.ttf?version=947d96&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/600.otf?version=1a06a5&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/600.woff2?version=1d7f08&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/600.woff?version=a90c72&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: italic;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/600italic.eot?version=ff6799&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/600italic.eot?version=ff6799&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/600italic.woff?version=efb9bd&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/600italic.ttf?version=a9606f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/600italic.otf?version=baa568&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/600italic.woff2?version=e4c19b&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/600italic.woff?version=efb9bd&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/700.eot?version=832c99&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/700.eot?version=832c99&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/700.woff?version=4d2dfa&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/700.ttf?version=603e6f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/700.otf?version=88031a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/700.woff2?version=595867&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/700.woff?version=4d2dfa&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/700italic.eot?version=90e8b2&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/700italic.eot?version=90e8b2&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/700italic.woff?version=fc51c0&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/700italic.ttf?version=f8e0e2&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/700italic.otf?version=f3657f&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/700italic.woff2?version=87558d&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/700italic.woff?version=fc51c0&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: normal;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/800.eot?version=b24781&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/800.eot?version=b24781&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/800.woff?version=7497f9&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/800.ttf?version=55b709&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/800.otf?version=f52d49&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/800.woff2?version=3d8de5&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/800.woff?version=7497f9&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: italic;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/800italic.eot?version=039233&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/800italic.eot?version=039233&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/800italic.woff?version=72a481&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/800italic.ttf?version=7cbece&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/800italic.otf?version=eb70b8&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/800italic.woff2?version=9154c3&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/800italic.woff?version=72a481&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: normal;
   font-weight: 900;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/900.eot?version=172ce3&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/900.eot?version=172ce3&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/900.woff?version=9b6567&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/900.ttf?version=440925&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/900.otf?version=f489a7&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/900.woff2?version=eb3a15&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/900.woff?version=9b6567&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fira Sans';
   font-style: italic;
   font-weight: 900;
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/900italic.eot?version=268b65&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/900italic.eot?version=268b65&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/900italic.woff?version=41e181&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/900italic.ttf?version=c191da&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fira-sans/900italic.otf?version=5d0cfb&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fira-sans/900italic.woff2?version=92d9fd&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fira-sans/900italic.woff?version=41e181&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.399em}
 .push-double{margin-right:0.399em}

@@ -2,61 +2,43 @@
   font-family: 'Averia Serif Libre';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/300.eot?version=3c238b&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/300.eot?version=3c238b&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/300.woff?version=6d17ef&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/300.ttf?version=cce73f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/300.otf?version=d01f74&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/300.woff2?version=9b9fd6&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/300.woff?version=6d17ef&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Averia Serif Libre';
   font-style: italic;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/300-italic.eot?version=94222f&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/300-italic.eot?version=94222f&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/300-italic.woff?version=d31be8&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/300-italic.ttf?version=be3272&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/300-italic.otf?version=4fb419&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/300-italic.woff2?version=1043a1&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/300-italic.woff?version=d31be8&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Averia Serif Libre';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/400.eot?version=e7e710&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/400.eot?version=e7e710&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/400.woff?version=d7b048&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/400.ttf?version=119110&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/400.otf?version=fd7614&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/400.woff2?version=7ccd8e&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/400.woff?version=d7b048&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Averia Serif Libre';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/400-italic.eot?version=994fb2&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/400-italic.eot?version=994fb2&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/400-italic.woff?version=fb885a&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/400-italic.ttf?version=054f3b&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/400-italic.otf?version=5e6cec&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/400-italic.woff2?version=0b3791&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/400-italic.woff?version=fb885a&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Averia Serif Libre';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/700.eot?version=b943c6&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/700.eot?version=b943c6&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/700.woff?version=5589a2&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/700.ttf?version=174a74&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/700.otf?version=cad8d2&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/700.woff2?version=446ebf&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/700.woff?version=5589a2&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Averia Serif Libre';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/700-italic.eot?version=cadc1f&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/700-italic.eot?version=cadc1f&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/700-italic.woff?version=7f721f&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/700-italic.ttf?version=406dc1&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/700-italic.otf?version=0f5192&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/700-italic.woff2?version=5431eb&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/averia-serif-libre/700-italic.woff?version=7f721f&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.3818359375em}
 .push-double{margin-right:0.3818359375em}

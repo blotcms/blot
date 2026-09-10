@@ -2,41 +2,29 @@
   font-family: 'Junicode Condensed';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/junicode-condensed/400.eot?version=5f7590&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/junicode-condensed/400.eot?version=5f7590&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/400.woff?version=32e5cf&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/400.ttf?version=317883&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/400.otf?version=d1a86e&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/junicode-condensed/400.woff2?version=f19040&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/400.woff?version=32e5cf&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Junicode Condensed';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/junicode-condensed/400-italic.eot?version=cbb05c&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/junicode-condensed/400-italic.eot?version=cbb05c&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/400-italic.woff?version=176627&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/400-italic.ttf?version=f515fc&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/400-italic.otf?version=81713a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/junicode-condensed/400-italic.woff2?version=67b3f2&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/400-italic.woff?version=176627&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Junicode Condensed';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700.eot?version=9d1d2d&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700.eot?version=9d1d2d&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700.woff?version=a71c05&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700.ttf?version=bbf7bb&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700.otf?version=06c311&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700.woff2?version=33d1f5&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700.woff?version=a71c05&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Junicode Condensed';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700-italic.eot?version=d000ec&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700-italic.eot?version=d000ec&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700-italic.woff?version=306865&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700-italic.ttf?version=3e51e6&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700-italic.otf?version=13741f&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700-italic.woff2?version=0cd3cc&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700-italic.woff?version=306865&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.2958984375em}
 .push-double{margin-right:0.2958984375em}

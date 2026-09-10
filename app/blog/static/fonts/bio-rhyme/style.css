@@ -2,51 +2,36 @@
   font-family: 'Bio Rhyme';
   font-style: normal;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/200.eot?version=d900b9&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/200.eot?version=d900b9&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/200.woff?version=917a62&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/200.ttf?version=291020&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/200.otf?version=746c3e&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/200.woff2?version=3bbc50&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/200.woff?version=917a62&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Bio Rhyme';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/300.eot?version=0bd095&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/300.eot?version=0bd095&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/300.woff?version=f9105e&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/300.ttf?version=9dae7c&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/300.otf?version=2da9c0&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/300.woff2?version=0b3a0f&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/300.woff?version=f9105e&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Bio Rhyme';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/400.eot?version=9302bf&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/400.eot?version=9302bf&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/400.woff?version=69a2c4&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/400.ttf?version=50c4df&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/400.otf?version=c96727&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/400.woff2?version=e2ff75&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/400.woff?version=69a2c4&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Bio Rhyme';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/700.eot?version=11a41a&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/700.eot?version=11a41a&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/700.woff?version=e14f9b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/700.ttf?version=91840d&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/700.otf?version=98b4eb&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/700.woff2?version=10ecce&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/700.woff?version=e14f9b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Bio Rhyme';
   font-style: normal;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/800.eot?version=88d56d&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/800.eot?version=88d56d&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/800.woff?version=7c3ef9&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/800.ttf?version=ad146f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/800.otf?version=299b75&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/800.woff2?version=23b2a0&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/bio-rhyme/800.woff?version=7c3ef9&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.447em}
 .push-double{margin-right:0.447em}

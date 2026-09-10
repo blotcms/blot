@@ -2,21 +2,15 @@
   font-family: 'EB Garamond';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/eb-garamond/400.eot?version=5d18fe&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/eb-garamond/400.eot?version=5d18fe&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/eb-garamond/400.woff?version=f7117c&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/eb-garamond/400.ttf?version=f85880&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/eb-garamond/400.otf?version=f30b70&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/eb-garamond/400.woff2?version=5e9517&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/eb-garamond/400.woff?version=f7117c&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'EB Garamond';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/eb-garamond/400-italic.eot?version=c12808&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/eb-garamond/400-italic.eot?version=c12808&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/eb-garamond/400-italic.woff?version=d3a05d&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/eb-garamond/400-italic.ttf?version=63fdbe&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/eb-garamond/400-italic.otf?version=2fb368&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/eb-garamond/400-italic.woff2?version=4e9b45&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/eb-garamond/400-italic.woff?version=d3a05d&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.33em}
 .push-double{margin-right:0.33em}

@@ -2,128 +2,112 @@
   font-family: 'Plex Serif';
   font-style: normal;
   font-weight: 100;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/thin.eot?version=9b0d1c&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/thin.eot?version=9b0d1c&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/thin.woff2?version=11b635&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/thin.woff?version=0496ca&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: italic;
   font-weight: 100;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/thin-italic.eot?version=65f3db&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/thin-italic.eot?version=65f3db&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/thin-italic.woff2?version=b418b0&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/thin-italic.woff?version=d8afdf&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: normal;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/extra-light.eot?version=54ffae&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/extra-light.eot?version=54ffae&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/extra-light.woff2?version=16dd52&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/extra-light.woff?version=c8cd38&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: italic;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/extra-light-italic.eot?version=b56b87&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/extra-light-italic.eot?version=b56b87&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/extra-light-italic.woff2?version=151c01&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/extra-light-italic.woff?version=50b408&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/light.eot?version=b8e2e8&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/light.eot?version=b8e2e8&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/light.woff2?version=b57c31&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/light.woff?version=62288a&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: italic;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/light-italic.eot?version=fea050&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/light-italic.eot?version=fea050&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/light-italic.woff2?version=0aa174&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/light-italic.woff?version=a6b5a3&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/regular.eot?version=19b685&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/regular.eot?version=19b685&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/regular.woff2?version=593026&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/regular.woff?version=71055e&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/italic.eot?version=00b8be&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/italic.eot?version=00b8be&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/italic.woff2?version=0c7a87&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/italic.woff?version=e7636c&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: normal;
   font-weight: 450;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/text.eot?version=67a3ba&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/text.eot?version=67a3ba&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/text.woff2?version=3a50bf&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/text.woff?version=5fc6a6&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: italic;
   font-weight: 450;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/text-italic.eot?version=e7b47e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/text-italic.eot?version=e7b47e&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/text-italic.woff2?version=e34012&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/text-italic.woff?version=ebded7&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/medium.eot?version=642fc0&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/medium.eot?version=642fc0&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/medium.woff2?version=e270f8&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/medium.woff?version=dba49a&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/semi-bold.eot?version=c85358&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/semi-bold.eot?version=c85358&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/semi-bold.woff2?version=5424ed&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/semi-bold.woff?version=ab39f7&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: italic;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/medium-italic.eot?version=92422b&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/medium-italic.eot?version=92422b&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/medium-italic.woff2?version=3c9fe7&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/medium-italic.woff?version=ab7e64&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: italic;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/semi-bold-italic.eot?version=d7fab6&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/semi-bold-italic.eot?version=d7fab6&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/semi-bold-italic.woff2?version=75b233&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/semi-bold-italic.woff?version=6ffe8d&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/bold.eot?version=281610&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/bold.eot?version=281610&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/bold.woff2?version=513aac&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/bold.woff?version=07f820&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Plex Serif';
   font-style: italic;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/bold-italic.eot?version=67bca7&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/bold-italic.eot?version=67bca7&extension=.eot#iefix') format('embedded-opentype'), 
+  src: url('{{{config.cdn.origin}}}/fonts/plex-serif/bold-italic.woff2?version=f6463b&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/bold-italic.woff?version=bd1b44&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.415em}

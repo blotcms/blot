@@ -2,41 +2,29 @@
   font-family: 'Junicode';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/junicode/400.eot?version=650bcb&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/junicode/400.eot?version=650bcb&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/junicode/400.woff?version=84d82c&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/junicode/400.ttf?version=a5612c&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/junicode/400.otf?version=7d088e&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/junicode/400.woff2?version=a4d04f&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/junicode/400.woff?version=84d82c&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Junicode';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/junicode/400-italic.eot?version=65c926&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/junicode/400-italic.eot?version=65c926&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/junicode/400-italic.woff?version=ce685e&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/junicode/400-italic.ttf?version=06fae0&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/junicode/400-italic.otf?version=475336&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/junicode/400-italic.woff2?version=b06454&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/junicode/400-italic.woff?version=ce685e&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Junicode';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/junicode/700.eot?version=66210d&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/junicode/700.eot?version=66210d&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/junicode/700.woff?version=ad3ad2&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/junicode/700.ttf?version=baa8b8&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/junicode/700.otf?version=cfc88d&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/junicode/700.woff2?version=c723a5&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/junicode/700.woff?version=ad3ad2&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Junicode';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/junicode/700-italic.eot?version=fb6c67&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/junicode/700-italic.eot?version=fb6c67&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/junicode/700-italic.woff?version=6d3fd5&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/junicode/700-italic.ttf?version=f223e0&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/junicode/700-italic.otf?version=805051&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/junicode/700-italic.woff2?version=cbdf19&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/junicode/700-italic.woff?version=6d3fd5&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.3701171875em}
 .push-double{margin-right:0.3701171875em}

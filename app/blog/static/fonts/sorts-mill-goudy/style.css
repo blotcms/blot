@@ -2,21 +2,15 @@
   font-family: 'Sorts Mill Goudy';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/sorts-mill-goudy/400.eot?version=781393&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/sorts-mill-goudy/400.eot?version=781393&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/sorts-mill-goudy/400.woff?version=09950a&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/sorts-mill-goudy/400.ttf?version=a3ef8d&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/sorts-mill-goudy/400.otf?version=22854f&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/sorts-mill-goudy/400.woff2?version=70c0b4&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/sorts-mill-goudy/400.woff?version=09950a&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Sorts Mill Goudy';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/sorts-mill-goudy/400-italic.eot?version=4e172d&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/sorts-mill-goudy/400-italic.eot?version=4e172d&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/sorts-mill-goudy/400-italic.woff?version=2a77d7&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/sorts-mill-goudy/400-italic.ttf?version=f436e2&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/sorts-mill-goudy/400-italic.otf?version=d79cb9&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/sorts-mill-goudy/400-italic.woff2?version=050db9&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/sorts-mill-goudy/400-italic.woff?version=2a77d7&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.459em}
 .push-double{margin-right:0.459em}

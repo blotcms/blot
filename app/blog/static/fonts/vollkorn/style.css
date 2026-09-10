@@ -2,61 +2,43 @@
   font-family: 'Vollkorn';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/400.eot?version=75a411&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/400.eot?version=75a411&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/400.woff?version=4da221&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/400.ttf?version=726cd4&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/400.otf?version=8dae56&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/400.woff2?version=251b17&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/vollkorn/400.woff?version=4da221&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Vollkornsmall-caps';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/400-small-caps.eot?version=532d8d&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/400-small-caps.eot?version=532d8d&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/400-small-caps.woff?version=db8123&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/400-small-caps.ttf?version=e1a1d1&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/400-small-caps.otf?version=90796d&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/400-small-caps.woff2?version=31e2c5&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/vollkorn/400-small-caps.woff?version=db8123&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Vollkorn';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/400-italic.eot?version=93b853&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/400-italic.eot?version=93b853&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/400-italic.woff?version=8a4eb9&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/400-italic.ttf?version=c70b00&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/400-italic.otf?version=c74346&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/400-italic.woff2?version=f7eef1&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/vollkorn/400-italic.woff?version=8a4eb9&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Vollkornsmall-caps';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/600-small-caps.eot?version=55b35c&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/600-small-caps.eot?version=55b35c&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/600-small-caps.woff?version=ef8c0a&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/600-small-caps.ttf?version=f03fc4&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/600-small-caps.otf?version=b56b6e&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/600-small-caps.woff2?version=745c4a&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/vollkorn/600-small-caps.woff?version=ef8c0a&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Vollkornsmall-caps';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/700-small-caps.eot?version=d007f8&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/700-small-caps.eot?version=d007f8&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/700-small-caps.woff?version=4ae98b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/700-small-caps.ttf?version=5069a6&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/700-small-caps.otf?version=64b769&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/700-small-caps.woff2?version=06523c&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/vollkorn/700-small-caps.woff?version=4ae98b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Vollkornsmall-caps';
   font-style: normal;
   font-weight: 900;
-  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/900-small-caps.eot?version=9837ac&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/900-small-caps.eot?version=9837ac&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/900-small-caps.woff?version=2fd5dd&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/900-small-caps.ttf?version=e4c3e0&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/vollkorn/900-small-caps.otf?version=1210fe&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/vollkorn/900-small-caps.woff2?version=31b325&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/vollkorn/900-small-caps.woff?version=2fd5dd&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.343em}
 .push-double{margin-right:0.343em}

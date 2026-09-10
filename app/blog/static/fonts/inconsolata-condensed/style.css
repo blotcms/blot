@@ -2,81 +2,57 @@
   font-family: 'Inconsolata Condensed';
   font-style: normal;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/200.eot?version=90a92f&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/200.eot?version=90a92f&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/200.woff?version=c5866b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/200.ttf?version=c4310d&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/200.otf?version=6b0d6a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/200.woff2?version=f5e6da&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/200.woff?version=c5866b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inconsolata Condensed';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/300.eot?version=d1f862&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/300.eot?version=d1f862&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/300.woff?version=997021&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/300.ttf?version=c0423a&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/300.otf?version=ee174c&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/300.woff2?version=1c25b6&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/300.woff?version=997021&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inconsolata Condensed';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/400.eot?version=7cc24e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/400.eot?version=7cc24e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/400.woff?version=3b0ffc&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/400.ttf?version=429ee6&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/400.otf?version=9494b3&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/400.woff2?version=4a0be5&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/400.woff?version=3b0ffc&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inconsolata Condensed';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/500.eot?version=b584c9&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/500.eot?version=b584c9&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/500.woff?version=82f2bc&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/500.ttf?version=42a493&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/500.otf?version=7bbd0a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/500.woff2?version=4ab873&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/500.woff?version=82f2bc&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inconsolata Condensed';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/600.eot?version=25a97e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/600.eot?version=25a97e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/600.woff?version=675877&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/600.ttf?version=6e0326&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/600.otf?version=1feedf&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/600.woff2?version=8318e0&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/600.woff?version=675877&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inconsolata Condensed';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/700.eot?version=887b85&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/700.eot?version=887b85&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/700.woff?version=55979b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/700.ttf?version=8ab84c&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/700.otf?version=3f53bd&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/700.woff2?version=95acff&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/700.woff?version=55979b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inconsolata Condensed';
   font-style: normal;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/800.eot?version=cb85fb&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/800.eot?version=cb85fb&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/800.woff?version=cca347&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/800.ttf?version=1d9e75&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/800.otf?version=90f283&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/800.woff2?version=95b7e2&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/800.woff?version=cca347&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inconsolata Condensed';
   font-style: normal;
   font-weight: 900;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/900.eot?version=0e2a0e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/900.eot?version=0e2a0e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/900.woff?version=1b6389&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/900.ttf?version=8ff4e2&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/900.otf?version=ba5aab&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/900.woff2?version=7dfaf2&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-condensed/900.woff?version=1b6389&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.4em}
 .push-double{margin-right:0.4em}

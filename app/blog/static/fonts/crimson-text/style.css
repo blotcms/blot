@@ -2,61 +2,43 @@
   font-family: 'Crimson Text';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/400.eot?version=c4f5b6&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/400.eot?version=c4f5b6&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/400.woff?version=039980&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/400.ttf?version=c8eaeb&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/400.otf?version=922910&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/400.woff2?version=7c5a25&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/crimson-text/400.woff?version=039980&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Crimson Text';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/400-italic.eot?version=bc2fc7&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/400-italic.eot?version=bc2fc7&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/400-italic.woff?version=62dac6&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/400-italic.ttf?version=684cf5&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/400-italic.otf?version=943c24&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/400-italic.woff2?version=880440&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/crimson-text/400-italic.woff?version=62dac6&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Crimson Text';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/600.eot?version=a8eedd&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/600.eot?version=a8eedd&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/600.woff?version=c5dea6&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/600.ttf?version=34b923&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/600.otf?version=e75b56&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/600.woff2?version=e7037a&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/crimson-text/600.woff?version=c5dea6&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Crimson Text';
   font-style: italic;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/600-italic.eot?version=4954a9&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/600-italic.eot?version=4954a9&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/600-italic.woff?version=d488f7&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/600-italic.ttf?version=6fa457&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/600-italic.otf?version=e2d7c0&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/600-italic.woff2?version=960260&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/crimson-text/600-italic.woff?version=d488f7&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Crimson Text';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/700.eot?version=066bf3&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/700.eot?version=066bf3&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/700.woff?version=c1d1b8&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/700.ttf?version=92e8df&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/700.otf?version=85f17e&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/700.woff2?version=541128&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/crimson-text/700.woff?version=c1d1b8&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Crimson Text';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/700-italic.eot?version=422fec&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/700-italic.eot?version=422fec&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/700-italic.woff?version=621130&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/700-italic.ttf?version=f6d733&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/crimson-text/700-italic.otf?version=0d532f&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/crimson-text/700-italic.woff2?version=8eb697&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/crimson-text/700-italic.woff?version=621130&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.33984375em}
 .push-double{margin-right:0.33984375em}

@@ -230,7 +230,7 @@ function build(directory, callback) {
         name: name,
         description: description,
         isPublic: isPublic,
-        locals: normalizeLocalsForComparison(snapshot.locals),
+        locals: normalizeLocalsForComparison(snapshot.locals, true),
       };
 
       var storedMetadataSnapshot = storedMetadata
@@ -348,12 +348,47 @@ function buildViews(id, definitions, callback) {
 // template that declares a syntax highlighter. Normalise both sides first.
 var SYNTAX_HIGHLIGHTER_VOLATILE_PROPS = ["background", "tags", "name", "colors"];
 
-function normalizeLocalsForComparison(locals) {
+// injectLocals overwrites every `font`/`*_font` local's `styles` with the
+// canonical @font-face CSS from blog/static/fonts/index.json, Mustache-rendered
+// with the real config.cdn.origin, on every setMetadata write. The on-disk
+// source keeps the raw `{{{config.cdn.origin}}}` token or (post the woff2
+// migration) omits `styles` entirely, so the two representations never compare
+// equal and a template with a non-system font (et-book, source-serif, ...)
+// drops/recreates on every startup.
+//
+// `styles` is fully derived from the font `id`, so on the *disk* snapshot we
+// render it from the registry exactly as injectLocals would - making the
+// snapshot represent the desired stored state. The *stored* snapshot is left
+// as-is. Result: a genuine registry change (e.g. .eot/.ttf -> .woff2) is a
+// real diff and triggers exactly one rebuild that refreshes the stored CSS;
+// once stored matches the registry, subsequent startups compare equal and
+// there is no rebuild loop.
+function renderFontStylesFromRegistry(fontStyles) {
+  return Mustache.render(fontStyles || "", {
+    config: { cdn: { origin: config.cdn.origin } },
+  });
+}
+
+function normalizeLocalsForComparison(locals, renderFontStyles) {
   var normalized = _.cloneDeep(locals || {});
 
   if (normalized.syntax_highlighter && typeof normalized.syntax_highlighter === "object") {
     SYNTAX_HIGHLIGHTER_VOLATILE_PROPS.forEach(function (prop) {
       delete normalized.syntax_highlighter[prop];
+    });
+  }
+
+  if (renderFontStyles) {
+    Object.keys(normalized).forEach(function (key) {
+      if (key !== "font" && key.indexOf("_font") === -1) return;
+
+      var local = normalized[key];
+      if (!local || typeof local !== "object" || !local.id) return;
+
+      var registryFont = fonts.find(function (f) {
+        return f.id === local.id;
+      });
+      if (registryFont) local.styles = renderFontStylesFromRegistry(registryFont.styles);
     });
   }
 

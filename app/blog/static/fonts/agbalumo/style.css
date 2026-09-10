@@ -2,11 +2,8 @@
   font-family: 'Agbalumo';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/agbalumo/400.eot?version=a24efa&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/agbalumo/400.eot?version=a24efa&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/agbalumo/400.woff?version=6234bf&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/agbalumo/400.ttf?version=27cd17&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/agbalumo/400.otf?version=f1fea9&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/agbalumo/400.woff2?version=e414e1&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/agbalumo/400.woff?version=6234bf&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.529em}
 .push-double{margin-right:0.529em}

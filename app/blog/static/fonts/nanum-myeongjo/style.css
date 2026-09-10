@@ -2,31 +2,22 @@
   font-family: 'Nanum Myeongjo';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/400.eot?version=24a94b&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/400.eot?version=24a94b&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/400.woff?version=860315&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/400.ttf?version=efdc1f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/400.otf?version=24a5e0&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/400.woff2?version=094d62&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/400.woff?version=860315&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Nanum Myeongjo';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/700.eot?version=dc2c1c&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/700.eot?version=dc2c1c&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/700.woff?version=178844&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/700.ttf?version=5ea37d&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/700.otf?version=27e6eb&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/700.woff2?version=bb82e1&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/700.woff?version=178844&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Nanum Myeongjo';
   font-style: normal;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/800.eot?version=9dff71&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/800.eot?version=9dff71&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/800.woff?version=5959f5&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/800.ttf?version=bf37d9&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/800.otf?version=a2d814&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/800.woff2?version=3ad6d2&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/800.woff?version=5959f5&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.3203125em}
 .push-double{margin-right:0.3203125em}

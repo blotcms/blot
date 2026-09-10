@@ -2,61 +2,43 @@
   font-family: 'Inria Sans';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/300.eot?version=c73016&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/300.eot?version=c73016&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/300.woff?version=030c80&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/300.ttf?version=6cdf19&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/300.otf?version=52f497&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/300.woff2?version=8872cd&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inria-sans/300.woff?version=030c80&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inria Sans';
   font-style: italic;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/300-italic.eot?version=3de13a&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/300-italic.eot?version=3de13a&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/300-italic.woff?version=04c2f8&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/300-italic.ttf?version=b79d8f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/300-italic.otf?version=c57799&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/300-italic.woff2?version=4f992a&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inria-sans/300-italic.woff?version=04c2f8&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inria Sans';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/400.eot?version=3e0d6b&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/400.eot?version=3e0d6b&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/400.woff?version=8adf94&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/400.ttf?version=134830&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/400.otf?version=2fad50&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/400.woff2?version=4280f3&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inria-sans/400.woff?version=8adf94&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inria Sans';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/400-italic.eot?version=025b62&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/400-italic.eot?version=025b62&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/400-italic.woff?version=6bd09b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/400-italic.ttf?version=8bb5da&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/400-italic.otf?version=bf0bc8&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/400-italic.woff2?version=59f861&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inria-sans/400-italic.woff?version=6bd09b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inria Sans';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/700.eot?version=1ecfb8&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/700.eot?version=1ecfb8&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/700.woff?version=057899&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/700.ttf?version=a26dc7&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/700.otf?version=070a53&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/700.woff2?version=88c288&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inria-sans/700.woff?version=057899&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inria Sans';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/700-italic.eot?version=dc6ce8&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/700-italic.eot?version=dc6ce8&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/700-italic.woff?version=23e0c3&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/700-italic.ttf?version=40819f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inria-sans/700-italic.otf?version=c7fc7a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inria-sans/700-italic.woff2?version=5e1a30&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inria-sans/700-italic.woff?version=23e0c3&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.353em}
 .push-double{margin-right:0.353em}

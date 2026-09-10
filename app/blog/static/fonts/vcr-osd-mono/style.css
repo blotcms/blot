@@ -2,11 +2,8 @@
   font-family: 'VCR OSD Mono';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/vcr-osd-mono/400.eot?version=38ea1d&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/vcr-osd-mono/400.eot?version=38ea1d&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/vcr-osd-mono/400.woff?version=33b234&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/vcr-osd-mono/400.ttf?version=5fcd6c&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/vcr-osd-mono/400.otf?version=f626aa&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/vcr-osd-mono/400.woff2?version=457b2c&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/vcr-osd-mono/400.woff?version=33b234&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.5859375em}
 .push-double{margin-right:0.5859375em}

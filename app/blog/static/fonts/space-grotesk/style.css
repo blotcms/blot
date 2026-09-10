@@ -2,51 +2,36 @@
   font-family: 'Space Grotesk';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/300.eot?version=10c615&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/300.eot?version=10c615&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/300.woff?version=e7057e&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/300.ttf?version=7e7678&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/300.otf?version=fdc62d&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/300.woff2?version=a2327a&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/space-grotesk/300.woff?version=e7057e&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Space Grotesk';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/400.eot?version=4b82d3&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/400.eot?version=4b82d3&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/400.woff?version=232257&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/400.ttf?version=155c2e&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/400.otf?version=7529ef&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/400.woff2?version=1fb963&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/space-grotesk/400.woff?version=232257&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Space Grotesk';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/500.eot?version=ec7098&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/500.eot?version=ec7098&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/500.woff?version=271465&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/500.ttf?version=d52e2a&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/500.otf?version=9acdcd&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/500.woff2?version=1d8798&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/space-grotesk/500.woff?version=271465&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Space Grotesk';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/600.eot?version=408ec3&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/600.eot?version=408ec3&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/600.woff?version=db9bcd&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/600.ttf?version=85caeb&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/600.otf?version=26eb5f&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/600.woff2?version=b5058b&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/space-grotesk/600.woff?version=db9bcd&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Space Grotesk';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/700.eot?version=5fcd58&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/700.eot?version=5fcd58&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/700.woff?version=73126e&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/700.ttf?version=b6d08f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/space-grotesk/700.otf?version=cc6097&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/space-grotesk/700.woff2?version=055f85&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/space-grotesk/700.woff?version=73126e&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.425em}
 .push-double{margin-right:0.425em}

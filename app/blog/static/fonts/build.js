@@ -8,8 +8,11 @@ const fontkit = require("fontkit");
 const MinifyCSS = require("clean-css");
 
 // Used to filter source font files and ordered
-// in the preferred way for the final rule.
-const EXTENSIONS = [".eot", ".woff2", ".woff", ".ttf", ".otf"];
+// in the preferred way for the final rule. We ship
+// only .woff2 (small, universal in every browser that
+// matters) with .woff last as the fallback for anything
+// ancient. .eot/.ttf/.otf/.svg are no longer emitted.
+const EXTENSIONS = [".woff2", ".woff"];
 
 // Used to avoid attempting to build
 // fonts which don't require any files
@@ -28,8 +31,6 @@ const SYSTEM_FONTS = [
 // @font-face rules generated, e.g.
 // url('black-italic.ttf') format('truetype')
 const FORMATS = {
-  ".ttf": "truetype",
-  ".otf": "opentype",
   ".woff": "woff",
   ".woff2": "woff2",
 };
@@ -115,11 +116,14 @@ async function generateStyle(directory) {
     return family[name].weight === 400 && family[name].style === "normal";
   })[0];
 
+  // fontkit (used by generateTypeset) reads .woff but not .woff2, so
+  // point it at the .woff face; every family keeps one.
+  const regularExtensions = family[RegularFontName].extensions;
   let pathToRegularFont =
     directory +
     "/" +
     RegularFontName +
-    family[RegularFontName].extensions.filter((ext) => ext !== ".eot")[0];
+    (regularExtensions.indexOf(".woff") > -1 ? ".woff" : regularExtensions[0]);
 
   let typeset = generateTypeset(pathToRegularFont, name);
 
@@ -190,14 +194,12 @@ function generateTypeset(path, name, hasSmallCaps) {
 const TextToSVG = require("text-to-svg");
 
 function generateSVG(directory, text) {
-  const fontpath = fs.existsSync(`${directory}/regular.ttf`)
-    ? `${directory}/regular.ttf`
-    : fs.existsSync(`${directory}/regular.woff`)
+  const fontpath = fs.existsSync(`${directory}/regular.woff`)
     ? `${directory}/regular.woff`
     : fs.existsSync(`${directory}/book.woff`)
     ? `${directory}/book.woff`
-    : fs.existsSync(`${directory}/400.ttf`)
-    ? `${directory}/400.ttf`
+    : fs.existsSync(`${directory}/400.woff`)
+    ? `${directory}/400.woff`
     : null;
   if (!fontpath) return;
   const textToSVG = TextToSVG.loadSync(fontpath);
@@ -338,9 +340,13 @@ const { execSync } = require("child_process");
 
 function convert(directory) {
   const fonts = {};
+
+  // Collect every face and the source formats it currently has on disk.
+  // .ttf/.otf are still read as *sources* here (they're git rm'd only
+  // after the build) but we no longer emit them.
   fs.readdirSync(directory)
     .filter((i) =>
-      [".otf", ".ttf", ".woff", ".woff2", ".eot"].includes(extname(i))
+      [".woff2", ".woff", ".ttf", ".otf"].includes(extname(i))
     )
     .forEach((filename) => {
       let name = filename.slice(0, -extname(filename).length);
@@ -350,41 +356,30 @@ function convert(directory) {
       fonts[name] = fonts[name] || {};
       fonts[name][extname(filename).slice(1)] = filename;
     });
+
   Object.keys(fonts).forEach((label) => {
-    const conversions = [];
     const font = fonts[label];
 
-    if ((font.ttf || font.otf) && !font.woff) {
-      const from = directory + "/" + (font.ttf || font.otf);
-      const to = directory + "/" + label + ".woff";
-      conversions.push({ from, to });
-    }
+    // Generate a .woff2 for every face that lacks one, from the best
+    // available source: prefer .woff (present for every face), then
+    // .ttf, then .otf. fontforge reads all three and round-trips
+    // variable and small-caps faces without extra handling.
+    if (font.woff2) return;
 
-    if ((font.ttf || font.otf) && !font.eot) {
-      const from = directory + "/" + (font.ttf || font.otf);
-      const to = directory + "/" + label + ".eot";
-      conversions.push({ from, to });
-    }
+    const source = font.woff || font.ttf || font.otf;
+    if (!source) return;
 
-    if (!font.otf && font.ttf) {
-      const from = directory + "/" + font.ttf;
-      const to = directory + "/" + label + ".otf";
-      conversions.push({ from, to });
-    }
+    const from = directory + "/" + source;
+    const to = directory + "/" + label + ".woff2";
 
-    if (!font.ttf && font.otf) {
-      const from = directory + "/" + font.otf;
-      const to = directory + "/" + label + ".ttf";
-      conversions.push({ from, to });
-    }
+    try {
+      fs.removeSync(directory + "/style.css");
+    } catch (e) {}
 
-    if (conversions.length) {
-      try {
-        fs.removeSync(directory + "/styles.css");
-      } catch (e) {}
-    }
-    for (const { from, to } of conversions)
-      execSync(`fontforge -lang=ff -c 'Open($1);Generate($2)' ${from} ${to}`);
+    execSync(
+      `fontforge -lang=ff -c 'Open($1);Generate($2)' '${from}' '${to}'`,
+      { stdio: "ignore" }
+    );
   });
 
   execSync(`find ${__dirname} -name '*.afm' -delete`);
@@ -393,7 +388,6 @@ function convert(directory) {
 function generateSRC(extensions, directory, file) {
   const base = "/fonts/" + basename(directory);
   let contentHashes = {};
-  let src;
 
   extensions.forEach((extension) => {
     contentHashes[extension] = hash(
@@ -401,24 +395,16 @@ function generateSRC(extensions, directory, file) {
     ).slice(0, 6);
   });
 
-  const extensionList = `${EXTENSIONS.filter(
-    (EXTENSION) => EXTENSION !== ".eot" && extensions.indexOf(EXTENSION) > -1
+  const extensionList = EXTENSIONS.filter(
+    (EXTENSION) => extensions.indexOf(EXTENSION) > -1
   )
     .map(
       (extension) =>
         `url('{{{config.cdn.origin}}}${base}/${file}${extension}?version=${contentHashes[extension]}&extension=${extension}') format('${FORMATS[extension]}')`
     )
-    .join(",\n       ")}`;
+    .join(",\n       ");
 
-  if (extensions.indexOf(".eot") > -1) {
-    src = `src: url('{{{config.cdn.origin}}}${base}/${file}.eot?version=${contentHashes[".eot"]}&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}${base}/${file}.eot?version=${contentHashes[".eot"]}&extension=.eot#iefix') format('embedded-opentype'), 
-       ${extensionList};`;
-  } else {
-    src = `src: ${extensionList};`;
-  }
-
-  return src;
+  return `src: ${extensionList};`;
 }
 
 function generateFontFace(name, style, weight, fontVariant, src) {

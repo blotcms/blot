@@ -2,41 +2,29 @@
   font-family: 'Computer Modern Bright';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/400.eot?version=a5bb01&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/400.eot?version=a5bb01&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/400.woff?version=d0f169&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/400.ttf?version=ab3d14&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/400.otf?version=e5be97&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/400.woff2?version=1490d1&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/400.woff?version=d0f169&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Computer Modern Bright';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/400-italic.eot?version=bc9b10&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/400-italic.eot?version=bc9b10&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/400-italic.woff?version=3646fc&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/400-italic.ttf?version=8f36d7&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/400-italic.otf?version=e616aa&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/400-italic.woff2?version=093eac&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/400-italic.woff?version=3646fc&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Computer Modern Bright';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/700.eot?version=3292ad&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/700.eot?version=3292ad&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/700.woff?version=350d3c&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/700.ttf?version=fe15c3&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/700.otf?version=3d9502&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/700.woff2?version=8b7d5e&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/700.woff?version=350d3c&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Computer Modern Bright';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/700-italic.eot?version=d2e926&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/700-italic.eot?version=d2e926&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/700-italic.woff?version=202829&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/700-italic.ttf?version=9015e8&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/700-italic.otf?version=d7965a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/700-italic.woff2?version=600529&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/computer-modern-bright/700-italic.woff?version=202829&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.52490234375em}
 .push-double{margin-right:0.52490234375em}

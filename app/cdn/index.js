@@ -30,7 +30,7 @@ cdn.use((req, res, next) => {
 });
 
 // Global static files available to all blogs e.g.
-// /fonts/agbalumo/400.ttf
+// /fonts/agbalumo/400.woff2
 // /plugins/katex/files/KaTeX_AMS-Regular.woff2
 cdn.use("/fonts", static(GLOBAL_STATIC_FILES + "/fonts"));
 cdn.use("/icons", static(GLOBAL_STATIC_FILES + "/icons"));

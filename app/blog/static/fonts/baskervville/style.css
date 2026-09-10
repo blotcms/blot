@@ -2,21 +2,15 @@
   font-family: 'Baskervville';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/baskervville/400.eot?version=5d5134&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/baskervville/400.eot?version=5d5134&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/baskervville/400.woff?version=1c649d&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/baskervville/400.ttf?version=0dc261&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/baskervville/400.otf?version=69c4c3&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/baskervville/400.woff2?version=255185&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/baskervville/400.woff?version=1c649d&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Baskervville';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/baskervville/400-italic.eot?version=ce84e0&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/baskervville/400-italic.eot?version=ce84e0&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/baskervville/400-italic.woff?version=c03bd5&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/baskervville/400-italic.ttf?version=1c35c1&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/baskervville/400-italic.otf?version=6d6295&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/baskervville/400-italic.woff2?version=07c511&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/baskervville/400-italic.woff?version=c03bd5&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.337em}
 .push-double{margin-right:0.337em}

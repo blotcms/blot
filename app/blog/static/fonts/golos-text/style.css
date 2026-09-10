@@ -2,11 +2,8 @@
   font-family: 'Golos Text';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/golos-text/400.eot?version=57fa76&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/golos-text/400.eot?version=57fa76&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/golos-text/400.woff?version=f6d3e9&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/golos-text/400.ttf?version=95a64c&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/golos-text/400.otf?version=72e2c0&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/golos-text/400.woff2?version=b19334&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/golos-text/400.woff?version=f6d3e9&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.39em}
 .push-double{margin-right:0.39em}

@@ -2,141 +2,99 @@
   font-family: 'Newsreader';
   font-style: normal;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/200.eot?version=a0086e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/200.eot?version=a0086e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/newsreader/200.woff?version=90590f&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/200.ttf?version=a42c30&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/200.otf?version=fb176e&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/newsreader/200.woff2?version=7f1ffa&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/newsreader/200.woff?version=90590f&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Newsreader';
   font-style: italic;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/200-italic.eot?version=537b03&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/200-italic.eot?version=537b03&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/newsreader/200-italic.woff?version=e0d611&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/200-italic.ttf?version=44feb3&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/200-italic.otf?version=d96231&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/newsreader/200-italic.woff2?version=bc3c07&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/newsreader/200-italic.woff?version=e0d611&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Newsreader';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/300.eot?version=ffbf7a&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/300.eot?version=ffbf7a&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/newsreader/300.woff?version=a0e495&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/300.ttf?version=1e0db9&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/300.otf?version=9ffed0&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/newsreader/300.woff2?version=bc424b&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/newsreader/300.woff?version=a0e495&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Newsreader';
   font-style: italic;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/300-italic.eot?version=a9ec2a&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/300-italic.eot?version=a9ec2a&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/newsreader/300-italic.woff?version=8f2edd&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/300-italic.ttf?version=f72dcd&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/300-italic.otf?version=d4da2b&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/newsreader/300-italic.woff2?version=8bf07e&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/newsreader/300-italic.woff?version=8f2edd&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Newsreader';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/400.eot?version=60e9dd&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/400.eot?version=60e9dd&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/newsreader/400.woff?version=37718a&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/400.ttf?version=efab53&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/400.otf?version=559497&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/newsreader/400.woff2?version=bd023f&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/newsreader/400.woff?version=37718a&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Newsreader';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/400-italic.eot?version=3a6d09&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/400-italic.eot?version=3a6d09&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/newsreader/400-italic.woff?version=054fce&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/400-italic.ttf?version=bca1b9&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/400-italic.otf?version=2da127&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/newsreader/400-italic.woff2?version=b73367&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/newsreader/400-italic.woff?version=054fce&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Newsreader';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/500.eot?version=0d9494&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/500.eot?version=0d9494&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/newsreader/500.woff?version=494fda&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/500.ttf?version=4bdc77&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/500.otf?version=00d6f6&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/newsreader/500.woff2?version=652f33&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/newsreader/500.woff?version=494fda&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Newsreader';
   font-style: italic;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/500-italic.eot?version=d7dffa&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/500-italic.eot?version=d7dffa&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/newsreader/500-italic.woff?version=c44896&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/500-italic.ttf?version=4dc7f1&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/500-italic.otf?version=bdab2b&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/newsreader/500-italic.woff2?version=96aafd&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/newsreader/500-italic.woff?version=c44896&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Newsreader';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/600.eot?version=57f1bf&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/600.eot?version=57f1bf&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/newsreader/600.woff?version=ed8823&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/600.ttf?version=06b54b&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/600.otf?version=f52f8c&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/newsreader/600.woff2?version=99268d&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/newsreader/600.woff?version=ed8823&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Newsreader';
   font-style: italic;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/600-italic.eot?version=7be365&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/600-italic.eot?version=7be365&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/newsreader/600-italic.woff?version=306057&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/600-italic.ttf?version=1e6a84&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/600-italic.otf?version=4fed5e&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/newsreader/600-italic.woff2?version=4f39bb&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/newsreader/600-italic.woff?version=306057&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Newsreader';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/700.eot?version=d66c12&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/700.eot?version=d66c12&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/newsreader/700.woff?version=f06581&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/700.ttf?version=c24937&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/700.otf?version=4b272a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/newsreader/700.woff2?version=c80049&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/newsreader/700.woff?version=f06581&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Newsreader';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/700-italic.eot?version=8ce93e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/700-italic.eot?version=8ce93e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/newsreader/700-italic.woff?version=20e27e&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/700-italic.ttf?version=2f6816&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/700-italic.otf?version=2602ad&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/newsreader/700-italic.woff2?version=6697be&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/newsreader/700-italic.woff?version=20e27e&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Newsreader';
   font-style: normal;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/800.eot?version=920249&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/800.eot?version=920249&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/newsreader/800.woff?version=901f39&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/800.ttf?version=a93407&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/800.otf?version=120f3b&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/newsreader/800.woff2?version=d9808e&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/newsreader/800.woff?version=901f39&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Newsreader';
   font-style: italic;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/800-italic.eot?version=693f0e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/newsreader/800-italic.eot?version=693f0e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/newsreader/800-italic.woff?version=c6ffbd&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/800-italic.ttf?version=449f5c&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/newsreader/800-italic.otf?version=8de01b&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/newsreader/800-italic.woff2?version=5ae39e&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/newsreader/800-italic.woff?version=c6ffbd&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.3655em}
 .push-double{margin-right:0.3655em}

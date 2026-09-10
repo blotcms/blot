@@ -2,11 +2,8 @@
   font-family: 'Michroma';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/michroma/400.eot?version=ec40c3&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/michroma/400.eot?version=ec40c3&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/michroma/400.woff?version=322af5&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/michroma/400.ttf?version=11e1ac&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/michroma/400.otf?version=8ce1b9&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/michroma/400.woff2?version=3768a1&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/michroma/400.woff?version=322af5&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.375em}
 .push-double{margin-right:0.375em}

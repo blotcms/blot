@@ -2,31 +2,22 @@
   font-family: 'Infini';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/infini/regular.eot?version=d50bb6&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/infini/regular.eot?version=d50bb6&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/infini/regular.woff?version=a8224d&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/infini/regular.ttf?version=ff8396&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/infini/regular.otf?version=ba86d7&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/infini/regular.woff2?version=126cab&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/infini/regular.woff?version=a8224d&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Infini';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/infini/regular-italic.eot?version=f5afb6&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/infini/regular-italic.eot?version=f5afb6&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/infini/regular-italic.woff?version=d6fc8e&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/infini/regular-italic.ttf?version=bdcd37&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/infini/regular-italic.otf?version=742758&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/infini/regular-italic.woff2?version=f3011a&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/infini/regular-italic.woff?version=d6fc8e&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Infini';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/infini/bold.eot?version=83c82e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/infini/bold.eot?version=83c82e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/infini/bold.woff?version=541aac&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/infini/bold.ttf?version=e16478&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/infini/bold.otf?version=b6cc52&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/infini/bold.woff2?version=96959c&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/infini/bold.woff?version=541aac&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.42em}
 .push-double{margin-right:0.42em}

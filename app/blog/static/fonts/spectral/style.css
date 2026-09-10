@@ -2,141 +2,99 @@
   font-family: 'Spectral';
   font-style: normal;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/200.eot?version=018cbf&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/200.eot?version=018cbf&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/spectral/200.woff?version=82566f&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/200.ttf?version=2cc94f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/200.otf?version=e6d34f&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/spectral/200.woff2?version=0c6118&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/spectral/200.woff?version=82566f&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Spectral';
   font-style: italic;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/200-italic.eot?version=319574&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/200-italic.eot?version=319574&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/spectral/200-italic.woff?version=974c6d&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/200-italic.ttf?version=a92448&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/200-italic.otf?version=a39a4a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/spectral/200-italic.woff2?version=f756f1&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/spectral/200-italic.woff?version=974c6d&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Spectral';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/300.eot?version=123ab0&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/300.eot?version=123ab0&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/spectral/300.woff?version=bfb659&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/300.ttf?version=c969f8&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/300.otf?version=b33f16&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/spectral/300.woff2?version=b45c4a&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/spectral/300.woff?version=bfb659&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Spectral';
   font-style: italic;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/300-italic.eot?version=9153a2&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/300-italic.eot?version=9153a2&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/spectral/300-italic.woff?version=2a0d2a&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/300-italic.ttf?version=619e3a&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/300-italic.otf?version=10cabf&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/spectral/300-italic.woff2?version=9d680c&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/spectral/300-italic.woff?version=2a0d2a&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Spectral';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/400.eot?version=24a559&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/400.eot?version=24a559&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/spectral/400.woff?version=6099b2&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/400.ttf?version=4689a7&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/400.otf?version=2d3980&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/spectral/400.woff2?version=0394b6&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/spectral/400.woff?version=6099b2&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Spectral';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/400-italic.eot?version=d73692&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/400-italic.eot?version=d73692&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/spectral/400-italic.woff?version=ffbe29&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/400-italic.ttf?version=b6c010&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/400-italic.otf?version=d803c5&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/spectral/400-italic.woff2?version=fba4e8&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/spectral/400-italic.woff?version=ffbe29&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Spectral';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/500.eot?version=5edc72&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/500.eot?version=5edc72&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/spectral/500.woff?version=cc8d14&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/500.ttf?version=44cb14&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/500.otf?version=d70c9a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/spectral/500.woff2?version=5f4cde&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/spectral/500.woff?version=cc8d14&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Spectral';
   font-style: italic;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/500-italic.eot?version=301a50&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/500-italic.eot?version=301a50&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/spectral/500-italic.woff?version=ea0933&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/500-italic.ttf?version=453b71&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/500-italic.otf?version=d35ec0&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/spectral/500-italic.woff2?version=af4611&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/spectral/500-italic.woff?version=ea0933&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Spectral';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/600.eot?version=a02203&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/600.eot?version=a02203&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/spectral/600.woff?version=3d8c7c&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/600.ttf?version=259041&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/600.otf?version=4dc372&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/spectral/600.woff2?version=fc9c94&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/spectral/600.woff?version=3d8c7c&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Spectral';
   font-style: italic;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/600-italic.eot?version=3deff0&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/600-italic.eot?version=3deff0&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/spectral/600-italic.woff?version=c0a3df&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/600-italic.ttf?version=f8e77b&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/600-italic.otf?version=469f19&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/spectral/600-italic.woff2?version=117d70&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/spectral/600-italic.woff?version=c0a3df&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Spectral';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/700.eot?version=90ff62&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/700.eot?version=90ff62&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/spectral/700.woff?version=9cdd65&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/700.ttf?version=63fcf7&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/700.otf?version=49f32c&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/spectral/700.woff2?version=e41138&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/spectral/700.woff?version=9cdd65&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Spectral';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/700-italic.eot?version=b2c3a7&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/700-italic.eot?version=b2c3a7&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/spectral/700-italic.woff?version=06dd8b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/700-italic.ttf?version=a258cb&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/700-italic.otf?version=5a5e75&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/spectral/700-italic.woff2?version=869914&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/spectral/700-italic.woff?version=06dd8b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Spectral';
   font-style: normal;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/800.eot?version=7433d3&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/800.eot?version=7433d3&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/spectral/800.woff?version=caad92&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/800.ttf?version=8da541&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/800.otf?version=8397ba&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/spectral/800.woff2?version=7f03b2&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/spectral/800.woff?version=caad92&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Spectral';
   font-style: italic;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/800-italic.eot?version=faa5a1&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/spectral/800-italic.eot?version=faa5a1&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/spectral/800-italic.woff?version=dc3487&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/800-italic.ttf?version=88797a&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/spectral/800-italic.otf?version=5ab260&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/spectral/800-italic.woff2?version=3e36cb&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/spectral/800-italic.woff?version=dc3487&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.45em}
 .push-double{margin-right:0.45em}

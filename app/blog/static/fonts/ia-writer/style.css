@@ -2,36 +2,28 @@
   font-family: 'iA Writer Duospace';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/ia-writer/400.eot?version=9d9627&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/ia-writer/400.eot?version=9d9627&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/ia-writer/400.woff2?version=ddb8db&extension=.woff2') format('woff2'),
+  src: url('{{{config.cdn.origin}}}/fonts/ia-writer/400.woff2?version=ddb8db&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/ia-writer/400.woff?version=b52acf&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'iA Writer Duospace';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/ia-writer/400-italic.eot?version=308f32&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/ia-writer/400-italic.eot?version=308f32&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/ia-writer/400-italic.woff2?version=b525f8&extension=.woff2') format('woff2'),
+  src: url('{{{config.cdn.origin}}}/fonts/ia-writer/400-italic.woff2?version=b525f8&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/ia-writer/400-italic.woff?version=70d67c&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'iA Writer Duospace';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/ia-writer/600.eot?version=4463d8&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/ia-writer/600.eot?version=4463d8&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/ia-writer/600.woff2?version=1d85b6&extension=.woff2') format('woff2'),
+  src: url('{{{config.cdn.origin}}}/fonts/ia-writer/600.woff2?version=1d85b6&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/ia-writer/600.woff?version=3d1167&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'iA Writer Duospace';
   font-style: italic;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/ia-writer/600-italic.eot?version=2bd1de&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/ia-writer/600-italic.eot?version=2bd1de&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/ia-writer/600-italic.woff2?version=c0b31e&extension=.woff2') format('woff2'),
+  src: url('{{{config.cdn.origin}}}/fonts/ia-writer/600-italic.woff2?version=c0b31e&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/ia-writer/600-italic.woff?version=eaa9ca&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.6em}

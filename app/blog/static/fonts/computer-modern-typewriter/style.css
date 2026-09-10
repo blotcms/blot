@@ -2,61 +2,43 @@
   font-family: 'Computer Modern Typewriter';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/300.eot?version=0cc91e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/300.eot?version=0cc91e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/300.woff?version=07045b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/300.ttf?version=b32c92&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/300.otf?version=eef201&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/300.woff2?version=a1195d&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/300.woff?version=07045b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Computer Modern Typewriter';
   font-style: italic;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/300-italic.eot?version=b31926&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/300-italic.eot?version=b31926&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/300-italic.woff?version=49ee8b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/300-italic.ttf?version=ca9c3e&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/300-italic.otf?version=570a4a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/300-italic.woff2?version=985271&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/300-italic.woff?version=49ee8b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Computer Modern Typewriter';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/400.eot?version=673eb6&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/400.eot?version=673eb6&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/400.woff?version=a39b66&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/400.ttf?version=c6d367&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/400.otf?version=f2a1ef&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/400.woff2?version=1748d6&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/400.woff?version=a39b66&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Computer Modern Typewriter';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/400-italic.eot?version=cf1b4e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/400-italic.eot?version=cf1b4e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/400-italic.woff?version=8d7c81&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/400-italic.ttf?version=9a7a88&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/400-italic.otf?version=73a707&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/400-italic.woff2?version=2a816c&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/400-italic.woff?version=8d7c81&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Computer Modern Typewriter';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/700.eot?version=aff247&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/700.eot?version=aff247&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/700.woff?version=b46963&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/700.ttf?version=fdab30&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/700.otf?version=b04efc&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/700.woff2?version=af5b02&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/700.woff?version=b46963&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Computer Modern Typewriter';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/700-italic.eot?version=7f59f9&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/700-italic.eot?version=7f59f9&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/700-italic.woff?version=3d5628&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/700-italic.ttf?version=19fa87&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/700-italic.otf?version=719b72&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/700-italic.woff2?version=91d715&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/computer-modern-typewriter/700-italic.woff?version=3d5628&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.52490234375em}
 .push-double{margin-right:0.52490234375em}

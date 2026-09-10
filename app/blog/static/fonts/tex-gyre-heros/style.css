@@ -2,41 +2,29 @@
   font-family: 'TeX Gyre Heros';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/400.eot?version=365731&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/400.eot?version=365731&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/400.woff?version=187bfe&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/400.ttf?version=a37aa8&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/400.otf?version=418e75&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/400.woff2?version=33001e&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/400.woff?version=187bfe&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'TeX Gyre Heros';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/400-italic.eot?version=b1355f&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/400-italic.eot?version=b1355f&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/400-italic.woff?version=a9002e&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/400-italic.ttf?version=c157c2&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/400-italic.otf?version=ba3ea5&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/400-italic.woff2?version=9458da&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/400-italic.woff?version=a9002e&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'TeX Gyre Heros';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700.eot?version=4dee98&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700.eot?version=4dee98&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700.woff?version=415c90&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700.ttf?version=72670a&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700.otf?version=00a18d&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700.woff2?version=4fdc28&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700.woff?version=415c90&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'TeX Gyre Heros';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700-italic.eot?version=a05dcc&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700-italic.eot?version=a05dcc&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700-italic.woff?version=704e0f&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700-italic.ttf?version=09d2d5&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700-italic.otf?version=bc8411&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700-italic.woff2?version=71b878&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700-italic.woff?version=704e0f&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.291em}
 .push-double{margin-right:0.291em}

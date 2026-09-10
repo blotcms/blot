@@ -2,81 +2,57 @@
   font-family: 'Inconsolata Expanded';
   font-style: normal;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/200.eot?version=44ee5e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/200.eot?version=44ee5e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/200.woff?version=86e2ac&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/200.ttf?version=b00f7f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/200.otf?version=cf2c89&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/200.woff2?version=10bef3&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/200.woff?version=86e2ac&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inconsolata Expanded';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/300.eot?version=43344a&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/300.eot?version=43344a&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/300.woff?version=e61be1&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/300.ttf?version=a7de7a&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/300.otf?version=d7ce5c&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/300.woff2?version=6db8e6&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/300.woff?version=e61be1&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inconsolata Expanded';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/400.eot?version=a73310&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/400.eot?version=a73310&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/400.woff?version=61cf52&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/400.ttf?version=7bbb13&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/400.otf?version=69c8be&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/400.woff2?version=932a82&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/400.woff?version=61cf52&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inconsolata Expanded';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/500.eot?version=46e66a&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/500.eot?version=46e66a&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/500.woff?version=59ee99&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/500.ttf?version=6a645c&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/500.otf?version=3d75b7&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/500.woff2?version=5123f1&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/500.woff?version=59ee99&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inconsolata Expanded';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/600.eot?version=b13851&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/600.eot?version=b13851&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/600.woff?version=ff8be4&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/600.ttf?version=1000f7&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/600.otf?version=42e405&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/600.woff2?version=babb85&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/600.woff?version=ff8be4&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inconsolata Expanded';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/700.eot?version=55c03c&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/700.eot?version=55c03c&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/700.woff?version=2a4c2c&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/700.ttf?version=265c8f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/700.otf?version=928005&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/700.woff2?version=1f234a&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/700.woff?version=2a4c2c&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inconsolata Expanded';
   font-style: normal;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/800.eot?version=8a1386&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/800.eot?version=8a1386&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/800.woff?version=c45f71&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/800.ttf?version=90e91f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/800.otf?version=ba431d&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/800.woff2?version=40b435&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/800.woff?version=c45f71&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inconsolata Expanded';
   font-style: normal;
   font-weight: 900;
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/900.eot?version=b19417&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/900.eot?version=b19417&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/900.woff?version=d7e2e0&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/900.ttf?version=4f0ecc&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/900.otf?version=ed5bdc&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/900.woff2?version=28eff1&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inconsolata-expanded/900.woff?version=d7e2e0&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.6em}
 .push-double{margin-right:0.6em}

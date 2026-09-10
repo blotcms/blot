@@ -2,141 +2,99 @@
   font-family: 'Source Code';
   font-style: normal;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/extra-light.eot?version=663b82&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/extra-light.eot?version=663b82&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/source-code/extra-light.woff?version=2a9a3c&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/extra-light.ttf?version=e91271&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/extra-light.otf?version=c23505&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/source-code/extra-light.woff2?version=7028c2&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/source-code/extra-light.woff?version=2a9a3c&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Source Code';
   font-style: italic;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/extra-light-italic.eot?version=fbe845&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/extra-light-italic.eot?version=fbe845&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/source-code/extra-light-italic.woff?version=e25725&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/extra-light-italic.ttf?version=871d88&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/extra-light-italic.otf?version=d89fff&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/source-code/extra-light-italic.woff2?version=0bcd5a&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/source-code/extra-light-italic.woff?version=e25725&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Source Code';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/light.eot?version=ba12b3&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/light.eot?version=ba12b3&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/source-code/light.woff?version=722968&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/light.ttf?version=cf1c1e&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/light.otf?version=2b3691&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/source-code/light.woff2?version=df9ee2&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/source-code/light.woff?version=722968&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Source Code';
   font-style: italic;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/light-italic.eot?version=a6007c&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/light-italic.eot?version=a6007c&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/source-code/light-italic.woff?version=979104&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/light-italic.ttf?version=c053d3&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/light-italic.otf?version=191657&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/source-code/light-italic.woff2?version=f7e458&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/source-code/light-italic.woff?version=979104&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Source Code';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/regular.eot?version=d5892e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/regular.eot?version=d5892e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/source-code/regular.woff?version=13ecee&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/regular.ttf?version=1066e5&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/regular.otf?version=20964d&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/source-code/regular.woff2?version=bedd2e&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/source-code/regular.woff?version=13ecee&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Source Code';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/italic.eot?version=0b13a0&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/italic.eot?version=0b13a0&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/source-code/italic.woff?version=bd9af3&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/italic.ttf?version=4f2201&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/italic.otf?version=13ed3d&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/source-code/italic.woff2?version=29964b&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/source-code/italic.woff?version=bd9af3&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Source Code';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/medium.eot?version=358f7b&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/medium.eot?version=358f7b&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/source-code/medium.woff?version=48629b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/medium.ttf?version=472c7e&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/medium.otf?version=9db14b&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/source-code/medium.woff2?version=d0a4ee&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/source-code/medium.woff?version=48629b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Source Code';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/semi-bold.eot?version=b01ff9&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/semi-bold.eot?version=b01ff9&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/source-code/semi-bold.woff?version=dcad55&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/semi-bold.ttf?version=0f5427&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/semi-bold.otf?version=fd020c&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/source-code/semi-bold.woff2?version=adc1b6&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/source-code/semi-bold.woff?version=dcad55&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Source Code';
   font-style: italic;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/medium-italic.eot?version=2af5b7&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/medium-italic.eot?version=2af5b7&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/source-code/medium-italic.woff?version=235130&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/medium-italic.ttf?version=7289b3&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/medium-italic.otf?version=4e272d&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/source-code/medium-italic.woff2?version=573ce9&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/source-code/medium-italic.woff?version=235130&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Source Code';
   font-style: italic;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/semi-bold-italic.eot?version=1b78a6&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/semi-bold-italic.eot?version=1b78a6&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/source-code/semi-bold-italic.woff?version=39da30&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/semi-bold-italic.ttf?version=83893e&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/semi-bold-italic.otf?version=cb9981&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/source-code/semi-bold-italic.woff2?version=a4fb65&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/source-code/semi-bold-italic.woff?version=39da30&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Source Code';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/bold.eot?version=32cdd7&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/bold.eot?version=32cdd7&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/source-code/bold.woff?version=c78ec9&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/bold.ttf?version=a3c308&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/bold.otf?version=51ada6&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/source-code/bold.woff2?version=323bcc&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/source-code/bold.woff?version=c78ec9&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Source Code';
   font-style: italic;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/bold-italic.eot?version=297591&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/bold-italic.eot?version=297591&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/source-code/bold-italic.woff?version=dc4c80&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/bold-italic.ttf?version=d77c75&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/bold-italic.otf?version=ebb7f7&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/source-code/bold-italic.woff2?version=630ce4&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/source-code/bold-italic.woff?version=dc4c80&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Source Code';
   font-style: normal;
   font-weight: 900;
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/black.eot?version=0297c6&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/black.eot?version=0297c6&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/source-code/black.woff?version=152254&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/black.ttf?version=e84e10&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/black.otf?version=f141a8&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/source-code/black.woff2?version=deb2fc&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/source-code/black.woff?version=152254&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Source Code';
   font-style: italic;
   font-weight: 900;
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/black-italic.eot?version=c7c4bc&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/source-code/black-italic.eot?version=c7c4bc&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/source-code/black-italic.woff?version=c41d64&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/black-italic.ttf?version=b4c428&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/source-code/black-italic.otf?version=ef61c0&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/source-code/black-italic.woff2?version=bb3e1b&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/source-code/black-italic.woff?version=c41d64&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.6em}
 .push-double{margin-right:0.6em}

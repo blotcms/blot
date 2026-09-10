@@ -2,61 +2,43 @@
   font-family: 'Neuton';
   font-style: normal;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/neuton/200.eot?version=99ed01&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/neuton/200.eot?version=99ed01&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/neuton/200.woff?version=692d62&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/neuton/200.ttf?version=b3dd4e&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/neuton/200.otf?version=c7ed73&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/neuton/200.woff2?version=3e4206&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/neuton/200.woff?version=692d62&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Neuton';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/neuton/300.eot?version=4f79f0&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/neuton/300.eot?version=4f79f0&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/neuton/300.woff?version=ec06cf&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/neuton/300.ttf?version=b9db45&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/neuton/300.otf?version=1e034e&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/neuton/300.woff2?version=b0427f&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/neuton/300.woff?version=ec06cf&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Neuton';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/neuton/400.eot?version=a6c2bb&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/neuton/400.eot?version=a6c2bb&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/neuton/400.woff?version=2f6672&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/neuton/400.ttf?version=d6ccf0&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/neuton/400.otf?version=7d0132&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/neuton/400.woff2?version=90d989&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/neuton/400.woff?version=2f6672&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Neuton';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/neuton/400-italic.eot?version=b6aab2&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/neuton/400-italic.eot?version=b6aab2&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/neuton/400-italic.woff?version=e1a79b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/neuton/400-italic.ttf?version=a48c29&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/neuton/400-italic.otf?version=e6c4e9&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/neuton/400-italic.woff2?version=cf2b08&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/neuton/400-italic.woff?version=e1a79b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Neuton';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/neuton/700.eot?version=503889&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/neuton/700.eot?version=503889&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/neuton/700.woff?version=3d1c42&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/neuton/700.ttf?version=44f1e0&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/neuton/700.otf?version=38f1a2&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/neuton/700.woff2?version=ddf9ce&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/neuton/700.woff?version=3d1c42&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Neuton';
   font-style: normal;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/neuton/800.eot?version=ab6dd1&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/neuton/800.eot?version=ab6dd1&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/neuton/800.woff?version=7d5bf8&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/neuton/800.ttf?version=094000&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/neuton/800.otf?version=30b187&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/neuton/800.woff2?version=690d5a&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/neuton/800.woff?version=7d5bf8&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.24267578125em}
 .push-double{margin-right:0.24267578125em}

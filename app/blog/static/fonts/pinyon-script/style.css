@@ -2,11 +2,8 @@
   font-family: 'Pinyon Script';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/pinyon-script/400.eot?version=b8874b&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/pinyon-script/400.eot?version=b8874b&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/pinyon-script/400.woff?version=e7294f&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/pinyon-script/400.ttf?version=c53b60&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/pinyon-script/400.otf?version=4592e7&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/pinyon-script/400.woff2?version=a18ea1&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/pinyon-script/400.woff?version=e7294f&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.359375em}
 .push-double{margin-right:0.359375em}

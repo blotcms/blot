@@ -2,21 +2,15 @@
   font-family: 'Rosario';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/rosario/400.eot?version=d16183&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/rosario/400.eot?version=d16183&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/rosario/400.woff?version=8e6e1b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/rosario/400.ttf?version=806e48&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/rosario/400.otf?version=6181af&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/rosario/400.woff2?version=50112b&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/rosario/400.woff?version=8e6e1b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Rosario';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/rosario/400-italic.eot?version=833ee9&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/rosario/400-italic.eot?version=833ee9&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/rosario/400-italic.woff?version=2d94b0&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/rosario/400-italic.ttf?version=eca5f4&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/rosario/400-italic.otf?version=285068&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/rosario/400-italic.woff2?version=7b0ba8&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/rosario/400-italic.woff?version=2d94b0&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.367em}
 .push-double{margin-right:0.367em}

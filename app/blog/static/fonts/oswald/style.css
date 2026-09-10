@@ -2,61 +2,43 @@
   font-family: 'Oswald';
   font-style: normal;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/oswald/200.eot?version=78ecbc&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/oswald/200.eot?version=78ecbc&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/oswald/200.woff?version=00453f&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/oswald/200.ttf?version=bae2f0&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/oswald/200.otf?version=e7a6f3&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/oswald/200.woff2?version=cb2c86&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/oswald/200.woff?version=00453f&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Oswald';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/oswald/300.eot?version=653837&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/oswald/300.eot?version=653837&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/oswald/300.woff?version=f4df4e&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/oswald/300.ttf?version=6ee38c&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/oswald/300.otf?version=ad8c71&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/oswald/300.woff2?version=a8ae14&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/oswald/300.woff?version=f4df4e&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Oswald';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/oswald/400.eot?version=2cf40b&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/oswald/400.eot?version=2cf40b&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/oswald/400.woff?version=dbeab4&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/oswald/400.ttf?version=a7ccbd&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/oswald/400.otf?version=2e4ea2&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/oswald/400.woff2?version=3ab77e&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/oswald/400.woff?version=dbeab4&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Oswald';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/oswald/500.eot?version=0ec030&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/oswald/500.eot?version=0ec030&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/oswald/500.woff?version=e30070&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/oswald/500.ttf?version=14cf87&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/oswald/500.otf?version=258ced&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/oswald/500.woff2?version=d54a35&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/oswald/500.woff?version=e30070&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Oswald';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/oswald/600.eot?version=9f1693&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/oswald/600.eot?version=9f1693&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/oswald/600.woff?version=303a57&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/oswald/600.ttf?version=6a5d13&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/oswald/600.otf?version=358f28&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/oswald/600.woff2?version=3b389f&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/oswald/600.woff?version=303a57&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Oswald';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/oswald/700.eot?version=ee68c2&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/oswald/700.eot?version=ee68c2&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/oswald/700.woff?version=ec3f76&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/oswald/700.ttf?version=452bfe&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/oswald/700.otf?version=faff5f&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/oswald/700.woff2?version=3dcc1d&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/oswald/700.woff?version=ec3f76&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.266em}
 .push-double{margin-right:0.266em}

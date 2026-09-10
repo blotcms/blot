@@ -2,61 +2,43 @@
   font-family: 'Chartersmall-caps';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/charter/regular-small-caps.eot?version=a8dd79&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/charter/regular-small-caps.eot?version=a8dd79&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/charter/regular-small-caps.woff?version=4cc8ca&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/charter/regular-small-caps.ttf?version=d0088e&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/charter/regular-small-caps.otf?version=3f1411&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/charter/regular-small-caps.woff2?version=81d723&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/charter/regular-small-caps.woff?version=4cc8ca&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Charter';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/charter/regular.eot?version=056507&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/charter/regular.eot?version=056507&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/charter/regular.woff?version=0c4500&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/charter/regular.ttf?version=c937fb&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/charter/regular.otf?version=fe3b71&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/charter/regular.woff2?version=017b84&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/charter/regular.woff?version=0c4500&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Charter';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/charter/italic.eot?version=7bc921&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/charter/italic.eot?version=7bc921&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/charter/italic.woff?version=a043b9&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/charter/italic.ttf?version=305571&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/charter/italic.otf?version=b46e39&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/charter/italic.woff2?version=f9a973&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/charter/italic.woff?version=a043b9&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Chartersmall-caps';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/charter/bold-small-caps.eot?version=75f883&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/charter/bold-small-caps.eot?version=75f883&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/charter/bold-small-caps.woff?version=7af01d&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/charter/bold-small-caps.ttf?version=8fa7b4&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/charter/bold-small-caps.otf?version=6f3e2e&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/charter/bold-small-caps.woff2?version=3b8b4c&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/charter/bold-small-caps.woff?version=7af01d&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Charter';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/charter/bold.eot?version=0ca438&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/charter/bold.eot?version=0ca438&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/charter/bold.woff?version=78342d&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/charter/bold.ttf?version=5ac2dd&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/charter/bold.otf?version=85f052&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/charter/bold.woff2?version=a696d8&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/charter/bold.woff?version=78342d&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Charter';
   font-style: italic;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/charter/bold-italic.eot?version=1a39de&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/charter/bold-italic.eot?version=1a39de&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/charter/bold-italic.woff?version=e5c78e&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/charter/bold-italic.ttf?version=cf2e86&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/charter/bold-italic.otf?version=6778fa&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/charter/bold-italic.woff2?version=a25a36&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/charter/bold-italic.woff?version=e5c78e&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.365234375em}
 .push-double{margin-right:0.365234375em}

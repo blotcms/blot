@@ -2,21 +2,15 @@
   font-family: 'Geist Mono';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/geist-mono/400.eot?version=646ce1&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/geist-mono/400.eot?version=646ce1&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/geist-mono/400.woff?version=007678&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/geist-mono/400.ttf?version=827a96&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/geist-mono/400.otf?version=986b47&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/geist-mono/400.woff2?version=1dc7ef&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/geist-mono/400.woff?version=007678&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Geist Mono';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/geist-mono/400-italic.eot?version=399ac0&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/geist-mono/400-italic.eot?version=399ac0&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/geist-mono/400-italic.woff?version=44f40d&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/geist-mono/400-italic.ttf?version=c0408d&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/geist-mono/400-italic.otf?version=d05114&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/geist-mono/400-italic.woff2?version=72932e&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/geist-mono/400-italic.woff?version=44f40d&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.6em}
 .push-double{margin-right:0.6em}

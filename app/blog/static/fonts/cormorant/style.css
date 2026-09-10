@@ -2,101 +2,71 @@
   font-family: 'Cormorant';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/300.eot?version=00b644&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/300.eot?version=00b644&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/cormorant/300.woff?version=3586cb&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/300.ttf?version=a5b2f2&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/300.otf?version=d65323&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/cormorant/300.woff2?version=6b0a83&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/cormorant/300.woff?version=3586cb&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Cormorant';
   font-style: italic;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/300-italic.eot?version=c67dae&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/300-italic.eot?version=c67dae&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/cormorant/300-italic.woff?version=cc8545&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/300-italic.ttf?version=e0651e&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/300-italic.otf?version=74c60b&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/cormorant/300-italic.woff2?version=55238f&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/cormorant/300-italic.woff?version=cc8545&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Cormorant';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/400.eot?version=22648e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/400.eot?version=22648e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/cormorant/400.woff?version=4c2656&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/400.ttf?version=4518fe&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/400.otf?version=cb3c40&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/cormorant/400.woff2?version=96057a&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/cormorant/400.woff?version=4c2656&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Cormorant';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/400-italic.eot?version=a0c51e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/400-italic.eot?version=a0c51e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/cormorant/400-italic.woff?version=078bc9&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/400-italic.ttf?version=e43ca3&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/400-italic.otf?version=e55cf7&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/cormorant/400-italic.woff2?version=17cd94&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/cormorant/400-italic.woff?version=078bc9&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Cormorant';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/500.eot?version=d1dfe9&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/500.eot?version=d1dfe9&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/cormorant/500.woff?version=56508f&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/500.ttf?version=cbad48&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/500.otf?version=feea2a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/cormorant/500.woff2?version=bbc43c&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/cormorant/500.woff?version=56508f&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Cormorant';
   font-style: italic;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/500-italic.eot?version=cd5cd3&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/500-italic.eot?version=cd5cd3&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/cormorant/500-italic.woff?version=e27003&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/500-italic.ttf?version=18fd7d&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/500-italic.otf?version=588157&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/cormorant/500-italic.woff2?version=4f83ef&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/cormorant/500-italic.woff?version=e27003&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Cormorant';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/600.eot?version=04cb3d&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/600.eot?version=04cb3d&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/cormorant/600.woff?version=b376e6&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/600.ttf?version=914078&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/600.otf?version=85e517&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/cormorant/600.woff2?version=6a38f8&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/cormorant/600.woff?version=b376e6&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Cormorant';
   font-style: italic;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/600-italic.eot?version=a50574&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/600-italic.eot?version=a50574&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/cormorant/600-italic.woff?version=933e89&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/600-italic.ttf?version=c0e266&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/600-italic.otf?version=8267f6&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/cormorant/600-italic.woff2?version=b32736&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/cormorant/600-italic.woff?version=933e89&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Cormorant';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/700.eot?version=f920f2&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/700.eot?version=f920f2&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/cormorant/700.woff?version=efc762&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/700.ttf?version=34af1a&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/700.otf?version=0f5f98&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/cormorant/700.woff2?version=f9e25f&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/cormorant/700.woff?version=efc762&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Cormorant';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/700-italic.eot?version=c585bd&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/cormorant/700-italic.eot?version=c585bd&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/cormorant/700-italic.woff?version=0db14e&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/700-italic.ttf?version=48e965&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/cormorant/700-italic.otf?version=0101d6&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/cormorant/700-italic.woff2?version=6f57ca&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/cormorant/700-italic.woff?version=0db14e&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.283em}
 .push-double{margin-right:0.283em}

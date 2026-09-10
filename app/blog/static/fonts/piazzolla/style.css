@@ -2,181 +2,127 @@
   font-family: 'Piazzolla';
   font-style: normal;
   font-weight: 100;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/100.eot?version=86c287&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/100.eot?version=86c287&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/100.woff?version=074fb2&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/100.ttf?version=10a144&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/100.otf?version=27df26&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/100.woff2?version=e676ca&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/100.woff?version=074fb2&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: italic;
   font-weight: 100;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/100-italic.eot?version=54424d&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/100-italic.eot?version=54424d&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/100-italic.woff?version=3c528f&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/100-italic.ttf?version=fb91df&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/100-italic.otf?version=ec8138&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/100-italic.woff2?version=a90af7&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/100-italic.woff?version=3c528f&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: normal;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/200.eot?version=dc6dba&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/200.eot?version=dc6dba&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/200.woff?version=5b35c1&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/200.ttf?version=efe274&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/200.otf?version=c3a8ae&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/200.woff2?version=a0aae8&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/200.woff?version=5b35c1&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: italic;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/200-italic.eot?version=2fedfb&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/200-italic.eot?version=2fedfb&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/200-italic.woff?version=8a6a56&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/200-italic.ttf?version=20b928&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/200-italic.otf?version=69f55c&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/200-italic.woff2?version=1ba9f8&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/200-italic.woff?version=8a6a56&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/300.eot?version=a85993&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/300.eot?version=a85993&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/300.woff?version=3add32&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/300.ttf?version=a9fcb6&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/300.otf?version=29676b&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/300.woff2?version=8263c6&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/300.woff?version=3add32&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: italic;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/300-italic.eot?version=1941da&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/300-italic.eot?version=1941da&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/300-italic.woff?version=e25408&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/300-italic.ttf?version=a51ebb&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/300-italic.otf?version=648ad3&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/300-italic.woff2?version=44b205&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/300-italic.woff?version=e25408&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/400.eot?version=b0bd57&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/400.eot?version=b0bd57&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/400.woff?version=f03248&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/400.ttf?version=dc41e8&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/400.otf?version=a65dbb&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/400.woff2?version=ad1fda&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/400.woff?version=f03248&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/400-italic.eot?version=874076&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/400-italic.eot?version=874076&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/400-italic.woff?version=bb0d08&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/400-italic.ttf?version=cb423b&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/400-italic.otf?version=5c48c0&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/400-italic.woff2?version=d16b62&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/400-italic.woff?version=bb0d08&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/500.eot?version=296d23&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/500.eot?version=296d23&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/500.woff?version=6dc932&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/500.ttf?version=94bc2d&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/500.otf?version=65d716&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/500.woff2?version=7c9c4a&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/500.woff?version=6dc932&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: italic;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/500-italic.eot?version=5de474&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/500-italic.eot?version=5de474&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/500-italic.woff?version=9ea9c2&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/500-italic.ttf?version=fb2bd7&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/500-italic.otf?version=d7e1a8&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/500-italic.woff2?version=58011d&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/500-italic.woff?version=9ea9c2&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/600.eot?version=dc8b0d&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/600.eot?version=dc8b0d&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/600.woff?version=133500&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/600.ttf?version=9dc174&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/600.otf?version=f6835a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/600.woff2?version=be272f&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/600.woff?version=133500&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: italic;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/600-italic.eot?version=387946&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/600-italic.eot?version=387946&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/600-italic.woff?version=177811&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/600-italic.ttf?version=234b9b&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/600-italic.otf?version=1fce37&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/600-italic.woff2?version=01d3e0&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/600-italic.woff?version=177811&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/700.eot?version=04e29e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/700.eot?version=04e29e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/700.woff?version=8f5018&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/700.ttf?version=742edd&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/700.otf?version=60102a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/700.woff2?version=bcbf7c&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/700.woff?version=8f5018&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/700-italic.eot?version=ea01d2&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/700-italic.eot?version=ea01d2&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/700-italic.woff?version=0ef66c&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/700-italic.ttf?version=c729d3&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/700-italic.otf?version=77e8bb&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/700-italic.woff2?version=74ab83&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/700-italic.woff?version=0ef66c&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: normal;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/800.eot?version=c64ec0&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/800.eot?version=c64ec0&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/800.woff?version=dcd8d9&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/800.ttf?version=9bdb92&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/800.otf?version=e0f312&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/800.woff2?version=89fa71&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/800.woff?version=dcd8d9&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: italic;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/800-italic.eot?version=1738bc&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/800-italic.eot?version=1738bc&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/800-italic.woff?version=5cbb8b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/800-italic.ttf?version=72f408&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/800-italic.otf?version=220e05&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/800-italic.woff2?version=2ab4bc&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/800-italic.woff?version=5cbb8b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: normal;
   font-weight: 900;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/900.eot?version=c82bd2&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/900.eot?version=c82bd2&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/900.woff?version=bce44a&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/900.ttf?version=4d7588&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/900.otf?version=16b348&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/900.woff2?version=a33008&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/900.woff?version=bce44a&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Piazzolla';
   font-style: italic;
   font-weight: 900;
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/900-italic.eot?version=a22852&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/900-italic.eot?version=a22852&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/900-italic.woff?version=dda3e9&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/900-italic.ttf?version=f35d00&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/piazzolla/900-italic.otf?version=5bcf3b&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/piazzolla/900-italic.woff2?version=291ab9&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/piazzolla/900-italic.woff?version=dda3e9&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.399em}
 .push-double{margin-right:0.399em}

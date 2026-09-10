@@ -2,41 +2,29 @@
   font-family: 'Computer Modern Sans';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/400.eot?version=106c1b&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/400.eot?version=106c1b&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/400.woff?version=028a5d&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/400.ttf?version=1b2457&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/400.otf?version=04054e&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/400.woff2?version=dc7980&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/400.woff?version=028a5d&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Computer Modern Sans';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/400-italic.eot?version=0c4285&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/400-italic.eot?version=0c4285&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/400-italic.woff?version=c96cf7&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/400-italic.ttf?version=67cbb1&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/400-italic.otf?version=8fbfb9&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/400-italic.woff2?version=318e61&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/400-italic.woff?version=c96cf7&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Computer Modern Sans';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700.eot?version=6c3170&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700.eot?version=6c3170&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700.woff?version=8686bb&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700.ttf?version=98a6bd&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700.otf?version=924c75&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700.woff2?version=6cb853&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700.woff?version=8686bb&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Computer Modern Sans';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700-italic.eot?version=152dee&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700-italic.eot?version=152dee&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700-italic.woff?version=c96053&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700-italic.ttf?version=ff6e72&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700-italic.otf?version=8e3426&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700-italic.woff2?version=8bf417&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700-italic.woff?version=c96053&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.5em}
 .push-double{margin-right:0.5em}

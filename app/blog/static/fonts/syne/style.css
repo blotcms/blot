@@ -2,51 +2,36 @@
   font-family: 'Syne';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/syne/400.eot?version=0bba7d&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/syne/400.eot?version=0bba7d&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/syne/400.woff?version=52bee3&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/syne/400.ttf?version=fa217a&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/syne/400.otf?version=180099&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/syne/400.woff2?version=71eba5&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/syne/400.woff?version=52bee3&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Syne';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/syne/500.eot?version=f50c6b&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/syne/500.eot?version=f50c6b&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/syne/500.woff?version=5fea81&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/syne/500.ttf?version=f3b944&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/syne/500.otf?version=f95e75&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/syne/500.woff2?version=5cb420&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/syne/500.woff?version=5fea81&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Syne';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/syne/600.eot?version=67fcbc&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/syne/600.eot?version=67fcbc&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/syne/600.woff?version=8863de&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/syne/600.ttf?version=f4eb54&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/syne/600.otf?version=b1a561&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/syne/600.woff2?version=4dc210&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/syne/600.woff?version=8863de&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Syne';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/syne/700.eot?version=6f5d0c&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/syne/700.eot?version=6f5d0c&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/syne/700.woff?version=c9911b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/syne/700.ttf?version=57467f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/syne/700.otf?version=11294e&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/syne/700.woff2?version=20b0bd&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/syne/700.woff?version=c9911b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Syne';
   font-style: normal;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/syne/800.eot?version=9d4c70&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/syne/800.eot?version=9d4c70&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/syne/800.woff?version=644b14&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/syne/800.ttf?version=902cb2&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/syne/800.otf?version=b4e96c&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/syne/800.woff2?version=e0a39d&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/syne/800.woff?version=644b14&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.315em}
 .push-double{margin-right:0.315em}

@@ -2,21 +2,15 @@
   font-family: 'Fondamento';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/fondamento/400.eot?version=1e55eb&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fondamento/400.eot?version=1e55eb&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fondamento/400.woff?version=a5d58d&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fondamento/400.ttf?version=bd1c8b&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fondamento/400.otf?version=fd8ad2&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fondamento/400.woff2?version=967941&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fondamento/400.woff?version=a5d58d&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Fondamento';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/fondamento/400-italic.eot?version=93897a&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/fondamento/400-italic.eot?version=93897a&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/fondamento/400-italic.woff?version=1589c5&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/fondamento/400-italic.ttf?version=d9066a&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/fondamento/400-italic.otf?version=0560a4&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/fondamento/400-italic.woff2?version=55ef94&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/fondamento/400-italic.woff?version=1589c5&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.34130859375em}
 .push-double{margin-right:0.34130859375em}

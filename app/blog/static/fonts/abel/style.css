@@ -2,11 +2,8 @@
   font-family: 'Abel';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/abel/400.eot?version=0f3258&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/abel/400.eot?version=0f3258&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/abel/400.woff?version=c7b093&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/abel/400.ttf?version=1052d6&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/abel/400.otf?version=d8906d&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/abel/400.woff2?version=49b556&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/abel/400.woff?version=c7b093&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.31494140625em}
 .push-double{margin-right:0.31494140625em}

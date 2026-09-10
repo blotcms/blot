@@ -2,31 +2,22 @@
   font-family: 'D Din';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/d-din/400.eot?version=05d4ee&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/d-din/400.eot?version=05d4ee&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/d-din/400.woff?version=599144&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/d-din/400.ttf?version=7e9a67&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/d-din/400.otf?version=d68d86&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/d-din/400.woff2?version=1823e3&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/d-din/400.woff?version=599144&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'D Din';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/d-din/400-italic.eot?version=a8fb9c&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/d-din/400-italic.eot?version=a8fb9c&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/d-din/400-italic.woff?version=8a8e4a&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/d-din/400-italic.ttf?version=e6252b&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/d-din/400-italic.otf?version=0861fb&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/d-din/400-italic.woff2?version=ea3d53&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/d-din/400-italic.woff?version=8a8e4a&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'D Din';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/d-din/700.eot?version=f9f40d&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/d-din/700.eot?version=f9f40d&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/d-din/700.woff?version=397fcf&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/d-din/700.ttf?version=bab8f3&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/d-din/700.otf?version=c352e7&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/d-din/700.woff2?version=62f850&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/d-din/700.woff?version=397fcf&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.308em}
 .push-double{margin-right:0.308em}

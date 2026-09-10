@@ -2,41 +2,29 @@
   font-family: 'Space Mono';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/space-mono/400.eot?version=c12152&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/space-mono/400.eot?version=c12152&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/space-mono/400.woff?version=3aa6f6&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/space-mono/400.ttf?version=96985f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/space-mono/400.otf?version=554332&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/space-mono/400.woff2?version=904e72&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/space-mono/400.woff?version=3aa6f6&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Space Mono';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/space-mono/400-italic.eot?version=ad20f0&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/space-mono/400-italic.eot?version=ad20f0&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/space-mono/400-italic.woff?version=126c33&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/space-mono/400-italic.ttf?version=2cdd33&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/space-mono/400-italic.otf?version=86d908&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/space-mono/400-italic.woff2?version=8291ec&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/space-mono/400-italic.woff?version=126c33&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Space Mono';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/space-mono/700.eot?version=a51ae2&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/space-mono/700.eot?version=a51ae2&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/space-mono/700.woff?version=4998a3&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/space-mono/700.ttf?version=40878d&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/space-mono/700.otf?version=cc31a6&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/space-mono/700.woff2?version=0f7a1e&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/space-mono/700.woff?version=4998a3&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Space Mono';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/space-mono/700-italic.eot?version=189217&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/space-mono/700-italic.eot?version=189217&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/space-mono/700-italic.woff?version=10a85f&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/space-mono/700-italic.ttf?version=c12bcb&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/space-mono/700-italic.otf?version=80ce2a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/space-mono/700-italic.woff2?version=2a9713&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/space-mono/700-italic.woff?version=10a85f&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.612em}
 .push-double{margin-right:0.612em}

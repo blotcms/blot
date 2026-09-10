@@ -2,141 +2,99 @@
   font-family: 'Karla';
   font-style: normal;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/karla/200.eot?version=e7259d&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/karla/200.eot?version=e7259d&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/karla/200.woff?version=e78705&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/karla/200.ttf?version=0b928d&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/karla/200.otf?version=465c5a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/karla/200.woff2?version=7f40f7&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/karla/200.woff?version=e78705&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Karla';
   font-style: italic;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/karla/200-italic.eot?version=4e576b&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/karla/200-italic.eot?version=4e576b&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/karla/200-italic.woff?version=d76730&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/karla/200-italic.ttf?version=f88057&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/karla/200-italic.otf?version=5e4e81&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/karla/200-italic.woff2?version=0a4abc&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/karla/200-italic.woff?version=d76730&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Karla';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/karla/300.eot?version=f3b14b&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/karla/300.eot?version=f3b14b&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/karla/300.woff?version=8030e1&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/karla/300.ttf?version=a11615&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/karla/300.otf?version=1820e2&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/karla/300.woff2?version=5f29df&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/karla/300.woff?version=8030e1&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Karla';
   font-style: italic;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/karla/300-italic.eot?version=2f4784&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/karla/300-italic.eot?version=2f4784&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/karla/300-italic.woff?version=b821c0&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/karla/300-italic.ttf?version=2de582&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/karla/300-italic.otf?version=5f2f1d&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/karla/300-italic.woff2?version=eee005&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/karla/300-italic.woff?version=b821c0&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Karla';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/karla/400.eot?version=aadb06&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/karla/400.eot?version=aadb06&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/karla/400.woff?version=a4c35a&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/karla/400.ttf?version=871b31&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/karla/400.otf?version=d09e4d&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/karla/400.woff2?version=b20c8d&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/karla/400.woff?version=a4c35a&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Karla';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/karla/400-italic.eot?version=1314d1&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/karla/400-italic.eot?version=1314d1&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/karla/400-italic.woff?version=209d17&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/karla/400-italic.ttf?version=fef8a5&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/karla/400-italic.otf?version=9052ba&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/karla/400-italic.woff2?version=1b4790&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/karla/400-italic.woff?version=209d17&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Karla';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/karla/500.eot?version=76a505&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/karla/500.eot?version=76a505&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/karla/500.woff?version=90eda6&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/karla/500.ttf?version=b2df7a&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/karla/500.otf?version=bd921a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/karla/500.woff2?version=13ae0d&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/karla/500.woff?version=90eda6&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Karla';
   font-style: italic;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/karla/500-italic.eot?version=f20067&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/karla/500-italic.eot?version=f20067&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/karla/500-italic.woff?version=24e1ff&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/karla/500-italic.ttf?version=e55db7&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/karla/500-italic.otf?version=75c907&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/karla/500-italic.woff2?version=60ea87&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/karla/500-italic.woff?version=24e1ff&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Karla';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/karla/600.eot?version=f0704a&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/karla/600.eot?version=f0704a&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/karla/600.woff?version=02496b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/karla/600.ttf?version=6ef19b&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/karla/600.otf?version=b7f737&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/karla/600.woff2?version=a49118&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/karla/600.woff?version=02496b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Karla';
   font-style: italic;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/karla/600-italic.eot?version=4084de&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/karla/600-italic.eot?version=4084de&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/karla/600-italic.woff?version=36ad24&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/karla/600-italic.ttf?version=d792c4&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/karla/600-italic.otf?version=5f2bc4&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/karla/600-italic.woff2?version=3cab21&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/karla/600-italic.woff?version=36ad24&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Karla';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/karla/700.eot?version=358c9d&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/karla/700.eot?version=358c9d&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/karla/700.woff?version=6d400f&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/karla/700.ttf?version=886c86&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/karla/700.otf?version=ee4b3a&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/karla/700.woff2?version=7ea767&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/karla/700.woff?version=6d400f&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Karla';
   font-style: italic;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/karla/700-italic.eot?version=b00584&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/karla/700-italic.eot?version=b00584&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/karla/700-italic.woff?version=9d0ebd&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/karla/700-italic.ttf?version=a54dac&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/karla/700-italic.otf?version=7f84a4&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/karla/700-italic.woff2?version=6452d9&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/karla/700-italic.woff?version=9d0ebd&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Karla';
   font-style: normal;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/karla/800.eot?version=f30c7e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/karla/800.eot?version=f30c7e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/karla/800.woff?version=d8814d&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/karla/800.ttf?version=b025bf&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/karla/800.otf?version=b71c2c&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/karla/800.woff2?version=990ca7&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/karla/800.woff?version=d8814d&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Karla';
   font-style: italic;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/karla/800-italic.eot?version=dcd34e&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/karla/800-italic.eot?version=dcd34e&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/karla/800-italic.woff?version=b9d749&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/karla/800-italic.ttf?version=914610&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/karla/800-italic.otf?version=a35f84&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/karla/800-italic.woff2?version=7eb308&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/karla/800-italic.woff?version=b9d749&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.3045em}
 .push-double{margin-right:0.3045em}

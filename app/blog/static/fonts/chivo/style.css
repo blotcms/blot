@@ -2,21 +2,15 @@
   font-family: 'Chivo';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/chivo/400.eot?version=9ae571&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/chivo/400.eot?version=9ae571&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/chivo/400.woff?version=5c7ac5&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/chivo/400.ttf?version=da67b3&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/chivo/400.otf?version=22dcb6&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/chivo/400.woff2?version=014fcb&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/chivo/400.woff?version=5c7ac5&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Chivo';
   font-style: italic;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/chivo/400-italic.eot?version=5ab3ad&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/chivo/400-italic.eot?version=5ab3ad&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/chivo/400-italic.woff?version=073c14&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/chivo/400-italic.ttf?version=38d4c8&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/chivo/400-italic.otf?version=567eda&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/chivo/400-italic.woff2?version=b97d92&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/chivo/400-italic.woff?version=073c14&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.395em}
 .push-double{margin-right:0.395em}

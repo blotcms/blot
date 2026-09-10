@@ -2,91 +2,64 @@
   font-family: 'Inter';
   font-style: normal;
   font-weight: 100;
-  src: url('{{{config.cdn.origin}}}/fonts/inter/100.eot?version=18d3c5&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inter/100.eot?version=18d3c5&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inter/100.woff?version=bf4b35&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inter/100.ttf?version=2dce62&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inter/100.otf?version=02d287&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inter/100.woff2?version=6b5f81&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inter/100.woff?version=bf4b35&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inter';
   font-style: normal;
   font-weight: 200;
-  src: url('{{{config.cdn.origin}}}/fonts/inter/200.eot?version=2522ee&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inter/200.eot?version=2522ee&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inter/200.woff?version=86fc46&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inter/200.ttf?version=0f3ac0&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inter/200.otf?version=066735&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inter/200.woff2?version=2ad1e0&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inter/200.woff?version=86fc46&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inter';
   font-style: normal;
   font-weight: 300;
-  src: url('{{{config.cdn.origin}}}/fonts/inter/300.eot?version=13035c&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inter/300.eot?version=13035c&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inter/300.woff?version=37407b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inter/300.ttf?version=d55f45&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inter/300.otf?version=e63158&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inter/300.woff2?version=d74a51&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inter/300.woff?version=37407b&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inter';
   font-style: normal;
   font-weight: 400;
-  src: url('{{{config.cdn.origin}}}/fonts/inter/400.eot?version=4884e9&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inter/400.eot?version=4884e9&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inter/400.woff?version=fefd3f&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inter/400.ttf?version=079af0&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inter/400.otf?version=682f47&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inter/400.woff2?version=5c5ffc&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inter/400.woff?version=fefd3f&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inter';
   font-style: normal;
   font-weight: 500;
-  src: url('{{{config.cdn.origin}}}/fonts/inter/500.eot?version=df6d95&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inter/500.eot?version=df6d95&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inter/500.woff?version=414e44&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inter/500.ttf?version=ed5338&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inter/500.otf?version=9473a6&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inter/500.woff2?version=0f820d&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inter/500.woff?version=414e44&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inter';
   font-style: normal;
   font-weight: 600;
-  src: url('{{{config.cdn.origin}}}/fonts/inter/600.eot?version=c936e5&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inter/600.eot?version=c936e5&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inter/600.woff?version=c10506&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inter/600.ttf?version=07a48b&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inter/600.otf?version=7bc3f4&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inter/600.woff2?version=378896&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inter/600.woff?version=c10506&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inter';
   font-style: normal;
   font-weight: 700;
-  src: url('{{{config.cdn.origin}}}/fonts/inter/700.eot?version=e5e202&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inter/700.eot?version=e5e202&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inter/700.woff?version=97523d&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inter/700.ttf?version=275bfe&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inter/700.otf?version=433098&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inter/700.woff2?version=904606&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inter/700.woff?version=97523d&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inter';
   font-style: normal;
   font-weight: 800;
-  src: url('{{{config.cdn.origin}}}/fonts/inter/800.eot?version=bbd26a&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inter/800.eot?version=bbd26a&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inter/800.woff?version=d9823d&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inter/800.ttf?version=c9709f&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inter/800.otf?version=a82be6&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inter/800.woff2?version=e13aff&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inter/800.woff?version=d9823d&extension=.woff') format('woff');
 }
 @font-face {
   font-family: 'Inter';
   font-style: normal;
   font-weight: 900;
-  src: url('{{{config.cdn.origin}}}/fonts/inter/900.eot?version=7b4c3f&extension=.eot'); 
-  src: url('{{{config.cdn.origin}}}/fonts/inter/900.eot?version=7b4c3f&extension=.eot#iefix') format('embedded-opentype'), 
-       url('{{{config.cdn.origin}}}/fonts/inter/900.woff?version=08067b&extension=.woff') format('woff'),
-       url('{{{config.cdn.origin}}}/fonts/inter/900.ttf?version=980c7e&extension=.ttf') format('truetype'),
-       url('{{{config.cdn.origin}}}/fonts/inter/900.otf?version=2e4e0b&extension=.otf') format('opentype');
+  src: url('{{{config.cdn.origin}}}/fonts/inter/900.woff2?version=e78b54&extension=.woff2') format('woff2'),
+       url('{{{config.cdn.origin}}}/fonts/inter/900.woff?version=08067b&extension=.woff') format('woff');
 }
 .pull-double {margin-left:-0.4034090909090909em}
 .push-double{margin-right:0.4034090909090909em}
