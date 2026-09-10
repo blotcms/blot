@@ -8,6 +8,10 @@ var sharp = require("sharp");
 var mime = require("mime-types");
 var callOnce = require("helper/callOnce");
 var assetDirectory = require("./asset_directory");
+// Imported HTML can reference arbitrary, user-controlled image URLs, so route
+// the download through the airlock's forward proxy (SSRF egress boundary)
+// rather than the app container's direct network. Fails closed in production.
+var fetch = require("helper/airlock").fetch;
 
 // Consider using this algorithm to determine best part of alt tag or caption to use
 // as the file's name:
@@ -36,7 +40,7 @@ function download(url, _callback) {
     callback(new Error("Timeout: >10s downloading " + url));
   }, TIMEOUT);
 
-  fetch(url)
+  fetch(url, { airlockLabel: "import/download_images" })
     .then(function (res) {
       if (!res.ok) {
         throw new Error("Bad status code: " + res.status);
