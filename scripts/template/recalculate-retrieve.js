@@ -72,14 +72,29 @@ if (require.main === module) {
 function parseArgs(argv) {
   var options = { dryRun: false, concurrency: DEFAULT_CONCURRENCY };
 
-  (argv || []).forEach(function (arg) {
+  argv = argv || [];
+
+  for (var i = 0; i < argv.length; i++) {
+    var arg = argv[i];
+
     if (arg === "--dry-run" || arg === "-n") {
       options.dryRun = true;
     } else if (arg.indexOf("--concurrency=") === 0) {
       var n = parseInt(arg.slice("--concurrency=".length), 10);
       if (n > 0) options.concurrency = n;
+    } else if (arg === "-r" || arg === "--reverse") {
+      // Walk blogs newest-first (see scripts/each/blog.js option `r`).
+      options.reverse = true;
+    } else if (arg === "-s" || arg === "--start") {
+      // Skip ahead to the Nth blog - 1-based position in the id list, matching
+      // scripts/each/blog.js option `s` - so an interrupted run can resume.
+      var s = parseInt(argv[++i], 10);
+      if (s > 0) options.start = s;
+    } else if (arg.indexOf("--start=") === 0) {
+      var sEq = parseInt(arg.slice("--start=".length), 10);
+      if (sEq > 0) options.start = sEq;
     }
-  });
+  }
 
   return options;
 }
@@ -103,6 +118,13 @@ function main(options, callback) {
   var dryRun = options.dryRun === true;
   var concurrency =
     options.concurrency > 0 ? options.concurrency : DEFAULT_CONCURRENCY;
+
+  // Passed straight through to scripts/each/blog.js: `s` starts at the Nth blog
+  // (1-based), `r` reverses the iteration order. SITE:* templates are always
+  // processed in full afterwards regardless of these.
+  var eachBlogOptions = { c: concurrency };
+  if (options.start > 0) eachBlogOptions.s = options.start;
+  if (options.reverse) eachBlogOptions.r = true;
 
   var stats = {
     updated: 0,
@@ -179,7 +201,7 @@ function main(options, callback) {
           }
         );
       },
-      { c: concurrency }
+      eachBlogOptions
     );
   }
 
