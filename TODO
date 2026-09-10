@@ -2,6 +2,8 @@ Run this in prod: node scripts/template/recalculate-retrieve.js
 
 ---
 
+resolve cloudflare fail2ban issuye 
+
 Clean up retrieve-metadata migration code once recalculate-retrieve has run
 
 Context: "Store entry fields in template retrieve metadata" (00d195709) taught
