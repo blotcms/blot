@@ -26,12 +26,15 @@ on:
   pull_request:
     paths:
       - "app/templates/source/**"
+      - "app/templates/folders/**"
 
 jobs:
-  # Figures out which template(s) a pull request touched, so the screenshot
-  # job below only re-renders those templates' previews instead of every
-  # template. Skipped entirely for workflow_dispatch, which picks its
-  # templates from the "templates" input instead.
+  # Figures out which template previews a pull request touched, so the
+  # screenshot job below only re-renders those previews instead of every
+  # template. A demo folder can be shared by several templates, so a change
+  # there selects each template that uses that folder. Skipped entirely for
+  # workflow_dispatch, which picks its templates from the "templates" input
+  # instead.
   detect-templates:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -47,12 +50,58 @@ jobs:
       - name: Detect changed templates
         id: detect
         run: |
-          templates=$(git diff --name-only \
-              "${{ github.event.pull_request.base.sha }}" \
-              "${{ github.event.pull_request.head.sha }}" \
-              -- app/templates/source |
-            sed -E 's#^app/templates/source/([^/]+)/.*#\1#' |
-            sort -u | paste -sd, -)
+          changed_files=$(mktemp)
+          # Treat a move as a deletion and an addition. Rename detection would
+          # report only the destination path, leaving previews which use the
+          # source demo folder stale.
+          git diff --no-renames --name-only \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}" \
+            -- app/templates/source app/templates/folders > "$changed_files"
+
+          templates=$(node - "$changed_files" <<'NODE'
+          const fs = require("fs");
+          const path = require("path");
+
+          const changed = fs
+            .readFileSync(process.argv[2], "utf8")
+            .split("\n")
+            .filter(Boolean);
+          const templates = new Set();
+          const folders = new Set();
+          let allTemplates = false;
+
+          for (const file of changed) {
+            const template = file.match(/^app\/templates\/source\/([^/]+)\//);
+            if (template) {
+              templates.add(template[1]);
+              continue;
+            }
+
+            const folder = file.match(/^app\/templates\/folders\/([^/]+)\//);
+            if (folder) {
+              folders.add(folder[1]);
+            } else {
+              // Changes to the folder builder itself can affect every demo
+              // blog, so every preview needs to be refreshed.
+              allTemplates = true;
+            }
+          }
+
+          const source = "app/templates/source";
+          for (const template of fs.readdirSync(source)) {
+            const packagePath = path.join(source, template, "package.json");
+            if (!fs.existsSync(packagePath)) continue;
+
+            const pkg = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+            const folder = (pkg.locals && pkg.locals.demo_folder) || "david";
+            if (allTemplates || folders.has(folder)) templates.add(template);
+          }
+
+          console.log([...templates].sort().join(","));
+          NODE
+          )
+          rm "$changed_files"
           echo "Changed templates: $templates"
           echo "templates=$templates" >> "$GITHUB_OUTPUT"
 
