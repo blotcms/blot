@@ -13,7 +13,8 @@ module.exports = function eachBlogOrOneBlog(processBlog) {
   const identifier = process.argv[2];
 
   if (identifier) {
-    // Process a single blog
+    // Process a single blog. getBlog owns identifier resolution, including
+    // shortened IDs; in contrast, each/blog.js's -o option requires full IDs.
     return new Promise((resolve, reject) => {
       getBlog(identifier, (err, _user, blog) => {
         if (err || !blog) {
@@ -74,4 +75,3 @@ module.exports = function eachBlogOrOneBlog(processBlog) {
     });
   }
 };
-
