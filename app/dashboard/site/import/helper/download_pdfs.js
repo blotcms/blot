@@ -5,6 +5,10 @@ var each_el = require("./each_el");
 var fs = require("fs-extra");
 var callOnce = require("helper/callOnce");
 var assetDirectory = require("./asset_directory");
+// Imported HTML can reference arbitrary, user-controlled PDF URLs, so route
+// the download through the airlock's forward proxy (SSRF egress boundary)
+// rather than the app container's direct network. Fails closed in production.
+var fetch = require("helper/airlock").fetch;
 
 var TIMEOUT = 5 * 1000; // 10s
 
@@ -30,7 +34,7 @@ function download(url, _callback) {
     callback(new Error("Timeout: >10s downloading " + url));
   }, TIMEOUT);
 
-  fetch(url)
+  fetch(url, { airlockLabel: "import/download_pdfs" })
     .then(function (res) {
       if (!res.ok) {
         return callback(new Error("Bad status code: " + res.status));

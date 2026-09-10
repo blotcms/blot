@@ -1,4 +1,16 @@
-resolve cloudflare fail2ban issuye 
+Remove the template slug-divergence migration once PR #1775 is merged and
+`node scripts/template/fix-divergent-slugs.js --apply` has run against every
+blog — including disabled ones, after they are re-enabled (the script reports
+these separately and prints the rerun command). Then delete
+scripts/template/fix-divergent-slugs.js,
+app/models/template/util/repairDivergentSlug.js and its spec
+app/models/template/tests/repairDivergentSlug.js. Nothing else imports them.
+The #1749 forward fix (models/template/create.js + util/slugForName.js) stays
+— it is what stops new divergent records being created.
+
+---
+
+resolve cloudflare fail2ban issuye
 
 node scripts/entry/backfill-hashes.js -s 472
 

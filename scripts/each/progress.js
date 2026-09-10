@@ -12,7 +12,12 @@
 // Because template.js -> blog.js and view.js -> template.js, the frames
 // nest on their own and the status line reads
 //
-//   Blog (23/1500)  Template (1/4)  View (7/12)
+//   42%  Blog blog_1234567 (23/55)  Template (1/4)  View (7/12)
+//
+// A frame may opt into the leading percentage and may set contextual display
+// data (the item currently in flight and its one-based index) independently of
+// its completed-item index. Percentages are rounded to the nearest whole
+// number with Math.round; an empty total is displayed as 0%.
 //
 // On a TTY the line is pinned to the bottom and redrawn after anything the
 // script logs, so it survives stdout scrolling past. When stdout is not a
@@ -47,10 +52,35 @@ var redrawTimer = null;
 var lastFallback = 0;
 
 function format() {
-  return frames
+  var percentageFrame = frames.filter(function (f) {
+    return f.percentage;
+  })[0];
+  var prefix = "";
+
+  if (percentageFrame) {
+    var percentageIndex =
+      percentageFrame.context.index == null
+        ? percentageFrame.index
+        : percentageFrame.context.index;
+    var percentage = percentageFrame.total
+      ? Math.round((percentageIndex / percentageFrame.total) * 100)
+      : 0;
+    prefix = percentage + "%  ";
+  }
+
+  return prefix + frames
     .map(function (f) {
+      var displayIndex =
+        f.context.index == null ? f.index : f.context.index;
+      var detail = f.context.detail ? " " + f.context.detail : "";
       return (
-        f.label + " (" + f.index + "/" + (f.total == null ? "?" : f.total) + ")"
+        f.label +
+        detail +
+        " (" +
+        displayIndex +
+        "/" +
+        (f.total == null ? "?" : f.total) +
+        ")"
       );
     })
     .join("  ");
@@ -132,10 +162,20 @@ function onChange(force) {
   else if (fallback) maybeFallbackLog(force);
 }
 
-// push(label[, total]) -> handle. total may be null/undefined when unknown;
-// call handle.setTotal(n) later once it is known.
-function push(label, total) {
-  var frame = { label: label, index: 0, total: total == null ? null : total };
+// push(label[, total[, options]]) -> handle. total may be null/undefined when
+// unknown; call handle.setTotal(n) later once it is known. Pass
+// { percentage: true } to prefix the whole nested status with this frame's
+// progress. setContext({ detail, index }) identifies an active item without
+// changing the completed-item count advanced by tick().
+function push(label, total, options) {
+  options = options || {};
+  var frame = {
+    label: label,
+    index: 0,
+    total: total == null ? null : total,
+    percentage: !!options.percentage,
+    context: {},
+  };
   frames.push(frame);
   install();
   // Show the 0/N state right away, so a slow or hanging first item still
@@ -155,6 +195,11 @@ function push(label, total) {
     },
     setTotal: function (n) {
       frame.total = n;
+      onChange(false);
+      return handle;
+    },
+    setContext: function (context) {
+      frame.context = context || {};
       onChange(false);
       return handle;
     },
