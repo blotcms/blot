@@ -1,5 +1,7 @@
 resolve cloudflare fail2ban issuye 
 
+node scripts/entry/backfill-hashes.js -s 472
+
 ---
 
 Debug issue with warwickmostyn
