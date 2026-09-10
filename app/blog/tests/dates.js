@@ -243,28 +243,34 @@ describe("dates", function () {
     });
     await this.blog.update({ timeZone: "Asia/Tokyo" });
 
-    // When you remove date from metadata, it should use created date adjusted for timezone
+    // When you remove date from metadata, it should use the created date
+    // adjusted for timezone. The "created" timestamp is assigned during the
+    // build, some time after createTime, so the minute can roll over between
+    // the two - accept any minute in the [createTime, afterCreateTime] window.
     const createTime = Date.now();
     await this.write({ path: "/a.txt", content: "Foo" });
+    const afterCreateTime = Date.now();
+
+    const acceptableMinutes = (zone) => {
+      const values = [];
+      for (
+        let t = moment.utc(createTime).startOf("minute");
+        t.valueOf() <= afterCreateTime;
+        t.add(1, "minute")
+      ) {
+        values.push(t.clone().tz(zone).format("YYYY-MM-DD HH:mm"));
+      }
+      return values;
+    };
 
     // In Tokyo timezone, created date should be adjusted accordingly
-    const createdDateTokyo = moment
-      .utc(createTime)
-      .tz("Asia/Tokyo")
-      .format("YYYY-MM-DD HH:mm");
-
-    expect(await this.text("/")).toBe(createdDateTokyo);
+    expect(acceptableMinutes("Asia/Tokyo")).toContain(await this.text("/"));
 
     // Change timezone to America/New_York
     await this.blog.update({ timeZone: "America/New_York" });
     await this.blog.rebuild();
 
-    const createdDateNY = moment
-      .utc(createTime)
-      .tz("America/New_York")
-      .format("YYYY-MM-DD HH:mm");
-
-    expect(await this.text("/")).toBe(createdDateNY);
+    expect(acceptableMinutes("America/New_York")).toContain(await this.text("/"));
 
     // However, when you use a date in metadata, it should remain constant regardless of timezone
     await this.write({
