@@ -89,6 +89,7 @@ Retrieves one or more named lists in a single call.
 
 Retrieves all entries including deleted ones (reads from the `all` list). Returns skinny entry objects by default (`options.skinny` defaults to `true`).
 
+- `options.fields` — optional array of entry property names, forwarded to `Entry.get`. When `config.redis.readEntriesFromHash` is on this narrows the read to just those fields (plus `id`) from each entry's Redis hash instead of the whole entry, which keeps list/archive pages from loading every entry's rendered HTML; while it is off `Entry.get` ignores it. Undefined means "whole entry". See `app/blog/render/retrieve/helpers/entryFieldList.js` for how the render pipeline derives this from template retrieve metadata.
 - `callback(entries)` — array of `Entry` instances.
 
 ### `getAllIDs(blogID, callback)`
@@ -110,10 +111,11 @@ Returns the IDs of entries in a named list.
 - `options.first` — if set, limits results to the first `N` IDs.
 - `callback(err, ids)` — array of string IDs in reverse-score order.
 
-### `getRecent(blogID, callback)`
+### `getRecent(blogID, [options,] callback)`
 
 Returns the 31 most recently published entries (index range `0..30` from the `entries` list) with `index` properties attached.
 
+- `options.fields` — optional array of entry property names, forwarded to `Entry.get` (see `getAll`).
 - `callback(entries)` — array of `Entry` instances.
 
 ### `getCreated(blogID, after, callback)`
