@@ -16,6 +16,7 @@ var ERROR = require("../../blog/render/error");
 var updateCdnManifest = require("./util/updateCdnManifest");
 var serializeRedisHashValues = require("models/redisHashSerializer");
 var clfdate = require("helper/clfdate");
+var applyUserRetrieveOptions = require("./util/applyUserRetrieveOptions");
 const MAX_VIEW_PAYLOAD_SIZE = 2 * 1024 * 1024;
 
 module.exports = function setView(templateID, updates, options, callback) {
@@ -390,65 +391,6 @@ module.exports = function setView(templateID, updates, options, callback) {
 		}).catch(callback);
 	});
 };
-
-var USER_RETRIEVE_KEYS = ["includeDraft", "filters"];
-
-function applyUserRetrieveOptions(parsedRetrieve, requestedRetrieve, existingRetrieve) {
-	var result = {};
-
-	extend(result).and(parsedRetrieve || {});
-
-	// The parser is authoritative for locals it can see in the content, but it
-	// can't see a dependency reached indirectly - e.g. a view whose
-	// locals.snippet is "{{latest_entry.title}}" and content is "{{{snippet}}}"
-	// still needs retrieve.latest_entry. Carry over any real retrieve local
-	// (one blot knows how to fetch) that the caller or the stored view asked
-	// for. Non-local keys (stale output from an older parser, internal
-	// __sentinels) are dropped - they fetch nothing.
-	[requestedRetrieve, existingRetrieve].forEach(function (source) {
-		if (!source) return;
-		Object.keys(source).forEach(function (key) {
-			if (key.indexOf("__") === 0) return;
-			if (!parseTemplate.isSystemRetrieveLocal(key)) return;
-
-			var sourceVal = source[key];
-
-			if (result[key] === undefined) {
-				result[key] = sourceVal;
-			} else if (type(result[key], "array") && type(sourceVal, "array")) {
-				// `cdn` is an array dependency - union the targets so an
-				// explicit/stored entry (e.g. a target reached indirectly)
-				// survives alongside the parser's. updateCdnManifest builds
-				// the manifest purely from this persisted array.
-				result[key] = [...new Set(result[key].concat(sourceVal))].sort();
-			} else if (type(result[key], "object") && type(sourceVal, "object")) {
-				// Both structured (e.g. plugin.katex.css from content plus an
-				// explicit plugin.zoom.js needed by a local): keep the parser's
-				// leaves, fold in the extra nested requests.
-				extend(result[key]).and(sourceVal);
-			}
-			// else: parser produced a value and the explicit one is a bare
-			// boolean (or vice versa) - the parser wins (see the setView
-			// stale-boolean tests).
-		});
-	});
-
-	USER_RETRIEVE_KEYS.forEach(function (key) {
-		var value;
-
-		if (requestedRetrieve && requestedRetrieve[key] !== undefined) {
-			value = requestedRetrieve[key];
-		} else if (existingRetrieve && existingRetrieve[key] !== undefined) {
-			value = existingRetrieve[key];
-		}
-
-		if (value !== undefined) {
-			result[key] = value;
-		}
-	});
-
-	return result;
-}
 
 function detectInfinitePartialDependency(
 	templateID,

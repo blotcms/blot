@@ -61,6 +61,17 @@ module.exports = function (doThis, allDone, options) {
 
     if (options.p) {
       forEach = async.each;
+    } else if (options.c && parseInt(options.c, 10) > 1) {
+      // Bounded concurrency: overlap the per-blog Redis reads without the
+      // unbounded fan-out of options.p. The nested progress line (Blog x
+      // Template x View) assumes one blog in flight at a time, so with
+      // options.c it only tracks the blog frame reliably - acceptable for a
+      // one-off migration where throughput matters more than a tidy status
+      // line.
+      var limit = parseInt(options.c, 10);
+      forEach = function (items, iterator, cb) {
+        async.eachLimit(items, limit, iterator, cb);
+      };
     }
 
     var bar = progress.push("Blog", blogIDs.length);
