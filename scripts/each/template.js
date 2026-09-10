@@ -2,17 +2,26 @@ var eachBlog = require("./blog");
 var Template = require("models/template");
 var async = require("async");
 var config = require("../../config");
+var progress = require("./progress");
 
 module.exports = function (doThis, callback) {
   eachBlog(function (user, blog, nextBlog) {
     Template.getTemplateList(blog.id, function (err, templates) {
       if (err) throw err;
 
+      var owned = (templates || []).filter(function (template) {
+        return template.owner === blog.id;
+      });
+
+      var bar = progress.push("Template", owned.length);
+
       async.eachSeries(
-        templates,
-        function (template, nextTemplate) {
-          // Only manipulate templates owned by the blog
-          if (template.owner !== blog.id) return nextTemplate();
+        owned,
+        function (template, done) {
+          var nextTemplate = function (err) {
+            bar.tick();
+            done(err);
+          };
 
           // console.log();
           // console.log(
@@ -30,7 +39,10 @@ module.exports = function (doThis, callback) {
 
           doThis(user, blog, template, nextTemplate);
         },
-        nextBlog
+        function (err) {
+          bar.pop();
+          nextBlog(err);
+        }
       );
     });
   }, callback);

@@ -3,6 +3,7 @@ var Blog = require("models/blog");
 var async = require("async");
 var type = require("helper/type");
 var ensure = require("helper/ensure");
+var progress = require("./progress");
 
 module.exports = function (doThis, allDone, options) {
   options = options || {};
@@ -62,9 +63,16 @@ module.exports = function (doThis, allDone, options) {
       forEach = async.each;
     }
 
+    var bar = progress.push("Blog", blogIDs.length);
+
     forEach(
       blogIDs,
-      function (blogID, nextBlog) {
+      function (blogID, done) {
+        var nextBlog = function (err) {
+          bar.tick();
+          done(err);
+        };
+
         Blog.get({ id: blogID }, function (err, blog) {
           if (err || !blog) {
             return nextBlog();
@@ -82,7 +90,10 @@ module.exports = function (doThis, allDone, options) {
           });
         });
       },
-      allDone
+      function (err) {
+        bar.pop();
+        allDone(err);
+      }
     );
   });
 };

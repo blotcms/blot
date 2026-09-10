@@ -1,4 +1,5 @@
 var eachBlog = require("../each/blog");
+var progress = require("../each/progress");
 var async = require("async");
 var Template = require("models/template");
 var templateKey = require("models/template/key");
@@ -123,12 +124,14 @@ function recalcBlog(blogID, stats, done) {
     });
 
     var changedTemplateIDs = [];
+    var bar = progress.push("Template", owned.length);
 
     async.eachSeries(
       owned,
       function (template, nextTemplate) {
         recalcTemplateViews(template.id, stats, function (err, changed) {
           if (changed) changedTemplateIDs.push(template.id);
+          bar.tick();
           // Stop the blog loop on a genuine setView error, but keep the
           // partial `changed` set so finalizeBlog still flushes the views
           // that were rewritten before the failure.
@@ -136,6 +139,7 @@ function recalcBlog(blogID, stats, done) {
         });
       },
       function (err) {
+        bar.pop();
         finalizeBlog(blogID, changedTemplateIDs, function (flushErr) {
           done(err || flushErr);
         });
@@ -150,6 +154,7 @@ function recalcTemplateViews(templateID, stats, done) {
 
     var changed = false;
     var firstErr = null;
+    var bar = progress.push("View", Object.keys(views || {}).length);
 
     async.eachOfSeries(
       views || {},
@@ -157,10 +162,12 @@ function recalcTemplateViews(templateID, stats, done) {
         recalcView(templateID, view, stats, function (err, viewChanged) {
           if (viewChanged) changed = true;
           if (err && !firstErr) firstErr = err;
+          bar.tick();
           nextView(err);
         });
       },
       function (err) {
+        bar.pop();
         done(firstErr || err || null, changed);
       }
     );
@@ -289,22 +296,43 @@ function eachSiteView(iterator, done) {
   redis
     .sMembers(templateKey.blogTemplates("SITE"))
     .then(function (templateIDs) {
+      var templateBar = progress.push("Template", (templateIDs || []).length);
+
       async.eachSeries(
         templateIDs || [],
-        function (templateID, nextTemplate) {
+        function (templateID, nextItem) {
+          var nextTemplate = function (err) {
+            templateBar.tick();
+            nextItem(err);
+          };
+
           Template.getAllViews(templateID, function (err, views) {
             if (err) return nextTemplate(err);
+
+            var viewBar = progress.push(
+              "View",
+              Object.keys(views || {}).length
+            );
 
             async.eachOfSeries(
               views || {},
               function (view, name, nextView) {
-                iterator(templateID, view, nextView);
+                iterator(templateID, view, function (err) {
+                  viewBar.tick();
+                  nextView(err);
+                });
               },
-              nextTemplate
+              function (err) {
+                viewBar.pop();
+                nextTemplate(err);
+              }
             );
           });
         },
-        done
+        function (err) {
+          templateBar.pop();
+          done(err);
+        }
       );
     })
     .catch(done);
