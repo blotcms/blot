@@ -19,11 +19,6 @@ export BLOT_PROTOCOL=https
 # Redis configuration
 export BLOT_REDIS_HOST=127.0.0.1
 
-# Entry reads come from the per-entry Redis hash by default. Set this to
-# "false" to force reads back onto the legacy JSON string key (migration
-# rollback). Remove once the string keys have been purged.
-# export BLOT_REDIS_READ_ENTRIES_FROM_HASH=false
-
 # Name of linux user who runs the blot server
 export BLOT_USER=
 

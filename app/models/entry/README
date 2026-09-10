@@ -2,7 +2,7 @@
 
 This module is the authoritative data layer for blog entries in Blot. It handles persistence, URL assignment, list membership, backlink tracking, dependency graph maintenance, scheduled publication, and full-text search for individual entries within a blog.
 
-All storage is backed by Redis. **Migration in progress:** each entry is written twice, in one `MULTI` — to the legacy JSON string key and to a Redis hash (`key.entryHash`). `get` now reads from the hash by default (`config.redis.readEntriesFromHash`, on unless `BLOT_REDIS_READ_ENTRIES_FROM_HASH=false`), fetching individual fields with `HMGET` instead of loading and parsing the whole entry, and falls back to the string for any entry the backfill (`scripts/entry/backfill-hashes.js`) has not reached. The string keys stay as that fallback until a later migration stage stops writing them and expires them. Relationships (URL-to-path mappings, sorted membership lists, dependency sets) are maintained as separate Redis keys updated atomically alongside each write.
+All storage is backed by Redis. **Migration in progress:** each entry is now written twice, in one `MULTI` — to the legacy JSON string key and to a Redis hash (`key.entryHash`). Reads still come from the JSON string; the hash is dormant until `config.redis.readEntriesFromHash` is turned on (per environment, once `scripts/entry/backfill-hashes.js` has populated every entry). `get` can then fetch individual fields with `HMGET` instead of loading and parsing the whole entry, and falls back to the string for any entry the backfill has not reached. Relationships (URL-to-path mappings, sorted membership lists, dependency sets) are maintained as separate Redis keys updated atomically alongside each write.
 
 ---
 
@@ -75,8 +75,8 @@ Defined in `key.js`.
 
 | Key pattern | Type | Contains |
 |-------------|------|---------|
-| `blog:{blogID}:entry:{normalizedPath}` | string | JSON-serialised entry object. Dual-written; now only a fallback for un-backfilled entries (and a rollback target via `BLOT_REDIS_READ_ENTRIES_FROM_HASH=false`). |
-| `blog:{blogID}:entry:hash:{normalizedPath}` | hash | One field per entry property. Dual-written in the same `MULTI` as the string key; the default read source. |
+| `blog:{blogID}:entry:{normalizedPath}` | string | JSON-serialised entry object. Authoritative; still the read source by default. |
+| `blog:{blogID}:entry:hash:{normalizedPath}` | hash | One field per entry property. Dual-written in the same `MULTI` as the string key; read only when `config.redis.readEntriesFromHash` is on. |
 | `blog:{blogID}:url:{url}` | string | The `id` (normalised path) of the entry claiming that URL |
 | `blog:{blogID}:dependents:{path}` | set | Paths of entries that depend on this path |
 | `blog:{blogID}:search` | — | Referenced but not written by this module directly |
@@ -107,12 +107,12 @@ Retrieves one or more entries from Redis.
 - When passed an array, calls back with an array of `Entry` instances. Missing entries are omitted from the result. An empty input array calls back with an empty array immediately.
 - Results are instances of the `Entry` constructor defined in `instance.js`.
 
-**Default (`config.redis.readEntriesFromHash` on):** reads `HGETALL`/`HMGET` from `key.entryHash`, falling back to the JSON string for any entry with no hash yet. `fields` (optional) then restricts which properties are read:
+**Default (`config.redis.readEntriesFromHash` off):** one `MGET` over the JSON string keys, exactly as before. `fields` is ignored.
+
+**Hash mode (`config.redis.readEntriesFromHash` on):** reads `HGETALL`/`HMGET` from `key.entryHash`, falling back to the JSON string for any entry with no hash yet. `fields` (optional) then restricts which properties are read:
   - `"title"` — a single field name. For a single-entry lookup the raw value is passed to the callback instead of an `Entry`.
   - `["title", "url"]` — an array of field names. Each result is an `Entry` carrying only those fields plus `id`.
   - omitted — the whole entry.
-
-**Rollback (`BLOT_REDIS_READ_ENTRIES_FROM_HASH=false`):** one `MGET` over the JSON string keys, exactly as before the migration. `fields` is ignored.
 
 ### `getByUrl(blogID, entryUrl, callback)`
 
