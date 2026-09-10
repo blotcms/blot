@@ -2,7 +2,7 @@
 
 This module is the authoritative data layer for blog entries in Blot. It handles persistence, URL assignment, list membership, backlink tracking, dependency graph maintenance, scheduled publication, and full-text search for individual entries within a blog.
 
-All storage is backed by Redis. Entry data is serialised as JSON strings. Relationships (URL-to-path mappings, sorted membership lists, dependency sets) are maintained as separate Redis keys updated atomically alongside each write.
+All storage is backed by Redis. **Migration in progress:** each entry is now written twice, in one `MULTI` — to the legacy JSON string key and to a Redis hash (`key.entryHash`). Reads still come from the JSON string; the hash is dormant until `config.redis.readEntriesFromHash` is turned on (per environment, once `scripts/entry/backfill-hashes.js` has populated every entry). `get` can then fetch individual fields with `HMGET` instead of loading and parsing the whole entry, and falls back to the string for any entry the backfill has not reached. Relationships (URL-to-path mappings, sorted membership lists, dependency sets) are maintained as separate Redis keys updated atomically alongside each write.
 
 ---
 
@@ -10,9 +10,10 @@ All storage is backed by Redis. Entry data is serialised as JSON strings. Relati
 
 | File | Purpose |
 |------|---------|
-| `index.js` | Public module surface. Re-exports `drop`, `get`, `getByUrl`, `instance`, `key`, `model`, `search`, and `set`. |
+| `index.js` | Public module surface. Re-exports `drop`, `format`, `get`, `getByUrl`, `instance`, `key`, `model`, `search`, and `set`. |
 | `model.js` | Canonical schema definition. Declares every field name and its expected type. Used by `helper/ensure` to validate entries before storage. |
 | `key.js` | Generates the Redis key strings used throughout the module. |
+| `format.js` | Translates between `Entry` objects and the flat string map stored in a Redis hash. `serialize` uses the shared `models/redisHashSerializer`; `deserialize` coerces each field back to its `model.js` type. |
 | `instance.js` | Minimal constructor function. Wraps a plain object in an `Entry` instance by copying all properties onto `this`. |
 | `get.js` | Retrieves one or more entries by file path from Redis. |
 | `getByUrl.js` | Retrieves a single entry by its public URL. |
@@ -74,7 +75,8 @@ Defined in `key.js`.
 
 | Key pattern | Type | Contains |
 |-------------|------|---------|
-| `blog:{blogID}:entry:{normalizedPath}` | string | JSON-serialised entry object |
+| `blog:{blogID}:entry:{normalizedPath}` | string | JSON-serialised entry object. Authoritative; still the read source by default. |
+| `blog:{blogID}:entry:hash:{normalizedPath}` | hash | One field per entry property. Dual-written in the same `MULTI` as the string key; read only when `config.redis.readEntriesFromHash` is on. |
 | `blog:{blogID}:url:{url}` | string | The `id` (normalised path) of the entry claiming that URL |
 | `blog:{blogID}:dependents:{path}` | set | Paths of entries that depend on this path |
 | `blog:{blogID}:search` | — | Referenced but not written by this module directly |
@@ -96,7 +98,7 @@ List keys written by `_assign.js`:
 
 ## Public API
 
-### `get(blogID, entryIDs, callback)`
+### `get(blogID, entryIDs, [fields], callback)`
 
 Retrieves one or more entries from Redis.
 
@@ -104,6 +106,13 @@ Retrieves one or more entries from Redis.
 - When passed a string, calls back with a single `Entry` instance or `undefined` if not found.
 - When passed an array, calls back with an array of `Entry` instances. Missing entries are omitted from the result. An empty input array calls back with an empty array immediately.
 - Results are instances of the `Entry` constructor defined in `instance.js`.
+
+**Default (`config.redis.readEntriesFromHash` off):** one `MGET` over the JSON string keys, exactly as before. `fields` is ignored.
+
+**Hash mode (`config.redis.readEntriesFromHash` on):** reads `HGETALL`/`HMGET` from `key.entryHash`, falling back to the JSON string for any entry with no hash yet. `fields` (optional) then restricts which properties are read:
+  - `"title"` — a single field name. For a single-entry lookup the raw value is passed to the callback instead of an `Entry`.
+  - `["title", "url"]` — an array of field names. Each result is an `Entry` carrying only those fields plus `id`.
+  - omitted — the whole entry.
 
 ### `getByUrl(blogID, entryUrl, callback)`
 
@@ -125,8 +134,8 @@ Writes entry data and runs all side-effects. This is the primary write operation
 7. Enforces mutual exclusivity: draft entries cannot be in the menu, scheduled, or on pages; scheduled entries cannot be in the menu or on pages; deleted entries clear all such flags.
 8. Calls `_setUrl` to resolve and claim a public URL.
 9. Manages URL deduplication dependencies (see URL Assignment below).
-10. Validates the merged entry against `model.js` and writes it to Redis.
-11. Sets a 24-hour TTL on deleted entry keys; removes any TTL from live entry keys.
+10. Validates the merged entry against `model.js` and writes it to Redis, in one `MULTI`, as both a JSON string and a hash (`DEL` + `HSET`).
+11. Sets a 24-hour TTL on both deleted entry keys; removes any TTL from both live entry keys.
 12. Runs in parallel: tag list update, list assignment (`_assign`), dependency graph rebuild.
 13. If scheduled, registers a `node-schedule` job.
 14. If a draft, publishes a Redis Pub/Sub notification.
@@ -250,6 +259,8 @@ Tests are located in `tests/`. They use a shared setup defined in `tests/setup.j
 
 Test files:
 
+- `tests/format.js` — pure unit coverage for the hash serializer/deserializer round-trip and type coercion.
+- `tests/get.js` — both read paths: the default JSON-string path (fields ignored, hash untouched) and, with the flag toggled on, whole-entry / single-field scalar / array-of-fields / list narrowing reads plus fallback to the JSON string when the hash is missing.
 - `tests/backlinks.js` — covers backlink addition, removal, multi-entry scenarios, deletion, URL changes, and restore scenarios.
 - `tests/search.js` — covers basic matching, case insensitivity, multi-term AND semantics, metadata and tag matching, draft/deleted exclusion, page opt-in, the 25-result cap, timeout behaviour, and concurrent search performance.
 - `tests/urlDeduplication.js` — covers URL conflict detection, dependency injection on deduplication, dependency removal on reclamation, and multi-conflict scenarios.

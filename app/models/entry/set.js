@@ -7,6 +7,7 @@ var clfdate = require("helper/clfdate");
 var debug = require("debug")("blot:entry:set");
 var get = require("./get");
 var key = require("./key");
+var format = require("./format");
 var setUrl = require("./_setUrl");
 var Candidates = setUrl.Candidates;
 var Blog = require("models/blog");
@@ -30,6 +31,7 @@ module.exports = function set (blogID, path, updates, callback) {
     .and(callback, "function");
 
   var entryKey = key.entry(blogID, path);
+  var entryHashKey = key.entryHash(blogID, path);
   var queue;
 
   debug("set", blogID, path);
@@ -164,18 +166,33 @@ module.exports = function set (blogID, path, updates, callback) {
         // keys it should have and no more
         ensure(entry, model, true);
 
-        // Store the entry
+        // Store the entry twice: the legacy JSON string key (authoritative
+        // until the hash backfill has run everywhere) and a Redis hash, which
+        // is the source of truth going forward and lets ./get.js fetch
+        // individual fields with HMGET. `del` before `hSet` clears any fields
+        // left behind by an older entry model.
         redis
+          .multi()
           .set(entryKey, JSON.stringify(entry))
+          .del(entryHashKey)
+          .hSet(entryHashKey, format.serialize(entry))
+          .exec()
           .then(function () {
             if (entry.deleted) {
-              return redis.expire(entryKey, 24 * 60 * 60).then(function (result) {
-                if (!result)
-                  throw new Error("Failed to set expiration for deleted entry");
-              });
+              return redis
+                .multi()
+                .expire(entryKey, 24 * 60 * 60)
+                .expire(entryHashKey, 24 * 60 * 60)
+                .exec()
+                .then(function (results) {
+                  if (!results || !results[0] || !results[1])
+                    throw new Error(
+                      "Failed to set expiration for deleted entry"
+                    );
+                });
             }
 
-            return redis.persist(entryKey);
+            return redis.multi().persist(entryKey).persist(entryHashKey).exec();
           })
           .then(function () {
             queue = [
