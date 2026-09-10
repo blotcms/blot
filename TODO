@@ -2,36 +2,6 @@ resolve cloudflare fail2ban issuye
 
 ---
 
-Proxy container (OpenResty) - deferred work after the build-only scaffolding PR
-
-The `proxy/` directory is build-only scaffolding: the image builds, the
-generated config passes `openresty -t`, the container boots and serves
-/health, and the cacher + e2e tests run in CI. It is not wired to
-production. Remaining before it can replace the bare-metal `config/openresty`:
-
-1. Certificate issuance for custom domains. The image ships a self-signed
-   placeholder so OpenResty can start; entrypoint.sh no longer calls
-   acme-nginx. Real on-demand issuance needs lua-resty-auto-ssl wired to
-   Redis + a working sockproc + the dehydrated hook scripts.
-2. Zero-downtime deployment. Replacing the container drops the :80/:443
-   listening socket, so `openresty -s reload` no longer covers image
-   changes. Needs a blue/green mechanism - SO_REUSEPORT on `--network host`
-   with an explicit drain, or iptables/nftables port-shifting. Config-only
-   changes can still reload against a bind-mounted config dir.
-3. Config de-duplication. `proxy/config/` is a hand-fork of
-   `config/openresty/conf/` and omits the rate-limit and bot-restriction
-   includes (restrict-bot-uas.conf, reverse-proxy-limit-*.conf, ...). The
-   two copies should become one source.
-4. Persistent volumes for the proxy cache (/var/cache/openresty) and
-   lua-resty-auto-ssl storage (/etc/resty-auto-ssl) so a redeploy doesn't
-   cold-start the cache or re-request certificates.
-5. Harden the `integration` workflow's real-app e2e (proxy/e2e/run.js): it
-   was first exercised in CI, not locally. Extend it to serve an actual
-   blog (seed a blog + template) rather than only the marketing site and
-   dashboard.
-
----
-
 Debug issue with warwickmostyn
 
 Google Drive:
