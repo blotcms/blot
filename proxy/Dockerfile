@@ -33,6 +33,22 @@ RUN curl -fsSL -o /vendor/lualib/resty/auto-ssl/vendor/shell.lua \
       "https://raw.githubusercontent.com/juce/lua-resty-shell/955243d70506c21e7cc29f61d745d1a8a718994f/lib/resty/shell.lua" && \
     echo "1db9590b05828572a59a67f4ec83210b86b233b6d13c7e3a1e9713d6e19d6974  /vendor/lualib/resty/auto-ssl/vendor/shell.lua" | sha256sum -c -
 
+# `dehydrated` - the ACME client lua-resty-auto-ssl shells out to during cert
+# issuance. The .src.rock does not ship it (the Makefile curls it), so without
+# this the hook fails with "can't execute .../dehydrated: No such file".
+#
+# lua-resty-auto-ssl v0.13.1 pins dehydrated 0.6.5 (2019), whose JWS `kid`
+# handling a current ACME server rejects ("Key ID (kid) in JWS header missing
+# expected URL prefix"). Use maintained 0.7.2 instead - the hook contract
+# (bin/resty-auto-ssl/letsencrypt_hooks) is unchanged and it tolerates any
+# extra hooks 0.7.x adds. The bare-metal config/openresty still uses the
+# 0.6.5 pin; unifying that is tracked in TODO.
+ARG DEHYDRATED_TAG=v0.7.2
+RUN curl -fsSL -o /vendor/resty-auto-ssl/dehydrated \
+      "https://raw.githubusercontent.com/dehydrated-io/dehydrated/${DEHYDRATED_TAG}/dehydrated" && \
+    echo "6f45ea1e9ad0d781ecc05ea7171036c4d3e0e10611f2080df6120458323c8d5b  /vendor/resty-auto-ssl/dehydrated" | sha256sum -c - && \
+    chmod 0755 /vendor/resty-auto-ssl/dehydrated
+
 # sockproc - used by lua-resty-auto-ssl to shell out during cert issuance.
 # Pinned to the commit lua-resty-auto-ssl's own Makefile uses.
 ARG SOCKPROC_COMMIT=92aba736027bb5d96e190b71555857ac5bb6b2be
@@ -56,6 +72,10 @@ COPY --from=deps /vendor/lualib/ /usr/local/openresty/lualib/
 # which runs ./sockproc next to it.
 COPY --from=deps /vendor/resty-auto-ssl/ /usr/bin/resty-auto-ssl/
 RUN chmod 0755 /usr/bin/resty-auto-ssl/*
+
+# Per-container runtime dir for the health-probe Unix socket (see
+# proxy/config/server.conf). entrypoint.sh also (re)creates and chowns it.
+RUN mkdir -p /run/openresty
 
 # Directories referenced by the generated config and by lua-resty-auto-ssl.
 # The log and cache directories (and auto-ssl storage) must be writable by the
@@ -84,6 +104,12 @@ COPY build/data/latest/html /etc/openresty/html
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Liveness for docker/compose and the readiness probe in
+# proxy/deploy/blue-green.sh. Probes a per-container Unix socket so a
+# blue/green overlap can't have the other container answer for this one.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
+  CMD curl -fsS -o /dev/null --unix-socket /run/openresty/health.sock http://localhost/health || exit 1
 
 EXPOSE 80 443
 

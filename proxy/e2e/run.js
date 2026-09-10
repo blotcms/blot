@@ -19,6 +19,9 @@ const PROXY_ORIGIN = process.env.PROXY_ORIGIN || "https://127.0.0.1";
 const HOST = process.env.BLOT_HOST || "localhost";
 const EMAIL = process.env.E2E_EMAIL || "e2e@example.com";
 const PASSWORD = process.env.E2E_PASSWORD || "e2e-password";
+// A real blog seeded by proxy/e2e/seed-blog.js, served on its own vhost.
+const BLOG_HOST = process.env.E2E_BLOG_HOST || "e2eblog." + HOST;
+const BLOG_TITLE = process.env.E2E_BLOG_TITLE || "Hello from the e2e blog";
 
 let failures = 0;
 let passes = 0;
@@ -177,8 +180,40 @@ async function request(path, opts = {}, max = 5) {
   );
 
   // 8. The proxy's hardening rules apply end to end (blog traffic path).
-  const git = await once("/.git/config", { headers: { Host: "e2e-blog.example" } });
+  const git = await once("/.git/config", { headers: { Host: BLOG_HOST } });
   check("GET /.git/config on a blog host is blocked (404)", git.status === 404, "got " + git.status);
+
+  // 9. A real seeded blog renders through the proxy on its own vhost, and the
+  //    proxy cache engages for blog traffic (MISS then HIT).
+  const blogOpts = { headers: { Host: BLOG_HOST } };
+  const blog1 = await request("/", blogOpts);
+  check(
+    "GET / on the blog host returns 200",
+    blog1.status === 200,
+    "got " + blog1.status + " location " + blog1.headers.location
+  );
+  check(
+    "blog page contains the seeded post title",
+    blog1.body.includes(BLOG_TITLE),
+    "title not found in body"
+  );
+  check(
+    "first blog hit is a cache MISS",
+    (blog1.headers["blot-cache"] || "").toUpperCase() === "MISS",
+    "Blot-Cache: " + blog1.headers["blot-cache"]
+  );
+  const blog2 = await request("/", blogOpts);
+  check(
+    "second blog hit is a cache HIT",
+    (blog2.headers["blot-cache"] || "").toUpperCase() === "HIT",
+    "Blot-Cache: " + blog2.headers["blot-cache"]
+  );
+  const missing = await once("/nope-" + Date.now(), blogOpts);
+  check(
+    "unknown blog path returns 404 from the app",
+    missing.status === 404,
+    "got " + missing.status
+  );
 
   console.log(`\n${passes} passed, ${failures} failed`);
   process.exit(failures ? 1 : 0);

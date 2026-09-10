@@ -69,6 +69,17 @@ services:
     network_mode: host
     environment:
       BLOT_HOST: ${BLOT_HOST:-localhost}
+    # Persistent volumes for the proxy cache and the lua-resty-auto-ssl /
+    # dehydrated working files, so recreating the container does not
+    # cold-start the cache or lose issuance state. entrypoint.sh chowns both
+    # to ec2-user on boot (they mount root-owned).
+    volumes:
+      - proxy-cache:/var/cache/openresty
+      - auto-ssl:/etc/resty-auto-ssl
     depends_on:
       app:
         condition: service_healthy
+
+volumes:
+  proxy-cache:
+  auto-ssl:

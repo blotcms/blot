@@ -6,9 +6,15 @@ name: integration
 #  proxy-behaviour : the built image vs a stub upstream (routing, caching,
 #                    gzip, hardening). Proves the generated production config.
 #  app-e2e         : a real round trip through the proxy to a Blot app
-#                    container (site loads, sign in / sign out). Not yet
+#                    container (site + dashboard sign in / sign out, plus a
+#                    seeded blog rendering on its own vhost). Not yet fully
 #                    hardened - see TODO "Proxy container (OpenResty)" - so it
 #                    is allowed to fail without failing the workflow.
+#  cert-issuance   : on-demand custom-domain certificate issuance through the
+#                    proxy against a Pebble ACME test server, and that an
+#                    issued cert survives a container recreate (persistence).
+#  zero-downtime   : a blue/green handover (SO_REUSEPORT + graceful drain)
+#                    serves every request while the old container is stopped.
 
 on:
   push:
@@ -120,11 +126,25 @@ jobs:
           docker compose -f proxy/e2e/docker-compose.yml exec -T app \
             node /tmp/seed-user.js e2e@example.com e2e-password
 
+      - name: Seed a blog
+        id: seed-blog
+        run: |
+          docker compose -f proxy/e2e/docker-compose.yml cp \
+            proxy/e2e/seed-blog.js app:/tmp/seed-blog.js
+          out=$(docker compose -f proxy/e2e/docker-compose.yml exec -T app \
+            node /tmp/seed-blog.js e2e@example.com e2eblog)
+          echo "$out"
+          json=$(echo "$out" | grep -o 'SEED_BLOG_RESULT=.*' | head -n1 | cut -d= -f2-)
+          host=$(printf '%s' "$json" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).host))')
+          test -n "$host"
+          echo "host=$host" >> "$GITHUB_OUTPUT"
+
       - name: Run end-to-end checks
         env:
           PROXY_ORIGIN: https://127.0.0.1
           E2E_EMAIL: e2e@example.com
           E2E_PASSWORD: e2e-password
+          E2E_BLOG_HOST: ${{ steps.seed-blog.outputs.host }}
         run: node proxy/e2e/run.js
 
       - name: Stack logs
@@ -134,3 +154,311 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose -f proxy/e2e/docker-compose.yml down -v || true
+
+  # On-demand certificate issuance for custom domains, end to end, against a
+  # Pebble ACME test server (no public DNS or rate limits). Also asserts the
+  # issued cert survives recreating the proxy container (persistence).
+  cert-issuance:
+    runs-on: ubuntu-latest
+    needs: proxy-behaviour
+    env:
+      TEST_DOMAIN: cert-test.example
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 21.7.3
+
+      - name: Install config generator dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/gendeps"
+          cd "$RUNNER_TEMP/gendeps"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+
+      - name: Generate proxy config (ACME_CA -> Pebble)
+        run: bash proxy/build/build.sh
+        env:
+          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+          ACME_CA: https://127.0.0.1:14000/dir
+
+      - name: Build proxy image
+        run: docker build -f proxy/Dockerfile -t blot-proxy:acme proxy/
+
+      - name: Start Redis, challtestsrv and Pebble
+        env:
+          # The upstream images are distroless (entrypoint is the binary) and
+          # published on ghcr.io, not Docker Hub.
+          PEBBLE_IMAGE: ghcr.io/letsencrypt/pebble:latest
+          CHALLTESTSRV_IMAGE: ghcr.io/letsencrypt/pebble-challtestsrv:latest
+        run: |
+          set -eux
+
+          # HTTP-01 validation must reach the proxy's default server, not the
+          # loopback-only internal server, so the challenge host resolves to
+          # the runner's routable IP (the proxy binds it via --network host).
+          HOSTIP=$(hostname -I | awk '{print $1}')
+          echo "HOSTIP=$HOSTIP" >> "$GITHUB_ENV"
+
+          docker run -d --name redis --network host redis:6.2.12-alpine
+
+          # challtestsrv only needs its DNS server; disable the HTTP/HTTPS/
+          # TLS-ALPN/DoH listeners and AAAA so nothing competes with the proxy.
+          docker run -d --name challtestsrv --network host "$CHALLTESTSRV_IMAGE" \
+            -dnsserver :8053 -management :8055 \
+            -http01 "" -https01 "" -tlsalpn01 "" -doh "" -defaultIPv6 ""
+
+          docker run -d --name pebble --network host \
+            -e "PEBBLE_VA_NOSLEEP=1" -e "PEBBLE_WFE_NONCEREJECT=0" \
+            -v "$PWD/proxy/e2e/pebble-config.json:/test/config/pebble-config.json:ro" \
+            "$PEBBLE_IMAGE" \
+            -config /test/config/pebble-config.json -dnsserver 127.0.0.1:8053
+
+          # The CA in front of Pebble's ACME endpoint (:14000) - the proxy's
+          # dehydrated hook (curl) must trust this to place an order. The
+          # image has no shell, so copy the file out of a created container.
+          cid=$(docker create "$PEBBLE_IMAGE")
+          docker cp "$cid:/test/certs/pebble.minica.pem" pebble.minica.pem
+          docker rm "$cid"
+          test -s pebble.minica.pem
+
+          for i in $(seq 1 30); do
+            curl -sf -X POST -d '{"host":"'"$TEST_DOMAIN"'.","addresses":["'"$HOSTIP"'"]}' \
+              http://127.0.0.1:8055/add-a && break
+            sleep 1
+          done
+
+          # Wait for Pebble, then build a CA bundle from the root AND
+          # intermediate that sign ISSUED certs (both generated fresh at
+          # Pebble startup, distinct from pebble.minica.pem). Trusting the
+          # intermediate too means the leaf verifies whether or not the proxy
+          # serves a full chain.
+          for i in $(seq 1 30); do
+            curl -sk https://127.0.0.1:14000/dir >/dev/null && break
+            sleep 1
+          done
+          curl -sk https://127.0.0.1:15000/roots/0 -o pebble-root.pem
+          curl -sk https://127.0.0.1:15000/intermediates/0 -o pebble-int.pem
+          cat pebble-root.pem pebble-int.pem > pebble-ca.bundle.pem
+          test -s pebble-root.pem && test -s pebble-int.pem
+
+      - name: Allow the domain and start the upstream
+        run: |
+          set -eux
+          docker exec redis redis-cli set "domain:$TEST_DOMAIN" 1
+          docker run -d --name stub --network host \
+            -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" node:22-alpine node /s.js
+          for i in $(seq 1 30); do
+            curl -sf -o /dev/null http://127.0.0.1:8088/ && break
+            sleep 1
+          done
+
+      - name: Start the proxy (auto-ssl storage on a named volume)
+        run: |
+          set -eux
+          docker volume create blot-acme-storage
+          docker run -d --name proxy --network host --cap-add SYS_NICE \
+            -e BLOT_HOST=localhost \
+            -e ACME_CA_CERT=/pebble-ca.pem \
+            -v "$PWD/pebble.minica.pem:/pebble-ca.pem:ro" \
+            -v blot-acme-storage:/etc/resty-auto-ssl \
+            blot-proxy:acme
+          for i in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' proxy)" = healthy ] && break
+            sleep 2
+          done
+
+      - name: Issue a certificate through the proxy
+        run: |
+          set -eux
+          # First HTTPS request triggers issuance; retry with -k while the
+          # order is in flight, then require a clean verify against the
+          # Pebble issuing root.
+          ok=""
+          for i in $(seq 1 40); do
+            code=$(curl -sk -o /dev/null -w '%{http_code}' \
+              --resolve "$TEST_DOMAIN:443:$HOSTIP" \
+              "https://$TEST_DOMAIN/" || true)
+            echo "attempt $i -> $code"
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            sleep 3
+          done
+          [ -n "$ok" ] || { docker logs proxy; exit 1; }
+
+          # Show the chain the proxy actually serves (helps if verify fails).
+          echo | openssl s_client -connect "$HOSTIP:443" \
+            -servername "$TEST_DOMAIN" -showcerts 2>/dev/null \
+            | openssl crl2pkcs7 -nocrl -certfile /dev/stdin 2>/dev/null \
+            | openssl pkcs7 -print_certs -noout 2>/dev/null || true
+
+          # The leaf must be a real Pebble-issued cert...
+          issuer=$(echo | openssl s_client -connect "$HOSTIP:443" \
+            -servername "$TEST_DOMAIN" 2>/dev/null \
+            | openssl x509 -noout -issuer)
+          echo "issuer: $issuer"
+          if ! echo "$issuer" | grep -qi pebble || echo "$issuer" | grep -qi placeholder; then
+            echo "=== still on the placeholder - running dehydrated directly for the full error ===" >&2
+            docker exec proxy sh -c 'cat /etc/resty-auto-ssl/letsencrypt/config; echo; ls -la /etc/resty-auto-ssl/letsencrypt/' >&2 || true
+            docker exec -e CURL_CA_BUNDLE=/pebble-ca.pem proxy sh -c 'cd /etc/resty-auto-ssl/letsencrypt && /usr/bin/resty-auto-ssl/dehydrated --register --accept-terms --config ./config 2>&1' >&2 || true
+            docker exec -e CURL_CA_BUNDLE=/pebble-ca.pem proxy sh -c 'HOOK_SERVER_PORT=8999 /usr/bin/resty-auto-ssl/dehydrated --cron --accept-terms --no-lock --domain '"$TEST_DOMAIN"' --challenge http-01 --config /etc/resty-auto-ssl/letsencrypt/config --hook /usr/bin/resty-auto-ssl/letsencrypt_hooks 2>&1' >&2 || true
+            docker exec proxy sh -c 'curl -sv --cacert /pebble-ca.pem https://127.0.0.1:14000/dir 2>&1 | tail -20' >&2 || true
+            exit 1
+          fi
+
+          # ...and verify cleanly against the Pebble root+intermediate bundle.
+          if ! curl -sS -o /dev/null --cacert pebble-ca.bundle.pem \
+                 --resolve "$TEST_DOMAIN:443:$HOSTIP" "https://$TEST_DOMAIN/"; then
+            echo "verify failed; leaf + bundle:" >&2
+            echo | openssl s_client -connect "$HOSTIP:443" -servername "$TEST_DOMAIN" \
+              2>/dev/null | openssl x509 -noout -issuer -subject >&2
+            head -1 pebble-root.pem pebble-int.pem >&2
+            exit 1
+          fi
+
+      - name: Certificate persists across a container recreate
+        run: |
+          set -eux
+
+          # The cert store is Redis (storage_adapter = redis), so that is what
+          # must hold the cert after issuance...
+          docker exec redis redis-cli --scan --pattern 'ssl*' | tee /tmp/ssl-keys
+          test -s /tmp/ssl-keys
+
+          # ...and whatever the auto-ssl volume does hold (dehydrated account /
+          # hook state) must not be lost across the recreate.
+          before=$(docker run --rm -v blot-acme-storage:/s alpine \
+            sh -c 'find /s -type f | wc -l')
+          echo "auto-ssl volume files before recreate: $before"
+
+          docker rm -f proxy
+          docker run -d --name proxy --network host --cap-add SYS_NICE \
+            -e BLOT_HOST=localhost \
+            -e ACME_CA_CERT=/pebble-ca.pem \
+            -v "$PWD/pebble.minica.pem:/pebble-ca.pem:ro" \
+            -v blot-acme-storage:/etc/resty-auto-ssl \
+            blot-proxy:acme
+          for i in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' proxy)" = healthy ] && break
+            sleep 2
+          done
+
+          after=$(docker run --rm -v blot-acme-storage:/s alpine \
+            sh -c 'find /s -type f | wc -l')
+          [ "$after" -ge "$before" ]
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            --cacert pebble-ca.bundle.pem \
+            --resolve "$TEST_DOMAIN:443:$HOSTIP" "https://$TEST_DOMAIN/")
+          [ "$code" = "200" ]
+
+          # And the recreated container serves the stored cert without asking
+          # the ACME server for a new one.
+          if docker logs proxy 2>&1 | grep -i "issuing new certificate"; then
+            echo "FAIL: proxy re-issued the certificate after recreate" >&2
+            exit 1
+          fi
+
+      - name: Logs
+        if: always()
+        run: |
+          for c in proxy pebble challtestsrv stub redis; do
+            echo "=== $c ==="; docker logs --tail 100 "$c" 2>&1 || true
+          done
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker rm -f proxy pebble challtestsrv stub redis 2>/dev/null || true
+          docker volume rm blot-acme-storage 2>/dev/null || true
+
+  # A blue/green handover: two proxy containers share :80/:443 via SO_REUSEPORT
+  # on `--network host`; stopping the first one with a drain timeout must not
+  # drop a single request.
+  zero-downtime:
+    runs-on: ubuntu-latest
+    needs: proxy-behaviour
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 21.7.3
+
+      - name: Install config generator dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/gendeps"
+          cd "$RUNNER_TEMP/gendeps"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+
+      - name: Generate proxy config (BLOT_HOST=localhost)
+        run: bash proxy/build/build.sh
+        env:
+          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+
+      - name: Build proxy image
+        run: docker build -f proxy/Dockerfile -t blot-proxy:zd proxy/
+
+      - name: Start upstream + proxy A + proxy B
+        run: |
+          set -eux
+          # Blog/site traffic must hit the :80 default server, not the
+          # loopback-only internal server, so target the runner's routable IP.
+          HOSTIP=$(hostname -I | awk '{print $1}')
+          echo "HOSTIP=$HOSTIP" >> "$GITHUB_ENV"
+
+          docker run -d --name stub --network host \
+            -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" node:22-alpine node /s.js
+          for i in $(seq 1 30); do
+            curl -sf -o /dev/null http://127.0.0.1:8088/ && break; sleep 1
+          done
+
+          start_proxy() {
+            docker run -d --name "$1" --network host --cap-add SYS_NICE \
+              -e BLOT_HOST=localhost blot-proxy:zd
+            for i in $(seq 1 30); do
+              [ "$(docker inspect -f '{{.State.Health.Status}}' "$1")" = healthy ] && return 0
+              sleep 2
+            done
+            docker logs "$1"; return 1
+          }
+          start_proxy zd-a
+          curl -sf -o /dev/null -H 'Host: someblog.example' "http://$HOSTIP/"  # baseline
+          start_proxy zd-b
+
+      - name: Hammer the proxy while stopping A
+        run: |
+          set -eux
+          (
+            # No --retry: every attempt is recorded as-is, so a single
+            # refused/dropped connection during the handover shows up as a
+            # non-200 and fails the assertion below. That is the whole point.
+            for i in $(seq 1 600); do
+              curl -s -o /dev/null -w '%{http_code}\n' --max-time 5 \
+                -H 'Host: someblog.example' "http://$HOSTIP/" || echo "curl-err"
+              sleep 0.05
+            done
+          ) > codes.txt &
+          loop=$!
+          sleep 3
+          docker stop --time 30 zd-a
+          wait "$loop"
+
+          total=$(wc -l < codes.txt)
+          bad=$(grep -vc '^200$' codes.txt || true)
+          echo "total=$total bad=$bad"
+          sort codes.txt | uniq -c
+          [ "$total" -ge 100 ]
+          [ "$bad" -eq 0 ]
+
+      - name: Logs
+        if: always()
+        run: |
+          for c in zd-a zd-b stub; do
+            echo "=== $c ==="; docker logs --tail 80 "$c" 2>&1 || true
+          done
+
+      - name: Tear down
+        if: always()
+        run: docker rm -f zd-a zd-b stub 2>/dev/null || true

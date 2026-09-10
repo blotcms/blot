@@ -107,6 +107,26 @@ const locals = {
     process.env.SSL_CERTIFICATE_KEY ||
     "/etc/ssl/private/letsencrypt-domain.key",
 
+  // ACME directory URL lua-resty-auto-ssl uses to issue custom-domain
+  // certificates on demand. Production default is Let's Encrypt; CI points
+  // this at a Pebble test server (see .github/workflows/integration.yml).
+  acme_ca:
+    process.env.ACME_CA || "https://acme-v02.api.letsencrypt.org/directory",
+
+  // DNS resolver OpenResty uses for OCSP stapling and to reach the ACME
+  // server. A container on a user-defined Docker network wants 127.0.0.11.
+  resolver: process.env.OPENRESTY_RESOLVER || "8.8.8.8 ipv6=off",
+
+  // Add `reuseport` to the default server's listen directives so a second
+  // container can bind the same :80/:443 during a blue/green handover
+  // (proxy/deploy/blue-green.sh). Set ENABLE_REUSEPORT=false where the
+  // generated config runs under a single process only.
+  reuseport: process.env.ENABLE_REUSEPORT !== "false",
+
+  // Send the error/access logs to stderr/stdout so `docker logs` works.
+  // Set LOG_TO_STDOUT=false for the bare-metal path, which rotates files.
+  log_to_stdout: process.env.LOG_TO_STDOUT !== "false",
+
   NETDATA_PASSWORD,
   NETDATA_USER,
   NETDATA_PORT,
