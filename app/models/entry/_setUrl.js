@@ -45,9 +45,21 @@ var UID_PERMUTATIONS = 500;
 //   path: '/a.jpg'
 // }));
 
+// A folder post ("Album+") is synthesized at the plus-stripped path
+// ("/album") where no source file exists, so unlike a real file it is
+// allowed to claim that exact path as its URL.
+function isFolderPostEntry(entry) {
+  return (
+    entry &&
+    typeof entry.html === "string" &&
+    entry.html.indexOf('class="multi-file-post"') !== -1
+  );
+}
+
 function Candidates(blog, entry) {
   var candidates = [];
   var metadataByLowercaseKey = metadataCaseInsensitive(entry.metadata);
+  var folderPost = isFolderPostEntry(entry);
 
   var format = blog.permalink.isCustom ? blog.permalink.custom : blog.permalink.format;
   
@@ -132,7 +144,9 @@ function Candidates(blog, entry) {
 
     // WE DONT EVER ADD ENTRY.PATH so images are always accessible
     // It's possible that entry.name when normalized === entry.path
-    if (entry.path && candidate === entry.path) return false;
+    // Folder posts are the exception: their path is synthesized and has
+    // no file behind it, so they may use their plus-stripped path as URL.
+    if (entry.path && candidate === entry.path && !folderPost) return false;
 
     // Otherwise we are pretty liberal: we allow posts and pages 
     // to have the same URL as a template view. This lets us set 

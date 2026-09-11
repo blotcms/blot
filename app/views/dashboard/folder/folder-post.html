@@ -1,0 +1,277 @@
+{{> close-button}}
+
+{{#folder}}
+{{#folderPost}}
+{{#entry}}
+<div class="folder-box folder-post-box live-updates">
+
+<div class="file-info">
+
+  <h1><span class="icon-folder-check"></span>{{folderName}}</h1>
+
+  <a href="{{{blog.url}}}{{{url}}}" target="_blank" class="template-button right-aligned file-helper">
+    View {{type}}
+    <span class="icon-zoom"></span>
+  </a>
+
+  <div class="folder-post-sources">
+    <table class="directory-list folder-post-source-list">
+      <thead style="height: 1.4em;">
+        <tr>
+          <th>Name</th>
+          <th>Date modified</th>
+          <th>Size</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#sources}}
+        {{^hidden}}
+        <tr class="directory-row folder-post-source {{^exists}}missing{{/exists}}">
+          <td>
+            <div class="directory-row__name-cell">
+              <a href="{{{base}}}/folder{{{url}}}" class="directory-row__link entry">
+                <span class="icon-file-check"></span>
+                <span class="truncate file-name">{{relativePath}}</span>
+              </a>
+            </div>
+            {{^exists}}<span class="file-missing-note">File missing from folder</span>{{/exists}}
+          </td>
+          <td data-sort="{{unix}}">{{#exists}}{{modified}}{{/exists}}{{^exists}}&mdash;{{/exists}}</td>
+          <td data-sort="{{bytes}}">{{#exists}}{{size}}{{/exists}}{{^exists}}&mdash;{{/exists}}</td>
+        </tr>
+        {{/hidden}}
+        {{/sources}}
+      </tbody>
+    </table>
+
+    {{#truncated}}
+    <details class="folder-post-more">
+      <summary>Show all {{sourceCount}} files</summary>
+      <table class="directory-list folder-post-source-list">
+        <tbody>
+          {{#sources}}
+          {{#hidden}}
+          <tr class="directory-row folder-post-source {{^exists}}missing{{/exists}}">
+            <td>
+              <div class="directory-row__name-cell">
+                <a href="{{{base}}}/folder{{{url}}}" class="directory-row__link entry">
+                  <span class="icon-file-check"></span>
+                  <span class="truncate file-name">{{relativePath}}</span>
+                </a>
+              </div>
+              {{^exists}}<span class="file-missing-note">File missing from folder</span>{{/exists}}
+            </td>
+            <td data-sort="{{unix}}">{{#exists}}{{modified}}{{/exists}}{{^exists}}&mdash;{{/exists}}</td>
+            <td data-sort="{{bytes}}">{{#exists}}{{size}}{{/exists}}{{^exists}}&mdash;{{/exists}}</td>
+          </tr>
+          {{/hidden}}
+          {{/sources}}
+        </tbody>
+      </table>
+    </details>
+    {{/truncated}}
+  </div>
+</div>
+
+<div class="publishing-steps">
+  <p>
+    <i><span class="icon-small-check"></span></i>
+    <b>Folder is a {{type}}</b>
+    To prevent this folder becoming a single {{type}}, remove the <code>+</code>
+    from the end of the folder&rsquo;s name.
+  </p>
+  {{#hasMissing}}
+  <p>
+    <i><span class="icon-small-no-entry"></span></i>
+    <b>Some source files are missing</b>
+    The {{type}} was built from files that are no longer in the folder. It will
+    update the next time the folder syncs.
+  </p>
+  {{/hasMissing}}
+</div>
+
+<div class="entry-info">
+
+  <h1><a href="{{{blog.url}}}{{{url}}}" target="_blank"><span class="icon-website"></span>{{title}}</a></h1>
+
+  <table class="file-stat">
+
+    <tr>
+     <td>{{Type}} title:</td>
+     <td>{{title}}
+       <details>
+         <summary><span class="icon-support"></span> Explain</summary>
+         <p>The title comes from the first heading in the source files. If none of the files has a heading, Blot uses the folder&rsquo;s name.</p>
+       </details>
+     </td>
+   </tr>
+
+   <tr>
+    <td>{{Type}} link:</td>
+    <td>{{{url}}} <button class="copy"><span class="icon-copy"></span> Copy</button>
+      <details>
+        <summary><span class="icon-support"></span> Explain</summary>
+        <p>
+          {{#metadataLink}}The link of this {{type}} is generated from Link metadata.{{/metadataLink}}
+          {{#metadataUrl}}The link of this {{type}} is generated from URL metadata.{{/metadataUrl}}
+          {{^metadataLink}}{{^metadataUrl}}The link of this {{type}} is generated using your site&rsquo;s <a href="{{{base}}}/link-format">link format</a> from the folder&rsquo;s path without the <code>+</code>.{{/metadataUrl}}{{/metadataLink}}
+        </p>
+      </details>
+    </td>
+  </tr>
+
+   <tr>
+     <td>{{Type}} URL:</td>
+     <td>https://{{blog.pretty.url}}{{url}} <button class="copy"><span class="icon-copy"></span> Copy</button>
+       <details>
+         <summary><span class="icon-support"></span> Explain</summary>
+         <p>The public, permanent URL of this {{type}}.</p>
+       </details>
+     </td>
+   </tr>
+
+   <tr>
+     <td>Date:</td>
+     <td>{{date}}
+       <details>
+         <summary><span class="icon-support"></span> Explain</summary>
+         <p>The date of this {{type}} is generated from the metadata and text content of its source files.</p>
+       </details>
+     </td>
+   </tr>
+
+   <tr>
+     <td>Converter:</td>
+     <td>Multiple files
+       <details>
+         <summary><span class="icon-support"></span> Explain</summary>
+         <p>This {{type}} is built from multiple files, so its converter depends on each source file inside the folder.</p>
+       </details>
+     </td>
+   </tr>
+
+   <tr>
+     <td>Thumbnail:</td>
+     <td>
+       {{#thumbnail.small}}
+       <img class="file-thumbnail" height="{{height}}" width="{{width}}" src="{{{url}}}" />
+       {{/thumbnail.small}}
+       {{^thumbnail.small}}--{{/thumbnail.small}}
+       <details>
+         <summary><span class="icon-support"></span> Explain</summary>
+         <p>
+           {{#thumbnail.small}}The thumbnail was generated from an image inside the folder post.{{/thumbnail.small}}
+           {{^thumbnail.small}}This {{type}} does not have a thumbnail. Add an image to the folder, or set Thumbnail metadata on one of the files.{{/thumbnail.small}}
+         </p>
+       </details>
+     </td>
+   </tr>
+
+   <tr>
+     <td>Summary:</td>
+     <td>
+       {{#summary}}<pre>{{summary}}</pre>{{/summary}}
+       {{^summary}}--{{/summary}}
+       <details>
+         <summary><span class="icon-support"></span> Explain</summary>
+         <p>The summary or excerpt of this {{type}}.</p>
+       </details>
+     </td>
+   </tr>
+
+   <tr>
+     <td>Slug:</td>
+     <td>{{slug}}
+       <details>
+         <summary><span class="icon-support"></span> Explain</summary>
+         <p>The slug or URL-friendly version of the title.</p>
+       </details>
+     </td>
+   </tr>
+
+   <tr>
+     <td>Tags:</td>
+     <td>
+       {{#tags}} {{tag}}{{^last}},{{/last}} {{/tags}}
+       {{^tags.length}}--{{/tags.length}}
+       <details>
+         <summary><span class="icon-support"></span> Explain</summary>
+         <p>Tags from every source file are combined.</p>
+       </details>
+     </td>
+   </tr>
+
+   <tr>
+     <td>Backlinks:</td>
+     <td>
+       {{#backlinks}} {{backlink}}{{^last}},{{/last}} {{/backlinks}}
+       {{^backlinks.length}}--{{/backlinks.length}}
+       <details>
+         <summary><span class="icon-support"></span> Explain</summary>
+         <p>The backlinks to this {{type}}.</p>
+       </details>
+     </td>
+   </tr>
+
+   <tr>
+     <td>Internal links:</td>
+     <td>
+       {{#internalLinks}} {{internalLink}}{{^last}},{{/last}} {{/internalLinks}}
+       {{^internalLinks.length}}--{{/internalLinks.length}}
+       <details>
+         <summary><span class="icon-support"></span> Explain</summary>
+         <p>The internal links within this {{type}}.</p>
+       </details>
+     </td>
+   </tr>
+
+   <tr>
+     <td>Dependencies:</td>
+     <td>
+       {{#dependencies}} {{dependency}}{{^last}},{{/last}} {{/dependencies}}
+       {{^dependencies.length}}--{{/dependencies.length}}
+       <details>
+         <summary><span class="icon-support"></span> Explain</summary>
+         <p>The files this {{type}} depends on, such as images referenced by its source files.</p>
+       </details>
+     </td>
+   </tr>
+
+   <tr>
+     <td>Metadata:</td>
+     <td>
+       {{#metadata.length}}
+       <table class="file-stat-nested">
+         {{#metadata}}
+         <tr>
+           <td>{{key}}</td>
+           <td>{{value}}</td>
+         </tr>
+         {{/metadata}}
+       </table>
+       {{/metadata.length}}
+       {{^metadata.length}}--{{/metadata.length}}
+       <details>
+         <summary><span class="icon-support"></span> Explain</summary>
+         <p>Metadata merged from every source file. Later files override earlier files for a repeated field.</p>
+       </details>
+     </td>
+   </tr>
+
+   <tr>
+     <td>GUID:</td>
+     <td>{{guid}} <button class="copy"><span class="icon-copy"></span> Copy</button>
+      <details>
+         <summary><span class="icon-support"></span> Explain</summary>
+         <p>The globally unique identifier for this {{type}}.</p>
+       </details>
+     </td>
+   </tr>
+ </table>
+
+</div>
+
+</div>
+{{/entry}}
+{{/folderPost}}
+{{/folder}}

@@ -43,9 +43,24 @@
 
 <div class="publishing-steps {{^entry}}no-entry{{/entry}}" s>
   {{#entry}}
-    
 
        <!-- File is a post or page -->
+  {{#multi}}
+  <p>
+    <i><span class="icon-small-check"></span></i>
+    {{#viewingSource}}
+    <b>File is part of a folder post</b>
+    Editing, renaming, or removing this file updates the {{type}} published at <a href="{{{blog.url}}}{{{url}}}" target="_blank">{{entryPath}}</a>.
+    {{/viewingSource}}
+    {{^viewingSource}}
+    <b>Folder is a {{type}}</b>
+    Add, rename, or delete files inside
+    {{#folderUrl}}<a href="{{{base}}}/folder{{{folderUrl}}}">{{/folderUrl}}<code>{{folderPath}}</code>{{#folderUrl}}</a>{{/folderUrl}}
+    to update it.
+    {{/viewingSource}}
+  </p>
+  {{/multi}}
+  {{^multi}}
   <p>
     <i><span class="icon-small-check"></span></i>
     <b>File is a {{type}}</b>
@@ -56,6 +71,7 @@
     To prevent this file becoming a {{type}}, start the file name with an underscore or move it into a folder that starts with an underscore.
     {{/converter.img}}
   </p>
+  {{/multi}}
   {{#scheduled}}
   {{^draft}}
   <!-- File is scheduled for future publication -->
@@ -168,6 +184,48 @@
      </td>
    </tr>
 
+   {{#multi}}
+   <!-- Folder post source files -->
+   <tr>
+     <td>{{Type}} files:</td>
+     <td>
+       <ul class="folder-post-file-list">
+         {{#sources}}
+         {{^hidden}}
+         <li class="folder-post-file {{#current}}current{{/current}} {{^exists}}missing{{/exists}}">
+           <a href="{{{base}}}/folder{{{url}}}">
+             <span class="icon-file-check"></span>
+             <span class="file-name">{{relativePath}}</span>
+           </a>
+           {{#exists}}<span class="file-size">{{size}}</span>{{/exists}}
+           {{^exists}}<span class="file-missing-note">missing from folder</span>{{/exists}}
+         </li>
+         {{/hidden}}
+         {{/sources}}
+       </ul>
+       {{#truncated}}
+       <details class="folder-post-more">
+         <summary>Show all {{sourceCount}} files</summary>
+         <ul class="folder-post-file-list">
+           {{#sources}}
+           {{#hidden}}
+           <li class="folder-post-file {{#current}}current{{/current}} {{^exists}}missing{{/exists}}">
+             <a href="{{{base}}}/folder{{{url}}}">
+               <span class="icon-file-check"></span>
+               <span class="file-name">{{relativePath}}</span>
+             </a>
+             {{#exists}}<span class="file-size">{{size}}</span>{{/exists}}
+             {{^exists}}<span class="file-missing-note">missing from folder</span>{{/exists}}
+           </li>
+           {{/hidden}}
+           {{/sources}}
+         </ul>
+       </details>
+       {{/truncated}}
+     </td>
+   </tr>
+   {{/multi}}
+
    <!-- Post or page link -->
    <tr>
     <td>{{Type}} link:</td>
@@ -242,10 +300,16 @@
        {{#converter.webloc}}
        <a href="/how/files/bookmarks">Bookmarks</a>
        {{/converter.webloc}}
-       
+       {{#converter.multi}}
+       Multiple files
+       {{/converter.multi}}
+
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
-         <p>The converter used to generate this post was chosen based on the file type.</p>
+         <p>
+          {{#converter.multi}}This {{type}} is built from multiple files, so its converter depends on each source file inside the folder.{{/converter.multi}}
+          {{^converter.multi}}The converter used to generate this post was chosen based on the file type.{{/converter.multi}}
+         </p>
        </details>
      </td>
    </tr>

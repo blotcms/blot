@@ -312,3 +312,151 @@ a.template-button.file-helper span {margin-left: 0.5em;}
   font-size: .9em;
   padding: 3px 6px;
 }
+
+/* Folder post view: the source files are listed at the top of .file-info with
+   the same Name / Date modified / Size layout as the folder viewer. The table
+   reuses .directory-list, so this only pulls it flush with the card edges and
+   adds a rule between it and the heading above. */
+.folder-post-sources {
+  margin: 4px -36px 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.folder-post-source-list {
+  width: 100%;
+}
+
+.folder-post-source-list th:first-child,
+.folder-post-source-list td:first-child {
+  padding-left: 36px;
+}
+
+.folder-post-source-list th:last-child,
+.folder-post-source-list td:last-child {
+  padding-right: 36px;
+}
+
+.folder-post-source-list tr td:first-child:after {
+  left: 36px;
+}
+
+.folder-post-source-list tr td:last-child:after {
+  right: 36px;
+}
+
+.folder-post-source.missing .file-name {
+  text-decoration: line-through;
+  color: #c0392b;
+}
+
+.folder-post-source .file-missing-note {
+  display: block;
+  font-size: 12px;
+  color: #c0392b;
+  margin-top: 2px;
+}
+
+.folder-post-sources .folder-post-more {
+  margin: 0;
+  padding: 8px 36px 4px;
+  border-top: 1px solid #f4f4f5;
+}
+
+.folder-post-sources .folder-post-more[open] {
+  padding-bottom: 0;
+}
+
+.folder-post-sources .folder-post-more .folder-post-source-list td:first-child:after,
+.folder-post-sources .folder-post-more .folder-post-source-list td:last-child:after {
+  left: 0;
+  right: 0;
+}
+
+/* A file that belongs to a folder post gets a "Post files:" row in the
+   file-stat table listing the folder's source files (relative path + size),
+   aligned with the other values in the value column. */
+.folder-post-file-list {
+  list-style: none;
+  margin: 3px 0 0;
+  padding: 0;
+  font-size: 13px;
+}
+
+.folder-post-file-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin: 0;
+  padding: 3px 0;
+}
+
+.folder-post-file-list a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  min-width: 0;
+  text-decoration: none;
+  color: var(--text-color);
+}
+
+.folder-post-file-list .icon-file-check {
+  flex-shrink: 0;
+}
+
+.folder-post-file-list .file-name {
+  overflow-wrap: anywhere;
+}
+
+.folder-post-file-list .file-size {
+  color: var(--light-text-color);
+  white-space: nowrap;
+}
+
+.folder-post-file-list li.current .file-name {
+  color: var(--accent-color);
+}
+
+.folder-post-file-list li.missing .file-name {
+  text-decoration: line-through;
+  color: #c0392b;
+}
+
+.folder-post-file-list .file-missing-note {
+  color: #c0392b;
+}
+
+/* The "Show all" disclosure lives inside a file-stat value cell, whose
+   `td details summary` rule would otherwise absolutely-position it. */
+.file-stat td .folder-post-more {
+  font-size: 13px;
+}
+
+.file-stat td .folder-post-more > summary {
+  position: static;
+  top: auto;
+  right: auto;
+  color: var(--accent-color);
+}
+
+.file-stat td .folder-post-more .folder-post-file-list {
+  margin-top: 0;
+}
+
+.folder-post-more {
+  margin-top: 12px;
+}
+
+.folder-post-more > summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--accent-color);
+  list-style: none;
+}
+
+.folder-post-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.folder-post-more[open] > summary {
+  margin-bottom: 4px;
+}

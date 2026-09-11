@@ -4,6 +4,12 @@ const Entry = require("models/entry");
 const localPath = require("helper/localPath");
 const async = require("async");
 
+// A folder post is synthesized at a "+"-stripped path with no file behind it
+// (the aggregate for "/Album +" is stored at "/album"). resolvePath would
+// never find a file there and drop it as a ghost on every sync/restart, so
+// these entries are checked against their source "+" folder instead.
+const folderPostFolder = require("sync/update/folderPostSourceFolder");
+
 function resolvePath (blogID, path, callback) {
   var candidates = [];
 
@@ -55,8 +61,21 @@ function main (blog, callback) {
     function (_entry, next) {
 
       if (!_entry) return next();
-      
+
       if (_entry.deleted) return next();
+
+      // Folder posts have no file at their own path; they are ghosts only if
+      // the "+" folder they were built from is gone - or has been replaced by
+      // a plain file, which can no longer aggregate anything.
+      var multiFolder = folderPostFolder(_entry);
+      if (multiFolder) {
+        return fs.stat(localPath(blog.id, multiFolder), function (err, stat) {
+          if (err || !stat.isDirectory()) {
+            missing.push({ entry: _entry, path: _entry.path });
+          }
+          next();
+        });
+      }
 
       resolvePath(blog.id, _entry.path, function (err, path) {
         if (path && path !== _entry.path) {

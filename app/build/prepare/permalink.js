@@ -107,22 +107,28 @@ module.exports = function (timeZone, format, entry) {
 
     for (var i in entry) if (allow.indexOf(i) > -1) view[i] = entry[i];
 
+    // A folder post's path/name is synthesized from its "+" folder (e.g. the
+    // aggregate for "/release.v1+" is stored at "/release.v1") and has no
+    // real file extension, even when it contains a dot. Don't let a dot
+    // anywhere in that path be mistaken for one.
+    var isFolderPost =
+      typeof entry.html === "string" &&
+      entry.html.indexOf('class="multi-file-post"') !== -1;
+
     // this needs a better name but make sure to update any
     // existing custom formats for folks...
-    view["path-without-extension"] = entry.path.slice(
-      0,
-      entry.path.lastIndexOf(".")
-    );
+    var pathDot = isFolderPost ? -1 : entry.path.lastIndexOf(".");
+    view["path-without-extension"] =
+      pathDot === -1 ? entry.path : entry.path.slice(0, pathDot);
 
     // stem should be path without extension
     view.stem = makeSlug(view["path-without-extension"]);
 
     // this needs a better name but make sure to update any
     // existing custom formats for folks...
-    view["name-without-extension"] = view.name.slice(
-      0,
-      view.name.lastIndexOf(".")
-    );
+    var nameDot = isFolderPost ? -1 : view.name.lastIndexOf(".");
+    view["name-without-extension"] =
+      nameDot === -1 ? view.name : view.name.slice(0, nameDot);
 
     // this needs a better name but make sure to update any
     // existing custom formats for folks...

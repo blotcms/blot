@@ -1,0 +1,111 @@
+{{=[[ ]]=}}
+
+<h1>Folder posts</h1>
+
+<p>A <a href="/how/sub-folders/folder-posts">folder post</a> is a folder whose name ends in <code>+</code>. Blot converts every file inside, concatenates the results in alphabetical order, and publishes them as one entry at the folder&rsquo;s path without the <code>+</code> (for example <code>/Album +</code> is published at <code>/album</code>). This guide covers the HTML Blot generates so you can build a slideshow, gallery, or other custom layout in your template.</p>
+
+<h2>Generated markup</h2>
+
+<p>The combined content is wrapped in a single <code>&lt;section class="multi-file-post"&gt;</code>. Each source file is rendered inside its own <code>&lt;section class="multi-file-entry"&gt;</code>, in the order the files appear on your site.</p>
+
+<pre class="html output"><code>&lt;section class="multi-file-post" data-folder="/Album +"&gt;
+  &lt;section class="multi-file-entry" data-file="/Album +/01-intro.md" data-index="0" data-extension="md"&gt;
+    &lt;h1&gt;Intro&lt;/h1&gt;
+    &lt;p&gt;&hellip;&lt;/p&gt;
+  &lt;/section&gt;
+  &lt;section class="multi-file-entry" data-file="/Album +/02-first.jpg" data-index="1" data-extension="jpg"&gt;
+    &lt;img src="/Album +/02-first.jpg"&gt;
+  &lt;/section&gt;
+&lt;/section&gt;</code></pre>
+
+<h3>Attributes</h3>
+
+<table>
+  <thead>
+    <tr><th>Attribute</th><th>Where</th><th>Value</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>data-folder</code></td><td><code>.multi-file-post</code></td><td>Path to the <code>+</code> folder.</td></tr>
+    <tr><td><code>data-file</code></td><td><code>.multi-file-entry</code></td><td>Path to the source file for that section.</td></tr>
+    <tr><td><code>data-index</code></td><td><code>.multi-file-entry</code></td><td>Zero-based position of the file in the post.</td></tr>
+    <tr><td><code>data-extension</code></td><td><code>.multi-file-entry</code></td><td>Lower-cased file extension, e.g. <code>md</code>, <code>jpg</code>. Omitted when the file has no extension.</td></tr>
+  </tbody>
+</table>
+
+<h2>The injected title</h2>
+
+<p>If none of the first three source sections produces an <code>&lt;h1&gt;</code>, Blot inserts one as the first child of <code>.multi-file-post</code> so the post is never headingless:</p>
+
+<pre class="html output"><code>&lt;h1 class="multi-file-title"&gt;Album&lt;/h1&gt;</code></pre>
+
+<p>The text is an explicit <code>Title</code> from the merged metadata, or the folder name with the trailing <code>+</code> removed and any percent-encoding decoded. Blot only checks the first three sections because that is as far as it looks when deriving the entry title &mdash; if the first heading appears in a later file you will see both it and the generated <code>.multi-file-title</code>, so target <code>.multi-file-title</code> in CSS if you want to hide or restyle it.</p>
+
+<h2>Merged metadata, dependencies, and stats</h2>
+
+<p><a href="/how/metadata">Metadata</a> from every source file is merged into the entry. Later files override earlier files for a repeated key (matched case-insensitively), except <code>Tags</code>, which are unioned across all files. Dependencies (such as images referenced by a Markdown file) and the entry&rsquo;s size and dates are merged the same way. The list of source files is not exposed to templates as metadata &mdash; read it from the <code>data-file</code> attributes in <code>entry.html</code> if you need it.</p>
+
+<h2>Limits</h2>
+
+<ul>
+  <li>Blot walks sub-folders of the <code>+</code> folder. A folder post is capped at <strong>50</strong> convertible files; above that Blot does not build the post.</li>
+  <li>Files Blot cannot convert, and <a href="/how/files">ignored files</a> (names starting with <code>_</code>, files inside <code>_</code> folders), are skipped.</li>
+  <li>If a file&rsquo;s converter is disabled for the site (for example image posts), that file is left out of the aggregate.</li>
+</ul>
+
+<h2>Example: a slideshow</h2>
+
+<p>Each <code>.multi-file-entry</code> becomes a slide. This example uses only CSS scroll-snapping, so it works without JavaScript; add controls as needed.</p>
+
+<pre class="html" data-file="entry.html"><code>{{#entry}}
+  {{{entry.html}}}
+{{/entry}}</code></pre>
+
+<pre class="css" data-file="style.css"><code>.multi-file-post {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  gap: 1rem;
+}
+
+.multi-file-post .multi-file-entry {
+  flex: 0 0 100%;
+  scroll-snap-align: center;
+}
+
+/* Hide the auto-generated title if you render your own */
+.multi-file-post .multi-file-title {
+  position: absolute;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+}</code></pre>
+
+<p>Because <code>entry.html</code> already contains the wrapper, you do not iterate the files in Mustache &mdash; render <code>{{{entry.html}}}</code> and style the sections. To treat only folder posts differently, test for the <code>multi-file-post</code> wrapper class (or a <code>data-folder</code> attribute) in <code>entry.html</code>.</p>
+
+<h2>Example: styling by file type</h2>
+
+<pre class="css" data-file="style.css"><code>.multi-file-entry[data-extension="jpg"],
+.multi-file-entry[data-extension="png"] {
+  margin: 0;
+}
+
+.multi-file-entry[data-extension="md"] {
+  max-width: 40rem;
+  margin: 0 auto;
+}</code></pre>
+
+<div class="guide-faq">
+<details>
+<summary>Implementation reference</summary>
+<ol>
+  <li>Aggregation, file collection, and the 50-file cap: <code>app/build/multiple.js</code>.</li>
+  <li>Wrapper markup and injected title: <code>renderHtmlSections</code> / <code>deriveHeading</code> in <code>app/build/multiple.js</code>.</li>
+  <li>Resolving a <code>+</code> folder to its published path: <code>findMultiFolder</code> in <code>app/build/index.js</code>.</li>
+  <li>User-facing overview: <code>app/views/how/sub-folders/folder-posts.html</code>.</li>
+</ol>
+</details>
+</div>
+
+[[={{ }}=]]

@@ -8,6 +8,7 @@ Summer newsletter
 - You can disable processing of images into posts from the [image settings](https://blot.im/sites/default/settings/images)
 - You can now import sites from Blogger on the importer
 - Obsidian callout support: /how/files/markdown#callouts
+- Add a "+" to a folder's name to publish everything inside it as a single [folder post](https://blot.im/how/sub-folders/folder-posts)
 
 **Changes**
 - Improved many of the built-in templates and fixed a batch of mobile layout bugs across the template collection

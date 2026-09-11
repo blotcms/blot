@@ -3,11 +3,42 @@ const path = require("path");
 const alphanum = require("helper/alphanum");
 const localPath = require("helper/localPath");
 const Stat = require("./stat");
-const client = require("models/client");
-const entryKeys = require("models/entry").key;
+const Entry = require("models/entry");
 const pathNormalize = require("helper/pathNormalizer");
 const IgnoredFiles = require("models/ignoredFiles");
 const postSourceSize = require("build/converters/post-source-size");
+const Build = require("build");
+
+const findMultiFolder =
+  (Build && Build.findMultiFolder) ||
+  function () {
+    return null;
+  };
+
+// Pull the source-file paths out of a folder post's generated HTML. Returns
+// an empty list for anything that is not a folder post so a stray data-file
+// attribute in an ordinary post cannot be mistaken for aggregation.
+function folderPostSourcePaths(html) {
+  if (typeof html !== "string" || html.indexOf('class="multi-file-post"') === -1)
+    return [];
+
+  const paths = [];
+  const pattern = /<section class="multi-file-entry"[^>]*\sdata-file="([^"]*)"/g;
+  let match;
+
+  while ((match = pattern.exec(html))) {
+    paths.push(
+      String(match[1])
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&")
+    );
+  }
+
+  return paths;
+}
 
 // Folders synced from Dropbox, Google Drive, git etc. can contain tens of
 // thousands of files. Statting every entry, checking Redis for a matching
@@ -139,24 +170,70 @@ async function decorate(blog, dir, pageStats) {
 
   const [entries, ignoredFiles] = await Promise.all([
     new Promise((resolve) => {
-      // An entry may be stored as a legacy JSON string key, a Redis hash, or
-      // (during the migration) both. EXISTS with multiple keys returns the
-      // count, so >= 1 means the entry is present in some form.
+      // Resolve each listed item to the entry that decides whether it is
+      // badged as published. A file inside a "+" folder shares the folder
+      // post's aggregate entry, so it is looked up under that path instead.
+      const lookups = pageNames.map((item) => {
+        const itemPath = pathNormalize(path.join(dir, item));
+        const multiInfo = findMultiFolder(itemPath);
+        const viaAggregate = !!(
+          multiInfo && pathNormalize(multiInfo.entryPath) !== itemPath
+        );
+        const lookupPath = viaAggregate ? multiInfo.entryPath : itemPath;
+        return {
+          itemPath,
+          viaAggregate,
+          folderPath: multiInfo ? pathNormalize(multiInfo.folderPath) : null,
+          lookupPath: pathNormalize(lookupPath),
+        };
+      });
+
+      // Every item in a "+" folder resolves to the same aggregate entry, so
+      // read each distinct path once. Entry.get transparently reads the
+      // legacy JSON string key or the newer Redis hash, whichever exists; we
+      // only need the deleted flag and the generated HTML (to confirm a file
+      // is one of the folder post's sources rather than an unsupported
+      // sibling).
+      const uniquePaths = Array.from(
+        new Set(lookups.map((lookup) => lookup.lookupPath))
+      );
+
       Promise.all(
-        pageNames.map((item) => {
-          const entryPath = path.join(dir, item);
-          return client.exists([
-            entryKeys.entry(blog.id, entryPath),
-            entryKeys.entryHash(blog.id, entryPath),
-          ]);
-        })
+        uniquePaths.map(
+          (entryPath) =>
+            new Promise((res) => {
+              Entry.get(blog.id, entryPath, ["html", "deleted"], (entry) =>
+                res(entry || null)
+              );
+            })
+        )
       )
-        .then((res) => {
-          if (!res || !res.length) return resolve([]);
+        .then((fetched) => {
+          const byPath = new Map();
+          uniquePaths.forEach((entryPath, index) => {
+            byPath.set(entryPath, fetched[index]);
+          });
+
           resolve(
             pageNames.filter((_, index) => {
-              const exists = res[index];
-              return Number(exists) >= 1 || exists === true;
+              const lookup = lookups[index];
+              const entry = byPath.get(lookup.lookupPath);
+
+              if (!entry || entry.deleted === true) return false;
+
+              // A file inside a "+" folder resolves to the shared aggregate
+              // entry. Only badge it as published if it is actually the "+"
+              // folder itself or one of the folder post's source files -
+              // not an unsupported sibling like archive.zip.
+              if (lookup.viaAggregate) {
+                if (lookup.itemPath === lookup.folderPath) return true;
+                return (
+                  folderPostSourcePaths(entry.html).indexOf(lookup.itemPath) !==
+                  -1
+                );
+              }
+
+              return true;
             })
           );
         })

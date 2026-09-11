@@ -1,0 +1,83 @@
+<h1>Folder posts</h1>
+
+<p>
+  Add a <code>+</code> to the end of a folder&rsquo;s name to publish everything inside
+  it as a single post. When Blot sees a folder such as <code>Essay +</code>, it joins
+  every file inside into one entry and publishes it at <code>/essay</code>.
+</p>
+
+<background>
+  <pre class="folder" title="Your site"><code>Essay +
+  Introduction.md
+  Part one.md
+  Part two.md
+  diagram.png
+Posts
+
+</code></pre></background>
+
+<p>
+  This is useful when a single post is easier to write as several files &mdash; a
+  long essay split into chapters, a photo story with captions between the images,
+  or a page that keeps its images and text side by side in the folder.
+</p>
+
+<h2>Create a folder post</h2>
+
+<p>
+  Make a folder and add a <code>+</code> to the end of its name. Put your files
+  inside. Blot publishes the post at the folder&rsquo;s path without the
+  <code>+</code>, so <code>Essay +</code> becomes <code>/essay</code>.
+</p>
+
+<p>
+  Only folders that contain a <a href="/how/files">file Blot can publish</a> become
+  posts. An empty <code>+</code> folder is ignored until you add a supported file.
+</p>
+
+<h2>The order of the files</h2>
+
+<p>
+  Files are joined in alphabetical order by file name. To control the order, name
+  the files so they sort the way you want, for example <code>01 Introduction.md</code>,
+  <code>02 Part one.md</code>, <code>03 Part two.md</code>.
+</p>
+
+<p>
+  A <code>+</code> folder can contain sub-folders. Blot looks through them too, up
+  to a total of 50 files. If a folder post would contain more than 50 files, Blot
+  does not publish it.
+</p>
+
+<h2>The title</h2>
+
+<p>
+  If none of the files inside the folder has a heading, Blot adds one for you using
+  the folder&rsquo;s name. Add a heading or <a href="/how/metadata#title">Title
+  metadata</a> to one of the files to set the title yourself.
+</p>
+
+<h2>Drafts</h2>
+
+<p>
+  Folder posts work inside a <a href="/how/sub-folders/drafts">Drafts</a> folder. A
+  folder such as <code>Drafts/Essay +</code> creates a single draft preview at
+  <code>/drafts/essay</code> and keeps it up to date as you edit the files.
+</p>
+
+<h2>Edit or remove a folder post</h2>
+
+<p>
+  Add, edit, rename, or delete files inside the folder to update the post. Blot
+  rebuilds it whenever any file inside changes. Delete the folder to remove the
+  post.
+</p>
+
+<h2>Building a custom layout</h2>
+
+<p>
+  Blot wraps a folder post in HTML that marks where each file begins, so a template
+  can lay the files out as a slideshow, a gallery, or another custom design. See
+  <a href="/developers/guides/folder-posts">Folder posts</a> in the developer
+  guides for the markup and examples.
+</p>

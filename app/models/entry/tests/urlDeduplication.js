@@ -77,6 +77,31 @@ describe("entry.urlDeduplication", function () {
     expect(third.dependencies).not.toContain("/multi-b.txt");
   });
 
+  it("publishes a folder post at its plus-stripped path", async function () {
+    await fs.outputFile(
+      this.blogDirectory + "/album+/one.md",
+      "Link: /album\n\n# One"
+    );
+
+    const builtEntry = await new Promise((resolve, reject) => {
+      build(this.blog, "/album+/one.md", function (err, entry) {
+        if (err) return reject(err);
+        resolve(entry);
+      });
+    });
+
+    expect(builtEntry.path).toEqual("/album");
+
+    const result = await new Promise((resolve, reject) => {
+      setUrl(this.blog.id, builtEntry, function (err, urlResult) {
+        if (err) return reject(err);
+        resolve(urlResult);
+      });
+    });
+
+    expect(result.url).toEqual("/album");
+  });
+
   it("returns null conflictingEntryPath when no conflict", async function () {
     await fs.outputFile(
       this.blogDirectory + "/unique.txt",

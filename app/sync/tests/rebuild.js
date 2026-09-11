@@ -84,4 +84,70 @@ describe("rebuild", function () {
 
     done();
   });
+
+  it("keeps a folder post aggregate through a full rebuild", async function (done) {
+    const Entry = require("models/entry");
+    const { promisify } = require("util");
+    const getEntry = (id) =>
+      new Promise((resolve) => Entry.get(this.blog.id, id, resolve));
+
+    await this.blog.write({ path: "/essay+/01 intro.md", content: "# Intro" });
+    await this.blog.write({ path: "/essay+/02 body.md", content: "The body." });
+    await this.blog.rebuild();
+
+    const isAggregate = (html) =>
+      html.includes("Intro") && html.includes("body");
+
+    await this.blog.check({ path: "/essay", html: isAggregate });
+    await this.blog.check({ path: "/essay+/01 intro.md", ignored: true });
+
+    // A second rebuild with nothing changed must not drop the aggregate — it
+    // lives at "/essay" with no file behind it, only the "/essay+" folder.
+    await this.blog.rebuild();
+
+    const afterRebuild = await this.blog.check({
+      path: "/essay",
+      html: isAggregate,
+    });
+    expect(afterRebuild.deleted).toBeFalsy();
+
+    // And if the aggregate goes missing (e.g. an over-eager ghost sweep), a
+    // full rebuild restores it from the "+" folder on disk.
+    await promisify(Entry.drop)(this.blog.id, "/essay");
+    const dropped = await getEntry("/essay");
+    expect(!dropped || dropped.deleted).toBeTruthy();
+
+    await this.blog.rebuild();
+
+    const restored = await this.blog.check({
+      path: "/essay",
+      html: isAggregate,
+    });
+    expect(restored.deleted).toBeFalsy();
+
+    done();
+  });
+
+  it("drops a folder post aggregate when its + folder is emptied before a rebuild", async function (done) {
+    const Entry = require("models/entry");
+    const getEntry = (id) =>
+      new Promise((resolve) => Entry.get(this.blog.id, id, resolve));
+
+    await this.blog.write({ path: "/essay+/01 intro.md", content: "# Intro" });
+    await this.blog.write({ path: "/essay+/02 body.md", content: "The body." });
+    await this.blog.rebuild();
+    await this.blog.check({ path: "/essay" });
+
+    // Every file leaves the folder but the (now empty) directory stays and no
+    // deletion event is processed — only a later full rebuild runs. `walk`
+    // only yields files, so the rebuild must still pick up the empty "+" dir.
+    await this.blog.remove("/essay+/01 intro.md");
+    await this.blog.remove("/essay+/02 body.md");
+    await this.blog.rebuild();
+
+    const after = await getEntry("/essay");
+    expect(!after || after.deleted).toBeTruthy();
+
+    done();
+  });
 });

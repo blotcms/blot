@@ -433,7 +433,8 @@ h2 + .clients {margin-top: 0}
 }
 
 .clients.files .icon-file-check,
-.clients.files .icon-folder {
+.clients.files .icon-folder,
+.clients.files .icon-folder-check {
   margin-right: 8px;
 }
 

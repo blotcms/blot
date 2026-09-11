@@ -1,14 +1,29 @@
 const debug = require("debug")("blot:dashboard:folder:kind");
-const basename = require("path").basename;
-const extname = require("path").extname;
+const path = require("path");
+const basename = path.basename;
+const extname = path.extname;
 const Entry = require("models/entry");
 const IgnoredFiles = require("models/ignoredFiles");
 const moment = require("moment");
 const converters = require("build/converters");
 const enabledConverters = require("build/converters/enabled");
+const Build = require("build");
+const fs = require("fs-extra");
+const localPath = require("helper/localPath");
 const postSourceSize = require("build/converters/post-source-size");
+const Stat = require("./stat");
+
+// Mirror the folder-post viewer: show the first N source files inline, hide the
+// rest behind a "Show all" toggle.
+const VISIBLE_SOURCE_LIMIT = 10;
 
 require("moment-timezone");
+
+const findMultiFolder =
+  (Build && Build.findMultiFolder) ||
+  function () {
+    return null;
+  };
 
 const SYNTHETIC_DEPENDENCY_PREFIXES = [
   "/__wikilink_slug__/",
@@ -19,6 +34,9 @@ module.exports = async function (blog, path) {
   return new Promise((resolve, reject) => {
     const blogID = blog.id;
 
+    const multiInfo = findMultiFolder(path);
+    const aggregatedLookupPath = multiInfo ? multiInfo.entryPath : null;
+
     Promise.all([
       new Promise((resolve, reject) => {
         IgnoredFiles.getStatus(blogID, path, function (err, ignored) {
@@ -26,20 +44,22 @@ module.exports = async function (blog, path) {
           resolve(ignored);
         });
       }),
-      new Promise((resolve, reject) => {
+      new Promise((resolve) => {
         Entry.get(blogID, path, function (entry) {
           resolve(entry);
         });
       }),
-    ])
-      .then(([ignoredReason, entry]) => {
-        // Entry.drop keeps a deleted tombstone (deleted: true) around for
-        // 24 hours rather than removing the record outright. For the
-        // dashboard a deleted entry is not a post/page, so treat it as
-        // absent — otherwise the "too large" / "wrong type" messaging for
-        // a previously published file stays hidden behind `if (!entry)`.
-        if (entry && entry.deleted) entry = null;
+      new Promise((resolve) => {
+        if (!aggregatedLookupPath || aggregatedLookupPath === path) {
+          return resolve(null);
+        }
 
+        Entry.get(blogID, aggregatedLookupPath, function (entry) {
+          resolve(entry);
+        });
+      }),
+    ])
+      .then(async ([ignoredReason, ownEntry, aggregatedEntry]) => {
         const matchingConverter = converters.find((converter) => {
           return converter.is(path);
         });
@@ -48,6 +68,15 @@ module.exports = async function (blog, path) {
             return matchingConverter && converter.id === matchingConverter.id;
           }
         );
+
+        let entry = resolveDisplayedEntry({
+          path,
+          ownEntry,
+          aggregatedEntry,
+          multiInfo,
+        });
+
+        const entryLookupPath = entry ? entry.path : path;
 
         let ignored = {};
 
@@ -82,10 +111,11 @@ module.exports = async function (blog, path) {
 
         const file = {};
 
-        file.kind = kind(path);
+        file.kind = kind(path, entry, multiInfo);
         file.path = path;
-        file.url = path.split('/').map(encodeURIComponent).join('/');
+        file.url = encodePath(path);
         file.name = basename(path);
+        file.entryPath = entryLookupPath;
 
         // a dictionary we use to display conditionally in the UI
         file.extension = {};
@@ -100,14 +130,26 @@ module.exports = async function (blog, path) {
           // Replace with case-preserving
           entry.name = file.name;
 
-          entry.converter = {};
-          entry.converter[converters.find((converter) => {
-            return converter.is(path);
-          }).id] = true;
-          
+          let converter;
+
+          if (isMultiEntry(entry, multiInfo)) {
+            entry.converter = { multi: true };
+          } else {
+            converter = converters.find((converter) => {
+              return converter.is(path);
+            });
+
+            if (converter) {
+              entry.converter = {};
+              entry.converter[converter.id] = true;
+            } else {
+              entry.converter = {};
+            }
+          }
+
           entry.type = entry.draft ? 'draft' : entry.page ? 'page' :  'post';
           entry.Type = entry.type.charAt(0).toUpperCase() + entry.type.slice(1);
-          
+
           entry.tags = entry.tags.map((tag, i, arr) => {
             return { tag, first: i === 0, last: i === arr.length - 1 };
           });
@@ -133,12 +175,34 @@ module.exports = async function (blog, path) {
             return { dependency };
             });
 
-           entry.internalLinks = entry.internalLinks.map((internalLink) => {
+          entry.internalLinks = entry.internalLinks.map((internalLink) => {
             return { internalLink };
           });
 
-          entry.metadata = Object.keys(entry.metadata).map((key) => {
-            return { key, value: entry.metadata[key] };
+          const rawMetadata = { ...(entry.metadata || {}) };
+          const sourcePaths = sourcePathsForEntry(entry, multiInfo);
+
+          if (sourcePaths.length && isMultiEntry(entry, multiInfo)) {
+            delete rawMetadata._sourcePaths;
+
+            const folderDetails =
+              multiInfo ||
+              (sourcePaths.length
+                ? findMultiFolder(sourcePaths[0])
+                : null) || { entryPath: entry.path };
+
+            entry.multi = await buildMultiEntryData({
+              blogID,
+              entry,
+              folderDetails,
+              sourcePaths,
+              currentPath: path,
+              timeZone: blog.timeZone,
+            });
+          }
+
+          entry.metadata = Object.keys(rawMetadata).map((key) => {
+            return { key, value: rawMetadata[key] };
           });
 
           if (entry.exif && typeof entry.exif === "object") {
@@ -188,12 +252,16 @@ const CATEGORIES = {
   "video": ["mp4", "avi", "mkv", "mov", "flv", "wmv"],
 };
 
-function kind (path) {
+function kind(path, entry, multiInfo) {
+  if (entry && isMultiEntry(entry, multiInfo)) {
+    return "Folder post";
+  }
+
   let kind = "File";
   let extension;
 
   extension = extname(path).toLowerCase().slice(1);
-  kind = KIND[extension] || extension.toUpperCase();
+  kind = KIND[extension] || (extension ? extension.toUpperCase() : "File");
   debug(path, extension, kind);
 
   return kind;
@@ -218,6 +286,165 @@ function normalizeExtension (path) {
   res[extension] = true;
 
   return res;
+}
+
+function encodePath(input) {
+  return input
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function resolveDisplayedEntry({ path, ownEntry, aggregatedEntry, multiInfo }) {
+  if (ownEntry && !isDeleted(ownEntry) && !isMultiEntry(ownEntry, multiInfo)) {
+    return ownEntry;
+  }
+
+  if (aggregatedEntry && !isDeleted(aggregatedEntry) && multiInfo) {
+    const sourcePaths = sourcePathsForEntry(aggregatedEntry, multiInfo);
+    const isFolder = path === multiInfo.folderPath;
+    const isSource = sourcePaths.indexOf(path) !== -1;
+
+    if (isFolder || isSource) return aggregatedEntry;
+  }
+
+  if (ownEntry && !isDeleted(ownEntry)) return ownEntry;
+
+  return null;
+}
+
+function isDeleted(entry) {
+  return !!(entry && entry.deleted);
+}
+
+function isMultiEntry(entry, multiInfo) {
+  if (!entry || isDeleted(entry)) return false;
+
+  if (sourcePathsFromHtml(entry.html).length > 0) return true;
+
+  if (
+    entry.metadata &&
+    Array.isArray(entry.metadata._sourcePaths) &&
+    entry.metadata._sourcePaths.length > 0
+  ) {
+    return true;
+  }
+
+  return !!(multiInfo && entry.path === multiInfo.entryPath);
+}
+
+function sourcePathsForEntry(entry, multiInfo) {
+  const fromHtml = sourcePathsFromHtml(entry && entry.html);
+  if (fromHtml.length) return fromHtml;
+
+  const fromMetadata =
+    entry &&
+    entry.metadata &&
+    Array.isArray(entry.metadata._sourcePaths)
+      ? entry.metadata._sourcePaths.slice()
+      : [];
+
+  if (fromMetadata.length) return fromMetadata;
+
+  if (multiInfo && multiInfo.folderPath) return [multiInfo.folderPath];
+
+  return [];
+}
+
+function isFolderPostHtml(html) {
+  return typeof html === "string" && html.indexOf('class="multi-file-post"') !== -1;
+}
+
+function sourcePathsFromHtml(html) {
+  // Only treat this as a folder post if it carries the generated wrapper.
+  // A normal post can legitimately contain a stray data-file attribute
+  // (e.g. <pre data-file="example.js">) and must not be misclassified.
+  if (!isFolderPostHtml(html)) return [];
+
+  const paths = [];
+  const pattern = /<section class="multi-file-entry"[^>]*\sdata-file="([^"]*)"/g;
+  let match;
+
+  while ((match = pattern.exec(html))) {
+    paths.push(unescapeAttribute(match[1]));
+  }
+
+  return paths;
+}
+
+function unescapeAttribute(value) {
+  return String(value)
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+async function buildMultiEntryData({
+  blogID,
+  entry,
+  folderDetails,
+  sourcePaths,
+  currentPath,
+  timeZone,
+}) {
+  const folderPath = folderDetails ? folderDetails.folderPath : null;
+  const entryPath = folderDetails ? folderDetails.entryPath : entry.path;
+
+  const existence = await Promise.all(
+    sourcePaths.map((sourcePath) => {
+      return fs.pathExists(localPath(blogID, sourcePath)).catch(() => false);
+    })
+  );
+
+  // The "Post files:" row shows each source file's relative path and size, so
+  // stat each file that still exists.
+  const stats = await Promise.all(
+    sourcePaths.map((sourcePath, index) =>
+      existence[index]
+        ? Stat(localPath(blogID, sourcePath), timeZone).catch(() => null)
+        : Promise.resolve(null)
+    )
+  );
+
+  const sources = sourcePaths.map((sourcePath, index) => {
+    return {
+      path: sourcePath,
+      name: basename(sourcePath),
+      relativePath: folderPath
+        ? relativeToFolder(folderPath, sourcePath)
+        : basename(sourcePath),
+      url: encodePath(sourcePath),
+      index: index,
+      displayIndex: index + 1,
+      current: sourcePath === currentPath,
+      exists: existence[index],
+      hidden: index >= VISIBLE_SOURCE_LIMIT,
+      size: stats[index] ? stats[index].size : null,
+    };
+  });
+
+  const hiddenCount = sources.filter((source) => source.hidden).length;
+
+  return {
+    folderPath: folderPath,
+    folderUrl: folderPath ? encodePath(folderPath) : null,
+    entryPath: entryPath,
+    entryUrl: entry.url,
+    viewingSource: sources.some((source) => source.current),
+    sources: sources,
+    sourceCount: sources.length,
+    hiddenCount: hiddenCount,
+    truncated: hiddenCount > 0,
+    hasMissing: sources.some((source) => !source.exists),
+  };
+}
+
+// Path of a source file relative to its "+" folder, e.g. "sub/notes.md".
+function relativeToFolder(folderPath, sourcePath) {
+  const relative = path.relative(folderPath, sourcePath);
+  return relative && !relative.startsWith("..") ? relative : basename(sourcePath);
 }
 
 function isSyntheticDependency (path) {
