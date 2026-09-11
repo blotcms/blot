@@ -10,11 +10,10 @@ var key = require("./key");
 module.exports = function (token, callback) {
   (async function () {
     try {
-      var value = await client.get(key.accessToken(token));
+      // GETDEL is atomic, so only one concurrent caller can consume the token.
+      var value = await client.getDel(key.accessToken(token));
 
       if (!value) return callback(new Error("Invalid access token"));
-
-      await client.del(key.accessToken(token));
 
       return callback(null, value);
     } catch (err) {

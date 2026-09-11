@@ -44,8 +44,8 @@ module.exports = function create (
 
       var userString = JSON.stringify(user);
 
-      // If I add or remove methods here
-      // also remove them from set.js
+      // If I add or remove an index key here (email/customer/paypal),
+      // also update the indexes() helper in set.js.
       var multi = client.multi();
       multi.sAdd(key.uids, uid);
       multi.setNX(key.user(uid), userString);
