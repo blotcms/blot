@@ -1,33 +1,6 @@
-Remove the template slug-divergence migration once PR #1775 is merged and
-`node scripts/template/fix-divergent-slugs.js --apply` has run against every
-blog — including disabled ones, after they are re-enabled (the script reports
-these separately and prints the rerun command). Then delete
-scripts/template/fix-divergent-slugs.js,
-app/models/template/util/repairDivergentSlug.js and its spec
-app/models/template/tests/repairDivergentSlug.js. Nothing else imports them.
-The #1749 forward fix (models/template/create.js + util/slugForName.js) stays
-— it is what stops new divergent records being created.
-
-Fix bug with Node crashes with ERR_STREAM_DESTROYED ("Cannot call write after a stream was destroyed") while generating thumbnails for large multi-frame externally-hosted GIFs (observed: a 150-frame, 160px-wide animated GIF during nashp.com's folder sync). Likely a write-stream torn down mid-resize/save in the thumbnail pipeline (data/static/<blog>/_thumbnails/<uuid>/*.gif) for store:thumbnails:url:*-cached (externally fetched) images. Separately: nashp.com has 16 posts linking to https://nashp.com/_media/mc.gif via full production URL instead of a relative path, causing unnecessary external fetches, and that URL currently 404s on production.
+Resolve cloudflare fail2ban issuye
 
 ---
-
-resolve cloudflare fail2ban issuye
-
-node scripts/entry/backfill-hashes.js -s 472
-
----
-
-Proxy container (OpenResty) - remaining before it can replace config/openresty:
-- Config de-dup: proxy/config/ is a hand-fork of config/openresty/conf/ and OMITS restrict-bot-uas.conf + reverse-proxy-limit-*.conf + reverse-proxy-preview/base/huge.conf (rate-limiting + bot restrictions - security-relevant, must land before cutover)
-- Blue/green hook server: :8999 is in a reuseport group, so during a deploy overlap an ACME hook request can hit the other instance (different secret) - needs per-instance hook routing, not a shared reuseport port
-- Wire proxy/deploy/{blue-green,reload-config}.sh into the real deploy pipeline
-- dehydrated version drift: the proxy image vendors dehydrated 0.7.2 (0.6.5, which lua-resty-auto-ssl pins, is rejected by current ACME servers); bare-metal config/openresty still installs the 0.6.5 pin via luarocks - unify (bump lua-resty-auto-ssl, or vendor 0.7.2 there too)
-- Drop or provision the stats. vhost netdata passwords file; Redis auth/TLS; build-arg vs runtime-env for NODE_SERVER_IP/REDIS_IP/netdata creds; container equivalent for fail2ban
-
----
-
-Debug issue with warwickmostyn
 
 Google Drive:
 - Fix bug with shared drive folders for [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBkLKSVzvjZLRSCpRJwcKBPlf)
@@ -214,6 +187,12 @@ Dashboard control follow-ups (found while reviewing the per-template dashboard-c
 - Album template: the new max_width control replaces `.entry.page .body>* { max-width: 35em }` (~560px) with a px default of 800. That widens the text measure on page entries for every existing site on next rebuild. Double-check the default reads well, or lower it toward the old ~560px.
 - Album template: several rules use `{{^heading_font}} ... 28px/23px fallback {{/heading_font}}`, but heading_font is always a populated object so the fallback is dead. Harmless, but could be tidied.
 
+---
+
+Fix performance issues with nashp
+
+Fix issue with warwickmostyn
+
 Fix bug with the website preview on the dashboard does not scroll, at least on FireFox on MacOS and tell Omar
 
 Fix bug with the paypal next bill dates are not syncing correctly for some users (e.g.slopserve)
@@ -385,6 +364,13 @@ Release new brochure site
 Record new video
 
 ---
+
+Proxy container (OpenResty) - remaining before it can replace config/openresty:
+- Config de-dup: proxy/config/ is a hand-fork of config/openresty/conf/ and OMITS restrict-bot-uas.conf + reverse-proxy-limit-*.conf + reverse-proxy-preview/base/huge.conf (rate-limiting + bot restrictions - security-relevant, must land before cutover)
+- Blue/green hook server: :8999 is in a reuseport group, so during a deploy overlap an ACME hook request can hit the other instance (different secret) - needs per-instance hook routing, not a shared reuseport port
+- Wire proxy/deploy/{blue-green,reload-config}.sh into the real deploy pipeline
+- dehydrated version drift: the proxy image vendors dehydrated 0.7.2 (0.6.5, which lua-resty-auto-ssl pins, is rejected by current ACME servers); bare-metal config/openresty still installs the 0.6.5 pin via luarocks - unify (bump lua-resty-auto-ssl, or vendor 0.7.2 there too)
+- Drop or provision the stats. vhost netdata passwords file; Redis auth/TLS; build-arg vs runtime-env for NODE_SERVER_IP/REDIS_IP/netdata creds; container equivalent for fail2ban
 
 Handle content negotiation headers for accept markdown from [LLM bots](https://blog.cloudflare.com/markdown-for-agents/) and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBsvRjgTvbGqmqtSfCQZZNpdM)
 
