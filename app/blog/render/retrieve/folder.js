@@ -23,7 +23,9 @@ module.exports = function (req, res, callback) {
 
     // Remove dotfiles and folders
     contents = contents.filter((item) => item[0] !== ".");
-    contents = alphanum(contents, { property: "name" });
+    // `contents` is an array of raw filenames at this point, not objects,
+    // so there's no `name` property to sort by - sort the strings directly.
+    contents = alphanum(contents);
 
     async.mapLimit(
       contents,

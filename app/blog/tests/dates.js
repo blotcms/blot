@@ -129,7 +129,6 @@ describe("dates", function () {
   });
 
   it("updates the entry's updated property when the post is modified", async function () {
-    const before = new Date();
     await this.write({ path: "/a.txt", content: "Foo" });
 
     await this.template({
@@ -139,13 +138,15 @@ describe("dates", function () {
     const firstUpdated = new Date(parseInt(await this.text("/")));
     await this.write({ path: "/a.txt", content: "Bar" });
     const secondUpdated = new Date(parseInt(await this.text("/")));
-    const after = new Date();
 
-    console.log({ before, firstUpdated, secondUpdated, after });
-
-    expect(firstUpdated >= before).toBe(true);
-    expect(secondUpdated >= firstUpdated).toBe(true);
-    expect(secondUpdated <= after).toBe(true);
+    // `updated` is derived from the file's mtime (see app/build/index.js),
+    // which is stamped by the filesystem rather than this process's clock.
+    // The two can drift by a few milliseconds (e.g. Docker on macOS), so
+    // comparing `updated` against a `new Date()` captured in this process
+    // is racy. What the test actually needs to protect is that editing a
+    // post moves its `updated` timestamp forward, which is stable because
+    // both timestamps come from the same clock source.
+    expect(secondUpdated.getTime()).toBeGreaterThan(firstUpdated.getTime());
   });
 
   it("does not change entry created date on modification", async function () {

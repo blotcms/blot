@@ -75,9 +75,10 @@ module.exports = function (req, res, next) {
       blog.redirectSubdomain &&
       !previewTemplate
     )
-      return res
-        .status(302)
-        .redirect(req.protocol + "://" + blog.domain + req.originalUrl);
+      return res.redirect(
+        302,
+        req.protocol + "://" + blog.domain + req.originalUrl
+      );
 
     // Redirect HTTP to HTTPS. Preview subdomains are not currently
     // available over HTTPS but when they are, remove this.
@@ -89,8 +90,10 @@ module.exports = function (req, res, next) {
     )
       redirect = "https://" + host + req.originalUrl;
 
-    // Should we be using 302 temporary for this?
-    if (redirect) return res.status(301).redirect(redirect);
+    // Note: Express's res.redirect(url) hard-codes 302 regardless of any
+    // prior res.status() call - the status must be passed to redirect()
+    // itself to actually send a permanent redirect.
+    if (redirect) return res.redirect(301, redirect);
 
     // Retrieve the name of the template from the host
     // If the request came from a preview domain
