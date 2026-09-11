@@ -169,8 +169,11 @@ describe("update", function () {
     var ghostPath = ctx.fake.path(".txt");
     var ghostNewPath = ctx.fake.path(".txt");
 
-    var content = ctx.fake.file();
-    var ghostContent = ctx.fake.file();
+    // Unique titles avoid a permalink collision between these two entries,
+    // which would otherwise get a "-2" suffix and break checkRename's
+    // exact permalink-reuse assertion.
+    var content = ctx.fake.file({ title: ctx.fake.random.uuid() });
+    var ghostContent = ctx.fake.file({ title: ctx.fake.random.uuid() });
     var ghostEntryID;
 
     ctx.writeAndSync(path, content, function (err) {
