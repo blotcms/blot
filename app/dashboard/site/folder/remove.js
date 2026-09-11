@@ -1,3 +1,4 @@
+const assertNoSymlinks = require("helper/assertNoSymlinks");
 const fs = require("fs-extra");
 const path = require("path");
 const clients = require("clients");
@@ -88,6 +89,7 @@ module.exports = async (req, res) => {
   const { folder, done } = await establishSyncLock(req.blog.id);
 
   try {
+    await assertNoSymlinks(localPath(req.blog.id, "/"), destination.absolute);
     const connectedClient =
       (req.blog.client && typeof req.blog.client.remove === "function"
         ? req.blog.client
@@ -119,7 +121,7 @@ module.exports = async (req, res) => {
       });
     }
 
-    if (err && (err.code === "EACCES" || err.code === "EPERM")) {
+    if (err && (err.code === "EACCES" || err.code === "EPERM" || err.code === "ELOOP")) {
       return res.status(403).json({
         ok: false,
         removed: normalizedPath,

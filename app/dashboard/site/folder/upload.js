@@ -1,3 +1,4 @@
+const assertNoSymlinks = require("helper/assertNoSymlinks");
 const fs = require("fs-extra");
 const path = require("path");
 const clients = require("clients");
@@ -308,6 +309,7 @@ module.exports = async (req, res, next) => {
         let contents;
 
         try {
+          await assertNoSymlinks(localPath(req.blog.id, "/"), entry.absolutePath);
           contents = await fs.readFile(entry.upload.file.path);
           if (client) {
             await writeClientFile(client, req.blog.id, entry.relativePath, contents);

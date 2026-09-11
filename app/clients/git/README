@@ -167,10 +167,12 @@ User Repository (User's Computer)
 5. `sync()` is called with the blog ID and handle
 6. Sync acquires a file lock to prevent concurrent syncs
 7. Sync fetches from the bare repository into the live repository
-8. Sync resets the live working tree to match `origin/master`
+8. Sync resolves `origin/master` to an immutable commit, rejects trees containing symbolic links or submodules, and resets the live working tree to that validated commit
 9. Sync computes diff between the previous and new HEAD commits
 10. For each modified file, `folder.update(path)` is called to process the change
 11. Lock is released and callback is invoked
+
+Symbolic links (including links within the blog) and submodules are not supported. Replace them with regular files before pushing. Rejected trees leave the live checkout unchanged.
 
 ### Authentication Flow
 

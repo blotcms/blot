@@ -281,14 +281,14 @@ describe("asset middleware", function () {
     expect(res.headers.get("content-type")).toContain("application/json");
   });
 
-  it("handles symbolic links correctly", async function () {
+  it("rejects symbolic links even when their target is inside the blog", async function () {
     // This would require setup in the test environment
     await this.write({ path: "/original.txt", content: "Original" });
     await fs.symlink(
       config.blog_folder_dir + "/" + this.blog.id + "/original.txt",
       config.blog_folder_dir + "/" + this.blog.id + "/link.txt"
     );
-    expect(await this.text("/link.txt")).toEqual("Original");
+    expect((await this.get("/link.txt")).status).toEqual(404);
   });
 
   it("processes hidden files correctly", async function () {

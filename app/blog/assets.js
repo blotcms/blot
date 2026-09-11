@@ -1,3 +1,4 @@
+const assertNoSymlinks = require("helper/assertNoSymlinks");
 const config = require("config");
 const express = require("express");
 const mime = require("mime-types");
@@ -176,7 +177,13 @@ function addLeadingUnderscore(path) {
   return join(dirname(path), "_" + basename(path));
 }
 
-function sendFile(path, { req, res, maxAge = 0, immutable = false } = {}) {
+async function sendFile(path, { req, res, maxAge = 0, immutable = false } = {}) {
+  // Static app assets also use this function; only blog-folder paths need
+  // the blog's no-symlink policy, including every ancestor within that root.
+  const blogRoot = req?.blog && join(config.blog_folder_dir, req.blog.id);
+  if (blogRoot && (path === blogRoot || path.startsWith(blogRoot + "/"))) {
+    await assertNoSymlinks(blogRoot, path);
+  }
   const isDirectory = path.indexOf(".") === -1;
   const defaultMime = isDirectory ? "text/html" : "application/octet-stream";
   let contentType = mime.contentType(mime.lookup(path) || defaultMime);

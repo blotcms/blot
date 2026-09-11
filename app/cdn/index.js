@@ -1,3 +1,5 @@
+const assertNoSymlinks = require("helper/assertNoSymlinks");
+const fs = require("fs").promises;
 const config = require("config");
 const express = require("express");
 const cdn = new express.Router();
@@ -44,7 +46,22 @@ cdn.use("/documentation/v-:version", static(config.views_directory));
 
 // Serves files directly from a blog's folder e.g.
 // /folder/blog_1234/favicon.ico
-cdn.use("/folder/v-:version", static(config.blog_folder_dir));
+cdn.use("/folder/v-:version", async (req, res, next) => {
+  try {
+    const filename = path.join(config.blog_folder_dir, decodeURIComponent(req.path));
+    await assertNoSymlinks(config.blog_folder_dir, filename);
+    // express.static also serves index.html for directory requests.
+    const stat = await fs.stat(filename);
+    if (stat.isDirectory()) {
+      await assertNoSymlinks(config.blog_folder_dir, path.join(filename, "index.html"));
+    }
+    next();
+  } catch (err) {
+    // Never expose filesystem paths or distinguish forbidden links from a
+    // missing asset. Do not fall through to another static root.
+    res.sendStatus(404);
+  }
+}, static(config.blog_folder_dir));
 
 // New route format: /template/{hash[0:2]}/{hash[2:4]}/{hash}{ext}
 // Serves rendered output directly from disk using Express static middleware

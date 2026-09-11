@@ -1,4 +1,5 @@
 const fs = require("fs-extra");
+const pipeline = require("util").promisify(require("stream").pipeline);
 const localPath = require("helper/localPath");
 const colors = require("colors/safe");
 const { join, dirname } = require("path");
@@ -47,18 +48,8 @@ const ensurePlaceholderWithMtime = async (pathOnBlot, modifiedTime) => {
   }
 };
 
-const streamToFile = (readStream, filePath) => {
-  return new Promise((resolve, reject) => {
-    const writer = fs.createWriteStream(filePath);
-    readStream.on("error", (err) => {
-      writer.destroy();
-      reject(err);
-    });
-    writer.on("error", reject);
-    writer.on("finish", () => resolve());
-    readStream.pipe(writer);
-  });
-};
+const streamToFile = (readStream, filePath) =>
+  pipeline(readStream, fs.createWriteStream(filePath));
 
 const extractZip = (zipPath, extractDir) => {
   return new Promise((resolve, reject) => {
@@ -384,8 +375,6 @@ module.exports = async (
         }
       }
 
-      var dest = fs.createWriteStream(tempPath);
-
       debug("getting file from Drive");
       let data;
 
@@ -413,52 +402,26 @@ module.exports = async (
 
       debug("got file from Drive");
 
-      data
-        .on("end", async () => {
-          if (settled) return;
-          settled = true;
-          try {
-            await fs.move(tempPath, pathOnBlot, { overwrite: true });
-          } catch (e) {
-            return reject(e);
-          }
-
-          try {
-            debug("Setting mtime for file", pathOnBlot, "to", modifiedTime);
-            debug("mtime before:", (await fs.stat(pathOnBlot)).mtime);
-            const mtime = new Date(modifiedTime);
-            debug("mtime to set:", mtime);
-            await fs.utimes(pathOnBlot, mtime, mtime);
-            debug("mtime after:", (await fs.stat(pathOnBlot)).mtime);
-          } catch (e) {
-            debug("Error setting mtime", e);
-          }
-
-          debug("DOWNLOAD file SUCCEEDED");
-          resolve({ updated: true });
-        })
-        .on("error", (err) => {
-          if (settled) return;
-          settled = true;
-          handleExportSizeLimit(err)
-            .then((handled) => {
-              if (handled === "downloadedZipFallback") {
-                return resolve({ updated: true });
-              }
-              if (handled === "placeholder") {
-                return resolve({
-                  updated: false,
-                  skippedReason: "exportSizeLimitExceeded",
-                });
-              }
-              return reject(err);
-            })
-            .catch((handleError) => reject(handleError));
-        })
-        .pipe(dest);
+      // Source end can precede the final disk write. Pipeline waits for the
+      // destination and destroys both streams on error before we publish.
+      await streamToFile(data, tempPath);
+      await fs.move(tempPath, pathOnBlot, { overwrite: true });
+      try {
+        const mtime = new Date(modifiedTime);
+        await fs.utimes(pathOnBlot, mtime, mtime);
+      } catch (e) {
+        debug("Error setting mtime", e);
+      }
+      settle(() => resolve({ updated: true }));
     } catch (e) {
       debug("download error", e);
-      const handled = await handleExportSizeLimit(e);
+      await fs.remove(tempPath).catch(() => {});
+      let handled;
+      try {
+        handled = await handleExportSizeLimit(e);
+      } catch (fallbackError) {
+        return settle(() => reject(fallbackError));
+      }
       if (handled === "downloadedZipFallback") {
         return settle(() => resolve({ updated: true }));
       }

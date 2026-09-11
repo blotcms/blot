@@ -187,6 +187,7 @@ HTML templates for user-facing pages:
   - If present but out-of-date (different size or mod time), re-downloads.
   - For Google Docs, uses modification time for comparison (no MD5).
   - For regular files, uses file size.
+  - Stream downloads are published only after the destination writer finishes; failed partial downloads are removed.
 - For each local file/folder not present remotely, deletes it (unless it matches an ignore pattern).
 - Updates the folder metadata database with new mappings.
 
