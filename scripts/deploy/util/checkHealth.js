@@ -1,5 +1,7 @@
 const HEALTH_CHECK_TIMEOUT = 180; // 3 minutes
 const HEALTH_CHECK_INTERVAL = 15; // 15 seconds
+const CURL_RETRY_ATTEMPTS = 3;
+const CURL_RETRY_DELAY = 3; // seconds
 const MAX_PORT = 65535;
 
 const sshCommand = require("./sshCommand");
@@ -44,9 +46,37 @@ module.exports = async function checkHealth(containerName, containerPort) {
           `Container is healthy according to docker, running second health check...`
         );
 
-        await sshCommand(
-          `curl --fail --max-time 10 http://localhost:${containerPort}/health || exit 1`
-        );
+        // Docker reporting "healthy" doesn't guarantee the very next curl
+        // lands cleanly - a single transient blip (e.g. contention while a
+        // sibling container is also coming up) can fail one attempt even
+        // though the app is genuinely up. Retry a few times before giving
+        // up and triggering a rollback.
+        let curlError;
+        let reachable = false;
+        for (let attempt = 1; attempt <= CURL_RETRY_ATTEMPTS; attempt++) {
+          try {
+            await sshCommand(
+              `curl --fail --max-time 10 http://localhost:${containerPort}/health`
+            );
+            reachable = true;
+            break;
+          } catch (error) {
+            curlError = error;
+            if (attempt < CURL_RETRY_ATTEMPTS) {
+              console.log(
+                `Health check curl attempt ${attempt} failed, retrying...`
+              );
+              await new Promise((resolve) =>
+                setTimeout(resolve, CURL_RETRY_DELAY * 1000)
+              );
+            }
+          }
+        }
+
+        if (!reachable) {
+          throw curlError;
+        }
+
         console.log(`Container is healthy and accessible.`);
 
         return true;
