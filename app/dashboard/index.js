@@ -91,8 +91,6 @@ dashboard.use(trace("loaded blog"));
 
 dashboard.use(require("dashboard/util/breadcrumbs"));
 
-dashboard.use("/stats", require("../stats"));
-
 // These need to be before ':handle'
 dashboard.use("/account", require("./account"));
 
