@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # This should only be run once, when the instance is launched
 # It will only work when run as root
@@ -21,26 +21,16 @@ dd if=/dev/zero of=/swapfile1 bs=1024 count=4194304
 # install redis
 dnf install -y redis6
 
-# install redis systemd service
-# start redis server
+# Keep mount preparation in a root-owned dependency and Redis service settings
+# in the service drop-in, without overwriting one section with another.
+/bin/bash "$(dirname "$0")/install-service-overrides.sh" || exit $?
+
+systemctl daemon-reload || exit $?
+
+# Start only after the mount dependency and restart policy are installed.
 systemctl start redis6
 systemctl enable redis6
 chkconfig redis6 on
-
-# edit the redis6 service and all the following:
-# under [Service]:   'Restart=always'
-mkdir -p /etc/systemd/system/redis6.service.d
-echo "[Service]" > /etc/systemd/system/redis6.service.d/override.conf
-echo "Restart=" >> /etc/systemd/system/redis6.service.d/override.conf
-echo "Restart=always" >> /etc/systemd/system/redis6.service.d/override.conf
-
-# before the redis server launches, run the bash script 
-# located at /home/ec2-user/scripts/mount-instance-store.sh
-echo "[Unit]" > /etc/systemd/system/redis6.service.d/override.conf
-echo "Before=redis6.service" >> /etc/systemd/system/redis6.service.d/override.conf
-echo "ExecStartPre=/home/ec2-user/scripts/mount-instance-store.sh" >> /etc/systemd/system/redis6.service.d/override.conf
-
-systemctl daemon-reload
 
 # update redis configuration so it listens on all interfaces
 # we lock down the instance using AWS security groups
@@ -85,4 +75,3 @@ chmod 0644 /etc/cron.d/blot-redis-backups
 # limit the SystemMaxUse of the journal to 100M
 # overwriting /etc/systemd/journald.conf
 # and then restart the systemd-journald service
-
