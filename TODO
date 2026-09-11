@@ -8,6 +8,8 @@ app/models/template/tests/repairDivergentSlug.js. Nothing else imports them.
 The #1749 forward fix (models/template/create.js + util/slugForName.js) stays
 — it is what stops new divergent records being created.
 
+Fix bug with Node crashes with ERR_STREAM_DESTROYED ("Cannot call write after a stream was destroyed") while generating thumbnails for large multi-frame externally-hosted GIFs (observed: a 150-frame, 160px-wide animated GIF during nashp.com's folder sync). Likely a write-stream torn down mid-resize/save in the thumbnail pipeline (data/static/<blog>/_thumbnails/<uuid>/*.gif) for store:thumbnails:url:*-cached (externally fetched) images. Separately: nashp.com has 16 posts linking to https://nashp.com/_media/mc.gif via full production URL instead of a relative path, causing unnecessary external fetches, and that URL currently 404s on production.
+
 ---
 
 resolve cloudflare fail2ban issuye
