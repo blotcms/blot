@@ -742,7 +742,7 @@ module.exports = (function () {
 
       totalEntries = parseInt(totalEntries);
 
-      pagination.total = Math.ceil(totalEntries / pageSize);
+      pagination.total = Math.max(1, Math.ceil(totalEntries / pageSize));
       pagination.current = pageNo;
       pagination.pageSize = pageSize;
       pagination.page_size = pageSize;

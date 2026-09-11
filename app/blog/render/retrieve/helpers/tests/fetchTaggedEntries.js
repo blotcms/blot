@@ -73,4 +73,12 @@ describe("fetchTaggedEntries sort ordering", function () {
     const result = await run({ limit: 1, offset: 1, sortBy: "id", order: "asc" });
     expect(result.entryIDs).toEqual(["b.txt"]);
   });
+
+  it("reports pagination.total as 1 (not 0) when the tag has no entries", async function () {
+    stubTag([]);
+    const result = await run({ limit: 10, offset: 0 });
+    expect(result.entryIDs).toEqual([]);
+    expect(result.pagination.current).toBe(1);
+    expect(result.pagination.total).toBe(1);
+  });
 });

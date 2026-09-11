@@ -530,6 +530,20 @@ describe("entries", function () {
     );
   });
 
+  it("getPage should report total as 1 (not 0) when the blog has no entries", function (done) {
+    Entries.getPage(
+      this.blog.id,
+      { pageNumber: 1, pageSize: 10, sortBy: "date" },
+      function (error, entries, pagination) {
+        expect(error).toBeNull();
+        expect(entries).toEqual([]);
+        expect(pagination.current).toBe(1);
+        expect(pagination.total).toBe(1);
+        done();
+      }
+    );
+  });
+
   it("getRecent should return the most recent entries with their indices", async function (done) {
     const key = `blog:${this.blog.id}:entries`;
 
