@@ -365,6 +365,12 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 7
+          # A re-run of this job (e.g. after a flaky failure) reuses the same
+          # workflow run, so without this the previous attempt's artifact of
+          # the same name sticks around too. coverage-report then downloads
+          # both copies into one folder and nyc chokes on the stale/partial
+          # one. Overwriting keeps only the latest attempt's coverage.
+          overwrite: true
 
   coverage-report:
     needs: [setup-tests, test]
