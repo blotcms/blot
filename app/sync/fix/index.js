@@ -7,9 +7,14 @@ const entriesPathIndex = require("./entries-path-index");
 const async = require("async");
 const callOnce = require("helper/callOnce");
 
-module.exports = function (blog, callback) {
+module.exports = function (blog, options, callback) {
   if (!blog) {
     throw new TypeError("Fix: Expected blog as first argument");
+  }
+
+  if (typeof options === "function") {
+    callback = options;
+    options = {};
   }
 
   if (typeof callback !== "function") {
@@ -17,15 +22,32 @@ module.exports = function (blog, callback) {
   }
 
   const finalReport = {};
+  // Callers that don't pass a status (the legacy two-argument API used by
+  // startup/hourly validators) never published one before this progress
+  // work was added. Keep that silent instead of writing a real messenger's
+  // status to Blog.setStatus - a "(n/5) Checking ..." message with no
+  // terminal follow-up would otherwise leave the dashboard showing that
+  // blog as syncing forever.
+  const status = options.status || function () {};
+  const checks = [
+    { name: "entry-ghosts", fn: entryGhosts },
+    { name: "tag-ghosts", fn: tagGhosts },
+    { name: "list-ghosts", fn: listGhosts },
+    { name: "menu-ghosts", fn: menuGhosts },
+    { name: "entries-path-index", fn: entriesPathIndex },
+  ];
+  let current = 0;
 
   async.eachSeries(
-    [entryGhosts, tagGhosts, listGhosts, menuGhosts, entriesPathIndex],
-    function (fn, next) {
-      fn(
+    checks,
+    function (check, next) {
+      current += 1;
+      status(`(${current}/${checks.length}) Checking ${check.name}`);
+      check.fn(
         blog,
         callOnce(function (err, report) {
           if (err) return next(err);
-          if (report && report.length) finalReport[fn.name] = report;
+          if (report && report.length) finalReport[check.name] = report;
           next();
         })
       );

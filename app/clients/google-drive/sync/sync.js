@@ -6,6 +6,10 @@ const download = require("../util/download");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const {
+  countLocalFiles,
+  createProgress,
+} = require("clients/util/resyncProgress");
 
 const driveReaddir = require("./util/driveReaddir");
 const localReaddir = require("./util/localReaddir");
@@ -35,6 +39,10 @@ module.exports = async function sync(blogID, publish, update) {
   const drive = await createDriveClient(serviceAccountId);
   const { getByPath, set, remove } = database.folder(folderId);
   const checkWeCanContinue = CheckWeCanContinue(blogID, account);
+  const progress = createProgress(
+    await countLocalFiles(localPath(blogID, "/")),
+    publish
+  );
 
   // fetch the latest folderName, in case it has changed
   // and also whether or not the folder is in the trash
@@ -87,12 +95,17 @@ module.exports = async function sync(blogID, publish, update) {
     // google docs to .gdoc files here.
     const remoteContents = transformDriveItems(driveItems);
 
-    for (const { name } of localContents) {
+    for (const { name, isDirectory: isLocalDirectory } of localContents) {
       const path = join(dir, name);
+      // A directory removed in one fs.remove call still accounts for every
+      // file total counted inside it, so current must advance by that many.
+      const removedCount = isLocalDirectory
+        ? await countLocalFiles(localPath(blogID, path))
+        : 1;
 
       if (shouldIgnoreFile(path)) {
         await checkWeCanContinue();
-        publish("Removing ignored", path);
+        progress.publish("Removing ignored", path, false, removedCount);
         await fs.remove(localPath(blogID, path));
         await update(path);
         const id = await getByPath(path);
@@ -102,7 +115,7 @@ module.exports = async function sync(blogID, publish, update) {
 
       if (!remoteContents.find((item) => item.name === name)) {
         await checkWeCanContinue();
-        publish("Removing", join(dir, name));
+        progress.publish("Removing", path, false, removedCount);
         console.log(
           "Removing",
           join(dir, name),
@@ -113,6 +126,16 @@ module.exports = async function sync(blogID, publish, update) {
         await remove(await getByPath(path));
       }
     }
+
+    // Add every new remote file in this directory to the total before
+    // processing any of them, so progress reflects the real amount of work
+    // discovered instead of total growing in lockstep with current.
+    const newFileCount = remoteContents.filter(
+      (item) =>
+        !item.isDirectory &&
+        !localContents.find((localItem) => localItem.name === item.name)
+    ).length;
+    progress.discover(newFileCount);
 
     for (const {
       id,
@@ -144,7 +167,14 @@ module.exports = async function sync(blogID, publish, update) {
 
         if (!existsLocally || !identical) {
           await checkWeCanContinue();
-          publish("Downloading", path);
+          // A missing existsLocally was already added to total by the
+          // discover() pass above; only a type mismatch (local dir where a
+          // file is expected) is new work discovered here.
+          progress.publish(
+            "Downloading",
+            path,
+            Boolean(existsLocally && existsLocally.isDirectory)
+          );
 
           if (existsLocally) {
             console.log("Updating out-of-sync:", path);
@@ -157,15 +187,21 @@ module.exports = async function sync(blogID, publish, update) {
           }
 
           try {
-            const result = await download(blogID, drive, path, {
-              id,
-              md5Checksum,
-              mimeType,
-              modifiedTime,
-            }, {
-              serviceAccountId,
-              folderId,
-            });
+            const result = await download(
+              blogID,
+              drive,
+              path,
+              {
+                id,
+                md5Checksum,
+                mimeType,
+                modifiedTime,
+              },
+              {
+                serviceAccountId,
+                folderId,
+              }
+            );
 
             if (result?.skippedReason === "exportSizeLimitExceeded") {
               publish("Skipped oversized Google Doc", path);
@@ -176,11 +212,13 @@ module.exports = async function sync(blogID, publish, update) {
             publish("Download failed", path);
             console.error("Download failed for", path, err);
           }
+        } else {
+          progress.publishThrottled("Checking", path);
         }
       } else {
         if (existsLocally && !existsLocally.isDirectory) {
           await checkWeCanContinue();
-          publish("Removing file", path);
+          progress.publish("Removing file", path);
           console.log("Removing file", path, "which is a directory remotely");
           await fs.remove(localPath(blogID, path));
           publish("Creating directory", path);
@@ -201,6 +239,7 @@ module.exports = async function sync(blogID, publish, update) {
 
   try {
     await walk("/", folderId);
+    progress.finish("Finished processing folder");
   } catch (err) {
     publish("Sync failed", err.message);
   }

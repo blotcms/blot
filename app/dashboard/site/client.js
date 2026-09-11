@@ -73,6 +73,11 @@ const verbs = {
   Removing: "removed",
 };
 
+// Reset progress messages are prefixed with "(current/total) ", e.g.
+// "(1/10) Downloading /post.md" - strip it before matching a verb so
+// these still parse into a path, verb and folder URL below.
+const PROGRESS_PREFIX = /^\(\d+\/\d+\)\s+/;
+
 client_routes.route("/activity").get(load.clients, async function (req, res) {
   res.locals.breadcrumbs.add("Activity", "activity");
 
@@ -84,12 +89,13 @@ client_routes.route("/activity").get(load.clients, async function (req, res) {
       syncID: key,
       messages: value
         .map((item) => {
+          const message = item.message.replace(PROGRESS_PREFIX, "");
           const matchedVerb = Object.keys(verbs).find((i) =>
-            item.message.startsWith(i + " /")
+            message.startsWith(i + " /")
           );
 
           if (matchedVerb) {
-            const path = item.message.slice((matchedVerb + " ").length);
+            const path = message.slice((matchedVerb + " ").length);
             item.path = Path.parse(path);
             item.verb = verbs[matchedVerb];
             item.url = Path.join(
@@ -146,17 +152,21 @@ client_routes.post("/reset/rebuild", function (req, res) {
     const thumbnails = !!req.query.thumbnails;
     const imageCache = !!req.query.imageCache;
 
-    Rebuild(req.blog.id, { thumbnails, imageCache }, function (err) {
-      if (err) console.log(err);
-      folder.status("Checking your site for issues");
-      Fix(req.blog, function (err) {
+    Rebuild(
+      req.blog.id,
+      { thumbnails, imageCache, status: folder.status, log: folder.log },
+      function (err) {
         if (err) console.log(err);
-        folder.status("Finished site rebuild");
-        done(null, function (err) {
-          if (err) console.log("Error releasing sync: ", err);
+        folder.status("Checking your site for issues");
+        Fix(req.blog, { status: folder.status, log: folder.log }, function (err) {
+          if (err) console.log(err);
+          folder.status("Finished site rebuild");
+          done(null, function (err) {
+            if (err) console.log("Error releasing sync: ", err);
+          });
         });
-      });
-    });
+      }
+    );
   });
 });
 
@@ -185,7 +195,7 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
     }
 
     folder.status("Checking your site for issues");
-    Fix(req.blog, function (err) {
+    Fix(req.blog, { status: folder.status, log: folder.log }, function (err) {
       if (err) console.log(err);
       folder.status("Finished site rebuild");
       done(null, function (err) {

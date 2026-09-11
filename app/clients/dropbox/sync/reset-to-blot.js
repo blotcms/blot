@@ -15,6 +15,10 @@ const {
   isDotfileOrDotfolder,
 } = require("../util/constants");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const {
+  countLocalFiles,
+  createProgress,
+} = require("clients/util/resyncProgress");
 
 const set = promisify(require("../database").set);
 const createClient = promisify((blogID, cb) =>
@@ -82,18 +86,29 @@ async function resetToBlot(blogID, publish) {
     skipped: 0,
   };
 
-  await walk(blogID, client, publish, dropboxRoot, "/", summary);
+  const localRoot = localPath(blogID, "/");
+  const progress = createProgress(await countLocalFiles(localRoot), publish);
+
+  await walk(blogID, client, publish, dropboxRoot, "/", summary, progress);
 
   await set(blogID, {
     error_code: 0,
   });
 
-  publish("Finished processing folder");
+  progress.finish("Finished processing folder");
 
   return summary;
 }
 
-const walk = async (blogID, client, publish, dropboxRoot, dir, summary) => {
+const walk = async (
+  blogID,
+  client,
+  publish,
+  dropboxRoot,
+  dir,
+  summary,
+  progress
+) => {
   const localRoot = localPath(blogID, "/");
   publish("Checking", dir);
   const [remoteContents, localContents] = await Promise.all([
@@ -101,13 +116,19 @@ const walk = async (blogID, client, publish, dropboxRoot, dir, summary) => {
     localReaddir(blogID, localRoot, dir),
   ]);
 
-  for (const { name, path_display } of localContents) {
+  for (const { name, path_display, is_directory } of localContents) {
     const pathOnBlot = join(dir, name);
+    const pathOnDisk = join(localRoot, dir, name);
+    // A directory removed in one fs.remove call still accounts for every
+    // file total counted inside it, so current must advance by that many.
+    const removedCount = is_directory
+      ? await countLocalFiles(pathOnDisk)
+      : 1;
 
     if (shouldIgnoreFile(pathOnBlot)) {
-      publish("Removing ignored", path_display);
+      progress.publish("Removing ignored", pathOnBlot, false, removedCount);
       try {
-        await fs.remove(join(localRoot, dir, name));
+        await fs.remove(pathOnDisk);
         summary.removed += 1;
       } catch (e) {
         publish("Failed to remove ignored", path_display, e.message);
@@ -120,15 +141,28 @@ const walk = async (blogID, client, publish, dropboxRoot, dir, summary) => {
     );
 
     if (!remoteCounterpart) {
-      publish("Removing", path_display);
+      progress.publish("Removing", pathOnBlot, false, removedCount);
       try {
-        await fs.remove(join(localRoot, dir, name));
+        await fs.remove(pathOnDisk);
         summary.removed += 1;
       } catch (e) {
         publish("Failed to remove", path_display, e.message);
       }
     }
   }
+
+  // Add every new remote file in this directory to the total before
+  // processing any of them, so progress reflects the real amount of work
+  // discovered instead of total growing in lockstep with current.
+  const newFileCount = remoteContents.filter((remoteItem) => {
+    const pathOnBlot = join(dir, remoteItem.name);
+    return (
+      !remoteItem.is_directory &&
+      !isDotfileOrDotfolder(pathOnBlot) &&
+      !localContents.find((localItem) => localItem.name === remoteItem.name)
+    );
+  }).length;
+  progress.discover(newFileCount);
 
   for (const remoteItem of remoteContents) {
     const localCounterpart = localContents.find(
@@ -144,7 +178,7 @@ const walk = async (blogID, client, publish, dropboxRoot, dir, summary) => {
 
     if (remoteItem.is_directory) {
       if (localCounterpart && !localCounterpart.is_directory) {
-        publish("Removing", pathOnDisk);
+        progress.publish("Removing", pathOnBlot);
         await fs.remove(pathOnDisk);
         summary.removed += 1;
         publish("Creating directory", pathOnDisk);
@@ -162,11 +196,19 @@ const walk = async (blogID, client, publish, dropboxRoot, dir, summary) => {
         publish,
         dropboxRoot,
         join(dir, name),
-        summary
+        summary,
+        progress
       );
     } else {
       if (hasUnsupportedExtension(pathOnDropbox)) {
-        publish("Skipping unsupported file", pathOnBlot);
+        // A missing localCounterpart was already added to total by the
+        // discover() pass above; only a type mismatch (local dir where a
+        // file is expected) is new work discovered here.
+        progress.publish(
+          "Skipping unsupported file",
+          pathOnBlot,
+          Boolean(localCounterpart && localCounterpart.is_directory)
+        );
         summary.skipped += 1;
         try {
           await fs.outputFile(pathOnDisk, "");
@@ -180,9 +222,10 @@ const walk = async (blogID, client, publish, dropboxRoot, dir, summary) => {
         typeof remoteItem.size === "number" &&
         remoteItem.size > MAX_FILE_SIZE
       ) {
-        publish(
+        progress.publish(
           "Skipping oversized file",
-          `${pathOnBlot} (${remoteItem.size} bytes > ${MAX_FILE_SIZE} byte limit)`
+          `${pathOnBlot} (${remoteItem.size} bytes > ${MAX_FILE_SIZE} byte limit)`,
+          Boolean(localCounterpart && localCounterpart.is_directory)
         );
         summary.skipped += 1;
         try {
@@ -198,7 +241,11 @@ const walk = async (blogID, client, publish, dropboxRoot, dir, summary) => {
         localCounterpart.content_hash === remoteItem.content_hash;
 
       if (localCounterpart && !identicalLocally) {
-        publish("Downloading", pathOnBlot);
+        progress.publish(
+          "Downloading",
+          pathOnBlot,
+          localCounterpart.is_directory
+        );
         try {
           await download(client, pathOnDropbox, pathOnDisk);
           summary.downloaded += 1;
@@ -206,13 +253,16 @@ const walk = async (blogID, client, publish, dropboxRoot, dir, summary) => {
           continue;
         }
       } else if (!localCounterpart) {
-        publish("Downloading", pathOnBlot);
+        // Already added to total by the discover() pass above.
+        progress.publish("Downloading", pathOnBlot, false);
         try {
           await download(client, pathOnDropbox, pathOnDisk);
           summary.downloaded += 1;
         } catch (e) {
           continue;
         }
+      } else {
+        progress.publishThrottled("Checking", pathOnBlot);
       }
     }
   }

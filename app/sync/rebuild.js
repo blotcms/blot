@@ -50,8 +50,14 @@ module.exports = function main(blogID, options, callback) {
   Blog.get({ id: blogID }, function (err, blog) {
     if (err || !blog) return callback(err || new Error("No blog"));
 
-    const { log, status } = messenger(blog);
-    const update = new Update(blog, log, status);
+    const fallbackMessenger =
+      options.log && options.status ? null : messenger(blog);
+    const log = options.log || fallbackMessenger.log;
+    const status = options.status || fallbackMessenger.status;
+    // Update's ordinary "Syncing" statuses would split the progress stream.
+    // Rebuild publishes the more specific, counted status below instead.
+    const updateStatus = function () {};
+    const update = new Update(blog, log, updateStatus);
 
     let blogDirectory = localPath(blog.id, "/");
 
@@ -81,26 +87,37 @@ module.exports = function main(blogID, options, callback) {
       // Files inside a + folder all rebuild the same aggregated entry.
       // Process each multi-folder once so a 50-file album is not built
       // 50 separate times during a full rebuild.
-      const seenMultiFolders = new Set();
       const updatePaths = [];
+      const updatePathCounts = new Map();
 
       paths.forEach(function (absPath) {
         var path = absPath.slice(blogDirectory.length);
         var multiInfo = build.findMultiFolder(path);
 
         if (multiInfo) {
-          if (seenMultiFolders.has(multiInfo.folderPath)) return;
-          seenMultiFolders.add(multiInfo.folderPath);
-          updatePaths.push(multiInfo.folderPath);
+          if (!updatePathCounts.has(multiInfo.folderPath)) {
+            updatePaths.push(multiInfo.folderPath);
+            updatePathCounts.set(multiInfo.folderPath, 0);
+          }
+          updatePathCounts.set(
+            multiInfo.folderPath,
+            updatePathCounts.get(multiInfo.folderPath) + 1
+          );
           return;
         }
 
         updatePaths.push(path);
+        updatePathCounts.set(path, 1);
       });
+
+      const total = paths.length;
+      let current = 0;
 
       async.eachSeries(
         updatePaths,
         function (path, next) {
+          current += updatePathCounts.get(path);
+          status(`(${current}/${total}) Rebuilding ${path}`);
           update(path, function () {
             // todo: don't swallow error here
             next();

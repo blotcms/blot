@@ -8,6 +8,10 @@ const localReaddir = require("./util/localReaddir");
 const remoteReaddir = require("./util/remoteReaddir");
 const remoteRecursiveList = require("./util/remoteRecursiveList");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const {
+  countLocalFiles,
+  createProgress,
+} = require("clients/util/resyncProgress");
 
 const database = require("../database");
 const config = require("config");
@@ -22,6 +26,10 @@ module.exports = async (blogID, publish, update) => {
   if (!update) update = () => {};
 
   const checkWeCanContinue = CheckWeCanContinue(blogID);
+  const progress = createProgress(
+    await countLocalFiles(localPath(blogID, "/")),
+    publish
+  );
   const summary = {
     downloaded: 0,
     removed: 0,
@@ -35,12 +43,9 @@ module.exports = async (blogID, publish, update) => {
     await remoteRecursiveList(blogID, "/");
     publish("Synced folder tree");
   } catch (error) {
-    console.error(
-      "Failed to sync folder tree",
-      {
-        error,
-      }
-    );
+    console.error("Failed to sync folder tree", {
+      error,
+    });
     publish("Failed to sync folder tree");
   }
 
@@ -51,12 +56,22 @@ module.exports = async (blogID, publish, update) => {
       localReaddir(localPath(blogID, dir)),
     ]);
 
-    for (const { name } of localContents) {
+    for (const { name, isDirectory: isLocalDirectory } of localContents) {
       const path = join(dir, name);
+      // A directory removed in one fs.remove call still accounts for every
+      // file total counted inside it, so current must advance by that many.
+      const removedCount = isLocalDirectory
+        ? await countLocalFiles(localPath(blogID, path))
+        : 1;
 
       if (shouldIgnoreFile(path)) {
         await checkWeCanContinue();
-        publish("Removing local ignored item", path);
+        progress.publish(
+          "Removing local ignored item",
+          path,
+          false,
+          removedCount
+        );
         await fs.remove(localPath(blogID, path));
         summary.removed += 1;
         await update(path);
@@ -69,12 +84,25 @@ module.exports = async (blogID, publish, update) => {
         )
       ) {
         await checkWeCanContinue();
-        publish("Removing local item", join(dir, name));
+        progress.publish("Removing local item", path, false, removedCount);
         await fs.remove(localPath(blogID, path));
         summary.removed += 1;
         await update(path);
       }
     }
+
+    // Add every new remote file in this directory to the total before
+    // processing any of them, so progress reflects the real amount of work
+    // discovered instead of total growing in lockstep with current.
+    const newFileCount = remoteContents.filter(
+      (item) =>
+        !item.isDirectory &&
+        !localContents.find(
+          (localItem) =>
+            localItem.name.normalize("NFC") === item.name.normalize("NFC")
+        )
+    ).length;
+    progress.discover(newFileCount);
 
     for (const { name, size, isDirectory } of remoteContents) {
       const path = join(dir, name);
@@ -85,7 +113,7 @@ module.exports = async (blogID, publish, update) => {
       if (isDirectory) {
         if (existsLocally && !existsLocally.isDirectory) {
           await checkWeCanContinue();
-          publish("Removing", path);
+          progress.publish("Removing", path);
           await fs.remove(localPath(blogID, path));
           summary.removed += 1;
           publish("Creating directory", path);
@@ -108,9 +136,13 @@ module.exports = async (blogID, publish, update) => {
         if (!existsLocally || (existsLocally && !identicalOnRemote)) {
           try {
             if (size > maxFileSize) {
-              publish(
+              // A missing existsLocally was already added to total by the
+              // discover() pass above; only a type mismatch (local dir
+              // where a file is expected) is new work discovered here.
+              progress.publish(
                 "File too large",
-                `${path} (${size} bytes > ${maxFileSize} byte limit)`
+                `${path} (${size} bytes > ${maxFileSize} byte limit)`,
+                Boolean(existsLocally && existsLocally.isDirectory)
               );
               summary.skipped += 1;
 
@@ -126,7 +158,11 @@ module.exports = async (blogID, publish, update) => {
             }
 
             await checkWeCanContinue();
-            publish("Updating", path);
+            progress.publish(
+              "Downloading",
+              path,
+              Boolean(existsLocally && existsLocally.isDirectory)
+            );
 
             await download(blogID, path);
             summary.downloaded += 1;
@@ -134,6 +170,8 @@ module.exports = async (blogID, publish, update) => {
           } catch (e) {
             publish("Failed to download", path, e);
           }
+        } else {
+          progress.publishThrottled("Checking", path);
         }
       }
     }
@@ -141,6 +179,7 @@ module.exports = async (blogID, publish, update) => {
 
   try {
     await walk("/");
+    progress.finish("Finished processing folder");
     // update the database to remove the error flag if it exists
     await database.store(blogID, { error: null });
   } catch (err) {

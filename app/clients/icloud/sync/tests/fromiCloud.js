@@ -61,7 +61,11 @@ describe("icloud fromiCloud sync", function () {
   });
 
   it("creates a 0-byte placeholder when an oversized remote file is missing locally", async () => {
-    const remoteFile = { name: "huge.mov", size: 1000 * 1000 * 1000, isDirectory: false };
+    const remoteFile = {
+      name: "huge.mov",
+      size: 1000 * 1000 * 1000,
+      isDirectory: false,
+    };
 
     mockModule(remoteRecursiveListPath, async () => {});
     mockModule(remoteReaddirPath, async () => [remoteFile]);
@@ -85,11 +89,23 @@ describe("icloud fromiCloud sync", function () {
     expect(stat.size).toBe(0);
     expect(summary.skipped).toBe(1);
     expect(summary.placeholdersCreated).toBe(1);
-    expect(published.some((line) => line.includes("Created placeholder for oversized file"))).toBe(true);
+    expect(
+      published.some((line) =>
+        line.includes("Created placeholder for oversized file")
+      )
+    ).toBe(true);
+    expect(published).toContain(
+      "(1/1) File too large /huge.mov (1000000000 bytes > 100000000 byte limit)"
+    );
+    expect(published).toContain("(1/1) Finished processing folder");
   });
 
   it("replaces mismatched local content with a 0-byte placeholder for oversized remote files", async () => {
-    const remoteFile = { name: "archive.zip", size: 1000 * 1000 * 1000, isDirectory: false };
+    const remoteFile = {
+      name: "archive.zip",
+      size: 1000 * 1000 * 1000,
+      isDirectory: false,
+    };
     const localFile = localPath(blogID, join("/", remoteFile.name));
 
     await fs.outputFile(localFile, "existing local content");
@@ -103,7 +119,11 @@ describe("icloud fromiCloud sync", function () {
     mockModule(databasePath, { store: async () => {} });
 
     const fromiCloud = require(fromiCloudPath);
-    const summary = await fromiCloud(blogID, () => {}, async () => {});
+    const summary = await fromiCloud(
+      blogID,
+      () => {},
+      async () => {}
+    );
 
     const stat = await fs.stat(localFile);
 
