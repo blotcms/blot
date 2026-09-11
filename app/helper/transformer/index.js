@@ -1,9 +1,11 @@
 var debug = require("debug")("blot:helper:transformer");
 var client = require("models/client");
+var blogKey = require("models/blog/key");
 var isURL = require("./isURL");
 var Keys = require("./keys");
 var HashFile = require("./hash");
 var download = require("./download");
+var ownHost = require("./ownHost");
 var type = require("../type");
 var ensure = require("../ensure");
 var fs = require("fs-extra");
@@ -38,6 +40,27 @@ function Transformer(blogID, name) {
 
   var keys = Keys(blogID, name);
 
+  // Fetched lazily (only once a URL actually needs to be checked) and
+  // memoized for the life of this Transformer, so instances used purely
+  // for local paths never pay for this lookup.
+  var ownHostnamesPromise;
+
+  function getOwnHostnames() {
+    if (!ownHostnamesPromise) {
+      ownHostnamesPromise = client
+        .hmGet(blogKey.info(blogID), ["domain", "handle"])
+        .then(function (res) {
+          return ownHost.hostnames({ domain: res[0], handle: res[1] });
+        })
+        .catch(function (err) {
+          debug(blogID, "failed to fetch own hostnames", err);
+          return [];
+        });
+    }
+
+    return ownHostnamesPromise;
+  }
+
   // Note: lookup does NOT de-duplicate concurrent calls for the same source
   // (only repeat calls once a result is cached). Simultaneous callers each
   // run the transform. They write the same content-hash key so the last
@@ -66,8 +89,34 @@ function Transformer(blogID, name) {
 
     // We check URLs first since isPath is less strict
     if (url) {
-      debug(src, "seemes to be a URL");
-      return fromURL(url, transform, callback);
+      // If this URL is hosted on the blog's own custom domain or its
+      // <handle>.blot.im subdomain, it's very likely a local file being
+      // referenced by its full URL rather than a relative path - fetching
+      // it over HTTP just to get back bytes we already have on disk
+      // needlessly slows builds down. Try resolving it as a local path
+      // first (recursing back through this same function reuses every
+      // local-path fallback below), and only hit the network if that
+      // fails - e.g. the file has since been deleted, or the URL doesn't
+      // actually map onto the folder.
+      return getOwnHostnames().then(function (ownHostnames) {
+        var ownPath = ownHost.resolve(url, ownHostnames);
+
+        if (ownPath) {
+          debug(src, "matches this blog's own domain, trying local path first:", ownPath);
+          return lookup(ownPath, transform, function (err, result, hash) {
+            if (!err) return callback(null, result, hash);
+            debug(
+              src,
+              "local lookup for own-domain URL failed, falling back to network fetch:",
+              err
+            );
+            fromURL(url, transform, callback);
+          });
+        }
+
+        debug(src, "seemes to be a URL");
+        fromURL(url, transform, callback);
+      });
     }
 
     if (path.length > 300) {

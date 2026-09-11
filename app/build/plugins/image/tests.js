@@ -165,6 +165,64 @@ describe("image", function () {
     });
   });
 
+  it("resolves an image referenced by its own blot.im subdomain URL from disk instead of fetching it", function (done) {
+    var test = this;
+    var path = "/tests-image.png";
+    var src = "https://" + test.blog.handle + "." + config.host + path;
+    var html = '<img src="' + src + '">';
+
+    fs.copySync(__dirname + path, localPath(test.blog.id, path));
+
+    render(test.blog, html, function (err, result) {
+      expect(err).toBe(null);
+      expect(result).toContain(".png");
+      expect(result).toContain("/_image_cache/");
+      test.result = result;
+      done();
+    });
+  });
+
+  it("resolves an image referenced by its own custom domain URL, ignoring the query string", function (done) {
+    var test = this;
+    var path = "/tests-image.png";
+    var src = "https://www.example.com" + path + "?foo=bar";
+    var html = '<img src="' + src + '">';
+
+    fs.copySync(__dirname + path, localPath(test.blog.id, path));
+
+    test.blog.update({ domain: "example.com" }).then(function () {
+      // .update() writes to Redis but doesn't mutate this in-memory
+      // object, so reflect the change the way a fresh blog.get() would.
+      test.blog.domain = "example.com";
+
+      render(test.blog, html, function (err, result) {
+        expect(err).toBe(null);
+        expect(result).toContain(".png");
+        expect(result).toContain("/_image_cache/");
+        test.result = result;
+        done();
+      });
+    });
+  });
+
+  it("resolves an image referenced by its own domain URL case-insensitively", function (done) {
+    var test = this;
+    var path = "/tests-image.png";
+    var src =
+      "https://" + test.blog.handle + "." + config.host + "/NESTED" + path.toUpperCase();
+    var html = '<img src="' + src + '">';
+
+    fs.copySync(__dirname + path, localPath(test.blog.id, "/nested" + path));
+
+    render(test.blog, html, function (err, result) {
+      expect(err).toBe(null);
+      expect(result).toContain(".png");
+      expect(result).toContain("/_image_cache/");
+      test.result = result;
+      done();
+    });
+  });
+
   it("caches an image case-insensitively", function (done) {
     var test = this;
     var path = "/tests-image.png";
@@ -215,7 +273,11 @@ describe("image", function () {
 
   // Wrapper around dumb API for this plugin
   function render (blog, html, callback) {
-    var options = { blogID: blog.id };
+    var options = {
+      blogID: blog.id,
+      domain: blog.domain,
+      baseURL: "https://" + blog.handle + "." + config.host
+    };
     var $ = cheerio.load(html, null, false);
 
     image.render(
