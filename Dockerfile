@@ -135,6 +135,11 @@ RUN node -e "require('sharp'); console.log('sharp loads against libvips ' + requ
 RUN apk add --no-cache chromium nss freetype harfbuzz ttf-freefont
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
+# config/redis/scripts/install-service-overrides.sh is written for the bash
+# that ships on the production EC2 host and its test spawns it with `bash`
+# directly - Alpine's base image only has busybox `sh`, so add the real thing.
+RUN apk add --no-cache bash
+
 # Configure git so the git client doesn't complain
 RUN git config --global --add safe.directory /usr/src/app \
  && git config --global user.email "you@example.com" \
