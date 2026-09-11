@@ -148,6 +148,12 @@ module.exports = configFile => {
     this.listCache = async function listCache ({ watch = true } = {}) {
       const files = [];
 
+      // With use_temp_path=off nginx writes in-progress responses to a
+      // numbered temp file inside this same tree before renaming it to its
+      // final 32-char md5 hash name; skip temp files so a listCache() call
+      // racing an in-flight write can't return partial/garbled content.
+      const CACHE_FILENAME = /^[0-9a-f]{32}$/;
+
       const list = async function (dir) {
         const stat = await fs.stat(dir);
         if (stat.isDirectory()) {
@@ -155,7 +161,7 @@ module.exports = configFile => {
           for (const child of children) {
             await list(dir + "/" + child);
           }
-        } else {
+        } else if (CACHE_FILENAME.test(basename(dir))) {
           files.push(dir);
         }
       };
