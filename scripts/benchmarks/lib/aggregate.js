@@ -28,6 +28,16 @@ const METRIC_PATHS = {
   build_peak_rss_mb: "build.memory_mb.peak_rss",
   render_peak_rss_mb: "render.memory_mb.peak_rss",
   render_bytes_mean: "render.bytes.mean_per_page",
+  tag_burst_p95_ms: "render.tag_burst.burst_timing_ms.p95",
+  tag_burst_inflation_ratio: "render.tag_burst.inflation_ratio",
+  archives_burst_p95_ms: "render.archives_burst.burst_timing_ms.p95",
+  archives_burst_inflation_ratio: "render.archives_burst.inflation_ratio",
+  search_burst_p95_ms: "render.search_burst.burst_timing_ms.p95",
+  search_burst_inflation_ratio: "render.search_burst.inflation_ratio",
+  sitemap_burst_p95_ms: "render.sitemap_burst.burst_timing_ms.p95",
+  sitemap_burst_inflation_ratio: "render.sitemap_burst.inflation_ratio",
+  backlinks_burst_p95_ms: "render.backlinks_burst.burst_timing_ms.p95",
+  backlinks_burst_inflation_ratio: "render.backlinks_burst.inflation_ratio",
 };
 
 /**

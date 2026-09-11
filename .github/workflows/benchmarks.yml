@@ -37,6 +37,27 @@ on:
       iterations:
         description: "Iterations to run and aggregate"
         default: "3"
+      tags:
+        description: "Distinct tags generated per site"
+        default: ""
+      tag_burst_concurrency:
+        description: "Distinct /tagged/<slug> pages hit at once"
+        default: ""
+      archives_burst_concurrency:
+        description: "Concurrent /archives requests"
+        default: ""
+      search_keywords:
+        description: "Distinct search keywords generated per site"
+        default: ""
+      search_burst_concurrency:
+        description: "Distinct /search?q= queries hit at once"
+        default: ""
+      backlinks_burst_concurrency:
+        description: "Concurrent hits to each site's hub entry"
+        default: ""
+      sitemap_burst_concurrency:
+        description: "Concurrent /sitemap.xml requests"
+        default: ""
 
 permissions:
   contents: read
@@ -165,6 +186,13 @@ jobs:
               -e GITHUB_SHA=${{ github.sha }} \
               -e SITES_ARG="${{ github.event.inputs.sites }}" \
               -e FILES_ARG="${{ github.event.inputs.files }}" \
+              -e TAGS_ARG="${{ github.event.inputs.tags }}" \
+              -e TAG_BURST_CONCURRENCY_ARG="${{ github.event.inputs.tag_burst_concurrency }}" \
+              -e ARCHIVES_BURST_CONCURRENCY_ARG="${{ github.event.inputs.archives_burst_concurrency }}" \
+              -e SEARCH_KEYWORDS_ARG="${{ github.event.inputs.search_keywords }}" \
+              -e SEARCH_BURST_CONCURRENCY_ARG="${{ github.event.inputs.search_burst_concurrency }}" \
+              -e BACKLINKS_BURST_CONCURRENCY_ARG="${{ github.event.inputs.backlinks_burst_concurrency }}" \
+              -e SITEMAP_BURST_CONCURRENCY_ARG="${{ github.event.inputs.sitemap_burst_concurrency }}" \
               -v ${{ github.workspace }}/app:/usr/src/app/app \
               -v ${{ github.workspace }}/scripts:/usr/src/app/scripts \
               -v ${{ github.workspace }}/config:/usr/src/app/config \
@@ -175,6 +203,13 @@ jobs:
                 ARGS="--output /benchmarks/runs/run-'"$i"'.json"
                 [ -n "$SITES_ARG" ] && ARGS="$ARGS --sites $SITES_ARG"
                 [ -n "$FILES_ARG" ] && ARGS="$ARGS --files $FILES_ARG"
+                [ -n "$TAGS_ARG" ] && ARGS="$ARGS --tags $TAGS_ARG"
+                [ -n "$TAG_BURST_CONCURRENCY_ARG" ] && ARGS="$ARGS --tag-burst-concurrency $TAG_BURST_CONCURRENCY_ARG"
+                [ -n "$ARCHIVES_BURST_CONCURRENCY_ARG" ] && ARGS="$ARGS --archives-burst-concurrency $ARCHIVES_BURST_CONCURRENCY_ARG"
+                [ -n "$SEARCH_KEYWORDS_ARG" ] && ARGS="$ARGS --search-keywords $SEARCH_KEYWORDS_ARG"
+                [ -n "$SEARCH_BURST_CONCURRENCY_ARG" ] && ARGS="$ARGS --search-burst-concurrency $SEARCH_BURST_CONCURRENCY_ARG"
+                [ -n "$BACKLINKS_BURST_CONCURRENCY_ARG" ] && ARGS="$ARGS --backlinks-burst-concurrency $BACKLINKS_BURST_CONCURRENCY_ARG"
+                [ -n "$SITEMAP_BURST_CONCURRENCY_ARG" ] && ARGS="$ARGS --sitemap-burst-concurrency $SITEMAP_BURST_CONCURRENCY_ARG"
                 npm run benchmark:ci -- $ARGS
               '
             echo "::endgroup::"

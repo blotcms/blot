@@ -9,6 +9,11 @@ const { expandSitemapUrls } = require("./util/sitemap");
 const { runWithConcurrency } = require("./util/concurrency");
 const { parseBenchmarkConfig } = require("./util/config");
 const { buildBenchmarkResult } = require("./util/result");
+const { runTagBurst } = require("./util/tagBurst");
+const { runArchivesBurst } = require("./util/archivesBurst");
+const { runSearchBurst } = require("./util/searchBurst");
+const { runSitemapBurst } = require("./util/sitemapBurst");
+const { runBacklinksBurst } = require("./util/backlinksBurst");
 
 describe("blog benchmarks", function () {
   require("./util/setup")();
@@ -155,6 +160,73 @@ describe("blog benchmarks", function () {
     const renderPhaseMetrics = renderPhaseMonitor.stop();
     const renderTiming = summarizeDurations(renderDurations);
 
+    console.log(
+      "[benchmark] tag burst:",
+      benchmarkConfig.tagBurstConcurrency,
+      "distinct tag pages requested concurrently per site"
+    );
+
+    const tagBurst = await runTagBurst({
+      blogs,
+      tagsBySite: workload.tagsBySite,
+      concurrency: benchmarkConfig.tagBurstConcurrency,
+      getForBlog: this.getForBlog.bind(this),
+    });
+
+    console.log(
+      "[benchmark] archives burst:",
+      benchmarkConfig.archivesBurstConcurrency,
+      "concurrent /archives requests across",
+      blogs.length,
+      "site(s)"
+    );
+
+    const archivesBurst = await runArchivesBurst({
+      blogs,
+      concurrency: benchmarkConfig.archivesBurstConcurrency,
+      getForBlog: this.getForBlog.bind(this),
+    });
+
+    console.log(
+      "[benchmark] search burst:",
+      benchmarkConfig.searchBurstConcurrency,
+      "distinct search queries requested concurrently per site"
+    );
+
+    const searchBurst = await runSearchBurst({
+      blogs,
+      keywordsBySite: workload.searchKeywordsBySite,
+      concurrency: benchmarkConfig.searchBurstConcurrency,
+      getForBlog: this.getForBlog.bind(this),
+    });
+
+    console.log(
+      "[benchmark] sitemap burst:",
+      benchmarkConfig.sitemapBurstConcurrency,
+      "concurrent /sitemap.xml requests across",
+      blogs.length,
+      "site(s)"
+    );
+
+    const sitemapBurst = await runSitemapBurst({
+      blogs,
+      concurrency: benchmarkConfig.sitemapBurstConcurrency,
+      getForBlog: this.getForBlog.bind(this),
+    });
+
+    console.log(
+      "[benchmark] backlinks burst:",
+      benchmarkConfig.backlinksBurstConcurrency,
+      "concurrent requests to each site's hub entry"
+    );
+
+    const backlinksBurst = await runBacklinksBurst({
+      blogs,
+      hubPathBySite: workload.hubPathBySite,
+      concurrency: benchmarkConfig.backlinksBurstConcurrency,
+      getForBlog: this.getForBlog.bind(this),
+    });
+
     siteSummaries.forEach((summary, index) => {
       summary.rendered_pages = renderTasks.filter(
         (task) => task.blog.id === summary.blog_id
@@ -179,6 +251,11 @@ describe("blog benchmarks", function () {
       siteSummaries,
       renderTasks,
       renderFailures,
+      tagBurst,
+      archivesBurst,
+      searchBurst,
+      sitemapBurst,
+      backlinksBurst,
     });
 
     global.__BLOT_BENCHMARK_RESULT = result;
@@ -228,6 +305,33 @@ describe("blog benchmarks", function () {
         num((result.render.bytes.mean_per_page / 1024).toFixed(1), 8) +
         " kb per page"
     );
+    console.log("");
+
+    const bursts = [
+      ["Tag burst", result.render.tag_burst],
+      ["Archives burst", result.render.archives_burst],
+      ["Search burst", result.render.search_burst],
+      ["Sitemap burst", result.render.sitemap_burst],
+      ["Backlinks burst", result.render.backlinks_burst],
+    ];
+
+    for (const [burstLabel, burst] of bursts) {
+      console.log(
+        label(`${burstLabel} inflation`) +
+          num(
+            burst.inflation_ratio === null
+              ? "n/a"
+              : burst.inflation_ratio.toFixed(2),
+            8
+          ) + "x"
+      );
+      console.log(
+        label(`${burstLabel} p95`) +
+          num(burst.burst_timing_ms.p95.toFixed(0), 8) +
+          " ms"
+      );
+    }
+
     console.log("");
   });
 });

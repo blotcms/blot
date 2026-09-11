@@ -1,5 +1,13 @@
 "use strict";
 
+const BURSTS = [
+  { key: "tag_burst", label: "Tag burst" },
+  { key: "archives_burst", label: "Archives burst" },
+  { key: "search_burst", label: "Search burst" },
+  { key: "sitemap_burst", label: "Sitemap burst" },
+  { key: "backlinks_burst", label: "Backlinks burst" },
+];
+
 /**
  * Extract summary metrics from a benchmark result JSON (same shape as the
  * table printed at the end of a run).
@@ -20,17 +28,34 @@ function metricsFromResult(result) {
     (render.memory_mb && render.memory_mb.peak_rss) || 0
   );
   const totalSeconds = totalWallMs / 1000;
+
+  const bursts = {};
+  for (const { key } of BURSTS) {
+    const burst = render[key] || {};
+    const timing = burst.burst_timing_ms || {};
+    bursts[key] = {
+      p95Ms: timing.p95 != null ? timing.p95 : 0,
+      inflationRatio:
+        burst.inflation_ratio != null ? burst.inflation_ratio : null,
+    };
+  }
+
   return {
     totalCpuPercent,
     totalMemoryMb,
     totalSeconds,
     meanBuildMs: buildTiming.mean != null ? buildTiming.mean : 0,
     meanRenderMs: renderTiming.mean != null ? renderTiming.mean : 0,
+    bursts,
   };
 }
 
 function fmtNum(n, width) {
   return String(n).padStart(width || 8);
+}
+
+function fmtRatio(ratio) {
+  return ratio == null ? "n/a" : ratio.toFixed(2);
 }
 
 /**
@@ -78,6 +103,27 @@ function printCompareTable(currentResult, branchResult) {
       fmtNum(br.meanRenderMs.toFixed(0), 8) +
       " ms per page"
   );
+  console.log("");
+
+  for (const { key, label: burstLabel } of BURSTS) {
+    const curBurst = cur.bursts[key];
+    const brBurst = br.bursts[key];
+
+    console.log(
+      label(`${burstLabel} p95`) +
+        fmtNum(curBurst.p95Ms.toFixed(0), 8) +
+        " ms  ->  " +
+        fmtNum(brBurst.p95Ms.toFixed(0), 8) +
+        " ms"
+    );
+    console.log(
+      label(`${burstLabel} inflation`) +
+        fmtNum(fmtRatio(curBurst.inflationRatio), 8) +
+        "x  ->  " +
+        fmtNum(fmtRatio(brBurst.inflationRatio), 8) +
+        "x"
+    );
+  }
   console.log("");
 }
 

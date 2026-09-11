@@ -11,6 +11,11 @@ function buildBenchmarkResult(options) {
     siteSummaries,
     renderTasks,
     renderFailures,
+    tagBurst,
+    archivesBurst,
+    searchBurst,
+    sitemapBurst,
+    backlinksBurst,
   } = options;
 
   const renderedPages = renderTasks.length;
@@ -26,6 +31,13 @@ function buildBenchmarkResult(options) {
       seed: benchmarkConfig.seed,
       render_concurrency: benchmarkConfig.renderConcurrency,
       requests_per_page: benchmarkConfig.requestsPerPage,
+      tags: benchmarkConfig.tags,
+      tag_burst_concurrency: benchmarkConfig.tagBurstConcurrency,
+      archives_burst_concurrency: benchmarkConfig.archivesBurstConcurrency,
+      search_keywords: benchmarkConfig.searchKeywords,
+      search_burst_concurrency: benchmarkConfig.searchBurstConcurrency,
+      sitemap_burst_concurrency: benchmarkConfig.sitemapBurstConcurrency,
+      backlinks_burst_concurrency: benchmarkConfig.backlinksBurstConcurrency,
       regression_threshold_percent: benchmarkConfig.regressionThresholdPercent,
       cpu_sample_interval_ms: benchmarkConfig.cpuSampleIntervalMs,
     },
@@ -63,6 +75,42 @@ function buildBenchmarkResult(options) {
         total: renderBytesTotal || 0,
         mean_per_page:
           renderedPages > 0 ? (renderBytesTotal || 0) / renderedPages : 0,
+      },
+      tag_burst: {
+        tags_tested_total: tagBurst.tags_tested_total,
+        // Uncontended, one-at-a-time baseline for the same tag pages.
+        solo_timing_ms: tagBurst.solo_timing_ms,
+        // Same pages requested all at once (Promise.all). A healthy render
+        // path keeps this close to the solo timing; queueing behind
+        // synchronous, uncached per-request work blows it up.
+        burst_timing_ms: tagBurst.burst_timing_ms,
+        inflation_ratio: tagBurst.inflation_ratio,
+        sites: tagBurst.sites,
+      },
+      archives_burst: {
+        requests_tested_total: archivesBurst.requests_tested_total,
+        solo_timing_ms: archivesBurst.solo_timing_ms,
+        burst_timing_ms: archivesBurst.burst_timing_ms,
+        inflation_ratio: archivesBurst.inflation_ratio,
+      },
+      search_burst: {
+        keywords_tested_total: searchBurst.keywords_tested_total,
+        solo_timing_ms: searchBurst.solo_timing_ms,
+        burst_timing_ms: searchBurst.burst_timing_ms,
+        inflation_ratio: searchBurst.inflation_ratio,
+        sites: searchBurst.sites,
+      },
+      sitemap_burst: {
+        requests_tested_total: sitemapBurst.requests_tested_total,
+        solo_timing_ms: sitemapBurst.solo_timing_ms,
+        burst_timing_ms: sitemapBurst.burst_timing_ms,
+        inflation_ratio: sitemapBurst.inflation_ratio,
+      },
+      backlinks_burst: {
+        requests_tested_total: backlinksBurst.requests_tested_total,
+        solo_timing_ms: backlinksBurst.solo_timing_ms,
+        burst_timing_ms: backlinksBurst.burst_timing_ms,
+        inflation_ratio: backlinksBurst.inflation_ratio,
       },
     },
     sites: siteSummaries,

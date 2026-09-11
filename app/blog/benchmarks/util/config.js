@@ -33,6 +33,28 @@ function parseBenchmarkConfig(raw = {}) {
       raw.requestsPerPage,
       BENCHMARK_DEFAULTS.requestsPerPage
     ),
+    tags: num(raw.tags, BENCHMARK_DEFAULTS.tags),
+    tagBurstConcurrency: num(
+      raw.tagBurstConcurrency,
+      BENCHMARK_DEFAULTS.tagBurstConcurrency
+    ),
+    archivesBurstConcurrency: num(
+      raw.archivesBurstConcurrency,
+      BENCHMARK_DEFAULTS.archivesBurstConcurrency
+    ),
+    searchKeywords: num(raw.searchKeywords, BENCHMARK_DEFAULTS.searchKeywords),
+    searchBurstConcurrency: num(
+      raw.searchBurstConcurrency,
+      BENCHMARK_DEFAULTS.searchBurstConcurrency
+    ),
+    backlinksBurstConcurrency: num(
+      raw.backlinksBurstConcurrency,
+      BENCHMARK_DEFAULTS.backlinksBurstConcurrency
+    ),
+    sitemapBurstConcurrency: num(
+      raw.sitemapBurstConcurrency,
+      BENCHMARK_DEFAULTS.sitemapBurstConcurrency
+    ),
   };
 }
 

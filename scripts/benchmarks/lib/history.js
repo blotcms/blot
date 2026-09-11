@@ -37,7 +37,7 @@ function loadHistory(dir, arch) {
 
 function recordFromResult(result, extra = {}) {
   return {
-    schema_version: 1,
+    schema_version: BENCHMARK_DEFAULTS.historySchemaVersion,
     git_sha: result.git_sha || process.env.GITHUB_SHA || null,
     timestamp: result.timestamp || new Date().toISOString(),
     arch: extra.arch || null,
@@ -62,10 +62,23 @@ function computeBaseline(records, options = {}) {
   const {
     window = BENCHMARK_DEFAULTS.baselineWindow,
     excludeSha = null,
+    schemaVersion = BENCHMARK_DEFAULTS.historySchemaVersion,
   } = options;
 
+  // Records written under an older schema version measured a different set
+  // of metrics (or a workload shape that shifts totals), so mixing them into
+  // this baseline would make every comparison noise. Excluding them means a
+  // schema bump resets the baseline automatically on the next master run,
+  // instead of requiring someone to clear the benchmarks-history-* Actions
+  // cache by hand.
   const usable = records
-    .filter((r) => r && r.metrics && (!excludeSha || r.git_sha !== excludeSha))
+    .filter(
+      (r) =>
+        r &&
+        r.metrics &&
+        r.schema_version === schemaVersion &&
+        (!excludeSha || r.git_sha !== excludeSha)
+    )
     .slice(-window);
 
   const metrics = {};
@@ -80,7 +93,7 @@ function computeBaseline(records, options = {}) {
   }
 
   return {
-    schema_version: 1,
+    schema_version: schemaVersion,
     generated_at: new Date().toISOString(),
     window,
     sample_count: usable.length,

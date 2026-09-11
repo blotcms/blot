@@ -62,7 +62,12 @@ function main() {
   const dryRun = flag("--dry-run");
   const repo = process.env.GITHUB_REPOSITORY;
 
-  const history = loadHistory(historyDir, arch);
+  // Records from an older history schema (a prior tracked-metric set, or a
+  // workload shape that shifted totals) are excluded so a schema bump resets
+  // the "how many samples do we have" count too, not just the baseline math.
+  const history = loadHistory(historyDir, arch).filter(
+    (r) => r.schema_version === BENCHMARK_DEFAULTS.historySchemaVersion
+  );
 
   if (history.length < BENCHMARK_DEFAULTS.minBaselineSamples + consecutive) {
     console.log(
