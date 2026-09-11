@@ -116,6 +116,12 @@ function getFromHash(blogID, entryIDs, single, fields, callback) {
     return entryHashKey(blogID, entryID);
   });
 
+  // Issued directly (not via redis.multi()/exec()) so node-redis's
+  // client-side cache (see app/models/redis.js) can serve repeat reads
+  // locally - a MULTI/EXEC transaction bypasses that cache entirely, since
+  // transaction-queued commands aren't tracked by it. These calls still
+  // avoid N sequential round trips: firing them all in the same tick lets
+  // node-redis auto-pipeline the writes.
   var reads = hashKeys.map(function (hashKey) {
     return fieldList ? redis.hmGet(hashKey, fieldList) : redis.hGetAll(hashKey);
   });
