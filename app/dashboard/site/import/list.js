@@ -10,6 +10,7 @@ module.exports = async function (req, res, next) {
     const imports = await fs.readdir(join(tempDir, "import", req.blog.id));
 
     res.locals.imports = imports
+      .filter(i => !fs.existsSync(join(tempDir, "import", req.blog.id, i, "deleted.txt")))
       .map((i) => {
         let size;
         let started;
@@ -66,6 +67,11 @@ module.exports = async function (req, res, next) {
           );
         } catch (e) {}
 
+        const leaseExpiry = require("./lifecycle").leaseExpiry(join(tempDir, "import", req.blog.id, i));
+        if (leaseExpiry !== undefined && leaseExpiry <= Date.now()) {
+          error = "Import worker stopped. Delete this import and try again.";
+        }
+
         return {
           id: i,
           name,
@@ -81,14 +87,14 @@ module.exports = async function (req, res, next) {
           cancelled,
           size,
           error,
-          lastStatus: !!error ? error : lastStatus,
+          lastStatus: cancelled ? (lastStatus === "Cancelled" ? "Cancelled" : "Cancelling") : (!!error ? error : lastStatus),
           started,
           importedOn,
           timestamp,
-          complete: !!size || !!error,
+          complete: !!size || !!error || lastStatus === "Cancelled",
         };
       })
-      .filter((i) => !!i && !!i.name && i.cancelled === undefined);
+      .filter((i) => !!i && !!i.name);
 
       // sort by timestamp
       res.locals.imports.sort((a, b) => {

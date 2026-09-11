@@ -3,53 +3,13 @@ var basename = require("path").basename;
 var parse = require("url").parse;
 var each_el = require("./each_el");
 var fs = require("fs-extra");
-var callOnce = require("helper/callOnce");
 var assetDirectory = require("./asset_directory");
-// Imported HTML can reference arbitrary, user-controlled PDF URLs, so route
-// the download through the airlock's forward proxy (SSRF egress boundary)
-// rather than the app container's direct network. Fails closed in production.
-var fetch = require("helper/airlock").fetch;
+var boundedDownload = require("./download");
+var lifecycle = require("../lifecycle");
 
-var TIMEOUT = 5 * 1000; // 10s
-
-function download(url, _callback) {
-  console.log("Attempting to download", url);
-
-  var time;
-
-  var callback = callOnce(function (err, data) {
-    console.log("Finishing attempt to download", url);
-    clearTimeout(time);
-    _callback(err, data);
-  });
-
-  if (!require("url").parse(url).hostname)
-    return callback(new Error("Failed to parse hostname: " + url));
-
-  if (!url || url.indexOf("data:") === 0)
-    return callback(new Error("Invalid URL: " + url));
-
-  time = setTimeout(function () {
-    console.log("Timing out downloading", url);
-    callback(new Error("Timeout: >10s downloading " + url));
-  }, TIMEOUT);
-
-  fetch(url, { airlockLabel: "import/download_pdfs" })
-    .then(function (res) {
-      if (!res.ok) {
-        return callback(new Error("Bad status code: " + res.status));
-      }
-      console.log("Successfully downloaded", url);
-
-      return res.buffer();
-    })
-    .then(function (data) {
-      callback(null, data);
-    })
-    .catch(function (err) {
-      console.log("Failed to download", url, err);
-      callback(err);
-    });
+function download(url, callback) {
+  boundedDownload(url, { airlockLabel: "import/download_pdfs" })
+    .then(({ data }) => callback(null, data), callback);
 }
 
 module.exports = function download_pdfs(post, callback) {
@@ -95,7 +55,7 @@ module.exports = function download_pdfs(post, callback) {
       download(href, function (err, data) {
         if (err) {
           console.log("PDF error:", href, err.name, err.statusCode);
-          return next();
+          return next(lifecycle.current() && lifecycle.current().signal.aborted ? err : null);
         }
 
         assetDirectory(post, function (err, directory) {
@@ -117,7 +77,8 @@ module.exports = function download_pdfs(post, callback) {
         });
       });
     },
-    function () {
+    function (err) {
+      if (err) return callback(err);
       post.html = $.html();
       callback(null, post);
     }

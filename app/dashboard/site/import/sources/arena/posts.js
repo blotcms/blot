@@ -1,4 +1,5 @@
-const fetch = require("node-fetch");
+const download = require("../../helper/download");
+const lifecycle = require("../../lifecycle");
 const PAGE_SIZE = 100;
 
 module.exports = async function posts ({ slug, status }) {
@@ -9,12 +10,9 @@ module.exports = async function posts ({ slug, status }) {
   async function fetchPage (page) {
     const url = base(slug, page);
     status(`Fetching page ${page + 1} of channel`);
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const data = await response.json();
-    return data.contents;
+    lifecycle.check();
+    const { data } = await download(url);
+    return JSON.parse(data.toString("utf8")).contents;
   }
 
   new_posts = await fetchPage(page);

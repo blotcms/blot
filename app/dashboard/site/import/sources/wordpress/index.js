@@ -66,6 +66,7 @@ function main(sourceFile, outputDirectory, status, options, callback) {
       async.eachOfSeries(
         items,
         function (item, index, done) {
+          try { require("../../lifecycle").check(); } catch (err) { return done(err); }
           var current = Number(index) + 1;
           var title = item.title[0].trim();
 

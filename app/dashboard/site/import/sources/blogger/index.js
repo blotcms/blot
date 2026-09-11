@@ -1,3 +1,4 @@
+const lifecycle = require("dashboard/site/import/lifecycle");
 const async = require("async");
 const fs = require("fs-extra");
 const helper = require("dashboard/site/import/helper");
@@ -14,7 +15,7 @@ function processEntry(entry, outputDirectory) {
         helper.convert_to_markdown,
         helper.insert_metadata,
         helper.write,
-      ],
+      ].map(lifecycle.guard),
       (err) => (err ? reject(err) : resolve())
     );
   });
@@ -30,6 +31,7 @@ async function importBlogger(sourceFile, outputDirectory, status, siteHost) {
     throw new Error("No published posts or pages found in this Blogger export.");
   }
   for (let index = 0; index < entries.length; index++) {
+    lifecycle.check();
     status(
       `(${index + 1}/${entries.length}) Processing ${entries[index].title}`
     );

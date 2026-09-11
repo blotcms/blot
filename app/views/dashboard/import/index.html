@@ -109,6 +109,7 @@
     <div class="import-row__meta">
       {{#icon}}<img width="14" height="14" src="{{icon}}" alt="">{{/icon}}
       <span>{{name}}</span>
+      {{#cancelled}}<span>Cancelled</span>{{/cancelled}}
       {{^error}}
       {{#started}}<span>&bull; {{started}}</span>{{/started}}
       {{#size}}<span>&bull; {{size}}</span>{{/size}}
@@ -139,9 +140,11 @@
 
   <div class="import-row__actions">
   {{#complete}}
-    {{^error}}
+    {{#size}}
+    {{^cancelled}}
     <a href="{{{importBase}}}/download/{{id}}" target="_blank" class="s no-underline">Download</a>
-    {{/error}}
+    {{/cancelled}}
+    {{/size}}
     <form method="post" action="{{{importBase}}}/delete/{{id}}">
       <input type="hidden" name="_csrf" value="{{csrftoken}}">
       <button type="submit">Delete</button>

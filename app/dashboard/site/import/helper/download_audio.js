@@ -4,12 +4,8 @@ var parse = require("url").parse;
 var each_el = require("./each_el");
 var fs = require("fs-extra");
 var assetDirectory = require("./asset_directory");
-// Imported HTML can reference arbitrary, user-controlled audio URLs, so route
-// the download through the airlock's forward proxy (SSRF egress boundary)
-// rather than the app container's direct network. Fails closed in production.
-// This replaces the unproxied `download` package, which was also never
-// declared in package.json (it resolved only as a transitive dependency).
-var fetch = require("helper/airlock").fetch;
+var download = require("./download");
+var lifecycle = require("../lifecycle");
 
 module.exports = function download_audio(post, callback) {
   var $ = cheerio.load(post.html, { decodeEntities: false });
@@ -34,16 +30,8 @@ module.exports = function download_audio(post, callback) {
 
       if (name.charAt(0) !== "_") name = "_" + name;
 
-      fetch(href, { airlockLabel: "import/download_audio" })
-        .then(function (res) {
-          if (!res.ok) {
-            throw new Error("Bad status code: " + res.status);
-          }
-          return res.arrayBuffer();
-        })
-        .then(function (arrayBuffer) {
-          var data = Buffer.from(arrayBuffer);
-
+      download(href, { airlockLabel: "import/download_audio" })
+        .then(function ({ data }) {
           assetDirectory(post, function (err, directory) {
             if (err) return next();
 
@@ -58,10 +46,11 @@ module.exports = function download_audio(post, callback) {
         })
         .catch(function (err) {
           console.log("Audio error:", href, err && err.message);
-          next();
+          next(lifecycle.current() && lifecycle.current().signal.aborted ? err : null);
         });
     },
-    function () {
+    function (err) {
+      if (err) return callback(err);
       post.html = $.html();
       callback(null, post);
     }

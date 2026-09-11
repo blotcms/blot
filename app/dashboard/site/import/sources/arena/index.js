@@ -5,21 +5,23 @@
 
 const Posts = require("./posts");
 const parse = require("./parse");
-const fetch = require("node-fetch");
+const download = require("../../helper/download");
+const lifecycle = require("../../lifecycle");
 const fs = require("fs-extra");
 const { join } = require("path");
 
 async function main({ slug, outputDirectory, status }) {
   status("Fetching posts from Are.na channel " + slug);
-  const response = await fetch(`https://api.are.na/v2/channels/${slug}`);
-  const json = await response.json();
+  const { data } = await download(`https://api.are.na/v2/channels/${slug}`);
+  const json = JSON.parse(data.toString("utf8"));
+  lifecycle.check();
   
   const {
     metadata: { description },
     owner,
   } = json;
 
-  fs.outputFile(
+  await fs.outputFile(
     join(outputDirectory, "_description.txt"),
     `${description}
 

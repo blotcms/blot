@@ -18,15 +18,25 @@ module.exports = function assetDirectory(entry, callback) {
 
   entry.asset_directory_callbacks = [callback];
 
-  fs.mkdtemp(path.join(os.tmpdir(), "blot-import-"), function (err, directory) {
+  const state = require("../lifecycle").current();
+  const parent = state ? state.stagingDirectory : os.tmpdir();
+  fs.ensureDir(parent, function (err) {
+    if (err) return finish(err);
+    fs.mkdtemp(path.join(parent, "blot-import-"), finish);
+  });
+
+  function finish(err, directory) {
     var callbacks = entry.asset_directory_callbacks;
 
     delete entry.asset_directory_callbacks;
 
-    if (!err) entry.asset_directory = directory;
+    if (!err) {
+      entry.asset_directory = directory;
+      if (state) state.assets.add(directory);
+    }
 
     callbacks.forEach(function (callback) {
       callback(err, directory);
     });
-  });
+  }
 };

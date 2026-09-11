@@ -23,14 +23,6 @@ function isBloggerExport(upload) {
   return extension === ".atom" || contentType === "application/atom+xml";
 }
 
-function errorMessage(error) {
-  const message = error && error.message ? error.message : String(error);
-  return (
-    message.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim() ||
-    "Blogger import failed"
-  ).slice(0, 300);
-}
-
 Importer.route("/blogger")
   .get(function (req, res) {
     res.locals.breadcrumbs.add("Blogger", "blogger");
@@ -66,41 +58,25 @@ Importer.route("/blogger")
     }
 
     const job = init({ blogID: req.blog.id, label: "Blogger" });
+    const releaseUpload = req.retainUpload
+      ? req.retainUpload(upload)
+      : () => fs.remove(upload.path);
     res.message(req.baseUrl, "Began import");
 
-    // Start after the response has been handed back to Express. The converter's
-    // promise resolves only after its Markdown and asset-writing pipeline ends.
-    setImmediate(async () => {
-      try {
-        await fs.outputFile(
-          join(job.importDirectory, "identifier.txt"),
-          normalizeIdentifier(upload.originalFilename, {
-            extension: ".atom",
-            fallback: "Blogger export",
-          }),
-          "utf8"
-        );
-        await blogger(upload.path, job.outputDirectory, job.status, {
-          siteHost,
-        });
-        await job.finish();
-      } catch (error) {
-        const message = errorMessage(error);
+    job.run(async () => {
+      await fs.outputFile(
+        join(job.importDirectory, "identifier.txt"),
+        normalizeIdentifier(upload.originalFilename, {
+          extension: ".atom",
+          fallback: "Blogger export",
+        }),
+        "utf8"
+      );
+      await blogger(upload.path, job.outputDirectory, job.status, { siteHost });
+    }).catch(error => console.error("Failed to clean up import", error))
+      .finally(() => releaseUpload())
+      .catch(error => console.error("Failed to remove Blogger upload", error));
 
-        await fs
-          .outputFile(join(job.importDirectory, "error.txt"), message, "utf8")
-          .then(() => job.status("Failed"))
-          .catch((writeError) =>
-            console.error("Failed to record import error", writeError)
-          );
-      } finally {
-        await fs
-          .remove(upload.path)
-          .catch((removeError) =>
-            console.error("Failed to remove Blogger upload", removeError)
-          );
-      }
-    });
   });
 
 module.exports = Importer;

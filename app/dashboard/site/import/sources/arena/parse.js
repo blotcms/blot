@@ -1,4 +1,5 @@
-const fetch = require("node-fetch");
+const lifecycle = require("dashboard/site/import/lifecycle");
+const download = require("../../helper/download");
 const { join, extname } = require("path");
 const moment = require("moment");
 const fs = require("fs-extra");
@@ -20,6 +21,7 @@ async function parse({ outputDirectory, posts, status }) {
   const write = helper.write.createWriter();
 
   for (const item of posts) {
+    lifecycle.check();
     const label =
       (item && (item.title || item.generated_title || item.id)) || "Untitled";
     status(`(${++done}/${posts.length}) Processing ${label}`);
@@ -34,6 +36,7 @@ async function parse({ outputDirectory, posts, status }) {
         status(`Cannot process Are.na block ${label}`);
       }
     } catch (error) {
+      lifecycle.check();
       status(`Failed to process Are.na block ${label}: ${error.message}`);
       console.error("Failed to process Are.na block", label, error);
     }
@@ -77,7 +80,7 @@ function text(item, outputDirectory, write) {
         helper.convert_to_markdown,
         helper.insert_metadata,
         write,
-      ],
+      ].map(lifecycle.guard),
       (error) => (error ? reject(error) : resolve())
     );
   });
@@ -102,12 +105,13 @@ async function link(item, outputDirectory) {
 `;
 
   const path = getPath({ outputDirectory, draft, name, created });
+  lifecycle.check();
   await fs.outputFile(path, content, "utf-8");
   await fs.utimes(path, createdDate, createdDate);
 }
 
 async function image(item, outputDirectory) {
-  const response = await fetch(item.image.original.url, {
+  const { data } = await download(item.image.original.url, {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (compatible; Blot/1.0; +https://blot.im)",
@@ -115,13 +119,7 @@ async function image(item, outputDirectory) {
       Accept: "image/*,*/*;q=0.8",
     },
   });
-  const data = await response.buffer();
-
-  if (!response.ok || !data.length) {
-    throw new Error(
-      `Failed to download image (${response.status}, ${data.length} bytes)`
-    );
-  }
+  lifecycle.check();
 
   const title = item.title || item.generated_title || "Untitled";
 
@@ -138,6 +136,7 @@ async function image(item, outputDirectory) {
   const name = sanitize(title) + extension;
 
   const path = getPath({ outputDirectory, draft, name, created });
+  lifecycle.check();
   await fs.outputFile(path, data);
   await fs.utimes(path, createdDate, createdDate);
 }

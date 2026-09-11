@@ -29,11 +29,15 @@ Importer.route("/wordpress")
       );
     }
 
-    const { importDirectory, outputDirectory, finish, status } = init({
+    const job = init({
       blogID: req.blog.id,
       label: "WordPress",
     });
 
+    const { importDirectory, outputDirectory, status } = job;
+    const releaseUpload = req.retainUpload
+      ? req.retainUpload(exportUpload)
+      : () => fs.remove(exportUpload.path);
     res.message(req.baseUrl, "Began import");
 
     const identifier = normalizeIdentifier(exportUpload.originalFilename, {
@@ -42,25 +46,15 @@ Importer.route("/wordpress")
     });
     const inputXML = exportUpload.path;
 
-    fs.outputFileSync(
-      join(importDirectory, "identifier.txt"),
-      identifier,
-      "utf-8"
-    );
+    job.run(async () => {
+      await fs.outputFile(join(importDirectory, "identifier.txt"), identifier, "utf8");
+      await new Promise((resolve, reject) => {
+        wordpress(inputXML, outputDirectory, status, {}, err => err ? reject(err) : resolve());
+      });
+    }).catch(error => console.error("Failed to clean up import", error))
+      .finally(() => releaseUpload())
+      .catch(error => console.error("Failed to remove import upload", error));
 
-    wordpress(inputXML, outputDirectory, status, {}, async function (err) {
-      if (err) {
-        console.trace();
-        console.log("finally here with message", err);
-        return fs.outputFile(join(importDirectory, "error.txt"), err.message);
-      }
-
-      try {
-        await finish();
-      } catch (err) {
-        fs.outputFile(join(importDirectory, "error.txt"), err.message);
-      }
-    });
   });
 
 module.exports = Importer;

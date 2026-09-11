@@ -11,49 +11,7 @@ dashboard.use(trace("loading session information"));
 dashboard.use(require("dashboard/util/session"));
 dashboard.use(trace("loaded session information"));
 
-const multiparty = require("multiparty");
-
-var tempDir = require("helper/tempDir")();
-
-const maxFilesSize = 30 * 1024 * 1024; // 30mb
-
-var FORM_OPTIONS = {
-  uploadDir: tempDir,
-  maxFilesSize
-};
-
-// Middleware to parse multipart forms and regular forms
-const parse = (req, res, next) => {
-  if (!req.is('multipart/form-data')) {
-    return next();
-  }
-
-  const form = new multiparty.Form(FORM_OPTIONS);
-  
-  form.parse(req, (err, fields, files) => {
-    if (err) {
-      if (err.code === "ETOOBIG") {
-        err.status = 413;
-      }
-      return next(err);
-    }
-
-    // Convert arrays to single values when only one value exists
-    req.body = Object.keys(fields).reduce((acc, key) => {
-      acc[key] = fields[key].length === 1 ? fields[key][0] : fields[key];
-      return acc;
-    }, {});
-
-    req.files = files;
-
-    if (req.files.avatar) {
-      req.files = { avatar: files.avatar[0] };
-    }
-
-    next();
-  });
-};
-dashboard.use(parse);
+dashboard.use(require("dashboard/util/multipart")());
 
 dashboard.use(require("dashboard/util/parse"));
 dashboard.use(cookieParser());

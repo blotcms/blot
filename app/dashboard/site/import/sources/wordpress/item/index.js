@@ -1,3 +1,4 @@
+const lifecycle = require("dashboard/site/import/lifecycle");
 var async = require("async");
 var helper = require("dashboard/site/import/helper");
 var extract_entry = require("./extract_entry");
@@ -28,10 +29,12 @@ module.exports = function (item, output_directory, write, callback) {
       helper.convert_to_markdown,
       helper.insert_metadata,
       write,
-    ],
+    ].map(lifecycle.guard),
     function (err, result) {
-      if (err) console.error(err);
-      callback(null);
+      if (err) {
+        err.message = `Failed to import ${item.title && item.title[0] || "WordPress item"}: ${err.message}`;
+      }
+      callback(err);
     }
   );
 };
