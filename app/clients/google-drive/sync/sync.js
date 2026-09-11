@@ -160,6 +160,20 @@ module.exports = async function sync(blogID, publish, update) {
           "application/vnd.google-apps."
         );
 
+        // NOTE: for regular files this only compares size, not content.
+        // A same-size content edit will not be re-downloaded. This is a
+        // known gap — see TODO "Add sync check" under Google Drive.
+        //
+        // Do NOT "fix" this by hashing every local file's contents on
+        // every sync (e.g. `: false`, forcing download()'s MD5 check to
+        // always run) without also solving the cost problem: that
+        // recomputes a checksum from disk for every unchanged file on
+        // every sync, which does not scale for blogs with many files.
+        // We moved away from exactly that approach once already, see
+        // b618509. Any fix here needs to keep sync cost proportional to
+        // the number of *changed* files, e.g. by comparing against a
+        // checksum stored at download time instead of rehashing live.
+        // See PR #1804 for a rejected attempt and further discussion.
         const identical = isGoogleAppFile
           ? truncateToSecond(existsLocally?.modifiedTime) ===
             truncateToSecond(modifiedTime)
