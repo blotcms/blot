@@ -58,6 +58,24 @@ describe("Stripe subscription webhooks", function () {
     webhook._resetStripeClient();
   });
 
+  it("preserves an independently disabled blog on an active subscription update", async function () {
+    await setBlog(this.blog.id, { isDisabled: true });
+    const event = {
+      type: "customer.subscription.updated",
+      data: { object: { id: this.subscriptionId, customer: this.customerId } },
+    };
+
+    const response = await this.fetch("/", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(event),
+    });
+
+    expect(response.status).toBe(200);
+    expect((await getUser(this.user.uid)).isDisabled).toBe(false);
+    expect((await getBlog({ id: this.blog.id })).isDisabled).toBe(true);
+  });
+
   it("updates subscription details on update event", async function () {
     const event = {
       type: "customer.subscription.updated",
@@ -250,7 +268,7 @@ describe("Stripe subscription webhooks", function () {
     expect(blog.isDisabled).toBe(false);
   });
 
-  it("returns 400 when verification fails", async function () {
+  it("returns 503 when subscription retrieval fails", async function () {
     this.stripeClient.customers.retrieveSubscription.and.callFake((_, __, callback) =>
       callback(new Error("nope"))
     );
@@ -275,7 +293,7 @@ describe("Stripe subscription webhooks", function () {
       body: JSON.stringify(event),
     });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(503);
     expect(this.stripeClient.customers.retrieveSubscription).toHaveBeenCalled();
 
     await delay(100);

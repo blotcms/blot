@@ -20,15 +20,16 @@ module.exports = function disable(user, updates, callback) {
 
   updates.isDisabled = true;
 
-  set(user.uid, updates, function (err) {
-    if (err) return callback(err);
-
-    async.each(
-      blogs,
-      function (blogID, next) {
-        setBlog(blogID, { isDisabled: true }, next);
-      },
-      callback
-    );
-  });
+  // Keep the persisted account flag unchanged until every blog is updated.
+  // If a blog write fails, webhook redelivery can still retry this transition.
+  async.each(
+    blogs,
+    function (blogID, next) {
+      setBlog(blogID, { isDisabled: true }, next);
+    },
+    function (err) {
+      if (err) return callback(err);
+      set(user.uid, updates, callback);
+    }
+  );
 };

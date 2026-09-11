@@ -18,6 +18,18 @@ const SUBSCRIPTION_EVENTS = [
 
 const prefix = () => `${clfdate()} PayPal Webhook:`;
 
+async function fetchJSON(url, options) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    if (!response.ok) throw new Error(`PayPal returned HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Verify an incoming PayPal webhook via PayPal's verify-webhook-signature API.
 // Returns true when verification succeeds - or when no webhook id is configured,
 // in which case verification is skipped and the previous behaviour preserved,
@@ -33,7 +45,7 @@ const verifyPayPalWebhook = async req => {
     return true;
   }
 
-  const response = await fetch(
+  const json = await fetchJSON(
     `${config.paypal.api_base}/v1/notifications/verify-webhook-signature`,
     {
       method: "POST",
@@ -55,8 +67,6 @@ const verifyPayPalWebhook = async req => {
     }
   );
 
-  const json = await response.json();
-
   return json.verification_status === "SUCCESS";
 };
 
@@ -70,7 +80,7 @@ paypal.post("/", parser.json(), async (req, res) => {
     }
   } catch (err) {
     console.log(prefix(), "signature verification error", err);
-    return res.sendStatus(400);
+    return res.sendStatus(503);
   }
 
   const eventType = req.body && req.body.event_type;
@@ -81,7 +91,7 @@ paypal.post("/", parser.json(), async (req, res) => {
 
   // if the webhook is for a subscription-related event, update the subscription
   if (SUBSCRIPTION_EVENTS.includes(eventType)) {
-    if (!subscriptionID) {
+    if (typeof subscriptionID !== "string" || !subscriptionID) {
       console.log(prefix(), "missing resource.id for", eventType);
       return res.sendStatus(400);
     }
@@ -93,6 +103,7 @@ paypal.post("/", parser.json(), async (req, res) => {
       console.log(prefix(), "Updated subscription successfully");
     } catch (err) {
       console.log(prefix(), err);
+      return res.sendStatus(503);
     }
   } else {
     console.log(prefix(), "Unhandled event", req.body);
@@ -102,54 +113,43 @@ paypal.post("/", parser.json(), async (req, res) => {
 });
 
 const updateSubscription = async subscriptionID => {
-  return new Promise((resolve, reject) => {
-    User.getByPayPalSubscriptionId(subscriptionID, async (err, user) => {
+  const user = await new Promise((resolve, reject) => {
+    User.getByPayPalSubscriptionId(subscriptionID, (err, user) => {
       if (err) return reject(err);
-
-      if (!user)
-        return reject(
-          new Error("No user associated with subscription ID " + subscriptionID)
-        );
-
-      const response = await fetch(
-        `${config.paypal.api_base}/v1/billing/subscriptions/${subscriptionID}`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            "Accept-Language": "en_US",
-            "Authorization": `Basic ${Buffer.from(
-              `${config.paypal.client_id}:${config.paypal.secret}`
-            ).toString("base64")}`
-          }
-        }
-      );
-
-      const paypal = await response.json();
-
-      const updates = { paypal };
-
-      const shouldDisable = subscriptionLifecycle.shouldDisableFromPaypalSubscription(paypal);
-      const shouldEnable = paypal.status === "ACTIVE" && user.isDisabled;
-
-      if (shouldDisable) {
-        return User.disable(user, updates, err => {
-          if (err) return reject(err);
-          resolve();
-        });
-      }
-
-      if (shouldEnable) {
-        return User.enable(user, updates, err => {
-          if (err) return reject(err);
-          resolve();
-        });
-      }
-
-      User.set(user.uid, updates, err => {
-        if (err) return reject(err);
-        resolve();
-      });
+      resolve(user);
     });
+  });
+  if (!user) {
+    throw new Error("No user associated with subscription ID " + subscriptionID);
+  }
+
+  const paypal = await fetchJSON(
+    `${config.paypal.api_base}/v1/billing/subscriptions/${encodeURIComponent(subscriptionID)}`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "Accept-Language": "en_US",
+        "Authorization": `Basic ${Buffer.from(
+          `${config.paypal.client_id}:${config.paypal.secret}`
+        ).toString("base64")}`
+      }
+    }
+  );
+
+  if (!paypal || paypal.id !== subscriptionID || typeof paypal.status !== "string") {
+    throw new Error("Invalid PayPal subscription response");
+  }
+  return new Promise((resolve, reject) => {
+    const updates = { paypal };
+    const done = err => err ? reject(err) : resolve();
+    const shouldDisable = subscriptionLifecycle.shouldDisableFromPaypalSubscription(paypal);
+    // Preserve deliberate per-blog availability when the account is unchanged.
+    // The model saves the account flag last to keep failures retryable.
+    const shouldEnable = paypal.status === "ACTIVE" && user.isDisabled;
+
+    if (shouldDisable && !user.isDisabled) return User.disable(user, updates, done);
+    if (shouldEnable) return User.enable(user, updates, done);
+    User.set(user.uid, updates, done);
   });
 };
 

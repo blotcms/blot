@@ -168,18 +168,20 @@ webhooks.post("/", parser.raw({ type: "application/json" }), function (req, res)
       function (err, subscription) {
         if (err || !subscription) {
           console.error("Failed to retrieve Stripe subscription", err);
-          return res.sendStatus(400);
+          return res.sendStatus(503);
         }
 
         update_subscription(
           event_data.customer,
           subscription,
           function (updateErr) {
-            if (updateErr) console.error("Failed to update subscription", updateErr);
+            if (updateErr) {
+              console.error("Failed to update subscription", updateErr);
+              return res.sendStatus(503);
+            }
+            return res.sendStatus(200);
           }
         );
-
-        return res.sendStatus(200);
       }
     );
   }
@@ -226,6 +228,9 @@ function update_subscription(customer_id, subscription, callback) {
       User.set(user.uid, updates, next);
     };
 
+    // Change blog availability only on an account transition: individual
+    // blogs can also be disabled deliberately by an administrator. The model
+    // saves the account flag last so failed transitions remain retryable.
     if (shouldDisable && !user.isDisabled) {
       handler = function (next) {
         User.disable(user, updates, next);
