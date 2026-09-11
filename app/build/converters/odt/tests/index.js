@@ -45,4 +45,24 @@ describe("odt converter", function () {
       done();
     });
   });
+
+  it("returns an error when the file is not a valid odt", function (done) {
+    const test = this;
+    const path = "/corrupt.odt";
+
+    fs.writeFileSync(test.blogDirectory + path, "this is not an odt file");
+
+    odt.read(test.blog, path, function (err, result) {
+      expect(err).toBeTruthy();
+      expect(err.message).toContain("Pandoc exited");
+      expect(result).toBeUndefined();
+      done();
+    });
+  });
+
+  it("recognizes .odt paths and rejects others", function () {
+    expect(odt.is("/file.odt")).toBe(true);
+    expect(odt.is("/file.ODT")).toBe(true);
+    expect(odt.is("/file.docx")).toBe(false);
+  });
 });

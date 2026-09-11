@@ -44,4 +44,24 @@ describe("docx converter", function () {
       done();
     });
   });
+
+  it("returns an error when the file is not a valid docx", function (done) {
+    const test = this;
+    const path = "/corrupt.docx";
+
+    fs.writeFileSync(test.blogDirectory + path, "this is not a docx file");
+
+    docx.read(test.blog, path, function (err, result) {
+      expect(err).toBeTruthy();
+      expect(err.message).toContain("Pandoc exited");
+      expect(result).toBeUndefined();
+      done();
+    });
+  });
+
+  it("recognizes .docx paths and rejects others", function () {
+    expect(docx.is("/file.docx")).toBe(true);
+    expect(docx.is("/file.DOCX")).toBe(true);
+    expect(docx.is("/file.odt")).toBe(false);
+  });
 });
