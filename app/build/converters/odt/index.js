@@ -93,6 +93,11 @@ function read (blog, path, callback) {
 
             var metadata = {};
 
+            // remove <style>, <meta> and <title>
+            $("style").remove();
+            $("meta").remove();
+            $("title").remove();
+
             $("p").each(function (i) {
               if ($(this).children().length) return false;
 
@@ -117,11 +122,6 @@ function read (blog, path, callback) {
 
               $(this).remove();
             });
-
-            // remove <style>, <meta> and <title>
-            $("style").remove();
-            $("meta").remove();
-            $("title").remove();
 
             var titleTag = $("header h1");
 
