@@ -318,6 +318,13 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Sanitize coverage artifact name
+        id: artifact-name
+        run: |
+          SAFE_SUITE=$(echo "${{ matrix.test_suite }}" | tr '/|' '--')
+          SAFE_SHARD=$(echo "${{ matrix.shard }}" | tr '/' '-')
+          echo "name=coverage-${SAFE_SUITE}-${SAFE_SHARD}" >> "$GITHUB_OUTPUT"
+
       - name: Run tests - ${{ matrix.test_suite }} (shard ${{ matrix.shard }})
         env:
           BLOT_STRIPE_KEY: ${{ secrets.BLOT_STRIPE_KEY }}
@@ -332,6 +339,7 @@ jobs:
           if [ -n "$TEST_EXCLUDE" ]; then
             EXCLUDE_ARG="--exclude=$TEST_EXCLUDE"
           fi
+          mkdir -p .nyc_output
           docker run --rm \
             --network host \
             -e BLOT_REDIS_HOST=localhost \
@@ -342,5 +350,149 @@ jobs:
             -v ${{ github.workspace }}/scripts:/usr/src/app/scripts \
             -v ${{ github.workspace }}/config:/usr/src/app/config \
             -v ${{ github.workspace }}/proxy:/usr/src/app/proxy \
+            -v ${{ github.workspace }}/.nyc_output:/usr/src/app/.nyc_output \
+            -v ${{ github.workspace }}/.nycrc.json:/usr/src/app/.nycrc.json \
             $IMAGE_TAG \
-            sh -c "node scripts/tests '$TEST_SUITE' --shard='$TEST_SHARD' $EXCLUDE_ARG"
+            sh -c "nyc --silent --no-clean node scripts/tests '$TEST_SUITE' --shard='$TEST_SHARD' $EXCLUDE_ARG"
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact-name.outputs.name }}
+          path: .nyc_output
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+
+  coverage-report:
+    needs: [setup-tests, test]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write # to read/write the coverage-baseline cache
+      pull-requests: write # to post/update the sticky PR comment
+    env:
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download coverage from every shard
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage-raw
+
+      # Master's most recent line-coverage % (if any), so a PR run can show a
+      # delta. Keyed by run so every push to master adds a fresh entry;
+      # restore-keys picks up the most recent one.
+      - name: Restore coverage baseline
+        uses: actions/cache/restore@v4
+        with:
+          path: .coverage/history
+          key: coverage-master-${{ github.run_id }}
+          restore-keys: |
+            coverage-master-
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge shard coverage and build report
+        id: merge-coverage
+        env:
+          IMAGE_TAG: ${{ needs.setup-tests.outputs.image_tag }}
+        run: |
+          mkdir -p .nyc_output coverage
+
+          # Each shard's raw coverage json files are the direct children of
+          # coverage-raw/<artifact-name>/ - flatten them into one directory so
+          # `nyc report` can treat it as a single temp dir. Filenames are
+          # content-addressed UUIDs, so collisions across shards aren't a concern.
+          find coverage-raw -mindepth 2 -maxdepth 2 -type f -name '*.json' \
+            -exec cp {} .nyc_output/ \;
+
+          echo "Merging $(ls .nyc_output | wc -l) raw coverage files from $(ls coverage-raw | wc -l) shards"
+
+          # Capture stdout via command substitution (not a pipe) so the
+          # docker run exit code - and therefore this step's - is nyc's own,
+          # not tee's.
+          REPORT_OUTPUT=$(docker run --rm \
+            -v ${{ github.workspace }}/app:/usr/src/app/app \
+            -v ${{ github.workspace }}/.nyc_output:/usr/src/app/.nyc_output \
+            -v ${{ github.workspace }}/.nycrc.json:/usr/src/app/.nycrc.json \
+            -v ${{ github.workspace }}/coverage:/usr/src/app/coverage \
+            $IMAGE_TAG \
+            sh -c "nyc report -t .nyc_output --reporter=text --reporter=text-summary --reporter=lcov --reporter=json-summary -o coverage")
+          DOCKER_EXIT=$?
+          echo "$REPORT_OUTPUT" | tee coverage/text-report.txt
+          exit $DOCKER_EXIT
+
+      - name: Add coverage summary to job summary
+        if: steps.merge-coverage.outcome == 'success'
+        run: |
+          echo "## Code coverage - \`${{ env.HEAD_SHA }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -n 20 coverage/text-report.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload merged coverage report
+        id: upload-report
+        if: steps.merge-coverage.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ github.sha }}
+          path: coverage
+          if-no-files-found: warn
+          retention-days: 30
+
+      # master: record this run's line coverage % as the new baseline for
+      # future PRs to diff against.
+      - name: Save coverage baseline
+        if: steps.merge-coverage.outcome == 'success' && github.event_name == 'push'
+        run: |
+          mkdir -p .coverage/history
+          node -e "
+            const fs = require('fs');
+            const s = JSON.parse(fs.readFileSync('coverage/coverage-summary.json', 'utf8'));
+            fs.writeFileSync(
+              '.coverage/history/latest.json',
+              JSON.stringify({ sha: process.env.HEAD_SHA, linesPct: s.total.lines.pct })
+            );
+          "
+
+      - name: Save coverage baseline cache
+        if: steps.merge-coverage.outcome == 'success' && github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: .coverage/history
+          key: coverage-master-${{ github.run_id }}
+
+      # pull_request: post/update the sticky coverage comment.
+      - name: Post PR coverage comment
+        if: always() && github.event_name == 'pull_request' && steps.merge-coverage.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/coverage/pr-comment.js \
+            --pr "${{ github.event.pull_request.number }}" \
+            --sha "$HEAD_SHA" \
+            --status done \
+            --summary coverage/coverage-summary.json \
+            --baseline .coverage/history/latest.json \
+            --artifact-url "${{ steps.upload-report.outputs.artifact-url }}"
+
+      - name: Post PR coverage comment (failed)
+        if: always() && github.event_name == 'pull_request' && steps.merge-coverage.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/coverage/pr-comment.js \
+            --pr "${{ github.event.pull_request.number }}" \
+            --sha "$HEAD_SHA" \
+            --status failed

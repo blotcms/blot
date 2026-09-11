@@ -16,6 +16,9 @@
 data
 app/views-built
 .benchmarks
+/.nyc_output
+/coverage
+/.coverage
 
 # Eventually merge into one 'data' folder
 blogs/*
