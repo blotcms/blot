@@ -1,8 +1,10 @@
 footer {
-display: flex;
-justify-content: space-between;
-flex-wrap: wrap;
-padding: var(--spacing) 0 0;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: var(--spacing) 0 0;
 }
 
 footer ul {

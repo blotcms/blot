@@ -1,25 +1,5 @@
-<ul class="steps">
+<ul class="setup-steps">
     <li class="{{step.title}}"><a href="{{{base}}}/setup">1. Title</a></li>
     <li class="{{step.folder}}"><a href="{{{base}}}/setup/folder">2. Sync folder</a></li>
     <li class="{{step.template}}"><a href="{{{base}}}/setup/template">3. Choose template</a></li>
 </ul>
-
-<style>
-
-    ul.steps {
-        display: flex;
-        list-style-type: none;
-        padding: 0;
-        font-size: 12px;
-    }
-
-    ul.steps li {
-        padding: 0.5rem 0;
-        flex-grow: 1;
-        background-color: var(--background-color);
-        border-top: 4px solid var(--border-color);
-        cursor: pointer;
-    }
-    
-    ul.steps li.selected {font-weight: bold;color:var(--text-color);border-top-color:var(--accent-color);}
-</style>

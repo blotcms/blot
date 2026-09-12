@@ -132,15 +132,6 @@ form.dashboard-form {
     z-index: 1;
     border: 1px solid var(--accent-color);
   }
-  
-  
-  
-  form.dashboard-form .box.green.success {
-    display: inline-block;
-    font-size: 14px;
-    background: rgba(226, 249, 227, 1);
-    padding: 0.33em 0.66em;
-  }
 
 
 /* Buttons */

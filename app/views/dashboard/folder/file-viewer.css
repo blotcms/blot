@@ -75,22 +75,6 @@
     position: relative;
     z-index: 2;
   }
-/*   
-  .publishing-steps:before {
-    content: "";
-    width: 0;
-    z-index: 3;
-    left: 1.3em;
-    background-color: var(--background-color);
-    border: 1px solid var(--border-color);
-    border-top: none;
-    border-right: none;
-    border-bottom: none;
-    position: absolute;
-    top:-1px;
-    bottom: -1px;
-    z-index: 1;
-  }  */
 
   .publishing-steps.no-entry:before {
     bottom: auto;

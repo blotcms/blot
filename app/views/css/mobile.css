@@ -1,60 +1,53 @@
-
 /* on small screens, hide navbar unless toggle is checked */
 
 @media (max-width: 768px) {
-
-    .header {margin-bottom: 12px;position:relative!important;display:block!important}
-    
-    .header label {
-      display: block!important;
-    }
-  
-    .content {
-      width: 100%;
-      padding: 0 2rem;
-    }
-  
-    .navbar {
-      display: none;
-      flex-direction: column;
-      position: absolute;
-      z-index: 20;
-      top: 42px;
-      right: 0;
-      width: 100%;
-      padding: 1rem
-    }
-  
-    .navbar ul {
-      width: 100%;
-    }
-  
-    .navbar a {
-      display: block;
-      padding: 12px 24px;
-    }
-  
-    .main-section-how {
-      flex-direction: column;
-    }
-  
-    .main-section-how > * {
-      width: 100%;
-    }
-  }
-  
-  /* on mobile screens reduce content padding to 1 em */
-  @media (max-width: 480px) {
-    .content {
-      padding: 0 1rem;
-    }
   .header {
-      padding: 1rem!important;
-    }
+    margin-bottom: 12px;
+    position: relative !important;
+    display: block !important;
+  }
 
-    
+  .header label {
+    display: block !important;
   }
-  
-  #navbar-toggle:checked ~ .site-container .navbar {
+
+  .content {
+    width: 100%;
+    padding: 0 2rem;
+  }
+
+  .navbar {
+    display: none;
+    flex-direction: column;
+    position: absolute;
+    z-index: 20;
+    top: 42px;
+    right: 0;
+    width: 100%;
+    padding: 1rem;
+  }
+
+  .navbar ul {
+    width: 100%;
+  }
+
+  .navbar a {
     display: block;
+    padding: 12px 24px;
   }
+}
+
+/* on mobile screens reduce content padding to 1 em */
+@media (max-width: 480px) {
+  .content {
+    padding: 0 1rem;
+  }
+
+  .header {
+    padding: 1rem !important;
+  }
+}
+
+#navbar-toggle:checked ~ .site-container .navbar {
+  display: block;
+}

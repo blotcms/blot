@@ -1,7 +1,7 @@
 
-    <p style="border: 1px solid;border-radius: 12px;padding: 24px;margin:48px 0 0;border-color: #eeeeec;">
-      <span style="/*! font-size:var(--large-font-size); */">{{price}}</span> 
-      <span style="font-size:var(--medium-font-size);/*! color:var(--medium-text-color) */">per {{interval}} per site</span>
+    <p class="card pricing-card" style="margin:48px 0 0;width:auto">
+      <span>{{price}}</span> 
+      <span class="pricing-card__period">per {{interval}} per site</span>
     </p>
   
       {{#user.paypal.status}}

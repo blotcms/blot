@@ -7,19 +7,29 @@ const prettySize = require("helper/prettySize");
 const clfdate = require("helper/clfdate");
 
 const buildFinderCSS = require("../tools/finder/build.js");
+const { DOCUMENTATION_BUNDLE_EXCLUDES } = require("./pageSpecificAssets");
 
-module.exports = ({source, destination}) => async () => {
-  // merge all css files together into one file
+const isExcludedFromDocumentationBundle = (filePath) =>
+  DOCUMENTATION_BUNDLE_EXCLUDES.some((suffix) => filePath.endsWith(suffix));
 
-  const cssFilePaths = recursiveReadDir(source).filter(i => i.endsWith(".css"));
+module.exports = ({ source, destination }) => async () => {
+  const cssFilePaths = recursiveReadDir(source).filter((i) =>
+    i.endsWith(".css")
+  );
 
-  const dashboardFiles = cssFilePaths.filter(i => i.includes("/dashboard/"));
-  const documentationFiles = cssFilePaths.filter(i => !dashboardFiles.includes(i));
+  const dashboardFiles = cssFilePaths.filter((i) => i.includes("/dashboard/"));
+  const documentationFiles = cssFilePaths.filter(
+    (i) =>
+      !dashboardFiles.includes(i) && !isExcludedFromDocumentationBundle(i)
+  );
 
   const documentationCSS = await mergeCSSFiles(documentationFiles);
   const finderCSS = await buildFinderCSS();
   const fullDocumentationCSS = documentationCSS.styles + "\n" + finderCSS;
-  await fs.writeFile(join(destination, "documentation.min.css"), fullDocumentationCSS);
+  await fs.writeFile(
+    join(destination, "documentation.min.css"),
+    fullDocumentationCSS
+  );
   console.log(
     clfdate(),
     "documentation.min.css built: ",
@@ -27,23 +37,31 @@ module.exports = ({source, destination}) => async () => {
   );
 
   const dashboardCSS = await mergeCSSFiles(dashboardFiles);
-  await fs.writeFile(join(destination, "dashboard.min.css"), dashboardCSS.styles);
-  console.log(clfdate(), "dashboard.min.css built: ", prettySize(dashboardCSS.stats.minifiedSize / 1024));
-}
+  await fs.writeFile(
+    join(destination, "dashboard.min.css"),
+    dashboardCSS.styles
+  );
+  console.log(
+    clfdate(),
+    "dashboard.min.css built: ",
+    prettySize(dashboardCSS.stats.minifiedSize / 1024)
+  );
+};
 
 const mergeCSSFiles = async (files) => {
-
   const cssContents = await Promise.all(
-    files.map(file => fs.readFile(file, "utf-8"))
+    files.map((file) => fs.readFile(file, "utf-8"))
   );
 
   // pull in callouts.css from app/build/plugins/callouts
-  const calloutsCSS = await fs.readFile(join(__dirname, "../../../app/build/plugins/callouts/public.css"), "utf-8");
+  const calloutsCSS = await fs.readFile(
+    join(__dirname, "../../../app/build/plugins/callouts/public.css"),
+    "utf-8"
+  );
 
   const mergedCSS = cssContents.join("\n\n") + "\n" + calloutsCSS;
 
   const minifiedCSS = new CleanCSS({ level: 2 }).minify(mergedCSS);
 
   return minifiedCSS;
-}
-  
+};

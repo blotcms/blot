@@ -1,6 +1,11 @@
 ol.path {
     margin: 1rem 0 2.8rem;
     padding: 0;
+    list-style: none;
+  }
+
+  ol.path.doc-nav {
+    margin-top: 43px;
   }
 
   ol.path > li {

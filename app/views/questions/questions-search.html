@@ -1,21 +1,4 @@
-<form action="/questions/search"  style="
-display: flex;
-flex-grow: 1;
-  margin-right: 1em;
-">
-    <input name="query" type="text" style="box-shadow: none;font-size:14px;
-    width:100%;margin:0;
-    padding: 8px 8px;
-    border-radius: 4px 0 0 4px" name="" placeholder="Search" value="{{query}}" />
-    <input style="
-      flex-basis: 25%;
-      font-size:16px;
-      border-radius: 0 4px 4px 0;
-      font-size: 14px;
-      padding: 0 1em;
-      color:var(--accent-color);
-      background-color: var(--background-color);
-      border: 1px solid #eeeeec;
-      border-left: none;
-      margin: 0;" type="submit" value="Search">
+<form action="/questions/search" class="questions-search">
+  <input name="query" type="text" placeholder="Search" value="{{query}}" />
+  <input type="submit" value="Search">
 </form>

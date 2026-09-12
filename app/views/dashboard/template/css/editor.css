@@ -81,12 +81,6 @@
   margin-right: 0;
 }
 
-.tab.selected {
-  border-bottom: none;
-  font-weight: 500;
-  color: #000;
-  background: transparent;
-}
 
 .error {
   padding: var(--editor-error-padding);

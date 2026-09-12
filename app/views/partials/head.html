@@ -6,14 +6,20 @@
 <link rel="preconnect" href="{{{cdnURL}}}" />
 {{/cdnURL}}
 <link rel="icon" sizes="180x180" href="{{#cdn}}/favicon-180x180.png{{/cdn}}" />
-<link rel="stylesheet" type="text/css" href="{{#cdn}}/documentation.min.css{{/cdn}}" />
-{{#selected.dashboard}}
-<link rel="stylesheet" type="text/css" href="{{#cdn}}/dashboard.min.css{{/cdn}}" />
-{{/selected.dashboard}}
 <link rel="preload" as="style" href="{{#cdn}}/documentation.min.css{{/cdn}}" />
 {{#selected.dashboard}}
 <link rel="preload" as="style" href="{{#cdn}}/dashboard.min.css{{/cdn}}" />
 {{/selected.dashboard}}
+<link rel="stylesheet" type="text/css" href="{{#cdn}}/documentation.min.css{{/cdn}}" />
+{{#selected.dashboard}}
+<link rel="stylesheet" type="text/css" href="{{#cdn}}/dashboard.min.css{{/cdn}}" />
+{{/selected.dashboard}}
+{{#selected.questions}}
+<link rel="stylesheet" type="text/css" href="{{#cdn}}/questions/tagify.css{{/cdn}}" />
+{{/selected.questions}}
+{{#selected.examples}}
+<link rel="stylesheet" type="text/css" href="{{#cdn}}/examples.css{{/cdn}}" />
+{{/selected.examples}}
 {{#cookie_redirect}}
 <meta http-equiv="refresh" content="0;URL='{{{cookie_redirect}}}'" />
 <script type="text/javascript">

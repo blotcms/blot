@@ -1,0 +1,12 @@
+.email-card {
+  max-width: 600px;
+}
+
+.email-card__row {
+  margin: 0;
+  padding: 24px;
+}
+
+.email-card__row + .email-card__row {
+  border-top: 1px solid var(--border-color);
+}

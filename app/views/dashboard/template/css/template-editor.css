@@ -2,11 +2,6 @@
   --heading-font-size: 13px;
   --heading-color: #969caa;
   --breadcrumbs-margin-bottom: 24px;
-  --upload-control-padding: 0.5em 1em;
-  --upload-control-font-size: 14px;
-  --upload-swatch-size: 48px;
-  --upload-button-gap: 0.375em;
-  --upload-file-input-opacity: 0;
   --template-row-gap: 0.25rem;
   --template-row-link-font-size: 14px;
   --template-row-link-padding: 0.219em 0 0.219em 0.25em;
@@ -15,9 +10,6 @@
   --template-preview-margin: 0.6875em;
   --template-preview-border-radius: 2px;
   --template-button-gap: 0.3125em;
-  --template-checked-padding: 0 0.5em;
-  --template-checked-font-size: 11px;
-  --template-checked-margin: 0.25em;
   --template-grid-gap: 20px;
   --template-grid-columns: repeat(auto-fill, minmax(140px, 1fr));
   --settings-group-margin-bottom: 1.5rem;
@@ -61,115 +53,6 @@ h2 {
   font-size: var(--heading-font-size);
 }
 
-form.upload-control {
-  padding: var(--upload-control-padding);
-  font-size: var(--upload-control-font-size);
-  border-bottom: 1px solid var(--light-border-color);
-}
-
-form.upload-control:last-of-type {
-  border-bottom: none;
-}
-
-.upload-control__fields {
-  display: flex;
-  align-items: center;
-  gap: 0.75em;
-}
-
-.upload-control__label {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  gap: 0.25em;
-  color: var(--text-color);
-}
-
-.upload-control__title {
-  font-weight: 500;
-}
-
-.upload-control__url {
-  font-size: 12px;
-  color: var(--accent-color);
-  word-break: break-all;
-  text-decoration: none;
-}
-
-.upload-control__empty {
-  font-size: 12px;
-  color: var(--medium-text-color);
-}
-
-.upload-control__url:hover {
-  text-decoration: underline;
-}
-
-.upload-control__preview {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: var(--upload-swatch-size);
-  height: var(--upload-swatch-size);
-  border-radius: var(--border-radius);
-  background: var(--light-background-color);
-  overflow: hidden;
-}
-
-.upload-control__preview img {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-}
-
-.upload-control__actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  margin-top: 0.5em;
-}
-
-.upload-control__button {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--template-button-gap);
-  position: relative;
-  cursor: pointer;
-  color: var(--accent-color);
-}
-
-.upload-control__button span {
-  padding: 0.375em 0.75em;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  background: var(--light-background-color);
-  color: inherit;
-}
-
-.upload-control__button:hover span {
-  border-color: var(--accent-color);
-}
-
-.upload-control__file-input {
-  position: absolute;
-  opacity: var(--upload-file-input-opacity);
-  width: 0.00625em;
-  height: 0.00625em;
-}
-
-.upload-control__clear {
-  padding: 0;
-  border: none;
-  background: none;
-  font-size: var(--heading-font-size);
-  color: var(--medium-text-color);
-  cursor: pointer;
-}
-
-.upload-control__clear:hover {
-  color: var(--accent-color);
-}
 
 .template-row + h2 {
   margin-top: 1em;
@@ -304,40 +187,6 @@ form.upload-control:last-of-type {
   left: 0;
 }
 
-.installed {
-  display: block;
-  font-size: 12px;
-  color: var(--accent-color);
-}
-
-.installed svg {
-  width: 12px;
-  fill: currentColor;
-  vertical-align: middle;
-}
-
-.checked-template {
-  float: right;
-  margin: var(--template-checked-margin);
-  padding: var(--template-checked-padding);
-  border-radius: 5px;
-  background: #eeeeec;
-  font-size: var(--template-checked-font-size);
-  font-weight: bold;
-  color: #bfbfbf;
-}
-
-.checked-template::before {
-  content: "";
-  display: inline-block;
-  margin-right: 0.5em;
-  border-radius: 50%;
-  background: #aaa;
-  width: 3px;
-  height: 3px;
-  position: relative;
-  top: -0.125em;
-}
 
 .iframe-container {
   position: relative;
@@ -476,4 +325,38 @@ p.template-heading-note {
 
 .iframe-container.is-mobile {
   width: 390px;
+}
+
+.template-layout {
+  display: flex;
+}
+
+.template-heading-row {
+  display: flex;
+  margin-bottom: 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.template-heading-row h1 {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  margin-right: 1em;
+  line-height: 1.3;
+}
+
+.template-heading-row h1 a {
+  color: var(--text-color);
+}
+
+.template-in-use {
+  color: var(--success-text-color);
+  background-color: var(--success-background-color);
+  font-size: 13px;
+  font-weight: bold;
+  margin-right: 1em;
+  border-radius: var(--border-radius);
+  padding: 3px 5px;
+  position: relative;
+  top: 2px;
 }

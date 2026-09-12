@@ -58,7 +58,7 @@ module.exports = function (req, res, next) {
 
   res.locals.base = "";
   res.locals.selected = {};
-  var url = req.originalUrl;
+  var url = require("url").parse(req.originalUrl).pathname;
 
   // Trim trailing slash from the URL before working out which
   // slugs to set as selected. This ensures that the following url

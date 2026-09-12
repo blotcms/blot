@@ -60,14 +60,11 @@ a.line:hover .right {
 flex-basis: 100%;
 }
 
-.center,
-div.line a.link {}
 
 .center {
   flex-grow: 0;
 }
 
-div.center {}
 
 .center b {
   color: var(--text-color);

@@ -1,5 +1,5 @@
 <section class="navigation">
-    <ul style="flex-grow:1">
+    <ul class="navigation-primary">
         <li class="minor signed-out">
             <a href="/" class="{{selected.index}}">
                 <span class="icon-folder"></span>Blot
@@ -7,7 +7,7 @@
         </li>
         <li class="minor signed-in">
             <a href="/sites" class="{{selected.dashboard}}">
-                <span  class="icon-folder"></span>Sites
+                <span class="icon-folder"></span>Sites
             </a>
         </li>
         <li class="minor break">
@@ -25,44 +25,37 @@
                 <span class="icon-globe"></span>Example sites
             </a>
         </li>
-         <li class="minor">
+        <li class="minor">
             <a href="/questions" class="{{selected.questions}}">
                 <span class="icon-questions"></span>Questions
             </a>
         </li>
-        <li class="minor ">
+        <li class="minor">
             <a href="/support" class="{{selected.support}}">
                 <span class="icon-support"></span>Support
             </a>
         </li>
-        </ul>   
-        <ul style="line-height: 1.2;">
+    </ul>
+    <ul class="navigation-secondary">
         <li class="minor signed-out">
             <a href="/pricing" class="{{selected.pricing}}">
                 Pricing
             </a>
-        </li>   
-
-
-
- <li class="minor">
+        </li>
+        <li class="minor">
             <a href="/news" class="{{selected.news}}">
                 Updates
             </a>
-        </li>  
-        
+        </li>
         <li class="minor">
             <a href="/developers" class="{{selected.developers}}">
                 Developers
             </a>
-        </li> 
-
-
+        </li>
         <li class="minor">
             <a href="/about" class="{{selected.about}}">
                 About
             </a>
         </li>
-
     </ul>
 </section>

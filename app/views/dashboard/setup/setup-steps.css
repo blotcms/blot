@@ -1,0 +1,26 @@
+.setup-steps {
+  display: flex;
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+  font-size: 12px;
+}
+
+.setup-steps li {
+  padding: 0.5rem 0;
+  flex-grow: 1;
+  background-color: var(--background-color);
+  border-top: 4px solid var(--border-color);
+  cursor: pointer;
+}
+
+.setup-steps li.selected {
+  font-weight: bold;
+  color: var(--text-color);
+  border-top-color: var(--accent-color);
+}
+
+.setup-steps a {
+  color: inherit;
+  text-decoration: none;
+}
