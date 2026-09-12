@@ -21,6 +21,7 @@ blog.use(require("./middleware/loadTemplate"));
 
 // The order of these routes is important
 require("./routes/draft")(blog);
+require("./routes/preview-reload")(blog);
 require("./routes/tagged")(blog);
 
 blog.get("/search", require("./routes/search"));

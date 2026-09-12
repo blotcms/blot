@@ -7,6 +7,7 @@ const lockfile = require("proper-lockfile");
 const messenger = require("./messenger");
 const gatherLockDiagnostics = require("./lock-diagnostics");
 const clfdate = require("helper/clfdate");
+const client = require("models/client");
 const {
   addPendingSync,
   removePendingSync,
@@ -204,6 +205,13 @@ function sync(blogID, callback) {
             if (err) {
               log("Error updating cacheID of blog");
             }
+
+            client
+              .publish("blog:" + blogID + ":preview:reload", "reload")
+              .catch((err) =>
+                log("Failed to publish preview reload event", err.message)
+              );
+
             callback(syncError);
           });
         });

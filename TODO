@@ -949,9 +949,7 @@ Add way to escape commas in tags and [tell questioner](https://blot.im/questions
 
 Add simple form endpoint, could be used for contact forms
 
-Add theme with photoswipe and use sharp's tile generation feature along with 
-
-Add [hot reload for preview subdomains](https://blot.im/questions/832) when the tab is active or re-opened
+Add theme with photoswipe and use sharp's tile generation feature along with
 
 Add way to set the slug-part of a URL for a post and tell [George](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsdBjKHPdsRXJBGSbxpQQCbCN) and follow up for [post in Questions](https://blot.im/questions/23) and tell [Jarrod](https://mail.google.com/mail/u/0/#inbox/FMfcgzGqQcpsRhzFwxVGFJLLTRsFFGKj)
 

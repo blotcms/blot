@@ -167,6 +167,16 @@ module.exports = function attachRenderView(req, res, _next) {
           .join(
             "<script>window.onload = function() {window.top.postMessage('iframe:' +  window.location.pathname, '*');};</script></body>"
           );
+
+        // Reload the preview whenever the blog's folder finishes syncing
+        // and its rendered output actually changed. See the "reload" event
+        // published in sync/index.js and streamed by
+        // blog/routes/preview-reload.js.
+        output = output
+          .split("</body>")
+          .join(
+            "<script>new EventSource('/__blot/preview/reload').onmessage = function() { window.location.reload(); };</script></body>"
+          );
       }
 
       // Only cache JavaScript and CSS if the request is not to a preview
