@@ -1,8 +1,7 @@
-Add cpu and disk info to benchmarks summary
-
-Add 404 and 400 and other error requests to benchmarks
-
 Google Drive:
+- Fix bug with repeat resyncs of specific sites via Google Drive:
+- To identify, run node scripts/google-drive/resync.js multiple times, some sites continually resync the same files...
+- Fix bug with Google Drive on Mark's site which unneccessarily re-downloads some (all?) files on sync rather than using the correct hash and tell [Mark](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTVmrvkvcfPvcJhcLvrwSndWS)
 - Fix bug with shared drive folders for [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBkLKSVzvjZLRSCpRJwcKBPlf)
 - Fix bug with Google Docs when disconnecting a site from Google Drive on Blot then reconnecting the site to Google Drive.
 - Improve sync efficieny with option to target a specific folder or file first (Track ids in database) and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBspgLdtHcrTZqRcPTJFNzBbd) maybe use touch metadata method to force syncs periodically for hot files?
@@ -177,46 +176,28 @@ Fix bugs with templates:
   - [ ] Add exif info
   - [ ] Add backlinks
 
----
+Fix bug with placeholder files when switching clients: DATA LOSS, BLOT WILL NOT TRANSFER THE ORIGINAL FILE REPRESENTED BY A PLACEHOLDER.
 
 Fix bug with the paypal next bill dates are not syncing correctly for some users (e.g.slopserve)
 
-Fix bug with repeat resyncs of specific sites via Google Drive:
-- To identify, run node scripts/google-drive/resync.js multiple times, some sites continually resync the same files...
 
 Fix bug with CDN replaceFolder not working with relative path to CSS file on wall.blot.im
 
 Fix bug with huge draft crashing the sync server /a327ex/drafts/it_follows.txt
 - Chunk large drafts into multiple messages to avoid memory issues? 
 
-Fix possible bug with changing folder name in Google Drive from uppercase to lowercase (what happens to file inside?). Is this related to entry lookup for deleted files? How was the missing ghost file undeleteable? the case of one variant was deleted but the other was not. The case of the ID mismatched. The folder lock was stuck.
-
-Fix bug with crash loop for page rendering issue
-- cache 502 responses in proxy cache for X mins?
-- how to handle this at a high level?
-- ensure doens't break zero downtime deploy
-
-Fix bug with crash loop for entry build
-- add a timeout for entry build process which is solid
-
 Fix bug with overdue subscription payment form not working
 - Possible bug introduced by recent stripe upgrade
 - Migrate [Stripe library to v7](https://github.com/stripe/stripe-node/wiki/Migration-guide-for-v7)
 
 Fix bugs with custom domain setup
-- Enter invalid domain and get (message 'domain removed') instead of error
 - Validate the domain is pointing to Blot before allowing resty-auto-ssl to request a cert. we seem to get into a DNS mismatch where a client thinks a domain points to Blot, and triggers a cert request through resty-auto-ssl but whatever DNS server Blot's server points to has the stale record (pointing elsewhere)
 - Disable redirect to HTTPS for blogs by default (to ensure old browsers without SNI work) but ensure all prominent links to the blog on dashboard use HTTPS
 - cache domain validity and display checkmark on dashboard
 
-Fix bug with incorrect date of files by path and follow up with [Ashish](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbgJMGBfxXGrhsDPbNJfnbZVCW)
-- `/posts/2021/Dec 2021/12-01 - Snow envy/Snow envy.txt` isn't dated correctly (should be first of december rather than january 12th)
-
 Fix bug with link format using filename and [follow up with yct](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTMLqzhtlSBrtFqNDFDdXPSfk)
 
 Fix bug with light mode colors and tell [Gary](https://mail.google.com/mail/u/0/#inbox/FMfcgzGwJSCRWXMlsPRVBsnrcRcbMklc)
-
-Fix bug with placeholder files when switching clients: DATA LOSS, BLOT WILL NOT TRANSFER THE ORIGINAL FILE REPRESENTED BY A PLACEHOLDER.
 
 Fix bug with the '-2' suffix on posts when renaming a huge folder and tell Chuck
 
@@ -229,8 +210,6 @@ Fix bug where one bad page can take down upstream repeatedly
 Fix bug with [many twitter embeds and tell Nash](https://mail.google.com/mail/u/0/#inbox/FMfcgzGllMNfjvRBthVncQtPJQpmrksx)
 
 Fix bug with filtering paginated list of entries and tell [Roy](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVgrQJWNPHHvdxnMtWCGJkZdM) and [Josh](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVzrFNFzLzbWrssWzbrSvtpTm) and [Logan](https://twitter.com/LoganGreer)
-
-Fix bug with template tags in blog post and tell [Shibel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwCgCJQhBZwgzQVLkKHnwPKVkFC)
 
 Fix bugs with template engine:
 - Prevent double submission on template editor at insertion and front-end levels
@@ -248,7 +227,9 @@ Fix bug with wordpress importer and follow up with [Simon](https://mail.google.c
 
 Fix bug with date metadata on [Vincent](https://mail.google.com/mail/u/0/#inbox/FMfcgxwJXVMdhvCJPXwVVSKRTFHQTQzn)'s blog and follow up. I suspect it's to do with the ordering of date tokens.
 
-Fix bug with tokens inside blog posts and follow up with [Karoly](https://mail.google.com/mail/u/0/#inbox/FMfcgxwJXfkFdhXCgBCTwGfBCzPhqwJF)
+Fix bug with tokens inside blog posts
+- follow up with [Karoly](https://mail.google.com/mail/u/0/#inbox/FMfcgxwJXfkFdhXCgBCTwGfBCzPhqwJF)
+-  tell [Shibel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwCgCJQhBZwgzQVLkKHnwPKVkFC)
 
 Fix bug with potentially TeX-related escaping issues and tell [Anthony](https://mail.google.com/mail/u/0/#inbox/FMfcgxwJWhzZspbBhTCPBGjvnslgrZlb) and Roy
 
@@ -256,13 +237,11 @@ Fix issue with variable passed to dateFormat function and tell [Leo](https://mai
 
 Fix bug with handling of queries and tell [this person](https://mail.google.com/mail/u/0/?zx=tqp989l7y4yi#inbox/15b575fbc8d80ad1).
 
-Fix bug with tags that contain slashes and tell [Jack](https://mail.google.com/mail/u/0/#inbox/FMfcgzGpFgzpsCkCMGqnClfqMkWZqNNz)
+Fix bug with tags that contain slashes:
+- tell [Jack](https://mail.google.com/mail/u/0/#inbox/FMfcgzGpFgzpsCkCMGqnClfqMkWZqNNz)
+- tell [Dave](https://mail.google.com/mail/u/0/#inbox/FMfcgxwHMjqlPTzJxBPcQPnGsQsPSsvh)
 
 Fix bug with search for 'Raycast' and [tell Anders](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbfBqJWDdrvFDKrkJZjjLVFPTl)
-
-Fix bug with Google Drive on Mark's site which unneccessarily re-downloads some (all?) files on sync rather than using the correct hash and tell [Mark](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTVmrvkvcfPvcJhcLvrwSndWS)
-
-Fix bug with slashes in tags and tell [Dave](https://mail.google.com/mail/u/0/#inbox/FMfcgxwHMjqlPTzJxBPcQPnGsQsPSsvh)
 
 Fix bug and tell [Vanessa](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLswJQjKhnLpNZzfPhJZpVtcph) which injects `<p>` tags 
 
