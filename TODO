@@ -435,10 +435,6 @@ Implement TOC Plugin
 
 Investigate replybox for comments
 
-Apply improvements from andrew's template into documentation template
-
-Turn francesco's template into a seperate 'Restaurant' template
-
 Add checkbox to toggle newsletter subscription to account page
 
 Adjust color settings into a simple 'presets' picker, then an option to dive into specific altertions on seperate view.
