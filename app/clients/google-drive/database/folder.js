@@ -2,10 +2,10 @@ const client = require("models/client");
 
 const PREFIX = require("./prefix");
 
-function folder(folderId) {
+function folder(folderId, blogID) {
 
   if (!(this instanceof folder)) {
-    return new folder(folderId);
+    return new folder(folderId, blogID);
   }
 
   if (!folderId) {
@@ -15,7 +15,44 @@ function folder(folderId) {
   // Redis keys
   this.key = `${PREFIX}${folderId}:folder`; // ID ↔ Path mapping
   this.reverseKey = `${PREFIX}${folderId}:path`; // Path ↔ ID mapping
+  this.contentKey = `${PREFIX}${folderId}:verified-content${blogID ? ":" + blogID : ""}`;
   this.metadataKey = `${PREFIX}${folderId}:metadata`; // File metadata
+
+  this.migrationCursorKey = `${this.contentKey}:cursor`;
+  this.getMigrationCursor = async () => (await client.get(this.migrationCursorKey)) || "";
+  this.setMigrationCursor = async (path) => client.set(this.migrationCursorKey, path);
+
+  // Content verification is independent of mutable metadata written by set().
+  // Fetch a directory in one Redis request, rather than one request per file.
+  this.getVerifiedContents = async (ids) => {
+    if (!ids.length) return [];
+    return (await client.hmGet(this.contentKey, ids)).map(value => {
+      try {
+        const record = value && JSON.parse(value);
+        return record && [record.path, record.checksum, record.fingerprint]
+          .every(field => typeof field === "string" && field.length) ? record : null;
+      } catch (_) { return null; }
+    });
+  };
+
+  this.setVerifiedContent = async (id, value) => {
+    await client.hSet(this.contentKey, id, JSON.stringify(value));
+  };
+
+  // Only manual mapping resets need this cleanup. Scan in batches so old
+  // verified IDs removed while mappings were absent do not accumulate forever.
+  this.pruneVerifiedContents = async () => {
+    let cursor = "0";
+    do {
+      const page = await client.hScan(this.contentKey, cursor, { COUNT: 256 });
+      cursor = page.cursor;
+      const ids = page.entries.map(entry => entry.field);
+      if (!ids.length) continue;
+      const paths = await client.hmGet(this.key, ids);
+      const removed = ids.filter((id, i) => !paths[i]);
+      if (removed.length) await client.hDel(this.contentKey, removed);
+    } while (cursor !== "0");
+  };
 
   // Set a mapping (ID → Path) and store metadata
   this.set = async (id, path, metadata = {}) => {
@@ -39,6 +76,7 @@ function folder(folderId) {
     if (previousId && previousId !== id) {
       // Remove the old mapping for the previous ID
       multi.hDel(this.key, previousId);
+      multi.hDel(this.contentKey, previousId);
     }
 
     // Add the new ID ↔ Path mapping
@@ -178,6 +216,7 @@ function folder(folderId) {
         ) {
           multi.hDel(this.key, currentId); // Delete ID ↔ Path mapping
           multi.hDel(this.reverseKey, currentPath); // Delete Path ↔ ID mapping
+          multi.hDel(this.contentKey, currentId);
           multi.hDel(this.metadataKey, currentId); // Delete metadata
           removedPaths.push(currentPath);
         }
@@ -191,11 +230,15 @@ function folder(folderId) {
   };
 
   // Reset all mappings and metadata
-  this.reset = async () => {
+  this.reset = async ({ preserveVerifiedContent = false } = {}) => {
     const multi = client.multi();
     multi.del(this.key);
     multi.del(this.reverseKey);
     multi.del(this.metadataKey);
+    if (!preserveVerifiedContent) {
+      multi.del(this.contentKey);
+      multi.del(this.migrationCursorKey);
+    }
     await multi.exec();
   };
 

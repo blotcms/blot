@@ -4,9 +4,7 @@ Resolve cloudflare fail2ban config drift
 
 Google Drive:
 - Fix bug with shared drive folders for [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBkLKSVzvjZLRSCpRJwcKBPlf)
-- Add sync check
-  - [ ] Same-size content edits to regular files are never re-downloaded (sync.js only compares size, not content). Needs a scalable content-verification design that doesn't rehash every unchanged file on every sync (e.g. checksum stored at download time). See PR #1804 for a rejected attempt.
-- Fix bug with Google Docs when disconnecting a site from Google Drive on Blot then reconnecting the site to Google Drive. 
+- Fix bug with Google Docs when disconnecting a site from Google Drive on Blot then reconnecting the site to Google Drive.
 - Improve sync efficieny with option to target a specific folder or file first (Track ids in database) and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBspgLdtHcrTZqRcPTJFNzBbd) maybe use touch metadata method to force syncs periodically for hot files?
 - Improve html output for google docs and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBQFmTvLKzPkJrgsBTWZmQJWS)
   Issue: <p><img><br><img></p> should be <p><img></p><p><img></p>

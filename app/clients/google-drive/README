@@ -184,12 +184,19 @@ HTML templates for user-facing pages:
 - Recursively walks the remote folder tree.
 - For each remote file/folder:
   - If missing locally, downloads it or creates a directory.
-  - If present but out-of-date (different size or mod time), re-downloads.
+  - If present but out-of-date, verifies local content and downloads only when needed.
   - For Google Docs, uses modification time for comparison (no MD5).
-  - For regular files, uses file size.
+  - For regular files with a remote MD5, compares a previously verified checksum and local stat fingerprint. The fingerprint includes device, inode, size, and nanosecond modification/change times; replacements and same-size writes invalidate it even when modification time is restored.
+  - Verification metadata is fetched with one Redis HMGET per directory and stored separately from path metadata, scoped to the blog as well as the Drive folder. An unchanged warm file causes no content reads. Directory listing and stat work still scale with total file count.
+  - Regular files without a remote MD5 use size and modification time as a metadata fallback. Google-app behavior is unchanged.
+  - Checksums are recorded only after stable before/after stat checks around hashing and a successful rebuild. Downloaded temporary files are verified before publication; failed post-publication verification still triggers a rebuild but does not populate the cache.
   - Stream downloads are published only after the destination writer finishes; failed partial downloads are removed.
 - For each local file/folder not present remotely, deletes it (unless it matches an ignore pattern).
 - Updates the folder metadata database with new mappings.
+
+**Migrating existing folders:** Equal-size files without verification records are warmed incrementally, at most 32 files and 64 MiB per sync. A single larger file may run alone so it is not permanently excluded. A persistent cursor follows sorted depth-first paths and advances even when verification fails, preventing a failing prefix from starving later files. Deferred counts appear in sync progress. Warming includes a one-time verification and rebuild for each migrated file before its successful result is cached. Those files retain the previous size-only behavior until a subsequent sync verifies them; a manual resync can advance the migration. Missing/different-size files and changes to previously verified files are handled immediately. A full cursor wrap can defer earlier failed files until the next run.
+
+Manual resync preserves verified records and its cursor while rebuilding path mappings, then prunes orphaned records in Redis batches after a successful traversal. Ordinary resets and removals clear the appropriate verification data. Verification and cursors are blog-specific; the preexisting remote ID/path mapping remains Drive-folder-specific.
 
 ### Write/Remove/Disconnect
 
