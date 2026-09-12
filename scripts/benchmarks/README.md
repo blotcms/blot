@@ -11,13 +11,14 @@ reused from `app/build/converters/*/tests`), then:
 
 | Phase      | What happens                                                    | Headline metrics |
 |------------|----------------------------------------------------------------|------------------|
-| **build**  | write the workload to disk, then `blog.rebuild()` every site   | per-site wall time p50 / p95, peak RSS, CPU % |
-| **render** | fetch every URL in each blog's sitemap and read the full body  | per-page wall time p50 / p95, peak RSS, CPU %, output bytes/page |
+| **build**  | write the workload to disk, then `blog.rebuild()` every site   | per-site wall time p50 / p95, peak RSS, CPU %, disk I/O ops |
+| **render** | fetch every URL in each blog's sitemap and read the full body  | per-page wall time p50 / p95, peak RSS, CPU %, disk I/O ops, output bytes/page |
 | **tag burst** | for each site, request several distinct `/tagged/<slug>` pages once solo (uncontended) and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
 | **archives burst** | request `/archives` (repeating blogs round-robin if there are fewer sites than the concurrency) once solo per target and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
 | **search burst** | for each site, request several distinct `/search?q=<keyword>` queries once solo and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
 | **sitemap burst** | request `/sitemap.xml` (same round-robin rule as archives) once solo per target and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
 | **backlinks burst** | request each site's "hub" entry — linked to by ~25% of its other entries — (same round-robin rule) once solo and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
+| **not-found burst** | request guaranteed-nonexistent paths (same round-robin rule) once solo and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
 
 Each generated entry also gets 1-4 tags drawn from a `--tags` (default 40)
 pool, so `/tagged/<slug>` pages exist with a realistic number of matching
@@ -76,6 +77,19 @@ Redis round trip per backlink. The **backlinks burst** phase fires
 `--backlinks-burst-concurrency` (default 8) concurrent requests at each
 site's hub entry (same round-robin rule as archives/sitemap) to see whether
 that per-render N+1 fan-out serializes under concurrent load.
+
+Every other phase only ever requests pages that exist. The **not-found
+burst** targets the opposite case: paths guaranteed not to have been written
+by the workload. A 404 goes through
+[`app/blog/routes/error.js`](../../app/blog/routes/error.js)'s catch-all
+middleware, which renders `error.html` via the same uncached, per-request
+`retrieve()` path as `/archives` and `/search` (only the compiled template is
+cached, not the rendered output) and also fires an unawaited `store404()`
+Redis write to log the miss for the dashboard. Dead links, scanners and
+mistyped URLs make error routes real production traffic, so
+`--not-found-burst-concurrency` (default 8) requests to guaranteed-404 paths
+(same round-robin rule as archives/sitemap/backlinks) are timed solo and then
+as a genuine concurrent burst, same pattern as the other burst phases.
 
 Everything is seeded (`--seed`, default `blot-benchmark-seed`) so the generated
 workload is identical from run to run. The full result is written as JSON; the
@@ -167,9 +181,11 @@ constant — older records stay in the NDJSON file for reference but are
 invisible to the baseline. Bump `historySchemaVersion` whenever a change
 meaningfully redefines a tracked metric (new/removed metric, a workload shape
 that shifts totals — e.g. this file's own `tags` / `tagBurstConcurrency`
-addition bumped it 1 → 2, `archivesBurstConcurrency` bumped it 2 → 3, and the
-search/sitemap/backlinks burst additions bumped it 3 → 4) and the next master
-run starts a fresh baseline on its own, no manual cache-clearing required.
+addition bumped it 1 → 2, `archivesBurstConcurrency` bumped it 2 → 3, the
+search/sitemap/backlinks burst additions bumped it 3 → 4, and the not-found
+burst addition plus the CPU/disk I/O metrics below bumped it 4 → 5) and the
+next master run starts a fresh baseline on its own, no manual cache-clearing
+required.
 
 **Manual — clear the history.** For anything the schema-version bump doesn't
 cover (e.g. you want to discard recent noisy runs without changing what's
@@ -205,6 +221,7 @@ information-only, and `detect-regression.js` will not open an issue.
 | `app/blog/benchmarks/util/searchBurst.js` | container | search-burst phase: solo vs. concurrent `/search?q=` timing |
 | `app/blog/benchmarks/util/sitemapBurst.js` | container | sitemap-burst phase: solo vs. concurrent `/sitemap.xml` timing |
 | `app/blog/benchmarks/util/backlinksBurst.js` | container | backlinks-burst phase: solo vs. concurrent hub-entry timing |
+| `app/blog/benchmarks/util/notFoundBurst.js` | container | not-found-burst phase: solo vs. concurrent 404 timing |
 | `invoke.sh` | host | run `index.js` in Docker + throwaway Redis |
 | `compare.js` / `format-diff.js` | host | local branch-vs-branch comparison |
 | `aggregate.js` | host | merge N iteration JSONs into one (median per metric) |

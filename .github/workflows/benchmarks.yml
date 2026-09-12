@@ -58,6 +58,9 @@ on:
       sitemap_burst_concurrency:
         description: "Concurrent /sitemap.xml requests"
         default: ""
+      not_found_burst_concurrency:
+        description: "Concurrent requests to guaranteed-404 paths"
+        default: ""
 
 permissions:
   contents: read
@@ -193,6 +196,7 @@ jobs:
               -e SEARCH_BURST_CONCURRENCY_ARG="${{ github.event.inputs.search_burst_concurrency }}" \
               -e BACKLINKS_BURST_CONCURRENCY_ARG="${{ github.event.inputs.backlinks_burst_concurrency }}" \
               -e SITEMAP_BURST_CONCURRENCY_ARG="${{ github.event.inputs.sitemap_burst_concurrency }}" \
+              -e NOT_FOUND_BURST_CONCURRENCY_ARG="${{ github.event.inputs.not_found_burst_concurrency }}" \
               -v ${{ github.workspace }}/app:/usr/src/app/app \
               -v ${{ github.workspace }}/scripts:/usr/src/app/scripts \
               -v ${{ github.workspace }}/config:/usr/src/app/config \
@@ -210,6 +214,7 @@ jobs:
                 [ -n "$SEARCH_BURST_CONCURRENCY_ARG" ] && ARGS="$ARGS --search-burst-concurrency $SEARCH_BURST_CONCURRENCY_ARG"
                 [ -n "$BACKLINKS_BURST_CONCURRENCY_ARG" ] && ARGS="$ARGS --backlinks-burst-concurrency $BACKLINKS_BURST_CONCURRENCY_ARG"
                 [ -n "$SITEMAP_BURST_CONCURRENCY_ARG" ] && ARGS="$ARGS --sitemap-burst-concurrency $SITEMAP_BURST_CONCURRENCY_ARG"
+                [ -n "$NOT_FOUND_BURST_CONCURRENCY_ARG" ] && ARGS="$ARGS --not-found-burst-concurrency $NOT_FOUND_BURST_CONCURRENCY_ARG"
                 npm run benchmark:ci -- $ARGS
               '
             echo "::endgroup::"

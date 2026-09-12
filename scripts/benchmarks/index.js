@@ -59,6 +59,7 @@ var benchmarkConfig = {
   searchBurstConcurrency: args.searchBurstConcurrency,
   backlinksBurstConcurrency: args.backlinksBurstConcurrency,
   sitemapBurstConcurrency: args.sitemapBurstConcurrency,
+  notFoundBurstConcurrency: args.notFoundBurstConcurrency,
 };
 
 global.__BLOT_BENCHMARK_CONFIG = benchmarkConfig;
@@ -136,6 +137,7 @@ function parseArgs(argv) {
     searchBurstConcurrency: BENCHMARK_DEFAULTS.searchBurstConcurrency,
     backlinksBurstConcurrency: BENCHMARK_DEFAULTS.backlinksBurstConcurrency,
     sitemapBurstConcurrency: BENCHMARK_DEFAULTS.sitemapBurstConcurrency,
+    notFoundBurstConcurrency: BENCHMARK_DEFAULTS.notFoundBurstConcurrency,
     output: null,
     path: null,
     ci: false,
@@ -157,6 +159,7 @@ function parseArgs(argv) {
     "--search-burst-concurrency": "searchBurstConcurrency",
     "--backlinks-burst-concurrency": "backlinksBurstConcurrency",
     "--sitemap-burst-concurrency": "sitemapBurstConcurrency",
+    "--not-found-burst-concurrency": "notFoundBurstConcurrency",
   };
 
   for (var i = 0; i < argv.length; i++) {
@@ -237,6 +240,10 @@ function parseArgs(argv) {
     parsed.sitemapBurstConcurrency,
     "--sitemap-burst-concurrency"
   );
+  ensurePositiveInt(
+    parsed.notFoundBurstConcurrency,
+    "--not-found-burst-concurrency"
+  );
 
   return parsed;
 }
@@ -291,6 +298,9 @@ function printHelp() {
         ")",
       "  --sitemap-burst-concurrency <n>  Concurrent /sitemap.xml requests (default: " +
         BENCHMARK_DEFAULTS.sitemapBurstConcurrency +
+        ")",
+      "  --not-found-burst-concurrency <n>  Concurrent requests to guaranteed-404 paths (default: " +
+        BENCHMARK_DEFAULTS.notFoundBurstConcurrency +
         ")",
       "  --cpu-sample-interval-ms <ms>  CPU/memory sampling interval (default: " +
         BENCHMARK_DEFAULTS.cpuSampleIntervalMs +

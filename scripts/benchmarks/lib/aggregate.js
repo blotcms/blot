@@ -28,6 +28,10 @@ const METRIC_PATHS = {
   build_peak_rss_mb: "build.memory_mb.peak_rss",
   render_peak_rss_mb: "render.memory_mb.peak_rss",
   render_bytes_mean: "render.bytes.mean_per_page",
+  build_cpu_avg_percent: "build.cpu.avg_percent_of_machine",
+  render_cpu_avg_percent: "render.cpu.avg_percent_of_machine",
+  build_disk_io_ops: "build.disk_io.total_ops",
+  render_disk_io_ops: "render.disk_io.total_ops",
   tag_burst_p95_ms: "render.tag_burst.burst_timing_ms.p95",
   tag_burst_inflation_ratio: "render.tag_burst.inflation_ratio",
   archives_burst_p95_ms: "render.archives_burst.burst_timing_ms.p95",
@@ -38,6 +42,8 @@ const METRIC_PATHS = {
   sitemap_burst_inflation_ratio: "render.sitemap_burst.inflation_ratio",
   backlinks_burst_p95_ms: "render.backlinks_burst.burst_timing_ms.p95",
   backlinks_burst_inflation_ratio: "render.backlinks_burst.inflation_ratio",
+  not_found_burst_p95_ms: "render.not_found_burst.burst_timing_ms.p95",
+  not_found_burst_inflation_ratio: "render.not_found_burst.inflation_ratio",
 };
 
 /**
