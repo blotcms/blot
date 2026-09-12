@@ -3,6 +3,7 @@ Fix performance bugs on nashp and anchor and re-enable sites
 ---
 
 Google Drive:
+- Fix bug which occurs when removing a file on the dashboard fails to propagate out to google drive (so the file re-appears when the next sync happens). Affects both Google Docs and regular files. Interestingly, file uploads on the dashboard via drag-and-drop do succeed.
 - Fix bug with repeat resyncs of specific sites via Google Drive:
 - To identify, run node scripts/google-drive/resync.js multiple times, some sites continually resync the same files...
 - Fix bug with Google Drive on Mark's site which unneccessarily re-downloads some (all?) files on sync rather than using the correct hash and tell [Mark](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTVmrvkvcfPvcJhcLvrwSndWS)
