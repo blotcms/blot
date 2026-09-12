@@ -1,5 +1,12 @@
 const redisSubscriber = require("helper/redisSubscriber");
 
+// Some upstream proxies (e.g. the preview subdomain's nginx config) have a
+// read timeout well under a minute and will close an idle connection before
+// the browser's EventSource notices. Send a periodic comment line to keep
+// the connection alive so we don't miss a message published during the
+// (otherwise recurring) reconnect gap.
+const HEARTBEAT_INTERVAL_MS = 10 * 1000;
+
 module.exports = function ({ channel }) {
   return function (req, res) {
     req.socket.setTimeout(2147483647);
@@ -18,6 +25,12 @@ module.exports = function ({ channel }) {
 
     res.write("\n");
 
+    const heartbeat = setInterval(function () {
+      try {
+        res.write(": heartbeat\n\n");
+      } catch (e) {}
+    }, HEARTBEAT_INTERVAL_MS);
+
     const subscription = redisSubscriber({
       channel: channel(req),
       onMessage: function (message) {
@@ -31,6 +44,7 @@ module.exports = function ({ channel }) {
     });
 
     req.on("close", function () {
+      clearInterval(heartbeat);
       subscription.cleanup();
     });
   };
