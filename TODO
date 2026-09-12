@@ -1,10 +1,10 @@
 Show progress bar and folder status on plugin settings page when a change triggers a full-site rebuild (make the existing background rebuild visible)
 
+Investigate unbounded areas of the app/blog code (and other parts of the codebase) and introduce bounds (e.g. previously infinite entries would be fetched from db)
+
 Add cpu and disk info to benchmarks summary
 
 Add 404 and 400 and other error requests to benchmarks
-
-Test googledrive client
 
 Google Drive:
 - Fix bug with shared drive folders for [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBkLKSVzvjZLRSCpRJwcKBPlf)
