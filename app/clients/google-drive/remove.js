@@ -9,6 +9,8 @@ module.exports = async function remove(blogID, path, callback) {
     clfdate() + " Google Drive: Remove:" + blogID + ":" + path + ":";
 
   try {
+    if (path[0] !== "/") path = "/" + path;
+
     const { serviceAccountId, folderId } = await database.blog.get(blogID);
     const drive = await createDriveClient(serviceAccountId);
     const { getByPath, remove } = database.folder(folderId, blogID);
