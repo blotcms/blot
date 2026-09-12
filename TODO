@@ -1,3 +1,11 @@
+Show progress bar and folder status on plugin settings page when a change triggers a full-site rebuild (make the existing background rebuild visible)
+
+Add cpu and disk info to benchmarks summary
+
+Add 404 and 400 and other error requests to benchmarks
+
+Test googledrive client
+
 Google Drive:
 - Fix bug with shared drive folders for [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBkLKSVzvjZLRSCpRJwcKBPlf)
 - Fix bug with Google Docs when disconnecting a site from Google Drive on Blot then reconnecting the site to Google Drive.
