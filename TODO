@@ -614,9 +614,8 @@ Improvements to template engine:
     - should resolve issue with `https://eli.li/tagged/og`
 - Improve various performance issues with archives page and sitemap on large sites - maybe allEntries only retrieves some properties and paginates through rather than a single request?
   - highlighted by `https://jimhardy-datascience.com/search?q=2026` and `https://www.nitinpai.in/archives`
-  - basically, we need to modify the template engine to save the properties of each entry requested, then use this in entry.get, then update entry to use a hash rather than a json blob.
+  - tried storing entries as a Redis hash + narrowing reads to just the fields a template references (PR #1831 unwinds it) - regressed prod performance and did not help either site. Root cause on these two sites was never diagnosed; don't retry the same approach without figuring that out first.
 - why is the feed so huge? are we compressing feeds? so slow for nginx?
-- we need to modify the template engine to extract which properties of the entry are used, then pass this into entry.get to reduce memory usage significantly for large sites.
 - finish function to render files in the user's folder dynamically and follow up with [questioner](https://blot.im/questions/3344)
 - maybe write tool to check before/after for lots of test sites? real life sites on blot? error if diff, or offer chance to test?
 - Add a related entry list and tell [David](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbdrPGTsMcvgWpNsNtmrkWRzDz) and [Thomas](https://mail.google.com/mail/u/0/#inbox/156dbe97153fab61) and [questioner](https://blot.im/questions/1484) and [questioner](https://blot.im/questions/3123)
