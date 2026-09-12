@@ -59,24 +59,25 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       # Per-arch registry cache. Keeps layers hot on each native runner.
+      # Wrapped in a retry: base-image pulls occasionally fail with a Docker
+      # Hub auth/network blip ("connection reset by peer" fetching an oauth
+      # token) that has nothing to do with the build itself.
       - name: Build ${{ env.PUSH_IMAGES == 'true' && 'and push' || '(local only)' }} (${{ matrix.arch }})
         id: build
-        uses: docker/build-push-action@v6
+        uses: Wandalen/wretry.action@v3
         with:
-          context: .
-          target: prod
-          platforms: ${{ matrix.platform }}          # native, no QEMU
-          # Fork PRs cannot push to GHCR - build locally and load into the
-          # runner's Docker so the health check below still has an image.
-          push: ${{ env.PUSH_IMAGES == 'true' }}
-          load: ${{ env.PUSH_IMAGES != 'true' }}
-          tags: |
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}-${{ matrix.arch }}
-          cache-from: |
-            type=registry,ref=${{ env.IMAGE_NAME }}:cache-${{ matrix.arch }}
-          # Registry cache export needs write access, which fork PRs lack -
-          # skip it there rather than fail the build.
-          cache-to: ${{ env.PUSH_IMAGES == 'true' && format('type=registry,ref={0}:cache-{1},mode=max', env.IMAGE_NAME, matrix.arch) || '' }}
+          action: docker/build-push-action@v6
+          attempt_limit: 2
+          attempt_delay: 10000
+          with: |
+            context: .
+            target: prod
+            platforms: ${{ matrix.platform }}
+            push: ${{ env.PUSH_IMAGES == 'true' }}
+            load: ${{ env.PUSH_IMAGES != 'true' }}
+            tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}-${{ matrix.arch }}
+            cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:cache-${{ matrix.arch }}
+            cache-to: ${{ env.PUSH_IMAGES == 'true' && format('type=registry,ref={0}:cache-{1},mode=max', env.IMAGE_NAME, matrix.arch) || '' }}
 
       - name: Verify health check (${{ matrix.arch }})
         env:
@@ -178,22 +179,23 @@ jobs:
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
 
+      # Wrapped in a retry: base-image pulls occasionally fail with a Docker
+      # Hub auth/network blip ("connection reset by peer" fetching an oauth
+      # token) that has nothing to do with the build itself.
       - name: Build ${{ env.PUSH_IMAGES == 'true' && 'and push' || '(local only)' }} airlock (${{ matrix.arch }})
-        uses: docker/build-push-action@v6
+        uses: Wandalen/wretry.action@v3
         with:
-          context: config/airlock
-          platforms: ${{ matrix.platform }}
-          # Fork PRs cannot push to GHCR - build locally and load into the
-          # runner's Docker so the egress-filter check below still has an image.
-          push: ${{ env.PUSH_IMAGES == 'true' }}
-          load: ${{ env.PUSH_IMAGES != 'true' }}
-          tags: |
-            ${{ env.AIRLOCK_IMAGE_NAME }}:${{ github.sha }}-${{ matrix.arch }}
-          cache-from: |
-            type=registry,ref=${{ env.AIRLOCK_IMAGE_NAME }}:cache-${{ matrix.arch }}
-          # Registry cache export needs write access, which fork PRs lack -
-          # skip it there rather than fail the build.
-          cache-to: ${{ env.PUSH_IMAGES == 'true' && format('type=registry,ref={0}:cache-{1},mode=max', env.AIRLOCK_IMAGE_NAME, matrix.arch) || '' }}
+          action: docker/build-push-action@v6
+          attempt_limit: 2
+          attempt_delay: 10000
+          with: |
+            context: config/airlock
+            platforms: ${{ matrix.platform }}
+            push: ${{ env.PUSH_IMAGES == 'true' }}
+            load: ${{ env.PUSH_IMAGES != 'true' }}
+            tags: ${{ env.AIRLOCK_IMAGE_NAME }}:${{ github.sha }}-${{ matrix.arch }}
+            cache-from: type=registry,ref=${{ env.AIRLOCK_IMAGE_NAME }}:cache-${{ matrix.arch }}
+            cache-to: ${{ env.PUSH_IMAGES == 'true' && format('type=registry,ref={0}:cache-{1},mode=max', env.AIRLOCK_IMAGE_NAME, matrix.arch) || '' }}
 
       - name: Verify egress filter (${{ matrix.arch }})
         env:
