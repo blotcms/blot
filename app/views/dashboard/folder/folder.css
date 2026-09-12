@@ -52,11 +52,22 @@
     overflow: hidden;
   }
 
+  /* Progress UI is suppressed for the folder footer in sync_status.js;
+     keep the line compact even if has-progress is present. */
   .sync-status.has-progress {
     display: flex;
-    height: auto;
-    overflow: visible;
-    width: 100%;
+    height: 1.5em;
+    overflow: hidden;
+    width: auto;
+  }
+
+  .sync-status.has-progress .sync-status-progress,
+  .sync-status.has-progress .sync-status-progress-label {
+    display: none;
+  }
+
+  .sync-status.has-progress .sync-status-icon {
+    display: inline;
   }
 
   .sync-status .sync-status-body {

@@ -78,10 +78,13 @@ function renderSyncStatusMessage(message) {
   var visibleMessage = shortenSyncingFilename(parsed.text);
   var progressBar = q(".sync-status-progress-bar");
   var progressLabel = q(".sync-status-progress-label");
+  // Folder footer stays a single compact status line. Drive/iCloud syncs still
+  // emit "(n/m) ..." messages; show the text, but never expand into a bar here.
+  var hideProgress = !!statusContainer.closest(".status-link");
 
   statusText.innerText = visibleMessage;
 
-  if (parsed.hasProgress) {
+  if (parsed.hasProgress && !hideProgress) {
     var roundedPercent = Math.round(Math.max(0, Math.min(100, parsed.percent)));
 
     statusContainer.classList.add("has-progress");
