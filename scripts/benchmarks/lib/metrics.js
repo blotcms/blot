@@ -33,12 +33,6 @@ function avgBurstInflation(r) {
 
 const METRICS = [
   {
-    key: "build_p50_ms",
-    label: "Build p50 (per site)",
-    unit: "ms",
-    get: (r) => num(r?.build?.timing_ms?.p50),
-  },
-  {
     key: "build_p95_ms",
     label: "Build p95 (per site)",
     unit: "ms",
@@ -61,12 +55,6 @@ const METRICS = [
     label: "Build disk I/O (blocks)",
     unit: "ops",
     get: (r) => num(r?.build?.disk_io?.total_ops),
-  },
-  {
-    key: "render_p50_ms",
-    label: "Render p50 (per page)",
-    unit: "ms",
-    get: (r) => num(r?.render?.timing_ms?.p50),
   },
   {
     key: "render_p95_ms",

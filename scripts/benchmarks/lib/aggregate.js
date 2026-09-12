@@ -21,9 +21,7 @@ function setPath(obj, dottedPath, value) {
 // Where each tracked metric lives inside a benchmark-result object, so the
 // aggregate's headline numbers reflect the per-iteration medians.
 const METRIC_PATHS = {
-  build_p50_ms: "build.timing_ms.p50",
   build_p95_ms: "build.timing_ms.p95",
-  render_p50_ms: "render.timing_ms.p50",
   render_p95_ms: "render.timing_ms.p95",
   build_peak_rss_mb: "build.memory_mb.peak_rss",
   render_peak_rss_mb: "render.memory_mb.peak_rss",

@@ -11,14 +11,18 @@ reused from `app/build/converters/*/tests`), then:
 
 | Phase      | What happens                                                    | Headline metrics |
 |------------|----------------------------------------------------------------|------------------|
-| **build**  | write the workload to disk, then `blog.rebuild()` every site   | per-site wall time p50 / p95, peak RSS, CPU %, disk I/O ops |
-| **render** | fetch every URL in each blog's sitemap and read the full body  | per-page wall time p50 / p95, peak RSS, CPU %, disk I/O ops, output bytes/page |
+| **build**  | write the workload to disk, then `blog.rebuild()` every site   | per-site wall time p95, peak RSS, CPU %, disk I/O ops |
+| **render** | fetch every URL in each blog's sitemap and read the full body  | per-page wall time p95, peak RSS, CPU %, disk I/O ops, output bytes/page |
 | **tag burst** | for each site, request several distinct `/tagged/<slug>` pages once solo (uncontended) and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
 | **archives burst** | request `/archives` (repeating blogs round-robin if there are fewer sites than the concurrency) once solo per target and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
 | **search burst** | for each site, request several distinct `/search?q=<keyword>` queries once solo and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
 | **sitemap burst** | request `/sitemap.xml` (same round-robin rule as archives) once solo per target and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
 | **backlinks burst** | request each site's "hub" entry — linked to by ~25% of its other entries — (same round-robin rule) once solo and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
 | **not-found burst** | request guaranteed-nonexistent paths (same round-robin rule) once solo and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
+
+Build and render p50 are still recorded in the raw result JSON alongside p95,
+but the PR-comment table only tracks p95 — it's the more useful signal for
+catching regressions, and a p50 row next to it was mostly redundant.
 
 Every burst phase's full p50/p95 and inflation ratio is kept in the raw result
 JSON (and in `samples` when aggregated across iterations), but the PR-comment
@@ -192,7 +196,8 @@ addition bumped it 1 → 2, `archivesBurstConcurrency` bumped it 2 → 3, the
 search/sitemap/backlinks burst additions bumped it 3 → 4, the not-found
 burst addition plus the CPU/disk I/O metrics below bumped it 4 → 5, and
 collapsing the six per-route burst p95/inflation pairs into a single
-`render_burst_inflation_avg` metric bumped it 5 → 6) and the next master run
+`render_burst_inflation_avg` metric bumped it 5 → 6, and dropping the build/
+render p50 rows in favor of p95-only bumped it 6 → 7) and the next master run
 starts a fresh baseline on its own, no manual cache-clearing required.
 
 **Manual — clear the history.** For anything the schema-version bump doesn't
