@@ -74,7 +74,7 @@ const BENCHMARK_DEFAULTS = Object.freeze({
   // reference but excluded from the rolling baseline, so the next master run
   // starts a fresh baseline automatically instead of requiring someone to
   // manually clear the benchmarks-history-* Actions cache.
-  historySchemaVersion: 4,
+  historySchemaVersion: 5,
 });
 
 module.exports = { BENCHMARK_DEFAULTS };

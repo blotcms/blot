@@ -55,6 +55,7 @@ function buildBenchmarkResult(options) {
         per_site: buildSiteDurations,
       },
       cpu: buildPhaseMetrics.cpu,
+      disk_io: buildPhaseMetrics.disk_io,
       memory_mb: buildPhaseMetrics.memory_mb,
     },
     render: {
@@ -70,6 +71,7 @@ function buildBenchmarkResult(options) {
         count: renderTiming.count,
       },
       cpu: renderPhaseMetrics.cpu,
+      disk_io: renderPhaseMetrics.disk_io,
       memory_mb: renderPhaseMetrics.memory_mb,
       bytes: {
         total: renderBytesTotal || 0,

@@ -52,6 +52,30 @@ const METRICS = [
     get: (r) => num(r?.render?.bytes?.mean_per_page),
   },
   {
+    key: "build_cpu_avg_percent",
+    label: "Build CPU (avg, % of machine)",
+    unit: "percent",
+    get: (r) => num(r?.build?.cpu?.avg_percent_of_machine),
+  },
+  {
+    key: "render_cpu_avg_percent",
+    label: "Render CPU (avg, % of machine)",
+    unit: "percent",
+    get: (r) => num(r?.render?.cpu?.avg_percent_of_machine),
+  },
+  {
+    key: "build_disk_io_ops",
+    label: "Build disk I/O (blocks)",
+    unit: "ops",
+    get: (r) => num(r?.build?.disk_io?.total_ops),
+  },
+  {
+    key: "render_disk_io_ops",
+    label: "Render disk I/O (blocks)",
+    unit: "ops",
+    get: (r) => num(r?.render?.disk_io?.total_ops),
+  },
+  {
     key: "tag_burst_p95_ms",
     label: "Tag burst p95 (concurrent /tagged/*)",
     unit: "ms",
@@ -139,6 +163,8 @@ function formatValue(value, unit) {
   if (unit === "MB") return Math.round(value) + " MB";
   if (unit === "ms") return Math.round(value) + " ms";
   if (unit === "ratio") return value.toFixed(2) + "x";
+  if (unit === "percent") return value.toFixed(1) + "%";
+  if (unit === "ops") return Math.round(value) + " ops";
   return String(value);
 }
 

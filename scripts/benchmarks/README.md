@@ -11,8 +11,8 @@ reused from `app/build/converters/*/tests`), then:
 
 | Phase      | What happens                                                    | Headline metrics |
 |------------|----------------------------------------------------------------|------------------|
-| **build**  | write the workload to disk, then `blog.rebuild()` every site   | per-site wall time p50 / p95, peak RSS, CPU % |
-| **render** | fetch every URL in each blog's sitemap and read the full body  | per-page wall time p50 / p95, peak RSS, CPU %, output bytes/page |
+| **build**  | write the workload to disk, then `blog.rebuild()` every site   | per-site wall time p50 / p95, peak RSS, CPU %, disk I/O ops |
+| **render** | fetch every URL in each blog's sitemap and read the full body  | per-page wall time p50 / p95, peak RSS, CPU %, disk I/O ops, output bytes/page |
 | **tag burst** | for each site, request several distinct `/tagged/<slug>` pages once solo (uncontended) and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
 | **archives burst** | request `/archives` (repeating blogs round-robin if there are fewer sites than the concurrency) once solo per target and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
 | **search burst** | for each site, request several distinct `/search?q=<keyword>` queries once solo and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
@@ -167,9 +167,10 @@ constant — older records stay in the NDJSON file for reference but are
 invisible to the baseline. Bump `historySchemaVersion` whenever a change
 meaningfully redefines a tracked metric (new/removed metric, a workload shape
 that shifts totals — e.g. this file's own `tags` / `tagBurstConcurrency`
-addition bumped it 1 → 2, `archivesBurstConcurrency` bumped it 2 → 3, and the
-search/sitemap/backlinks burst additions bumped it 3 → 4) and the next master
-run starts a fresh baseline on its own, no manual cache-clearing required.
+addition bumped it 1 → 2, `archivesBurstConcurrency` bumped it 2 → 3, the
+search/sitemap/backlinks burst additions bumped it 3 → 4, and the CPU/disk I/O
+metrics below bumped it 4 → 5) and the next master run starts a fresh baseline
+on its own, no manual cache-clearing required.
 
 **Manual — clear the history.** For anything the schema-version bump doesn't
 cover (e.g. you want to discard recent noisy runs without changing what's

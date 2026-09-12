@@ -279,6 +279,8 @@ describe("blog benchmarks", function () {
       result.build.memory_mb.peak_rss,
       result.render.memory_mb.peak_rss
     );
+    const totalDiskIoOps =
+      result.build.disk_io.total_ops + result.render.disk_io.total_ops;
     const totalSeconds = totalWallMs / 1000;
     const label = (s) => ("  " + s).padEnd(26);
     const num = (n, width = 10) => String(n).padStart(width);
@@ -287,6 +289,7 @@ describe("blog benchmarks", function () {
     console.log(label("Requests per page") + num(benchmarkConfig.requestsPerPage, 8));
     console.log(label("Total CPU") + num(totalCpuPercent.toFixed(2), 8) + " %");
     console.log(label("Total Memory") + num(Math.round(totalMemoryMb), 8) + " mb");
+    console.log(label("Total Disk I/O") + num(totalDiskIoOps, 8) + " ops");
     console.log(label("Total requests") + num(result.render.sitemap_pages_total, 8));
     console.log("");
     console.log(label("Total time") + num(totalSeconds.toFixed(1), 8) + " seconds");

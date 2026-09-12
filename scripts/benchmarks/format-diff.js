@@ -27,6 +27,9 @@ function metricsFromResult(result) {
     (build.memory_mb && build.memory_mb.peak_rss) || 0,
     (render.memory_mb && render.memory_mb.peak_rss) || 0
   );
+  const totalDiskIoOps =
+    ((build.disk_io && build.disk_io.total_ops) || 0) +
+    ((render.disk_io && render.disk_io.total_ops) || 0);
   const totalSeconds = totalWallMs / 1000;
 
   const bursts = {};
@@ -43,6 +46,7 @@ function metricsFromResult(result) {
   return {
     totalCpuPercent,
     totalMemoryMb,
+    totalDiskIoOps,
     totalSeconds,
     meanBuildMs: buildTiming.mean != null ? buildTiming.mean : 0,
     meanRenderMs: renderTiming.mean != null ? renderTiming.mean : 0,
@@ -80,6 +84,13 @@ function printCompareTable(currentResult, branchResult) {
       " mb  ->  " +
       fmtNum(Math.round(br.totalMemoryMb), 8) +
       " mb"
+  );
+  console.log(
+    label("Total Disk I/O") +
+      fmtNum(Math.round(cur.totalDiskIoOps), 8) +
+      " ops  ->  " +
+      fmtNum(Math.round(br.totalDiskIoOps), 8) +
+      " ops"
   );
   console.log("");
   console.log(

@@ -58,6 +58,7 @@ class PhaseMonitor {
     this.startCpu = null;
     this.lastCpu = null;
     this.lastSampleAt = 0;
+    this.startResourceUsage = null;
     this.cpuPercentSamples = [];
     this.rssSamples = [];
     this.heapUsedSamples = [];
@@ -68,6 +69,10 @@ class PhaseMonitor {
     this.startCpu = process.cpuUsage();
     this.lastCpu = process.cpuUsage();
     this.lastSampleAt = this.startedAt;
+
+    if (typeof process.resourceUsage === "function") {
+      this.startResourceUsage = process.resourceUsage();
+    }
 
     this.captureSample();
 
@@ -115,9 +120,27 @@ class PhaseMonitor {
     const totalCpuMs = (cpuUsage.user + cpuUsage.system) / 1000;
 
     let maxRssResourceMb = 0;
+    let fsReadOps = 0;
+    let fsWriteOps = 0;
 
     if (typeof process.resourceUsage === "function") {
-      maxRssResourceMb = process.resourceUsage().maxRSS / 1024;
+      const endResourceUsage = process.resourceUsage();
+      maxRssResourceMb = endResourceUsage.maxRSS / 1024;
+
+      // fsRead/fsWrite are cumulative-since-process-start block I/O counts
+      // (getrusage's ru_inblock/ru_oublock), so a phase's share is the delta
+      // against the snapshot taken in start(). Counts blocks, not bytes —
+      // useful as a relative regression signal, not an absolute size.
+      if (this.startResourceUsage) {
+        fsReadOps = Math.max(
+          0,
+          endResourceUsage.fsRead - this.startResourceUsage.fsRead
+        );
+        fsWriteOps = Math.max(
+          0,
+          endResourceUsage.fsWrite - this.startResourceUsage.fsWrite
+        );
+      }
     }
 
     return {
@@ -135,6 +158,11 @@ class PhaseMonitor {
           wallMs > 0 && this.cpuCoreCount > 0
             ? ((totalCpuMs / wallMs) * 100) / this.cpuCoreCount
             : 0,
+      },
+      disk_io: {
+        fs_read_ops: fsReadOps,
+        fs_write_ops: fsWriteOps,
+        total_ops: fsReadOps + fsWriteOps,
       },
       memory_mb: {
         avg_rss: average(this.rssSamples),
