@@ -1,5 +1,3 @@
-Show progress bar and folder status on plugin settings page when a change triggers a full-site rebuild (make the existing background rebuild visible)
-
 Add cpu and disk info to benchmarks summary
 
 Add 404 and 400 and other error requests to benchmarks
@@ -179,16 +177,6 @@ Fix bugs with templates:
   - [ ] Add exif info
   - [ ] Add backlinks
 
-Dashboard control follow-ups (found while reviewing the per-template dashboard-control PRs):
-- Portfolio template: the new show_search boolean only toggles the search box on archives.html. If search should be hideable everywhere it appears (e.g. the toolbar / nav), wire show_search into those views too.
-- Portfolio template: heading_font control emits {{#weight}}/{{#style}} rules; confirm the fonts static data actually carries weight/style so the control does something, otherwise drop those blocks.
-- Index template: the new logo_url upload is reused as og:image / twitter:image in _head.html. Upload URLs are site-relative, so social scrapers get a relative path. Either expose an absolute form of the upload value or fall back to {{{avatar}}} for social meta.
-- Blog template: sticky_navigation positions the sidebar with `left/right: calc(50% - var(--body-outer-width) / 2)`, which only lines up while the body is exactly --body-outer-width wide and centred. Verify against long nav lists and the navigation_location=right case, and confirm behaviour at the mobile breakpoint where .sidebar becomes position:relative.
-- Blog template: title_and_summary index layout renders {{{summary}}} unescaped. Fine while summaries are plain text, but revisit if summaries ever carry markup.
-- Keynote template: this PR was rebased onto master's flex gallery rewrite (body:has(.gallery), flex column) that fixed opaque screenshot backgrounds. The gallery padding is now driven by {{spacing}}em (default 4) instead of the tuned 3.66em. Visually re-check that the gallery still fills the viewport below the header and that screenshots stay opaque at the min/max spacing and slide_width values.
-- Album template: the new max_width control replaces `.entry.page .body>* { max-width: 35em }` (~560px) with a px default of 800. That widens the text measure on page entries for every existing site on next rebuild. Double-check the default reads well, or lower it toward the old ~560px.
-- Album template: several rules use `{{^heading_font}} ... 28px/23px fallback {{/heading_font}}`, but heading_font is always a populated object so the fallback is dead. Harmless, but could be tidied.
-
 ---
 
 Fix bug with the paypal next bill dates are not syncing correctly for some users (e.g.slopserve)
@@ -270,20 +258,11 @@ Fix bug with handling of queries and tell [this person](https://mail.google.com/
 
 Fix bug with tags that contain slashes and tell [Jack](https://mail.google.com/mail/u/0/#inbox/FMfcgzGpFgzpsCkCMGqnClfqMkWZqNNz)
 
-Fix bug with template error causing server to go down (issue with folder rebuild)
-    reproduce bug with chinese template?
-
 Fix bug with search for 'Raycast' and [tell Anders](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbfBqJWDdrvFDKrkJZjjLVFPTl)
 
 Fix bug with Google Drive on Mark's site which unneccessarily re-downloads some (all?) files on sync rather than using the correct hash and tell [Mark](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTVmrvkvcfPvcJhcLvrwSndWS)
 
-Fix post encoding bugs
-- Fix [Kevin](https://mail.google.com/mail/u/0/#inbox/1665be131ce98928)'s URL encoding bug. Each entry's url property is not encoded as a URI component on the server but it needs to be.
-- Fix encoding bug with greek URLs then tell [Rodericus](https://mail.google.com/mail/u/0/#search/rodericus/15bb13fafc1c34e5) know
-
 Fix bug with slashes in tags and tell [Dave](https://mail.google.com/mail/u/0/#inbox/FMfcgxwHMjqlPTzJxBPcQPnGsQsPSsvh)
-
-Fix bug with file list on dashboard in Safari and tell [Ryan](https://mail.google.com/mail/u/0/#inbox/FMfcgxwHMGHzLwclHfnvjZrvfsvTQdGf)
 
 Fix bug and tell [Vanessa](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLswJQjKhnLpNZzfPhJZpVtcph) which injects `<p>` tags 
 
@@ -292,8 +271,6 @@ Fix bug with blockquotes and tell [Kerim](https://mail.google.com/mail/u/0/#inbo
 Fix bug with indented code in pre tags and tell [Michael](https://mail.google.com/mail/u/0/#inbox/166704e2c0187e5c)
 
 Fix bug with nested Markdown and tell [Martin](https://mail.google.com/mail/u/0/#inbox/FMfcgxwDqnhgBjBSKzvtclvqcFcMptMR):
-
-Fix bug with [Rodrigo's Word Document files](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVWRXqnjmjBDmcRXKcdxjcDfr)
 
 Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
 
