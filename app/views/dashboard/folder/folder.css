@@ -52,11 +52,20 @@
     overflow: hidden;
   }
 
+  /* dashboard.min.css bundles this file for every dashboard page, so this
+     base rule (not just the .status-link override below) must stay
+     unscoped: it's what lets the progress bar/label expand the line on
+     other pages (import, client reset/disconnect, Google Drive connect). */
+  .sync-status.has-progress {
+    display: flex;
+    height: auto;
+    overflow: visible;
+    width: 100%;
+  }
+
   /* Progress UI is suppressed for the folder footer in sync_status.js;
      keep the line compact even if has-progress is present. Scoped to
-     .status-link so this doesn't hide progress bars on other dashboard
-     pages (import, client reset/disconnect, Google Drive connect) where
-     dashboard.min.css's global bundle would otherwise apply it too. */
+     .status-link so it doesn't affect the pages above. */
   .status-link .sync-status.has-progress {
     display: flex;
     height: 1.5em;
