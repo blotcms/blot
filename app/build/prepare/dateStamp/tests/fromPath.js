@@ -55,4 +55,13 @@ describe("date from file path", function () {
 
   // Invalid hour
   check("2013-01-31-100-322-1-4.jpg", 1359590400000, "100-322-1-4.jpg");
+
+  // Regression: a "MM-DD" numbered folder nested inside a
+  // month-named folder ("Dec 2021") must not be mistaken for a
+  // "DD-MM" folder using the year from the outer "Dec 2021" folder.
+  check(
+    "/posts/2021/Dec 2021/12-01 - Snow envy/Snow envy.txt",
+    Date.UTC(2021, 11, 1),
+    "Snow envy.txt"
+  );
 });
