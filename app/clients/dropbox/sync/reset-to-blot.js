@@ -250,6 +250,16 @@ const walk = async (
           await download(client, pathOnDropbox, pathOnDisk);
           summary.downloaded += 1;
         } catch (e) {
+          // A file can end up with a destination path longer than the
+          // filesystem allows – seen in production when a Dropbox account
+          // got stuck wrapping the same file in nested "(Conflict met
+          // exemplaar van ...)" copies. That download can never succeed, so
+          // without counting it as "skipped" here it stays out of both
+          // summary.downloaded and summary.skipped, which means the hourly
+          // sync validation (init.js's countChanges) keeps treating this
+          // blog as having unsynced changes and re-emails the admin every
+          // hour, forever, even though there's nothing new to report.
+          if (e.code === "ENAMETOOLONG") summary.skipped += 1;
           continue;
         }
       } else if (!localCounterpart) {
@@ -259,6 +269,7 @@ const walk = async (
           await download(client, pathOnDropbox, pathOnDisk);
           summary.downloaded += 1;
         } catch (e) {
+          if (e.code === "ENAMETOOLONG") summary.skipped += 1;
           continue;
         }
       } else {

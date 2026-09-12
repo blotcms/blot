@@ -13,10 +13,19 @@ function retry(fn, options) {
   // 401 = token revoked
   // 409 = folder no longer exists
   // in these cases, do not retry, there is no point
+  //
+  // ENAMETOOLONG = the destination path exceeds the filesystem's
+  // max name/path length. Retrying can never succeed here since the
+  // path length doesn't change between attempts – seen in production
+  // when a Dropbox account got stuck repeatedly wrapping a file in
+  // "(Conflict met exemplaar van ...)" copies, eventually producing a
+  // filename over the OS limit. Without this, every sync attempt burned
+  // through all 6 exponential-backoff retries before giving up.
   options.errorFilter =
     options.errorFilter ||
     function (err) {
       console.log("dropbox:retry invoked with err", err);
+      if (err.code === "ENAMETOOLONG") return false;
       return [401, 409].indexOf(err.status) === -1;
     };
 

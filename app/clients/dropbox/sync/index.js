@@ -377,6 +377,27 @@ function Apply(client, blogFolder, log, status) {
               } else {
                 log(item.resolved_relative_path, "Downloaded to folder successfully");
               }
+
+              // Seen in production: a Dropbox account stuck generating
+              // ever-longer "(Conflict met exemplaar van ...)" copies of the
+              // same file until the name exceeded the filesystem's max name
+              // length. We can't write a placeholder here the way we do for
+              // unsupported/oversized files above, because item.path_on_disk
+              // is itself the too-long path – any write to it fails the same
+              // way the download did. Without this check, the file's hash
+              // never matches (it's never written), so every subsequent sync
+              // and hourly validation run re-attempts and re-fails the same
+              // download forever, spamming the logs and repeatedly flagging
+              // the blog as having "unsynced changes".
+              if (err && err.code === "ENAMETOOLONG") {
+                log(
+                  item.resolved_relative_path,
+                  "Skipping download because destination path exceeds filesystem name limit"
+                );
+                status("Skipping " + item.resolved_relative_path + " (name too long)");
+                return callback();
+              }
+
               // Swallow the error that occur when the user has forbidden content
               // in their folder. We should surface this eventually. You can test
               // this error using the file in tests/files/will_flag_restricted_content.png
