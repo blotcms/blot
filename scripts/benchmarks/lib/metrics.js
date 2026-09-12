@@ -7,6 +7,30 @@
 // `deterministic: true` marks metrics with near-zero run-to-run variance
 // (byte sizes), which get the tighter `sizeThresholdPercent` band.
 
+// Route types exercised by the concurrent-burst checks. Each one measures a
+// solo (uncontended) timing plus a burst (Promise.all) timing for the same
+// requests; `inflation_ratio` is burst ÷ solo. Individually they used to each
+// get their own p95 + inflation row (12 rows total), which dwarfed the rest
+// of the table. They're collapsed into a single averaged inflation metric
+// below — the per-route numbers are still in the raw result JSON if you need
+// to dig into which route regressed.
+const BURST_ROUTES = [
+  "tag_burst",
+  "archives_burst",
+  "search_burst",
+  "sitemap_burst",
+  "backlinks_burst",
+  "not_found_burst",
+];
+
+function avgBurstInflation(r) {
+  const values = BURST_ROUTES.map((key) => num(r?.render?.[key]?.inflation_ratio)).filter(
+    (n) => n !== null
+  );
+  if (!values.length) return null;
+  return values.reduce((sum, n) => sum + n, 0) / values.length;
+}
+
 const METRICS = [
   {
     key: "build_p50_ms",
@@ -21,6 +45,24 @@ const METRICS = [
     get: (r) => num(r?.build?.timing_ms?.p95),
   },
   {
+    key: "build_peak_rss_mb",
+    label: "Build peak RSS",
+    unit: "MB",
+    get: (r) => num(r?.build?.memory_mb?.peak_rss),
+  },
+  {
+    key: "build_cpu_avg_percent",
+    label: "Build CPU (avg, % of machine)",
+    unit: "percent",
+    get: (r) => num(r?.build?.cpu?.avg_percent_of_machine),
+  },
+  {
+    key: "build_disk_io_ops",
+    label: "Build disk I/O (blocks)",
+    unit: "ops",
+    get: (r) => num(r?.build?.disk_io?.total_ops),
+  },
+  {
     key: "render_p50_ms",
     label: "Render p50 (per page)",
     unit: "ms",
@@ -31,12 +73,6 @@ const METRICS = [
     label: "Render p95 (per page)",
     unit: "ms",
     get: (r) => num(r?.render?.timing_ms?.p95),
-  },
-  {
-    key: "build_peak_rss_mb",
-    label: "Build peak RSS",
-    unit: "MB",
-    get: (r) => num(r?.build?.memory_mb?.peak_rss),
   },
   {
     key: "render_peak_rss_mb",
@@ -52,22 +88,10 @@ const METRICS = [
     get: (r) => num(r?.render?.bytes?.mean_per_page),
   },
   {
-    key: "build_cpu_avg_percent",
-    label: "Build CPU (avg, % of machine)",
-    unit: "percent",
-    get: (r) => num(r?.build?.cpu?.avg_percent_of_machine),
-  },
-  {
     key: "render_cpu_avg_percent",
     label: "Render CPU (avg, % of machine)",
     unit: "percent",
     get: (r) => num(r?.render?.cpu?.avg_percent_of_machine),
-  },
-  {
-    key: "build_disk_io_ops",
-    label: "Build disk I/O (blocks)",
-    unit: "ops",
-    get: (r) => num(r?.build?.disk_io?.total_ops),
   },
   {
     key: "render_disk_io_ops",
@@ -76,76 +100,10 @@ const METRICS = [
     get: (r) => num(r?.render?.disk_io?.total_ops),
   },
   {
-    key: "tag_burst_p95_ms",
-    label: "Tag burst p95 (concurrent /tagged/*)",
-    unit: "ms",
-    get: (r) => num(r?.render?.tag_burst?.burst_timing_ms?.p95),
-  },
-  {
-    key: "tag_burst_inflation_ratio",
-    label: "Tag burst inflation (burst ÷ solo)",
+    key: "render_burst_inflation_avg",
+    label: "Render burst inflation (avg burst ÷ solo, across routes)",
     unit: "ratio",
-    get: (r) => num(r?.render?.tag_burst?.inflation_ratio),
-  },
-  {
-    key: "archives_burst_p95_ms",
-    label: "Archives burst p95 (concurrent /archives)",
-    unit: "ms",
-    get: (r) => num(r?.render?.archives_burst?.burst_timing_ms?.p95),
-  },
-  {
-    key: "archives_burst_inflation_ratio",
-    label: "Archives burst inflation (burst ÷ solo)",
-    unit: "ratio",
-    get: (r) => num(r?.render?.archives_burst?.inflation_ratio),
-  },
-  {
-    key: "search_burst_p95_ms",
-    label: "Search burst p95 (concurrent /search)",
-    unit: "ms",
-    get: (r) => num(r?.render?.search_burst?.burst_timing_ms?.p95),
-  },
-  {
-    key: "search_burst_inflation_ratio",
-    label: "Search burst inflation (burst ÷ solo)",
-    unit: "ratio",
-    get: (r) => num(r?.render?.search_burst?.inflation_ratio),
-  },
-  {
-    key: "sitemap_burst_p95_ms",
-    label: "Sitemap burst p95 (concurrent /sitemap.xml)",
-    unit: "ms",
-    get: (r) => num(r?.render?.sitemap_burst?.burst_timing_ms?.p95),
-  },
-  {
-    key: "sitemap_burst_inflation_ratio",
-    label: "Sitemap burst inflation (burst ÷ solo)",
-    unit: "ratio",
-    get: (r) => num(r?.render?.sitemap_burst?.inflation_ratio),
-  },
-  {
-    key: "backlinks_burst_p95_ms",
-    label: "Backlinks burst p95 (concurrent hub-entry hits)",
-    unit: "ms",
-    get: (r) => num(r?.render?.backlinks_burst?.burst_timing_ms?.p95),
-  },
-  {
-    key: "backlinks_burst_inflation_ratio",
-    label: "Backlinks burst inflation (burst ÷ solo)",
-    unit: "ratio",
-    get: (r) => num(r?.render?.backlinks_burst?.inflation_ratio),
-  },
-  {
-    key: "not_found_burst_p95_ms",
-    label: "Not-found burst p95 (concurrent 404s)",
-    unit: "ms",
-    get: (r) => num(r?.render?.not_found_burst?.burst_timing_ms?.p95),
-  },
-  {
-    key: "not_found_burst_inflation_ratio",
-    label: "Not-found burst inflation (burst ÷ solo)",
-    unit: "ratio",
-    get: (r) => num(r?.render?.not_found_burst?.inflation_ratio),
+    get: avgBurstInflation,
   },
 ];
 

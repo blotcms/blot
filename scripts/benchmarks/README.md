@@ -20,6 +20,13 @@ reused from `app/build/converters/*/tests`), then:
 | **backlinks burst** | request each site's "hub" entry — linked to by ~25% of its other entries — (same round-robin rule) once solo and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
 | **not-found burst** | request guaranteed-nonexistent paths (same round-robin rule) once solo and once as a genuine concurrent burst | burst p50/p95, burst ÷ solo inflation ratio |
 
+Every burst phase's full p50/p95 and inflation ratio is kept in the raw result
+JSON (and in `samples` when aggregated across iterations), but the PR-comment
+table only tracks one row across all six phases — `render_burst_inflation_avg`,
+the mean of the six inflation ratios — so a table with the general build/render
+metrics doesn't balloon into a dozen near-duplicate rows. Dig into the raw JSON
+if you need to know which specific route regressed.
+
 Each generated entry also gets 1-4 tags drawn from a `--tags` (default 40)
 pool, so `/tagged/<slug>` pages exist with a realistic number of matching
 entries — modelled on a real customer blog (~800 entries, ~40 tags) that hit
@@ -182,10 +189,11 @@ invisible to the baseline. Bump `historySchemaVersion` whenever a change
 meaningfully redefines a tracked metric (new/removed metric, a workload shape
 that shifts totals — e.g. this file's own `tags` / `tagBurstConcurrency`
 addition bumped it 1 → 2, `archivesBurstConcurrency` bumped it 2 → 3, the
-search/sitemap/backlinks burst additions bumped it 3 → 4, and the not-found
-burst addition plus the CPU/disk I/O metrics below bumped it 4 → 5) and the
-next master run starts a fresh baseline on its own, no manual cache-clearing
-required.
+search/sitemap/backlinks burst additions bumped it 3 → 4, the not-found
+burst addition plus the CPU/disk I/O metrics below bumped it 4 → 5, and
+collapsing the six per-route burst p95/inflation pairs into a single
+`render_burst_inflation_avg` metric bumped it 5 → 6) and the next master run
+starts a fresh baseline on its own, no manual cache-clearing required.
 
 **Manual — clear the history.** For anything the schema-version bump doesn't
 cover (e.g. you want to discard recent noisy runs without changing what's

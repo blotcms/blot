@@ -32,18 +32,10 @@ const METRIC_PATHS = {
   render_cpu_avg_percent: "render.cpu.avg_percent_of_machine",
   build_disk_io_ops: "build.disk_io.total_ops",
   render_disk_io_ops: "render.disk_io.total_ops",
-  tag_burst_p95_ms: "render.tag_burst.burst_timing_ms.p95",
-  tag_burst_inflation_ratio: "render.tag_burst.inflation_ratio",
-  archives_burst_p95_ms: "render.archives_burst.burst_timing_ms.p95",
-  archives_burst_inflation_ratio: "render.archives_burst.inflation_ratio",
-  search_burst_p95_ms: "render.search_burst.burst_timing_ms.p95",
-  search_burst_inflation_ratio: "render.search_burst.inflation_ratio",
-  sitemap_burst_p95_ms: "render.sitemap_burst.burst_timing_ms.p95",
-  sitemap_burst_inflation_ratio: "render.sitemap_burst.inflation_ratio",
-  backlinks_burst_p95_ms: "render.backlinks_burst.burst_timing_ms.p95",
-  backlinks_burst_inflation_ratio: "render.backlinks_burst.inflation_ratio",
-  not_found_burst_p95_ms: "render.not_found_burst.burst_timing_ms.p95",
-  not_found_burst_inflation_ratio: "render.not_found_burst.inflation_ratio",
+  // Derived metric (see metrics.js) — has no single home in the raw result
+  // schema, so it's stashed under a synthetic path rather than one of the
+  // per-route burst objects.
+  render_burst_inflation_avg: "render.burst_inflation_avg",
 };
 
 /**
