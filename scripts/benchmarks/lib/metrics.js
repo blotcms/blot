@@ -135,6 +135,18 @@ const METRICS = [
     unit: "ratio",
     get: (r) => num(r?.render?.backlinks_burst?.inflation_ratio),
   },
+  {
+    key: "not_found_burst_p95_ms",
+    label: "Not-found burst p95 (concurrent 404s)",
+    unit: "ms",
+    get: (r) => num(r?.render?.not_found_burst?.burst_timing_ms?.p95),
+  },
+  {
+    key: "not_found_burst_inflation_ratio",
+    label: "Not-found burst inflation (burst ÷ solo)",
+    unit: "ratio",
+    get: (r) => num(r?.render?.not_found_burst?.inflation_ratio),
+  },
 ];
 
 const METRIC_BY_KEY = Object.fromEntries(METRICS.map((m) => [m.key, m]));

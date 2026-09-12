@@ -14,6 +14,7 @@ const { runArchivesBurst } = require("./util/archivesBurst");
 const { runSearchBurst } = require("./util/searchBurst");
 const { runSitemapBurst } = require("./util/sitemapBurst");
 const { runBacklinksBurst } = require("./util/backlinksBurst");
+const { runNotFoundBurst } = require("./util/notFoundBurst");
 
 describe("blog benchmarks", function () {
   require("./util/setup")();
@@ -227,6 +228,20 @@ describe("blog benchmarks", function () {
       getForBlog: this.getForBlog.bind(this),
     });
 
+    console.log(
+      "[benchmark] not-found burst:",
+      benchmarkConfig.notFoundBurstConcurrency,
+      "concurrent requests to guaranteed-404 paths across",
+      blogs.length,
+      "site(s)"
+    );
+
+    const notFoundBurst = await runNotFoundBurst({
+      blogs,
+      concurrency: benchmarkConfig.notFoundBurstConcurrency,
+      getForBlog: this.getForBlog.bind(this),
+    });
+
     siteSummaries.forEach((summary, index) => {
       summary.rendered_pages = renderTasks.filter(
         (task) => task.blog.id === summary.blog_id
@@ -256,6 +271,7 @@ describe("blog benchmarks", function () {
       searchBurst,
       sitemapBurst,
       backlinksBurst,
+      notFoundBurst,
     });
 
     global.__BLOT_BENCHMARK_RESULT = result;
@@ -316,6 +332,7 @@ describe("blog benchmarks", function () {
       ["Search burst", result.render.search_burst],
       ["Sitemap burst", result.render.sitemap_burst],
       ["Backlinks burst", result.render.backlinks_burst],
+      ["Not-found burst", result.render.not_found_burst],
     ];
 
     for (const [burstLabel, burst] of bursts) {

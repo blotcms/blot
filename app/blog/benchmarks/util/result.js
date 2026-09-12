@@ -16,6 +16,7 @@ function buildBenchmarkResult(options) {
     searchBurst,
     sitemapBurst,
     backlinksBurst,
+    notFoundBurst,
   } = options;
 
   const renderedPages = renderTasks.length;
@@ -38,6 +39,7 @@ function buildBenchmarkResult(options) {
       search_burst_concurrency: benchmarkConfig.searchBurstConcurrency,
       sitemap_burst_concurrency: benchmarkConfig.sitemapBurstConcurrency,
       backlinks_burst_concurrency: benchmarkConfig.backlinksBurstConcurrency,
+      not_found_burst_concurrency: benchmarkConfig.notFoundBurstConcurrency,
       regression_threshold_percent: benchmarkConfig.regressionThresholdPercent,
       cpu_sample_interval_ms: benchmarkConfig.cpuSampleIntervalMs,
     },
@@ -113,6 +115,12 @@ function buildBenchmarkResult(options) {
         solo_timing_ms: backlinksBurst.solo_timing_ms,
         burst_timing_ms: backlinksBurst.burst_timing_ms,
         inflation_ratio: backlinksBurst.inflation_ratio,
+      },
+      not_found_burst: {
+        requests_tested_total: notFoundBurst.requests_tested_total,
+        solo_timing_ms: notFoundBurst.solo_timing_ms,
+        burst_timing_ms: notFoundBurst.burst_timing_ms,
+        inflation_ratio: notFoundBurst.inflation_ratio,
       },
     },
     sites: siteSummaries,

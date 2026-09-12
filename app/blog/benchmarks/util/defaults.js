@@ -58,6 +58,12 @@ const BENCHMARK_DEFAULTS = Object.freeze({
   // {{#all_entries}} just like archives.js, but crawlers can and do fetch
   // several blogs' sitemaps around the same time.
   sitemapBurstConcurrency: 8,
+  // How many concurrent requests to guaranteed-nonexistent paths are fired
+  // per burst (same round-robin repeat rule as the archives/sitemap bursts).
+  // Error routes (dead links, scanners, typos) are real production traffic
+  // too, so this exercises the not-found render path under concurrency
+  // instead of only ever hitting successful pages.
+  notFoundBurstConcurrency: 8,
   // CI gate / trend-alert threshold, in percent, applied to timing metrics.
   regressionThresholdPercent: 15,
   // Tight threshold for near-deterministic metrics (output byte size).

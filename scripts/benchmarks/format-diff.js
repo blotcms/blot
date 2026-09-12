@@ -6,6 +6,7 @@ const BURSTS = [
   { key: "search_burst", label: "Search burst" },
   { key: "sitemap_burst", label: "Sitemap burst" },
   { key: "backlinks_burst", label: "Backlinks burst" },
+  { key: "not_found_burst", label: "Not-found burst" },
 ];
 
 /**
@@ -37,7 +38,10 @@ function metricsFromResult(result) {
     const burst = render[key] || {};
     const timing = burst.burst_timing_ms || {};
     bursts[key] = {
-      p95Ms: timing.p95 != null ? timing.p95 : 0,
+      // null (not 0) when a result predates this burst phase - a missing
+      // measurement must render as "n/a", not a fabricated fast time that
+      // looks like a real improvement in the comparison table.
+      p95Ms: timing.p95 != null ? timing.p95 : null,
       inflationRatio:
         burst.inflation_ratio != null ? burst.inflation_ratio : null,
     };
@@ -60,6 +64,10 @@ function fmtNum(n, width) {
 
 function fmtRatio(ratio) {
   return ratio == null ? "n/a" : ratio.toFixed(2);
+}
+
+function fmtMs(ms) {
+  return ms == null ? "n/a" : ms.toFixed(0);
 }
 
 /**
@@ -122,9 +130,9 @@ function printCompareTable(currentResult, branchResult) {
 
     console.log(
       label(`${burstLabel} p95`) +
-        fmtNum(curBurst.p95Ms.toFixed(0), 8) +
+        fmtNum(fmtMs(curBurst.p95Ms), 8) +
         " ms  ->  " +
-        fmtNum(brBurst.p95Ms.toFixed(0), 8) +
+        fmtNum(fmtMs(brBurst.p95Ms), 8) +
         " ms"
     );
     console.log(

@@ -42,6 +42,8 @@ const METRIC_PATHS = {
   sitemap_burst_inflation_ratio: "render.sitemap_burst.inflation_ratio",
   backlinks_burst_p95_ms: "render.backlinks_burst.burst_timing_ms.p95",
   backlinks_burst_inflation_ratio: "render.backlinks_burst.inflation_ratio",
+  not_found_burst_p95_ms: "render.not_found_burst.burst_timing_ms.p95",
+  not_found_burst_inflation_ratio: "render.not_found_burst.inflation_ratio",
 };
 
 /**

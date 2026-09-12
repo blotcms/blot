@@ -55,6 +55,10 @@ function parseBenchmarkConfig(raw = {}) {
       raw.sitemapBurstConcurrency,
       BENCHMARK_DEFAULTS.sitemapBurstConcurrency
     ),
+    notFoundBurstConcurrency: num(
+      raw.notFoundBurstConcurrency,
+      BENCHMARK_DEFAULTS.notFoundBurstConcurrency
+    ),
   };
 }
 
