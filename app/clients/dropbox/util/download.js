@@ -7,7 +7,11 @@ const retry = require("./retry");
 const callOnce = require("helper/callOnce");
 
 const TIMEOUT = 30 * 1000; // 30 seconds
-const { MAX_FILE_SIZE, hasUnsupportedExtension } = require("./constants");
+const {
+  MAX_FILE_SIZE,
+  hasUnsupportedExtension,
+  exceedsFilesystemPathLimits,
+} = require("./constants");
 
 async function download(client, source, destination, callback) {
   const id = uuid();
@@ -16,6 +20,20 @@ async function download(client, source, destination, callback) {
   let timedOut = false;
 
   console.log(prefix(), source, "->", destination);
+
+  // The destination path can never become writeable between attempts, so
+  // check it locally before fetching anything from Dropbox. Without this,
+  // we'd download the full file every time only to fail on fs.outputFile.
+  if (exceedsFilesystemPathLimits(destination)) {
+    console.log(
+      prefix(),
+      "destination exceeds filesystem name/path limit, skipping download",
+      destination
+    );
+    const err = new Error("Destination path exceeds filesystem limit");
+    err.code = "ENAMETOOLONG";
+    return callback(err);
+  }
 
   const timeout = setTimeout(function () {
     timedOut = true;

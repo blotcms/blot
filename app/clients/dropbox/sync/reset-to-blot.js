@@ -177,18 +177,35 @@ const walk = async (
     if (isDotfileOrDotfolder(pathOnBlot)) continue;
 
     if (remoteItem.is_directory) {
+      let mkdirFailed = false;
+
       if (localCounterpart && !localCounterpart.is_directory) {
         progress.publish("Removing", pathOnBlot);
         await fs.remove(pathOnDisk);
         summary.removed += 1;
         publish("Creating directory", pathOnDisk);
-        await fs.mkdir(pathOnDisk);
-        summary.createdDirs += 1;
+        try {
+          await fs.mkdir(pathOnDisk);
+          summary.createdDirs += 1;
+        } catch (e) {
+          if (e.code !== "ENAMETOOLONG") throw e;
+          summary.skipped += 1;
+          mkdirFailed = true;
+        }
       } else if (!localCounterpart) {
         publish("Creating directory", pathOnBlot);
-        await fs.mkdir(pathOnDisk);
-        summary.createdDirs += 1;
+        try {
+          await fs.mkdir(pathOnDisk);
+          summary.createdDirs += 1;
+        } catch (e) {
+          if (e.code !== "ENAMETOOLONG") throw e;
+          summary.skipped += 1;
+          mkdirFailed = true;
+        }
       }
+
+      // Can't walk a directory that was never created.
+      if (mkdirFailed) continue;
 
       await walk(
         blogID,
@@ -253,12 +270,11 @@ const walk = async (
           // A file can end up with a destination path longer than the
           // filesystem allows – seen in production when a Dropbox account
           // got stuck wrapping the same file in nested "(Conflict met
-          // exemplaar van ...)" copies. That download can never succeed, so
-          // without counting it as "skipped" here it stays out of both
-          // summary.downloaded and summary.skipped, which means the hourly
-          // sync validation (init.js's countChanges) keeps treating this
-          // blog as having unsynced changes and re-emails the admin every
-          // hour, forever, even though there's nothing new to report.
+          // exemplaar van ...)" copies. That download can never succeed.
+          // countChanges() (init.js) only looks at downloaded/removed/
+          // createdDirs, so this was never counted as an unsynced change
+          // either way; recording it as "skipped" here is just for
+          // visibility in logs/summaries, not to affect the hourly email.
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
           continue;
         }

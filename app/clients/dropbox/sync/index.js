@@ -384,11 +384,13 @@ function Apply(client, blogFolder, log, status) {
               // length. We can't write a placeholder here the way we do for
               // unsupported/oversized files above, because item.path_on_disk
               // is itself the too-long path – any write to it fails the same
-              // way the download did. Without this check, the file's hash
-              // never matches (it's never written), so every subsequent sync
-              // and hourly validation run re-attempts and re-fails the same
-              // download forever, spamming the logs and repeatedly flagging
-              // the blog as having "unsynced changes".
+              // way the download did. This only changes the log/status line;
+              // the file is still never written, so its hash still never
+              // matches and every subsequent webhook/hourly walk still calls
+              // download() again. download() now checks the path length
+              // before contacting Dropbox (see util/download.js), so at
+              // least this no longer burns 6 retries or fetches the file
+              // over the network first.
               if (err && err.code === "ENAMETOOLONG") {
                 log(
                   item.resolved_relative_path,
