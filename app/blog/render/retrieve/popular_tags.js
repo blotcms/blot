@@ -4,6 +4,11 @@ var LRUCache = require("lru-cache").LRUCache;
 // Safe cache key includes blog/cache identity and query pagination options.
 var popularTagsCache = new LRUCache({
   max: 1000,
+  // Bound by bytes too, for consistency with the other render-path caches.
+  maxSize: 5 * 1024 * 1024,
+  sizeCalculation: function (value) {
+    return JSON.stringify(value).length;
+  },
 });
 
 function cloneDeep(value) {

@@ -9,6 +9,12 @@ const { sortEntries } = getTemplateSortOptions;
 
 const postsCache = new LRUCache({
   max: 1000,
+  // Bound by bytes, not just item count: a single tag-heavy blog paginating
+  // through hundreds of distinct tags can otherwise fill all 1000 slots with
+  // large payloads (up to 500 full entries each) and starve every other
+  // blog sharing this process's memory.
+  maxSize: 100 * 1024 * 1024,
+  sizeCalculation: (value) => JSON.stringify(value).length,
 });
 
 function cloneDeep(value) {

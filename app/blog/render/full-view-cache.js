@@ -5,6 +5,12 @@ var LRUCache = require("lru-cache").LRUCache;
 // plus blog.cacheID which changes whenever render-relevant blog data changes.
 var fullViewCache = new LRUCache({
   max: 1000,
+  // Bound by bytes too: unbounded-size views (large templates/partials)
+  // shouldn't be able to fill the cache's memory budget on their own.
+  maxSize: 20 * 1024 * 1024,
+  sizeCalculation: function (value) {
+    return JSON.stringify(value).length;
+  },
 });
 
 function cloneDeep(value) {
