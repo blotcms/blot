@@ -1,7 +1,7 @@
 var moment = require("moment");
 
 function fromPath(path) {
-  var created, parsed, fileName, tokens;
+  var created, parsed, fileName, tokens, hasTime;
   var year, month, day;
   var hour, minute, second;
 
@@ -31,6 +31,9 @@ function fromPath(path) {
     }
 
     var numberOfValidTokens = 3;
+
+    // The path only encodes a time of day when it has a valid hour token.
+    hasTime = hour !== false;
 
     if (hour !== false) numberOfValidTokens++;
     if (hour !== false && minute !== false) numberOfValidTokens++;
@@ -83,6 +86,7 @@ function fromPath(path) {
     created !== undefined && {
       created: created.valueOf(),
       fileName: fileName,
+      hasTime: hasTime,
     }
   );
 }

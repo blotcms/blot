@@ -261,6 +261,56 @@ describe("update", function () {
     });
   });
 
+  it("carries the same-day creation time through a rename when metadata specifies a date-only value", function (testDone) {
+    var moment = require("moment");
+    var path = this.fake.path(".txt");
+    var newPath = this.fake.path(".txt");
+    // Date-only metadata matching today has no time-of-day. The file is
+    // about to be created and immediately renamed, both within today, so
+    // once the rename is detected the resulting entry's dateStamp should
+    // pick up the entry's real creation time rather than staying at
+    // midnight (see build/prepare/dateStamp and sync/renames.js).
+    var dateOnly = moment.utc().format("M/D/YYYY");
+    var content = "Date: " + dateOnly + "\n\n" + this.fake.file();
+    var ctx = this;
+
+    sync(this.blog.id, function (err, folder, done) {
+      if (err) return testDone.fail(err);
+
+      fs.outputFileSync(folder.path + path, content, "utf-8");
+
+      folder.update(path, function (err) {
+        if (err) return testDone.fail(err);
+
+        fs.moveSync(folder.path + path, folder.path + newPath);
+
+        async.series(
+          [folder.update.bind(this, path), folder.update.bind(this, newPath)],
+          function (err) {
+            if (err) return testDone.fail(err);
+
+            done(null, function (err) {
+              if (err) return testDone.fail(err);
+
+              ctx.checkEntry({ path: newPath, deleted: false }, function (
+                err,
+                entry
+              ) {
+                if (err) return testDone.fail(err);
+
+                expect(
+                  moment.utc(entry.dateStamp).format("YYYY-MM-DD HH:mm")
+                ).toEqual(moment.utc(entry.created).format("YYYY-MM-DD HH:mm"));
+
+                testDone();
+              });
+            });
+          }
+        );
+      });
+    });
+  });
+
   it("detects a renamed file", function (testDone) {
     var path = this.fake.path(".txt");
     var newPath = this.fake.path(".txt");

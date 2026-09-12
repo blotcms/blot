@@ -28,7 +28,12 @@ module.exports = (function () {
       each(
         blogID,
         function (entry, nextEntry) {
-          var dateStamp = DateStamp(blog, entry.path, entry.metadata);
+          var dateStamp = DateStamp(
+            blog,
+            entry.path,
+            entry.metadata,
+            typeof entry.created === "number" ? entry.created : undefined
+          );
           var changes = {};
 
           // This is fine!

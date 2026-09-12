@@ -8,6 +8,7 @@ var BuildMultiple = require("./multiple");
 var Prepare = require("./prepare");
 var Thumbnail = require("./thumbnail");
 var DateStamp = require("./prepare/dateStamp");
+var Entry = require("models/entry");
 var moment = require("moment");
 var enabledConverters = require("./converters/enabled");
 var pathNormalizer = require("helper/pathNormalizer");
@@ -128,50 +129,65 @@ function buildWith(blog, path, multiInfo, callback) {
         // Could be lots of reasons (404?)
         if (err || !thumbnail) thumbnail = {};
 
-        var entry;
+        // Used by DateStamp: if the metadata date has no time-of-day, and
+        // the entry was first created by Blot on that same calendar day,
+        // we reuse the entry's original creation time rather than midnight.
+        // A brand new entry has no stored 'created' yet - Entry.set is
+        // about to assign it Date.now() moments after this build finishes,
+        // so use that same instant here rather than leaving it undefined.
+        // Otherwise a post created *and* dated for today would never
+        // benefit from this until some later, unrelated rebuild.
+        Entry.get(blog.id, entryPath, function (existingEntry) {
+          var previousCreated =
+            existingEntry && typeof existingEntry.created === "number"
+              ? existingEntry.created
+              : Date.now();
 
-        // Given the properties above
-        // that we've extracted from the
-        // local file, compute stuff like
-        // the teaser, isDraft etc..
+          var entry;
 
-        try {
-          entry = {
-            html: html,
-            name: basename(entryPath),
-            path: entryPath,
-            id: entryPath,
-            thumbnail: thumbnail,
-            draft: is_draft,
-            metadata: metadata,
-            size: typeof stat.size === "number" ? stat.size : 0,
-            dependencies: dependencies,
-            exif: (extras && extras.exif) || {},
-            dateStamp: DateStamp(blog, entryPath, metadata),
-            updated: stat && stat.mtime ? moment.utc(stat.mtime).valueOf() : Date.now(),
-          };
+          // Given the properties above
+          // that we've extracted from the
+          // local file, compute stuff like
+          // the teaser, isDraft etc..
 
-          if (entry.dateStamp === undefined) {
-            entry.dateStampWasRemoved = true;
-            delete entry.dateStamp;
+          try {
+            entry = {
+              html: html,
+              name: basename(entryPath),
+              path: entryPath,
+              id: entryPath,
+              thumbnail: thumbnail,
+              draft: is_draft,
+              metadata: metadata,
+              size: typeof stat.size === "number" ? stat.size : 0,
+              dependencies: dependencies,
+              exif: (extras && extras.exif) || {},
+              dateStamp: DateStamp(blog, entryPath, metadata, previousCreated),
+              updated: stat && stat.mtime ? moment.utc(stat.mtime).valueOf() : Date.now(),
+            };
+
+            if (entry.dateStamp === undefined) {
+              entry.dateStampWasRemoved = true;
+              delete entry.dateStamp;
+            }
+
+            debug(
+              "Blog:",
+              blog.id,
+              entryPath,
+              " preparing additional properties for",
+              entry.name
+            );
+            entry = Prepare(entry, {
+              titlecase: blog.plugins.titlecase.enabled,
+            });
+            debug("Blog:", blog.id, path, " additional properties computed.");
+          } catch (e) {
+            return callback(e);
           }
 
-          debug(
-            "Blog:",
-            blog.id,
-            entryPath,
-            " preparing additional properties for",
-            entry.name
-          );
-          entry = Prepare(entry, {
-            titlecase: blog.plugins.titlecase.enabled,
-          });
-          debug("Blog:", blog.id, path, " additional properties computed.");
-        } catch (e) {
-          return callback(e);
-        }
-
-        callback(null, entry);
+          callback(null, entry);
+        });
       });
     });
   });
