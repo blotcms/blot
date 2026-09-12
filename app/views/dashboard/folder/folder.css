@@ -53,20 +53,23 @@
   }
 
   /* Progress UI is suppressed for the folder footer in sync_status.js;
-     keep the line compact even if has-progress is present. */
-  .sync-status.has-progress {
+     keep the line compact even if has-progress is present. Scoped to
+     .status-link so this doesn't hide progress bars on other dashboard
+     pages (import, client reset/disconnect, Google Drive connect) where
+     dashboard.min.css's global bundle would otherwise apply it too. */
+  .status-link .sync-status.has-progress {
     display: flex;
     height: 1.5em;
     overflow: hidden;
     width: auto;
   }
 
-  .sync-status.has-progress .sync-status-progress,
-  .sync-status.has-progress .sync-status-progress-label {
+  .status-link .sync-status.has-progress .sync-status-progress,
+  .status-link .sync-status.has-progress .sync-status-progress-label {
     display: none;
   }
 
-  .sync-status.has-progress .sync-status-icon {
+  .status-link .sync-status.has-progress .sync-status-icon {
     display: inline;
   }
 
