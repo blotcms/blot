@@ -1,3 +1,7 @@
+Fix performance bugs on nashp and anchor and re-enable sites
+
+---
+
 Google Drive:
 - Fix bug with repeat resyncs of specific sites via Google Drive:
 - To identify, run node scripts/google-drive/resync.js multiple times, some sites continually resync the same files...
