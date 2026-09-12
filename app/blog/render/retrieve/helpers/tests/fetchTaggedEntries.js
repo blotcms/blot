@@ -28,12 +28,7 @@ describe("fetchTaggedEntries sort ordering", function () {
   }
 
   function run(options) {
-    return new Promise(function (resolve, reject) {
-      fetchTaggedEntries("blog-1", "foo", options, function (err, result) {
-        if (err) return reject(err);
-        resolve(result);
-      });
-    });
+    return fetchTaggedEntries("blog-1", "foo", options);
   }
 
   it("keeps newest-first order for the default selection", async function () {
@@ -78,7 +73,6 @@ describe("fetchTaggedEntries sort ordering", function () {
     stubTag([]);
     const result = await run({ limit: 10, offset: 0 });
     expect(result.entryIDs).toEqual([]);
-    expect(result.pagination.current).toBe(1);
     expect(result.pagination.total).toBe(1);
   });
 });

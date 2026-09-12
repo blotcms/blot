@@ -1,12 +1,17 @@
-const Entry = require("models/entry");
+const { getEntry } = require("../../lib/models");
 const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const entryFieldList = require("./helpers/entryFieldList");
-const withEntryFields = require("./helpers/withEntryFields");
+const withEntryFields = require("../../lib/withEntryFields");
+const asRetriever = require("../../lib/asRetriever");
+const {
+  normalizePageNumber,
+  normalizePageSize,
+} = require("../../lib/pagination");
 const getTemplateSortOptions = require("blog/sortOptions");
 const { sortEntries } = getTemplateSortOptions;
 
-module.exports = function (req, res, callback) {
+async function tagged(req, res) {
   const blogID = req.blog.id;
   const tags =
     req.query.name ||
@@ -15,75 +20,60 @@ module.exports = function (req, res, callback) {
     (res.locals && res.locals.tag) ||
     "";
 
-  let page = parseInt(req.params.page, 10);
-  if (!page || page < 1) page = 1;
+  const page = normalizePageNumber(req.params.page);
 
   const templateLocals = (req.template && req.template.locals) || {};
   const pathPrefix =
     (res.locals && res.locals.path_prefix) ?? templateLocals.path_prefix;
   const sortOptions = getTemplateSortOptions(templateLocals);
 
-  let preferredLimit;
+  const preferredLimit =
+    templateLocals.tagged_page_size !== undefined
+      ? templateLocals.tagged_page_size
+      : templateLocals.page_size;
 
-  if (templateLocals.tagged_page_size !== undefined) {
-    preferredLimit = templateLocals.tagged_page_size;
-  } else {
-    preferredLimit = templateLocals.page_size;
-  }
-
-  let limit = parseInt(preferredLimit, 10);
-  if (!Number.isFinite(limit)) limit = undefined;
-
-  if (!limit || limit < 1 || limit > 500) limit = 100;
-
+  const limit = normalizePageSize(preferredLimit);
   const offset = (page - 1) * limit;
 
-  fetchTaggedEntries(
-    blogID,
-    tags,
-    { limit, offset, pathPrefix, ...sortOptions },
-    function (err, result) {
-      if (err) return callback(err);
+  const result = await fetchTaggedEntries(blogID, tags, {
+    limit,
+    offset,
+    pathPrefix,
+    ...sortOptions,
+  });
 
-      const fields = entryFieldList(req.retrieve, ["tagged"]);
-      const entryIDs = result.entryIDs || [];
+  const fields = entryFieldList(req.retrieve, ["tagged"]);
+  const entryIDs = result.entryIDs || [];
 
-      const withEntries = function (entries) {
-        entries = sortEntries(entries, sortOptions);
+  let entries;
+  if (!fields) {
+    entries = await getEntry(blogID, entryIDs);
+  } else {
+    entries = await withEntryFields(
+      () => getEntry(blogID, entryIDs, fields),
+      () => getEntry(blogID, entryIDs)
+    );
+  }
 
-        projectEntryFields(entries, req.retrieve, ["tagged"]);
+  entries = sortEntries(entries, sortOptions);
+  projectEntryFields(entries, req.retrieve, ["tagged"]);
 
-        const totalEntries =
-          result.total !== undefined
-            ? result.total
-            : (result.entryIDs || []).length;
+  const totalEntries =
+    result.total !== undefined ? result.total : (result.entryIDs || []).length;
 
-        res.locals.pagination = res.locals.pagination || result.pagination || {};
+  res.locals.pagination = res.locals.pagination || result.pagination || {};
 
-        callback(null, {
-          tag: result.tag,
-          tagged: result.tagged,
-          is: result.tagged, // alias
-          entries,
-          pagination: result.pagination,
-          total: totalEntries,
-          entryIDs: result.entryIDs || [],
-          slugs: result.slugs,
-          prettyTags: result.prettyTags,
-        });
-      };
-
-      if (!fields) return Entry.get(blogID, entryIDs, withEntries);
-
-      withEntryFields(
-        function (cb) {
-          Entry.get(blogID, entryIDs, fields, cb);
-        },
-        function (cb) {
-          Entry.get(blogID, entryIDs, cb);
-        },
-        withEntries
-      );
-    }
-  );
+  return {
+    tag: result.tag,
+    tagged: result.tagged,
+    is: result.tagged, // alias
+    entries,
+    pagination: result.pagination,
+    total: totalEntries,
+    entryIDs: result.entryIDs || [],
+    slugs: result.slugs,
+    prettyTags: result.prettyTags,
+  };
 };
+
+module.exports = asRetriever(tagged);

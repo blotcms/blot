@@ -1,5 +1,5 @@
 const lookupFile = require("./lookupFile");
-const config = require("config");
+const blogHosts = require("../../lib/blogHosts");
 
 const htmlExtRegex = /\.html$/;
 const fileExtRegex = /[^/]*\.[^/]*$/;
@@ -11,19 +11,7 @@ module.exports = async function replaceCssUrls(blog, css, log = () => {}) {
     const blogID = blog.id;
     const cacheID = blog.cacheID;
 
-    const hosts = [
-      blog.handle + "." + config.host,
-      "www." + blog.handle + "." + config.host,
-    ];
-
-    if (blog.domain) {
-      hosts.push(blog.domain);
-      if (blog.domain.startsWith("www.")) {
-        hosts.push(blog.domain.slice(4));
-      } else {
-        hosts.push("www." + blog.domain);
-      }
-    }
+    const hosts = blogHosts(blog);
 
     // Create regex patterns for each host
     const hostPatterns = hosts.map(

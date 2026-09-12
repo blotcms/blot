@@ -17,7 +17,7 @@ describe("blog asset symlink policy", function () {
     await fs.symlink("../folder/file.txt", path.join(blog, "index-link/index.html"));
     const module = {exports:{}};
     const config = {blog_folder_dir:path.join(dir,"blogs"), blog_static_files_dir:path.join(dir,"static"), blot_directory:dir};
-    vm.runInNewContext(await fs.readFile(require.resolve("../assets"), "utf8"), {
+    vm.runInNewContext(await fs.readFile(require.resolve("../routes/assets"), "utf8"), {
       module, exports:module.exports,
       require:name => name === "config" ? config : require(name),
     });

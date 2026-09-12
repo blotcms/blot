@@ -1,5 +1,8 @@
-const Entries = require("models/entries");
+const { getTotal } = require("../../lib/models");
+const asRetriever = require("../../lib/asRetriever");
 
-module.exports = function (req, res, callback) {
-  Entries.getTotal(req.blog.id, callback);
+async function totalPosts(req, res) {
+  return getTotal(req.blog.id);
 };
+
+module.exports = asRetriever(totalPosts);

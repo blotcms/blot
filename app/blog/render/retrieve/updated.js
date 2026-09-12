@@ -1,12 +1,13 @@
 const moment = require("moment");
+const asRetriever = require("../../lib/asRetriever");
 require("moment-timezone");
 
-module.exports = function (req, res, callback) {
-  return callback(null, function () {
+module.exports = asRetriever(function (req, res) {
+  return function () {
     const d = moment.utc(req.blog.cacheID).tz(req.blog.timeZone);
 
     // Section: {{#date}} YYYY {{/date}}
-    var renderDate = function () {
+    const renderDate = function () {
       let [text, render] = arguments; // text = block contents
 
       try {
@@ -32,5 +33,5 @@ module.exports = function (req, res, callback) {
     };
 
     return renderDate;
-  });
-};
+  };
+});

@@ -1,8 +1,8 @@
-var config = require("config");
-var withEntryFields = require("../helpers/withEntryFields");
+const config = require("config");
+const withEntryFields = require("../../../lib/withEntryFields");
 
-describe("retrieve/withEntryFields", function () {
-  var previousFlag;
+describe("lib/withEntryFields", function () {
+  let previousFlag;
 
   beforeEach(function () {
     previousFlag = config.redis.readEntriesFromHash;
@@ -12,82 +12,62 @@ describe("retrieve/withEntryFields", function () {
     config.redis.readEntriesFromHash = previousFlag;
   });
 
-  it("passes the narrow fetch straight through when hash reads are off", function (done) {
+  it("passes the narrow fetch straight through when hash reads are off", async function () {
     config.redis.readEntriesFromHash = false;
 
-    var fullCalled = false;
+    let fullCalled = false;
 
-    withEntryFields(
-      function (cb) {
-        cb([{ title: "{{summary}}" }]); // Mustache present, but flag is off
-      },
-      function (cb) {
+    const result = await withEntryFields(
+      async () => [{ title: "{{summary}}" }],
+      async () => {
         fullCalled = true;
-        cb("full");
-      },
-      function (result) {
-        expect(fullCalled).toBe(false);
-        expect(result).toEqual([{ title: "{{summary}}" }]);
-        done();
+        return "full";
       }
     );
+
+    expect(fullCalled).toBe(false);
+    expect(result).toEqual([{ title: "{{summary}}" }]);
   });
 
-  it("returns the narrow result unchanged when no entry has Mustache", function (done) {
+  it("returns the narrow result unchanged when no entry has Mustache", async function () {
     config.redis.readEntriesFromHash = true;
 
-    var fullCalled = false;
+    let fullCalled = false;
 
-    withEntryFields(
-      function (cb) {
-        cb([{ title: "Plain" }, { title: "Also plain" }]);
-      },
-      function (cb) {
+    const result = await withEntryFields(
+      async () => [{ title: "Plain" }, { title: "Also plain" }],
+      async () => {
         fullCalled = true;
-        cb("full");
-      },
-      function (result) {
-        expect(fullCalled).toBe(false);
-        expect(result.length).toBe(2);
-        done();
+        return "full";
       }
     );
+
+    expect(fullCalled).toBe(false);
+    expect(result.length).toBe(2);
   });
 
-  it("refetches in full when a narrowed entry carries Mustache", function (done) {
+  it("refetches in full when a narrowed entry carries Mustache", async function () {
     config.redis.readEntriesFromHash = true;
 
-    withEntryFields(
-      function (cb) {
-        cb([
-          { title: "Plain" },
-          { title: "{{#allEntries}}{{summary}}{{/allEntries}}" },
-        ]);
-      },
-      function (cb) {
-        cb("full entries");
-      },
-      function (result) {
-        expect(result).toEqual("full entries");
-        done();
-      }
+    const result = await withEntryFields(
+      async () => [
+        { title: "Plain" },
+        { title: "{{#allEntries}}{{summary}}{{/allEntries}}" },
+      ],
+      async () => "full entries"
     );
+
+    expect(result).toEqual("full entries");
   });
 
-  it("handles a single entry (not an array) from the narrow fetch", function (done) {
+  it("handles a single entry (not an array) from the narrow fetch", async function () {
     config.redis.readEntriesFromHash = true;
 
-    withEntryFields(
-      function (cb) {
-        cb({ title: "{{foo}}" });
-      },
-      function (cb) {
-        cb("full");
-      },
-      function (result) {
-        expect(result).toEqual("full");
-        done();
-      }
+    const result = await withEntryFields(
+      async () => ({ title: "{{foo}}" }),
+      async () => "full"
     );
+
+    expect(result).toEqual("full");
   });
 });

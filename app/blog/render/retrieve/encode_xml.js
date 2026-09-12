@@ -2,23 +2,23 @@
 // inclusion in a CDATA-fenced description tag for an RSS
 // feed item. It resolves relative URLs to make the result
 // more portable. It should help produce valid feeds.
-
-var absolute_urls = require("./absolute_urls").absolute_urls;
-var cheerio = require("cheerio");
+const absolute_urls = require("./absolute_urls").absolute_urls;
+const cheerio = require("cheerio");
+const asRetriever = require("../../lib/asRetriever");
 
 // Removes everything forbidden by XML 1.0 specifications,
 // plus the unicode replacement character U+FFFD
-function removeXMLInvalidChars (string) {
-  var regex =
+function removeXMLInvalidChars(string) {
+  const regex =
     /((?:[\0-\x08\x0B\f\x0E-\x1F\uFFFD\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF]))/g;
   return string.replace(regex, "");
 }
 
-module.exports = function (req, res, callback) {
-  return callback(null, function () {
+module.exports = asRetriever(function (req, res) {
+  return function () {
     return function (text, render) {
-      var xml;
-      var $;
+      let xml;
+      let $;
 
       text = render(text);
 
@@ -26,7 +26,7 @@ module.exports = function (req, res, callback) {
         $ = cheerio.load(
           text,
           {
-            decodeEntities: false
+            decodeEntities: false,
           },
           false
         );
@@ -40,5 +40,5 @@ module.exports = function (req, res, callback) {
 
       return xml || text;
     };
-  });
-};
+  };
+});

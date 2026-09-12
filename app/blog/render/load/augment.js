@@ -1,21 +1,19 @@
-var normalize = require("models/tags").normalize;
-var type = require("helper/type");
-var Entry = require("models/entry");
-var async = require("async");
-var _ = require("lodash");
-var moment = require("moment");
-var debug = require("debug")("blog:render:augment");
+const normalize = require("models/tags").normalize;
+const type = require("helper/type");
+const { getEntryByUrl } = require("../../lib/models");
+const moment = require("moment");
+const debug = require("debug")("blog:render:augment");
 require("moment-timezone");
 
-module.exports = function (req, res, entry, callback) {
-  var blog = req.blog;
+module.exports = async function augment(req, res, entry) {
+  const blog = req.blog;
 
   entry.metadata = createRenderMetadata(entry.metadata);
 
   // Can be either inherited from the properties of the blog
   // or from the template, or from the view
-  var hideDate = res.locals.hide_dates || false;
-  var dateDisplay = res.locals.date_display || "MMMM D, Y";
+  const hideDate = res.locals.hide_dates || false;
+  const dateDisplay = res.locals.date_display || "MMMM D, Y";
 
   entry.formatDate = FormatDate(entry.dateStamp, req.blog.timeZone);
   entry.formatUpdated = FormatDate(entry.updated, req.blog.timeZone);
@@ -43,12 +41,12 @@ module.exports = function (req, res, entry, callback) {
     delete entry.thumbnail;
   }
 
-  var tags = [];
-  var tagged = {};
-  var totalTags = entry.tags.length;
+  const tags = [];
+  const tagged = {};
+  const totalTags = entry.tags.length;
 
-  for (var i = 0; i < totalTags; i++) {
-    var tag = entry.tags[i];
+  for (let i = 0; i < totalTags; i++) {
+    const tag = entry.tags[i];
 
     // augment has already been called on this
     // entry there is a bug in eachEntry
@@ -67,8 +65,8 @@ module.exports = function (req, res, entry, callback) {
 
     if (!tag) continue;
 
-    var slug = normalize(tag);
-    var lower = tag.toLowerCase();
+    const slug = normalize(tag);
+    const lower = tag.toLowerCase();
 
     tagged[tag] = tagged[lower] = tagged[slug] = true;
 
@@ -81,7 +79,7 @@ module.exports = function (req, res, entry, callback) {
     });
   }
 
-  for (var k in entry.thumbnail) {
+  for (const k in entry.thumbnail) {
     entry.thumbnail[k].ratio =
       (entry.thumbnail[k].height / entry.thumbnail[k].width) * 100 + "%";
   }
@@ -107,38 +105,41 @@ module.exports = function (req, res, entry, callback) {
 
   debug(entry.path, "fetching backlinks", entry.backlinks);
 
-  async.map(
-    entry.backlinks,
-    function (linkUrl, next) {
+  const resolved = await Promise.all(
+    entry.backlinks.map(async (linkUrl) => {
       debug("Looking up backlink for linkUrl", linkUrl);
       if (typeof linkUrl !== "string") {
-        return next(null, null);
+        return null;
       }
-      Entry.getByUrl(req.blog.id, linkUrl, function (entry) {
-        if (entry) {
-          debug("Found", entry.path, "for", linkUrl);
-        } else {
-          debug("No entry found for", linkUrl);
-        }
-        next(null, entry);
-      });
-    },
-    function (err, backlinks) {
-      debug(entry.path, "fetched backlinks", backlinks);
-      entry.backlinks = backlinks.filter(
-        (backlinkedEntry) =>
-          !!backlinkedEntry &&
-          // we don't want to show unpublished entries
-          !backlinkedEntry.scheduled &&
-          // we don't want to show the same entry
-          backlinkedEntry.path !== entry.path
-      );
-      entry.backlinks = _.uniqBy(entry.backlinks, "path");
-      debug(entry.path, "final backlinks", entry.backlinks);
-
-      callback();
-    }
+      const linked = await getEntryByUrl(req.blog.id, linkUrl);
+      if (linked) {
+        debug("Found", linked.path, "for", linkUrl);
+      } else {
+        debug("No entry found for", linkUrl);
+      }
+      return linked;
+    })
   );
+
+  debug(entry.path, "fetched backlinks", resolved);
+  entry.backlinks = resolved.filter(
+    (backlinkedEntry) =>
+      !!backlinkedEntry &&
+      // we don't want to show unpublished entries
+      !backlinkedEntry.scheduled &&
+      // we don't want to show the same entry
+      backlinkedEntry.path !== entry.path
+  );
+
+  // Deduplicate by path without lodash
+  const seen = new Set();
+  entry.backlinks = entry.backlinks.filter((item) => {
+    if (seen.has(item.path)) return false;
+    seen.add(item.path);
+    return true;
+  });
+
+  debug(entry.path, "final backlinks", entry.backlinks);
 };
 
 function createRenderMetadata(sourceMetadata) {
@@ -146,14 +147,17 @@ function createRenderMetadata(sourceMetadata) {
     return sourceMetadata;
   }
 
-  var renderMetadata = Object.assign({}, sourceMetadata);
-  var keys = Object.keys(sourceMetadata);
+  const renderMetadata = Object.assign({}, sourceMetadata);
+  const keys = Object.keys(sourceMetadata);
 
-  for (var i = 0; i < keys.length; i++) {
-    var key = keys[i];
-    var lowerKey = key.toLowerCase();
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    const lowerKey = key.toLowerCase();
 
-    if (lowerKey === key || Object.prototype.hasOwnProperty.call(renderMetadata, lowerKey)) {
+    if (
+      lowerKey === key ||
+      Object.prototype.hasOwnProperty.call(renderMetadata, lowerKey)
+    ) {
       continue;
     }
 

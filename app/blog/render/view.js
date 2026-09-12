@@ -1,11 +1,7 @@
-const { promisify } = require("util");
 const Blog = require("models/blog");
 const blogDefaults = require("models/blog/defaults");
 const renderMiddleware = require("./middleware");
-const getMetadata = require("models/template/getMetadata");
-
-const getMetadataAsync = promisify(getMetadata);
-const getBlogAsync = promisify(Blog.get);
+const { getMetadata, getBlog } = require("../lib/models");
 
 /**
  * Render a view for CDN manifest generation
@@ -15,8 +11,7 @@ const getBlogAsync = promisify(Blog.get);
  */
 async function renderView(templateID, viewName) {
   try {
-    // Fetch metadata
-    const metadata = await getMetadataAsync(templateID);
+    const metadata = await getMetadata(templateID);
     if (!metadata) {
       return null; // Missing metadata - skip in manifest
     }
@@ -32,7 +27,7 @@ async function renderView(templateID, viewName) {
     if (ownerID === "SITE") {
       blogData = { id: "SITE" };
     } else {
-      blogData = await getBlogAsync({ id: ownerID });
+      blogData = await getBlog({ id: ownerID });
       if (!blogData) {
         return null; // Missing blog - skip in manifest
       }
@@ -40,7 +35,6 @@ async function renderView(templateID, viewName) {
 
     const blog = Blog.extend(Object.assign({}, blogDefaults, blogData));
 
-    // Create mock req/res objects compatible with render middleware
     let renderedOutput = null;
     let renderError = null;
 
@@ -51,7 +45,8 @@ async function renderView(templateID, viewName) {
       template: {
         locals: metadata.locals || {},
         id: templateID,
-        cdn: metadata.cdn && typeof metadata.cdn === "object" ? metadata.cdn : {},
+        cdn:
+          metadata.cdn && typeof metadata.cdn === "object" ? metadata.cdn : {},
       },
       query: {},
       protocol: "https",
@@ -68,7 +63,6 @@ async function renderView(templateID, viewName) {
       renderView: null, // Set by render middleware
     };
 
-    // Call render middleware
     await new Promise((resolve) => {
       renderMiddleware(req, res, (err) => {
         if (err) {
@@ -84,30 +78,33 @@ async function renderView(templateID, viewName) {
       return null;
     }
 
-    // Render the view - use callback pattern which is simpler
     await new Promise((resolve) => {
-      res.renderView(viewName, (err) => {
-        // next callback - called on errors
-        if (err) {
-          if (err.code === "NO_VIEW") {
-            // Missing view - skip in manifest (not an error)
-            renderError = null;
-          } else {
+      res.renderView(
+        viewName,
+        (err) => {
+          // next callback - called on errors
+          if (err) {
+            if (err.code === "NO_VIEW") {
+              // Missing view - skip in manifest (not an error)
+              renderError = null;
+            } else {
+              renderError = err;
+              console.error(`Error rendering view ${viewName} for CDN:`, err);
+            }
+          }
+          resolve();
+        },
+        (err, output) => {
+          // callback pattern - captures output directly
+          if (err) {
             renderError = err;
             console.error(`Error rendering view ${viewName} for CDN:`, err);
+          } else {
+            renderedOutput = output;
           }
+          resolve();
         }
-        resolve();
-      }, (err, output) => {
-        // callback pattern - captures output directly
-        if (err) {
-          renderError = err;
-          console.error(`Error rendering view ${viewName} for CDN:`, err);
-        } else {
-          renderedOutput = output;
-        }
-        resolve();
-      });
+      );
     });
 
     if (renderError) {
@@ -128,4 +125,3 @@ async function renderView(templateID, viewName) {
 }
 
 module.exports = renderView;
-

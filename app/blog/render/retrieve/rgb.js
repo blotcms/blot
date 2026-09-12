@@ -2,16 +2,17 @@
 // lower-opacity versions of the color, e.g.
 // background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1);
 const tinyColor = require("helper/tinyColor");
+const asRetriever = require("../../lib/asRetriever");
 
-module.exports = function (req, res, callback) {
-  return callback(null, function () {
+module.exports = asRetriever(function (req, res) {
+  return function () {
     return function (text, render) {
-      var rgb = "";
+      let rgb = "";
 
       text = render(text);
 
       try {
-        let { r, g, b } = tinyColor(text).toRgb();
+        const { r, g, b } = tinyColor(text).toRgb();
         rgb = `${r}, ${g}, ${b}`;
       } catch (e) {
         return text;
@@ -19,5 +20,5 @@ module.exports = function (req, res, callback) {
 
       return rgb;
     };
-  });
-};
+  };
+});

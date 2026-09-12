@@ -16,24 +16,25 @@ I can use this lamba to accomplish the following in my template:
   ... then render the grid layout
 {{/is.layout.grid}}
 
-The lamba loops over the top-level variables, checks if they 
+The lamba loops over the top-level variables, checks if they
 are strings and if so, then creates a child object that looks
 like this: { grid: true }.
 
-I chose "is" instead of "if" to avoid future conflicts if we 
+I chose "is" instead of "if" to avoid future conflicts if we
 move to handlebars, say.
 
 */
+const asRetriever = require("../../lib/asRetriever");
 
-module.exports = function (req, res, callback) {
-  let is = {};
+module.exports = asRetriever(function (req, res) {
+  const is = {};
 
-  for (let local in req.template.locals) {
+  for (const local in req.template.locals) {
     if (typeof req.template.locals[local] === "string") {
       is[local] = {};
       is[local][req.template.locals[local]] = true;
     }
   }
 
-  return callback(null, is);
-};
+  return is;
+});

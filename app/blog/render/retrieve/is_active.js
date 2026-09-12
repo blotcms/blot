@@ -1,15 +1,16 @@
-var normalize = require("helper/urlNormalizer");
+const normalize = require("helper/urlNormalizer");
+const asRetriever = require("../../lib/asRetriever");
 
-module.exports = function (req, res, callback) {
-  return callback(null, function () {
-    var url = normalize(req.url) || "/";
+module.exports = asRetriever(function (req, res) {
+  return function () {
+    const url = normalize(req.url) || "/";
 
     return function (text) {
-      var active = "";
+      let active = "";
 
       if (text === url) active = "active";
 
       return active;
     };
-  });
-};
+  };
+});

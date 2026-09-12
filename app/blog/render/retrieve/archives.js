@@ -1,68 +1,65 @@
-var Entries = require("models/entries");
-var arrayify = require("helper/arrayify");
-var projectEntryFields = require("./helpers/projectEntryFields");
-var entryFieldList = require("./helpers/entryFieldList");
-var withEntryFields = require("./helpers/withEntryFields");
-var moment = require("moment");
+const { getAll } = require("../../lib/models");
+const arrayify = require("helper/arrayify");
+const projectEntryFields = require("./helpers/projectEntryFields");
+const entryFieldList = require("./helpers/entryFieldList");
+const withEntryFields = require("../../lib/withEntryFields");
+const moment = require("moment");
 require("moment-timezone");
+const asRetriever = require("../../lib/asRetriever");
 
-module.exports = function (req, res, callback) {
-  var fields = entryFieldList(req.retrieve, ["archives"]);
+async function archives(req, res) {
+  const fields = entryFieldList(req.retrieve, ["archives"]);
 
-  var build = function (allEntries) {
-    // dateStamp is always kept, so the year/month grouping below is unaffected.
-    projectEntryFields(allEntries, req.retrieve, ["archives"]);
+  let allEntries;
+  if (!fields) {
+    allEntries = await getAll(req.blog.id);
+  } else {
+    allEntries = await withEntryFields(
+      () => getAll(req.blog.id, { fields }),
+      () => getAll(req.blog.id)
+    );
+  }
 
-    var years = {};
+  // dateStamp is always kept, so the year/month grouping below is unaffected.
+  projectEntryFields(allEntries, req.retrieve, ["archives"]);
 
-    for (var x in allEntries) {
-      var entry = allEntries[x];
+  const years = {};
 
-      var date = moment.utc(entry.dateStamp).tz(req.blog.timeZone);
+  for (const x in allEntries) {
+    const entry = allEntries[x];
 
-      var year = date.format("YYYY");
-      var month = date.format("MMMM");
+    const date = moment.utc(entry.dateStamp).tz(req.blog.timeZone);
 
-      // Init an empty data structure
-      years[year] = years[year] || {
-        year: year,
-        total: 0,
-        months: {}
-      };
+    const year = date.format("YYYY");
+    const month = date.format("MMMM");
 
-      years[year].months[month] = years[year].months[month] || {
-        month: month,
-        entries: []
-      };
+    // Init an empty data structure
+    years[year] = years[year] || {
+      year: year,
+      total: 0,
+      months: {},
+    };
 
-      years[year].months[month].entries.push(entry);
-      years[year].total++;
-    }
+    years[year].months[month] = years[year].months[month] || {
+      month: month,
+      entries: [],
+    };
 
-    for (var i in years) {
-      for (var j in years[i].months)
-        years[i].months[j].s = years[i].months[j].entries.length > 1 ? "s" : "";
+    years[year].months[month].entries.push(entry);
+    years[year].total++;
+  }
 
-      years[i].months = arrayify(years[i].months);
-      years[i].s = years[i].total > 1 ? "s" : "";
-    }
+  for (const i in years) {
+    for (const j in years[i].months)
+      years[i].months[j].s = years[i].months[j].entries.length > 1 ? "s" : "";
 
-    years = arrayify(years).sort(function (a, b) {
-      return parseInt(b.year) - parseInt(a.year);
-    });
+    years[i].months = arrayify(years[i].months);
+    years[i].s = years[i].total > 1 ? "s" : "";
+  }
 
-    return callback(null, years);
-  };
-
-  if (!fields) return Entries.getAll(req.blog.id, build);
-
-  withEntryFields(
-    function (cb) {
-      Entries.getAll(req.blog.id, { fields: fields }, cb);
-    },
-    function (cb) {
-      Entries.getAll(req.blog.id, cb);
-    },
-    build
-  );
+  return arrayify(years).sort(function (a, b) {
+    return parseInt(b.year) - parseInt(a.year);
+  });
 };
+
+module.exports = asRetriever(archives);

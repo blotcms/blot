@@ -1,4 +1,4 @@
-/* 
+/*
 
 This function accepts some HTML and will resolve any relative
 URLs against the host for the particular request. This is only
@@ -16,15 +16,15 @@ Use it like this:
 {{/absolute_urls}}
 
 */
+const cheerio = require("cheerio");
+const debug = require("debug")("blot:render:absolute_urls");
+const asRetriever = require("../../lib/asRetriever");
 
-var cheerio = require("cheerio");
-var debug = require("debug")("blot:render:absolute_urls");
-
-function absolute_urls (base, $) {
+function absolute_urls(base, $) {
   try {
     $("[href], [src]").each(function () {
-      var href = $(this).attr("href");
-      var src = $(this).attr("src");
+      const href = $(this).attr("href");
+      const src = $(this).attr("src");
 
       // This is a little naive but whatever.
       // For example, what about protcol-less
@@ -44,22 +44,22 @@ function absolute_urls (base, $) {
   return $;
 }
 
-module.exports = function (req, res, callback) {
-  return callback(null, function () {
+module.exports = asRetriever(function (req, res) {
+  return function () {
     return function (text, render) {
-      var base = req.protocol + "://" + req.get("host");
+      const base = req.protocol + "://" + req.get("host");
 
       text = render(text);
 
-      var $ = cheerio.load(text, null, false);
+      let $ = cheerio.load(text, null, false);
 
       text = absolute_urls(base, $);
       text = $.html();
 
       return text;
     };
-  });
-};
+  };
+});
 
 // We also want to use this function in encode_xml
 // so we export it without the callback wrapper.

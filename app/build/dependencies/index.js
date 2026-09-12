@@ -24,7 +24,7 @@ var metadataCaseInsensitive = require("helper/metadataCaseInsensitive");
 // exact path recorded as a dependency.
 //
 // Two accepted edge cases. First: static asset requests are decoded
-// with decodeURIComponent (app/blog/assets.js), which restores every
+// with decodeURIComponent (app/blog/routes/assets.js), which restores every
 // escape, but Entry.getByUrl and the image transformer use decodeURI,
 // which leaves "%23"/"%3F" encoded - so a folder whose name literally
 // contains "#" or "?" is still served as a static file but misses

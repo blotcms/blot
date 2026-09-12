@@ -1,5 +1,5 @@
 describe("blog server vhosts", function () {
-  var vhosts = require("../vhosts");
+  var vhosts = require("../middleware/vhosts");
   var config = require("config");
 
   it("extracts a blot domain", function (done) {
@@ -59,7 +59,7 @@ describe("blog server vhosts", function () {
         isSubdomain,
         extractHandle,
         extractPreviewTemplate,
-      } = require("../vhosts");
+      } = require("../middleware/vhosts");
       assert(isSubdomain("david." + config.host));
       assert(isSubdomain("a.b.c.d.e.f.g." + config.host));
 

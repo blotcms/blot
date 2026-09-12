@@ -260,7 +260,7 @@ function isFile(file, callback) {
   });
 }
 
-// Entry.getByUrl and app/blog/view.js decode the URL differently, so we
+// Entry.getByUrl and app/blog/routes/view.js decode the URL differently, so we
 // match whichever the lookup we're about to make uses.
 function decodeURISafely(url) {
   try {

@@ -1,18 +1,20 @@
+const asRetriever = require("../../lib/asRetriever");
+
 function canonicalize(url) {
   // Split off the query string and/or fragment so their delimiters are treated
   // as structural URL syntax rather than being folded into path-segment
   // encoding. Otherwise a slug containing an encoded "?" (e.g. `foo%3Fbar`)
   // would canonicalize to the same value as a distinct link with a real query
   // string (`foo?bar`).
-  var suffixIndex = url.search(/[?#]/);
-  var suffix = "";
+  let suffixIndex = url.search(/[?#]/);
+  let suffix = "";
 
   if (suffixIndex !== -1) {
     suffix = url.slice(suffixIndex);
     url = url.slice(0, suffixIndex);
   }
 
-  var segments = url.split("/").map(function (segment) {
+  const segments = url.split("/").map(function (segment) {
     return decodeURIComponent(segment);
   });
 
@@ -26,10 +28,12 @@ function canonicalize(url) {
   return segments.map(encodeURIComponent).join("/") + suffix;
 }
 
-module.exports = function (req, res, callback) {
-  return callback(null, function () {
-    var url;
-    var link;
+// Sync Mustache lambda factory — keep synchronous so unit tests that read the
+// callback result on the same tick continue to work.
+module.exports = asRetriever(function (req, res) {
+  return function () {
+    let url;
+    let link;
 
     try {
       url = req.url;
@@ -43,10 +47,10 @@ module.exports = function (req, res, callback) {
       return false;
     }
 
-    var active = "";
+    let active = "";
 
     if (link === url) active = "active";
 
     return active;
-  });
-};
+  };
+});

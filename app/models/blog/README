@@ -273,7 +273,7 @@ The Redis key generator. Methods:
 
 ## Integration Points
 
-- **`app/blog/vhosts.js`**: Calls `Blog.get({ handle })` or `Blog.get({ domain })` on every incoming HTTP request to identify which blog to serve.
+- **`app/blog/middleware/vhosts.js`**: Calls `Blog.get({ handle })` or `Blog.get({ domain })` on every incoming HTTP request to identify which blog to serve.
 - **`app/sync/`**: Calls `Blog.setStatus` via `sync/messenger.js` to log sync progress. Calls `Blog.set` to update `client`, `status`, and other fields during sync operations.
 - **`app/dashboard/`**: Calls `Blog.set` when the user saves settings. Calls `Blog.get` and `Blog.extend` to populate dashboard views.
 - **`app/clients/`** (Dropbox, Google Drive, Git, iCloud, local): Call `Blog.get`, `Blog.set`, and `Blog.remove` when connecting, disconnecting, or renaming sync clients.

@@ -1,22 +1,20 @@
-var Blog = require("models/blog");
-var config = require("config");
+const Blog = require("models/blog");
+const config = require("config");
+const { getBlog } = require("../lib/models");
+const fromCloudflare = require("../lib/fromCloudflare");
 
-module.exports = function (req, res, next) {
-
+module.exports = async function vhosts(req, res, next) {
   req.log("Loading blog");
 
-  var identifier, handle, redirect, previewTemplate, err;
-  var host = req.get("host");
+  let identifier, handle, redirect, previewTemplate, err;
+  const host = req.get("host");
 
   // We have a special case for Cloudflare
   // because some of their SSL settings insist on fetching
   // from the origin server (in this case Blot) over HTTP
   // which causes a redirect loop when we try to redirect
   // to HTTPS. This is a workaround.
-  var fromCloudflare =
-    Object.keys(req.headers || {})
-      .map(key => key.trim().toLowerCase())
-      .find(key => key.startsWith("cf-")) !== undefined;
+  const cloudflare = fromCloudflare(req);
 
   // The request is missing a host header
   if (!host) {
@@ -36,14 +34,14 @@ module.exports = function (req, res, next) {
   } else {
     // strip port if present, this is required by test suite
     // and is a good idea in general
-    const domain = (host.indexOf(":") > -1 ? host.split(":")[0] : host).toLowerCase();
+    const domain = (
+      host.indexOf(":") > -1 ? host.split(":")[0] : host
+    ).toLowerCase();
     identifier = { domain };
   }
 
-  Blog.get(identifier, function (err, blog) {
-    if (err) {
-      return next(err);
-    }
+  try {
+    let blog = await getBlog(identifier);
 
     if (!blog || blog.isDisabled || blog.isUnpaid) {
       err = new Error("No blog");
@@ -86,7 +84,7 @@ module.exports = function (req, res, next) {
       blog.forceSSL &&
       req.protocol === "http" &&
       !previewTemplate &&
-      fromCloudflare === false
+      cloudflare === false
     )
       redirect = "https://" + host + req.originalUrl;
 
@@ -133,17 +131,19 @@ module.exports = function (req, res, next) {
 
     req.log("loaded blog");
     return next();
-  });
+  } catch (error) {
+    return next(error);
+  }
 };
 
-function isSubdomain (host) {
+function isSubdomain(host) {
   return (
     host.slice(-config.host.length) === config.host &&
     host.slice(0, -config.host.length).length > 1
   );
 }
 
-function extractHandle (host) {
+function extractHandle(host) {
   if (!isSubdomain(host, config.host)) return false;
 
   let handle = host
@@ -159,12 +159,12 @@ function extractHandle (host) {
   return handle;
 }
 
-function extractPreviewTemplate (host, blogID) {
+function extractPreviewTemplate(host, blogID) {
   if (!isSubdomain(host, config.host)) return false;
 
-  var subdomains = host.slice(0, -config.host.length - 1).split(".");
-  var handle = subdomains.pop();
-  var prefix = subdomains.shift();
+  const subdomains = host.slice(0, -config.host.length - 1).split(".");
+  const handle = subdomains.pop();
+  const prefix = subdomains.shift();
 
   // Follows the new convention for preview subdomains, e.g.
   // preview-of-$template-on-$handle.$host e.g.
@@ -189,12 +189,12 @@ function extractPreviewTemplate (host, blogID) {
 
   if (!subdomains || !subdomains.length || prefix !== "preview") return false;
 
-  var name = subdomains.pop();
-  var isBlots = !subdomains.pop();
+  const name = subdomains.pop();
+  const isBlots = !subdomains.pop();
 
   if (host === handle + "." + config.host) return false;
 
-  var owner = isBlots ? "SITE" : blogID;
+  const owner = isBlots ? "SITE" : blogID;
 
   return owner + ":" + name;
 }

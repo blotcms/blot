@@ -17,48 +17,68 @@ The blog module sits below the `site` vhost (which handles the dashboard and pub
 ```
 app/blog/
 ├── index.js              Entry point. Assembles the Express router in route order.
-├── vhosts.js             Identifies and loads the blog from the request host or domain.
-├── loadTemplate.js       Loads template metadata and attaches it to req.template.
-├── entry.js              Serves a single published entry by URL.
-├── entries.js            Serves paginated entry listings (/ and /page/:page).
-├── view.js               Serves template views matched by URL pattern.
-├── draft.js              Serves draft previews and SSE live-reload streams.
-├── tagged.js             Serves entries filtered by one or more tags.
-├── search.js             Handles full-text entry search queries.
-├── random.js             Redirects to a randomly selected entry.
-├── robots.js             Serves robots.txt and domain/subscription verification endpoints.
-├── assets.js             Serves static files from the blog folder and global static directories.
-├── error.js              Final error and 404 handler, including redirect resolution.
-├── readme.txt            Obsolete planning note (superseded by this file).
+├── sortOptions.js        Shared sort helpers (also imported by models/entry/search).
+├── lib/                  Shared adapters and helpers for the async pipeline.
+│   ├── models.js         Promise adapters for Blog/Entry/Entries/Template/Tags APIs
+│   ├── asRetriever.js    Dual callback/promise wrapper for retrieve modules
+│   ├── attachAdjacent.js Shared next/previous wiring for entry + draft
+│   ├── blogHosts.js      Host list for CDN link rewriting
+│   ├── loadPlugin.js     Promise wrapper around build/plugins.load
+│   ├── fromCloudflare.js Shared Cloudflare request sniff
+│   ├── clone.js          Shared deep clone / freeze for LRU caches
+│   ├── pagination.js     Shared page/limit normalization for tagged listings
+│   ├── staticPaths.js    Shared global static directory constants
+│   └── withEntryFields.js Narrowed entry-list fetch with Mustache refetch guard
+├── middleware/           Request-identity middleware
+│   ├── vhosts.js         Identifies and loads the blog from the request host or domain.
+│   └── loadTemplate.js   Loads template metadata and attaches it to req.template.
+├── routes/               Route handlers (async/await)
+│   ├── entry.js          Serves a single published entry by URL.
+│   ├── entries.js        Serves paginated entry listings (/ and /page/:page).
+│   ├── view.js           Serves template views matched by URL pattern.
+│   ├── draft.js          Serves draft previews and SSE live-reload streams.
+│   ├── tagged.js         Serves entries filtered by one or more tags.
+│   ├── search.js         Handles full-text entry search queries.
+│   ├── random.js         Redirects to a randomly selected entry.
+│   ├── robots.js         Serves robots.txt
+│   ├── verify.js         Domain-setup and subscription-duration verification
+│   ├── assets.js         Serves static files from the blog folder and global static directories.
+│   └── error.js          Final error and 404 handler, including redirect resolution.
 │
 ├── render/               The Mustache rendering pipeline. See below.
 ├── static/               Global static assets served to all blogs (fonts, icons, katex, syntax highlighter).
 ├── tests/                Integration tests for all route handlers.
-└── views/                HTML error pages (error-no-blog, error-almost-connected, error-bad-render, template-error).
+├── benchmarks/           Blog-serving benchmarks (run via benchmarks.yml).
+└── views/                HTML error page used for template parse errors (template-error.html).
+    Other blog error HTML lives in app/views/.
 ```
+
+Historical top-level files (`vhosts.js`, `entry.js`, …) were removed once
+nothing required them; use `middleware/` and `routes/` paths instead.
 
 ## Request Lifecycle
 
 Requests pass through the following middleware in order, as assembled in `index.js`:
 
-1. **`vhosts.js`** — Extracts a blog handle from a Blot subdomain or a custom domain from the `Host` header. Calls `Blog.get()` to load the blog record. Applies redirects for `www` canonicalization, handle changes, subdomain-to-custom-domain redirects, and HTTP-to-HTTPS enforcement. Sets `req.blog`. Detects preview subdomains (e.g. `preview-of-diary-on-news.blot.im`) and sets `req.preview = true` and a preview `blog.template` when appropriate.
+1. **`middleware/vhosts.js`** — Extracts a blog handle from a Blot subdomain or a custom domain from the `Host` header. Awaits `Blog.get()` to load the blog record. Applies redirects for `www` canonicalization, handle changes, subdomain-to-custom-domain redirects, and HTTP-to-HTTPS enforcement. Sets `req.blog`. Detects preview subdomains (e.g. `preview-of-diary-on-news.blot.im`) and sets `req.preview = true` and a preview `blog.template` when appropriate.
 
-2. **`render/middleware.js`** — Attaches `res.renderView(viewName, next, callback)` to the response object. This function encapsulates the entire rendering pipeline (view fetch, local retrieval, Mustache rendering, CDN link rewriting). All subsequent route handlers call `res.renderView()` to produce output.
+2. **`render/middleware.js`** — Attaches async `res.renderView(viewName, next, callback)` to the response object. This function encapsulates the entire rendering pipeline (view fetch, local retrieval, Mustache rendering, CDN link rewriting). All subsequent route handlers call `res.renderView()` to produce output.
 
-3. **`loadTemplate.js`** — Calls `Template.getMetadata()` for `req.blog.template`. Attaches `req.template` with the template's `locals`, `id`, and `cdn` manifest. In preview mode, renders a template-error page if the template has parse errors.
+3. **`middleware/loadTemplate.js`** — Awaits `Template.getMetadata()` for `req.blog.template`. Attaches `req.template` with the template's `locals`, `id`, and `cdn` manifest. In preview mode, renders a template-error page if the template has parse errors.
 
-4. **Route handlers** (in priority order):
+4. **Route handlers** (in priority order, under `routes/`):
    - `draft.js` — `GET /_draft/*` (view) and `GET /_stream/*` (SSE live-reload).
    - `tagged.js` — `GET /tagged/:tag` and `GET /tagged/:tag/page/:page`.
    - `search.js` — `GET /search?q=...`.
-   - `robots.js` — `GET /robots.txt`, `GET /verify/domain-setup`, `GET /verify/subscription-duration`.
+   - `robots.js` — `GET /robots.txt`
+   - `verify.js` — `GET /verify/domain-setup`, `GET /verify/subscription-duration`.
    - `entry.js` — Falls through on all URLs; resolves by `Entry.getByUrl()`.
    - `view.js` — Falls through on all URLs; resolves by `Template.getViewByURL()`.
    - `entries.js` — `GET /` and `GET /page/:page`.
    - `assets.js` — Falls through on all URLs; serves files from blog folder and global static directories.
    - `random.js` — `GET /random`.
 
-5. **`error.js`** — Catches all remaining requests. Checks `Redirects.check()` first; if a redirect exists, issues a 301. Otherwise renders a 404 via `res.renderView("error.html")` and records the URL via `models/404`. Handles template rendering errors and ENOENT errors (no blog found) with static HTML fallback pages.
+5. **`routes/error.js`** — Catches all remaining requests. Checks `Redirects.check()` first; if a redirect exists, issues a 301. Otherwise renders a 404 via `res.renderView("error.html")` and records the URL via `models/404`. Handles template rendering errors and ENOENT errors (no blog found) with static HTML fallback pages.
 
 ## Rendering Pipeline (`render/`)
 
@@ -85,7 +105,7 @@ Either `?debug=true` or `?json=true` returns the fully assembled render context 
 
 ### `render/retrieve/`
 
-Each file in this directory is a named retriever. The retrieve system (`render/retrieve/index.js`) accepts a map of local names that the view template declares it needs. It calls the matching retriever function for each name, passing `(req, res, callback)`. Retrievers are registered under both snake_case and camelCase aliases where applicable. Public template examples in this README use snake_case naming, while camelCase aliases continue to work for backward compatibility.
+Each file in this directory is a named retriever. The retrieve system (`render/retrieve/index.js`) accepts a map of local names that the view template declares it needs. It fetches matching retrievers in parallel via `Promise.all`. Retrievers are async or sync functions wrapped by `lib/asRetriever.js` so unit tests can still use `(req, res, callback)` while production awaits them. Retrievers are registered under both snake_case and camelCase aliases where applicable. Public template examples in this README use snake_case naming, while camelCase aliases continue to work for backward compatibility.
 
 | Local name(s) | Source file | What it provides |
 |---|---|---|
@@ -146,7 +166,7 @@ After Mustache rendering, asset URLs in HTML and CSS output that point to files 
 
 ## Route Handlers
 
-### `vhosts.js`
+### `middleware/vhosts.js`
 
 Exports `module.exports` (middleware), plus three named helpers for testing:
 
@@ -159,44 +179,45 @@ Preview subdomain patterns supported:
 - `preview-of-my-{template}-on-{handle}.{host}` — Previews a blog-owned template.
 - `preview.{template}.{handle}.{host}` — Legacy preview pattern.
 
-### `draft.js`
+### `routes/draft.js`
 
 Registers two routes:
 
 - `GET /_draft/*` — Renders a draft entry using `entry.html`. Sets `X-Robots-Tag: noindex`. Removes `X-Frame-Options` and `Content-Security-Policy` to allow iframe embedding in the editor preview.
 - `GET /_stream/*` — Opens a Server-Sent Events connection. Subscribes to the Redis pub/sub channel `blog:{blogID}:draft:{path}`. On each message, re-renders the draft and writes the body HTML as a JSON-encoded `data:` event. The socket timeout is set to `MAX_TIMEOUT` (2,147,483,647 ms) to keep the connection alive.
 
-### `entry.js`
+### `routes/entry.js`
 
 Resolves the request URL (decoded, lowercased, trimmed) via `Entry.getByUrl()`. Skips deleted, draft, or scheduled (unless `?scheduled` is set) entries. Loads adjacent entries via `Entries.adjacentTo()`. Issues a 301 redirect if the canonical URL differs from the request URL. Loads plugin HTML via `build/plugins` and attaches it as `res.locals.partials.pluginHTML`. Renders `entry.html`.
 
 Comments (Disqus plugin) are suppressed when entry metadata sets `Comments: No`, or for pages that do not explicitly set `Comments: Yes`.
 
-### `entries.js`
+### `routes/entries.js`
 
 Calls `models/entries.getPage()` with options derived from `req.template.locals` (`sort_by`, `sort_order`, `page_size`, `path_prefix`) and from `req.params.page` or `req.query.page`. Sets `res.locals.entries` and `res.locals.pagination` (documented in templates with snake_case fields such as `page_size` and `total_entries`; camelCase aliases still resolve for backwards compatibility). Renders `entries.html`.
 
-### `view.js`
+### `routes/view.js`
 
 Calls `Template.getViewByURL()` to match the decoded request URL against template view URL patterns. If matched, merges any URL-parsed params into `req.params`, exposes `res.locals.request` (query and params), and renders the matched view.
 
-### `tagged.js`
+### `routes/tagged.js`
 
 Handles `GET /tagged/:tag` and `GET /tagged/:tag/page/:page`. Calls the `tagged` retriever to fetch entries matching the tag slug. Sets `res.locals.slug`, `res.locals.tag`, `res.locals.entries`, `res.locals.total`, and `res.locals.pagination`. Renders `tagged.html`.
 
-### `search.js`
+### `routes/search.js`
 
 Handles `GET /search`. Reads `req.query.q`. If `q` is an array, joins with a space. Calls `Entry.search()`. Sets `res.locals.query` and `res.locals.entries`. Sets `Cache-Control: no-cache`. Renders `search.html`. Returns 404 for malformed query types.
 
-### `assets.js`
+### `routes/assets.js`
 
 An Express sub-router that serves static files. Security middleware blocks paths containing `..`, `.php`, `/.git`, or null bytes.
 
-Global static directories served with a one-year `Cache-Control` header:
+Global static directories served with a one-year `Cache-Control` header (from `lib/staticPaths.js`):
 - `/fonts` — Web fonts available to all templates.
 - `/icons` — Icon assets.
 - `/katex` — KaTeX math rendering assets.
 - `/plugins` — Plugin static assets.
+- `/syntax-highlighter` — Syntax highlighting assets.
 
 Additional global files: `/html2canvas.min.js`, `/layout.css`.
 
@@ -209,17 +230,20 @@ Blog-specific static paths served from `config.blog_static_files_dir/{blogID}`:
 
 For all other paths, the router attempts to serve files from `config.blog_folder_dir/{blogID}` using a sequence of fallback strategies: exact path, lowercase path, case-insensitive path resolution, `path/index.html`, `path/_index.html`, `path.html`, and `_path.html`. `Cache-Control` is suppressed unless `?cache` and `?extension` query parameters are both present.
 
-### `robots.js`
+### `routes/robots.js`
 
 - `GET /robots.txt` — Returns `Disallow: /` for preview subdomains and for requests arriving at a non-canonical domain. Otherwise falls through to template-rendered robots.txt.
+
+### `routes/verify.js`
+
 - `GET /verify/domain-setup` — Returns the blog's handle as plain text (used for DNS-based domain verification).
 - `GET /verify/subscription-duration` — Returns the subscription tenure duration in milliseconds as JSON.
 
-### `random.js`
+### `routes/random.js`
 
 Calls `Entries.random()` and redirects (no-cache) to the returned entry URL, preserving the original query string.
 
-### `error.js`
+### `routes/error.js`
 
 Registers four middleware functions at the end of the router:
 
@@ -248,7 +272,7 @@ The `static/` directory contains global assets served to all blogs under paths s
 | `models/template` | `loadTemplate.js`, `view.js`, `render/full-view-cache.js`, `render/view.js` |
 | `models/tags` | `render/retrieve/all_tags.js`, `render/retrieve/tagged.js`, `render/retrieve/popular_tags.js`, `render/load/augment.js` |
 | `models/redirects` | `error.js` |
-| `models/user` | `robots.js` |
+| `models/user` | `routes/verify.js` |
 | `models/redis` | `draft.js` |
 | `models/404` | `error.js` |
 | `build/plugins` | `entry.js`, `render/retrieve/plugin.js`, `render/retrieve/app_css.js`, `render/retrieve/app_js.js` |
@@ -267,8 +291,7 @@ The `static/` directory contains global assets served to all blogs under paths s
 | `cheerio` | HTML manipulation in `absolute_urls.js` and `encode_xml.js` |
 | `moment` / `moment-timezone` | Date formatting in augment and retrieve functions |
 | `lru-cache` | In-process LRU caches for full view and popular tags |
-| `lodash` | Utility functions in retrieve and augment |
-| `async` | Parallel/series async control |
+| *(none — blog no longer depends on the `async` npm package)* | Native `async`/`await` and `Promise.all` |
 | `mime-types` | Content-Type detection in `assets.js` |
 | `fs-extra` | File system access in `assets.js` and `lookupFile.js` |
 

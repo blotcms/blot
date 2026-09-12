@@ -1,11 +1,12 @@
 // This is useful for creating a JSON feed. Mustache's
 // default escaping does not encode newlines, which causes
 // problems.
+const asRetriever = require("../../lib/asRetriever");
 
-module.exports = function (req, res, callback) {
-  return callback(null, function () {
+module.exports = asRetriever(function (req, res) {
+  return function () {
     return function (text, render) {
-      var encoded_text = "";
+      let encoded_text = "";
 
       text = render(text);
 
@@ -19,5 +20,5 @@ module.exports = function (req, res, callback) {
 
       return encoded_text;
     };
-  });
-};
+  };
+});

@@ -1,10 +1,14 @@
-const Entry = require("models/entry");
-const EntryInstance = require("models/entry/instance");
-const entriesModel = require("models/entries");
+const { getEntry, getPage } = require("../../lib/models");
 const LRUCache = require("lru-cache").LRUCache;
 const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const getTemplateSortOptions = require("blog/sortOptions");
+const { cloneDeep, deepFreeze } = require("../../lib/clone");
+const asRetriever = require("../../lib/asRetriever");
+const {
+  normalizePageNumber,
+  normalizePageSize,
+} = require("../../lib/pagination");
 const { sortEntries } = getTemplateSortOptions;
 
 const postsCache = new LRUCache({
@@ -17,34 +21,8 @@ const postsCache = new LRUCache({
   sizeCalculation: (value) => JSON.stringify(value).length,
 });
 
-function cloneDeep(value) {
-  if (Array.isArray(value)) {
-    return value.map(cloneDeep);
-  }
-
-  if (value && typeof value === "object") {
-    const clone = value instanceof EntryInstance ? new EntryInstance() : {};
-
-    Object.keys(value).forEach((key) => {
-      clone[key] = cloneDeep(value[key]);
-    });
-
-    return clone;
-  }
-
-  return value;
-}
-
-function deepFreeze(value) {
-  if (!value || typeof value !== "object" || Object.isFrozen(value)) {
-    return value;
-  }
-
-  Object.keys(value).forEach((key) => {
-    deepFreeze(value[key]);
-  });
-
-  return Object.freeze(value);
+function clonePosts(value) {
+  return cloneDeep(value, { preserveEntryInstances: true });
 }
 
 function normalizeTagKey(tags) {
@@ -53,16 +31,6 @@ function normalizeTagKey(tags) {
   }
 
   return tags === undefined ? undefined : String(tags);
-}
-
-function parsePositiveInteger(value, fallback) {
-  const parsed = parseInt(value, 10);
-
-  if (!parsed || parsed < 1) {
-    return fallback;
-  }
-
-  return parsed;
 }
 
 function createCacheKey(req, res, normalizedOptions) {
@@ -81,7 +49,7 @@ function createCacheKey(req, res, normalizedOptions) {
   });
 }
 
-module.exports = function (req, res, callback) {
+async function posts(req, res) {
   const blogID = req?.blog?.id;
   const log = typeof req?.log === "function" ? req.log.bind(req) : () => {};
 
@@ -96,101 +64,70 @@ module.exports = function (req, res, callback) {
   };
 
   const tags = req?.query?.tag || req?.params?.tag || res?.locals?.tag;
-  const normalizedPageNumber = parsePositiveInteger(options.pageNumber, 1);
-  const normalizedPageSize = parsePositiveInteger(options.pageSize, 100);
-  const normalizedLimit = Math.max(1, Math.min(500, normalizedPageSize));
-  const normalizedOffset = (normalizedPageNumber - 1) * normalizedLimit;
+  const pageNumber = normalizePageNumber(options.pageNumber);
+  const pageSize = normalizePageSize(options.pageSize);
+  const offset = (pageNumber - 1) * pageSize;
   const normalizedOptions = {
     branch: tags ? "tagged" : "untagged",
     tags,
     sortBy: options.sortBy,
     order: options.order,
     pathPrefix: options.pathPrefix,
-    pageNumber: normalizedPageNumber,
-    pageSize: normalizedPageSize,
-    limit: normalizedLimit,
-    offset: normalizedOffset,
+    pageNumber,
+    pageSize,
+    limit: pageSize,
+    offset,
   };
 
   const key = createCacheKey(req, res, normalizedOptions);
 
   if (postsCache.has(key)) {
-    const cachedPayload = cloneDeep(postsCache.get(key));
+    const cachedPayload = clonePosts(postsCache.get(key));
     log("Retrieved posts from cache");
     res.locals.pagination = cachedPayload.pagination;
-    return callback(
-      null,
-      projectEntryFields(cachedPayload.entries, req.retrieve, ["posts"])
-    );
+    return projectEntryFields(cachedPayload.entries, req.retrieve, ["posts"]);
   }
+
+  let payload;
 
   if (!tags) {
     log("Loading page of entries");
-    return entriesModel.getPage(blogID, options, (err, entries, pagination) => {
-      if (err) {
-        return callback(err);
-      }
-
-      const payload = { entries, pagination };
-      const immutableCopy = deepFreeze(cloneDeep(payload));
-      postsCache.set(key, immutableCopy);
-      const responsePayload = cloneDeep(immutableCopy);
-
-      res.locals.pagination = responsePayload.pagination;
-
-      callback(
-        null,
-        projectEntryFields(responsePayload.entries, req.retrieve, ["posts"])
-      );
-    });
-  }
-
-  let page = parseInt(options.pageNumber, 10);
-  if (!page || page < 1) page = 1;
-
-  let limit = parseInt(options.pageSize, 10);
-  if (!Number.isFinite(limit)) limit = undefined;
-  if (!limit || limit < 1 || limit > 500) limit = 100;
-
-  const offset = (page - 1) * limit;
-
-  log("Loading tagged page of entries");
-  fetchTaggedEntries(
-    blogID,
-    tags,
-    {
-      limit,
+    // Forward the raw, unnormalized pageNumber/pageSize here: models/entries
+    // getPage does its own validation (default page size 5, max 100, and a
+    // 400 for a non-digit :page) which bots probe for. lib/pagination's
+    // normalizePageNumber/normalizePageSize above have different defaults
+    // (100/500) and never reject, so they're only used for the tagged
+    // branch and the cache key below - never as an override here.
+    const page = await getPage(blogID, options);
+    payload = { entries: page.entries, pagination: page.pagination };
+  } else {
+    log("Loading tagged page of entries");
+    const result = await fetchTaggedEntries(blogID, tags, {
+      limit: pageSize,
       offset,
       pathPrefix: options.pathPrefix,
       sortBy: options.sortBy,
       order: options.order,
-    },
-    (err, result) => {
-      if (err) {
-        return callback(err);
-      }
+    });
 
-      Entry.get(blogID, result.entryIDs || [], (entries) => {
-        const payload = {
-          // fetchTaggedEntries paginated in the selected order; re-apply it to
-          // the hydrated page so Entry.get's ordering can't drift.
-          entries: sortEntries(entries, options),
-          pagination: result.pagination || {},
-        };
-        const immutableCopy = deepFreeze(cloneDeep(payload));
-        postsCache.set(key, immutableCopy);
-        const responsePayload = cloneDeep(immutableCopy);
+    const entries = await getEntry(blogID, result.entryIDs || []);
+    payload = {
+      // fetchTaggedEntries paginated in the selected order; re-apply it to
+      // the hydrated page so Entry.get's ordering can't drift.
+      entries: sortEntries(entries, options),
+      pagination: result.pagination || {},
+    };
+  }
 
-        res.locals.pagination = responsePayload.pagination;
-        callback(
-          null,
-          projectEntryFields(responsePayload.entries, req.retrieve, ["posts"])
-        );
-      });
-    }
-  );
+  const immutableCopy = deepFreeze(clonePosts(payload));
+  postsCache.set(key, immutableCopy);
+  const responsePayload = clonePosts(immutableCopy);
+
+  res.locals.pagination = responsePayload.pagination;
+  return projectEntryFields(responsePayload.entries, req.retrieve, ["posts"]);
 };
 
+module.exports = asRetriever(posts);
 module.exports._createCacheKey = createCacheKey;
 module.exports._clear = function () {
   postsCache.clear();

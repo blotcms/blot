@@ -12,33 +12,34 @@ blog.use((req, res, next) => {
 
 // Custom domain & subdomain middleware
 // also handles the mapping of preview domains
-blog.use(require("./vhosts"));
+blog.use(require("./middleware/vhosts"));
 
 // Load in the rendering engine
 blog.use(renderView);
 
-blog.use(require('./loadTemplate'));
+blog.use(require("./middleware/loadTemplate"));
 
 // The order of these routes is important
-require("./draft")(blog);
-require("./tagged")(blog);
+require("./routes/draft")(blog);
+require("./routes/tagged")(blog);
 
-blog.get('/search', require('./search'));
+blog.get("/search", require("./routes/search"));
 
-require("./robots")(blog);
+require("./routes/robots")(blog);
+require("./routes/verify")(blog);
 
 // By checking for entries before template files
 // we can allow the user to intercept their site's
 // index page on their template with a page whose
 // metadata sets 'Link: /`.
-blog.use(require("./entry"));
-blog.use(require("./view"));
+blog.use(require("./routes/entry"));
+blog.use(require("./routes/view"));
 
-blog.get("/page/:page", require("./entries"));
-blog.get("/", require("./entries"));
+blog.get("/page/:page", require("./routes/entries"));
+blog.get("/", require("./routes/entries"));
 
-blog.use(require("./assets"));
-blog.use('/random', require('./random'));
-require("./error")(blog);
+blog.use(require("./routes/assets"));
+blog.use("/random", require("./routes/random"));
+require("./routes/error")(blog);
 
 module.exports = blog;

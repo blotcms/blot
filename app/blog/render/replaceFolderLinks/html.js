@@ -4,7 +4,7 @@ const htmlExtRegex = /\.html$/;
 const fileExtRegex = /[^/]*\.[^/]*$/;
 
 const lookupFile = require("./lookupFile");
-const config = require("config");
+const blogHosts = require("../../lib/blogHosts");
 
 const parseSrcset = (value) => {
   if (typeof value !== "string") {
@@ -39,19 +39,12 @@ module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
   try {
     const blogID = blog.id;
     const cacheID = blog.cacheID;
-    const hosts = [blog.handle + "." + config.host, 'www.' + blog.handle + "." + config.host];
-
-    if (blog.domain) {
-      hosts.push(blog.domain);
-      if (blog.domain.startsWith("www.")) {
-        hosts.push(blog.domain.slice(4));
-      } else {
-        hosts.push("www." + blog.domain);
-      }
-    }
+    const hosts = blogHosts(blog);
 
     // Create regex patterns for each host
-    const hostPatterns = hosts.map(host => new RegExp(`^(?:https?:)?//${host}`));
+    const hostPatterns = hosts.map(
+      (host) => new RegExp(`^(?:https?:)?//${host}`)
+    );
 
     const document = parse5.parse(html);
     const elements = [];

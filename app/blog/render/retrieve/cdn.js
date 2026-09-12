@@ -1,13 +1,14 @@
 const config = require("config");
 const generateCdnUrl = require("models/template/util/generateCdnUrl");
+const asRetriever = require("../../lib/asRetriever");
 
-module.exports = function (req, res, callback) {
-  return callback(null, function () {
+module.exports = asRetriever(function (req, res) {
+  return function () {
     const manifest = (req && req.template && req.template.cdn) || {};
     const templateID = req.template && req.template.id;
 
     // Section: {{#cdn}}/path/to/file{{/cdn}}
-    var renderCdn = function (text, render) {
+    const renderCdn = function (text, render) {
       try {
         // Skip CDN URLs for preview subdomains
         if (req.preview) {
@@ -18,9 +19,15 @@ module.exports = function (req, res, callback) {
         if (!rendered || !String(rendered).trim()) return "";
 
         const renderedNormalized = String(rendered).trim().replace(/^\//, "");
-        
-        if (templateID && Object.prototype.hasOwnProperty.call(manifest, renderedNormalized)) {
-          return generateCdnUrl(renderedNormalized, manifest[renderedNormalized]);
+
+        if (
+          templateID &&
+          Object.prototype.hasOwnProperty.call(manifest, renderedNormalized)
+        ) {
+          return generateCdnUrl(
+            renderedNormalized,
+            manifest[renderedNormalized]
+          );
         }
 
         return rendered;
@@ -35,5 +42,5 @@ module.exports = function (req, res, callback) {
     };
 
     return renderCdn;
-  });
-};
+  };
+});

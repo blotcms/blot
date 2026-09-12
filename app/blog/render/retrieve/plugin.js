@@ -1,22 +1,23 @@
-var Plugins = require("build/plugins");
+const Plugins = require("build/plugins");
+const asRetriever = require("../../lib/asRetriever");
 
-module.exports = function (req, res, callback) {
-  var requested = (req.retrieve && req.retrieve.plugin) || {};
-  var response = {};
-  var pluginList = Plugins.list || {};
-  var blogPlugins = (req.blog && req.blog.plugins) || {};
+module.exports = asRetriever(function (req, res) {
+  let requested = (req.retrieve && req.retrieve.plugin) || {};
+  const response = {};
+  const pluginList = Plugins.list || {};
+  const blogPlugins = (req.blog && req.blog.plugins) || {};
 
   if (requested === true || typeof requested !== "object") requested = {};
 
   Object.keys(requested).forEach(function (pluginName) {
-    var pluginRequest = requested[pluginName];
-    var pluginConfig = blogPlugins[pluginName];
-    var pluginMeta = pluginList[pluginName];
+    const pluginRequest = requested[pluginName];
+    const pluginConfig = blogPlugins[pluginName];
+    const pluginMeta = pluginList[pluginName];
 
     if (!pluginMeta || !pluginConfig || !pluginConfig.enabled) return;
     if (!pluginRequest || typeof pluginRequest !== "object") return;
 
-    var value = {};
+    const value = {};
 
     if (pluginRequest.css) value.css = pluginMeta.publicCSS || "";
     if (pluginRequest.js) value.js = pluginMeta.publicJS || "";
@@ -24,7 +25,7 @@ module.exports = function (req, res, callback) {
     if (Object.keys(value).length) response[pluginName] = value;
   });
 
-  if (!Object.keys(response).length) return callback();
+  if (!Object.keys(response).length) return;
 
-  callback(null, response);
-};
+  return response;
+});

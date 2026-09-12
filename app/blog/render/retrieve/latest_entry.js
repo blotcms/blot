@@ -1,17 +1,19 @@
-const { getPage } = require("models/entries");
+const { getPage } = require("../../lib/models");
 const projectEntryFields = require("./helpers/projectEntryFields");
+const asRetriever = require("../../lib/asRetriever");
 
-module.exports = function (req, res, callback) {
+async function latestEntry(req, res) {
   req.log("Loading latest entry");
-  getPage(req.blog.id, { pageNumber: 1, pageSize: 1 }, function (err, entries) {
-    req.log("Loaded latest entry");
-    const latestEntry = entries && entries.length ? entries[0] : {};
-    return callback(
-      null,
-      projectEntryFields(latestEntry, req.retrieve, [
-        "latestEntry",
-        "latest_entry",
-      ])
-    );
+  const { entries } = await getPage(req.blog.id, {
+    pageNumber: 1,
+    pageSize: 1,
   });
+  req.log("Loaded latest entry");
+  const latest = entries && entries.length ? entries[0] : {};
+  return projectEntryFields(latest, req.retrieve, [
+    "latestEntry",
+    "latest_entry",
+  ]);
 };
+
+module.exports = asRetriever(latestEntry);

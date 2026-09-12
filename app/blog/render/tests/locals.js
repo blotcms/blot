@@ -1,11 +1,10 @@
-var renderLocals = require("../locals");
+const renderLocals = require("../locals");
 
 describe("renderLocals", function () {
-  var req, res, callback;
+  let req, res;
 
   beforeEach(function () {
     req = {};
-    callback = jasmine.createSpy("callback");
   });
 
   it("renders template tags in string locals against the full locals object", function () {
@@ -17,16 +16,15 @@ describe("renderLocals", function () {
       },
     };
 
-    renderLocals(req, res, callback);
+    renderLocals(req, res);
 
     expect(res.locals.title).toEqual("Hello World");
-    expect(callback).toHaveBeenCalledWith(null, req, res);
   });
 
   it("leaves strings without template tags unchanged", function () {
     res = { locals: { description: "Plain text", partials: {} } };
 
-    renderLocals(req, res, callback);
+    renderLocals(req, res);
 
     expect(res.locals.description).toEqual("Plain text");
   });
@@ -34,7 +32,7 @@ describe("renderLocals", function () {
   it("leaves non-string locals untouched", function () {
     res = { locals: { count: 123, enabled: true, partials: {} } };
 
-    renderLocals(req, res, callback);
+    renderLocals(req, res);
 
     expect(res.locals.count).toEqual(123);
     expect(res.locals.enabled).toEqual(true);
@@ -49,7 +47,7 @@ describe("renderLocals", function () {
       },
     };
 
-    renderLocals(req, res, callback);
+    renderLocals(req, res);
 
     expect(res.locals.entry.title).toEqual("Hi, entry!");
   });
@@ -63,7 +61,7 @@ describe("renderLocals", function () {
       },
     };
 
-    renderLocals(req, res, callback);
+    renderLocals(req, res);
 
     expect(res.locals.items[0]).toEqual("Hello World");
     expect(res.locals.items[1]).toEqual("plain");
@@ -77,7 +75,7 @@ describe("renderLocals", function () {
       },
     };
 
-    renderLocals(req, res, callback);
+    renderLocals(req, res);
 
     expect(res.locals.partials.sub).toEqual("Hello {{name}}");
   });
@@ -88,30 +86,27 @@ describe("renderLocals", function () {
       locals: { title: "Hello {{> missing}", partials: {} },
     };
 
-    renderLocals(req, res, callback);
+    renderLocals(req, res);
 
     expect(res.locals.title).toEqual("Hello {{> missing}");
-    expect(callback).toHaveBeenCalledWith(null, req, res);
   });
 
-  it("still calls back when a circular local causes traversal to fail", function () {
-    var circular = {};
+  it("does not throw when a circular local causes traversal to fail", function () {
+    const circular = {};
     circular.self = circular;
 
     res = { locals: { circular: circular, partials: {} } };
 
     expect(function () {
-      renderLocals(req, res, callback);
+      renderLocals(req, res);
     }).not.toThrow();
-
-    expect(callback).toHaveBeenCalledWith(null, req, res);
   });
 
   it("throws when res.locals.partials is missing", function () {
     res = { locals: { title: "Hello" } };
 
     expect(function () {
-      renderLocals(req, res, callback);
+      renderLocals(req, res);
     }).toThrowError();
   });
 });

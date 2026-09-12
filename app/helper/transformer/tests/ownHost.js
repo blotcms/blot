@@ -60,7 +60,7 @@ describe("helper/transformer/ownHost", function () {
       ).toEqual("/cat.jpg");
     });
 
-    it("returns null for a path app/blog/assets.js serves globally, even if the blog folder happens to have a file there too", function () {
+    it("returns null for a path app/blog/routes/assets.js serves globally, even if the blog folder happens to have a file there too", function () {
       expect(
         ownHost.resolve("https://example.com/icons/search.svg", ownHostnames)
       ).toBe(null);

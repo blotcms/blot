@@ -27,7 +27,7 @@ const getEntry = (blogID, path) =>
 
 // The preview subdomain skips CDN rewriting and renders template errors on a
 // dedicated page instead of failing opaquely, which is what we want while
-// iterating (app/blog/vhosts.js).
+// iterating (app/blog/middleware/vhosts.js).
 function previewOrigin(blog, templateID) {
   const slug = templateID.split(":").slice(1).join(":");
   return `${config.protocol}preview-of-my-${slug}-on-${blog.handle}.${config.host}`;

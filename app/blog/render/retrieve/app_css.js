@@ -1,5 +1,6 @@
-var Plugins = require("build/plugins");
+const loadPlugin = require("../../lib/loadPlugin");
+const asRetriever = require("../../lib/asRetriever");
 
-module.exports = function (req, res, callback) {
-  Plugins.load("css", req.blog.plugins, callback);
-};
+module.exports = asRetriever(async function (req, res) {
+  return loadPlugin("css", req.blog.plugins);
+});

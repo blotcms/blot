@@ -1,25 +1,24 @@
-var Entries = require("models/entries");
-var projectEntryFields = require("./helpers/projectEntryFields");
-var entryFieldList = require("./helpers/entryFieldList");
-var withEntryFields = require("./helpers/withEntryFields");
+const { getAll } = require("../../lib/models");
+const projectEntryFields = require("./helpers/projectEntryFields");
+const entryFieldList = require("./helpers/entryFieldList");
+const withEntryFields = require("../../lib/withEntryFields");
+const asRetriever = require("../../lib/asRetriever");
 
-module.exports = function (req, res, callback) {
-  var keys = ["allEntries", "all_entries"];
-  var fields = entryFieldList(req.retrieve, keys);
+async function allEntries(req, res) {
+  const keys = ["allEntries", "all_entries"];
+  const fields = entryFieldList(req.retrieve, keys);
 
-  var done = function (allEntries) {
-    return callback(null, projectEntryFields(allEntries, req.retrieve, keys));
-  };
+  let allEntriesList;
+  if (!fields) {
+    allEntriesList = await getAll(req.blog.id);
+  } else {
+    allEntriesList = await withEntryFields(
+      () => getAll(req.blog.id, { fields }),
+      () => getAll(req.blog.id)
+    );
+  }
 
-  if (!fields) return Entries.getAll(req.blog.id, done);
-
-  withEntryFields(
-    function (cb) {
-      Entries.getAll(req.blog.id, { fields: fields }, cb);
-    },
-    function (cb) {
-      Entries.getAll(req.blog.id, cb);
-    },
-    done
-  );
+  return projectEntryFields(allEntriesList, req.retrieve, keys);
 };
+
+module.exports = asRetriever(allEntries);

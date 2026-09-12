@@ -4,8 +4,10 @@ const hash = require("helper/hash");
 const { resolve, join } = require("path");
 const { promisify } = require("util");
 const caseSensitivePath = promisify(require("helper/caseSensitivePath"));
-
-const GLOBAL_STATIC_FILES = config.blot_directory + "/app/blog/static";
+const {
+  GLOBAL_STATIC_DIR,
+  GLOBAL_STATIC_SUBDIRECTORIES,
+} = require("../../lib/staticPaths");
 
 class Cache {
   constructor() {
@@ -58,14 +60,8 @@ async function lookupFile(blogID, cacheID, value) {
   const query = rest.length ? `?${rest.join("?")}` : "";
 
   // if the value is a static file, we need to resolve it
-  if (
-    value.startsWith("/fonts") ||
-    value.startsWith("/icons") ||
-    value.startsWith("/katex") ||
-    value.startsWith("/plugins") ||
-    value.startsWith("/syntax-highlighter")
-  ) {
-    const filePath = join(GLOBAL_STATIC_FILES, pathFromValue);
+  if (GLOBAL_STATIC_SUBDIRECTORIES.some((dir) => value.startsWith(dir))) {
+    const filePath = join(GLOBAL_STATIC_DIR, pathFromValue);
     try {
       // check  if the file exists in the global static files set
       if (globalStaticFiles.has(pathFromValue)) {

@@ -6,12 +6,13 @@ const { join, basename, dirname } = require("path");
 const { promisify } = require("util");
 const fs = require("fs-extra");
 const caseSensitivePath = promisify(require("helper/caseSensitivePath"));
+const {
+  GLOBAL_STATIC_DIR,
+  GLOBAL_STATIC_SUBDIRECTORIES,
+} = require("../lib/staticPaths");
 
 // Constants
 const LARGEST_POSSIBLE_MAXAGE = 86400000;
-
-const GLOBAL_STATIC_FILES = config.blot_directory + "/app/blog/static";
-const GLOBAL_STATIC_SUBDIRECTORIES = ["/fonts", "/icons", "/katex", "/plugins"];
 
 // We always return 404 for requests which contain these patterns
 const BLOCKED_PATTERNS = [
@@ -48,12 +49,12 @@ assets.use((req, res, next) => {
 
 // Global static files
 GLOBAL_STATIC_SUBDIRECTORIES.forEach((dir) => {
-  assets.use(dir, express.static(GLOBAL_STATIC_FILES + dir, { maxAge: "1y" }));
+  assets.use(dir, express.static(GLOBAL_STATIC_DIR + dir, { maxAge: "1y" }));
 });
 
 assets.get("/html2canvas.min.js", async (req, res, next) => {
   try {
-    await sendFile(GLOBAL_STATIC_FILES + "/html2canvas.min.js", {
+    await sendFile(GLOBAL_STATIC_DIR + "/html2canvas.min.js", {
       req,
       res,
       maxAge: LARGEST_POSSIBLE_MAXAGE,
@@ -66,7 +67,7 @@ assets.get("/html2canvas.min.js", async (req, res, next) => {
 
 assets.get("/layout.css", async (req, res, next) => {
   try {
-    await sendFile(GLOBAL_STATIC_FILES + "/layout.css", {
+    await sendFile(GLOBAL_STATIC_DIR + "/layout.css", {
       req,
       res,
       maxAge: LARGEST_POSSIBLE_MAXAGE,

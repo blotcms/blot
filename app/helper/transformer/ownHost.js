@@ -1,13 +1,18 @@
 var url = require("url");
 var config = require("config");
 
-// Paths app/blog/assets.js mounts globally, ahead of the blog's own
-// folder (see GLOBAL_STATIC_SUBDIRECTORIES there). A blog folder can
+// Paths app/blog/routes/assets.js mounts globally, ahead of the blog's own
+// folder (see GLOBAL_STATIC_SUBDIRECTORIES in blog/lib/staticPaths.js). A blog folder can
 // coincidentally contain a file at one of these paths too, but the live
 // site never serves it - the global asset always shadows it - so we must
 // not "helpfully" resolve these locally, or we'd serve different bytes
 // than the URL actually returns.
-var RESERVED_PREFIXES = ["/fonts/", "/icons/", "/katex/", "/plugins/"];
+var {
+  GLOBAL_STATIC_SUBDIRECTORIES,
+} = require("../../blog/lib/staticPaths");
+var RESERVED_PREFIXES = GLOBAL_STATIC_SUBDIRECTORIES.map(function (dir) {
+  return dir.endsWith("/") ? dir : dir + "/";
+});
 
 // Strips a leading "www." so we treat the www and bare-domain forms of a
 // hostname as equivalent without needing to be strict about which one a

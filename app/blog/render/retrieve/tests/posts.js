@@ -167,6 +167,33 @@ describe("posts", function () {
     expect((await second.text()).trim()).toEqual("Paris|paris|true|true");
   });
 
+  it("defaults to 5 posts per page when page_size is unset", async function () {
+    for (const letter of ["a", "b", "c", "d", "e", "f"]) {
+      await this.write({ path: `/${letter}.txt`, content: letter });
+    }
+
+    await this.template(
+      {
+        "foo.html": `{{#posts}}{{{name}}} {{/posts}}`,
+      },
+      {
+        views: {
+          "foo.html": {
+            url: "/foo",
+          },
+        },
+      }
+    );
+
+    const res = await this.get("/foo");
+    const text = (await res.text()).trim();
+
+    // models/entries.getPage defaults to 5 per page when no page_size is
+    // configured - this must not be overridden by pagination normalization
+    // (which defaults to 100) before reaching the model.
+    expect(text.split(" ").length).toEqual(5);
+  });
+
   describe("rejects invalid page numbers", function () {
     const cases = [
       ["zero", "/page/0"],
@@ -212,6 +239,37 @@ describe("posts cache", function () {
     delete require.cache[helperPath];
   });
 
+  it("forwards raw, unnormalized pageNumber/pageSize to models/entries.getPage", function (done) {
+    const posts = loadPostsWithTaggedStub(function () {});
+    posts._clear();
+
+    spyOn(entriesModel, "getPage").and.callFake(function (blogID, options, callback) {
+      // models/entries.getPage does its own validation (default page size 5,
+      // max 100, and a 400 for a non-digit page). If posts.js pre-normalizes
+      // these with lib/pagination (default 100, max 500, never rejects)
+      // before calling getPage, that validation is silently bypassed.
+      expect(options.pageSize).toBeUndefined();
+      expect(options.pageNumber).toBe("not-a-number");
+      callback(null, [], { page: 1, pages: 1 });
+    });
+
+    posts(
+      {
+        blog: { id: "blog-1", cacheID: 100 },
+        query: { page: "not-a-number" },
+        params: {},
+        template: { locals: {} },
+        log: function () {},
+      },
+      { locals: {} },
+      function (err) {
+        expect(err).toBeNull();
+        expect(entriesModel.getPage).toHaveBeenCalledTimes(1);
+        done();
+      }
+    );
+  });
+
   it("passes nested sort locals into getPage", function (done) {
     const posts = loadPostsWithTaggedStub(function () {});
     posts._clear();
@@ -241,9 +299,9 @@ describe("posts cache", function () {
 
   it("forwards the resolved sort selection to fetchTaggedEntries and orders the page", function (done) {
     let received;
-    const posts = loadPostsWithTaggedStub(function (blogID, tags, options, cb) {
+    const posts = loadPostsWithTaggedStub(async function (blogID, tags, options) {
       received = { blogID, tags, options };
-      cb(null, { entryIDs: ["a.txt", "m.txt", "z.txt"], pagination: {} });
+      return { entryIDs: ["a.txt", "m.txt", "z.txt"], pagination: {} };
     });
     posts._clear();
 
@@ -305,14 +363,11 @@ describe("posts cache", function () {
   });
 
   it("reuses cached tagged responses for identical inputs", function (done) {
-    const taggedSpy = jasmine.createSpy("fetchTaggedEntries").and.callFake(function (
-      blogID,
-      tags,
-      options,
-      callback
-    ) {
-      callback(null, { entryIDs: ["1", "2"], pagination: { page: 1, pages: 1 } });
-    });
+    const taggedSpy = jasmine
+      .createSpy("fetchTaggedEntries")
+      .and.callFake(async function (blogID, tags, options) {
+        return { entryIDs: ["1", "2"], pagination: { page: 1, pages: 1 } };
+      });
 
     const posts = loadPostsWithTaggedStub(taggedSpy);
     posts._clear();
