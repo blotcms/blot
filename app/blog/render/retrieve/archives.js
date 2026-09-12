@@ -6,17 +6,18 @@ const withEntryFields = require("../../lib/withEntryFields");
 const moment = require("moment");
 require("moment-timezone");
 const asRetriever = require("../../lib/asRetriever");
+const { MAX_ENTRIES } = require("../../lib/limits");
 
 async function archives(req, res) {
   const fields = entryFieldList(req.retrieve, ["archives"]);
 
   let allEntries;
   if (!fields) {
-    allEntries = await getAll(req.blog.id);
+    allEntries = await getAll(req.blog.id, { limit: MAX_ENTRIES });
   } else {
     allEntries = await withEntryFields(
-      () => getAll(req.blog.id, { fields }),
-      () => getAll(req.blog.id)
+      () => getAll(req.blog.id, { fields, limit: MAX_ENTRIES }),
+      () => getAll(req.blog.id, { limit: MAX_ENTRIES })
     );
   }
 

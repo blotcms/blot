@@ -955,4 +955,50 @@ describe("entries", function () {
       });
     });
   });
+
+  describe("getAll with a limit", function () {
+    it("returns only the N most recently published entries", async function (done) {
+      const blogID = this.blog.id;
+      const key = `blog:${blogID}:entries`;
+
+      await redis.zAdd(key, [
+        { score: 1, value: "id1" },
+        { score: 2, value: "id2" },
+        { score: 3, value: "id3" },
+      ]);
+
+      spyOn(Entry, "get").and.callFake((blogID, ids, callback) => {
+        callback(ids.map((id) => buildEntry(id, { id })));
+      });
+
+      Entries.getAll(blogID, { limit: 2 }, function (entries) {
+        expect(entries.map((entry) => entry.id)).toEqual(["id3", "id2"]);
+        done();
+      });
+    });
+
+    it("returns every entry when no limit is given", async function (done) {
+      const blogID = this.blog.id;
+      const key = `blog:${blogID}:entries`;
+
+      await redis.zAdd(key, [
+        { score: 1, value: "id1" },
+        { score: 2, value: "id2" },
+        { score: 3, value: "id3" },
+      ]);
+
+      spyOn(Entry, "get").and.callFake((blogID, ids, callback) => {
+        callback(ids.map((id) => buildEntry(id, { id })));
+      });
+
+      Entries.getAll(blogID, function (entries) {
+        expect(entries.map((entry) => entry.id)).toEqual([
+          "id3",
+          "id2",
+          "id1",
+        ]);
+        done();
+      });
+    });
+  });
 });
