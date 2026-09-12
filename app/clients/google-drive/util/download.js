@@ -6,7 +6,7 @@ const { join, dirname } = require("path");
 const debug = require("debug")("blot:clients:google-drive:download");
 const tempDir = require("helper/tempDir")();
 const guid = require("helper/guid");
-const computeMd5Checksum = require("../util/md5Checksum");
+const verifyContent = require("./verifyContent");
 const config = require("config");
 const hash = require("helper/hash");
 const cheerio = require("cheerio");
@@ -332,14 +332,14 @@ module.exports = async (
         return resolve({ updated: false });
       }
 
-      const existingMd5Checksum = await computeMd5Checksum(pathOnBlot);
+      const verifiedContent = await verifyContent(pathOnBlot, md5Checksum);
 
-      if (existingMd5Checksum && md5Checksum === existingMd5Checksum) {
+      if (verifiedContent) {
         debug("DOWNLOAD file skipped because md5Checksum matches");
         debug("      path:", path);
-        debug("   locally:", existingMd5Checksum);
+        debug("   locally:", verifiedContent.checksum);
         debug("    remote:", md5Checksum);
-        return resolve({ updated: false });
+        return resolve({ updated: false, verifiedContent });
       }
 
       debug("DOWNLOAD file");
@@ -405,6 +405,9 @@ module.exports = async (
       // Source end can precede the final disk write. Pipeline waits for the
       // destination and destroys both streams on error before we publish.
       await streamToFile(data, tempPath);
+      if (md5Checksum && !(await verifyContent(tempPath, md5Checksum))) {
+        throw new Error("Downloaded content does not match the listed Drive checksum");
+      }
       await fs.move(tempPath, pathOnBlot, { overwrite: true });
       try {
         const mtime = new Date(modifiedTime);
@@ -412,7 +415,10 @@ module.exports = async (
       } catch (e) {
         debug("Error setting mtime", e);
       }
-      settle(() => resolve({ updated: true }));
+      // Publication has succeeded. A concurrent local write (or stat failure)
+      // must not suppress the caller's rebuild; simply decline to cache it.
+      const verified = await verifyContent(pathOnBlot, md5Checksum).catch(() => null);
+      settle(() => resolve({ updated: true, verifiedContent: verified }));
     } catch (e) {
       debug("download error", e);
       await fs.remove(tempPath).catch(() => {});

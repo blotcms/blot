@@ -439,7 +439,7 @@ class HotDocPoller {
     const { done, folder } = await establishSyncLock(item.blogID);
     try {
       const drive = await this.getDrive(item.serviceAccountId);
-      const folderDb = database.folder(item.folderId);
+      const folderDb = database.folder(item.folderId, item.blogID);
       const path = await folderDb.get(item.fileId);
 
       if (!path) {
@@ -495,6 +495,13 @@ class HotDocPoller {
 
         if (result?.updated && folder?.update) {
           await folder.update(path);
+        }
+
+        if (result?.verifiedContent) {
+          await folderDb.setVerifiedContent(file.data.id, {
+            path,
+            ...result.verifiedContent,
+          });
         }
 
         if (result?.updated !== true) {

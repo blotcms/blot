@@ -21,7 +21,7 @@ module.exports = async (blogID, publish, options = {}) => {
   const { folderId, serviceAccountId } = account;
   const drive = await createDriveClient(serviceAccountId);
   const checkWeCanContinue = CheckWeCanContinue(blogID, account);
-  const { reset, set } = database.folder(folderId);
+  const { reset, set } = database.folder(folderId, blogID);
   const progress = options.publishSyncProgress
     ? {
         current: 0,

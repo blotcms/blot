@@ -11,7 +11,7 @@ module.exports = async function remove(blogID, path, callback) {
   try {
     const { serviceAccountId, folderId } = await database.blog.get(blogID);
     const drive = await createDriveClient(serviceAccountId);
-    const { getByPath, remove } = database.folder(folderId);
+    const { getByPath, remove } = database.folder(folderId, blogID);
 
     console.log(prefix(), "Removing from local folder");
     const pathOnBlot = localPath(blogID, path);

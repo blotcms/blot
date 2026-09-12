@@ -1,3 +1,5 @@
+const migrationBudget = require("./util/migrationBudget");
+const comparePaths = require("./util/comparePaths");
 const fs = require("fs-extra");
 const { join } = require("path");
 const localPath = require("helper/localPath");
@@ -37,7 +39,13 @@ module.exports = async function sync(blogID, publish, update) {
   }
 
   const drive = await createDriveClient(serviceAccountId);
-  const { getByPath, set, remove } = database.folder(folderId);
+  const { getByPath, set, remove, getVerifiedContents, setVerifiedContent,
+    getMigrationCursor, setMigrationCursor } = database.folder(folderId, blogID);
+  const migrationCursor = await getMigrationCursor();
+  const canMigrate = migrationBudget();
+  let lastMigrated = migrationCursor;
+  let migrationExhausted = false;
+  let deferred = 0;
   const checkWeCanContinue = CheckWeCanContinue(blogID, account);
   const progress = createProgress(
     await countLocalFiles(localPath(blogID, "/")),
@@ -93,7 +101,13 @@ module.exports = async function sync(blogID, publish, update) {
 
     // We handle file name deduplication and the mapping of
     // google docs to .gdoc files here.
-    const remoteContents = transformDriveItems(driveItems);
+    const remoteContents = transformDriveItems(driveItems)
+      .sort((a, b) => comparePaths(a.name, b.name));
+    const regularFiles = remoteContents.filter(item =>
+      !item.isDirectory && !item.mimeType.startsWith("application/vnd.google-apps.") &&
+      item.md5Checksum);
+    const verifiedRecords = await getVerifiedContents(regularFiles.map(item => item.id));
+    const verifiedById = new Map(regularFiles.map((item, i) => [item.id, verifiedRecords[i]]));
 
     for (const { name, isDirectory: isLocalDirectory } of localContents) {
       const path = join(dir, name);
@@ -160,24 +174,31 @@ module.exports = async function sync(blogID, publish, update) {
           "application/vnd.google-apps."
         );
 
-        // NOTE: for regular files this only compares size, not content.
-        // A same-size content edit will not be re-downloaded. This is a
-        // known gap — see TODO "Add sync check" under Google Drive.
-        //
-        // Do NOT "fix" this by hashing every local file's contents on
-        // every sync (e.g. `: false`, forcing download()'s MD5 check to
-        // always run) without also solving the cost problem: that
-        // recomputes a checksum from disk for every unchanged file on
-        // every sync, which does not scale for blogs with many files.
-        // We moved away from exactly that approach once already, see
-        // b618509. Any fix here needs to keep sync cost proportional to
-        // the number of *changed* files, e.g. by comparing against a
-        // checksum stored at download time instead of rehashing live.
-        // See PR #1804 for a rejected attempt and further discussion.
+        const cached = verifiedById.get(id);
+        const verified = cached && cached.path === path &&
+          cached.checksum === md5Checksum && cached.fingerprint &&
+          cached.fingerprint === existsLocally?.fingerprint;
         const identical = isGoogleAppFile
-          ? truncateToSecond(existsLocally?.modifiedTime) ===
-            truncateToSecond(modifiedTime)
-          : existsLocally?.size === size;
+          ? truncateToSecond(existsLocally?.modifiedTime) === truncateToSecond(modifiedTime)
+          : md5Checksum
+            ? Boolean(verified)
+            : existsLocally?.size === size &&
+              truncateToSecond(existsLocally?.modifiedTime) === truncateToSecond(modifiedTime);
+
+        // Warm old equal-size files incrementally, without turning the first
+        // sync after deployment into a complete content scan. A persistent
+        // cursor advances on attempts, including failures, for fair retries.
+        const legacy = !isGoogleAppFile && md5Checksum && !cached &&
+          existsLocally && !existsLocally.isDirectory && existsLocally.size === size;
+        if (legacy) {
+          if (comparePaths(path, migrationCursor) <= 0 || migrationExhausted || !canMigrate(size)) {
+            if (comparePaths(path, migrationCursor) > 0) migrationExhausted = true;
+            deferred++;
+            progress.publishThrottled("Verification deferred", path);
+            continue;
+          }
+          lastMigrated = path;
+        }
 
         if (!existsLocally || !identical) {
           await checkWeCanContinue();
@@ -221,7 +242,14 @@ module.exports = async function sync(blogID, publish, update) {
               publish("Skipped oversized Google Doc", path);
             }
 
-            if (result?.updated) await update(path);
+            // A previous rebuild/cache-store may have failed after publication.
+            // Rebuild before recording verification, even if bytes now match.
+            if (result?.updated || (!isGoogleAppFile && result?.verifiedContent)) {
+              await update(path);
+            }
+            if (!isGoogleAppFile && result?.verifiedContent) {
+              await setVerifiedContent(id, { path, ...result.verifiedContent });
+            }
           } catch (err) {
             publish("Download failed", path);
             console.error("Download failed for", path, err);
@@ -253,8 +281,14 @@ module.exports = async function sync(blogID, publish, update) {
 
   try {
     await walk("/", folderId);
-    progress.finish("Finished processing folder");
+    await setMigrationCursor(migrationExhausted ? lastMigrated : "");
+    progress.finish(deferred
+      ? `Finished processing folder (${deferred} content verifications deferred)`
+      : "Finished processing folder");
+    return true;
   } catch (err) {
+    if (lastMigrated !== migrationCursor) await setMigrationCursor(lastMigrated);
     publish("Sync failed", err.message);
+    return false;
   }
 };
