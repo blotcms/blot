@@ -195,7 +195,30 @@ h2 {
   padding: var(--iframe-container-padding);
   border-radius: var(--iframe-container-border-radius);
   box-sizing: border-box;
-  overflow: auto;
+  overflow: hidden;
+}
+
+.iframe-scroll {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.iframe-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.iframe-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.iframe-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;
 }
 
 .iframe-container iframe {
@@ -217,6 +240,43 @@ h2 {
   border-radius: var(--border-radius);
   pointer-events: none;
   box-shadow: inset 0 1px rgba(0, 0, 0, 0.1), inset 0 -1px rgba(0, 0, 0, 0.1), inset -1px 0 rgba(0, 0, 0, 0.1), inset 1px 0 rgba(0, 0, 0, 0.1);
+}
+
+.iframe-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--light-background-color);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.iframe-container.loaded .iframe-loading {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0s 0.2s;
+}
+
+.iframe-loading-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--medium-text-color);
+  animation: l1 1s infinite ease-in-out;
+}
+
+.iframe-loading-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.iframe-loading-dot:nth-child(3) {
+  animation-delay: 0.3s;
 }
 
 .iframe-container iframe.mobile {

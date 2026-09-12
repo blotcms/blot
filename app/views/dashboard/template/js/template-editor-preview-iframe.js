@@ -24,6 +24,10 @@ if (previewIframeContainer) {
     return;
   }
 
+  iframe.addEventListener("load", function () {
+    previewIframeContainer.classList.add("loaded");
+  });
+
   var localStorageAvailable = false;
   try {
     localStorageAvailable = typeof window.localStorage !== "undefined";

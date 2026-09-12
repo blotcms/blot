@@ -17,12 +17,19 @@
     </div>
     <div style="box-sizing: border-box;flex-grow: 1;width: 66.66666%;flex-grow: 0;flex-shrink: 0;padding:0 0 0 1rem;            position: sticky;top: 0;">
         <div class="iframe-container" data-origin="{{{previewOrigin}}}">
-            <iframe id="full_size_preview"
-                      width="960"
-                      height="1400"
-                      scrolling="no"
-                    src="{{{preview}}}"
-                    ></iframe>
+            <div class="iframe-scroll">
+                <iframe id="full_size_preview"
+                          width="960"
+                          height="1400"
+                          scrolling="no"
+                        src="{{{preview}}}"
+                        ></iframe>
+            </div>
+            <div class="iframe-loading" data-iframe-loading aria-hidden="true">
+                <span class="iframe-loading-dot"></span>
+                <span class="iframe-loading-dot"></span>
+                <span class="iframe-loading-dot"></span>
+            </div>
         </div>
         <br><br>
     </div>

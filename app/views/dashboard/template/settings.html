@@ -11,12 +11,19 @@
     top: 0;">
                
         <div class="iframe-container" data-origin="{{{previewOrigin}}}">
-            <iframe id="full_size_preview"
-                      width="960"
-                      height="1400"
-                      scrolling="no"
-                    src="{{{preview}}}"
-                    ></iframe>
+            <div class="iframe-scroll">
+                <iframe id="full_size_preview"
+                          width="960"
+                          height="1400"
+                          scrolling="no"
+                        src="{{{preview}}}"
+                        ></iframe>
+            </div>
+            <div class="iframe-loading" data-iframe-loading aria-hidden="true">
+                <span class="iframe-loading-dot"></span>
+                <span class="iframe-loading-dot"></span>
+                <span class="iframe-loading-dot"></span>
+            </div>
         </div>
         
          <div class="segmented-control" style="width:200px;margin:12px 0;font-size: 12px;" data-view-toggle>
