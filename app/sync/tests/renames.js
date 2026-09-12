@@ -4,7 +4,6 @@ describe("update", function () {
   var async = require("async");
   var redis = require("models/client");
   var entryKey = require("models/entry/key").entry;
-  var entryHashKey = require("models/entry/key").entryHash;
 
   it("detects a renamed file across multiple syncs", function (done) {
     var path = this.fake.path(".txt");
@@ -214,10 +213,7 @@ describe("update", function () {
                   },
                   function (next) {
                     redis
-                      .del([
-                        entryKey(blogID, ghostPath),
-                        entryHashKey(blogID, ghostPath),
-                      ])
+                      .del(entryKey(blogID, ghostPath))
                       .then(function () {
                         var deletedListKey = "blog:" + blogID + ":deleted";
 

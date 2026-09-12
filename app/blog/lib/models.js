@@ -103,13 +103,9 @@ function getViewByURL(template, url) {
 
 // Entry.get / getByUrl and several Entries helpers are NOT err-first —
 // they omit the error argument. Mirror the adapter used in models/entry/search.js.
-function getEntry(blogID, entryIDs, fields) {
+function getEntry(blogID, entryIDs) {
   return new Promise((resolve) => {
-    if (fields === undefined) {
-      Entry.get(blogID, entryIDs, (entries) => resolve(entries));
-    } else {
-      Entry.get(blogID, entryIDs, fields, (entries) => resolve(entries));
-    }
+    Entry.get(blogID, entryIDs, (entries) => resolve(entries));
   });
 }
 
@@ -134,23 +130,15 @@ function randomEntry(blogID) {
 }
 
 // getAll / getRecent callback with (entries) only — never an error argument.
-function getAll(blogID, options) {
+function getAll(blogID) {
   return new Promise((resolve) => {
-    if (options === undefined) {
-      Entries.getAll(blogID, (entries) => resolve(entries));
-    } else {
-      Entries.getAll(blogID, options, (entries) => resolve(entries));
-    }
+    Entries.getAll(blogID, (entries) => resolve(entries));
   });
 }
 
-function getRecent(blogID, options) {
+function getRecent(blogID) {
   return new Promise((resolve) => {
-    if (options === undefined) {
-      Entries.getRecent(blogID, (entries) => resolve(entries));
-    } else {
-      Entries.getRecent(blogID, options, (entries) => resolve(entries));
-    }
+    Entries.getRecent(blogID, (entries) => resolve(entries));
   });
 }
 

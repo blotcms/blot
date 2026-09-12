@@ -4,7 +4,6 @@ const listGhosts = require("./list-ghosts");
 const menuGhosts = require("./menu-ghosts");
 const tagGhosts = require("./tag-ghosts");
 const entriesPathIndex = require("./entries-path-index");
-const archivesIndex = require("./archives-index");
 const async = require("async");
 const callOnce = require("helper/callOnce");
 
@@ -36,7 +35,6 @@ module.exports = function (blog, options, callback) {
     { name: "list-ghosts", fn: listGhosts },
     { name: "menu-ghosts", fn: menuGhosts },
     { name: "entries-path-index", fn: entriesPathIndex },
-    { name: "archives-index", fn: archivesIndex },
   ];
   let current = 0;
 

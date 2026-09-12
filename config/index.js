@@ -94,17 +94,7 @@ module.exports = {
   port: BLOT_PORT,
   clients_port: 8888,
 
-  redis: {
-    port: 6379,
-    host: process.env.BLOT_REDIS_HOST || "127.0.0.1",
-
-    // Migration flag (see app/models/entry). models/entry/get reads each entry
-    // from its Redis hash, falling back to the legacy JSON string key. This is
-    // now on by default; set BLOT_REDIS_READ_ENTRIES_FROM_HASH=false to force
-    // reads back onto the JSON string (rollback, no code change needed).
-    readEntriesFromHash:
-      process.env.BLOT_REDIS_READ_ENTRIES_FROM_HASH !== "false",
-  },
+  redis: { port: 6379, host: process.env.BLOT_REDIS_HOST || "127.0.0.1" },
 
   admin: {
     uid: process.env.BLOT_ADMIN_UID,

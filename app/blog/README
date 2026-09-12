@@ -27,8 +27,7 @@ app/blog/
 │   ├── fromCloudflare.js Shared Cloudflare request sniff
 │   ├── clone.js          Shared deep clone / freeze for LRU caches
 │   ├── pagination.js     Shared page/limit normalization for tagged listings
-│   ├── staticPaths.js    Shared global static directory constants
-│   └── withEntryFields.js Narrowed entry-list fetch with Mustache refetch guard
+│   └── staticPaths.js    Shared global static directory constants
 ├── middleware/           Request-identity middleware
 │   ├── vhosts.js         Identifies and loads the blog from the request host or domain.
 │   └── loadTemplate.js   Loads template metadata and attaches it to req.template.
@@ -111,11 +110,11 @@ Each file in this directory is a named retriever. The retrieve system (`render/r
 |---|---|---|
 | `active` | `active.js` | Lambda that returns `"active"` if the current URL matches `this.url` or `this.slug`. |
 | `absolute_urls` / `absoluteURLs` | `absolute_urls.js` | Lambda that rewrites relative `href`/`src` attributes to absolute URLs. Used in RSS feeds. |
-| `all_entries` / `allEntries` | `all_entries.js` | All published entries for the blog, capped at `MAX_ENTRIES` (`lib/limits.js`, currently 1000) most recent entries. |
+| `all_entries` / `allEntries` | `all_entries.js` | All published entries for the blog. |
 | `all_tags` / `allTags` | `all_tags.js` | All tags, sorted alphabetically, with entry counts. |
 | `app_css` / `appCSS` / `plugin_css` | `app_css.js` | Concatenated CSS from enabled blog plugins. |
 | `app_js` / `appJS` / `plugin_js` | `app_js.js` | Concatenated JS from enabled blog plugins. |
-| `archives` | `archives.js` | Entries grouped by year and month (for archive views), capped at `MAX_ENTRIES` (`lib/limits.js`, currently 1000) most recent entries. Reads from the precomputed `models/archives` index rather than fetching and grouping every entry per request - see `app/models/archives/README`. |
+| `archives` | `archives.js` | All entries grouped by year and month (for archive views). |
 | `asset` | `asset.js` | Single asset lookup by path. |
 | `avatar_url` | `avatar_url.js` | URL for the blog's avatar image. |
 | `cdn` | `cdn.js` | Lambda/string for CDN URL generation. Used as `{{#cdn}}/path{{/cdn}}` (section) or `{{cdn}}` (origin string). Skips CDN rewriting on preview subdomains. |

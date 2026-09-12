@@ -7,7 +7,6 @@ var clfdate = require("helper/clfdate");
 var debug = require("debug")("blot:entry:set");
 var get = require("./get");
 var key = require("./key");
-var format = require("./format");
 var setUrl = require("./_setUrl");
 var Candidates = setUrl.Candidates;
 var Blog = require("models/blog");
@@ -16,7 +15,6 @@ var Blog = require("models/blog");
 var rebuildDependencyGraph = require("./_rebuildDependencyGraph");
 var backlinksToUpdate = require("./_backlinksToUpdate");
 var updateTagList = require("models/tags").set;
-var updateArchivesIndex = require("models/archives").set;
 var addToSchedule = require("./_addToSchedule");
 var notifyDrafts = require("./_notifyDrafts");
 var assignToLists = require("./_assign");
@@ -32,7 +30,6 @@ module.exports = function set (blogID, path, updates, callback) {
     .and(callback, "function");
 
   var entryKey = key.entry(blogID, path);
-  var entryHashKey = key.entryHash(blogID, path);
   var queue;
 
   debug("set", blogID, path);
@@ -167,54 +164,22 @@ module.exports = function set (blogID, path, updates, callback) {
         // keys it should have and no more
         ensure(entry, model, true);
 
-        // Store the entry twice: the legacy JSON string key (authoritative
-        // until the hash backfill has run everywhere) and a Redis hash, which
-        // is the source of truth going forward and lets ./get.js fetch
-        // individual fields with HMGET. `del` before `hSet` clears any fields
-        // left behind by an older entry model.
+        // Store the entry
         redis
-          .multi()
           .set(entryKey, JSON.stringify(entry))
-          .del(entryHashKey)
-          .hSet(entryHashKey, format.serialize(entry))
-          .exec()
           .then(function () {
             if (entry.deleted) {
-              return redis
-                .multi()
-                .expire(entryKey, 24 * 60 * 60)
-                .expire(entryHashKey, 24 * 60 * 60)
-                .exec()
-                .then(function (results) {
-                  if (!results || !results[0] || !results[1])
-                    throw new Error(
-                      "Failed to set expiration for deleted entry"
-                    );
-                });
+              return redis.expire(entryKey, 24 * 60 * 60).then(function (result) {
+                if (!result)
+                  throw new Error("Failed to set expiration for deleted entry");
+              });
             }
 
-            return redis.multi().persist(entryKey).persist(entryHashKey).exec();
+            return redis.persist(entryKey);
           })
           .then(function () {
-            // Re-read the blog's timezone right before reconciling the
-            // archives index, rather than reusing the `blog` fetched at the
-            // top of this save (before setUrl and the entry-persisting
-            // multis above). Every archive bucket is keyed by year/month in
-            // this timezone (see models/archives/set.js), so a save that
-            // straddles a concurrent timezone change - and therefore an
-            // archives rebuild - must not write into a now-stale bucket
-            // using the timezone this save started with.
-            return new Promise(function (resolve, reject) {
-              Blog.get({ id: blogID }, function (err, currentBlog) {
-                if (err) return reject(err);
-                resolve(currentBlog ? currentBlog.timeZone : blog.timeZone);
-              });
-            });
-          })
-          .then(function (timeZone) {
             queue = [
               updateTagList.bind(this, blogID, entry),
-              updateArchivesIndex.bind(this, blogID, entry, timeZone),
               assignToLists.bind(this, blogID, entry),
               rebuildDependencyGraph.bind(this, blogID, entry, previousDependencies),
             ];

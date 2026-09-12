@@ -12,7 +12,6 @@ var flushCache = require("./flushCache");
 var normalizeImageExif = require("./util/imageExif").normalize;
 var normalizeConverters = require("./util/converters").normalize;
 var updateCdnManifest = require("../template/util/updateCdnManifest");
-var Archives = require("../archives");
 var forkSiteTemplate = require("../template/util/forkSiteTemplate");
 var renameGitRepo = require("clients/git/renameRepo");
 var serializeRedisHashValues = require("models/redisHashSerializer");
@@ -184,24 +183,6 @@ module.exports = function (blogID, blog, callback) {
         // We didn't manage to apply any changes
         // to this blog, so empty the list of changes
         return callback(err, []);
-      }
-
-      // Every precomputed archive bucket is keyed by year/month in the
-      // blog's timezone (see models/archives/set.js), so changing timezone
-      // invalidates the whole index. Rebuild is proportional to entry count
-      // and timezone changes are rare, so this runs fire-and-forget rather
-      // than holding up the settings save.
-      if (changes.timeZone) {
-        Archives.rebuild(blogID, function (err) {
-          if (err) {
-            console.log(
-              "Blog.set",
-              blogID,
-              "Error rebuilding archives index",
-              err
-            );
-          }
-        });
       }
 
       const template = latest.template || former.template;

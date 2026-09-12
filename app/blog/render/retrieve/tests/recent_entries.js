@@ -24,12 +24,8 @@ describe("recent_entries", function () {
     expect(result).toEqual([{ id: "/a.txt", title: "A", html: "<p>A</p>" }]);
   });
 
-  it("requests a narrowed field list when the template only references non-heavy fields", async function () {
-    spyOn(Entries, "getRecent").and.callFake(function (
-      blogID,
-      options,
-      callback
-    ) {
+  it("strips unreferenced heavy fields when the template only references non-heavy fields", async function () {
+    spyOn(Entries, "getRecent").and.callFake(function (blogID, callback) {
       callback([{ id: "/a.txt", title: "A", html: "<p>A</p>" }]);
     });
 
@@ -38,22 +34,13 @@ describe("recent_entries", function () {
       retrieve: { recentEntries: { fields: { title: true } } },
     });
 
-    expect(Entries.getRecent).toHaveBeenCalledWith(
-      "blog-1",
-      jasmine.objectContaining({ fields: jasmine.any(Array) }),
-      jasmine.any(Function)
-    );
     // The template only referenced `title`, so the unreferenced heavy `html`
     // field should be stripped even though the fetch above returned it.
     expect(result).toEqual([{ id: "/a.txt", title: "A" }]);
   });
 
   it("recognizes the recent_entries alias", async function () {
-    spyOn(Entries, "getRecent").and.callFake(function (
-      blogID,
-      options,
-      callback
-    ) {
+    spyOn(Entries, "getRecent").and.callFake(function (blogID, callback) {
       callback([{ id: "/a.txt", title: "A", html: "<p>A</p>" }]);
     });
 

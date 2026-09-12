@@ -1,8 +1,6 @@
 const { getEntry } = require("../../lib/models");
 const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
 const projectEntryFields = require("./helpers/projectEntryFields");
-const entryFieldList = require("./helpers/entryFieldList");
-const withEntryFields = require("../../lib/withEntryFields");
 const asRetriever = require("../../lib/asRetriever");
 const {
   normalizePageNumber,
@@ -42,18 +40,9 @@ async function tagged(req, res) {
     ...sortOptions,
   });
 
-  const fields = entryFieldList(req.retrieve, ["tagged"]);
   const entryIDs = result.entryIDs || [];
 
-  let entries;
-  if (!fields) {
-    entries = await getEntry(blogID, entryIDs);
-  } else {
-    entries = await withEntryFields(
-      () => getEntry(blogID, entryIDs, fields),
-      () => getEntry(blogID, entryIDs)
-    );
-  }
+  let entries = await getEntry(blogID, entryIDs);
 
   entries = sortEntries(entries, sortOptions);
   projectEntryFields(entries, req.retrieve, ["tagged"]);

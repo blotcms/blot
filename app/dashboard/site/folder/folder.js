@@ -189,11 +189,9 @@ async function decorate(blog, dir, pageStats) {
       });
 
       // Every item in a "+" folder resolves to the same aggregate entry, so
-      // read each distinct path once. Entry.get transparently reads the
-      // legacy JSON string key or the newer Redis hash, whichever exists; we
-      // only need the deleted flag and the generated HTML (to confirm a file
-      // is one of the folder post's sources rather than an unsupported
-      // sibling).
+      // read each distinct path once. We only need the deleted flag and the
+      // generated HTML (to confirm a file is one of the folder post's
+      // sources rather than an unsupported sibling).
       const uniquePaths = Array.from(
         new Set(lookups.map((lookup) => lookup.lookupPath))
       );
