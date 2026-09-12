@@ -131,4 +131,30 @@ describe("icloud fromiCloud sync", function () {
     expect(summary.skipped).toBe(1);
     expect(summary.placeholdersCreated).toBe(1);
   });
+
+  it("does not remove local files when remoteReaddir fails (partial/unconfirmed listing)", async () => {
+    const localFile = localPath(blogID, join("/", "post.txt"));
+    await fs.outputFile(localFile, "hello world");
+
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => {
+      throw new Error("Directory listing unavailable: iCloud has not synced it yet");
+    });
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, { store: async () => {} });
+
+    const fromiCloud = require(fromiCloudPath);
+    const published = [];
+    const summary = await fromiCloud(
+      blogID,
+      (...args) => published.push(args.join(" ")),
+      async () => {}
+    );
+
+    const stat = await fs.stat(localFile);
+
+    expect(stat.isFile()).toBe(true);
+    expect(summary.removed).toBe(0);
+    expect(published.some((line) => line.includes("Sync failed"))).toBe(true);
+  });
 });

@@ -38,10 +38,45 @@ export default async (req, res) => {
   // otherwise, files or subdirectories may be missing. if this stops working
   // you can use brctl monitor -p [path] to force iCloud to sync the directory
   // listing (this will not download the files, just the list of contents)
+  // `ls` (brctl/ls.js) does NOT throw on failure: it returns null when the
+  // directory does not exist, when brctl's download times out, or on any
+  // unexpected error. Previously its return value was discarded and we fell
+  // through to fs.readdir regardless, so a transient timeout produced a
+  // PARTIAL listing served as a 200. The caller (sync/fromiCloud) then
+  // treated every file missing from that partial list as deleted remotely
+  // and removed Blot's local copy - silently unpublishing real posts.
+  let listing = null;
   try {
-    await ls(dirPath);
+    listing = await ls(dirPath);
   } catch (error) {
     console.error(clfdate(), "Error listing directory:", dirPath, error);
+  }
+
+  if (listing === null) {
+    // Distinguish a directory that is genuinely gone (a legitimate remote
+    // deletion - let it flow through the ENOENT -> 404 path below, as before)
+    // from one that exists but whose contents iCloud has not materialised.
+    // Only the latter is a partial listing, and for it we FAIL CLOSED: the
+    // error makes remoteReaddir throw, which aborts that sync pass before its
+    // deletion loop runs, and the sync is simply retried later. A failed sync
+    // is recoverable; a deleted post is not.
+    let exists = true;
+    try {
+      await fs.stat(dirPath);
+    } catch (error) {
+      if (error.code === "ENOENT") exists = false;
+    }
+
+    if (exists) {
+      console.error(
+        clfdate(),
+        "Refusing to serve unconfirmed (possibly partial) listing:",
+        dirPath
+      );
+      return res
+        .status(503)
+        .send("Directory listing unavailable: iCloud has not synced it yet");
+    }
   }
 
   let files = [];
