@@ -421,8 +421,6 @@ Replace existing cssURL and scriptURL and css_url and script_url properties in t
 Replace existing asset helper properties in templates with new cdn helper
 - Check it's only used for CSS/JS...
 
-Search results pages should be no-indexed by search engines
-
 Can we optimize renderView in some way?
 - use lru cache or moize libraries? back against cacheID property of blog?
 - Memoize load template / load full view / load blog... others?
@@ -1034,7 +1032,6 @@ Expose log files on blog's dashboard and tell [Roman](https://mail.google.com/ma
 ---
 
 Improvements to metadata extractor:
-- Improve date parser to use time from file creation date if it's within the same day as the date specified in metadata and follow up with [Nicolas](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsShbhKRcvhWJlKRPHPctMnWM)
 - Adjust summary generator such that a subtitle is used for summary text (i.e. an h2 directly following an h1) We still want to prevent the scenario in which a later h2 becomes the summary, though. Notify [Jessica and rebuild Jessica's site](https://mail.google.com/mail/u/0/#inbox/KtbxLwghhxtxrtdGHFqBRMcDGkGWtxvSdq)
 - Add support for entry property with escaped double quotes, tell [Jay](https://mail.google.com/mail/u/0/#inbox/15e396dbd8350972)
 
