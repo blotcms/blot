@@ -275,6 +275,109 @@ describe("build", function () {
     });
   });
 
+  describe("dateStamp and the entry's creation time", function () {
+    var Entry = require("models/entry");
+    var moment = require("moment");
+
+    it("uses the current time for a brand new entry whose date-only metadata matches today", function (done) {
+      var path = "/date-only-brand-new.txt";
+      var blog = this.blog;
+      var dateOnly = moment.utc().format("M/D/YYYY");
+
+      fs.outputFileSync(
+        this.blogDirectory + path,
+        "Date: " + dateOnly + "\n\nBrand new post"
+      );
+
+      var before = Date.now();
+
+      build(blog, path, function (err, entry) {
+        if (err) return done.fail(err);
+        var after = Date.now();
+
+        // A brand new entry has no stored 'created' yet - Entry.set is
+        // about to assign it Date.now() moments after this build
+        // finishes, so build() should use that same instant rather than
+        // defaulting to midnight (which would otherwise only get fixed by
+        // a later, unrelated rebuild).
+        expect(entry.dateStamp).toBeGreaterThanOrEqual(before);
+        expect(entry.dateStamp).toBeLessThanOrEqual(after);
+
+        done();
+      });
+    });
+
+    it("uses the entry's original creation time when a rebuild's date-only metadata falls on the same day", function (done) {
+      var path = "/date-only-same-day.txt";
+      var blog = this.blog;
+
+      fs.outputFileSync(this.blogDirectory + path, "No date in this file yet");
+
+      build(blog, path, function (err, entry) {
+        if (err) return done.fail(err);
+
+        // Simulate this entry having first been created earlier today,
+        // at a specific time, by directly setting its 'created' field.
+        var createdAt = moment.utc().startOf("day").add(15, "hours").add(30, "minutes").valueOf();
+
+        Entry.set(blog.id, path, Object.assign({}, entry, { created: createdAt }), function (err) {
+          if (err) return done.fail(err);
+
+          var dateOnly = moment.utc().format("M/D/YYYY");
+          fs.outputFileSync(
+            this.blogDirectory + path,
+            "Date: " + dateOnly + "\n\nNow with a date"
+          );
+
+          build(blog, path, function (err, rebuiltEntry) {
+            if (err) return done.fail(err);
+
+            expect(moment.utc(rebuiltEntry.dateStamp).format("YYYY-MM-DD HH:mm")).toEqual(
+              moment.utc(createdAt).format("YYYY-MM-DD HH:mm")
+            );
+
+            done();
+          });
+        }.bind(this));
+      }.bind(this));
+    });
+
+    it("does not use the entry's creation time when the metadata date is a different day", function (done) {
+      var path = "/date-only-different-day.txt";
+      var blog = this.blog;
+
+      fs.outputFileSync(this.blogDirectory + path, "No date in this file yet");
+
+      build(blog, path, function (err, entry) {
+        if (err) return done.fail(err);
+
+        var createdAt = moment.utc().subtract(10, "days").add(15, "hours").valueOf();
+
+        Entry.set(blog.id, path, Object.assign({}, entry, { created: createdAt }), function (err) {
+          if (err) return done.fail(err);
+
+          var dateOnly = moment.utc().format("M/D/YYYY");
+          fs.outputFileSync(
+            this.blogDirectory + path,
+            "Date: " + dateOnly + "\n\nNow with a date"
+          );
+
+          build(blog, path, function (err, rebuiltEntry) {
+            if (err) return done.fail(err);
+
+            // Falls back to midnight since the metadata date doesn't
+            // match the day the entry was originally created.
+            expect(moment.utc(rebuiltEntry.dateStamp).format("HH:mm")).toEqual(
+              "00:00"
+            );
+
+            done();
+          });
+        }.bind(this));
+      }.bind(this));
+    });
+  });
+
   it("will not cache image an image using the static query string", function (done) {
     var path = "/Hello world.txt";
     var contents = "<img src='" + this.origin + "/public.jpg?static=1'>";

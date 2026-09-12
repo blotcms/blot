@@ -64,4 +64,14 @@ describe("date from file path", function () {
     Date.UTC(2021, 11, 1),
     "Snow envy.txt"
   );
+
+  describe("hasTime", function () {
+    it("is false when the path has no hour token", function () {
+      expect(fromPath("/2016/1/18/foo-bar-baz.txt").hasTime).toEqual(false);
+    });
+
+    it("is true when the path has an hour token", function () {
+      expect(fromPath("2013-09-18-19.20.36.jpg").hasTime).toEqual(true);
+    });
+  });
 });
