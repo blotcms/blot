@@ -16,22 +16,30 @@ describe("cacher", function () {
 
     expect(files.length).toBe(1);
 
-    const contents = await fs.readFile(files[0], "utf-8");
+    const buffer = await fs.readFile(files[0]);
+    // The file starts with nginx's fixed-size binary cache header
+    // (ngx_http_file_cache_header_t). Its raw bytes include a timestamp, so
+    // it occasionally contains a '\n' (0x0A) byte, which used to shift every
+    // line index below and made this spec flaky. Slice from the "KEY: "
+    // marker so we only split the guaranteed plain-text metadata/headers/
+    // body into lines.
+    const keyIndex = buffer.indexOf("KEY: ");
+    const contents = buffer.slice(keyIndex).toString("utf-8");
     // we trim because the lines end with '\r'
     const lines = contents.split("\n").map(l => l.trim());
 
-    expect(lines.length).toBe(12);
-    expect(lines[1]).toBe("KEY: " + this.origin + "/");
-    expect(lines[2]).toBe("HTTP/1.1 200 OK");
-    expect(lines[3]).toBe("X-Powered-By: Express");
-    expect(lines[4]).toBe("Content-Type: text/html; charset=utf-8");
-    expect(lines[5]).toBe("Content-Length: 11");
-    expect(lines[6]).toMatch(/^ETag: /);
-    expect(lines[7]).toMatch(/^Date: /);
-    expect(lines[8]).toBe("Connection: keep-alive");
-    expect(lines[9]).toBe("Keep-Alive: timeout=5");
+    expect(lines.length).toBe(11);
+    expect(lines[0]).toBe("KEY: " + this.origin + "/");
+    expect(lines[1]).toBe("HTTP/1.1 200 OK");
+    expect(lines[2]).toBe("X-Powered-By: Express");
+    expect(lines[3]).toBe("Content-Type: text/html; charset=utf-8");
+    expect(lines[4]).toBe("Content-Length: 11");
+    expect(lines[5]).toMatch(/^ETag: /);
+    expect(lines[6]).toMatch(/^Date: /);
+    expect(lines[7]).toBe("Connection: keep-alive");
+    expect(lines[8]).toBe("Keep-Alive: timeout=5");
 
-    expect(lines[11]).toBe("Hello Node!");
+    expect(lines[10]).toBe("Hello Node!");
 
     // if we retry the request, the header 'cache-hit' should be set
     const cachedResponse = await fetch(this.origin);
