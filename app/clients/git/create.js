@@ -235,6 +235,16 @@ function report(folder, message, logMessage = message) {
   folder.status(message);
 }
 
+// git add exits non-zero for paths matched by a .gitignore rule; rather than
+// spawning a separate `git check-ignore` per entry (slow: one subprocess per
+// file, and this repo runs git with maxConcurrentProcesses: 1), we just try
+// to add the file and skip it if git refuses it as ignored.
+function isGitIgnoreAddError(err) {
+  return /ignored by one of your \.gitignore files/i.test(
+    String((err && err.message) || err)
+  );
+}
+
 async function countFiles(dir) {
   const entries = (await fs.readdir(dir, { withFileTypes: true })).filter(
     (entry) => !shouldIgnoreFile(entry.name)
@@ -261,14 +271,6 @@ async function addFolder(folder, liveRepo, bareRepo, progress) {
       .filter((entry) => !shouldIgnoreFile(entry.name))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    if (!entries.length && dir === folder.path) {
-      console.log(
-        clfdate() + " Git: addFolder: folder is empty, creating initial commit"
-      );
-      // If the folder is empty, create an initial commit
-      return handleEmptyFolder(folder, liveRepo);
-    }
-
     for (const entry of entries) {
       const filePath = path.join(dir, entry.name);
 
@@ -294,6 +296,17 @@ async function addFolder(folder, liveRepo, bareRepo, progress) {
 
     await walk(folder.path);
     await commitPendingFiles(liveRepo, progress);
+
+    // Nothing was actually staged, either because the folder was empty or
+    // because every file in it is gitignored: fall back to an initial commit
+    // so the repository ends up with a HEAD instead of being left with none.
+    if (progress.filesAdded === 0) {
+      console.log(
+        clfdate() +
+          " Git: addFolder: no files added, creating initial commit"
+      );
+      return handleEmptyFolder(folder, liveRepo);
+    }
 
     if (progress.unpushedCommits > 0) {
       await pushPendingCommits(liveRepo, progress);
@@ -335,6 +348,16 @@ async function stageFile(folder, liveRepo, bareRepo, progress, filePath) {
   try {
     await liveRepo.add(filePath);
   } catch (err) {
+    if (isGitIgnoreAddError(err)) {
+      console.log(
+        clfdate() +
+          " Git: create: skipping gitignored file " +
+          relativePath
+      );
+      progress.total = Math.max(0, progress.total - 1);
+      return;
+    }
+
     console.log(
       "Failed to add file " + relativePath + " to repository: " + err.message
     );

@@ -115,4 +115,45 @@ describe("git client create", function () {
         });
     });
   });
+
+  it("skips files ignored by an existing .gitignore", function (done) {
+    var blogDir = localPath(this.blog.id, "/");
+    var fs = require("fs-extra");
+    var blog = this.blog;
+    var tmp = this.tmp;
+    var clonedDir = this.tmp + "/" + this.blog.handle;
+
+    fs.outputFileSync(blogDir + "/.gitignore", ".verification/\n");
+    fs.outputFileSync(blogDir + "/post.txt", "Hello");
+    fs.outputFileSync(blogDir + "/.verification/agent.jsonl", "notes");
+
+    setClientToGit(this.user, blog, this.server.port, function (err, repoUrl) {
+      if (err) return done.fail(err);
+
+      Git(tmp)
+        .silent(true)
+        .clone(repoUrl, function (err) {
+          if (err) return done.fail(err);
+
+          expect(fs.readdirSync(blogDir).sort()).toEqual([
+            ".git",
+            ".gitignore",
+            ".verification",
+            "post.txt",
+          ]);
+          expect(fs.existsSync(blogDir + "/.verification/agent.jsonl")).toBe(
+            true
+          );
+
+          expect(fs.readdirSync(clonedDir).sort()).toEqual([
+            ".git",
+            ".gitignore",
+            "post.txt",
+          ]);
+          expect(fs.existsSync(clonedDir + "/.verification")).toBe(false);
+
+          done();
+        });
+    });
+  });
 });

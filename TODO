@@ -97,6 +97,8 @@ Dropbox:
 
 Git:
 - Improve the performance of Git client initialization by either using batching of commits and increasing the interval for Git garbage collection
+- Investigate a bug with git client credentials triggered when you have two sites using git on one account, and delete one of the sites
+- Work out how to pipe custom error messages down
 - Surface progress of Git garbage collection command on dashboard through blog status updates
 - Create tests for large Git repo initialization
 - Gather the total number of files so we can add a status bar to the setting up repository page
@@ -196,12 +198,6 @@ Fix bug with repeat resyncs of specific sites via Google Drive:
 
 Fix bug with CDN replaceFolder not working with relative path to CSS file on wall.blot.im
 
-Fix bug with [~/gitbug folder](https://mail.google.com/mail/u/0/#inbox/KtbxLxgKJJfmhMNplLBcTcFCPgBVNlGtHL) during setup
-- surface setup errors with git client
-- handle these errors nicely through sync status
-
-Fix bug with auto heading injector and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQgKvJFLPslvxmlmMBnmcQQTqzq)
-
 Fix bug with huge draft crashing the sync server /a327ex/drafts/it_follows.txt
 - Chunk large drafts into multiple messages to avoid memory issues? 
 
@@ -236,10 +232,6 @@ Fix bug with placeholder files when switching clients: DATA LOSS, BLOT WILL NOT 
 
 Fix bug with the '-2' suffix on posts when renaming a huge folder and tell Chuck
 
-Fix bugs with git client
-- Investigate a bug with git client credentials triggered when you have two sites using git on one account, and delete one of the sites
-- Work out how to pipe custom error messages down
-
 Fix bug with menu which occur when multiple pages are added at once Menu needs concurrency or atomic operations (so we can build posts in parallel)
 - move menu into its own model (it's possible to add thousands of entries to it...)
 
@@ -251,13 +243,6 @@ Fix bug with [many twitter embeds and tell Nash](https://mail.google.com/mail/u/
 Fix bug with filtering paginated list of entries and tell [Roy](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVgrQJWNPHHvdxnMtWCGJkZdM) and [Josh](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVzrFNFzLzbWrssWzbrSvtpTm) and [Logan](https://twitter.com/LoganGreer)
 
 Fix bug with template tags in blog post and tell [Shibel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwCgCJQhBZwgzQVLkKHnwPKVkFC)
-
-Fix [Frank](https://mail.google.com/mail/u/0/1527fbcf999ba0c3)'s strange template bug
-
-Follow-ups from drag-and-drop template upload:
-- Move the folder browser (views/dashboard/folder/directory.html) onto the shared views/js/collect-dropped-files.js instead of its inline copy of the same traversal
-- Surface template metadata.errors in the dashboard editor, not only on the preview subdomain, so a template with a broken view says so where it is edited
-- Reconcile the two url defaults for a new view: source-code.js maps foo.html to /foo, readFromFolder and the upload route map it to /foo.html
 
 Fix bugs with template engine:
 - Prevent double submission on template editor at insertion and front-end levels
@@ -310,17 +295,10 @@ Fix bug with nested Markdown and tell [Martin](https://mail.google.com/mail/u/0/
 
 Fix bug with [Rodrigo's Word Document files](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVWRXqnjmjBDmcRXKcdxjcDfr)
 
-Fix bug with image minification which produces larger file than source file and tell [Jan](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBTkHlNvhcJLGVRCPvXvjbwsWR)
-
-Fix bug parsing ISO8601 date format and tell [Thomas](https://mail.google.com/mail/u/0/#inbox/1625012def221a8f)
-
 Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
 
 Fix bug with Google Drive client and [Stephen's large blog](https://mail.google.com/mail/u/0/#inbox/QgrcJHsBsbkNkMkkkMmLWBxRfnGnWPVwLHl)
   - It also seems like server crashes when a massive google drive folder is synced, with a directory containing 6772 items
-
-Fix bug with Bruce's local template, [possibly related to Ryan's issue](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbdrKgBjjDKTqMbltHHhplfZsr). The template switches from 3 to 2 after each sync.
-- Also affecting [Chris](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbdrRbHMFllcTBGXPJBNKBcLjr)
 
 Fix bug accessibility issue with menu links reordering and tell [Grace](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbfBpBkKCLVRWBGxzDDDkhSXfl)
 
@@ -340,6 +318,11 @@ Proxy container (OpenResty) - remaining before it can replace config/openresty:
 - Wire proxy/deploy/{blue-green,reload-config}.sh into the real deploy pipeline
 - dehydrated version drift: the proxy image vendors dehydrated 0.7.2 (0.6.5, which lua-resty-auto-ssl pins, is rejected by current ACME servers); bare-metal config/openresty still installs the 0.6.5 pin via luarocks - unify (bump lua-resty-auto-ssl, or vendor 0.7.2 there too)
 - Drop or provision the stats. vhost netdata passwords file; Redis auth/TLS; build-arg vs runtime-env for NODE_SERVER_IP/REDIS_IP/netdata creds; container equivalent for fail2ban
+
+Follow-ups from drag-and-drop template upload:
+- Move the folder browser (views/dashboard/folder/directory.html) onto the shared views/js/collect-dropped-files.js instead of its inline copy of the same traversal
+- Surface template metadata.errors in the dashboard editor, not only on the preview subdomain, so a template with a broken view says so where it is edited
+- Reconcile the two url defaults for a new view: source-code.js maps foo.html to /foo, readFromFolder and the upload route map it to /foo.html
 
 Handle content negotiation headers for accept markdown from [LLM bots](https://blog.cloudflare.com/markdown-for-agents/) and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBsvRjgTvbGqmqtSfCQZZNpdM)
 
