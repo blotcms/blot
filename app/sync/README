@@ -53,7 +53,7 @@ sync/
       readme.txt            Design notes for the draft preview feature.
 
   fix/
-    index.js                Orchestrator: runs all five repair routines in series against
+    index.js                Orchestrator: runs all six repair routines in series against
                             a blog, then bumps cacheID if any routine reported changes.
     entry-ghosts.js         Detects entries whose stored path does not match the actual
                             file on disk (case mismatch or missing file). Corrects the
@@ -65,8 +65,12 @@ sync/
                             and updates stale labels, URLs, and metadata.
     entries-path-index.js   Compares the entry count to the lex path-index count and
                             calls pathIndex.backfillIndex when they diverge.
+    archives-index.js       Compares the entry count to the precomputed archives index
+                            (models/archives) and calls Archives.rebuild when they
+                            diverge or the index has never been built.
     tests/
       entries-path-index.js Unit tests for entries-path-index.js using Jasmine spies.
+      archives-index.js     Unit tests for archives-index.js using Jasmine spies.
 
   tests/
     index.js                Tests for lock acquisition, mutual exclusion, stale-lock

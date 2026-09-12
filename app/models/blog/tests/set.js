@@ -4,8 +4,40 @@ describe("Blog.set", function () {
   var key = require("../key");
   var client = require("models/client");
   var config = require("config");
+  var Archives = require("../../archives");
 
   global.test.blog();
+
+  it("rebuilds the archives index when the timezone changes", function (done) {
+    var test = this;
+
+    spyOn(Archives, "rebuild").and.callFake(function (blogID, callback) {
+      callback();
+    });
+
+    set(test.blog.id, { timeZone: "America/Los_Angeles" }, function (err) {
+      if (err) return done.fail(err);
+
+      expect(Archives.rebuild).toHaveBeenCalledWith(
+        test.blog.id,
+        jasmine.any(Function)
+      );
+      done();
+    });
+  });
+
+  it("does not rebuild the archives index for unrelated changes", function (done) {
+    var test = this;
+
+    spyOn(Archives, "rebuild");
+
+    set(test.blog.id, { title: "A new title" }, function (err) {
+      if (err) return done.fail(err);
+
+      expect(Archives.rebuild).not.toHaveBeenCalled();
+      done();
+    });
+  });
 
   it("will set the domain", function (done) {
     var test = this;

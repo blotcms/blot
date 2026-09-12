@@ -16,6 +16,7 @@ var Blog = require("models/blog");
 var rebuildDependencyGraph = require("./_rebuildDependencyGraph");
 var backlinksToUpdate = require("./_backlinksToUpdate");
 var updateTagList = require("models/tags").set;
+var updateArchivesIndex = require("models/archives").set;
 var addToSchedule = require("./_addToSchedule");
 var notifyDrafts = require("./_notifyDrafts");
 var assignToLists = require("./_assign");
@@ -195,8 +196,25 @@ module.exports = function set (blogID, path, updates, callback) {
             return redis.multi().persist(entryKey).persist(entryHashKey).exec();
           })
           .then(function () {
+            // Re-read the blog's timezone right before reconciling the
+            // archives index, rather than reusing the `blog` fetched at the
+            // top of this save (before setUrl and the entry-persisting
+            // multis above). Every archive bucket is keyed by year/month in
+            // this timezone (see models/archives/set.js), so a save that
+            // straddles a concurrent timezone change - and therefore an
+            // archives rebuild - must not write into a now-stale bucket
+            // using the timezone this save started with.
+            return new Promise(function (resolve, reject) {
+              Blog.get({ id: blogID }, function (err, currentBlog) {
+                if (err) return reject(err);
+                resolve(currentBlog ? currentBlog.timeZone : blog.timeZone);
+              });
+            });
+          })
+          .then(function (timeZone) {
             queue = [
               updateTagList.bind(this, blogID, entry),
+              updateArchivesIndex.bind(this, blogID, entry, timeZone),
               assignToLists.bind(this, blogID, entry),
               rebuildDependencyGraph.bind(this, blogID, entry, previousDependencies),
             ];
