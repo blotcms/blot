@@ -341,6 +341,10 @@ jobs:
             EXCLUDE_ARG="--exclude=$TEST_EXCLUDE"
           fi
           mkdir -p .nyc_output
+          # include/exclude formerly lived in .nycrc.json; pass them as CLI
+          # args so we don't need a config file. node_modules is excluded by
+          # nyc's default --exclude-node-modules.
+          NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/blog/benchmarks/** --exclude=app/views-built/** --exclude=app/templates/source/**"
           docker run --rm \
             --network host \
             -e BLOT_REDIS_HOST=localhost \
@@ -352,9 +356,8 @@ jobs:
             -v ${{ github.workspace }}/config:/usr/src/app/config \
             -v ${{ github.workspace }}/proxy:/usr/src/app/proxy \
             -v ${{ github.workspace }}/.nyc_output:/usr/src/app/.nyc_output \
-            -v ${{ github.workspace }}/.nycrc.json:/usr/src/app/.nycrc.json \
             $IMAGE_TAG \
-            sh -c "nyc --silent --no-clean node scripts/tests '$TEST_SUITE' --shard='$TEST_SHARD' $EXCLUDE_ARG"
+            sh -c "nyc --silent --no-clean $NYC_ARGS node scripts/tests '$TEST_SUITE' --shard='$TEST_SHARD' $EXCLUDE_ARG"
 
       - name: Upload coverage
         if: always()
@@ -429,13 +432,13 @@ jobs:
           # Capture stdout via command substitution (not a pipe) so the
           # docker run exit code - and therefore this step's - is nyc's own,
           # not tee's.
+          NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/blog/benchmarks/** --exclude=app/views-built/** --exclude=app/templates/source/**"
           REPORT_OUTPUT=$(docker run --rm \
             -v ${{ github.workspace }}/app:/usr/src/app/app \
             -v ${{ github.workspace }}/.nyc_output:/usr/src/app/.nyc_output \
-            -v ${{ github.workspace }}/.nycrc.json:/usr/src/app/.nycrc.json \
             -v ${{ github.workspace }}/coverage:/usr/src/app/coverage \
             $IMAGE_TAG \
-            sh -c "nyc report -t .nyc_output --reporter=text --reporter=text-summary --reporter=lcov --reporter=json-summary -o coverage")
+            sh -c "nyc report -t .nyc_output $NYC_ARGS --reporter=text --reporter=text-summary --reporter=lcov --reporter=json-summary -o coverage")
           DOCKER_EXIT=$?
           echo "$REPORT_OUTPUT" | tee coverage/text-report.txt
           exit $DOCKER_EXIT
