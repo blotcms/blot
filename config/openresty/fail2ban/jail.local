@@ -11,6 +11,17 @@ bantime.factor = 24
 bantime.formula = ban.Time * (1<<(ban.Count-1))
 bantime.maxtime = 604800
 
+[sshd]
+enabled = true
+filter = sshd
+logpath = /var/log/secure
+backend = polling
+port = ssh
+maxretry = 3
+findtime = 300
+bantime = 3600
+banaction = iptables-multiport
+
 [nginx-403]
 filter = nginx-403
 enabled = true
