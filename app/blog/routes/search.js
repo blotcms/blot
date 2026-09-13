@@ -28,8 +28,18 @@ module.exports = async (req, res, next) => {
         req.template && req.template.locals
       );
       // Entry.search sorts and caps by the selection before returning.
-      res.locals.entries =
+      const entries =
         (await searchEntries(req.blog.id, query, sortOptions)) || [];
+      res.locals.entries = entries;
+
+      // Views that also bind {{#search_results}} would otherwise trigger a
+      // second full-body Entry.search scan in the same request (the scan
+      // matches against entry.html and holds up to MAX_COLLECT full entries
+      // before slicing - see
+      // https://github.com/davidmerfield/blot/issues/1844). Stash this
+      // request's scan so retrieve/search_results.js can reuse it. Not a
+      // process-wide cache: req is discarded at the end of the request.
+      req._searchScan = { query, sortOptions, entries };
     }
 
     // Don't cache search results

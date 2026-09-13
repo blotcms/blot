@@ -41,7 +41,14 @@ function createCacheKey(req, res, normalizedOptions) {
     tags: normalizeTagKey(normalizedOptions.tags),
     sortBy: String(normalizedOptions.sortBy),
     order: String(normalizedOptions.order),
-    pathPrefix: String(normalizedOptions.pathPrefix),
+    // String(undefined) === "undefined", which would collide with an
+    // actual path_prefix of the literal string "undefined". Leave it as
+    // undefined (JSON.stringify omits the property) instead of collapsing
+    // both to the same key.
+    pathPrefix:
+      normalizedOptions.pathPrefix === undefined
+        ? undefined
+        : String(normalizedOptions.pathPrefix),
     pageNumber: Number(normalizedOptions.pageNumber),
     pageSize: Number(normalizedOptions.pageSize),
     limit: Number(normalizedOptions.limit),
@@ -74,7 +81,16 @@ async function posts(req, res) {
     order: options.order,
     pathPrefix: options.pathPrefix,
     pageNumber,
-    pageSize,
+    // The untagged branch forwards the RAW, unnormalized options.pageSize
+    // to getPage below - models/entries defaults an unset value to 5,
+    // while normalizePageSize's own default (used for pagination math and
+    // the tagged branch) is 100. Keying on the normalized value here would
+    // make an unset page_size collide with an explicit page_size of 100,
+    // silently serving whichever request populated the cache first to the
+    // other - see https://github.com/davidmerfield/blot/issues/1844. The
+    // tagged branch always fetches with the normalized `limit` below, so
+    // its key uses that same normalized value.
+    pageSize: tags ? pageSize : options.pageSize,
     limit: pageSize,
     offset,
   };

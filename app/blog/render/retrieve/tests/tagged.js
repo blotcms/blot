@@ -26,6 +26,78 @@ describe("tagged block", function () {
     expect(body.trim()).toEqual("<ul><li>Second</li><li>First</li></ul>");
   });
 
+  it("fetches tagged entries once when a view binds both {{#entries}} and {{#tagged}}", async function () {
+    await this.write({
+      path: "/first.txt",
+      content: "Title: First\nTags: foo\n\nFirst body",
+    });
+    await this.write({
+      path: "/second.txt",
+      content: "Title: Second\nTags: foo\n\nSecond body",
+    });
+
+    // routes/tagged.js always fetches the {{#entries}} page; a view that
+    // also references {{#tagged}} must not trigger a second
+    // fetchTaggedEntries/Entry.get pass. See
+    // https://github.com/davidmerfield/blot/issues/1844
+    await this.template({
+      "tagged.html":
+        "{{#entries}}{{title}}-e {{/entries}}{{#tagged}}{{#entries}}{{title}}-t {{/entries}}{{/tagged}}",
+    });
+
+    // Publishing/indexing the entries above also calls Entry.get - only spy
+    // once that's done, so the count below reflects just the request.
+    const Entry = require("models/entry");
+    spyOn(Entry, "get").and.callThrough();
+
+    const res = await this.get("/tagged/foo");
+    const body = await res.text();
+
+    expect(res.status).toEqual(200);
+    expect(body).toContain("Second-e");
+    expect(body).toContain("Second-t");
+    expect(Entry.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not leak entries across an "undefined" string path_prefix set on the tagged.html view', async function () {
+    await this.write({
+      path: "/undefined/inside.txt",
+      content: "Title: Inside\nTags: foo\n\nInside body",
+    });
+    await this.write({
+      path: "/elsewhere/outside.txt",
+      content: "Title: Outside\nTags: foo\n\nOutside body",
+    });
+
+    // A per-VIEW path_prefix (as opposed to a template-level one) isn't
+    // visible to routes/tagged.js's own fetch, which runs before
+    // render/middleware.js merges the view's locals in. That fetch's
+    // (unfiltered) result must not collide, via key serialization, with
+    // the later fetch that resolves the view's literal string
+    // path_prefix: "undefined" - String(undefined) === "undefined" would
+    // make the two indistinguishable. See
+    // https://github.com/davidmerfield/blot/issues/1844
+    await this.template(
+      {
+        "tagged.html":
+          "{{#entries}}{{title}}-e {{/entries}}{{#tagged}}{{#entries}}{{title}}-t {{/entries}}{{/tagged}}",
+      },
+      { views: { "tagged.html": { locals: { path_prefix: "undefined" } } } }
+    );
+
+    const res = await this.get("/tagged/foo");
+    const body = await res.text();
+
+    expect(res.status).toEqual(200);
+    // The route's own fetch runs before the view's path_prefix is
+    // resolved, so the top-level {{#entries}} local stays unfiltered.
+    expect(body).toContain("Inside-e");
+    expect(body).toContain("Outside-e");
+    // {{#tagged}}{{#entries}} must only include the "/undefined/" folder.
+    expect(body).toContain("Inside-t");
+    expect(body).not.toContain("Outside-t");
+  });
+
   it("keeps existing tagged behavior when path_prefix is not set", async function () {
     await this.write({
       path: "/blog/one.txt",

@@ -34,6 +34,50 @@ describe("posts", function () {
     expect(text2.trim()).toEqual("b.txt a.txt");
   });
 
+  it("getPages once when a view binds both {{#entries}} and {{#posts}}", async function () {
+    const entriesModel = require("models/entries");
+    spyOn(entriesModel, "getPage").and.callThrough();
+
+    await this.write({ path: "/a.txt", content: "Hello, A!" });
+    await this.write({ path: "/b.txt", content: "Hello, B!" });
+
+    // Official templates bind {{#posts}}; older/custom ones still bind
+    // {{#entries}}. routes/entries.js always fetches the {{#entries}} page,
+    // so a view referencing both must not cause a second Entries.getPage
+    // call. See https://github.com/davidmerfield/blot/issues/1844
+    await this.template({
+      "entries.html":
+        "{{#entries}}{{{name}}}-e {{/entries}}{{#posts}}{{{name}}}-p {{/posts}}",
+    });
+
+    const body = await this.text("/");
+
+    expect(body).toContain("b.txt-e");
+    expect(body).toContain("b.txt-p");
+    expect(entriesModel.getPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("respects a page_size set on the entries.html view itself, not just the template", async function () {
+    await this.write({ path: "/a.txt", content: "Hello, A!" });
+    await this.write({ path: "/b.txt", content: "Hello, B!" });
+    await this.write({ path: "/c.txt", content: "Hello, C!" });
+
+    // routes/entries.js resolves page_size before render/middleware.js has
+    // merged the view's own locals into res.locals - it must look those up
+    // itself, or it primes retrieve/posts.js's cache under the same key a
+    // correctly-resolved {{#posts}} fetch would use, but with the wrong
+    // (default) page size. See
+    // https://github.com/davidmerfield/blot/issues/1844
+    await this.template(
+      { "entries.html": "{{#posts}}{{{name}}} {{/posts}}" },
+      { views: { "entries.html": { locals: { page_size: 2 } } } }
+    );
+
+    const body = await this.text("/");
+
+    expect(body.trim().split(" ").length).toEqual(2);
+  });
+
   it("filters posts by query tag", async function () {
     await this.write({
       path: "/a.txt",
@@ -558,5 +602,59 @@ describe("posts cache", function () {
     );
 
     expect(tagged).not.toBe(untagged);
+  });
+
+  it("does not collide an unset page_size with an explicit default-sized one", function () {
+    const posts = loadPostsWithTaggedStub(function () {});
+
+    const makeKey = (pageSize) =>
+      posts._createCacheKey(
+        { blog: { id: "blog-1", cacheID: "v1" }, query: {}, params: {}, template: { locals: {} } },
+        { locals: {} },
+        {
+          branch: "untagged",
+          tags: undefined,
+          sortBy: "date",
+          order: "desc",
+          pathPrefix: undefined,
+          pageNumber: 1,
+          // The untagged branch keys on the RAW page size (posts() passes
+          // `tags ? pageSize : options.pageSize` here) - an unset value
+          // must not collide with an explicit page_size equal to
+          // normalizePageSize's own default (100), or two different
+          // requests (e.g. a template with no page_size configured and a
+          // second one explicitly set to 100) would share a cache entry
+          // fetched with models/entries' unrelated default of 5. See
+          // https://github.com/davidmerfield/blot/issues/1844
+          pageSize,
+          limit: 100,
+          offset: 0,
+        }
+      );
+
+    expect(makeKey(undefined)).not.toBe(makeKey(100));
+  });
+
+  it("does not collide an unset path_prefix with the literal string \"undefined\"", function () {
+    const posts = loadPostsWithTaggedStub(function () {});
+
+    const makeKey = (pathPrefix) =>
+      posts._createCacheKey(
+        { blog: { id: "blog-1", cacheID: "v1" }, query: {}, params: {}, template: { locals: {} } },
+        { locals: {} },
+        {
+          branch: "untagged",
+          tags: undefined,
+          sortBy: "date",
+          order: "desc",
+          pathPrefix,
+          pageNumber: 1,
+          pageSize: 100,
+          limit: 100,
+          offset: 0,
+        }
+      );
+
+    expect(makeKey(undefined)).not.toBe(makeKey("undefined"));
   });
 });
