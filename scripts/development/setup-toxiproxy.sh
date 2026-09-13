@@ -3,8 +3,13 @@ set -euo pipefail
 
 COMPOSE_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/docker-compose.yml"
 
-LATENCY_MS="${BLOT_TOXIPROXY_LATENCY_MS:-6}"
-JITTER_MS="${BLOT_TOXIPROXY_JITTER_MS:-10}"
+# Measured against prod Redis (172.30.0.138) via `redis-cli --latency` /
+# `--latency-history` over SSH: min 0ms, max 1ms, avg ~0.15-0.27ms, very
+# stable across samples (near-zero jitter) - it's same-VPC/same-AZ traffic.
+# 3ms/3ms below is already a couple ms of margin above that observed worst
+# case, not a literal replay of it.
+LATENCY_MS="${BLOT_TOXIPROXY_LATENCY_MS:-3}"
+JITTER_MS="${BLOT_TOXIPROXY_JITTER_MS:-3}"
 LOSS_PERCENT="${BLOT_TOXIPROXY_PACKET_LOSS_PERCENT:-2}"
 REORDER_PERCENT="${BLOT_TOXIPROXY_REORDER_PERCENT:-10}"
 
