@@ -121,7 +121,7 @@ describe("projectEntryFields", function () {
     expect(entries[0].html).toBe("<p>one</p>");
   });
 
-  it("skips projection for the whole list when a kept field's markup contains Mustache", function () {
+  it("still projects when a kept field's markup contains Mustache tags", function () {
     var entries = [
       entry({
         id: "2",
@@ -136,16 +136,18 @@ describe("projectEntryFields", function () {
       ["allEntries", "all_entries"]
     );
 
-    // The dynamic markup in entry 0 is rendered against the whole list, so
-    // every entry keeps all heavy fields - not just the one holding the tags.
-    expect(entries[0].summary).toBe("one summary");
-    expect(entries[0].body).toBe("one");
-    expect(entries[1].summary).toBe("one summary");
-    expect(entries[1].body).toBe("one");
+    // Entry content is data, not a template, so tags in `html` do not keep
+    // other heavy fields around for a second render pass. `html` itself stays
+    // because the view references it.
+    expect(entries[0].html).toBe("{{#allEntries}}{{{summary}}}{{/allEntries}}");
+    expect(entries[0].summary).toBeUndefined();
+    expect(entries[0].body).toBeUndefined();
+    expect(entries[1].summary).toBeUndefined();
+    expect(entries[1].body).toBeUndefined();
     expect(entries[1].html).toBe("<p>one</p>");
   });
 
-  it("skips projection when a retained light field contains Mustache", function () {
+  it("still projects when a retained light field contains Mustache tags", function () {
     var entries = [
       entry({ id: "2", title: "{{#allEntries}}{{summary}}{{/allEntries}}" }),
     ];
@@ -156,25 +158,7 @@ describe("projectEntryFields", function () {
       ["allEntries", "all_entries"]
     );
 
-    // `title` is kept (referenced) but its Mustache is re-rendered against the
-    // whole local, so `summary` etc. must not be stripped.
-    expect(entries[0].summary).toBe("one summary");
-    expect(entries[0].html).toBe("<p>one</p>");
-  });
-
-  it("still projects when Mustache only appears in a field being stripped", function () {
-    var entries = [
-      entry({ id: "2", body: "{{#allEntries}}{{summary}}{{/allEntries}}" }),
-    ];
-
-    projectEntryFields(
-      entries,
-      { allEntries: { fields: { title: true } } },
-      ["allEntries", "all_entries"]
-    );
-
-    // `body` is being removed anyway, so its contents don't block projection.
-    expect(entries[0].body).toBeUndefined();
+    expect(entries[0].title).toBe("{{#allEntries}}{{summary}}{{/allEntries}}");
     expect(entries[0].summary).toBeUndefined();
     expect(entries[0].html).toBeUndefined();
   });

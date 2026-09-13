@@ -209,7 +209,7 @@ describe("template", function () {
     );
   });
 
-  it("keeps a heavy field referenced only from a string local", function (done) {
+  it("does not keep a heavy field referenced only from a string local", function (done) {
     var test = this;
 
     var view = {
@@ -227,7 +227,7 @@ describe("template", function () {
       ) {
         if (err) return done.fail(err);
 
-        expect(fullView[2].allEntries.fields.html).toBe(true);
+        expect(fullView[2].allEntries.fields.html).toBeUndefined();
         expect(fullView[2].allEntries.fields.title).toBe(true);
 
         done();

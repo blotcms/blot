@@ -8,8 +8,8 @@ var parseTemplate = require("../parseTemplate");
 //
 //   1. Real retrieve locals (ones blot knows how to fetch) that the caller or
 //      the previously stored view asked for - e.g. a dependency reached only
-//      through a string local. Non-local keys (stale output from an older
-//      parser) are dropped: they fetch nothing.
+//      through an explicit retrieve request. Non-local keys (stale output from
+//      an older parser) are dropped: they fetch nothing.
 //   2. User-set options on the retrieve object (includeDraft, filters).
 //
 // setView persists exactly what this returns, so a bulk recalculation can

@@ -1,10 +1,8 @@
 const ERROR = require("./error");
 const loadView = require("./load");
-const renderLocals = require("./locals");
 const finalRender = require("./main");
 const retrieve = require("./retrieve");
 const getCachedFullView = require("./full-view-cache");
-const hardenProjectedRetrieve = require("models/template/util/hardenProjectedRetrieve");
 
 const ensure = require("helper/ensure");
 const extend = require("helper/extend");
@@ -82,24 +80,11 @@ module.exports = function attachRenderView(req, res, _next) {
 
       extend(res.locals.partials).and(viewPartials);
 
-      // getFullView hardened the projection metadata against the view's own
-      // content, partials and locals. res.locals now also holds the query,
-      // template- and blog-level locals merged above, and renderLocals
-      // evaluates the mustache in all of them - fold their references in
-      // before projection runs at retrieve time. Skip `partials` (already
-      // covered by getFullView, and large).
-      const localsForHardening = {};
-      Object.keys(res.locals).forEach((k) => {
-        if (k !== "partials") localsForHardening[k] = res.locals[k];
-      });
-      hardenProjectedRetrieve(missingLocals, null, null, localsForHardening);
-
       const foundLocals = await retrieve(req, res, missingLocals);
       extend(res.locals).and(foundLocals);
 
       try {
         await loadView(req, res);
-        renderLocals(req, res);
       } catch (e) {
         return next(ERROR.BAD_LOCALS());
       }
