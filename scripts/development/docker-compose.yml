@@ -3,9 +3,14 @@ services:
   node-app:
     image: blot
     # even though the os.cpu stats don't reflect this, it does seem capable
-    # of throttling the performance of the node.js service, somehow! 
+    # of throttling the performance of the node.js service, somehow!
     # useful to simulate real-life server resources
     cpus: 0.75
+    # Matches production's site-server profile (BLUE/GREEN in
+    # scripts/deploy/constants.js) by default. Override both to simulate the
+    # blog-server profile (YELLOW) instead:
+    #   BLOT_CONTAINER_MEMORY=1878m BLOT_MAX_OLD_SPACE_SIZE=1500 npm start
+    mem_limit: ${BLOT_CONTAINER_MEMORY:-1365m}
     build:
       context: ../../
       dockerfile: Dockerfile
@@ -40,7 +45,7 @@ services:
       - ../../scripts:/usr/src/app/scripts
       - ../../TODO:/usr/src/app/TODO
       - ../../config:/usr/src/app/config
-    command: npx --node-options="--max-old-space-size=750 --trace-deprecation" nodemon /usr/src/app/app/index.js --watch /usr/src/app/app -e js,html,css --ignore /usr/src/app/app/documentation/data --ignore /usr/src/app/app/documentation/output --ignore /usr/src/app/app/views --ignore /usr/src/app/app/views-built  --ignore /usr/src/app/app/clients/*/views --ignore /usr/src/app/app/templates/folders --ignore /usr/src/app/app/templates/source
+    command: npx --node-options="--max-old-space-size=${BLOT_MAX_OLD_SPACE_SIZE:-750} --trace-deprecation" nodemon /usr/src/app/app/index.js --watch /usr/src/app/app -e js,html,css --ignore /usr/src/app/app/documentation/data --ignore /usr/src/app/app/documentation/output --ignore /usr/src/app/app/views --ignore /usr/src/app/app/views-built  --ignore /usr/src/app/app/clients/*/views --ignore /usr/src/app/app/templates/folders --ignore /usr/src/app/app/templates/source
 
   redis:
     image: "redis:6.2.12-alpine"
