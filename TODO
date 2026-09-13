@@ -2,6 +2,8 @@ Rewrite the benchmarks: more blogs, more posts, larger sites, and persist to Red
 
 ---
 
+Investigate the most effective Mustache template cache size now that it's bounded (#1859).
+
 Fix performance bugs on nashp and anchor and re-enable sites
 
 ---
@@ -360,6 +362,7 @@ Improvements to docs and documentation:
     - Reach out to Bear to let them know about textbundle support
   - Improve tools/ulysses
     - Reach out to Ulysses to let them know about textbundle support
+  - Create tools pages for AI assistants (Claude Code, Cursor, Codex) explaining how to use them to create templates
 - Add a documentation page on media handling
   - explain image compression and thumbnails
 - Add a documentation page on typography and fonts
@@ -379,6 +382,11 @@ Improvements to dashboard:
 
 Improvements to template editor:
 - Do preview subdomains respond to etags?
+- Make preview hot reload more efficient by only reloading when the tab is visible
+  - the injected script in `app/blog/render/middleware.js` and `app/blog/views/template-error.html` does `new EventSource('/__blot/preview/reload').onmessage = function() { window.location.reload(); }` on every message, including background tabs / hidden template-editor iframes. the expensive part is the full render that `location.reload()` triggers, not the SSE connection (keep that open; 10s heartbeats are cheap)
+  - follow the visibility pattern in `app/views/js/sync_status.js`: if `document.visibilityState === "hidden"`, set a pending flag; on `visibilitychange` to visible, reload once
+  - debounce? no long debounce. the server already publishes once per completed sync that had changes (`app/sync/index.js` after the cacheID bump), so events are not per-keystroke. coalesce instead: one pending reload is enough if several events arrive while hidden or while a reload is already in flight. a short (100–300ms) debounce would only matter for back-to-back completed syncs while the tab is visible
+  - etags? not nicely, not yet. `location.reload()` may send If-None-Match / If-Modified-Since and openresty already forwards those (`config/openresty/conf/reverse-proxy-preview.conf`). render middleware sets Last-Modified from cacheID and Express default weak etags come from the body, but freshness is checked in `res.send()` after the expensive render, so a 304 still costs a full render. skipping the reload when hidden is the real win. a cheap cacheID-based etag checked *before* render would actually leverage them — related to the etag question above
 - Add [commit mono](https://commitmono.com/) font to font picker
 - File upload feature (_url) needs to generate image dimensions too.. maybe it needs MORE power
 - Enforce size limits on setting tempalte views
