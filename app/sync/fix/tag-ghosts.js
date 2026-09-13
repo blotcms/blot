@@ -31,6 +31,8 @@ function execTransaction(multi, callback) {
 module.exports = function main(blog, callback) {
   const report = [];
   Tags.list(blog.id, function (err, tags) {
+    if (err) return callback(err);
+
     async.eachSeries(
       tags,
       function (tag, next) {

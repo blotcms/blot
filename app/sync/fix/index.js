@@ -60,8 +60,10 @@ module.exports = function (blog, options, callback) {
 
       // otherwise set cacheID to force cache invalidation
       const cacheID = Date.now();
-      Blog.set(blog.id, { cacheID }, function (err) {
-        callback(err, finalReport);
+      Blog.set(blog.id, { cacheID }, function (setErr) {
+        // A check earlier in the series may have already failed - don't let
+        // a successful cacheID bump on Blog.set mask that error.
+        callback(err || setErr, finalReport);
       });
     }
   );
