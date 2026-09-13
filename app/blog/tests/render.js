@@ -33,6 +33,40 @@ describe("render", function () {
         expect(body.trim()).toEqual('Hello, John!');
     });
 
+    it("does not evaluate Mustache tags inside entry HTML", async function () {
+        await this.write({
+            path: "/hello.txt",
+            content: "Title: Hello\n\nThis post mentions {{title}} and {{#entry}}nope{{/entry}}.",
+        });
+
+        await this.template({
+            "entry.html": "{{#entry}}{{{html}}}{{/entry}}",
+        });
+
+        const body = await this.text("/hello");
+
+        expect(body).toContain("{{title}}");
+        expect(body).toContain("{{#entry}}nope{{/entry}}");
+        expect(body).not.toContain("This post mentions Hello");
+    });
+
+    it("does not evaluate Mustache tags in string locals", async function () {
+        await this.write({
+            path: "/a.txt",
+            content: "Title: DistinctTitle\n\nA body",
+        });
+
+        await this.template(
+            { "entries.html": "{{{snippet}}}" },
+            { locals: { snippet: "{{#entries}}{{title}}{{/entries}}" } }
+        );
+
+        const body = await (await this.get("/")).text();
+
+        expect(body).toContain("{{#entries}}{{title}}{{/entries}}");
+        expect(body).not.toContain("DistinctTitle");
+    });
+
     it("exposes partials to views, including partials in partials", async function () {
         
         await this.template({

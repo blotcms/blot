@@ -13,10 +13,14 @@ var projectableEntryFields = require("./projectableEntryFields");
 // every partial's content) and make sure no heavy field that appears there is
 // ever projected away. Over-broad (an {{{html}}} outside any entry loop keeps
 // `html` on every entry local) but only ever keeps fields, never drops one.
-module.exports = function hardenProjectedRetrieve(retrieve, viewContent, allPartials, viewLocals) {
+//
+// String locals are not templates: the render pipeline treats them as data
+// (see blog/render/middleware.js), so a local like snippet = "{{{html}}}" is
+// not a reason to keep `html`.
+module.exports = function hardenProjectedRetrieve(retrieve, viewContent, allPartials) {
   if (!retrieve || typeof retrieve !== "object") return retrieve;
 
-  var referenced = collectReferencedIdentifiers(viewContent, allPartials, viewLocals);
+  var referenced = collectReferencedIdentifiers(viewContent, allPartials);
 
   Object.keys(retrieve).forEach(function (key) {
     var value = retrieve[key];
@@ -43,7 +47,7 @@ module.exports = function hardenProjectedRetrieve(retrieve, viewContent, allPart
   return retrieve;
 };
 
-function collectReferencedIdentifiers(viewContent, allPartials, viewLocals) {
+function collectReferencedIdentifiers(viewContent, allPartials) {
   var names = {};
 
   addFrom(viewContent);
@@ -54,30 +58,7 @@ function collectReferencedIdentifiers(viewContent, allPartials, viewLocals) {
     });
   }
 
-  // Locals can hold mustache that renderLocals evaluates later - a heavy field
-  // referenced only from a string local (e.g. locals.snippet = "{{{html}}}")
-  // must be kept too. renderLocals recurses without a depth limit, so match
-  // that: walk arbitrarily deep, guarding only against cycles.
-  addFromValue(viewLocals, new WeakSet());
-
   return names;
-
-  function addFromValue(value, seen) {
-    if (value == null) return;
-    if (typeof value === "string") return addFrom(value);
-    if (typeof value !== "object") return;
-    if (seen.has(value)) return;
-    seen.add(value);
-
-    if (Array.isArray(value)) {
-      for (var i = 0; i < value.length; i++) addFromValue(value[i], seen);
-      return;
-    }
-
-    Object.keys(value).forEach(function (key) {
-      addFromValue(value[key], seen);
-    });
-  }
 
   function addFrom(content) {
     if (!content || typeof content !== "string") return;

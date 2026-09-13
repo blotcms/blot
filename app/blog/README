@@ -91,10 +91,9 @@ Attaches `res.renderView(viewName, next, callback)` to the response. When called
 2. Merges view-level locals, query parameters, template locals, and blog locals into `res.locals`.
 3. Calls `render/retrieve/index.js` to fetch any named locals declared as required by the view.
 4. Calls `render/load/index.js` to augment every entry object found in `res.locals`.
-5. Calls `render/locals.js` to recursively render any local string values that contain Mustache tags.
-6. Calls `render/main.js` to execute the final `Mustache.render()`.
-7. For HTML responses, calls `render/replaceFolderLinks/html.js` to rewrite relative asset URLs to CDN URLs. For CSS responses, calls `render/replaceFolderLinks/css.js`.
-8. Sends the output with appropriate `Content-Type` and `Last-Modified` headers. Sets a one-year `Cache-Control` for JS and CSS views when caching is enabled and the request is not a preview.
+5. Calls `render/main.js` to execute the final `Mustache.render()` of the view and its partials. String values on `res.locals` (including entry HTML) are data, not templates: tags inside post content or other locals are left as-is.
+6. For HTML responses, calls `render/replaceFolderLinks/html.js` to rewrite relative asset URLs to CDN URLs. For CSS responses, calls `render/replaceFolderLinks/css.js`.
+7. Sends the output with appropriate `Content-Type` and `Last-Modified` headers. Sets a one-year `Cache-Control` for JS and CSS views when caching is enabled and the request is not a preview.
 
 #### Public render-context inspection
 
@@ -112,8 +111,8 @@ Each file in this directory is a named retriever. The retrieve system (`render/r
 | `absolute_urls` / `absoluteURLs` | `absolute_urls.js` | Lambda that rewrites relative `href`/`src` attributes to absolute URLs. Used in RSS feeds. |
 | `all_entries` / `allEntries` | `all_entries.js` | All published entries for the blog. |
 | `all_tags` / `allTags` | `all_tags.js` | All tags, sorted alphabetically, with entry counts. |
-| `app_css` / `appCSS` / `plugin_css` | `app_css.js` | Concatenated CSS from enabled blog plugins. |
-| `app_js` / `appJS` / `plugin_js` | `app_js.js` | Concatenated JS from enabled blog plugins. |
+| `app_css` / `appCSS` / `plugin_css` | `app_css.js` | Concatenated CSS from enabled blog plugins. Mustache in plugin CSS is evaluated against `plugins` at retrieve time (templates insert the result with `{{{appCSS}}}`). |
+| `app_js` / `appJS` / `plugin_js` | `app_js.js` | Concatenated JS from enabled blog plugins. Mustache in plugin JS (e.g. analytics tracking IDs) is evaluated against `plugins` at retrieve time (templates insert the result with `{{{appJS}}}`). |
 | `archives` | `archives.js` | All entries grouped by year and month (for archive views). |
 | `asset` | `asset.js` | Single asset lookup by path. |
 | `avatar_url` | `avatar_url.js` | URL for the blog's avatar image. |
@@ -277,7 +276,7 @@ The `static/` directory contains global assets served to all blogs under paths s
 | `build/plugins` | `entry.js`, `render/retrieve/plugin.js`, `render/retrieve/app_css.js`, `render/retrieve/app_js.js` |
 | `sync/update/drafts` | `draft.js` |
 | `helper/caseSensitivePath` | `assets.js`, `render/replaceFolderLinks/lookupFile.js` |
-| `helper/ensure` | `render/middleware.js`, `render/main.js`, `render/locals.js`, `render/retrieve/index.js` |
+| `helper/ensure` | `render/middleware.js`, `render/main.js`, `render/retrieve/index.js` |
 | `config` | `vhosts.js`, `assets.js`, `render/middleware.js`, `render/replaceFolderLinks/lookupFile.js`, `render/retrieve/cdn.js` |
 
 ### External

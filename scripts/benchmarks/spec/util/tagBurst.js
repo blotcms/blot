@@ -9,8 +9,7 @@ const { timedRequest } = require("./burstRequest");
  * requests to different /tagged/<slug> pages were each fast in isolation,
  * but requesting several distinct tag pages at the same time made every one
  * of them queue behind the others' synchronous, uncached, per-request work
- * over the full entry set (see app/blog/render/load/augment.js and
- * app/blog/render/locals.js).
+ * over the full entry set (see app/blog/render/load/augment.js).
  *
  * For each blog: pick up to `concurrency` distinct tags, time each one
  * in isolation (uncontended baseline), then fire all of them at once with

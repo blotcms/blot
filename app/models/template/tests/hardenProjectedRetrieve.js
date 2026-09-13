@@ -56,7 +56,7 @@ describe("hardenProjectedRetrieve", function () {
     ]);
   });
 
-  it("keeps a heavy field referenced only from a string local", function () {
+  it("does not treat string locals as templates", function () {
     var retrieve = { posts: { fields: { title: true } } };
     harden(
       retrieve,
@@ -64,40 +64,7 @@ describe("hardenProjectedRetrieve", function () {
       {},
       { snippet: "{{#posts}}{{{html}}}{{/posts}}", nested: { deep: "{{{body}}}" } }
     );
-    expect(retrieve.posts.fields).toEqual({
-      title: true,
-      html: true,
-      body: true,
-    });
-  });
-
-  it("scans arbitrarily deep local nesting", function () {
-    var retrieve = { posts: { fields: { title: true } } };
-    harden(retrieve, null, null, {
-      a: { b: { c: { d: { e: { f: { g: "{{#posts}}{{{html}}}{{/posts}}" } } } } } },
-    });
-    expect(retrieve.posts.fields).toEqual({ title: true, html: true });
-  });
-
-  it("does not loop on a cyclic locals object", function () {
-    var locals = { x: "{{{body}}}" };
-    locals.self = locals;
-    var retrieve = { posts: { fields: { title: true } } };
-    harden(retrieve, null, null, locals);
-    expect(retrieve.posts.fields).toEqual({ title: true, body: true });
-  });
-
-  it("scans nested objects of locals (e.g. inherited template/blog locals)", function () {
-    var retrieve = { posts: { fields: { title: true } } };
-    harden(retrieve, null, null, {
-      template: { snippet: "{{#posts}}{{{html}}}{{/posts}}" },
-      blog: { footer: "{{{body}}}" },
-    });
-    expect(retrieve.posts.fields).toEqual({
-      title: true,
-      html: true,
-      body: true,
-    });
+    expect(retrieve.posts.fields).toEqual({ title: true });
   });
 
   it("keeps a heavy field found in entry-backed partial content", function () {

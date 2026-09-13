@@ -20,7 +20,7 @@
 //     always kept, so augment() and friends keep working.
 
 // Large, render-only fields. None of these are read by the render pipeline
-// itself (blog/render/load/augment.js, locals.js, ...), only by templates.
+// itself (blog/render/load/augment.js, ...), only by templates.
 var HEAVY_FIELDS = ["html", "body", "teaser", "teaserBody", "summary"];
 
 // Given the full retrieve object and the alias keys a retrieve module answers
@@ -80,25 +80,6 @@ function projectEntryFields(entries, retrieve, keys) {
 
   if (!strip.length) return entries;
 
-  // A Blot entry's own content can carry Mustache that renderLocals evaluates
-  // after retrieval - e.g. an entry whose `html` (or even a plain `title`) is
-  // "{{#allEntries}}{{{summary}}}{{/allEntries}}". That markup is rendered
-  // against the whole retrieved local, not just its own entry, and renderLocals
-  // walks every string property, not only the heavy ones. So if ANY retained
-  // string field of ANY entry contains template tags, we can't know which
-  // fields are safe to drop - bail out of projection for the whole list.
-  //
-  // KNOWN LIMITATION: this only sees the entries in *this* local. An entry
-  // here whose markup references a different retrieve local's heavy field
-  // (e.g. a post body containing "{{latestEntry.summary}}") does not stop
-  // latest_entry from projecting `summary` away, because each retrieve module
-  // runs independently. Closing that needs projection to move to a single
-  // post-retrieval pass in blog/render/retrieve/index.js - tracked as a
-  // follow-up. It is rare and fails safe-ish (empty fragment, not data loss).
-  for (var i = 0; i < list.length; i++) {
-    if (entryHasMustache(list[i], strip)) return entries;
-  }
-
   for (var k = 0; k < list.length; k++) {
     var entry = list[k];
 
@@ -110,22 +91,6 @@ function projectEntryFields(entries, retrieve, keys) {
   }
 
   return entries;
-}
-
-// True if any string field that will survive projection contains a Mustache
-// tag. `strip` is the set of fields about to be removed - those are ignored
-// (they won't be around to be re-rendered).
-function entryHasMustache(entry, strip) {
-  if (!entry || typeof entry !== "object") return false;
-
-  for (var key in entry) {
-    if (!Object.prototype.hasOwnProperty.call(entry, key)) continue;
-    if (strip.indexOf(key) !== -1) continue;
-    var value = entry[key];
-    if (typeof value === "string" && value.indexOf("{{") !== -1) return true;
-  }
-
-  return false;
 }
 
 projectEntryFields.HEAVY_FIELDS = HEAVY_FIELDS;

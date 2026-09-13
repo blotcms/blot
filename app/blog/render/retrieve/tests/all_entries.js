@@ -66,7 +66,7 @@ describe("all_entries", function () {
     expect(rendered).toContain("A body");
   });
 
-  it("keeps a heavy field referenced only from a template-level local", async function () {
+  it("does not treat a template-level string local as a nested template", async function () {
     await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
 
     await this.template(
@@ -78,13 +78,14 @@ describe("all_entries", function () {
     );
 
     const locals = await (await this.get("/list?json=1")).json();
-    expect(locals.allEntries[0].html).toContain("A body");
+    expect(locals.allEntries[0].html).toBeUndefined();
 
     const rendered = await (await this.get("/list")).text();
-    expect(rendered).toContain("A body");
+    expect(rendered).toContain("{{#allEntries}}{{{html}}} {{/allEntries}}");
+    expect(rendered).not.toContain("A body");
   });
 
-  it("keeps a heavy field referenced only from a query string local", async function () {
+  it("does not treat a query string local as a nested template", async function () {
     await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
 
     await this.template(
@@ -99,7 +100,7 @@ describe("all_entries", function () {
       await this.get("/list?json=1&snippet=" + snippet)
     ).json();
 
-    expect(locals.allEntries[0].html).toContain("A body");
+    expect(locals.allEntries[0].html).toBeUndefined();
   });
 });
 
