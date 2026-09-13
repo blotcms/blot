@@ -1,3 +1,5 @@
+Investigate the most effective Mustache template cache size now that it's bounded (#1859).
+
 Fix performance bugs on nashp and anchor and re-enable sites
 
 ---
