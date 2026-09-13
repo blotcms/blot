@@ -102,3 +102,180 @@ describe("all_entries", function () {
     expect(locals.allEntries[0].html).toContain("A body");
   });
 });
+
+describe("all_entries cache", function () {
+  const Entries = require("models/entries");
+  const allEntriesPath = require.resolve("../all_entries");
+  const getAllCachedPath = require.resolve("../helpers/getAllCached");
+
+  function loadAllEntries() {
+    delete require.cache[allEntriesPath];
+    delete require.cache[getAllCachedPath];
+    return require("../all_entries");
+  }
+
+  afterEach(function () {
+    delete require.cache[allEntriesPath];
+    delete require.cache[getAllCachedPath];
+  });
+
+  function makeReq(blog, retrieve) {
+    return {
+      blog,
+      retrieve: retrieve || {},
+      log: function () {},
+    };
+  }
+
+  it("reuses cached entries for identical cacheIDs", function (done) {
+    const allEntries = loadAllEntries();
+
+    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+      callback([{ id: "1", title: "A" }]);
+    });
+
+    const req = makeReq({ id: "blog-1", cacheID: 100 });
+
+    allEntries(req, { locals: {} }, function () {
+      allEntries(req, { locals: {} }, function () {
+        expect(Entries.getAll).toHaveBeenCalledTimes(1);
+        done();
+      });
+    });
+  });
+
+  it("refetches when cacheID changes", function (done) {
+    const allEntries = loadAllEntries();
+
+    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+      callback([{ id: "1", title: "A" }]);
+    });
+
+    allEntries(
+      makeReq({ id: "blog-1", cacheID: 100 }),
+      { locals: {} },
+      function () {
+        allEntries(
+          makeReq({ id: "blog-1", cacheID: 101 }),
+          { locals: {} },
+          function () {
+            expect(Entries.getAll).toHaveBeenCalledTimes(2);
+            done();
+          }
+        );
+      }
+    );
+  });
+
+  it("returns isolated copies so caller mutations do not taint cache", function (done) {
+    const allEntries = loadAllEntries();
+
+    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+      callback([{ id: "1", title: "Original" }]);
+    });
+
+    const req = makeReq({ id: "blog-1", cacheID: 100 });
+
+    allEntries(req, { locals: {} }, function (err, first) {
+      first[0].title = "Mutated";
+
+      allEntries(req, { locals: {} }, function (err, second) {
+        expect(second[0].title).toBe("Original");
+        done();
+      });
+    });
+  });
+
+  it("dedupes concurrent misses for the same cacheID into one getAll call", function (done) {
+    const allEntries = loadAllEntries();
+
+    let resolveGetAll;
+    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+      resolveGetAll = () => callback([{ id: "1", title: "A" }]);
+    });
+
+    const req = makeReq({ id: "blog-1", cacheID: 100 });
+
+    let doneCount = 0;
+    function onDone() {
+      doneCount++;
+      if (doneCount === 2) {
+        expect(Entries.getAll).toHaveBeenCalledTimes(1);
+        done();
+      }
+    }
+
+    allEntries(req, { locals: {} }, onDone);
+    allEntries(req, { locals: {} }, onDone);
+
+    expect(Entries.getAll).toHaveBeenCalledTimes(1);
+    resolveGetAll();
+  });
+
+  it("stores separate entries per referenced field set so a stripped cache entry can't leak into a view that needs more", function (done) {
+    const allEntries = loadAllEntries();
+
+    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+      callback([{ id: "1", title: "A", html: "<p>A body</p>" }]);
+    });
+
+    const blog = { id: "blog-1", cacheID: 100 };
+
+    const titleOnlyReq = makeReq(blog, {
+      allEntries: { fields: { title: true } },
+    });
+    const withHtmlReq = makeReq(blog, {
+      allEntries: { fields: { title: true, html: true } },
+    });
+
+    allEntries(titleOnlyReq, { locals: {} }, function (err, entries) {
+      expect(entries[0].html).toBeUndefined();
+
+      allEntries(withHtmlReq, { locals: {} }, function (err, entries2) {
+        expect(entries2[0].html).toBe("<p>A body</p>");
+        expect(Entries.getAll).toHaveBeenCalledTimes(1);
+        done();
+      });
+    });
+  });
+
+  it("bypasses the cache for preview requests", function (done) {
+    const allEntries = loadAllEntries();
+
+    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+      callback([{ id: "1", title: "A" }]);
+    });
+
+    const req = makeReq({ id: "blog-1", cacheID: 100 });
+    req.preview = true;
+
+    allEntries(req, { locals: {} }, function () {
+      allEntries(req, { locals: {} }, function () {
+        expect(Entries.getAll).toHaveBeenCalledTimes(2);
+        done();
+      });
+    });
+  });
+
+  it("does not cache an empty result, so a transient Redis failure isn't mistaken for an empty blog", function (done) {
+    const allEntries = loadAllEntries();
+
+    // Entries.getAll resolves to [] on a failed zRange/mGet rather than
+    // rejecting (see models/entries/index.js getRange's .catch), so an
+    // empty array from it is ambiguous between "no posts" and "Redis
+    // hiccup." Caching it either way risks hiding every post until the
+    // cacheID changes; refetching on every miss is the safe default.
+    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+      callback([]);
+    });
+
+    const req = makeReq({ id: "blog-1", cacheID: 100 });
+
+    allEntries(req, { locals: {} }, function () {
+      allEntries(req, { locals: {} }, function () {
+        expect(Entries.getAll).toHaveBeenCalledTimes(2);
+        done();
+      });
+    });
+  });
+});
