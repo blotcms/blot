@@ -53,6 +53,7 @@ describe("simple pass-through retrieve locals", function () {
   });
 
   it("total_posts returns the blog's total entry count", async function () {
+    totalPosts._clear();
     spyOn(Entries, "getTotal").and.callFake((blogID, cb) => cb(null, 42));
 
     const result = await run(totalPosts, { blog: { id: "blog-1" } });
@@ -62,6 +63,63 @@ describe("simple pass-through retrieve locals", function () {
       "blog-1",
       jasmine.any(Function)
     );
+  });
+});
+
+describe("total_posts cache", function () {
+  const totalPosts = require("../total_posts");
+  const Entries = require("models/entries");
+
+  beforeEach(function () {
+    totalPosts._clear();
+  });
+
+  function makeReq(blog) {
+    return { blog, log: function () {} };
+  }
+
+  it("reuses cached totals for identical cacheIDs", function (done) {
+    spyOn(Entries, "getTotal").and.callFake(function (blogID, callback) {
+      callback(null, 42);
+    });
+
+    const req = makeReq({ id: "blog-1", cacheID: 100 });
+
+    totalPosts(req, {}, function () {
+      totalPosts(req, {}, function () {
+        expect(Entries.getTotal).toHaveBeenCalledTimes(1);
+        done();
+      });
+    });
+  });
+
+  it("refetches when cacheID changes", function (done) {
+    spyOn(Entries, "getTotal").and.callFake(function (blogID, callback) {
+      callback(null, 42);
+    });
+
+    totalPosts(makeReq({ id: "blog-1", cacheID: 100 }), {}, function () {
+      totalPosts(makeReq({ id: "blog-1", cacheID: 101 }), {}, function () {
+        expect(Entries.getTotal).toHaveBeenCalledTimes(2);
+        done();
+      });
+    });
+  });
+
+  it("keys totals per blog so one site cannot read another's count", function (done) {
+    spyOn(Entries, "getTotal").and.callFake(function (blogID, callback) {
+      callback(null, blogID === "blog-1" ? 1 : 99);
+    });
+
+    totalPosts(makeReq({ id: "blog-1", cacheID: 100 }), {}, function (err, first) {
+      expect(first).toBe(1);
+
+      totalPosts(makeReq({ id: "blog-2", cacheID: 100 }), {}, function (err, second) {
+        expect(second).toBe(99);
+        expect(Entries.getTotal).toHaveBeenCalledTimes(2);
+        done();
+      });
+    });
   });
 });
 

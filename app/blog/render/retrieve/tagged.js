@@ -2,7 +2,9 @@ const { getEntry } = require("../../lib/models");
 const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
-const { cloneDeep } = require("../../lib/clone");
+const { cloneDeep, deepFreeze } = require("../../lib/clone");
+const LRUCache = require("lru-cache").LRUCache;
+const { normalizePathPrefix } = require("helper/pathPrefix");
 const {
   normalizePageNumber,
   normalizePageSize,
@@ -10,12 +12,53 @@ const {
 const getTemplateSortOptions = require("blog/sortOptions");
 const { sortEntries } = getTemplateSortOptions;
 
+// Separate from posts.js's tagged branch: that cache stores {entries,
+// pagination} keyed on page_size, while this local stores the full tagged
+// payload (tag metadata, slugs, prettyTags, totals) keyed on
+// tagged_page_size || page_size. Official /tagged/:tag pages never go
+// through posts.js, so sharing storage would still miss this path and
+// would collide on the different payload shape.
+const taggedCache = new LRUCache({
+  max: 1000,
+  // Bound by bytes, not just item count: official /tagged/:tag pages
+  // return a full page of entries, and a slug-heavy blog paginating
+  // through distinct tags can otherwise fill every slot and starve
+  // other blogs sharing this process.
+  maxSize: 100 * 1024 * 1024,
+  sizeCalculation: (value) => JSON.stringify(value).length,
+});
+
+function cloneTagged(value) {
+  return cloneDeep(value, { preserveEntryInstances: true });
+}
+
 function normalizeTagsKey(tags) {
-  if (Array.isArray(tags)) return tags.map((tag) => String(tag)).sort();
+  // Preserve array order: fetchTaggedEntries builds tag/slugs/prettyTags
+  // from the original sequence, so ?tag=foo&tag=bar and ?tag=bar&tag=foo
+  // must not share a cache entry.
+  if (Array.isArray(tags)) return tags.map((tag) => String(tag));
   return tags === undefined ? undefined : String(tags);
 }
 
+function createCacheKey(req, normalized) {
+  return JSON.stringify({
+    blogID: String(req?.blog?.id),
+    cacheID: String(req?.blog?.cacheID),
+    tags: normalized.tags,
+    sortBy: String(normalized.sortBy),
+    order: String(normalized.order),
+    // Key on the same value fetchTaggedEntries actually filters by.
+    // normalizePathPrefix(undefined) is null and normalizePathPrefix("undefined")
+    // is "/undefined", so an unset prefix cannot collide with the literal
+    // string "undefined" (or a numeric 1 with the string "1").
+    pathPrefix: normalizePathPrefix(normalized.pathPrefix),
+    page: Number(normalized.page),
+    limit: Number(normalized.limit),
+  });
+}
+
 async function tagged(req, res) {
+  const log = typeof req?.log === "function" ? req.log.bind(req) : () => {};
   const blogID = req.blog.id;
   const tags =
     req.query.name ||
@@ -47,24 +90,26 @@ async function tagged(req, res) {
   // second call reuses it instead of re-running
   // fetchTaggedEntries/Entry.get. See
   // https://github.com/davidmerfield/blot/issues/1844
-  const key = JSON.stringify({
+  //
+  // The process LRU below then serves repeat /tagged/:tag requests for
+  // the same cacheID without touching Redis at all.
+  const key = createCacheKey(req, {
     tags: normalizeTagsKey(tags),
+    sortBy: sortOptions.sortBy,
+    order: sortOptions.order,
+    pathPrefix,
     page,
     limit,
-    // String(undefined) === "undefined", which would collide with an
-    // actual path_prefix of the literal string "undefined" and reuse an
-    // unfiltered payload where filterEntryIDsByPathPrefix should have
-    // applied a "/undefined" filter. Leave it undefined (JSON.stringify
-    // omits the property) instead of collapsing both to the same key.
-    pathPrefix: pathPrefix === undefined ? undefined : String(pathPrefix),
-    sortBy: String(sortOptions.sortBy),
-    order: String(sortOptions.order),
   });
 
   let payload;
 
   if (req._taggedFetch && req._taggedFetch.key === key) {
     payload = req._taggedFetch.payload;
+  } else if (taggedCache.has(key)) {
+    log("Retrieved tagged entries from cache");
+    payload = cloneTagged(taggedCache.get(key));
+    req._taggedFetch = { key, payload };
   } else {
     const result = await fetchTaggedEntries(blogID, tags, {
       limit,
@@ -95,6 +140,13 @@ async function tagged(req, res) {
     };
 
     req._taggedFetch = { key, payload };
+    // Entry.get swallows Redis MGET failures as [] (models/entry/get.js).
+    // If we received IDs but no hydrated entries, that is indistinguishable
+    // from a total hydration miss - do not persist it, or later requests
+    // would serve an empty tagged page until cacheID changes.
+    if (!(entryIDs.length > 0 && (payload.entries || []).length === 0)) {
+      taggedCache.set(key, deepFreeze(cloneTagged(payload)));
+    }
   }
 
   res.locals.pagination = res.locals.pagination || payload.pagination || {};
@@ -111,3 +163,7 @@ async function tagged(req, res) {
 }
 
 module.exports = asRetriever(tagged);
+module.exports._createCacheKey = createCacheKey;
+module.exports._clear = function () {
+  taggedCache.clear();
+};

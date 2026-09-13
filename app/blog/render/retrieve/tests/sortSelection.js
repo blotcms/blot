@@ -28,6 +28,7 @@ describe("post sorting across retrieve helpers", function () {
     const recentEntries = require("../recent_entries");
 
     beforeEach(function () {
+      recentEntries._clear();
       spyOn(Entries, "getRecent").and.callFake((blogID, cb) => cb(newestFirst()));
     });
 
