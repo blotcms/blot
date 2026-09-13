@@ -358,6 +358,7 @@ Improvements to docs and documentation:
     - Reach out to Bear to let them know about textbundle support
   - Improve tools/ulysses
     - Reach out to Ulysses to let them know about textbundle support
+  - Create tools pages for AI assistants (Claude Code, Cursor, Codex) explaining how to use them to create templates
 - Add a documentation page on media handling
   - explain image compression and thumbnails
 - Add a documentation page on typography and fonts
