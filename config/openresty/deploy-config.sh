@@ -75,6 +75,16 @@ echo "Fail2Ban deployment complete."
 #########################################################
 
 #########################################################
+# Begin sshd hardening section
+#########################################################
+
+echo "Disabling X11 forwarding in sshd_config on $PUBLIC_IP"
+ssh -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo sed -i 's/^#\?X11Forwarding.*/X11Forwarding no/' /etc/ssh/sshd_config && sudo sshd -t && sudo systemctl reload sshd"
+
+echo "sshd hardening complete."
+#########################################################
+
+#########################################################
 # Begin logrotate deployment section
 #########################################################
 
