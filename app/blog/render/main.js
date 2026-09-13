@@ -1,8 +1,25 @@
 var Mustache = require("mustache");
+var LRUCache = require("lru-cache").LRUCache;
 var ensure = require("helper/ensure");
 
 var ERROR = require("./error");
 var OVERFLOW = "Maximum call stack size exceeded";
+
+// Mustache's default templateCache is a plain object keyed on the full
+// template string, with no eviction. renderLocals (./locals.js) runs
+// Mustache.render on every entry field that contains '{{', so every unique
+// piece of entry HTML/content ever rendered gets parsed and cached forever,
+// growing without bound for the lifetime of the process. Swap in a bounded
+// LRU cache (same get/set/clear interface Mustache expects) so repeated
+// renders of view templates still hit the cache, but stale entry content
+// eventually falls out. See https://github.com/davidmerfield/blot/issues/1851
+Mustache.templateCache = new LRUCache({
+  max: 500,
+  maxSize: 5 * 1024 * 1024,
+  sizeCalculation: function (tokens) {
+    return JSON.stringify(tokens).length;
+  },
+});
 
 // This function basically wraps mustache
 // and gives me some nice error messages...
