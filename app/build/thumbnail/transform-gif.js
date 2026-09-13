@@ -83,12 +83,8 @@ function transform(input, to, options, callback) {
     transform.resize({ withoutEnlargement: true, fit: "inside", width: size, height: size });
   }
 
-  console.log('HERE', to);
-
   transform.toFile(to, function done(err, info) {
     if (err) return callback(err);
-
-    console.log('INFO', info);
 
     callback(err, info.width, info.height);
   });

@@ -55,13 +55,9 @@ async function read(blog, path, callback) {
 
     const parsedExif = await exif.parseExif(localPath, blog.imageExif);
 
-    console.log("Parsed EXIF:", parsedExif);
-
     const extras = Object.keys(parsedExif).length
       ? { exif: parsedExif }
       : undefined;
-
-    console.log("Extras to be returned:", extras);
 
     if (EXTENSIONS_TO_CONVERT.includes(extname(path).toLowerCase())) {
       const transformer = new Transformer(blog.id, "img-converter");

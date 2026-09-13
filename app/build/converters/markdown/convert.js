@@ -198,8 +198,8 @@ function safely(method, input) {
   try {
     input = method(input);
   } catch (e) {
-    console.log("Conversion Error:", e.message || e.code, "caught safely");
-    if (e.stack) console.log(e.stack);
+    debug("Conversion Error:", e.message || e.code, "caught safely");
+    if (e.stack) debug(e.stack);
   }
 
   return input;

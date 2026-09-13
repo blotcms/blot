@@ -19,7 +19,6 @@
 
 var fs = require("fs");
 var bigInt = require("./biginteger");
-var debug = false;
 
 exports.maxObjectSize = 100 * 1000 * 1000; // 100Meg
 exports.maxObjectCount = 32768;
@@ -71,25 +70,10 @@ var parseBuffer = (exports.parseBuffer = function (buffer) {
   var trailer = buffer.slice(buffer.length - 32, buffer.length);
   // 6 null bytes (index 0 to 5)
   var offsetSize = trailer.readUInt8(6);
-  if (debug) {
-    console.log("offsetSize: " + offsetSize);
-  }
   var objectRefSize = trailer.readUInt8(7);
-  if (debug) {
-    console.log("objectRefSize: " + objectRefSize);
-  }
   var numObjects = readUInt64BE(trailer, 8);
-  if (debug) {
-    console.log("numObjects: " + numObjects);
-  }
   var topObject = readUInt64BE(trailer, 16);
-  if (debug) {
-    console.log("topObject: " + topObject);
-  }
   var offsetTableOffset = readUInt64BE(trailer, 24);
-  if (debug) {
-    console.log("offsetTableOffset: " + offsetTableOffset);
-  }
 
   if (numObjects > exports.maxObjectCount) {
     throw new Error("maxObjectCount exceeded");
@@ -104,17 +88,6 @@ var parseBuffer = (exports.parseBuffer = function (buffer) {
       offsetTableOffset + (i + 1) * offsetSize
     );
     offsetTable[i] = readUInt(offsetBytes, 0);
-    if (debug) {
-      console.log(
-        "Offset for Object #" +
-          i +
-          " is " +
-          offsetTable[i] +
-          " [" +
-          offsetTable[i].toString(16) +
-          "]"
-      );
-    }
   }
 
   // Parses an object inside the currently parsed binary property list.
@@ -373,9 +346,6 @@ var parseBuffer = (exports.parseBuffer = function (buffer) {
       if (length * 2 * objectRefSize > exports.maxObjectSize) {
         throw new Error("To little heap space available!");
       }
-      if (debug) {
-        console.log("Parsing dictionary #" + tableOffset);
-      }
       var dict = {};
       for (var i = 0; i < length; i++) {
         var keyRef = readUInt(
@@ -395,11 +365,6 @@ var parseBuffer = (exports.parseBuffer = function (buffer) {
         );
         var key = parseObject(keyRef);
         var val = parseObject(valRef);
-        if (debug) {
-          console.log(
-            "  DICT #" + tableOffset + ": Mapped " + key + " to " + val
-          );
-        }
         dict[key] = val;
       }
       return dict;

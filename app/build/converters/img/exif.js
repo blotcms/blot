@@ -54,8 +54,6 @@ async function parseExif(filePath, mode = "off") {
     if (!stat || !stat.isFile() || stat.size === 0) return {};
     const raw = await execExifTool(filePath);
 
-    console.log("Raw EXIF data:", raw);
-
     const result = {};
 
     Object.keys(raw || {}).forEach((key) => {

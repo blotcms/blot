@@ -37,7 +37,6 @@ function create(blogID, path, done) {
 
       debug(blogID, "Transforming", path);
       transform(path, fullPathToOutputDirectory, function (err, thumbnails) {
-        console.log(err);
         if (err) return done(err);
 
         for (var i in thumbnails) {

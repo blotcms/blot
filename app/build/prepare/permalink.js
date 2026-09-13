@@ -142,7 +142,7 @@ module.exports = function (timeZone, format, entry) {
     permalink = mustache.render(format || DEFAULT, view);
     debug("permalink", permalink);
   } catch (e) {
-    console.log(e);
+    debug("Error rendering permalink", e);
     permalink = "";
   }
 

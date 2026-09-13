@@ -83,8 +83,7 @@ async function processImages(blogID, docPath, $) {
       await fs.outputFile(join(assetDir, filename), buffer);
 
       $(elem).attr("src", "/_assets/" + docHash + "/" + filename);
-    } catch (err) {
-      console.log(err);
+    } catch {
     }
   }
 
@@ -106,7 +105,6 @@ async function processImages(blogID, docPath, $) {
       }
 
       const fetchImage = async (resolvedPath, done) => {
-        console.log("Fetched image for gdoc:", src, resolvedPath);
         try {
           const determinedExt = await determineExtension(resolvedPath);
 
@@ -129,9 +127,7 @@ async function processImages(blogID, docPath, $) {
       );
 
       $(elem).attr("src", output);
-    } catch (err) {
-      console.log(err);
-
+    } catch {
       const fallbackFilename = await findCachedAsset(assetDir, filenameBase);
 
       if (fallbackFilename) {

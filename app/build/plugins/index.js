@@ -287,7 +287,7 @@ function loadPlugins (plugins) {
 
 function Timeout (name, cb) {
   return setTimeout(function () {
-    console.log(name + " timed out. Moving to next plugin.");
+    console.warn(name + " timed out. Moving to next plugin.");
     cb();
   }, TIMEOUT);
 }
