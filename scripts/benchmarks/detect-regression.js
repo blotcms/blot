@@ -17,10 +17,10 @@
 const { spawnSync } = require("child_process");
 
 const { loadHistory, computeBaseline } = require("./lib/history");
-const { METRIC_BY_KEY, formatValue } = require("./lib/metrics");
+const { getMetrics, formatValue } = require("./lib/metrics");
 const { classify } = require("./lib/stats");
 const { fmtDelta } = require("./lib/report");
-const { BENCHMARK_DEFAULTS } = require("../../app/blog/benchmarks/util/defaults");
+const { BENCHMARK_DEFAULTS } = require("./spec/util/defaults");
 
 function arg(name, fallback = null) {
   const i = process.argv.indexOf(name);
@@ -60,6 +60,15 @@ function main() {
   );
   const alert = flag("--alert");
   const dryRun = flag("--dry-run");
+  const issueLabel = arg("--issue-label", "benchmark-regression");
+  const workflowName = arg("--workflow-name", "benchmarks.yml");
+  // See pr-comment.js's --exclude-phase - a render-only workflow's build_*
+  // metrics are meaningless near-zero process-startup noise and shouldn't
+  // be eligible to trigger a regression issue.
+  const excludePhaseArg = arg("--exclude-phase");
+  const excludePhases = excludePhaseArg
+    ? excludePhaseArg.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
   const repo = process.env.GITHUB_REPOSITORY;
 
   // Records from an older history schema (a prior tracked-metric set, or a
@@ -81,12 +90,13 @@ function main() {
   const priorRecords = history.slice(0, -consecutive);
   const baseline = computeBaseline(priorRecords, {
     window: BENCHMARK_DEFAULTS.baselineWindow,
+    excludePhases,
   });
 
   const offenders = [];
 
-  for (const key of Object.keys(METRIC_BY_KEY)) {
-    const metric = METRIC_BY_KEY[key];
+  for (const metric of getMetrics(excludePhases)) {
+    const key = metric.key;
     const base = baseline.metrics[key];
     if (!base || !Number.isFinite(base.median)) continue;
 
@@ -153,7 +163,7 @@ function main() {
         `Suspect range: \`${shortSha(lastGood.git_sha)}..${shortSha(firstBad.git_sha)}\`.`
       : "",
     "",
-    "<sub>Filed automatically by `.github/workflows/benchmarks.yml`. " +
+    `<sub>Filed automatically by \`.github/workflows/${workflowName}\`. ` +
       "Close once addressed or acknowledged; it will not reopen unless a new " +
       "regression crosses the threshold after recovery.</sub>",
   ].filter((line) => line !== undefined);
@@ -175,7 +185,7 @@ function main() {
       "--repo",
       repo,
       "--label",
-      "benchmark-regression",
+      issueLabel,
       "--state",
       "open",
       "--json",
@@ -199,7 +209,7 @@ function main() {
     return;
   }
 
-  ensureLabel(repo);
+  ensureLabel(repo, issueLabel);
 
   const out = gh(
     [
@@ -212,19 +222,19 @@ function main() {
       "--body-file",
       "-",
       "--label",
-      "benchmark-regression",
+      issueLabel,
     ],
     body
   );
   console.log(`[detect] filed ${out.trim()}`);
 }
 
-function ensureLabel(repo) {
+function ensureLabel(repo, issueLabel) {
   try {
     gh([
       "label",
       "create",
-      "benchmark-regression",
+      issueLabel,
       "--repo",
       repo,
       "--color",

@@ -31,41 +31,54 @@ function avgBurstInflation(r) {
   return values.reduce((sum, n) => sum + n, 0) / values.length;
 }
 
+// `phase` marks which part of a run a metric describes ("build" or
+// "render"). Consumers that only run one phase for real (e.g.
+// benchmarks-render.yml's --corpus-mode render, which starts/stops the
+// build-phase monitor without doing any real build work - see
+// build-render.spec.js) can filter these out via getMetrics()'s
+// `excludePhases` so meaningless near-zero build numbers never get reported
+// on or alerted against.
 const METRICS = [
   {
     key: "build_p95_ms",
     label: "Build p95 (per site)",
     unit: "ms",
+    phase: "build",
     get: (r) => num(r?.build?.timing_ms?.p95),
   },
   {
     key: "build_peak_rss_mb",
     label: "Build peak RSS",
     unit: "MB",
+    phase: "build",
     get: (r) => num(r?.build?.memory_mb?.peak_rss),
   },
   {
     key: "build_cpu_avg_percent",
     label: "Build CPU (avg, % of machine)",
     unit: "percent",
+    phase: "build",
     get: (r) => num(r?.build?.cpu?.avg_percent_of_machine),
   },
   {
     key: "build_disk_io_ops",
     label: "Build disk I/O (blocks)",
     unit: "ops",
+    phase: "build",
     get: (r) => num(r?.build?.disk_io?.total_ops),
   },
   {
     key: "render_p95_ms",
     label: "Render p95 (per page)",
     unit: "ms",
+    phase: "render",
     get: (r) => num(r?.render?.timing_ms?.p95),
   },
   {
     key: "render_peak_rss_mb",
     label: "Render peak RSS",
     unit: "MB",
+    phase: "render",
     get: (r) => num(r?.render?.memory_mb?.peak_rss),
   },
   {
@@ -73,24 +86,28 @@ const METRICS = [
     label: "Output size (per page)",
     unit: "bytes",
     deterministic: true,
+    phase: "render",
     get: (r) => num(r?.render?.bytes?.mean_per_page),
   },
   {
     key: "render_cpu_avg_percent",
     label: "Render CPU (avg, % of machine)",
     unit: "percent",
+    phase: "render",
     get: (r) => num(r?.render?.cpu?.avg_percent_of_machine),
   },
   {
     key: "render_disk_io_ops",
     label: "Render disk I/O (blocks)",
     unit: "ops",
+    phase: "render",
     get: (r) => num(r?.render?.disk_io?.total_ops),
   },
   {
     key: "render_burst_inflation_avg",
     label: "Render burst inflation (avg burst ÷ solo, across routes)",
     unit: "ratio",
+    phase: "render",
     get: avgBurstInflation,
   },
 ];
@@ -102,7 +119,19 @@ function num(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+// METRICS filtered to drop any metric whose `phase` is in `excludePhases`.
+// Defaults to the full list, so existing callers that don't pass this are
+// unaffected.
+function getMetrics(excludePhases = []) {
+  if (!excludePhases || !excludePhases.length) return METRICS;
+  return METRICS.filter((m) => !excludePhases.includes(m.phase));
+}
+
 // Flatten a full benchmark-result JSON down to { metricKey: number|null }.
+// Always extracts every metric (including build_* ones, even if they're
+// meaningless zeros for a render-only run) so the raw history record stays
+// complete - phase filtering happens downstream, at reporting/regression
+// time, via getMetrics().
 function extractMetrics(result) {
   const out = {};
   for (const metric of METRICS) out[metric.key] = metric.get(result);
@@ -126,4 +155,4 @@ function formatValue(value, unit) {
   return String(value);
 }
 
-module.exports = { METRICS, METRIC_BY_KEY, extractMetrics, formatValue };
+module.exports = { METRICS, METRIC_BY_KEY, getMetrics, extractMetrics, formatValue };

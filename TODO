@@ -1,4 +1,4 @@
-Rewrite the benchmarks: more blogs, more posts, larger sites, and persist to Redis with a cache across action runs
+Investigate the most effective Mustache template cache size now that it's bounded (#1859).
 
 Now we have many LRU caches in app/blog we need to gather data in production to rigorously determine the most effective relative sizes for the caches (include the mustache template cache in this)
 

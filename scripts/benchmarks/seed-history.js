@@ -27,6 +27,11 @@ function main() {
   const arch = arg("--arch", "amd64");
   const historyDir = arg("--history-dir", ".benchmarks/history");
   const workflow = arg("--workflow", "benchmarks.yml");
+  // Lets callers with a differently-named history artifact (e.g.
+  // benchmarks-render.yml's "render-benchmark-history-<arch>", vs. this
+  // workflow's own default "benchmark-history-<arch>") reuse this script
+  // instead of duplicating it.
+  const artifactName = arg("--artifact-name", `benchmark-history-${arch}`);
   const repo = process.env.GITHUB_REPOSITORY;
   const file = path.join(historyDir, `history-${arch}.ndjson`);
 
@@ -52,8 +57,6 @@ function main() {
         "[.workflow_runs[] | .databaseId // .id]",
       ]).stdout || "[]"
     );
-
-    const artifactName = `benchmark-history-${arch}`;
 
     for (const runId of runs) {
       const artifactId = (

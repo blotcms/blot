@@ -6,7 +6,7 @@
 const path = require("path");
 const fs = require("fs");
 
-const ROOT = path.resolve(__dirname, "../../../build/converters");
+const ROOT = path.resolve(__dirname, "../../../../app/build/converters");
 
 function fixture(sourceRelative, targetPath) {
   const sourcePath = path.join(ROOT, sourceRelative);

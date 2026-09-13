@@ -201,8 +201,8 @@ jobs:
     runs-on: ubuntu-latest
     # Every file with describe()/it() must sit in a <suite>/tests/ directory
     # (or be named tests.js) so the runner picks it up. The only exception is
-    # app/blog/benchmarks/benchmarks.js: it is a Jasmine spec run by its own
-    # workflow (benchmarks.yml), never by the unit-test matrix.
+    # scripts/benchmarks/spec/build-render.spec.js: it is a Jasmine spec run
+    # by its own workflow (benchmarks.yml), never by the unit-test matrix.
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -241,9 +241,9 @@ jobs:
             SPEC_FILES=""
           fi
 
-          # app/blog/benchmarks is a benchmark spec run by benchmarks.yml, not
-          # the unit-test matrix - exclude it from this check.
-          SPEC_FILES=$(echo "$SPEC_FILES" | grep -v "app/blog/benchmarks/" || true)
+          # scripts/benchmarks/spec is a benchmark spec run by benchmarks.yml,
+          # not the unit-test matrix - exclude it from this check.
+          SPEC_FILES=$(echo "$SPEC_FILES" | grep -v "scripts/benchmarks/spec/" || true)
 
           echo "Files with both describe() and it():"
           echo "$SPEC_FILES"
@@ -344,7 +344,7 @@ jobs:
           # include/exclude formerly lived in .nycrc.json; pass them as CLI
           # args so we don't need a config file. node_modules is excluded by
           # nyc's default --exclude-node-modules.
-          NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/blog/benchmarks/** --exclude=app/views-built/** --exclude=app/templates/source/**"
+          NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/views-built/** --exclude=app/templates/source/**"
           docker run --rm \
             --network host \
             -e BLOT_REDIS_HOST=localhost \
@@ -432,7 +432,7 @@ jobs:
           # Capture stdout via command substitution (not a pipe) so the
           # docker run exit code - and therefore this step's - is nyc's own,
           # not tee's.
-          NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/blog/benchmarks/** --exclude=app/views-built/** --exclude=app/templates/source/**"
+          NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/views-built/** --exclude=app/templates/source/**"
           REPORT_OUTPUT=$(docker run --rm \
             -v ${{ github.workspace }}/app:/usr/src/app/app \
             -v ${{ github.workspace }}/.nyc_output:/usr/src/app/.nyc_output \
@@ -456,10 +456,18 @@ jobs:
         if: steps.merge-coverage.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report-${{ github.sha }}
+          # Deliberately NOT prefixed "coverage-" - the "Download coverage
+          # from every shard" step above matches that prefix, and on a rerun
+          # within the same workflow run (e.g. re-running just one flaky test
+          # job) a prior successful attempt's merged report would otherwise
+          # get swept back in as if it were a raw per-shard coverage file,
+          # which crashes nyc ("Invalid file coverage object, missing keys")
+          # since a coverage-summary.json isn't shaped like raw nyc output.
+          name: merged-coverage-report-${{ github.sha }}
           path: coverage
           if-no-files-found: warn
           retention-days: 30
+          overwrite: true
 
       # master: record this run's line coverage % as the new baseline for
       # future PRs to diff against.

@@ -55,9 +55,11 @@ module.exports = function registerGlobalTest() {
       });
     },
 
-    blogs: function (total) {
+    blogs: function (total, options = {}) {
+      var skipTeardown = options.skipTeardown === true;
+
       beforeEach(require("./util/createUser"));
-      afterEach(require("./util/removeUser"));
+      if (!skipTeardown) afterEach(require("./util/removeUser"));
 
       beforeEach(function (done) {
         var context = this;
@@ -75,27 +77,31 @@ module.exports = function registerGlobalTest() {
         );
       });
 
-      afterEach(function (done) {
-        var context = this;
-        async.each(
-          this.blogs,
-          function (blog, next) {
-            require("./util/removeBlog").call(
-              { user: context.user, blog: blog },
-              next
-            );
-          },
-          done
-        );
-      });
+      if (!skipTeardown) {
+        afterEach(function (done) {
+          var context = this;
+          async.each(
+            this.blogs,
+            function (blog, next) {
+              require("./util/removeBlog").call(
+                { user: context.user, blog: blog },
+                next
+              );
+            },
+            done
+          );
+        });
+      }
     },
 
-    blog: function () {
+    blog: function (options = {}) {
+      var skipTeardown = options.skipTeardown === true;
+
       beforeEach(require("./util/createUser"));
-      afterEach(require("./util/removeUser"));
+      if (!skipTeardown) afterEach(require("./util/removeUser"));
 
       beforeEach(require("./util/createBlog"));
-      afterEach(require("./util/removeBlog"));
+      if (!skipTeardown) afterEach(require("./util/removeBlog"));
     },
 
     tmp: function () {

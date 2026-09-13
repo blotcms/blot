@@ -1,0 +1,210 @@
+name: benchmarks-converters
+
+# What this workflow does
+# ------------------------
+# Per-converter build-time micro-benchmark: on a change under
+# app/build/converters/<name>/** (or shared app/build/** files), times N
+# conversions of that converter's own existing test fixtures using its
+# actual read(blog, path, callback) function directly - no full blog/Redis/
+# rebuild machinery, no Docker (a converter's `read` only touches the
+# filesystem, plus pandoc/soffice for some converters, both already on the
+# `dev`... actually the standard GitHub runner image - see setup below).
+#
+# Posts a sticky PR comment with per-converter p50/p95/peak-RSS and a rolling
+# per-converter history (own cache key per converter) for lightweight
+# regression detection on master. This is deliberately much simpler than the
+# render/build benchmark's multi-metric history+baseline apparatus - each
+# converter here only tracks one timing metric.
+#
+# See scripts/benchmarks/README.md for the whole picture.
+
+on:
+  pull_request:
+    branches: ["master"]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "app/build/converters/**"
+      - "app/build/*.js"
+      - "app/build/metadata/**"
+      # Shared helpers required directly by more than one converter (grepped
+      # each converter's requires for anything outside its own directory) -
+      # a regression here wouldn't otherwise trigger this workflow at all.
+      - "app/build/math/normalizeLiteralDollars.js"
+      - "app/build/prepare/titlify.js"
+  push:
+    branches: ["master"]
+    paths:
+      - "app/build/converters/**"
+      - "app/build/*.js"
+      - "app/build/metadata/**"
+      - "app/build/math/normalizeLiteralDollars.js"
+      - "app/build/prepare/titlify.js"
+  workflow_dispatch:
+    inputs:
+      converters:
+        description: "Space-separated converter names (default: all)"
+        default: ""
+      n:
+        description: "Conversions per converter"
+        default: "300"
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+concurrency:
+  group: benchmarks-converters-${{ github.event_name == 'push' && 'master' || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  detect-changed-converters:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    outputs:
+      converters: ${{ steps.detect.outputs.converters }}
+      any: ${{ steps.detect.outputs.any }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine which converters changed
+        id: detect
+        run: |
+          if [ -n "${{ github.event.inputs.converters }}" ]; then
+            CONVERTERS="${{ github.event.inputs.converters }}"
+          else
+            BASE="${{ github.event.pull_request.base.sha || format('{0}~1', github.sha) }}"
+            HEAD="${{ github.event.pull_request.head.sha || github.sha }}"
+            CHANGED=$(git diff --name-only "$BASE" "$HEAD" -- app/build || true)
+
+            # A change to a converter's own directory affects just that
+            # converter; a change to a *shared* app/build/*.js file (or
+            # app/build/metadata/**, or one of the shared helpers below -
+            # normalizeLiteralDollars.js is required directly by html/gdoc,
+            # titlify.js by img/webloc - grepped from each converter's own
+            # requires) is treated conservatively as affecting every
+            # converter.
+            if echo "$CHANGED" | grep -qE '^app/build/[^/]+\.js$|^app/build/metadata/|^app/build/math/normalizeLiteralDollars\.js$|^app/build/prepare/titlify\.js$'; then
+              CONVERTERS=$(ls app/build/converters | grep -vE '\.js$|^tests$|^readme\.txt$' | tr '\n' ' ')
+            else
+              CONVERTERS=$(echo "$CHANGED" | grep -oE '^app/build/converters/[^/]+' | sed 's#app/build/converters/##' | sort -u | grep -vE '\.js$|^tests$' | tr '\n' ' ')
+            fi
+          fi
+
+          CONVERTERS=$(echo "$CONVERTERS" | xargs)
+          echo "Converters to benchmark: $CONVERTERS"
+          echo "converters=$CONVERTERS" >> "$GITHUB_OUTPUT"
+          if [ -n "$CONVERTERS" ]; then
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "any=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  benchmark-converters:
+    needs: detect-changed-converters
+    if: needs.detect-changed-converters.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      # The img converter's fixtures (AVIF/WebP/HEIC/etc.) go through
+      # app/helper/transformer, which is backed by the process-wide Redis
+      # client in app/models/client - without this, that path either hangs
+      # in a reconnect loop or fails outright. Same image as the other
+      # benchmark workflows' redis service.
+      redis:
+        image: redis:6
+        ports:
+          - 6379:6379
+    env:
+      NODE_PATH: app
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      RESULT_FILE: .benchmarks/converter-result.json
+      HISTORY_DIR: .benchmarks/converter-history
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The repo has no committed package-lock.json/npm-shrinkwrap.json, so
+      # `npm ci` fails immediately - match the rest of the repo's CI (e.g.
+      # deploy.yml, screenshots.yml) and use `npm install`.
+      - name: Install dependencies
+        run: npm install
+
+      # docx/odt/rtf/org/markdown all shell out to pandoc; odt/docx-adjacent
+      # paths may also touch soffice. Installing both keeps this workflow
+      # self-contained (no Docker image needed - converters run in-process).
+      - name: Install pandoc + libreoffice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pandoc libreoffice
+
+      - name: Restore converter history
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.HISTORY_DIR }}
+          key: converter-benchmarks-history-${{ github.run_id }}
+          restore-keys: |
+            converter-benchmarks-history-
+
+      - name: Run converter benchmark
+        run: |
+          CONVERTER_ARGS=""
+          for c in ${{ needs.detect-changed-converters.outputs.converters }}; do
+            CONVERTER_ARGS="$CONVERTER_ARGS --converter $c"
+          done
+          node scripts/benchmarks/converter-bench.js \
+            $CONVERTER_ARGS \
+            --n "${{ github.event.inputs.n || '300' }}" \
+            --output "$RESULT_FILE"
+
+      - name: Post PR comment
+        if: github.event_name == 'pull_request'
+        run: |
+          node scripts/benchmarks/converter-pr-comment.js \
+            --pr "${{ github.event.pull_request.number }}" \
+            --result "$RESULT_FILE" \
+            --history-dir "$HISTORY_DIR" \
+            --sha "$HEAD_SHA"
+
+      - name: Update history and check for regressions
+        if: github.event_name == 'push'
+        run: |
+          node scripts/benchmarks/converter-pr-comment.js \
+            --result "$RESULT_FILE" \
+            --history-dir "$HISTORY_DIR" \
+            --sha "$HEAD_SHA" \
+            --update-history
+
+      - name: Save converter history
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.HISTORY_DIR }}
+          key: converter-benchmarks-history-${{ github.run_id }}
+
+      - name: Upload converter benchmark result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: converter-benchmark-result
+          path: ${{ env.RESULT_FILE }}
+          if-no-files-found: warn
+
+      - name: Upload converter benchmark history
+        if: always() && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: converter-benchmark-history
+          path: ${{ env.HISTORY_DIR }}
+          retention-days: 90
+          if-no-files-found: warn

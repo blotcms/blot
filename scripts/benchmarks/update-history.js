@@ -28,6 +28,13 @@ function main() {
   const resultFile = arg("--result");
   const arch = arg("--arch", "amd64");
   const historyDir = arg("--history-dir", ".benchmarks/history");
+  // See pr-comment.js/detect-regression.js's --exclude-phase - keeps a
+  // render-only workflow's baseline from being built out of meaningless
+  // build_* metrics.
+  const excludePhaseArg = arg("--exclude-phase");
+  const excludePhases = excludePhaseArg
+    ? excludePhaseArg.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
 
   if (!resultFile || !fs.existsSync(resultFile)) {
     console.error(`[history] result file not found: ${resultFile}`);
@@ -55,7 +62,10 @@ function main() {
     console.log(`[history] ${arch}: appended ${record.git_sha} (${history.length} total).`);
   }
 
-  const baseline = computeBaseline(history, { excludeSha: record.git_sha });
+  const baseline = computeBaseline(history, {
+    excludeSha: record.git_sha,
+    excludePhases,
+  });
   const baselineFile = path.join(historyDir, `baseline-${arch}.json`);
   fs.writeFileSync(baselineFile, JSON.stringify(baseline, null, 2));
   console.log(
