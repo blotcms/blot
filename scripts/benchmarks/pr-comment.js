@@ -24,7 +24,7 @@ const { spawnSync } = require("child_process");
 
 const { compareToBaseline, markdownTable, hasRegression } = require("./lib/report");
 const { loadHistory, computeBaseline } = require("./lib/history");
-const { BENCHMARK_DEFAULTS } = require("../../app/blog/benchmarks/util/defaults");
+const { BENCHMARK_DEFAULTS } = require("./spec/util/defaults");
 
 const RESULTS_START = "<!-- bench:results:start -->";
 const RESULTS_END = "<!-- bench:results:end -->";
@@ -92,8 +92,8 @@ function extractSha(body) {
 
 // The fenced results block: the table plus its provenance footer. `sha` is the
 // commit these numbers were produced from; `prevSha` the one before it.
-function resultsBlock({ result, baseline, sha, prevSha }) {
-  const rows = compareToBaseline(result, baseline);
+function resultsBlock({ result, baseline, sha, prevSha, excludePhases }) {
+  const rows = compareToBaseline(result, baseline, { excludePhases });
   const cfg = result.config || {};
   const url = runUrl();
 
@@ -122,8 +122,8 @@ function resultsBlock({ result, baseline, sha, prevSha }) {
   );
 }
 
-function callout({ result, baseline }) {
-  const rows = compareToBaseline(result, baseline);
+function callout({ result, baseline, excludePhases }) {
+  const rows = compareToBaseline(result, baseline, { excludePhases });
   if (!baseline || !baseline.sample_count) {
     return (
       "> No master baseline yet — showing this run's raw numbers. " +
@@ -145,13 +145,13 @@ function callout({ result, baseline }) {
   return "> No metric moved outside the noise band.";
 }
 
-function doneBody({ arch, result, baseline, sha, prevSha, marker }) {
+function doneBody({ arch, result, baseline, sha, prevSha, marker, title, excludePhases }) {
   return [
-    `### Benchmark — \`${arch}\``,
+    `### ${title || "Benchmark"} — \`${arch}\``,
     "",
-    callout({ result, baseline }),
+    callout({ result, baseline, excludePhases }),
     "",
-    resultsBlock({ result, baseline, sha, prevSha }),
+    resultsBlock({ result, baseline, sha, prevSha, excludePhases }),
     "",
     `<!-- bench:sha:${short(sha) || "none"} -->`,
     marker,
@@ -160,8 +160,8 @@ function doneBody({ arch, result, baseline, sha, prevSha, marker }) {
 
 // `sha` is the commit now being benchmarked; `prevBlock`/`prevSha` are the
 // preserved results (if any) from the last completed run.
-function runningBody({ arch, sha, prevBlock, prevSha, marker }) {
-  const lines = [`### Benchmark — \`${arch}\` ${LOADING}`, ""];
+function runningBody({ arch, sha, prevBlock, prevSha, marker, title }) {
+  const lines = [`### ${title || "Benchmark"} — \`${arch}\` ${LOADING}`, ""];
 
   if (prevBlock) {
     lines.push(
@@ -184,14 +184,32 @@ function runningBody({ arch, sha, prevBlock, prevSha, marker }) {
   return lines.join("\n");
 }
 
-function failedBody({ arch, sha, prevBlock, prevSha, marker }) {
+function failedBody({ arch, sha, prevBlock, prevSha, marker, title }) {
   const url = runUrl();
-  const lines = [`### Benchmark — \`${arch}\` — run failed`, ""];
+  const lines = [`### ${title || "Benchmark"} — \`${arch}\` — run failed`, ""];
 
   lines.push(
     `> The benchmark run for ${commitRef(sha) || "the latest commit"} failed` +
       (url ? ` — see the [run](${url})` : "") +
       "." +
+      (prevBlock
+        ? ` Numbers below are from ${commitRef(prevSha) || "the previous run"}.`
+        : "")
+  );
+
+  if (prevBlock) {
+    lines.push("", prevBlock, "", `<!-- bench:sha:${short(prevSha) || "none"} -->`);
+  }
+
+  lines.push(marker);
+  return lines.join("\n");
+}
+
+function skippedBody({ arch, sha, prevBlock, prevSha, marker, title, message }) {
+  const lines = [`### ${title || "Benchmark"} — \`${arch}\` — skipped`, ""];
+
+  lines.push(
+    `> ${message || "This run was skipped."}` +
       (prevBlock
         ? ` Numbers below are from ${commitRef(prevSha) || "the previous run"}.`
         : "")
@@ -233,6 +251,19 @@ function main() {
   const resultFile = arg("--result");
   const baselineFile = arg("--baseline");
   const historyDir = arg("--history-dir");
+  const commentTag = arg("--comment-tag"); // e.g. "render" - keeps a second
+  // sticky comment (different workload, not comparable metrics) separate
+  // from the default small-scale benchmark comment.
+  const title = arg("--title");
+  const message = arg("--message");
+  // Comma-separated phases ("build", "render") to drop from the table and
+  // baseline/regression comparison entirely - used by benchmarks-render.yml,
+  // whose --corpus-mode render skips real build work, so its build_* metrics
+  // are meaningless near-zero process-startup noise (see build-render.spec.js).
+  const excludePhaseArg = arg("--exclude-phase");
+  const excludePhases = excludePhaseArg
+    ? excludePhaseArg.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
   const repo = process.env.GITHUB_REPOSITORY;
 
   if (!pr || !repo) {
@@ -240,7 +271,9 @@ function main() {
     return;
   }
 
-  const marker = `<!-- blot-benchmark-comment:${arch} -->`;
+  const marker = commentTag
+    ? `<!-- blot-benchmark-comment:${commentTag}:${arch} -->`
+    : `<!-- blot-benchmark-comment:${arch} -->`;
 
   try {
     // We need the current comment body up front to preserve the last results
@@ -261,9 +294,11 @@ function main() {
     let body;
 
     if (status === "running") {
-      body = runningBody({ arch, sha, prevBlock, prevSha, marker });
+      body = runningBody({ arch, sha, prevBlock, prevSha, marker, title });
     } else if (status === "failed") {
-      body = failedBody({ arch, sha, prevBlock, prevSha, marker });
+      body = failedBody({ arch, sha, prevBlock, prevSha, marker, title });
+    } else if (status === "skipped") {
+      body = skippedBody({ arch, sha, prevBlock, prevSha, marker, title, message });
     } else {
       const result = readJson(resultFile);
       if (!result) {
@@ -273,7 +308,7 @@ function main() {
       let baseline = readJson(baselineFile);
       if (!baseline && historyDir) {
         const history = loadHistory(historyDir, arch);
-        baseline = history.length ? computeBaseline(history) : null;
+        baseline = history.length ? computeBaseline(history, { excludePhases }) : null;
       }
       body = doneBody({
         arch,
@@ -282,6 +317,8 @@ function main() {
         sha: sha || result.git_sha,
         prevSha,
         marker,
+        title,
+        excludePhases,
       });
     }
 

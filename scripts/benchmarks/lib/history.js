@@ -4,8 +4,8 @@ const fs = require("fs");
 const path = require("path");
 
 const { median, mad } = require("./stats");
-const { METRICS, extractMetrics } = require("./metrics");
-const { BENCHMARK_DEFAULTS } = require("../../../app/blog/benchmarks/util/defaults");
+const { getMetrics, extractMetrics } = require("./metrics");
+const { BENCHMARK_DEFAULTS } = require("../spec/util/defaults");
 
 // History is one append-only NDJSON file per architecture:
 //   <dir>/history-<arch>.ndjson
@@ -63,6 +63,7 @@ function computeBaseline(records, options = {}) {
     window = BENCHMARK_DEFAULTS.baselineWindow,
     excludeSha = null,
     schemaVersion = BENCHMARK_DEFAULTS.historySchemaVersion,
+    excludePhases = [],
   } = options;
 
   // Records written under an older schema version measured a different set
@@ -82,7 +83,7 @@ function computeBaseline(records, options = {}) {
     .slice(-window);
 
   const metrics = {};
-  for (const metric of METRICS) {
+  for (const metric of getMetrics(excludePhases)) {
     const values = usable
       .map((r) => r.metrics[metric.key])
       .filter((n) => Number.isFinite(n));

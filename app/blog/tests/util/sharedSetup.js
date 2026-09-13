@@ -7,14 +7,15 @@ module.exports = function setup(options = {}) {
   const config = require("config");
 
   const blogCount = Math.max(1, Number(options.blogs) || 1);
+  const skipTeardown = options.skipTeardown === true;
   const templateBuildTimeoutMs = Number(options.templateBuildTimeoutMs) || 30 * 1000;
   const templateBuildJasmineTimeoutMs =
     Number(options.templateBuildJasmineTimeoutMs) || 35 * 1000;
 
   if (blogCount === 1) {
-    global.test.blog();
+    global.test.blog({ skipTeardown });
   } else {
-    global.test.blogs(blogCount);
+    global.test.blogs(blogCount, { skipTeardown });
   }
 
   const router = express.Router();

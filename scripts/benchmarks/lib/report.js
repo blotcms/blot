@@ -1,8 +1,8 @@
 "use strict";
 
-const { METRICS, extractMetrics, formatValue } = require("./metrics");
+const { getMetrics, extractMetrics, formatValue } = require("./metrics");
 const { classify } = require("./stats");
-const { BENCHMARK_DEFAULTS } = require("../../../app/blog/benchmarks/util/defaults");
+const { BENCHMARK_DEFAULTS } = require("../spec/util/defaults");
 
 const STATUS_LABEL = {
   regression: "regressed",
@@ -19,12 +19,13 @@ function compareToBaseline(result, baseline, options = {}) {
   const {
     thresholdPercent = BENCHMARK_DEFAULTS.regressionThresholdPercent,
     sizeThresholdPercent = BENCHMARK_DEFAULTS.sizeThresholdPercent,
+    excludePhases = [],
   } = options;
 
   const current = extractMetrics(result);
   const baseMetrics = (baseline && baseline.metrics) || {};
 
-  return METRICS.map((metric) => {
+  return getMetrics(excludePhases).map((metric) => {
     const value = current[metric.key];
     const base = baseMetrics[metric.key] || { median: null, mad: 0 };
     const band = metric.deterministic ? sizeThresholdPercent : thresholdPercent;

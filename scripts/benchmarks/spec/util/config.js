@@ -59,6 +59,15 @@ function parseBenchmarkConfig(raw = {}) {
       raw.notFoundBurstConcurrency,
       BENCHMARK_DEFAULTS.notFoundBurstConcurrency
     ),
+    distribution:
+      raw.distribution === "skewed" ? "skewed" : BENCHMARK_DEFAULTS.distribution,
+    mediaFraction: num(raw.mediaFraction, BENCHMARK_DEFAULTS.mediaFraction),
+    corpusMode: ["build", "render"].includes(raw.corpusMode)
+      ? raw.corpusMode
+      : BENCHMARK_DEFAULTS.corpusMode,
+    corpusManifestPath: String(
+      raw.corpusManifestPath || BENCHMARK_DEFAULTS.corpusManifestPath
+    ),
   };
 }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 
-// Runs the benchmark spec (app/blog/benchmarks/benchmarks.js) once and writes a
+// Runs the benchmark spec (scripts/benchmarks/spec/build-render.spec.js) once and writes a
 // single benchmark-result JSON. It does NOT compare against a baseline or gate
 // anything - that is done afterwards, outside the container, by:
 //
@@ -18,7 +18,7 @@ var path = require("path");
 var seedrandom = require("seedrandom");
 var clfdate = require("helper/clfdate");
 
-var { BENCHMARK_DEFAULTS } = require("blog/benchmarks/util/defaults");
+var { BENCHMARK_DEFAULTS } = require("./spec/util/defaults");
 
 var args = parseArgs(process.argv.slice(2));
 var client = require("models/client");
@@ -28,7 +28,10 @@ var jasmine = new Jasmine();
 
 var jasmineConfig = {
   spec_dir: "",
-  spec_files: ["**/benchmarks/benchmarks.js", "!**/node_modules/**"],
+  spec_files: [
+    "**/benchmarks/spec/build-render.spec.js",
+    "!**/node_modules/**",
+  ],
   helpers: [],
   stopSpecOnExpectationFailure: true,
   random: false,
@@ -60,6 +63,10 @@ var benchmarkConfig = {
   backlinksBurstConcurrency: args.backlinksBurstConcurrency,
   sitemapBurstConcurrency: args.sitemapBurstConcurrency,
   notFoundBurstConcurrency: args.notFoundBurstConcurrency,
+  distribution: args.distribution,
+  mediaFraction: args.mediaFraction,
+  corpusMode: args.corpusMode,
+  corpusManifestPath: args.corpusManifestPath,
 };
 
 global.__BLOT_BENCHMARK_CONFIG = benchmarkConfig;
@@ -94,6 +101,49 @@ jasmine.addReporter({
       );
     }
 
+    if (benchmarkConfig.corpusMode === "build" && result.overallStatus === "passed") {
+      const workload = global.__BLOT_CORPUS_WORKLOAD;
+      const corpusBlogs = global.__BLOT_CORPUS_BLOGS || [];
+
+      if (!workload) {
+        console.error("[benchmark] Missing corpus workload payload");
+        exitCode = 1;
+      } else {
+        const manifest = {
+          corpusSchemaVersion: BENCHMARK_DEFAULTS.corpusSchemaVersion,
+          createdAt: new Date().toISOString(),
+          gitSha: process.env.GITHUB_SHA || null,
+          config: {
+            sites: benchmarkConfig.sites,
+            files: benchmarkConfig.files,
+            seed: benchmarkConfig.seed,
+            distribution: benchmarkConfig.distribution,
+            mediaFraction: benchmarkConfig.mediaFraction,
+          },
+          fixtureCount: workload.fixtureCount,
+          sites: corpusBlogs.map((blog, index) => ({
+            blogID: blog.blogID,
+            handle: blog.handle,
+            filesWritten: workload.filesPerSite[index] || 0,
+            tags: workload.tagsBySite[index] || [],
+            searchKeywords: workload.searchKeywordsBySite[index] || [],
+            hubPath: workload.hubPathBySite[index] || null,
+          })),
+        };
+
+        fs.ensureDirSync(path.dirname(args.corpusManifestPath));
+        fs.writeJsonSync(args.corpusManifestPath, manifest, { spaces: 2 });
+        console.log(
+          clfdate(),
+          "Wrote corpus manifest",
+          colors.cyan(args.corpusManifestPath),
+          "with",
+          manifest.sites.length,
+          "sites"
+        );
+      }
+    }
+
     process.exitCode = exitCode;
 
     setImmediate(function () {
@@ -103,17 +153,22 @@ jasmine.addReporter({
 });
 
 (async function ensureEmptyDatabase() {
-  let hasKeys = false;
+  // corpusMode "render" deliberately runs against a *restored* corpus (a
+  // Redis dump full of keys) rather than a throwaway empty database, so skip
+  // the emptiness check in that mode only.
+  if (benchmarkConfig.corpusMode !== "render") {
+    let hasKeys = false;
 
-  for await (const batch of client.scanIterator({ MATCH: "*", COUNT: 1 })) {
-    if (batch.length > 0) {
-      hasKeys = true;
-      break;
+    for await (const batch of client.scanIterator({ MATCH: "*", COUNT: 1 })) {
+      if (batch.length > 0) {
+        hasKeys = true;
+        break;
+      }
     }
-  }
 
-  if (hasKeys) {
-    throw new Error("Database is not empty: keys found");
+    if (hasKeys) {
+      throw new Error("Database is not empty: keys found");
+    }
   }
 
   jasmine.execute();
@@ -138,6 +193,10 @@ function parseArgs(argv) {
     backlinksBurstConcurrency: BENCHMARK_DEFAULTS.backlinksBurstConcurrency,
     sitemapBurstConcurrency: BENCHMARK_DEFAULTS.sitemapBurstConcurrency,
     notFoundBurstConcurrency: BENCHMARK_DEFAULTS.notFoundBurstConcurrency,
+    distribution: BENCHMARK_DEFAULTS.distribution,
+    mediaFraction: BENCHMARK_DEFAULTS.mediaFraction,
+    corpusMode: BENCHMARK_DEFAULTS.corpusMode,
+    corpusManifestPath: BENCHMARK_DEFAULTS.corpusManifestPath,
     output: null,
     path: null,
     ci: false,
@@ -160,6 +219,7 @@ function parseArgs(argv) {
     "--backlinks-burst-concurrency": "backlinksBurstConcurrency",
     "--sitemap-burst-concurrency": "sitemapBurstConcurrency",
     "--not-found-burst-concurrency": "notFoundBurstConcurrency",
+    "--media-fraction": "mediaFraction",
   };
 
   for (var i = 0; i < argv.length; i++) {
@@ -190,6 +250,24 @@ function parseArgs(argv) {
 
     if (arg === "--path" && next) {
       parsed.path = next;
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--distribution" && next) {
+      parsed.distribution = next === "skewed" ? "skewed" : "flat";
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--corpus-mode" && next) {
+      parsed.corpusMode = ["build", "render"].includes(next) ? next : "off";
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--corpus-manifest-path" && next) {
+      parsed.corpusManifestPath = next;
       i += 1;
       continue;
     }
@@ -304,6 +382,18 @@ function printHelp() {
         ")",
       "  --cpu-sample-interval-ms <ms>  CPU/memory sampling interval (default: " +
         BENCHMARK_DEFAULTS.cpuSampleIntervalMs +
+        ")",
+      "  --distribution <flat|skewed>   Workload shape (default: " +
+        BENCHMARK_DEFAULTS.distribution +
+        ")",
+      "  --media-fraction <0-1>         Fraction of posts hard-linked to a media fixture (default: " +
+        BENCHMARK_DEFAULTS.mediaFraction +
+        ")",
+      "  --corpus-mode <off|build|render>  Corpus lifecycle mode (default: " +
+        BENCHMARK_DEFAULTS.corpusMode +
+        ")",
+      "  --corpus-manifest-path <path>  Where to write/read the corpus manifest (default: " +
+        BENCHMARK_DEFAULTS.corpusManifestPath +
         ")",
       "  --output <path>                Write JSON benchmark result to path",
       "  --ci                           Non-interactive mode",
