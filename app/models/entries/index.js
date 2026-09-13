@@ -212,6 +212,13 @@ module.exports = (function () {
       });
   }
 
+  // Entries are read in full (content included) - a single Entry.get call
+  // with the whole list's ids does one MGET that parses every entry in the
+  // list at once, which for a blog with many large entries can exhaust the
+  // heap before pruneMissing ever gets to zRem the stale ones. Batching the
+  // reads keeps only PRUNE_BATCH_SIZE full entries in memory at a time.
+  var PRUNE_BATCH_SIZE = 100;
+
   function pruneMissing(blogID, callback) {
     if (!callback) callback = function () {};
 
@@ -227,30 +234,43 @@ module.exports = (function () {
           .then(function (ids) {
             if (!ids || !ids.length) return nextList();
 
-            Entry.get(blogID, ids, function (entries) {
-              entries = entries || [];
+            var existing = {};
+            var batches = [];
 
-              var existing = {};
+            for (var i = 0; i < ids.length; i += PRUNE_BATCH_SIZE) {
+              batches.push(ids.slice(i, i + PRUNE_BATCH_SIZE));
+            }
 
-              entries.forEach(function (entry) {
-                if (entry && entry.id) existing[entry.id] = true;
-              });
+            async.eachSeries(
+              batches,
+              function (batch, nextBatch) {
+                Entry.get(blogID, batch, function (entries) {
+                  (entries || []).forEach(function (entry) {
+                    if (entry && entry.id) existing[entry.id] = true;
+                  });
 
-              var missing = ids.filter(function (id) {
-                return !existing[id];
-              });
-
-              if (!missing.length) return nextList();
-
-              redis
-                .zRem(key, missing)
-                .then(function () {
-                  nextList();
-                })
-                .catch(function (err) {
-                  nextList(err);
+                  setImmediate(nextBatch);
                 });
-            });
+              },
+              function (err) {
+                if (err) return nextList(err);
+
+                var missing = ids.filter(function (id) {
+                  return !existing[id];
+                });
+
+                if (!missing.length) return nextList();
+
+                redis
+                  .zRem(key, missing)
+                  .then(function () {
+                    nextList();
+                  })
+                  .catch(function (err) {
+                    nextList(err);
+                  });
+              }
+            );
           })
           .catch(function (err) {
             nextList(err);

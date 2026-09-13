@@ -1,8 +1,6 @@
 Rewrite the benchmarks: more blogs, more posts, larger sites, and persist to Redis with a cache across action runs
 
----
-
-Investigate the most effective Mustache template cache size now that it's bounded (#1859).
+Now we have many LRU caches in app/blog we need to gather data in production to rigorously determine the most effective relative sizes for the caches (include the mustache template cache in this)
 
 Fix performance bugs on nashp and anchor and re-enable sites
 
@@ -10,40 +8,28 @@ Fix performance bugs on nashp and anchor and re-enable sites
 
 Google Drive:
 - Fix bug with repeat resyncs of specific sites via Google Drive:
-- To identify, run node scripts/google-drive/resync.js multiple times, some sites continually resync the same files...
-- Fix bug with Google Drive on Mark's site which unneccessarily re-downloads some (all?) files on sync rather than using the correct hash and tell [Mark](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTVmrvkvcfPvcJhcLvrwSndWS)
+  - To identify, run node scripts/google-drive/resync.js multiple times, some sites continually resync the same files...
+  - Mark's site unneccessarily re-downloads some (all?) files on sync rather than using the correct hash and tell [Mark](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTVmrvkvcfPvcJhcLvrwSndWS)
 - Fix bug with shared drive folders for [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBkLKSVzvjZLRSCpRJwcKBPlf)
-- Fix bug with Google Docs when disconnecting a site from Google Drive on Blot then reconnecting the site to Google Drive.
+- Fix bug with Google Docs when disconnecting a site from Google Drive on Blot then reconnecting the site to Google Drive. We need to work out how to handle this (Google Docs are not real files)
 - Improve sync efficieny with option to target a specific folder or file first (Track ids in database) and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBspgLdtHcrTZqRcPTJFNzBbd) maybe use touch metadata method to force syncs periodically for hot files?
+  - Make it possible to short-circuit the full folder traversal and immediately begin at a specific file/subfolder
 - Improve html output for google docs and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBQFmTvLKzPkJrgsBTWZmQJWS)
   Issue: <p><img><br><img></p> should be <p><img></p><p><img></p>
-- [ ] new folder setup (e.g. waiting for user to share folder on drive) needs to survive a server restart (See init.js TODO)
-- [ ] slowly resync all connected blogs on server restart
-- [ ] It seems like sometimes the first sentence of Google Docs become titles unexpectedly – possibly a mis-identified title tag?
-- [ ] make it possible to short-circuit the full folder traversal and immediately begin at a specific file/subfolder
-- [ ] to improve sync speed, eventually set up temporary channels to watch google docs for changes – is this faster than polling driveactivity? or work out the fastest way to get fast updates for google docs. Is the move to listen on changes.watch and then setup an optional temporary files.watch channel to stream changes for the length of the channel (don't renew)?
-- [ ] add tests with nock
-- [ ] Test multiple sites sync in parallel
-- [ ] Test multiple Google Drive accounts in parallel
-- [ ] On disconnect, convert Google Docs in folder into Markdown and inform the user
-  - tell henryirvine about this affecting his site
-- [ ] Test drafts
-- [ ] Test local templates
+- Fix bug with new folder setup (e.g. waiting for user to share folder on drive) which does not survive a server restart (See init.js TODO)
+- Fix possible bug where it seems like sometimes the first sentence of Google Docs become titles unexpectedly – possibly a mis-identified title tag?
 - How do we handle two files with same name and same parent? How does our fileId:path hash handle this? Make sure we delete the right file. Will file.title as opposed to file.name give us the deduped version?
   - Bug: move file with deduplicated name from sub folder to other folder
   - download should check for an existing file with same name but different fileId and dedupe before storing the path?
 - Handle revoked credentials without tanking server
 - Handle removed blog folder without error
 - Handle renamed blog folder
-- Can the google drive client handle a server restart during setup?
-- database.folder should throw ENOENT and EEXIST errors for del, set, move etc.
-- Error handling
-  - Retry when we get google drive's This service is not available error
-  - Handle storage quota errors
-  - Handle 429 errors with exponential backoff retry
+- Handle google drive's This service is not available error
+- Handle storage quota errors
+- Handle 429 errors with exponential backoff retry
 - Add a way for sync/build to accept a ctime as an option. We can't set this at the operating system level but google drive's API does return a createdTime value and we could use this as the true file's created date, rather than the date the file is made on the server
-- `write` should use the best method for large file uploading
-- Work out if we can test this using Mocks  
+- Google Drive `write` should use the best method for large file uploading
+- Add proper testing for this
 
 Dropbox:
 - Sync verification should instrument the sync/fix function to also report errors where the folder doesn't match the database.
@@ -64,28 +50,7 @@ Dropbox:
 - Bug: dropbox reset FROM BLOT should handle revoked token
 - Bug: add sync lock process to dropbox connection when writing folder contents
 - Bug: ensure the app permission access_token is destroyed when switching to full-folder and vice versa
-- Testing for dropbox:
-  - Write proper tests
-  - Add integration test with a dropbox Webhook call. I want to not push some code which would prevent syncing customer folders.
-  - Write test to simulate process dying and restarting mid-pull. Does the client recover?
-  - Write tests for a series of random dropbox client operations (pull, add, push, move, reset, delete) that can be seeded and reliably re-run in the case of failure.
-  - Does client.remove support the removal of folders? If not, make it so and add a test
-  - Thorough QA on dropbox client
-    - app folder single site
-      - renames
-      - deletes
-      - creates
-      - updates
-    - app folder multiple sites
-      - renames
-      - deletes
-      - creates
-      - updates
-    - full folder
-      - renames
-      - deletes
-      - creates
-      - updates
+- Add testing for dropbox:
 - Modify setup flow:
   - Phase 1: RESET FROM BLOT (NON DESTRUCTIVE, deduplicate on conflict)
   - Phase 2: RESET TO BLOT (TWICE?) then sync/FIX then begin ordinary syncing
@@ -93,25 +58,21 @@ Dropbox:
 - Make Dropbox sync issue emails more useful with a script to compile the logs for a single site (including macserver)
   - Adjust full_folder to add a big warning to prevent confusion about where the new folder is when transitioning permissions
   - Add a step to authentication flow which says: 'there is already a folder called 'Your blog title' in your Dropbox, would you like to use that?' then overwrite the files inside. This prevents the proliferation of confusing 'Your blog title (1)' when you re-authenticate.
-  - Make the folder in Dropbox rename automatically when the customer changes the username for one of their multiple blogs?
-  - When you switch from app folder to full folder, there should be a notification indicating that your folder location has changed
-  - Check content hash for upload possible
-  - Make dropbox reset FROM abortable
-  - Make dropbox reset TO abortable
-  - Surface errors during setup on dashboard
-   - Surface sync issues with Dropbox client on the homepage of dashboard
-   - How do we make errors sticky? To make sure users click through to clients page to re-connect to Dropbox, etc...
+- When you switch from app folder to full folder, there should be a notification indicating that your folder location has changed
+- Check content hash for upload possible
+- Make dropbox reset FROM abortable
+- Make dropbox reset TO abortable
+- Surface errors during setup on dashboard
+- Surface sync issues with Dropbox client on the homepage of dashboard
+- How do we make errors sticky? To make sure users click through to clients page to re-connect to Dropbox, etc...
 
 Git:
-- Improve the performance of Git client initialization by either using batching of commits and increasing the interval for Git garbage collection
 - Investigate a bug with git client credentials triggered when you have two sites using git on one account, and delete one of the sites
-- Work out how to pipe custom error messages down
-- Surface progress of Git garbage collection command on dashboard through blog status updates
+- Work out how to pipe custom error messages down to customer git clients
 - Create tests for large Git repo initialization
-- Gather the total number of files so we can add a status bar to the setting up repository page
 - Make git client setup resumable / handle server restart
 - Fix bug with git client which let large pushes overwhelm the main server, leading to downtime
-- Handle error out of space on blob server during git client setup
+- Handle error out of space on blot server during git client setup
 - Surface errors with permissions on Git repo directory when setting up Git client
 - Add sync check
 - Add support for LFS and tell [Jamie](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVMcpnxGHqnxJHNdbMBSrglzg)
@@ -120,7 +81,7 @@ Git:
 - Write test to simulate process dying and restarting mid-pull. Does the client recover? What happens if a pull fails midway? Does git recover?
 - Write tests for a series of random client operations (pull, add, push, move, reset, delete) that can be seeded and reliably re-run in the case of failure.
 - Move to neat promise chain api when 2.0 comes out
-* Test that client must keep sending new entries and deleted entries when it recieved an error from entry.build otherwise you get ghost posts...
+- Test that client must keep sending new entries and deleted entries when it recieved an error from entry.build otherwise you get ghost posts...
 - send nice error message with instructions for 413 request too large: "git reset HEAD^" etc...
 - Thoroughly document:
 - Explain that the git client uses the master branch and repos from github will use main in the docs and on the dashboard then tell [N](https://mail.google.com/mail/u/0/#inbox/FMfcgzGqPzKcnQKsQQNkzcRpvCWpWKTr)

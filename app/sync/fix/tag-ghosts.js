@@ -47,8 +47,13 @@ module.exports = function main(blog, callback) {
             return execTransaction(multi, next);
           }
 
-          async.each(
+          // entryIDs can run into the thousands for a popular tag, and each
+          // fetch reads the entry in full (content included) - async.each
+          // would fire all of those concurrently and hold them all in
+          // memory at once, so cap how many are in flight together.
+          async.eachLimit(
             entryIDs,
+            20,
             function (entryID, next) {
               Entry.get(blog.id, entryID, function (entry) {
                 if (!entry) {

@@ -51,39 +51,57 @@ function resolvePath (blogID, path, callback) {
 // The purpose of this script was to resolve an issue with entries having
 // path properties that were not equal to the location of the file on disk
 // if the file system is case sensitive.
+// Entries.each reads one full entry (content included) at a time, but for
+// a blog with very large posts the string of already-processed entries can
+// pile up in memory faster than V8 gets a chance to reclaim it. Yielding to
+// the event loop every YIELD_EVERY entries gives it that chance, bounding
+// peak memory instead of letting it climb for the length of the walk.
+var YIELD_EVERY = 50;
+
 function main (blog, callback) {
   var missing = [];
   var edit = [];
   var report = [];
+  var count = 0;
+
+  function done (next) {
+    count++;
+    if (count % YIELD_EVERY === 0) return setImmediate(next);
+    next();
+  }
 
   Entries.each(
     blog.id,
     function (_entry, next) {
 
-      if (!_entry) return next();
+      if (!_entry) return done(next);
 
-      if (_entry.deleted) return next();
+      if (_entry.deleted) return done(next);
 
       // Folder posts have no file at their own path; they are ghosts only if
       // the "+" folder they were built from is gone - or has been replaced by
       // a plain file, which can no longer aggregate anything.
+      // Only the id and path are kept for remediation below - holding on to
+      // the full entry (content included) for every ghost found would grow
+      // with the aggregate content size of the corrupted blog this check is
+      // meant to repair.
       var multiFolder = folderPostFolder(_entry);
       if (multiFolder) {
         return fs.stat(localPath(blog.id, multiFolder), function (err, stat) {
           if (err || !stat.isDirectory()) {
-            missing.push({ entry: _entry, path: _entry.path });
+            missing.push({ id: _entry.id, path: _entry.path });
           }
-          next();
+          done(next);
         });
       }
 
       resolvePath(blog.id, _entry.path, function (err, path) {
         if (path && path !== _entry.path) {
-          edit.push({ entry: _entry, path: path });
+          edit.push({ oldPath: _entry.path, path: path });
         } else if (err) {
-          missing.push({ entry: _entry, path: _entry.path });
+          missing.push({ id: _entry.id, path: _entry.path });
         }
-        next();
+        done(next);
       });
     },
     function (err) {
@@ -111,7 +129,7 @@ function main (blog, callback) {
       async.eachSeries(
         edit,
         function (item, next) {
-          Entry.set(blog.id, item.entry.path, { path: item.path }, next);
+          Entry.set(blog.id, item.oldPath, { path: item.path }, next);
         },
         function (err) {
           if (err) return callback(err);
@@ -120,11 +138,7 @@ function main (blog, callback) {
             missing,
             function (item, next) {
               const dropID =
-                item.entry &&
-                item.entry.id &&
-                item.entry.id !== item.entry.path
-                  ? item.entry.id
-                  : item.entry.path;
+                item.id && item.id !== item.path ? item.id : item.path;
               Entry.drop(blog.id, dropID, next);
             },
             function (err) {
