@@ -75,3 +75,12 @@ banaction = iptables-multiport
 logencoding = auto
 polling_file = true
 maxlines = 100
+
+[recidive]
+enabled = true
+logpath = /var/log/fail2ban.log
+backend = polling
+banaction = iptables-allports
+bantime = 1w
+findtime = 1d
+maxretry = 3
