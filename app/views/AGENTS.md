@@ -15,6 +15,8 @@ These instructions apply to work on the brochure and its documentation views.
 - The brochure and documentation templates, partials, stylesheets, scripts, and assets are in `app/views/**`.
 - The brochure homepage is `app/views/index.html` and is served at `https://local.blot/`.
 - The documentation router serves static files from the views directory and renders extensionless paths as matching views.
+- CSS source files live in `app/views/css/` and alongside their partials in `app/views/partials/`; `app/documentation/build/css.js` collects and minifies them into the generated `documentation.min.css` bundle.
+- Client-side documentation JavaScript is bundled and minified with esbuild from `app/views/js/documentation.js` by `app/documentation/build/js.js`, producing the generated `documentation.min.js`; edit the source modules under `app/views/js/` instead.
 
 ## Local development and verification
 
