@@ -2,7 +2,7 @@ html {
 
   --background-color: #fff;
   --medium-background-color: #e4eafb;
-  --light-background-color: #F7F8FA; 
+  --light-background-color: #f8faff;
 
   --text-color: #000;
   --medium-text-color: #7e848f;
@@ -439,7 +439,7 @@ h2 + .clients {margin-top: 0}
 
 .clients.templates li a {
     border-radius: 12px;
-  background-color: #f8faff;
+  background-color: var(--light-background-color);
     margin: 4px 0;
     border-bottom: none;
 }
@@ -816,7 +816,7 @@ ul.pill-navigation {
   border-radius: 2em;
   text-decoration: none;
   color: #94a3cc;
-  background: #f8faff;
+  background: var(--light-background-color);
   transition: background 0.1s, color 0.1s;
   transition-timing-function: ease;
 }
