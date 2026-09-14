@@ -28,3 +28,12 @@
 6. This fork-on-write work is intentionally hidden behind a seamless **“just edit the template”** experience: the backend clones the default, switches the site to the user-owned copy when needed, and persists the edit there. **Reset changes** is the supported safe escape hatch for experiments—it discards the fork’s code/settings and restores the original default template. Confirm first: the reset is permanent and cannot be undone.
 7. Pair the source with the matching preview: edits under `source/<template>/` affect the main default preview `https://preview-of-<template>-on-local.local.blot/` (for Blog: [`https://preview-of-blog-on-local.local.blot/`](https://preview-of-blog-on-local.local.blot/)), not the separate user fork at `preview-of-my-<template>-on-local.local.blot`. Dashboard edits affect the fork only; they do not update repository source. A URL containing `-my-` is the user-specific fork preview, so remove `-my-` when checking the main default-template preview.
 8. After an edit, wait for the template/documentation watcher to apply the folder change. Preview subdomains hot reload once the change is applied, so check the rendered page or output HTML after the watcher reloads; manually reload only if needed. Otherwise, inspect the source diff. Use `docker ps` or `docker logs -f --tail 0 blot-node-app-1` only when the expected update does not appear or something is otherwise wrong.
+
+## Editing discipline
+
+- Treat CSS order as functional. Before moving rules, preserve specificity and base-before-override relationships.
+- For CSS reorganization, use this order where practical: layout, typography, navigation, branding, content, controls, plugins.
+- Keep comments concise and customer-facing; explain only non-obvious calculations, conditional rules, or extension boundaries.
+- When a task names one template file, inspect and edit only that file unless a dependency is required.
+- After source changes, wait for the watcher, then smoke-test the default preview homepage plus Archives and Search. Check computed typography and horizontal overflow.
+- Finish with a scoped `git diff --check` and status check; preserve unrelated working-tree changes.

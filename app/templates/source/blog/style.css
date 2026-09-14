@@ -1,13 +1,5 @@
 {{{app_css}}}
-/*
-
-TO DO:
-
-- add :visited :hover states for links
-- consolidate and abstract colors to make this themeable
-- move from pixels to percent for font size
-
-*/
+/* Values below come from package.json and scale from the selected body font. */
 
 /* Inserts the @font-face rules required to load whichever fonts are selected. */
 {{{font.styles}}}
@@ -30,6 +22,23 @@ TO DO:
   --body-outer-width: calc(var(--content-width) + var(--sidebar-width) + var(--sidebar-gap) + var(--gutter-padding));
 }
 
+body {
+  word-wrap: break-word; /* for long words & urls */
+  position: relative;
+  /* Width is the reading column; padding reserves the sidebar and gutters. */
+  width: min(
+    var(--content-width),
+    100vw - var(--sidebar-width) - var(--sidebar-gap) - var(--gutter-padding)
+  );
+  margin: var(--spacing) auto;
+  padding: 0 var(--gutter-padding) 0 calc(var(--sidebar-width) + var(--sidebar-gap));
+  {{#is.navigation_location.right}}
+  padding: 0 calc(var(--sidebar-width) + var(--sidebar-gap)) 0 var(--gutter-padding);
+  {{/is.navigation_location.right}}
+  color: var(--text-color);
+  background-color: var(--background-color);
+}
+
 html, body {
   {{#font}}
   font-family: {{{stack}}};
@@ -38,74 +47,8 @@ html, body {
   {{/font}}
 }
 
-body {
-  word-wrap: break-word; /* for long words & urls */
-  position: relative;
-  /* Never let the fixed sidebar + gutters push the outer width past the
-     viewport (which the {{{spacing}}}/{{{content_width}}}/{{{sidebar_width}}}
-     controls can do at their maxima or with a large body font). Above that
-     point this resolves to --content-width and the layout is unchanged. */
-  width: min(
-    var(--content-width),
-    100vw - var(--sidebar-width) - var(--sidebar-gap) - var(--gutter-padding)
-  );
-  margin: var(--spacing) auto;
-  padding: 0 var(--gutter-padding) 0 calc(var(--sidebar-width) + var(--sidebar-gap));
-  color: var(--text-color);
-  background-color: var(--background-color);
-}
-
-{{#is.navigation_location.right}}
-body {
-  padding: 0 calc(var(--sidebar-width) + var(--sidebar-gap)) 0 var(--gutter-padding);
-}
-{{/is.navigation_location.right}}
-
-.sidebar {
-  width: var(--sidebar-width);
-  left: 0;
-  text-align: right;
-  {{^sticky_navigation}}
-  position: absolute;
-  {{/sticky_navigation}}
-  {{#sticky_navigation}}
-  position: fixed;
-  top: var(--spacing);
-  left: calc(50% - var(--body-outer-width) / 2);
-  z-index: 2;
-  background: var(--background-color);
-  /* A long title or menu can outgrow the viewport; keep every link reachable. */
-  max-height: 100vh;
-  overflow-y: auto;
-  {{/sticky_navigation}}
-  {{#is.navigation_alignment.left}}
-  text-align: left;
-  {{/is.navigation_alignment.left}}
-  {{#is.navigation_alignment.right}}
-  text-align: right;
-  {{/is.navigation_alignment.right}}
-  {{#is.navigation_alignment.center}}
-  text-align: center;
-  {{/is.navigation_alignment.center}}
-}
-
-{{#is.navigation_location.right}}
-.sidebar {
-  left: auto;
-  right: 0;
-  {{#sticky_navigation}}
-  right: calc(50% - var(--body-outer-width) / 2);
-  {{/sticky_navigation}}
-}
-{{/is.navigation_location.right}}
-
-.light {color: var(--light-text-color); }
-.light:empty {display: none;}
-
-.entry + .light {margin: 1.7em 0}
-
-h1 + .light {margin-top: -1em}
-h1 + .light:empty {display: none;}
+/* Typography */
+a {color: inherit;text-decoration: none;}
 
 .sidebar, h1, h2, h3, h4, h5, h6 {
   font-weight: 400;
@@ -117,21 +60,18 @@ h1 + .light:empty {display: none;}
   {{/title_font}}
 }
 
+.light {color: var(--light-text-color); }
+.light:empty {display: none;}
+
+.entry + .light {margin: 1.7em 0}
+
+h1 + .light {margin-top: -1em}
+
 h1 a, h2, h3, h4, h5, h6 {
   font-size: calc(var(--base-font-size) * 1.091);
   text-transform: uppercase;
   letter-spacing: calc(var(--base-font-size) * 0.1575);
 }
-
-.sidebar {
-  font-size: calc(var(--base-font-size) * 1.091);
-  {{#uppercase_navigation}}
-  text-transform: uppercase;
-  letter-spacing: calc(var(--base-font-size) * 0.1575);
-  {{/uppercase_navigation}}
-}
-
-.sidebar a {display: block;}
 
 h1 a {font-size: calc(var(--base-font-size) * 1.182);position:relative}
 
@@ -167,7 +107,48 @@ h2, h3, h4, h5, h6 {
   font-weight: 600;
 }
 
-a {color: inherit;text-decoration: none;}
+/* Navigation follows the position, alignment, and sticky settings below. */
+.sidebar {
+  width: var(--sidebar-width);
+  left: 0;
+  text-align: right;
+  font-size: calc(var(--base-font-size) * 1.091);
+  {{^sticky_navigation}}
+  position: absolute;
+  {{/sticky_navigation}}
+  {{#sticky_navigation}}
+  position: fixed;
+  top: var(--spacing);
+  left: calc(50% - var(--body-outer-width) / 2);
+  z-index: 2;
+  background: var(--background-color);
+  /* A long title or menu can outgrow the viewport; keep every link reachable. */
+  max-height: 100vh;
+  overflow-y: auto;
+  {{/sticky_navigation}}
+  {{#uppercase_navigation}}
+  text-transform: uppercase;
+  letter-spacing: calc(var(--base-font-size) * 0.1575);
+  {{/uppercase_navigation}}
+  {{#is.navigation_alignment.left}}
+  text-align: left;
+  {{/is.navigation_alignment.left}}
+  {{#is.navigation_alignment.right}}
+  text-align: right;
+  {{/is.navigation_alignment.right}}
+  {{#is.navigation_alignment.center}}
+  text-align: center;
+  {{/is.navigation_alignment.center}}
+  {{#is.navigation_location.right}}
+  left: auto;
+  right: 0;
+  {{#sticky_navigation}}
+  right: calc(50% - var(--body-outer-width) / 2);
+  {{/sticky_navigation}}
+  {{/is.navigation_location.right}}
+}
+
+.sidebar a {display: block;}
 
 
 hr {
@@ -189,8 +170,7 @@ hr {
 
 .site-title {display:block}
 
-/* We want each word on its own
-   line if theres an image */
+/* With an image, keep each title word on its own line. */
 .logo.hasAvatar,
 .logo.hasLogo {word-spacing:160px}
 
@@ -224,11 +204,10 @@ hr {
 
 
 
-/* This is used between articles in list view */
+/* Decorative separator between full-post listings. */
 hr.full {
   color: var(--border-color);
-  /* master tightened this from 7em/11em; keep it proportional to --spacing (default 7) */
-  margin: calc(var(--spacing) * 0.5) 0 calc(var(--spacing) * 0.643) 1em; /* We add 1em to the left due to letter spacing*/
+  margin: calc(var(--spacing) * 0.5) 0 calc(var(--spacing) * 0.643) 1em; /* Offset balances the letter-spaced glyphs. */
   height: 0;
   width: 100%;
   text-align: center;
@@ -237,13 +216,6 @@ hr.full {
 }
 
 hr.full:after {content: "··•··";}
-
-.pagination {
-  text-align: center;
-  margin: 2em 0 3em;
-}
-
-
 
 .caption, blockquote {color: var(--light-text-color)}
 
@@ -258,7 +230,7 @@ blockquote {
 }
 
 
-/* Styles specific to entry content */
+/* Styles for HTML generated inside posts. */
 
 .entry p,
 .entry li,
@@ -349,4 +321,5 @@ input[type="submit"] {
   cursor: pointer;
 }
 
+/* Keep extension styles last so they can override the base theme. */
 {{> plugin}}
