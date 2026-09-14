@@ -175,14 +175,17 @@
     .todo > p:before,
     .todo > details > summary:before {
       content: "";
-      width: 15px;
-      height: 15px;
+      width: 16px;
+      height: 16px;
       box-sizing: border-box;
       position: absolute;
       top: 0.3rem;
       left: 0;
-      background: var(--background-color);
-      border: 1px solid var(--text-color);
+      background-color: var(--text-color);
+      mask-image: var(--icon-checkbox-empty-mask);
+      mask-repeat: no-repeat;
+      mask-position: 0 0;
+      mask-size: 16px 16px;
     }
 
     .todo li:before {
@@ -204,39 +207,21 @@
       position: relative;
     }
 
-    .updates-done > li:not(.no-lab):before {
-      content: "";
-      width: 15px;
-      height: 15px;
-      box-sizing: border-box;
-      position: absolute;
-      top: 0.3rem;
-      left: 0;
-      background: var(--background-color);
-      border: 1px solid var(--text-color);
-    }
-
-    .updates-done > li:first-child:not(.no-lab):before {
-      width: 15px;
-      height: 15px;
-      top: 0.3rem;
-      left: 0;
-    }
-
+    .updates-done > li:not(.no-lab):before,
     .updates-done > li:not(.no-lab):after {
-      content: "";
-      width: 4px;
-      height: 8px;
-      box-sizing: border-box;
+      display: none;
+    }
+
+    .updates-done > li:not(.no-lab) > .icon-checkbox {
       position: absolute;
-      top: 0.45rem;
-      left: 4px;
-      background: transparent;
-      border: none;
-      border-right: 2px solid var(--text-color);
-      border-bottom: 2px solid var(--text-color);
-      border-radius: 0;
-      transform: rotate(45deg);
+      top: calc(0.3rem + 4px);
+      left: 0;
+      width: 16px;
+      height: 16px;
+      background-color: var(--text-color);
+      mask-repeat: no-repeat;
+      mask-position: 0 0;
+      mask-size: 16px 16px;
     }
 
     .updates-done > li.no-lab {
@@ -294,6 +279,7 @@
       {{#days}}
           {{#commits}}
           <li>
+            <span class="icon-checkbox" aria-hidden="true"></span>
             <a
               rel="nofollow"
               href="https://github.com/davidmerfield/Blot/commit/{{ hash }}">

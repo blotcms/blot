@@ -596,14 +596,16 @@ kbd {
   mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+PHBhdGggZD0iTTYuNDU3IDEuMDQ3Yy42NTktMS4yMzQgMi40MjctMS4yMzQgMy4wODYgMGw2LjA4MiAxMS4zNzhBMS43NSAxLjc1IDAgMCAxIDE0LjA4MiAxNUgxLjkxOGExLjc1IDEuNzUgMCAwIDEtMS41NDMtMi41NzVabTEuNzYzLjcwN2EuMjUuMjUgMCAwIDAtLjQ0IDBMMS42OTggMTMuMTMyYS4yNS4yNSAwIDAgMCAuMjIuMzY4aDEyLjE2NGEuMjUuMjUgMCAwIDAgLjIyLS4zNjhabS41MyAzLjk5NnYyLjVhLjc1Ljc1IDAgMCAxLTEuNSAwdi0yLjVhLjc1Ljc1IDAgMCAxIDEuNSAwWk05IDExYTEgMSAwIDEgMS0yIDAgMSAxIDAgMCAxIDIgMFoiLz48L3N2Zz4=");
 }
 
-/* Guide FAQ: expandable details/summary (from documentation template, scoped to avoid conflicts) */
-.guide-faq details {
+/* Expandable FAQ details/summary. Indicator styles are variants so the same
+   spacing and open-state layout can be shared by guides and brochure pages. */
+.faq details {
   max-width: 100%;
+  margin-bottom: 6px;
   border-top: 1px solid var(--border-color);
   background: var(--background-color);
 }
 
-.guide-faq summary {
+.faq summary {
   list-style: none;
   padding: 16px;
   font-weight: 500;
@@ -612,16 +614,16 @@ kbd {
   padding-left: 32px;
 }
 
-.guide-faq summary:focus {
+.faq summary:focus {
   outline: none;
 }
 
-.guide-faq summary::-webkit-details-marker {
+.faq summary::-webkit-details-marker {
   display: none;
 }
 
-.guide-faq summary::before,
-.guide-faq summary::after {
+.faq--plus summary::before,
+.faq--plus summary::after {
   content: '';
   position: absolute;
   left: 8px;
@@ -632,24 +634,60 @@ kbd {
   transition: all 0.3s ease;
 }
 
-.guide-faq summary::after {
+.faq--plus summary::after {
   transform: rotate(90deg);
 }
 
-.guide-faq details[open] {
+.faq--chevron summary::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--medium-text-color);
+  border-bottom: 1.5px solid var(--medium-text-color);
+  transform: translate(-50%, -50%) rotate(-45deg);
+  transition: transform 0.2s ease;
+}
+
+.faq--chevron details {
+  margin-bottom: 0;
+  border-top: none;
+}
+
+.faq--chevron summary {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.faq--chevron details[open] summary::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.faq details[open] {
   padding: 0 16px 16px 16px;
 }
 
-.guide-faq details[open] > *:not(summary) {
+.faq details[open] > *:not(summary) {
   padding-left: 16px;
 }
 
-.guide-faq details[open] summary::after {
+.faq--chevron details[open] {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.faq--chevron details[open] > *:not(summary) {
+  padding-left: 32px;
+}
+
+.faq--plus details[open] summary::after {
   transform: rotate(0);
   opacity: 0;
 }
 
-.guide-faq details[open] summary::before {
+.faq--plus details[open] summary::before {
   transform: rotate(180deg);
 }
 
@@ -1057,6 +1095,69 @@ ul.pill-navigation {
   font-size: var(--medium-font-size);
 }
 
+.pricing-panel {
+  width: 100%;
+  max-width: 100%;
+  padding: 32px;
+  margin: 0;
+}
+
+.pricing-panel__title {
+  max-width: none;
+  margin: 0 0 24px;
+  padding: 0;
+  color: var(--medium-text-color);
+  font-size: var(--font-size);
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.pricing-page {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.pricing-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 430px) minmax(0, 1fr);
+  column-gap: 90px;
+  align-items: start;
+  margin-top: 3rem;
+}
+
+.pricing-faq {
+  min-width: 0;
+}
+
+.pricing-price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--text-color);
+  font-size: calc(var(--font-size) + 4px);
+  font-weight: 400;
+  line-height: 1.2;
+  margin-bottom: 30px;
+  text-decoration: none;
+}
+
+.pricing-includes__label {
+  margin: 0 0 10px;
+}
+
+.pricing-panel .feature-list {
+  margin: 0 0 28px;
+}
+
+.pricing-panel .feature-list li {
+  margin-bottom: 6px;
+}
+
+.pricing-panel .feature-list .icon-checkbox {
+  color: var(--text-color);
+}
+
 .feature-list {
   list-style-type: none;
   padding: 0;
@@ -1085,10 +1186,22 @@ ul.pill-navigation {
   margin: 4rem auto 0;
 }
 
-.home-panel {
+.home-panel,
+.pricing-panel {
   box-sizing: border-box;
   border-radius: 16px;
   background: var(--light-background-color);
+}
+
+@media (max-width: 1050px) {
+  .pricing-page {
+    max-width: 430px;
+  }
+
+  .pricing-layout {
+    grid-template-columns: minmax(0, 430px);
+    row-gap: 48px;
+  }
 }
 
 .home-intro {
@@ -1279,7 +1392,7 @@ ul.pill-navigation {
   width: auto;
 }
 
-.home-create-button {
+.brochure-create-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1295,8 +1408,8 @@ ul.pill-navigation {
   transition: background 0.15s ease, transform 0.15s ease;
 }
 
-.home-create-button:hover,
-.home-create-button:focus-visible {
+.brochure-create-button:hover,
+.brochure-create-button:focus-visible {
   background: var(--dark-accent-color);
   transform: translateY(-1px);
 }

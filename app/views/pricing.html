@@ -1,27 +1,33 @@
-<h1>Pricing</h1>
+<div class="pricing-page">
+<div class="pricing-layout">
 
-<a href="/sign-up" class="card pricing-card">
-  <span>{{price}}</span> 
-  <span class="pricing-card__period">per month per site</span>
-</a>
+<section class="pricing-panel" aria-label="Blot pricing plan">
+  <h1 class="pricing-panel__title">Pricing</h1>
 
-<p style="margin-bottom: 6px;"><strong>Includes:</strong></p>
-<ul class="feature-list">
-  <li>Hosting</li>
-  <li>All <a href="/templates">templates</a></li>
-  <li>Use a <a href="/how/configure/domain">custom domain</a></li>
-  <li>SSL certificates included</li>
-  <li><a href="/support">Support</a></li>
-</ul>
+  <a href="/sign-up" class="pricing-price">
+    <span class="pricing-price__amount">{{price}}</span>
+    <span class="pricing-price__period">per month per site</span>
+  </a>
 
-<a href="/sites/sign-up" class="button-with-icon">
-  Create site
-</a>
+  <div class="pricing-includes">
+    <ul class="feature-list">
+      <li><span class="icon-checkbox" aria-hidden="true"></span>Hosting for your site</li>
+      <li><span class="icon-checkbox" aria-hidden="true"></span>All <a href="/templates">templates</a></li>
+      <li><span class="icon-checkbox" aria-hidden="true"></span>Use a <a href="/how/configure/domain">custom domain</a></li>
+      <li><span class="icon-checkbox" aria-hidden="true"></span>SSL certificates</li>
+      <li><span class="icon-checkbox" aria-hidden="true"></span><a href="/support">Support</a></li>
+    </ul>
+  </div>
 
-<br><br><br>
+  <a href="/sites/sign-up" class="brochure-create-button">
+    Create site
+  </a>
+</section>
+
+<div class="faq faq--chevron pricing-faq">
     
   <details>
-    <summary>Can I pay annually instead of monthly?</summary>  
+    <summary>Annual billing?</summary>  
     <p>
       Yes, after you have <a href="/sign-up">signed up for Blot</a> you can switch your billing interval
       from once-per-month to once-per-year on the
@@ -42,7 +48,7 @@
     </details>
     
     <details>
-  <summary>Can I host Blot on my own server?</summary>  
+  <summary>Can I self-host Blot?</summary>  
   <p>
     Yes, Blot’s <a href="/source-code">source code</a> is available under the AGPL license.
   </p>
@@ -92,7 +98,7 @@
 </details>
 <details>
 
-  <summary>Cancel my subscription?</summary>
+  <summary>How do I cancel?</summary>
 <p>
   You can cancel your subscription at any point on the
   <a href="/account/subscription">account page</a>. You can choose to
@@ -150,38 +156,5 @@
     If you decide to stop using Blot, you can export your site to the Wordpress format, which is useful for migrating a site to another platform.
   </p>
   </details>
-
-
-  <style>
-   
-   /* wrap each details in a border with radius
-    animate the height of the details when opened
-
-   */
-
-
-details {
-  margin-bottom: 6px;
-
-}
-details summary {
-  list-style: none;
-  cursor: pointer;
-  position: relative;
-  font-weight: 600;
-}
-
-details p {
-  margin-left: 16px;
-}
-
-@keyframes open {
-  from {
-    height: 0;
-  }
-  to {
-    height: auto;
-  }
-}
-
-  </style>
+</div>
+</div>
