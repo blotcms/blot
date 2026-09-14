@@ -48,10 +48,8 @@ const fetchIcon = async (link, name, icon) => {
     $("link[rel='icon']").attr("href") ||
     protocol + "//" + hostname + "/favicon.ico";
 
-  // download the icon, convert it to a PNG if it's an ICO
-  if (icon.startsWith("//")) icon = "https:" + icon;
-
-  if (icon.startsWith("/")) icon = protocol + "//" + hostname + icon;
+  // Resolve relative icon URLs against the page URL before downloading.
+  if (!icon.startsWith("data:")) icon = new URL(icon, link).href;
 
   // we already have a data URL
   if (icon.startsWith("data:")) {
