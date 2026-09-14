@@ -1,3 +1,5 @@
+Solve deployment issue by moving ssh to obscure port?
+
 Now we have many LRU caches in app/blog we need to gather data in production to rigorously determine the most effective relative sizes for the caches (include the mustache template cache in this)
 
 Fix performance bugs on nashp and anchor and re-enable sites
