@@ -1,14 +1,22 @@
-/* on small screens, hide navbar unless toggle is checked */
+/* On smaller screens, collapse the global navigation into the header. */
 
 @media (max-width: 768px) {
   .header {
     margin-bottom: 12px;
-    position: relative !important;
-    display: block !important;
   }
 
-  .header label {
+  .header .header-inner {
+    flex-wrap: wrap;
+    gap: 0;
+    min-height: 56px;
+    padding: 0 2rem;
+  }
+
+  .navigation-toggle {
     display: block !important;
+    order: 2;
+    margin-left: 0.75rem;
+    padding: 0.75rem 0;
   }
 
   .content {
@@ -16,38 +24,65 @@
     padding: 0 2rem;
   }
 
-  .navbar {
+  .header .site-navigation {
     display: none;
-    flex-direction: column;
-    position: absolute;
-    z-index: 20;
-    top: 42px;
-    right: 0;
+    order: 10;
+    flex: 0 0 100%;
     width: 100%;
-    padding: 1rem;
+    padding: 0.75rem 0 1rem;
+    border-top: 1px solid var(--border-color);
   }
 
-  .navbar ul {
-    width: 100%;
+  .header .call-to-action {
+    order: 3;
+    margin-left: auto;
   }
 
-  .navbar a {
+  .site-navigation .navigation {
     display: block;
-    padding: 12px 24px;
+  }
+
+  .site-navigation .navigation ul {
+    display: block;
+    width: 100%;
+  }
+
+  .navigation a {
+    display: block;
+    padding: 0.5rem 0;
+  }
+
+  #navbar-toggle:checked ~ .site-navigation {
+    display: block;
   }
 }
 
-/* on mobile screens reduce content padding to 1 em */
+/* On narrow mobile screens reduce content padding to 1em. */
 @media (max-width: 480px) {
   .content {
     padding: 0 1rem;
   }
 
-  .header {
-    padding: 1rem !important;
+  .header .header-inner {
+    padding: 0 1rem;
   }
 }
 
-#navbar-toggle:checked ~ .site-container .navbar {
-  display: block;
+@media (max-width: 1050px) {
+  .home-hero {
+    grid-template-columns: minmax(0, 430px);
+    row-gap: 48px;
+    align-items: start;
+    justify-content: center;
+    max-width: 430px;
+    margin-top: 3rem;
+  }
+
+  .home-intro {
+    margin-top: 0;
+  }
+
+  .home-featured {
+    justify-self: center;
+  }
 }

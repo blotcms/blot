@@ -70,9 +70,13 @@ documentation.get(
 
 documentation.use(require("./selected"));
 
-documentation.get("/", function (req, res, next) {
+documentation.get("/", require("./featured"), function (req, res, next) {
   res.locals.title = "Blot";
   res.locals.description = "Turns a folder into a website";
+  // Keep the homepage's avatar grid close to the original five-row layout.
+  if (res.locals.featured && Array.isArray(res.locals.featured.sites)) {
+    res.locals.featured.sites = res.locals.featured.sites.slice(0, 27);
+  }
   // otherwise the <title> of the page is 'Blot - Blot'
   res.locals.hide_title_suffix = true;
   next();

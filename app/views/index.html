@@ -1,17 +1,43 @@
-<section class="home-hero">
-    <section class="intro">
-        <p style="margin-top:0">Blot is:</p>
-        <ul>
-            <li>A tool that turns a folder into a website.</li>
-            <li>A simple way to publish to the internet— just drag and drop your files.</li>
-            <li>Designed to work with the tools you already use, like your favorite text editor.</li>
-        </ul>
-        <p>For over a decade, people have used Blot to share their ideas and projects online — and this brochure is live.</p>
-        <div class="home-actions">
-            <p><a href="/watch"><span class="icon-play icon-inline"></span>Watch the video</a></p>
-            <a class="button-with-icon" href="/sites/sign-up">
-                Create a site
-            </a>
-        </div>
+<section class="home-hero" aria-label="About Blot">
+    <section class="home-intro home-panel">
+        <h1>Blot is a blogging platform with no interface. It turns a folder into a website.</h1>
+
+        <p class="home-video-link">
+            <a href="/watch"><span class="icon-play icon-inline" aria-hidden="true"></span>Watch the video</a>
+        </p>
+
+        <nav class="home-links" aria-label="Blot links">
+            <a href="/how">How to use Blot<span class="home-link-dot" aria-hidden="true"></span></a>
+            <a href="/templates">Templates<span class="home-link-dot" aria-hidden="true"></span></a>
+            <a href="/about">About<span class="home-link-dot" aria-hidden="true"></span></a>
+            <a href="/questions">Questions<span class="home-link-dot" aria-hidden="true"></span></a>
+            <a href="/contact">Contact us<span class="home-link-dot" aria-hidden="true"></span></a>
+        </nav>
     </section>
+
+    {{#featured}}
+    <section class="home-featured" aria-label="People who use Blot">
+        <ul id="home-featured-grid" class="home-featured-grid">
+            {{#sites}}
+            <li class="home-featured-item">
+                <a class="home-avatar" target="_blank" rel="noopener" href="{{{link}}}">
+                    <img
+                        src="{{#cdn}}{{{image}}}{{/cdn}}"
+                        alt="{{name}}"
+                        width="{{featured.image_size}}"
+                        height="{{featured.image_size}}"
+                    />
+                    <span class="home-avatar-card">
+                        <span class="home-avatar-name">{{name}}</span>
+                        <span class="home-avatar-meta">{{bio}}{{#tenure_label}} <span class="home-avatar-tenure"><span aria-hidden="true">·</span> Joined {{tenure_label}}</span>{{/tenure_label}}</span>
+                    </span>
+                </a>
+            </li>
+            {{/sites}}
+            <li class="home-featured-action">
+                <a class="home-create-button" href="/sites/sign-up">Create a site</a>
+            </li>
+        </ul>
+    </section>
+    {{/featured}}
 </section>

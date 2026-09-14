@@ -5,38 +5,33 @@
 </head>
 <body>
   {{> header}}
-  <section class="site-container">
-    <section class="navbar">
-      {{> navigation}}
-    </section>
-    <section class="content">
-      {{#show-main-section-right}}
-      <section class="main-section main-section-with-toc">
-        <section class="main-section-content {{#show-toc-or-on-this-page}}js-toc-content{{/show-toc-or-on-this-page}}">
-          {{> breadcrumbs}}
-          {{> body}}
-        </section>
-        <aside class="toc-sidebar">
-          {{#selected.how}}
-          {{> links}}
-          {{/selected.how}}
-          {{#show-toc-or-on-this-page}}
-          <div id="toc-wrapper">
-            <p>On this page</p>
-            <div id="toc"></div>
-          </div>
-          {{/show-toc-or-on-this-page}}
-        </aside>
-      </section>
-      {{/show-main-section-right}}
-      {{^show-main-section-right}}
-      <section class="main-section">
+  <main class="content">
+    {{#show-main-section-right}}
+    <section class="main-section main-section-with-toc">
+      <section class="main-section-content {{#show-toc-or-on-this-page}}js-toc-content{{/show-toc-or-on-this-page}}">
         {{> breadcrumbs}}
         {{> body}}
       </section>
-      {{/show-main-section-right}}
-      {{> footer}}
+      <aside class="toc-sidebar">
+        {{#selected.how}}
+        {{> links}}
+        {{/selected.how}}
+        {{#show-toc-or-on-this-page}}
+        <div id="toc-wrapper">
+          <p>On this page</p>
+          <div id="toc"></div>
+        </div>
+        {{/show-toc-or-on-this-page}}
+      </aside>
     </section>
-  </section>
+    {{/show-main-section-right}}
+    {{^show-main-section-right}}
+    <section class="main-section">
+      {{> breadcrumbs}}
+      {{> body}}
+    </section>
+    {{/show-main-section-right}}
+    {{> footer}}
+  </main>
 </body>
 </html>

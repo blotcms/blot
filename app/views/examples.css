@@ -29,12 +29,6 @@ margin: 0;font-size:16px
     animation: fadeIn 0.5s ease-in-out forwards;
   }
 
-  @keyframes fadeIn {
-    100% {
-      opacity: 1;
-    }
-  }
-
   #featured li:nth-child(1) {
     animation-delay: 0.05s;
   }
@@ -86,5 +80,4 @@ margin: 0;font-size:16px
   #featured li:nth-child(13) {
     animation-delay: 0.65s;
   }
-
 

@@ -1,15 +1,29 @@
-<input type="checkbox" id="navbar-toggle">
-<section class="header">
-  <label for="navbar-toggle">
-    <span class="icon-menu"></span>
-  </label>
-  <section class="spacer"></section>
-</section>
-{{^user}}
-<section class="call-to-action">
-  <section class="spacer"></section>
-  <a class="signed-out" href="/sites/log-in">Log in</a>
-  <a class="signed-out" href="/sites/sign-up">Sign up</a>
-</section>
-{{/user}}
+<header class="header">
+  <div class="header-inner">
+    <a class="site-brand signed-out {{selected.index}}" href="/">
+      <span class="icon-folder" aria-hidden="true"></span>
+      <span>Blot</span>
+    </a>
+    <a class="site-brand signed-in {{selected.dashboard}}" href="/sites">
+      <span class="icon-folder" aria-hidden="true"></span>
+      <span>Sites</span>
+    </a>
 
+    <input type="checkbox" id="navbar-toggle" aria-label="Toggle navigation">
+    <label class="navigation-toggle" for="navbar-toggle" aria-controls="site-navigation">
+      <span class="icon-menu" aria-hidden="true"></span>
+      <span class="visually-hidden">Toggle navigation</span>
+    </label>
+
+    <nav class="site-navigation" id="site-navigation" aria-label="Main navigation">
+      {{> navigation}}
+    </nav>
+
+    {{^user}}
+    <div class="call-to-action">
+      <a class="signed-out" href="/sites/log-in">Log in</a>
+      <a class="signed-out" href="/sites/sign-up">Sign up</a>
+    </div>
+    {{/user}}
+  </div>
+</header>

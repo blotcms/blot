@@ -7,15 +7,14 @@
 
 <p style="margin-bottom: 6px;"><strong>Includes:</strong></p>
 <ul class="feature-list">
-  <li><span class="icon-server"></span> Hosting</li>
-  <li><span class="icon-stack"></span> All <a href="/templates">templates</a></li>
-  <li><span class="icon-website"></span> Use a <a href="/how/configure/domain">custom domain</a></li>
-  <li><span class="icon-file-check"></span> SSL certificates included</li>
-  <li><span class="icon-support"></span> <a href="/support">Support</a></li>
+  <li>Hosting</li>
+  <li>All <a href="/templates">templates</a></li>
+  <li>Use a <a href="/how/configure/domain">custom domain</a></li>
+  <li>SSL certificates included</li>
+  <li><a href="/support">Support</a></li>
 </ul>
 
 <a href="/sites/sign-up" class="button-with-icon">
-  <svg style="fill:currentColor;vertical-align: middle;position:relative;top:-0.1em" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M7.75 2a.75.75 0 0 1 .75.75V7h4.25a.75.75 0 0 1 0 1.5H8.5v4.25a.75.75 0 0 1-1.5 0V8.5H2.75a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2Z"></path></svg>
   Create site
 </a>
 
@@ -161,9 +160,6 @@
    */
 
 
-
-/* instead of the standard triangle, use a '+' symbol which rotates to a 'x' when the detail is open */
-
 details {
   margin-bottom: 6px;
 
@@ -173,32 +169,11 @@ details summary {
   cursor: pointer;
   position: relative;
   font-weight: 600;
-  padding-left: 1em;
 }
 
 details p {
   margin-left: 16px;
 }
-
-details summary::before {
-  content: "";
-  background: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMiAxMiIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEyIj48cGF0aCBkPSJNNC43IDEwYy0uMiAwLS40LS4xLS41LS4yLS4zLS4zLS4zLS44IDAtMS4xTDYuOSA2IDQuMiAzLjNjLS4zLS4zLS4zLS44IDAtMS4xLjMtLjMuOC0uMyAxLjEgMGwzLjMgMy4yYy4zLjMuMy44IDAgMS4xTDUuMyA5LjdjLS4yLjItLjQuMy0uNi4zWiI+PC9wYXRoPjwvc3ZnPg==") no-repeat;
-  background-size: 14px;
-  width: 14px;
-  height: 14px;
-  opacity: 0.5;
-  position: absolute;
-  left: -1px;
-  top: 5px;
-  transform: rotate(0deg);
-  transform-origin: center;
-  transition: transform 0.2s;
-}
-
-details[open] summary::before {
-  transform: rotate(90deg);
-}
-
 
 @keyframes open {
   from {
