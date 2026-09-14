@@ -1,1 +1,9 @@
+<script src="https://assets.mediadelivery.net/playerjs/player-0.1.0.min.js"></script>
 {{> video}}
+<script>
+  var player = new playerjs.Player(document.querySelector(".video-embed iframe"));
+
+  player.on("ready", function () {
+    player.play();
+  });
+</script>
