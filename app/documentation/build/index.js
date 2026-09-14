@@ -82,6 +82,10 @@ async function restoreFromCache(cacheDir) {
 
 async function saveToCache(cacheDir) {
   await fs.ensureDir(cacheDir);
+  // A cache directory may already exist when a watcher refreshes a cache
+  // with the same source hash. Remove files from the previous snapshot so
+  // generated output cannot remain stale in the refreshed cache.
+  await fs.emptyDir(cacheDir);
   await fs.copy(DESTINATION_DIRECTORY, cacheDir);
   console.log(clfdate(), "Documentation cache saved");
 }
@@ -101,6 +105,25 @@ async function cleanOldCaches(cacheRoot, currentHash) {
   }
 }
 
+async function refreshDevelopmentCache() {
+  if (config.environment !== "development") return null;
+
+  const hash = await computeViewsHash();
+  const cacheRoot = join(config.tmp_directory, "documentation-cache");
+  const cacheDir = join(cacheRoot, hash, "views-built");
+
+  await saveToCache(cacheDir);
+  await cleanOldCaches(cacheRoot, hash);
+
+  return { hash, cacheDir };
+}
+
+async function rebuildTools() {
+  console.log("Rebuilding tools");
+  await tools();
+  await refreshDevelopmentCache();
+}
+
 const handle =
   (initial = false, cacheDir = null) =>
   async (path) => {
@@ -111,8 +134,7 @@ const handle =
 
       if (path.includes("tools/")) {
         if (initial) return;
-        console.log("Rebuilding tools");
-        await tools();
+        await rebuildTools();
         return;
       }
 
@@ -204,6 +226,14 @@ module.exports = async ({ watch = false, skipZip = false } = {}) => {
     await fs.ensureDir(DESTINATION_DIRECTORY);
   }
 
+  // Tool pages are generated from a directory of source files, so a cache
+  // snapshot can be stale even when its source hash matches. Refresh this
+  // generated subtree after restoring a development cache before starting
+  // the watcher. The rest of the documentation can still use the cache.
+  if (cacheRestored) {
+    await rebuildTools();
+  }
+
   // Only run expensive build steps if cache was not restored
   if (!cacheRestored) {
     if (!skipZip) await zip();
@@ -246,11 +276,7 @@ module.exports = async ({ watch = false, skipZip = false } = {}) => {
     }
 
     // Save to cache after full rebuild (development only)
-    if (config.environment === "development" && cacheDir && hash) {
-      await saveToCache(cacheDir);
-      const cacheRoot = join(config.tmp_directory, "documentation-cache");
-      await cleanOldCaches(cacheRoot, hash);
-    }
+    await refreshDevelopmentCache();
   }
 
   console.log(
@@ -286,3 +312,6 @@ if (require.main === module) {
   module.exports();
   console.log("Documentation built");
 }
+
+module.exports.computeViewsHash = computeViewsHash;
+module.exports.rebuildTools = rebuildTools;

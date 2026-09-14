@@ -3,23 +3,34 @@
 <p class="supported-extensions">File extensions: <span>.png</span> <span>.jpeg</span> <span>.gif</span> <span>.tiff</span> <span>.webp</span> <span>.avif</span> <span>.heic</span> <span>.heif</span></p>
 
 <p>
-  Put images directly into your site's folder and Blot will publish them as
-  individual posts. Blot generates optimized versions to deliver to your
-  readers. Use the path to add <a href="/how/metadata">tags</a> or change the
-  <a href="/how/metadata">publication date</a>. Images in formats not widely
-  supported on the web, such as TIFF, WebP, and AVIF, are automatically
-  converted into PNG assets when published.
-</p>
-
-<p>
-  Images become posts by default. If you prefer to keep image files in your
+  Put images directly into your site's folder and Blot will publish them as posts. If you prefer to keep image files in your
   folder without publishing them as posts, you can turn this off on the
   <a href="/sites/default/settings/images"><span class="ui-action"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M16 13.25A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75ZM1.75 2.5a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h.94l.03-.03 6.077-6.078a1.75 1.75 0 0 1 2.412-.06L14.5 10.31V2.75a.25.25 0 0 0-.25-.25Zm12.5 11a.25.25 0 0 0 .25-.25v-.917l-4.298-3.889a.25.25 0 0 0-.344.009L4.81 13.5ZM7 6a2 2 0 1 1-3.999.001A2 2 0 0 1 7 6ZM5.5 6a.5.5 0 1 0-1 0 .5.5 0 0 0 1 0Z"></path></svg> Images</span></a>
   page in your dashboard.
 </p>
 
-<h2>Compression and color profile</h2>
-<p>Blot aims to compress your images as little as possible to preserve its quality. Blot also preserves the color profile of images when publishing them to your site and generating thumbnails.</p>
+<p>
+  Images in formats not widely
+  supported on the web, such as TIFF, WebP, and AVIF, are automatically
+  converted into PNG assets when published; the source file in your folder is
+  not modified.
+</p>
+
+<h2>Compression</h2>
+<p>Blot does not compress your original image files or reduce their dimensions. Thumbnails are separate, resized images generated for templates; they do not replace the original file.</p>
+
+<h2>Thumbnails</h2>
+<p>
+  When an image meets the thumbnail requirements, Blot generates thumbnails
+  for an image post so you can show smaller images on an index page, archive,
+  gallery, or social preview without loading the full image. A standalone
+  image post uses its image as the source for these thumbnails. For other
+  kinds of posts, Blot chooses the first suitable image in the post unless you
+  set <code>Thumbnail</code> metadata. See the full
+  <a href="/developers/guides/thumbnails">thumbnail guide</a> for the
+  selection rules and how to override the choice.
+</p>
+
 
 <background class="green">
   <pre class="folder" title="Your site"><code>Apple.jpeg
@@ -34,9 +45,10 @@ Trip to France
 
 <h2>Ignore a file</h2>
 <p>
-  You can <a href="/how/posts#prevent-a-file-becoming-a-post"></a>prevent a file from becoming a post or page</p> if you
-  start its name with an underscore. This is useful if you want to embed an
-  image in <a href="/how/posts/markdown#images">Markdown post</a>.
+  You can <a href="/how/posts#prevent-a-file-becoming-a-post">prevent a
+  file from becoming a post or page</a> if you start its name with an
+  underscore. This is useful if you want to embed an image in a
+  <a href="/how/posts/markdown#images">Markdown post</a>.
 </p>
 
 <h2>Captioning an image</h2>
@@ -86,4 +98,3 @@ Trip to France
 </table>
 
 <p>The images themselves which are served on your site always have their EXIF removed regardless of this setting.</p>
-

@@ -226,9 +226,9 @@ Fix bug with accessibility issues with scrolling and code blocks and tell [Eli](
 
 ---
 
-Release new brochure site
-
 Record new video
+
+Make it possible to create a site for free then require subscription to make it public
 
 ---
 
@@ -250,21 +250,11 @@ New templates:
 - Release [Fede](https://wordpress.org/themes/kanso/)'s theme as profile template
 - Transfer theme for [John](https://mail.google.com/mail/u/0/#inbox/KtbxLzFrMrLsxTzRKrfFWQBgXxBHCVbGTg)
 
-Remove any plan to automate account removal
-- operator must be the only person to trigger the delete overdue or cancelled site flow via script
-- collect data on the number of sites to delete once per day for a once-weekly update email and include commands to run in email
-- only send the admin notification email when the subscription first changes state in db: stripe sends multiple webhooks and these each trigger emails, even if state does not change
-- update the admin emails and the noop / simplify the subscription code if needed. still proceed with the user / site disabling (but not deletion step)
-
 Move Blot's GitHub repo to its own organization
 
 Switch templates from entries.html to index.html with explicit url: ['/', '/page/:page'].
 - fix docs on routing order
 
-Use the pandoc convention for [delimiting KaTeX](https://pandoc.org/demo/example33/8.13-math.html) instead of double dollar signs and update docs
-- Tell [customer](https://mail.google.com/mail/u/0/?zx=j8rkxjpin0du#inbox/FMfcgzGrbHmWxcrVtbhnzHVnCtfLZhxH)
-
-Make it possible to create a site for free then require subscription to make it public
 
 Improve markdown:
 - Turn on 'preserve linebreaks by default' for markdown 
@@ -292,48 +282,18 @@ Improve images:
 - Image cacher should work for webp, tiff, etc. as well as JPG
 
 Improvements to docs and documentation:
-- Add a guide to documentation to using Formspark to add a contact form to a site
 - Rewrite code which generates a fake 'macOS' folder to work cross platform:
   - if the user is browsing from Windows create a windows folder
   - if the user is browsing from linux create a linux folder
-- Windows video + windows finder.css
-- Create material in docs with title 'Turn X into website' where X is:
-  - Dropbox, Google Drive, etc.
-  - Word Document, Google Doc, etc.
-- Document text editors
-  https://coteditor.com/
-  https://zettelkasten.de/the-archive/
-  https://tot.rocks/
-  https://desairem.com/wordpress/ufocus/
-- Add guide to useful text editors like [this one recommended by Andrew](https://itunes.apple.com/us/app/write-best-note-taking-app/id848311469)
-  - do this as a marketing strategy, e.g. target 'blog with microsoft word', 'blog with google docs', 'blog with ia writer' etc... contact the people who make text editors and ask them to link to us?
+  - Windows video + windows finder.css
 - Personalize the documentation for logged in customers
-- Add [contributor](https://api.github.com/repos/davidmerfield/blot/contributors) / [language](https://api.github.com/repos/davidmerfield/blot/languages) and repo information to source code page using GitHub API.
-- Redo demo video
 - Improve tools section of docs
   - Update obsidian tools pages (improve)
-  - Add https://www.textasticapp.com/ to text editor tools
   - Improve tools/bear 
     - Reach out to Bear to let them know about textbundle support
   - Improve tools/ulysses
     - Reach out to Ulysses to let them know about textbundle support
   - Create tools pages for AI assistants (Claude Code, Cursor, Codex) explaining how to use them to create templates
-- Add a documentation page on media handling
-  - explain image compression and thumbnails
-- Add a documentation page on typography and fonts
-  - explain typeset
-
-Improvements to dashboard:
-- Add affordance for drag-and-drop to upload
-- Make it clearer in the UI that creating a second site increases the subscription at the next billing cycle, probably with a one-time notice.
-- Improve clients
-  - cache sync validity and display checkmark on dashboard
-  - surface errors for clients on dashboard index
-- Resolve inconsistency: 'Create site' vs New template vs Create file
-- Clamp length of password and email address in log in and sign up and reset forms
-  - ensure the forms have tight max-bodies
-  - return an error if these are too long
-- When a folder has lots of elements, trim the list of files on the dashboard, at least on the index page
 
 Improvements to template editor:
 - Do preview subdomains respond to etags?

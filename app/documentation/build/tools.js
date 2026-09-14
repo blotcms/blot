@@ -65,6 +65,7 @@ const fetchIcon = async (link, name, icon) => {
     return "/icons/" + name + "." + iconExtension;
   }
 
+  try {
   const iconResponse = await fetch(icon);
 
   if (!iconResponse.ok) {
@@ -79,6 +80,10 @@ const fetchIcon = async (link, name, icon) => {
   await fs.outputFile(iconPath, iconBuffer);
 
   return "/icons/" + name + "." + iconExtension;
+  } catch (e) {
+    console.log("Failed to fetch icon", icon);
+    return null;
+  }
 };
 
 const load = async relativePath => {
@@ -90,6 +95,10 @@ const load = async relativePath => {
 
 const main = async () => {
 
+  // This directory contains only generated pages. Empty it before rebuilding
+  // so deleted tools and categories cannot survive a watcher rebuild or a
+  // restored cache refresh.
+  await fs.emptyDir(outputDirectory);
 
   const categories = (await fs.readdir(toolsDirectory)).filter(
     f => f.indexOf(".") === -1 && f !== "icons" && f !== "README"
@@ -226,7 +235,7 @@ const loadTool = async (category, tool) => {
         outputDirectory + result.icon
       );
     } else {
-      throw new Error("Failed to fetch icon for " + result.link);
+      throw new Error("Failed to fetch icon for " + title);
     }
   }
 

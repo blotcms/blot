@@ -2,7 +2,11 @@
 
 <h1>Thumbnails</h1>
 
-<p>This guide explains how Blot selects, builds, and exposes thumbnails for your entries. Use it when building index pages, entry cards, image grids, or when you need thumbnails for social previews.</p>
+<p>This guide explains how Blot selects, builds, and exposes thumbnails for your entries. Use it when building index pages, entry cards, image grids, or when you need thumbnails for social previews. For an overview of how Blot handles uploaded image files, see the <a href="/how/files/images">image files guide</a>.</p>
+
+<h2>Image files and thumbnails</h2>
+
+<p>A standalone image post uses its image as the source for its thumbnails. Blot does not compress or optimize the original image file; thumbnails are separate, resized images exposed to templates through the entry's <code>thumbnail</code> object.</p>
 
 <h2>Which image is used as a thumbnail?</h2>
 
@@ -31,7 +35,7 @@
 
 <h2>Thumbnail sizes</h2>
 
-<p>If there is an image that meets the criteria, Blot generates four sizes of thumbnail:</p>
+<p>If there is an image that meets the criteria, Blot generates four thumbnail variants:</p>
 
 <table>
   <thead>
@@ -45,7 +49,7 @@
   </tbody>
 </table>
 
-<p>When images are resized, Blot never increases the dimensions of the image.<sup>2</sup></p>
+<p>When images are resized, Blot never increases the dimensions of the image. A source image smaller than a size limit remains at its original dimensions for that variant.<sup>2</sup></p>
 
 <h2>How to use the thumbnail object in templates</h2>
 

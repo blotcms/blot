@@ -1418,6 +1418,100 @@ ul.pill-navigation {
   margin-top: 30px;
 }
 
+.home-tools {
+  max-width: 1240px;
+  box-sizing: border-box;
+  margin: 12rem auto 0;
+  padding: 0 32px 8rem;
+  text-align: center;
+}
+
+.home-tools h2 {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  color: var(--text-color);
+  font-size: clamp(3.5rem, 7.2vw, 6rem);
+  font-weight: 600;
+  letter-spacing: -0.065em;
+  line-height: 0.98;
+}
+
+.home-tools-intro {
+  max-width: 820px;
+  margin: 2.75rem auto 0;
+  color: var(--medium-text-color);
+  font-size: 1.5rem;
+  line-height: 1.45;
+}
+
+.home-tools-list {
+  display: flex;
+  max-width: 1100px;
+  margin: 4rem auto 0;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 16px 18px;
+}
+
+.home-tool-button {
+  display: inline-flex;
+  min-height: 80px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 14px;
+  padding: 0 30px;
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+  background: var(--background-color);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.08);
+  color: #292929;
+  font-size: 1.5rem;
+  line-height: 1;
+  text-decoration: none;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.home-tool-button img {
+  display: block;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  object-fit: contain;
+}
+
+.home-tool-button:hover,
+.home-tool-button:focus-visible {
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.12);
+  color: #292929;
+  transform: translateY(-2px);
+}
+
+.home-tools-cta {
+  display: inline-flex;
+  min-height: 80px;
+  box-sizing: border-box;
+  align-items: center;
+  margin-top: 4.5rem;
+  padding: 0 40px;
+  border-radius: 999px;
+  background: #f0f0f0;
+  color: var(--text-color);
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.home-tools-cta:hover,
+.home-tools-cta:focus-visible {
+  background: #e7e7e7;
+  color: var(--text-color);
+  transform: translateY(-2px);
+}
+
 .template-readme {
   max-width: 600px;
   margin: 48px auto;
