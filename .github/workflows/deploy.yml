@@ -15,6 +15,7 @@ env:
   REGISTRY_URL: ghcr.io/davidmerfield/blot
   AIRLOCK_REGISTRY_URL: ghcr.io/davidmerfield/blot-airlock
   BLOT_DEPLOY_SSH_HOST: ${{ secrets.BLOT_DEPLOY_SSH_HOST }}
+  BLOT_DEPLOY_SSH_PORT: ${{ secrets.BLOT_DEPLOY_SSH_PORT }}
 
 jobs:
   deploy:
@@ -166,7 +167,7 @@ jobs:
           Host blot
             HostName ${BLOT_DEPLOY_SSH_HOST}
             User deploy
-            Port 46217
+            Port ${BLOT_DEPLOY_SSH_PORT}
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
           EOF
