@@ -2,6 +2,15 @@
   background: var(--background-color);
 }
 
+html[data-auth="out"] .signed-in,
+html[data-auth="in"] .signed-out {
+  display: none !important;
+}
+
+html[data-auth="in"] .signed-in {
+  display: block !important;
+}
+
 .header-inner {
   display: flex;
   align-items: center;
@@ -40,6 +49,10 @@
 .site-navigation {
   flex: 1;
   min-width: 0;
+}
+
+.dashboard-navigation .navigation {
+  justify-content: flex-end;
 }
 
 .navigation {

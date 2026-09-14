@@ -1,29 +1,6 @@
-<header class="header">
-  <div class="header-inner">
-    <a class="site-brand signed-out {{selected.index}}" href="/">
-      <img class="site-brand-logo" src="/images/header-logo.svg" alt="">
-      <span>Blot</span>
-    </a>
-    <a class="site-brand signed-in {{selected.dashboard}}" href="/sites">
-      <img class="site-brand-logo" src="/images/header-logo.svg" alt="">
-      <span>Sites</span>
-    </a>
-
-    <input type="checkbox" id="navbar-toggle" aria-label="Toggle navigation">
-    <label class="navigation-toggle" for="navbar-toggle" aria-controls="site-navigation">
-      <span class="icon-menu" aria-hidden="true"></span>
-      <span class="visually-hidden">Toggle navigation</span>
-    </label>
-
-    <nav class="site-navigation" id="site-navigation" aria-label="Main navigation">
-      {{> navigation}}
-    </nav>
-
-    {{^user}}
-    <div class="call-to-action">
-      <a class="signed-out" href="/sites/log-in">Log in</a>
-      <a class="signed-out" href="/sites/sign-up">Sign up</a>
-    </div>
-    {{/user}}
-  </div>
-</header>
+{{#selected.dashboard}}
+{{> dashboard-header}}
+{{/selected.dashboard}}
+{{^selected.dashboard}}
+{{> public-header}}
+{{/selected.dashboard}}

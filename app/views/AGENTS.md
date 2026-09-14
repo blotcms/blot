@@ -18,6 +18,18 @@ These instructions apply to work on the brochure and its documentation views.
 - CSS source files live in `app/views/css/` and alongside their partials in `app/views/partials/`; `app/documentation/build/css.js` collects and minifies them into the generated `documentation.min.css` bundle.
 - Client-side documentation JavaScript is bundled and minified with esbuild from `app/views/js/documentation.js` by `app/documentation/build/js.js`, producing the generated `documentation.min.js`; edit the source modules under `app/views/js/` instead.
 
+## Dashboard login
+
+- The dashboard is available at `https://local.blot/sites`.
+- With the local Docker environment running, generate a one-time login link for the default user with:
+
+  ```bash
+  docker exec blot-node-app-1 node scripts/blog/access.js 'example@example.com'
+  ```
+
+- Open the URL printed by the command in the browser. It establishes the authenticated session and redirects to the dashboard.
+- If the container or `https://local.blot/` is unavailable, ask the operator to start the local development server before continuing.
+
 ## Local development and verification
 
 - Use `https://local.blot/` to verify rendered changes in the browser.

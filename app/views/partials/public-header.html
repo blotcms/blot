@@ -1,0 +1,26 @@
+<header class="header public-header">
+  <div class="header-inner">
+    <a class="site-brand {{selected.index}}" href="/">
+      <img class="site-brand-logo" src="/images/header-logo.svg" alt="">
+      <span>Blot</span>
+    </a>
+
+    <input type="checkbox" id="navbar-toggle" aria-label="Toggle navigation">
+    <label class="navigation-toggle" for="navbar-toggle" aria-controls="site-navigation">
+      <span class="icon-menu" aria-hidden="true"></span>
+      <span class="visually-hidden">Toggle navigation</span>
+    </label>
+
+    <nav class="site-navigation" id="site-navigation" aria-label="Main navigation">
+      {{> navigation}}
+    </nav>
+
+    <div class="call-to-action">
+      {{^user}}
+      <a class="signed-out" href="/sites/log-in">Log in</a>
+      <a class="signed-out" href="/sites/sign-up">Sign up</a>
+      {{/user}}
+      <a class="signed-in" href="/sites">Dashboard</a>
+    </div>
+  </div>
+</header>

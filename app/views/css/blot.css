@@ -1151,13 +1151,15 @@ ul.pill-navigation {
   color: var(--accent-color);
 }
 
-.home-link-dot {
-  width: 6px;
-  height: 6px;
-  flex: 0 0 auto;
-  box-sizing: border-box;
-  border: 1px solid var(--dark-border-color);
-  border-radius: 50%;
+.home-links a .icon-small-chevron-right {
+  color: var(--light-text-color);
+  font-size: 12px;
+  transition: color 0.2s;
+}
+
+.home-links a:hover .icon-small-chevron-right,
+.home-links a:focus-visible .icon-small-chevron-right {
+  color: var(--accent-color);
 }
 
 .home-featured {
