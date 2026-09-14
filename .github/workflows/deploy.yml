@@ -166,6 +166,7 @@ jobs:
           Host blot
             HostName ${BLOT_DEPLOY_SSH_HOST}
             User deploy
+            Port 46217
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
           EOF
