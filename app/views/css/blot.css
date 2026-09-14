@@ -211,6 +211,18 @@ h1:first-child {
   line-height: 1;
 }
 
+h1.sync-method-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+h1.sync-method-title img {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+}
+
 h2, h3 {
   font-size: 16px;
   margin: 2.8rem 0 0;

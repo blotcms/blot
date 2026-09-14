@@ -1,9 +1,9 @@
 <h1>Folder posts</h1>
 
 <p>
-  Add a <code>+</code> to the end of a folder&rsquo;s name to publish everything inside
-  it as a single post. When Blot sees a folder such as <code>Essay +</code>, it joins
-  every file inside into one entry and publishes it at <code>/essay</code>.
+  Files inside a folder whose name ends in <code>+</code> become a single post instead
+  of separate posts. For example, files inside a folder called <code>Essay +</code>
+  are joined into one post.
 </p>
 
 <background>
@@ -25,28 +25,58 @@ Posts
 <h2>Create a folder post</h2>
 
 <p>
-  Make a folder and add a <code>+</code> to the end of its name. Put your files
-  inside. Blot publishes the post at the folder&rsquo;s path without the
-  <code>+</code>, so <code>Essay +</code> becomes <code>/essay</code>.
-</p>
-
-<p>
-  Only folders that contain a <a href="/how/files">file Blot can publish</a> become
-  posts. An empty <code>+</code> folder is ignored until you add a supported file.
+  Make a folder and add a <code>+</code> to the end of its name. Put <a
+    href="/how/files">files that Blot can publish</a> inside. An empty
+  <code>+</code> folder is ignored until you add a supported file.
 </p>
 
 <h2>The order of the files</h2>
 
 <p>
-  Files are joined in alphabetical order by file name. To control the order, name
-  the files so they sort the way you want, for example <code>01 Introduction.md</code>,
-  <code>02 Part one.md</code>, <code>03 Part two.md</code>.
+  Files are joined alphabetically by name. Prefix them with numbers to control
+  the order. Blot includes sub-folders in the same list, sorting by sub-folder
+  name and then file name:
 </p>
 
+<table style="table-layout: auto;">
+  <tbody>
+    <tr>
+      <td style="white-space: nowrap;">
+        <span class="icon-file"></span> 01 Introduction.md
+      </td>
+    </tr>
+    <tr>
+      <td style="white-space: nowrap;">
+        <span class="icon-folder"></span> 02 Photos
+        <span class="light">›</span>
+        <span class="icon-file"></span> 01 Street.jpg
+      </td>
+    </tr>
+    <tr>
+      <td style="white-space: nowrap;">
+        <span class="icon-folder"></span> 02 Photos
+        <span class="light">›</span>
+        <span class="icon-file"></span> 02 Museum.jpg
+      </td>
+    </tr>
+    <tr>
+      <td style="white-space: nowrap;border:none">
+        <span class="icon-file"></span> 03 Conclusion.md
+      </td>
+    </tr>
+  </tbody>
+</table>
+
 <p>
-  A <code>+</code> folder can contain sub-folders. Blot looks through them too, up
-  to a total of 50 files. If a folder post would contain more than 50 files, Blot
-  does not publish it.
+  Folder posts can include supported files in sub-folders, up to 50 files total.
+  Posts with more than 50 files are not published.
+</p>
+
+<h2>Ignore a file</h2>
+
+<p>
+  To ignore one file in a folder post, start its name with an underscore. For
+  example, <code>_notes.md</code> stays in the folder but is left out of the post.
 </p>
 
 <h2>The title</h2>
@@ -61,8 +91,8 @@ Posts
 
 <p>
   Folder posts work inside a <a href="/how/sub-folders/drafts">Drafts</a> folder. A
-  folder such as <code>Drafts/Essay +</code> creates a single draft preview at
-  <code>/drafts/essay</code> and keeps it up to date as you edit the files.
+  folder such as <code>Drafts/Essay +</code> creates a single draft preview and keeps
+  it up to date as you edit the files.
 </p>
 
 <h2>Edit or remove a folder post</h2>

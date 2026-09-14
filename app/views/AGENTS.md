@@ -20,8 +20,8 @@ These instructions apply to work on the brochure and its documentation views.
 
 - Use `https://local.blot/` to verify rendered changes in the browser.
 - If `https://local.blot/` is offline or unreachable, stop and prompt the operator to run `npm start`. Do not silently substitute another server or continue browser verification against a different URL.
-- After editing a view, wait for the documentation watcher/server to reload before checking the page.
-- Reload the relevant browser page and confirm the changed text or layout is visibly present before reporting success.
+- If a rendered check is needed, wait for the documentation watcher/server to reload before checking the page.
+- After edits, generally just look at the source diff unless you're making a complicated visual change. If the operator flags an issue, reload the relevant `https://local.blot/` page and verify the rendering.
 - When useful, inspect the running containers with `docker ps`. The node container is currently named `blot-node-app-1`; its logs can be followed with `docker logs -f --tail 0 blot-node-app-1`.
 
 ## Editing guidance
@@ -29,4 +29,9 @@ These instructions apply to work on the brochure and its documentation views.
 - Keep changes focused on the requested brochure/documentation behavior or presentation.
 - Preserve unrelated worktree changes; do not reset, discard, or overwrite them.
 - Prefer editing the source view in `app/views` rather than generated or cached output.
-- Do not claim that a change works based only on a successful file edit; verify it through the local site.
+- For simple documentation edits, the source diff is sufficient; use the local site to verify complicated visual changes or investigate an operator-reported issue.
+
+## Documentation writing conventions
+
+- In user-facing documentation, use “post” and “posts” rather than internal terms such as “entry” or “entries.”
+- Avoid hardcoding post URL examples because the URL depends on the site’s configured link format.
