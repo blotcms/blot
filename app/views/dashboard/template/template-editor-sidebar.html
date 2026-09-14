@@ -24,6 +24,7 @@
         </div>
 	{{/uploads.length}}
 
+	{{#favicon_supported}}
 	<div class="settings-group">
 		<h2 class="template-heading">Favicon</h2>
 		<a class="line" href="{{{base}}}/favicon" style="padding: 11px 14px;border-bottom: none;">
@@ -39,6 +40,7 @@
 			{{/favicon}}
 		</a>
 	</div>
+	{{/favicon_supported}}
 
         <div class="settings-group">
                 <h2 class="template-heading">Menu</h2>
