@@ -22,7 +22,7 @@
    docker exec blot-node-app-1 node scripts/info/index.js <handle>
    ```
 
-   Use the `Found blog_<id> client=<handle>` line and work in `./data/blogs/blog_<id>/`. Use path-scoped searches such as `rg --files ./data/blogs/blog_<id>` and edit only the requested site files.
+   `scripts/info/index.js <handle>` returns the ID as `blog_<id>`. Edit the matching host folder under `data/blogs/blog_<id>/`; the Docker path `./data/blogs/...` refers to the same files. Use path-scoped searches such as `rg --files ./data/blogs/blog_<id>` and edit only the requested site files.
 4. Edit template definitions under `source/<template>/` (for example, `source/blog/package.json` and `source/blog/style.css`). `package.json` defines `locals`; CSS/HTML consumes them with placeholders such as `{{background_color}}`. These files are separate from the site’s `data/blogs/blog_<id>/` source folder.
 5. In the dashboard editor, any `locals` key containing `_color` becomes a color picker. The picker supports a HEXA field plus hue/opacity sliders; **Save** posts the value as `locals.<key>` (for example, `locals.background_color`). Saving a default template first creates a user-owned fork, then writes the changed locals into that fork’s generated `package.json`. **Edit code → package.json** shows the persisted value.
 6. This fork-on-write work is intentionally hidden behind a seamless **“just edit the template”** experience: the backend clones the default, switches the site to the user-owned copy when needed, and persists the edit there. **Reset changes** is the supported safe escape hatch for experiments—it discards the fork’s code/settings and restores the original default template. Confirm first: the reset is permanent and cannot be undone.
