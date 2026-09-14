@@ -94,36 +94,36 @@
   }
 
   .home-tools h2 {
-    font-size: clamp(3rem, 12vw, 4.5rem);
+    font-size: 20px;
   }
 
   .home-tools-intro {
     margin-top: 2rem;
-    font-size: 1.15rem;
+    font-size: var(--font-size);
   }
 
   .home-tools-list {
     margin-top: 3rem;
-    gap: 12px;
+    gap: 8px;
   }
 
   .home-tool-button {
-    min-height: 64px;
-    gap: 10px;
-    padding: 0 20px;
-    font-size: 1.15rem;
+    min-height: 48px;
+    gap: 8px;
+    padding: 0 16px;
+    font-size: var(--font-size);
   }
 
   .home-tool-button img {
-    width: 24px;
-    height: 24px;
-    flex-basis: 24px;
+    width: 20px;
+    height: 20px;
+    flex-basis: 20px;
   }
 
   .home-tools-cta {
-    min-height: 64px;
+    min-height: 48px;
     margin-top: 3.5rem;
-    padding: 0 28px;
-    font-size: 1.15rem;
+    padding: 0 16px;
+    font-size: var(--font-size);
   }
 }

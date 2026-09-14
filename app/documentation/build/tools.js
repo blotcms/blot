@@ -41,7 +41,8 @@ const fetchIcon = async (link, name, icon) => {
 
   const { hostname, protocol } = new URL(link);
 
-  icon = icon ||
+  icon =
+    icon ||
     $("link[rel='apple-touch-icon']").attr("href") ||
     $("link[rel='shortcut icon']").attr("href") ||
     $("link[rel='SHORTCUT ICON']").attr("href") ||
@@ -92,11 +93,6 @@ const load = async relativePath => {
 };
 
 const main = async () => {
-
-  // This directory contains only generated pages. Empty it before rebuilding
-  // so deleted tools and categories cannot survive a watcher rebuild or a
-  // restored cache refresh.
-  await fs.emptyDir(outputDirectory);
 
   const categories = (await fs.readdir(toolsDirectory)).filter(
     f => f.indexOf(".") === -1 && f !== "icons" && f !== "README"
