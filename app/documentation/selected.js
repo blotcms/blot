@@ -18,6 +18,7 @@ var TITLES = {
   "word-documents": "Word Documents",
   "html": "HTML",
   "how-blot-works": "How Blot works",
+  "mustache": "Template language",
   "ask": "Ask a question",
   "urls": "URL format",
   "hard-stop-start-ec2-instance": "How to stop and start an EC2 instance",

@@ -30,42 +30,36 @@
   <!-- You should read <a href="https://mustache.github.io/mustache.5.html">Mustache's documentation</a> carefully before designing your own template.  -->
 Consider this example template, which produces a list of all of the posts on your site:</p>
 
-<pre class="html"><code>
-  <html>
-  <title>{{title}}</title>
-  <body>
+<pre class="html" data-file="template.html"><code>&lt;html&gt;
+  &lt;title&gt;{{title}}&lt;/title&gt;
+  &lt;body&gt;
     {{#all_posts}}
-    <a href="{{{url}}}">{{title}}</a><br>
+    &lt;a href="{{{url}}}"&gt;{{title}}&lt;/a&gt;&lt;br&gt;
     {{/all_posts}}
-  </body>
-  </html>
-</code></pre>
+  &lt;/body&gt;
+&lt;/html&gt;</code></pre>
 
 <p>Blot generates JSON containing the data for this template:</p>
 
-<pre class="code json"><code>
-  {
-    "title": "Your site's title",
-    "all_posts": [
+<pre class="json"><code>{
+  "title": "Your site's title",
+  "all_posts": [
     {"title": "First post", "url": "/first-post"},
     {"title": "Second post", "url": "/second-post"},
     {"title": "Third post", "url": "/third-post"}
-    ]
-  }
-</code></pre>
+  ]
+}</code></pre>
 
 <p>Blot then renders the template to produce this HTML:</p>
 
-<pre class="html"><code>
-  <html>
-  <title>Your site's title</title>
-  <body>
-    <a href="/first-post">First post</a><br>
-    <a href="/second-post">Second post</a><br>
-    <a href="/third-post">Third post</a><br>
-  </body>
-  </html>
-</code></pre>
+<pre class="html output"><code>&lt;html&gt;
+  &lt;title&gt;Your site's title&lt;/title&gt;
+  &lt;body&gt;
+    &lt;a href="/first-post"&gt;First post&lt;/a&gt;&lt;br&gt;
+    &lt;a href="/second-post"&gt;Second post&lt;/a&gt;&lt;br&gt;
+    &lt;a href="/third-post"&gt;Third post&lt;/a&gt;&lt;br&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</code></pre>
 
 <h2>Retrieving the JSON used to render a template</h2>
 

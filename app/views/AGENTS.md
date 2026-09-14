@@ -35,3 +35,11 @@ These instructions apply to work on the brochure and its documentation views.
 
 - In user-facing documentation, use “post” and “posts” rather than internal terms such as “entry” or “entries.”
 - Avoid hardcoding post URL examples because the URL depends on the site’s configured link format.
+- Treat user-facing docs as product copy: use concise, user-facing language and describe stable behavior rather than internal terminology or configuration-dependent output.
+
+## Documentation code blocks and guide navigation
+
+- Use `<pre class="bash|html|json" data-file="..."><code>…</code></pre>` for copyable code blocks.
+- Adjacent code blocks ending in `class="output"` become input → JSON → output tabs.
+- Escape literal HTML inside code and avoid leading or trailing blank lines inside `<code>`.
+- Developer guide ordering is manual; when renaming a guide, also update its breadcrumb title in `app/documentation/selected.js`.

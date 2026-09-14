@@ -211,13 +211,15 @@ h1:first-child {
   line-height: 1;
 }
 
-h1.sync-method-title {
+h1.sync-method-title,
+h1.import-method-title {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-h1.sync-method-title img {
+h1.sync-method-title img,
+h1.import-method-title img {
   width: 24px;
   height: 24px;
   flex: 0 0 auto;

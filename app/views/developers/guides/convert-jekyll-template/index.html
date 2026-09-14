@@ -61,32 +61,28 @@ style.css</pre>
 <h2>Layouts, includes and partial templates</h2>
 <p>The template systems used by Blot and Jekyll offer ways to avoid repeating the same code across different pages. For example, the Minima template has a header that is present on every page on your site. This header is stored in its own file <a href="https://github.com/jekyll/minima/blob/master/_includes/header.html">_includes/header.html</a>.</p>
 <p>Jekyll allows you to embed this file in another template file using the following syntax:</p>
-<pre class="window code html">
-{%- include head.html -%}
-</pre>
+<pre class="html"><code>{%- include head.html -%}</code></pre>
 <p>Jekyll also uses 'layouts', which specify a combination of included template files that are used to render the HTML sent to your readers. Here's the contents of <a href="https://github.com/jekyll/minima/blob/master/_layouts/default.html">layouts/default.html</a> which is used to render all the pages in the Minima template:</p>
-<pre class="window code html">
-<!DOCTYPE html>
-<html lang="{{ page.lang | default: site.lang | default: "en" }}">
+<pre class="html" data-file="_layouts/default.html"><code>&lt;!DOCTYPE html&gt;
+&lt;html lang="{{ page.lang | default: site.lang | default: "en" }}"&gt;
 
   {%- include head.html -%}
 
-  <body>
+  &lt;body&gt;
 
     {%- include header.html -%}
 
-    <main class="page-content" aria-label="Content">
-      <div class="wrapper">
+    &lt;main class="page-content" aria-label="Content"&gt;
+      &lt;div class="wrapper"&gt;
         {{ content }}
-      </div>
-    </main>
+      &lt;/div&gt;
+    &lt;/main&gt;
 
     {%- include footer.html -%}
 
-  </body>
+  &lt;/body&gt;
 
-</html>
-</pre>
+&lt;/html&gt;</code></pre>
 
 
 <h2>Flatten directory structure</h2>
@@ -112,72 +108,72 @@ google-analytics.html</pre>
 <h2>Convert the index page</h2>
 <p>The homepage of this Jekyll template is inside 'home.html'. On Blot, this file must be called 'entries.html'. So rename it and open the file in your text editor:</p>
 
-<pre class="window code html">
+<pre class="html" data-file="home.html"><code>
 ---
 layout: default
 ---
 
-<div class="home">
+&lt;div class="home"&gt;
   {%- if page.title -%}
-    <h1 class="page-heading">{{ page.title }}</h1>
+    &lt;h1 class="page-heading"&gt;{{ page.title }}&lt;/h1&gt;
   {%- endif -%}
 
   {{ content }}
 
   {%- if site.posts.size > 0 -%}
-    <h2 class="post-list-heading">{{ page.list_title | default: "Posts" }}</h2>
-    <ul class="post-list">
+    &lt;h2 class="post-list-heading"&gt;{{ page.list_title | default: "Posts" }}&lt;/h2&gt;
+    &lt;ul class="post-list"&gt;
       {%- for post in site.posts -%}
-      <li>
+      &lt;li&gt;
         {%- assign date_format = site.minima.date_format | default: "%b %-d, %Y" -%}
-        <span class="post-meta">{{ post.date | date: date_format }}</span>
-        <h3>
-          <a class="post-link" href="{{ post.url | relative_url }}">
+        &lt;span class="post-meta"&gt;{{ post.date | date: date_format }}&lt;/span&gt;
+        &lt;h3&gt;
+          &lt;a class="post-link" href="{{ post.url | relative_url }}"&gt;
             {{ post.title | escape }}
-          </a>
-        </h3>
+          &lt;/a&gt;
+        &lt;/h3&gt;
         {%- if site.show_excerpts -%}
           {{ post.excerpt }}
         {%- endif -%}
-      </li>
+      &lt;/li&gt;
       {%- endfor -%}
-    </ul>
+    &lt;/ul&gt;
 
-    <p class="feed-subscribe"><svg class="svg-icon orange"><use xlink:href="{{ '/assets/minima-social-icons.svg#rss' | relative_url }}"></use></svg><a href="{{ "/feed.xml" | relative_url }}">Subscribe</a></p>
+    &lt;p class="feed-subscribe"&gt;&lt;svg class="svg-icon orange"&gt;&lt;use xlink:href="{{ '/assets/minima-social-icons.svg#rss' | relative_url }}"&gt;&lt;/use&gt;&lt;/svg&gt;&lt;a href="{{ "/feed.xml" | relative_url }}"&gt;Subscribe&lt;/a&gt;&lt;/p&gt;
   {%- endif -%}
 
-</div>
-</pre>
+&lt;/div&gt;
+</code></pre>
 
 
 
 <p>Here's how it should look using Blot's template system:</p>
-<pre class="window code html">
+<pre class="html" data-file="entries.html"><code>
 {{> header}}
-<div class="home">
+&lt;div class="home"&gt;
   
-  <h2 class="post-list-heading">Posts</h2>
-  <ul class="post-list">
+  &lt;h2 class="post-list-heading"&gt;Posts&lt;/h2&gt;
+  &lt;ul class="post-list"&gt;
     {{#entries}}
-    <li>
-      <span class="post-meta">{{date}}</span>
-      <h3>
-        <a class="post-link" href="{{{url}}}">
+    &lt;li&gt;
+      &lt;span class="post-meta"&gt;{{date}}&lt;/span&gt;
+      &lt;h3&gt;
+        &lt;a class="post-link" href="{{{url}}}"&gt;
           {{title}}
-        </a>
-      </h3>
+        &lt;/a&gt;
+      &lt;/h3&gt;
       {{#show_excerpts}}
         {{summary}}
       {{/show_excerpts}}
-    </li>
+    &lt;/li&gt;
     {{/entries}}
-  </ul>
+  &lt;/ul&gt;
 
-  <p class="feed-subscribe"><svg class="svg-icon orange"><use xlink:href="/minima-social-icons.svg#rss"></use></svg><a href="/feed.xml">Subscribe</a></p>
+  &lt;p class="feed-subscribe"&gt;&lt;svg class="svg-icon orange"&gt;&lt;use xlink:href="/minima-social-icons.svg#rss"&gt;&lt;/use&gt;&lt;/svg&gt;&lt;a href="/feed.xml"&gt;Subscribe&lt;/a&gt;&lt;/p&gt;
 
-</div>
+&lt;/div&gt;
 {{> footer}}
-</pre>
+</code></pre>
 
 <p>We have changed Jekyll's <code>{%- for post in site.posts -%}</code> syntax with Blot's <code>{{#entries}}</code> syntax.</p>
 

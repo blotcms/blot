@@ -17,9 +17,7 @@
   provide a repository URL to clone, plus a username and password.
 </p>
 
-<small>
-  <pre><code>git clone https://blot.im/url-to-your-repository.git</code></pre>
-</small>
+<pre class="bash"><code>git clone https://blot.im/url-to-your-repository.git</code></pre>
 
 <p>
   Your site is generated from the <code>master</code> branch of your repository. To update
@@ -46,15 +44,11 @@
   endpoint:
 </p>
 
-<small>
-  <pre><code>git remote set-url origin https://blot.im/url-to-yours.git</code></pre>
-</small>
+<pre class="bash"><code>git remote set-url origin https://blot.im/url-to-yours.git</code></pre>
 
 <p>The next time you push, you will need to use the force flag:</p>
 
-<small>
-  <pre><code>git push --force</code></pre>
-</small>
+<pre class="bash"><code>git push --force</code></pre>
 
 <h2>Sharing your folder on GitHub</h2>
 
@@ -64,25 +58,19 @@
   Blot's endpoint:
 </p>
 
-<small>
-  <pre><code>git remote set-url --add --push origin https://blot.im/your-repo.git</code></pre>
-</small>
+<pre class="bash"><code>git remote set-url --add --push origin https://blot.im/your-repo.git</code></pre>
 
 <p>
   If you already use Blot as your remote, you can add GitHub's endpoint:
 </p>
 
-<small>
-  <pre><code>git remote set-url --add --push origin https://github.com/your-repo.git</code></pre>
-</small>
+<pre class="bash"><code>git remote set-url --add --push origin https://github.com/your-repo.git</code></pre>
 
 <p>
   The next time you push, use the force flag so the changes are accepted by both Blot and GitHub:
 </p>
 
-<small>
-  <pre><code>git push --force</code></pre>
-</small>
+<pre class="bash"><code>git push --force</code></pre>
 
 {{> not-synced}}
 
