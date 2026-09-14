@@ -4,6 +4,7 @@ require('./sync_status.js');
 require('./instant.page.js');
 require('./tagify.js');
 require('./examples.js');
+require('./templates.js');
 require('./questions-ask.js');
 require('./questions-textarea.js');
 require('./questions-edit.js');

@@ -485,6 +485,290 @@ h2 + .clients {margin-top: 0}
 }
 
 
+/* The template landing page hero uses the existing template thumbnails to
+   create a responsive frame around its heading. */
+.templates-hero {
+  width: 100%;
+  margin: -1rem auto 4rem;
+}
+
+.main-section:has(.templates-hero) {
+  overflow: visible;
+}
+
+.templates-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-rows: repeat(5, minmax(72px, auto));
+  align-items: center;
+  column-gap: 2rem;
+  row-gap: clamp(3rem, 6vw, 4rem);
+  width: calc(100% + 8rem);
+  max-width: none;
+  margin: 0 -4rem;
+}
+
+.templates-hero-copy {
+  z-index: 1;
+  grid-column: 3 / 7;
+  grid-row: 2 / 5;
+  align-self: center;
+  text-align: center;
+}
+
+.templates-hero-copy h1 {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.templates-hero-copy p {
+  max-width: 28rem;
+  margin: 1.75rem auto 0;
+  color: var(--medium-text-color);
+  font-size: var(--font-size);
+  line-height: 1.35;
+}
+
+.templates-hero-image {
+  display: block;
+  width: min(100%, 80px);
+  justify-self: center;
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+
+.templates-hero-animations-enabled .templates-hero-image {
+  opacity: 0;
+  transform: translateY(14px) scale(1.12);
+}
+
+.templates-hero-animations-enabled .templates-hero-image-ready {
+  animation: templates-hero-image-in 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.templates-hero-image img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background-color: white;
+  border-radius: var(--border-radius);
+  object-fit: cover;
+  box-shadow: inset 0 1px 0 #f5f4f5, 0 -1px 0 rgba(0,0,0,.11), 0 1px 0 rgba(0,0,0,.26), -1px 0 0 rgba(0,0,0,.13), 1px 0 0 rgba(0,0,0,.13);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.templates-hero-image .templates-hero-desktop-image {
+  aspect-ratio: 2120 / 1560;
+}
+
+.templates-hero-image .templates-hero-mobile-image {
+  display: none;
+  aspect-ratio: 800 / 1300;
+}
+
+/* A few portrait screenshots break up the landscape rhythm at every
+   breakpoint, like the reference page. */
+.templates-hero-image:nth-of-type(2),
+.templates-hero-image:nth-of-type(5),
+.templates-hero-image:nth-of-type(8),
+.templates-hero-image:nth-of-type(10),
+.templates-hero-image:nth-of-type(14),
+.templates-hero-image:nth-of-type(17),
+.templates-hero-image:nth-of-type(20),
+.templates-hero-image:nth-of-type(23),
+.templates-hero-image:nth-of-type(26) {
+  width: min(100%, 60px);
+}
+
+.templates-hero-image:nth-of-type(2) .templates-hero-desktop-image,
+.templates-hero-image:nth-of-type(5) .templates-hero-desktop-image,
+.templates-hero-image:nth-of-type(8) .templates-hero-desktop-image,
+.templates-hero-image:nth-of-type(10) .templates-hero-desktop-image,
+.templates-hero-image:nth-of-type(14) .templates-hero-desktop-image,
+.templates-hero-image:nth-of-type(17) .templates-hero-desktop-image,
+.templates-hero-image:nth-of-type(20) .templates-hero-desktop-image,
+.templates-hero-image:nth-of-type(23) .templates-hero-desktop-image,
+.templates-hero-image:nth-of-type(26) .templates-hero-desktop-image {
+  display: none;
+}
+
+.templates-hero-image:nth-of-type(2) .templates-hero-mobile-image,
+.templates-hero-image:nth-of-type(5) .templates-hero-mobile-image,
+.templates-hero-image:nth-of-type(8) .templates-hero-mobile-image,
+.templates-hero-image:nth-of-type(10) .templates-hero-mobile-image,
+.templates-hero-image:nth-of-type(14) .templates-hero-mobile-image,
+.templates-hero-image:nth-of-type(17) .templates-hero-mobile-image,
+.templates-hero-image:nth-of-type(20) .templates-hero-mobile-image,
+.templates-hero-image:nth-of-type(23) .templates-hero-mobile-image,
+.templates-hero-image:nth-of-type(26) .templates-hero-mobile-image {
+  display: block;
+}
+
+.templates-hero-image:hover img,
+.templates-hero-image:focus-visible img {
+  transform: translateY(-3px) scale(1.04);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
+}
+
+@keyframes templates-hero-image-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(1.12);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Show a full frame on wide screens, then progressively simplify it as the
+   available width narrows. */
+.templates-hero-image:nth-of-type(1) { grid-column: 1; grid-row: 1; }
+.templates-hero-image:nth-of-type(2) { grid-column: 2; grid-row: 1; }
+.templates-hero-image:nth-of-type(3) { grid-column: 3; grid-row: 1; }
+.templates-hero-image:nth-of-type(4) { grid-column: 4; grid-row: 1; }
+.templates-hero-image:nth-of-type(5) { grid-column: 5; grid-row: 1; }
+.templates-hero-image:nth-of-type(6) { grid-column: 6; grid-row: 1; }
+.templates-hero-image:nth-of-type(7) { grid-column: 7; grid-row: 1; }
+.templates-hero-image:nth-of-type(8) { grid-column: 8; grid-row: 1; }
+.templates-hero-image:nth-of-type(9) { grid-column: 1; grid-row: 2; }
+.templates-hero-image:nth-of-type(10) { grid-column: 2; grid-row: 2; }
+.templates-hero-image:nth-of-type(11) { grid-column: 7; grid-row: 2; }
+.templates-hero-image:nth-of-type(12) { grid-column: 8; grid-row: 2; }
+.templates-hero-image:nth-of-type(13) { grid-column: 1; grid-row: 3; }
+.templates-hero-image:nth-of-type(14) { grid-column: 2; grid-row: 3; }
+.templates-hero-image:nth-of-type(15) { grid-column: 7; grid-row: 3; }
+.templates-hero-image:nth-of-type(16) { grid-column: 8; grid-row: 3; }
+.templates-hero-image:nth-of-type(17) { grid-column: 1; grid-row: 4; }
+.templates-hero-image:nth-of-type(18) { grid-column: 2; grid-row: 4; }
+.templates-hero-image:nth-of-type(19) { grid-column: 7; grid-row: 4; }
+.templates-hero-image:nth-of-type(20) { grid-column: 8; grid-row: 4; }
+.templates-hero-image:nth-of-type(21) { grid-column: 1; grid-row: 5; }
+.templates-hero-image:nth-of-type(22) { grid-column: 2; grid-row: 5; }
+.templates-hero-image:nth-of-type(23) { grid-column: 3; grid-row: 5; }
+.templates-hero-image:nth-of-type(24) { grid-column: 4; grid-row: 5; }
+.templates-hero-image:nth-of-type(25) { grid-column: 5; grid-row: 5; }
+.templates-hero-image:nth-of-type(26) { grid-column: 6; grid-row: 5; }
+.templates-hero-image:nth-of-type(27) { grid-column: 7; grid-row: 5; }
+.templates-hero-image:nth-of-type(28) { grid-column: 8; grid-row: 5; }
+.templates-hero-image:nth-of-type(n + 29) { display: none; }
+
+@media (max-width: 900px) {
+  .templates-hero-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-rows: repeat(5, minmax(64px, auto));
+    column-gap: 1.5rem;
+    row-gap: 3rem;
+  }
+
+  .templates-hero-copy {
+    grid-column: 2 / 6;
+  }
+
+  .templates-hero-image:nth-of-type(1) { grid-column: 1; grid-row: 1; }
+  .templates-hero-image:nth-of-type(2) { grid-column: 2; grid-row: 1; }
+  .templates-hero-image:nth-of-type(3) { grid-column: 3; grid-row: 1; }
+  .templates-hero-image:nth-of-type(4) { grid-column: 4; grid-row: 1; }
+  .templates-hero-image:nth-of-type(5) { grid-column: 5; grid-row: 1; }
+  .templates-hero-image:nth-of-type(6) { grid-column: 6; grid-row: 1; }
+  .templates-hero-image:nth-of-type(7) { grid-column: 1; grid-row: 2; }
+  .templates-hero-image:nth-of-type(8) { grid-column: 2; grid-row: 2; }
+  .templates-hero-image:nth-of-type(9) { grid-column: 5; grid-row: 2; }
+  .templates-hero-image:nth-of-type(10) { grid-column: 6; grid-row: 2; }
+  .templates-hero-image:nth-of-type(11) { grid-column: 1; grid-row: 3; }
+  .templates-hero-image:nth-of-type(12) { grid-column: 2; grid-row: 3; }
+  .templates-hero-image:nth-of-type(13) { grid-column: 5; grid-row: 3; }
+  .templates-hero-image:nth-of-type(14) { grid-column: 6; grid-row: 3; }
+  .templates-hero-image:nth-of-type(15) { grid-column: 1; grid-row: 4; }
+  .templates-hero-image:nth-of-type(16) { grid-column: 2; grid-row: 4; }
+  .templates-hero-image:nth-of-type(17) { grid-column: 5; grid-row: 4; }
+  .templates-hero-image:nth-of-type(18) { grid-column: 6; grid-row: 4; }
+  .templates-hero-image:nth-of-type(19) { grid-column: 1; grid-row: 5; }
+  .templates-hero-image:nth-of-type(20) { grid-column: 2; grid-row: 5; }
+  .templates-hero-image:nth-of-type(21) { grid-column: 3; grid-row: 5; }
+  .templates-hero-image:nth-of-type(22) { grid-column: 4; grid-row: 5; }
+  .templates-hero-image:nth-of-type(23) { grid-column: 5; grid-row: 5; }
+  .templates-hero-image:nth-of-type(24) { grid-column: 6; grid-row: 5; }
+  .templates-hero-image:nth-of-type(n + 25) { display: none; }
+}
+
+@media (max-width: 768px) {
+  .templates-hero-grid {
+    width: calc(100% + 4rem);
+    margin-left: -2rem;
+    margin-right: -2rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .templates-hero {
+    margin-top: 0;
+    margin-bottom: 3rem;
+  }
+
+  .templates-hero-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: repeat(6, minmax(48px, auto));
+    column-gap: 0.75rem;
+    row-gap: 1rem;
+  }
+
+  .templates-hero-copy {
+    grid-column: 1 / -1;
+    grid-row: 3 / 6;
+    padding: 0 0.5rem;
+  }
+
+  .templates-hero-copy p {
+    max-width: 20rem;
+    margin-top: 1.25rem;
+    font-size: var(--font-size);
+  }
+
+  .templates-hero-image {
+    width: min(100%, 68px);
+  }
+
+  .templates-hero-image:nth-of-type(1) { grid-column: 1; grid-row: 1; }
+  .templates-hero-image:nth-of-type(2) { grid-column: 2; grid-row: 1; }
+  .templates-hero-image:nth-of-type(3) { grid-column: 3; grid-row: 1; }
+  .templates-hero-image:nth-of-type(4) { grid-column: 4; grid-row: 1; }
+  .templates-hero-image:nth-of-type(5) { grid-column: 1; grid-row: 2; }
+  .templates-hero-image:nth-of-type(6) { grid-column: 2; grid-row: 2; }
+  .templates-hero-image:nth-of-type(7) { grid-column: 3; grid-row: 2; }
+  .templates-hero-image:nth-of-type(8) { grid-column: 4; grid-row: 2; }
+  .templates-hero-image:nth-of-type(9) { grid-column: 1; grid-row: 6; }
+  .templates-hero-image:nth-of-type(10) { grid-column: 2; grid-row: 6; }
+  .templates-hero-image:nth-of-type(11) { grid-column: 3; grid-row: 6; }
+  .templates-hero-image:nth-of-type(12) { grid-column: 4; grid-row: 6; }
+  .templates-hero-image:nth-of-type(n + 13) { display: none; }
+}
+
+@media (max-width: 480px) {
+  .templates-hero-grid {
+    width: calc(100% + 2rem);
+    margin-left: -1rem;
+    margin-right: -1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .templates-hero-image,
+  .templates-hero-animations-enabled .templates-hero-image {
+    opacity: 1;
+    transform: none;
+    animation: none;
+    transition: none;
+  }
+}
+
+
 
 .form-container {
   margin: 0;

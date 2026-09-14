@@ -1,4 +1,6 @@
-<h1>Templates</h1>
-  
-{{> template-list}}  
+{{^category}}
+{{> template-hero}}
+{{/category}}
+
+{{> template-list}}
 {{> folder-list}}
