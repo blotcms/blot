@@ -58,15 +58,6 @@ if (require.main === module) {
     console.log("Done building templates.");
     if (!watch) process.exit();
   });
-
-  // Rebuilds templates when we load new states
-  // using scripts/state/info.js
-  redisSubscriber({
-    channel: "templates:rebuild",
-    onMessage: function () {
-      main({}, function () {});
-    },
-  });
 }
 
 function main(options, callback) {
