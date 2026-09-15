@@ -2,7 +2,7 @@ const { getEntry } = require("../../lib/models");
 const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
-const { cloneDeep, deepFreeze } = require("../../lib/clone");
+const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 const LRUCache = require("lru-cache").LRUCache;
 const { normalizePathPrefix } = require("helper/pathPrefix");
 const {
@@ -25,7 +25,7 @@ const taggedCache = new LRUCache({
   // through distinct tags can otherwise fill every slot and starve
   // other blogs sharing this process.
   maxSize: 100 * 1024 * 1024,
-  sizeCalculation: (value) => JSON.stringify(value).length,
+  sizeCalculation: (value) => value.size,
 });
 
 function cloneTagged(value) {
@@ -108,7 +108,7 @@ async function tagged(req, res) {
     payload = req._taggedFetch.payload;
   } else if (taggedCache.has(key)) {
     log("Retrieved tagged entries from cache");
-    payload = cloneTagged(taggedCache.get(key));
+    payload = cloneTagged(taggedCache.get(key).payload);
     req._taggedFetch = { key, payload };
   } else {
     const result = await fetchTaggedEntries(blogID, tags, {
@@ -145,7 +145,10 @@ async function tagged(req, res) {
     // from a total hydration miss - do not persist it, or later requests
     // would serve an empty tagged page until cacheID changes.
     if (!(entryIDs.length > 0 && (payload.entries || []).length === 0)) {
-      taggedCache.set(key, deepFreeze(cloneTagged(payload)));
+      taggedCache.set(
+        key,
+        prepareCacheValue(payload, { preserveEntryInstances: true }),
+      );
     }
   }
 

@@ -1,5 +1,5 @@
 const { getFullView } = require("../lib/models");
-const { cloneDeep, deepFreeze } = require("../lib/clone");
+const { cloneDeep, prepareCacheValue } = require("../lib/clone");
 const LRUCache = require("lru-cache").LRUCache;
 
 // This cache is safe because the key includes blog/template/view identity,
@@ -9,9 +9,7 @@ const fullViewCache = new LRUCache({
   // Bound by bytes too: unbounded-size views (large templates/partials)
   // shouldn't be able to fill the cache's memory budget on their own.
   maxSize: 20 * 1024 * 1024,
-  sizeCalculation: function (value) {
-    return JSON.stringify(value).length;
-  },
+  sizeCalculation: (value) => value.size,
 });
 
 function createCacheKey(blog, template, viewName) {
@@ -35,15 +33,15 @@ async function getCachedFullView(options) {
   const key = createCacheKey(blog, template, viewName);
 
   if (fullViewCache.has(key)) {
-    return cloneDeep(fullViewCache.get(key));
+    return cloneDeep(fullViewCache.get(key).payload);
   }
 
   const response = await getFullView(blog.id, template.id, viewName);
 
-  const immutableCopy = deepFreeze(cloneDeep(response));
-  fullViewCache.set(key, immutableCopy);
+  const prepared = prepareCacheValue(response);
+  fullViewCache.set(key, prepared);
 
-  return cloneDeep(immutableCopy);
+  return cloneDeep(prepared.payload);
 }
 
 module.exports = getCachedFullView;

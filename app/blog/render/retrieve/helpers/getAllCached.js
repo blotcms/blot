@@ -5,14 +5,14 @@
 // repeat renders hit the LRU instead of Redis at all.
 const LRUCache = require("lru-cache").LRUCache;
 const { getAll } = require("../../../lib/models");
-const { cloneDeep, deepFreeze } = require("../../../lib/clone");
+const { cloneDeep, prepareCacheValue } = require("../../../lib/clone");
 
 const entriesCache = new LRUCache({
   max: 200,
   // Byte-capped like the posts/popular_tags caches: a single large blog's
   // full catalog must not evict every other blog sharing this process.
   maxSize: 100 * 1024 * 1024,
-  sizeCalculation: (value) => JSON.stringify(value).length,
+  sizeCalculation: (value) => value.size,
 });
 
 // Dedupes concurrent misses for the same key (e.g. archives and all_entries
@@ -42,7 +42,7 @@ async function getAllCached(blog, options) {
   const key = createCacheKey(blog);
 
   if (!bypassCache && entriesCache.has(key)) {
-    return cloneEntries(entriesCache.get(key));
+    return cloneEntries(entriesCache.get(key).payload);
   }
 
   if (inflight.has(key)) {
@@ -50,7 +50,10 @@ async function getAllCached(blog, options) {
   }
 
   const promise = getAll(blog && blog.id).then((entries) => {
-    const immutableCopy = deepFreeze(cloneEntries(entries));
+    const prepared = prepareCacheValue(entries, {
+      preserveEntryInstances: true,
+    });
+    const immutableCopy = prepared.payload;
     // Entries.getAll swallows transient Redis failures (a failed zRange or
     // mGet) by resolving to [] rather than rejecting - see
     // models/entries/index.js's getRange. Caching that [] would look
@@ -59,7 +62,7 @@ async function getAllCached(blog, options) {
     // non-empty results; an empty catalog always re-hits Redis, which is
     // cheap.
     if (!bypassCache && immutableCopy.length > 0) {
-      entriesCache.set(key, immutableCopy);
+      entriesCache.set(key, prepared);
     }
     return immutableCopy;
   });

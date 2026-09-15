@@ -5,7 +5,7 @@ const moment = require("moment");
 require("moment-timezone");
 const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
-const { cloneDeep, deepFreeze } = require("../../lib/clone");
+const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 
 const ALIASES = ["archives"];
 
@@ -16,7 +16,7 @@ const ALIASES = ["archives"];
 const archivesCache = new LRUCache({
   max: 200,
   maxSize: 100 * 1024 * 1024,
-  sizeCalculation: (value) => JSON.stringify(value).length,
+  sizeCalculation: (value) => value.size,
 });
 
 function cloneYears(value) {
@@ -99,7 +99,7 @@ async function archives(req, res) {
   const key = createCacheKey(req.blog, req.retrieve);
 
   if (!bypassCache && archivesCache.has(key)) {
-    return cloneYears(archivesCache.get(key));
+    return cloneYears(archivesCache.get(key).payload);
   }
 
   const allEntries = await getAllCached(req.blog, { bypassCache });
@@ -116,11 +116,14 @@ async function archives(req, res) {
   // could still group into zero years if every entry lacked a dateStamp -
   // guard here too so archivesCache can't end up caching that either.
   if (!bypassCache && years.length > 0) {
-    archivesCache.set(key, deepFreeze(cloneYears(years)));
+    archivesCache.set(
+      key,
+      prepareCacheValue(years, { preserveEntryInstances: true }),
+    );
   }
 
   return years;
-};
+}
 
 module.exports = asRetriever(archives);
 module.exports._createCacheKey = createCacheKey;

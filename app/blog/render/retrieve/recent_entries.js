@@ -2,7 +2,7 @@ const { getRecent } = require("../../lib/models");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
-const { cloneDeep, deepFreeze } = require("../../lib/clone");
+const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 
 const ALIASES = ["recentEntries", "recent_entries"];
 
@@ -11,7 +11,7 @@ const recentEntriesCache = new LRUCache({
   // 30 skinny entries per blog, but still byte-capped so a burst of
   // distinct blogs cannot fill the process by item count alone.
   maxSize: 20 * 1024 * 1024,
-  sizeCalculation: (value) => JSON.stringify(value).length,
+  sizeCalculation: (value) => value.size,
 });
 
 function cloneEntries(value) {
@@ -32,9 +32,9 @@ async function recentEntries(req, res) {
   if (recentEntriesCache.has(key)) {
     log("Retrieved recent entries from cache");
     return projectEntryFields(
-      cloneEntries(recentEntriesCache.get(key)),
+      cloneEntries(recentEntriesCache.get(key).payload),
       req.retrieve,
-      ALIASES
+      ALIASES,
     );
   }
 
@@ -46,7 +46,10 @@ async function recentEntries(req, res) {
   // look identical to a genuinely empty blog and hide every post until
   // the cacheID changes. Only cache non-empty results.
   if (recent.length > 0) {
-    recentEntriesCache.set(key, deepFreeze(cloneEntries(recent)));
+    recentEntriesCache.set(
+      key,
+      prepareCacheValue(recent, { preserveEntryInstances: true }),
+    );
   }
 
   return projectEntryFields(recent, req.retrieve, ALIASES);

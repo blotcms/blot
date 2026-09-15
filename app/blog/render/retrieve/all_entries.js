@@ -2,7 +2,7 @@ const getAllCached = require("./helpers/getAllCached");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
-const { cloneDeep, deepFreeze } = require("../../lib/clone");
+const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 
 const ALIASES = ["allEntries", "all_entries"];
 
@@ -12,7 +12,7 @@ const ALIASES = ["allEntries", "all_entries"];
 const allEntriesCache = new LRUCache({
   max: 200,
   maxSize: 100 * 1024 * 1024,
-  sizeCalculation: (value) => JSON.stringify(value).length,
+  sizeCalculation: (value) => value.size,
 });
 
 function cloneEntries(value) {
@@ -44,7 +44,7 @@ async function allEntries(req, res) {
   const key = createCacheKey(req.blog, req.retrieve);
 
   if (!bypassCache && allEntriesCache.has(key)) {
-    return cloneEntries(allEntriesCache.get(key));
+    return cloneEntries(allEntriesCache.get(key).payload);
   }
 
   const allEntriesList = await getAllCached(req.blog, { bypassCache });
@@ -56,11 +56,14 @@ async function allEntries(req, res) {
   // failure rather than rejecting - caching that here would look identical
   // to a genuinely empty blog and hide every post until cacheID changes.
   if (!bypassCache && allEntriesList.length > 0) {
-    allEntriesCache.set(key, deepFreeze(cloneEntries(allEntriesList)));
+    allEntriesCache.set(
+      key,
+      prepareCacheValue(allEntriesList, { preserveEntryInstances: true }),
+    );
   }
 
   return allEntriesList;
-};
+}
 
 module.exports = asRetriever(allEntries);
 module.exports._createCacheKey = createCacheKey;

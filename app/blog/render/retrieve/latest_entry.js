@@ -2,7 +2,7 @@ const { getPage } = require("../../lib/models");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
-const { cloneDeep, deepFreeze } = require("../../lib/clone");
+const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 
 const ALIASES = ["latestEntry", "latest_entry"];
 
@@ -11,7 +11,7 @@ const latestEntryCache = new LRUCache({
   // One full entry (including html) per blog; byte-cap so a few large
   // posts cannot dominate the process by item count alone.
   maxSize: 20 * 1024 * 1024,
-  sizeCalculation: (value) => JSON.stringify(value).length,
+  sizeCalculation: (value) => value.size,
 });
 
 function cloneEntry(value) {
@@ -32,9 +32,9 @@ async function latestEntry(req, res) {
   if (latestEntryCache.has(key)) {
     log("Retrieved latest entry from cache");
     return projectEntryFields(
-      cloneEntry(latestEntryCache.get(key)),
+      cloneEntry(latestEntryCache.get(key).payload),
       req.retrieve,
-      ALIASES
+      ALIASES,
     );
   }
 
@@ -51,7 +51,10 @@ async function latestEntry(req, res) {
   // models/entry/get.js and entries handlePaginationAndCallback. Don't
   // cache an empty result; refetching a page of size 1 is cheap.
   if (entries && entries.length) {
-    latestEntryCache.set(key, deepFreeze(cloneEntry(latest)));
+    latestEntryCache.set(
+      key,
+      prepareCacheValue(latest, { preserveEntryInstances: true }),
+    );
   }
 
   return projectEntryFields(cloneEntry(latest), req.retrieve, ALIASES);

@@ -1,6 +1,7 @@
 const { listTags } = require("../../lib/models");
 const { normalizePathPrefix } = require("helper/pathPrefix");
-const { cloneDeep, deepFreeze } = require("../../lib/clone");
+const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
+const { compactTags, expandTags } = require("./helpers/compactTags");
 const LRUCache = require("lru-cache").LRUCache;
 const asRetriever = require("../../lib/asRetriever");
 
@@ -10,7 +11,7 @@ const asRetriever = require("../../lib/asRetriever");
 const allTagsCache = new LRUCache({
   max: 1000,
   maxSize: 50 * 1024 * 1024,
-  sizeCalculation: (value) => JSON.stringify(value).length,
+  sizeCalculation: (value) => value.size,
 });
 
 function createCacheKey(blog, pathPrefix) {
@@ -38,9 +39,9 @@ async function allTags(req, res) {
 
   if (!bypassCache && allTagsCache.has(key)) {
     req.log("Retrieved all tags from cache");
-    const cached = cloneDeep(allTagsCache.get(key));
+    const cached = cloneDeep(allTagsCache.get(key).payload);
     res.locals.all_tags_total_posts = cached.totalPosts;
-    return cached.tags;
+    return expandTags(cached.tags);
   }
 
   req.log("Listing all tags");
@@ -74,7 +75,10 @@ async function allTags(req, res) {
   const totalPosts = Object.keys(set).length;
 
   if (!bypassCache) {
-    allTagsCache.set(key, deepFreeze(cloneDeep({ tags, totalPosts })));
+    allTagsCache.set(
+      key,
+      prepareCacheValue({ tags: compactTags(tags), totalPosts }),
+    );
   }
 
   // toDO maybe rename this? it's ugly
@@ -82,7 +86,7 @@ async function allTags(req, res) {
 
   req.log("Listed all tags");
   return tags;
-};
+}
 
 module.exports = asRetriever(allTags);
 module.exports._createCacheKey = createCacheKey;
