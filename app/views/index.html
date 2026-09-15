@@ -3,7 +3,7 @@
         <h1>Blot turns a folder into a website</h1>
 
         <p class="home-video-link">
-            <a href="/watch"><span class="icon-play icon-inline" aria-hidden="true"></span>Watch the video</a>
+            <a href="/watch" data-watch-trigger><span class="icon-play icon-inline" aria-hidden="true"></span>Watch the video</a>
         </p>
 
         <nav class="home-links" aria-label="Blot links">
@@ -40,6 +40,13 @@
         </ul>
     </section>
     {{/featured}}
+</section>
+
+<section class="watch-screen" data-watch-screen aria-label="Blot video" aria-hidden="true">
+    {{> video}}
+    <button class="watch-close" data-watch-close type="button" aria-label="Close video">
+        <span class="watch-close-icon" aria-hidden="true"></span>
+    </button>
 </section>
 
 <section class="templates-hero" aria-labelledby="templates-hero-title">

@@ -12,7 +12,12 @@
     </label>
 
     <nav class="site-navigation" id="site-navigation" aria-label="Main navigation">
-      {{> navigation}}
+      <div class="signed-out">
+        {{> navigation}}
+      </div>
+      <div class="signed-in dashboard-navigation">
+        {{> dashboard-navigation}}
+      </div>
     </nav>
 
     <div class="call-to-action">

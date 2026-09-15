@@ -1,0 +1,13 @@
+{{#blog}}
+{{^hidebreadcrumbs}}
+{{#breadcrumbs.length}}
+<span class="icon-small-chevron-right dashboard-breadcrumb-separator" aria-hidden="true"></span>
+<nav class="dashboard-breadcrumbs" aria-label="Breadcrumb">
+  {{#breadcrumbs}}
+  <a href="{{{url}}}">{{label}}</a>
+  <span class="icon-small-chevron-right" aria-hidden="true"></span>
+  {{/breadcrumbs}}
+</nav>
+{{/breadcrumbs.length}}
+{{/hidebreadcrumbs}}
+{{/blog}}

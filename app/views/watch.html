@@ -1,9 +1,6 @@
-<script src="https://assets.mediadelivery.net/playerjs/player-0.1.0.min.js"></script>
-{{> video}}
-<script>
-  var player = new playerjs.Player(document.querySelector(".video-embed iframe"));
-
-  player.on("ready", function () {
-    player.play();
-  });
-</script>
+<section class="watch-screen" data-watch-screen aria-label="Blot video" aria-hidden="false">
+  {{> video}}
+  <button class="watch-close" data-watch-close type="button" aria-label="Close video">
+    <span class="watch-close-icon" aria-hidden="true"></span>
+  </button>
+</section>

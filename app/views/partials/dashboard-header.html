@@ -1,9 +1,13 @@
 <header class="header dashboard-header">
   <div class="header-inner">
-    <a class="site-brand {{selected.dashboard}}" href="/sites">
-      <img class="site-brand-logo" src="/images/header-logo.svg" alt="">
-      <span>Blot</span>
-    </a>
+    <div class="dashboard-header-context">
+      <a class="site-brand {{selected.dashboard}}" href="/sites">
+        <img class="site-brand-logo" src="/images/header-logo.svg" alt="">
+        <span>Blot</span>
+      </a>
+
+      {{> dashboard-breadcrumbs}}
+    </div>
 
     <input type="checkbox" id="navbar-toggle" aria-label="Toggle navigation">
     <label class="navigation-toggle" for="navbar-toggle" aria-controls="site-navigation">
@@ -12,19 +16,7 @@
     </label>
 
     <nav class="site-navigation dashboard-navigation" id="site-navigation" aria-label="Main navigation">
-      <section class="navigation">
-        <ul class="navigation-primary">
-          <li class="minor">
-            <a href="/how" class="{{selected.how}}">Documentation</a>
-          </li>
-          <li class="minor">
-            <a href="/questions" class="{{selected.questions}}">Questions</a>
-          </li>
-          <li class="minor">
-            <a href="/support" class="{{selected.support}}">Support</a>
-          </li>
-        </ul>
-      </section>
+      {{> dashboard-navigation}}
     </nav>
   </div>
 </header>

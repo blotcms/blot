@@ -8,6 +8,7 @@ require('./templates.js');
 require('./questions-ask.js');
 require('./questions-textarea.js');
 require('./questions-edit.js');
+require('./watch.js');
 
 require('../../build/plugins/callouts/public.js');
 

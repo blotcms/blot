@@ -33,6 +33,10 @@
     border-top: 1px solid var(--border-color);
   }
 
+  .header .dashboard-header-context {
+    max-width: none;
+  }
+
   .header .call-to-action {
     order: 3;
     margin-left: auto;
@@ -65,6 +69,17 @@
 
   .header .header-inner {
     padding: 0 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .watch-screen {
+    padding: 1rem;
+  }
+
+  .watch-close {
+    top: 0.75rem;
+    right: 1rem;
   }
 }
 

@@ -1368,6 +1368,161 @@ ul.pill-navigation {
   width: 100%;
 }
 
+body.is-watching,
+body.watch-page {
+  overflow: hidden;
+  background: #101010;
+  color: #d5d5d5;
+}
+
+body.is-watching .header,
+body.watch-page .header {
+  position: relative;
+  z-index: 30;
+  background: transparent;
+  pointer-events: none;
+}
+
+body.is-watching .site-brand,
+body.watch-page .site-brand {
+  pointer-events: auto;
+}
+
+body.is-watching .site-brand,
+body.watch-page .site-brand,
+body.is-watching .site-brand.selected,
+body.watch-page .site-brand.selected {
+  color: #d5d5d5;
+}
+
+body.is-watching .site-brand-logo,
+body.watch-page .site-brand-logo {
+  filter: grayscale(1) brightness(0) invert(1);
+  opacity: 0.8;
+}
+
+body.is-watching .site-brand:hover,
+body.is-watching .site-brand:focus-visible,
+body.watch-page .site-brand:hover,
+body.watch-page .site-brand:focus-visible {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #d5d5d5;
+}
+
+body.is-watching .site-navigation,
+body.is-watching .navigation-toggle,
+body.is-watching .call-to-action,
+body.watch-page .site-navigation,
+body.watch-page .navigation-toggle,
+body.watch-page .call-to-action {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.35s ease, visibility 0s linear 0.35s;
+}
+
+.watch-screen {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 4rem;
+  background: #101010;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.45s ease, visibility 0s linear 0.45s;
+}
+
+.watch-screen.is-active,
+body.watch-page .watch-screen {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.watch-screen .video-embed {
+  width: min(1200px, 90vw, calc(90vh * 16 / 9));
+  aspect-ratio: 16 / 9;
+  padding-top: 0;
+}
+
+.watch-close {
+  position: absolute;
+  z-index: 100;
+  top: 1.25rem;
+  right: 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #c9c9c9;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.watch-close:hover,
+.watch-close:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.watch-close:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+.watch-close-icon {
+  position: relative;
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
+.watch-close-icon::before,
+.watch-close-icon::after {
+  position: absolute;
+  top: 9px;
+  left: 0;
+  width: 20px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  content: '';
+}
+
+.watch-close-icon::before {
+  transform: rotate(45deg);
+}
+
+.watch-close-icon::after {
+  transform: rotate(-45deg);
+}
+
+body.watch-page .content {
+  min-height: 100vh;
+  padding: 0;
+}
+
+body.watch-page .main-section {
+  min-height: 0;
+  padding: 0;
+}
+
+body.watch-page footer {
+  display: none;
+}
+
 .pricing-card {
   display: block;
   color: var(--text-color);

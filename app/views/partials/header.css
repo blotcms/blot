@@ -20,6 +20,14 @@ html[data-auth="in"] .signed-in {
   box-sizing: border-box;
 }
 
+.dashboard-header-context {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0%;
+  max-width: calc(50% - 1.5rem);
+  min-width: 0;
+}
+
 .site-brand {
   display: flex;
   align-items: center;
@@ -53,6 +61,54 @@ html[data-auth="in"] .signed-in {
   position: relative;
   top: 0;
   margin-right: 2px;
+}
+
+.dashboard-breadcrumbs {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+}
+
+.dashboard-breadcrumbs a {
+  display: block;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  min-width: 0;
+  max-width: 240px;
+  overflow: hidden;
+  color: var(--medium-text-color);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.dashboard-breadcrumbs a:hover,
+.dashboard-breadcrumbs a:focus-visible {
+  background-color: #efefef;
+  color: var(--accent-color);
+}
+
+.dashboard-breadcrumbs span,
+.dashboard-breadcrumb-separator {
+  flex-shrink: 0;
+  color: var(--border-color);
+  font-size: 0.75em;
+  margin: 0;
+  position: relative;
+  top: 0.05em;
+}
+
+.dashboard-breadcrumbs span:last-child {
+  display: none;
+}
+
+.dashboard-breadcrumbs a:first-child,
+.dashboard-breadcrumbs a:first-child + span {
+  display: none;
 }
 
 .site-navigation {

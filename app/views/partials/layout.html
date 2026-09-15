@@ -3,13 +3,15 @@
 <head>
   {{> head}}
 </head>
-<body>
+<body class="{{#selected.watch}}watch-page{{/selected.watch}}">
   {{> header}}
   <main class="content">
     {{#show-main-section-right}}
     <section class="main-section main-section-with-toc">
       <section class="main-section-content {{#show-toc-or-on-this-page}}js-toc-content{{/show-toc-or-on-this-page}}">
+        {{^selected.dashboard}}
         {{> breadcrumbs}}
+        {{/selected.dashboard}}
         {{> body}}
       </section>
       <aside class="toc-sidebar">
@@ -27,7 +29,9 @@
     {{/show-main-section-right}}
     {{^show-main-section-right}}
     <section class="main-section">
+      {{^selected.dashboard}}
       {{> breadcrumbs}}
+      {{/selected.dashboard}}
       {{> body}}
     </section>
     {{/show-main-section-right}}

@@ -12,10 +12,67 @@ const templatesSourceDirectory = path.join(__dirname, "../../templates/source");
 const NAME_MAP = { cv: "CV" };
 
 const categories = [
-  { name: "Blogging", slug: "blogging", templates: ["blog", "magazine", "fieldnotes", "index"] },
-  { name: "Photography", slug: "photography", templates: ["portfolio", "album"] },
-  { name: "Personal & CV", slug: "personal", templates: ["cv"] },
-  { name: "Organizations", slug: "organizations", templates: ["event", "documentation"] },
+  {
+    name: "Writing",
+    slug: "blogging",
+    templates: [
+      "blog",
+      "fieldnotes",
+      "hypertext",
+      "index",
+      "journal",
+      "keynote",
+      "magazine",
+      "notebook",
+      "text",
+      "wireframe",
+      "zine",
+    ],
+  },
+  {
+    name: "Photos",
+    slug: "photography",
+    templates: ["album", "gallery", "links", "portfolio"],
+  },
+  {
+    name: "Personal",
+    slug: "personal",
+    templates: [
+      "blog",
+      "cv",
+      "fieldnotes",
+      "hypertext",
+      "index",
+      "journal",
+      "keynote",
+      "notebook",
+      "portfolio",
+      "profile",
+      "text",
+      "wireframe",
+      "zine",
+    ],
+  },
+  {
+    name: "Organizations",
+    slug: "organizations",
+    templates: ["documentation", "event", "organization"],
+  },
+  {
+    name: "Portfolio",
+    slug: "portfolio",
+    templates: ["album", "cv", "gallery", "portfolio", "profile", "studio"],
+  },
+  {
+    name: "Editorial",
+    slug: "editorial",
+    templates: ["blog", "fieldnotes", "journal", "magazine", "text", "zine"],
+  },
+  {
+    name: "Notes",
+    slug: "notes",
+    templates: ["fieldnotes", "hypertext", "index", "journal", "keynote", "links", "notebook"],
+  },
 ];
 
 const cdn = () => (text, render) => `{{#cdn}}${render(text)}{{/cdn}}`;
