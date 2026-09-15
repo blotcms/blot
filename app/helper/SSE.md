@@ -14,9 +14,9 @@ The setup-race test also closes a stream while Redis `connect()` is pending and
 verifies that the client is quit without creating a late subscription.
 
 The preview virtual host includes `reverse-proxy-preview.conf`, whose
-`proxy_read_timeout` is 15 seconds. The heartbeat therefore remains at 10
-seconds. The general SSE include has a 24-hour timeout, but it is not used by
-the preview virtual host. The local per-tab client overhead was not material
-relative to rendering and application memory, so the simpler isolated-client
-design is retained rather than adding process-level multiplexing and its shared
-failure domain.
+`proxy_read_timeout` is 15 seconds. Draft streams and preview-reload
+therefore send a comment heartbeat every 10 seconds. The general SSE include
+has a 24-hour timeout, but it is not used by the preview virtual host. The
+local per-tab client overhead was not material relative to rendering and
+application memory, so the simpler isolated-client design is retained rather
+than adding process-level multiplexing and its shared failure domain.

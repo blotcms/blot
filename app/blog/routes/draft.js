@@ -7,6 +7,11 @@ const redisSubscriber = require("helper/redisSubscriber");
 // Timer duration was truncated to 2147483647.
 const MAX_TIMEOUT = 2147483647;
 
+// Preview vhosts use reverse-proxy-preview.conf (proxy_read_timeout 15s).
+// Live blog hosts send /draft/stream/ through reverse-proxy-sse.conf (24h),
+// but a draft opened on a preview-* host still needs this keepalive.
+const HEARTBEAT_INTERVAL_MS = 10 * 1000;
+
 function endResponse(res) {
   try {
     if (!res.destroyed && !res.writableEnded) res.end();
@@ -129,6 +134,13 @@ module.exports = function register(blog) {
       return closed || res.destroyed || res.writableEnded;
     }
 
+    const heartbeat = setInterval(function () {
+      if (responseIsClosed()) return;
+      try {
+        res.write(": heartbeat\n\n");
+      } catch (e) {}
+    }, HEARTBEAT_INTERVAL_MS);
+
     const renderQueue = createRenderQueue({
       isClosed: responseIsClosed,
       render: async function () {
@@ -157,6 +169,7 @@ module.exports = function register(blog) {
     function cleanup() {
       if (closed) return;
       closed = true;
+      clearInterval(heartbeat);
       renderQueue.clear();
       req.removeListener("close", cleanup);
       req.removeListener("aborted", cleanup);
@@ -201,3 +214,4 @@ module.exports = function register(blog) {
 };
 
 module.exports.createRenderQueue = createRenderQueue;
+module.exports.HEARTBEAT_INTERVAL_MS = HEARTBEAT_INTERVAL_MS;
