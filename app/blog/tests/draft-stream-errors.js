@@ -89,4 +89,45 @@ describe("draft stream route", function () {
     expect(next).not.toHaveBeenCalled();
     expect(res.end).toHaveBeenCalledTimes(1);
   });
+
+  it("sends preview-compatible ten-second heartbeats until cleanup", async function () {
+    jasmine.clock().install();
+    try {
+      require.cache[subscriberPath] = {
+        exports: function () {
+          return { cleanup: jasmine.createSpy("cleanup"), setupPromise: Promise.resolve() };
+        },
+      };
+      delete require.cache[routePath];
+      const routes = {};
+      const draft = require("../routes/draft");
+      draft({
+        get: function (path, handler) {
+          routes[path] = handler;
+        },
+      });
+
+      const req = new EventEmitter();
+      req.blog = { id: "blog" };
+      req.url = "/draft/stream/Drafts/index.txt";
+      req.socket = { setTimeout: jasmine.createSpy("setTimeout") };
+      const res = new EventEmitter();
+      res.writeHead = jasmine.createSpy("writeHead");
+      res.write = jasmine.createSpy("write");
+      res.end = jasmine.createSpy("end");
+
+      await routes[drafts.streamRoute](req, res, function () {});
+      res.write.calls.reset();
+
+      jasmine.clock().tick(draft.HEARTBEAT_INTERVAL_MS);
+      expect(res.write).toHaveBeenCalledWith(": heartbeat\n\n");
+
+      req.emit("close");
+      res.write.calls.reset();
+      jasmine.clock().tick(draft.HEARTBEAT_INTERVAL_MS * 2);
+      expect(res.write).not.toHaveBeenCalled();
+    } finally {
+      jasmine.clock().uninstall();
+    }
+  });
 });

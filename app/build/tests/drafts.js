@@ -41,8 +41,11 @@ describe("drafts work", function () {
           const readableStream = new Readable().wrap(body);
           readableStream.on("data", chunk => {
             const data = chunk.toString().trim();
-            if (!data) return;
+            // SSE comment heartbeats keep preview proxies from timing out.
+            if (!data || data.startsWith(":")) return;
             expect(data).toContain(secondContents);
+            readableStream.destroy();
+            if (typeof body.destroy === "function") body.destroy();
             console.log("calling done... HERE!");
             done();
           });
@@ -109,7 +112,9 @@ describe("drafts work", function () {
   });
 
   afterEach(function (done) {
-    this.server.close();
-    done();
+    if (typeof this.server.closeAllConnections === "function") {
+      this.server.closeAllConnections();
+    }
+    this.server.close(done);
   });
 });

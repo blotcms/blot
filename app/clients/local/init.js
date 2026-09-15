@@ -4,8 +4,7 @@
 const async = require("async");
 const debug = require("debug")("blot:clients:local:setup");
 const setup = require("./setup");
-const createRedisClient = require("models/redis");
-const client = createRedisClient();
+const redisSubscriber = require("helper/redisSubscriber");
 const clfdate = require("helper/clfdate");
 const Blog = require("models/blog");
 const prefix = () => clfdate() + " Local folder client:";
@@ -17,39 +16,37 @@ module.exports = async () => {
   var CHANNEL = "clients:local:new-folder";
   console.log(prefix(), "Listening");
 
-  const cleanup = async function () {
-    try {
-      if (client.isOpen) {
-        await client.unsubscribe(CHANNEL);
-      }
-    } catch (err) {
+  const subscription = redisSubscriber({
+    channel: CHANNEL,
+    onMessage: function (message, channel) {
+      debug("recieved", message, "on", channel);
+      if (channel !== CHANNEL) return;
+      let { blogID } = JSON.parse(message);
+      setup(blogID, function (err) {
+        if (err) console.error(err);
+      });
+    },
+    onError: function (err) {
       console.error(err);
-    }
+    },
+  });
 
-    try {
-      if (client.isOpen) {
-        await client.quit();
-      }
-    } catch (err) {
+  let initialSetupTimer;
+
+  const cleanup = function () {
+    if (initialSetupTimer) clearTimeout(initialSetupTimer);
+    void Promise.resolve(subscription.cleanup()).catch(function (err) {
       console.error(err);
-    }
+    });
   };
 
   process.once("SIGTERM", cleanup);
   process.once("SIGINT", cleanup);
   process.once("exit", cleanup);
 
-  await client.connect();
-  await client.subscribe(CHANNEL, function (message, channel) {
-    debug("recieved", message, "on", channel);
-    if (channel !== CHANNEL) return;
-    let { blogID } = JSON.parse(message);
-    setup(blogID, function (err) {
-      if (err) console.error(err);
-    });
-  });
+  await subscription.setupPromise;
 
-  setTimeout(function () {
+  initialSetupTimer = setTimeout(function () {
     Blog.getAllIDs(function (err, blogIDs) {
       if (err) console.error(err);
       async.eachSeries(
