@@ -82,11 +82,11 @@ function listAllPaymentMethods(stripe, customerId, callback) {
 }
 
 // Cards added before this feature existed were stored as legacy Card
-// objects (attached via customer.sources) rather than modern PaymentMethods,
-// and Stripe does not surface those in paymentMethods.list. We fetch all of
-// a customer's legacy cards so they can still be viewed/managed/removed
-// here; any card added or set as default from now on becomes a real
-// PaymentMethod instead.
+// objects (attached via customer.sources) rather than modern PaymentMethods.
+// Stripe's Payment Methods API is backwards-compatible with those Cards: the
+// same object appears in paymentMethods.list with the same card_ id, just
+// object: "payment_method" instead of object: "card". We still fetch
+// listCards for any card Stripe does not surface that way.
 function fetchLegacyCards(stripe, customerId, defaultSourceId, callback) {
   listAll(function (startingAfter, cb) {
     var params = { limit: 100 };
@@ -198,7 +198,17 @@ module.exports = function syncPaymentMethods(user, callback) {
           ) {
             if (err) return callback(err);
 
-            paymentMethods = legacyCards.concat(paymentMethods);
+            // Same card_ id from both APIs is one card, not two. Keep the
+            // legacy row so isLegacy stays accurate for remove/default.
+            var seen = {};
+            legacyCards.forEach(function (card) {
+              seen[card.id] = true;
+            });
+            paymentMethods = legacyCards.concat(
+              paymentMethods.filter(function (pm) {
+                return !seen[pm.id];
+              })
+            );
 
             set(user.uid, { paymentMethods: paymentMethods }, function (err) {
               if (err) return callback(err);
