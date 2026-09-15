@@ -43,4 +43,75 @@ describe("drafts", function () {
         });        
     });
 
+    it("serializes and coalesces a burst of draft renders", async function () {
+        const createRenderQueue = require("../routes/draft").createRenderQueue;
+        const resolvers = [];
+        let active = 0;
+        let maximumActive = 0;
+        let renders = 0;
+        const queue = createRenderQueue({
+            isClosed: function () { return false; },
+            render: function () {
+                renders++;
+                active++;
+                maximumActive = Math.max(maximumActive, active);
+                return new Promise(function (resolve) {
+                    resolvers.push(function () { active--; resolve(); });
+                });
+            }
+        });
+
+        queue.notify();
+        queue.notify();
+        queue.notify();
+        expect(renders).toBe(1);
+        resolvers.shift()();
+        await new Promise(setImmediate);
+        expect(renders).toBe(2);
+        resolvers.shift()();
+        await new Promise(setImmediate);
+
+        expect(maximumActive).toBe(1);
+        expect(renders).toBe(2);
+    });
+
+    it("retries a pending render after a throw", async function () {
+        const createRenderQueue = require("../routes/draft").createRenderQueue;
+        let renders = 0;
+        let shouldThrow = true;
+        const queue = createRenderQueue({
+            isClosed: function () { return false; },
+            render: async function () {
+                renders++;
+                if (shouldThrow) {
+                    shouldThrow = false;
+                    queue.notify();
+                    throw new Error("render failed");
+                }
+            }
+        });
+
+        queue.notify();
+        await new Promise(setImmediate);
+
+        expect(renders).toBe(2);
+    });
+
+    it("starts a new render after the queue is idle", async function () {
+        const createRenderQueue = require("../routes/draft").createRenderQueue;
+        let renders = 0;
+        const queue = createRenderQueue({
+            isClosed: function () { return false; },
+            render: async function () { renders++; }
+        });
+
+        queue.notify();
+        await new Promise(setImmediate);
+        expect(renders).toBe(1);
+
+        queue.notify();
+        await new Promise(setImmediate);
+        expect(renders).toBe(2);
+    });
+
 });
