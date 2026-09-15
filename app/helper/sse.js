@@ -7,8 +7,15 @@ const redisSubscriber = require("helper/redisSubscriber");
 // (otherwise recurring) reconnect gap.
 const HEARTBEAT_INTERVAL_MS = 10 * 1000;
 
+function endResponse(res) {
+  try {
+    if (!res.destroyed && !res.writableEnded) res.end();
+  } catch (e) {}
+}
+
 module.exports = function ({ channel }) {
   return function (req, res) {
+    let closed = false;
     req.socket.setTimeout(2147483647);
 
     res.writeHead(200, {
@@ -26,6 +33,7 @@ module.exports = function ({ channel }) {
     res.write("\n");
 
     const heartbeat = setInterval(function () {
+      if (closed || res.destroyed || res.writableEnded) return;
       try {
         res.write(": heartbeat\n\n");
       } catch (e) {}
@@ -34,18 +42,40 @@ module.exports = function ({ channel }) {
     const subscription = redisSubscriber({
       channel: channel(req),
       onMessage: function (message) {
-        res.write("\n");
-        res.write("data: " + message + "\n\n");
-        res.flushHeaders();
+        if (closed || res.destroyed || res.writableEnded) return;
+        try {
+          res.write("\n");
+          res.write("data: " + message + "\n\n");
+          res.flushHeaders();
+        } catch (err) {}
       },
       onError: function (err) {
         console.log("Redis Error: " + err);
       },
     });
 
-    req.on("close", function () {
+    function cleanup() {
+      if (closed) return;
+      // Flip state before any asynchronous Redis teardown begins.
+      closed = true;
       clearInterval(heartbeat);
-      subscription.cleanup();
+      req.removeListener("close", cleanup);
+      req.removeListener("aborted", cleanup);
+      res.removeListener("close", cleanup);
+      void Promise.resolve(subscription.cleanup()).catch(function (err) {
+        console.log("Redis Error: " + err);
+      });
+    }
+
+    void subscription.setupPromise.catch(function () {
+      cleanup();
+      endResponse(res);
     });
+
+    req.on("close", cleanup);
+    req.on("aborted", cleanup);
+    res.on("close", cleanup);
   };
 };
+
+module.exports.HEARTBEAT_INTERVAL_MS = HEARTBEAT_INTERVAL_MS;

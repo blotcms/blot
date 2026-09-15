@@ -70,17 +70,18 @@ function errorHandler(err, req, res, next) {
   }
 
   var redirect = req.body.redirect || req.baseUrl + req.path;
-  var message = "Error";
+  var message;
 
   // this should not be an object but I made
   // some bad decisions in the past. eventually
   // fix blog.set...
-  if (err.message) {
+  if (err && typeof err.message === "string" && err.message) {
     message = err.message;
+  } else if (type(err, "object")) {
+    for (var i in err) if (type(err[i], "string") && err[i]) message = err[i];
   }
 
-  if (type(err, "object"))
-    for (var i in err) if (type(err[i], "string")) message = err[i];
+  message = message || "Error";
 
   // if this is a post request then redirect to it with a message
   // otherwise just display the error on the current page

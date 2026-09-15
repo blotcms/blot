@@ -57,15 +57,24 @@ module.exports = (function () {
   }
 
   function injectScript(html, filePath, callback) {
-    var $ = cheerio.load(html, { decodeEntities: false });
+    var $;
+
+    try {
+      $ = cheerio.load(html || "", { decodeEntities: false });
+    } catch (e) {
+      return callback(html, html);
+    }
 
     fs.readFile(injectionPath, "utf-8", function (err, scriptTag) {
-      scriptTag = Mustache.render(scriptTag, {
-        streamURL:
-          streamRoute.slice(0, -1) + encodeURIComponent(filePath.slice(1)),
-      });
-
-      $("head").append(scriptTag);
+      if (!err && scriptTag) {
+        try {
+          scriptTag = Mustache.render(scriptTag, {
+            streamURL:
+              streamRoute.slice(0, -1) + encodeURIComponent(filePath.slice(1)),
+          });
+          $("head").append(scriptTag);
+        } catch (e) {}
+      }
 
       return callback($.html(), $("body").html());
     });
