@@ -1,5 +1,5 @@
 const sync = require("sync");
-const createRedisClient = require("models/redis");
+const redisSubscriber = require("helper/redisSubscriber");
 
 const promisify = require("util").promisify;
 const database = require("clients/dropbox/database");
@@ -13,12 +13,24 @@ function setup(account, session, callback) {
   sync(account.blog.id, async function (err, folder, done) {
     if (err) return callback(err);
 
-    const client = createRedisClient();
     const signal = { aborted: false };
     const abortChannel = "sync:status:" + account.blog.id;
     let abortHandled = false;
     let cleaned = false;
     let finished = false;
+
+    const subscription = redisSubscriber({
+      channel: abortChannel,
+      onMessage: function (message) {
+        if (message !== "Attempting to disconnect from Dropbox") return;
+        signal.aborted = true;
+        abortHandled = true;
+        handleAbort();
+      },
+      onError: function (err) {
+        console.log("Error:", err);
+      },
+    });
 
     const cleanup = async () => {
       if (cleaned) return;
@@ -32,17 +44,7 @@ function setup(account, session, callback) {
       }
 
       try {
-        if (client.isOpen) {
-          await client.unsubscribe(abortChannel);
-        }
-      } catch (e) {
-        console.log("Error unsubscribing:", e);
-      }
-
-      try {
-        if (client.isOpen) {
-          await client.quit();
-        }
+        await subscription.cleanup();
       } catch (e) {
         console.log("Error cleaning up:", e);
       }
@@ -62,13 +64,7 @@ function setup(account, session, callback) {
     };
 
     try {
-      await client.connect();
-      await client.subscribe(abortChannel, function (message, channel) {
-        if (message !== "Attempting to disconnect from Dropbox") return;
-        signal.aborted = true;
-        abortHandled = true;
-        handleAbort();
-      });
+      await subscription.setupPromise;
 
       folder.status("Loading Dropbox account");
       account = await getAccount(account);
