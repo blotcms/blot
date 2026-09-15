@@ -42,6 +42,54 @@
     {{/featured}}
 </section>
 
+<section class="templates-hero" aria-labelledby="templates-hero-title">
+    <div class="templates-hero-grid">
+        <div class="templates-hero-copy">
+            <h1 id="templates-hero-title">Templates</h1>
+            <p>Explore the kinds of sites you can build with Blot. Start with a folder, choose a template, and make it a website.</p>
+            <a class="templates-hero-button home-tools-cta" href="/templates">View templates</a>
+        </div>
+
+        {{#allTemplates}}
+        <a href="/templates/{{slug}}" class="templates-hero-image" aria-label="View {{name}} template">
+            <img
+                src="{{#cdn}}/images/examples/{{slug}}/0.png{{/cdn}}"
+                class="templates-hero-desktop-image"
+                width="2120" height="1560"
+                alt=""
+                loading="lazy"
+                decoding="async" />
+            <img
+                src="{{#cdn}}/images/examples/{{slug}}/0.mobile.png{{/cdn}}"
+                class="templates-hero-mobile-image"
+                width="800" height="1300"
+                alt=""
+                loading="lazy"
+                decoding="async" />
+        </a>
+        {{/allTemplates}}
+
+        {{#allTemplates}}
+        <a href="/templates/{{slug}}" class="templates-hero-image templates-hero-image-repeat" aria-hidden="true" tabindex="-1">
+            <img
+                src="{{#cdn}}/images/examples/{{slug}}/0.png{{/cdn}}"
+                class="templates-hero-desktop-image"
+                width="2120" height="1560"
+                alt=""
+                loading="lazy"
+                decoding="async" />
+            <img
+                src="{{#cdn}}/images/examples/{{slug}}/0.mobile.png{{/cdn}}"
+                class="templates-hero-mobile-image"
+                width="800" height="1300"
+                alt=""
+                loading="lazy"
+                decoding="async" />
+        </a>
+        {{/allTemplates}}
+    </div>
+</section>
+
 <section class="home-tools" aria-labelledby="home-tools-title">
     <h2 id="home-tools-title">Works with the tools you already use</h2>
 

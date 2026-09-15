@@ -1,6 +1,7 @@
 const config = require("config");
 const Express = require("express");
 const redirector = require("./redirector");
+const loadTemplates = require("./build/templates").loadTemplates;
 const { join } = require("path");
 
 const documentation = Express.Router();
@@ -70,16 +71,21 @@ documentation.get(
 
 documentation.use(require("./selected"));
 
-documentation.get("/", require("./featured"), function (req, res, next) {
-  res.locals.title = "Blot";
-  res.locals.description = "Turns a folder into a website";
-  // Keep the homepage's avatar grid close to the original five-row layout.
-  if (res.locals.featured && Array.isArray(res.locals.featured.sites)) {
-    res.locals.featured.sites = res.locals.featured.sites.slice(0, 27);
+documentation.get("/", require("./featured"), async function (req, res, next) {
+  try {
+    res.locals.title = "Blot";
+    res.locals.description = "Turns a folder into a website";
+    res.locals.allTemplates = await loadTemplates();
+    // Keep the homepage's avatar grid close to the original five-row layout.
+    if (res.locals.featured && Array.isArray(res.locals.featured.sites)) {
+      res.locals.featured.sites = res.locals.featured.sites.slice(0, 27);
+    }
+    // otherwise the <title> of the page is 'Blot - Blot'
+    res.locals.hide_title_suffix = true;
+    next();
+  } catch (error) {
+    next(error);
   }
-  // otherwise the <title> of the page is 'Blot - Blot'
-  res.locals.hide_title_suffix = true;
-  next();
 });
 
 documentation.get("/examples", require("./featured"));

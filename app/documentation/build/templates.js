@@ -186,3 +186,4 @@ module.exports = async () => {
 
 module.exports.sanitizePreviewTree = sanitizePreviewTree;
 module.exports.formatTreeForPreview = formatTreeForPreview;
+module.exports.loadTemplates = loadTemplates;

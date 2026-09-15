@@ -489,7 +489,7 @@ h2 + .clients {margin-top: 0}
    create a responsive frame around its heading. */
 .templates-hero {
   width: 100%;
-  margin: -1rem auto 4rem;
+  margin: 10rem auto 4rem;
 }
 
 .main-section:has(.templates-hero) {
@@ -531,6 +531,10 @@ h2 + .clients {margin-top: 0}
   color: var(--medium-text-color);
   font-size: var(--font-size);
   line-height: 1.35;
+}
+
+.templates-hero .templates-hero-button {
+  margin-top: 1.75rem;
 }
 
 .templates-hero-image {
@@ -708,7 +712,7 @@ h2 + .clients {margin-top: 0}
 
 @media (max-width: 600px) {
   .templates-hero {
-    margin-top: 0;
+    margin-top: 4rem;
     margin-bottom: 3rem;
   }
 

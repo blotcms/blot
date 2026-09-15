@@ -1,12 +1,18 @@
 Now we have many LRU caches in app/blog we need to gather data in production to rigorously determine the most effective relative sizes for the caches (include the mustache template cache in this)
 
-Fix performance bugs on nashp and anchor and re-enable sites
+Fix performance bugs on anchor and re-enable site
+
+Improve performance for nashp using additional req trace logging and more possible LRU caching
+
+Implement an abstract blog storage mechanism that will simulatenously make it possible to:
+- implement folder storage limits (include generated files in this amount?)
+- implement s3 storage for static generated assets (and then subsequently folder files)
 
 Fix benchmark build-corpus action issue
 
 ---
 
-Google Drive:
+Improve Google Drive sync
 - Fix bug with repeat resyncs of specific sites via Google Drive:
   - To identify, run node scripts/google-drive/resync.js multiple times, some sites continually resync the same files...
   - Mark's site unneccessarily re-downloads some (all?) files on sync rather than using the correct hash and tell [Mark](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTVmrvkvcfPvcJhcLvrwSndWS)
@@ -31,7 +37,7 @@ Google Drive:
 - Google Drive `write` should use the best method for large file uploading
 - Add proper testing for this
 
-Dropbox:
+Improve Dropbox sync
 - Sync verification should instrument the sync/fix function to also report errors where the folder doesn't match the database.
 - Bug: ensure that when a process dies, any blogs setting up dropbox client will be re-attempted
 - Bug: Adding an additional blog to existing app folder under constant webhooks failed. New blog had correct folder but old blog still used root. To fix we need to acquire a lock on ALL blogs interacting with that dropbox account to proceed with setup process of second site.
@@ -66,7 +72,7 @@ Dropbox:
 - Surface sync issues with Dropbox client on the homepage of dashboard
 - How do we make errors sticky? To make sure users click through to clients page to re-connect to Dropbox, etc...
 
-Git:
+Improve git sync
 - Investigate a bug with git client credentials triggered when you have two sites using git on one account, and delete one of the sites
 - Work out how to pipe custom error messages down to customer git clients
 - Create tests for large Git repo initialization
@@ -91,7 +97,7 @@ Git:
   - I want them to be able to keep using their old one *until* someone else claims it, then I want 401 unauthorized, please reauthenticate with new username... but the remote path will be wrong?
 - Rate limit authentication route?
 
-iCloud:
+Improve iCloud sync
 - Revert server changes to iCloud to reintroduce integrity checks
   - 0043d91b36621ecd6aef2bcc263f51f209924792
   - 98dc9405c883825917de8e436ec620f60adaf975
@@ -127,7 +133,7 @@ iCloud:
 
 ---
 
-Fix bugs with templates:
+Fix bugs with templates
 - Fix responsive thumbnail component on photo template (it loads large thumbnail every time)
 - Fix 'back' button in photo template and tell [Bibi](https://mail.google.com/mail/u/0/#inbox/FMfcgzGrcPJTmPXxWvhbmFpvwdfVzhpn)
 - Fix side navigation on Blog template and tell [Sava](https://mail.google.com/mail/u/0/#inbox/FMfcgzGwJcgnPdxPcSqPwmMnFSThFMQg)
@@ -147,13 +153,14 @@ Fix bugs with templates:
   - [ ] Add exif info
   - [ ] Add backlinks
 
-Fix bug with placeholder files when switching clients: DATA LOSS, BLOT WILL NOT TRANSFER THE ORIGINAL FILE REPRESENTED BY A PLACEHOLDER.
+Fix bug with placeholder files when switching clients which will lead to data loss because Blot will not transfer the contents of placeholder files across
 
 Fix bug with the paypal next bill dates are not syncing correctly for some users (e.g.slopserve)
 
 Fix bug with CDN replaceFolder not working with relative path to CSS file on wall.blot.im
 
-Fix bug with huge draft crashing the sync server /a327ex/drafts/it_follows.txt
+Fix bug with huge draft crashing the sync server
+- /a327ex/drafts/it_follows.txt
 - Chunk large drafts into multiple messages to avoid memory issues? 
 
 Fix bug with overdue subscription payment form not working
@@ -165,9 +172,11 @@ Fix bugs with custom domain setup
 - Disable redirect to HTTPS for blogs by default (to ensure old browsers without SNI work) but ensure all prominent links to the blog on dashboard use HTTPS
 - cache domain validity and display checkmark on dashboard
 
-Fix bug with link format using filename and [follow up with yct](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTMLqzhtlSBrtFqNDFDdXPSfk)
+Fix bug with link format using filename
+- [follow up with yct](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTMLqzhtlSBrtFqNDFDdXPSfk)
 
-Fix bug with light mode colors and tell [Gary](https://mail.google.com/mail/u/0/#inbox/FMfcgzGwJSCRWXMlsPRVBsnrcRcbMklc)
+Fix bug with light mode colors 
+- tell [Gary](https://mail.google.com/mail/u/0/#inbox/FMfcgzGwJSCRWXMlsPRVBsnrcRcbMklc)
 
 Fix bug with menu which occur when multiple pages are added at once Menu needs concurrency or atomic operations (so we can build posts in parallel)
 - move menu into its own model (it's possible to add thousands of entries to it...)
@@ -175,9 +184,11 @@ Fix bug with menu which occur when multiple pages are added at once Menu needs c
 Fix bug where one bad page can take down upstream repeatedly 
 – perhaps we need to cache in proxy cache timeouts? or somehow detect if a request causes upstream to crash?
 
-Fix bug with [many twitter embeds and tell Nash](https://mail.google.com/mail/u/0/#inbox/FMfcgzGllMNfjvRBthVncQtPJQpmrksx)
+Fix bug with many twitter embeds 
+- [and tell Nash](https://mail.google.com/mail/u/0/#inbox/FMfcgzGllMNfjvRBthVncQtPJQpmrksx)
 
-Fix bug with filtering paginated list of entries and tell [Roy](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVgrQJWNPHHvdxnMtWCGJkZdM) and [Josh](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVzrFNFzLzbWrssWzbrSvtpTm) and [Logan](https://twitter.com/LoganGreer)
+Fix bug with filtering paginated list of entries 
+- tell [Roy](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVgrQJWNPHHvdxnMtWCGJkZdM) and [Josh](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVzrFNFzLzbWrssWzbrSvtpTm) and [Logan](https://twitter.com/LoganGreer)
 
 Fix bugs with template engine:
 - Prevent double submission on template editor at insertion and front-end levels
@@ -191,7 +202,8 @@ Fix bugs with template engine:
 - Fix date selector for template and tell [Zach](https://mail.google.com/mail/u/0/#inbox/FMfcgzGxTFSjkTvfDRgNHZwSQqDzWKFB)
 - Fix bug with forking / editing new templates and tell [Jarrod](https://mail.google.com/mail/u/0/#inbox/FMfcgzGrbRSDCZqMwzjDdqdGCkScxpsw) when local template folders better reflect template names
 
-Fix bug with wordpress importer and follow up with [Simon](https://mail.google.com/mail/u/0/#inbox/FMfcgxwGCtMPcJhlmcdNvWwtWvgzWJvZ)
+Fix bug with wordpress importer 
+- follow up with [Simon](https://mail.google.com/mail/u/0/#inbox/FMfcgxwGCtMPcJhlmcdNvWwtWvgzWJvZ)
 
 Fix bug with date metadata on [Vincent](https://mail.google.com/mail/u/0/#inbox/FMfcgxwJXVMdhvCJPXwVVSKRTFHQTQzn)'s blog and follow up. I suspect it's to do with the ordering of date tokens.
 
@@ -243,8 +255,6 @@ Follow-ups from drag-and-drop template upload:
 - Move the folder browser (views/dashboard/folder/directory.html) onto the shared views/js/collect-dropped-files.js instead of its inline copy of the same traversal
 - Surface template metadata.errors in the dashboard editor, not only on the preview subdomain, so a template with a broken view says so where it is edited
 - Reconcile the two url defaults for a new view: source-code.js maps foo.html to /foo, readFromFolder and the upload route map it to /foo.html
-
-Handle content negotiation headers for accept markdown from [LLM bots](https://blog.cloudflare.com/markdown-for-agents/) and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBsvRjgTvbGqmqtSfCQZZNpdM)
 
 New templates:
 - Release [Fede](https://wordpress.org/themes/kanso/)'s theme as profile template
@@ -1034,8 +1044,6 @@ Improve 404 log page on Dashboard
 - Add frequency indicator for each route 404 log and tell [Jamie](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVDLzTVpVZHfgwRgcmtGXFHXx)
 - Add filtering by date to 404 log and [tell this person](https://mail.google.com/mail/u/0/#inbox/1566e52d170f29ca)
 
-Add support for nesting multiple layout tags e.g. "{<>} {||} Y" and tell [Marius](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVqNqbsQJjcrTXRcsFxHVPzDq)
-
 ---
 
 Write new app/build/converters to turn new file formats into posts
@@ -1101,7 +1109,8 @@ Write new clients to sync blog folders
 
 ---
 
-Add password protection for blogs then tell [Ed](https://mail.google.com/mail/u/0/#inbox/164edd9d46596ec7), [this person](https://mail.google.com/mail/u/0/#inbox/155f01452a3f7231), [this person](https://mail.google.com/mail/u/0/#inbox/1645b6e48dc13281), and [Will](https://mail.google.com/mail/u/0/#inbox/FMfcgzGlkXsdBcCssKznzgvJQPDQpKlh), and [Modomiro](https://twitter.com/modomiro/status/1053345173743329281) and [Julian](https://mail.google.com/mail/u/0/#inbox/FMfcgxwCgpVWqGMHszwgxZRxNTNXRTlX) and [Raph](https://mail.google.com/mail/u/0/#inbox/FMfcgxwCgzFTCKQXQmQqdNMdjMfDFkMW) and [Jeremy](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmvTvDjVMLQQmxvnZHBnnxdRpk) and [Tara](https://mail.google.com/mail/u/0/#sent/FMfcgxwChJlBCNMWSFhSctjMkBcKdpsq) and [Phil](https://mail.google.com/mail/u/0/#inbox/FMfcgxwChSHbCCgQqZqqKQftJbwHRkss) and [Florian](https://mail.google.com/mail/u/0/#inbox/FMfcgxwDrlSVCrQSVMBlFwQcNcGfZLzn) and Roy's friend Tim and [Kaleb](https://mail.google.com/mail/u/0/#inbox/FMfcgxwGDNWPljXXlwQVtswFCCLGFCQV) and [Lotus](https://mail.google.com/mail/u/0/#inbox/FMfcgxwGDNQfSzPBHtqRCQqCDjMTZLCQ) and [Khaled](https://mail.google.com/mail/u/0/#inbox/FMfcgxwHMGBFrctdVXhksCvqXXVPfDWR) and [Noel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwHNMdwcwMqfVjmJPHKBMxzQChR) and [Franz](https://mail.google.com/mail/u/0/#inbox/FMfcgxwJXVMfwXfsWswWjvrpVKrPqpDt) and [Justin](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKjBRFjtljCQvlhsfXsSxrCKdJ) and [Kyle](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKkHZVgwCNwsdlhdzCggRtsRhN) and [Devan](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsJznDjRgbzwPmChbNQdqfnfq) and [John](https://mail.google.com/mail/u/0/?zx=bjx0x027sgct#inbox/FMfcgzGqQvvRpSrnkRNsrhddkzBhMsvf) and [Anita](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsSWMtCTdmrbscFCFLggctmxH) and [Emerald](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLtkXpvTkdGzkFCLtmmLTlvrJL) and [Ben](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmvBmLLlZwPLbdJdXKQXrwrJnL) and [Giuseppe](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmvBnTWqHgFgdwBvcCDcmzLXGV) and [Annie](https://mail.google.com/mail/u/0/?zx=j8rkxjpin0du#inbox/FMfcgzGqRQCwsXBNDJqLjDnJrjGmctdJ) and [Jan](https://mail.google.com/mail/u/0/?zx=j8rkxjpin0du#inbox/FMfcgzGqRPzfVlDPLLjkqCfnBWqmVqKg)
+Add password protection for blogs 
+- tell [Ed](https://mail.google.com/mail/u/0/#inbox/164edd9d46596ec7), [this person](https://mail.google.com/mail/u/0/#inbox/155f01452a3f7231), [this person](https://mail.google.com/mail/u/0/#inbox/1645b6e48dc13281), and [Will](https://mail.google.com/mail/u/0/#inbox/FMfcgzGlkXsdBcCssKznzgvJQPDQpKlh), and [Modomiro](https://twitter.com/modomiro/status/1053345173743329281) and [Julian](https://mail.google.com/mail/u/0/#inbox/FMfcgxwCgpVWqGMHszwgxZRxNTNXRTlX) and [Raph](https://mail.google.com/mail/u/0/#inbox/FMfcgxwCgzFTCKQXQmQqdNMdjMfDFkMW) and [Jeremy](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmvTvDjVMLQQmxvnZHBnnxdRpk) and [Tara](https://mail.google.com/mail/u/0/#sent/FMfcgxwChJlBCNMWSFhSctjMkBcKdpsq) and [Phil](https://mail.google.com/mail/u/0/#inbox/FMfcgxwChSHbCCgQqZqqKQftJbwHRkss) and [Florian](https://mail.google.com/mail/u/0/#inbox/FMfcgxwDrlSVCrQSVMBlFwQcNcGfZLzn) and Roy's friend Tim and [Kaleb](https://mail.google.com/mail/u/0/#inbox/FMfcgxwGDNWPljXXlwQVtswFCCLGFCQV) and [Lotus](https://mail.google.com/mail/u/0/#inbox/FMfcgxwGDNQfSzPBHtqRCQqCDjMTZLCQ) and [Khaled](https://mail.google.com/mail/u/0/#inbox/FMfcgxwHMGBFrctdVXhksCvqXXVPfDWR) and [Noel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwHNMdwcwMqfVjmJPHKBMxzQChR) and [Franz](https://mail.google.com/mail/u/0/#inbox/FMfcgxwJXVMfwXfsWswWjvrpVKrPqpDt) and [Justin](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKjBRFjtljCQvlhsfXsSxrCKdJ) and [Kyle](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKkHZVgwCNwsdlhdzCggRtsRhN) and [Devan](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsJznDjRgbzwPmChbNQdqfnfq) and [John](https://mail.google.com/mail/u/0/?zx=bjx0x027sgct#inbox/FMfcgzGqQvvRpSrnkRNsrhddkzBhMsvf) and [Anita](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsSWMtCTdmrbscFCFLggctmxH) and [Emerald](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLtkXpvTkdGzkFCLtmmLTlvrJL) and [Ben](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmvBmLLlZwPLbdJdXKQXrwrJnL) and [Giuseppe](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmvBnTWqHgFgdwBvcCDcmzLXGV) and [Annie](https://mail.google.com/mail/u/0/?zx=j8rkxjpin0du#inbox/FMfcgzGqRQCwsXBNDJqLjDnJrjGmctdJ) and [Jan](https://mail.google.com/mail/u/0/?zx=j8rkxjpin0du#inbox/FMfcgzGqRPzfVlDPLLjkqCfnBWqmVqKg)
 - think about how to add simple password (just a string) protection to sites. 
 - we need to consider both the node.js app (app/index) and the openresty reverse proxy (config/openresty), especially the proxy caching behaviour for sites. 
 - perhaps we'll need to handle sessions for sites with password protection in some way at the open resty level? or just use some response header from upstream to always bypass the proxy cache? or some cookie? we don't want to add any extra work in openresty for sites without passwords. perhaps sites with passwords return responses with a header that prevents any proxy caching from taking place?

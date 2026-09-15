@@ -98,3 +98,13 @@
   right: 2em;
   top: 17px;
 }
+
+.buttons .red.working {
+  background-color: #ff2a2a;
+  color: #8b0000;
+  opacity: 0.6;
+}
+
+.buttons .red.working:after {
+  background: #8b0000;
+}
