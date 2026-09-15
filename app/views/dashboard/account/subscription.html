@@ -72,14 +72,17 @@
     </a>
     {{/user.paypal.status}}
 
-    {{#user.subscription.status}}
+    {{#user.showPaymentMethodsLink}}
     <a class="line" href="/dashboard/account/subscription/payment-method"
-      ><span class="label">Payment method</span
+      ><span class="label">Payment methods</span
       ><span class="center"
-        ><span class="link">Update payment details</span></span
+        ><span class="link">Manage payment methods</span>
+        {{#user.hasExpiredPaymentMethod}}<span class="tablet expired">Expired card</span>{{/user.hasExpiredPaymentMethod}}
+        {{^user.hasExpiredPaymentMethod}}{{#user.hasExpiringSoonPaymentMethod}}<span class="tablet expiring">Card expiring soon</span>{{/user.hasExpiringSoonPaymentMethod}}{{/user.hasExpiredPaymentMethod}}
+        </span
       ></a
     >
-    {{/user.subscription.status}}
+    {{/user.showPaymentMethodsLink}}
 
     {{^user.paypal.status}}
     <a class="line" href="/dashboard/account/subscription/cancel"

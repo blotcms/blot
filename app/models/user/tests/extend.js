@@ -308,4 +308,99 @@ describe("user extend", function () {
     var result = extend(user);
     expect(result).toBe(user);
   });
+
+  describe("showPaymentMethodsLink", function () {
+    it("is false with no Stripe or PayPal subscription", function () {
+      var user = createUser({ subscription: {}, paypal: {} });
+      extend(user);
+      expect(user.showPaymentMethodsLink).toBe(false);
+    });
+
+    it("is true for a Stripe subscription with a status", function () {
+      var user = createUser({
+        subscription: { status: "active", customer: "cus_123" },
+        paypal: {}
+      });
+      extend(user);
+      expect(user.showPaymentMethodsLink).toBe(true);
+    });
+
+    it("is true for an active PayPal subscription, even though subscription.status is unset", function () {
+      var config = require("config");
+      var originalPlans = config.paypal.plans;
+      config.paypal.plans = { yearly_44: "P-TEST-YEARLY-44" };
+
+      var user = createUser({
+        subscription: {},
+        paypal: {
+          status: "ACTIVE",
+          plan_id: "P-TEST-YEARLY-44",
+          quantity: "1",
+          billing_info: {
+            next_billing_time: new Date(Date.now() + 86400000).toISOString()
+          }
+        }
+      });
+      extend(user);
+      expect(user.showPaymentMethodsLink).toBe(true);
+
+      config.paypal.plans = originalPlans;
+    });
+  });
+
+  describe("payment methods", function () {
+    function monthsFromNow(months) {
+      var date = new Date();
+      date.setMonth(date.getMonth() + months);
+      return { exp_month: date.getMonth() + 1, exp_year: date.getFullYear() };
+    }
+
+    it("flags an expired card and sets hasExpiredPaymentMethod", function () {
+      var user = createUser({
+        paymentMethods: [
+          Object.assign(
+            { id: "pm_1", brand: "visa", last4: "4242", isDefault: true },
+            monthsFromNow(-1)
+          )
+        ]
+      });
+      extend(user);
+      expect(user.paymentMethods[0].isExpired).toBe(true);
+      expect(user.paymentMethods[0].isExpiringSoon).toBe(false);
+      expect(user.hasExpiredPaymentMethod).toBe(true);
+      expect(user.hasExpiringSoonPaymentMethod).toBeUndefined();
+    });
+
+    it("flags a card expiring soon and sets hasExpiringSoonPaymentMethod", function () {
+      var user = createUser({
+        paymentMethods: [
+          Object.assign(
+            { id: "pm_1", brand: "visa", last4: "4242", isDefault: true },
+            monthsFromNow(1)
+          )
+        ]
+      });
+      extend(user);
+      expect(user.paymentMethods[0].isExpired).toBe(false);
+      expect(user.paymentMethods[0].isExpiringSoon).toBe(true);
+      expect(user.hasExpiringSoonPaymentMethod).toBe(true);
+      expect(user.hasExpiredPaymentMethod).toBeUndefined();
+    });
+
+    it("does not flag a card with plenty of time left", function () {
+      var user = createUser({
+        paymentMethods: [
+          Object.assign(
+            { id: "pm_1", brand: "visa", last4: "4242", isDefault: true },
+            monthsFromNow(12)
+          )
+        ]
+      });
+      extend(user);
+      expect(user.paymentMethods[0].isExpired).toBe(false);
+      expect(user.paymentMethods[0].isExpiringSoon).toBe(false);
+      expect(user.hasExpiredPaymentMethod).toBeUndefined();
+      expect(user.hasExpiringSoonPaymentMethod).toBeUndefined();
+    });
+  });
 });

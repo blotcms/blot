@@ -18,6 +18,7 @@ describe("user", function () {
         expect(user.created).toEqual(jasmine.any(Number));
         expect(user.created).toBeGreaterThan(0);
         expect(user.welcomeEmailSent).toBe(false);
+        expect(user.paymentMethods).toEqual([]);
 
         User.remove(user.uid, function (err) {
           expect(err).toBe(null);

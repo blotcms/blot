@@ -57,6 +57,7 @@ module.exports = function save(uid, updates, callback) {
       if (typeof user.created === "undefined") user.created = 0;
       if (typeof user.welcomeEmailSent === "undefined")
         user.welcomeEmailSent = true;
+      if (typeof user.paymentMethods === "undefined") user.paymentMethods = [];
 
       var result = await new Promise(function (resolve, reject) {
         validate(user, updates, function (err, validated, changes) {

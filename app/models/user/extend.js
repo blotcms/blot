@@ -3,6 +3,7 @@ var prettyDate = require("helper/prettyDate");
 var prettyPrice = require("helper/prettyPrice");
 var config = require("config");
 var subscriptionLifecycle = require("./subscriptionLifecycle");
+var markPaymentMethodExpiry = require("./paymentMethodExpiry");
 
 module.exports = function extend (user) {
   // True if the user has set a password, false otherwise
@@ -97,6 +98,23 @@ module.exports = function extend (user) {
         );
 
     user.pretty.price = prettyPrice(amount * quantity);
+  }
+
+  // Whether to show a "manage payment methods" link at all: true for any
+  // Stripe subscriber (the page manages their cards) and any PayPal
+  // subscriber (the page instead points them at PayPal), since
+  // subscription.status is only ever set for Stripe.
+  user.showPaymentMethodsLink = Boolean(
+    (subscription && subscription.status) || (user.paypal && user.paypal.status)
+  );
+
+  if (user.paymentMethods && user.paymentMethods.length) {
+    markPaymentMethodExpiry(user.paymentMethods);
+
+    user.paymentMethods.forEach(function (paymentMethod) {
+      if (paymentMethod.isExpired) user.hasExpiredPaymentMethod = true;
+      if (paymentMethod.isExpiringSoon) user.hasExpiringSoonPaymentMethod = true;
+    });
   }
 
   if (user.blogs.length !== 1) {

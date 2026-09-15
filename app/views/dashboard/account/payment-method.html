@@ -1,21 +1,91 @@
+{{#paypal}}
+<div class="line" style="border-bottom: none">
+  <span class="center"
+    >Your subscription is billed through PayPal, so your payment method is
+    managed there rather than on Blot.</span
+  >
+</div>
+<p>
+  <a
+    href="https://www.paypal.com/myaccount/autopay/"
+    target="_blank"
+    rel="noopener noreferrer"
+    class="link"
+    >Manage your payment method on PayPal</a
+  >
+</p>
+{{/paypal}}
 
-<form method="POST" class="account" id="payment-form" data-stripe-key="{{stripe_key}}" style="max-width: 400px;">
-  <p>Enter new payment method:</p>
+{{^paypal}}
+{{> message}}
 
-<a href="" class="mess error" style="display:none">
-         {{text}}
-         <span class="link">Dismiss</span>
-        </a>
+<div class="payment-methods-list">
+  {{#paymentMethods}}
+  <div class="line payment-method-row">
+    <span class="card-brand-icon card-brand-icon-{{brand}}"></span>
+    <span class="center">
+      <b>{{brandPretty}}</b> ending in {{last4}}
+      <span class="payment-method-expiry">Expires {{exp_month}}/{{exp_year}}</span>
+      {{#isDefault}}<span class="tablet">Default</span>{{/isDefault}}
+      {{#isExpired}}<span class="tablet expired">Expired</span>{{/isExpired}}
+      {{#isExpiringSoon}}<span class="tablet expiring">Expiring soon</span>{{/isExpiringSoon}}
+    </span>
+    <span class="right payment-method-actions">
+      {{^isDefault}}
+      <form method="POST" action="{{defaultUrl}}">
+        <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+        <button type="submit" class="link-button">Make default</button>
+      </form>
+      <form
+        method="POST"
+        action="{{removeUrl}}"
+        onsubmit="return confirm('Remove this payment method?')">
+        <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+        <button type="submit" class="link-button">Remove</button>
+      </form>
+      {{/isDefault}}
+      {{#isDefault}}
+      <span
+        class="payment-method-note"
+        title="Set a different payment method as default before you can remove this one"
+        >Can't remove default</span
+      >
+      {{/isDefault}}
+    </span>
+  </div>
+  {{/paymentMethods}}
 
-  <input type="hidden" name="_csrf" value="{{csrftoken}}">
+  {{^hasPaymentMethods}}
+  <div class="line" style="border-bottom: none">
+    <span class="center">You don't have a payment method on file yet.</span>
+  </div>
+  {{/hasPaymentMethods}}
+</div>
+
+<form
+  method="POST"
+  class="account"
+  id="payment-form"
+  data-stripe-key="{{stripe_key}}"
+  style="max-width: 400px; margin-top: 2em">
+  <p>Add a payment method:</p>
+
+  <input type="hidden" name="_csrf" value="{{csrftoken}}" />
 
   {{> card-form}}
-    
-  <div class="buttons">
-    <button type="submit" >Save payment method</button>
-    <a href="/sites/account/subscription">Cancel</a>
-  </div>
-<br>
-<br>
 
+  <div class="buttons">
+    <button type="submit">Add payment method</button>
+    <a href="/sites/account/subscription">Done</a>
+  </div>
 </form>
+
+<p class="payment-methods-disclaimer">
+  Your card details are never stored on Blot's servers &mdash; we only keep
+  the card's brand and last 4 digits so we can show you this page. Everything
+  else is stored securely by Stripe, who process the charge for your
+  subscription.
+</p>
+
+{{> powered-by-stripe}}
+{{/paypal}}

@@ -27,7 +27,8 @@ describe("user validate", function () {
       created: Date.now(),
       welcomeEmailSent: true,
       subscription: {},
-      paypal: {}
+      paypal: {},
+      paymentMethods: []
     }, overrides);
   }
 
@@ -153,7 +154,8 @@ describe("user validate", function () {
       lastSession: "",
       passwordHash: "hash123",
       subscription: {},
-      paypal: {}
+      paypal: {},
+      paymentMethods: []
     };
     await client.set(key.user(otherUid), JSON.stringify(otherUser));
     await client.set(key.email(otherEmail), otherUid);

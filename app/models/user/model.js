@@ -8,7 +8,8 @@ var MODEL = {
   welcomeEmailSent: "boolean",
   passwordHash: "string",
   subscription: "object",
-  paypal: "object"
+  paypal: "object",
+  paymentMethods: "array"
 };
 
 module.exports = MODEL;

@@ -36,18 +36,18 @@ if (form && cardContainer && window.Stripe) {
       var errorElement = document.getElementById('error');
       errorElement.textContent = message;
       errorElement.style.display = 'block';
-      document.querySelector('button[type="submit"]').classList.remove('working');
+      form.querySelector('button[type="submit"]').classList.remove('working');
     }
 
     function stripeTokenHandler(token) {
-      var hiddenInput = document.querySelector('input.stripeToken');
+      var hiddenInput = form.querySelector('input.stripeToken');
       hiddenInput.setAttribute('value', token.id);
       form.submit();
     }
 
     card.on('focus', function () {
       document.getElementById('error').style.display = 'none';
-      document.querySelector('button[type="submit"]').classList.remove('working');
+      form.querySelector('button[type="submit"]').classList.remove('working');
       setFocusColor(card._parent.id);
     });
 
@@ -56,7 +56,7 @@ if (form && cardContainer && window.Stripe) {
     });
 
     form.addEventListener('submit', function (event) {
-      document.querySelector('button[type="submit"]').classList.add('working');
+      form.querySelector('button[type="submit"]').classList.add('working');
       event.preventDefault();
 
       stripe.createToken(card).then(function (result) {

@@ -1,0 +1,108 @@
+.payment-methods-list {
+  margin-bottom: 1.5em;
+}
+
+.payment-method-row {
+  align-items: center;
+}
+
+/* Card brand marks are drawn in full colour, so (unlike the rest of the
+   icon set in icons.css) these use background-image rather than a
+   currentColor mask-image. */
+.card-brand-icon {
+  display: inline-block;
+  width: 32px;
+  height: 22px;
+  margin-right: 12px;
+  flex-shrink: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  vertical-align: middle;
+}
+
+.card-brand-icon-unknown,
+.card-brand-icon-unset {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAyMiIgd2lkdGg9IjMyIiBoZWlnaHQ9IjIyIj48cmVjdCB4PSIwLjUiIHk9IjAuNSIgd2lkdGg9IjMxIiBoZWlnaHQ9IjIxIiByeD0iMyIgZmlsbD0iI2YyZjJmMiIgc3Ryb2tlPSIjYzljOWM5Ii8+PHJlY3QgeD0iMC41IiB5PSI2IiB3aWR0aD0iMzEiIGhlaWdodD0iNCIgZmlsbD0iI2M5YzljOSIvPjwvc3ZnPgo=");
+}
+
+.card-brand-icon-visa {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAyMiIgd2lkdGg9IjMyIiBoZWlnaHQ9IjIyIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMjIiIHJ4PSIzIiBmaWxsPSIjMUExRjcxIi8+PHRleHQgeD0iMTYiIHk9IjE1IiBmb250LWZhbWlseT0iSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI5IiBmb250LXN0eWxlPSJpdGFsaWMiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmZmZmZmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5WSVNBPC90ZXh0Pjwvc3ZnPgo=");
+}
+
+.card-brand-icon-mastercard {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAyMiIgd2lkdGg9IjMyIiBoZWlnaHQ9IjIyIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMjIiIHJ4PSIzIiBmaWxsPSIjZmZmIiBzdHJva2U9IiNlMGUwZTAiLz48Y2lyY2xlIGN4PSIxMyIgY3k9IjExIiByPSI2LjUiIGZpbGw9IiNFQjAwMUIiLz48Y2lyY2xlIGN4PSIxOSIgY3k9IjExIiByPSI2LjUiIGZpbGw9IiNGNzlFMUIiLz48cGF0aCBkPSJNMTYgNS43YTYuNDggNi40OCAwIDAgMSAwIDEwLjYgNi40OCA2LjQ4IDAgMCAxIDAtMTAuNloiIGZpbGw9IiNGRjVGMDAiLz48L3N2Zz4K");
+}
+
+.card-brand-icon-amex {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAyMiIgd2lkdGg9IjMyIiBoZWlnaHQ9IjIyIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMjIiIHJ4PSIzIiBmaWxsPSIjMkU3N0JDIi8+PHRleHQgeD0iMTYiIHk9IjE0IiBmb250LWZhbWlseT0iSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI3LjUiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmZmZmZmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5BTUVYPC90ZXh0Pjwvc3ZnPgo=");
+}
+
+.card-brand-icon-discover {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAyMiIgd2lkdGg9IjMyIiBoZWlnaHQ9IjIyIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMjIiIHJ4PSIzIiBmaWxsPSIjNGQ0ZDRkIi8+PGNpcmNsZSBjeD0iMjUiIGN5PSIxNSIgcj0iNiIgZmlsbD0iI0Y1ODAyMCIvPjx0ZXh0IHg9IjE0IiB5PSIxNCIgZm9udC1mYW1pbHk9IkhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iNi41IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iI2ZmZmZmZiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+RElTQzwvdGV4dD48L3N2Zz4K");
+}
+
+/* Diners Club, JCB and UnionPay fall back to the generic card mark below
+   rather than a bespoke brand mark - they're rare enough on Blot that a
+   plain card icon plus the "brandPretty" name next to it is enough. */
+.card-brand-icon-diners,
+.card-brand-icon-jcb,
+.card-brand-icon-unionpay {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAyMiIgd2lkdGg9IjMyIiBoZWlnaHQ9IjIyIj48cmVjdCB4PSIwLjUiIHk9IjAuNSIgd2lkdGg9IjMxIiBoZWlnaHQ9IjIxIiByeD0iMyIgZmlsbD0iI2YyZjJmMiIgc3Ryb2tlPSIjYzljOWM5Ii8+PHJlY3QgeD0iMC41IiB5PSI2IiB3aWR0aD0iMzEiIGhlaWdodD0iNCIgZmlsbD0iI2M5YzljOSIvPjwvc3ZnPgo=");
+}
+
+.payment-method-expiry {
+  color: var(--medium-text-color);
+  font-size: 13px;
+  margin-left: 8px;
+}
+
+.payment-method-row .tablet {
+  margin-left: 8px;
+}
+
+/* Used both on this page's payment method rows and on the expiry badge
+   shown next to "Manage payment methods" in subscription.html. */
+.tablet.expired {
+  color: #c0392b;
+  border-color: #c0392b;
+}
+
+.tablet.expiring {
+  color: #b7791f;
+  border-color: #b7791f;
+}
+
+.payment-method-actions form {
+  display: inline;
+}
+
+.payment-method-note {
+  color: var(--medium-text-color);
+  font-size: 13px;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 12px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--accent-color);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.payment-methods-disclaimer {
+  color: var(--medium-text-color);
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 500px;
+}
+
+.powered-by-stripe {
+  font-size: 12px;
+  color: var(--light-text-color);
+  margin-top: 0.5em;
+}

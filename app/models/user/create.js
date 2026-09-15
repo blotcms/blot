@@ -32,6 +32,7 @@ module.exports = function create (
         email: email,
         subscription: subscription,
         paypal: paypal,
+        paymentMethods: [],
         passwordHash: passwordHash
       };
 

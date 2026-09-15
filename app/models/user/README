@@ -25,7 +25,7 @@ The module is consumed directly by the dashboard routes (sign-up, log-in, accoun
 |------|-------------|
 | `create.js` | Creates a new user record. Generates a UID, validates the initial field set, writes all Redis keys atomically via `MULTI`, and schedules a subscription renewal notification email. |
 | `set.js` | Updates an existing user by merging validated `updates` into the current record. Maintains secondary indexes (email, Stripe customer, PayPal subscription ID) and propagates email changes to Stripe via `updateBillingEmail`. |
-| `getById.js` | Fetches a user by UID. Applies defaults for `created` and `welcomeEmailSent` on records that pre-date those fields. Returns `null` if not found. |
+| `getById.js` | Fetches a user by UID. Applies defaults for `created`, `welcomeEmailSent`, and `paymentMethods` on records that pre-date those fields. Returns `null` if not found. |
 | `getByEmail.js` | Resolves a UID from the email index and delegates to `getById`. Normalizes the email to lowercase before lookup. |
 | `getByCustomerId.js` | Resolves a UID from the Stripe customer index and delegates to `getById`. |
 | `getByPayPalSubscriptionId.js` | Resolves a UID from the PayPal subscription index and delegates to `getById`. |
@@ -54,12 +54,14 @@ The module is consumed directly by the dashboard routes (sign-up, log-in, accoun
 |------|-------------|
 | `subscriptionLifecycle.js` | Pure functions that interpret Stripe and PayPal subscription state. Determines whether a subscription should cause account disablement, whether it is cancelled, whether it is overdue, and whether it is past the grace period for deletion. Handles both Stripe (Unix seconds timestamps) and PayPal (ISO 8601 strings) date formats. |
 | `subscriptionTenure.js` | Computes the total elapsed subscription duration in milliseconds by finding the earliest subscription start date across Stripe and PayPal records. |
+| `syncPaymentMethods.js` | Fetches the Stripe customer's payment methods (plus their legacy default source/card, if they have one) and caches a display-ready summary (id, brand, last4, expiry, which one is default) on `user.paymentMethods`. Stripe remains the source of truth; called by the payment-methods page, the Stripe webhook, and the `scripts/user/fetch-payment-methods-from-stripe.js` backfill. |
+| `paymentMethodExpiry.js` | Pure function that annotates a list of payment methods with `isExpired`/`isExpiringSoon` flags based on `exp_month`/`exp_year`. Shared by `extend.js` and the payment-methods route. |
 
 ### View Preparation
 
 | File | Description |
 |------|-------------|
-| `extend.js` | Annotates a user object with derived display properties before passing it to view templates. Removes sensitive fields (`passwordHash`, `credentials`, `created`, `welcomeEmailSent`). Adds `isSubscribed`, `willCancel`, `isFreeForLife`, `isUnpaid`, `isPastDue`, `needsToPay`, `isMonthly`, `totalFee`, and formatted `pretty.*` fields. Also adds blog plurality helpers (`multipleBlogs`, `s`, `are`). |
+| `extend.js` | Annotates a user object with derived display properties before passing it to view templates. Removes sensitive fields (`passwordHash`, `credentials`, `created`, `welcomeEmailSent`). Adds `isSubscribed`, `willCancel`, `isFreeForLife`, `isUnpaid`, `isPastDue`, `needsToPay`, `isMonthly`, `totalFee`, `hasExpiredPaymentMethod`, `hasExpiringSoonPaymentMethod`, and formatted `pretty.*` fields. Also adds blog plurality helpers (`multipleBlogs`, `s`, `are`). |
 
 ### Email Scheduling
 
@@ -113,6 +115,7 @@ welcomeEmailSent boolean  — Whether the initial welcome email has been dispatc
 passwordHash     string   — bcrypt hash of the user's password
 subscription     object   — Stripe subscription object (may be empty: {})
 paypal           object   — PayPal subscription object (may be empty: {})
+paymentMethods   array    — Cached Stripe payment methods (see syncPaymentMethods.js); defaults to [] on records that pre-date this field
 ```
 
 ---

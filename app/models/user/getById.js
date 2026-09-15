@@ -7,6 +7,7 @@ function applyUserDefaults(user) {
   if (typeof user.created === "undefined") user.created = 0;
   if (typeof user.welcomeEmailSent === "undefined")
     user.welcomeEmailSent = true;
+  if (typeof user.paymentMethods === "undefined") user.paymentMethods = [];
 
   return user;
 }
