@@ -69,10 +69,14 @@ describe("Blot's documentation'", function () {
         "Cache Startup Test Tool"
       );
     } finally {
-      config.tmp_directory = originalTmpDirectory;
       await fs.remove(sourcePath);
       await fs.remove(generatedPath);
-      await fs.remove(tmpDirectory);
+      try {
+        await build.rebuildTools();
+      } finally {
+        config.tmp_directory = originalTmpDirectory;
+        await fs.remove(tmpDirectory);
+      }
     }
   });
 
@@ -124,10 +128,14 @@ describe("Blot's documentation'", function () {
         "Updated Cache Change Test Tool"
       );
     } finally {
-      config.tmp_directory = originalTmpDirectory;
       await fs.remove(sourcePath);
       await fs.remove(generatedPath);
-      await fs.remove(tmpDirectory);
+      try {
+        await build.rebuildTools();
+      } finally {
+        config.tmp_directory = originalTmpDirectory;
+        await fs.remove(tmpDirectory);
+      }
     }
   });
 });
