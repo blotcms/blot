@@ -4,8 +4,8 @@ var Express = require("express");
 var Account = new Express.Router();
 var logout = require("./util/logout");
 const prettyPrice = require("helper/prettyPrice");
-const type = require("helper/type");
 const Email = require("helper/email");
+const { errorHandler } = require("dashboard/util/message");
 
 const BREADCRUMBS = {
   "pay-subscription": "Subscription overdue",
@@ -112,20 +112,7 @@ Account.use(function (err, req, res, next) {
     res.status(400);
     res.render("dashboard/error", { error: err });
   } else if (req.method === "POST") {
-    var redirect = (req.body && req.body.redirect) || req.baseUrl + req.path;
-    var message = "Error";
-
-    // this should not be an object but I made
-    // some bad decisions in the past. eventually
-    // fix blog.set...
-    if (err.message) {
-      message = err.message;
-    }
-
-    if (type(err, "object"))
-      for (var i in err) if (type(err[i], "string")) message = err[i];
-
-    res.message(redirect, new Error(message));
+    return errorHandler(err, req, res, next);
   } else {
     next(err);
   }
