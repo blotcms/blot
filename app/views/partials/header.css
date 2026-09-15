@@ -1,4 +1,8 @@
 .header {
+  --header-control-height: 1.7rem;
+  --header-control-line-height: 1rem;
+  --header-control-padding: 0.35rem 0.75rem;
+  --header-control-radius: 6px;
   background: var(--background-color);
 }
 
@@ -33,13 +37,15 @@ html[data-auth="in"] .signed-in {
   align-items: center;
   flex-shrink: 0;
   gap: 0.35rem;
-  padding: 0.35rem 0.75rem;
-  border-radius: 6px;
+  box-sizing: border-box;
+  height: var(--header-control-height);
+  padding: var(--header-control-padding);
+  border-radius: var(--header-control-radius);
   background-color: transparent;
   color: var(--text-color);
   font-size: 16px;
   font-weight: 400;
-  line-height: 1;
+  line-height: var(--header-control-line-height);
   text-decoration: none;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
@@ -74,12 +80,15 @@ html[data-auth="in"] .signed-in {
 
 .dashboard-breadcrumbs a {
   display: block;
-  padding: 0.35rem 0.75rem;
-  border-radius: 6px;
+  box-sizing: border-box;
+  height: var(--header-control-height);
+  padding: var(--header-control-padding);
+  border-radius: var(--header-control-radius);
   min-width: 0;
   max-width: 240px;
   overflow: hidden;
   color: var(--medium-text-color);
+  line-height: var(--header-control-line-height);
   text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -139,11 +148,14 @@ html[data-auth="in"] .signed-in {
 
 .navigation a {
   display: block;
-  padding: 0.35rem 0.75rem;
-  border-radius: 6px;
+  box-sizing: border-box;
+  height: var(--header-control-height);
+  padding: var(--header-control-padding);
+  border-radius: var(--header-control-radius);
   background-color: transparent;
   color: var(--text-color);
   font-size: var(--small-font-size);
+  line-height: var(--header-control-line-height);
   text-decoration: none;
   white-space: nowrap;
   transition: background-color 0.2s ease, color 0.2s ease;
@@ -181,15 +193,18 @@ html[data-auth="in"] .signed-in {
 }
 
 .call-to-action a {
+  display: block;
+  box-sizing: border-box;
+  height: var(--header-control-height);
   background-color: var(--light-background-color);
-  border-radius: 4px;
+  border-radius: var(--header-control-radius);
   color: var(--accent-color);
   font-weight: 600;
   font-size: var(--small-font-size);
-  line-height: 24px;
+  line-height: var(--header-control-line-height);
   cursor: pointer;
   user-select: none;
-  padding: 0 12px;
+  padding: var(--header-control-padding);
   transition: background-color 0.2s;
 }
 
