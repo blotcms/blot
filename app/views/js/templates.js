@@ -12,12 +12,14 @@ const initTemplateHero = () => {
 
   if (!hero) return;
 
+  const grid = hero.querySelector(".templates-hero-grid");
   const images = Array.from(hero.querySelectorAll(".templates-hero-image"));
   const fadeStart = performance.now();
+  const shuffledImages = shuffle([...images]);
 
   hero.classList.add("templates-hero-animations-enabled");
 
-  shuffle(images).forEach((image, index) => {
+  images.forEach((image, index) => {
     const plannedDelay = index * 0.025 + Math.random() * 0.1;
     let started = false;
 
@@ -45,6 +47,8 @@ const initTemplateHero = () => {
     sourceImage.addEventListener("load", startImage, { once: true });
     sourceImage.addEventListener("error", startImage, { once: true });
   });
+
+  shuffledImages.forEach((image) => grid.appendChild(image));
 };
 
 initTemplateHero();

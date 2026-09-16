@@ -58,40 +58,32 @@
         </div>
 
         {{#allTemplates}}
-        <a href="/templates/{{slug}}" class="templates-hero-image" aria-label="View {{name}} template">
+        <a href="/templates/{{slug}}" class="templates-hero-image" data-screenshot-variant="desktop" aria-label="View {{name}} template">
             <img
                 src="{{#cdn}}/images/examples/{{slug}}/0.png{{/cdn}}"
-                class="templates-hero-desktop-image"
                 width="2120" height="1560"
                 alt=""
                 loading="lazy"
                 decoding="async" />
-            <img
-                src="{{#cdn}}/images/examples/{{slug}}/0.mobile.png{{/cdn}}"
-                class="templates-hero-mobile-image"
-                width="800" height="1300"
-                alt=""
-                loading="lazy"
-                decoding="async" />
+            <span class="home-avatar-card" aria-hidden="true">
+                <span class="home-avatar-name">{{name}}</span>
+                <span class="home-avatar-meta">Template</span>
+            </span>
         </a>
         {{/allTemplates}}
 
         {{#allTemplates}}
-        <a href="/templates/{{slug}}" class="templates-hero-image templates-hero-image-repeat" aria-hidden="true" tabindex="-1">
-            <img
-                src="{{#cdn}}/images/examples/{{slug}}/0.png{{/cdn}}"
-                class="templates-hero-desktop-image"
-                width="2120" height="1560"
-                alt=""
-                loading="lazy"
-                decoding="async" />
+        <a href="/templates/{{slug}}" class="templates-hero-image" data-screenshot-variant="mobile" aria-label="View {{name}} template">
             <img
                 src="{{#cdn}}/images/examples/{{slug}}/0.mobile.png{{/cdn}}"
-                class="templates-hero-mobile-image"
                 width="800" height="1300"
                 alt=""
                 loading="lazy"
                 decoding="async" />
+            <span class="home-avatar-card" aria-hidden="true">
+                <span class="home-avatar-name">{{name}}</span>
+                <span class="home-avatar-meta">Template</span>
+            </span>
         </a>
         {{/allTemplates}}
     </div>

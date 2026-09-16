@@ -538,6 +538,7 @@ h2 + .clients {margin-top: 0}
 }
 
 .templates-hero-image {
+  position: relative;
   display: block;
   width: min(100%, 80px);
   justify-self: center;
@@ -566,57 +567,26 @@ h2 + .clients {margin-top: 0}
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.templates-hero-image .templates-hero-desktop-image {
+.templates-hero-image[data-screenshot-variant="desktop"] img {
   aspect-ratio: 2120 / 1560;
 }
 
-.templates-hero-image .templates-hero-mobile-image {
-  display: none;
-  aspect-ratio: 800 / 1300;
-}
-
-/* A few portrait screenshots break up the landscape rhythm at every
-   breakpoint, like the reference page. */
-.templates-hero-image:nth-of-type(2),
-.templates-hero-image:nth-of-type(5),
-.templates-hero-image:nth-of-type(8),
-.templates-hero-image:nth-of-type(10),
-.templates-hero-image:nth-of-type(14),
-.templates-hero-image:nth-of-type(17),
-.templates-hero-image:nth-of-type(20),
-.templates-hero-image:nth-of-type(23),
-.templates-hero-image:nth-of-type(26) {
+.templates-hero-image[data-screenshot-variant="mobile"] {
   width: min(100%, 60px);
 }
 
-.templates-hero-image:nth-of-type(2) .templates-hero-desktop-image,
-.templates-hero-image:nth-of-type(5) .templates-hero-desktop-image,
-.templates-hero-image:nth-of-type(8) .templates-hero-desktop-image,
-.templates-hero-image:nth-of-type(10) .templates-hero-desktop-image,
-.templates-hero-image:nth-of-type(14) .templates-hero-desktop-image,
-.templates-hero-image:nth-of-type(17) .templates-hero-desktop-image,
-.templates-hero-image:nth-of-type(20) .templates-hero-desktop-image,
-.templates-hero-image:nth-of-type(23) .templates-hero-desktop-image,
-.templates-hero-image:nth-of-type(26) .templates-hero-desktop-image {
-  display: none;
+.templates-hero-image[data-screenshot-variant="mobile"] img {
+  aspect-ratio: 800 / 1300;
 }
 
-.templates-hero-image:nth-of-type(2) .templates-hero-mobile-image,
-.templates-hero-image:nth-of-type(5) .templates-hero-mobile-image,
-.templates-hero-image:nth-of-type(8) .templates-hero-mobile-image,
-.templates-hero-image:nth-of-type(10) .templates-hero-mobile-image,
-.templates-hero-image:nth-of-type(14) .templates-hero-mobile-image,
-.templates-hero-image:nth-of-type(17) .templates-hero-mobile-image,
-.templates-hero-image:nth-of-type(20) .templates-hero-mobile-image,
-.templates-hero-image:nth-of-type(23) .templates-hero-mobile-image,
-.templates-hero-image:nth-of-type(26) .templates-hero-mobile-image {
-  display: block;
+.templates-hero-image .home-avatar-card {
+  bottom: calc(100% + 16px);
 }
 
 .templates-hero-image:hover img,
 .templates-hero-image:focus-visible img {
   transform: translateY(-3px) scale(1.04);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
+  box-shadow: inset 0 1px 0 #f5f4f5, 0 -1px 0 rgba(0,0,0,.11), 0 1px 0 rgba(0,0,0,.26), -1px 0 0 rgba(0,0,0,.13), 1px 0 0 rgba(0,0,0,.13), 0 8px 18px rgba(0, 0, 0, 0.14);
 }
 
 @keyframes templates-hero-image-in {
@@ -1786,27 +1756,32 @@ body.watch-page footer {
 .home-avatar-card {
   position: absolute;
   z-index: 2;
-  bottom: calc(100% + 20px);
+  bottom: calc(100% + 12px);
   left: 50%;
   display: flex;
   visibility: hidden;
-  width: min(330px, calc(100vw - 32px));
-  min-height: 72px;
+  width: max-content;
+  max-width: min(330px, calc(100vw - 32px));
   box-sizing: border-box;
   flex-direction: column;
+  align-items: center;
   gap: 0;
   padding: 12px 22px;
-  border-bottom: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
   background: #fff;
   color: var(--text-color);
+  text-align: center;
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, 6px);
-  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
+  box-shadow: inset 0 1px 0 #f5f4f5, 0 -1px 0 rgba(0,0,0,.11), 0 1px 0 rgba(0,0,0,.26), -1px 0 0 rgba(0,0,0,.13), 1px 0 0 rgba(0,0,0,.13);
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
 }
 
 .home-avatar:hover .home-avatar-card,
-.home-avatar:focus-visible .home-avatar-card {
+.home-avatar:focus-visible .home-avatar-card,
+.templates-hero-image:hover .home-avatar-card,
+.templates-hero-image:focus-visible .home-avatar-card {
   visibility: visible;
   opacity: 1;
   transform: translate(-50%, 0);
