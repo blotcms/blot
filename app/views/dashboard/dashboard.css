@@ -181,9 +181,7 @@ button.logout:hover {
 }
 
 form.create-site-button {
-  position: absolute;
-  top: 0;
-  right: 0;
+  margin-top: var(--spacing);
 }
 
 form.create-site-button button {

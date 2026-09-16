@@ -1,12 +1,3 @@
-<form class="create-site-button" action="/sites/account/create-site" method="POST">
-	<input type="hidden" name="timeZone" value="">
-	<input type="hidden" name="_csrf" value="{{csrftoken}}">
-	<input type="hidden" name="title" value="Untitled site">
-	<button>
-		<span class="icon-plus"></span>&thinsp; Create site
-	</button>
-</form>
-
 <div class="sites-list-container">
 	<div class="sites">
 		{{#blogs}}
@@ -23,6 +14,15 @@
 			</div> -->
 		</div>
 		{{/blogs}}
+
+		<form class="create-site-button" action="/sites/account/create-site" method="POST">
+			<input type="hidden" name="timeZone" value="">
+			<input type="hidden" name="_csrf" value="{{csrftoken}}">
+			<input type="hidden" name="title" value="Untitled site">
+			<button>
+				<span class="icon-plus"></span>&thinsp; Create site
+			</button>
+		</form>
 	</div>
 
 	<div>

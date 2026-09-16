@@ -9,7 +9,7 @@
     flex-wrap: wrap;
     gap: 0;
     min-height: 56px;
-    padding: 0 2rem;
+    padding: 0 1.5rem;
   }
 
   .navigation-toggle {
@@ -68,7 +68,7 @@
   }
 
   .header .header-inner {
-    padding: 0 1rem;
+    padding: 0 0.75rem;
   }
 }
 
