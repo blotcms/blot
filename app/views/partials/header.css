@@ -43,7 +43,7 @@ html[data-auth="in"] .signed-in {
   border-radius: var(--header-control-radius);
   background-color: transparent;
   color: var(--text-color);
-  font-size: 16px;
+  font-size: var(--small-font-size);
   font-weight: 400;
   line-height: var(--header-control-line-height);
   text-decoration: none;

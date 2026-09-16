@@ -1136,7 +1136,7 @@ ul.pill-navigation {
   margin: 2em 0;
   display: flex;
   flex-wrap: wrap;
-  max-width: ;
+  max-width: none;
 }
 
 
@@ -1177,44 +1177,101 @@ ul.pill-navigation {
   border-color: var(--light-accent-color);
 }
 
+.main-section-content > .tool-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25em 1rem;
+  max-width: none;
+}
+
+.main-section-content > .tool-list li {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
 
 .top-tool-row {
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid var(--border-color);padding-top: 12px;margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+  column-gap: 1.5rem;
+  align-items: start;
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+  margin-bottom: 12px;
 }
 
 .tool-category {
-  width: 240px;flex-shrink: 0;
+  width: auto;
+  min-width: 0;
+}
+
+.tool-category-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
 .tool-category .category-description {
-  font-size: 14px;color:var(--medium-text-color);padding-right:24px;
+  font-size: 14px;
+  color: var(--medium-text-color);
+  padding-right: 24px;
 }
 .tool-category .category-description p {
   margin-top: 12px
 }
 
 .top-tool-row h3 {
-  border-bottom: none;padding-bottom: none;margin-top:0;
+  border-bottom: none;
+  margin-top: 0;
   padding-bottom: 0;
 }
 
+.tool-category-view-all {
+  flex-shrink: 0;
+  color: var(--accent-color);
+  font-size: 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
 
- .top-tools  {max-width: none;flex-wrap: wrap;overflow: hidden;margin: 0;height:160px;padding-right: 60px;}
-
- .top-tools li a {
-  background-color: #fbfaf9;
-  flex-direction: column;
-  padding: 1.5em
+.top-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 
 .top-tools li {
-  flex-basis: 150px;
-  flex-shrink: 0;
-  min-width: 150px;
-  margin-right: 12px;
-  margin-bottom: 0;
+  min-width: 0;
+  margin: 0;
+}
+
+.top-tools li a {
+  background-color: #fbfaf9;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 1.5em;
+}
+
+@media screen and (max-width: 900px) {
+  .top-tool-row {
+    grid-template-columns: 1fr;
+    row-gap: 1rem;
+  }
+
+  .top-tools {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media screen and (max-width: 600px) {
+  .main-section-content > .tool-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 .intro {

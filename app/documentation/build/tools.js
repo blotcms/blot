@@ -163,7 +163,7 @@ const main = async () => {
       {
         ...tool,
         cdn,
-        category: result.categories.find(c => c.slug === tool.category),
+        category: result.categories.find(c => c.slug === 'all-' + tool.category),
         related: result.categories
           .find(c => c.slug === 'all-' + tool.category)
           .tools.filter(t => t.slug !== tool.slug)
