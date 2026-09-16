@@ -137,7 +137,7 @@ Exported from `index.js`:
 ### Initial Setup Flow
 
 1. User navigates to iCloud client dashboard and clicks "Connect."
-2. User enters an iCloud Drive sharing link (validated format: `https://www.icloud.com/iclouddrive/[code]#...`).
+2. User enters an iCloud Drive sharing link (validated format: `https://www.icloud.com/iclouddrive/[code]` or `https://www.icloud.com/iclouddrive/[code]#...`).
 3. The dashboard POST `/set-up-folder` validates the link, stores metadata (sharingLink, blotiCloudAccount), and sends a POST request to the remote macserver at `MACSERVER_URL/setup` with the blogID and sharingLink as headers.
 4. The macserver accepts the sharing link, accesses the iCloud folder, and notifies the Node.js process via POST `/status` with `acceptedSharingLink: true`.
 5. The Node.js process calls `initialTransfer()`:

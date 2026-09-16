@@ -3,6 +3,7 @@ const database = require("../database");
 const disconnect = require("../disconnect");
 const express = require("express");
 const fetch = require("../util/rateLimitedFetchWithRetriesAndTimeout");
+const isValidSharingLink = require("../util/isValidSharingLink");
 const dashboard = new express.Router();
 const parseBody = require("body-parser").urlencoded({ extended: false });
 const config = require("config"); // For accessing configuration values
@@ -91,12 +92,9 @@ dashboard
       // Store the sharingLink in the database if provided
       if (sharingLink) {
         // validate the sharing link format
-        // it should look like: https://www.icloud.com/iclouddrive/08d83wAt2lMHc46hEEi0D5zcQ#example
-        if (
-          !/^https:\/\/www\.icloud\.com\/iclouddrive\/[a-zA-Z0-9_-]+#/.test(
-            sharingLink
-          )
-        ) {
+        // it should look like: https://www.icloud.com/iclouddrive/08d83wAt2lMHc46hEEi0D5zcQ
+        // or: https://www.icloud.com/iclouddrive/08d83wAt2lMHc46hEEi0D5zcQ#example
+        if (!isValidSharingLink(sharingLink)) {
           return next(new Error("Invalid sharing link format"));
         }
 
