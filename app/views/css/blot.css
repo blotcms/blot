@@ -984,7 +984,7 @@ a:has(.ui-action) {
 .ui-action svg {
   vertical-align: middle;
   position: relative;
-  top: -1px;
+  top: -2px;
   margin-right: 4px;
 }
 
@@ -1020,7 +1020,7 @@ a:has(.ui-action) {
 
 .code-block-toolbar button.copy {
   position: absolute;
-  top: 0;
+  top: -1px;
   font-size: 12px;
   right: 0;
   color: var(--medium-text-color);
@@ -1603,7 +1603,8 @@ body.watch-page footer {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  column-gap: 4px;
+  row-gap: 0;
   color: var(--text-color);
   font-size: calc(var(--font-size) + 4px);
   font-weight: 400;
@@ -1626,6 +1627,15 @@ body.watch-page footer {
 
 .pricing-panel .feature-list .icon-checkbox {
   color: var(--text-color);
+}
+
+.pricing-panel .feature-list .icon-small-check {
+  width: 12px;
+  height: 12px;
+  mask-size: 12px;
+  vertical-align: middle;
+  top: 0;
+  color: #b8bdc8;
 }
 
 .feature-list {
