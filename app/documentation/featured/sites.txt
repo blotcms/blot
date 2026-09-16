@@ -2,12 +2,9 @@ zacharykeeting.com Zachary Keeting, artist
 blog.andrewjanjigian.com Andrew Janjigian, photographer
 keywords.oxus.net Kerim Friedman, anthropologist
 discombobulated.co.nz Jessica Nickelsen, writer
-rebeccakukshtel.com Rebecca Kukshtel, software engineer
 blog.aurynn.com Aurynn Shaw, software engineer
-john.pavlusoffice.com John Pavlus, writer
 iiiiiiiii.in Ishtaarth Dalmia, writer
 www.failuretolerated.com Sean McCoy, game designer
-mrfrisby.com Stuart Frisby, designer
 vaughntan.org Vaughn Tan, writer, 2019
 eli.li Eli Mellen, software engineer
 paul.af Paul Esch-Laurent, software engineer
@@ -20,15 +17,12 @@ www.skellis.net Simon Ellis, artist
 ianamurray.work Iana Murray, journalist
 www.dustinsenos.com Dustin Senos, designer
 theocasciani.page Théo Casciani, writer
-diklein.com David Klein, designer
 www.emilycass.org Emily Cass, architect
 jessytuddenham.com Jessy Tuddenham, dancer
 bnjmnmddn.com Benjamin Madden, academic
 www.jsoliday.com J. Soliday, musician
 tellyou.today Neale Stokes, librarian
-brainsister.com Jessica Doyle, writer
 poetry.bencallahan.com Ben Callahan, poet
-www.maxkeith.co Max Keith, runner
 spittingdog.net Dave Haysom, translator
 reillybrennan.com Reilly Brennan, venture capitalist
 sidenote.ridwansanusi.com Ridwan Sanusi, designer
@@ -38,24 +32,20 @@ www.nitinpai.in Nitin Pai, think-tank director
 jeankapsa.com Jean Kapsa, pianist
 www.declad.com Lewis Martin, architect
 notesof.com Thibault Michel, designer
-bgreen.lol Brandon Lucas Green, musician
 meredithgran.com Meredith Gran, cartoonist
 ellanew.com Ellane W, designer
 alongtheray.com Raymond Hines, writer
 matthiaszeeb.net Matthias Zeeb, economist
 simonuvarov.com Simon Uvarov, software engineer
-www.carsonteuscher.com Carson Teuscher, historian
 erinkissane.com Erin Kissane, writer
 nonaneva.com ノナネヷ, artist
 ilovewasting.ink Peter Orosz, writer
-blog.vesikar.com Yash Vesikar, computer scientist
+vesikar.com Yash Vesikar, computer scientist
 words.studiopallister.com James Pallister, writer
 www.gillianrosselli.com Gillian Rosselli, artist
 www.caitlinmrivers.com Caitlin Rivers, epidemiologist
-jbeau.info Jeremy Beaudry, artist
 www.audunberdal.no Audun Berdal, designer
 www.amirsharif.com Amir Sharif, software engineer
-www.spakhm.com Slava Akhmechet, software engineer
 www.hayalpozanti.com Hayal Pozanti, artist
 www.rossrichardson.com Ross Richardson, cinematographer
 alineleynen.com Aline Leynen, jeweller
@@ -72,3 +62,4 @@ maggiewangphotography.com Maggie Wang, academic
 chuckpearson.blog Chuck Pearson, designer
 garywebbracing.com Gary Webb, racing driver
 vichhika.com Vichhika Tep, designer
+koalanguage.org Juliet Birch, linguist

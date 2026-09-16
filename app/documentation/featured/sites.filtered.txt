@@ -40,12 +40,12 @@ simonuvarov.com Simon Uvarov, software engineer
 erinkissane.com Erin Kissane, writer
 nonaneva.com ノナネヷ, artist
 ilovewasting.ink Peter Orosz, writer
+vesikar.com Yash Vesikar, computer scientist
 words.studiopallister.com James Pallister, writer
 www.gillianrosselli.com Gillian Rosselli, artist
 www.caitlinmrivers.com Caitlin Rivers, epidemiologist
 www.audunberdal.no Audun Berdal, designer
 www.amirsharif.com Amir Sharif, software engineer
-www.spakhm.com Slava Akhmechet, software engineer
 www.hayalpozanti.com Hayal Pozanti, artist
 www.rossrichardson.com Ross Richardson, cinematographer
 alineleynen.com Aline Leynen, jeweller
@@ -62,3 +62,4 @@ maggiewangphotography.com Maggie Wang, academic
 chuckpearson.blog Chuck Pearson, designer
 garywebbracing.com Gary Webb, racing driver
 vichhika.com Vichhika Tep, designer
+koalanguage.org Juliet Birch, linguist

@@ -1,8 +1,11 @@
 Now we have many LRU caches in app/blog we need to gather data in production to rigorously determine the most effective relative sizes for the caches (include the mustache template cache in this)
 
-Fix performance bugs on anchor and re-enable site
-
-Improve performance for nashp using additional req trace logging and more possible LRU caching
+Fix performance bugs on various sites:
+- anchor and re-enable site
+- nashp (improve speed)
+- jaysjay (especially archives)
+- using additional req trace logging and more possible LRU caching
+- do we need a seperate incrementally updated index of skinny entry properties, e.g. title url etc for rendering archives / allEntries?
 
 Implement an abstract blog storage mechanism that will simulatenously make it possible to:
 - implement folder storage limits (include generated files in this amount?)
