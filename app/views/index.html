@@ -49,6 +49,48 @@
     </button>
 </section>
 
+<section class="home-folder-section" aria-labelledby="home-folder-title">
+    <div class="home-folder-heading">
+        <h2 id="home-folder-title">Your folder is the CMS</h2>
+        <p>Files become posts on your site automatically</p>
+    </div>
+
+    <div class="home-folder-carousel is-initializing" data-home-folder-carousel role="region" aria-roledescription="carousel" aria-label="Template folder examples">
+        <div class="home-folder-controls">
+            <button class="home-folder-control" data-home-folder-prev type="button" aria-label="Previous templates">
+                <span aria-hidden="true">←</span>
+            </button>
+            <button class="home-folder-control" data-home-folder-next type="button" aria-label="Next templates">
+                <span aria-hidden="true">→</span>
+            </button>
+        </div>
+
+        <div class="home-folder-viewport">
+            <div class="home-folder-track">
+                {{#allTemplates}}
+                <article class="home-folder-card">
+                    <div class="home-folder-card-content">
+                        <div class="home-folder-card-folder">
+                            {{{folder_html}}}
+                        </div>
+
+                        <a class="home-folder-card-site" href="/templates/{{slug}}" aria-label="View the {{name}} template">
+                            <img
+                                src="{{#cdn}}/images/examples/{{slug}}/0.png{{/cdn}}"
+                                width="2120" height="1560"
+                                alt=""
+                                loading="lazy"
+                                decoding="async" />
+                        </a>
+                    </div>
+
+                </article>
+                {{/allTemplates}}
+            </div>
+        </div>
+    </div>
+</section>
+
 <section class="templates-hero" aria-labelledby="templates-hero-title">
     <div class="templates-hero-grid">
         <div class="templates-hero-copy">

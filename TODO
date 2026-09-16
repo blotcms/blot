@@ -2,6 +2,10 @@ Now we have many LRU caches in app/blog we need to gather data in production to 
 - Maybe move all LRU caching into app/models and simplify app/blog?
 - Maybe remove redis client side caching and instead implement LRU caching more aggressively in the models?
 
+Finish cross platform folder renderer
+
+Blot (node and proxy) should handle redis down elegantly 
+
 Fix performance bugs on various sites:
 - anchor and re-enable site
 - nashp (improve speed)

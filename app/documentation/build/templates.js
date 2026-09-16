@@ -4,6 +4,7 @@ const config = require("config");
 const mustache = require("mustache");
 const { marked } = require("marked");
 const html = require("./html");
+const renderFolder = require("../tools/finder/render_folder");
 
 const viewsDirectory = path.join(__dirname, "../../views/templates");
 const outputDirectory = path.join(config.views_directory, "templates");
@@ -134,6 +135,22 @@ const loadManifest = () => {
   return fs.readJsonSync(manifestPath);
 };
 
+const folderPreviewForTemplate = (template, manifest = loadManifest()) => {
+  const treeEntry = manifest[template.demo_folder] || {};
+  const previewTree = sanitizePreviewTree(treeEntry.displayTree || treeEntry.fullTree || []);
+
+  return previewTree.length
+    ? formatTreeForPreview(previewTree)
+    : DEFAULT_FOLDER_PREVIEW;
+};
+
+const folderHTMLForTemplate = (template, manifest) =>
+  renderFolder(
+    folderPreviewForTemplate(template, manifest),
+    ["folder", "home-folder-preview"],
+    template.name
+  );
+
 const loadPartials = async () => {
   const partials = {};
 
@@ -169,7 +186,15 @@ const loadTemplates = async () => {
     });
   }
 
-  return templates.sort((a, b) => a.slug.localeCompare(b.slug));
+  const manifest = loadManifest();
+
+  return templates
+    .sort((a, b) => a.slug.localeCompare(b.slug))
+    .map((template) => ({
+      ...template,
+      folder_preview: folderPreviewForTemplate(template, manifest),
+      folder_html: folderHTMLForTemplate(template, manifest),
+    }));
 };
 
 const renderView = async (viewName, data, destination, partials) => {
@@ -231,11 +256,7 @@ module.exports = async () => {
       templateData.README = marked.parse(await fs.readFile(readmePath, "utf8"));
     }
 
-    const treeEntry = manifest[template.demo_folder] || {};
-    const previewTree = sanitizePreviewTree(treeEntry.displayTree || treeEntry.fullTree || []);
-    templateData.folder_preview = previewTree.length
-      ? formatTreeForPreview(previewTree)
-      : DEFAULT_FOLDER_PREVIEW;
+    templateData.folder_preview = folderPreviewForTemplate(template, manifest);
 
     await renderView("template.html", { template: templateData, cdn }, `${template.slug}/index.html`, partials);
   }

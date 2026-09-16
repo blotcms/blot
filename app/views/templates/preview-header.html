@@ -1,20 +1,19 @@
-<div style="padding:2rem 3rem">
+<div class="template-page-header">
 <!-- <h1 style="padding:0">{{name}}</h1> -->
 
-<div style="padding: 0 0 1em;margin-top: 0;display: flex;justify-content:space-between">
+<div class="template-page-header-row">
 
 	<div>
 		{{=[[ ]]=}}
 		{{> breadcrumbs}}
 		[[={{ }}=]]
 	</div>
-	<div>
-		<a href="/sign-up" style="margin: 0;border:none;cursor: pointer; font-size:14px;display:  inline-block;border-radius: var(--border-radius);background-color: var(--accent-color);color:var(--background-color);padding:0.333em 0.66em;font-weight: 600;margin-right: 6px;">
+	<div class="template-page-header-actions">
+		<a href="/sign-up" class="template-use-button">
 			Use this template
 		</a>
-		<a href="{{#cdn}}{{{zip}}}{{/cdn}}" target="_blank" class="template-button">
-	<span class="icon-download"></span>&thinsp;
-	Download folder
+		<a href="{{{preview}}}/" target="_blank" class="template-button">
+	View demo
 </a>
 
 </div>
@@ -26,48 +25,4 @@
 </a>
 </div>
 </div>
-
-
-<style type="text/css">
-a.bordered-button {
-  margin-right: 1.4em;
-  line-height: 1.1;
-  padding: 10px 16px;
-}
-
-	a .browser {border: 1px solid var(--border-color);border-radius: 6px;display: block;padding: 1rem 1rem 0;}
-
-	a	.browser.mobile {
-		padding: 1rem;
-		border-radius: 12px;
-	}
-
-		.devices {position: relative;width: 100%;}
-		.devices img {max-width: 100%}
-	
-        .devices .desktop {
-		border: 1px solid var(--border-color);
-		border-radius: 18px;
-	}
-
-	
-    .devices .mobile {position: absolute;
-		bottom: 0;right: 0;
-		width: 400px;height: 400px}
-
-		.sc {margin: 2rem 0}
-</style>
-
-<div style="display: flex">
-<p class="sc" style="max-width:900px;margin:0 auto;flex-basis: 100%">	<a target="_blank" style="text-decoration: none;cursor: zoom-in;" href="{{{preview}}}/"
-		>
-		<img style="border-radius:12px;box-shadow: inset 0 1px 0 #f5f4f5,0 -1px 0 rgba(0,0,0,.11),0 1px 0 rgba(0,0,0,.26),-1px 0 0 rgba(0,0,0,.13),1px 0 0 rgba(0,0,0,.13);" src="{{#cdn}}/images/examples/{{slug}}/0.png{{/cdn}}"
-	/></a>
-</p>
-<!-- <p class="sc" style="flex-basis: 25%;margin-left: 2rem">		<a target="_blank" style="text-decoration: none;cursor: zoom-in;" href="{{{preview}}}/"
-		>
-		<span class="browser mobile"><img src="{{#cdn}}/images/examples/{{slug}}/0.mobile.png{{/cdn}}"
-	/></span></a>
-</p></div> -->
-</div>	
 </div>

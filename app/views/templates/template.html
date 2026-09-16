@@ -1,13 +1,21 @@
 {{#template}}
 {{> preview-header}}
 
-<div class="template-folder-wrapper">
-    <a href="{{#cdn}}{{{zip}}}{{/cdn}}" target="_blank" class="template-button">
-        <span class="icon-download"></span>&thinsp;
-        Download folder
-    </a>
+<div class="template-showcase">
+    <section class="template-preview">
+        <a target="_blank" class="template-preview-link" href="{{{preview}}}/">
+            <img class="template-preview-image" src="{{#cdn}}/images/examples/{{slug}}/0.png{{/cdn}}" alt="{{name}} template preview" />
+        </a>
+    </section>
 
-    <pre class="folder folder-preview" title="{{name}}"><code>{{folder_preview}}</code></pre>
+    <section class="template-folder-wrapper">
+        <pre class="folder folder-preview" title="{{name}}"><code>{{folder_preview}}</code></pre>
+
+        <a href="{{#cdn}}{{{zip}}}{{/cdn}}" target="_blank" class="template-button template-folder-download">
+            <span class="icon-download"></span>&thinsp;
+            Download folder
+        </a>
+    </section>
 </div>
 
 {{#README}}
