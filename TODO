@@ -1,4 +1,6 @@
 Now we have many LRU caches in app/blog we need to gather data in production to rigorously determine the most effective relative sizes for the caches (include the mustache template cache in this)
+- Maybe move all LRU caching into app/models and simplify app/blog?
+- Maybe remove redis client side caching and instead implement LRU caching more aggressively in the models?
 
 Fix performance bugs on various sites:
 - anchor and re-enable site

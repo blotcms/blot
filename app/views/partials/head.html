@@ -6,7 +6,12 @@
 {{#cdnURL}}
 <link rel="preconnect" href="{{{cdnURL}}}" />
 {{/cdnURL}}
-<link rel="icon" sizes="180x180" href="{{#cdn}}/favicon-180x180.png{{/cdn}}" />
+<link rel="icon" type="image/png" href="{{#cdn}}/favicon-96x96.png{{/cdn}}" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="{{#cdn}}/favicon.svg{{/cdn}}" />
+<link rel="shortcut icon" href="{{#cdn}}/favicon.ico{{/cdn}}" />
+<link rel="apple-touch-icon" sizes="180x180" href="{{#cdn}}/apple-touch-icon.png{{/cdn}}" />
+<meta name="apple-mobile-web-app-title" content="Blot" />
+<link rel="manifest" href="{{#cdn}}/site.webmanifest{{/cdn}}" />
 <link rel="preload" as="style" href="{{#cdn}}/documentation.min.css{{/cdn}}" />
 {{#selected.dashboard}}
 <link rel="preload" as="style" href="{{#cdn}}/dashboard.min.css{{/cdn}}" />
