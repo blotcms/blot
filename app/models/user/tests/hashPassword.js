@@ -41,6 +41,23 @@ describe("user hashPassword", function () {
     expect(hashedPassword).toBeDefined();
     expect(hashedPassword).not.toEqual(password);
   });
+
+  it("rejects a password over the bcrypt byte limit", async function () {
+    var { MAX_PASSWORD_LENGTH } = require("../auth-limits");
+    var error = await hash("a".repeat(MAX_PASSWORD_LENGTH + 1)).then(
+      function () { return null; },
+      function (err) { return err; }
+    );
+    expect(error).not.toBeNull();
+    expect(error.message).toEqual("Password is too long");
+  });
+
+  it("hashes a password at the bcrypt byte limit", async function () {
+    var { MAX_PASSWORD_LENGTH } = require("../auth-limits");
+    var hashedPassword = await hash("a".repeat(MAX_PASSWORD_LENGTH));
+    expect(hashedPassword).toBeDefined();
+    expect(hashedPassword).not.toEqual("a".repeat(MAX_PASSWORD_LENGTH));
+  });
 });
 
 describe("user checkPassword", function () {

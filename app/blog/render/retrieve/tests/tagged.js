@@ -26,6 +26,28 @@ describe("tagged block", function () {
     expect(body.trim()).toEqual("<ul><li>Second</li><li>First</li></ul>");
   });
 
+  it("lists the page when tagged.html binds only {{#entries}}", async function () {
+    await this.write({
+      path: "/first.txt",
+      content: "Title: First\nTags: foo\n\nFirst body",
+    });
+    await this.write({
+      path: "/second.txt",
+      content: "Title: Second\nTags: foo\n\nSecond body",
+    });
+
+    await this.template({
+      "tagged.html": "{{#entries}}{{title}} {{/entries}}",
+    });
+
+    const res = await this.get("/tagged/foo");
+    const body = await res.text();
+
+    expect(res.status).toEqual(200);
+    expect(body).toContain("Second");
+    expect(body).toContain("First");
+  });
+
   it("fetches tagged entries once when a view binds both {{#entries}} and {{#tagged}}", async function () {
     await this.write({
       path: "/first.txt",
@@ -36,10 +58,8 @@ describe("tagged block", function () {
       content: "Title: Second\nTags: foo\n\nSecond body",
     });
 
-    // routes/tagged.js always fetches the {{#entries}} page; a view that
-    // also references {{#tagged}} must not trigger a second
-    // fetchTaggedEntries/Entry.get pass. See
-    // https://github.com/davidmerfield/blot/issues/1844
+    // Both names alias the same tagged retrieve, so a view referencing
+    // both must not trigger a second fetchTaggedEntries/Entry.get pass.
     await this.template({
       "tagged.html":
         "{{#entries}}{{title}}-e {{/entries}}{{#tagged}}{{#entries}}{{title}}-t {{/entries}}{{/tagged}}",
@@ -69,14 +89,9 @@ describe("tagged block", function () {
       content: "Title: Outside\nTags: foo\n\nOutside body",
     });
 
-    // A per-VIEW path_prefix (as opposed to a template-level one) isn't
-    // visible to routes/tagged.js's own fetch, which runs before
-    // render/middleware.js merges the view's locals in. That fetch's
-    // (unfiltered) result must not collide, via key serialization, with
-    // the later fetch that resolves the view's literal string
-    // path_prefix: "undefined" - String(undefined) === "undefined" would
-    // make the two indistinguishable. See
-    // https://github.com/davidmerfield/blot/issues/1844
+    // A per-view path_prefix of the literal string "undefined" must not
+    // collide with an unset prefix (String(undefined) === "undefined")
+    // and must apply to both {{#entries}} and {{#tagged}}{{#entries}}.
     await this.template(
       {
         "tagged.html":
@@ -89,11 +104,8 @@ describe("tagged block", function () {
     const body = await res.text();
 
     expect(res.status).toEqual(200);
-    // The route's own fetch runs before the view's path_prefix is
-    // resolved, so the top-level {{#entries}} local stays unfiltered.
     expect(body).toContain("Inside-e");
-    expect(body).toContain("Outside-e");
-    // {{#tagged}}{{#entries}} must only include the "/undefined/" folder.
+    expect(body).not.toContain("Outside-e");
     expect(body).toContain("Inside-t");
     expect(body).not.toContain("Outside-t");
   });
@@ -538,8 +550,8 @@ describe("tagged cache", function () {
     });
 
     tagged(makeReq(), { locals: {} }, function () {
-      // A fresh req, with no request-local _taggedFetch, so this second
-      // call only hits if the process LRU was populated.
+      // A fresh req, so this second call only hits if the process LRU
+      // was populated.
       tagged(makeReq(), { locals: {} }, function () {
         expect(taggedSpy).toHaveBeenCalledTimes(1);
         expect(Entry.get).toHaveBeenCalledTimes(1);

@@ -189,6 +189,22 @@ describe("entries", function () {
         expect(body2).toContain('3/3/2/5/2');
     });
 
+    it("does not populate {{#entries}} on a non-listing custom view", async function () {
+
+        await this.write({path: '/a.txt', content: 'Hello, A!'});
+
+        await this.template({
+            "foo.html": "{{#entries}}{{{html}}}{{/entries}}"
+        }, {
+            views: {
+                "foo.html": { url: "/foo" }
+            }
+        });
+
+        const body = await this.text('/foo');
+        expect(body).not.toContain('Hello, A!');
+    });
+
     it("keeps pagination object available on single-page blogs", async function () {
 
         await this.write({path: '/only.txt', content: 'Hello, only!'});

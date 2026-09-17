@@ -5,7 +5,7 @@
   {{> message}}
   
   <label>Your email address:</label>  
-  <input class="noMargin" type="text" name="email" value="{{user.email}}" autofocus placeholder=""/>
+  <input class="noMargin" type="text" name="email" maxlength="{{maxEmailLength}}" value="{{user.email}}" autofocus placeholder=""/>
 
   <div class="buttons">
     <button type="submit">Save email address</button>

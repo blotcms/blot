@@ -35,28 +35,35 @@
   <p class="error">That was not your password.</p>
   {{/BADPASSWORD}}
 
+  {{#EMAILTOOLONG}}
+  <p class="error">Your email address is too long.</p>
+  {{/EMAILTOOLONG}}
+
+  {{#PASSWORDTOOLONG}}
+  <p class="error">Your password is too long.</p>
+  {{/PASSWORDTOOLONG}}
+
     <input type="hidden" name="_csrf" value="{{csrftoken}}" />
 
     <p>
       <label for="email">Your email address</label>
       {{#validemail}}
-      <input name="email" required="" type="text" value="{{email}}" />
+      <input name="email" required="" type="text" maxlength="{{maxEmailLength}}" value="{{email}}" />
       {{/validemail}}
       {{^validemail}}
-      <input name="email" required="" type="text" value="{{email}}" autofocus />
+      <input name="email" required="" type="text" maxlength="{{maxEmailLength}}" value="{{email}}" autofocus />
       {{/validemail}}
     </p>
     <p>
       <label for="password">Password <a style="float:right;" id="reset" href="/log-in/reset{{#email}}?email={{email}}{{/email}}">Reset your password</a></label>
-      {{#validemail}} 
-      <input name="password" required="" type="password" autofocus />
+      {{#validemail}}
+      <input name="password" required="" type="password" maxlength="{{maxPasswordLength}}" autofocus />
       {{/validemail}}
-      {{^validemail}} 
-      <input name="password" required="" type="password" />
+      {{^validemail}}
+      <input name="password" required="" type="password" maxlength="{{maxPasswordLength}}" />
       {{/validemail}}
     </p>
     <input type="submit" value="Log in" style="margin-bottom: 8px" />
     <p>Do you not have an account? <a href="/sites/sign-up">Sign up</a></p>
   </form>
 </section>
-

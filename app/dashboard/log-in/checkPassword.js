@@ -1,6 +1,7 @@
 var User = require("models/user");
 var LogInError = require("./logInError");
 var authenticate = require("./authenticate");
+var { passwordIsTooLong } = require("models/user/auth-limits");
 
 module.exports = function checkPassword(req, res, next) {
   var user = req.user;
@@ -13,6 +14,10 @@ module.exports = function checkPassword(req, res, next) {
 
   if (password === undefined) {
     return res.render("dashboard/log-in/password");
+  }
+
+  if (passwordIsTooLong(password)) {
+    return next(new LogInError("PASSWORDTOOLONG"));
   }
 
   User.checkPassword(user.uid, password, function (err, match) {

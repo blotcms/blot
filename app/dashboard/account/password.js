@@ -2,6 +2,7 @@ var Express = require("express");
 var Password = new Express.Router();
 var User = require("models/user");
 var checkPassword = require("./util/checkPassword");
+var { passwordIsTooLong } = require("models/user/auth-limits");
 
 Password.route("/")
 
@@ -73,6 +74,13 @@ function save(req, res, next) {
 function checkMatching(req, res, next) {
   if (!req.body.newPasswordA) {
     return next(new Error("Please choose a new password"));
+  }
+
+  if (
+    passwordIsTooLong(req.body.newPasswordA) ||
+    passwordIsTooLong(req.body.newPasswordB)
+  ) {
+    return next(new Error("Your new password is too long."));
   }
 
   if (req.body.newPasswordA !== req.body.newPasswordB) {

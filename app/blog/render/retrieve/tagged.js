@@ -82,17 +82,6 @@ async function tagged(req, res) {
   const limit = normalizePageSize(preferredLimit);
   const offset = (page - 1) * limit;
 
-  // routes/tagged.js calls this directly, then render/middleware.js's
-  // retrieve pass calls it again for any view that also binds {{#tagged}} -
-  // retrieval is driven by the view's static metadata, not by what's
-  // already on res.locals, so the second call happens unconditionally.
-  // Cache this request's fetch (on req, not a process-wide cache) so the
-  // second call reuses it instead of re-running
-  // fetchTaggedEntries/Entry.get. See
-  // https://github.com/davidmerfield/blot/issues/1844
-  //
-  // The process LRU below then serves repeat /tagged/:tag requests for
-  // the same cacheID without touching Redis at all.
   const key = createCacheKey(req, {
     tags: normalizeTagsKey(tags),
     sortBy: sortOptions.sortBy,
@@ -104,12 +93,9 @@ async function tagged(req, res) {
 
   let payload;
 
-  if (req._taggedFetch && req._taggedFetch.key === key) {
-    payload = req._taggedFetch.payload;
-  } else if (taggedCache.has(key)) {
+  if (taggedCache.has(key)) {
     log("Retrieved tagged entries from cache");
     payload = cloneTagged(taggedCache.get(key).payload);
-    req._taggedFetch = { key, payload };
   } else {
     const result = await fetchTaggedEntries(blogID, tags, {
       limit,
@@ -139,7 +125,6 @@ async function tagged(req, res) {
       prettyTags: result.prettyTags,
     };
 
-    req._taggedFetch = { key, payload };
     // Entry.get swallows Redis MGET failures as [] (models/entry/get.js).
     // If we received IDs but no hydrated entries, that is indistinguishable
     // from a total hydration miss - do not persist it, or later requests
@@ -154,13 +139,12 @@ async function tagged(req, res) {
 
   res.locals.pagination = res.locals.pagination || payload.pagination || {};
 
-  // Clone before projecting: a reused payload may be shared with a
-  // different call site (routes/tagged.js's own {{#entries}} local), and
-  // projection deletes fields in place. Preserve Entry prototypes so
-  // render-time augmentation (date/formatDate/absoluteURL/tags helpers)
-  // still applies - see render/load/eachEntry.js.
+  // Clone before projecting so the LRU payload is not mutated in place.
+  // Preserve Entry prototypes so render-time augmentation
+  // (date/formatDate/absoluteURL/tags helpers) still applies -
+  // see render/load/eachEntry.js.
   const entries = cloneDeep(payload.entries, { preserveEntryInstances: true });
-  projectEntryFields(entries, req.retrieve, ["tagged"]);
+  projectEntryFields(entries, req.retrieve, ["tagged", "entries"]);
 
   return { ...payload, entries };
 }

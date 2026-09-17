@@ -1,22 +1,9 @@
-const retrieveTagged = require("../render/retrieve/tagged");
-
+// A fetch error here (other than the statusCode case retrieve/index.js
+// re-throws) no longer reaches next(err)/error.html - it's swallowed and the
+// page renders with tagged/entries missing. See the note in
+// render/retrieve/index.js.
 module.exports = function register(blog) {
-  blog.get(
-    ["/tagged/:tag", "/tagged/:tag/page/:page"],
-    async function (req, res, next) {
-      try {
-        const result = await retrieveTagged(req, res);
-
-        res.locals.slug = encodeURIComponent(req.params.tag);
-        res.locals.tag = (result && result.tag) || req.params.tag;
-        res.locals.entries = (result && result.entries) || [];
-        res.locals.total = (result && result.total) || 0;
-        res.locals.pagination = (result && result.pagination) || {};
-
-        res.renderView("tagged.html", next);
-      } catch (err) {
-        return next(err);
-      }
-    }
-  );
+  blog.get(["/tagged/:tag", "/tagged/:tag/page/:page"], function (req, res, next) {
+    res.renderView("tagged.html", next);
+  });
 };

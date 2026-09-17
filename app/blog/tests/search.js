@@ -40,6 +40,18 @@ describe("search", function () {
         expect(res.status).toEqual(200);
         expect(res.headers.get('cache-control')).toEqual('no-cache');
         expect(body).toContain('Hello, A!');
+        expect(body).toContain('hello a');
+    });
+
+
+    it("exposes query as a string to search templates", async function () {
+
+        const res = await this.get('/search?q=hello&json=1');
+        const locals = await res.json();
+
+        expect(res.status).toEqual(200);
+        expect(locals.query).toEqual('hello');
+        expect(typeof locals.query).toEqual('string');
     });
 
 
