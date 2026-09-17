@@ -383,6 +383,7 @@ jobs:
       contents: read
       actions: write # to read/write the coverage-baseline cache
       pull-requests: write # to post/update the sticky PR comment
+      packages: read # to pull the test image from GitHub Container Registry
     env:
       HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:

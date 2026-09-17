@@ -42,7 +42,15 @@ function workloadFromManifest(manifest) {
 describe("blog benchmarks", function () {
   require("./util/setup")();
 
-  global.test.timeout(20 * 60 * 1000);
+  // corpus-mode "build" creates/writes/rebuilds up to 1000 sites and 160k
+  // files in this one spec (see corpusMode branches below) - regularly over
+  // 20 minutes end to end, well within the corpus-build workflow's own
+  // 360-minute job timeout (see benchmarks-corpus.yml) but well past the
+  // 20-minute budget that's actually right for the normal (few-site) render
+  // benchmark this spec also runs.
+  const isCorpusBuild =
+    (global.__BLOT_BENCHMARK_CONFIG || {}).corpusMode === "build";
+  global.test.timeout(isCorpusBuild ? 90 * 60 * 1000 : 20 * 60 * 1000);
 
   it("measures build and render performance", async function () {
     const benchmarkConfig = parseBenchmarkConfig(

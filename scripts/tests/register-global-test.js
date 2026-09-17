@@ -63,13 +63,36 @@ module.exports = function registerGlobalTest() {
 
       beforeEach(function (done) {
         var context = this;
-        context.blogs = [];
-        async.times(
+        context.blogs = new Array(total);
+
+        // Blog.create() reads the owning user's `blogs` array, appends the
+        // new id, and writes it back (see app/models/blog/create.js). That
+        // read-modify-write isn't safe against many concurrent writers on
+        // the same user record: User.set()'s compare-and-swap (see
+        // app/models/user/set.js) retries up to 20 times against a fresh
+        // read of the user each time, but always reinserts the *same*
+        // (increasingly stale) blogs array Blog.create computed once up
+        // front, so heavy concurrency can exhaust those retries and throw
+        // "User changed too frequently" - previously swallowed here (the
+        // completion callback ignored its `err` and pushed `undefined`
+        // anyway), which surfaced many calls later as a confusing
+        // "Cannot read properties of undefined" once benchmark corpus runs
+        // started creating hundreds of blogs per user. createBlog.js now
+        // retries on that error with a fresh read, so contention just costs
+        // a few retries rather than a crash - a concurrency cap of 10 fully
+        // avoided the crash but was slow enough (with the corpus benchmark's
+        // 1000 blogs) to blow the spec's own 20-minute timeout; 40 keeps
+        // throughput up while createBlog.js's retries absorb the CAS
+        // contention that shows up at this concurrency. Any failure that
+        // does slip through still fails setup loudly instead of silently.
+        async.timesLimit(
           total,
-          function (blog, next) {
+          40,
+          function (index, next) {
             var result = { user: context.user };
-            require("./util/createBlog").call(result, function () {
-              context.blogs.push(result.blog);
+            require("./util/createBlog").call(result, function (err) {
+              if (err) return next(err);
+              context.blogs[index] = result.blog;
               next();
             });
           },
