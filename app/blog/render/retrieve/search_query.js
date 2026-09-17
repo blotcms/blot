@@ -1,5 +1,6 @@
 const asRetriever = require("../../lib/asRetriever");
+const searchQueryString = require("../../lib/searchQuery");
 
 module.exports = asRetriever(function (req, res) {
-  return req.query.q;
+  return searchQueryString(req.query.q);
 });

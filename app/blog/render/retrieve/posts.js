@@ -34,7 +34,10 @@ function normalizeTagKey(tags) {
 }
 
 function fieldsSignature(retrieve) {
-  const fields = projectEntryFields.resolveFields(retrieve, ["posts"]);
+  // Include `entries` so a listing view that also binds {{#entries}}
+  // (whose fields parseTemplate does not record on `posts`) shares the
+  // unprojected cache variant rather than a title-only one.
+  const fields = projectEntryFields.resolveFields(retrieve, ["posts", "entries"]);
   return fields ? Object.keys(fields).sort().join(",") : null;
 }
 
@@ -104,22 +107,11 @@ async function posts(req, res) {
   const key = createCacheKey(req, res, normalizedOptions);
   let cached = postsCache.get(key);
 
-  // routes/entries.js prefetches before retrieve metadata exists, so it
-  // stores the full (unprojected) variant. A later {{#posts}} retrieve
-  // with a fields signature must reuse that payload instead of calling
-  // Entries.getPage a second time. See
-  // https://github.com/davidmerfield/blot/issues/1844
-  if (!cached && fieldsSignature(req && req.retrieve) !== null) {
-    cached = postsCache.get(
-      createCacheKey({ blog: req && req.blog }, res, normalizedOptions)
-    );
-  }
-
   if (cached) {
     const cachedPayload = clonePosts(cached.payload);
     log("Retrieved posts from cache");
     res.locals.pagination = cachedPayload.pagination;
-    return projectEntryFields(cachedPayload.entries, req.retrieve, ["posts"]);
+    return projectEntryFields(cachedPayload.entries, req.retrieve, ["posts", "entries"]);
   }
 
   let payload;
@@ -155,7 +147,7 @@ async function posts(req, res) {
 
   // Resolve/project before insertion so large unrequested bodies never enter
   // the LRU. A null field signature deliberately preserves the full variant.
-  projectEntryFields(payload.entries, req.retrieve, ["posts"]);
+  projectEntryFields(payload.entries, req.retrieve, ["posts", "entries"]);
   const prepared = prepareCacheValue(payload, { preserveEntryInstances: true });
   postsCache.set(key, prepared);
   const responsePayload = clonePosts(prepared.payload);

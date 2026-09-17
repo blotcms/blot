@@ -52,6 +52,11 @@ describe("simple pass-through retrieve locals", function () {
     expect(result).toEqual("hello");
   });
 
+  it("search_query joins a repeated q query parameter", async function () {
+    const result = await run(searchQuery, { query: { q: ["hello", "world"] } });
+    expect(result).toEqual("hello world");
+  });
+
   it("total_posts returns the blog's total entry count", async function () {
     totalPosts._clear();
     spyOn(Entries, "getTotal").and.callFake((blogID, cb) => cb(null, 42));

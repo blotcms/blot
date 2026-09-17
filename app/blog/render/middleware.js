@@ -2,6 +2,7 @@ const ERROR = require("./error");
 const loadView = require("./load");
 const finalRender = require("./main");
 const retrieve = require("./retrieve");
+const listingViews = require("./listingViews");
 const getCachedFullView = require("./full-view-cache");
 
 const ensure = require("helper/ensure");
@@ -80,8 +81,11 @@ module.exports = function attachRenderView(req, res, _next) {
 
       extend(res.locals.partials).and(viewPartials);
 
+      listingViews.ensureRetrieve(name, missingLocals);
+
       const foundLocals = await retrieve(req, res, missingLocals);
       extend(res.locals).and(foundLocals);
+      listingViews.aliasLocals(name, req, res, foundLocals);
 
       try {
         await loadView(req, res);
