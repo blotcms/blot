@@ -3,6 +3,10 @@ const dashboard = require("dashboard");
 const documentation = require("documentation");
 const mustache = require("helper/express-mustache");
 const config = require("config");
+const {
+  MAX_EMAIL_LENGTH,
+  MAX_PASSWORD_LENGTH,
+} = require("models/user/auth-limits");
 
 const VIEW_DIRECTORY = config.views_directory;
 
@@ -16,6 +20,8 @@ const cdnURLHelper = require('documentation/tools/cdn-url-helper');
 const site = Express();
 
 site.locals.cdn = cdnURLHelper({cacheID, viewDirectory: VIEW_DIRECTORY});
+site.locals.maxEmailLength = MAX_EMAIL_LENGTH;
+site.locals.maxPasswordLength = MAX_PASSWORD_LENGTH;
 
 // Hide the header added by Express
 site.disable("x-powered-by");

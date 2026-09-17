@@ -1,5 +1,6 @@
 var ensure = require("helper/ensure");
 var getByEmail = require("../getByEmail");
+var { emailIsTooLong } = require("../auth-limits");
 
 module.exports = function (user, email, callback) {
   ensure(user, "object").and(email, "string").and(callback, "function");
@@ -8,6 +9,9 @@ module.exports = function (user, email, callback) {
   email = email.trim().toLowerCase().replace(" ", "");
 
   if (!email) return callback(new Error("Please enter an email"));
+
+  if (emailIsTooLong(email))
+    return callback(new Error("Email address is too long"));
 
   var emailRegex = /[^\s@]+@[^\s@]+\.[^\s@]+/;
 

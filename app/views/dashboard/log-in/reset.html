@@ -47,6 +47,10 @@ input[type="submit"].link:hover {
 <p class="error">Please enter your email address to reset your password.</p>
 {{/NOEMAIL}}
 
+{{#EMAILTOOLONG}}
+<p class="error">Your email address is too long.</p>
+{{/EMAILTOOLONG}}
+
 <p style="margin-top: 24px;margin-bottom: 24px">{{^error}}If you cannot remember the email address for your account please <a href="/support">contact support</a>.{{/error}}</p>
 
 <form method="POST">
@@ -55,7 +59,7 @@ input[type="submit"].link:hover {
 
   <p>
     <label for="email">Your email address</label>
-    <input name="email" value="{{email}}" type="text" autofocus />
+    <input name="email" value="{{email}}" type="text" maxlength="{{maxEmailLength}}" autofocus />
   </p>
 
   <input type="submit" name="reset"  value="Reset your password" />

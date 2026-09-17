@@ -71,4 +71,29 @@ describe("password setting authorization", function () {
     expect((await request(true, "other-token")).error.message).toEqual("Your token was invalid.");
     expect(User.set).not.toHaveBeenCalled();
   });
+
+  it("rejects a new password that exceeds the bcrypt byte limit", async function () {
+    var { MAX_PASSWORD_LENGTH } = require("models/user/auth-limits");
+    var tooLong = "a".repeat(MAX_PASSWORD_LENGTH + 1);
+    var req = {
+      method: "POST",
+      url: "/set",
+      user: { uid: "password-route-user", hasPassword: false },
+      session: {},
+      body: { newPasswordA: tooLong, newPasswordB: tooLong },
+    };
+    var result = await new Promise(function (resolve, reject) {
+      Password.handle(req, {
+        redirect: function (location) { resolve({ redirect: location }); },
+        message: function (location) { resolve({ saved: location }); },
+        render: function (view) { resolve({ view: view }); },
+      }, function (err) {
+        if (err) return resolve({ error: err });
+        reject(new Error("Password route did not respond"));
+      });
+    });
+
+    expect(result.error.message).toEqual("Your new password is too long.");
+    expect(User.hashPassword).not.toHaveBeenCalled();
+  });
 });

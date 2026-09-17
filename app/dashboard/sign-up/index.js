@@ -10,6 +10,10 @@ var Express = require("express");
 var config = require("config");
 var stripe = require("stripe")(config.stripe.secret);
 var User = require("models/user");
+var {
+  emailIsTooLong,
+  passwordIsTooLong,
+} = require("models/user/auth-limits");
 var signup = Express.Router();
 
 signup.use(function (req, res, next) {
@@ -61,11 +65,17 @@ alreadyPaid.post(validateEmail, function (req, res, next) {
 function validateEmail (req, res, next) {
   var email = req.body && req.body.email;
 
+  if (typeof email !== "string" || !email.trim()) {
+    return next(new Error(NO_EMAIL));
+  }
+
+  if (emailIsTooLong(email.trim())) {
+    return next(new Error("Email address is too long"));
+  }
+
   // Normalize the email here before storing it
   // in the browser's session
   email = email.trim().toLowerCase();
-
-  if (!email) return next(new Error(NO_EMAIL));
 
   User.getByEmail(email, function (err, existingUser) {
     if (err) return next(err);
@@ -159,12 +169,22 @@ passwordForm.get(function (req, res) {
 passwordForm.post(function (req, res, next) {
   var subscription = req.session.subscription || {};
   var paypal = req.session.paypal || {};
-  var email = req.body.email;
-  var password = req.body.password;
+  var email = req.body && req.body.email;
+  var password = req.body && req.body.password;
 
-  if (!email) return next(new Error("Please choose an email address"));
+  if (typeof email !== "string" || !email.trim()) {
+    return next(new Error("Please choose an email address"));
+  }
 
   if (!password) return next(new Error("Please choose a password"));
+
+  if (emailIsTooLong(email.trim())) {
+    return next(new Error("Email address is too long"));
+  }
+
+  if (passwordIsTooLong(password)) {
+    return next(new Error("Password is too long"));
+  }
 
   User.hashPassword(password, function (err, passwordHash) {
     if (err) return next(err);

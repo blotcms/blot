@@ -1,6 +1,7 @@
 const Express = require("express");
 const Email = new Express.Router();
 const User = require("models/user");
+const { emailIsTooLong } = require("models/user/auth-limits");
 
 Email.route("/")
 
@@ -14,6 +15,10 @@ Email.route("/")
   .post(function (req, res, next) {
     if (!req.body.email) {
       return next(new Error("Please specify an email address"));
+    }
+
+    if (emailIsTooLong(req.body.email)) {
+      return next(new Error("Email address is too long"));
     }
 
     User.set(req.user.uid, { email: req.body.email }, function (err, changes) {
