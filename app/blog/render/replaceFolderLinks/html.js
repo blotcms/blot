@@ -35,6 +35,27 @@ const parseSrcset = (value) => {
   return parsed;
 };
 
+// Cheap pre-scan of the raw output string, run before the expensive
+// parse5.parse + tree-walk below. Most rendered pages have no folder-file
+// links at all, so this lets us skip the parse entirely in the common case.
+//
+// This deliberately does NOT try to inspect or validate attribute *values*
+// (host-matching, file extension, data: URLs, etc) the way the real
+// per-node walk below does - only whether one of these attribute names
+// appears in the raw text at all. Pairing quotes to extract a value out of
+// unparsed HTML text is not reliable: earlier text (a <script> body, a
+// comment, anything) can contain a stray quote character that pairs with a
+// later *real* attribute's quote, silently consuming it and hiding it from
+// this scan. A pure name-presence check can't have that failure mode - the
+// worst case is falling through to the real parse for a page that turns
+// out to need no changes, matching the same coarse presence-only style
+// replaceFolderLinks/css.js already uses for its `url(...)` pre-check.
+const candidateAttrRegex = /(?<![\w-])(?:href|src|poster|srcset)\s*=/i;
+
+function mayNeedFolderLinkReplacement(html) {
+  return candidateAttrRegex.test(html);
+}
+
 module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
   try {
     const blogID = blog.id;
@@ -45,6 +66,12 @@ module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
     const hostPatterns = hosts.map(
       (host) => new RegExp(`^(?:https?:)?//${host}`)
     );
+
+    // Skip the expensive parse5 parse + tree-walk entirely when nothing in
+    // the output could possibly need rewriting.
+    if (!mayNeedFolderLinkReplacement(html)) {
+      return html;
+    }
 
     const document = parse5.parse(html);
     const elements = [];
