@@ -22,7 +22,7 @@ services:
     # The dev image ships node_modules only; the source is mounted in, exactly
     # like .github/workflows/node.yml's test job. BLOT_REPO is the repo root
     # (absolute in CI); it defaults to this file's ../.. for local use.
-    image: ${BLOT_APP_IMAGE:-ghcr.io/davidmerfield/blot:test-latest}
+    image: ${BLOT_APP_IMAGE:-ghcr.io/blotcms/blot:test-latest}
     network_mode: host
     working_dir: /usr/src/app
     command: ["node", "/usr/src/app/app/index.js"]

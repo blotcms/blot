@@ -12,7 +12,7 @@ We don't gather analytics data. There are no metrics and there are no A/B tests.
 
 ## Task tracking
 
-We use [a text-file](https://github.com/davidmerfield/Blot/blob/master/TODO) to keep track of tasks. If somebody needs to be notified when a task is complete, we include a link to the appropriate email thread in the text file, along with a description of the task. This text-file is checked into version control which means we can easily summarize our completed tasks – the [updates page](/news) is generated from this file. 
+We use [a text-file](https://github.com/blotcms/blot/blob/master/TODO) to keep track of tasks. If somebody needs to be notified when a task is complete, we include a link to the appropriate email thread in the text file, along with a description of the task. This text-file is checked into version control which means we can easily summarize our completed tasks – the [updates page](/news) is generated from this file. 
 
 ## Accounting
 

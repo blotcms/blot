@@ -269,8 +269,6 @@ New templates:
 - Release [Fede](https://wordpress.org/themes/kanso/)'s theme as profile template
 - Transfer theme for [John](https://mail.google.com/mail/u/0/#inbox/KtbxLzFrMrLsxTzRKrfFWQBgXxBHCVbGTg)
 
-Move Blot's GitHub repo to its own organization
-
 Switch templates from entries.html to index.html with explicit url: ['/', '/page/:page'].
 - fix docs on routing order
 
@@ -827,7 +825,7 @@ Improve paypal integration:
   - [ ] Add way to delete account from dashboard
 - [ ] Update scheduleEmailNotification for paypal customers
 
-Make {{active}} strip the domain from the link [before checking](https://github.com/davidmerfield/Blot/blob/master/app/blog/render/retrieve/active.js#L22)? Or automatically strip the domain from internal links on Blot's dashboard?
+Make {{active}} strip the domain from the link [before checking](https://github.com/blotcms/blot/blob/master/app/blog/render/retrieve/active.js#L22)? Or automatically strip the domain from internal links on Blot's dashboard?
 
 Store path -> md5 hash on sync
 - Use to auto version links to files in your folder so they can be cached

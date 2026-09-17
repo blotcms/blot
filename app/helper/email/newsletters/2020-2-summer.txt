@@ -8,7 +8,7 @@ Summer newsletter
 - You can now use [citations and external bibliographies](https://blot.im/how/guides/citations) in your [Markdown](https://blot.im/how/guides/markdown) blog posts.
 - Blot now generates thumbnails from GIF and SVG images. This improves those templates which use thumbnails on their index page, like the [Magazine](https://blot.im/templates/magazine) and [Scrapbook](https://blot.im/templates/scrapbook) templates.
 - You can now specify your blog post’s publish date using the [RFC3339 date format](https://tools.ietf.org/html/rfc3339), which looks something like *2020-04-12T23:20:50.52Z*.
-- Added new template functions to [format the updated date and created date](https://github.com/davidmerfield/Blot/pull/279) of a particular blog post.
+- Added new template functions to [format the updated date and created date](https://github.com/blotcms/blot/pull/279) of a particular blog post.
 
 **Changes**
 - Script tags are now removed from the output of your blog’s RSS feed. This will better conform your feed to the [RSS specification](https://validator.w3.org/feed/docs/rss2.html).

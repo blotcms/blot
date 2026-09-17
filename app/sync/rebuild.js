@@ -130,7 +130,7 @@ module.exports = function main(blogID, options, callback) {
           // cacheID. render/retrieve/posts.js keys its process-wide cache on
           // blogID + cacheID, so without this an unchanged cacheID means a
           // rebuild's fresh entries never invalidate that cache - see
-          // https://github.com/davidmerfield/blot/issues/1844
+          // https://github.com/blotcms/blot/issues/1844
           Blog.set(blogID, { cacheID: Date.now() }, (err) => {
             callback(err);
           });

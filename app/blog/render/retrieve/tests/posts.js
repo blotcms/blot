@@ -663,7 +663,7 @@ describe("posts cache", function () {
           // requests (e.g. a template with no page_size configured and a
           // second one explicitly set to 100) would share a cache entry
           // fetched with models/entries' unrelated default of 5. See
-          // https://github.com/davidmerfield/blot/issues/1844
+          // https://github.com/blotcms/blot/issues/1844
           pageSize,
           limit: 100,
           offset: 0,

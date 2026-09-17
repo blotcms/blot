@@ -88,6 +88,9 @@ jobs:
   app-e2e:
     runs-on: ubuntu-latest
     needs: proxy-behaviour
+    permissions:
+      contents: read
+      packages: read
     # The real-app round trip is still being stabilised; surface its result
     # without blocking the scaffolding.
     continue-on-error: true
@@ -113,8 +116,15 @@ jobs:
       - name: Build proxy image
         run: docker build -f proxy/Dockerfile -t blot-proxy:e2e proxy/
 
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Pull Blot app image
-        run: docker pull ghcr.io/davidmerfield/blot:test-latest
+        run: docker pull ghcr.io/blotcms/blot:test-latest
 
       - name: Start the stack
         run: docker compose -f proxy/e2e/docker-compose.yml up -d --wait --wait-timeout 420

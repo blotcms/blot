@@ -10,7 +10,7 @@ var OVERFLOW = "Maximum call stack size exceeded";
 // get/set/clear interface Mustache expects) so repeated renders of view
 // templates still hit the cache, but one-off strings eventually fall out
 // instead of growing without bound for the lifetime of the process.
-// See https://github.com/davidmerfield/blot/issues/1851
+// See https://github.com/blotcms/blot/issues/1851
 Mustache.templateCache = new LRUCache({
   max: 500,
   maxSize: 5 * 1024 * 1024,

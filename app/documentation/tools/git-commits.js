@@ -92,7 +92,7 @@ const build = async () => {
   try {
     // Fetch the latest commits from the GitHub API
     const response = await fetch(
-      "https://api.github.com/repos/davidmerfield/blot/commits?per_page=300",
+      "https://api.github.com/repos/blotcms/blot/commits?per_page=300",
       {
         headers: {
           "User-Agent": "GitHub-Commit-Fetcher",

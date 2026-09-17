@@ -152,7 +152,7 @@ it".
 
 1. **Build & push.** `.github/workflows/build.yml` has a second matrix job,
    `build-airlock`, alongside the app's `build` job: builds `config/airlock`
-   per-arch, pushes `ghcr.io/davidmerfield/blot-airlock:<sha>-<arch>`, then
+   per-arch, pushes `ghcr.io/blotcms/blot-airlock:<sha>-<arch>`, then
    `manifest-airlock` creates the multi-arch `<sha>` (and `latest` on
    master) tag - same shape as the app image. It also runs a "Verify egress
    filter" step, so a regression in `egress.nft`/`entrypoint.sh` fails the

@@ -15,7 +15,7 @@ This is a short guide to installing Blot on your machine. I develop Blot on OSX 
 Get the code by cloning the git repository (700mb, sorry!):
 
 ```sh
-git clone https://github.com/davidmerfield/Blot
+git clone https://github.com/blotcms/blot
 ```
 
 Install the dependencies once you're into the repo's root directory:

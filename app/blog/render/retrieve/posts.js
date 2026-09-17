@@ -96,7 +96,7 @@ async function posts(req, res) {
     // the tagged branch) is 100. Keying on the normalized value here would
     // make an unset page_size collide with an explicit page_size of 100,
     // silently serving whichever request populated the cache first to the
-    // other - see https://github.com/davidmerfield/blot/issues/1844. The
+    // other - see https://github.com/blotcms/blot/issues/1844. The
     // tagged branch always fetches with the normalized `limit` below, so
     // its key uses that same normalized value.
     pageSize: tags ? pageSize : options.pageSize,

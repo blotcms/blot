@@ -6,7 +6,7 @@
 SCRIPTS_DIRECTORY=/home/ec2-user/node/scripts
 PANDOC_URL=https://github.com/jgm/pandoc/releases/download/3.1.1/pandoc-3.1.1-linux-arm64.tar.gz
 BLOT_DIRECTORY=/var/www/blot
-BLOT_REPO=https://github.com/davidmerfield/Blot
+BLOT_REPO=https://github.com/blotcms/blot
 
 
 if [ ! -d "/home/ec2-user/node/scripts" ]; then

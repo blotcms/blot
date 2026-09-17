@@ -40,7 +40,7 @@ Another mistake I made over winter: I turned off Blot’s CDN, hoping to reduce 
 
 I will restart Blot’s CDN so that images on your site download quickly again. I will then focus on Blot’s template system for the next few months. I’d also like to continue my research on existing blogging platforms and publish these notes. 
 
-[Paul](https://github.com/Pinjasaur) has been kindly contributing to Blot’s code since January. We managed to get Blot running on Paul’s machine and we wrote a [guide to setting up a development environment](https://github.com/davidmerfield/Blot/blob/master/config/guides/development-environment.md). This is an important step towards encouraging people to self-host Blot, which is one of my long-term goals.
+[Paul](https://github.com/Pinjasaur) has been kindly contributing to Blot’s code since January. We managed to get Blot running on Paul’s machine and we wrote a [guide to setting up a development environment](https://github.com/blotcms/blot/blob/master/config/guides/development-environment.md). This is an important step towards encouraging people to self-host Blot, which is one of my long-term goals.
 
 If you have any questions at all about any of this, please don’t hesitate to reply directly to this email.
 

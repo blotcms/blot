@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 env:
-  REGISTRY_URL: ghcr.io/davidmerfield/blot
-  AIRLOCK_REGISTRY_URL: ghcr.io/davidmerfield/blot-airlock
+  REGISTRY_URL: ghcr.io/blotcms/blot
+  AIRLOCK_REGISTRY_URL: ghcr.io/blotcms/blot-airlock
   BLOT_DEPLOY_SSH_HOST: ${{ secrets.BLOT_DEPLOY_SSH_HOST }}
   BLOT_DEPLOY_SSH_PORT: ${{ secrets.BLOT_DEPLOY_SSH_PORT }}
 

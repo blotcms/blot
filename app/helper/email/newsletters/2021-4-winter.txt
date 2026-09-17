@@ -4,7 +4,7 @@ Winter newsletter
 
 **New features**
 - You can now sync your blog’s folder using [Google Drive](https://blot.im/how/sync/google-drive).
-- Added a script to [import posts from Micro.blog](https://github.com/davidmerfield/Blot/tree/master/app/dashboard/routes/importer/sources/micro.blog). The script generates a directory of Markdown and image files in format suitable for Blot. If you would like us to run this script on your behalf, please [send us](https://blot.im/contact) your [Micro.blog export](https://help.micro.blog/t/exporting-from-micro-blog/557) in the Wordpress format.
+- Added a script to [import posts from Micro.blog](https://github.com/blotcms/blot/tree/master/app/dashboard/routes/importer/sources/micro.blog). The script generates a directory of Markdown and image files in format suitable for Blot. If you would like us to run this script on your behalf, please [send us](https://blot.im/contact) your [Micro.blog export](https://help.micro.blog/t/exporting-from-micro-blog/557) in the Wordpress format.
 - You can customize all the colors of the [Magazine template](https://blot.im/templates/magazine) on the web template editor using the point-and-click controls, no need to edit the CSS.
 
 **Changes**

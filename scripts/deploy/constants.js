@@ -31,7 +31,7 @@ const blogsConfig = {
 };
 
 module.exports = {
-  REGISTRY_URL: "ghcr.io/davidmerfield/blot",
+  REGISTRY_URL: "ghcr.io/blotcms/blot",
   PLATFORM_OS: "linux",
   LOG_MAX_SIZE: "512m",
   LOG_MAX_FILE: 1,
@@ -76,7 +76,7 @@ module.exports = {
   // Chromium overhead once the follow-up PR drops that binary.
   AIRLOCK: {
     name: "blot-airlock",
-    registry: "ghcr.io/davidmerfield/blot-airlock",
+    registry: "ghcr.io/blotcms/blot-airlock",
     network: "blotnet",
     memory: "512m",
     cpus: 1,

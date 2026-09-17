@@ -1,4 +1,4 @@
-docker run --pull=always --rm -d --name blot-container -p 8088:8080 --env-file /etc/blot/secrets.env -v /var/www/blot/data:/usr/src/app/data ghcr.io/davidmerfield/blot:latest
+docker run --pull=always --rm -d --name blot-container -p 8088:8080 --env-file /etc/blot/secrets.env -v /var/www/blot/data:/usr/src/app/data ghcr.io/blotcms/blot:latest
 
 docker ps
 

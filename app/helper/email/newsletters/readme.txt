@@ -12,11 +12,11 @@ npm run preview-newsletter
 
 Find PRs using this search query:
 
-https://github.com/davidmerfield/Blot/pulls?q=sort%3Amerged-asc+is%3Amerged+merged%3A%3E%3D2023-10-03+author%3A%40me+
+https://github.com/blotcms/blot/pulls?q=sort%3Amerged-asc+is%3Amerged+merged%3A%3E%3D2023-10-03+author%3A%40me+
 
 Then look at the commits too just in case:
 
-https://github.com/davidmerfield/Blot
+https://github.com/blotcms/blot
 
 Discuss the following and no more:
 - New features

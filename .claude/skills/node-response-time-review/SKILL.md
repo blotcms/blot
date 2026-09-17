@@ -147,7 +147,7 @@ nashp", "Fix issue with warwickmostyn").
 
 Don't file a new issue every run — this is a recurring check. Update the
 existing tracking issue (currently
-[#1825](https://github.com/davidmerfield/blot/issues/1825)) with the
+[#1825](https://github.com/blotcms/blot/issues/1825)) with the
 current window's numbers via `gh issue edit` (replace body) or `gh issue
 comment` (append), rather than creating a duplicate. Structure the update
 as: threshold/method recap, confirmed slow sites (with the avg/pct150/max

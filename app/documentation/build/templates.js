@@ -182,7 +182,7 @@ const loadTemplates = async () => {
       name: NAME_MAP[slug] || slug[0].toUpperCase() + slug.slice(1),
       slug,
       demo_folder: (pkg.locals && pkg.locals.demo_folder) || "david",
-      source: `https://github.com/davidmerfield/Blot/tree/master/app/templates/source/${slug}`,
+      source: `https://github.com/blotcms/blot/tree/master/app/templates/source/${slug}`,
     });
   }
 
