@@ -18,20 +18,50 @@ function periodEndedAtISO(details) {
     : "unknown";
 }
 
+function daysAgo(ms) {
+  return Math.floor((Date.now() - ms) / (24 * 60 * 60 * 1000));
+}
+
 module.exports = function processSubscriptionLifecycle(callback) {
   callback = callback || function () {};
 
   var disabled = 0;
   var deleted = 0;
   var enabled = 0;
-  var cancelledDueForDeletion = [];
+  var usersToRemove = [];
 
   function queueCancelledDeletion(user, details, next) {
     if (!subscriptionLifecycle.deletionDue(user)) return next();
 
-    cancelledDueForDeletion.push({
+    var periodEndedAtMs = details.periodEndedAt;
+
+    usersToRemove.push({
       email: user.email,
-      subscriptionExpiredOn: periodEndedAtISO(details),
+      reason:
+        "cancelled on " +
+        periodEndedAtISO(details) +
+        (periodEndedAtMs
+          ? " (" + daysAgo(periodEndedAtMs) + " days ago)"
+          : ""),
+    });
+
+    deleteUserAccount(user, function (deleteErr) {
+      if (deleteErr) return next(deleteErr);
+
+      deleted += 1;
+      next();
+    });
+  }
+
+  function queueOverdueDeletion(user, overdue, overdueStartedAtISO, next) {
+    usersToRemove.push({
+      email: user.email,
+      reason:
+        "overdue on " +
+        overdueStartedAtISO +
+        (overdue.startedAt
+          ? " (" + daysAgo(overdue.startedAt) + " days ago)"
+          : ""),
     });
 
     deleteUserAccount(user, function (deleteErr) {
@@ -106,17 +136,7 @@ module.exports = function processSubscriptionLifecycle(callback) {
           "startedAt=" + overdueStartedAtISO
         );
 
-        return deleteUserAccount(user, function (deleteErr) {
-          if (deleteErr) return next(deleteErr);
-
-          email.OVERDUE_SUBSCRIPTION_DELETION_FLOW("", {
-            email: user.email,
-            subscriptionOverdueOn: overdueStartedAtISO,
-          });
-
-          deleted += 1;
-          next();
-        });
+        return queueOverdueDeletion(user, overdue, overdueStartedAtISO, next);
       }
 
       var details = subscriptionLifecycle.cancellationDetails(user);
@@ -147,14 +167,14 @@ module.exports = function processSubscriptionLifecycle(callback) {
         "deleted=" + deleted
       );
 
-      if (!cancelledDueForDeletion.length) return callback();
+      if (!usersToRemove.length) return callback();
 
-      email.DELETED_CANCELLED_SUBSCRIPTION_EXPIRED(
+      email.USERS_DUE_FOR_REMOVAL(
         "",
         {
-          users: cancelledDueForDeletion,
-          count: cancelledDueForDeletion.length,
-          singular: cancelledDueForDeletion.length === 1,
+          users: usersToRemove,
+          count: usersToRemove.length,
+          singular: usersToRemove.length === 1,
         },
         function (emailErr) {
           // Log and swallow: the lifecycle work already succeeded by this
@@ -162,7 +182,7 @@ module.exports = function processSubscriptionLifecycle(callback) {
           if (emailErr) {
             console.log(
               clfdate(),
-              "Subscription lifecycle job failed to send cancelled deletion summary",
+              "Subscription lifecycle job failed to send users-to-remove summary",
               emailErr
             );
           }

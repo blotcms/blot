@@ -1,3 +1,0 @@
-User entered overdue deletion flow (safe mode)
-
-{{email}} has been overdue since {{subscriptionOverdueOn}} for over 2 months and has entered deletion flow. Deletion remains a safe-mode no-op.

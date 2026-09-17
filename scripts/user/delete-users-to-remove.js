@@ -13,7 +13,10 @@ var HELP_FLAG = argv.indexOf("-h") !== -1 || argv.indexOf("--help") !== -1;
 var FAST_CONFIRMATION_PROMPT = "Delete all <count> users? (y/n)";
 
 function printUsage() {
-  console.log("Usage: node scripts/user/delete-cancelled-after-grace.js [-fast]");
+  console.log("Usage: node scripts/user/delete-users-to-remove.js [-fast]");
+  console.log("");
+  console.log("Finds cancelled and overdue accounts that have passed their");
+  console.log("grace period and are due for removal.");
   console.log("");
   console.log("Options:");
   console.log("  -fast, --fast  list all candidates first and confirm once before deleting");
@@ -25,28 +28,56 @@ if (HELP_FLAG) {
   process.exit(0);
 }
 
-function describeUser(user, blogs, details) {
+function candidateFromCancellation(user) {
+  var details = subscriptionLifecycle.cancellationDetails(user);
+
+  if (!details.cancelled || !details.periodEnded) return null;
+  if (!subscriptionLifecycle.deletionDue(user)) return null;
+
+  return {
+    user: user,
+    reason: "cancelled",
+    description:
+      "cancelled, subscription period ended " +
+      moment(details.periodEndedAt).fromNow() +
+      " (" +
+      new Date(details.periodEndedAt).toISOString() +
+      "), provider=" +
+      details.provider,
+  };
+}
+
+function candidateFromOverdue(user) {
+  var overdue = subscriptionLifecycle.overdueDetails(user);
+
+  if (!overdue.overdue || overdue.phase !== "deletion_flow") return null;
+
+  return {
+    user: user,
+    reason: "overdue",
+    description:
+      "overdue since " +
+      moment(overdue.startedAt).fromNow() +
+      " (" +
+      new Date(overdue.startedAt).toISOString() +
+      ")",
+  };
+}
+
+function describeUser(candidate, blogs) {
   var lines = [];
 
   lines.push(
-    "Delete cancelled account " +
-      colors.yellow(user.email) +
+    "Delete " +
+      candidate.reason +
+      " account " +
+      colors.yellow(candidate.user.email) +
       " " +
-      colors.dim(user.uid) +
+      colors.dim(candidate.user.uid) +
       "?"
   );
 
-  lines.push("- provider: " + details.provider);
-
-  if (details.periodEndedAt) {
-    lines.push(
-      "- subscription period ended " +
-        colors.underline(moment(details.periodEndedAt).fromNow()) +
-        " (" +
-        new Date(details.periodEndedAt).toISOString() +
-        ")"
-    );
-  }
+  lines.push("- " + candidate.description);
 
   blogs.forEach(function (blog) {
     if (!blog) return;
@@ -63,14 +94,13 @@ function describeUser(user, blogs, details) {
   return lines.join("\n");
 }
 
-function describeCandidateSummary(user, details) {
-  var fields = [colors.yellow(user.email), colors.dim(user.uid), "provider=" + details.provider];
-
-  if (details.periodEndedAt) {
-    fields.push("periodEndedAt=" + new Date(details.periodEndedAt).toISOString());
-  }
-
-  return fields.join(" | ");
+function describeCandidateSummary(candidate) {
+  return [
+    colors.yellow(candidate.user.email),
+    colors.dim(candidate.user.uid),
+    "reason=" + candidate.reason,
+    candidate.description,
+  ].join(" | ");
 }
 
 function deleteAccount(user, callback) {
@@ -90,10 +120,10 @@ function collectCandidates(done) {
 
   eachUser(
     function (user, next) {
-      var details = subscriptionLifecycle.cancellationDetails(user);
+      var candidate =
+        candidateFromCancellation(user) || candidateFromOverdue(user);
 
-      if (!details.cancelled || !details.periodEnded) return next();
-      if (!subscriptionLifecycle.deletionDue(user)) return next();
+      if (!candidate) return next();
 
       async.map(
         user.blogs || [],
@@ -103,11 +133,8 @@ function collectCandidates(done) {
         function (err, blogs) {
           if (err) return next(err);
 
-          candidates.push({
-            user: user,
-            details: details,
-            blogs: blogs.filter(Boolean),
-          });
+          candidate.blogs = blogs.filter(Boolean);
+          candidates.push(candidate);
 
           next();
         }
@@ -123,7 +150,7 @@ function runFastMode(candidates, done) {
   if (!candidates.length) return done(null, 0);
 
   candidates.forEach(function (candidate, index) {
-    console.log((index + 1) + ". " + describeCandidateSummary(candidate.user, candidate.details));
+    console.log((index + 1) + ". " + describeCandidateSummary(candidate));
   });
 
   var prompt = FAST_CONFIRMATION_PROMPT.replace("<count>", candidates.length);
@@ -156,7 +183,7 @@ function runInteractiveMode(candidates, done) {
     candidates,
     function (candidate, next) {
       getConfirmation(
-        describeUser(candidate.user, candidate.blogs, candidate.details),
+        describeUser(candidate, candidate.blogs),
         function (_, yes) {
           if (!yes) {
             console.log(colors.red("Skipped " + candidate.user.email));
@@ -178,7 +205,7 @@ function runInteractiveMode(candidates, done) {
   );
 }
 
-console.log("Scanning for cancelled users that passed the 1 month grace period...");
+console.log("Scanning for cancelled and overdue users that passed their grace period...");
 if (!FAST_MODE) {
   console.log("Tip: use -fast to review all candidates and confirm once.");
 }
