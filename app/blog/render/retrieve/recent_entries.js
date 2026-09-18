@@ -3,6 +3,7 @@ const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
+const cacheStats = require("../../lib/cacheStats");
 
 const ALIASES = ["recentEntries", "recent_entries"];
 
@@ -60,3 +61,4 @@ module.exports._createCacheKey = createCacheKey;
 module.exports._clear = function () {
   recentEntriesCache.clear();
 };
+module.exports._stats = cacheStats("recentEntries", recentEntriesCache);

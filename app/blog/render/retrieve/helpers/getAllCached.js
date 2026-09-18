@@ -6,6 +6,7 @@
 const LRUCache = require("lru-cache").LRUCache;
 const { getAll } = require("../../../lib/models");
 const { cloneDeep, prepareCacheValue } = require("../../../lib/clone");
+const cacheStats = require("../../../lib/cacheStats");
 
 const entriesCache = new LRUCache({
   max: 200,
@@ -82,3 +83,4 @@ module.exports._clear = function () {
   entriesCache.clear();
   inflight.clear();
 };
+module.exports._stats = cacheStats("entries", entriesCache);

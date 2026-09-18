@@ -1,5 +1,6 @@
 const { popularTags: getPopularTags } = require("../../lib/models");
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
+const cacheStats = require("../../lib/cacheStats");
 const { compactTags, expandTags } = require("./helpers/compactTags");
 const LRUCache = require("lru-cache").LRUCache;
 const asRetriever = require("../../lib/asRetriever");
@@ -62,3 +63,4 @@ module.exports._createCacheKey = createCacheKey;
 module.exports._clear = function () {
   popularTagsCache.clear();
 };
+module.exports._stats = cacheStats("popularTags", popularTagsCache);

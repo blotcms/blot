@@ -30,7 +30,13 @@ module.exports = function () {
         "redis_cache_missRate=" + cacheStats.missRate(),
         "redis_cache_loadCount=" + cacheStats.loadCount(),
         "redis_cache_loadFailureRate=" + cacheStats.loadFailureRate(),
-        "redis_cache_averageLoadPenalty=" + cacheStats.averageLoadPenalty()
+        "redis_cache_averageLoadPenalty=" + cacheStats.averageLoadPenalty(),
+        // Entry count against the configured cap: this cache is bounded by
+        // key count only (node-redis has no byte-size option), so a full
+        // cache of large values can still be far bigger in memory than a
+        // full cache of small ones.
+        "redis_cache_entryCount=" + cacheStats.entryCount,
+        "redis_cache_maxEntries=" + cacheStats.maxEntries
       );
     }
   } catch (err) {

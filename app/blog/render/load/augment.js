@@ -6,6 +6,15 @@ const debug = require("debug")("blog:render:augment");
 require("moment-timezone");
 
 module.exports = async function augment(req, res, entry) {
+  // augment() rewrites several entry fields in place (tags, backlinks, ...)
+  // in ways that aren't safe to re-run: a second pass sees the already
+  // -converted values and discards them as invalid. Callers are expected to
+  // invoke this once per Entry object (see eachEntry.js's identity dedup),
+  // but guard here too so a future caller reaching the same object twice
+  // can't silently corrupt it.
+  if (entry.__augmented) return;
+  entry.__augmented = true;
+
   const blog = req.blog;
 
   entry.metadata = createRenderMetadata(entry.metadata);
@@ -48,8 +57,8 @@ module.exports = async function augment(req, res, entry) {
   for (let i = 0; i < totalTags; i++) {
     const tag = entry.tags[i];
 
-    // augment has already been called on this
-    // entry there is a bug in eachEntry
+    // Tags should always be strings at this point; skip anything else
+    // rather than crash on malformed data.
     if (!type(tag, "string")) {
       console.log(
         "Error BAD TAG:",

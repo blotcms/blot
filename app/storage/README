@@ -709,7 +709,11 @@ app/storage/
   refactor, testable file-by-file. Includes building `.list()` paginated
   from day 1 (§2.4) — the local-disk `opendir`-backed implementation starts
   fixing today's huge-directory crash risk immediately, before S3 is even
-  in the picture.
+  in the picture — and a small, short-TTL, in-process write-through
+  memoization scoped to a single sync operation (§4.9), so a `write()`
+  followed shortly by a `read()` of the same path within one
+  `folder.update()` doesn't pay a redundant round trip. This is
+  independent of, and much cheaper than, the Phase 2b decision below.
 - **Phase 1 — generated assets first**, not blog folders. These are
   already written asynchronously at build time (§1.2), already
   content-addressed or UUID-keyed, and losing/regenerating one costs nothing
@@ -728,8 +732,13 @@ app/storage/
   meaningfully simpler system (no eviction policy, no cross-instance
   invalidation problem in §2.6, nothing to keep consistent). This phase
   must also replace `folder.js`'s live per-request `readdir`/`stat` (§1.2)
-  with `.list()` (§2.4), and land the consolidated case-insensitive
-  resolution method (§2.5) — neither depends on whether a cache exists.
+  with `.list()` (§2.4), land the consolidated case-insensitive resolution
+  method (§2.5), **and parallelize `rebuild.js`'s serial
+  `async.eachSeries` file-processing loop (§4.9)** — this last one is a
+  real, confirmed-in-code risk independent of the caching decision, and
+  needs fixing before `.folder` moves to S3, not after. Also the natural
+  place to add the sampled shadow-read instrumentation (§4.9) that turns
+  the Phase 2b decision into a measurement rather than a guess.
 - **Phase 2b — the SSD-LRU-cache pattern from §1.4, generalized from the
   macserver watcher, only if Phase 2a's measurements show it's actually
   needed.** If built: source of truth stays S3; local SSD holds a working
@@ -949,17 +958,51 @@ options as before, unaffected by the destination change:
   maintain, worth it mainly if "no dependency on any specific host" matters
   more than simplicity.
 
-**Delete semantics — same recommendation as before, now with a real
-constraint behind it:** B2's S3-compatible API doesn't support Lifecycle
-Policies (confirmed from Bunny-vs-B2 comparison research — B2 is the one of
-the two that *does* support them, unlike Bunny Storage, but B2's lifecycle
-rules apply to *file versions*, which only exist if versioning-like
-behavior is used). Recommend **not** using `--delete` (so the backup only
-grows, protecting against an accidental delete on the primary propagating
-before anyone notices) and instead using B2's native lifecycle rule to
-expire objects after a bounded window (e.g. 60–90 days) — B2 does support
-this at the bucket level even without full S3 versioning, so the
-"grow-then-expire" plan from before still works cleanly on this backend.
+**Delete semantics — decided: grow-and-expire, and it's fully achievable on
+B2, not just a fallback if versioning happened to be available.** Confirmed
+directly: **B2 buckets are always versioned by default** ("The buckets that
+are in Backblaze B2 Cloud Storage are always versioned by default" — this
+isn't a toggle, every bucket works this way, on any API). B2's
+S3-compatible API also supports S3-style Lifecycle Rules, including
+`NoncurrentVersionExpiration` (delete old, superseded versions after N
+days) and plain `Expiration` (delete current objects after N days),
+filterable by key prefix. Put together, this gives real grow-and-expire
+semantics, not just "don't delete":
+
+- Run `aws s3 sync` **without `--delete`**. When a file's content changes,
+  the sync uploads new content to the same key — because the bucket is
+  always versioned, the old content becomes a *noncurrent* version rather
+  than being destroyed, and the current version always reflects the latest
+  sync. When a file is removed from the primary, sync simply leaves the
+  corresponding key untouched in the backup (protects against accidental
+  deletion).
+- Add a `NoncurrentVersionExpiration` lifecycle rule (e.g. `NoncurrentDays:
+  60–90`, filtered to the `folder/` prefix) so superseded versions — the
+  actual protection against an accidental *overwrite* or corruption, not
+  just a delete — get cleaned up automatically after the retention window,
+  rather than accumulating forever.
+- **Note the important distinction this reveals**: plain `Expiration`
+  (deleting *current* objects after N days) would be the wrong rule to
+  apply broadly here — a blog post's image that simply hasn't changed in
+  years is still current, valid content, and shouldn't expire just because
+  it's old. Only `NoncurrentVersionExpiration` (which only ever touches
+  *superseded* versions, never the current one) is the right mechanism for
+  this use case.
+
+**Switching between grow-and-expire and a pure `--delete` mirror later, on
+the same existing bucket, is easy — confirmed no bucket recreation is
+needed either direction.** Versioning is inherent to every B2 bucket
+regardless of which sync mode you use, and lifecycle rules are ordinary
+bucket configuration, addable/changeable/removable at any time via the
+standard S3 `PutBucketLifecycleConfiguration`/`DeleteBucketLifecycleConfiguration`
+calls. Switching is really just: change the `--delete` flag on your sync
+command, and add or remove the lifecycle rule — no migration, no
+downtime, nothing structural. The only practical thing to be aware of:
+switching *into* `--delete` mode after running grow-and-expire for a while
+means the very next sync run will remove every backup object that's no
+longer present in the primary, which could be a meaningful one-time cleanup
+if a lot has been deleted from the primary over time — not a technical
+blocker, just worth expecting.
 
 **Cost drivers** (worked through against your actual data volume in a
 private calculation, not reproduced here — see the note at the end of §4.8):
@@ -993,13 +1036,9 @@ that section).
 - **Latency and throughput under real conditions** — see the how-to below;
   needed to size the SSD cache's hit-rate target realistically before
   writing storage-layer code.
-- **Exact retention window** for the B2 backup's grow-then-expire policy
-  (§4.6) — a number, not otherwise decided.
-- **Delete semantics for the B2 sync — not yet actually confirmed**, only
-  recommended: no `--delete` (let the backup grow, expire via B2's native
-  lifecycle rule after the retention window above) rather than mirroring
-  deletes live. This is a real yes/no still open, separate from the region
-  question above.
+- **Exact retention window** for the B2 backup's grow-and-expire
+  `NoncurrentVersionExpiration` rule (§4.6) — a number (60? 90?), not
+  otherwise decided.
 
 **B2 region: decided.** Your AWS instance is in `us-west-2` (Oregon).
 Backblaze's regions are US West (Sacramento + Phoenix data centers), US
@@ -1136,41 +1175,102 @@ whether *any* request pattern in this system is latency-sensitive enough,
 or frequent enough at volume, for that difference to matter in aggregate —
 which is exactly what needs measuring, not assumed either way.
 
-**One case pure S3 could genuinely struggle with, independent of caching,
-worth checking separately:** a full rebuild or initial sync of a
-many-thousand-file blog, if implemented as a serial loop of individual file
-reads, would accumulate S3's per-request latency linearly (thousands of
-files × ~10-20ms serially adds up to real wall-clock time, vs. gp2's
-~1-2ms). Note a local SSD cache wouldn't help this case either — a full
-rebuild touches every file, so the cache starts cold regardless. The actual
-lever here is **parallelizing S3 requests** (S3 comfortably supports high
-concurrent request rates — official guidance is 5,500 GET/HEAD requests/sec
-*per prefix*, and `blogID`-prefixed keys already spread load across many
-prefixes naturally), not caching. Worth auditing whether `buildFromFolder`,
-`Sync/rebuild.js`, and similar bulk-read code paths read files serially or
-concurrently today, independent of the cache-or-no-cache question.
+**One case pure S3 could genuinely struggle with — confirmed in code, not
+speculative, and worth flagging as a real risk to design around:** a full
+rebuild of a many-thousand-file blog processes files strictly one at a
+time. `app/sync/rebuild.js:113-124` walks the entire blog folder, then runs
+`async.eachSeries(updatePaths, ...)` — every changed path's `update(path,
+...)` call runs to completion before the next one starts, for the whole
+blog. Each `update()` call very likely does at least one file read
+internally (hashing, content parsing, thumbnail/build triggers). Under S3,
+that's thousands of files × a per-request latency serially, with zero
+overlap — a rebuild that takes seconds today could plausibly take minutes.
+**A local SSD cache wouldn't fix this either** — a full rebuild touches
+every file for the first time, so the cache starts stone cold regardless of
+whether Phase 2b exists. The actual lever is **parallelizing this loop**
+(S3 comfortably handles high concurrent request rates — official guidance
+is 5,500 GET/HEAD requests/sec *per prefix*, and `blogID`-prefixed keys
+already spread load across many prefixes), not caching. This needs to be
+addressed as part of the S3 migration itself, independent of the Phase 2a/2b
+caching decision — worth auditing `rebuild.js` and `buildFromFolder.js` for
+this specifically before cutting `.folder` over to S3, not discovering it
+after.
 
-**Recommended approach:** use the `toxiproxy`-based benchmark already
-planned (§4.7) to answer this with real numbers before committing to build
-Phase 2b — measure actual S3 GET/PUT latency from your EC2 region/AZ, and
-compare it against the current EBS numbers gathered per §4.7's dashboard
-instructions, specifically for the request *volume and pattern* that Bunny
-cache-misses plus Origin Shield actually produce in production (not total
-traffic — the vast majority of which never reaches the origin at all). If
-that comes back comfortably acceptable, skip Phase 2b entirely and revisit
-only if real production behavior later suggests otherwise. If it doesn't,
-you'll have real numbers to size the cache against, rather than guessing a
-hit-rate target upfront the way an LRU cache's size is usually chosen.
+**A related, but genuinely different problem, worth pulling apart
+explicitly: the ordinary sync → build flow, not just full rebuilds.** A
+regular file-change-via-client-sync-then-build flow can plausibly read the
+*same* just-written file's content more than once in quick succession
+within one `folder.update(path)` call — computing a hash/fingerprint,
+parsing content, triggering a thumbnail/build step, etc., potentially each
+independently calling `.read()` on data the same process just handled
+moments ago. This is a different shape of problem than Phase 2b's design
+target (a long-lived, cross-instance, multi-blog cache serving *unrelated*
+future requests) — it's narrow, single-operation, single-process, and
+short-lived. Recommend **not** conflating the two: rather than concluding
+"therefore Phase 2b must exist," a much cheaper mechanism handles this
+specific case — a small, short-TTL, in-process write-through memoization
+inside the storage layer itself, scoped to a single sync operation (e.g.
+cleared at the end of `folder.update`, or just a few seconds' TTL keyed by
+`(blogID, path)`). When `store.folder.write(path, data)` runs, the content
+is already in hand — an immediately-following `.read()` for that same path,
+within the same operation, can be served from that short-lived memoization
+instead of a fresh S3 round trip, with none of Phase 2b's complexity
+(no eviction policy, no cross-instance consistency problem, since it's
+deliberately not meant to outlive one sync operation). This is cheap enough
+to build in Phase 0/1 regardless of what Phase 2a's measurements eventually
+say about the bigger cache — it solves a structurally different problem
+(redundant round trips *within* one logical operation) than Phase 2b solves
+(serving *unrelated* future requests from a warm cache). Worth pairing this
+with an actual audit of the sync/build pipeline for how many independent
+`.read()` calls a single file change triggers today — the cheapest fix of
+all might just be threading the content already read once through the rest
+of the pipeline in memory, rather than re-reading it via the storage layer
+at each step, which the memoization above is a safety net for, not a
+replacement for fixing at the source where practical.
+
+**Recommended approach for the *actual* Phase 2b question, now with a
+better source of data than a synthetic benchmark:** you suggested
+instrumenting real read operations during the dual-write phase (Phase 1)
+to get concrete X→Y timing numbers rather than synthetic ones — this is a
+stronger version of the `toxiproxy` benchmark idea from §4.7, not just a
+supplement to it, since it measures actual production access patterns
+rather than an approximation. Concretely: during Phase 1/2a, have a
+*sampled* fraction of reads (e.g. 1-5%, not every read — keeping the
+measurement's own S3 request-cost overhead negligible) perform a shadow S3
+read alongside the real (local-disk, in Phase 1; or the only read, once
+cut over in 2a) read, timing both, and log
+`{operation, scope, byteSize, localMs, s3Ms}` — either to existing app logs
+(queryable via the existing SSH log tooling) or a small Redis-backed
+rolling histogram, whichever is cheaper to query later. Since every read
+already funnels through the storage abstraction (that's the whole point of
+building it first), this is a natural, single-choke-point place to add the
+instrumentation — no need to touch call sites individually. This gives real
+X-was-N-ms/Y-would-have-been-M-ms numbers for your actual traffic and file-size
+distribution, which is a strictly better input to the Phase 2b decision
+than a synthetic `toxiproxy` benchmark — recommend leaning on this over the
+synthetic version once Phase 1 is running, and using `toxiproxy` mainly for
+earlier, pre-Phase-1 sanity-checking before any real traffic exists to
+measure.
 
 ## 5. Other open decisions worth resolving before/while building
 
 - **Whether Phase 2b (the SSD cache) needs to be built at all** (§4.9) —
   the single biggest open question left in this plan, and the best kind to
-  have: resolvable by measurement rather than judgment call. Everything
-  else in §2.6 (cross-instance invalidation, ETag reconciliation) is moot
-  if the answer turns out to be "no."
-- **B2 delete semantics** (`--delete` mirror vs. grow-and-expire) (§4.7) —
-  still an open yes/no, separate from the (now decided) region question.
+  have: resolvable by measurement (the shadow-read instrumentation below)
+  rather than judgment call. Everything else in §2.6 (cross-instance
+  invalidation, ETag reconciliation) is moot if the answer turns out to be
+  "no."
+- **`rebuild.js`'s serial file-processing loop** (§4.9) — confirmed real,
+  not speculative (`async.eachSeries` at `app/sync/rebuild.js:113`). Needs
+  a concrete parallelization approach decided (bounded concurrency via
+  `async.eachLimit` or similar, sized to avoid overwhelming S3's per-prefix
+  request-rate guidance) before `.folder` moves to S3.
+- **Shadow-read instrumentation sampling rate** (§4.9) — what fraction of
+  reads to double up during Phase 1/2a (1%? 5%?) to gather real S3-vs-local
+  timing data without adding meaningful S3 request-cost overhead from the
+  measurement itself.
+- **B2 retention window** (§4.7) — a number for the
+  `NoncurrentVersionExpiration` rule, not otherwise decided.
 - **Daily write rate and EBS latency/throughput** (§4.7) — data-gathering
   steps given, not yet pulled.
 - **Object key layout — one thing still worth a check**: S3 keys are always

@@ -67,6 +67,42 @@ describe("render", function () {
         expect(body).not.toContain("DistinctTitle");
     });
 
+    it("keeps entry tags intact on entries.html, which aliases {{#entries}} to the same objects as {{#posts}}", async function () {
+        await this.publish({ path: "/a.txt", content: "Tags: Reviews\n\nA body" });
+
+        await this.template({
+            "entries.html": "{{#entries}}{{title}} in {{#tags}} {{name}} {{/tags}}{{/entries}}",
+        });
+
+        const body = await (await this.get("/")).text();
+
+        expect(body).toContain("Reviews");
+    });
+
+    it("keeps entry tags intact on tagged.html, which aliases {{#entries}} to the same objects as {{#tagged}}", async function () {
+        await this.publish({ path: "/a.txt", content: "Tags: Reviews\n\nA body" });
+
+        await this.template({
+            "tagged.html": "{{#entries}}{{title}} in {{#tags}} {{name}} {{/tags}}{{/entries}}",
+        });
+
+        const body = await this.text("/tagged/reviews");
+
+        expect(body).toContain("Reviews");
+    });
+
+    it("keeps entry tags intact on search.html, which aliases {{#entries}} to the same objects as {{#search_results}}", async function () {
+        await this.publish({ path: "/a.txt", content: "Tags: Reviews\n\nBananas" });
+
+        await this.template({
+            "search.html": "{{#entries}}{{title}} in {{#tags}} {{name}} {{/tags}}{{/entries}}",
+        });
+
+        const body = await this.text("/search?q=bananas");
+
+        expect(body).toContain("Reviews");
+    });
+
     it("exposes partials to views, including partials in partials", async function () {
         
         await this.template({

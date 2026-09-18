@@ -36,7 +36,14 @@ function createRedisClient() {
 // This keeps cache mutation limited to node-redis itself.
 createRedisClient.getClientSideCacheStats = function (client) {
   const clientSideCache = clientSideCaches.get(client);
-  return clientSideCache ? clientSideCache.stats() : null;
+  if (!clientSideCache) return null;
+
+  const stats = clientSideCache.stats();
+  // node-redis only bounds this cache by entry count, not by byte size, so
+  // entryCount/maxEntries is the only signal for how full it actually is.
+  stats.entryCount = clientSideCache.size();
+  stats.maxEntries = clientSideCache.maxEntries;
+  return stats;
 };
 
 module.exports = createRedisClient;

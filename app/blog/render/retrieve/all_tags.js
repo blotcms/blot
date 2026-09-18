@@ -1,6 +1,7 @@
 const { listTags } = require("../../lib/models");
 const { normalizePathPrefix } = require("helper/pathPrefix");
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
+const cacheStats = require("../../lib/cacheStats");
 const { compactTags, expandTags } = require("./helpers/compactTags");
 const LRUCache = require("lru-cache").LRUCache;
 const asRetriever = require("../../lib/asRetriever");
@@ -93,3 +94,4 @@ module.exports._createCacheKey = createCacheKey;
 module.exports._clear = function () {
   allTagsCache.clear();
 };
+module.exports._stats = cacheStats("allTags", allTagsCache);

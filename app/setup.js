@@ -10,6 +10,7 @@ const async = require("async");
 const clfdate = require("helper/clfdate");
 const scheduler = require("./scheduler");
 const logRedisCacheStats = require("./scheduler/redis-cache-stats");
+const logRenderCacheStats = require("./scheduler/render-cache-stats");
 const flush = require("documentation/tools/flush-cache");
 const configureLocalBlogs = require("./configure-local-blogs");
 const purgeCdnUrls = require("helper/purgeCdnUrls");
@@ -49,6 +50,15 @@ async function runPostListenTasks() {
     setInterval(logRedisCacheStats, 60 * 1000);
   } catch (err) {
     logError("Failed to start Redis cache stats logging", err);
+  }
+
+  try {
+    // Process memory plus the render-path in-process LRU caches, so heap
+    // growth can be correlated against cache footprint after the fact.
+    log("Starting render cache stats logging asynchronously");
+    setInterval(logRenderCacheStats, 60 * 1000);
+  } catch (err) {
+    logError("Failed to start render cache stats logging", err);
   }
 
   try {

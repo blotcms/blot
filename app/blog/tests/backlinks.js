@@ -26,6 +26,22 @@ describe("backlinks", function () {
     expect(body).toContain("Linker Page");
   });
 
+  it("keeps backlinks intact on entries.html, which aliases {{#entries}} to the same objects as {{#posts}}", async function () {
+    await this.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
+    await this.write({
+      path: "/linker.txt",
+      content: "Title: Linker\n\n[see target](/target)",
+    });
+    await this.template({
+      "entries.html":
+        "{{#entries}}{{#backlinks.length}}Backlinks for {{title}}: {{#backlinks}}{{title}}{{/backlinks}}{{/backlinks.length}}{{/entries}}",
+    });
+
+    const body = await this.text("/");
+    expect(body).toContain("Backlinks for Target:");
+    expect(body).toContain("Linker");
+  });
+
   it("renders multiple backlinks when several pages link to the same page", async function () {
     await this.write({
       path: "/pages/target.txt",
