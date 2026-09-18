@@ -177,7 +177,10 @@ function deletionDue(user, now, graceMs) {
   return details.periodEndedAt + graceMs <= now;
 }
 
-function overdueDetails(user, now) {
+// startedAtMs optionally overrides when the subscription went overdue. Stripe
+// rolls current_period_end forward on unpaid subscriptions, so for those the
+// caller should pass the date from models/user/overdueSince instead.
+function overdueDetails(user, now, startedAtMs) {
   now = now || Date.now();
 
   var stripe = user && user.subscription;
@@ -199,7 +202,7 @@ function overdueDetails(user, now) {
     };
   }
 
-  var startedAt = stripePeriodEndAtMs(stripe);
+  var startedAt = startedAtMs || stripePeriodEndAtMs(stripe);
   if (!startedAt) {
     return {
       overdue: false,

@@ -1,11 +1,10 @@
 var async = require("async");
 var colors = require("colors/safe");
-var moment = require("moment");
 var eachUser = require("../each/user");
 var getConfirmation = require("../util/getConfirmation");
-var subscriptionLifecycle = require("models/user/subscriptionLifecycle");
 var Delete = require("dashboard/account/delete");
 var Blog = require("models/blog");
+var removal = require("models/user/removal");
 
 var argv = process.argv.slice(2);
 var FAST_MODE = argv.indexOf("-fast") !== -1 || argv.indexOf("--fast") !== -1;
@@ -26,42 +25,6 @@ function printUsage() {
 if (HELP_FLAG) {
   printUsage();
   process.exit(0);
-}
-
-function candidateFromCancellation(user) {
-  var details = subscriptionLifecycle.cancellationDetails(user);
-
-  if (!details.cancelled || !details.periodEnded) return null;
-  if (!subscriptionLifecycle.deletionDue(user)) return null;
-
-  return {
-    user: user,
-    reason: "cancelled",
-    description:
-      "cancelled, subscription period ended " +
-      moment(details.periodEndedAt).fromNow() +
-      " (" +
-      new Date(details.periodEndedAt).toISOString() +
-      "), provider=" +
-      details.provider,
-  };
-}
-
-function candidateFromOverdue(user) {
-  var overdue = subscriptionLifecycle.overdueDetails(user);
-
-  if (!overdue.overdue || overdue.phase !== "deletion_flow") return null;
-
-  return {
-    user: user,
-    reason: "overdue",
-    description:
-      "overdue since " +
-      moment(overdue.startedAt).fromNow() +
-      " (" +
-      new Date(overdue.startedAt).toISOString() +
-      ")",
-  };
 }
 
 function describeUser(candidate, blogs) {
@@ -120,30 +83,37 @@ function collectCandidates(done) {
 
   eachUser(
     function (user, next) {
-      var candidate =
-        candidateFromCancellation(user) || candidateFromOverdue(user);
+      removal.overdueFor(user, function (err, overdue) {
+        if (err) return next(err);
 
-      if (!candidate) return next();
+        var candidate = removal.removalCandidate(user, overdue);
 
-      async.map(
-        user.blogs || [],
-        function (blogID, blogDone) {
-          Blog.get({ id: blogID }, blogDone);
-        },
-        function (err, blogs) {
-          if (err) return next(err);
+        if (!candidate) return next();
 
-          candidate.blogs = blogs.filter(Boolean);
-          candidates.push(candidate);
-
-          next();
-        }
-      );
+        withBlogs(user, candidate, next);
+      });
     },
     function (err) {
       done(err, candidates);
     }
   );
+
+  function withBlogs(user, candidate, next) {
+    async.map(
+      user.blogs || [],
+      function (blogID, blogDone) {
+        Blog.get({ id: blogID }, blogDone);
+      },
+      function (err, blogs) {
+        if (err) return next(err);
+
+        candidate.blogs = blogs.filter(Boolean);
+        candidates.push(candidate);
+
+        next();
+      }
+    );
+  }
 }
 
 function runFastMode(candidates, done) {
