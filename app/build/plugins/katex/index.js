@@ -1,5 +1,6 @@
 // Render span.math.inline and span.math.display, the normalized internal representation for TeX emitted by converters, into KaTeX HTML.
 const katex = require("katex");
+const HARD_BREAK_SENTINEL = require("../../math/hardBreakSentinel");
 
 const SKIP_TAGS = ["script", "style", "code", "pre"];
 const BLOCK_BOUNDARY_TAGS = [
@@ -41,34 +42,81 @@ function renderTex(source, display) {
   }
 }
 
-function hasSiblingContent($parent, $exclude) {
-  return $parent
-    .contents()
-    .toArray()
-    .some(function (node) {
-      if (node === $exclude[0]) return false;
-      if (node.type === "text") return /\S/.test(node.data || "");
-      return node.type === "tag";
-    });
+// A <br> that loosenDisplayMath inserted to isolate display math on its own
+// source line carries the sentinel in the text node on the far side of it
+// (see build/math/loosenDisplayMath.js). A <br> the author actually wrote
+// has no such marker, and still disqualifies the math from display
+// rendering, as before.
+function isOwnLineBreak(br, direction) {
+  const neighbour = direction === "prev" ? br.prev : br.next;
+  return (
+    neighbour &&
+    neighbour.type === "text" &&
+    (neighbour.data || "").indexOf(HARD_BREAK_SENTINEL) !== -1
+  );
 }
 
-// Display math sharing its nearest text-content block with other content should
-// render inline so it doesn't break out of the line.
-function isMixedBlockDisplay($span) {
-  let $node = $span;
-  let $parent = $node.parent();
-  let mixed = false;
+// Walk outward from a node, in one direction, looking for real content that
+// shares its line with it. An author-written <br> marks mixed content, same
+// as any other tag. A loosenDisplayMath <br> marks a line boundary instead:
+// content beyond it doesn't count. Running out of siblings at one level
+// moves the search up to that ancestor's position in its own parent,
+// stopping for good at a block-boundary tag (p, li, td, ...).
+function hasContentOnSameLine(node, direction) {
+  while (node) {
+    const parent = node.parent;
+    if (!parent) return false;
 
-  while ($parent.length) {
-    if (hasSiblingContent($parent, $node)) mixed = true;
+    let sibling = direction === "prev" ? node.prev : node.next;
 
-    if ($parent.is(BLOCK_BOUNDARY_SELECTOR)) return mixed;
+    while (sibling) {
+      if (sibling.type === "tag" && sibling.name === "br") {
+        return !isOwnLineBreak(sibling, direction);
+      }
+      if (sibling.type === "text") {
+        const text = (sibling.data || "").split(HARD_BREAK_SENTINEL).join("");
+        if (/\S/.test(text)) return true;
+      } else if (sibling.type === "tag") {
+        return true;
+      }
+      sibling = direction === "prev" ? sibling.prev : sibling.next;
+    }
 
-    $node = $parent;
-    $parent = $node.parent();
+    if (parent.type === "tag" && BLOCK_BOUNDARY_TAGS.includes(parent.name)) {
+      return false;
+    }
+
+    node = parent;
   }
 
   return false;
+}
+
+// Display math sharing its line with other content should render inline so
+// it doesn't break out of the line. Math set off on its own line - whether
+// by a blank line (a separate paragraph) or a hard line break around it -
+// keeps its display rendering even when other text shares the same block.
+function isMixedBlockDisplay($span) {
+  const node = $span[0];
+
+  return (
+    hasContentOnSameLine(node, "prev") || hasContentOnSameLine(node, "next")
+  );
+}
+
+function stripHardBreakSentinels($) {
+  $("*")
+    .addBack()
+    .contents()
+    .each(function () {
+      if (
+        this.type === "text" &&
+        this.data &&
+        this.data.indexOf(HARD_BREAK_SENTINEL) !== -1
+      ) {
+        this.data = this.data.split(HARD_BREAK_SENTINEL).join("");
+      }
+    });
 }
 
 function renderPandocMath($) {
@@ -91,6 +139,7 @@ function render($, callback) {
   if (!$ || typeof $ !== "function") return callback(null);
 
   renderPandocMath($);
+  stripHardBreakSentinels($);
 
   callback(null);
 }

@@ -2,6 +2,7 @@ var spawn = require("child_process").spawn;
 var path = require("path");
 var indentation = require("./indentation");
 var footnotes = require("./footnotes");
+var loosenDisplayMath = require("build/math/loosenDisplayMath");
 var time = require("helper/time");
 var config = require("config");
 var Pandoc = config.pandoc.bin;
@@ -188,6 +189,12 @@ module.exports = function (blog, text, options, callback) {
   time("indentation");
   text = safely(indentation, text);
   time.end("indentation");
+
+  // Only display math that Pandoc will actually parse (i.e. when the katex
+  // plugin is enabled) needs the hard-break treatment.
+  if (katexEnabled) {
+    text = safely(loosenDisplayMath, text);
+  }
 
   debug("Pre-pandoc", text);
   time("pandoc");

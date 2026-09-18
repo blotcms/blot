@@ -5,8 +5,19 @@ const Pandoc = config.pandoc.bin;
 const debug = require("debug")("blot:converters:org");
 const cheerio = require("cheerio");
 const extractMetadata = require("build/metadata");
+const loosenDisplayMath = require("build/math/loosenDisplayMath");
 
 module.exports = function (blog, text, callback) {
+  // Org always emits katex spans (see --katex below), so, as with the
+  // markdown converter, display math ($$...$$) that occupies a whole
+  // source line by itself but is glued to surrounding prose by a single
+  // newline should still render as display rather than inline.
+  try {
+    text = loosenDisplayMath(text, { hardBreak: "\\\\" });
+  } catch (e) {
+    debug("loosenDisplayMath error", e.message || e.code, "caught safely");
+  }
+
   var args = [
     // Limit the heap size for the pandoc process
     // to prevent pandoc consuming all the system's
