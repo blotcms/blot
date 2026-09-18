@@ -4,6 +4,19 @@ const list = require("./list");
 
 module.exports = async function eachEntry(locals, iterator) {
   const entries = [];
+  // Older listing templates get the same Entry objects aliased under two
+  // locals keys (e.g. `posts` and `entries` - see render/listingViews.js), so
+  // this walk can reach the same object more than once. Dedupe by identity;
+  // otherwise augment() runs twice on one entry and mangles fields it
+  // rewrites in place, e.g. entry.tags (strings -> objects, then discarded
+  // as invalid on the second pass).
+  const seen = new Set();
+
+  function queueEntry(entry) {
+    if (seen.has(entry)) return;
+    seen.add(entry);
+    entries.push(entry);
+  }
 
   extractEntriesFromView(locals);
 
@@ -11,8 +24,14 @@ module.exports = async function eachEntry(locals, iterator) {
     entries.map(async (entry) => {
       const queue = [iterator(entry)];
 
-      if (entry.next instanceof Entry) queue.push(iterator(entry.next));
-      if (entry.previous instanceof Entry) queue.push(iterator(entry.previous));
+      if (entry.next instanceof Entry && !seen.has(entry.next)) {
+        seen.add(entry.next);
+        queue.push(iterator(entry.next));
+      }
+      if (entry.previous instanceof Entry && !seen.has(entry.previous)) {
+        seen.add(entry.previous);
+        queue.push(iterator(entry.previous));
+      }
 
       await Promise.all(queue);
     })
@@ -29,7 +48,7 @@ module.exports = async function eachEntry(locals, iterator) {
 
       // This is an entry, modify it now and proceed!
       if (local instanceof Entry) {
-        entries.push(local);
+        queueEntry(local);
         continue;
       }
 
@@ -44,7 +63,7 @@ module.exports = async function eachEntry(locals, iterator) {
       // entry then the rest is too. This could be dumb.
       if (type(local, "array") && local[0] instanceof Entry) {
         for (const entry of local) {
-          entries.push(entry);
+          queueEntry(entry);
         }
         continue;
       }
