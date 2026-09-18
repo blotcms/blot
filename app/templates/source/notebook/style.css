@@ -135,6 +135,7 @@ a:hover {filter: brightness(0.75);}
 
 .site-title {
   margin: 0;
+  min-width: 0;
   font-weight: bold;
   font-size: 200%;
   line-height: var(--title-line-height);
@@ -149,6 +150,7 @@ a:hover {filter: brightness(0.75);}
   display: flex;
   align-items: center;
   gap: 0.5em;
+  min-width: 0;
 }
 
 .site-title a:hover {filter: brightness(0.75);}
@@ -265,6 +267,7 @@ a:hover {filter: brightness(0.75);}
 
 .content-wrapper {
   background: var(--content-background);
+  min-height: 80vh;
   display: flex;
   justify-content: space-between;
   align-items: stretch;
@@ -303,6 +306,9 @@ a:hover {filter: brightness(0.75);}
   .main, .sidebar {flex-basis: auto; width: 100%;}
   .main {padding-right: 0.5rem; padding-left: 0.5rem;}
   .sidebar {box-shadow: 0 -1px 0 var(--sidebar-border-color);}
+  .site-header {gap: 1rem;}
+  .site-header:not(.site-header--stripe) .site-title {font-size: 180%;}
+  .site-title {flex: 1 1 auto;}
 }
 
 /* ---------- Date header ---------- */

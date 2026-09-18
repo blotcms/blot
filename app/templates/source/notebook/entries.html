@@ -8,6 +8,12 @@
       <div class="content-wrapper">
         <main class="main">
 
+          {{^posts.length}}
+          <div class="centered">
+            <p>No posts yet.</p>
+          </div>
+          {{/posts.length}}
+
           {{#posts}}
           <article class="post">
             {{^hide_dates}}{{#date}}<div class="date-header"><span>{{date}}</span></div>{{/date}}{{/hide_dates}}
