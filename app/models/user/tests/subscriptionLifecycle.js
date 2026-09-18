@@ -290,5 +290,15 @@ describe("subscriptionLifecycle", function () {
       var details = subscriptionLifecycle.overdueDetails(user, now);
       expect(details.overdue).toBe(false);
     });
+    it("uses startedAtMs instead of a period end Stripe rolled into the future", function () {
+      var user = {
+        subscription: { status: "unpaid", current_period_end: Math.floor((now + 86400000 * 20) / 1000) }
+      };
+      var startedAt = now - ONE_MONTH_MS * 2 - 86400000;
+      var details = subscriptionLifecycle.overdueDetails(user, now, startedAt);
+      expect(details.overdue).toBe(true);
+      expect(details.startedAt).toEqual(startedAt);
+      expect(details.phase).toEqual("deletion_flow");
+    });
   });
 });
