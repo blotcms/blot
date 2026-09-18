@@ -1,5 +1,26 @@
 # Local Folder Client
 
+## Production status: not a production client
+
+This client is development-only. It is not, and should not become, a way
+for real users to sync a live blog folder. In practice its main use is
+building the demo/fixture folders used by development and test scripts
+(e.g. `scripts/development/translate/index.js`) — it is probably not
+exercised in production at all.
+
+This is enforced in code, not just by convention: `app/clients/index.js`
+only registers `clients.local` when `config.environment === "development"`,
+so the `local` client name doesn't exist in the client registry in
+production at all — there's no dashboard flow, route, or configuration path
+by which a production, user-facing blog could be switched to it. Any change
+to this module should preserve that property; it should remain impossible
+to configure for a user-facing site, not just discouraged.
+
+Because it never runs against real user data or in a production
+environment, this module warrants a lighter security review bar than the
+real sync clients (Dropbox, Google Drive, iCloud, Git) — issues here can't
+expose or corrupt a real user's blog, only development/test fixtures.
+
 ## Purpose
 
 The local folder client provides a minimal implementation of Blot's client interface for syncing a blog folder stored directly on the Blot server. This client is intended for development and testing environments only and is not available in production. It serves as a reference implementation that demonstrates the core responsibilities and contract that all clients must fulfill.
