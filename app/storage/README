@@ -719,19 +719,24 @@ app/storage/
   first real visitor doesn't pay a cold miss. Confirms your own instinct in
   `TODO` ("we probably don't need a caching layer for static files since
   static files will end up in CDN storage after first request").
-- **Phase 2 — blog folder source files**, backed by the SSD-LRU-cache pattern
-  from §1.4, generalized from the macserver watcher rather than reinvented.
-  Source of truth in S3; local SSD holds a working set, evicted
-  least-recently-used, exactly like today's macserver disk-usage monitor. Read
-  path never blocks on S3 for a warm blog; a cold blog pays a one-time fetch
-  before its next sync/render, not per-request. This phase must also replace
-  `folder.js`'s live per-request `readdir`/`stat` (§1.2) with `.list()`
-  (§2.4) — no longer optional once directory listing means an S3
-  `ListObjectsV2` call instead of a local syscall. This is also where the
-  per-object SSD cache invalidation design (§2.6) and the consolidated
-  case-insensitive resolution method (§2.5) land, since both only matter
-  once blog-folder content is actually cached/mirrored locally in front of
-  a remote source of truth.
+- **Phase 2a — blog folder source files, S3-direct, deliberately *without*
+  the SSD cache at first.** Move `.folder` to S3 as the source of truth,
+  with no local caching layer yet, and measure real latency/throughput in
+  production against actual traffic before building anything more. See
+  §4.9 for why this has a real chance of being sufficient on its own — if
+  it holds up, Phase 2b (the cache) may not be needed at all, which is a
+  meaningfully simpler system (no eviction policy, no cross-instance
+  invalidation problem in §2.6, nothing to keep consistent). This phase
+  must also replace `folder.js`'s live per-request `readdir`/`stat` (§1.2)
+  with `.list()` (§2.4), and land the consolidated case-insensitive
+  resolution method (§2.5) — neither depends on whether a cache exists.
+- **Phase 2b — the SSD-LRU-cache pattern from §1.4, generalized from the
+  macserver watcher, only if Phase 2a's measurements show it's actually
+  needed.** If built: source of truth stays S3; local SSD holds a working
+  set, evicted least-recently-used. Read path never blocks on S3 for a warm
+  blog; a cold blog pays a one-time fetch before its next sync/render, not
+  per-request. This is where the per-object cache invalidation design
+  (§2.6) would land, if this phase happens at all.
 - **Alongside all of this:** replace the local-disk `proper-lockfile` lock
   (§1.3) with a Redis-based distributed lock before ever running multiple app
   boxes against the same S3 bucket — otherwise two boxes syncing the same blog
@@ -1083,8 +1088,87 @@ If a fuller cost breakdown is useful again later, it's best treated as a
 private calculation between us rather than something that lives in this
 document.
 
+### 4.9 Can `.folder` skip the SSD cache entirely? Worth measuring before building it
+
+You asked whether it's worth sizing up pure S3-backed latency/throughput
+*before* building the caching layer, on the chance it turns out unnecessary.
+Strongly agree this is worth doing first, not as an afterthought — and there
+are concrete reasons to think it has a real chance of working, not just
+optimism:
+
+**The read paths that would actually hit S3 directly are narrower than
+"every file read" once everything else in this plan lands:**
+- Rendered HTML/CSS/JS never touches raw file storage at all — it's
+  Redis-cached (§1.2).
+- Generated assets are permacached by Bunny after first fetch (§1.7, §4.4),
+  and the plan already has the storage layer actively warming that cache at
+  build time (§4.4) rather than waiting for a real visitor to trigger the
+  first fetch.
+- Origin Shield (confirmed enabled, §4.4) already deduplicates concurrent
+  cache misses across edge nodes into a single origin request, rather than
+  every miss independently hitting the origin.
+- Folder-link resolution and the `folder` template local are being
+  restructured anyway (build-time baking via PR #1896, paginated `.list()`
+  via §2.4) — independent of whether a cache exists underneath them.
+- Sync/build-time file reads (converting a doc, generating a thumbnail) are
+  async and already off any visitor's critical path (§1.2) — S3 latency
+  there is close to irrelevant no matter what it is.
+
+What's left, once all of that is accounted for, is genuinely just: **a
+Bunny cache-miss that needs a fresh fetch from your origin for a
+`.folder`/`.assets` file.** That's a real request, but it's a *cache-fill*
+event, not a per-visitor request — Bunny's own tolerance for how long an
+origin fetch takes is generous (it's filling its own cache once, not
+serving a page load directly), so the bar "pure S3 needs to clear" is lower
+than "must feel instant to a visitor."
+
+**Rough scale of what that bar actually is, from published S3 figures (not
+derived from your setup — treat as ballpark, to be replaced by your own
+measurement):** same-region S3 GET latency is typically single-to-low-double-digit
+milliseconds at p50 (roughly 10-20ms), with a heavier tail at p99 depending
+on object size and request patterns — meaningfully higher than gp2 EBS's
+typical ~1-2ms per operation (worth remembering gp2 is *also*
+network-attached block storage over AWS's Nitro fabric, not physically
+local disk, so this isn't a "network vs. local" comparison, just a "how much
+protocol/routing overhead per request" one). For a single cache-fill fetch,
+an extra ~10-20ms is very likely imperceptible; the real question is
+whether *any* request pattern in this system is latency-sensitive enough,
+or frequent enough at volume, for that difference to matter in aggregate —
+which is exactly what needs measuring, not assumed either way.
+
+**One case pure S3 could genuinely struggle with, independent of caching,
+worth checking separately:** a full rebuild or initial sync of a
+many-thousand-file blog, if implemented as a serial loop of individual file
+reads, would accumulate S3's per-request latency linearly (thousands of
+files × ~10-20ms serially adds up to real wall-clock time, vs. gp2's
+~1-2ms). Note a local SSD cache wouldn't help this case either — a full
+rebuild touches every file, so the cache starts cold regardless. The actual
+lever here is **parallelizing S3 requests** (S3 comfortably supports high
+concurrent request rates — official guidance is 5,500 GET/HEAD requests/sec
+*per prefix*, and `blogID`-prefixed keys already spread load across many
+prefixes naturally), not caching. Worth auditing whether `buildFromFolder`,
+`Sync/rebuild.js`, and similar bulk-read code paths read files serially or
+concurrently today, independent of the cache-or-no-cache question.
+
+**Recommended approach:** use the `toxiproxy`-based benchmark already
+planned (§4.7) to answer this with real numbers before committing to build
+Phase 2b — measure actual S3 GET/PUT latency from your EC2 region/AZ, and
+compare it against the current EBS numbers gathered per §4.7's dashboard
+instructions, specifically for the request *volume and pattern* that Bunny
+cache-misses plus Origin Shield actually produce in production (not total
+traffic — the vast majority of which never reaches the origin at all). If
+that comes back comfortably acceptable, skip Phase 2b entirely and revisit
+only if real production behavior later suggests otherwise. If it doesn't,
+you'll have real numbers to size the cache against, rather than guessing a
+hit-rate target upfront the way an LRU cache's size is usually chosen.
+
 ## 5. Other open decisions worth resolving before/while building
 
+- **Whether Phase 2b (the SSD cache) needs to be built at all** (§4.9) —
+  the single biggest open question left in this plan, and the best kind to
+  have: resolvable by measurement rather than judgment call. Everything
+  else in §2.6 (cross-instance invalidation, ETag reconciliation) is moot
+  if the answer turns out to be "no."
 - **B2 delete semantics** (`--delete` mirror vs. grow-and-expire) (§4.7) —
   still an open yes/no, separate from the (now decided) region question.
 - **Daily write rate and EBS latency/throughput** (§4.7) — data-gathering
@@ -1130,8 +1214,13 @@ the direct-to-S3 optimization is a deliberate, well-understood later step
 (one Edge Rule per scope), not a blocker. The remaining real design work,
 beyond the refactor, is: (1) moving the per-blog sync lock off local disk
 before multi-instance ever becomes real, and (2) rewriting `folder.js`'s
-live directory listing to use a sync-time-built index rather than live
-`ListObjectsV2` calls once blog folders are on S3.
+live directory listing to use paginated `.list()` calls rather than a
+buffering `fs.readdir`. Best-case scenario worth actually pursuing, per
+§4.9: the SSD caching layer itself — the single largest remaining piece of
+new operational complexity in this whole plan (eviction, cross-instance
+invalidation, reconciliation) — may turn out to be unnecessary, and that's
+answerable by measurement before committing to build it, not something to
+guess at upfront.
 
 Suggested first concrete step, **once PR #1896 has landed** (the one hard
 sequencing dependency, per the scope note at the top): build
