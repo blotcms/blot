@@ -3,6 +3,7 @@ const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
+const cacheStats = require("../../lib/cacheStats");
 const LRUCache = require("lru-cache").LRUCache;
 const { normalizePathPrefix } = require("helper/pathPrefix");
 const {
@@ -154,3 +155,4 @@ module.exports._createCacheKey = createCacheKey;
 module.exports._clear = function () {
   taggedCache.clear();
 };
+module.exports._stats = cacheStats("tagged", taggedCache);

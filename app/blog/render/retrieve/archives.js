@@ -6,6 +6,7 @@ require("moment-timezone");
 const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
+const cacheStats = require("../../lib/cacheStats");
 
 const ALIASES = ["archives"];
 
@@ -130,3 +131,4 @@ module.exports._createCacheKey = createCacheKey;
 module.exports._clear = function () {
   archivesCache.clear();
 };
+module.exports._stats = cacheStats("archives", archivesCache);

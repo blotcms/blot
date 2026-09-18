@@ -4,6 +4,7 @@ const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const getTemplateSortOptions = require("blog/sortOptions");
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
+const cacheStats = require("../../lib/cacheStats");
 const asRetriever = require("../../lib/asRetriever");
 const {
   normalizePageNumber,
@@ -161,3 +162,4 @@ module.exports._createCacheKey = createCacheKey;
 module.exports._clear = function () {
   postsCache.clear();
 };
+module.exports._stats = cacheStats("posts", postsCache);

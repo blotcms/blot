@@ -2,6 +2,7 @@ const { getTotal } = require("../../lib/models");
 const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
 const { prepareCacheValue } = require("../../lib/clone");
+const cacheStats = require("../../lib/cacheStats");
 
 const totalPostsCache = new LRUCache({
   max: 10000,
@@ -35,3 +36,4 @@ module.exports._createCacheKey = createCacheKey;
 module.exports._clear = function () {
   totalPostsCache.clear();
 };
+module.exports._stats = cacheStats("totalPosts", totalPostsCache);

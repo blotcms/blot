@@ -1,5 +1,6 @@
 const { getFullView } = require("../lib/models");
 const { cloneDeep, prepareCacheValue } = require("../lib/clone");
+const cacheStats = require("../lib/cacheStats");
 const LRUCache = require("lru-cache").LRUCache;
 
 // This cache is safe because the key includes blog/template/view identity,
@@ -49,3 +50,4 @@ module.exports._createCacheKey = createCacheKey;
 module.exports._clear = function () {
   fullViewCache.clear();
 };
+module.exports._stats = cacheStats("fullView", fullViewCache);
