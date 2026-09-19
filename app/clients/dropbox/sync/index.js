@@ -8,7 +8,7 @@ var isDotfileOrDotfolder = _require.isDotfileOrDotfolder;
 var hashFile = require("helper/hashFile");
 var Database = require("../database");
 var persistError = require("../util/persistError");
-var { SOURCES } = require("../util/classifyError");
+var { SOURCES, classify } = require("../util/classifyError");
 var Path = require("path");
 var join = Path.join;
 var Delta = require("../delta");
@@ -402,6 +402,12 @@ function Apply(client, blogFolder, log, status) {
                 err.statusMessage === "Conflict"
               ) {
                 return callback();
+              }
+
+              // Revoked access will fail every remaining file and must not
+              // advance the cursor past changes we never downloaded.
+              if (err && classify(err, SOURCES.APPLY).persist) {
+                return callback(err);
               }
 
               // Swallow errors generally so we can proceed to next file

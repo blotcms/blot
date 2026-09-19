@@ -28,6 +28,19 @@ describe("dropbox classifyError", function () {
       expect(classified.status).toBe(401);
     });
 
+    it("stores a tagged auth failure from a later step under the auth source", function () {
+      const err = { status: 400, error: { error: "invalid_grant" } };
+      const classified = classify(err, SOURCES.APPLY);
+
+      expect(classified.source).toBe(SOURCES.AUTH);
+      expect(
+        issueFromAccount({
+          error_code: classified.status,
+          error_source: classified.source,
+        }).code
+      ).toBe(health.CODES.REAUTH_REQUIRED);
+    });
+
     it("maps invalid_grant from token refresh to REAUTH_REQUIRED", function () {
       const err = {
         status: 400,

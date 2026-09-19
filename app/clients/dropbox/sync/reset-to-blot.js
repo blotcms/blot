@@ -22,7 +22,7 @@ const {
 
 const set = promisify(require("../database").set);
 const persistError = promisify(require("../util/persistError"));
-const { SOURCES } = require("../util/classifyError");
+const { SOURCES, classify } = require("../util/classifyError");
 const tagSource = require("../util/tagSource");
 const createClient = promisify((blogID, cb) =>
   require("../util/createClient")(blogID, (err, ...results) => cb(err, results))
@@ -292,6 +292,8 @@ const walk = async (
           // either way; recording it as "skipped" here is just for
           // visibility in logs/summaries, not to affect the hourly email.
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
+          // Revoked access fails every remaining file: fail the resync.
+          if (classify(e, SOURCES.APPLY).persist) throw e;
           continue;
         }
       } else if (!localCounterpart) {
@@ -302,6 +304,8 @@ const walk = async (
           summary.downloaded += 1;
         } catch (e) {
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
+          // Revoked access fails every remaining file: fail the resync.
+          if (classify(e, SOURCES.APPLY).persist) throw e;
           continue;
         }
       } else {

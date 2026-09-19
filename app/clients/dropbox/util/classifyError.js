@@ -90,7 +90,9 @@ function classify(err, source) {
     result.persist = true;
     result.healthCode = health.CODES.REAUTH_REQUIRED;
     result.status = status || 401;
-    result.source = source || SOURCES.AUTH;
+    // A refresh failure can surface from any step (with status 400), so
+    // always store it as auth: issueFromAccount maps that source.
+    result.source = SOURCES.AUTH;
     return result;
   }
 
