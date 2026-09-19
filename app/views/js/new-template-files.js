@@ -111,6 +111,12 @@ function init(root) {
     var entry = rows[path];
     if (!entry) return;
 
+    // Finished files drop to the bottom, so the active file and the queue
+    // stay at the top of a long list
+    if (modifier === "done" && !/--done/.test(entry.row.className)) {
+      fileList.appendChild(entry.row);
+    }
+
     entry.state.textContent = text || "";
     entry.row.className =
       "file-drop__chip template-upload__file" +
