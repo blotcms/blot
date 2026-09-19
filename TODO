@@ -1,3 +1,5 @@
+Rebuild all sites to bake in folder CDN urls
+
 Why is Ross' template so slow to install? It takes a few seconds. Let's speed it up.
 
 Now we have many LRU caches in app/blog we need to gather data in production to rigorously determine the most effective relative sizes for the caches (include the mustache template cache in this)

@@ -76,6 +76,8 @@ TemplateEditor.route("/:templateSlug/install")
   })
   .post(function (req, res, next) {
     var templateID = req.body.template;
+    const log = typeof req.log === "function" ? req.log : function () {};
+
     if (typeof templateID !== "string") {
       const err = new TypeError("Invalid template ID");
       err.status = 400;
@@ -93,12 +95,18 @@ TemplateEditor.route("/:templateSlug/install")
     }
 
     var updates = { template: templateID };
+    log("Installing template", templateID);
     Blog.set(req.blog.id, updates, function (err) {
       if (err) return next(err);
+
+      log("Installed template", templateID);
+      log("Removing enabled from local templates");
 
       Template.removeEnabledFromAllTemplates(
         req.blog.id,
         function (removeErr) {
+          log("Removed enabled from local templates");
+
           if (removeErr) {
             console.warn(
               "Failed to remove enabled from local templates after install",
