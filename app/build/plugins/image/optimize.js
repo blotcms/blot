@@ -1,5 +1,5 @@
 var config = require("config");
-var uuid = require("uuid/v4");
+var { v4: uuid } = require("uuid");
 var join = require("path").join;
 var fs = require("fs-extra");
 var cache_folder_name = "_image_cache";

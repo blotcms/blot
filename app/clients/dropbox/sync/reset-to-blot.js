@@ -14,6 +14,7 @@ const {
   hasUnsupportedExtension,
   isDotfileOrDotfolder,
 } = require("../util/constants");
+const modifiedSince = require("./modified-since");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const {
   countLocalFiles,
@@ -31,11 +32,28 @@ const createClient = promisify((blogID, cb) =>
 // const upload = promisify(require("clients/dropbox/util/upload"));
 // const get = promisify(require("../database").get);
 
-async function resetToBlot(blogID, publish) {
+// update(path) is called as each file or directory changes on disk, so the
+// database follows the folder even if the walk fails part way through. It is
+// the same (blogID, publish, update) contract the iCloud and Drive clients
+// use, and callers should hold the folder lock while it runs.
+async function resetToBlot(blogID, publish, update) {
   if (!publish)
     publish = (...args) => {
       console.log(clfdate() + " Dropbox:", args.join(" "));
     };
+
+  const updatePath = async (path) => {
+    if (typeof update !== "function") return;
+    try {
+      await update(path);
+    } catch (err) {
+      publish("Failed to update", path, err.message);
+    }
+  };
+
+  // Files Dropbox modified after this moment may just be edits that
+  // landed mid-walk (before their webhook), not changes we failed to sync.
+  const startedAt = Date.now();
 
   publish("Syncing folder from Dropbox to Blot");
 
@@ -92,22 +110,37 @@ async function resetToBlotWithClient(blogID, publish, client, account) {
     })
   );
 
-  // This means that future syncs will be fast
-  await set(blogID, { cursor });
+  // The cursor is fetched before the walk, so edits made during it are still
+  // seen by the next sync, but only saved once the walk succeeds. If the walk
+  // throws, the old cursor stays and the next webhook can still see those files.
 
   const summary = {
     downloaded: 0,
     removed: 0,
     createdDirs: 0,
     skipped: 0,
+    // Subset of downloaded: files Dropbox modified after we started.
+    modifiedDuringWalk: 0,
+    startedAt,
   };
 
   const localRoot = localPath(blogID, "/");
   const progress = createProgress(await countLocalFiles(localRoot), publish);
 
-  await walk(blogID, client, publish, dropboxRoot, "/", summary, progress);
+  await walk(
+    blogID,
+    client,
+    publish,
+    updatePath,
+    dropboxRoot,
+    "/",
+    summary,
+    progress
+  );
 
+  // This means that future syncs will be fast
   await set(blogID, {
+    cursor,
     error_code: 0,
   });
 
@@ -120,6 +153,7 @@ const walk = async (
   blogID,
   client,
   publish,
+  updatePath,
   dropboxRoot,
   dir,
   summary,
@@ -146,6 +180,7 @@ const walk = async (
       try {
         await fs.remove(pathOnDisk);
         summary.removed += 1;
+        await updatePath(pathOnBlot);
       } catch (e) {
         publish("Failed to remove ignored", path_display, e.message);
       }
@@ -161,6 +196,7 @@ const walk = async (
       try {
         await fs.remove(pathOnDisk);
         summary.removed += 1;
+        await updatePath(pathOnBlot);
       } catch (e) {
         publish("Failed to remove", path_display, e.message);
       }
@@ -199,6 +235,7 @@ const walk = async (
         progress.publish("Removing", pathOnBlot);
         await fs.remove(pathOnDisk);
         summary.removed += 1;
+        await updatePath(pathOnBlot);
         publish("Creating directory", pathOnDisk);
         try {
           await fs.mkdir(pathOnDisk);
@@ -213,6 +250,7 @@ const walk = async (
         try {
           await fs.mkdir(pathOnDisk);
           summary.createdDirs += 1;
+          await updatePath(pathOnBlot);
         } catch (e) {
           if (e.code !== "ENAMETOOLONG") throw e;
           summary.skipped += 1;
@@ -227,6 +265,7 @@ const walk = async (
         blogID,
         client,
         publish,
+        updatePath,
         dropboxRoot,
         join(dir, name),
         summary,
@@ -245,6 +284,7 @@ const walk = async (
         summary.skipped += 1;
         try {
           await fs.outputFile(pathOnDisk, "");
+          await updatePath(pathOnBlot);
         } catch (err) {
           publish("Failed to create placeholder", pathOnBlot, err.message);
         }
@@ -263,6 +303,7 @@ const walk = async (
         summary.skipped += 1;
         try {
           await fs.outputFile(pathOnDisk, "");
+          await updatePath(pathOnBlot);
         } catch (err) {
           publish("Failed to create placeholder", pathOnBlot, err.message);
         }
@@ -282,12 +323,15 @@ const walk = async (
         try {
           await download(client, pathOnDropbox, pathOnDisk);
           summary.downloaded += 1;
+          await updatePath(pathOnBlot);
+          if (modifiedSince(remoteItem, summary.startedAt))
+            summary.modifiedDuringWalk += 1;
         } catch (e) {
           // A file can end up with a destination path longer than the
           // filesystem allows – seen in production when a Dropbox account
           // got stuck wrapping the same file in nested "(Conflict met
           // exemplaar van ...)" copies. That download can never succeed.
-          // countChanges() (init.js) only looks at downloaded/removed/
+          // countChanges() (sync/count-changes.js) only looks at downloaded/removed/
           // createdDirs, so this was never counted as an unsynced change
           // either way; recording it as "skipped" here is just for
           // visibility in logs/summaries, not to affect the hourly email.
@@ -302,6 +346,9 @@ const walk = async (
         try {
           await download(client, pathOnDropbox, pathOnDisk);
           summary.downloaded += 1;
+          await updatePath(pathOnBlot);
+          if (modifiedSince(remoteItem, summary.startedAt))
+            summary.modifiedDuringWalk += 1;
         } catch (e) {
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
           // Revoked access fails every remaining file: fail the resync.

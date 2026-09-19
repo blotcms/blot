@@ -8,6 +8,7 @@ var DateStamp = require("../../build/prepare/dateStamp");
 var Blog = require("../blog");
 var pathIndex = require("./pathIndex");
 var normalizePathPrefix = require("helper/pathPrefix").normalizePathPrefix;
+var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
 
 var MAX_RANDOM_ATTEMPTS = 10;
 
@@ -392,7 +393,12 @@ module.exports = (function () {
           return callback(entries);
         });
       })
-      .catch(function () {
+      .catch(function (err) {
+        // Callers that would cache or render an empty list as if it were real
+        // pass onError to hear about an outage; everyone else gets []
+        if (options.onError && isRedisUnavailableError(err))
+          return options.onError(err);
+
         return callback([]);
       });
   }
@@ -856,8 +862,13 @@ module.exports = (function () {
     });
   }
 
-  function getRecent(blogID, callback) {
-    getRange(blogID, 0, 30, { skinny: true }, function (entries) {
+  function getRecent(blogID, options, callback) {
+    if (typeof options === "function") {
+      callback = options;
+      options = {};
+    }
+
+    getRange(blogID, 0, 30, { skinny: true, onError: options.onError }, function (entries) {
       redis
         .zCard(listKey(blogID, "entries"))
         .then(function (totalEntries) {
@@ -873,7 +884,10 @@ module.exports = (function () {
 
           callback(entries);
         })
-        .catch(function () {
+        .catch(function (err) {
+          if (options.onError && isRedisUnavailableError(err))
+            return options.onError(err);
+
           callback([]);
         });
     });

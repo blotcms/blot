@@ -55,8 +55,8 @@ async function getAllCached(blog, options) {
       preserveEntryInstances: true,
     });
     const immutableCopy = prepared.payload;
-    // Entries.getAll swallows transient Redis failures (a failed zRange or
-    // mGet) by resolving to [] rather than rejecting - see
+    // Entries.getAll can still resolve [] on other transient failures
+    // rather than rejecting - see
     // models/entries/index.js's getRange. Caching that [] would look
     // identical to a genuinely empty blog and silently hide every post
     // until the cacheID changes or the LRU entry is evicted. Only cache

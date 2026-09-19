@@ -1,6 +1,6 @@
 const client = require("models/client");
 const clfdate = require("helper/clfdate");
-const uuid = require("uuid/v4");
+const { v4: uuid } = require("uuid");
 const Blog = require("models/blog");
 
 // Will log, and then send any updates to the client

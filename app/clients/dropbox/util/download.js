@@ -1,5 +1,5 @@
 const fs = require("fs-extra");
-const uuid = require("uuid/v4");
+const { v4: uuid } = require("uuid");
 const clfdate = require("helper/clfdate");
 const promisify = require("util").promisify;
 const setMtime = promisify(require("./setMtime"));

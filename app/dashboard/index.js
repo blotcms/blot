@@ -97,6 +97,10 @@ dashboard.use("/:handle", require("./site"));
 // we encoded the blog's username in the URLs
 dashboard.use(require("dashboard/util/redirect-to-other-blog"));
 
+// Redis unreachable: respond 503. This must come before the handler below,
+// which would turn the failure into a flash message and a redirect.
+dashboard.use(require("helper/redisUnavailable").redisUnavailableHandler);
+
 // need to handle dashboard errors better...
 dashboard.use(message.errorHandler);
 

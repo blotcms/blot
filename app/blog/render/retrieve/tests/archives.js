@@ -77,7 +77,7 @@ describe("archives cache", function () {
   it("reuses the cached grouping for identical cacheIDs", function (done) {
     const { archives } = loadArchives();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "A", dateStamp: Date.parse("2020-01-02") }]);
     });
 
@@ -94,7 +94,7 @@ describe("archives cache", function () {
   it("refetches when cacheID changes", function (done) {
     const { archives } = loadArchives();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "A", dateStamp: Date.parse("2020-01-02") }]);
     });
 
@@ -117,7 +117,7 @@ describe("archives cache", function () {
   it("returns isolated copies so caller mutations do not taint cache", function (done) {
     const { archives } = loadArchives();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "Original", dateStamp: Date.parse("2020-01-02") }]);
     });
 
@@ -137,7 +137,7 @@ describe("archives cache", function () {
     const { archives, getAllCached } = loadArchives();
     const allEntries = require("../all_entries");
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "A", dateStamp: Date.parse("2020-01-02") }]);
     });
 
@@ -154,7 +154,7 @@ describe("archives cache", function () {
   it("stores separate entries per referenced field set so a stripped cache entry can't leak into a view that needs more", function (done) {
     const { archives } = loadArchives();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([
         {
           id: "1",
@@ -188,7 +188,7 @@ describe("archives cache", function () {
   it("bypasses the cache for preview requests", function (done) {
     const { archives } = loadArchives();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "A", dateStamp: Date.parse("2020-01-02") }]);
     });
 
@@ -211,7 +211,7 @@ describe("archives cache", function () {
     // empty array from it is ambiguous between "no posts" and "Redis
     // hiccup." Caching it either way risks hiding every post until the
     // cacheID changes; refetching on every miss is the safe default.
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([]);
     });
 

@@ -4,22 +4,72 @@ const Blog = require("models/blog");
 const clfdate = require("helper/clfdate");
 const email = require("helper/email");
 const resetToBlot = require("./sync/reset-to-blot");
-const { get: getAccount } = require("./database");
+const { get: getAccount, set: setAccount } = require("./database");
 const Fix = require("sync/fix");
+const establishSyncLock = require("sync/establishSyncLock");
+const sync = promisify(require("./sync"));
+const countChanges = require("./sync/count-changes");
 
 const getAllIDs = promisify(Blog.getAllIDs);
 const getBlog = promisify(Blog.get);
 const getDropboxAccount = promisify(getAccount);
+const setDropboxAccount = promisify(setAccount);
 
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_IN_MS = 15 * 60 * 1000;
 
-const countChanges = (summary = {}) => {
-  return (
-    (summary.downloaded || 0) +
-    (summary.removed || 0) +
-    (summary.createdDirs || 0)
-  );
+// Runs resetToBlot while holding the blog's folder lock, so it can't race a
+// webhook sync. resetToBlot updates the database as it changes files, since it
+// advances the Dropbox cursor and later syncs would never revisit them.
+const resetToBlotWithLock = async (blogID, publish) => {
+  const { folder, done } = await establishSyncLock(blogID);
+  let error = null;
+
+  try {
+    return await resetToBlot(blogID, publish, folder.update);
+  } catch (err) {
+    error = err;
+    throw err;
+  } finally {
+    // done rejects with the error it is given, once the lock is released
+    await done(error).catch((err) => {
+      if (err !== error)
+        console.error(clfdate(), "Dropbox: Error releasing lock", blogID, err);
+    });
+  }
+};
+
+const fixBlog = (blog) =>
+  new Promise((resolve) => {
+    Fix(blog, (err) => {
+      if (err) {
+        console.error(clfdate(), "Dropbox: Fix error for blog", blog.id, err);
+      }
+      resolve();
+    });
+  });
+
+// Webhook syncs that arrive while we hold the lock give up waiting for it and
+// are dropped, so run a normal sync once we release it. sync() stamps
+// last_sync, which would keep the blog eligible for validation forever, so
+// put the previous value back.
+const catchUpSync = async (blog) => {
+  let before;
+
+  try {
+    before = await getDropboxAccount(blog.id);
+    await sync(blog);
+  } catch (err) {
+    console.error(clfdate(), "Dropbox: Catch-up sync error", blog.id, err);
+  } finally {
+    // Also on failure: sync() stamps last_sync as soon as it gets the lock
+    if (before && typeof before.last_sync === "number") {
+      await setDropboxAccount(blog.id, { last_sync: before.last_sync }).catch(
+        (err) =>
+          console.error(clfdate(), "Dropbox: Error restoring last_sync", err)
+      );
+    }
+  }
 };
 
 const hasRecentSync = (account) => {
@@ -27,7 +77,24 @@ const hasRecentSync = (account) => {
   return Date.now() - account.last_sync <= ONE_HOUR_IN_MS;
 };
 
+let validationRunning = false;
+
 const runValidation = async () => {
+  if (validationRunning) {
+    console.log(clfdate(), "Dropbox: Validation still running, skipping");
+    return;
+  }
+
+  validationRunning = true;
+
+  try {
+    await validateAllBlogs();
+  } finally {
+    validationRunning = false;
+  }
+};
+
+const validateAllBlogs = async () => {
   console.log(clfdate(), "Dropbox: Running hourly sync validation");
 
   let blogIDs = [];
@@ -56,7 +123,21 @@ const runValidation = async () => {
         console.log(clfdate(), "Dropbox:", blogID, ...args);
       };
 
-      const summary = await resetToBlot(blogID, publish);
+      let summary;
+
+      try {
+        summary = await resetToBlotWithLock(blogID, publish);
+      } catch (err) {
+        // A sync is already running for this blog, and that sync will pick
+        // up whatever changed. Check it again next hour.
+        if (err.message === "Failed to acquire folder lock") {
+          console.log(clfdate(), "Dropbox: Skipping busy blog", blogID);
+          checkedBlogs -= 1;
+          continue;
+        }
+        throw err;
+      }
+
       const changeCount = countChanges(summary);
 
       if (changeCount > 0) {
@@ -69,19 +150,9 @@ const runValidation = async () => {
         });
       }
 
-      await new Promise((resolve) => {
-        Fix(blog, (fixError) => {
-          if (fixError) {
-            console.error(
-              clfdate(),
-              "Dropbox: Fix error for blog",
-              blogID,
-              fixError
-            );
-          }
-          resolve();
-        });
-      });
+      await fixBlog(blog);
+
+      await catchUpSync(blog);
     } catch (err) {
       console.error(
         clfdate(),
@@ -155,9 +226,15 @@ const resyncRecentSyncsOnStartup = async () => {
 
       try {
         console.log(clfdate(), "Dropbox: Resyncing recent blog", blogID);
-        await resetToBlot(blogID, publish);
+        await resetToBlotWithLock(blogID, publish);
+        await fixBlog(blog);
+        await catchUpSync(blog);
         console.log(clfdate(), "Dropbox: Resync complete for blog", blogID);
       } catch (err) {
+        if (err.message === "Failed to acquire folder lock") {
+          console.log(clfdate(), "Dropbox: Skipping busy blog", blogID);
+          continue;
+        }
         console.error(
           clfdate(),
           "Dropbox: Resync error for blog",

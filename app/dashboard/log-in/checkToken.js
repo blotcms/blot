@@ -1,6 +1,7 @@
 var User = require("models/user");
 var authenticate = require("./authenticate");
 var LogInError = require("./logInError");
+var { isRedisUnavailableError } = require("helper/redisUnavailable");
 
 // The purpose of this function is to check to see if the
 // user has requested the log in page with a one-time access
@@ -25,11 +26,14 @@ module.exports = function checkToken(req, res, next) {
 
   // First we make sure that the access token passed is valid.
   User.checkAccessToken(token, function (err, uid) {
+    // An outage is not a bad token, let it reach the 503 handler
+    if (isRedisUnavailableError(err)) return next(err);
     if (err) return next(new LogInError("BADTOKEN"));
 
     // Then we load the user associated with the access token.
     // Tokens are stored against UIDs in the database.
     User.getById(uid, function (err, user) {
+      if (isRedisUnavailableError(err)) return next(err);
       if (err || !user) return next(new LogInError("NOUSER"));
 
       // You used to be able to disable your account

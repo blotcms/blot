@@ -178,6 +178,14 @@ the deploy mechanism and persistent volumes now exist and are covered by CI
   production Redis credentials need wiring.
 - **Secret delivery**. `NODE_SERVER_IP`, `REDIS_IP` and the netdata creds are
   build-time inputs to the generator; decide build-arg vs runtime-env.
+- **Redis outage handling**. Node answers 503 with a `Retry-After` and
+  `no-store` page when it cannot reach Redis, but the proxy does not handle
+  this yet. It replaces an upstream 503 with the "offline" page, retries it on
+  the next container (each 503 counts against `max_fails`), `allow_domain` in
+  `init.conf` returns true when the Redis lookup errors (it should fail
+  closed), and `resty.redis` timeouts default to 60s, including inside the
+  auto-ssl storage adapter. Fix these here and in `config/openresty`, with an
+  e2e check against the stub upstream. Tracked in `TODO`.
 - **`fail2ban` / `logrotate`** are host-level in `config/openresty`; the
   container logs to stdout/stderr (so `docker logs` and the host's log
   shipper work) but has no equivalent request-ban layer.

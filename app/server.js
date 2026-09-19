@@ -33,24 +33,36 @@ console.log(
 // req.ip is the address NGINX appended, which a client cannot spoof.
 server.set("trust proxy", 1);
 
-// Check if the database is healthy
+// Check if the database is healthy. Uses the shared client rather than
+// opening a new connection, which would hang while Redis is down.
 server.get("/redis-health", async function (req, res) {
-  const createRedisClient = require("models/redis");
-  const client = createRedisClient();
+  const client = require("models/client");
 
   // do not cache response
   res.set("Cache-Control", "no-store");
 
   try {
-    await client.connect();
-    await client.ping();
+    if (!client.isReady) throw new Error("Redis client is not ready");
+
+    let timer;
+
+    try {
+      await Promise.race([
+        client.ping(),
+        new Promise((resolve, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("Redis ping timed out")),
+            2000
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+
     res.send("OK");
   } catch (err) {
-    res.status(400).send("Failed to ping redis");
-  } finally {
-    if (client.isOpen) {
-      await client.quit();
-    }
+    res.status(503).send("Failed to ping redis");
   }
 });
 
@@ -125,5 +137,9 @@ server.get("/health", function (req, res) {
   res.set("Cache-Control", "no-store");
   res.send("OK");
 });
+
+// Errors from the site that bubble up to here: respond 503 if Redis is
+// unreachable. The blog and dashboard have their own handlers for the same case.
+server.use(require("helper/redisUnavailable").redisUnavailableHandler);
 
 module.exports = server;

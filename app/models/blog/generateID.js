@@ -1,4 +1,4 @@
-var uuid = require("uuid/v4");
+var { v4: uuid } = require("uuid");
 var PREFIX = "blog_";
 
 // uuid() returns a hex encoded 128 bit decimal.

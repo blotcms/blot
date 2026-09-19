@@ -9,6 +9,7 @@ const ensure = require("helper/ensure");
 const extend = require("helper/extend");
 const getTemplateSortOptions = require("blog/sortOptions");
 const callOnce = require("helper/callOnce");
+const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const config = require("config");
 const fromCloudflare = require("../lib/fromCloudflare");
 const CACHE = config.cache;
@@ -104,7 +105,8 @@ module.exports = function attachRenderView(req, res, _next) {
       try {
         await loadView(req, res);
       } catch (e) {
-        return next(ERROR.BAD_LOCALS());
+        // An outage is not a template problem, and a 400 would be cached
+        return next(isRedisUnavailableError(e) ? e : ERROR.BAD_LOCALS());
       }
 
       req.log("Loaded other locals");

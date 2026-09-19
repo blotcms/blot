@@ -1,4 +1,4 @@
-var uuid = require("uuid/v4");
+var { v4: uuid } = require("uuid");
 var retry = require("clients/dropbox/util/retry");
 module.exports = function (client, options, callback) {
   if (options.root) {
