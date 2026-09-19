@@ -4,7 +4,7 @@ const Blog = require("models/blog");
 const clfdate = require("helper/clfdate");
 const email = require("helper/email");
 const resetToBlot = require("./sync/reset-to-blot");
-const { get: getAccount } = require("./database");
+const { get: getAccount, set: setAccount } = require("./database");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
 const sync = promisify(require("./sync"));
@@ -13,6 +13,7 @@ const countChanges = require("./sync/count-changes");
 const getAllIDs = promisify(Blog.getAllIDs);
 const getBlog = promisify(Blog.get);
 const getDropboxAccount = promisify(getAccount);
+const setDropboxAccount = promisify(setAccount);
 
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_IN_MS = 15 * 60 * 1000;
@@ -44,6 +45,22 @@ const resetToBlotWithLock = async (blogID, publish) => {
   await done(null);
 
   return summary;
+};
+
+// Webhook syncs that arrive while we hold the lock give up waiting for it and
+// are dropped, so run a normal sync once we release it. sync() stamps
+// last_sync, which would keep the blog eligible for validation forever, so
+// put the previous value back.
+const catchUpSync = async (blog) => {
+  try {
+    const before = await getDropboxAccount(blog.id);
+    await sync(blog);
+    if (before && typeof before.last_sync === "number") {
+      await setDropboxAccount(blog.id, { last_sync: before.last_sync });
+    }
+  } catch (err) {
+    console.error(clfdate(), "Dropbox: Catch-up sync error", blog.id, err);
+  }
 };
 
 const hasRecentSync = (account) => {
@@ -121,11 +138,7 @@ const runValidation = async () => {
         });
       });
 
-      // Webhook syncs that arrived while we held the lock gave up waiting
-      // for it and were dropped. Catch up on anything they would have found.
-      await sync(blog).catch((err) => {
-        console.error(clfdate(), "Dropbox: Catch-up sync error", blogID, err);
-      });
+      await catchUpSync(blog);
     } catch (err) {
       console.error(
         clfdate(),
@@ -200,6 +213,7 @@ const resyncRecentSyncsOnStartup = async () => {
       try {
         console.log(clfdate(), "Dropbox: Resyncing recent blog", blogID);
         await resetToBlotWithLock(blogID, publish);
+        await catchUpSync(blog);
         console.log(clfdate(), "Dropbox: Resync complete for blog", blogID);
       } catch (err) {
         console.error(
