@@ -5,6 +5,7 @@ var fs = require("fs-extra");
 var localPath = require("helper/localPath");
 var retry = require("./util/retry");
 var persistError = require("./util/persistError");
+var database = require("./database");
 var { SOURCES } = require("./util/classifyError");
 const { promisify } = require("util");
 const upload = promisify(require("clients/dropbox/util/upload"));
@@ -45,7 +46,13 @@ function write(blogID, path, contents, callback) {
       });
     }
 
-    callback();
+    // A successful upload shows access, the folder and storage are all
+    // fine, so it is the recovery path for a persisted quota error.
+    if (!account.error_code) return callback();
+
+    database.set(blogID, { error_code: 0 }, function () {
+      callback();
+    });
   });
 }
 
