@@ -38,7 +38,8 @@ const resetToBlotWithLock = async (blogID, publish) => {
       }
     }
   } catch (err) {
-    await done(err);
+    // done rejects with err once the lock is released
+    await done(err).catch(() => {});
     throw err;
   }
 
@@ -216,6 +217,10 @@ const resyncRecentSyncsOnStartup = async () => {
         await catchUpSync(blog);
         console.log(clfdate(), "Dropbox: Resync complete for blog", blogID);
       } catch (err) {
+        if (err.message === "Failed to acquire folder lock") {
+          console.log(clfdate(), "Dropbox: Skipping busy blog", blogID);
+          continue;
+        }
         console.error(
           clfdate(),
           "Dropbox: Resync error for blog",

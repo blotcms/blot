@@ -14,6 +14,7 @@ const {
   hasUnsupportedExtension,
   isDotfileOrDotfolder,
 } = require("../util/constants");
+const modifiedSince = require("./modified-since");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const {
   countLocalFiles,
@@ -80,8 +81,9 @@ async function resetToBlot(blogID, publish) {
     recursive: true,
   });
 
-  // This means that future syncs will be fast
-  await set(blogID, { cursor });
+  // The cursor is fetched before the walk, so edits made during it are still
+  // seen by the next sync, but only saved once the walk succeeds. If the walk
+  // throws, the old cursor stays and the next webhook can still see those files.
 
   const summary = {
     downloaded: 0,
@@ -101,7 +103,9 @@ async function resetToBlot(blogID, publish) {
 
   await walk(blogID, client, publish, dropboxRoot, "/", summary, progress);
 
+  // This means that future syncs will be fast
   await set(blogID, {
+    cursor,
     error_code: 0,
   });
 
@@ -109,11 +113,6 @@ async function resetToBlot(blogID, publish) {
 
   return summary;
 }
-
-const modifiedSince = (remoteItem, timestamp) => {
-  const modified = Date.parse(remoteItem.server_modified);
-  return !isNaN(modified) && modified >= timestamp;
-};
 
 const walk = async (
   blogID,
@@ -248,6 +247,7 @@ const walk = async (
         summary.skipped += 1;
         try {
           await fs.outputFile(pathOnDisk, "");
+          summary.changedPaths.push(pathOnBlot);
         } catch (err) {
           publish("Failed to create placeholder", pathOnBlot, err.message);
         }
@@ -266,6 +266,7 @@ const walk = async (
         summary.skipped += 1;
         try {
           await fs.outputFile(pathOnDisk, "");
+          summary.changedPaths.push(pathOnBlot);
         } catch (err) {
           publish("Failed to create placeholder", pathOnBlot, err.message);
         }
@@ -293,7 +294,7 @@ const walk = async (
           // filesystem allows – seen in production when a Dropbox account
           // got stuck wrapping the same file in nested "(Conflict met
           // exemplaar van ...)" copies. That download can never succeed.
-          // countChanges() (init.js) only looks at downloaded/removed/
+          // countChanges() (sync/count-changes.js) only looks at downloaded/removed/
           // createdDirs, so this was never counted as an unsynced change
           // either way; recording it as "skipped" here is just for
           // visibility in logs/summaries, not to affect the hourly email.
