@@ -58,6 +58,7 @@ describe("upload template route", function () {
     return {
       req: {
         blog,
+        session: {},
         files: uploads,
         body: { relativePaths: JSON.stringify(relativePaths), ...body },
       },
@@ -87,6 +88,7 @@ describe("upload template route", function () {
     return {
       req: {
         blog,
+        session: {},
         files: {
           zip: [
             {
