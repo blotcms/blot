@@ -19,34 +19,35 @@ const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_IN_MS = 15 * 60 * 1000;
 
 // Runs resetToBlot while holding the blog's folder lock, so it can't race a
-// webhook sync, then updates the database for every path it changed on disk.
-// resetToBlot alone only writes files, and it advances the Dropbox cursor,
-// so without this a later sync would never notice those files changed.
+// webhook sync. resetToBlot updates the database as it changes files, since it
+// advances the Dropbox cursor and later syncs would never revisit them.
 const resetToBlotWithLock = async (blogID, publish) => {
   const { folder, done } = await establishSyncLock(blogID);
-
-  let summary;
+  let error = null;
 
   try {
-    summary = await resetToBlot(blogID, publish);
-
-    for (const path of summary.changedPaths) {
-      try {
-        await folder.update(path);
-      } catch (err) {
-        console.error(clfdate(), "Dropbox: Error updating", blogID, path, err);
-      }
-    }
+    return await resetToBlot(blogID, publish, folder.update);
   } catch (err) {
-    // done rejects with err once the lock is released
-    await done(err).catch(() => {});
+    error = err;
     throw err;
+  } finally {
+    // done rejects with the error it is given, once the lock is released
+    await done(error).catch((err) => {
+      if (err !== error)
+        console.error(clfdate(), "Dropbox: Error releasing lock", blogID, err);
+    });
   }
-
-  await done(null);
-
-  return summary;
 };
+
+const fixBlog = (blog) =>
+  new Promise((resolve) => {
+    Fix(blog, (err) => {
+      if (err) {
+        console.error(clfdate(), "Dropbox: Fix error for blog", blog.id, err);
+      }
+      resolve();
+    });
+  });
 
 // Webhook syncs that arrive while we hold the lock give up waiting for it and
 // are dropped, so run a normal sync once we release it. sync() stamps
@@ -76,7 +77,24 @@ const hasRecentSync = (account) => {
   return Date.now() - account.last_sync <= ONE_HOUR_IN_MS;
 };
 
+let validationRunning = false;
+
 const runValidation = async () => {
+  if (validationRunning) {
+    console.log(clfdate(), "Dropbox: Validation still running, skipping");
+    return;
+  }
+
+  validationRunning = true;
+
+  try {
+    await validateAllBlogs();
+  } finally {
+    validationRunning = false;
+  }
+};
+
+const validateAllBlogs = async () => {
   console.log(clfdate(), "Dropbox: Running hourly sync validation");
 
   let blogIDs = [];
@@ -132,19 +150,7 @@ const runValidation = async () => {
         });
       }
 
-      await new Promise((resolve) => {
-        Fix(blog, (fixError) => {
-          if (fixError) {
-            console.error(
-              clfdate(),
-              "Dropbox: Fix error for blog",
-              blogID,
-              fixError
-            );
-          }
-          resolve();
-        });
-      });
+      await fixBlog(blog);
 
       await catchUpSync(blog);
     } catch (err) {
@@ -221,6 +227,7 @@ const resyncRecentSyncsOnStartup = async () => {
       try {
         console.log(clfdate(), "Dropbox: Resyncing recent blog", blogID);
         await resetToBlotWithLock(blogID, publish);
+        await fixBlog(blog);
         await catchUpSync(blog);
         console.log(clfdate(), "Dropbox: Resync complete for blog", blogID);
       } catch (err) {

@@ -29,11 +29,24 @@ const createClient = promisify((blogID, cb) =>
 // const upload = promisify(require("clients/dropbox/util/upload"));
 // const get = promisify(require("../database").get);
 
-async function resetToBlot(blogID, publish) {
+// update(path) is called as each file or directory changes on disk, so the
+// database follows the folder even if the walk fails part way through. It is
+// the same (blogID, publish, update) contract the iCloud and Drive clients
+// use, and callers should hold the folder lock while it runs.
+async function resetToBlot(blogID, publish, update) {
   if (!publish)
     publish = (...args) => {
       console.log(clfdate() + " Dropbox:", args.join(" "));
     };
+
+  const updatePath = async (path) => {
+    if (typeof update !== "function") return;
+    try {
+      await update(path);
+    } catch (err) {
+      publish("Failed to update", path, err.message);
+    }
+  };
 
   // Files Dropbox modified after this moment may just be edits that
   // landed mid-walk (before their webhook), not changes we failed to sync.
@@ -90,9 +103,6 @@ async function resetToBlot(blogID, publish) {
     removed: 0,
     createdDirs: 0,
     skipped: 0,
-    // Blot paths we changed on disk, so callers holding the folder lock can
-    // update the database. This function only writes to the folder.
-    changedPaths: [],
     // Subset of downloaded: files Dropbox modified after we started.
     modifiedDuringWalk: 0,
     startedAt,
@@ -101,7 +111,16 @@ async function resetToBlot(blogID, publish) {
   const localRoot = localPath(blogID, "/");
   const progress = createProgress(await countLocalFiles(localRoot), publish);
 
-  await walk(blogID, client, publish, dropboxRoot, "/", summary, progress);
+  await walk(
+    blogID,
+    client,
+    publish,
+    updatePath,
+    dropboxRoot,
+    "/",
+    summary,
+    progress
+  );
 
   // This means that future syncs will be fast
   await set(blogID, {
@@ -118,6 +137,7 @@ const walk = async (
   blogID,
   client,
   publish,
+  updatePath,
   dropboxRoot,
   dir,
   summary,
@@ -144,7 +164,7 @@ const walk = async (
       try {
         await fs.remove(pathOnDisk);
         summary.removed += 1;
-        summary.changedPaths.push(pathOnBlot);
+        await updatePath(pathOnBlot);
       } catch (e) {
         publish("Failed to remove ignored", path_display, e.message);
       }
@@ -160,7 +180,7 @@ const walk = async (
       try {
         await fs.remove(pathOnDisk);
         summary.removed += 1;
-        summary.changedPaths.push(pathOnBlot);
+        await updatePath(pathOnBlot);
       } catch (e) {
         publish("Failed to remove", path_display, e.message);
       }
@@ -199,7 +219,7 @@ const walk = async (
         progress.publish("Removing", pathOnBlot);
         await fs.remove(pathOnDisk);
         summary.removed += 1;
-        summary.changedPaths.push(pathOnBlot);
+        await updatePath(pathOnBlot);
         publish("Creating directory", pathOnDisk);
         try {
           await fs.mkdir(pathOnDisk);
@@ -214,7 +234,7 @@ const walk = async (
         try {
           await fs.mkdir(pathOnDisk);
           summary.createdDirs += 1;
-          summary.changedPaths.push(pathOnBlot);
+          await updatePath(pathOnBlot);
         } catch (e) {
           if (e.code !== "ENAMETOOLONG") throw e;
           summary.skipped += 1;
@@ -229,6 +249,7 @@ const walk = async (
         blogID,
         client,
         publish,
+        updatePath,
         dropboxRoot,
         join(dir, name),
         summary,
@@ -247,7 +268,7 @@ const walk = async (
         summary.skipped += 1;
         try {
           await fs.outputFile(pathOnDisk, "");
-          summary.changedPaths.push(pathOnBlot);
+          await updatePath(pathOnBlot);
         } catch (err) {
           publish("Failed to create placeholder", pathOnBlot, err.message);
         }
@@ -266,7 +287,7 @@ const walk = async (
         summary.skipped += 1;
         try {
           await fs.outputFile(pathOnDisk, "");
-          summary.changedPaths.push(pathOnBlot);
+          await updatePath(pathOnBlot);
         } catch (err) {
           publish("Failed to create placeholder", pathOnBlot, err.message);
         }
@@ -286,7 +307,7 @@ const walk = async (
         try {
           await download(client, pathOnDropbox, pathOnDisk);
           summary.downloaded += 1;
-          summary.changedPaths.push(pathOnBlot);
+          await updatePath(pathOnBlot);
           if (modifiedSince(remoteItem, summary.startedAt))
             summary.modifiedDuringWalk += 1;
         } catch (e) {
@@ -307,7 +328,7 @@ const walk = async (
         try {
           await download(client, pathOnDropbox, pathOnDisk);
           summary.downloaded += 1;
-          summary.changedPaths.push(pathOnBlot);
+          await updatePath(pathOnBlot);
           if (modifiedSince(remoteItem, summary.startedAt))
             summary.modifiedDuringWalk += 1;
         } catch (e) {

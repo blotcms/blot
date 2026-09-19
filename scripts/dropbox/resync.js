@@ -62,7 +62,7 @@ const processBlog = async (blog) => {
     try {
       folder.status("Dropbox resyncing");
 
-      await resetToBlot(blog.id, publish);
+      await resetToBlot(blog.id, publish, folder.update);
       try {
         await fix(blog);
       } catch (err) {
