@@ -1,5 +1,3 @@
-Smooth new template creation via drag and drop (it hangs on initial upload page for a while, then the interstial page should already have added the new template to the nav)
-
 Why is Ross' template so slow to install? It takes a few seconds. Let's speed it up.
 
 Now we have many LRU caches in app/blog we need to gather data in production to rigorously determine the most effective relative sizes for the caches (include the mustache template cache in this)

@@ -105,12 +105,31 @@
   display: none;
 }
 
-.template-upload__file--added .file-drop__name {
-  font-weight: 600;
+.template-upload__file-indicator {
+  flex-shrink: 0;
+  display: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin: 0 0.25rem;
 }
 
-.template-upload__file--added .template-upload__file-state {
-  color: var(--success-text-color);
+/* The active file pulses like a working button */
+.template-upload__file--working .template-upload__file-indicator {
+  display: block;
+  border-radius: 0.55rem;
+  background: #666;
+  animation: pulse 0.2s cubic-bezier(0.5, 0, 0.5, 1) alternate infinite;
+}
+
+/* Uploaded files get a green check */
+.template-upload__file--done .template-upload__file-indicator {
+  display: block;
+  width: 0.35rem;
+  height: 0.65rem;
+  margin: 0 0.3rem 0.2rem;
+  border: solid var(--success-text-color);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 /* Skipped and failed rows are stated rather than merely tinted, so the
