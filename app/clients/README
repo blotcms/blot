@@ -43,6 +43,16 @@ and may have the following methods:
 
 - site_routes: an Express router which needs to be mounted to the site
 - dashboard_routes: an Express router which needs to be mounted to the dashboard
+- getHealth: an async function (blogID) returning the client's current health, built with the helpers in health.js. Clients without it are treated as healthy.
+
+Health
+------
+
+getHealth reports whether a blog's sync needs the user's attention, as structured data rather than a status message:
+
+  { state: "ok" | "syncing" | "error", issues: [{ code, message, since }] }
+
+Issue codes are shared between clients (see health.js): REAUTH_REQUIRED, SOURCE_MISSING, QUOTA_EXCEEDED and SYNC_ERROR. Only report conditions the user must act on. Transient failures that will be retried belong in the sync status log, not in health. Any issue a client reports must be cleared once the underlying problem is resolved.
 
 More abstractly: clients must be stateless. They must be able to run without issue in parallel and the server must be able to restart without issue. Blot's sync module exposes a distributed locking function that a client can use to determine whether it is safe to interact with the blog's folder.
 

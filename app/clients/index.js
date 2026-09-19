@@ -48,6 +48,7 @@ for (var i in clients) {
 
   if (client.site_routes) ensure(client.site_routes, "function");
   if (client.dashboard_routes) ensure(client.dashboard_routes, "function");
+  if (client.getHealth) ensure(client.getHealth, "function");
 
   // This is used as an identifier in the DB
   // e.g. a blog's client will be set to this value
