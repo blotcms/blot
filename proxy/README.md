@@ -73,6 +73,29 @@ self-signed placeholder so OpenResty can start).
   `domain:<that-domain>` to Redis, and confirm a staging-trusted cert is
   issued on first request.
 
+### Possible replacement for `lua-resty-auto-ssl` (to investigate)
+
+`lua-resty-auto-ssl` is effectively unmaintained, and its shell-out chain
+(`dehydrated` + `sockproc` + the `:8999` hook server) is why the image vendors
+and patches so much, why `dehydrated` has drifted from the bare-metal pin, and
+why issuance can be flaky during a blue/green overlap. Options worth a spike
+before cutover - none evaluated or tested yet:
+
+- **[`lua-resty-acme`](https://github.com/fffonion/lua-resty-acme)** - pure-Lua
+  ACMEv2 client with an on-demand `autossl` mode; would keep OpenResty and
+  `allow_domain`, and drop the `dehydrated`/`sockproc`/`:8999` machinery. Open
+  questions: Redis key-layout compatibility with existing certs, OCSP stapling,
+  and behaviour across a blue/green overlap. The Pebble `cert-issuance` CI job
+  is the natural acceptance test.
+- **Issue from the Blot app** (e.g. `acme-client`) when a domain is connected,
+  write the cert to Redis, and have the proxy only read it. Takes issuance out
+  of the request path and would allow validating DNS first (see the root
+  `TODO`).
+- Caddy on-demand TLS would work but means replacing the OpenResty layer, so
+  it is not a certs-only change. The official `nginx-acme` module is aimed at
+  statically declared `server_name`s and probably does not fit on-demand
+  issuance (unverified).
+
 ## Deployment (mechanism only - not wired to production)
 
 The container runs with `--network host` (the generated upstreams are
