@@ -157,10 +157,12 @@ async function resetToBlotWithClient(
   );
 
   // This means that future syncs will be fast
-  await set(blogID, {
-    cursor,
-    error_code: 0,
-  });
+  // A download-only pass can't show that Dropbox has room for uploads,
+  // so it leaves a quota error in place.
+  await set(
+    blogID,
+    keepsErrorAfterDownload(account) ? { cursor } : { cursor, error_code: 0 }
+  );
 
   progress.finish("Finished processing folder");
 
