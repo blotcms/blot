@@ -1,3 +1,5 @@
+Check in on our dropbox sync verification job to make sure it's working well (docker green)
+
 Rebuild all sites to bake in folder CDN urls
 
 Why is Ross' template so slow to install? It takes a few seconds. Let's speed it up.
