@@ -3,6 +3,14 @@ const collectUploadEntries = require("./collect-upload-entries");
 const parseUploadedTemplate = require("./parse-uploaded-template");
 const createTemplateFromUpload = require("./create-template-from-upload");
 
+const escapeHTML = (value) =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
 // Creates a new template from a folder or zip file the user dropped on the
 // 'New template' page.
 //
@@ -32,10 +40,22 @@ module.exports = async function uploadTemplate (req, res) {
 
     const slug = template.id.split(":").slice(1).join(":");
 
+    const redirect = `/sites/${req.blog.handle}/template/${slug}`;
+
+    // Shown by the message middleware above the new template's page, along
+    // with any warnings, once the client follows the redirect. The text is
+    // rendered unescaped, so the name has to be escaped here.
+    req.session.message = {
+      text: `Created ${escapeHTML(template.name)}.`,
+      error: false,
+      url: redirect,
+      warnings,
+    };
+
     return res.json({
       ok: true,
       name: template.name,
-      redirect: `/sites/${req.blog.handle}/template/${slug}`,
+      redirect,
       views: views.map((view) => view.name),
       ignored,
       warnings,

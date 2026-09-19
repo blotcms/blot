@@ -5,6 +5,11 @@
      <span>{{{text}}}</span>
      <span style="text-decoration: underline;">Dismiss</span>
     </a>
+        {{#warnings.length}}
+        <ul class="success" style="margin-top: -1.5rem; padding-left: 2.5rem;">
+          {{#warnings}}<li>{{.}}</li>{{/warnings}}
+        </ul>
+        {{/warnings.length}}
         {{/error}}
         {{/message}}
 

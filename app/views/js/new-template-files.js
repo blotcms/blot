@@ -38,13 +38,6 @@ function init(root) {
   var problemList = root.querySelector("[data-template-upload-problems]");
   var dismiss = root.querySelector("[data-template-upload-dismiss]");
 
-  var warningBox = root.querySelector("[data-template-upload-warning]");
-  var warningMessage = root.querySelector(
-    "[data-template-upload-warning-message]"
-  );
-  var warningList = root.querySelector("[data-template-upload-warnings]");
-  var continueLink = root.querySelector("[data-template-upload-continue]");
-
   var csrfToken = root.getAttribute("data-csrf");
   var action = root.getAttribute("data-action");
 
@@ -122,6 +115,11 @@ function init(root) {
       row.appendChild(svgIcon());
       row.appendChild(name);
       row.appendChild(state);
+
+      var indicator = document.createElement("span");
+      indicator.className = "template-upload__file-indicator";
+      indicator.setAttribute("aria-hidden", "true");
+      row.appendChild(indicator);
       fileList.appendChild(row);
 
       rows[path] = { row: row, state: state };
@@ -171,7 +169,6 @@ function init(root) {
 
   function hideNotices() {
     if (errorBox) errorBox.hidden = true;
-    if (warningBox) warningBox.hidden = true;
   }
 
   function showError(message, problems) {
@@ -217,55 +214,99 @@ function init(root) {
     return formData;
   }
 
-  // Warnings mean the template was created but not quite as its package.json
-  // asked — it was not installed, or describes files which were not uploaded.
-  // Redirecting straight past them would mean nobody ever reads them.
-  // The server decides what a zip actually contained and which files were set
-  // aside, so the rows only become accurate once it has answered. Re-render
-  // them from the response rather than leaving the user looking at a single
-  // 'template.zip' row.
-  function showResult(result) {
-    var views = result.views || [];
-    var ignored = result.ignored || [];
-
-    showFiles(
-      views.concat(
-        ignored.map(function (item) {
-          return item.path;
-        })
-      ),
-      views.length === 1
-        ? "Created 1 file in " + result.name
-        : "Created " + views.length + " files in " + result.name
-    );
-
-    views.forEach(function (name) {
-      setFileState(name, "Added", "added");
-    });
-
-    ignored.forEach(function (item) {
-      setFileState(item.path, "Skipped", "ignored");
-    });
+  // The server stores any warnings with the success message, so the new
+  // template's page can show them above the template itself
+  function finish(result) {
+    window.location = result.redirect;
   }
 
-  function finish(result) {
-    setWorking(false);
-    showResult(result);
+  // The files travel in one request, in order, so the bytes sent so far say
+  // which files have gone. Each is marked done once its share has been sent
+  // and the next one pulses, as the importer does for its own steps.
+  function send(entries, paths) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      var sizes = entries.map(function (entry) {
+        return entry.file.size || 0;
+      });
+      var fileBytes = sizes.reduce(function (a, b) {
+        return a + b;
+      }, 0);
+      var done = 0;
 
-    if (!result.warnings || !result.warnings.length || !warningBox) {
-      window.location = result.redirect;
-      return;
-    }
+      function markProgress(fraction) {
+        var sent = fraction * fileBytes;
+        var end = 0;
+        var active = -1;
 
-    if (warningMessage) {
-      warningMessage.textContent = "Created " + result.name + ".";
-    }
+        for (var i = 0; i < paths.length; i++) {
+          end += sizes[i];
 
-    renderList(warningList, result.warnings, false);
+          if (i < done) continue;
 
-    if (continueLink) continueLink.href = result.redirect;
+          if (sent >= end && fraction > 0) {
+            setFileState(paths[i], "", "done");
+            done = i + 1;
+          } else {
+            active = i;
+            break;
+          }
+        }
 
-    warningBox.hidden = false;
+        if (active > -1) setFileState(paths[active], "", "working");
+      }
+
+      markProgress(0);
+
+      xhr.upload.onprogress = function (event) {
+        if (event.lengthComputable && event.total) {
+          markProgress(Math.min(event.loaded / event.total, 0.999999));
+        }
+      };
+
+      xhr.upload.onload = function () {
+        markProgress(1);
+        paths.forEach(function (path) {
+          setFileState(path, "", "done");
+        });
+        setLabel("Creating template…");
+      };
+
+      xhr.onerror = function () {
+        reject(new Error("Something went wrong uploading this template."));
+      };
+
+      xhr.onload = function () {
+        var result;
+
+        try {
+          result = JSON.parse(xhr.responseText);
+        } catch (e) {
+          // The multipart limit is enforced before our route runs and
+          // renders an HTML error page rather than JSON
+          return reject(
+            new Error(
+              xhr.status === 413
+                ? "Those files are too large to upload."
+                : "Something went wrong uploading this template."
+            )
+          );
+        }
+
+        if (xhr.status < 200 || xhr.status >= 300) {
+          var error = new Error(
+            result.error || "This template could not be uploaded."
+          );
+          error.problems = result.problems;
+          return reject(error);
+        }
+
+        resolve(result);
+      };
+
+      xhr.open("POST", action);
+      xhr.send(buildFormData(entries));
+    });
   }
 
   function upload(entries) {
@@ -313,35 +354,7 @@ function init(root) {
         : "Uploading " + paths.length + " files…"
     );
 
-    paths.forEach(function (path) {
-      setFileState(path, "Uploading…", "working");
-    });
-
-    fetch(action, { method: "POST", body: buildFormData(entries) })
-      .then(function (response) {
-        return response
-          .json()
-          .catch(function () {
-            // The multipart limit is enforced before our route runs and
-            // renders an HTML error page rather than JSON
-            throw new Error(
-              response.status === 413
-                ? "Those files are too large to upload."
-                : "Something went wrong uploading this template."
-            );
-          })
-          .then(function (result) {
-            if (!response.ok) {
-              var error = new Error(
-                result.error || "This template could not be uploaded."
-              );
-              error.problems = result.problems;
-              throw error;
-            }
-
-            return result;
-          });
-      })
+    send(entries, paths)
       .then(finish)
       .catch(function (err) {
         setWorking(false);
