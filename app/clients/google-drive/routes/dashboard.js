@@ -10,6 +10,7 @@ const express = require("express");
 const dashboard = new express.Router();
 
 const finishSetup = require("./setup");
+const { clearAllErrorFields } = require("../database/error");
 
 const VIEWS = require("path").resolve(__dirname + "/../views") + "/";
 
@@ -121,13 +122,13 @@ dashboard
     await database.blog.store(req.blog.id, {
       email,
       serviceAccountId,
-      error: null,
       preparing: true,
       startedSetup: Date.now(),
       nonEmptyFolderShared: false,
       nonEditorPermissions: false,
       folderId: null,
       folderName: null,
+      ...clearAllErrorFields(),
     });
 
     let drive;

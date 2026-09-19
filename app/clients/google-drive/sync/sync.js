@@ -4,6 +4,12 @@ const fs = require("fs-extra");
 const { join } = require("path");
 const localPath = require("helper/localPath");
 const database = require("../database");
+const {
+  MESSAGES,
+  isLostFolderError,
+  lostFolderMessage,
+  sourceMissingFields,
+} = require("../database/error");
 const download = require("../util/download");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
@@ -67,23 +73,28 @@ module.exports = async function sync(blogID, publish, update) {
 
     if (folder.data.trashed) {
       publish("Error syncing with Google Drive");
-      await database.blog.store(blogID, {
-        error:
-          "The Google Drive folder used to sync this site has been moved to the trash. Please select a new folder to continue syncing.",
-        folderId: null,
-        folderName: null,
-      });
+      await database.blog.store(
+        blogID,
+        sourceMissingFields(account, MESSAGES.TRASHED)
+      );
+      return false;
     }
   } catch (err) {
-    if (err.code === 404) {
+    if (isLostFolderError(err)) {
       publish("Error syncing with Google Drive");
-      await database.blog.store(blogID, {
-        error:
-          "The Google Drive folder used to sync this site has been deleted. Please select a new folder to continue syncing.",
-        folderId: null,
-        folderName: null,
-      });
+      await database.blog.store(
+        blogID,
+        sourceMissingFields(account, lostFolderMessage(err))
+      );
+      return false;
     }
+
+    // Transient / unknown Drive errors are retried on the next webhook or
+    // poll. Do not persist them as health, and do not walk a folder whose
+    // metadata we failed to load.
+    publish("Sync failed", err.message);
+    console.error("Google Drive folder lookup failed", err);
+    return false;
   }
 
   const walk = async (dir, dirId) => {

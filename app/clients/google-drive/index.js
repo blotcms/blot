@@ -7,5 +7,6 @@ module.exports = {
   write: require("./write"),
   site_routes: require("./routes/site"),
   dashboard_routes: require("./routes/dashboard"),
-  init: require('./init')
+  init: require('./init'),
+  getHealth: require("./getHealth"),
 };
