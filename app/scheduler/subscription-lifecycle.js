@@ -132,7 +132,21 @@ module.exports = function processSubscriptionLifecycle(callback) {
           return next();
         }
 
-        processUser(user, overdue, next);
+        // Likewise for a failed disable or removal: log it and move on so
+        // the rest of the users (and the removal email) still get processed.
+        processUser(user, overdue, function (processErr) {
+          if (processErr) {
+            console.log(
+              clfdate(),
+              "Subscription lifecycle could not process user",
+              user.email,
+              user.uid,
+              processErr
+            );
+          }
+
+          next();
+        });
       });
     },
     function (err) {
