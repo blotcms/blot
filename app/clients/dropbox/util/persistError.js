@@ -1,5 +1,5 @@
 const database = require("../database");
-const classify = require("./classifyError");
+const { classify } = require("./classifyError");
 
 // Persist a Dropbox error onto the blog's account row when it is
 // user-actionable. Transient failures are ignored so a previous durable

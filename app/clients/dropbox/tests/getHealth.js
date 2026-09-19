@@ -86,9 +86,9 @@ describe("dropbox getHealth", function () {
     });
   });
 
-  it("does not surface a stale 400", function (done) {
+  it("does not surface a stale 500", function (done) {
     const blogID = this.blog.id;
-    save.call(this, { error_code: 400 }, async function (err) {
+    save.call(this, { error_code: 500 }, async function (err) {
       if (err) return done.fail(err);
       try {
         expect(await getHealth(blogID)).toEqual(health.ok());
@@ -110,6 +110,24 @@ describe("dropbox getHealth", function () {
       } catch (e) {
         done.fail(e);
       }
+    });
+  });
+
+  it("reports REAUTH_REQUIRED after persistError records a 401", function (done) {
+    const blogID = this.blog.id;
+    const persistError = require("../util/persistError");
+    save.call(this, {}, function (err) {
+      if (err) return done.fail(err);
+      persistError(blogID, { status: 401 }, SOURCES.APPLY, async function (err) {
+        if (err) return done.fail(err);
+        try {
+          const result = await getHealth(blogID);
+          expect(result.issues[0].code).toBe(health.CODES.REAUTH_REQUIRED);
+          done();
+        } catch (e) {
+          done.fail(e);
+        }
+      });
     });
   });
 });

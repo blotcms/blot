@@ -7,6 +7,7 @@ const {
   issueFromAccount,
   flagsFromAccount,
   backfillPatch,
+  keepsErrorAfterDownload,
 } = require("../util/classifyError");
 const tagSource = require("../util/tagSource");
 
@@ -157,8 +158,23 @@ describe("dropbox classifyError", function () {
       ).toBe(health.CODES.REAUTH_REQUIRED);
     });
 
+    it("maps a legacy unsourced 400 (refresh failure) to REAUTH_REQUIRED", function () {
+      expect(issueFromAccount({ error_code: 400 }).code).toBe(
+        health.CODES.REAUTH_REQUIRED
+      );
+      expect(backfillPatch({ error_code: 400, last_sync: 5 })).toEqual({
+        error_source: SOURCES.AUTH,
+        error_since: 5,
+      });
+    });
+
+    it("keeps only quota errors through a download-only pass", function () {
+      expect(keepsErrorAfterDownload({ error_code: 507 })).toBe(true);
+      expect(keepsErrorAfterDownload({ error_code: 401 })).toBe(false);
+      expect(keepsErrorAfterDownload({ error_code: 0 })).toBe(false);
+    });
+
     it("does not surface a stale transient error_code", function () {
-      expect(issueFromAccount({ error_code: 400 })).toBe(null);
       expect(issueFromAccount({ error_code: 429 })).toBe(null);
       expect(issueFromAccount({ error_code: 500 })).toBe(null);
       expect(issueFromAccount({ error_code: 0 })).toBe(null);
@@ -189,7 +205,7 @@ describe("dropbox classifyError", function () {
         folder_missing: false,
         quota_exceeded: true,
       });
-      expect(flagsFromAccount({ error_code: 400 })).toEqual({
+      expect(flagsFromAccount({ error_code: 500 })).toEqual({
         revoked: false,
         folder_missing: false,
         quota_exceeded: false,
@@ -210,7 +226,7 @@ describe("dropbox classifyError", function () {
     });
 
     it("clears stale transient error_codes", function () {
-      expect(backfillPatch({ error_code: 400 })).toEqual({
+      expect(backfillPatch({ error_code: 500 })).toEqual({
         error_code: 0,
         error_source: "",
         error_since: 0,

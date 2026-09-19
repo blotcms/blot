@@ -8,7 +8,11 @@ var isDotfileOrDotfolder = _require.isDotfileOrDotfolder;
 var hashFile = require("helper/hashFile");
 var Database = require("../database");
 var persistError = require("../util/persistError");
-var { SOURCES, classify } = require("../util/classifyError");
+var {
+  SOURCES,
+  classify,
+  keepsErrorAfterDownload,
+} = require("../util/classifyError");
 var Path = require("path");
 var join = Path.join;
 var Delta = require("../delta");
@@ -89,9 +93,11 @@ module.exports = function main(blog, callback) {
           // cursor and folderID and folder path to the database.
           // This means that future webhooks will invoke calls to
           // delta which return changes made after this point in time.
-          account.error_code = 0;
-          account.error_source = "";
-          account.error_since = 0;
+          if (!keepsErrorAfterDownload(account)) {
+            account.error_code = 0;
+            account.error_source = "";
+            account.error_since = 0;
+          }
           account.last_sync = Date.now();
           account.cursor = result.cursor;
           // we store account folder for use on the dashboard

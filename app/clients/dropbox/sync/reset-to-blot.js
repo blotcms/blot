@@ -23,7 +23,11 @@ const {
 
 const set = promisify(require("../database").set);
 const persistError = promisify(require("../util/persistError"));
-const { SOURCES, classify } = require("../util/classifyError");
+const {
+  SOURCES,
+  classify,
+  keepsErrorAfterDownload,
+} = require("../util/classifyError");
 const tagSource = require("../util/tagSource");
 const createClient = promisify((blogID, cb) =>
   require("../util/createClient")(blogID, (err, ...results) => cb(err, results))

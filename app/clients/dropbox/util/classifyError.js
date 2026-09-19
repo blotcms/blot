@@ -126,7 +126,8 @@ function isRetryable(err) {
 
 // Map a stored Dropbox account row to a health issue. Legacy rows have
 // error_code but no error_source: 401 → reauth, 409 → folder missing
-// (apply never persisted errors historically), 507 → quota. Other codes
+// (apply never persisted errors historically), 400 → reauth (refresh
+// failures), 507 → quota. Other codes
 // were transients that should not have been surfaced.
 function issueFromAccount(account) {
   if (!account || !account.error_code) return null;
@@ -135,7 +136,13 @@ function issueFromAccount(account) {
   const status = account.error_code;
   let code = null;
 
-  if (status === 401 || source === SOURCES.AUTH) {
+  // Legacy rows stored a refresh failure (HTTP 400 invalid_grant) with no
+  // source; new rows always carry source "auth" for it.
+  if (
+    status === 401 ||
+    source === SOURCES.AUTH ||
+    (status === 400 && source === "")
+  ) {
     code = health.CODES.REAUTH_REQUIRED;
   } else if (status === 409 && (source === SOURCES.DELTA || source === "")) {
     code = health.CODES.SOURCE_MISSING;
@@ -150,6 +157,13 @@ function issueFromAccount(account) {
     issue.since = account.error_since;
   }
   return issue;
+}
+
+// A pass that only downloads proves auth and the folder are fine, but
+// not that Dropbox has room for uploads, so it must not clear a quota error.
+function keepsErrorAfterDownload(account) {
+  const issue = issueFromAccount(account);
+  return !!(issue && issue.code === health.CODES.QUOTA_EXCEEDED);
 }
 
 function flagsFromAccount(account) {
@@ -176,6 +190,7 @@ function backfillPatch(account) {
 
   const actionable =
     status === 401 ||
+    status === 400 ||
     status === 409 ||
     status === 507 ||
     source === SOURCES.AUTH;
@@ -187,7 +202,7 @@ function backfillPatch(account) {
   const patch = {};
 
   if (!source) {
-    if (status === 401) patch.error_source = SOURCES.AUTH;
+    if (status === 401 || status === 400) patch.error_source = SOURCES.AUTH;
     else if (status === 409 || status === 507) patch.error_source = SOURCES.DELTA;
   }
 
@@ -205,5 +220,6 @@ module.exports = {
   dropboxTag,
   issueFromAccount,
   flagsFromAccount,
+  keepsErrorAfterDownload,
   backfillPatch,
 };
