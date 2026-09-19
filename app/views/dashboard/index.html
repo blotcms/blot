@@ -1,7 +1,7 @@
 <div class="sites-list-container">
 	<div class="sites">
 		{{#blogs}}
-		<div class="site">
+		<div class="site{{#healthIssue}} has-health-issue{{/healthIssue}}">
 			<a href="/sites/{{handle}}" class="blog-link" style="padding-left: 1rem;">
 				<span class="text-info">
 					<span class="title truncate">{{pretty.label}}</span>
@@ -9,6 +9,9 @@
 				</span>
 				<span class="icon-chevron"></span>
 			</a>
+			{{#healthIssue}}
+			<a href="/sites/{{handle}}/client" class="health-badge" data-health="{{code}}" title="{{message}}">{{label}}</a>
+			{{/healthIssue}}
 			<!-- <div class="preview-holder">
 				<div class="site-preview" data-url="{{{previewURL}}}" data-cache-id="{{cacheID}}"></div>
 			</div> -->

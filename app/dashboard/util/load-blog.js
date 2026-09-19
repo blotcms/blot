@@ -2,6 +2,7 @@ const moment = require("moment");
 const config = require("config");
 const Blog = require("models/blog");
 const Template = require("models/template");
+const getBlogHealth = require("./get-blog-health");
 
 module.exports = function (req, res, next, handle) {
   if (!req.session || !req.user || !req.user.blogs.length) return next();
@@ -28,6 +29,12 @@ module.exports = function (req, res, next, handle) {
       return next(e);
     }
 
+    getBlogHealth(blog).then(function () {
+      finish(blog);
+    }, next);
+  });
+
+  function finish(blog) {
     const siteTemplate = blog.template.startsWith("SITE:");
     const slug = blog.template.split(":").slice(1).join(":");
 
@@ -45,5 +52,5 @@ module.exports = function (req, res, next, handle) {
     res.locals.breadcrumbs.add(req.blog.pretty.label, `${req.params.handle}`);
     res.locals.title = req.blog.pretty.label;
     next();
-  });
+  }
 };

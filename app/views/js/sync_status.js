@@ -60,6 +60,11 @@ function renderSyncStatusMessage(message) {
   var statusText = q(".sync-status-text");
   if (!statusText) return;
 
+  // The server rendered a client health issue in place of the sync status.
+  // Live messages must not overwrite it; it clears when the page fragment
+  // is re-fetched (see loadFolder) after the client recovers.
+  if (statusContainer.hasAttribute("data-health")) return;
+
   if (typeof message === "undefined") {
     // Re-apply the last raw status we were given. We must not read it back
     // from statusText.innerText, because the render below replaces that with

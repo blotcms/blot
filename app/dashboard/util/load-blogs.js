@@ -1,6 +1,7 @@
 const Blog = require("models/blog");
 const Template = require("models/template");
 const config = require("config");
+const getBlogHealth = require("./get-blog-health");
 
 module.exports = async function (req, res, next) {
   if (!req.session || !req.user || !req.user.blogs.length) return next();
@@ -36,7 +37,11 @@ module.exports = async function (req, res, next) {
       })
     );
 
-    req.blogs = res.locals.blogs = blogs.filter(blog => blog !== null);
+    const existing = blogs.filter(blog => blog !== null);
+
+    await Promise.all(existing.map(getBlogHealth));
+
+    req.blogs = res.locals.blogs = existing;
     
     next();
   } catch (error) {

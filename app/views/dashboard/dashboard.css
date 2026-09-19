@@ -147,6 +147,31 @@ a.blog-link .icon-chevron {
   transition: color 0.2s;
 }
 
+/* Shown only when the site's client needs attention. Sits beside the
+   link (not inside it) because it links to the client page. */
+.site .health-badge {
+  position: absolute;
+  top: 50%;
+  right: 3rem;
+  transform: translateY(-50%);
+  z-index: 2;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--small-font-size);
+  line-height: 1.4;
+  white-space: nowrap;
+  color: var(--error-text-color);
+  background: var(--error-background-color);
+}
+
+.site.has-health-issue a.blog-link .text-info {
+  padding-right: 9rem;
+}
+
+.health-issue .center {
+  color: var(--error-text-color);
+}
+
 a.blog-link:hover .icon-chevron {
   color: var(--accent-color);
 }

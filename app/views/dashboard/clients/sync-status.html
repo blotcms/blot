@@ -1,7 +1,10 @@
-<span class="sync-status" data-sync-status-url="{{{dashboardBase}}}/status">
+<span class="sync-status" data-sync-status-url="{{{dashboardBase}}}/status"{{#blog.healthIssue}} data-health="{{code}}"{{/blog.healthIssue}}>
     <span class="sync-status-icon">
         <span class="status-synced">
             <span style="color:green;font-size: 12px;margin-right: 4px;position: relative;top:-2px" class="icon-small-check"></span>
+        </span>
+        <span class="status-health">
+            <span class="icon-small-alert"></span>
         </span>
         <span class="status-error">
             <span style="color: orange; font-size: 12px; margin-right: 4px; position: relative; top: -2px" class="icon-small-alert"></span>
@@ -11,7 +14,7 @@
         </span>
     </span>
     <span class="sync-status-body">
-        <span class="sync-status-text">{{blog.status.message}}</span>
+        <span class="sync-status-text">{{#blog.healthIssue}}{{label}}{{/blog.healthIssue}}{{^blog.healthIssue}}{{blog.status.message}}{{/blog.healthIssue}}</span>
         <span class="sync-status-progress">
             <span class="sync-status-progress-bar"></span>
         </span>
