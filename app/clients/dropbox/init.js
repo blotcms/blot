@@ -53,14 +53,21 @@ const resetToBlotWithLock = async (blogID, publish) => {
 // last_sync, which would keep the blog eligible for validation forever, so
 // put the previous value back.
 const catchUpSync = async (blog) => {
+  let before;
+
   try {
-    const before = await getDropboxAccount(blog.id);
+    before = await getDropboxAccount(blog.id);
     await sync(blog);
-    if (before && typeof before.last_sync === "number") {
-      await setDropboxAccount(blog.id, { last_sync: before.last_sync });
-    }
   } catch (err) {
     console.error(clfdate(), "Dropbox: Catch-up sync error", blog.id, err);
+  } finally {
+    // Also on failure: sync() stamps last_sync as soon as it gets the lock
+    if (before && typeof before.last_sync === "number") {
+      await setDropboxAccount(blog.id, { last_sync: before.last_sync }).catch(
+        (err) =>
+          console.error(clfdate(), "Dropbox: Error restoring last_sync", err)
+      );
+    }
   }
 };
 
