@@ -652,13 +652,6 @@ Think about how to purge the old versions of files cached by bunny's permacache
 
 Reduce size of css file by only shipping katex css once the site first publishes a post with katex
 
-Make initial health check /health more powerful
-- inspect blogs directory and verify there are the expected number of folders
-- check we can communicate with redis
-- verify pandoc is installed and running
-- make the initial timeout in the health check longer?
-- subsequent requests can just check redis connection?
-
 Testing:
 - Write unit tests for database models which have no tests subdirectory
   - e.g. models/404, models/entries, models/redirects

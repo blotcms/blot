@@ -158,7 +158,12 @@ async function getCurrentImageHash(containerName) {
   }
 }
 
-async function deployContainer(container, platform, imageHash) {
+async function deployContainer(
+  container,
+  platform,
+  imageHash,
+  { verify = true } = {}
+) {
   const dockerCreateCommand = await generateDockerCommand(
     container,
     platform,
@@ -209,6 +214,21 @@ async function deployContainer(container, platform, imageHash) {
   await sshCommand(`docker start ${container.name}`);
   console.log("Checking health of new container...");
   await checkHealth(container.name, container.port);
+
+  if (verify) await verifyContainer(container, imageHash);
+}
+
+// Runs inside the container so it checks the redis connection, data mount,
+// binaries and airlock the app itself sees. On failure sshCommand throws with
+// the report, which main() handles like a failed health check.
+async function verifyContainer(container, imageHash) {
+  if (!container.verify) return;
+
+  console.log(`Verifying ${container.name}...`);
+  const report = await sshCommand(
+    `docker exec ${container.name} node /usr/src/app/scripts/deploy/verify-container/index.js ${imageHash}`
+  );
+  console.log(report);
 }
 
 // --- airlock (config/airlock) --------------------------------------------
@@ -472,6 +492,9 @@ async function main() {
         // already-running container; a normal deploy attaches it between
         // `docker create` and `docker start` (see deployContainer).
         await connectToAirlockNetwork(container.name);
+        // A previous run may have been cut off after this container started
+        // but before it passed verification, so don't trust "already deployed".
+        await verifyContainer(container, imageHash);
         continue;
       }
 
@@ -503,7 +526,11 @@ async function main() {
 
         console.error("Rolling back...");
         try {
-          await deployContainer(container, platform, rollbackHash);
+          // Skip verification on rollback: the priority is to get
+          // something serving again, not to gate it.
+          await deployContainer(container, platform, rollbackHash, {
+            verify: false,
+          });
           console.error("Rollback succeeded.");
         } catch (rollbackError) {
           console.error("Rollback failed:", rollbackError);

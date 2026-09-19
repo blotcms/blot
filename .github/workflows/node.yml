@@ -64,6 +64,7 @@ jobs:
         - config/openresty:1
         - config/redis:1
         - proxy:1
+        - scripts/deploy:1
     steps:
       - name: Sparse checkout for hash calculation
         uses: actions/checkout@v4

@@ -83,10 +83,14 @@ module.exports = {
   },
 
   CONTAINERS: {
-    // Failover server (both sites and blogs)
+    // Failover server (both sites and blogs). Deployed first, so it is also
+    // the canary for the rest of the deploy: `verify` runs the deploy-time
+    // checks in ../verify-container inside it once it is healthy, and a
+    // failure rolls it back before green and yellow are touched.
     BLUE: {
       name: "blot-container-blue",
       port: 8088,
+      verify: true,
       ...siteConfig,
     },
 

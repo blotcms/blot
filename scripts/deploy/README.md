@@ -12,6 +12,7 @@ The deployment system uses an SSH user (`deploy`) that can execute commands on t
 - **Audit logging**: All commands are logged
 - **Docker access**: User can manage Docker containers
 - **Automated health checks**: Automatic rollback on failure
+- **Deploy-time verification**: Blue (deployed first) must also pass `verify-container` before green and yellow are touched
 
 ## Quick Start
 
@@ -207,3 +208,15 @@ gh workflow run deploy.yml
 ```
 
 **Note:** The workflow always deploys the commit that triggered it. To deploy a specific commit, navigate to that commit in GitHub first, then trigger the workflow from the Actions tab.
+
+---
+
+## Deploy-time container verification
+
+Once blue reports healthy, the deploy runs `scripts/deploy/verify-container` inside it (`docker exec`). Any failed check fails the deploy: blue is rolled back and green and yellow are never touched. It checks the release ID, redis read/write, that `data/blogs` matches the blogs in redis, the data mount is writable with disk to spare, pandoc, git, sharp (with HEIC), required env vars, the airlock (browser and proxy), a render of the canary blog (`preview-of-wireframe-on-david`, straight to the container, not via the proxy) and the dashboard log-in page.
+
+This is deliberately not part of `/health` or the Docker `HEALTHCHECK`, which also run after crash-restarts when we want to keep serving whatever we can. Rollbacks skip it for the same reason. To run it by hand:
+
+```bash
+ssh blot "docker exec blot-container-blue node /usr/src/app/scripts/deploy/verify-container/index.js <commit>"
+```
