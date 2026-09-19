@@ -34,10 +34,7 @@ module.exports = function requestLogger(req, res, next) {
   };
 
   // Response logging
-  let hasFinished = false;
-  
   res.on("finish", () => {
-    hasFinished = true;
     try {
       const duration = ((Date.now() - requestStart) / 1000).toFixed(3);
       console.log(createLogEntry(
@@ -50,10 +47,11 @@ module.exports = function requestLogger(req, res, next) {
     }
   });
 
-  // this can fire unexpectedly for POST requests with bodies
+  // Listen on res, not req: req emits "close" as soon as its body has been
+  // fully read (e.g. by body-parser on POSTs), long before the client leaves.
   // https://github.com/expressjs/express/issues/6334
-  req.on("close", () => {
-    if (hasFinished) return;
+  res.on("close", () => {
+    if (res.writableFinished) return;
     try {
       console.log(createLogEntry(
         "Connection closed by client",
