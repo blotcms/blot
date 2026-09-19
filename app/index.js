@@ -2,10 +2,20 @@ const config = require("config");
 const clfdate = require("helper/clfdate");
 const email = require("helper/email");
 const redis = require("models/client");
+const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const setup = require("./setup");
 const server = require("./server");
 
 const DEPLOYMENT_MARKER_EXPIRATION_SECONDS = 90 * 24 * 60 * 60;
+
+// Background work that hits Redis while it is down rejects with a connection
+// error. Log those rather than crash the process. Installing a listener
+// disables Node's default handling, so anything else is rethrown, which
+// surfaces as an uncaught exception and still exits the process.
+process.on("unhandledRejection", function (err) {
+  if (!isRedisUnavailableError(err)) throw err;
+  console.error(clfdate(), "Unhandled rejection (Redis unavailable):", err.message);
+});
 
 function releaseId() {
   return process.env.BLOT_RELEASE_ID || process.env.GIT_SHA;

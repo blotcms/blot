@@ -162,6 +162,10 @@ documentation.use(function (req, res, next) {
   next(err);
 });
 
+// Redis unreachable: 503, which the proxy does not cache. The handler
+// below would return a 400, which it caches for a year.
+documentation.use(require("helper/redisUnavailable").redisUnavailableHandler);
+
 // Some kind of other error
 // jshint unused:false
 documentation.use(function (err, req, res, next) {

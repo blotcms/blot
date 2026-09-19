@@ -39,6 +39,10 @@ const loadFeatured = async () => {
 }
 
 module.exports = async function (req, res, next) {
-  res.locals.featured = await loadFeatured();
-  next();
+  try {
+    res.locals.featured = await loadFeatured();
+    next();
+  } catch (err) {
+    next(err);
+  }
 };

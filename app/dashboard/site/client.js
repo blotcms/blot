@@ -78,48 +78,52 @@ const verbs = {
 // these still parse into a path, verb and folder URL below.
 const PROGRESS_PREFIX = /^\(\d+\/\d+\)\s+/;
 
-client_routes.route("/activity").get(load.clients, async function (req, res) {
-  res.locals.breadcrumbs.add("Activity", "activity");
+client_routes.route("/activity").get(load.clients, async function (req, res, next) {
+  try {
+    res.locals.breadcrumbs.add("Activity", "activity");
 
-  let { statuses, next, previous } = await getStatuses(req.blog.id);
+    let { statuses, next, previous } = await getStatuses(req.blog.id);
 
-  statuses = _.chain(statuses)
-    .groupBy("syncID")
-    .map((value, key) => ({
-      syncID: key,
-      messages: value
-        .map((item) => {
-          const message = item.message.replace(PROGRESS_PREFIX, "");
-          const matchedVerb = Object.keys(verbs).find((i) =>
-            message.startsWith(i + " /")
-          );
-
-          if (matchedVerb) {
-            const path = message.slice((matchedVerb + " ").length);
-            item.path = Path.parse(path);
-            item.verb = verbs[matchedVerb];
-            item.url = Path.join(
-              res.locals.base,
-              "folder",
-              encodeURIComponent(path.slice(1))
+    statuses = _.chain(statuses)
+      .groupBy("syncID")
+      .map((value, key) => ({
+        syncID: key,
+        messages: value
+          .map((item) => {
+            const message = item.message.replace(PROGRESS_PREFIX, "");
+            const matchedVerb = Object.keys(verbs).find((i) =>
+              message.startsWith(i + " /")
             );
-          }
 
-          item.fromNow = moment(item.datestamp).fromNow();
+            if (matchedVerb) {
+              const path = message.slice((matchedVerb + " ").length);
+              item.path = Path.parse(path);
+              item.verb = verbs[matchedVerb];
+              item.url = Path.join(
+                res.locals.base,
+                "folder",
+                encodeURIComponent(path.slice(1))
+              );
+            }
 
-          return item;
-        })
-        .filter(({ message }) => message !== "Syncing" && message !== "Synced"),
-    }))
-    .filter((i) => i.messages && i.messages.length)
-    .value();
+            item.fromNow = moment(item.datestamp).fromNow();
 
-  res.render("dashboard/clients/activity", {
-    title: "Activity",
-    statuses,
-    next,
-    previous,
-  });
+            return item;
+          })
+          .filter(({ message }) => message !== "Syncing" && message !== "Synced"),
+      }))
+      .filter((i) => i.messages && i.messages.length)
+      .value();
+
+    res.render("dashboard/clients/activity", {
+      title: "Activity",
+      statuses,
+      next,
+      previous,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 client_routes

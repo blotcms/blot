@@ -8,7 +8,12 @@ module.exports = async function related(req, res, next) {
   const related_tag = path.split("/").pop();
 
   res.locals.related_tag = related_tag;
-  res.locals.related = await list({ tag: related_tag });
+
+  try {
+    res.locals.related = await list({ tag: related_tag });
+  } catch (err) {
+    return next(err);
+  }
 
   return next();
 };

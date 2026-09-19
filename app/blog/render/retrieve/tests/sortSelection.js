@@ -29,7 +29,7 @@ describe("post sorting across retrieve helpers", function () {
 
     beforeEach(function () {
       recentEntries._clear();
-      spyOn(Entries, "getRecent").and.callFake((blogID, cb) => cb(newestFirst()));
+      spyOn(Entries, "getRecent").and.callFake((blogID, options, cb) => cb(newestFirst()));
     });
 
     it("stays newest-first regardless of the Post sorting selection", async function () {

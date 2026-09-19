@@ -131,7 +131,7 @@ describe("all_entries cache", function () {
   it("reuses cached entries for identical cacheIDs", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "A" }]);
     });
 
@@ -148,7 +148,7 @@ describe("all_entries cache", function () {
   it("refetches when cacheID changes", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "A" }]);
     });
 
@@ -171,7 +171,7 @@ describe("all_entries cache", function () {
   it("returns isolated copies so caller mutations do not taint cache", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "Original" }]);
     });
 
@@ -191,7 +191,7 @@ describe("all_entries cache", function () {
     const allEntries = loadAllEntries();
 
     let resolveGetAll;
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       resolveGetAll = () => callback([{ id: "1", title: "A" }]);
     });
 
@@ -216,7 +216,7 @@ describe("all_entries cache", function () {
   it("stores separate entries per referenced field set so a stripped cache entry can't leak into a view that needs more", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "A", html: "<p>A body</p>" }]);
     });
 
@@ -243,7 +243,7 @@ describe("all_entries cache", function () {
   it("bypasses the cache for preview requests", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "A" }]);
     });
 
@@ -266,7 +266,7 @@ describe("all_entries cache", function () {
     // empty array from it is ambiguous between "no posts" and "Redis
     // hiccup." Caching it either way risks hiding every post until the
     // cacheID changes; refetching on every miss is the safe default.
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([]);
     });
 

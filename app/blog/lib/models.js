@@ -129,16 +129,20 @@ function randomEntry(blogID) {
   });
 }
 
-// getAll / getRecent callback with (entries) only — never an error argument.
+// getAll / getRecent callback with (entries) only, never an error argument,
+// and resolve [] on a Redis failure. onError makes them reject on a Redis
+// outage instead, so that no caller renders or caches an empty list as real.
 function getAll(blogID) {
-  return new Promise((resolve) => {
-    Entries.getAll(blogID, (entries) => resolve(entries));
+  return new Promise((resolve, reject) => {
+    Entries.getAll(blogID, { onError: reject }, (entries) => resolve(entries));
   });
 }
 
 function getRecent(blogID) {
-  return new Promise((resolve) => {
-    Entries.getRecent(blogID, (entries) => resolve(entries));
+  return new Promise((resolve, reject) => {
+    Entries.getRecent(blogID, { onError: reject }, (entries) =>
+      resolve(entries)
+    );
   });
 }
 

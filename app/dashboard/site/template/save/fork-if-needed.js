@@ -15,30 +15,34 @@ const updateBlog = (blogID, updates) => {
 }
 
 module.exports = async (req, res, next) => {
-    res.locals.templateForked = false;
+  try {
+      res.locals.templateForked = false;
 
-    if (req.template.owner === req.blog.id) {
-        return next();
-    }
+      if (req.template.owner === req.blog.id) {
+          return next();
+      }
 
-    const template = await createTemplate({
-        isPublic: false,
-        owner: req.blog.id,
-        // Derive the slug from the name so it stays in step with the id the
-        // fork is stored under; the source template's slug may not.
-        slug: slugForName(req.blog.id, req.template.name),
-        name: req.template.name,
-        cloneFrom: req.template.id,
-    });
+      const template = await createTemplate({
+          isPublic: false,
+          owner: req.blog.id,
+          // Derive the slug from the name so it stays in step with the id the
+          // fork is stored under; the source template's slug may not.
+          slug: slugForName(req.blog.id, req.template.name),
+          name: req.template.name,
+          cloneFrom: req.template.id,
+      });
 
-    // if the blog used to use the forked template, we need to update the blog's template
-    if (req.blog.template === req.template.id) {
-        await updateBlog(req.blog.id, {
-            template: template.id
-        });
-    }
+      // if the blog used to use the forked template, we need to update the blog's template
+      if (req.blog.template === req.template.id) {
+          await updateBlog(req.blog.id, {
+              template: template.id
+          });
+      }
 
-    res.locals.templateForked = true;
-    req.template = res.locals.template = template;
-    next();
+      res.locals.templateForked = true;
+      req.template = res.locals.template = template;
+      next();
+  } catch (err) {
+    next(err);
+  }
 };

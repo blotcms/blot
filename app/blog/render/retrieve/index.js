@@ -1,4 +1,5 @@
 const ensure = require("helper/ensure");
+const { isRedisUnavailableError } = require("helper/redisUnavailable");
 
 const all_entries = require("./all_entries");
 const all_tags = require("./all_tags");
@@ -79,6 +80,9 @@ module.exports = async function retrieve(req, res, needed) {
         // getPage rejects invalid :page with statusCode 400. Listing views
         // retrieve posts inside renderView, so that error must surface.
         if (err && err.statusCode) throw err;
+        // A Redis outage must not render an incomplete page, the proxy would
+        // cache it for a year. Let it reach the 503 handler.
+        if (isRedisUnavailableError(err)) throw err;
         // Known trade-off: /, /tagged/:tag and /search used to have their
         // own try/catch -> next(err), so any fetch error (a Redis hiccup in
         // fetchTaggedEntries/Entry.get, a bug in Entry.search, ...) rendered

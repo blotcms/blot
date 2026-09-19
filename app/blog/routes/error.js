@@ -3,6 +3,7 @@ const store404 = require("models/404").set;
 const config = require("config");
 const path = require("path");
 const clfdate = require("helper/clfdate");
+const { redisUnavailableHandler } = require("helper/redisUnavailable");
 const { checkRedirect } = require("../lib/models");
 
 const VIEW_DIR = path.resolve(__dirname + "/../../views");
@@ -43,6 +44,9 @@ module.exports = function register(blog) {
     // We expose these to the user
     store404(req.blog.id, req.url);
   });
+
+  // Redis unreachable: 503 and a generic page, not a template error
+  blog.use(redisUnavailableHandler);
 
   // Errors
   blog.use(function (err, req, res, next) {

@@ -93,13 +93,17 @@ Account.get("/delete-blog-paypal", function (req, res) {
 });
 
 Account.get("/delete-blog-paypal/update", async (req, res, next) => {
-  // fetch the latest subscription from PayPal
-  if (!req.user.paypal.id) return next();
+  try {
+    // fetch the latest subscription from PayPal
+    if (!req.user.paypal.id) return next();
 
-  await updateSubscription(req.user.paypal.id);
-  Email.SUBSCRIPTION_DECREASE(req.user.uid);
+    await updateSubscription(req.user.paypal.id);
+    Email.SUBSCRIPTION_DECREASE(req.user.uid);
 
-  res.message("/sites", "Reduced your PayPal subscription");
+    res.message("/sites", "Reduced your PayPal subscription");
+  } catch (err) {
+    next(err);
+  }
 });
 
 Account.post("/log-out", logout, function (req, res) {
