@@ -66,6 +66,15 @@ function describeCandidateSummary(candidate) {
   ].join(" | ");
 }
 
+function logUserError(user, action, err) {
+  console.error(
+    colors.red(
+      "Error " + action + " " + user.email + " " + user.uid + ": " +
+        ((err && err.message) || err)
+    )
+  );
+}
+
 function deleteAccount(user, callback) {
   var req = { user: user };
   var res = {};
@@ -84,7 +93,10 @@ function collectCandidates(done) {
   eachUser(
     function (user, next) {
       removal.overdueFor(user, function (err, overdue) {
-        if (err) return next(err);
+        if (err) {
+          logUserError(user, "checking overdue status for", err);
+          return next();
+        }
 
         var candidate = removal.removalCandidate(user, overdue);
 
@@ -105,7 +117,10 @@ function collectCandidates(done) {
         Blog.get({ id: blogID }, blogDone);
       },
       function (err, blogs) {
-        if (err) return next(err);
+        if (err) {
+          logUserError(user, "loading blogs for", err);
+          return next();
+        }
 
         candidate.blogs = blogs.filter(Boolean);
         candidates.push(candidate);
@@ -135,7 +150,10 @@ function runFastMode(candidates, done) {
 
     async.eachSeries(candidates, function (candidate, next) {
       deleteAccount(candidate.user, function (deleteErr) {
-        if (deleteErr) return next(deleteErr);
+        if (deleteErr) {
+          logUserError(candidate.user, "deleting", deleteErr);
+          return next();
+        }
         deleted += 1;
         console.log(colors.green("Deleted " + candidate.user.email));
         next();
@@ -161,7 +179,10 @@ function runInteractiveMode(candidates, done) {
           }
 
           deleteAccount(candidate.user, function (deleteErr) {
-            if (deleteErr) return next(deleteErr);
+            if (deleteErr) {
+              logUserError(candidate.user, "deleting", deleteErr);
+              return next();
+            }
             deleted += 1;
             console.log(colors.green("Deleted " + candidate.user.email));
             next();
