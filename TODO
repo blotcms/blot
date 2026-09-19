@@ -1,4 +1,3 @@
-Can we use toxicproxy to simulate latency to node server in development? To make it feel more like production? Or worse even?
 
 If you rename the folder for a site's installed template, everything breaks (the template editor, etc.). Can we handle this more elegantly somehow?
 

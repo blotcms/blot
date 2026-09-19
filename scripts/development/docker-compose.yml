@@ -73,6 +73,7 @@ services:
       - "8474:8474"
     expose:
       - "26379"
+      - "8081"
 
   # Single egress boundary for fetching untrusted, user-supplied URLs
   # (bookmark screenshots, remote images in posts). See config/airlock.
@@ -104,4 +105,5 @@ services:
       - ../../data/ssl:/etc/ssl:ro
     depends_on:
       - node-app
+      - toxiproxy
     command: /bin/sh -c "sh /etc/nginx/init.sh"

@@ -55,5 +55,11 @@ echo "[toxiproxy] Configuring redis proxy via API (latency toggled after server 
 curl -sf -X DELETE "${API}/proxies/redis" >/dev/null 2>&1 || true
 curl -sf -X POST "${API}/proxies" -H "Content-Type: application/json" -d "{\"name\":\"redis\",\"listen\":\"0.0.0.0:6379\",\"upstream\":\"redis:6379\"}" >/dev/null
 
+# nginx -> node-app. Latency here stands in for the client<->server round trip
+# users see in production (see enable-toxiproxy-latency.sh).
+curl -sf -X DELETE "${API}/proxies/node" >/dev/null 2>&1 || true
+curl -sf -X POST "${API}/proxies" -H "Content-Type: application/json" -d "{\"name\":\"node\",\"listen\":\"0.0.0.0:8081\",\"upstream\":\"node-app:8080\"}" >/dev/null
+
+echo "[toxiproxy] Ready: nginx -> toxiproxy:8081 -> node-app:8080"
 echo "[toxiproxy] Ready: node-app -> toxiproxy:6379 -> redis:6379 (latency ${LATENCY_MS}ms + jitter ${JITTER_MS}ms once server is ready)"
 echo "[toxiproxy] Note: packet loss/reorder (tc netem) skipped — image has no shell; set BLOT_USE_TOXIPROXY=false or ignore."
