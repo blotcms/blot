@@ -116,7 +116,7 @@ describe("dropbox getHealth", function () {
   it("reports REAUTH_REQUIRED after persistError records a 401", function (done) {
     const blogID = this.blog.id;
     const persistError = require("../util/persistError");
-    save.call(this, {}, function (err) {
+    save.call(this, { error_code: 0 }, function (err) {
       if (err) return done.fail(err);
       persistError(blogID, { status: 401 }, SOURCES.APPLY, async function (err) {
         if (err) return done.fail(err);

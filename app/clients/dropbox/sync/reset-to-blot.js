@@ -70,14 +70,28 @@ async function resetToBlot(blogID, publish, update) {
   }
 
   try {
-    return await resetToBlotWithClient(blogID, publish, client, account);
+    return await resetToBlotWithClient(
+      blogID,
+      publish,
+      client,
+      account,
+      updatePath,
+      startedAt
+    );
   } catch (err) {
     await persistError(blogID, err, SOURCES.APPLY);
     throw err;
   }
 }
 
-async function resetToBlotWithClient(blogID, publish, client, account) {
+async function resetToBlotWithClient(
+  blogID,
+  publish,
+  client,
+  account,
+  updatePath,
+  startedAt
+) {
   let dropboxRoot = "/";
 
   // Load the path to the blog folder root position in Dropbox
