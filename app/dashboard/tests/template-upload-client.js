@@ -257,13 +257,8 @@ describe("template upload client", function () {
       const errorMessage = element();
       const problems = element();
       const dismiss = element();
-      const warningBox = element();
-      const warningMessage = element();
-      const warnings = element();
-      const continueLink = element();
 
       errorBox.hidden = true;
-      warningBox.hidden = true;
 
       const root = element({
         "data-csrf": "token",
@@ -281,10 +276,6 @@ describe("template upload client", function () {
         "[data-template-upload-message]": errorMessage,
         "[data-template-upload-problems]": problems,
         "[data-template-upload-dismiss]": dismiss,
-        "[data-template-upload-warning]": warningBox,
-        "[data-template-upload-warning-message]": warningMessage,
-        "[data-template-upload-warnings]": warnings,
-        "[data-template-upload-continue]": continueLink,
         "[data-template-upload-folder-input]": null,
         "[data-template-upload-zip-input]": null,
       };
@@ -303,16 +294,19 @@ describe("template upload client", function () {
         errorMessage,
         problems,
         dismiss,
-        warningBox,
-        warningMessage,
-        warnings,
-        continueLink,
       };
     }
 
     // fetch and FormData are Node globals. Deleting them rather than putting
     // them back would break every later suite in the same process.
-    const BROWSER_GLOBALS = ["window", "document", "FormData", "fetch"];
+    const BROWSER_GLOBALS = [
+      "window",
+      "document",
+      "FormData",
+      "fetch",
+      "XMLHttpRequest",
+    ];
+    let requests;
     let originalGlobals;
 
     beforeEach(function () {
@@ -328,6 +322,20 @@ describe("template upload client", function () {
         createElementNS: () => element(),
         createTextNode: (text) => ({ text }),
         querySelectorAll: () => [],
+      };
+      requests = [];
+      global.XMLHttpRequest = function () {
+        this.upload = {};
+        this.open = function () {};
+        this.send = function () {
+          requests.push(this);
+        };
+        this.respond = function (status, body) {
+          this.status = status;
+          this.responseText = JSON.stringify(body);
+          this.upload.onload();
+          this.onload();
+        };
       };
       global.FormData = function () {
         this.appended = [];
@@ -468,45 +476,6 @@ describe("template upload client", function () {
       });
     });
 
-    it("shows warnings instead of redirecting past them", function () {
-      const { root, dropzone, warningBox, warnings, continueLink } = build();
-
-      global.fetch = () =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          json: () =>
-            Promise.resolve({
-              ok: true,
-              name: "Theme",
-              redirect: "/sites/example/template/theme",
-              views: ["index.html"],
-              ignored: [],
-              warnings: ["package.json set 'enabled'"],
-            }),
-        });
-
-      panel.init(root);
-
-      dropzone.dispatch("drop", {
-        dataTransfer: dataTransfer({ files: [file("index.html")] }),
-        preventDefault: function () {},
-      });
-
-      // Let collectDroppedFiles, fetch and its two thens settle
-      return Promise.resolve()
-        .then(() => Promise.resolve())
-        .then(() => Promise.resolve())
-        .then(() => Promise.resolve())
-        .then(function () {
-          expect(warningBox.hidden).toBe(false);
-          expect(warnings.children.length).toEqual(1);
-          expect(continueLink.href).toEqual("/sites/example/template/theme");
-          // The page must not have navigated on its own
-          expect(global.window.location).toBe(undefined);
-        });
-    });
-
     it("swaps the instructions for one row per dropped file", function () {
       const { root, dropzone, empty, selected, selectedLabel, files } = build();
       global.fetch = () => new Promise(function () {});
@@ -531,47 +500,6 @@ describe("template upload client", function () {
       });
     });
 
-    it("rebuilds the rows from what the server actually created", function () {
-      const { root, dropzone, selectedLabel, files } = build();
-
-      // A zip is one row on the way up: only the server knows what was inside
-      global.fetch = () =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          json: () =>
-            Promise.resolve({
-              ok: true,
-              name: "Theme",
-              redirect: "/sites/example/template/theme",
-              views: ["index.html", "entry.html", "style.css"],
-              ignored: [{ path: ".DS_Store", reason: "system-file" }],
-              warnings: ["package.json set 'enabled'"],
-            }),
-        });
-
-      panel.init(root);
-
-      dropzone.dispatch("drop", {
-        dataTransfer: dataTransfer({ files: [file("theme.zip")] }),
-        preventDefault: function () {},
-      });
-
-      return Promise.resolve()
-        .then(function () {
-          // Before the response: just the zip
-          expect(files.children.length).toEqual(1);
-        })
-        .then(() => Promise.resolve())
-        .then(() => Promise.resolve())
-        .then(() => Promise.resolve())
-        .then(function () {
-          // After it: the views it contained, plus what was skipped
-          expect(files.children.length).toEqual(4);
-          expect(selectedLabel.textContent).toContain("Created 3 files");
-        });
-    });
-
     it("returns to the instructions when cleared", function () {
       const { root, dropzone, empty, selected, files, clear } = build();
       global.fetch = () => new Promise(function () {});
@@ -593,23 +521,8 @@ describe("template upload client", function () {
       });
     });
 
-    it("redirects immediately when there are no warnings", function () {
+    it("redirects to the new template once the server responds", function () {
       const { root, dropzone } = build();
-
-      global.fetch = () =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          json: () =>
-            Promise.resolve({
-              ok: true,
-              name: "Theme",
-              redirect: "/sites/example/template/theme",
-              views: ["index.html"],
-              ignored: [],
-              warnings: [],
-            }),
-        });
 
       panel.init(root);
 
@@ -619,9 +532,14 @@ describe("template upload client", function () {
       });
 
       return Promise.resolve()
-        .then(() => Promise.resolve())
-        .then(() => Promise.resolve())
-        .then(() => Promise.resolve())
+        .then(function () {
+          expect(requests.length).toEqual(1);
+          requests[0].respond(200, {
+            ok: true,
+            name: "Theme",
+            redirect: "/sites/example/template/theme",
+          });
+        })
         .then(function () {
           expect(global.window.location).toEqual(
             "/sites/example/template/theme"
