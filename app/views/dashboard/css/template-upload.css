@@ -107,29 +107,41 @@
 
 .template-upload__file-indicator {
   flex-shrink: 0;
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+}
+
+/* Queued: a single dim dot */
+.template-upload__file-indicator::before {
+  content: "";
   width: 0.5rem;
   height: 0.5rem;
-  margin: 0 0.25rem;
+  border-radius: 50%;
+  background: #666;
+  opacity: 0.25;
+}
+
+.template-upload__file-indicator .icon-small-check {
+  display: none;
+  color: green;
+  font-size: 12px;
 }
 
 /* The active file pulses like a working button */
-.template-upload__file--working .template-upload__file-indicator {
-  display: block;
-  border-radius: 0.55rem;
-  background: #666;
+.template-upload__file--working .template-upload__file-indicator::before {
+  opacity: 1;
   animation: pulse 0.2s cubic-bezier(0.5, 0, 0.5, 1) alternate infinite;
 }
 
-/* Uploaded files get a green check */
-.template-upload__file--done .template-upload__file-indicator {
-  display: block;
-  width: 0.35rem;
-  height: 0.65rem;
-  margin: 0 0.3rem 0.2rem;
-  border: solid var(--success-text-color);
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+/* Uploaded files get the green sync tick */
+.template-upload__file--done .template-upload__file-indicator::before {
+  display: none;
+}
+
+.template-upload__file--done .template-upload__file-indicator .icon-small-check {
+  display: inline-block;
 }
 
 /* Skipped and failed rows are stated rather than merely tinted, so the

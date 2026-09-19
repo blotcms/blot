@@ -49,35 +49,6 @@ function init(root) {
   // One row per file, keyed by path so the response can update them in place
   var rows = {};
 
-  var FILE_ICON =
-    "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" +
-    "|M14 2v6h6M8 13h8M8 17h8M8 9h2";
-
-  function svgIcon() {
-    var svg = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "svg"
-    );
-
-    svg.setAttribute("class", "file-drop__file-icon");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("fill", "none");
-    svg.setAttribute("stroke", "currentColor");
-    svg.setAttribute("stroke-width", "1.5");
-    svg.setAttribute("aria-hidden", "true");
-
-    FILE_ICON.split("|").forEach(function (d) {
-      var path = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "path"
-      );
-      path.setAttribute("d", d);
-      svg.appendChild(path);
-    });
-
-    return svg;
-  }
-
   function setLabel(text) {
     if (selectedLabel) selectedLabel.textContent = text || "";
   }
@@ -112,14 +83,19 @@ function init(root) {
       var state = document.createElement("span");
       state.className = "template-upload__file-state";
 
-      row.appendChild(svgIcon());
-      row.appendChild(name);
-      row.appendChild(state);
-
+      // A dim dot while queued, a pulsing one while uploading and the
+      // sync status tick once done
       var indicator = document.createElement("span");
       indicator.className = "template-upload__file-indicator";
       indicator.setAttribute("aria-hidden", "true");
+
+      var tick = document.createElement("span");
+      tick.className = "icon-small-check";
+      indicator.appendChild(tick);
+
       row.appendChild(indicator);
+      row.appendChild(name);
+      row.appendChild(state);
       fileList.appendChild(row);
 
       rows[path] = { row: row, state: state };
