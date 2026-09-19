@@ -17,7 +17,7 @@ echo "[toxiproxy] Latency now active: ${LATENCY_MS}ms + jitter ${JITTER_MS}ms (e
 # (connect time; TTFB minus TLS is one RTT for cached pages, ~+90ms when Node
 # renders). Multiplied by 1.5 = ~285ms per request, split across both
 # directions, with ~30ms jitter. Applied per direction, so a request pays 2x.
-NODE_LATENCY_MS="${BLOT_TOXIPROXY_NODE_LATENCY_MS:-143}"
+NODE_LATENCY_MS="${BLOT_TOXIPROXY_NODE_LATENCY_MS:-95}"
 NODE_JITTER_MS="${BLOT_TOXIPROXY_NODE_JITTER_MS:-30}"
 
 for stream in upstream downstream; do
