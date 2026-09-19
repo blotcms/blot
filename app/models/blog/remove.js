@@ -5,6 +5,7 @@ var fs = require("fs-extra");
 var get = require("./get");
 var set = require("./set");
 var key = require("./key");
+var templateKey = require("models/template/key");
 var BackupDomain = require("./util/backupDomain");
 var flushCache = require("./flushCache");
 
@@ -99,7 +100,11 @@ function deleteKeys(blog, callback) {
 
       var patterns = ["template:" + blog.id + ":*", "blog:" + blog.id + ":*"];
 
-      var remove = ["template:owned_by:" + blog.id];
+      var remove = [
+        "template:owned_by:" + blog.id,
+        templateKey.folderPendingRemoval(blog.id),
+        templateKey.folderFresh(blog.id),
+      ];
 
       if (blog.handle) {
         remove.push("handle:" + blog.handle);

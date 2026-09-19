@@ -29,6 +29,7 @@ module.exports = {
   buildFromFolder: require("./buildFromFolder"),
   readFromFolder: require("./readFromFolder"),
   writeToFolder: require("./writeToFolder"),
+  renameLocalTemplate: require("./renameLocalTemplate"),
   removeFromFolder: require("./removeFromFolder"),
   removeEnabledFromAllTemplates: require("./removeEnabledFromAllTemplates"),
   

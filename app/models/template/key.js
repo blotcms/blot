@@ -31,6 +31,15 @@ module.exports = {
     return "template:owned_by:" + blogID;
   },
 
+  // Per-blog state for detecting renamed local template folders
+  folderPendingRemoval: function folderPendingRemoval (blogID) {
+    return "template:folder_pending_removal:" + blogID;
+  },
+
+  folderFresh: function folderFresh (blogID) {
+    return "template:folder_fresh:" + blogID;
+  },
+
   renderedOutput: function renderedOutput(hash) {
     return "cdn:rendered:" + hash;
   }

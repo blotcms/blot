@@ -1,6 +1,4 @@
 
-If you rename the folder for a site's installed template, everything breaks (the template editor, etc.). Can we handle this more elegantly somehow?
-
 Smooth new template creation via drag and drop (it hangs on initial upload page for a while, then the interstial page should already have added the new template to the nav)
 
 Why is Ross' template so slow to install? It takes a few seconds. Let's speed it up.
