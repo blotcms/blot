@@ -180,6 +180,7 @@ function buildWith(blog, path, multiInfo, callback) {
             );
             entry = Prepare(entry, {
               titlecase: blog.plugins.titlecase.enabled,
+              blogID: blog.id,
             });
             debug("Blog:", blog.id, path, " additional properties computed.");
           } catch (e) {

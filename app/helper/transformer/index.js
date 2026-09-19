@@ -16,6 +16,7 @@ var resolve = require("path").resolve;
 var async = require("async");
 var caseSensitivePath = require("../caseSensitivePath");
 var he = require("he");
+var unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
 
 // Maps https://cdn.blot.im/blog_xyz/_image_cache/abc.jpg to
 // /_image_cache/abc.jpg to enable us to look up the file quickly
@@ -33,6 +34,24 @@ function resolveCDNPath(src) {
   } catch (e) {
     return src;
   }
+}
+
+// A build-time consumer of an <img src> that runs after
+// app/build/plugins/folderAssets in the pipeline (e.g. app/build/thumbnail,
+// called from app/build/index.js on the same post-plugin html) sees the
+// baked %%BLOT_CDN%%/folder/v-<hash>/<blogID><path> link instead of a
+// local path. Map it back to <path>. Only the token form matters: every
+// caller of Transformer.lookup() sees build-time HTML, which never
+// contains the real CDN origin (middleware.js substitutes that per request).
+function resolveFolderCDNPath(src, blogID) {
+  var unwrapped = unwrapFolderLink(src, blogID);
+
+  if (unwrapped === null) return src;
+
+  // unwrapFolderLink keeps any ?query/#hash, which aren't part of the
+  // file's path on disk.
+  var cutIndex = unwrapped.search(/[?#]/);
+  return cutIndex === -1 ? unwrapped : unwrapped.slice(0, cutIndex);
 }
 
 function Transformer(blogID, name) {
@@ -78,6 +97,7 @@ function Transformer(blogID, name) {
     }
 
     src = resolveCDNPath(src);
+    src = resolveFolderCDNPath(src, blogID);
 
     var url = isURL(src);
     var path = src;

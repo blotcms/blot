@@ -349,7 +349,12 @@ Heading Here
 
     const entry = await this.blog.check({ path: "/DocumentPost.txt" });
 
-    expect(entry.html).toContain('<embed src="/Assets/document.pdf"');
+    // The embed src resolves to an existing folder file, so
+    // app/build/plugins/folderAssets bakes it into a %%BLOT_CDN%%-prefixed,
+    // versioned URL at build time rather than leaving the raw path.
+    expect(entry.html).toMatch(
+      /<embed src="%%BLOT_CDN%%\/folder\/v-[a-f0-9]{8}\/[^"]*\/Assets\/document\.pdf"/
+    );
     expect(entry.html).not.toContain('title="wikilink"');
 
     done();
@@ -689,7 +694,13 @@ Heading Here
     const imagePath = "/_Images/Image.jpg";
     const imageContent = "BinaryImageContent";
 
-    const html = '<p><img src="/_Images/Image.jpg" title="Image.jpg" alt="Image.jpg"><span class="caption">Image.jpg</span></p>';
+    // The src resolves to an existing folder file, so
+    // app/build/plugins/folderAssets bakes it into a %%BLOT_CDN%%-prefixed,
+    // versioned URL at build time rather than leaving the raw path.
+    const html = (actual) =>
+      /^<p><img src="%%BLOT_CDN%%\/folder\/v-[a-f0-9]{8}\/[^"]*\/_Images\/Image\.jpg" title="Image\.jpg" alt="Image\.jpg"><span class="caption">Image\.jpg<\/span><\/p>$/.test(
+        actual
+      );
 
     const files = [
       { path: imagePath, content: imageContent },
@@ -709,7 +720,13 @@ Heading Here
     const imagePath = "/Files/Pic.png";
     const imageContent = "BinaryImageContent";
 
-    const html = '<p><img src="/Files/Pic.png" title="Caption text" alt="Caption text"><span class="caption">Caption text</span></p>';
+    // The src resolves to an existing folder file, so
+    // app/build/plugins/folderAssets bakes it into a %%BLOT_CDN%%-prefixed,
+    // versioned URL at build time rather than leaving the raw path.
+    const html = (actual) =>
+      /^<p><img src="%%BLOT_CDN%%\/folder\/v-[a-f0-9]{8}\/[^"]*\/Files\/Pic\.png" title="Caption text" alt="Caption text"><span class="caption">Caption text<\/span><\/p>$/.test(
+        actual
+      );
 
     const files = [
       { path: imagePath, content: imageContent },

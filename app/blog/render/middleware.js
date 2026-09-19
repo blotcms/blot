@@ -18,6 +18,7 @@ const CACHE_CONTROL = "Cache-Control";
 
 const replaceFolderLinks = require("./replaceFolderLinks/html");
 const replaceFolderLinksCSS = require("./replaceFolderLinks/css");
+const BLOT_CDN_TOKEN = require("./replaceFolderLinks/cdnToken");
 
 const cacheDuration = "public, max-age=31536000";
 const JS = "text/javascript";
@@ -35,6 +36,19 @@ module.exports = function attachRenderView(req, res, _next) {
     const blog = req.blog;
     const templateID = req.template.id;
     const cloudflare = fromCloudflare(req);
+
+    // The real CDN origin, downgraded to http when the request itself was
+    // served over http and isn't behind Cloudflare - mirrors the existing
+    // protocol-downgrade trick for the {{cdn}}/{{public}} helper case below.
+    function resolveCdnOrigin() {
+      let cdnOrigin = config.cdn.origin;
+
+      if (req.protocol === "http" && cloudflare === false) {
+        cdnOrigin = cdnOrigin.split("https://").join("http://");
+      }
+
+      return cdnOrigin;
+    }
 
     if (callback) callback = callOnce(callback);
 
@@ -106,9 +120,21 @@ module.exports = function attachRenderView(req, res, _next) {
       // Keep this response no-cache and public (not preview-only) unless
       // Blot's public-template policy changes.
       if (req.query && (req.query.debug || req.query.json)) {
-        if (callback) return callback(null, res.locals);
+        // res.locals.entry.html (and any other locals derived from entry
+        // HTML) can contain build-time-baked %%BLOT_CDN%% tokens (see
+        // app/build/plugins/folderAssets) that are normally only resolved
+        // by the unconditional replace below, which runs after
+        // finalRender - this branch returns before that point. Resolve
+        // the token here too, the same way, so this endpoint never leaks
+        // the raw placeholder instead of a working CDN URL.
+        const debugJSON = JSON.stringify(res.locals)
+          .split(BLOT_CDN_TOKEN)
+          .join(resolveCdnOrigin());
+
+        if (callback) return callback(null, JSON.parse(debugJSON));
         res.set("Cache-Control", "no-cache");
-        return res.json(res.locals);
+        res.type("json");
+        return res.send(debugJSON);
       }
 
       let output;
@@ -119,7 +145,9 @@ module.exports = function attachRenderView(req, res, _next) {
         return next(ERROR.BAD_LOCALS());
       }
 
-      // Replace protocol of CDN links for requests served over HTTP
+      // Replace protocol of CDN links for requests served over HTTP. This
+      // is the separate, pre-existing {{cdn}}/{{public}} template-helper
+      // case, which hardcodes config.cdn.origin directly.
       if (
         viewType.indexOf("text/") > -1 &&
         req.protocol === "http" &&
@@ -135,10 +163,21 @@ module.exports = function attachRenderView(req, res, _next) {
         req.log("Replacing folder links with CDN links");
         output = await replaceFolderLinks(blog, output, req.log);
         req.log("Replaced folder links with CDN links");
-      } else if (viewType === "text/css" && !req.preview) {
+      } else if (viewType === STYLE && !req.preview) {
         req.log("Replacing folder links with CDN links");
         output = await replaceFolderLinksCSS(blog, output, req.log);
         req.log("Replaced folder links with CDN links");
+      }
+
+      // Resolve the %%BLOT_CDN%% token baked into build-time-baked entry
+      // HTML (see app/build/plugins/folderAssets) into the real CDN
+      // origin. This must run unconditionally - for both the callback path
+      // (e.g. CDN manifest generation) and the normal response path below
+      // - since it's the one place every path converges. This is also the
+      // natural future hook for CDN white-labeling / same-host routing:
+      // only this resolution step would need to change.
+      if (output.indexOf(BLOT_CDN_TOKEN) > -1) {
+        output = output.split(BLOT_CDN_TOKEN).join(resolveCdnOrigin());
       }
 
       if (callback) {

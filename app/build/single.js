@@ -65,7 +65,7 @@ module.exports = function (blog, path, callback) {
           if (err) return callback(err);
 
           html = fixMustache(html);
-          dependencies = dependencies.concat(newDependencies);
+          dependencies = Array.from(new Set(dependencies.concat(newDependencies)));
 
           return callback(null, html, metadata, stat, dependencies, extras);
         });

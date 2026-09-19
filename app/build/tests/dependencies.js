@@ -49,7 +49,12 @@ describe("dependencies", function () {
       if (err) return done.fail(err);
 
       expect(entry.dependencies).toEqual(["/Docs/report.pdf"]);
-      expect(entry.html).toContain('href="/Docs/report.pdf"');
+      // The href is baked into a %%BLOT_CDN%%-prefixed, versioned URL at
+      // build time by app/build/plugins/folderAssets, rather than being
+      // resolved on every request.
+      expect(entry.html).toMatch(
+        /href="%%BLOT_CDN%%\/folder\/v-[a-f0-9]{8}\/[^"]*\/Docs\/report\.pdf"/
+      );
       done();
     });
   });
@@ -64,11 +69,18 @@ describe("dependencies", function () {
     build(this.blog, path, function (err, entry) {
       if (err) return done.fail(err);
 
-      // The link keeps pointing at the original file in the folder...
-      expect(entry.html).toContain('href="/Photos/beach.jpg"');
+      // The link points at a %%BLOT_CDN%%-prefixed, versioned URL for the
+      // original file in the folder, baked at build time...
+      expect(entry.html).toMatch(
+        /href="%%BLOT_CDN%%\/folder\/v-[a-f0-9]{8}\/[^"]*\/Photos\/beach\.jpg"/
+      );
       // ...while the image plugin is free to rewrite the <img> src
-      // separately (e.g. to a cached/optimized CDN URL).
-      expect(entry.html).toMatch(/<a href="\/Photos\/beach\.jpg"><img/);
+      // separately (e.g. to a cached/optimized CDN URL); when it doesn't
+      // (e.g. the fake image data here isn't a real image), folderAssets
+      // still bakes the <img> src too.
+      expect(entry.html).toMatch(
+        /<a href="%%BLOT_CDN%%\/folder\/v-[a-f0-9]{8}\/[^"]*\/Photos\/beach\.jpg"><img/
+      );
       done();
     });
   });

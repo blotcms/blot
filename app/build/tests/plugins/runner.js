@@ -64,7 +64,7 @@ describe("plugin runner", function () {
 
   it("ignores plugins that return no result", async function () {
     const plugins = { autoImage: { enabled: true, options: {} } };
-    const contents = "<p><a href='https://example.com/image.jpg'>https://example.com/image.jpg</a></p>";
+    const contents = "<p><a href='https://elsewhere.test/image.jpg'>https://elsewhere.test/image.jpg</a></p>";
 
     const { dependencies } = await runPlugins(plugins, contents);
 

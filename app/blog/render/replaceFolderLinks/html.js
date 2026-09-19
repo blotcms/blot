@@ -1,39 +1,13 @@
 const parse5 = require("parse5");
 
-const htmlExtRegex = /\.html$/;
-const fileExtRegex = /[^/]*\.[^/]*$/;
-
+const {
+  htmlExtRegex,
+  fileExtRegex,
+  parseSrcset,
+} = require("./shared");
 const lookupFile = require("./lookupFile");
 const blogHosts = require("../../lib/blogHosts");
-
-const parseSrcset = (value) => {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const candidates = value.split(",");
-  const parsed = [];
-
-  for (const candidate of candidates) {
-    const trimmed = candidate.trim();
-    if (!trimmed) {
-      return null;
-    }
-
-    const parts = trimmed.split(/\s+/);
-    const url = parts.shift();
-    if (!url) {
-      return null;
-    }
-
-    parsed.push({
-      url,
-      descriptor: parts.length ? parts.join(" ") : "",
-    });
-  }
-
-  return parsed;
-};
+const BLOT_CDN_TOKEN = require("./cdnToken");
 
 // Cheap pre-scan of the raw output string, run before the expensive
 // parse5.parse + tree-walk below. Most rendered pages have no folder-file
@@ -56,6 +30,22 @@ function mayNeedFolderLinkReplacement(html) {
   return candidateAttrRegex.test(html);
 }
 
+// DEPRECATION NOTE: this whole request-time pass exists only for content that
+// was NOT baked at build time (app/build/plugins/folderAssets). Once every
+// entry has been rebuilt it should only be needed for TEMPLATE output, which
+// can't be baked (a template renders for many blogs). What it handles that
+// the build-time plugin also handles, and so can be dropped for entries:
+//   - relative folder links (href/src/poster/srcset)
+//   - absolute same-host links (https://<blog host>/photo.jpg) - the host is
+//     stripped below via blogHosts(); folderAssets does the same at build time
+// What ONLY happens here and must be kept or replaced when removing this:
+//   - template-authored links (partials, CSS/JS references in layouts)
+//   - links in entries built before folderAssets existed (until rebuilt)
+//   - (transiently) files that didn't exist at build time: folderAssets
+//     records a dependency on them, so creating the file rebuilds and bakes
+//     the entry (sync/update/set.js -> rebuildDependents); this pass only
+//     covers the short window before that rebuild finishes
+//   - hosts added after an entry was built (e.g. a custom domain set later)
 module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
   try {
     const blogID = blog.id;
@@ -98,6 +88,13 @@ module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
               continue;
             }
 
+            // Already baked at build time (app/build/plugins/folderAssets) -
+            // no need to look it up again, middleware.js resolves the
+            // token unconditionally.
+            if (attr.value.indexOf(BLOT_CDN_TOKEN) === 0) {
+              continue;
+            }
+
             // Check if URL is relative or matches any of the host patterns
             const isRelative = attr.value.indexOf("://") === -1;
             const matchesHost = hostPatterns.some(pattern => pattern.test(attr.value));
@@ -115,7 +112,11 @@ module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
             }
 
             const hasRelative = candidates.some((candidate) => {
-              if (!candidate.url || candidate.url.startsWith("data:")) {
+              if (
+                !candidate.url ||
+                candidate.url.startsWith("data:") ||
+                candidate.url.indexOf(BLOT_CDN_TOKEN) === 0
+              ) {
                 return false;
               }
               const isRelative = candidate.url.indexOf("://") === -1;
@@ -140,8 +141,12 @@ module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
     for (const node of elements) {
       for (const attr of node.attrs) {
         if (attr.name === "href" || attr.name === "src" || attr.name === "poster") {
+          if (attr.value.indexOf(BLOT_CDN_TOKEN) === 0) {
+            continue;
+          }
+
           let value = attr.value;
-            
+
           // Remove host if it matches any of the patterns
           hostPatterns.forEach(pattern => {
             value = value.replace(pattern, '');
@@ -179,7 +184,11 @@ module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
               for (const candidate of candidates) {
                 const originalUrl = candidate.url;
 
-                if (!originalUrl || originalUrl.startsWith("data:")) {
+                if (
+                  !originalUrl ||
+                  originalUrl.startsWith("data:") ||
+                  originalUrl.indexOf(BLOT_CDN_TOKEN) === 0
+                ) {
                   rebuilt.push(
                     candidate.descriptor
                       ? `${originalUrl} ${candidate.descriptor}`

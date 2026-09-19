@@ -55,4 +55,29 @@ describe("render middleware", function() {
     expect(body.cacheID).toEqual(jasmine.any(Number));
   });
 
+  it("resolves %%BLOT_CDN%% tokens baked into entry.html before sending debug/json output", async function () {
+    const BLOT_CDN_TOKEN = require("../replaceFolderLinks/cdnToken");
+
+    await this.write({ path: "/photo.jpg", content: "fake image data" });
+    await this.write({
+      path: "/b.txt",
+      content: "Link: /photo-post\n\n![Image](photo.jpg)\n\nHello, world!",
+    });
+    await this.template({
+      "entry.html": `Entry`
+    });
+
+    const res = await this.get("/photo-post?json=true");
+    const body = await res.json();
+
+    expect(res.status).toEqual(200);
+    expect(body.entry.path).toEqual("/b.txt");
+    // app/build/plugins/folderAssets bakes the img src into a
+    // %%BLOT_CDN%%-prefixed, versioned URL at build time - this endpoint
+    // must resolve that token the same way the main render path does,
+    // rather than leaking the raw placeholder to the client.
+    expect(JSON.stringify(body)).not.toContain(BLOT_CDN_TOKEN);
+    expect(body.entry.html).toContain(config.cdn.origin);
+  });
+
 });

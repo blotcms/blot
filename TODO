@@ -443,10 +443,6 @@ Reach out to include Blot on textbundle website
 
 Look into figma make
 
-Improve server performance by 1. Create `app/build/plugins/folderAssets/index.js` that exports a `render` handler; reuse the logic from `app/blog/render/replaceFolderLinks/html.js` and `lookupFile` so it asynchronously rewrites `<a href>`/`<img src>` etc. during build-time processing to CDN urls, resolving the correct case where needed.
-- 2. Register the plugin in `app/build/plugins/index.js` so it runs for HTML entries (respecting `options.isHTML`) and make it default-enabled for blogs.
-- 3. Add new tests under `app/build/plugins/folderAssets/tests` to confirm the plugin emits CDN URLs and leaves untouched cases alone.
-
 Can we use lightningcss to replace the existing css minifier for performance?
 
 Transformer should short-circuit network lookups to {{config.host}} or {{cdn}} urls and pull the files directly

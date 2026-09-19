@@ -17,13 +17,19 @@ const MAX_RESULTS = 25;
 const MAX_COLLECT = 500;
 const CHUNK_SIZE = 200;
 
+// Build-time-baked folder links (see build/plugins/folderAssets) look like
+// %%BLOT_CDN%%/folder/v-<hash>/<blogID>/photo.jpg. Drop the token, version
+// and blog ID so queries like "cdn" or "folder" don't match every post
+// while filename searches still hit the remaining /photo.jpg.
+const BAKED_PREFIX_REGEX = /%%BLOT_CDN%%\/folder\/v-[a-f0-9]+\/[^/"'\s]+/g;
+
 function buildSearchText(entry) {
   return [
     entry.title,
     entry.permalink,
     entry.tags.join(" "),
     entry.path,
-    entry.html,
+    entry.html.replace(BAKED_PREFIX_REGEX, ""),
     Object.values(entry.metadata).join(" ")
   ].join(" ").toLowerCase();
 }

@@ -11,7 +11,15 @@ const GLOBAL_STATIC_SUBDIRECTORIES = [
   "/syntax-highlighter",
 ];
 
+// True for "/fonts" or anything under "/fonts/", but not "/fontsFoo".
+function isReservedStaticPath(path) {
+  return GLOBAL_STATIC_SUBDIRECTORIES.some(
+    (dir) => path === dir || path.startsWith(dir + "/")
+  );
+}
+
 module.exports = {
+  isReservedStaticPath,
   GLOBAL_STATIC_DIR: config.blot_directory + "/app/blog/static",
   GLOBAL_STATIC_SUBDIRECTORIES,
 };

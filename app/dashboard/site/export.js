@@ -5,6 +5,7 @@ const archiver = require('archiver');
 const path = require("path");
 const fs = require('fs-extra');
 const Template = require("models/template");
+const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 
 Export.get("/", function (req, res) {
     res.locals.breadcrumbs.add("Export");
@@ -152,7 +153,10 @@ Export.get('/wordpress', async function (req, res) {
         entry.url.split("/").map(encodeURIComponent).join("/");
 
         entry.xmlDate = moment.utc(entry.dateStamp).tz(req.blog.timeZone).format('ddd, DD MMM YYYY HH:mm:ss ZZ');
-        entry.xmlBody = entry.body;
+        // Stored HTML has build-time-baked %%BLOT_CDN%% links (see
+        // app/build/plugins/folderAssets); this path bypasses
+        // blog/render/middleware.js, which normally resolves them.
+        entry.xmlBody = entry.body.split(BLOT_CDN_TOKEN).join(config.cdn.origin);
 
         entry.tags = entry.tags.map(tag => {
             return { tag };
