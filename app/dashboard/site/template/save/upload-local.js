@@ -1,6 +1,6 @@
 const fs = require("fs-extra");
 const { join, extname } = require("path");
-const uuid = require("uuid/v4");
+const { v4: uuid } = require("uuid");
 const config = require("config");
 const Template = require("models/template");
 const { isAjaxRequest } = require("./ajax-response");

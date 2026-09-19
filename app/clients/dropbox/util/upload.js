@@ -6,7 +6,7 @@
 
 const fs = require("fs-extra");
 const retry = require("./retry");
-const uuid = require("uuid/v4");
+const { v4: uuid } = require("uuid");
 const clfdate = require("helper/clfdate");
 const callOnce = require("helper/callOnce");
 

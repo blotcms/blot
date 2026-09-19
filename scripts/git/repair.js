@@ -5,7 +5,7 @@ var rootDir = require("helper/rootDir");
 var Git = require("simple-git");
 var tempDir = require("helper/tempDir")();
 var GIT_DATA_DIRECTORY = rootDir + "/app/clients/git/data";
-var uuid = require("uuid/v4");
+var { v4: uuid } = require("uuid");
 
 each(
   function (user, blog, next) {

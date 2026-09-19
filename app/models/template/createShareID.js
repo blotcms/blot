@@ -2,7 +2,7 @@ var key = require("./key");
 var client = require("models/client");
 var getMetadata = require("./getMetadata");
 var setMetadata = require("./setMetadata");
-var uuid = require("uuid/v4");
+var { v4: uuid } = require("uuid");
 
 module.exports = function createShareID(templateID, callback) {
   getMetadata(templateID, function (err, template) {

@@ -1,5 +1,5 @@
 var fs = require("fs-extra");
-var uuid = require("uuid");
+var { v4: uuid } = require("uuid");
 var callOnce = require("helper/callOnce");
 var Transform = require("./transform");
 var TransformGIF = require("./transform-gif");

@@ -330,7 +330,7 @@ The CDN URL format is `{cdn.origin}/template/{h[0:2]}/{h[2:4]}/{h[4:]}/{basename
 
 - `mustache` — template parsing and validation
 - `path-to-regexp` — URL pattern matching in `getViewByURL`
-- `uuid/v4` — share token generation
+- `uuid` (`v4`) — share token generation
 - `lodash` — deep clone in `serialize`/`deserialize`
 - `fs-extra` — file-system operations
 - `async` — series and parallel iteration

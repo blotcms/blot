@@ -1,5 +1,5 @@
 var fs = require("fs-extra");
-var uuid = require("uuid/v4");
+var { v4: uuid } = require("uuid");
 var extname = require("path").extname;
 var config = require("config");
 var folder = "_avatars";

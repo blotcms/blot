@@ -3,7 +3,7 @@ const os = require("os");
 const { join } = require("path");
 const sharp = require("sharp");
 const toIco = require("to-ico");
-const uuid = require("uuid/v4");
+const { v4: uuid } = require("uuid");
 
 const ICO_SIZES = [16, 32, 48];
 const PNG_SIZES = { png16: 16, png32: 32, appleTouch: 180 };
