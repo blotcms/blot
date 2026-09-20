@@ -16,6 +16,33 @@ which stays untouched until every view has migrated.
 - Accessibility from day one. Mobile from day one.
 - Inline SVG, never PNG.
 
+## API
+
+    pane.folder(tree, opts) -> { html } | null   one folder window (markup only)
+    pane.text(text, opts)   -> { html } | null   text editor window (not built yet)
+    pane.code(code, opts)   -> { html } | null   code editor window (not built yet)
+    pane.assets()           -> { css, js }       once per page: static and cacheable
+    pane.transform($)                            cheerio hook for the docs build
+
+- **Markup and assets are separate**: a page with 20 windows ships one stylesheet and
+  one head snippet, not 20 copies.
+- **`null` means "not implemented"**, never an exception for author input, so callers
+  can fall back.
+- **Folders**: a row is a folder when it ends in `/`, has children, or has no `.` in its
+  name (the docs' existing convention, so an empty "Posts" works).
+- **Views**: authors can ask for `list` (default) and `icons`, the two views every OS has.
+  The other captured views (columns, gallery, tiles, content, sidebar) are OS-specific
+  studies for comparing skins, not authorable.
+- **Deterministic**: output never depends on the real clock (`now` is an option with a
+  constant default), so builds are stable and cacheable.
+- **Overrides**: `os` and `theme` pin one window (the copy around it may say "Finder");
+  the CSS applies each per-OS rule to windows following the visitor's OS
+  (`html[data-os]`) and to windows pinned to that OS (`data-pin`), never both. `width`
+  and `height` are CSS variables (`--pane-w`, `--pane-h`).
+- **Chrome is CSS**: window chrome should be drawn with pseudo-elements and SVG
+  backgrounds on a few wrapper elements, not many decorative DOM nodes, so 20 windows
+  don't multiply the HTML.
+
 ## Authoring syntax
 
 Compatible with today's markup: `pre.folder`, `pre.text`, `pre.code`,

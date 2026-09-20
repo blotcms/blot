@@ -139,16 +139,21 @@ masks, `c` clusters, `[` `]` cluster, `b` blink, `+` `-` `0` zoom, `r` re-render
 
 ## The module skeleton and its contract
 
-`../index.js` is a very basic first cut of the real module: `pane.render(text, { title })`
-returns `{ html, css, js }` (a figure per window, one shared stylesheet skinned by
-`html[data-os]`, and a tiny head snippet that sets `data-os`). `pane-adapter.js` plugs it
-into the harness for the default view of every OS/theme; other views fall back to
-`fixtures/`. Set `PANE_QA_FIXTURES=1` to use only the fixtures.
+`../index.js` is a very basic first cut of the real module. Its API keeps markup and assets
+apart: `pane.folder(tree, opts)` returns `{ html }` (one figure per window),
+`pane.assets()` returns the `{ css, js }` a page ships **once** (one stylesheet skinned by
+`html[data-os]`, and a tiny head snippet that sets `data-os`), and `pane.transform($)` is the
+cheerio hook the docs build will call. `text()` and `code()` return `null` until the editor
+windows exist. The header of `../index.js` documents the options (view, files, now, os,
+theme, width, height). `pane-adapter.js` plugs it into the harness for the default view of
+every OS/theme, adding `assets()` to each window; other views fall back to `fixtures/`.
+Set `PANE_QA_FIXTURES=1` to use only the fixtures.
 
 The adapter passes the module the **view** (`list` for the default view, then `icons`,
 `columns`, `gallery`, `tiles`, `content`, `sidebar`); the module returns `null` for views
 it doesn't implement (`SUPPORTED_VIEWS`), and add a view there to have the harness render
-it instead of the fixture. It also passes the **sample data** in `sample.json` (true
+it instead of the fixture. Authors can only ask for `list` and `icons` (`VIEWS`), the two
+views every OS has; the others are OS-specific studies used to compare skins. It also passes the **sample data** in `sample.json` (true
 byte sizes and frozen modified times of the "Your site" folder) as `files`, with `now`.
 Per-OS formatting ("6 bytes" / "2.7 kB", "3:38 PM" / "Today 15:38" / `9/20/2026 3:38 PM`)
 is module logic, tested in `../tests/index.js`.
