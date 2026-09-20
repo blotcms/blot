@@ -50,14 +50,15 @@ jobs:
       fail-fast: false
       matrix:
         theme: [light, dark]
+        scale: [1, 2]
     steps:
       - uses: actions/checkout@v4
       - name: Screenshot
-        run: bash app/helper/pane/screenshots/macos.sh ${{ matrix.theme }} out
+        run: bash app/helper/pane/screenshots/macos.sh ${{ matrix.theme }} out ${{ matrix.scale }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pane-macos-${{ matrix.theme }}
+          name: pane-macos-${{ matrix.theme }}-${{ matrix.scale }}x
           path: out
           if-no-files-found: warn
 

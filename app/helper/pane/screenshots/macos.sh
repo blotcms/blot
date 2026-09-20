@@ -2,7 +2,8 @@
 # Try to screenshot Finder on a hosted macOS runner. usage: macos.sh <light|dark> <out-dir>
 # Every step is best-effort: the point is to learn what the runner allows.
 set -uo pipefail
-THEME="${1:-light}"; OUT="${2:-out}"; mkdir -p "$OUT"
+THEME="${1:-light}"; OUT="${2:-out}"; SCALE="${3:-1}"; mkdir -p "$OUT"
+SUFFIX=""; [ "$SCALE" != 1 ] && SUFFIX="@${SCALE}x"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 FIXTURE="$HOME/Documents/Your site"
 bash "$HERE/make-fixture.sh" "$FIXTURE"
@@ -27,6 +28,14 @@ else
   osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to false' >"$OUT/appearance.log" 2>&1 || true
 fi
 sleep 3
+
+# Retina: the runner's display has no HiDPI modes, so create a HiDPI virtual
+# display with the private CGVirtualDisplay API and make it the main display.
+if [ "$SCALE" = 2 ]; then
+  clang -fobjc-arc "$HERE/hidpi.m" -framework Foundation -framework CoreGraphics -o /tmp/hidpi >"$OUT/hidpi.log" 2>&1
+  /tmp/hidpi virtual 1024 768 600 >>"$OUT/hidpi.log" 2>&1 &
+  sleep 8
+fi
 
 # 50% grey desktop so the window's shadow is visible. Finder won't set a
 # wallpaper for us here, so paint a borderless desktop-level window instead.
@@ -84,5 +93,5 @@ delay 1
 tell application "Finder" to set selection to {}
 OSA
 sleep 4
-screencapture -x -R40,40,520,640 "$OUT/macos-$THEME.png" >"$OUT/screencapture.log" 2>&1 || true
+screencapture -x -R40,40,520,640 "$OUT/macos-$THEME$SUFFIX.png" >"$OUT/screencapture.log" 2>&1 || true
 rm -f "$OUT/grey.png"; ls -la "$OUT" >> "$OUT/screencapture.log"
