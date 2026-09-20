@@ -268,7 +268,11 @@ try {
     "appx notepad after: $((Get-AppxPackage *Notepad* -ErrorAction SilentlyContinue | Select-Object -ExpandProperty PackageFullName) -join ', ')" | Out-File $log -Append
   }
   foreach ($e in @(@("Essay.txt", "text"), @("index.html", "code"))) {
-    Start-Process notepad.exe -ArgumentList "`"$(Join-Path $edit $e[0])`""
+    # the Store app is an execution alias in WindowsApps; plain "notepad.exe" finds the classic one first
+    $alias = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\notepad.exe"
+    $exe = if (Test-Path $alias) { $alias } else { "notepad.exe" }
+    "launching $exe" | Out-File $log -Append
+    Start-Process $exe -ArgumentList "`"$(Join-Path $edit $e[0])`""
     Start-Sleep -Seconds 6
     $np = Get-Process notepad -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
     if (-not $np) { "no notepad window for $($e[1])" | Out-File $log -Append; continue }
