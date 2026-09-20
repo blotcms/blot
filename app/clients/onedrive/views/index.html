@@ -1,0 +1,22 @@
+{{> status-line}}
+
+{{#account}}
+
+  {{#revoked}}
+  <a href="{{{base}}}/redirect" class="mess error">
+    <b>Error</b><br><br>
+    Blot can no longer access OneDrive for <b>{{blog.title}}</b>. You can probably fix this by reconnecting to OneDrive.<br><br>
+    <span class="button">Re-connect to OneDrive</span>
+  </a>
+  {{/revoked}}
+
+  <div class="live-updates">
+    <div class="line">
+      <div class="label">OneDrive account</div>
+      <div class="center">{{email}}</div>
+    </div>
+  </div>
+
+  <p>Your OneDrive account is connected. Folder sync is still being built, so changes in OneDrive won't appear on your site yet.</p>
+
+{{/account}}

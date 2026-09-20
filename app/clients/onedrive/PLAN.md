@@ -20,13 +20,37 @@ Decisions so far:
 
 ## Getting the credentials (Microsoft Entra)
 
-Sign in to the portal with a **Microsoft Entra work or school account** for
-the organisation that will own the app (an account like you@blot.im in a
-tenant you control), not a personal Microsoft account: apps registered with a
-personal Microsoft account cannot be publisher verified later, and
-re-registering would change the client ID. A free Entra tenant is enough, and
-app registrations cost nothing. The signed-in user needs the Application
-Administrator or Cloud Application Administrator role.
+### 0. Create an Entra tenant (required, do this first)
+
+Blot must own a **Microsoft Entra tenant** (a free directory) and register the
+app inside it. Do not register the app under a personal Microsoft account:
+apps registered that way cannot be publisher verified later, and moving to a
+new registration would change the client ID and force every connected user to
+reconnect. Owning a tenant now also means widening to work/school accounts
+later is a settings change, not a migration.
+
+1. Go to <https://entra.microsoft.com> and choose to create a new tenant (or
+   sign up at <https://azure.microsoft.com/free>, which creates one). Use a
+   Microsoft account that will remain the long-term owner, ideally a shared
+   Blot address rather than one person's inbox.
+2. Create the tenant as a standard **Microsoft Entra ID** workforce tenant with
+   a name like `Blot`. Its default domain is `<name>.onmicrosoft.com`; that is
+   fine for now (publisher verification later needs a custom domain such as
+   blot.im, added under Entra > Custom domain names and verified via DNS).
+3. Note the **tenant ID** (Entra > Overview). It isn't needed in config for v1
+   (the `consumers` authority is used), but keep it with the credentials.
+4. Make sure at least two people have the Global Administrator (or
+   Application Administrator) role so the registration is not held by a single
+   account, and turn on MFA for them (Microsoft requires it for portal admin
+   access and for publisher verification later).
+5. A free Azure account may ask for a card at sign-up; registering an app does
+   not create billable resources.
+
+### Register the app
+
+Sign in to the portal as a user in that tenant with the Application
+Administrator or Cloud Application Administrator role. A free tenant is
+enough, and app registrations cost nothing.
 
 1. Go to <https://entra.microsoft.com> > **Identity > Applications > App
    registrations > New registration**. (Same page as Azure portal > "App
@@ -162,7 +186,7 @@ mounted at `https://blot.im/clients/onedrive/...`.
 
 1. **Skeleton** (this PR): registration gated on config, stub pages, webhook
    that handles the validation handshake and `clientState`.
-2. **OAuth**: `/authenticate` callback exchanging the code at
+2. **OAuth** (done in this PR): `/authenticate` callback exchanging the code at
    `https://login.microsoftonline.com/common/oauth2/v2.0/token`, refresh
    token handling, `database.js` for account state. Port of
    `dropbox/routes/setup`.

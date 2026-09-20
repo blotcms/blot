@@ -1,6 +1,7 @@
 const express = require("express");
 const site = express.Router();
 const crypto = require("crypto");
+const cookieParser = require("cookie-parser");
 const config = require("config");
 const debug = require("debug")("blot:clients:onedrive:routes");
 
@@ -10,6 +11,47 @@ function safeEqual(a, b) {
 
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 }
+
+// Microsoft sends the user back to blot.im/clients/onedrive/authenticate
+// after they accept or decline. This public route has no session, so we
+// find the blog from cookies set by the dashboard's /redirect route and
+// check the OAuth `state` against the cookie to make sure this login was
+// started by this browser. We then hand the code to the dashboard route
+// (which has the session and blog) to exchange it for tokens.
+site.get("/authenticate", cookieParser(), function (req, res, next) {
+  const handle = req.cookies.onedriveBlog;
+  const state = req.cookies.onedriveState;
+
+  if (!handle || !state) {
+    return next(new Error("No blog to authenticate"));
+  }
+
+  res.clearCookie("onedriveBlog");
+  res.clearCookie("onedriveState");
+
+  if (!safeEqual(req.query.state || "", state)) {
+    return next(new Error("Invalid OneDrive authentication state"));
+  }
+
+  const clientPage = "/sites/" + encodeURIComponent(handle) + "/client";
+
+  // The user declined, or Microsoft reported an error
+  if (req.query.error) {
+    debug("Authorization failed:", req.query.error);
+    return res.redirect(clientPage);
+  }
+
+  if (!req.query.code) {
+    return next(new Error("No authorization code from OneDrive"));
+  }
+
+  // Same-origin path with all user input percent-encoded.
+  res.redirect(
+    clientPage +
+      "/onedrive/authenticate?code=" +
+      encodeURIComponent(req.query.code)
+  );
+});
 
 // Microsoft Graph POSTs change notifications here. Two cases:
 //

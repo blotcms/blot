@@ -1,21 +1,28 @@
 OneDrive client
 ---------------
 
-Skeleton only. See PLAN.md in this directory for the design and for how to
-register the Microsoft Entra app that provides the credentials.
+Work in progress. See PLAN.md in this directory for the design and for how to
+create the Microsoft Entra tenant and app that provide the credentials.
 
 Current state:
 
-- `disconnect`, `write`, `remove` only touch the local blog folder. They
-  do not yet talk to Microsoft Graph.
-- `dashboard_routes` exposes a connect page that explains sync is not
-  available yet, and a disconnect page.
-- `site_routes` exposes `POST /webhook`, which answers Graph's
+- OAuth works (personal Microsoft accounts only): the dashboard `/redirect`
+  route sends the user to Microsoft, `/clients/onedrive/authenticate` (site
+  route) checks the `state` cookie and hands the code to the dashboard
+  `/authenticate` route, which exchanges it for tokens, reads the account
+  from Graph, and saves it (`database.js`) and sets `blog.client`.
+- `util/getAccessToken.js` returns a valid access token, refreshing and
+  saving the rotated tokens; a rejected refresh token sets `error_code` 401,
+  and the dashboard shows a reconnect prompt.
+- `disconnect` clears `blog.client` and forgets the stored tokens.
+- `write` and `remove` only touch the local blog folder. They do not yet talk
+  to Microsoft Graph.
+- `site_routes` also exposes `POST /webhook`, which answers Graph's
   `validationToken` handshake, checks `clientState` on notifications and
   responds 202, but does not act on them.
 - The client is only registered (`app/clients/index.js`) once
-  `config.onedrive.{client_id,client_secret,webhook_secret}` are set, so it
-  stays hidden on the dashboard until the Entra app exists.
+  `config.onedrive.{client_id,client_secret,webhook_secret}` are set.
 
-Not implemented: OAuth, folder setup, Redis storage, delta sync, uploads,
-subscription renewal, polling fallback.
+Not implemented: folder setup, delta sync, uploads, subscription creation
+and renewal, polling fallback, `getHealth`. Do not set the credentials in
+production until folder sync exists: connecting works, but nothing syncs yet.
