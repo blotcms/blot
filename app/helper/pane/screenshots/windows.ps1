@@ -142,9 +142,14 @@ try {
 [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint x, uint y, uint d, UIntPtr e);
 "@
   function Click($x, $y) {
+    # nudge, hover, press, hold, release: XAML menu items ignore an instant click
+    [Native.Mouse]::SetCursorPos($x - 3, $y - 3) | Out-Null
+    Start-Sleep -Milliseconds 200
     [Native.Mouse]::SetCursorPos($x, $y) | Out-Null
-    Start-Sleep -Milliseconds 300
-    [Native.Mouse]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); [Native.Mouse]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 700
+    [Native.Mouse]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 150
+    [Native.Mouse]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
   }
   # The window opens at a fixed place on the 1024x768 desktop. Open View, then
   # Show (last item), which opens the submenu containing Navigation pane.
