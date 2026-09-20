@@ -23,9 +23,7 @@ run() {
   gsettings set org.gnome.desktop.interface color-scheme "prefer-$THEME" || true
   gsettings list-recursively org.gnome.nautilus > "$OUT/gsettings.txt" 2>&1
   xsetroot -solid "#c8c8c8"
-  # a compositor gives the window its shadow
-  xcompmgr -c -r 24 -o 0.45 -l -30 -t -30 >"$OUT/xcompmgr.log" 2>&1 &
-  # a window manager is needed for keyboard focus (F9 toggles the sidebar)
+  # a window manager is needed for keyboard focus (and the window needs focus)
   openbox >"$OUT/openbox.log" 2>&1 &
   sleep 2
   nautilus --new-window "$FIXTURE" >"$OUT/nautilus.log" 2>&1 &
@@ -52,16 +50,22 @@ run() {
   done
   sleep 1.5
   xdotool windowactivate --sync "$WID" || xdotool windowfocus "$WID" || true
-  sleep 0.5; xdotool key --clearmodifiers F9; sleep 1.5
-  import -window root "$OUT/debug-after-f9.png"
+  sleep 0.5
   # expand folders bottom-up so row positions above don't shift, then the
   # nested folder inside Fruits (rows are 52px apart, arrows at x=37)
   for y in 274 222 118; do xdotool mousemove $((X + 37 * S)) $((Y + y * S)) click 1; sleep 0.5; done
   xdotool mousemove $((X + 57 * S)) $((Y + 274 * S)) click 1; sleep 0.5
   xdotool mousemove $((X + 700 * S)) $((Y + 500 * S)); sleep 1
-  import -window root "$OUT/linux-$THEME$SUFFIX-full.png"
-  convert "$OUT/linux-$THEME$SUFFIX-full.png" -crop "$((WIDTH + 120 * S))x$((HEIGHT + 120 * S))+$((X - 60 * S))+$((Y - 60 * S))" +repage "$OUT/linux-$THEME$SUFFIX.png"
-  rm "$OUT/linux-$THEME$SUFFIX-full.png"
+  import -window root "$OUT/full.png"
+  convert "$OUT/full.png" -crop "${WIDTH}x${HEIGHT}+${X}+${Y}" +repage "$OUT/window.png"
+  # No compositor under Xvfb, so give the window its rounded corners and shadow
+  # ourselves, on a mild grey desktop with room around it.
+  R=$((12 * S))
+  convert "$OUT/window.png" -alpha set \( +clone -alpha transparent -fill white -draw "roundrectangle 0,0 $((WIDTH - 1)),$((HEIGHT - 1)) $R,$R" \) \
+    -compose DstIn -composite "$OUT/rounded.png"
+  convert "$OUT/rounded.png" \( +clone -background black -shadow 45x$((20 * S))+0+$((10 * S)) \) +swap -background none -layers merge +repage "$OUT/shadowed.png"
+  convert -size "$((WIDTH + 120 * S))x$((HEIGHT + 120 * S))" xc:"#c8c8c8" "$OUT/shadowed.png" -gravity center -composite "$OUT/linux-$THEME$SUFFIX.png"
+  rm -f "$OUT/full.png" "$OUT/window.png" "$OUT/rounded.png" "$OUT/shadowed.png"
   { echo "nautilus: $(nautilus --version)"; echo "libadwaita: $(dpkg -s libadwaita-1-0 2>/dev/null | grep ^Version)"; lsb_release -d; echo "scale: $S"; } > "$OUT/versions.txt" 2>&1
 }
 export THEME OUT FIXTURE S SUFFIX
