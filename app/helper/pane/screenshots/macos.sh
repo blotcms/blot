@@ -197,23 +197,14 @@ done
 # Dock is hidden and the capture starts under the menu bar.
 osascript -e 'tell application "TextEdit" to quit' >>"$OUT/finder.log" 2>&1
 defaults write com.apple.dock autohide -bool true; killall Dock; sleep 3
-cp -Rp "$FIXTURE/." "$HOME/Desktop/"
+# Old report.doc looks like Report.docx, so leave it off: 12 icons fill two columns of six
+cp -Rp "$FIXTURE/." "$HOME/Desktop/"; rm -f "$HOME/Desktop/Old report.doc"
 osascript -e 'tell application "Finder" to close every window' -e 'tell application "Finder" to activate' >>"$OUT/finder.log" 2>&1
-sleep 5
-# The desktop keeps icons arranged by Finder unless told otherwise, which ignores positions
-osascript -e 'tell application "Finder" to set arrangement of icon view options of window of desktop to not arranged' >>"$OUT/finder.log" 2>&1
-# lay the icons out in a tidy grid (4 columns, by name) instead of Finder's default
-# right-hand columns; positions are icon centres in points from the screen's top left
-i=0
-while IFS= read -r name; do
-  x=$((90 + (i % 4) * 120)); y=$((110 + (i / 4) * 130)); i=$((i + 1))
-  osascript -e "tell application \"Finder\" to set position of item \"$name\" of desktop to {$x, $y}" >>"$OUT/finder.log" 2>&1
-done < <(ls -1 "$FIXTURE")
+sleep 6
 osascript -e 'tell application "Finder" to select {}' >>"$OUT/finder.log" 2>&1
-sleep 4
-# debug: where did the icons go?
-osascript -e 'tell application "Finder" to return (name of every item of desktop) & (position of every item of desktop)' >"$OUT/desktop-positions.log" 2>&1
+sleep 3
 screencapture -x -R0,0,1024,768 "$OUT/debug-desktop-full.png" >>"$OUT/screencapture.log" 2>&1 || true
-# just the grid: 4 columns x 4 rows and a margin
-screencapture -x -R0,30,540,570 "$OUT/macos-$THEME$SUFFIX-desktop.png" >>"$OUT/screencapture.log" 2>&1 || true
+# Finder lays the icons out by name in columns from the right edge (positions set through
+# AppleScript are ignored); capture just those two columns
+screencapture -x -R760,30,264,660 "$OUT/macos-$THEME$SUFFIX-desktop.png" >>"$OUT/screencapture.log" 2>&1 || true
 rm -f "$OUT/grey.png"; ls -la "$OUT" >> "$OUT/screencapture.log"

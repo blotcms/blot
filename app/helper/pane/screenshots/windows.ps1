@@ -289,24 +289,20 @@ try {
 try {
   $desktop = [Environment]::GetFolderPath("Desktop")
   Copy-Item (Join-Path $fixture "*") $desktop -Recurse -Force
-  Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name HideIcons -Value 0 -Type DWord
+  Remove-Item (Join-Path $desktop "Old report.doc") -ErrorAction SilentlyContinue   # looks like Report.docx
+  # Explorer writes HideIcons back as it shuts down, so stop it first and set the value
+  # afterwards, then start it explicitly
+  $adv = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
   Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 4
-  # the shell doesn't always come back by itself, and a restart forgets the grey desktop
-  if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
-  Start-Sleep -Seconds 10
+  Set-ItemProperty -Path $adv -Name HideIcons -Value 0 -Type DWord
+  Start-Process explorer.exe
+  Start-Sleep -Seconds 12
   [Native.Win]::SystemParametersInfo(0x14, 0, "", 3) | Out-Null
   [Native.Win]::SetSysColors(1, @(1), @(0x808080)) | Out-Null
-  "explorer processes: $((Get-Process explorer -ErrorAction SilentlyContinue).Count)" | Out-File $log -Append
-  "desktop folder $desktop has $((Get-ChildItem $desktop | Measure-Object).Count) items; HideIcons=$((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced').HideIcons)" | Out-File $log -Append
-  # HideIcons is written back as 1 when Explorer is killed, so use the desktop's own
-  # "show desktop icons" command (a toggle) to bring them back, then refresh
-  $progman = [Native.Win]::FindWindow("Progman", $null)
-  [Native.Win]::SendMessage($progman, 0x111, [IntPtr]0x7402, [IntPtr]::Zero) | Out-Null
-  Start-Sleep -Seconds 3
+  "desktop $desktop has $((Get-ChildItem $desktop | Measure-Object).Count) items; HideIcons=$((Get-ItemProperty $adv).HideIcons); explorer processes: $((Get-Process explorer -ErrorAction SilentlyContinue).Count)" | Out-File $log -Append
   [System.Windows.Forms.SendKeys]::SendWait("{F5}")
-  Start-Sleep -Seconds 3
   [Native.Mouse]::SetCursorPos($sw - 4, 4) | Out-Null
-  Start-Sleep -Seconds 3
+  Start-Sleep -Seconds 4
   $bmp = New-Object System.Drawing.Bitmap $sw, ($sh - $taskbar)
   [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen(0, 0, 0, 0, $bmp.Size)
   $bmp.Save("$Out\$Label-$Theme$suffix-desktop.png", [System.Drawing.Imaging.ImageFormat]::Png)
