@@ -177,10 +177,21 @@ defaults write com.apple.TextEdit RichText 0
 defaults write com.apple.TextEdit IgnoreHTML 1
 osascript -e 'tell application "Finder" to close every window' >>"$OUT/finder.log" 2>&1
 for e in "Essay.txt:text" "index.html:code"; do
-  open -a TextEdit "$EDIT/${e%%:*}"; sleep 5
-  BOUNDS="$(osascript -e 'tell application "TextEdit" to activate' \
-    -e 'tell application "TextEdit" to set bounds of front window to {150, 150, 640, 510}' \
-    -e 'delay 2' -e 'tell application "TextEdit" to return bounds of front window' 2>>"$OUT/editors.log")"
+  open -a TextEdit "$EDIT/${e%%:*}"; sleep 6
+  screencapture -x "$OUT/debug-textedit-${e##*:}.png"
+  # System Events (not TextEdit itself, which is what timed out) places and reads the window
+  osascript >>"$OUT/editors.log" 2>&1 <<OSA
+tell application "System Events" to tell process "TextEdit"
+  set frontmost to true
+  set position of window 1 to {150, 150}
+  set size of window 1 to {490, 360}
+end tell
+OSA
+  sleep 2
+  BOUNDS="$(osascript -e 'tell application "System Events" to tell process "TextEdit" to return (position of window 1) & (size of window 1)' 2>>"$OUT/editors.log")"
+  # position + size -> left, top, right, bottom
+  IFS=', ' read -r PX PY SX SY <<< "$BOUNDS"
+  BOUNDS="$PX, $PY, $((PX + SX)), $((PY + SY))"
   echo "${e##*:} bounds: $BOUNDS" >> "$OUT/bounds.txt"
   IFS=', ' read -r L T R B <<< "$BOUNDS"
   sleep 2

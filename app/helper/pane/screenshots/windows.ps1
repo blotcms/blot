@@ -258,6 +258,9 @@ try {
   New-Item -ItemType Directory -Force -Path $edit | Out-Null
   Copy-Item (Join-Path $assets "text-sample.txt") (Join-Path $edit "Essay.txt")
   Copy-Item (Join-Path $assets "code-sample.html") (Join-Path $edit "index.html")
+  # is the newer (Windows 11, tabbed, dark mode) Notepad available? log it
+  "appx notepad: $((Get-AppxPackage *Notepad* -ErrorAction SilentlyContinue | Select-Object -ExpandProperty PackageFullName) -join ', ')" | Out-File $log -Append
+  "winget: $(try { winget --version } catch { 'none' })" | Out-File $log -Append
   foreach ($e in @(@("Essay.txt", "text"), @("index.html", "code"))) {
     Start-Process notepad.exe -ArgumentList "`"$(Join-Path $edit $e[0])`""
     Start-Sleep -Seconds 6

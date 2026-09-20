@@ -97,6 +97,8 @@ CSS
   cp "$HERE/fixture-assets/text-sample.txt" "$EDIT/Essay.txt"
   cp "$HERE/fixture-assets/code-sample.html" "$EDIT/index.html"
   gsettings set org.gnome.TextEditor restore-session false || true
+  gsettings set org.gnome.TextEditor spellcheck false || true
+  gsettings set org.gnome.TextEditor highlight-current-line false || true
   for e in "Essay.txt:text:false" "index.html:code:true"; do
     IFS=: read -r file kind lines <<< "$e"
     gsettings set org.gnome.TextEditor show-line-numbers "$lines" || true
@@ -114,7 +116,7 @@ CSS
     xdotool windowactivate --sync "$WID" || true
     sleep 1
     capture "linux-$THEME$SUFFIX-$kind"
-    pkill -x gnome-text-edit; sleep 3  # (comm is truncated to 15 chars; -f would match this script itself)
+    pkill -x gnome-text-edit; sleep 3; rm -rf "$HOME/.local/share/org.gnome.TextEditor"  # (comm is truncated to 15 chars; -f would match this script itself)
   done
 
   { echo "nautilus: $(nautilus --version)"; echo "libadwaita: $(dpkg -s libadwaita-1-0 2>/dev/null | grep ^Version)"; lsb_release -d; echo "scale: $S"; } > "$OUT/versions.txt" 2>&1
