@@ -1,17 +1,17 @@
-total 2336
-drwxr-xr-x  16 runner  staff     512 Sep 20 17:23 .
-drwxr-xr-x  18 runner  staff     576 Sep 20 17:21 ..
--rw-r--r--   1 runner  staff       0 Sep 20 17:22 appearance.log
--rw-r--r--   1 runner  staff      27 Sep 20 17:22 bounds.txt
--rw-r--r--   1 runner  staff     545 Sep 20 17:22 columns.log
--rw-r--r--   1 runner  staff       3 Sep 20 17:23 finder.log
--rw-r--r--   1 runner  staff    1921 Sep 20 17:22 hidpi-probe.log
--rw-r--r--   1 runner  staff      75 Sep 20 17:22 hidpi.log
--rw-r--r--@  1 runner  staff  295250 Sep 20 17:23 macos-dark@2x-columns.png
--rw-r--r--@  1 runner  staff  205553 Sep 20 17:23 macos-dark@2x-gallery.png
--rw-r--r--@  1 runner  staff  298567 Sep 20 17:22 macos-dark@2x-icons.png
--rw-r--r--@  1 runner  staff  357557 Sep 20 17:22 macos-dark@2x.png
--rw-r--r--   1 runner  staff       0 Sep 20 17:22 screencapture.log
--rw-r--r--   1 runner  staff    1728 Sep 20 17:22 toolbar.log
--rw-r--r--   1 runner  staff      65 Sep 20 17:21 versions.txt
--rw-r--r--   1 runner  staff       0 Sep 20 17:22 wallpaper.log
+total 536
+drwxr-xr-x  16 runner  staff    512 Sep 20 17:27 .
+drwxr-xr-x  18 runner  staff    576 Sep 20 17:26 ..
+-rw-r--r--   1 runner  staff      0 Sep 20 17:26 appearance.log
+-rw-r--r--   1 runner  staff     27 Sep 20 17:26 bounds.txt
+-rw-r--r--   1 runner  staff    363 Sep 20 17:26 columns.log
+-rw-r--r--   1 runner  staff    293 Sep 20 17:27 finder.log
+-rw-r--r--   1 runner  staff   1921 Sep 20 17:26 hidpi-probe.log
+-rw-r--r--   1 runner  staff     75 Sep 20 17:26 hidpi.log
+-rw-r--r--@  1 runner  staff  61106 Sep 20 17:27 macos-dark@2x-columns.png
+-rw-r--r--@  1 runner  staff  61106 Sep 20 17:27 macos-dark@2x-gallery.png
+-rw-r--r--@  1 runner  staff  61106 Sep 20 17:27 macos-dark@2x-icons.png
+-rw-r--r--@  1 runner  staff  61106 Sep 20 17:27 macos-dark@2x.png
+-rw-r--r--   1 runner  staff      0 Sep 20 17:27 screencapture.log
+-rw-r--r--   1 runner  staff   1727 Sep 20 17:26 toolbar.log
+-rw-r--r--   1 runner  staff     65 Sep 20 17:26 versions.txt
+-rw-r--r--   1 runner  staff      0 Sep 20 17:26 wallpaper.log

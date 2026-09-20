@@ -6,4 +6,3 @@ cliclick
 ✔︎ Bottle cliclick (5.1)
 [34m==>[0m [1mPouring cliclick--5.1.arm64_tahoe.bottle.tar.gz[0m
 🍺  /opt/homebrew/Cellar/cliclick/5.1: 6 files, 161.3KB
-121:189: execution error: System Events got an error: Can’t make every checkbox of entire contents of window 1 of process "Finder" whose name = "Kind" into type specifier. (-1700)
