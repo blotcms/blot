@@ -290,8 +290,14 @@ try {
   $desktop = [Environment]::GetFolderPath("Desktop")
   Copy-Item (Join-Path $fixture "*") $desktop -Recurse -Force
   Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name HideIcons -Value 0 -Type DWord
-  Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 10
-  (New-Object -ComObject Shell.Application).MinimizeAll(); Start-Sleep -Seconds 2
+  Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 4
+  # the shell doesn't always come back by itself, and a restart forgets the grey desktop
+  if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+  Start-Sleep -Seconds 10
+  [Native.Win]::SystemParametersInfo(0x14, 0, "", 3) | Out-Null
+  [Native.Win]::SetSysColors(1, @(1), @(0x808080)) | Out-Null
+  "explorer processes: $((Get-Process explorer -ErrorAction SilentlyContinue).Count)" | Out-File $log -Append
+  Start-Sleep -Seconds 3
   [Native.Mouse]::SetCursorPos($sw - 4, 4) | Out-Null
   Start-Sleep -Seconds 3
   $bmp = New-Object System.Drawing.Bitmap $sw, ($sh - $taskbar)

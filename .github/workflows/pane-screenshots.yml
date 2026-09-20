@@ -101,9 +101,9 @@ jobs:
             nautilus gnome-text-editor openbox x11-xserver-utils libglib2.0-bin xvfb xdotool imagemagick dbus-x11 dconf-gsettings-backend \
             gsettings-desktop-schemas adwaita-icon-theme gnome-themes-extra \
             fonts-cantarell libadwaita-1-0 librsvg2-common adwaita-icon-theme-full shared-mime-info \
-            gnome-shell-extension-desktop-icons-ng gjs
+            gnome-shell-extension-desktop-icons-ng gjs xcompmgr
       - name: Screenshot
-        run: xvfb-run -a -s "-screen 0 2560x2400x24" bash app/helper/pane/screenshots/linux.sh ${{ matrix.theme }} out ${{ matrix.scale }}
+        run: xvfb-run -a -s "-screen 0 2560x2400x24 +extension Composite" bash app/helper/pane/screenshots/linux.sh ${{ matrix.theme }} out ${{ matrix.scale }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:

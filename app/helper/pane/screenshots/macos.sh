@@ -199,6 +199,16 @@ osascript -e 'tell application "TextEdit" to quit' >>"$OUT/finder.log" 2>&1
 defaults write com.apple.dock autohide -bool true; killall Dock; sleep 3
 cp -Rp "$FIXTURE/." "$HOME/Desktop/"
 osascript -e 'tell application "Finder" to close every window' -e 'tell application "Finder" to activate' >>"$OUT/finder.log" 2>&1
-sleep 8
-screencapture -x -R0,30,1024,738 "$OUT/macos-$THEME$SUFFIX-desktop.png" >>"$OUT/screencapture.log" 2>&1 || true
+sleep 5
+# lay the icons out in a tidy grid (4 columns, by name) instead of Finder's default
+# right-hand columns; positions are icon centres in points from the screen's top left
+i=0
+while IFS= read -r name; do
+  x=$((90 + (i % 4) * 120)); y=$((110 + (i / 4) * 130)); i=$((i + 1))
+  osascript -e "tell application \"Finder\" to set position of item \"$name\" of desktop to {$x, $y}" >>"$OUT/finder.log" 2>&1
+done < <(ls -1 "$FIXTURE")
+osascript -e 'tell application "Finder" to select {}' >>"$OUT/finder.log" 2>&1
+sleep 4
+# just the grid: 4 columns x 4 rows and a margin
+screencapture -x -R0,30,540,570 "$OUT/macos-$THEME$SUFFIX-desktop.png" >>"$OUT/screencapture.log" 2>&1 || true
 rm -f "$OUT/grey.png"; ls -la "$OUT" >> "$OUT/screencapture.log"
