@@ -1,4 +1,0 @@
-/org/gnome/Nautilus/window/1: (['enter-location', 'reload', 'down', 'close-other-tabs', 'toggle-sidebar', 'bookmark-current-location', 'open-location', 'back', 'go-starred', 'show-help-overlay', 'up', 'new-tab', 'close-current-view', 'back-n', 'redo', 'tab-move-right', 'restore-tab', 'tab-move-new-window', 'backspaceup', 'forward-n', 'current-location-menu', 'undo', 'stop', 'go-home', 'go-to-tab', 'prompt-home-location', 'prompt-root-location', 'forward', 'tab-move-left'],)
-()
-/org/gnome/Nautilus/window/2: Error: GDBus.Error:org.freedesktop.DBus.Error.UnknownMethod: Object does not exist at path “/org/gnome/Nautilus/window/2”
-/org/gnome/Nautilus/window/3: Error: GDBus.Error:org.freedesktop.DBus.Error.UnknownMethod: Object does not exist at path “/org/gnome/Nautilus/window/3”
