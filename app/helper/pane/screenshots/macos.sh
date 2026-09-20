@@ -71,11 +71,23 @@ PLIST="$HOME/Library/Preferences/com.apple.finder.plist"
   # a longer Name, Date Modified/Size narrow enough for Finder's short date format,
   # Kind hidden.
   echo "standard list view settings before:"; defaults read com.apple.finder FK_StandardViewSettings
-  setcol() {  # column key, property, integer value
-    K=":FK_StandardViewSettings:ListViewSettings:columns:$1:$2"
-    $PB -c "Set $K $3" "$PLIST" 2>/dev/null || $PB -c "Add $K integer $3" "$PLIST"
-  }
-  setcol name width 270; setcol dateModified width 104; setcol size width 70; setcol kind visible 0
+  # The defaults don't exist on a fresh runner, so create each dictionary level first.
+  # Modern macOS reads ExtendedListViewSettingsV2; older versions ListViewSettings.
+  mkdict() { $PB -c "Add $1 dict" "$PLIST" 2>/dev/null || true; }
+  mkdict ":FK_StandardViewSettings"
+  for view in ListViewSettings ExtendedListViewSettingsV2; do
+    mkdict ":FK_StandardViewSettings:$view"
+    mkdict ":FK_StandardViewSettings:$view:columns"
+    for col in name dateModified size kind; do mkdict ":FK_StandardViewSettings:$view:columns:$col"; done
+    setcol() {  # column key, property, integer value
+      K=":FK_StandardViewSettings:$view:columns:$1:$2"
+      $PB -c "Set $K $3" "$PLIST" 2>/dev/null || $PB -c "Add $K integer $3" "$PLIST"
+    }
+    setcol name width 270; setcol name visible 1; setcol name index 0; setcol name ascending 1
+    setcol dateModified width 104; setcol dateModified visible 1; setcol dateModified index 1
+    setcol size width 70; setcol size visible 1; setcol size index 2
+    setcol kind visible 0; setcol kind index 3
+  done
   killall cfprefsd; killall Finder; sleep 4
   echo "after:"; defaults read com.apple.finder "NSToolbar Configuration Browser"
   echo "standard list view settings after:"; defaults read com.apple.finder FK_StandardViewSettings
