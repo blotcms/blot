@@ -19,10 +19,6 @@ New-Item -Path $key -Force | Out-Null
 Set-ItemProperty -Path $key -Name AppsUseLightTheme -Value $light -Type DWord
 Set-ItemProperty -Path $key -Name SystemUsesLightTheme -Value $light -Type DWord
 
-# Try hiding the navigation pane by zeroing its saved width (read at launch).
-$sizer = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Modules\GlobalSettings\Sizer"
-New-Item -Path $sizer -Force | Out-Null
-Set-ItemProperty -Path $sizer -Name PageSpaceControlSizer -Type Binary -Value ([byte[]](0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)) -ErrorAction Continue
 # clear the runner's console windows off the desktop first
 (New-Object -ComObject Shell.Application).MinimizeAll()
 Start-Sleep -Seconds 2
@@ -65,6 +61,15 @@ try {
     }
     "$step -> $(Press $el)" | Out-File $log -Append
     Start-Sleep -Seconds 2
+    if ($step -eq "Show") {
+      # the flyout isn't exposed to UI Automation, so drive it with the keyboard:
+      # Navigation pane is the first item in the Show submenu
+      [System.Windows.Forms.SendKeys]::SendWait("{DOWN}")
+      Start-Sleep -Milliseconds 500
+      [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+      "sent Down, Enter" | Out-File $log -Append
+      break
+    }
   }
 } catch { "uia error: $_" | Out-File $log -Append }
 Start-Sleep -Seconds 1

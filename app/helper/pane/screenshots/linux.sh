@@ -23,8 +23,14 @@ run() {
   gsettings set org.gnome.desktop.interface color-scheme "prefer-$THEME" || true
   nautilus --new-window "$FIXTURE" >"$OUT/nautilus.log" 2>&1 &
   sleep 8
-  WID="$(xdotool search --class nautilus | head -1)"
+  # several X windows share the class (helpers are 1x1); pick the largest one
+  WID=""; BEST=0
+  for w in $(xdotool search --class nautilus); do
+    eval "$(xdotool getwindowgeometry --shell "$w")"
+    if [ $((WIDTH * HEIGHT)) -gt "$BEST" ]; then BEST=$((WIDTH * HEIGHT)); WID="$w"; fi
+  done
   eval "$(xdotool getwindowgeometry --shell "$WID")"
+  echo "window $WID: ${WIDTH}x${HEIGHT}+${X}+${Y}" > "$OUT/geometry.txt"
   # expand folders bottom-up so row positions above don't shift, then the
   # nested folder inside Fruits (rows are 52px apart, arrows at x=37)
   for y in 274 222 118; do xdotool mousemove $((37 * S)) $((y * S)) click 1; sleep 0.5; done
