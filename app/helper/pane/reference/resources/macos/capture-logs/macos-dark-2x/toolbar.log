@@ -6,7 +6,7 @@ before:
     "TB Size Mode" = 1;
 }
 standard list view settings before:
-2026-09-20 17:09:23.437 defaults[7865:25815] 
+2026-09-20 17:16:36.689 defaults[2505:11219] 
 The domain/default pair of (com.apple.finder, FK_StandardViewSettings) does not exist
 after:
 {
@@ -19,18 +19,50 @@ after:
 }
 standard list view settings after:
 {
-    ListViewSettings =     {
+    ExtendedListViewSettingsV2 =     {
         columns =         {
             dateModified =             {
+                index = 1;
+                visible = 1;
                 width = 104;
             };
             kind =             {
+                index = 3;
                 visible = 0;
             };
             name =             {
+                ascending = 1;
+                index = 0;
+                visible = 1;
                 width = 270;
             };
             size =             {
+                index = 2;
+                visible = 1;
+                width = 70;
+            };
+        };
+    };
+    ListViewSettings =     {
+        columns =         {
+            dateModified =             {
+                index = 1;
+                visible = 1;
+                width = 104;
+            };
+            kind =             {
+                index = 3;
+                visible = 0;
+            };
+            name =             {
+                ascending = 1;
+                index = 0;
+                visible = 1;
+                width = 270;
+            };
+            size =             {
+                index = 2;
+                visible = 1;
                 width = 70;
             };
         };
