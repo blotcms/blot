@@ -290,24 +290,7 @@ try {
   $desktop = [Environment]::GetFolderPath("Desktop")
   Copy-Item (Join-Path $fixture "*") $desktop -Recurse -Force
   Remove-Item (Join-Path $desktop "Old report.doc") -ErrorAction SilentlyContinue   # looks like Report.docx
-  # Explorer writes HideIcons back as it shuts down, so stop it first and set the value
-  # afterwards, then start it explicitly
   $adv = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-  Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 4
-  Set-ItemProperty -Path $adv -Name HideIcons -Value 0 -Type DWord
-  Start-Process explorer.exe
-  Start-Sleep -Seconds 12
-  [Native.Win]::SystemParametersInfo(0x14, 0, "", 3) | Out-Null
-  [Native.Win]::SetSysColors(1, @(1), @(0x808080)) | Out-Null
-  "desktop $desktop has $((Get-ChildItem $desktop | Measure-Object).Count) items; HideIcons=$((Get-ItemProperty $adv).HideIcons); explorer processes: $((Get-Process explorer -ErrorAction SilentlyContinue).Count)" | Out-File $log -Append
-  # starting Explorer opens a Home window: close any File Explorer windows
-  foreach ($try in 1..3) {
-    (New-Object -ComObject Shell.Application).Windows() | ForEach-Object { try { $_.Quit() } catch { } }
-    Start-Sleep -Seconds 2
-  }
-  [System.Windows.Forms.SendKeys]::SendWait("{F5}")
-  [Native.Mouse]::SetCursorPos($sw - 4, 4) | Out-Null
-  Start-Sleep -Seconds 4
   # Are the icons actually drawn? (HideIcons only says what the shell will do at startup)
   function Show-Icons {
     $b = New-Object System.Drawing.Bitmap 640, 600
@@ -316,13 +299,22 @@ try {
       $c = $b.GetPixel($x, $y); if ([Math]::Abs($c.R - 128) + [Math]::Abs($c.G - 128) + [Math]::Abs($c.B - 128) -gt 30) { return $true } } }
     return $false
   }
-  $progman = [Native.Win]::FindWindow("Progman", $null)
+  # Windows restarts a killed Explorer by itself within seconds, reading HideIcons as it
+  # starts, so set the value, kill it and let that restart happen (a second explorer.exe
+  # would only open a File Explorer window). Retry until the icons are drawn.
   foreach ($attempt in 1..3) {
-    $shown = Show-Icons
-    "icons visible (attempt $attempt): $shown" | Out-File $log -Append
-    if ($shown) { break }
-    [Native.Win]::SendMessage($progman, 0x111, [IntPtr]0x7402, [IntPtr]::Zero) | Out-Null   # toggle
+    Set-ItemProperty -Path $adv -Name HideIcons -Value 0 -Type DWord
+    Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 14
+    if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { "explorer did not restart by itself" | Out-File $log -Append; Start-Process explorer.exe; Start-Sleep -Seconds 10 }
+    (New-Object -ComObject Shell.Application).Windows() | ForEach-Object { try { $_.Quit() } catch { } }
+    [Native.Win]::SystemParametersInfo(0x14, 0, "", 3) | Out-Null
+    [Native.Win]::SetSysColors(1, @(1), @(0x808080)) | Out-Null
+    [Native.Mouse]::SetCursorPos($sw - 4, 4) | Out-Null
     Start-Sleep -Seconds 4
+    $shown = Show-Icons
+    "attempt ${attempt}: HideIcons=$((Get-ItemProperty $adv).HideIcons), items on desktop $((Get-ChildItem $desktop | Measure-Object).Count), icons visible: $shown" | Out-File $log -Append
+    if ($shown) { break }
   }
   $dbg = New-Object System.Drawing.Bitmap $sw, $sh
   [System.Drawing.Graphics]::FromImage($dbg).CopyFromScreen(0, 0, 0, 0, $dbg.Size)
