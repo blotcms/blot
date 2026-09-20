@@ -73,8 +73,9 @@ try {
   Click 650 555
   Start-Sleep -Seconds 2
   Shot "submenu"
-  $navX = [int]($env:NAV_X); $navY = [int]($env:NAV_Y)
-  if ($navX -gt 0) { Click $navX $navY; Start-Sleep -Seconds 2; "clicked Navigation pane at $navX,$navY" | Out-File $log -Append }
+  Click 867 559
+  Start-Sleep -Seconds 2
+  "clicked Navigation pane" | Out-File $log -Append
 } catch { "uia error: $_" | Out-File $log -Append }
 Start-Sleep -Seconds 1
 [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
