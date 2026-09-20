@@ -61,6 +61,11 @@ try {
     }
     "$step -> $(Press $el)" | Out-File $log -Append
     Start-Sleep -Seconds 2
+    # whole-screen shot to see whether the flyout is actually drawn
+    $sb = [System.Windows.Forms.SystemInformation]::VirtualScreen
+    $sbmp = New-Object System.Drawing.Bitmap $sb.Width, $sb.Height
+    [System.Drawing.Graphics]::FromImage($sbmp).CopyFromScreen($sb.Location, [System.Drawing.Point]::Empty, $sb.Size)
+    $sbmp.Save("$Out\debug-after-$($step -replace ' ','-').png")
     if ($step -eq "Show") {
       # the flyout isn't exposed to UI Automation, so drive it with the keyboard:
       # Navigation pane's access key is N
