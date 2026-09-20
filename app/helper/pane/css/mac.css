@@ -20,8 +20,8 @@ linear-gradient(var(--div),var(--div)) 467.5px 3.5px/1px 19px no-repeat}
 .pane .pane-head i:nth-child(1)::before{content:"Name"}
 .pane .pane-head i:nth-child(2)::before{content:"Date Modified"}
 .pane .pane-head i:nth-child(3)::before{content:"Size"}
-.pane .pane-head i:nth-child(1)::after{content:"";position:absolute;left:245.5px;top:11px;width:8px;height:5px;background:var(--dim);-webkit-mask:var(--g-sort) center/8px 5px no-repeat;mask:var(--g-sort) center/8px 5px no-repeat}
-.pane .pane-tree{padding-top:5px}
+.pane .pane-head i:nth-child(1)::after{content:"";position:absolute;right:9px;top:11px;width:8px;height:5px;background:var(--dim);-webkit-mask:var(--g-sort) center/8px 5px no-repeat;mask:var(--g-sort) center/8px 5px no-repeat}
+.pane .pane-tree{padding:5px 0 8px}
 .pane .pane-row{margin:0 10px;height:20px;border-radius:5px}
 .pane .pane-odd{background:var(--stripe)}
 .pane .pane-label{width:252.5px;padding-left:calc(37.5px + var(--x,0px))}
@@ -39,3 +39,18 @@ linear-gradient(var(--div),var(--div)) 467.5px 3.5px/1px 19px no-repeat}
 .pane .pane-k-generic{background-image:url(icon:mac/generic)}
 .pane .pane-k-link{background-image:url(icon:mac/link)}
 .pane .pane-k-image{background-image:url(icon:mac/image)}
+@container (max-width:489px){
+.pane .pane-label,.pane .pane-head i:nth-child(1){flex:1;width:auto}
+.pane .pane-head{background:linear-gradient(var(--l1) 50%,var(--l2) 50%) bottom/100% 1px no-repeat}
+.pane .pane-head i:nth-child(3){flex:none;width:90px}
+}
+@container (max-width:439px){
+.pane .pane-bar::before,.pane .pane-bar::after{display:none}
+.pane .pane-bar{padding-left:96px}
+}
+@container (max-width:379px){
+.pane .pane-s,.pane .pane-head i:nth-child(3){display:none}
+}
+@container (max-width:299px){
+.pane .pane-d,.pane .pane-head i:nth-child(2){display:none}
+}

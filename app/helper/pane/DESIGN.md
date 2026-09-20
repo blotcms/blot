@@ -256,3 +256,12 @@ skin), contrast (reported), and size (reported).
 3. `@light`/`@dark` build-time directives rather than `light-dark()` (§2).
 4. Stripes as a build-time class (§1).
 5. No size limit; sizes are reported (§7).
+
+## Implementation notes (Stage 1, as built)
+
+- Cell classes are `pane-d` (date) and `pane-s` (size), ordered per OS with CSS `order`.
+- Windows' hidden file extensions (§3) need a per-OS label; that lands with the Windows skin.
+- The contrast report from §5 is not built yet (nothing enforces it either way).
+- `pane-name` expansion (§8) is built: `lib/names.js`, `transform($)`, and the prose rule in `lib/css.js`.
+- The macOS skin measures to the 2× reference; `qa/thresholds.json` holds `macos-light` and
+  `macos-dark` to tightened limits.

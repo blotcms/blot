@@ -117,7 +117,9 @@ function skin(os, source) {
 function build(options = {}) {
   const skins = options.skins || SKINS;
   const read = (f) => fs.readFileSync(path.join(ROOT, "css", f), "utf8");
-  const css = read("base.css") + skins.map((os) => skin(os, read(`${os}.css`))).join("");
+  // prose: <span class="pane-name"> shows the child for the visitor's OS (or the default)
+  const prose = skins.map((os) => `html[data-os=${os}] .pane-name>[data-os=${os}]${os === DEFAULT_SKIN ? `,html:not([data-os]) .pane-name>[data-os=${os}]` : ""}`).join(",") + "{display:inline}";
+  const css = read("base.css") + skins.map((os) => skin(os, read(`${os}.css`))).join("") + prose;
   return minify(icons(css));
 }
 

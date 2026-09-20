@@ -93,7 +93,7 @@ the same. The skin can show the sidebar again later if we want a fuller window.
 
 ## Accessibility
 
-- Content is a nested `ul`/`li` (a `table` for list view); no `role="tree"`.
+- Content is a nested `ul`/`li` in every view (see DESIGN.md); no `role="tree"`.
 - Window is a `figure` named by its title; all chrome, icons and dots are
   `aria-hidden`. Hidden per-OS chrome is `display: none`.
 - Folder/file type and expanded state is visually hidden text.

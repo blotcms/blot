@@ -34,6 +34,7 @@
 const { folder: renderFolder, OS_KEYS } = require("./lib/markup");
 const { formatSize, formatDate, formatFolderSize } = require("./lib/format");
 const css = require("./lib/css");
+const { expand } = require("./lib/names");
 
 // what an author can ask for; the QA harness has more views (see the header)
 const VIEWS = ["list", "icons"];
@@ -58,6 +59,12 @@ const assets = () => ({ css: (CSS = CSS || css.build()), js: JS });
 // For the docs build: replaces <pre class="folder|text|code"> in a cheerio document.
 // (Assets are not injected here; the build ships assets() once.)
 function transform($) {
+  $("span.pane-name").each((i, el) => {
+    if ($(el).children().length) return; // already expanded
+    const html = expand($(el).text(), $(el).attr("data-key"));
+    if (html) $(el).removeAttr("data-key").html(html);
+    else console.warn(`pane: unknown pane-name term "${$(el).text()}"`);
+  });
   const kinds = { folder, text, code };
   $("pre.folder, pre.text, pre.code").each((i, el) => {
     const kind = ["folder", "text", "code"].find((k) => $(el).hasClass(k));
