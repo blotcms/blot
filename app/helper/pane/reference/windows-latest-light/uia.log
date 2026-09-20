@@ -1,3 +1,8 @@
 View -> invoke
 Show -> expand
-sent Down, Enter
+top-level: '' class=Shell_TrayWnd
+top-level: 'Your site - File Explorer' class=CabinetWClass
+top-level: 'System Properties' class=#32770
+top-level: 'C:\ProgramData\GitHub\HostedComputeAgent\hosted-compute-agent' class=CASCADIA_HOSTING_WINDOW_CLASS
+top-level: 'Program Manager' class=Progman
+sent n
