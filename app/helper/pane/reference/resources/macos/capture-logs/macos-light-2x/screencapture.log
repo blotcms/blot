@@ -1,16 +1,17 @@
-total 2088
-drwxr-xr-x  15 runner  staff     480 Sep 20 17:16 .
-drwxr-xr-x  18 runner  staff     576 Sep 20 17:15 ..
--rw-r--r--   1 runner  staff       0 Sep 20 17:15 appearance.log
--rw-r--r--   1 runner  staff      27 Sep 20 17:15 bounds.txt
--rw-r--r--   1 runner  staff       3 Sep 20 17:16 finder.log
--rw-r--r--   1 runner  staff    1921 Sep 20 17:15 hidpi-probe.log
--rw-r--r--   1 runner  staff      75 Sep 20 17:15 hidpi.log
--rw-r--r--@  1 runner  staff  254922 Sep 20 17:16 macos-light@2x-columns.png
--rw-r--r--@  1 runner  staff  183945 Sep 20 17:16 macos-light@2x-gallery.png
--rw-r--r--@  1 runner  staff  260610 Sep 20 17:15 macos-light@2x-icons.png
--rw-r--r--@  1 runner  staff  338192 Sep 20 17:15 macos-light@2x.png
--rw-r--r--   1 runner  staff       0 Sep 20 17:15 screencapture.log
--rw-r--r--   1 runner  staff    1727 Sep 20 17:15 toolbar.log
--rw-r--r--   1 runner  staff      65 Sep 20 17:15 versions.txt
--rw-r--r--   1 runner  staff       0 Sep 20 17:15 wallpaper.log
+total 2264
+drwxr-xr-x  16 runner  staff     512 Sep 20 17:22 .
+drwxr-xr-x  18 runner  staff     576 Sep 20 17:21 ..
+-rw-r--r--   1 runner  staff       0 Sep 20 17:21 appearance.log
+-rw-r--r--   1 runner  staff      27 Sep 20 17:22 bounds.txt
+-rw-r--r--   1 runner  staff     545 Sep 20 17:22 columns.log
+-rw-r--r--   1 runner  staff       3 Sep 20 17:22 finder.log
+-rw-r--r--   1 runner  staff    1921 Sep 20 17:21 hidpi-probe.log
+-rw-r--r--   1 runner  staff      75 Sep 20 17:22 hidpi.log
+-rw-r--r--@  1 runner  staff  277005 Sep 20 17:22 macos-light@2x-columns.png
+-rw-r--r--@  1 runner  staff  215786 Sep 20 17:22 macos-light@2x-gallery.png
+-rw-r--r--@  1 runner  staff  282904 Sep 20 17:22 macos-light@2x-icons.png
+-rw-r--r--@  1 runner  staff  344922 Sep 20 17:22 macos-light@2x.png
+-rw-r--r--   1 runner  staff       0 Sep 20 17:22 screencapture.log
+-rw-r--r--   1 runner  staff    1729 Sep 20 17:22 toolbar.log
+-rw-r--r--   1 runner  staff      65 Sep 20 17:21 versions.txt
+-rw-r--r--   1 runner  staff       0 Sep 20 17:22 wallpaper.log
