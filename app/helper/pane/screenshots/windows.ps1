@@ -95,7 +95,7 @@ $progman = [Native.Win]::FindWindow("Progman", $null)
 [Native.Win]::SendMessage($progman, 0x111, [IntPtr]0x7402, [IntPtr]::Zero) | Out-Null  # toggle desktop icons
 
 # Move the window clear of the desktop edges and taskbar, leaving room for its shadow
-[Native.Win]::MoveWindow($h, 110, 60, 800, 600, $true) | Out-Null
+[Native.Win]::MoveWindow($h, 170, 50, 800, 560, $true) | Out-Null
 Start-Sleep -Seconds 2
 
 $r = New-Object Native.Win+RECT

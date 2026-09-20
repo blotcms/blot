@@ -28,16 +28,19 @@ else
 fi
 sleep 3
 
-# Mild grey desktop so the window's shadow is visible
-python3 - "$OUT/grey.png" <<'PY'
-import sys, zlib, struct
-w = h = 64
-raw = b"".join(b"\x00" + bytes([200, 200, 200]) * w for _ in range(h))
-def chunk(t, d): return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d))
-open(sys.argv[1], "wb").write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
-PY
-osascript -e "tell application \"Finder\" to set desktop picture to POSIX file \"$OUT/grey.png\"" >"$OUT/wallpaper.log" 2>&1 || true
-sleep 2
+# Mild grey desktop so the window's shadow is visible. Finder won't set a
+# wallpaper for us here, so paint a borderless desktop-level window instead.
+osascript -l JavaScript >"$OUT/wallpaper.log" 2>&1 <<'JXA' &
+ObjC.import('Cocoa');
+const app = $.NSApplication.sharedApplication;
+app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);
+const win = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer($.NSScreen.mainScreen.frame, 0, 2, false);
+win.backgroundColor = $.NSColor.colorWithSRGBRedGreenBlueAlpha(0.784, 0.784, 0.784, 1);
+win.level = -2147483623; // kCGDesktopWindowLevel
+win.orderFront(null);
+$.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(600));
+JXA
+sleep 3
 # Trim the Finder toolbar to back/forward, the view switcher and search: drop
 # the arrange, share, tag and action buttons. Identifiers are Finder's own.
 PLIST="$HOME/Library/Preferences/com.apple.finder.plist"
