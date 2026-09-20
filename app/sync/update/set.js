@@ -156,46 +156,53 @@ function buildAndSet(blog, path, multiInfo, callback) {
             if (err) return next(err);
 
             // A successful rebuild means any previous "ignored" record for
-            // this path (wrong type, too large, …) is stale. Clear it
-            // best-effort — it must not hold up or fail the sync. For a
-            // folder post the same applies to each source file that is now
-            // part of the aggregate again (e.g. one shrunk back under the
-            // size limit), otherwise the dashboard keeps hiding its badge.
-            IgnoredFiles.drop(blog.id, entry.path, noop);
-            sourcePaths.forEach(function (sourcePath) {
-              IgnoredFiles.drop(blog.id, sourcePath, noop);
-            });
+            // this path (wrong type, too large, …) is stale. Errors are
+            // swallowed so a failed clear can't fail the sync, but we wait
+            // for it so callers never observe the stale record after the
+            // sync finishes. For a folder post the same applies to each
+            // source file that is now part of the aggregate again (e.g. one
+            // shrunk back under the size limit), otherwise the dashboard
+            // keeps hiding its badge.
+            async.each(
+              [entry.path].concat(sourcePaths),
+              function (ignoredPath, done) {
+                IgnoredFiles.drop(blog.id, ignoredPath, function () {
+                  done();
+                });
+              },
+              function () {
+                const syntheticKeys = new Set();
 
-            const syntheticKeys = new Set();
+                const slugToken = makeSlug(
+                  entry.slug || entry.metadata.title || entry.title || ""
+                );
+                if (slugToken) {
+                  syntheticKeys.add(`/__wikilink_slug__/${slugToken}`);
+                }
 
-            const slugToken = makeSlug(
-              entry.slug || entry.metadata.title || entry.title || ""
+                const filenameToken = entry.path ? basename(entry.path) : "";
+                if (filenameToken) {
+                  syntheticKeys.add(`/__wikilink_filename__/${filenameToken}`);
+                }
+
+                syntheticKeys.forEach((syntheticKey) =>
+                  rebuildDependents(blog.id, syntheticKey, noop)
+                );
+
+                // A draft folder post outside /drafts/ would write "/album.html"
+                // and could clobber a real sibling source file, so skip the
+                // filesystem preview there (still viewable via the draft URL).
+                if (
+                  entry.draft &&
+                  !isHidden(entry.path) &&
+                  !isUnsafeFolderPostPreview(entry.path, entry.html)
+                ) {
+                  Preview.write(blog.id, entry.path, next);
+                } else {
+                  next();
+                }
+              }
             );
-            if (slugToken) {
-              syntheticKeys.add(`/__wikilink_slug__/${slugToken}`);
-            }
-
-            const filenameToken = entry.path ? basename(entry.path) : "";
-            if (filenameToken) {
-              syntheticKeys.add(`/__wikilink_filename__/${filenameToken}`);
-            }
-
-            syntheticKeys.forEach((syntheticKey) =>
-              rebuildDependents(blog.id, syntheticKey, noop)
-            );
-
-            // A draft folder post outside /drafts/ would write "/album.html"
-            // and could clobber a real sibling source file, so skip the
-            // filesystem preview there (still viewable via the draft URL).
-            if (
-              entry.draft &&
-              !isHidden(entry.path) &&
-              !isUnsafeFolderPostPreview(entry.path, entry.html)
-            ) {
-              Preview.write(blog.id, entry.path, next);
-            } else {
-              next();
-            }
           });
         },
       ],
