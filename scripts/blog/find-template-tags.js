@@ -10,6 +10,10 @@
 // with its progress display) and the results are aggregated (only blogs with matches are listed).
 //
 // Usage: node scripts/blog/find-template-tags.js [handle|domain|id] [--json]
+//        [-s START] [-e END] [-r]
+//
+// -s/-e/-r only apply when searching every blog: start at the Nth blog, end at
+// the Nth blog (1-based positions in the list), or reverse the order.
 
 const fs = require("fs-extra");
 const getBlog = require("../get/blog");
@@ -23,7 +27,17 @@ const TAG = /\{\{[\s\S]*?\}\}\}?/g;
 const MAX_BYTES = 5 * 1024 * 1024;
 const TEXT_EXTENSIONS = /\.(md|markdown|txt|text|html?|org|rtf|docx?|odt)$/i;
 
-const identifier = process.argv.slice(2).find((arg) => !arg.startsWith("--"));
+const args = process.argv.slice(2);
+const options = {};
+const positional = [];
+
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === "-s" || args[i] === "-e") options[args[i][1]] = args[++i];
+  else if (args[i] === "-r") options.r = true;
+  else if (!args[i].startsWith("-")) positional.push(args[i]);
+}
+
+const identifier = positional[0];
 const asJSON = process.argv.includes("--json");
 
 function getAllIDs(blogID) {
@@ -181,7 +195,8 @@ function searchAll() {
       });
 
       process.exit();
-    }
+    },
+    options
   );
 }
 
