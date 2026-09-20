@@ -210,20 +210,20 @@ Capture "$Label-$Theme$suffix"   # Details, Explorer's default
 # The other view options. The command bar collapses View into an overflow menu at
 # narrow widths, so widen the window to pick each one, then narrow it to capture.
 # Menu items sit at fixed offsets below the View button (measured at 100%).
+# (index = position in the View flyout; opening it through UI Automation puts the
+# keyboard focus on the first item, and mouse clicks on flyout items don't register)
 $views = @(
-  @("extra-large-icons", 47), @("large-icons", 79), @("medium-icons", 111), @("small-icons", 143),
-  @("list", 175), @("tiles", 239), @("content", 271)
+  @("extra-large-icons", 0), @("large-icons", 1), @("medium-icons", 2), @("small-icons", 3),
+  @("list", 4), @("tiles", 6), @("content", 7)
 )
 foreach ($v in $views) {
   try {
     Place 800
     $btn = Find-Element $root "View"
-    $rect = $btn.Current.BoundingRectangle
-    $cx = [int]($rect.X + $rect.Width / 2); $cy = [int]($rect.Y + $rect.Height / 2)
-    "view $($v[0]): View button centre $cx,$cy (rect $rect)" | Out-File $log -Append
-    Click $cx $cy; Start-Sleep -Seconds 2
-    if ($v[0] -eq "extra-large-icons") { Shot "view-menu" }
-    Click ($cx + 20 * $Scale) ($cy + $v[1] * $Scale); Start-Sleep -Seconds 2
+    Press $btn | Out-Null; Start-Sleep -Seconds 2
+    for ($i = 0; $i -lt $v[1]; $i++) { [System.Windows.Forms.SendKeys]::SendWait("{DOWN}"); Start-Sleep -Milliseconds 250 }
+    if ($v[0] -eq "extra-large-icons" -or $v[0] -eq "tiles") { Shot "view-menu-$($v[0])" }
+    [System.Windows.Forms.SendKeys]::SendWait("{ENTER}"); Start-Sleep -Seconds 2
     Place $Width
     Capture "$Label-$Theme$suffix-$($v[0])"
   } catch { "view $($v[0]) failed: $_" | Out-File $log -Append }
