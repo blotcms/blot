@@ -2,7 +2,7 @@
 # Screenshot GNOME Files (Nautilus) under Xvfb.
 # usage: linux.sh <light|dark> <out-dir> [scale]   (scale 2 = HiDPI, via GDK_SCALE)
 set -uo pipefail
-THEME="${1:-light}"; OUT="${2:-out}"; S="${3:-1}"; NARROW="${NARROW:-560}"; NARROW_H="${NARROW_H:-960}"; mkdir -p "$OUT"
+THEME="${1:-light}"; OUT="${2:-out}"; S="${3:-1}"; NARROW="${NARROW:-890}"; NARROW_H="${NARROW_H:-960}"; mkdir -p "$OUT"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 FIXTURE="$HOME/Your site"
 bash "$HERE/make-fixture.sh" "$FIXTURE"
@@ -34,8 +34,7 @@ run() {
     eval "$(xdotool getwindowgeometry --shell "$w")"
     if [ $((WIDTH * HEIGHT)) -gt "$BEST" ]; then BEST=$((WIDTH * HEIGHT)); WID="$w"; fi
   done
-  # Nautilus 46 has no setting to hide the sidebar, but libadwaita collapses it
-  # when the window is narrow, so use a narrow window.
+  # (set NARROW=560 to collapse the sidebar; the default keeps the wider window)
   xdotool windowsize "$WID" $((NARROW * S)) $((NARROW_H * S)); sleep 1
   xdotool windowmove "$WID" $((100 * S)) $((100 * S)); sleep 1
   eval "$(xdotool getwindowgeometry --shell "$WID")"
@@ -44,7 +43,7 @@ run() {
   xdotool windowactivate --sync "$WID" || xdotool windowfocus "$WID" || true
   sleep 0.5
   # expand the one folder: Fruits is the 6th row (folders sort among the files)
-  xdotool mousemove $((X + 41 * S)) $((Y + 368 * S)) click 1; sleep 0.7
+  xdotool mousemove $((X + 222 * S)) $((Y + 368 * S)) click 1; sleep 0.7
   xdotool key --clearmodifiers ctrl+shift+a; sleep 0.5  # clear the selection
   xdotool mousemove $((X + 700 * S)) $((Y + 500 * S)); sleep 1
   import -window root "$OUT/full.png"

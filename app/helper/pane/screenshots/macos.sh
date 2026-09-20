@@ -68,7 +68,7 @@ tell application "Finder"
   close every window
   set w to make new Finder window to (POSIX file "$FIXTURE" as alias)
   set current view of w to list view
-  set bounds of w to {100, 100, 760, 620}
+  set bounds of w to {100, 100, 500, 620}
   set sidebar width of w to 160
 end tell
 delay 1
@@ -84,5 +84,5 @@ delay 1
 tell application "Finder" to set selection to {}
 OSA
 sleep 4
-screencapture -x -R40,40,780,640 "$OUT/macos-$THEME.png" >"$OUT/screencapture.log" 2>&1 || true
+screencapture -x -R40,40,520,640 "$OUT/macos-$THEME.png" >"$OUT/screencapture.log" 2>&1 || true
 rm -f "$OUT/grey.png"; ls -la "$OUT" >> "$OUT/screencapture.log"

@@ -176,19 +176,17 @@ if ($Scale -ne 1) {
   $h = if ($shellWin) { [IntPtr][int64]$shellWin.HWND } else { [Native.Win]::FindWindow("CabinetWClass", $null) }
   "explorer dpi: $([Hidpi]::GetDpiForWindow($h))" | Out-File "$Out\hidpi.log" -Append
 }
-# Plain mild-grey desktop with no icons, so the window's shadow is visible
+# Plain mild-grey desktop (icons stay in a column at the left edge, which the capture avoids), so the window's shadow is visible
 Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name Background -Value "128 128 128"
 [Native.Win]::SystemParametersInfo(0x14, 0, "", 3) | Out-Null
 [Native.Win]::SetSysColors(1, @(1), @(0x808080)) | Out-Null
-$progman = [Native.Win]::FindWindow("Progman", $null)
-[Native.Win]::SendMessage($progman, 0x111, [IntPtr]0x7402, [IntPtr]::Zero) | Out-Null  # toggle desktop icons
 
 # Size the window (logical px x scale) and keep it clear of the screen edges and
 # taskbar, leaving room for its shadow
 $sw = [Hidpi]::GetSystemMetrics(0); $sh = [Hidpi]::GetSystemMetrics(1)
-$taskbar = 48 * $Scale; $pad = 60 * $Scale
+$taskbar = 48 * $Scale; $pad = 60 * $Scale; $left = 140 * $Scale
 $winH = [Math]::Min(640 * $Scale, $sh - $taskbar - 2 * 30 * $Scale)
-[Native.Win]::MoveWindow($h, $pad, 30 * $Scale, $Width * $Scale, $winH, $true) | Out-Null
+[Native.Win]::MoveWindow($h, $left, 30 * $Scale, $Width * $Scale, $winH, $true) | Out-Null
 Start-Sleep -Seconds 2
 
 $r = New-Object Native.Win+RECT

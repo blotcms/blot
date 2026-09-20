@@ -106,10 +106,29 @@ jobs:
           path: out
           if-no-files-found: warn
 
+  # Experiments: can a hosted macOS runner give us a Retina (2x) Finder capture?
+  # See app/helper/pane/screenshots/macos-hidpi.sh.
+  macos-hidpi:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        experiment: [modes, virtual]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run experiment
+        run: bash app/helper/pane/screenshots/macos-hidpi.sh ${{ matrix.experiment }} out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pane-hidpi-macos-${{ matrix.experiment }}
+          path: out
+          if-no-files-found: warn
+
   # Commits the captures to app/helper/pane/reference so they show up in the
   # pull request. Pushes made with GITHUB_TOKEN don't trigger new workflow runs.
   commit:
-    needs: [linux, macos, windows, windows-hidpi]
+    needs: [linux, macos, windows, windows-hidpi, macos-hidpi]
     if: ${{ !cancelled() && github.ref_type == 'branch' && github.ref != 'refs/heads/master' }}
     runs-on: ubuntu-latest
     permissions:

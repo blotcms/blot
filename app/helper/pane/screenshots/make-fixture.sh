@@ -29,3 +29,15 @@ echo "<h1>Hello</h1>" > "$D/index.html"
 echo "* Heading" > "$D/Tasks.org"
 # Plain text
 echo "Hello" > "$D/About.txt"
+
+# Spread modified (and, on macOS, created) times across the years so each OS's
+# date formats get exercised. `touch -t` on macOS also moves the creation date
+# back when it is earlier. GNU and BSD touch differ, so try both.
+i=0
+for f in "$D"/* "$D"/Fruits/*; do
+  days=$(( (i * i * 37) % 4500 ))
+  if date -v-1d +%s >/dev/null 2>&1; then stamp=$(date -v-"${days}"d -v-"$((i * 13))"M +%Y%m%d%H%M); else stamp=$(date -d "$days days ago - $((i * 13)) minutes" +%Y%m%d%H%M); fi
+  touch -t "$stamp" "$f"
+  i=$((i + 1))
+done
+touch -t "$(date +%Y%m%d0000)" "$D/Fruits/Apple.md" 2>/dev/null || true
