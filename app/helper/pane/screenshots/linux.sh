@@ -127,7 +127,7 @@ CSS
   # DING's window is transparent, which needs a compositing manager to show the grey desktop
   xcompmgr >"$OUT/xcompmgr.log" 2>&1 &
   sleep 2
-  gjs "$DING/ding.js" -P "$DING" -D "0:0:$((1280)):$((800)):1:0:0:0:0:0" >>"$OUT/ding.log" 2>&1 &
+  XDG_CURRENT_DESKTOP=ubuntu:GNOME XDG_SESSION_TYPE=x11 gjs "$DING/ding.js" -P "$DING" -D "0:0:$((1280)):$((800)):1:0:0:0:0:0" >>"$OUT/ding.log" 2>&1 &
   sleep 10
   import -window root "$OUT/full.png"
   convert "$OUT/full.png" -crop "$((1280 * S))x$((800 * S))+0+0" +repage "$OUT/linux-$THEME$SUFFIX-desktop.png"

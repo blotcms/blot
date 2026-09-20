@@ -297,6 +297,9 @@ try {
   [Native.Win]::SystemParametersInfo(0x14, 0, "", 3) | Out-Null
   [Native.Win]::SetSysColors(1, @(1), @(0x808080)) | Out-Null
   "explorer processes: $((Get-Process explorer -ErrorAction SilentlyContinue).Count)" | Out-File $log -Append
+  "desktop folder $desktop has $((Get-ChildItem $desktop | Measure-Object).Count) items; HideIcons=$((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced').HideIcons)" | Out-File $log -Append
+  # ask the desktop to refresh (F5 on the desktop) so it lists the copied files
+  [System.Windows.Forms.SendKeys]::SendWait("{F5}")
   Start-Sleep -Seconds 3
   [Native.Mouse]::SetCursorPos($sw - 4, 4) | Out-Null
   Start-Sleep -Seconds 3
