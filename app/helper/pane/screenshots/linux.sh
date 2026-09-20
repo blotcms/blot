@@ -114,7 +114,7 @@ CSS
     xdotool windowactivate --sync "$WID" || true
     sleep 1
     capture "linux-$THEME$SUFFIX-$kind"
-    pkill -f gnome-text-editor; sleep 3
+    pkill -x gnome-text-edit; sleep 3  # (comm is truncated to 15 chars; -f would match this script itself)
   done
 
   { echo "nautilus: $(nautilus --version)"; echo "libadwaita: $(dpkg -s libadwaita-1-0 2>/dev/null | grep ^Version)"; lsb_release -d; echo "scale: $S"; } > "$OUT/versions.txt" 2>&1
