@@ -8,7 +8,7 @@ bash "$HERE/make-fixture.sh" "$FIXTURE"
 
 export GDK_BACKEND=x11
 if [ "$THEME" = dark ]; then
-  export ADW_DEBUG_COLOR_SCHEME=prefer-dark GTK_THEME=Adwaita:dark
+  export ADW_DEBUG_COLOR_SCHEME=prefer-dark
 else
   export ADW_DEBUG_COLOR_SCHEME=prefer-light
 fi
@@ -26,7 +26,9 @@ run() {
     xdotool windowmove "$WID" 40 40 windowsize "$WID" 900 560 || true
     sleep 2
     # expand every folder in the tree
-    xdotool key --window "$WID" shift+Right || true
+    xdotool mousemove 400 118 click 1 || true
+    for _ in 1 2 3; do xdotool key shift+Right; sleep 0.3; xdotool key Down; done
+    sleep 1
     sleep 1
   fi
   import -window root "$OUT/linux-$THEME-root.png"
