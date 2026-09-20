@@ -1,35 +1,7 @@
-** Message: 11:12:31.661: Connecting to org.freedesktop.Tracker3.Miner.Files
+** Message: 11:15:15.155: Connecting to org.freedesktop.Tracker3.Miner.Files
 
-(org.gnome.Nautilus:3384): Gtk-WARNING **: 11:12:38.617: Unable to acquire the address of the accessibility bus: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files. If you are attempting to run GTK without a11y support, GTK_A11Y should be set to 'none'.
+(org.gnome.Nautilus:3384): Gtk-WARNING **: 11:15:24.854: Unable to acquire the address of the accessibility bus: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files. If you are attempting to run GTK without a11y support, GTK_A11Y should be set to 'none'.
 
-** (org.gnome.Nautilus:3384): WARNING **: 11:12:39.736: Unable to get contents of the bookmarks file: Error opening file /home/runner/.gtk-bookmarks: No such file or directory
+** (org.gnome.Nautilus:3384): WARNING **: 11:15:26.112: Unable to get contents of the bookmarks file: Error opening file /home/runner/.gtk-bookmarks: No such file or directory
 
-** (org.gnome.Nautilus:3384): WARNING **: 11:12:39.737: Unable to get contents of the bookmarks file: Error opening file /home/runner/.gtk-bookmarks: No such file or directory
-
-(org.gnome.Nautilus:3384): GLib-GIO-CRITICAL **: 11:12:40.876: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
-
-(org.gnome.Nautilus:3384): GLib-CRITICAL **: 11:12:40.876: g_str_match_string: assertion 'potential_hit != NULL' failed
-
-(org.gnome.Nautilus:3384): GLib-GIO-CRITICAL **: 11:12:40.876: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
-
-(org.gnome.Nautilus:3384): GLib-CRITICAL **: 11:12:40.876: g_str_match_string: assertion 'potential_hit != NULL' failed
-
-(org.gnome.Nautilus:3384): GLib-GIO-CRITICAL **: 11:12:40.988: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
-
-(org.gnome.Nautilus:3384): GLib-CRITICAL **: 11:12:40.988: g_str_match_string: assertion 'potential_hit != NULL' failed
-
-(org.gnome.Nautilus:3384): GLib-GIO-CRITICAL **: 11:12:41.105: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
-
-(org.gnome.Nautilus:3384): GLib-CRITICAL **: 11:12:41.105: g_str_match_string: assertion 'potential_hit != NULL' failed
-
-(org.gnome.Nautilus:3384): GLib-GIO-CRITICAL **: 11:12:41.111: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
-
-(org.gnome.Nautilus:3384): GLib-CRITICAL **: 11:12:41.111: g_str_match_string: assertion 'potential_hit != NULL' failed
-
-(org.gnome.Nautilus:3384): GLib-GIO-CRITICAL **: 11:12:41.111: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
-
-(org.gnome.Nautilus:3384): GLib-CRITICAL **: 11:12:41.111: g_str_match_string: assertion 'potential_hit != NULL' failed
-
-(org.gnome.Nautilus:3384): GLib-GIO-CRITICAL **: 11:12:41.217: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
-
-(org.gnome.Nautilus:3384): GLib-CRITICAL **: 11:12:41.217: g_str_match_string: assertion 'potential_hit != NULL' failed
+** (org.gnome.Nautilus:3384): WARNING **: 11:15:26.113: Unable to get contents of the bookmarks file: Error opening file /home/runner/.gtk-bookmarks: No such file or directory
