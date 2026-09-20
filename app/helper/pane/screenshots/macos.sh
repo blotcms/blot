@@ -140,6 +140,33 @@ OSA
 )"
 echo "bounds: $BOUNDS" > "$OUT/bounds.txt"
 IFS=', ' read -r L T R B <<< "$BOUNDS"
+# Finder ignores column widths set through AppleScript or its preferences for a
+# fresh window, so resize the columns the way a person would: drag the dividers
+# (right to left, so earlier drags don't move later ones), then untick Kind in
+# View Options. Positions are measured from the reference: dividers at 203 / 384 /
+# 480pt from the window's left edge, the column header 65pt below its top.
+{
+  command -v cliclick >/dev/null || brew install cliclick
+  HY=$((T + 65)); D1=$((L + 203)); D2=$((L + 384)); D3=$((L + 480))
+  drag() { cliclick -w 60 dd:"$1,$HY" dm:"$(( ($1 + $2) / 2 )),$HY" dm:"$2,$HY" du:"$2,$HY"; sleep 1; }
+  drag $D2 $((D2 - 77))                    # Date Modified 181pt -> 104pt
+  drag $((D3 - 77)) $((D3 - 77 - 27))      # Size 97pt -> 70pt
+  drag $D1 $((D1 + 60))                    # Name 202pt -> 262pt (+30%)
+  osascript <<OSA
+tell application "System Events" to tell process "Finder"
+  keystroke "j" using {command down}
+  delay 2
+  set boxes to (every checkbox of (entire contents of window 1) whose name is "Kind")
+  log "kind checkboxes: " & (count of boxes)
+  repeat with b in boxes
+    if value of b is 1 then click b
+  end repeat
+  delay 1
+  keystroke "w" using {command down}
+end tell
+OSA
+} >"$OUT/columns.log" 2>&1
+sleep 2
 capture() { screencapture -x -R$((L - 96)),$((T - 96)),$((R - L + 192)),$((B - T + 192)) "$OUT/$1.png" >>"$OUT/screencapture.log" 2>&1 || true; }
 sleep 4
 capture "macos-$THEME$SUFFIX"
