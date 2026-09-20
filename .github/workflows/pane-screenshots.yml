@@ -64,7 +64,10 @@ jobs:
         runner: [windows-latest, windows-11-arm]
         theme: [light, dark]
     steps:
+      # the repo contains filenames Windows can't check out, so fetch only what we need
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: app/helper/pane
       - name: Screenshot
         shell: pwsh
         run: ./app/helper/pane/screenshots/windows.ps1 -Theme ${{ matrix.theme }} -Out out -Label ${{ matrix.runner }}
