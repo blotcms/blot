@@ -1,14 +1,15 @@
 // Streams a zip of the template currently installed on a blog to stdout,
 // laid out like a template folder (<slug>/package.json, <slug>/style.css...).
 //
-//   node scripts/template/export-zip <blog identifier> > template.zip
+//   node scripts/template/export-zip <blog ID> > template.zip
 //
 // Exits with code 3 (and writes nothing to stdout) if the template has
 // localEditing enabled, since its files already live in the blog's folder.
 // Status messages go to stderr so stdout stays a clean zip stream.
 
 var archiver = require("archiver");
-var getBlog = require("../get/blog");
+// Blog.get rather than scripts/get/blog, which mints a dashboard login token
+var Blog = require("models/blog");
 var Template = require("models/template");
 var shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
@@ -19,10 +20,10 @@ function fail(message, code) {
   process.exit(code || 1);
 }
 
-if (!process.argv[2]) fail("Pass a blog identifier as the first argument");
+if (!process.argv[2]) fail("Pass a blog identifier (blog ID) as the first argument");
 
-getBlog(process.argv[2], function (err, user, blog) {
-  if (err) fail(err.message);
+Blog.get({ id: process.argv[2] }, function (err, blog) {
+  if (err || !blog) fail(err ? err.message : "No blog " + process.argv[2]);
 
   if (!blog.template) fail("Blog " + blog.id + " has no template");
 

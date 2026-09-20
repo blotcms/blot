@@ -3,12 +3,13 @@
 //   node scripts/development/fork create <handle> < settings.json
 //     Creates a blog on example@example.com with the given handle (or the
 //     first free variant of it), applies the production settings JSON read
-//     from stdin (see scripts/blog/export-settings) and prints its blog ID
-//     on the last line.
+//     from stdin (see scripts/blog/export-settings) and prints blogID=... and
+//     handle=... lines.
 //
 //   node scripts/development/fork finish <blogID> [templateSlug]
 //     Rebuilds the blog from its folder, builds the folder's templates, and
-//     if a template slug is passed, switches the blog to that template.
+//     if a template slug is passed, switches the blog to that template, then
+//     starts the folder watcher and prints url=...
 
 var User = require("models/user");
 var Blog = require("models/blog");
@@ -16,6 +17,7 @@ var Template = require("models/template");
 var validate = require("models/blog/validate/handle");
 var rebuild = require("sync/rebuild");
 var client = require("models/client");
+var config = require("config");
 var fs = require("fs-extra");
 
 // app/clients/local/init.js listens here to start watching a new folder
@@ -63,15 +65,9 @@ function create(base, settings, callback) {
 
         Blog.set(blog.id, changes, function (err) {
           if (err) return callback(err);
-
-          // The watcher must start in the master process, which only hears
-          // about new folders through this channel (payload must be JSON)
-          client
-            .publish(LOCAL_CLIENT_CHANNEL, JSON.stringify({ blogID: blog.id }))
-            .then(function () {
-              console.log(blog.id);
-              callback();
-            }, callback);
+          console.log("blogID=" + blog.id);
+          console.log("handle=" + blog.handle);
+          callback();
         });
       });
     });
@@ -85,10 +81,29 @@ function finish(blogID, slug, callback) {
     // rebuild skips /Templates, so build the folder's templates explicitly
     Template.buildFromFolder(blogID, function (err) {
       if (err) return callback(err);
-      if (!slug) return callback();
-      activate(blogID, slug, callback);
+      if (!slug) return watch(blogID, callback);
+      activate(blogID, slug, function (err) {
+        if (err) return callback(err);
+        watch(blogID, callback);
+      });
     });
   });
+}
+
+// Only after the folder is fully copied and built: the watcher ignores
+// existing files, and starting it earlier races with the rsync and rebuild.
+// It must start in the master process, which only hears about new folders
+// through this channel (payload must be JSON).
+function watch(blogID, callback) {
+  client
+    .publish(LOCAL_CLIENT_CHANNEL, JSON.stringify({ blogID: blogID }))
+    .then(function () {
+      Blog.get({ id: blogID }, function (err, blog) {
+        if (err) return callback(err);
+        console.log("url=https://" + blog.handle + "." + config.host);
+        callback();
+      });
+    }, callback);
 }
 
 function activate(blogID, slug, callback) {

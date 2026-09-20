@@ -3,9 +3,10 @@
 // the site elsewhere, e.g. by `npm run fork`. Environment-specific fields
 // (handle, domain, client, template, SSL, status) are left out.
 //
-//   node scripts/blog/export-settings <blog identifier>
+//   node scripts/blog/export-settings <blog ID>
 
-var getBlog = require("../get/blog");
+// Blog.get rather than scripts/get/blog, which mints a dashboard login token
+var Blog = require("models/blog");
 var scheme = require("models/blog/scheme");
 
 var EXCLUDED = [
@@ -21,13 +22,13 @@ var EXCLUDED = [
 ];
 
 if (!process.argv[2]) {
-  console.error("Pass a blog identifier as the first argument");
+  console.error("Pass a blog identifier (blog ID) as the first argument");
   process.exit(1);
 }
 
-getBlog(process.argv[2], function (err, user, blog) {
-  if (err) {
-    console.error(err.message);
+Blog.get({ id: process.argv[2] }, function (err, blog) {
+  if (err || !blog) {
+    console.error(err ? err.message : "No blog " + process.argv[2]);
     return process.exit(1);
   }
 

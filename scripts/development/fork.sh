@@ -26,7 +26,7 @@ else
 fi
 
 echo "Looking up $IDENTIFIER on production..."
-PROD_BLOG_ID="$(ssh blot "docker exec $PROD_CONTAINER node /usr/src/app/scripts/info \"$IDENTIFIER\"" | grep 'blog_' | head -n1 | cut -d ' ' -f 2)"
+PROD_BLOG_ID="$(ssh -T blot "docker exec $PROD_CONTAINER node /usr/src/app/scripts/info \"$IDENTIFIER\"" | grep 'blog_' | head -n1 | cut -d ' ' -f 2)"
 
 if [ -z "$PROD_BLOG_ID" ]; then
   echo "Could not find a blog for '$IDENTIFIER'" >&2
@@ -38,10 +38,15 @@ HANDLE_BASE="$(echo "$IDENTIFIER" | sed -E 's#^[a-zA-Z]+://##; s#[/:].*$##; s#\.
 [ -n "$HANDLE_BASE" ] && [ "${#HANDLE_BASE}" -ge 2 ] || HANDLE_BASE="fork"
 
 echo "Downloading site settings..."
-SETTINGS="$(ssh blot "docker exec $PROD_CONTAINER node /usr/src/app/scripts/blog/export-settings \"$PROD_BLOG_ID\"")"
+SETTINGS="$(ssh -T blot "docker exec $PROD_CONTAINER node /usr/src/app/scripts/blog/export-settings \"$PROD_BLOG_ID\"")"
 
 echo "Creating local site..."
-LOCAL_BLOG_ID="$(echo "$SETTINGS" | docker exec -i "$LOCAL_CONTAINER" node /usr/src/app/scripts/development/fork create "$HANDLE_BASE" | tail -n1)"
+CREATED="$(echo "$SETTINGS" | docker exec -i "$LOCAL_CONTAINER" node /usr/src/app/scripts/development/fork create "$HANDLE_BASE")"
+LOCAL_BLOG_ID="$(echo "$CREATED" | sed -n 's/^blogID=//p')"
+if [ -z "$LOCAL_BLOG_ID" ]; then
+  echo "Failed to create local site: $CREATED" >&2
+  exit 1
+fi
 LOCAL_FOLDER="$LOCAL_BLOGS_DIR/$LOCAL_BLOG_ID"
 echo "Created $LOCAL_BLOG_ID"
 
@@ -50,12 +55,12 @@ mkdir -p "$LOCAL_FOLDER"
 rsync -avz "blot:$PROD_BLOGS_DIR/$PROD_BLOG_ID/" "$LOCAL_FOLDER/"
 
 echo "Downloading installed template..."
-ZIP="$(mktemp -t fork-template).zip"
+ZIP="$(mktemp /tmp/fork-template.XXXXXX)"
 trap 'rm -f "$ZIP"' EXIT
 
 TEMPLATE_SLUG=""
 set +e
-ssh blot "docker exec $PROD_CONTAINER node /usr/src/app/scripts/template/export-zip \"$PROD_BLOG_ID\"" > "$ZIP"
+ssh -T blot "docker exec $PROD_CONTAINER node /usr/src/app/scripts/template/export-zip \"$PROD_BLOG_ID\"" > "$ZIP"
 STATUS=$?
 set -e
 
@@ -69,13 +74,13 @@ else
   TEMPLATES_DIR="Templates"
   [ -d "$LOCAL_FOLDER/templates" ] && [ ! -d "$LOCAL_FOLDER/Templates" ] && TEMPLATES_DIR="templates"
   mkdir -p "$LOCAL_FOLDER/$TEMPLATES_DIR"
-  TEMPLATE_SLUG="$(unzip -Z1 "$ZIP" | head -n1 | cut -d/ -f1)"
+  TEMPLATE_SLUG="$(unzip -Z1 "$ZIP" | awk -F/ 'NR==1{print $1; exit}')"
   unzip -q -o "$ZIP" -d "$LOCAL_FOLDER/$TEMPLATES_DIR"
   echo "Added template $TEMPLATES_DIR/$TEMPLATE_SLUG"
 fi
 
 echo "Building local site..."
-docker exec "$LOCAL_CONTAINER" node /usr/src/app/scripts/development/fork finish "$LOCAL_BLOG_ID" $TEMPLATE_SLUG
+docker exec "$LOCAL_CONTAINER" node /usr/src/app/scripts/development/fork finish "$LOCAL_BLOG_ID" ${TEMPLATE_SLUG:+"$TEMPLATE_SLUG"}
 
 echo "Done: $LOCAL_FOLDER"
-open "$LOCAL_FOLDER"
+open "$LOCAL_FOLDER" || true
