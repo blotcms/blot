@@ -215,7 +215,9 @@ foreach ($v in $views) {
     $btn = Find-Element $root "View"
     $rect = $btn.Current.BoundingRectangle
     $cx = [int]($rect.X + $rect.Width / 2); $cy = [int]($rect.Y + $rect.Height / 2)
+    "view $($v[0]): View button centre $cx,$cy (rect $rect)" | Out-File $log -Append
     Click $cx $cy; Start-Sleep -Seconds 2
+    if ($v[0] -eq "extra-large-icons") { Shot "view-menu" }
     Click ($cx + 20 * $Scale) ($cy + $v[1] * $Scale); Start-Sleep -Seconds 2
     Place $Width
     Capture "$Label-$Theme$suffix-$($v[0])"
