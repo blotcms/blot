@@ -27,7 +27,9 @@ which is wrong.
   on the Fruits row (5th row at y=326 logical: folders aren't sorted first, so the row moves when files are added or removed).
 - Views: `default-folder-viewer` `list-view` (tree) or `icon-view` (`-icons`).
 - Several X windows share the `nautilus` class (helpers are 1x1), so the largest is used.
-- Selection cleared with Ctrl-Shift-A.
+- Selection cleared with Ctrl-Shift-A. That key press puts GTK in keyboard modality,
+  which draws a focus ring round the focused row, so `~/.config/gtk-4.0/gtk.css` turns
+  outlines off.
 
 ## Corners and shadow
 There is no compositor under Xvfb, so windows come out with square corners and no

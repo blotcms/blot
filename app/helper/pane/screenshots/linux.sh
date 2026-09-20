@@ -17,6 +17,16 @@ else
 fi
 
 run() {
+  # No focus ring: my key presses (select-none) switch GTK to keyboard modality, which
+  # draws one round the focused row. A user stylesheet switches it off.
+  mkdir -p "$HOME/.config/gtk-4.0"
+  cat > "$HOME/.config/gtk-4.0/gtk.css" <<'CSS'
+*:focus, *:focus-visible, row:focus, row:focus-visible, listview > row, gridview > child, columnview row {
+  outline: none;
+  outline-color: transparent;
+  outline-width: 0;
+}
+CSS
   gsettings set org.gnome.nautilus.list-view use-tree-view true || true
   gsettings set org.gnome.desktop.interface color-scheme "prefer-$THEME" || true
   gsettings list-recursively org.gnome.nautilus > "$OUT/gsettings.txt" 2>&1
