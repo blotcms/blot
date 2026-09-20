@@ -24,7 +24,7 @@ which is wrong.
   collapses it when the window is narrower than about 500px, so the default 490px
   window has no sidebar. `-sidebar` captures use an 890px window with the sidebar.
 - Tree view: `org.gnome.nautilus.list-view use-tree-view true`, then click the arrow
-  on the Fruits row (6th row: folders aren't sorted first).
+  on the Fruits row (5th row at y=326 logical: folders aren't sorted first, so the row moves when files are added or removed).
 - Views: `default-folder-viewer` `list-view` (tree) or `icon-view` (`-icons`).
 - Several X windows share the `nautilus` class (helpers are 1x1), so the largest is used.
 - Selection cleared with Ctrl-Shift-A.

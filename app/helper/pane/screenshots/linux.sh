@@ -63,11 +63,11 @@ run() {
   }
   close_nautilus() { pkill nautilus; sleep 3; }
 
-  # list view with the tree expanded (the default capture). Fruits is the 6th row
+  # list view with the tree expanded (the default capture). Fruits is the 5th row
   # (folders sort among the files); the arrow is at x=41 with the sidebar collapsed.
   gsettings set org.gnome.nautilus.preferences default-folder-viewer 'list-view' || true
   open_nautilus "$W" "$H"
-  xdotool mousemove $((X + 41 * S)) $((Y + 368 * S)) click 1; sleep 0.7
+  xdotool mousemove $((X + 41 * S)) $((Y + 326 * S)) click 1; sleep 0.7
   capture "linux-$THEME$SUFFIX"; close_nautilus
 
   # icon view (the other Nautilus layout)
@@ -78,7 +78,7 @@ run() {
   # wide list view with the sidebar showing (arrow at x=222)
   gsettings set org.gnome.nautilus.preferences default-folder-viewer 'list-view' || true
   open_nautilus 890 "$H"
-  xdotool mousemove $((X + 222 * S)) $((Y + 368 * S)) click 1; sleep 0.7
+  xdotool mousemove $((X + 222 * S)) $((Y + 326 * S)) click 1; sleep 0.7
   capture "linux-$THEME$SUFFIX-sidebar"; close_nautilus
 
   { echo "nautilus: $(nautilus --version)"; echo "libadwaita: $(dpkg -s libadwaita-1-0 2>/dev/null | grep ^Version)"; lsb_release -d; echo "scale: $S"; } > "$OUT/versions.txt" 2>&1
