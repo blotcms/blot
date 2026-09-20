@@ -236,8 +236,7 @@ Capture "$Label-$Theme$suffix"   # Details, Explorer's default
 # (index = position in the View flyout; opening it through UI Automation puts the
 # keyboard focus on the first item, and mouse clicks on flyout items don't register)
 $views = @(
-  @("extra-large-icons", 0), @("large-icons", 1), @("medium-icons", 2), @("small-icons", 3),
-  @("list", 4), @("tiles", 6), @("content", 7)
+  @("icons", 2), @("list", 4), @("tiles", 6), @("content", 7)
 )
 foreach ($v in $views) {
   try {
@@ -245,8 +244,7 @@ foreach ($v in $views) {
     $btn = Find-Element $root "View"
     Press $btn | Out-Null; Start-Sleep -Seconds 2
     for ($i = 0; $i -lt $v[1]; $i++) { [System.Windows.Forms.SendKeys]::SendWait("{DOWN}"); Start-Sleep -Milliseconds 250 }
-    if ($v[0] -eq "extra-large-icons" -or $v[0] -eq "tiles") { Shot "view-menu-$($v[0])" }
-    [System.Windows.Forms.SendKeys]::SendWait("{ENTER}"); Start-Sleep -Seconds 2
+        [System.Windows.Forms.SendKeys]::SendWait("{ENTER}"); Start-Sleep -Seconds 2
     Place $Width
     Capture "$Label-$Theme$suffix-$($v[0])"
   } catch { "view $($v[0]) failed: $_" | Out-File $log -Append }
