@@ -119,6 +119,15 @@ function printFiles(files) {
   });
 }
 
+function printResult(result) {
+  console.log("");
+  console.log("=".repeat(60));
+  console.log("email:  " + (result.email || "(unknown)"));
+  console.log("blog:   " + result.blogID + " " + (result.handle || ""));
+  console.log("domain: " + (result.domain || "(none)"));
+  printFiles(result.files);
+}
+
 function searchOne() {
   getBlog(identifier, function (err, user, blog) {
     if (err || !blog) {
@@ -156,7 +165,13 @@ function searchAll() {
       scan(blog)
         .then(function (files) {
           searched++;
-          if (files.length) results.push(summarise(blog, user, files));
+          if (!files.length) return;
+
+          const result = summarise(blog, user, files);
+          results.push(result);
+
+          // Report matches as they are found (kept off stdout for --json).
+          if (!asJSON) printResult(result);
         })
         .catch(function (err) {
           console.error("Error scanning blog " + blog.id + ": " + err.message);
@@ -185,14 +200,7 @@ function searchAll() {
           " blog(s)"
       );
 
-      results.forEach(function (result) {
-        console.log("");
-        console.log("=".repeat(60));
-        console.log("email:  " + (result.email || "(unknown)"));
-        console.log("blog:   " + result.blogID + " " + (result.handle || ""));
-        console.log("domain: " + (result.domain || "(none)"));
-        printFiles(result.files);
-      });
+      results.forEach(printResult);
 
       process.exit();
     },
