@@ -1,1 +1,3 @@
 bounds: 150, 150, 640, 510
+text bounds: 
+code bounds: 
