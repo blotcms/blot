@@ -26,13 +26,15 @@ run() {
     xdotool windowmove "$WID" 40 40 windowsize "$WID" 900 560 || true
     sleep 2
     # expand every folder in the tree
-    xdotool mousemove 400 118 click 1 || true
-    for _ in 1 2 3; do xdotool key shift+Right; sleep 0.3; xdotool key Down; done
-    sleep 1
+    # expand folders bottom-up so row positions above don't shift, then the
+    # nested folder inside Fruits (row height is 52px, arrows at x=222)
+    for y in 274 222 118; do xdotool mousemove 222 $y click 1; sleep 0.5; done
+    xdotool mousemove 242 274 click 1; sleep 0.5
+    xdotool mousemove 700 500; sleep 1
     sleep 1
   fi
   import -window root "$OUT/linux-$THEME-root.png"
-  [ -n "$WID" ] && import -window "$WID" "$OUT/linux-$THEME-window.png" || true
+  convert "$OUT/linux-$THEME-root.png" -crop 890x550+0+0 +repage "$OUT/linux-$THEME-window.png" || true
   { echo "nautilus: $(nautilus --version)"; echo "libadwaita: $(dpkg -s libadwaita-1-0 2>/dev/null | grep ^Version)"; lsb_release -d; } > "$OUT/versions.txt" 2>&1
 }
 export -f run 2>/dev/null || true

@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: pane-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   linux:
     runs-on: ubuntu-latest
@@ -64,17 +68,45 @@ jobs:
         runner: [windows-latest, windows-11-arm]
         theme: [light, dark]
     steps:
-      # the repo contains filenames Windows can't check out, so fetch only what we need
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: app/helper/pane/screenshots/windows.ps1
-          sparse-checkout-cone-mode: false
+      # the repo contains filenames Windows can't check out, so fetch just the script
+      - name: Fetch script
+        shell: pwsh
+        run: Invoke-WebRequest "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/app/helper/pane/screenshots/windows.ps1" -OutFile windows.ps1
       - name: Screenshot
         shell: pwsh
-        run: ./app/helper/pane/screenshots/windows.ps1 -Theme ${{ matrix.theme }} -Out out -Label ${{ matrix.runner }}
+        run: ./windows.ps1 -Theme ${{ matrix.theme }} -Out out -Label ${{ matrix.runner }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: pane-${{ matrix.runner }}-${{ matrix.theme }}
           path: out
           if-no-files-found: warn
+
+  # Commits the captures to app/helper/pane/reference so they show up in the
+  # pull request. Pushes made with GITHUB_TOKEN don't trigger new workflow runs.
+  commit:
+    needs: [linux, macos, windows]
+    if: ${{ !cancelled() && github.ref_type == 'branch' && github.ref != 'refs/heads/master' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: captured
+      - name: Commit images
+        run: |
+          rm -rf app/helper/pane/reference
+          for dir in captured/pane-*; do
+            name="${dir#captured/pane-}"
+            mkdir -p "app/helper/pane/reference/$name"
+            cp "$dir"/*.png "$dir"/versions.txt "app/helper/pane/reference/$name/" 2>/dev/null || true
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/helper/pane/reference
+          git diff --cached --quiet && exit 0
+          git commit -m "Update pane reference screenshots"
+          git pull --rebase origin "${{ github.ref_name }}"
+          git push origin "HEAD:${{ github.ref_name }}"

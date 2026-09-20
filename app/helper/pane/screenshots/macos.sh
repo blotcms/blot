@@ -28,7 +28,8 @@ end tell
 delay 1
 tell application "System Events" to tell process "Finder"
   -- Cmd-Option-Right expands all folders in list view
-  key code 124 using {command down, option down}
+  keystroke "a" using command down
+  key code 124 using {option down}
 end tell
 OSA
 sleep 4
