@@ -88,7 +88,7 @@ function scan(blog, callback) {
   );
 }
 
-function describe(blog, user, files) {
+function summarize(blog, user, files) {
   return {
     email: user && user.email,
     blogID: blog.id,
@@ -124,7 +124,7 @@ function searchOne() {
 
     User.getById(blog.owner, function (err, user) {
       scan(blog, function (files) {
-        const result = describe(blog, user, files);
+        const result = summarize(blog, user, files);
 
         if (asJSON) {
           console.log(JSON.stringify(result, null, 2));
@@ -168,7 +168,7 @@ function searchAll() {
           User.getById(blog.owner, function (err, user) {
             scan(blog, function (files) {
               searched++;
-              if (files.length) results.push(describe(blog, user, files));
+              if (files.length) results.push(summarize(blog, user, files));
               if (searched % 100 === 0)
                 console.error("  " + searched + "/" + blogIDs.length + " searched");
               next();

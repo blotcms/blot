@@ -37,8 +37,11 @@ fi
 HANDLE_BASE="$(echo "$IDENTIFIER" | sed -E 's#^[a-zA-Z]+://##; s#[/:].*$##; s#\..*$##' | tr -cd 'a-zA-Z0-9')"
 [ -n "$HANDLE_BASE" ] && [ "${#HANDLE_BASE}" -ge 2 ] || HANDLE_BASE="fork"
 
+echo "Downloading site settings..."
+SETTINGS="$(ssh blot "docker exec $PROD_CONTAINER node /usr/src/app/scripts/blog/export-settings \"$PROD_BLOG_ID\"")"
+
 echo "Creating local site..."
-LOCAL_BLOG_ID="$(docker exec "$LOCAL_CONTAINER" node /usr/src/app/scripts/development/fork create "$HANDLE_BASE" | tail -n1)"
+LOCAL_BLOG_ID="$(echo "$SETTINGS" | docker exec -i "$LOCAL_CONTAINER" node /usr/src/app/scripts/development/fork create "$HANDLE_BASE" | tail -n1)"
 LOCAL_FOLDER="$LOCAL_BLOGS_DIR/$LOCAL_BLOG_ID"
 echo "Created $LOCAL_BLOG_ID"
 

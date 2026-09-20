@@ -41,7 +41,9 @@ getBlog(process.argv[2], function (err, user, blog) {
     archive.on("error", function (err) {
       fail(err.message);
     });
-    archive.on("end", function () {
+
+    // Exit only once stdout has flushed, or a slow consumer gets a truncated zip
+    process.stdout.on("finish", function () {
       process.exit();
     });
 
