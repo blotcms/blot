@@ -6,9 +6,13 @@
 // these files now display the raw tags. Read-only: this does not generate an
 // access token (unlike scripts/get/blog.js) or modify anything.
 //
-// Usage: node scripts/blog/find-template-tags.js <handle|domain|id> [--json]
+// If no handle/domain/id is passed, every blog in series is searched and the
+// results are aggregated (only blogs with matches are listed).
+//
+// Usage: node scripts/blog/find-template-tags.js [handle|domain|id] [--json]
 
 const fs = require("fs-extra");
+const async = require("async");
 const parseUrl = require("url").parse;
 const Blog = require("models/blog");
 const User = require("models/user");
@@ -19,13 +23,8 @@ const TAG = /\{\{[\s\S]*?\}\}\}?/g;
 const MAX_BYTES = 5 * 1024 * 1024;
 const TEXT_EXTENSIONS = /\.(md|markdown|txt|text|html?|org|rtf|docx?|odt)$/i;
 
-const identifier = process.argv[2];
+const identifier = process.argv.slice(2).find((arg) => !arg.startsWith("--"));
 const asJSON = process.argv.includes("--json");
-
-if (!identifier) {
-  console.error("Usage: node scripts/blog/find-template-tags.js <handle|domain|id> [--json]");
-  process.exit(1);
-}
 
 function hostOf(value) {
   try {
@@ -89,49 +88,130 @@ function scan(blog, callback) {
   );
 }
 
-getBlog(function (err, blog) {
-  if (err) {
-    console.error(err.message);
-    return process.exit(1);
-  }
+function describe(blog, user, files) {
+  return {
+    email: user && user.email,
+    blogID: blog.id,
+    handle: blog.handle,
+    domain: blog.domain,
+    files,
+  };
+}
 
-  User.getById(blog.owner, function (err, user) {
-    scan(blog, function (files) {
-      const result = {
-        email: user && user.email,
-        blogID: blog.id,
-        handle: blog.handle,
-        domain: blog.domain,
-        files,
-      };
+function printFiles(files) {
+  files.forEach(function (file) {
+    console.log("");
+    console.log(
+      file.path +
+        "  [" +
+        file.kind +
+        (file.published ? "" : ", unpublished") +
+        (file.url ? ", " + file.url : "") +
+        ", " +
+        file.tagCount +
+        " tag(s)]"
+    );
+    console.log("  " + file.tags.join("  "));
+  });
+}
 
-      if (asJSON) {
-        console.log(JSON.stringify(result, null, 2));
-        return process.exit();
-      }
+function searchOne() {
+  getBlog(function (err, blog) {
+    if (err) {
+      console.error(err.message);
+      return process.exit(1);
+    }
 
-      console.log("email:  " + (result.email || "(unknown)"));
-      console.log("blog:   " + blog.id + " " + (blog.handle || ""));
-      console.log("domain: " + (blog.domain || "(none)"));
-      console.log("");
-      console.log(files.length + " file(s) with template tags in their source");
+    User.getById(blog.owner, function (err, user) {
+      scan(blog, function (files) {
+        const result = describe(blog, user, files);
 
-      files.forEach(function (file) {
+        if (asJSON) {
+          console.log(JSON.stringify(result, null, 2));
+          return process.exit();
+        }
+
+        console.log("email:  " + (result.email || "(unknown)"));
+        console.log("blog:   " + blog.id + " " + (blog.handle || ""));
+        console.log("domain: " + (blog.domain || "(none)"));
         console.log("");
-        console.log(
-          file.path +
-            "  [" +
-            file.kind +
-            (file.published ? "" : ", unpublished") +
-            (file.url ? ", " + file.url : "") +
-            ", " +
-            file.tagCount +
-            " tag(s)]"
-        );
-        console.log("  " + file.tags.join("  "));
-      });
+        console.log(files.length + " file(s) with template tags in their source");
+        printFiles(files);
 
-      process.exit();
+        process.exit();
+      });
     });
   });
-});
+}
+
+function searchAll() {
+  Blog.getAllIDs(function (err, blogIDs) {
+    if (err || !blogIDs) {
+      console.error((err && err.message) || "No blogs found");
+      return process.exit(1);
+    }
+
+    // Progress goes to stderr so --json output on stdout stays parseable.
+    console.error(
+      "Searching " + blogIDs.length + " blog(s) in series for template tags..."
+    );
+
+    const results = [];
+    let searched = 0;
+
+    async.eachSeries(
+      blogIDs,
+      function (blogID, next) {
+        Blog.get({ id: blogID }, function (err, blog) {
+          if (err || !blog) return next();
+
+          User.getById(blog.owner, function (err, user) {
+            scan(blog, function (files) {
+              searched++;
+              if (files.length) results.push(describe(blog, user, files));
+              if (searched % 100 === 0)
+                console.error("  " + searched + "/" + blogIDs.length + " searched");
+              next();
+            });
+          });
+        });
+      },
+      function () {
+        const totalFiles = results.reduce((n, r) => n + r.files.length, 0);
+        const summary = {
+          blogsSearched: searched,
+          blogsWithTags: results.length,
+          filesWithTags: totalFiles,
+        };
+
+        if (asJSON) {
+          console.log(JSON.stringify({ summary, blogs: results }, null, 2));
+          return process.exit();
+        }
+
+        console.log("");
+        console.log("Searched " + searched + " of " + blogIDs.length + " blog(s)");
+        console.log(
+          totalFiles +
+            " file(s) with template tags across " +
+            results.length +
+            " blog(s)"
+        );
+
+        results.forEach(function (result) {
+          console.log("");
+          console.log("=".repeat(60));
+          console.log("email:  " + (result.email || "(unknown)"));
+          console.log("blog:   " + result.blogID + " " + (result.handle || ""));
+          console.log("domain: " + (result.domain || "(none)"));
+          printFiles(result.files);
+        });
+
+        process.exit();
+      }
+    );
+  });
+}
+
+if (identifier) searchOne();
+else searchAll();
