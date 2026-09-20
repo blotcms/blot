@@ -1,7 +1,0 @@
-
-Caption                         Version    BuildNumber
--------                         -------    -----------
-Microsoft Windows 11 Enterprise 10.0.26200 26200
-
-
-screen: 1024x768
