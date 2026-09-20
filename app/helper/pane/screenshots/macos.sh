@@ -192,4 +192,13 @@ OSA
   osascript -e 'tell application "TextEdit" to close every window saving no' >>"$OUT/editors.log" 2>&1
   sleep 2
 done
+# Desktop icons: the "Your site" contents (files and the Fruits folder) as icons on the
+# desktop itself. The grey window sits at the desktop level, below Finder's icons. The
+# Dock is hidden and the capture starts under the menu bar.
+osascript -e 'tell application "TextEdit" to quit' >>"$OUT/finder.log" 2>&1
+defaults write com.apple.dock autohide -bool true; killall Dock; sleep 3
+cp -Rp "$FIXTURE/." "$HOME/Desktop/"
+osascript -e 'tell application "Finder" to close every window' -e 'tell application "Finder" to activate' >>"$OUT/finder.log" 2>&1
+sleep 8
+screencapture -x -R0,30,1024,738 "$OUT/macos-$THEME$SUFFIX-desktop.png" >>"$OUT/screencapture.log" 2>&1 || true
 rm -f "$OUT/grey.png"; ls -la "$OUT" >> "$OUT/screencapture.log"

@@ -284,4 +284,18 @@ try {
     Start-Sleep -Seconds 2
   }
 } catch { "editors failed: $_" | Out-File $log -Append }
+# Desktop icons: the "Your site" contents (files and the Fruits folder) as icons on the
+# desktop itself, on the grey desktop; the capture stops above the taskbar.
+try {
+  $desktop = [Environment]::GetFolderPath("Desktop")
+  Copy-Item (Join-Path $fixture "*") $desktop -Recurse -Force
+  Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name HideIcons -Value 0 -Type DWord
+  Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 10
+  (New-Object -ComObject Shell.Application).MinimizeAll(); Start-Sleep -Seconds 2
+  [Native.Mouse]::SetCursorPos($sw - 4, 4) | Out-Null
+  Start-Sleep -Seconds 3
+  $bmp = New-Object System.Drawing.Bitmap $sw, ($sh - $taskbar)
+  [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen(0, 0, 0, 0, $bmp.Size)
+  $bmp.Save("$Out\$Label-$Theme$suffix-desktop.png", [System.Drawing.Imaging.ImageFormat]::Png)
+} catch { "desktop icons failed: $_" | Out-File $log -Append }
 Get-Process explorer | Select-Object Id, MainWindowTitle | Out-String | Out-File "$Out\processes.txt"

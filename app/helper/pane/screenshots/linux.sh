@@ -119,6 +119,18 @@ CSS
     pkill -x gnome-text-edit; sleep 3; rm -rf "$HOME/.local/share/org.gnome.TextEditor"  # (comm is truncated to 15 chars; -f would match this script itself)
   done
 
+  # Desktop icons: stock GNOME has none. Ubuntu ships Desktop Icons NG (DING), a GJS app
+  # that draws GNOME-styled icons for ~/Desktop and can run without GNOME Shell.
+  DESK="$HOME/Desktop"; mkdir -p "$DESK"; cp -a "$FIXTURE/." "$DESK/"
+  DING=/usr/share/gnome-shell/extensions/ding@rastersoft.com/app
+  ls "$DING" > "$OUT/ding.log" 2>&1
+  gjs "$DING/ding.js" -P "$DING" -D "0:0:$((1280)):$((800)):1:0:0:0:0:0" >>"$OUT/ding.log" 2>&1 &
+  sleep 10
+  import -window root "$OUT/full.png"
+  convert "$OUT/full.png" -crop "$((1280 * S))x$((800 * S))+0+0" +repage "$OUT/linux-$THEME$SUFFIX-desktop.png"
+  rm -f "$OUT/full.png"
+  pkill -x gjs; sleep 2
+
   { echo "nautilus: $(nautilus --version)"; echo "libadwaita: $(dpkg -s libadwaita-1-0 2>/dev/null | grep ^Version)"; lsb_release -d; echo "scale: $S"; } > "$OUT/versions.txt" 2>&1
 }
 export THEME OUT FIXTURE S SUFFIX W H PAD HERE
