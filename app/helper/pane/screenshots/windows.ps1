@@ -57,20 +57,24 @@ try {
     [System.Drawing.Graphics]::FromImage($sbmp).CopyFromScreen($sb.Location, [System.Drawing.Point]::Empty, $sb.Size)
     $sbmp.Save("$Out\debug-$name.png")
   }
-  # Open the View flyout, then drive it by keyboard: End = last item (Show),
-  # Right = open the submenu on its first item (Navigation pane), Enter = toggle.
-  $view = Find-Element $root "View"
-  if (-not $view) { throw "View button not found" }
-  Press $view | Out-Null
+  Add-Type -Namespace Native -Name Mouse -MemberDefinition @"
+[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+[DllImport("user32.dll")] public static extern void mouse_event(uint f, uint x, uint y, uint d, UIntPtr e);
+"@
+  function Click($x, $y) {
+    [Native.Mouse]::SetCursorPos($x, $y) | Out-Null
+    Start-Sleep -Milliseconds 300
+    [Native.Mouse]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); [Native.Mouse]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
+  }
+  # The window opens at a fixed place on the 1024x768 desktop. Open View, then
+  # Show (last item), which opens the submenu containing Navigation pane.
+  Click 660 183
   Start-Sleep -Seconds 2
-  [System.Windows.Forms.SendKeys]::SendWait("{END}")
-  Start-Sleep -Milliseconds 700
-  [System.Windows.Forms.SendKeys]::SendWait("{RIGHT}")
-  Start-Sleep -Seconds 1
+  Click 650 555
+  Start-Sleep -Seconds 2
   Shot "submenu"
-  [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-  Start-Sleep -Seconds 2
-  "drove flyout by keyboard" | Out-File $log -Append
+  $navX = [int]($env:NAV_X); $navY = [int]($env:NAV_Y)
+  if ($navX -gt 0) { Click $navX $navY; Start-Sleep -Seconds 2; "clicked Navigation pane at $navX,$navY" | Out-File $log -Append }
 } catch { "uia error: $_" | Out-File $log -Append }
 Start-Sleep -Seconds 1
 [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
