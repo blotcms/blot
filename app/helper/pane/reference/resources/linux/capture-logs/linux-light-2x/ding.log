@@ -22,10 +22,10 @@ stylesheet.css
 templatesScriptsManager.js
 thumbnails.js
 
-(gjs:6619): dbind-WARNING **: 20:22:20.290: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
+(gjs:6439): dbind-WARNING **: 20:31:08.531: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
 Detected async api for thumbnails
 
-(gjs:6619): Gjs-CRITICAL **: 20:22:20.581: JS ERROR: TypeError: GLib.getenv(...) is null
+(gjs:6439): Gjs-CRITICAL **: 20:31:09.041: JS ERROR: TypeError: GLib.getenv(...) is null
 _createDesktopBackgroundMenu@/usr/share/gnome-shell/extensions/ding@rastersoft.com/app/desktopManager.js:1123:18
 DesktopManager@/usr/share/gnome-shell/extensions/ding@rastersoft.com/app/desktopManager.js:237:14
 @/usr/share/gnome-shell/extensions/ding@rastersoft.com/app/ding.js:180:26
