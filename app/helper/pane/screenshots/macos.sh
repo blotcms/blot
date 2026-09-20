@@ -10,18 +10,6 @@ bash "$HERE/make-fixture.sh" "$FIXTURE"
 
 { sw_vers; system_profiler SPDisplaysDataType; } > "$OUT/versions.txt" 2>&1
 
-# Investigate a Retina (HiDPI) display: list the modes displayplacer can see and
-# try to switch to a scaled one. Results are logged, the capture carries on.
-{
-  brew install jakehilborn/jakehilborn/displayplacer
-  displayplacer list
-  ID="$(displayplacer list | sed -n 's/.*Persistent screen id: //p' | head -1)"
-  echo "screen id: $ID"
-  displayplacer "id:$ID res:1024x768 hz:60 color_depth:8 scaling:on" || true
-  sleep 3
-  system_profiler SPDisplaysDataType
-} > "$OUT/hidpi-probe.log" 2>&1
-
 if [ "$THEME" = dark ]; then
   osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' >"$OUT/appearance.log" 2>&1 || true
 else

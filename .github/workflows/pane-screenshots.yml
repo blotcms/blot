@@ -7,11 +7,17 @@ name: pane-screenshots
 on:
   push:
     # Only the capture scripts and fixture assets: QA and module changes must not
-    # re-run (and cancel) the six-job capture matrix.
+    # re-run (and cancel) the capture matrix.
     paths:
       - "app/helper/pane/screenshots/**"
       - ".github/workflows/pane-screenshots.yml"
   workflow_dispatch:
+    inputs:
+      os:
+        description: "Which OS to capture"
+        type: choice
+        options: [all, macos, windows, linux]
+        default: all
 
 permissions:
   contents: read
@@ -20,8 +26,55 @@ concurrency:
   group: pane-screenshots-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Homebrew: don't self-update or clean up (slow), it only installs cliclick
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
 jobs:
+  # Works out which OSes need capturing, so a change to macos.sh doesn't spend
+  # Windows and Linux minutes. Shared files (the fixture, its assets, this file) run
+  # everything. The commit job only replaces the OSes that ran.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      macos: ${{ steps.plan.outputs.macos }}
+      windows: ${{ steps.plan.outputs.windows }}
+      linux: ${{ steps.plan.outputs.linux }}
+    steps:
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          CHOICE: ${{ inputs.os }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          macos=false; windows=false; linux=false
+          all() { macos=true; windows=true; linux=true; }
+          if [ "$EVENT" = workflow_dispatch ]; then
+            case "$CHOICE" in
+              macos) macos=true ;; windows) windows=true ;; linux) linux=true ;; *) all ;;
+            esac
+          elif files="$(gh api "repos/${{ github.repository }}/compare/$BEFORE...${{ github.sha }}" --jq '.files[].filename' 2>/dev/null)" && [ -n "$files" ]; then
+            while read -r f; do
+              case "$f" in
+                app/helper/pane/screenshots/macos.sh|app/helper/pane/screenshots/hidpi.m) macos=true ;;
+                app/helper/pane/screenshots/windows.ps1) windows=true ;;
+                app/helper/pane/screenshots/linux.sh) linux=true ;;
+                app/helper/pane/screenshots/*|.github/workflows/pane-screenshots.yml) all ;;
+              esac
+            done <<< "$files"
+          else
+            all   # a new branch or an API error: capture everything
+          fi
+          echo "macos=$macos" >> "$GITHUB_OUTPUT"
+          echo "windows=$windows" >> "$GITHUB_OUTPUT"
+          echo "linux=$linux" >> "$GITHUB_OUTPUT"
+          echo "capturing: macos=$macos windows=$windows linux=$linux"
+
   linux:
+    needs: plan
+    if: needs.plan.outputs.linux == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -30,10 +83,18 @@ jobs:
         scale: [2]
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: app/helper/pane/screenshots
+      # apt downloads dominate this job: keep the .deb files between runs
+      - uses: actions/cache@v4
+        with:
+          path: ~/apt-archives
+          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/pane-screenshots.yml') }}
       - name: Install GNOME Files and screenshot tools
         run: |
+          sudo mkdir -p "$HOME/apt-archives/partial"
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          sudo apt-get install -y --no-install-recommends -o Dir::Cache::archives="$HOME/apt-archives" \
             nautilus gnome-text-editor openbox x11-xserver-utils libglib2.0-bin xvfb xdotool imagemagick dbus-x11 dconf-gsettings-backend \
             gsettings-desktop-schemas adwaita-icon-theme gnome-themes-extra \
             fonts-cantarell libadwaita-1-0 librsvg2-common adwaita-icon-theme-full shared-mime-info
@@ -47,6 +108,8 @@ jobs:
           if-no-files-found: warn
 
   macos:
+    needs: plan
+    if: needs.plan.outputs.macos == 'true'
     runs-on: macos-latest
     strategy:
       fail-fast: false
@@ -55,6 +118,13 @@ jobs:
         scale: [2]
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: app/helper/pane/screenshots
+      # cliclick's Homebrew bottle
+      - uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: brew-${{ runner.os }}-cliclick-1
       - name: Screenshot
         run: bash app/helper/pane/screenshots/macos.sh ${{ matrix.theme }} out ${{ matrix.scale }}
       - uses: actions/upload-artifact@v4
@@ -65,6 +135,8 @@ jobs:
           if-no-files-found: warn
 
   windows:
+    needs: plan
+    if: needs.plan.outputs.windows == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -94,7 +166,7 @@ jobs:
   # Commits the captures to app/helper/pane/reference so they show up in the
   # pull request. Pushes made with GITHUB_TOKEN don't trigger new workflow runs.
   commit:
-    needs: [linux, macos, windows]
+    needs: [plan, linux, macos, windows]
     if: ${{ !cancelled() && github.ref_type == 'branch' && github.ref != 'refs/heads/master' }}
     runs-on: ubuntu-latest
     permissions:
@@ -107,15 +179,23 @@ jobs:
       - name: Commit images
         run: |
           REF=app/helper/pane/reference
-          for os in macos windows linux; do
+          # only the OSes that ran: the others keep their committed screenshots
+          seen=""
+          for dir in captured/pane-*; do
+            [ -d "$dir" ] || continue
+            name="${dir#captured/pane-}"     # e.g. macos-light-2x
+            os="${name%%-*}"
+            case " $seen " in *" $os "*) ;; *) seen="$seen $os" ;; esac
+          done
+          for os in $seen; do
             rm -f "$REF/$os"/*.png
             rm -rf "$REF/resources/$os/capture-logs"
             mkdir -p "$REF/$os" "$REF/resources/$os/capture-logs"
           done
           for dir in captured/pane-*; do
-            name="${dir#captured/pane-}"     # e.g. macos-light-2x
+            [ -d "$dir" ] || continue
+            name="${dir#captured/pane-}"
             os="${name%%-*}"
-            [ -d "$REF/$os" ] || continue
             for f in "$dir"/*; do
               base="$(basename "$f")"
               case "$base" in
