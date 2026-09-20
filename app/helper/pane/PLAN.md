@@ -148,7 +148,17 @@ Scripts are in `screenshots/`. Findings from the first runs:
   has the Windows 11 style Explorer. The repo can't be checked out on Windows
   (a filename contains `|`), so the job downloads just the script.
   `windows-11-arm` is stuck on the Windows first-run setup screen and is dropped.
-- Display sizes are small (1024x768 / 1280x800) and 1x on every platform.
+- **Sidebar/toolbar.** macOS: sidebar hidden (Option-Cmd-S) and the Finder toolbar
+  trimmed to back/forward, view switcher and search by rewriting
+  `NSToolbar Configuration Browser` before launch. Linux: `start-with-sidebar`
+  gsetting. Windows: the navigation pane can't be hidden yet; UI Automation can
+  open View > Show but the flyout isn't exposed, and zeroing the saved sizer
+  width only shrinks it to a sliver.
+- **Resolution.** Captures are cropped to the window. Linux has a 2x capture
+  (`GDK_SCALE=2`). The macOS runner's virtual display offers no HiDPI modes
+  (`displayplacer list`: scaling off everywhere), so Retina would need a
+  `CGVirtualDisplay` spike or web-sourced images. Windows runs at 100% scale;
+  200% is untried (needs `DisplayConfigSetDeviceInfo`).
 
 If a platform proves too limited, fall back to gathering screenshots from the
 web (or supplied by hand) into `reference/`.
