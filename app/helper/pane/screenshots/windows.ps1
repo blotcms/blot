@@ -308,6 +308,25 @@ try {
   [System.Windows.Forms.SendKeys]::SendWait("{F5}")
   [Native.Mouse]::SetCursorPos($sw - 4, 4) | Out-Null
   Start-Sleep -Seconds 4
+  # Are the icons actually drawn? (HideIcons only says what the shell will do at startup)
+  function Show-Icons {
+    $b = New-Object System.Drawing.Bitmap 640, 600
+    [System.Drawing.Graphics]::FromImage($b).CopyFromScreen(0, 0, 0, 0, $b.Size)
+    for ($y = 0; $y -lt 600; $y += 6) { for ($x = 0; $x -lt 640; $x += 6) {
+      $c = $b.GetPixel($x, $y); if ([Math]::Abs($c.R - 128) + [Math]::Abs($c.G - 128) + [Math]::Abs($c.B - 128) -gt 30) { return $true } } }
+    return $false
+  }
+  $progman = [Native.Win]::FindWindow("Progman", $null)
+  foreach ($attempt in 1..3) {
+    $shown = Show-Icons
+    "icons visible (attempt $attempt): $shown" | Out-File $log -Append
+    if ($shown) { break }
+    [Native.Win]::SendMessage($progman, 0x111, [IntPtr]0x7402, [IntPtr]::Zero) | Out-Null   # toggle
+    Start-Sleep -Seconds 4
+  }
+  $dbg = New-Object System.Drawing.Bitmap $sw, $sh
+  [System.Drawing.Graphics]::FromImage($dbg).CopyFromScreen(0, 0, 0, 0, $dbg.Size)
+  $dbg.Save("$Out\debug-desktop-full.png")
   # the icons stack down the left edge; keep just that part of the screen
   $sw = [int]($sw * 0.4)
   $bmp = New-Object System.Drawing.Bitmap $sw, ($sh - $taskbar)
