@@ -28,14 +28,14 @@ else
 fi
 sleep 3
 
-# Mild grey desktop so the window's shadow is visible. Finder won't set a
+# 50% grey desktop so the window's shadow is visible. Finder won't set a
 # wallpaper for us here, so paint a borderless desktop-level window instead.
 osascript -l JavaScript >"$OUT/wallpaper.log" 2>&1 <<'JXA' &
 ObjC.import('Cocoa');
 const app = $.NSApplication.sharedApplication;
 app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);
 const win = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer($.NSScreen.mainScreen.frame, 0, 2, false);
-win.backgroundColor = $.NSColor.colorWithSRGBRedGreenBlueAlpha(0.784, 0.784, 0.784, 1);
+win.backgroundColor = $.NSColor.colorWithSRGBRedGreenBlueAlpha(0.5, 0.5, 0.5, 1);
 win.level = -2147483623; // kCGDesktopWindowLevel
 win.orderFront(null);
 $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(600));
@@ -67,7 +67,7 @@ tell application "Finder"
   close every window
   set w to make new Finder window to (POSIX file "$FIXTURE" as alias)
   set current view of w to list view
-  set bounds of w to {100, 100, 920, 620}
+  set bounds of w to {100, 100, 660, 620}
   set sidebar width of w to 160
 end tell
 delay 1
@@ -83,5 +83,5 @@ delay 1
 tell application "Finder" to set selection to {}
 OSA
 sleep 4
-screencapture -x -R40,40,940,640 "$OUT/macos-$THEME.png" >"$OUT/screencapture.log" 2>&1 || true
+screencapture -x -R40,40,680,640 "$OUT/macos-$THEME.png" >"$OUT/screencapture.log" 2>&1 || true
 rm -f "$OUT/grey.png"; ls -la "$OUT" >> "$OUT/screencapture.log"

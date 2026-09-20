@@ -6,10 +6,19 @@ New-Item -ItemType Directory -Force -Path $Out | Out-Null
 
 $fixture = Join-Path $env:USERPROFILE "Documents\Your site"
 Remove-Item -Recurse -Force $fixture -ErrorAction SilentlyContinue
-foreach ($d in "Fruits\Tasty", "Pages", "Posts") { New-Item -ItemType Directory -Force -Path (Join-Path $fixture $d) | Out-Null }
-foreach ($f in "Fruits\Apple.md", "Fruits\Pear.txt", "Fruits\Tasty\Mango.md", "Pages\About.txt", "Pages\Contact.docx", "Introduction.docx", "index.html") {
-  Set-Content -Path (Join-Path $fixture $f) -Value "x"
+New-Item -ItemType Directory -Force -Path (Join-Path $fixture "Fruits") | Out-Null
+# One subfolder plus one file of every type we need an icon for (keep in sync with make-fixture.sh)
+$png = [Convert]::FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+$gif = [Convert]::FromBase64String("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
+[IO.File]::WriteAllBytes((Join-Path $fixture "Logo.png"), $png)
+[IO.File]::WriteAllBytes((Join-Path $fixture "Animation.gif"), $gif)
+$text = @{
+  "Fruits\Apple.md" = "Apple"; "Notes.markdown" = "# Notes"; "Draft.md" = "# Draft"; "Photo.jpg" = "jpeg"
+  "Plan.gdoc" = '{"doc_id":"1abc","resource_id":"document:1abc"}'; "Report.docx" = "docx"; "Old report.doc" = "doc"
+  "Blot.webloc" = '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>URL</key><string>https://blot.im</string></dict></plist>'
+  "Blot.url" = "[InternetShortcut]`r`nURL=https://blot.im"; "index.html" = "<h1>Hello</h1>"; "Tasks.org" = "* Heading"; "About.txt" = "Hello"
 }
+foreach ($k in $text.Keys) { Set-Content -Path (Join-Path $fixture $k) -Value $text[$k] }
 
 (Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Out-String) | Out-File "$Out\versions.txt"
 
@@ -88,9 +97,9 @@ $h = if ($shellWin) { [IntPtr][int64]$shellWin.HWND } else { [IntPtr]::Zero }
 if ($h -eq [IntPtr]::Zero) { $h = [Native.Win]::FindWindow("CabinetWClass", $null) }
 
 # Plain mild-grey desktop with no icons, so the window's shadow is visible
-Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name Background -Value "200 200 200"
+Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name Background -Value "128 128 128"
 [Native.Win]::SystemParametersInfo(0x14, 0, "", 3) | Out-Null
-[Native.Win]::SetSysColors(1, @(1), @(0xC8C8C8)) | Out-Null
+[Native.Win]::SetSysColors(1, @(1), @(0x808080)) | Out-Null
 $progman = [Native.Win]::FindWindow("Progman", $null)
 [Native.Win]::SendMessage($progman, 0x111, [IntPtr]0x7402, [IntPtr]::Zero) | Out-Null  # toggle desktop icons
 
