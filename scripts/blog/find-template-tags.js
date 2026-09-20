@@ -78,7 +78,7 @@ async function scan(blog) {
   return files;
 }
 
-function describe(blog, user, files) {
+function summarise(blog, user, files) {
   return {
     email: user && user.email,
     blogID: blog.id,
@@ -113,7 +113,7 @@ function searchOne() {
     }
 
     scan(blog).then(function (files) {
-      const result = describe(blog, user, files);
+      const result = summarise(blog, user, files);
 
       if (asJSON) {
         console.log(JSON.stringify(result, null, 2));
@@ -142,7 +142,7 @@ function searchAll() {
       scan(blog)
         .then(function (files) {
           searched++;
-          if (files.length) results.push(describe(blog, user, files));
+          if (files.length) results.push(summarise(blog, user, files));
         })
         .catch(function (err) {
           console.error("Error scanning blog " + blog.id + ": " + err.message);
