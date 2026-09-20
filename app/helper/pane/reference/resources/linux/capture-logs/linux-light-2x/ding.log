@@ -22,10 +22,10 @@ stylesheet.css
 templatesScriptsManager.js
 thumbnails.js
 
-(gjs:6710): dbind-WARNING **: 20:46:13.688: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
+(gjs:6758): dbind-WARNING **: 20:55:29.400: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
 Detected async api for thumbnails
-** Message: 20:46:13.973: Connecting to org.freedesktop.Tracker3.Miner.Files
+** Message: 20:55:29.616: Connecting to org.freedesktop.Tracker3.Miner.Files
 GNOME nautilus 46.4
-DBus interface for Nautilus (org.gnome.Nautilus.FileOperations2) is now available.
 DBus interface for Gvfs daemon (org.gtk.vfs.Metadata) is now available.
+DBus interface for Nautilus (org.gnome.Nautilus.FileOperations2) is now available.
 DBus interface for Nautilus (org.freedesktop.FileManager1) is now available.
