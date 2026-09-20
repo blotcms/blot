@@ -43,8 +43,8 @@ run() {
   xdotool mousemove $((X + 500 * S)) $((Y + 400 * S)) click 1; sleep 0.5
   xdotool windowactivate --sync "$WID" || xdotool windowfocus "$WID" || true
   sleep 0.5
-  # expand the one folder (arrow at x=37 without the sidebar)
-  xdotool mousemove $((X + 37 * S)) $((Y + 118 * S)) click 1; sleep 0.7
+  # expand the one folder: Fruits is the 6th row (folders sort among the files)
+  xdotool mousemove $((X + 41 * S)) $((Y + 368 * S)) click 1; sleep 0.7
   xdotool mousemove $((X + 700 * S)) $((Y + 500 * S)); sleep 1
   import -window root "$OUT/full.png"
   convert "$OUT/full.png" -crop "${WIDTH}x${HEIGHT}+${X}+${Y}" +repage "$OUT/window.png"
