@@ -1,0 +1,16 @@
+before:
+{
+    "TB Display Mode" = 2;
+    "TB Icon Size Mode" = 1;
+    "TB Is Shown" = 1;
+    "TB Size Mode" = 1;
+}
+after:
+{
+    "TB Display Mode" = 2;
+    "TB Icon Size Mode" = 1;
+    "TB Is Shown" = 1;
+    "TB Item Identifiers" =     (
+        "com.apple.finder.BACK"
+    );
+}

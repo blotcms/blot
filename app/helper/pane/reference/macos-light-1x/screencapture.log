@@ -1,0 +1,11 @@
+total 240
+drwxr-xr-x  10 runner  staff     320 Sep 20 13:03 .
+drwxr-xr-x  18 runner  staff     576 Sep 20 13:03 ..
+-rw-r--r--   1 runner  staff       0 Sep 20 13:03 appearance.log
+-rw-r--r--   1 runner  staff       1 Sep 20 13:03 finder.log
+-rw-r--r--   1 runner  staff    1921 Sep 20 13:03 hidpi-probe.log
+-rw-r--r--@  1 runner  staff  106369 Sep 20 13:03 macos-light.png
+-rw-r--r--   1 runner  staff       0 Sep 20 13:03 screencapture.log
+-rw-r--r--   1 runner  staff     278 Sep 20 13:03 toolbar.log
+-rw-r--r--   1 runner  staff      65 Sep 20 13:03 versions.txt
+-rw-r--r--   1 runner  staff       0 Sep 20 13:03 wallpaper.log
