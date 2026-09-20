@@ -46,3 +46,14 @@ line numbers (`org.gnome.TextEditor show-line-numbers`) and it highlights HTML b
 (and shows a tab for each file) unless `~/.local/share/org.gnome.TextEditor` is removed
 between runs; spellcheck is switched off. `pkill -f gnome-text-editor` kills the capture
 script itself (its command line contains the string), use `pkill -x gnome-text-edit`.
+
+## Desktop icons (`-desktop`)
+Stock GNOME has no desktop icons. Ubuntu's Desktop Icons NG (DING,
+`gnome-shell-extension-desktop-icons-ng`, run with `gjs .../ding.js`) draws GNOME-styled ones for
+`~/Desktop`, and runs without GNOME Shell if `XDG_CURRENT_DESKTOP=ubuntu:GNOME` is set (it crashes
+without it). Home and Trash icons are switched off and the order is by name
+(`org.gnome.shell.extensions.ding`). Under a bare window manager DING is a normal window, so it is
+marked as a desktop window (`_NET_WM_WINDOW_TYPE_DESKTOP`), undecorated (`_MOTIF_WM_HINTS`) and put at
+the origin with a 1280x560 area (three columns of four). Its window background is set to the
+same grey with a GTK 3 user stylesheet: making it transparent needs a real compositor and came out
+black under `xcompmgr`. The capture is cropped to the grid.

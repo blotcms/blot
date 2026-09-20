@@ -315,7 +315,7 @@ try {
   [System.Drawing.Graphics]::FromImage($dbg).CopyFromScreen(0, 0, 0, 0, $dbg.Size)
   $dbg.Save("$Out\debug-desktop-full.png")
   # the icons stack down the left edge; keep just that part of the screen
-  $sw = [int]($sw * 0.4)
+  $sw = 250 * $Scale   # three columns of icons
   $bmp = New-Object System.Drawing.Bitmap $sw, ($sh - $taskbar)
   [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen(0, 0, 0, 0, $bmp.Size)
   $bmp.Save("$Out\$Label-$Theme$suffix-desktop.png", [System.Drawing.Imaging.ImageFormat]::Png)

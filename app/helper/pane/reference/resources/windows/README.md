@@ -64,3 +64,13 @@ through its execution alias `%LOCALAPPDATA%\Microsoft\WindowsApps\notepad.exe`: 
 `notepad.exe` still finds the classic one first. The new Notepad shows spell-check
 squiggles and a notification dot on the feedback icon; there is no setting to hide either
 from a script.
+
+## Desktop icons (`-desktop`)
+The "Your site" contents (except `Old report.doc`) copied onto the real desktop. The desktop
+is emptied at the start of the script instead of hiding its icons: remove the runner's
+shortcuts in `C:\Users\Public\Desktop`, hide the Recycle Bin
+(`HideDesktopIcons\NewStartPanel`), restart Explorer once. Hiding with `HideIcons=1` cannot
+be undone later: after every restart Explorer reads it back as 1 (tried: set 0 before the
+kill, after the kill, a second `explorer.exe`, the Progman `0x7402` toggle, F5). At the end
+the files are copied over and the shell told to refresh (`SHChangeNotify`); stray File Explorer
+windows are closed. Windows shows the icons in columns of five, and hides extensions.

@@ -53,3 +53,12 @@ TextEdit, in plain-text mode (`RichText` false, spelling checks and ruler off). 
 there and every AppleEvent to it times out (-1712). The window is placed and read back
 through System Events. TextEdit renders `.html` files as rich text whatever
 `IgnoreHTML` says, so the code sample is `Snippet.txt`.
+
+## Desktop icons (`-desktop`)
+The "Your site" contents (all files and `Fruits`, except `Old report.doc`, which looks like
+`Report.docx`) copied to `~/Desktop` and captured straight off the desktop, on the grey
+desktop-level window (Finder's icons sit above it). The Dock is hidden
+(`defaults write com.apple.dock autohide`). Finder lays the icons out by name in columns from
+the right edge; positions set through AppleScript (`set position of item ... of desktop`) and
+`arrangement ... not arranged` are accepted but ignored, so the capture is just those two
+columns (`screencapture -R760,30,264,660`).

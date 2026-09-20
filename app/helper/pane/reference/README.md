@@ -10,7 +10,7 @@ by CI. They are the targets `pane` is built to reproduce.
       linux/      GNOME Files (Nautilus) screenshots
       resources/  per-OS README (how each was captured, what we learned) and capture logs
 
-Screenshot names: `<os>-<theme>[@2x][-view].png`, e.g. `macos-dark@2x-icons.png`. The
+Screenshot names: `<os>-<theme>[@2x][-view].png` (`-desktop` is the sample files as icons on the bare desktop, cropped to the icon grid), e.g. `macos-dark@2x-icons.png`. The
 unsuffixed view is each OS's default list/details view with the tree expanded.
 
 Every window is 490px wide (logical), on a plain 50% grey desktop with 96px of desktop
