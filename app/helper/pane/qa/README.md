@@ -120,3 +120,11 @@ overlaid; the shadow chart shows the four edge curves. It reloads when rendered 
 thresholds or references change, and can re-render the current case (optionally
 whenever the fixture changes). Keys: `j`/`k` cases, `1`-`5` modes, `h` diff/heatmap, `m`
 masks, `c` clusters, `[` `]` cluster, `b` blink, `+` `-` `0` zoom, `r` re-render, `?` help.
+
+## The module skeleton
+
+`../index.js` is a very basic first cut of the real module: `pane.render(text, { title })`
+returns `{ html, css, js }` (a figure per window, one shared stylesheet skinned by
+`html[data-os]`, and a tiny head snippet that sets `data-os`). `pane-adapter.js` plugs it
+into the harness for the default view of every OS/theme; other views fall back to
+`fixtures/`. Set `PANE_QA_FIXTURES=1` to use only the fixtures.

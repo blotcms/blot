@@ -1,4 +1,4 @@
-// The adapter interface: render(caseId) -> { html, css } | null
+// The adapter interface: render(caseId) -> { html, css, js? } | null
 //
 // `html` is the window markup (a fragment, placed at the reference's padding);
 // `css` is any stylesheet it needs (fixtures may instead inline a <style>).
@@ -17,6 +17,8 @@ const fs = require("fs");
 const path = require("path");
 const { getCase, FIXTURES_DIR } = require("./lib/cases");
 
+const DATA_OS = { macos: "mac", windows: "win", linux: "linux" };
+
 function fixturePath(c) {
   const candidates = [`${c.id}.html`, `${c.os}-${c.view}.html`];
   for (const name of candidates) {
@@ -30,8 +32,9 @@ async function render(caseId) {
   const c = getCase(caseId);
   if (!c) throw new Error(`Unknown case: ${caseId}`);
 
-  if (process.env.PANE_QA_ADAPTER) {
-    const custom = require(path.resolve(process.env.PANE_QA_ADAPTER));
+  // the real module first (PANE_QA_ADAPTER overrides; PANE_QA_FIXTURES=1 skips it)
+  if (!process.env.PANE_QA_FIXTURES) {
+    const custom = require(process.env.PANE_QA_ADAPTER ? path.resolve(process.env.PANE_QA_ADAPTER) : "./pane-adapter");
     const result = await custom.render(caseId, c);
     if (result) return result;
   }
@@ -50,9 +53,9 @@ function fixtureFor(caseId) {
 // The full page the renderer screenshots (and the viewer shows in an iframe).
 // `origin` is where the window's top-left corner sits (CSS px); defaults to the
 // nominal padding, but the renderer passes the reference's detected position.
-function composePage(c, { html, css }, origin = { x: c.padding, y: c.padding }) {
+function composePage(c, { html, css, js }, origin = { x: c.padding, y: c.padding }) {
   return `<!doctype html>
-<html lang="en" data-os="${c.os}" data-theme="${c.theme}" style="color-scheme:${c.theme}">
+<html lang="en" data-os="${DATA_OS[c.os]}" data-theme="${c.theme}" style="color-scheme:${c.theme}">
 <head>
 <meta charset="utf-8">
 <style>
@@ -60,6 +63,7 @@ html,body{margin:0;background:#808080}
 #pane-qa-stage{position:absolute;left:${origin.x}px;top:${origin.y}px}
 </style>
 <style>${css || ""}</style>
+${js ? `<script>${js}</script>` : ""}
 </head>
 <body><div id="pane-qa-stage">${html}</div></body>
 </html>`;

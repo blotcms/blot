@@ -36,7 +36,7 @@ function createServer() {
       message: e.message,
       diffPercent: e.diff ? e.diff.percent : null,
       shadowError: e.shadow ? e.shadow.error : null,
-      hasFixture: Boolean(adapter.fixtureFor(c.id)) || Boolean(process.env.PANE_QA_ADAPTER),
+      hasFixture: true, // the pane module, or a fixture as fallback
     };
   };
 
