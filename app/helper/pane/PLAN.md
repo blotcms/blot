@@ -60,6 +60,10 @@ Kind; Windows Name / Date modified / Type / Size; GNOME Name / Size / Modified.
 - Android maps to Windows and iOS/iPadOS to macOS (configurable table).
   ChromeOS maps to Linux.
 
+Folder windows hide the sidebar (and other navigation chrome where the OS allows
+it) so the folder structure and files are the focus; the reference captures do
+the same. The skin can show the sidebar again later if we want a fuller window.
+
 ## Accessibility
 
 - Content is a nested `ul`/`li` (a `table` for list view); no `role="tree"`.

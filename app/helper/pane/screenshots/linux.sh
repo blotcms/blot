@@ -26,10 +26,12 @@ run() {
     xdotool windowmove "$WID" 40 40 windowsize "$WID" 900 560 || true
     sleep 2
     # expand every folder in the tree
+    # F9 toggles the sidebar; the mock-ups only need the folder contents
+    xdotool mousemove 500 300 click 1; xdotool key F9; sleep 1
     # expand folders bottom-up so row positions above don't shift, then the
     # nested folder inside Fruits (row height is 52px, arrows at x=222)
-    for y in 274 222 118; do xdotool mousemove 222 $y click 1; sleep 0.5; done
-    xdotool mousemove 242 274 click 1; sleep 0.5
+    for y in 274 222 118; do xdotool mousemove 37 $y click 1; sleep 0.5; done
+    xdotool mousemove 57 274 click 1; sleep 0.5
     xdotool mousemove 700 500; sleep 1
     sleep 1
   fi

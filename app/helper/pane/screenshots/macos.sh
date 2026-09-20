@@ -27,6 +27,9 @@ tell application "Finder"
 end tell
 delay 1
 tell application "System Events" to tell process "Finder"
+  -- Hide Sidebar (View menu, Option-Cmd-S): we only want the folder contents
+  keystroke "s" using {command down, option down}
+  delay 1
   -- Cmd-Option-Right expands all folders in list view
   keystroke "a" using command down
   key code 124 using {option down}

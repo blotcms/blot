@@ -26,6 +26,33 @@ Start-Process explorer.exe -ArgumentList "`"$fixture`""
 Start-Sleep -Seconds 8
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+# Hide the navigation pane via UI Automation (View > Show > Navigation pane).
+# Best-effort: failures are logged to uia.log rather than failing the capture.
+try {
+  Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+  $A = [System.Windows.Automation.AutomationElement]
+  $root = $A::RootElement
+  function Find-Element($scope, $name) {
+    $cond = New-Object System.Windows.Automation.PropertyCondition($A::NameProperty, $name)
+    return $scope.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
+  }
+  function Press($el) {
+    $p = $null
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$p)) { $p.Invoke(); return }
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$p)) { $p.Expand(); return }
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$p)) { $p.Toggle(); return }
+    throw "no usable pattern on $($el.Current.Name)"
+  }
+  foreach ($step in "View", "Show", "Navigation pane") {
+    $el = Find-Element $root $step
+    if (-not $el) { throw "not found: $step" }
+    Press $el
+    Start-Sleep -Seconds 1
+  }
+  "hid navigation pane" | Out-File "$Out\uia.log"
+} catch { "uia failed: $_" | Out-File "$Out\uia.log" }
+Start-Sleep -Seconds 1
+[System.Windows.Forms.SendKeys]::SendWait("{ESC}")
 $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
 "screen: $($b.Width)x$($b.Height)" | Out-File "$Out\versions.txt" -Append
 $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
