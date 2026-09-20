@@ -45,8 +45,7 @@ run() {
     xdotool windowmove "$WID" $((PAD + 40 * S)) $((PAD + 40 * S)); sleep 1
     eval "$(xdotool getwindowgeometry --shell "$WID")"
     echo "window $WID: ${WIDTH}x${HEIGHT}+${X}+${Y}" >> "$OUT/geometry.txt"
-    # focus the window by clicking a blank corner (never an item, which would select it)
-    xdotool mousemove $((X + WIDTH - 30 * S)) $((Y + HEIGHT - 30 * S)) click 1; sleep 0.5
+    # focus via the window manager (a click could select an item or hit a button)
     xdotool windowactivate --sync "$WID" || xdotool windowfocus "$WID" || true
     sleep 0.5
   }

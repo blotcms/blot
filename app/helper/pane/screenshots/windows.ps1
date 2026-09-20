@@ -38,6 +38,8 @@ Set-ItemProperty -Path $key -Name AppsUseLightTheme -Value $light -Type DWord
 Set-ItemProperty -Path $key -Name SystemUsesLightTheme -Value $light -Type DWord
 
 # clear the runner's console windows off the desktop first
+# the runner leaves System Properties / Performance Options dialogs open
+Get-Process SystemProperties* -ErrorAction SilentlyContinue | Stop-Process -Force
 (New-Object -ComObject Shell.Application).MinimizeAll()
 Start-Sleep -Seconds 2
 Start-Process explorer.exe -ArgumentList "`"$fixture`""
@@ -206,7 +208,9 @@ Start-Sleep -Seconds 2
 # taskbar, leaving room for its shadow. Icons sit in a column at the left of the
 # desktop, so the window (and so the capture) stays to their right.
 $sw = [Hidpi]::GetSystemMetrics(0); $sh = [Hidpi]::GetSystemMetrics(1)
-$taskbar = 48 * $Scale; $pad = 96 * $Scale; $left = 176 * $Scale
+# 80px of desktop around the window (the screen is short at 200%, and the "Test Mode"
+# watermark sits above the taskbar at the bottom right)
+$taskbar = 48 * $Scale; $pad = 80 * $Scale; $left = 176 * $Scale
 # 480x360 logical px. MoveWindow includes Explorer's invisible 7px resize borders
 # (left, right, bottom), so ask for a little more to get a visible 480 wide.
 $winH = (360 + 7) * $Scale

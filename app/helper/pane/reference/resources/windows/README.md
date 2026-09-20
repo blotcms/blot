@@ -40,7 +40,8 @@ the `LogPixels` registry values (ignored), a loopback RDP session with
 - Extensions are hidden by default ("About", not "About.txt").
 - Before each capture: click the tab (moves focus off the toolbar) and park the mouse
   at the screen corner (no tooltip or hover). `CopyFromScreen` excludes the cursor.
-- A stray runner "System Properties" dialog is closed.
+- The runner leaves "System Properties" / "Performance Options" dialogs open; the
+  `SystemProperties*` processes are killed.
 
 ## Desktop
 A tiled bitmap wallpaper (`WallpaperStyle 0`, `TileWallpaper 1`) of 20-logical-px
@@ -50,5 +51,6 @@ kept to their right. The Progman "toggle icons" message is stateful and unreliab
 
 ## Captures
 `DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)` gives the visible frame; the
-capture is that plus 96 logical px each side. At 2x the screen is only 800x600
+capture is that plus 80 logical px each side (less than the other OSes' 96: the screen is
+short and the watermark sits at the bottom right). At 2x the screen is only 800x600
 logical, which is why the window is 360px tall. The shadow is Windows' own (faint).
