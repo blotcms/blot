@@ -25,6 +25,7 @@ jobs:
       fail-fast: false
       matrix:
         theme: [light, dark]
+        scale: [1, 2]
     steps:
       - uses: actions/checkout@v4
       - name: Install GNOME Files and screenshot tools
@@ -35,11 +36,11 @@ jobs:
             gsettings-desktop-schemas adwaita-icon-theme gnome-themes-extra \
             fonts-cantarell libadwaita-1-0 librsvg2-common adwaita-icon-theme-full shared-mime-info
       - name: Screenshot
-        run: xvfb-run -a -s "-screen 0 1280x800x24" bash app/helper/pane/screenshots/linux.sh ${{ matrix.theme }} out
+        run: xvfb-run -a -s "-screen 0 2560x1600x24" bash app/helper/pane/screenshots/linux.sh ${{ matrix.theme }} out ${{ matrix.scale }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pane-linux-${{ matrix.theme }}
+          name: pane-linux-${{ matrix.theme }}-${{ matrix.scale }}x
           path: out
           if-no-files-found: warn
 
@@ -101,7 +102,7 @@ jobs:
           for dir in captured/pane-*; do
             name="${dir#captured/pane-}"
             mkdir -p "app/helper/pane/reference/$name"
-            cp "$dir"/*.png "$dir"/versions.txt "app/helper/pane/reference/$name/" 2>/dev/null || true
+            cp "$dir"/*.png "$dir"/*.txt "$dir"/*.log "app/helper/pane/reference/$name/" 2>/dev/null || true
           done
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

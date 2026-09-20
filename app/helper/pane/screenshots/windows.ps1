@@ -26,8 +26,16 @@ Start-Process explorer.exe -ArgumentList "`"$fixture`""
 Start-Sleep -Seconds 8
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+Add-Type -Namespace Native -Name Win -MemberDefinition @"
+[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+[DllImport("user32.dll")] public static extern IntPtr FindWindow(string c, string t);
+[DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int a, out RECT r, int s);
+public struct RECT { public int Left, Top, Right, Bottom; }
+"@
+[Native.Win]::SetProcessDPIAware() | Out-Null
 # Hide the navigation pane via UI Automation (View > Show > Navigation pane).
-# Best-effort: failures are logged to uia.log rather than failing the capture.
+# Best-effort: everything is logged to uia.log so failures can be diagnosed.
+$log = "$Out\uia.log"
 try {
   Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
   $A = [System.Windows.Automation.AutomationElement]
@@ -38,25 +46,27 @@ try {
   }
   function Press($el) {
     $p = $null
-    if ($el.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$p)) { $p.Invoke(); return }
-    if ($el.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$p)) { $p.Expand(); return }
-    if ($el.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$p)) { $p.Toggle(); return }
-    throw "no usable pattern on $($el.Current.Name)"
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$p)) { $p.Invoke(); return "invoke" }
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$p)) { $p.Expand(); return "expand" }
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$p)) { $p.Toggle(); return "toggle" }
+    return "no usable pattern"
   }
   foreach ($step in "View", "Show", "Navigation pane") {
     $el = Find-Element $root $step
-    if (-not $el) { throw "not found: $step" }
-    Press $el
+    if (-not $el) { "not found: $step" | Out-File $log -Append; break }
+    "$step -> $(Press $el)" | Out-File $log -Append
     Start-Sleep -Seconds 1
   }
-  "hid navigation pane" | Out-File "$Out\uia.log"
-} catch { "uia failed: $_" | Out-File "$Out\uia.log" }
+} catch { "uia error: $_" | Out-File $log -Append }
 Start-Sleep -Seconds 1
 [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
-$b = [System.Windows.Forms.SystemInformation]::VirtualScreen
-"screen: $($b.Width)x$($b.Height)" | Out-File "$Out\versions.txt" -Append
-$bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+$h = [Native.Win]::FindWindow("CabinetWClass", $null)
+$r = New-Object Native.Win+RECT
+[Native.Win]::DwmGetWindowAttribute($h, 9, [ref]$r, [System.Runtime.InteropServices.Marshal]::SizeOf($r)) | Out-Null
+$w = $r.Right - $r.Left; $ht = $r.Bottom - $r.Top
+"window: $($r.Left),$($r.Top) ${w}x${ht}" | Out-File "$Out\versions.txt" -Append
+$bmp = New-Object System.Drawing.Bitmap $w, $ht
 $g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-$bmp.Save("$Out\$Label-$Theme-screen.png", [System.Drawing.Imaging.ImageFormat]::Png)
+$g.CopyFromScreen($r.Left, $r.Top, 0, 0, $bmp.Size)
+$bmp.Save("$Out\$Label-$Theme.png", [System.Drawing.Imaging.ImageFormat]::Png)
 Get-Process explorer | Select-Object Id, MainWindowTitle | Out-String | Out-File "$Out\processes.txt"
