@@ -1,0 +1,21 @@
+OneDrive client
+---------------
+
+Skeleton only. See PLAN.md in this directory for the design and for how to
+register the Microsoft Entra app that provides the credentials.
+
+Current state:
+
+- `disconnect`, `write`, `remove` only touch the local blog folder. They
+  do not yet talk to Microsoft Graph.
+- `dashboard_routes` exposes a connect page that explains sync is not
+  available yet, and a disconnect page.
+- `site_routes` exposes `POST /webhook`, which answers Graph's
+  `validationToken` handshake, checks `clientState` on notifications and
+  responds 202, but does not act on them.
+- The client is only registered (`app/clients/index.js`) once
+  `config.onedrive.{client_id,client_secret,webhook_secret}` are set, so it
+  stays hidden on the dashboard until the Entra app exists.
+
+Not implemented: OAuth, folder setup, Redis storage, delta sync, uploads,
+subscription renewal, polling fallback.

@@ -97,3 +97,8 @@ export BLOT_MAILGUN_KEY=
 # Google Drive client for folder syncing
 export BLOT_GOOGLEDRIVE_ID=
 export BLOT_GOOGLEDRIVE_SECRET=
+
+# Microsoft Entra app for OneDrive folder syncing (see app/clients/onedrive/PLAN.md)
+export BLOT_ONEDRIVE_CLIENT_ID=
+export BLOT_ONEDRIVE_CLIENT_SECRET=
+export BLOT_ONEDRIVE_WEBHOOK_SECRET=
