@@ -63,11 +63,14 @@ try {
     Start-Sleep -Seconds 2
     if ($step -eq "Show") {
       # the flyout isn't exposed to UI Automation, so drive it with the keyboard:
-      # Navigation pane is the first item in the Show submenu
-      [System.Windows.Forms.SendKeys]::SendWait("{DOWN}")
-      Start-Sleep -Milliseconds 500
-      [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-      "sent Down, Enter" | Out-File $log -Append
+      # Navigation pane's access key is N
+      # dump what UI Automation can see, for diagnosis
+      foreach ($w in $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)) {
+        "top-level: '$($w.Current.Name)' class=$($w.Current.ClassName)" | Out-File $log -Append
+      }
+      # the menu items have access keys; N is Navigation pane
+      [System.Windows.Forms.SendKeys]::SendWait("n")
+      "sent n" | Out-File $log -Append
       break
     }
   }

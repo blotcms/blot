@@ -21,6 +21,9 @@ run() {
   gsettings set org.gnome.nautilus.list-view use-tree-view true || true
   gsettings set org.gnome.nautilus.window-state start-with-sidebar false || true
   gsettings set org.gnome.desktop.interface color-scheme "prefer-$THEME" || true
+  # a window manager is needed for keyboard focus (F9 toggles the sidebar)
+  openbox >"$OUT/openbox.log" 2>&1 &
+  sleep 2
   nautilus --new-window "$FIXTURE" >"$OUT/nautilus.log" 2>&1 &
   sleep 8
   # several X windows share the class (helpers are 1x1); pick the largest one
@@ -31,6 +34,8 @@ run() {
   done
   eval "$(xdotool getwindowgeometry --shell "$WID")"
   echo "window $WID: ${WIDTH}x${HEIGHT}+${X}+${Y}" > "$OUT/geometry.txt"
+  xdotool mousemove $((500 * S)) $((400 * S)) click 1; sleep 0.5
+  xdotool key F9; sleep 1.5
   # expand folders bottom-up so row positions above don't shift, then the
   # nested folder inside Fruits (rows are 52px apart, arrows at x=37)
   for y in 274 222 118; do xdotool mousemove $((37 * S)) $((y * S)) click 1; sleep 0.5; done
