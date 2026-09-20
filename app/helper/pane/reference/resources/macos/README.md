@@ -22,6 +22,9 @@ script paints a borderless window at `kCGDesktopWindowLevel` filled with 50% gre
 - Size: bounds `{150, 150, 640, 510}` (490x360pt). Finder enforces a minimum width
   (about 484pt), so the real bounds are read back and the capture is taken around them
   (`bounds.txt` in the capture logs).
+- List view columns are set through `list view options` (`column id name column`, etc.):
+  Name 270pt, Date Modified 104pt (narrow enough that Finder uses its short date
+  format), Size 70pt, and Kind hidden, so name, date and size all fit in the window.
 - Sidebar hidden with Option-Cmd-S (View menu) via System Events.
 - Toolbar reduced to back/forward: rewrite `NSToolbar Configuration Browser` in
   `com.apple.finder.plist` (`TB Item Identifiers` = `com.apple.finder.BACK`), then

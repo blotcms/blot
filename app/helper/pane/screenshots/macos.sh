@@ -82,6 +82,24 @@ tell application "Finder"
   set bounds of w to {150, 150, 640, 510}
   set sidebar width of w to 160
 end tell
+-- Column widths: a longer Name, and Date Modified / Size narrow enough that Finder
+-- switches to its short date format. Kind is hidden so name, date and size all fit.
+tell application "Finder"
+  tell list view options of w
+    try
+      set visible of column id kind column to false
+    on error e
+      log "hide kind: " & e
+    end try
+    try
+      set width of column id name column to 270
+      set width of column id modification date column to 104
+      set width of column id size column to 70
+    on error e
+      log "widths: " & e
+    end try
+  end tell
+end tell
 delay 1
 tell application "System Events" to tell process "Finder"
   -- Hide Sidebar (View menu, Option-Cmd-S): we only want the folder contents
