@@ -32,7 +32,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            nautilus openbox xvfb xdotool imagemagick dbus-x11 dconf-gsettings-backend \
+            nautilus openbox picom x11-xserver-utils xvfb xdotool imagemagick dbus-x11 dconf-gsettings-backend \
             gsettings-desktop-schemas adwaita-icon-theme gnome-themes-extra \
             fonts-cantarell libadwaita-1-0 librsvg2-common adwaita-icon-theme-full shared-mime-info
       - name: Screenshot

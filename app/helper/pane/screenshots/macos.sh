@@ -28,6 +28,16 @@ else
 fi
 sleep 3
 
+# Mild grey desktop so the window's shadow is visible
+python3 - "$OUT/grey.png" <<'PY'
+import sys, zlib, struct
+w = h = 64
+raw = b"".join(b"\x00" + bytes([200, 200, 200]) * w for _ in range(h))
+def chunk(t, d): return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d))
+open(sys.argv[1], "wb").write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+PY
+osascript -e "tell application \"Finder\" to set desktop picture to POSIX file \"$OUT/grey.png\"" >"$OUT/wallpaper.log" 2>&1 || true
+sleep 2
 # Trim the Finder toolbar to back/forward, the view switcher and search: drop
 # the arrange, share, tag and action buttons. Identifiers are Finder's own.
 PLIST="$HOME/Library/Preferences/com.apple.finder.plist"
@@ -54,7 +64,7 @@ tell application "Finder"
   close every window
   set w to make new Finder window to (POSIX file "$FIXTURE" as alias)
   set current view of w to list view
-  set bounds of w to {60, 60, 960, 620}
+  set bounds of w to {100, 100, 920, 620}
   set sidebar width of w to 160
 end tell
 delay 1
@@ -70,5 +80,5 @@ delay 1
 tell application "Finder" to set selection to {}
 OSA
 sleep 4
-screencapture -x -R60,60,900,560 "$OUT/macos-$THEME.png" >"$OUT/screencapture.log" 2>&1 || true
-ls -la "$OUT" >> "$OUT/screencapture.log"
+screencapture -x -R40,40,940,640 "$OUT/macos-$THEME.png" >"$OUT/screencapture.log" 2>&1 || true
+rm -f "$OUT/grey.png"; ls -la "$OUT" >> "$OUT/screencapture.log"

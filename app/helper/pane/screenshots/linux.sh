@@ -22,6 +22,9 @@ run() {
   gsettings set org.gnome.nautilus.window-state start-with-sidebar false || true
   gsettings set org.gnome.desktop.interface color-scheme "prefer-$THEME" || true
   gsettings list-recursively org.gnome.nautilus > "$OUT/gsettings.txt" 2>&1
+  xsetroot -solid "#c8c8c8"
+  # a compositor gives the window its shadow
+  picom --backend xrender --shadow >"$OUT/picom.log" 2>&1 &
   # a window manager is needed for keyboard focus (F9 toggles the sidebar)
   openbox >"$OUT/openbox.log" 2>&1 &
   sleep 2
@@ -33,19 +36,20 @@ run() {
     eval "$(xdotool getwindowgeometry --shell "$w")"
     if [ $((WIDTH * HEIGHT)) -gt "$BEST" ]; then BEST=$((WIDTH * HEIGHT)); WID="$w"; fi
   done
+  xdotool windowmove "$WID" $((100 * S)) $((100 * S)); sleep 1
   eval "$(xdotool getwindowgeometry --shell "$WID")"
   echo "window $WID: ${WIDTH}x${HEIGHT}+${X}+${Y}" > "$OUT/geometry.txt"
-  xdotool mousemove $((500 * S)) $((400 * S)) click 1; sleep 0.5
+  xdotool mousemove $((X + 500 * S)) $((Y + 400 * S)) click 1; sleep 0.5
   xdotool windowactivate --sync "$WID" || xdotool windowfocus "$WID" || true
   sleep 0.5; xdotool key --clearmodifiers F9; sleep 1.5
   import -window root "$OUT/debug-after-f9.png"
   # expand folders bottom-up so row positions above don't shift, then the
   # nested folder inside Fruits (rows are 52px apart, arrows at x=37)
-  for y in 274 222 118; do xdotool mousemove $((37 * S)) $((y * S)) click 1; sleep 0.5; done
-  xdotool mousemove $((57 * S)) $((274 * S)) click 1; sleep 0.5
-  xdotool mousemove $((700 * S)) $((500 * S)); sleep 1
+  for y in 274 222 118; do xdotool mousemove $((X + 37 * S)) $((Y + y * S)) click 1; sleep 0.5; done
+  xdotool mousemove $((X + 57 * S)) $((Y + 274 * S)) click 1; sleep 0.5
+  xdotool mousemove $((X + 700 * S)) $((Y + 500 * S)); sleep 1
   import -window root "$OUT/linux-$THEME$SUFFIX-full.png"
-  convert "$OUT/linux-$THEME$SUFFIX-full.png" -crop "${WIDTH}x${HEIGHT}+${X}+${Y}" +repage "$OUT/linux-$THEME$SUFFIX.png"
+  convert "$OUT/linux-$THEME$SUFFIX-full.png" -crop "$((WIDTH + 120 * S))x$((HEIGHT + 120 * S))+$((X - 60 * S))+$((Y - 60 * S))" +repage "$OUT/linux-$THEME$SUFFIX.png"
   rm "$OUT/linux-$THEME$SUFFIX-full.png"
   { echo "nautilus: $(nautilus --version)"; echo "libadwaita: $(dpkg -s libadwaita-1-0 2>/dev/null | grep ^Version)"; lsb_release -d; echo "scale: $S"; } > "$OUT/versions.txt" 2>&1
 }

@@ -30,6 +30,10 @@ Add-Type -Namespace Native -Name Win -MemberDefinition @"
 [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
 [DllImport("user32.dll")] public static extern IntPtr FindWindow(string c, string t);
 [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int a, out RECT r, int s);
+[DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int ht, bool repaint);
+[DllImport("user32.dll")] public static extern bool SystemParametersInfo(int a, int b, string c, int d);
+[DllImport("user32.dll")] public static extern bool SetSysColors(int n, int[] i, int[] c);
+[DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, int m, IntPtr w, IntPtr l);
 public struct RECT { public int Left, Top, Right, Bottom; }
 "@
 [Native.Win]::SetProcessDPIAware() | Out-Null
@@ -82,21 +86,26 @@ Start-Sleep -Seconds 1
 $shellWin = (New-Object -ComObject Shell.Application).Windows() | Where-Object { $_.LocationName -eq "Your site" } | Select-Object -First 1
 $h = if ($shellWin) { [IntPtr][int64]$shellWin.HWND } else { [IntPtr]::Zero }
 if ($h -eq [IntPtr]::Zero) { $h = [Native.Win]::FindWindow("CabinetWClass", $null) }
+
+# Plain mild-grey desktop with no icons, so the window's shadow is visible
+Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name Background -Value "200 200 200"
+[Native.Win]::SystemParametersInfo(0x14, 0, "", 3) | Out-Null
+[Native.Win]::SetSysColors(1, @(1), @(0xC8C8C8)) | Out-Null
+$progman = [Native.Win]::FindWindow("Progman", $null)
+[Native.Win]::SendMessage($progman, 0x111, [IntPtr]0x7402, [IntPtr]::Zero) | Out-Null  # toggle desktop icons
+
+# Move the window clear of the desktop edges and taskbar, leaving room for its shadow
+[Native.Win]::MoveWindow($h, 110, 60, 800, 600, $true) | Out-Null
+Start-Sleep -Seconds 2
+
 $r = New-Object Native.Win+RECT
 [Native.Win]::DwmGetWindowAttribute($h, 9, [ref]$r, [System.Runtime.InteropServices.Marshal]::SizeOf($r)) | Out-Null
-$w = $r.Right - $r.Left; $ht = $r.Bottom - $r.Top
-"window: $($r.Left),$($r.Top) ${w}x${ht}" | Out-File "$Out\versions.txt" -Append
-$bmp = New-Object System.Drawing.Bitmap $w, $ht
+$pad = 60
+$x0 = [Math]::Max(0, $r.Left - $pad); $y0 = [Math]::Max(0, $r.Top - $pad)
+$x1 = [Math]::Min(1024, $r.Right + $pad); $y1 = [Math]::Min(700, $r.Bottom + $pad)
+"window: $($r.Left),$($r.Top) $($r.Right - $r.Left)x$($r.Bottom - $r.Top); capture $x0,$y0 $($x1 - $x0)x$($y1 - $y0)" | Out-File "$Out\versions.txt" -Append
+$bmp = New-Object System.Drawing.Bitmap ($x1 - $x0), ($y1 - $y0)
 $g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($r.Left, $r.Top, 0, 0, $bmp.Size)
-# Explorer has no setting to hide the command bar (New / Sort / View / ...), so
-# cut its band out of the capture and close the gap. Rows are relative to the
-# window's top edge at 100% scale.
-$cutTop = 89; $cutBottom = 136
-$out = New-Object System.Drawing.Bitmap $w, ($ht - ($cutBottom - $cutTop))
-$og = [System.Drawing.Graphics]::FromImage($out)
-$og.DrawImage($bmp, (New-Object System.Drawing.Rectangle 0, 0, $w, $cutTop), (New-Object System.Drawing.Rectangle 0, 0, $w, $cutTop), [System.Drawing.GraphicsUnit]::Pixel)
-$og.DrawImage($bmp, (New-Object System.Drawing.Rectangle 0, $cutTop, $w, ($ht - $cutBottom)), (New-Object System.Drawing.Rectangle 0, $cutBottom, $w, ($ht - $cutBottom)), [System.Drawing.GraphicsUnit]::Pixel)
-$bmp.Save("$Out\$Label-$Theme-full.png", [System.Drawing.Imaging.ImageFormat]::Png)
-$out.Save("$Out\$Label-$Theme.png", [System.Drawing.Imaging.ImageFormat]::Png)
+$g.CopyFromScreen($x0, $y0, 0, 0, $bmp.Size)
+$bmp.Save("$Out\$Label-$Theme.png", [System.Drawing.Imaging.ImageFormat]::Png)
 Get-Process explorer | Select-Object Id, MainWindowTitle | Out-String | Out-File "$Out\processes.txt"
