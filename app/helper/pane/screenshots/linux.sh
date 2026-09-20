@@ -2,7 +2,7 @@
 # Screenshot GNOME Files (Nautilus) under Xvfb.
 # usage: linux.sh <light|dark> <out-dir> [scale]   (scale 2 = HiDPI, via GDK_SCALE)
 set -uo pipefail
-THEME="${1:-light}"; OUT="${2:-out}"; S="${3:-1}"; NARROW="${NARROW:-560}"; NARROW_H="${NARROW_H:-820}"; mkdir -p "$OUT"
+THEME="${1:-light}"; OUT="${2:-out}"; S="${3:-1}"; NARROW="${NARROW:-560}"; NARROW_H="${NARROW_H:-960}"; mkdir -p "$OUT"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 FIXTURE="$HOME/Your site"
 bash "$HERE/make-fixture.sh" "$FIXTURE"
@@ -45,6 +45,7 @@ run() {
   sleep 0.5
   # expand the one folder: Fruits is the 6th row (folders sort among the files)
   xdotool mousemove $((X + 41 * S)) $((Y + 368 * S)) click 1; sleep 0.7
+  xdotool key --clearmodifiers ctrl+shift+a; sleep 0.5  # clear the selection
   xdotool mousemove $((X + 700 * S)) $((Y + 500 * S)); sleep 1
   import -window root "$OUT/full.png"
   convert "$OUT/full.png" -crop "${WIDTH}x${HEIGHT}+${X}+${Y}" +repage "$OUT/window.png"
