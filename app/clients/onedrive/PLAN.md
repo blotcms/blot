@@ -10,7 +10,11 @@ Decisions so far:
 
 - **App folder only.** Scope `Files.ReadWrite.AppFolder`; files live in
   `/Apps/<app name>/` in the user's OneDrive. No full-drive mode.
-- **Personal and work/school accounts**, via the `common` authority.
+- **Personal Microsoft accounts only for v1.** Work/school support is
+  deferred until Blot has a formal business entity and can be publisher
+  verified (see "Publisher verification"). The code should use the
+  `consumers` authority for now; switching to `common` later is a config
+  change plus the admin-consent handling described below.
 - Register **two** Entra apps: production (`Blot`) and development
   (`Blot Dev`), as Dropbox does.
 
@@ -30,9 +34,12 @@ Administrator or Cloud Application Administrator role.
 2. **Name:** `Blot` (this name is shown on the consent screen, and it becomes
    the app folder name in OneDrive, so pick it deliberately). Use `Blot Dev`
    for the development app.
-3. **Supported account types:** "Accounts in any organizational directory
-   and personal Microsoft accounts". This is what allows both work/school and
-   consumer OneDrive.
+3. **Supported account types:** "Personal Microsoft accounts only" for v1.
+   When work/school support is added, change this to "Accounts in any
+   organizational directory and personal Microsoft accounts" (Authentication
+   blade); the client ID stays the same, which is why the app should be
+   registered in an Entra tenant you own now (see above) even though v1 is
+   personal-only.
 4. **Redirect URI:** platform **Web**. Production:
    `https://blot.im/clients/onedrive/authenticate`. Development: the same path
    on your dev host, e.g. `http://localhost:8080/clients/onedrive/authenticate`
@@ -63,22 +70,40 @@ Administrator or Cloud Application Administrator role.
 
 ## Publisher verification
 
-Without it, the consent screen shows an "unverified publisher" warning. More
-importantly, Microsoft documents that when a tenant has risk-based step-up
-consent enabled, users **cannot consent at all** to newly registered
-multi-tenant apps that are not publisher verified and that request permissions
-beyond basic sign-in (our `Files.ReadWrite.AppFolder` is beyond that), so
-some work/school users would be blocked until an admin approves the app.
-Personal accounts are unaffected beyond the warning. Verification is therefore
-close to mandatory for work/school support, and optional polish for personal
-accounts only.
+Without it, the consent screen shows an "unverified publisher" warning.
+Personal accounts are unaffected beyond that, so **v1 (personal only) does not
+need verification.** It matters for work/school accounts:
+
+- Microsoft recommends tenants allow user consent only for apps from verified
+  publishers, and the built-in policy for that
+  (`microsoft-user-default-low`) blocks unverified apps for users. Tenants on
+  it will block Blot's users from connecting.
+- Microsoft's documented default, where a user can consent to any permission
+  that doesn't need admin consent, would likely allow
+  `Files.ReadWrite.AppFolder` (narrow, unlike "all files"), but many schools
+  and companies tighten this or disable user consent entirely, in which case
+  an admin has to approve regardless of verification.
+- With risk-based step-up consent enabled, users can't consent to unverified
+  multi-tenant apps requesting more than basic sign-in.
+- Where users can't consent, an **admin consent workflow** lets them request
+  approval, and an admin can approve via an admin-consent URL. Work/school
+  support should link to that flow instead of dead-ending.
 
 **Cost:** none. Microsoft states there is no charge and no licence required.
 
-**Effort:** the verification step itself takes minutes once the prerequisites
-are met. The lead time is the prerequisite, a verified Microsoft AI Cloud
-Partner Program (CPP, formerly MPN) account; Microsoft does not publish how
-long that business verification takes, so allow for some back and forth.
+**Requires a formal business.** Partner Center business verification confirms
+"your business is legally registered with an active registration at the
+stated address". It asks for formation documents (articles or certificate of
+incorporation, business licence or registration certificate) whose name and
+address match the account exactly, current domain-registration documents, a
+government-ID identity check of a user, and an employee business email (not a
+free or personal address). Microsoft says this typically takes three to five
+business days. Microsoft's profile guidance says a sole proprietor should use
+their company name as the legal name, so a registered sole proprietorship
+with a business licence or DBA may qualify, but the docs don't spell out
+eligibility and an unregistered informal project would not have registration
+records to submit. Treat "form the US entity first" as the plan; check
+eligibility with Partner Center before relying on any other route.
 
 Prerequisites (all from Microsoft's "Publisher verification overview"):
 
