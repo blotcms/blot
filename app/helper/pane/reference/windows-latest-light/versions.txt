@@ -4,4 +4,4 @@ Caption                                  Version    BuildNumber
 Microsoft Windows Server 2025 Datacenter 10.0.26100 26100
 
 
-screen: 1024x768
+window: 0,0 0x0
