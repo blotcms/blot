@@ -22,9 +22,13 @@ script paints a borderless window at `kCGDesktopWindowLevel` filled with 50% gre
 - Size: bounds `{150, 150, 640, 510}` (490x360pt). Finder enforces a minimum width
   (about 484pt), so the real bounds are read back and the capture is taken around them
   (`bounds.txt` in the capture logs).
-- List view columns are set through `list view options` (`column id name column`, etc.):
-  Name 270pt, Date Modified 104pt (narrow enough that Finder uses its short date
-  format), Size 70pt, and Kind hidden, so name, date and size all fit in the window.
+- List view columns: Finder ignores widths set through AppleScript (`list view options`,
+  no error, no effect) or its preferences (`FK_StandardViewSettings`, read back correctly,
+  ignored) for a fresh window. What works is dragging the column dividers with
+  `cliclick` (right to left, so earlier drags don't move later ones): Date Modified
+  is narrowed until Finder switches to its short date format, Name is widened by 30%,
+  and Kind is unticked in View Options (Cmd-J). Divider positions are measured from
+  the screenshot and relative to the window bounds.
 - Sidebar hidden with Option-Cmd-S (View menu) via System Events.
 - Toolbar reduced to back/forward: rewrite `NSToolbar Configuration Browser` in
   `com.apple.finder.plist` (`TB Item Identifiers` = `com.apple.finder.BACK`), then
