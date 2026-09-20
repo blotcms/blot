@@ -1,13 +1,74 @@
 {
-  "_comment": "Limits for diff.js. diffPercent is % of compared (unmasked) pixels that differ, per region name or kind (chrome is stricter than text). inkPercent is differing pixels / pixels that are ink in either image, per region. flatDeltaE is the CIE76 colour difference between a region's dominant colours (wrong greys). blurMae is the mean absolute error of blurred images, % of full scale. shadowError is RMSE in luminance levels. sizeDelta is the window size difference in CSS px. rowYOffset is the mean vertical offset of text rows in CSS px. Per-case entries in \"cases\" override the defaults key by key. These start loose so crude fixtures pass or fail meaningfully; tighten as the module improves.",
+  "_comment": "Limits for diff.js. diffPercent is % of compared (unmasked) pixels that differ, per region name or kind (chrome is stricter than text). inkPercent is differing pixels / pixels that are ink in either image, per region. flatDeltaE is the CIE76 colour difference between a region's dominant colours (wrong greys). blurMae is the mean absolute error of blurred images, % of full scale. shadowError is RMSE in luminance levels. sizeDelta is the window size difference in CSS px. rowYOffset is the mean vertical offset of text rows in CSS px. Per-case entries in \"cases\" override the defaults key by key. These start loose so crude fixtures pass or fail meaningfully; tighten as the module improves. macos-light and macos-dark (the built skin) are held to the tightened limits.",
   "default": {
-    "diffPercent": { "overall": 8, "chrome": 5, "text": 15 },
-    "inkPercent": { "chrome": 40, "text": 70 },
-    "flatDeltaE": { "chrome": 4, "text": 4 },
-    "blurMae": { "overall": 3, "chrome": 4, "text": 4 },
+    "diffPercent": {
+      "overall": 8,
+      "chrome": 5,
+      "text": 15
+    },
+    "inkPercent": {
+      "chrome": 40,
+      "text": 70
+    },
+    "flatDeltaE": {
+      "chrome": 4,
+      "text": 4
+    },
+    "blurMae": {
+      "overall": 3,
+      "chrome": 4,
+      "text": 4
+    },
     "shadowError": 10,
     "sizeDelta": 4,
     "rowYOffset": 4
   },
-  "cases": {}
+  "cases": {
+    "macos-light": {
+      "diffPercent": {
+        "overall": 2.5,
+        "chrome": 1.5,
+        "text": 3
+      },
+      "inkPercent": {
+        "chrome": 20,
+        "text": 30
+      },
+      "flatDeltaE": {
+        "chrome": 1,
+        "text": 1
+      },
+      "blurMae": {
+        "overall": 1.2,
+        "chrome": 1,
+        "text": 1.5
+      },
+      "shadowError": 4,
+      "sizeDelta": 1,
+      "rowYOffset": 1.5
+    },
+    "macos-dark": {
+      "diffPercent": {
+        "overall": 2.5,
+        "chrome": 1.5,
+        "text": 3
+      },
+      "inkPercent": {
+        "chrome": 20,
+        "text": 30
+      },
+      "flatDeltaE": {
+        "chrome": 1,
+        "text": 1
+      },
+      "blurMae": {
+        "overall": 1.2,
+        "chrome": 1,
+        "text": 1.5
+      },
+      "shadowError": 4,
+      "sizeDelta": 1,
+      "rowYOffset": 1.5
+    }
+  }
 }

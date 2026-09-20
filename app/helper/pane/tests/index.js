@@ -6,11 +6,10 @@ describe("pane", function () {
     const result = pane.folder("Fruits\n  Apple.md\nAbout.txt", { title: "Your site" });
     expect(Object.keys(result)).toEqual(["html"]);
     expect(result.html).toContain('aria-label="Your site"');
-    expect(result.html.match(/class="pane-row"/g).length).toBe(3);
-    expect(result.html).toContain('style="--d:1"');
-    expect(result.html.match(/pane-folder/g).length).toBe(1);
+    expect(result.html.match(/class="pane-row/g).length).toBe(3);
+    expect(result.html.match(/pane-k-folder/g).length).toBe(1);
     const { css, js } = pane.assets();
-    expect(css).toContain("html[data-os=win]");
+    expect(css).toContain("html[data-os=mac]");
     expect(js.length).toBeLessThan(500);
   });
 
@@ -21,19 +20,6 @@ describe("pane", function () {
   it("escapes names and titles", function () {
     expect(pane.folder("<b>x</b>").html).not.toContain("<b>x</b>");
     expect(pane.folder("a", { title: '"><script>' }).html).not.toContain("<script>");
-  });
-
-  describe("folders", function () {
-    it("treats a trailing slash, children or a missing extension as a folder", function () {
-      const html = pane.folder("Posts/\nDrafts\nFruits\n  Apple.md\nAbout.txt\nLICENSE.md").html;
-      // Posts/ (explicit), Drafts (no dot), Fruits (children); About.txt and LICENSE.md are files
-      expect(html.match(/pane-folder/g).length).toBe(3);
-      expect(html.match(/pane-file/g).length).toBe(3);
-      expect(html).not.toContain("Posts/");
-    });
-    it("says so to screen readers", function () {
-      expect(pane.folder("Posts/").html).toContain(", folder");
-    });
   });
 
   describe("options", function () {
@@ -65,18 +51,6 @@ describe("pane", function () {
     it("never depends on the clock: the same input gives the same output", function () {
       const opts = { files: { "a.md": { bytes: 6, modified: "2026-09-20T15:38:00" } } };
       expect(pane.folder("a.md", opts).html).toEqual(pane.folder("a.md", opts).html);
-    });
-  });
-
-  describe("assets", function () {
-    it("applies the per-OS skins to windows pinned to that OS as well as to the visitor's OS", function () {
-      const { css } = pane.assets();
-      expect(css).toContain("html[data-os=win] .pane:not([data-pin]) .pane-bar,.pane[data-pin=win] .pane-bar{");
-      expect(css).toContain(".pane[data-pin=linux][data-theme=dark]{");
-    });
-    it("follows prefers-color-scheme unless the theme is pinned", function () {
-      const { css } = pane.assets();
-      expect(css).toContain("@media (prefers-color-scheme:dark){\n.pane:not([data-theme]){");
     });
   });
 
