@@ -80,6 +80,12 @@ async function setAccount(blogID, changes) {
     multi.sRem(blogsKey(account.account_id), blogID);
   }
 
+  // Fields that have a natural empty value don't need to be supplied when
+  // an account is first saved (or was saved before the field existed).
+  for (var j in DEFAULTS) {
+    if (account[j] === undefined) account[j] = DEFAULTS[j];
+  }
+
   // Overwrite existing properties with any changes
   for (var i in changes) account[i] = changes[i];
 
@@ -144,6 +150,14 @@ function accountKey(blogID) {
 function blogsKey(account_id) {
   return "clients:onedrive:" + account_id;
 }
+
+var DEFAULTS = {
+  error_code: 0,
+  error_since: 0,
+  folder: "",
+  folder_id: "",
+  last_sync: 0,
+};
 
 Model = {
   // Microsoft account ID from Graph's /me, used to find which blogs

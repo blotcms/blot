@@ -12,8 +12,34 @@ describe("onedrive database", function () {
       refresh_token: "ZZZZ",
       expires_at: Date.now() + 3600 * 1000,
       error_code: 0,
+      error_since: 0,
+      folder: "",
+      folder_id: "",
+      last_sync: 0,
     };
   }
+
+  it("fills in defaults for fields that are not supplied", function (done) {
+    var blogID = this.blog.id;
+    var account = fakeAccount();
+    var supplied = {
+      account_id: account.account_id,
+      email: account.email,
+      access_token: account.access_token,
+      refresh_token: account.refresh_token,
+      expires_at: account.expires_at,
+    };
+
+    database.set(blogID, supplied, function (err) {
+      if (err) return done.fail(err);
+
+      database.get(blogID, function (err, stored) {
+        if (err) return done.fail(err);
+        expect(stored).toEqual(account);
+        done();
+      });
+    });
+  });
 
   it("sets and gets an account, restoring number types", function (done) {
     var blogID = this.blog.id;
