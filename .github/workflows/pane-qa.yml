@@ -65,6 +65,8 @@ jobs:
         with:
           path: repo
           ref: ${{ github.ref_name }}
+          # the QA scripts only need the pane directory (root files, package.json, come with it)
+          sparse-checkout: app/helper/pane
 
       - name: Install fonts (Linux)
         if: matrix.os == 'linux'
@@ -72,14 +74,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends fonts-cantarell fonts-dejavu-core
 
-      # only what the qa scripts need, at the versions package.json pins
+      # only what the qa scripts need, at the versions package.json pins. node_modules and
+      # Puppeteer's downloaded Chrome are cached on that list, so most runs skip the install.
+      - name: Work out dependencies
+        id: deps
+        shell: bash
+        run: echo "pkgs=$(node -e "const p=require('./repo/package.json');const d={...p.dependencies,...p.devDependencies};console.log(['puppeteer','sharp','pixelmatch','express'].map(n=>n+'@'+d[n]).join(' '))")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            tools/node_modules
+            ~/.cache/puppeteer
+          key: qa-deps-${{ runner.os }}-${{ runner.arch }}-${{ steps.deps.outputs.pkgs }}
       - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          PKGS=$(node -e "const p=require('./repo/package.json');const d={...p.dependencies,...p.devDependencies};console.log(['puppeteer','sharp','pixelmatch','express'].map(n=>n+'@'+d[n]).join(' '))")
-          mkdir tools && cd tools
+          mkdir -p tools && cd tools
           npm init -y >/dev/null
-          npm install --no-audit --no-fund $PKGS
+          npm install --no-audit --no-fund ${{ steps.deps.outputs.pkgs }}
 
       - name: Render
         shell: bash
@@ -106,6 +120,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
+          sparse-checkout: app/helper/pane
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -126,15 +141,29 @@ jobs:
           git add -f "$OUT"
           git diff --cached --quiet && exit 0
           git commit -m "Update pane rendered images"
-          git pull --rebase origin "${{ github.ref_name }}"
-          git push origin "HEAD:${{ github.ref_name }}"
+          # other pushes (people, the screenshots bot) can land in between
+          for attempt in 1 2 3 4; do
+            git pull --rebase origin "${{ github.ref_name }}" && git push origin "HEAD:${{ github.ref_name }}" && break
+            sleep $((attempt * 5))
+          done
       # Informational: the thresholds don't gate CI until the module exists.
+      - name: Work out dependencies
+        id: deps
+        run: echo "pkgs=$(node -e "const p=require('./package.json');const d={...p.dependencies,...p.devDependencies};console.log(['puppeteer','sharp','pixelmatch','express'].map(n=>n+'@'+d[n]).join(' '))")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            tools/node_modules
+            ~/.cache/puppeteer
+          key: qa-deps-${{ runner.os }}-${{ runner.arch }}-${{ steps.deps.outputs.pkgs }}
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p tools && cd tools && npm init -y >/dev/null
+          npm install --no-audit --no-fund ${{ steps.deps.outputs.pkgs }}
       - name: Summarise differences
         run: |
-          PKGS=$(node -e "const p=require('./package.json');const d={...p.dependencies,...p.devDependencies};console.log(['puppeteer','sharp','pixelmatch','express'].map(n=>n+'@'+d[n]).join(' '))")
-          mkdir tools && cd tools && npm init -y >/dev/null
-          npm install --no-audit --no-fund $PKGS
-          cd ..
           NODE_PATH="$PWD/tools/node_modules" node app/helper/pane/qa/smoke.js
           {
             echo '### pane QA'
