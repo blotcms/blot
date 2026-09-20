@@ -51,38 +51,26 @@ try {
     if ($el.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$p)) { $p.Toggle(); return "toggle" }
     return "no usable pattern"
   }
-  foreach ($step in "View", "Show", "Navigation pane") {
-    $el = Find-Element $root $step
-    if (-not $el) {
-      "not found: $step; menu items visible:" | Out-File $log -Append
-      $cond = New-Object System.Windows.Automation.PropertyCondition($A::ControlTypeProperty, [System.Windows.Automation.ControlType]::MenuItem)
-      foreach ($m in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond)) { "  $($m.Current.Name)" | Out-File $log -Append }
-      break
-    }
-    "$step -> $(Press $el)" | Out-File $log -Append
-    Start-Sleep -Seconds 2
-    # whole-screen shot to see whether the flyout is actually drawn
+  function Shot($name) {
     $sb = [System.Windows.Forms.SystemInformation]::VirtualScreen
     $sbmp = New-Object System.Drawing.Bitmap $sb.Width, $sb.Height
     [System.Drawing.Graphics]::FromImage($sbmp).CopyFromScreen($sb.Location, [System.Drawing.Point]::Empty, $sb.Size)
-    $sbmp.Save("$Out\debug-after-$($step -replace ' ','-').png")
-    if ($step -eq "Show") {
-      # the flyout isn't exposed to UI Automation, so drive it with the keyboard:
-      # Navigation pane's access key is N
-      # dump what UI Automation can see, for diagnosis
-      foreach ($w in $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)) {
-        "top-level: '$($w.Current.Name)' class=$($w.Current.ClassName)" | Out-File $log -Append
-      }
-      $ex = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, (New-Object System.Windows.Automation.PropertyCondition($A::ClassNameProperty, "CabinetWClass")))
-      foreach ($e in $ex.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)) {
-        if ($e.Current.Name) { "  [$($e.Current.ControlType.ProgrammaticName)] $($e.Current.Name)" | Out-File $log -Append }
-      }
-      # the menu items have access keys; N is Navigation pane
-      [System.Windows.Forms.SendKeys]::SendWait("n")
-      "sent n" | Out-File $log -Append
-      break
-    }
+    $sbmp.Save("$Out\debug-$name.png")
   }
+  # Open the View flyout, then drive it by keyboard: End = last item (Show),
+  # Right = open the submenu on its first item (Navigation pane), Enter = toggle.
+  $view = Find-Element $root "View"
+  if (-not $view) { throw "View button not found" }
+  Press $view | Out-Null
+  Start-Sleep -Seconds 2
+  [System.Windows.Forms.SendKeys]::SendWait("{END}")
+  Start-Sleep -Milliseconds 700
+  [System.Windows.Forms.SendKeys]::SendWait("{RIGHT}")
+  Start-Sleep -Seconds 1
+  Shot "submenu"
+  [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+  Start-Sleep -Seconds 2
+  "drove flyout by keyboard" | Out-File $log -Append
 } catch { "uia error: $_" | Out-File $log -Append }
 Start-Sleep -Seconds 1
 [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
