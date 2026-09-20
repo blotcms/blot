@@ -1,6 +1,6 @@
 # Try to screenshot File Explorer on a hosted Windows runner.
 # usage: windows.ps1 -Theme light|dark -Out <dir> -Label <name>
-param([string]$Theme = "light", [string]$Out = "out", [string]$Label = "windows")
+param([string]$Theme = "light", [string]$Out = "out", [string]$Label = "windows", [int]$Scale = 1, [int]$Width = 400)
 $ErrorActionPreference = "Continue"
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 
@@ -19,6 +19,13 @@ $text = @{
   "Blot.url" = "[InternetShortcut]`r`nURL=https://blot.im"; "index.html" = "<h1>Hello</h1>"; "Tasks.org" = "* Heading"; "About.txt" = "Hello"
 }
 foreach ($k in $text.Keys) { Set-Content -Path (Join-Path $fixture $k) -Value $text[$k] }
+# spread created/modified times across the years so each OS's date formats get exercised
+$when = @(0, -3, -20, -45, -100, -200, -400, -800, -1200, -2000, -3000, -4000, -5000)
+$i = 0
+foreach ($item in Get-ChildItem $fixture -Recurse) {
+  $d = (Get-Date).AddDays($when[$i % $when.Count]).AddMinutes(-13 * $i); $i++
+  $item.CreationTime = $d.AddDays(-2); $item.LastWriteTime = $d
+}
 
 (Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Out-String) | Out-File "$Out\versions.txt"
 
@@ -34,6 +41,66 @@ Start-Sleep -Seconds 2
 Start-Process explorer.exe -ArgumentList "`"$fixture`""
 Start-Sleep -Seconds 8
 
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class Hidpi {
+  [StructLayout(LayoutKind.Sequential)] public struct LUID { public uint Low; public int High; }
+  [StructLayout(LayoutKind.Sequential)] public struct HDR { public int type; public uint size; public LUID adapter; public uint id; }
+  [StructLayout(LayoutKind.Sequential)] public struct GET { public HDR h; public int minRel; public int curRel; public int maxRel; }
+  [StructLayout(LayoutKind.Sequential)] public struct SET { public HDR h; public int rel; }
+  [DllImport("user32.dll")] static extern int GetDisplayConfigBufferSizes(uint flags, out uint paths, out uint modes);
+  [DllImport("user32.dll")] static extern int QueryDisplayConfig(uint flags, ref uint paths, IntPtr pathArr, ref uint modes, IntPtr modeArr, IntPtr topo);
+  [DllImport("user32.dll")] static extern int DisplayConfigGetDeviceInfo(ref GET p);
+  [DllImport("user32.dll")] static extern int DisplayConfigSetDeviceInfo(ref SET p);
+  [DllImport("user32.dll")] public static extern IntPtr SetProcessDpiAwarenessContext(IntPtr c);
+  [DllImport("user32.dll")] public static extern uint GetDpiForSystem();
+  [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern int GetSystemMetrics(int i);
+  [DllImport("user32.dll")] public static extern bool SystemParametersInfo(int a, int b, IntPtr c, int d);
+  [DllImport("user32.dll")] public static extern IntPtr FindWindow(string c, string t);
+
+  public static string SetScale(int percent) {
+    uint np, nm; int r = GetDisplayConfigBufferSizes(2, out np, out nm); if (r != 0) return "sizes " + r;
+    IntPtr pa = Marshal.AllocHGlobal((int)np * 72), ma = Marshal.AllocHGlobal((int)nm * 64);
+    r = QueryDisplayConfig(2, ref np, pa, ref nm, ma, IntPtr.Zero); if (r != 0) return "query " + r;
+    LUID luid = new LUID(); luid.Low = (uint)Marshal.ReadInt32(pa, 0); luid.High = Marshal.ReadInt32(pa, 4);
+    uint id = (uint)Marshal.ReadInt32(pa, 8);
+    GET g = new GET(); g.h.type = -3; g.h.size = (uint)Marshal.SizeOf(typeof(GET)); g.h.adapter = luid; g.h.id = id;
+    r = DisplayConfigGetDeviceInfo(ref g); if (r != 0) return "get " + r;
+    int[] steps = {100,125,150,175,200,225,250,300,350,400,450,500};
+    int rel = Array.IndexOf(steps, percent) - (-g.minRel);
+    SET s = new SET(); s.h.type = -4; s.h.size = (uint)Marshal.SizeOf(typeof(SET)); s.h.adapter = luid; s.h.id = id; s.rel = rel;
+    r = DisplayConfigSetDeviceInfo(ref s);
+    return "min=" + g.minRel + " cur=" + g.curRel + " max=" + g.maxRel + " set rel=" + rel + " -> " + r;
+  }
+
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+  public struct DEVMODE {
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+    public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
+    public int dmFields, dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
+    public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+    public short dmLogPixels;
+    public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency, dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
+  }
+  [DllImport("user32.dll", CharSet = CharSet.Ansi)] static extern bool EnumDisplaySettings(string dev, int mode, ref DEVMODE dm);
+  [DllImport("user32.dll", CharSet = CharSet.Ansi)] static extern int ChangeDisplaySettings(ref DEVMODE dm, int flags);
+  public static string Modes() {
+    var seen = new System.Collections.Generic.SortedSet<string>();
+    DEVMODE dm = new DEVMODE(); dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+    for (int i = 0; EnumDisplaySettings(null, i, ref dm); i++) seen.Add(dm.dmPelsWidth + "x" + dm.dmPelsHeight);
+    return string.Join(" ", seen);
+  }
+  public static string SetResolution(int w, int h) {
+    DEVMODE dm = new DEVMODE(); dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+    EnumDisplaySettings(null, -1, ref dm);
+    dm.dmPelsWidth = w; dm.dmPelsHeight = h; dm.dmFields = 0x80000 | 0x100000;
+    return "ChangeDisplaySettings " + w + "x" + h + " -> " + ChangeDisplaySettings(ref dm, 0);
+  }
+}
+"@
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type -Namespace Native -Name Win -MemberDefinition @"
 [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
@@ -45,7 +112,7 @@ Add-Type -Namespace Native -Name Win -MemberDefinition @"
 [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, int m, IntPtr w, IntPtr l);
 public struct RECT { public int Left, Top, Right, Bottom; }
 "@
-[Native.Win]::SetProcessDPIAware() | Out-Null
+[Hidpi]::SetProcessDpiAwarenessContext([IntPtr]-4) | Out-Null  # per-monitor v2: real pixels
 # Hide the navigation pane via UI Automation (View > Show > Navigation pane).
 # Best-effort: everything is logged to uia.log so failures can be diagnosed.
 $log = "$Out\uia.log"
@@ -96,6 +163,19 @@ $shellWin = (New-Object -ComObject Shell.Application).Windows() | Where-Object {
 $h = if ($shellWin) { [IntPtr][int64]$shellWin.HWND } else { [IntPtr]::Zero }
 if ($h -eq [IntPtr]::Zero) { $h = [Native.Win]::FindWindow("CabinetWClass", $null) }
 
+if ($Scale -ne 1) {
+  # The navigation pane setting sticks, so hide it at 100% (above) and only then
+  # scale up: Windows caps the scale by resolution (200% needs a 1600x1200 screen).
+  $shellWin.Quit(); Start-Sleep -Seconds 2
+  "resolution: $([Hidpi]::SetResolution(1600, 1200))" | Out-File "$Out\hidpi.log" -Append
+  Start-Sleep -Seconds 4
+  "scale $($Scale * 100)%: $([Hidpi]::SetScale($Scale * 100))" | Out-File "$Out\hidpi.log" -Append
+  Start-Sleep -Seconds 5
+  Start-Process explorer.exe -ArgumentList "`"$fixture`""; Start-Sleep -Seconds 8
+  $shellWin = (New-Object -ComObject Shell.Application).Windows() | Where-Object { $_.LocationName -eq "Your site" } | Select-Object -First 1
+  $h = if ($shellWin) { [IntPtr][int64]$shellWin.HWND } else { [Native.Win]::FindWindow("CabinetWClass", $null) }
+  "explorer dpi: $([Hidpi]::GetDpiForWindow($h))" | Out-File "$Out\hidpi.log" -Append
+}
 # Plain mild-grey desktop with no icons, so the window's shadow is visible
 Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name Background -Value "128 128 128"
 [Native.Win]::SystemParametersInfo(0x14, 0, "", 3) | Out-Null
@@ -103,18 +183,22 @@ Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name Background -Value "128
 $progman = [Native.Win]::FindWindow("Progman", $null)
 [Native.Win]::SendMessage($progman, 0x111, [IntPtr]0x7402, [IntPtr]::Zero) | Out-Null  # toggle desktop icons
 
-# Move the window clear of the desktop edges and taskbar, leaving room for its shadow
-[Native.Win]::MoveWindow($h, 170, 30, 800, 640, $true) | Out-Null
+# Size the window (logical px x scale) and keep it clear of the screen edges and
+# taskbar, leaving room for its shadow
+$sw = [Hidpi]::GetSystemMetrics(0); $sh = [Hidpi]::GetSystemMetrics(1)
+$taskbar = 48 * $Scale; $pad = 60 * $Scale
+$winH = [Math]::Min(640 * $Scale, $sh - $taskbar - 2 * 30 * $Scale)
+[Native.Win]::MoveWindow($h, $pad, 30 * $Scale, $Width * $Scale, $winH, $true) | Out-Null
 Start-Sleep -Seconds 2
 
 $r = New-Object Native.Win+RECT
 [Native.Win]::DwmGetWindowAttribute($h, 9, [ref]$r, [System.Runtime.InteropServices.Marshal]::SizeOf($r)) | Out-Null
-$pad = 60
 $x0 = [Math]::Max(0, $r.Left - $pad); $y0 = [Math]::Max(0, $r.Top - $pad)
-$x1 = [Math]::Min(1024, $r.Right + $pad); $y1 = [Math]::Min(700, $r.Bottom + $pad)
+$x1 = [Math]::Min($sw, $r.Right + $pad); $y1 = [Math]::Min($sh - $taskbar, $r.Bottom + $pad)
 "window: $($r.Left),$($r.Top) $($r.Right - $r.Left)x$($r.Bottom - $r.Top); capture $x0,$y0 $($x1 - $x0)x$($y1 - $y0)" | Out-File "$Out\versions.txt" -Append
 $bmp = New-Object System.Drawing.Bitmap ($x1 - $x0), ($y1 - $y0)
 $g = [System.Drawing.Graphics]::FromImage($bmp)
 $g.CopyFromScreen($x0, $y0, 0, 0, $bmp.Size)
-$bmp.Save("$Out\$Label-$Theme.png", [System.Drawing.Imaging.ImageFormat]::Png)
+$suffix = if ($Scale -ne 1) { "@${Scale}x" } else { "" }
+$bmp.Save("$Out\$Label-$Theme$suffix.png", [System.Drawing.Imaging.ImageFormat]::Png)
 Get-Process explorer | Select-Object Id, MainWindowTitle | Out-String | Out-File "$Out\processes.txt"

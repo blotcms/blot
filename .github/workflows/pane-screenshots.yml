@@ -68,6 +68,7 @@ jobs:
       matrix:
         runner: [windows-latest]
         theme: [light, dark]
+        scale: [1, 2]
     steps:
       # the repo contains filenames Windows can't check out, so fetch just the script
       - name: Fetch script
@@ -75,11 +76,11 @@ jobs:
         run: Invoke-WebRequest "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/app/helper/pane/screenshots/windows.ps1" -OutFile windows.ps1
       - name: Screenshot
         shell: pwsh
-        run: ./windows.ps1 -Theme ${{ matrix.theme }} -Out out -Label ${{ matrix.runner }}
+        run: ./windows.ps1 -Theme ${{ matrix.theme }} -Out out -Label ${{ matrix.runner }} -Scale ${{ matrix.scale }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pane-${{ matrix.runner }}-${{ matrix.theme }}
+          name: pane-${{ matrix.runner }}-${{ matrix.theme }}-${{ matrix.scale }}x
           path: out
           if-no-files-found: warn
 
@@ -90,7 +91,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        experiment: [dpi, res-dpi, spi, logpixels, rdp]
+        experiment: [res-1200]
     steps:
       - name: Fetch script
         shell: pwsh

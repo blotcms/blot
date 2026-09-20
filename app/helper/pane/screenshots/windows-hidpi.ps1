@@ -115,6 +115,14 @@ switch ($Experiment) {
     OpenExplorer $f
     Report "explorer"
   }
+  "res-1200" {
+    Log "SetResolution: $([Hidpi]::SetResolution(1600, 1200))"
+    Start-Sleep -Seconds 4
+    Log "SetScale 200: $([Hidpi]::SetScale(200))"
+    Start-Sleep -Seconds 5
+    OpenExplorer $f
+    Report "explorer"
+  }
   "spi" {
     # SPI_SETLOGICALDPIOVERRIDE: relative scale steps above the recommended value
     foreach ($steps in 4, 3, 2, 1) {
