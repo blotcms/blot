@@ -27,7 +27,8 @@ script paints a borderless window at `kCGDesktopWindowLevel` filled with 50% gre
   ignored) for a fresh window. What works is dragging the column dividers with
   `cliclick` (right to left, so earlier drags don't move later ones): Date Modified
   is narrowed until Finder switches to its short date format, Name is widened by 30%,
-  and Kind is unticked in View Options (Cmd-J). Divider positions are measured from
+  and Kind is hidden from the header's context menu (right-click, K, Return). Cmd-J
+  View Options followed by Cmd-W closed the Finder window instead, so avoid it. Divider positions are measured from
   the screenshot and relative to the window bounds.
 - Sidebar hidden with Option-Cmd-S (View menu) via System Events.
 - Toolbar reduced to back/forward: rewrite `NSToolbar Configuration Browser` in
