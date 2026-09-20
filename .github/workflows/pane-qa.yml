@@ -1,0 +1,129 @@
+# Renders the pane QA cases (app/helper/pane/qa) on the runner of the matching
+# OS, so the system fonts line up with the real screenshots (SF on macOS, Segoe
+# UI Variable on Windows, Cantarell on Ubuntu), and commits the images to
+# app/helper/pane/rendered/, like pane-screenshots does for reference/.
+# See app/helper/pane/qa/README.md.
+name: pane-qa
+
+on:
+  push:
+    paths:
+      - "app/helper/pane/qa/**"
+      - "app/helper/pane/index.js"
+      - "app/helper/pane/reference/*/*.png"
+      - ".github/workflows/pane-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pane-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # the qa scripts only need these; there is no reason to install the whole repo
+  QA_PACKAGES: puppeteer@24.1.1 sharp@0.35.4 pixelmatch@5.3.0 express@4.22.3
+
+jobs:
+  render:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos, runner: macos-latest }
+          - { os: windows, runner: windows-latest }
+          - { os: linux, runner: ubuntu-latest }
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Windows can't check out this repo (a filename contains `|`), so
+      # download the tarball and unpack only app/helper/pane.
+      - name: Fetch pane (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Headers @{ Authorization = "Bearer ${{ github.token }}" } "https://api.github.com/repos/${{ github.repository }}/tarball/${{ github.sha }}" -OutFile repo.tgz
+          New-Item -ItemType Directory -Force repo | Out-Null
+          # bsdtar (the Windows tar) uses --include; fall back to GNU tar's --wildcards
+          tar -xzf repo.tgz -C repo --strip-components=1 --include "*/app/helper/pane/*"
+          if ($LASTEXITCODE -ne 0) { tar -xzf repo.tgz -C repo --strip-components=1 --wildcards "*/app/helper/pane/*" }
+          Get-ChildItem repo/app/helper/pane
+      - uses: actions/checkout@v4
+        if: matrix.os != 'windows'
+        with:
+          path: repo
+
+      - name: Install fonts (Linux)
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-cantarell fonts-dejavu-core
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          mkdir tools && cd tools
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund $QA_PACKAGES
+
+      - name: Render
+        shell: bash
+        working-directory: repo
+        env:
+          NODE_PATH: ${{ github.workspace }}/tools/node_modules
+        run: node app/helper/pane/qa/render.js --os ${{ matrix.os }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pane-qa-${{ matrix.os }}
+          path: repo/app/helper/pane/rendered/${{ matrix.os }}
+          if-no-files-found: warn
+
+  # Commits the renders next to the references so the local viewer works
+  # without Chrome. Pushes made with GITHUB_TOKEN don't trigger new runs.
+  commit:
+    needs: render
+    if: ${{ !cancelled() && github.ref_type == 'branch' && github.ref != 'refs/heads/master' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          path: rendered-artifacts
+      - name: Commit images
+        run: |
+          OUT=app/helper/pane/rendered
+          for os in macos windows linux; do
+            [ -d "rendered-artifacts/pane-qa-$os" ] || continue   # keep the old images if a job failed
+            rm -rf "$OUT/$os"
+            mkdir -p "$OUT/$os"
+            cp rendered-artifacts/pane-qa-$os/*.png "$OUT/$os/" 2>/dev/null || true
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f "$OUT"
+          git diff --cached --quiet && exit 0
+          git commit -m "Update pane rendered images"
+          git pull --rebase origin "${{ github.ref_name }}"
+          git push origin "HEAD:${{ github.ref_name }}"
+      # Informational: the thresholds don't gate CI until the module exists.
+      - name: Summarise differences
+        run: |
+          mkdir tools && cd tools && npm init -y >/dev/null
+          npm install --no-audit --no-fund $QA_PACKAGES
+          cd ..
+          {
+            echo '### pane QA'
+            echo '```'
+            NODE_PATH="$PWD/tools/node_modules" node app/helper/pane/qa/diff.js || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

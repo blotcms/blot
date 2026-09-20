@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pane QA</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to comparison</a>
+<header class="top">
+  <h1>pane QA</h1>
+  <p id="summary" class="muted" role="status"></p>
+  <button id="help-button" type="button" aria-haspopup="dialog">Keyboard shortcuts <kbd>?</kbd></button>
+</header>
+
+<div class="layout">
+  <nav class="cases" aria-label="Cases">
+    <form class="filters" aria-label="Filter cases" onsubmit="return false">
+      <label>OS <select id="f-os"><option value="">all</option></select></label>
+      <label>Theme <select id="f-theme"><option value="">all</option></select></label>
+      <label>View <select id="f-view"><option value="">all</option></select></label>
+      <label>Result <select id="f-status"><option value="">all</option><option>pass</option><option>fail</option><option>missing</option><option>error</option></select></label>
+    </form>
+    <ul id="case-list"></ul>
+  </nav>
+
+  <main id="main" tabindex="-1">
+    <section class="head" aria-labelledby="case-title">
+      <h2 id="case-title">Select a case</h2>
+      <p id="case-meta" class="muted"></p>
+    </section>
+
+    <div class="toolbar" role="toolbar" aria-label="Comparison controls">
+      <fieldset class="modes">
+        <legend>Mode</legend>
+        <label><input type="radio" name="mode" value="side" checked> <span><kbd>1</kbd> Side by side</span></label>
+        <label><input type="radio" name="mode" value="swipe"> <span><kbd>2</kbd> Swipe</span></label>
+        <label><input type="radio" name="mode" value="onion"> <span><kbd>3</kbd> Onion skin</span></label>
+        <label><input type="radio" name="mode" value="blink"> <span><kbd>4</kbd> Blink</span></label>
+        <label><input type="radio" name="mode" value="live"> <span><kbd>5</kbd> Live HTML</span></label>
+      </fieldset>
+      <label>Diff view
+        <select id="diff-mode"><option value="diff">Pixel diff</option><option value="heatmap">Difference heatmap</option></select>
+      </label>
+      <label class="check"><input type="checkbox" id="show-masks" checked> Masked regions <kbd>m</kbd></label>
+      <label class="check"><input type="checkbox" id="show-clusters"> Diff clusters <kbd>c</kbd></label>
+      <span class="zoom" role="group" aria-label="Zoom">
+        <button type="button" id="zoom-out" aria-label="Zoom out">&minus;</button>
+        <output id="zoom-level" aria-label="Zoom level">100%</output>
+        <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+        <button type="button" id="zoom-fit">Fit <kbd>0</kbd></button>
+      </span>
+      <button type="button" id="rerender">Re-render this case <kbd>r</kbd></button>
+      <label class="check"><input type="checkbox" id="auto-render"> Re-render when the fixture changes</label>
+      <span id="status" class="muted" role="status" aria-live="polite"></span>
+    </div>
+
+    <div id="mode-controls" class="mode-controls"></div>
+    <div id="stage-area" class="stage-area"></div>
+
+    <output id="readout" class="readout" aria-label="Pixel under the pointer">Move the pointer over an image to read pixels.</output>
+
+    <div class="panels">
+      <section aria-labelledby="h-metrics"><h3 id="h-metrics">Metrics</h3><div id="metrics"></div></section>
+      <section aria-labelledby="h-clusters"><h3 id="h-clusters">Largest differences</h3><ol id="clusters"></ol></section>
+      <section aria-labelledby="h-shadow"><h3 id="h-shadow">Shadow profile</h3><div id="shadow"></div></section>
+    </div>
+  </main>
+</div>
+
+<dialog id="help" aria-labelledby="help-title">
+  <h2 id="help-title">Keyboard shortcuts</h2>
+  <dl>
+    <dt><kbd>j</kbd> / <kbd>k</kbd></dt><dd>Next / previous case</dd>
+    <dt><kbd>1</kbd>&ndash;<kbd>5</kbd></dt><dd>Side by side, swipe, onion skin, blink, live HTML</dd>
+    <dt><kbd>h</kbd></dt><dd>Switch pixel diff / heatmap</dd>
+    <dt><kbd>m</kbd> / <kbd>c</kbd></dt><dd>Toggle masked regions / diff clusters</dd>
+    <dt><kbd>b</kbd></dt><dd>Start / stop blinking</dd>
+    <dt><kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd></dt><dd>Zoom in / out / fit (up to 400%)</dd>
+    <dt>Arrow keys</dt><dd>Pan (when an image is focused); in a slider, move it</dd>
+    <dt><kbd>[</kbd> / <kbd>]</kbd></dt><dd>Jump to the previous / next diff cluster</dd>
+    <dt><kbd>r</kbd></dt><dd>Re-render this case</dd>
+    <dt><kbd>?</kbd></dt><dd>This help</dd>
+  </dl>
+  <form method="dialog"><button>Close</button></form>
+</dialog>
+<script src="app.js"></script>
+</body>
+</html>

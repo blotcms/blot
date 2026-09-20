@@ -113,21 +113,32 @@ must be tiny. Guidelines:
 ## QA: real vs. rendered comparison
 
 Goal: for every OS x theme x view, compare a REAL screenshot (captured on CI
-runners) with the pane rendering of the same
-fixture, captured in a browser in CI, and make the differences easy to inspect.
-Not pixel-identical, but close enough to judge by eye and by metric.
+runners) with the pane rendering of the same fixture, captured in a browser in
+CI, and make the differences easy to inspect. Not pixel-identical, but close
+enough to judge by eye and by metric. Built; see `qa/README.md`.
 
 - `reference/`: real screenshots captured by CI (see Phase 1).
-- `rendered/`: pane output for the same fixture, rendered by Puppeteer at the
-  same window size and captured by a CI job, committed like the references.
-- `qa/`: a small local server (`node app/helper/pane/qa`) that lists every
-  OS/theme/view pair and shows real | rendered | diff side by side, with a swipe
-  slider and overlay/blink modes, plus the pixel-difference score.
-- Agents can use it too: a CLI (`node app/helper/pane/qa/diff.js`) writes diff
-  PNGs and a JSON report of per-pair metrics, so a change can be checked without
-  a human looking at every image.
-- Both sides use one shared fixture definition (same tree, same window size and
-  crop) so images align without manual work.
+- `rendered/`: pane output for the same case, rendered by Puppeteer at the same
+  scale on the runner of the matching OS (so the system fonts line up) by
+  `.github/workflows/pane-qa.yml`, committed like the references so the viewer
+  works without Chrome.
+- `qa/`: the case registry (derived by scanning `reference/`), an adapter
+  interface (`render(caseId) -> { html, css }`, with hand-written `qa/fixtures/`
+  until the module exists), the renderer, a pure comparison engine (pixelmatch
+  diff, window detection, shadow profile, diff clusters, text row positions) and
+  two front ends:
+  - `node app/helper/pane/qa/diff.js [--case ID] [--explain] [--json]` for
+    agents: diff images and a JSON report in `qa/out/`, a table, coordinates of
+    the largest differences in CSS px, non-zero exit above `qa/thresholds.json`.
+  - `node app/helper/pane/qa`: a local viewer (side by side, swipe, onion skin,
+    blink, live HTML, synced zoom to 400%, pixel readout, shadow charts, mask and
+    cluster overlays, live reload, re-render).
+- Chrome is compared strictly, text loosely (row positions, not glyph pixels);
+  time-dependent text (the date columns) is masked; the fixtures freeze dates.
+- Decisions to revisit: thresholds start loose; `rendered/` is committed (it
+  makes the viewer and diff work without Chrome, at the cost of binary churn);
+  the Windows and Linux captures have no shadow, so their shadow metric only
+  checks the rendering does not add one.
 
 ## Phase 1 (this PR): gather reference screenshots
 

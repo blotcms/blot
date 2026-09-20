@@ -1,0 +1,10 @@
+{
+  "_comment": "Limits for diff.js. diffPercent is % of compared (unmasked) pixels that differ, per region name or kind (chrome is stricter than text). shadowError is RMSE in luminance levels. sizeDelta is the window size difference in CSS px. rowYOffset is the mean vertical offset of text rows in CSS px. Per-case entries in \"cases\" override the defaults key by key. These start loose so crude fixtures pass or fail meaningfully; tighten as the module improves.",
+  "default": {
+    "diffPercent": { "overall": 8, "chrome": 5, "text": 15 },
+    "shadowError": 10,
+    "sizeDelta": 4,
+    "rowYOffset": 4
+  },
+  "cases": {}
+}

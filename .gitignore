@@ -32,3 +32,5 @@ config/nginx/server.conf
 package-lock.json
 node_modules/*
 app/clients/icloud/macserver/node_modules
+# pane QA output (diff images, reports)
+app/helper/pane/qa/out/
