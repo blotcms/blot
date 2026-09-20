@@ -1,39 +1,39 @@
-** Message: 19:09:28.956: Connecting to org.freedesktop.Tracker3.Miner.Files
+** Message: 19:12:33.121: Connecting to org.freedesktop.Tracker3.Miner.Files
 
-(org.gnome.Nautilus:4242): Gtk-WARNING **: 19:09:29.048: Unable to acquire the address of the accessibility bus: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files. If you are attempting to run GTK without a11y support, GTK_A11Y should be set to 'none'.
+(org.gnome.Nautilus:4396): Gtk-WARNING **: 19:12:33.223: Unable to acquire the address of the accessibility bus: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files. If you are attempting to run GTK without a11y support, GTK_A11Y should be set to 'none'.
 
-** (org.gnome.Nautilus:4242): WARNING **: 19:09:29.231: Unable to get contents of the bookmarks file: Error opening file /home/runner/.gtk-bookmarks: No such file or directory
+** (org.gnome.Nautilus:4396): WARNING **: 19:12:33.432: Unable to get contents of the bookmarks file: Error opening file /home/runner/.gtk-bookmarks: No such file or directory
 
-** (org.gnome.Nautilus:4242): WARNING **: 19:09:29.231: Unable to get contents of the bookmarks file: Error opening file /home/runner/.gtk-bookmarks: No such file or directory
+** (org.gnome.Nautilus:4396): WARNING **: 19:12:33.432: Unable to get contents of the bookmarks file: Error opening file /home/runner/.gtk-bookmarks: No such file or directory
 
-(org.gnome.Nautilus:4242): GLib-GIO-CRITICAL **: 19:09:29.388: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
+(org.gnome.Nautilus:4396): GLib-GIO-CRITICAL **: 19:12:33.584: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
 
-(org.gnome.Nautilus:4242): GLib-CRITICAL **: 19:09:29.388: g_str_match_string: assertion 'potential_hit != NULL' failed
+(org.gnome.Nautilus:4396): GLib-CRITICAL **: 19:12:33.584: g_str_match_string: assertion 'potential_hit != NULL' failed
 
-(org.gnome.Nautilus:4242): GLib-GIO-CRITICAL **: 19:09:29.388: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
+(org.gnome.Nautilus:4396): GLib-GIO-CRITICAL **: 19:12:33.584: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
 
-(org.gnome.Nautilus:4242): GLib-CRITICAL **: 19:09:29.388: g_str_match_string: assertion 'potential_hit != NULL' failed
+(org.gnome.Nautilus:4396): GLib-CRITICAL **: 19:12:33.584: g_str_match_string: assertion 'potential_hit != NULL' failed
 
-(org.gnome.Nautilus:4242): GLib-GIO-CRITICAL **: 19:09:29.446: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
+(org.gnome.Nautilus:4396): GLib-GIO-CRITICAL **: 19:12:33.634: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
 
-(org.gnome.Nautilus:4242): GLib-CRITICAL **: 19:09:29.446: g_str_match_string: assertion 'potential_hit != NULL' failed
+(org.gnome.Nautilus:4396): GLib-CRITICAL **: 19:12:33.634: g_str_match_string: assertion 'potential_hit != NULL' failed
 
-(org.gnome.Nautilus:4242): GLib-GIO-CRITICAL **: 19:09:29.529: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
+(org.gnome.Nautilus:4396): GLib-GIO-CRITICAL **: 19:12:33.710: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
 
-(org.gnome.Nautilus:4242): GLib-CRITICAL **: 19:09:29.529: g_str_match_string: assertion 'potential_hit != NULL' failed
+(org.gnome.Nautilus:4396): GLib-CRITICAL **: 19:12:33.710: g_str_match_string: assertion 'potential_hit != NULL' failed
 
-(org.gnome.Nautilus:4242): GLib-GIO-CRITICAL **: 19:09:29.529: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
+(org.gnome.Nautilus:4396): GLib-GIO-CRITICAL **: 19:12:33.710: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
 
-(org.gnome.Nautilus:4242): GLib-CRITICAL **: 19:09:29.529: g_str_match_string: assertion 'potential_hit != NULL' failed
+(org.gnome.Nautilus:4396): GLib-CRITICAL **: 19:12:33.710: g_str_match_string: assertion 'potential_hit != NULL' failed
 
-(org.gnome.Nautilus:4242): GLib-GIO-CRITICAL **: 19:09:29.629: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
+(org.gnome.Nautilus:4396): GLib-GIO-CRITICAL **: 19:12:33.812: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
 
-(org.gnome.Nautilus:4242): GLib-CRITICAL **: 19:09:29.629: g_str_match_string: assertion 'potential_hit != NULL' failed
+(org.gnome.Nautilus:4396): GLib-CRITICAL **: 19:12:33.812: g_str_match_string: assertion 'potential_hit != NULL' failed
 
-(org.gnome.Nautilus:4242): GLib-GIO-CRITICAL **: 19:09:39.712: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
+(org.gnome.Nautilus:4396): GLib-GIO-CRITICAL **: 19:12:43.899: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
 
-(org.gnome.Nautilus:4242): GLib-CRITICAL **: 19:09:39.712: g_str_match_string: assertion 'potential_hit != NULL' failed
+(org.gnome.Nautilus:4396): GLib-CRITICAL **: 19:12:43.899: g_str_match_string: assertion 'potential_hit != NULL' failed
 
-(org.gnome.Nautilus:4242): GLib-GIO-CRITICAL **: 19:09:39.713: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
+(org.gnome.Nautilus:4396): GLib-GIO-CRITICAL **: 19:12:43.900: g_app_info_get_commandline: assertion 'G_IS_APP_INFO (appinfo)' failed
 
-(org.gnome.Nautilus:4242): GLib-CRITICAL **: 19:09:39.713: g_str_match_string: assertion 'potential_hit != NULL' failed
+(org.gnome.Nautilus:4396): GLib-CRITICAL **: 19:12:43.900: g_str_match_string: assertion 'potential_hit != NULL' failed
