@@ -170,7 +170,7 @@ for v in "icon view:icons" "column view:columns" "flow view:gallery"; do
 done
 # Editors: TextEdit is the OS's text editor window. Capture it with prose ("text")
 # and with source code ("code"; IgnoreHTML shows the markup instead of rendering it).
-EDIT="$HOME/Documents/editors"; mkdir -p "$EDIT"
+EDIT="/private/tmp/pane-editors"; mkdir -p "$EDIT"  # not ~/Documents: TextEdit would block on a permission prompt there
 cp "$HERE/fixture-assets/text-sample.txt" "$EDIT/Essay.txt"
 cp "$HERE/fixture-assets/code-sample.html" "$EDIT/index.html"
 defaults write com.apple.TextEdit RichText 0
