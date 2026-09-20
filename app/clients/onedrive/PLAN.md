@@ -190,9 +190,12 @@ mounted at `https://blot.im/clients/onedrive/...`.
    `https://login.microsoftonline.com/common/oauth2/v2.0/token`, refresh
    token handling, `database.js` for account state. Port of
    `dropbox/routes/setup`.
-3. **Folder setup and transfer**: create/locate the app folder
-   (`/me/drive/special/approot`), choose whether to copy existing files up or
-   pull down, as Dropbox does.
+3. **Folder setup and transfer** (done): create a per-blog folder inside the
+   app folder (`/me/drive/special/approot`) and upload the blog's files, as
+   Dropbox does (we always create a fresh folder, so there is nothing to pull
+   down and no upload/download choice). Includes `resync`
+   (`reset-to-blot`), `reset-from-blot`, `getHealth`, and `write`/`remove`
+   pushing to OneDrive.
 4. **Delta sync**: `GET /me/drive/special/approot/delta`, store the
    `deltaLink`, apply deletions/dirs/downloads, handle `410 resyncRequired`
    with a full resync. Port of `dropbox/delta.js`. Handle case-only renames

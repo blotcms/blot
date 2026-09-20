@@ -162,9 +162,22 @@ Model = {
   // Epoch ms after which access_token is no longer valid.
   expires_at: "number",
 
-  // HTTP-style status code of an error talking to Microsoft. 0 if OK,
-  // 401 if the refresh token was rejected and the user must reconnect.
+  // A user-actionable error talking to Microsoft, as an HTTP-style code
+  // (see util/classifyError.js): 0 if OK, 401 if access was revoked,
+  // 404 if the blog's folder was deleted, 507 if storage is full.
   error_code: "number",
+
+  // Epoch ms when the current error_code first appeared, 0 if none.
+  error_since: "number",
+
+  // Name of the blog's folder inside the app folder (Apps/<app name>),
+  // and its Graph item ID, which stays valid if the user renames it.
+  // Empty strings until the folder has been created during setup.
+  folder: "string",
+  folder_id: "string",
+
+  // Epoch ms of the last successful transfer.
+  last_sync: "number",
 };
 
 module.exports = {

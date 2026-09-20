@@ -4,6 +4,9 @@ const dashboard = express.Router();
 const disconnect = require("clients/onedrive/disconnect");
 const Database = require("clients/onedrive/database");
 const oauth = require("clients/onedrive/util/oauth");
+const setup = require("clients/onedrive/setup");
+const { flagsFromAccount } = require("clients/onedrive/util/classifyError");
+const { promisify } = require("util");
 const Blog = require("models/blog");
 const views = __dirname + "/../views/";
 
@@ -14,7 +17,8 @@ dashboard.use(function loadOneDriveAccount(req, res, next) {
     if (!account) return next();
 
     res.locals.account = req.account = account;
-    res.locals.revoked = account.error_code === 401;
+    Object.assign(res.locals, flagsFromAccount(account));
+    res.locals.preparing = !account.folder_id;
 
     next();
   });
@@ -63,28 +67,36 @@ dashboard.get("/authenticate", async function (req, res, next) {
     const tokens = await oauth.exchangeCode(req.query.code);
     const profile = await oauth.getProfile(tokens.access_token);
 
-    await new Promise(function (resolve, reject) {
-      Database.set(
-        req.blog.id,
-        {
-          account_id: profile.account_id,
-          email: profile.email,
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
-          expires_at: tokens.expires_at,
-          error_code: 0,
-        },
-        function (err) {
-          err ? reject(err) : resolve();
-        }
-      );
+    const existing = await promisify(Database.get)(req.blog.id);
+
+    // Reconnecting the same Microsoft account (say, after access was
+    // revoked) keeps the blog's folder. A different account has none, and
+    // neither does an account whose folder was deleted (error_code 404).
+    const sameAccount = existing && existing.account_id === profile.account_id;
+    const needsSetup =
+      !sameAccount || !existing.folder_id || existing.error_code === 404;
+
+    await promisify(Database.set)(req.blog.id, {
+      account_id: profile.account_id,
+      email: profile.email,
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_at: tokens.expires_at,
+      error_code: 0,
+      error_since: 0,
+      folder: needsSetup ? "" : existing.folder,
+      folder_id: needsSetup ? "" : existing.folder_id,
     });
 
-    await new Promise(function (resolve, reject) {
-      Blog.set(req.blog.id, { client: "onedrive" }, function (err) {
-        err ? reject(err) : resolve();
+    await promisify(Blog.set)(req.blog.id, { client: "onedrive" });
+
+    // Creates the folder and uploads the blog's files in the background,
+    // reporting progress through the sync status shown on the dashboard.
+    if (needsSetup) {
+      setup(req.blog.id, req.blog.title, function (err) {
+        if (err) console.error("OneDrive setup failed for", req.blog.id, err);
       });
-    });
+    }
 
     res.redirect(req.baseUrl);
   } catch (err) {

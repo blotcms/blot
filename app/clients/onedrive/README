@@ -14,15 +14,29 @@ Current state:
 - `util/getAccessToken.js` returns a valid access token, refreshing and
   saving the rotated tokens; a rejected refresh token sets `error_code` 401,
   and the dashboard shows a reconnect prompt.
-- `disconnect` clears `blog.client` and forgets the stored tokens.
-- `write` and `remove` only touch the local blog folder. They do not yet talk
-  to Microsoft Graph.
+- After connecting, `setup.js` (under the folder lock) creates a folder named
+  after the blog inside the app folder (`Apps/<app name>/<blog title>`, renamed
+  automatically if taken) and uploads the blog's files with
+  `sync/reset-from-blot.js`. Progress shows through the sync status.
+- `write` and `remove` change the local folder and OneDrive. Before the
+  OneDrive folder exists they only change the local folder.
+- `resync` is `sync/reset-to-blot.js` (OneDrive -> Blot, used by the dashboard's
+  reset tools); `sync/reset-from-blot.js` is the reverse (Blot -> OneDrive).
+- `getHealth` reports REAUTH_REQUIRED (access revoked / refresh token
+  rejected), SOURCE_MISSING (folder deleted) and QUOTA_EXCEEDED (storage full)
+  from `error_code` on the stored account, set by `util/persistError.js` using
+  the rules in `util/classifyError.js`. Transient errors (throttling, 5xx) are
+  retried in `util/graph.js` and never reported as health issues.
+- `disconnect` clears `blog.client` and forgets the stored tokens (it does not
+  delete the user's OneDrive folder).
 - `site_routes` also exposes `POST /webhook`, which answers Graph's
   `validationToken` handshake, checks `clientState` on notifications and
   responds 202, but does not act on them.
 - The client is only registered (`app/clients/index.js`) once
   `config.onedrive.{client_id,client_secret,webhook_secret}` are set.
 
-Not implemented: folder setup, delta sync, uploads, subscription creation
-and renewal, polling fallback, `getHealth`. Do not set the credentials in
-production until folder sync exists: connecting works, but nothing syncs yet.
+Not implemented: pulling changes from OneDrive automatically (delta sync),
+Graph change-notification subscriptions and renewal, a polling fallback. Until
+then changes made in OneDrive only reach Blot via the dashboard's resync. Do
+not set the credentials in production until delta sync exists. If setup fails
+part way the sync status shows the error; the user can disconnect and retry.
