@@ -84,7 +84,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: app/helper/pane/screenshots
+          # the workflow file is included so hashFiles() below can see it
+          sparse-checkout: |
+            app/helper/pane/screenshots
+            .github/workflows
       # apt downloads dominate this job: keep the .deb files between runs
       - uses: actions/cache@v4
         with:
