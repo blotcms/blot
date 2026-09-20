@@ -22,13 +22,22 @@ stylesheet.css
 templatesScriptsManager.js
 thumbnails.js
 
-(gjs:6431): dbind-WARNING **: 20:30:53.528: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
+(gjs:6630): dbind-WARNING **: 20:39:04.257: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
 Detected async api for thumbnails
+** Message: 20:39:04.552: Connecting to org.freedesktop.Tracker3.Miner.Files
+GNOME nautilus 46.4
 
-(gjs:6431): Gjs-CRITICAL **: 20:30:53.721: JS ERROR: TypeError: GLib.getenv(...) is null
-_createDesktopBackgroundMenu@/usr/share/gnome-shell/extensions/ding@rastersoft.com/app/desktopManager.js:1123:18
-DesktopManager@/usr/share/gnome-shell/extensions/ding@rastersoft.com/app/desktopManager.js:237:14
-@/usr/share/gnome-shell/extensions/ding@rastersoft.com/app/ding.js:180:26
-@/usr/share/gnome-shell/extensions/ding@rastersoft.com/app/ding.js:197:21
-@/usr/share/gnome-shell/extensions/ding@rastersoft.com/app/ding.js:206:13
+(gjs:6630): GLib-GIO-CRITICAL **: 20:39:04.669: GFileInfo created without standard::is-hidden
 
+(gjs:6630): GLib-GIO-CRITICAL **: 20:39:04.669: file ../../../gio/gfileinfo.c: line 1632 (g_file_info_get_is_hidden): should not be reached
+
+(gjs:6630): GLib-GIO-CRITICAL **: 20:39:04.669: GFileInfo created without standard::is-backup
+
+(gjs:6630): GLib-GIO-CRITICAL **: 20:39:04.669: file ../../../gio/gfileinfo.c: line 1654 (g_file_info_get_is_backup): should not be reached
+
+(gjs:6630): GLib-GIO-CRITICAL **: 20:39:04.669: GFileInfo created without standard::is-symlink
+
+(gjs:6630): GLib-GIO-CRITICAL **: 20:39:04.669: file ../../../gio/gfileinfo.c: line 1676 (g_file_info_get_is_symlink): should not be reached
+DBus interface for Gvfs daemon (org.gtk.vfs.Metadata) is now available.
+DBus interface for Nautilus (org.gnome.Nautilus.FileOperations2) is now available.
+DBus interface for Nautilus (org.freedesktop.FileManager1) is now available.
