@@ -8,7 +8,7 @@ Script: `screenshots/linux.sh`.
 Xvfb (2560x2400) plus `openbox` (a window manager is needed for keyboard focus) inside
 `dbus-run-session`. Packages that matter: `nautilus`, `librsvg2-common`,
 `adwaita-icon-theme-full`, `shared-mime-info` (without them icons are broken),
-`xdotool`, `imagemagick`, `feh`, `x11-xserver-utils`.
+`xdotool`, `imagemagick`, `x11-xserver-utils`.
 
 ## Themes
 Real libadwaita dark mode needs `ADW_DEBUG_COLOR_SCHEME=prefer-dark` (and the
