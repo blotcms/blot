@@ -200,6 +200,8 @@ defaults write com.apple.dock autohide -bool true; killall Dock; sleep 3
 cp -Rp "$FIXTURE/." "$HOME/Desktop/"
 osascript -e 'tell application "Finder" to close every window' -e 'tell application "Finder" to activate' >>"$OUT/finder.log" 2>&1
 sleep 5
+# The desktop keeps icons arranged by Finder unless told otherwise, which ignores positions
+osascript -e 'tell application "Finder" to set arrangement of icon view options of window of desktop to not arranged' >>"$OUT/finder.log" 2>&1
 # lay the icons out in a tidy grid (4 columns, by name) instead of Finder's default
 # right-hand columns; positions are icon centres in points from the screen's top left
 i=0

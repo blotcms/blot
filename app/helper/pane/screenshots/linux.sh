@@ -121,7 +121,12 @@ CSS
 
   # Desktop icons: stock GNOME has none. Ubuntu ships Desktop Icons NG (DING), a GJS app
   # that draws GNOME-styled icons for ~/Desktop and can run without GNOME Shell.
-  DESK="$HOME/Desktop"; mkdir -p "$DESK"; cp -a "$FIXTURE/." "$DESK/"
+  DESK="$HOME/Desktop"; mkdir -p "$DESK"
+  # no Home or Trash icons, sorted by name; the files go in in name order
+  gsettings set org.gnome.shell.extensions.ding show-home false || true
+  gsettings set org.gnome.shell.extensions.ding show-trash false || true
+  gsettings set org.gnome.shell.extensions.ding arrangeorder NAME || true
+  for f in $(ls -1 "$FIXTURE"); do cp -a "$FIXTURE/$f" "$DESK/"; done
   DING=/usr/share/gnome-shell/extensions/ding@rastersoft.com/app
   ls "$DING" > "$OUT/ding.log" 2>&1
   # DING's window is transparent, which needs a compositing manager to show the grey desktop
@@ -129,6 +134,13 @@ CSS
   sleep 2
   XDG_CURRENT_DESKTOP=ubuntu:GNOME XDG_SESSION_TYPE=x11 gjs "$DING/ding.js" -P "$DING" -D "0:0:$((1280)):$((800)):1:0:0:0:0:0" >>"$OUT/ding.log" 2>&1 &
   sleep 10
+  # under GNOME Shell DING is the desktop; here the window manager treats it as a normal
+  # window, so mark it as the desktop and put it at the origin
+  for w in $(xdotool search --name "DING"); do
+    xprop -id "$w" -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DESKTOP >>"$OUT/ding.log" 2>&1
+    xdotool windowmove "$w" 0 0 windowsize "$w" $((1280 * S)) $((800 * S)) >>"$OUT/ding.log" 2>&1
+  done
+  sleep 4
   import -window root "$OUT/full.png"
   convert "$OUT/full.png" -crop "$((1280 * S))x$((800 * S))+0+0" +repage "$OUT/linux-$THEME$SUFFIX-desktop.png"
   rm -f "$OUT/full.png"

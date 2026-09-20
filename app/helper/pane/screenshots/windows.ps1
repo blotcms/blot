@@ -298,7 +298,11 @@ try {
   [Native.Win]::SetSysColors(1, @(1), @(0x808080)) | Out-Null
   "explorer processes: $((Get-Process explorer -ErrorAction SilentlyContinue).Count)" | Out-File $log -Append
   "desktop folder $desktop has $((Get-ChildItem $desktop | Measure-Object).Count) items; HideIcons=$((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced').HideIcons)" | Out-File $log -Append
-  # ask the desktop to refresh (F5 on the desktop) so it lists the copied files
+  # HideIcons is written back as 1 when Explorer is killed, so use the desktop's own
+  # "show desktop icons" command (a toggle) to bring them back, then refresh
+  $progman = [Native.Win]::FindWindow("Progman", $null)
+  [Native.Win]::SendMessage($progman, 0x111, [IntPtr]0x7402, [IntPtr]::Zero) | Out-Null
+  Start-Sleep -Seconds 3
   [System.Windows.Forms.SendKeys]::SendWait("{F5}")
   Start-Sleep -Seconds 3
   [Native.Mouse]::SetCursorPos($sw - 4, 4) | Out-Null
