@@ -112,13 +112,12 @@ must be tiny. Guidelines:
 
 ## QA: real vs. rendered comparison
 
-Goal: for every OS x theme x view, compare a REAL screenshot (from CI runners,
-or sourced from the web/supplied by hand) with the pane rendering of the same
+Goal: for every OS x theme x view, compare a REAL screenshot (captured on CI
+runners) with the pane rendering of the same
 fixture, captured in a browser in CI, and make the differences easy to inspect.
 Not pixel-identical, but close enough to judge by eye and by metric.
 
-- `reference/`: real screenshots (this PR's CI captures, plus web-sourced ones
-  where a runner can't produce one, e.g. Retina macOS).
+- `reference/`: real screenshots captured by CI (see Phase 1).
 - `rendered/`: pane output for the same fixture, rendered by Puppeteer at the
   same window size and captured by a CI job, committed like the references.
 - `qa/`: a small local server (`node app/helper/pane/qa`) that lists every
@@ -138,7 +137,7 @@ Scripts are in `screenshots/`. Findings from the first runs:
 
 - **macOS: works.** `macos-latest` is macOS 26.6.2 (Tahoe); `screencapture` and
   Finder AppleScript both work. Light/dark toggles via System Events. 1024x768,
-  1x (no Retina), so Retina detail needs web/supplied screenshots.
+  1x by default; Retina comes from a HiDPI virtual display (see below).
 - **Linux: works.** `ubuntu-latest` is Ubuntu 24.04 (GNOME Files 46,
   libadwaita 1.5), so one release behind the newest GNOME. Needs `librsvg2-common`
   and `adwaita-icon-theme-full` for icons, and `ADW_DEBUG_COLOR_SCHEME` for real
@@ -181,9 +180,6 @@ Scripts are in `screenshots/`. Findings from the first runs:
 - **Layout of `reference/`.** `macos/ windows/ linux/` hold only screenshots;
   `resources/<os>/README.md` documents how each was captured, and CI puts logs in
   `resources/<os>/capture-logs/`. Only @2x is committed (see `reference/README.md`).
-
-If a platform proves too limited, fall back to gathering screenshots from the
-web (or supplied by hand) into `reference/`.
 
 ## Later
 

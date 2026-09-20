@@ -32,8 +32,7 @@ which is wrong.
 ## Corners and shadow
 There is no compositor under Xvfb, so windows come out with square corners and no
 shadow. The capture rounds the corners (12px x scale, as GNOME does) and deliberately
-leaves the shadow off rather than faking one; get real GNOME shadow measurements from
-web screenshots when we need them.
+leaves the shadow off rather than faking one.
 
 ## Desktop
 `xsetroot -solid '#808080'`; the final image is composited on the same 50% grey.
