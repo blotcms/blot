@@ -21,6 +21,7 @@ run() {
   gsettings set org.gnome.nautilus.list-view use-tree-view true || true
   gsettings set org.gnome.nautilus.window-state start-with-sidebar false || true
   gsettings set org.gnome.desktop.interface color-scheme "prefer-$THEME" || true
+  gsettings list-recursively org.gnome.nautilus > "$OUT/gsettings.txt" 2>&1
   # a window manager is needed for keyboard focus (F9 toggles the sidebar)
   openbox >"$OUT/openbox.log" 2>&1 &
   sleep 2

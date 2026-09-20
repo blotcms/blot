@@ -68,6 +68,10 @@ try {
       foreach ($w in $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)) {
         "top-level: '$($w.Current.Name)' class=$($w.Current.ClassName)" | Out-File $log -Append
       }
+      $ex = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, (New-Object System.Windows.Automation.PropertyCondition($A::ClassNameProperty, "CabinetWClass")))
+      foreach ($e in $ex.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)) {
+        if ($e.Current.Name) { "  [$($e.Current.ControlType.ProgrammaticName)] $($e.Current.Name)" | Out-File $log -Append }
+      }
       # the menu items have access keys; N is Navigation pane
       [System.Windows.Forms.SendKeys]::SendWait("n")
       "sent n" | Out-File $log -Append
