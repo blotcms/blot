@@ -55,9 +55,11 @@ Rules:
   child. Hidden children are `display:none`, so screen readers and copy/paste see one.
 - **Internal class names.** The skeleton used `pane-name` for the row label; that collides
   with the author-facing `pane-name` prose span (§8). Internal names are `pane-label`, `pane-cell`, …
-- **Scrolling.** `height` is `auto` by default (the window fits its rows). When the author sets
-  `height`, `.pane-tree` scrolls and gets `tabindex="0"` so it is keyboard reachable; without
-  a `height` there is no scroller and no tabindex. The QA adapter passes the reference height.
+- **Height.** Default: the window fits its rows, capped at the reference height (360px on
+  macOS; `max-height` in the skin). The build knows the row count, so it adds `tabindex="0"`
+  to `.pane-tree` only when the rows can exceed the cap (a scroller must be keyboard
+  reachable). An explicit `height` (`--pane-h`) fixes the height instead. The QA adapter
+  passes the reference height.
 - **Icons.** `<i class="pane-icon pane-k-doc">`: `pane-k-<kind>` where kind comes from the
   extension via one table (`folder`, `text`, `doc`, `image`, `html`, `md`, `link`, `generic`, …).
   The folder disclosure chevron and the row's sr text are not extra nodes: the chevron is
@@ -84,7 +86,7 @@ icons/<os>/<kind>.svg   hand-optimised sources, inlined as data URIs by the buil
 A skin declares its tokens twice and uses them everywhere with `var()`:
 
 ```css
-@light { --bg:#fff; --fg:#262626; --dim:#6b6b6b; --bar:#f6f6f6; --line:#d8d8d8; --stripe:#f4f5f5 }
+@light { --bg:#fff; --fg:#262626; --dim:#8a8a8a; --bar:#f6f6f6; --line:#d8d8d8; --stripe:#f4f5f5 }
 @dark  { --bg:#1e1e1e; --fg:#e8e8e8; --dim:#8e8e8e; … }
 .pane-row { color:var(--fg) }
 ```
@@ -164,7 +166,7 @@ Anything not in the table stays as in the skeleton and is covered by unit tests
 - **Coloured file and folder icons**: SVG as `background-image:url("data:image/svg+xml,…")`,
   one per kind per OS, drawn from the 2× references (zoomed), not scaled bitmaps. No PNG
   anywhere. Encoding: percent-encode only `<`, `>`, `#`, `%`, quotes → `'`, collapse
-  whitespace. Budget ≤ 700 bytes raw per icon, ≤ 12 kinds per OS.
+  whitespace. No size cap: as detailed as fidelity needs.
 - **Traffic lights, nav pill, header dividers, shadow** are gradients and box-shadows on
   pseudo-elements, not images, so they cost bytes only once.
 - If dark mode needs a different icon, the `@dark` block overrides that one background.
@@ -176,10 +178,9 @@ Anything not in the table stays as in the skeleton and is covered by unit tests
   not be selected (`user-select:none` on `.pane-bar`, `.pane-head`, icons, glyphs).
 - Visually hidden "folder" / "expanded" text via `.pane-sr` (clip-rect pattern, not
   `display:none`).
-- **Contrast**: every text/background pair is ≥ 4.5:1 (unit test computes WCAG ratios from
-  the tokens, light and dark, including text on stripes). The real Finder's secondary text is
-  ~3.4:1 (`#8a8a8a` on white); we use `#6b6b6b` (5.3:1) and accept the small QA cost, which
-  we will measure. Decorative lines are exempt.
+- **Contrast: fidelity wins.** Text colours are the real OS colours, even where the real OS
+  is below 4.5:1 (Finder's secondary text). Contrast is *reported* by a test (not enforced)
+  so the ratios are visible; we do not adjust colours to pass it.
 - `prefers-reduced-motion`: the list view has no animation. Anything animated later (cursor blink)
   lives in `@media (prefers-reduced-motion:no-preference)`, so the default is static.
 - `forced-colors:active`: drop shadows, stripes and the traffic lights; borders and dividers use
@@ -203,21 +204,13 @@ Windows scale down (`min(--pane-w, 100%)`). As the container narrows, in order:
 Thresholds are per skin (Explorer's minimum is ~386px) but the *order* is a rule. Tap targets
 are irrelevant (nothing is interactive); text stays ≥ 13px.
 
-## 7. Size budget
+## 7. Size
 
-Measured with raw byte length and `zlib.brotliCompressSync` by `tests/size.js`, which fails
-above budget (+10% tolerance for the hard limit). Numbers are targets for now; the hard limit
-is set from the first measured version.
-
-| | Stage 1 (mac) | Final (3 OS) |
-|---|---|---|
-| CSS, once per page | ≤ 8 KB raw, ≤ 2.5 KB brotli | ≤ 30 KB raw, ≤ 8 KB brotli |
-| JS, once per page | ≤ 300 B raw (inline in `<head>`) | same |
-| HTML, per window (fixed) | ≤ 400 B | ≤ 400 B |
-| HTML, per row | ≤ 300 B raw (all three OS cells; ≤ 80 B brotli in bulk) | same |
-
-A docs page with 20 windows of 15 rows is ≤ ~100 KB raw HTML from panes, of which brotli
-takes most, because rows repeat.
+**No size limit.** A faithful render is the goal; a single retina PNG is bigger than the
+whole stylesheet will be, so we have budget. We still keep the CSS as small as fidelity
+allows (custom properties, shared glyphs, no duplication), and `tests/size.js` *reports* CSS,
+JS and per-window HTML sizes (raw and brotli) so growth is visible. The JS stays a tiny inline
+`<head>` snippet. No hard budget unless we decide to add one later.
 
 ## 8. `pane-name` text swap
 
@@ -254,13 +247,12 @@ css/*.css  icons/  tests/{format,parse,markup,css,size}.js
 Unit tests (fast, pure): formatters (all boundaries), parser (indent, folder rule, columns),
 markup (structure, pin, escaping, `null` for unsupported views), CSS build (`@light`/`@dark`
 expansion, `data-os`/`data-pin` selector wrapping, uniqueness of the matching path, default
-skin), contrast, and size budget.
+skin), contrast (reported), and size (reported).
 
-## Open questions and defaults I'll proceed with
+## Decisions (resolved in review)
 
-1. Default height `auto` with the QA adapter passing the reference height (the references clip
-   mid-row; in docs a fitted window is nicer).
-2. Contrast wins over fidelity for secondary text (§5).
-3. `@light`/`@dark` directives rather than `light-dark()` (§2).
+1. Default height fits the rows, capped at the reference height (§1).
+2. Fidelity above all: real OS colours, contrast reported not enforced (§5).
+3. `@light`/`@dark` build-time directives rather than `light-dark()` (§2).
 4. Stripes as a build-time class (§1).
-5. Hard size limit is set after the first measurement.
+5. No size limit; sizes are reported (§7).
