@@ -6,8 +6,10 @@ name: pane-screenshots
 
 on:
   push:
+    # Only the capture scripts and fixture assets: QA and module changes must not
+    # re-run (and cancel) the six-job capture matrix.
     paths:
-      - "app/helper/pane/**"
+      - "app/helper/pane/screenshots/**"
       - ".github/workflows/pane-screenshots.yml"
   workflow_dispatch:
 
@@ -129,5 +131,8 @@ jobs:
           git add -f "$REF"
           git diff --cached --quiet && exit 0
           git commit -m "Update pane reference screenshots"
-          git pull --rebase origin "${{ github.ref_name }}"
-          git push origin "HEAD:${{ github.ref_name }}"
+          # other pushes (people, agents, the pane-qa bot) can land in between
+          for attempt in 1 2 3 4; do
+            git pull --rebase origin "${{ github.ref_name }}" && git push origin "HEAD:${{ github.ref_name }}" && break
+            sleep $((attempt * 5))
+          done
