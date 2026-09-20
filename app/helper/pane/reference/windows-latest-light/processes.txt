@@ -1,7 +1,7 @@
 
   Id MainWindowTitle
   -- ---------------
-3600 Your site - File Explorer
-5008 
+1588 Your site - File Explorer
+2012 
 
 
