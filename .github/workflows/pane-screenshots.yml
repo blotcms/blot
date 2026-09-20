@@ -1,0 +1,76 @@
+# Spike for app/helper/pane: can hosted runners screenshot a real Finder,
+# File Explorer and GNOME Files window? Uploads whatever we manage to capture
+# as artifacts. Every capture step is best-effort so one failing platform
+# doesn't hide the others' results. See app/helper/pane/PLAN.md.
+name: pane-screenshots
+
+on:
+  push:
+    paths:
+      - "app/helper/pane/**"
+      - ".github/workflows/pane-screenshots.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        theme: [light, dark]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GNOME Files and screenshot tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            nautilus xvfb xdotool imagemagick dbus-x11 dconf-gsettings-backend \
+            gsettings-desktop-schemas adwaita-icon-theme gnome-themes-extra \
+            fonts-cantarell libadwaita-1-0
+      - name: Screenshot
+        run: xvfb-run -a -s "-screen 0 1280x800x24" bash app/helper/pane/screenshots/linux.sh ${{ matrix.theme }} out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pane-linux-${{ matrix.theme }}
+          path: out
+          if-no-files-found: warn
+
+  macos:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        theme: [light, dark]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Screenshot
+        run: bash app/helper/pane/screenshots/macos.sh ${{ matrix.theme }} out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pane-macos-${{ matrix.theme }}
+          path: out
+          if-no-files-found: warn
+
+  windows:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-latest, windows-11-arm]
+        theme: [light, dark]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Screenshot
+        shell: pwsh
+        run: ./app/helper/pane/screenshots/windows.ps1 -Theme ${{ matrix.theme }} -Out out -Label ${{ matrix.runner }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pane-${{ matrix.runner }}-${{ matrix.theme }}
+          path: out
+          if-no-files-found: warn
