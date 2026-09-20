@@ -1,3 +1,7 @@
+Make sure next bill amount is in all billing emails to customers
+
+Add clear bill change info to new blog flow
+
 Check in on our dropbox sync verification job to make sure it's working well (docker green)
 
 Rebuild all sites to bake in folder CDN urls
