@@ -89,5 +89,14 @@ $w = $r.Right - $r.Left; $ht = $r.Bottom - $r.Top
 $bmp = New-Object System.Drawing.Bitmap $w, $ht
 $g = [System.Drawing.Graphics]::FromImage($bmp)
 $g.CopyFromScreen($r.Left, $r.Top, 0, 0, $bmp.Size)
-$bmp.Save("$Out\$Label-$Theme.png", [System.Drawing.Imaging.ImageFormat]::Png)
+# Explorer has no setting to hide the command bar (New / Sort / View / ...), so
+# cut its band out of the capture and close the gap. Rows are relative to the
+# window's top edge at 100% scale.
+$cutTop = 89; $cutBottom = 136
+$out = New-Object System.Drawing.Bitmap $w, ($ht - ($cutBottom - $cutTop))
+$og = [System.Drawing.Graphics]::FromImage($out)
+$og.DrawImage($bmp, (New-Object System.Drawing.Rectangle 0, 0, $w, $cutTop), (New-Object System.Drawing.Rectangle 0, 0, $w, $cutTop), [System.Drawing.GraphicsUnit]::Pixel)
+$og.DrawImage($bmp, (New-Object System.Drawing.Rectangle 0, $cutTop, $w, ($ht - $cutBottom)), (New-Object System.Drawing.Rectangle 0, $cutBottom, $w, ($ht - $cutBottom)), [System.Drawing.GraphicsUnit]::Pixel)
+$bmp.Save("$Out\$Label-$Theme-full.png", [System.Drawing.Imaging.ImageFormat]::Png)
+$out.Save("$Out\$Label-$Theme.png", [System.Drawing.Imaging.ImageFormat]::Png)
 Get-Process explorer | Select-Object Id, MainWindowTitle | Out-String | Out-File "$Out\processes.txt"
