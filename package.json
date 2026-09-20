@@ -6,6 +6,7 @@
   "main": "app/index.js",
   "scripts": {
     "download-folder": "./scripts/development/download-folder.sh",
+    "fork": "./scripts/development/fork.sh",
     "test": "./scripts/tests/invoke.sh",
     "benchmark": "node scripts/benchmarks/compare.js",
     "benchmark:ci": "node scripts/benchmarks --ci",
