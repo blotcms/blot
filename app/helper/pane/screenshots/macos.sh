@@ -175,6 +175,8 @@ cp "$HERE/fixture-assets/text-sample.txt" "$EDIT/Essay.txt"
 cp "$HERE/fixture-assets/code-sample.html" "$EDIT/index.html"
 defaults write com.apple.TextEdit RichText 0
 defaults write com.apple.TextEdit IgnoreHTML 1
+defaults write com.apple.TextEdit CheckSpellingWhileTyping -bool false
+defaults write -g NSAutomaticSpellingCorrectionEnabled -bool false
 osascript -e 'tell application "Finder" to close every window' >>"$OUT/finder.log" 2>&1
 for e in "Essay.txt:text" "index.html:code"; do
   open -a TextEdit "$EDIT/${e%%:*}"; sleep 6

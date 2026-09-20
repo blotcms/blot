@@ -261,6 +261,12 @@ try {
   # is the newer (Windows 11, tabbed, dark mode) Notepad available? log it
   "appx notepad: $((Get-AppxPackage *Notepad* -ErrorAction SilentlyContinue | Select-Object -ExpandProperty PackageFullName) -join ', ')" | Out-File $log -Append
   "winget: $(try { winget --version } catch { 'none' })" | Out-File $log -Append
+  if (-not (Get-AppxPackage Microsoft.WindowsNotepad -ErrorAction SilentlyContinue)) {
+    # try for the newer Notepad (tabs, dark mode); fall back to the classic one
+    $job = Start-Job { winget install --id 9MSMLRH6LZF3 --source msstore --accept-package-agreements --accept-source-agreements --disable-interactivity 2>&1 | Out-String }
+    if (Wait-Job $job -Timeout 240) { "winget install notepad: $(Receive-Job $job)" | Out-File $log -Append } else { "winget install notepad: timed out" | Out-File $log -Append; Stop-Job $job }
+    "appx notepad after: $((Get-AppxPackage *Notepad* -ErrorAction SilentlyContinue | Select-Object -ExpandProperty PackageFullName) -join ', ')" | Out-File $log -Append
+  }
   foreach ($e in @(@("Essay.txt", "text"), @("index.html", "code"))) {
     Start-Process notepad.exe -ArgumentList "`"$(Join-Path $edit $e[0])`""
     Start-Sleep -Seconds 6
