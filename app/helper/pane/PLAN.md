@@ -154,11 +154,29 @@ Scripts are in `screenshots/`. Findings from the first runs:
   gsetting. Windows: the navigation pane can't be hidden yet; UI Automation can
   open View > Show but the flyout isn't exposed, and zeroing the saved sizer
   width only shrinks it to a sliver.
-- **Resolution.** Captures are cropped to the window. Linux has a 2x capture
-  (`GDK_SCALE=2`). The macOS runner's virtual display offers no HiDPI modes
-  (`displayplacer list`: scaling off everywhere), so Retina would need a
-  `CGVirtualDisplay` spike or web-sourced images. Windows runs at 100% scale;
-  200% is untried (needs `DisplayConfigSetDeviceInfo`).
+- **Resolution (2x works on all three).**
+  - Linux: `GDK_SCALE=2` under Xvfb.
+  - Windows: Windows caps the display scale by *logical* resolution (roughly a
+    600px minimum logical height), so 200% needs a 1600x1200 screen. The script
+    switches the runner to 1600x1200 (`ChangeDisplaySettings`), then sets 200%
+    through `DisplayConfigSetDeviceInfo` (the undocumented "set DPI scale" call).
+    The navigation pane is hidden at 100% first because the setting sticks.
+  - macOS: the runner display has no HiDPI modes, so `screenshots/hidpi.m` creates
+    a HiDPI virtual display with the private `CGVirtualDisplay` API, makes it the
+    main display, and `screencapture` then yields real Retina pixels.
+- **Views.** One capture per view: Finder icons/list/columns/gallery, Explorer
+  extra-large/large/medium/small icons, list, details, tiles, content, Nautilus
+  list (tree) and icons. Explorer's flyout ignores mouse clicks on items, so views
+  are picked with arrow keys after opening the flyout through UI Automation.
+- **Fixture.** `make-fixture.sh` / `windows.ps1` create one `Fruits` folder and one
+  file per type we need an icon for (Markdown, images, Google Docs, Word, bookmarks,
+  HTML, Org, text) with created/modified dates spread over the years.
+- **Window sizes.** Targeting ~400px wide: Finder stops at ~484px and Explorer at
+  ~386px, both re-laying out (columns clip) below their natural width. Linux keeps
+  the wider ~890px window with its sidebar, which reads better.
+- **Backgrounds.** All captures sit on 50% grey with 60px of padding so the window
+  shadow is visible. Linux has no compositor under Xvfb, so its rounded corners and
+  shadow are synthesised with ImageMagick.
 
 If a platform proves too limited, fall back to gathering screenshots from the
 web (or supplied by hand) into `reference/`.
