@@ -83,10 +83,32 @@ jobs:
           path: out
           if-no-files-found: warn
 
+  # Experiments: can a hosted Windows runner give us a 200% (HiDPI) Explorer capture?
+  # Each experiment gets a fresh VM. See app/helper/pane/screenshots/windows-hidpi.ps1.
+  windows-hidpi:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        experiment: [dpi, res-dpi, spi, logpixels, rdp]
+    steps:
+      - name: Fetch script
+        shell: pwsh
+        run: Invoke-WebRequest "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/app/helper/pane/screenshots/windows-hidpi.ps1" -OutFile windows-hidpi.ps1
+      - name: Run experiment
+        shell: pwsh
+        run: ./windows-hidpi.ps1 -Experiment ${{ matrix.experiment }} -Out out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pane-hidpi-windows-${{ matrix.experiment }}
+          path: out
+          if-no-files-found: warn
+
   # Commits the captures to app/helper/pane/reference so they show up in the
   # pull request. Pushes made with GITHUB_TOKEN don't trigger new workflow runs.
   commit:
-    needs: [linux, macos, windows]
+    needs: [linux, macos, windows, windows-hidpi]
     if: ${{ !cancelled() && github.ref_type == 'branch' && github.ref != 'refs/heads/master' }}
     runs-on: ubuntu-latest
     permissions:
