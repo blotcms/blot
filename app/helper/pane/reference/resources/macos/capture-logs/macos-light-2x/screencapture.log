@@ -1,0 +1,16 @@
+total 2560
+drwxr-xr-x  15 runner  staff     480 Sep 20 14:22 .
+drwxr-xr-x  18 runner  staff     576 Sep 20 14:21 ..
+-rw-r--r--   1 runner  staff       0 Sep 20 14:21 appearance.log
+-rw-r--r--   1 runner  staff      27 Sep 20 14:22 bounds.txt
+-rw-r--r--   1 runner  staff       3 Sep 20 14:22 finder.log
+-rw-r--r--   1 runner  staff    1921 Sep 20 14:21 hidpi-probe.log
+-rw-r--r--   1 runner  staff      75 Sep 20 14:21 hidpi.log
+-rw-r--r--@  1 runner  staff  324260 Sep 20 14:22 macos-light@2x-columns.png
+-rw-r--r--@  1 runner  staff  220294 Sep 20 14:22 macos-light@2x-gallery.png
+-rw-r--r--@  1 runner  staff  324003 Sep 20 14:22 macos-light@2x-icons.png
+-rw-r--r--@  1 runner  staff  406709 Sep 20 14:22 macos-light@2x.png
+-rw-r--r--   1 runner  staff       0 Sep 20 14:22 screencapture.log
+-rw-r--r--   1 runner  staff     278 Sep 20 14:22 toolbar.log
+-rw-r--r--   1 runner  staff      65 Sep 20 14:21 versions.txt
+-rw-r--r--   1 runner  staff       0 Sep 20 14:22 wallpaper.log

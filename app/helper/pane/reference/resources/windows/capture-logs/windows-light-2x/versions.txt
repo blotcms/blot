@@ -1,0 +1,14 @@
+
+Caption                                  Version    BuildNumber
+-------                                  -------    -----------
+Microsoft Windows Server 2025 Datacenter 10.0.26100 26100
+
+
+window: 351,192 962x721; capture 159,0 1346x1104
+window: 351,192 962x721; capture 159,0 1346x1104
+window: 351,192 962x721; capture 159,0 1346x1104
+window: 351,192 962x721; capture 159,0 1346x1104
+window: 351,192 962x721; capture 159,0 1346x1104
+window: 351,192 962x721; capture 159,0 1346x1104
+window: 351,192 962x721; capture 159,0 1346x1104
+window: 351,192 962x721; capture 159,0 1346x1104

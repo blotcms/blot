@@ -1,0 +1,41 @@
+[34m==>[0m [1mTapping jakehilborn/jakehilborn[0m
+Cloning into '/opt/homebrew/Library/Taps/jakehilborn/homebrew-jakehilborn'...
+Tapped 1 formula (14 files, 11.2KB).
+[34m==>[0m [1mTrusted formula jakehilborn/jakehilborn/displayplacer[0m
+[34m==>[0m [1mWould install 1 formula:[0m
+displayplacer
+[32m==>[0m [1mFetching downloads for: [32mdisplayplacer[39m[0m
+✔︎ Formula displayplacer (1.4.0)
+[34m==>[0m [1mInstalling displayplacer from jakehilborn/jakehilborn[0m
+[34m==>[0m [1mmake -C src[0m
+🍺  /opt/homebrew/Cellar/displayplacer/1.4.0: 6 files, 97.6KB, built in 5 seconds
+Persistent screen id: 07230EFA-7A8D-4E37-845C-19CC8737EEF5
+Contextual screen id: 1
+Serial screen id: s305419896
+Type: 31 inch external screen
+Resolution: 1024x768
+Hertz: 60
+Color Depth: 7
+Scaling: off
+Origin: (0,0) - main display
+Rotation: 0
+Enabled: true
+Resolutions for rotation 0:
+  mode 0: res:800x600 hz:60 color_depth:7
+  mode 1: res:960x540 hz:60 color_depth:7
+  mode 2: res:1024x576 hz:60 color_depth:7
+  mode 3: res:1024x768 hz:60 color_depth:7 <-- current mode
+  mode 4: res:1280x720 hz:60 color_depth:7
+  mode 5: res:1280x960 hz:60 color_depth:7
+  mode 6: res:1344x756 hz:60 color_depth:7
+  mode 7: res:1344x1008 hz:60 color_depth:7
+  mode 8: res:1600x900 hz:60 color_depth:7
+  mode 9: res:1600x1200 hz:60 color_depth:7
+  mode 10: res:1920x1080 hz:60 color_depth:7
+  mode 11: res:640x480 hz:60 color_depth:7
+
+Execute the command below to set your screens to the current arrangement. If screen ids are switching, please run `displayplacer --help` for info on using contextual or serial ids instead of persistent ids.
+
+displayplacer "id:07230EFA-7A8D-4E37-845C-19CC8737EEF5 res:1024x768 hz:60 color_depth:7 enabled:true scaling:off origin:(0,0) degree:0"
+screen id: 07230EFA-7A8D-4E37-845C-19CC8737EEF5
+Screen ID 07230EFA-7A8D-4E37-845C-19CC8737EEF5: could not find res:1024x768 hz:60 color_depth:8 scaling:on
