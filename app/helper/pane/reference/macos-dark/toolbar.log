@@ -11,9 +11,6 @@ after:
     "TB Icon Size Mode" = 1;
     "TB Is Shown" = 1;
     "TB Item Identifiers" =     (
-        "com.apple.finder.BACK",
-        NSToolbarFlexibleSpaceItem,
-        "com.apple.finder.SWCH",
-        "com.apple.finder.SRCH"
+        "com.apple.finder.BACK"
     );
 }
