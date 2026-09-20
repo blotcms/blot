@@ -502,6 +502,159 @@ function compareRowBands(reference, rendered) {
   };
 }
 
+
+// ---------------------------------------------------------------------------
+// Flat colour, ink and blurred scores (more sensitive than the raw diff %,
+// which large flat areas dilute)
+// ---------------------------------------------------------------------------
+
+const hex = (c) => "#" + c.map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
+
+// The most common colour in a rectangle (pixels quantised to 4 levels per
+// channel, then averaged, so noise and subpixel AA don't split the vote).
+// Ignored pixels don't vote. Returns [r, g, b] or null.
+function dominantColor(img, rect, ignore) {
+  const { width: w, height: h, data } = img;
+  const bins = new Map();
+  for (let y = Math.max(0, rect.y); y < Math.min(h, rect.y + rect.h); y++) {
+    for (let x = Math.max(0, rect.x); x < Math.min(w, rect.x + rect.w); x++) {
+      const p = y * w + x;
+      if (ignore && ignore[p]) continue;
+      const i = p * 4;
+      const key = (data[i] >> 2) * 4096 + (data[i + 1] >> 2) * 64 + (data[i + 2] >> 2);
+      const bin = bins.get(key);
+      if (bin) {
+        bin.n++;
+        bin.r += data[i];
+        bin.g += data[i + 1];
+        bin.b += data[i + 2];
+      } else {
+        bins.set(key, { n: 1, r: data[i], g: data[i + 1], b: data[i + 2] });
+      }
+    }
+  }
+  let best = null;
+  for (const bin of bins.values()) if (!best || bin.n > best.n) best = bin;
+  return best ? [best.r / best.n, best.g / best.n, best.b / best.n] : null;
+}
+
+function toLab([r, g, b]) {
+  const lin = (v) => ((v /= 255) <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const [R, G, B] = [lin(r), lin(g), lin(b)];
+  const X = (0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047;
+  const Y = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+  const Z = (0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883;
+  const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
+}
+
+// CIE76 colour difference: ~1 is barely visible, ~2-3 noticeable side by side.
+function deltaE(a, b) {
+  const [l1, a1, b1] = toLab(a);
+  const [l2, a2, b2] = toLab(b);
+  return Math.sqrt((l1 - l2) ** 2 + (a1 - a2) ** 2 + (b1 - b2) ** 2);
+}
+
+// Per region: the reference's dominant colour vs the rendering's, with a hint an
+// agent can act on ("titlebar background should be #ececec, rendered #f6f6f6").
+function flatColorCheck(reference, rendered, ignore, regions) {
+  return regions.map((region) => {
+    const ref = dominantColor(reference, region, ignore);
+    const rend = dominantColor(rendered, region, ignore);
+    if (!ref || !rend) return { name: region.name, reference: null, rendered: null, deltaE: 0, hint: null };
+    const dE = deltaE(ref, rend);
+    return {
+      name: region.name,
+      reference: hex(ref),
+      rendered: hex(rend),
+      deltaE: dE,
+      hint: dE >= 1 ? `${region.name} background should be ${hex(ref)} (rendered ${hex(rend)}, deltaE ${dE.toFixed(1)})` : null,
+    };
+  });
+}
+
+// Differing pixels divided by pixels that are "ink" (differ from the region's
+// dominant colour) in either image, so a mostly blank region doesn't hide a
+// wrong glyph or icon. Returns [{ name, ink, count, percent }].
+function inkStats(reference, rendered, diffMask, ignore, regions, opts = {}) {
+  const inkDelta = opts.inkDelta || 24;
+  const { width: w, height: h } = reference;
+  return regions.map((region) => {
+    const base = dominantColor(reference, region, ignore) || [255, 255, 255];
+    let ink = 0;
+    let count = 0;
+    for (let y = Math.max(0, region.y); y < Math.min(h, region.y + region.h); y++) {
+      for (let x = Math.max(0, region.x); x < Math.min(w, region.x + region.w); x++) {
+        const p = y * w + x;
+        if (ignore && ignore[p]) continue;
+        const i = p * 4;
+        const far = (img) =>
+          Math.max(Math.abs(img.data[i] - base[0]), Math.abs(img.data[i + 1] - base[1]), Math.abs(img.data[i + 2] - base[2])) > inkDelta;
+        if (far(reference) || far(rendered)) {
+          ink++;
+          if (diffMask[p]) count++;
+        }
+      }
+    }
+    return { name: region.name, ink, count, percent: ink ? (count / ink) * 100 : 0 };
+  });
+}
+
+// Separable box blur (radius in pixels), edges clamped.
+function boxBlur(img, radius) {
+  const { width: w, height: h, data } = img;
+  const tmp = new Float32Array(w * h * 3);
+  const out = new Float32Array(w * h * 3);
+  const n = 2 * radius + 1;
+  for (let y = 0; y < h; y++) {
+    for (let c = 0; c < 3; c++) {
+      let sum = 0;
+      for (let k = -radius; k <= radius; k++) sum += data[(y * w + Math.min(w - 1, Math.max(0, k))) * 4 + c];
+      for (let x = 0; x < w; x++) {
+        tmp[(y * w + x) * 3 + c] = sum / n;
+        sum += data[(y * w + Math.min(w - 1, x + radius + 1)) * 4 + c] - data[(y * w + Math.max(0, x - radius)) * 4 + c];
+      }
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    for (let c = 0; c < 3; c++) {
+      let sum = 0;
+      for (let k = -radius; k <= radius; k++) sum += tmp[(Math.min(h - 1, Math.max(0, k)) * w + x) * 3 + c];
+      for (let y = 0; y < h; y++) {
+        out[(y * w + x) * 3 + c] = sum / n;
+        sum += tmp[(Math.min(h - 1, y + radius + 1) * w + x) * 3 + c] - tmp[(Math.max(0, y - radius) * w + x) * 3 + c];
+      }
+    }
+  }
+  return out;
+}
+
+// Mean absolute error of the blurred images as a % of full scale. Blurring
+// forgives anti-aliasing and 1px shifts but not wrong colours or missing
+// elements, so it moves smoothly as the rendering improves. Returns
+// { overall, regions: { name: % } }.
+function blurredError(reference, rendered, ignore, regions, radius) {
+  const a = boxBlur(reference, radius);
+  const b = boxBlur(rendered, radius);
+  const { width: w, height: h } = reference;
+  const mae = (rect) => {
+    let sum = 0;
+    let n = 0;
+    for (let y = Math.max(0, rect.y); y < Math.min(h, rect.y + rect.h); y++) {
+      for (let x = Math.max(0, rect.x); x < Math.min(w, rect.x + rect.w); x++) {
+        const p = y * w + x;
+        if (ignore && ignore[p]) continue;
+        sum += Math.abs(a[p * 3] - b[p * 3]) + Math.abs(a[p * 3 + 1] - b[p * 3 + 1]) + Math.abs(a[p * 3 + 2] - b[p * 3 + 2]);
+        n += 3;
+      }
+    }
+    return n ? (sum / n / 255) * 100 : 0;
+  };
+  const out = { overall: mae({ x: 0, y: 0, w, h }), regions: {} };
+  for (const r of regions) out.regions[r.name] = mae(r);
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Case comparison
 // ---------------------------------------------------------------------------
@@ -574,6 +727,10 @@ function compareImages(reference, rendered, def, opts = {}) {
     textRowBands(rendCrop, rowRegion, ignore)
   );
 
+  const flat = flatColorCheck(refCrop, rendCrop, ignore, regions);
+  const ink = inkStats(refCrop, rendCrop, diff.mask, ignore, regions);
+  const blur = blurredError(refCrop, rendCrop, ignore, regions, Math.max(1, Math.round(opts.blurRadius || 1.5 * scale)));
+
   const shadow = shadowError(
     shadowProfile(reference, refRect, { distance: opts.shadowDistance || 24 * scale }),
     shadowProfile(rendered, rendRect, { distance: opts.shadowDistance || 24 * scale })
@@ -598,7 +755,15 @@ function compareImages(reference, rendered, def, opts = {}) {
       compared: diff.compared,
       percent: diff.ratio * 100,
     },
-    regions: stats.slice(1).map((s) => ({ ...s, percent: s.ratio * 100 })),
+    regions: stats.slice(1).map((s, i) => ({
+      ...s,
+      percent: s.ratio * 100,
+      inkPercent: ink[i].percent,
+      ink: ink[i].ink,
+      flat: flat[i],
+      blurMae: blur.regions[s.name],
+    })),
+    blurMae: blur.overall,
     rows,
     shadow,
     masks,
@@ -626,5 +791,11 @@ module.exports = {
   compareRowBands,
   resolveRects,
   compareImages,
+  dominantColor,
+  deltaE,
+  flatColorCheck,
+  inkStats,
+  boxBlur,
+  blurredError,
   luma,
 };

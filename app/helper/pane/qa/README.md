@@ -41,6 +41,22 @@ logical size, padding, **masks** and **regions**.
   window edge a hard step, so the shadow is not mistaken for window), which aligns the two
   without depending on the padding. The desktop around it is used for the **shadow profile**.
 
+### Metrics
+
+The raw diff % is diluted by large flat areas, so regions also get:
+
+- **ink %**: differing pixels / pixels that are ink (differ from the region's dominant
+  colour) in either image. This is the number that moves as glyphs and icons improve.
+- **flat colour** (deltaE, CIE76): the dominant colour of each region against the
+  rendering's, with a hint such as `titlebar background should be #ececec (rendered
+  #f6f6f6)`. Wrong greys are the most common CSS error; deltaE above ~2 is visible.
+- **blurred error**: mean absolute error after a small blur, as % of full scale. It forgives
+  anti-aliasing and 1px shifts, not wrong colours or missing elements.
+
+A test (`tests/masks.js`) checks that every mask holds text and does not cut through it,
+so a regenerated reference that moves a column fails loudly instead of skewing the
+numbers. Update the mask in `lib/cases.js` when it does.
+
 ### Things that are true of the references
 
 - Finder's minimum width is about 484px, Explorer's about 386px; all windows are
@@ -121,10 +137,25 @@ thresholds or references change, and can re-render the current case (optionally
 whenever the fixture changes). Keys: `j`/`k` cases, `1`-`5` modes, `h` diff/heatmap, `m`
 masks, `c` clusters, `[` `]` cluster, `b` blink, `+` `-` `0` zoom, `r` re-render, `?` help.
 
-## The module skeleton
+## The module skeleton and its contract
 
 `../index.js` is a very basic first cut of the real module: `pane.render(text, { title })`
 returns `{ html, css, js }` (a figure per window, one shared stylesheet skinned by
 `html[data-os]`, and a tiny head snippet that sets `data-os`). `pane-adapter.js` plugs it
 into the harness for the default view of every OS/theme; other views fall back to
 `fixtures/`. Set `PANE_QA_FIXTURES=1` to use only the fixtures.
+
+The adapter passes the module the **view** (`list` for the default view, then `icons`,
+`columns`, `gallery`, `tiles`, `content`, `sidebar`); the module returns `null` for views
+it doesn't implement (`SUPPORTED_VIEWS`), and add a view there to have the harness render
+it instead of the fixture. It also passes the **sample data** in `sample.json` (true
+byte sizes and frozen modified times of the "Your site" folder) as `files`, with `now`.
+Per-OS formatting ("6 bytes" / "2.7 kB", "3:38 PM" / "Today 15:38" / `9/20/2026 3:38 PM`)
+is module logic, tested in `../tests/index.js`.
+
+## Checks
+
+`node app/helper/pane/qa/smoke.js` starts the viewer in Chrome and checks the case list,
+the images and the console. The workflow runs it. The renderer logs which font Chrome
+really used per case (`fonts: .SF NS (684)`), so a silent fallback (Arimo instead of
+Segoe UI Variable) is visible in the log, and one failing case no longer stops the rest.

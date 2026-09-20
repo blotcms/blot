@@ -46,6 +46,7 @@ function createServer() {
     for (const res of clients) res.write(`data: ${JSON.stringify({ version, what })}\n\n`);
   }
 
+  app.get("/favicon.ico", (req, res) => res.status(204).end());
   app.use(express.static(path.join(__dirname, "public")));
 
   app.get("/api/cases", async (req, res, next) => {
@@ -101,8 +102,8 @@ function createServer() {
     if (!c) return;
     try {
       browser = browser || (await launch());
-      const file = await renderCase(browser, c);
-      if (!file) return res.status(404).json({ error: "no fixture or adapter output for this case" });
+      const result = await renderCase(browser, c);
+      if (!result) return res.status(404).json({ error: "no fixture or adapter output for this case" });
       changed(c.id);
       res.json({ ok: true, version });
     } catch (err) {

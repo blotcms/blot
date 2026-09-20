@@ -29,8 +29,28 @@ async function launch() {
   });
 }
 
-// Renders one case with an open browser. Returns the written path, or null if
-// the adapter has nothing for this case.
+// Which fonts Chrome really used for the page's text, e.g. "Arimo (412), SF
+// Pro Text (0)" - so "rendered in Arimo, not Segoe UI Variable" is visible
+// instead of a silent fallback. Returns [{ family, glyphs }], most used first.
+async function platformFonts(page) {
+  const client = await page.createCDPSession();
+  try {
+    await client.send("DOM.enable");
+    await client.send("CSS.enable");
+    const { root } = await client.send("DOM.getDocument", { depth: 0 });
+    const { nodeIds } = await client.send("DOM.querySelectorAll", { nodeId: root.nodeId, selector: "#pane-qa-stage, #pane-qa-stage *" });
+    const totals = new Map();
+    for (const nodeId of nodeIds.slice(0, 400)) {
+      const { fonts } = await client.send("CSS.getPlatformFontsForNode", { nodeId });
+      for (const f of fonts) totals.set(f.familyName, (totals.get(f.familyName) || 0) + f.glyphCount);
+    }
+    return [...totals].map(([family, glyphs]) => ({ family, glyphs })).sort((a, b) => b.glyphs - a.glyphs);
+  } finally {
+    await client.detach();
+  }
+}
+
+// Returns { file, fonts }, or null if the adapter has nothing for this case.
 async function renderCase(browser, c) {
   const result = await adapter.render(c.id);
   if (!result) return null;
@@ -47,6 +67,7 @@ async function renderCase(browser, c) {
     await page.evaluateOnNewDocument(FREEZE_DATE);
     await page.setContent(adapter.composePage(c, result, geometry.origin), { waitUntil: "load" });
     await page.evaluate(() => document.fonts.ready);
+    const fonts = await platformFonts(page);
 
     const shot = await page.screenshot({ type: "png", omitBackground: false });
     // match the reference's pixel size exactly (fractional logical sizes round up)
@@ -57,25 +78,37 @@ async function renderCase(browser, c) {
       .toBuffer();
     fs.mkdirSync(path.dirname(c.renderedPath), { recursive: true });
     fs.writeFileSync(c.renderedPath, out);
-    return c.renderedPath;
+    return { file: c.renderedPath, fonts };
   } finally {
     await page.close();
   }
 }
 
+// One case failing (a bad fixture, a timeout) doesn't stop the rest. Returns
+// { done: [ids], failed: [{ id, error }] }.
 async function renderCases(cases, log = () => {}) {
   const browser = await launch();
   const done = [];
+  const failed = [];
   try {
     for (const c of cases) {
-      const file = await renderCase(browser, c);
-      log(file ? `rendered ${c.id}` : `skipped ${c.id} (no fixture or adapter output)`);
-      if (file) done.push(c.id);
+      try {
+        const result = await renderCase(browser, c);
+        if (!result) {
+          log(`skipped ${c.id} (no fixture or adapter output)`);
+          continue;
+        }
+        done.push(c.id);
+        log(`rendered ${c.id}  fonts: ${result.fonts.map((f) => `${f.family} (${f.glyphs})`).join(", ") || "none"}`);
+      } catch (err) {
+        failed.push({ id: c.id, error: err.message });
+        log(`FAILED ${c.id}: ${err.message}`);
+      }
     }
   } finally {
     await browser.close();
   }
-  return done;
+  return { done, failed };
 }
 
 module.exports = { renderCases, renderCase, launch };

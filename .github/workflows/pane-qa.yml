@@ -7,12 +7,19 @@ name: pane-qa
 
 on:
   push:
+    # the module will span many files under app/helper/pane; the images and
+    # capture scripts have their own workflow (pane-screenshots)
     paths:
-      - "app/helper/pane/qa/**"
-      - "app/helper/pane/index.js"
-      - "app/helper/pane/reference/*/*.png"
+      - "app/helper/pane/**"
+      - "!app/helper/pane/reference/**"
+      - "!app/helper/pane/rendered/**"
+      - "!app/helper/pane/screenshots/**"
+      - "package.json"
       - ".github/workflows/pane-qa.yml"
   workflow_dispatch:
+  # pane-screenshots calls this after committing new references (pushes made
+  # with GITHUB_TOKEN don't start workflows), so rendered/ doesn't go stale
+  workflow_call:
 
 permissions:
   contents: read
@@ -22,8 +29,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # the qa scripts only need these; there is no reason to install the whole repo
-  QA_PACKAGES: puppeteer@24.1.1 sharp@0.35.4 pixelmatch@5.3.0 express@4.22.3
+  # always the branch tip, also when called after the screenshots bot pushed
+  REF: ${{ github.ref_name }}
 
 jobs:
   render:
@@ -46,16 +53,18 @@ jobs:
         if: matrix.os == 'windows'
         shell: pwsh
         run: |
-          Invoke-WebRequest -Headers @{ Authorization = "Bearer ${{ github.token }}" } "https://api.github.com/repos/${{ github.repository }}/tarball/${{ github.sha }}" -OutFile repo.tgz
+          Invoke-WebRequest -Headers @{ Authorization = "Bearer ${{ github.token }}" } "https://api.github.com/repos/${{ github.repository }}/tarball/$env:REF" -OutFile repo.tgz
           New-Item -ItemType Directory -Force repo | Out-Null
           # bsdtar (the Windows tar) uses --include; fall back to GNU tar's --wildcards
           tar -xzf repo.tgz -C repo --strip-components=1 --include "*/app/helper/pane/*"
           if ($LASTEXITCODE -ne 0) { tar -xzf repo.tgz -C repo --strip-components=1 --wildcards "*/app/helper/pane/*" }
+          Invoke-WebRequest -Headers @{ Authorization = "Bearer ${{ github.token }}" } "https://raw.githubusercontent.com/${{ github.repository }}/$env:REF/package.json" -OutFile repo/package.json
           Get-ChildItem repo/app/helper/pane
       - uses: actions/checkout@v4
         if: matrix.os != 'windows'
         with:
           path: repo
+          ref: ${{ github.ref_name }}
 
       - name: Install fonts (Linux)
         if: matrix.os == 'linux'
@@ -63,12 +72,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends fonts-cantarell fonts-dejavu-core
 
+      # only what the qa scripts need, at the versions package.json pins
       - name: Install dependencies
         shell: bash
         run: |
+          PKGS=$(node -e "const p=require('./repo/package.json');const d={...p.dependencies,...p.devDependencies};console.log(['puppeteer','sharp','pixelmatch','express'].map(n=>n+'@'+d[n]).join(' '))")
           mkdir tools && cd tools
           npm init -y >/dev/null
-          npm install --no-audit --no-fund $QA_PACKAGES
+          npm install --no-audit --no-fund $PKGS
 
       - name: Render
         shell: bash
@@ -93,6 +104,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -118,9 +131,11 @@ jobs:
       # Informational: the thresholds don't gate CI until the module exists.
       - name: Summarise differences
         run: |
+          PKGS=$(node -e "const p=require('./package.json');const d={...p.dependencies,...p.devDependencies};console.log(['puppeteer','sharp','pixelmatch','express'].map(n=>n+'@'+d[n]).join(' '))")
           mkdir tools && cd tools && npm init -y >/dev/null
-          npm install --no-audit --no-fund $QA_PACKAGES
+          npm install --no-audit --no-fund $PKGS
           cd ..
+          NODE_PATH="$PWD/tools/node_modules" node app/helper/pane/qa/smoke.js
           {
             echo '### pane QA'
             echo '```'

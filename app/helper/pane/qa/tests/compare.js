@@ -13,6 +13,11 @@ const {
   compareRowBands,
   resolveRects,
   compareImages,
+  dominantColor,
+  deltaE,
+  flatColorCheck,
+  inkStats,
+  blurredError,
 } = require("../lib/compare");
 const { evaluate } = require("../lib/thresholds");
 
@@ -293,6 +298,55 @@ describe("pane qa compare", function () {
 
     it("reports an error when a window cannot be found", function () {
       expect(compareImages(scene(), createImage(50, 50), def).error).toMatch(/rendered/);
+    });
+  });
+
+  describe("flat colour, ink and blurred scores", function () {
+    const whole = { name: "all", kind: "chrome", x: 0, y: 0, w: 160, h: 120 };
+
+    it("finds the dominant colour, ignoring masked pixels", function () {
+      const img = scene({ color: [236, 236, 236] });
+      expect(dominantColor(img, { x: 40, y: 30, w: 80, h: 50 }).map(Math.round)).toEqual([236, 236, 236]);
+      expect(dominantColor(img, { x: 0, y: 0, w: 160, h: 120 }).map(Math.round)).toEqual([128, 128, 128]);
+    });
+
+    it("measures colour difference in deltaE", function () {
+      expect(deltaE([200, 200, 200], [200, 200, 200])).toBe(0);
+      expect(deltaE([236, 236, 236], [246, 246, 246])).toBeGreaterThan(3);
+      expect(deltaE([236, 236, 236], [237, 237, 237])).toBeLessThan(1);
+    });
+
+    it("says what a wrong grey should be", function () {
+      const win = { name: "titlebar", kind: "chrome", x: 40, y: 30, w: 80, h: 50 };
+      const [c] = flatColorCheck(scene({ color: [236, 236, 236] }), scene({ color: [246, 246, 246] }), null, [win]);
+      expect(c.reference).toBe("#ececec");
+      expect(c.rendered).toBe("#f6f6f6");
+      expect(c.hint).toContain("titlebar background should be #ececec");
+      expect(flatColorCheck(scene(), scene(), null, [win])[0].hint).toBeNull();
+    });
+
+    it("scores diffs against ink, so blank space doesn't dilute them", function () {
+      const a = scene();
+      const b = scene();
+      paint(a, { x: 50, y: 40, w: 4, h: 4 }, [0, 0, 0]);
+      paint(b, { x: 60, y: 40, w: 4, h: 4 }, [0, 0, 0]); // the same glyph, moved
+      const d = diffImages(a, b);
+      const [s] = inkStats(a, b, d.mask, null, [{ name: "content", kind: "text", x: 40, y: 30, w: 80, h: 50 }]);
+      expect(s.ink).toBe(32);
+      expect(s.count).toBe(32);
+      expect(s.percent).toBe(100);
+      expect(d.ratio * 100).toBeLessThan(1); // the raw percentage barely notices
+    });
+
+    it("blurs away anti-aliasing but not wrong colours", function () {
+      const a = scene();
+      const shifted = scene({ win: { x: 40, y: 30, w: 80, h: 50 } });
+      paint(shifted, { x: 40, y: 30, w: 1, h: 50 }, [128, 128, 128]); // 1px edge difference
+      const small = blurredError(a, shifted, null, [whole], 2);
+      const wrong = blurredError(a, scene({ color: [200, 200, 200] }), null, [whole], 2);
+      expect(small.overall).toBeLessThan(0.5);
+      expect(wrong.overall).toBeGreaterThan(small.overall * 5);
+      expect(wrong.regions.all).toBeCloseTo(wrong.overall, 5);
     });
   });
 

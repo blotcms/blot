@@ -87,7 +87,12 @@ async function analyze(c, thresholds, opts = {}) {
       compared: r.compared,
       count: r.count,
       percent: r.percent,
+      inkPercent: r.inkPercent,
+      ink: r.ink,
+      flat: r.flat,
+      blurMae: r.blurMae,
     })),
+    blurMae: result.blurMae,
     rows: result.rows,
     shadow: {
       error: result.shadow.error,

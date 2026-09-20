@@ -16,8 +16,9 @@ async function main() {
     console.error("No cases match.");
     process.exit(1);
   }
-  const done = await renderCases(cases, (line) => console.log(line));
-  console.log(`${done.length}/${cases.length} cases rendered`);
+  const { done, failed } = await renderCases(cases, (line) => console.log(line));
+  console.log(`${done.length}/${cases.length} cases rendered, ${failed.length} failed`);
+  if (failed.length) process.exit(1);
 }
 
 if (require.main === module) {

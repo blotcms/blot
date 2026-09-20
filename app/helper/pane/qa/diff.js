@@ -66,7 +66,10 @@ function explain(e, top) {
       (e.shadow.referenceHasShadow ? "" : " (reference has no shadow; rendering should not add one)")
   );
   for (const r of e.regions) {
-    lines.push(`  region ${r.name} (${r.kind}): ${r.percent.toFixed(2)}% differ`);
+    lines.push(
+      `  region ${r.name} (${r.kind}): ${r.percent.toFixed(2)}% differ, ${r.inkPercent.toFixed(0)}% of ink, blurred error ${r.blurMae.toFixed(1)}%, colour deltaE ${r.flat.deltaE.toFixed(1)}`
+    );
+    if (r.flat.hint && r.flat.deltaE >= 2) lines.push(`    hint: ${r.flat.hint}`);
   }
   lines.push(`  top ${Math.min(top, e.clusters.length)} of ${e.clusters.length} diff clusters:`);
   for (const c of e.clusters.slice(0, top)) {

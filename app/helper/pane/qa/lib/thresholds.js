@@ -14,6 +14,9 @@ function limitsFor(thresholds, id) {
     ...base,
     ...own,
     diffPercent: { ...base.diffPercent, ...own.diffPercent },
+    inkPercent: { ...base.inkPercent, ...own.inkPercent },
+    flatDeltaE: { ...base.flatDeltaE, ...own.flatDeltaE },
+    blurMae: { ...base.blurMae, ...own.blurMae },
   };
 }
 
@@ -31,6 +34,13 @@ function evaluate(entry, thresholds) {
     const limit = limits.diffPercent[r.name] !== undefined ? limits.diffPercent[r.name] : limits.diffPercent[r.kind];
     check("diffPercent", r.percent, limit, r.name);
   }
+  const byRegion = (table, r) => (table[r.name] !== undefined ? table[r.name] : table[r.kind]);
+  for (const r of entry.regions) {
+    check("inkPercent", r.inkPercent, byRegion(limits.inkPercent, r), r.name);
+    check("flatDeltaE", r.flat ? r.flat.deltaE : null, byRegion(limits.flatDeltaE, r), r.name);
+    check("blurMae", r.blurMae, byRegion(limits.blurMae, r), r.name);
+  }
+  check("blurMae", entry.blurMae, limits.blurMae.overall, "overall");
   check("sizeDelta", Math.max(Math.abs(entry.geometry.sizeDelta.w), Math.abs(entry.geometry.sizeDelta.h)), limits.sizeDelta);
   check("rowYOffset", entry.rows.meanYOffset / entry.scale, limits.rowYOffset);
   // a case whose reference has no shadow (Linux) is still checked: the

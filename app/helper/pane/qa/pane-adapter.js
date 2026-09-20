@@ -1,10 +1,12 @@
-// Plugs the real pane module into the QA harness: the default view of each
-// case, rendered from the sample tree ("Your site" from screenshots/make-fixture.sh).
-// Returns null for views the module doesn't implement yet, so fixtures fill in.
+// Plugs the real pane module into the QA harness. It hands the module the case's
+// view and the sample folder ("Your site" from screenshots/make-fixture.sh, in
+// qa/sample.json). Views the module doesn't implement yet (it returns null)
+// fall through to fixtures.
 
 const pane = require("../index");
+const sample = require("./sample.json");
 
-const SAMPLE = `About.txt
+const TREE = `About.txt
 Animation.gif
 Blot.webloc
 Draft.md
@@ -19,9 +21,16 @@ Plan.gdoc
 Report.docx
 Tasks.org`;
 
+// the harness names the default view "default"; the module calls it "list"
+const VIEW = { default: "list" };
+
 async function render(caseId, c) {
-  if (c.view !== "default") return null;
-  return pane.render(SAMPLE, { title: "Your site" });
+  return pane.render(TREE, {
+    title: sample.title,
+    view: VIEW[c.view] || c.view,
+    files: sample.files,
+    now: sample.now,
+  });
 }
 
 module.exports = { render };
