@@ -1,0 +1,3 @@
+resolution: ChangeDisplaySettings 1600x1200 -> 0
+scale 200%: min=0 cur=0 max=4 set rel=4 -> 0
+explorer dpi: 192
