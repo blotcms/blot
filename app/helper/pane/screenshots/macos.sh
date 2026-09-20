@@ -67,8 +67,18 @@ PLIST="$HOME/Library/Preferences/com.apple.finder.plist"
   for id in com.apple.finder.BACK; do
     $PB -c "Add \":NSToolbar Configuration Browser:TB Item Identifiers:$i\" string $id" "$PLIST"; i=$((i+1))
   done
+  # Standard list view column widths (used by any folder without its own .DS_Store):
+  # a longer Name, Date Modified/Size narrow enough for Finder's short date format,
+  # Kind hidden.
+  echo "standard list view settings before:"; defaults read com.apple.finder FK_StandardViewSettings
+  setcol() {  # column key, property, integer value
+    K=":FK_StandardViewSettings:ListViewSettings:columns:$1:$2"
+    $PB -c "Set $K $3" "$PLIST" 2>/dev/null || $PB -c "Add $K integer $3" "$PLIST"
+  }
+  setcol name width 270; setcol dateModified width 104; setcol size width 70; setcol kind visible 0
   killall cfprefsd; killall Finder; sleep 4
   echo "after:"; defaults read com.apple.finder "NSToolbar Configuration Browser"
+  echo "standard list view settings after:"; defaults read com.apple.finder FK_StandardViewSettings
 } > "$OUT/toolbar.log" 2>&1
 
 # Finder enforces a minimum width, so read the real window bounds back and capture
