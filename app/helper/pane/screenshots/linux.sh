@@ -36,7 +36,9 @@ run() {
   eval "$(xdotool getwindowgeometry --shell "$WID")"
   echo "window $WID: ${WIDTH}x${HEIGHT}+${X}+${Y}" > "$OUT/geometry.txt"
   xdotool mousemove $((500 * S)) $((400 * S)) click 1; sleep 0.5
-  xdotool key F9; sleep 1.5
+  xdotool windowactivate --sync "$WID" || xdotool windowfocus "$WID" || true
+  sleep 0.5; xdotool key --clearmodifiers F9; sleep 1.5
+  import -window root "$OUT/debug-after-f9.png"
   # expand folders bottom-up so row positions above don't shift, then the
   # nested folder inside Fruits (rows are 52px apart, arrows at x=37)
   for y in 274 222 118; do xdotool mousemove $((37 * S)) $((y * S)) click 1; sleep 0.5; done
