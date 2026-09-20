@@ -1,7 +1,7 @@
 
   Id MainWindowTitle
   -- ---------------
-7352 
-9600 Your site - File Explorer
+ 992 
+9976 Your site - File Explorer
 
 
