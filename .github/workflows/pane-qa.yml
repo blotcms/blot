@@ -79,7 +79,10 @@ jobs:
       - name: Work out dependencies
         id: deps
         shell: bash
-        run: echo "pkgs=$(node -e "const p=require('./repo/package.json');const d={...p.dependencies,...p.devDependencies};console.log(['puppeteer','sharp','pixelmatch','express'].map(n=>n+'@'+d[n]).join(' '))")" >> "$GITHUB_OUTPUT"
+        run: |
+          # single-quoted script, no nested quotes: macOS's Bash 3.2 mis-parses those
+          PKGS=$(node -e 'const p=require("./repo/package.json");const d={...p.dependencies,...p.devDependencies};console.log(["puppeteer","sharp","pixelmatch","express"].map(n=>n+"@"+d[n]).join(" "))')
+          echo "pkgs=$PKGS" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         id: cache
         with:
@@ -149,7 +152,10 @@ jobs:
       # Informational: the thresholds don't gate CI until the module exists.
       - name: Work out dependencies
         id: deps
-        run: echo "pkgs=$(node -e "const p=require('./package.json');const d={...p.dependencies,...p.devDependencies};console.log(['puppeteer','sharp','pixelmatch','express'].map(n=>n+'@'+d[n]).join(' '))")" >> "$GITHUB_OUTPUT"
+        run: |
+          # single-quoted script, no nested quotes: macOS's Bash 3.2 mis-parses those
+          PKGS=$(node -e 'const p=require("./package.json");const d={...p.dependencies,...p.devDependencies};console.log(["puppeteer","sharp","pixelmatch","express"].map(n=>n+"@"+d[n]).join(" "))')
+          echo "pkgs=$PKGS" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         id: cache
         with:
