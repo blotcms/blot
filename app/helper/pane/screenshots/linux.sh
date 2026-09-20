@@ -3,7 +3,7 @@
 # usage: linux.sh <light|dark> <out-dir> [scale]   (scale 2 = HiDPI, via GDK_SCALE)
 set -uo pipefail
 THEME="${1:-light}"; OUT="${2:-out}"; S="${3:-1}"; mkdir -p "$OUT"
-W="${W:-480}"; H="${H:-520}"; PAD=$((96 * S))
+W="${W:-490}"; H="${H:-520}"; PAD=$((96 * S))
 HERE="$(cd "$(dirname "$0")" && pwd)"
 FIXTURE="$HOME/Your site"
 bash "$HERE/make-fixture.sh" "$FIXTURE"
@@ -51,12 +51,13 @@ run() {
     xdotool mousemove $((X + WIDTH / 2)) $((Y + HEIGHT + 2 * PAD)); sleep 1
     import -window root "$OUT/full.png"
     convert "$OUT/full.png" -crop "${WIDTH}x${HEIGHT}+${X}+${Y}" +repage "$OUT/window.png"
-    # No compositor under Xvfb, so give the window its rounded corners and shadow
-    # ourselves, on a 50% grey desktop with generous room around it.
+    # No compositor under Xvfb, so windows have square corners and no shadow. Round
+    # the corners (GNOME's are) but deliberately leave the shadow off rather than
+    # fake one; centre on a 50% grey desktop with generous room around it.
     R=$((12 * S))
     convert "$OUT/window.png" -alpha set \( +clone -alpha transparent -fill white -draw "roundrectangle 0,0 $((WIDTH - 1)),$((HEIGHT - 1)) $R,$R" \) \
       -compose DstIn -composite "$OUT/rounded.png"
-    convert "$OUT/rounded.png" \( +clone -background black -shadow 45x$((20 * S))+0+$((10 * S)) \) +swap -background none -layers merge +repage "$OUT/shadowed.png"
+    cp "$OUT/rounded.png" "$OUT/shadowed.png"
     convert -size "$((WIDTH + 2 * PAD))x$((HEIGHT + 2 * PAD))" xc:"#808080" "$OUT/shadowed.png" -gravity center -composite "$OUT/$1.png"
     rm -f "$OUT/full.png" "$OUT/window.png" "$OUT/rounded.png" "$OUT/shadowed.png"
   }

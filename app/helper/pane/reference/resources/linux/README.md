@@ -21,7 +21,7 @@ which is wrong.
 ## Window
 - Nautilus 46 has no setting or working shortcut to hide the sidebar (F9 does nothing;
   the `toggle-sidebar` D-Bus action only affects the collapsed overlay). libadwaita
-  collapses it when the window is narrower than about 500px, so the default 480px
+  collapses it when the window is narrower than about 500px, so the default 490px
   window has no sidebar. `-sidebar` captures use an 890px window with the sidebar.
 - Tree view: `org.gnome.nautilus.list-view use-tree-view true`, then click the arrow
   on the Fruits row (6th row: folders aren't sorted first).
@@ -29,11 +29,11 @@ which is wrong.
 - Several X windows share the `nautilus` class (helpers are 1x1), so the largest is used.
 - Selection cleared with Ctrl-Shift-A.
 
-## Shadow and corners (synthesised, not real)
-There is no compositor under Xvfb, so windows have square corners and no shadow. The
-capture adds a 12px (x scale) corner radius and an ImageMagick shadow
-(`-shadow 45x20+0+10`, scaled) on the checkerboard desktop. Those numbers are guesses,
-not measured from real GNOME; compare with real GNOME screenshots before copying them.
+## Corners and shadow
+There is no compositor under Xvfb, so windows come out with square corners and no
+shadow. The capture rounds the corners (12px x scale, as GNOME does) and deliberately
+leaves the shadow off rather than faking one; get real GNOME shadow measurements from
+web screenshots when we need them.
 
 ## Desktop
 `xsetroot -solid '#808080'`; the final image is composited on the same 50% grey.

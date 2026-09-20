@@ -13,7 +13,7 @@ by CI. They are the targets `pane` is built to reproduce.
 Screenshot names: `<os>-<theme>[@2x][-view].png`, e.g. `macos-dark@2x-icons.png`. The
 unsuffixed view is each OS's default list/details view with the tree expanded.
 
-Every window is 480px wide (logical), on a plain 50% grey desktop with 96px of desktop
+Every window is 490px wide (logical), on a plain 50% grey desktop with 96px of desktop
 around it (80px on Windows), so drop shadows are easy to see. The image files and the HTML
 page in the sample folder are Photoshop-style white and mid-grey checkerboards; there is
 also a real Markdown document and a synthesised valid .docx.

@@ -1,6 +1,6 @@
 # Try to screenshot File Explorer on a hosted Windows runner.
 # usage: windows.ps1 -Theme light|dark -Out <dir> -Label <name>
-param([string]$Theme = "light", [string]$Out = "out", [string]$Label = "windows", [int]$Scale = 1, [int]$Width = 480)
+param([string]$Theme = "light", [string]$Out = "out", [string]$Label = "windows", [int]$Scale = 1, [int]$Width = 490)
 $ErrorActionPreference = "Continue"
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 
@@ -207,8 +207,8 @@ $sw = [Hidpi]::GetSystemMetrics(0); $sh = [Hidpi]::GetSystemMetrics(1)
 # 80px of desktop around the window (the screen is short at 200%, and the "Test Mode"
 # watermark sits above the taskbar at the bottom right)
 $taskbar = 48 * $Scale; $pad = 80 * $Scale; $left = 176 * $Scale
-# 480x360 logical px. MoveWindow includes Explorer's invisible 7px resize borders
-# (left, right, bottom), so ask for a little more to get a visible 480 wide.
+# 490x360 logical px. MoveWindow includes Explorer's invisible 7px resize borders
+# (left, right, bottom), so ask for a little more to get a visible 490 wide.
 $winH = (360 + 7) * $Scale
 $suffix = if ($Scale -ne 1) { "@${Scale}x" } else { "" }
 function Place($width) { [Native.Win]::MoveWindow($h, $left - 7 * $Scale, $pad, ($width + 14) * $Scale, $winH, $true) | Out-Null; Start-Sleep -Seconds 2 }

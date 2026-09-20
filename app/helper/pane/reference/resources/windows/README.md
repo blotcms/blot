@@ -34,7 +34,7 @@ the `LogPixels` registry values (ignored), a loopback RDP session with
   first item; arrow keys plus Enter pick a view. Mouse clicks on the flyout items are
   ignored. Flyout order: extra large, large, medium, small, list, details, (pane
   toggles), tiles, content. Only medium (`-icons`), list, tiles and content are kept.
-- Size: 480x360 logical px, but `MoveWindow` includes 7px invisible resize borders (left,
+- Size: 490x360 logical px, but `MoveWindow` includes 7px invisible resize borders (left,
   right, bottom), so ask for +14 wide and +7 tall. Explorer's minimum width is about
   386px.
 - Extensions are hidden by default ("About", not "About.txt").

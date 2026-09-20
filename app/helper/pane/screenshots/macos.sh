@@ -79,7 +79,7 @@ tell application "Finder"
   close every window
   set w to make new Finder window to (POSIX file "$FIXTURE" as alias)
   set current view of w to list view
-  set bounds of w to {150, 150, 630, 510}
+  set bounds of w to {150, 150, 640, 510}
   set sidebar width of w to 160
 end tell
 delay 1

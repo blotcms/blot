@@ -19,7 +19,7 @@ script paints a borderless window at `kCGDesktopWindowLevel` filled with 50% gre
 
 ## Finder window
 - Appearance: System Events `appearance preferences` dark mode on/off.
-- Size: bounds `{150, 150, 630, 510}` (480x360pt). Finder enforces a minimum width
+- Size: bounds `{150, 150, 640, 510}` (490x360pt). Finder enforces a minimum width
   (about 484pt), so the real bounds are read back and the capture is taken around them
   (`bounds.txt` in the capture logs).
 - Sidebar hidden with Option-Cmd-S (View menu) via System Events.
