@@ -8,7 +8,7 @@ displayplacer
 ✔︎ Formula displayplacer (1.4.0)
 [34m==>[0m [1mInstalling displayplacer from jakehilborn/jakehilborn[0m
 [34m==>[0m [1mmake -C src[0m
-🍺  /opt/homebrew/Cellar/displayplacer/1.4.0: 6 files, 97.6KB, built in 4 seconds
+🍺  /opt/homebrew/Cellar/displayplacer/1.4.0: 6 files, 97.6KB, built in 8 seconds
 Persistent screen id: 07230EFA-7A8D-4E37-845C-19CC8737EEF5
 Contextual screen id: 1
 Serial screen id: s305419896

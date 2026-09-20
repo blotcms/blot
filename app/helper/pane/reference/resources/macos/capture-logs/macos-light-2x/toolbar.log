@@ -5,6 +5,9 @@ before:
     "TB Is Shown" = 1;
     "TB Size Mode" = 1;
 }
+standard list view settings before:
+2026-09-20 17:09:18.805 defaults[63086:147231] 
+The domain/default pair of (com.apple.finder, FK_StandardViewSettings) does not exist
 after:
 {
     "TB Display Mode" = 2;
@@ -13,4 +16,23 @@ after:
     "TB Item Identifiers" =     (
         "com.apple.finder.BACK"
     );
+}
+standard list view settings after:
+{
+    ListViewSettings =     {
+        columns =         {
+            dateModified =             {
+                width = 104;
+            };
+            kind =             {
+                visible = 0;
+            };
+            name =             {
+                width = 270;
+            };
+            size =             {
+                width = 70;
+            };
+        };
+    };
 }
