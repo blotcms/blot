@@ -41,9 +41,15 @@ Set-ItemProperty -Path $key -Name AppsUseLightTheme -Value $light -Type DWord
 Set-ItemProperty -Path $key -Name SystemUsesLightTheme -Value $light -Type DWord
 
 # clear the runner's console windows off the desktop first
-# hide the desktop icons (restart Explorer so it notices)
-Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name HideIcons -Value 1 -Type DWord
-Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 6
+# Empty the desktop rather than hiding its icons (Explorer puts HideIcons back to 1 when it
+# restarts, so hiding can't be undone later): remove the runner's shortcuts and hide the
+# Recycle Bin, then restart Explorer once so it notices.
+Remove-Item "$env:PUBLIC\Desktop\*" -Force -ErrorAction SilentlyContinue
+Remove-Item ([Environment]::GetFolderPath("Desktop") + "\*") -Recurse -Force -ErrorAction SilentlyContinue
+$hide = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel"
+New-Item -Path $hide -Force | Out-Null
+Set-ItemProperty -Path $hide -Name "{645FF040-5081-101B-9F08-00AA002F954E}" -Value 1 -Type DWord   # Recycle Bin
+Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 8
 # the runner leaves System Properties / Performance Options dialogs open
 Get-Process SystemProperties* -ErrorAction SilentlyContinue | Stop-Process -Force
 (New-Object -ComObject Shell.Application).MinimizeAll()
@@ -120,6 +126,7 @@ Add-Type -Namespace Native -Name Win -MemberDefinition @"
 [DllImport("user32.dll")] public static extern bool SystemParametersInfo(int a, int b, string c, int d);
 [DllImport("user32.dll")] public static extern bool SetSysColors(int n, int[] i, int[] c);
 [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, int m, IntPtr w, IntPtr l);
+[DllImport("shell32.dll")] public static extern void SHChangeNotify(int e, int f, IntPtr a, IntPtr b);
 public struct RECT { public int Left, Top, Right, Bottom; }
 "@
 [Hidpi]::SetProcessDpiAwarenessContext([IntPtr]-4) | Out-Null  # per-monitor v2: real pixels
@@ -290,8 +297,12 @@ try {
   $desktop = [Environment]::GetFolderPath("Desktop")
   Copy-Item (Join-Path $fixture "*") $desktop -Recurse -Force
   Remove-Item (Join-Path $desktop "Old report.doc") -ErrorAction SilentlyContinue   # looks like Report.docx
-  $adv = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-  # Are the icons actually drawn? (HideIcons only says what the shell will do at startup)
+  # The desktop was emptied at the start, so the icons appear as soon as it refreshes.
+  [Native.Win]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)   # SHCNE_ASSOCCHANGED
+  [Native.Win]::SHChangeNotify(0x00001000, 0, [IntPtr]::Zero, [IntPtr]::Zero)   # SHCNE_UPDATEDIR
+  (New-Object -ComObject Shell.Application).Windows() | ForEach-Object { try { $_.Quit() } catch { } }
+  [Native.Mouse]::SetCursorPos($sw - 4, 4) | Out-Null
+  Start-Sleep -Seconds 5
   function Show-Icons {
     $b = New-Object System.Drawing.Bitmap 640, 600
     [System.Drawing.Graphics]::FromImage($b).CopyFromScreen(0, 0, 0, 0, $b.Size)
@@ -299,23 +310,7 @@ try {
       $c = $b.GetPixel($x, $y); if ([Math]::Abs($c.R - 128) + [Math]::Abs($c.G - 128) + [Math]::Abs($c.B - 128) -gt 30) { return $true } } }
     return $false
   }
-  # Windows restarts a killed Explorer by itself within seconds, reading HideIcons as it
-  # starts, so set the value, kill it and let that restart happen (a second explorer.exe
-  # would only open a File Explorer window). Retry until the icons are drawn.
-  foreach ($attempt in 1..3) {
-    Set-ItemProperty -Path $adv -Name HideIcons -Value 0 -Type DWord
-    Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 14
-    if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { "explorer did not restart by itself" | Out-File $log -Append; Start-Process explorer.exe; Start-Sleep -Seconds 10 }
-    (New-Object -ComObject Shell.Application).Windows() | ForEach-Object { try { $_.Quit() } catch { } }
-    [Native.Win]::SystemParametersInfo(0x14, 0, "", 3) | Out-Null
-    [Native.Win]::SetSysColors(1, @(1), @(0x808080)) | Out-Null
-    [Native.Mouse]::SetCursorPos($sw - 4, 4) | Out-Null
-    Start-Sleep -Seconds 4
-    $shown = Show-Icons
-    "attempt ${attempt}: HideIcons=$((Get-ItemProperty $adv).HideIcons), items on desktop $((Get-ChildItem $desktop | Measure-Object).Count), icons visible: $shown" | Out-File $log -Append
-    if ($shown) { break }
-  }
+  "desktop has $((Get-ChildItem $desktop | Measure-Object).Count) items; icons visible: $(Show-Icons)" | Out-File $log -Append
   $dbg = New-Object System.Drawing.Bitmap $sw, $sh
   [System.Drawing.Graphics]::FromImage($dbg).CopyFromScreen(0, 0, 0, 0, $dbg.Size)
   $dbg.Save("$Out\debug-desktop-full.png")
