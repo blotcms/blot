@@ -1,0 +1,33 @@
+/* macOS Finder (Tahoe), list view. Every rule is rooted at .pane; the build wraps it. */
+@light{--bg:#fff;--fg:#272727;--dim:#808080;--title:#4c4c4c;--stripe:#f4f5f5;--l1:#f0f0f0;--l2:#ddd;--div:#e6e6e6;--pill:#f2f2f2;--pill-ring:#f9f9f9;--nav:#b2b2b2;--pill-sh:rgba(0,0,0,.07)}
+@dark{--bg:#1e1e1e;--fg:#ddd;--dim:#9a9a9a;--title:#e8e8e8;--stripe:#292929;--l1:#2d2d2d;--l2:#404040;--div:#343434;--pill:#141414;--pill-ring:#232323;--nav:#555;--pill-sh:rgba(0,0,0,.2)}
+.pane{--step:15px;--g-chev:url(icon:mac/chevron);--g-nav:url(icon:mac/nav);--g-sort:url(icon:mac/sort);
+background:var(--bg);color:var(--fg);font:13px/20px -apple-system,"SF Pro Text",system-ui,sans-serif;
+border-radius:26px;box-shadow:0 0 0 .5px rgba(0,0,0,.25),0 18px 40px rgba(0,0,0,.35)}
+.pane::before{content:"";position:absolute;left:0;top:0;width:100px;height:52px;background:url(icon:mac/lights) 19px 19px/60px 14px no-repeat}
+.pane .pane-bar{height:52px;padding-left:182px;font:700 16px/52px -apple-system,"SF Pro Text",system-ui,sans-serif;color:var(--title);white-space:nowrap}
+.pane .pane-bar::before{content:"";position:absolute;left:96px;top:8px;width:72px;height:35px;box-sizing:border-box;border-radius:18px;
+background:linear-gradient(var(--div),var(--div)) 36px 8px/1px 19px no-repeat,var(--pill);box-shadow:inset 0 0 0 1px var(--pill-ring),0 6px 16px var(--pill-sh)}
+.pane .pane-bar::after{content:"";position:absolute;left:96px;top:8px;width:72px;height:35px;background:var(--nav);-webkit-mask:var(--g-nav) center/72px 35px no-repeat;mask:var(--g-nav) center/72px 35px no-repeat}
+.pane .pane-head{height:28px;font-weight:400;color:var(--dim);
+background:linear-gradient(var(--l1) 50%,var(--l2) 50%) bottom/100% 1px no-repeat,
+linear-gradient(var(--div),var(--div)) 262.5px 3.5px/1px 19px no-repeat,
+linear-gradient(var(--div),var(--div)) 354.5px 3.5px/1px 19px no-repeat,
+linear-gradient(var(--div),var(--div)) 467.5px 3.5px/1px 19px no-repeat}
+.pane .pane-head i{height:27px;line-height:27px;padding-left:7.5px}
+.pane .pane-head i:nth-child(1){width:262.5px;padding-left:47.5px;color:var(--fg);font-weight:600}
+.pane .pane-head i:nth-child(2){width:92px}
+.pane .pane-head i:nth-child(1)::before{content:"Name"}
+.pane .pane-head i:nth-child(2)::before{content:"Date Modified"}
+.pane .pane-head i:nth-child(3)::before{content:"Size"}
+.pane .pane-head i:nth-child(1)::after{content:"";position:absolute;left:245.5px;top:11px;width:8px;height:5px;background:var(--dim);-webkit-mask:var(--g-sort) center/8px 5px no-repeat;mask:var(--g-sort) center/8px 5px no-repeat}
+.pane .pane-tree{padding-top:5px}
+.pane .pane-row{margin:0 10px;height:20px;border-radius:5px}
+.pane .pane-odd{background:var(--stripe)}
+.pane .pane-label{width:252.5px;padding-left:calc(37.5px + var(--x,0px))}
+.pane .pane-icon{left:calc(17px + var(--x,0px));width:14px;height:16px;margin-top:-8px}
+.pane .pane-open::before{content:"";position:absolute;left:calc(4px + var(--x,0px));top:6px;width:9px;height:8px;background:var(--dim);-webkit-mask:var(--g-chev) center/9px 8px no-repeat;mask:var(--g-chev) center/9px 8px no-repeat}
+.pane .pane-cell{color:var(--dim)}
+.pane .pane-d{width:92px;padding-left:8px;box-sizing:border-box;order:1}
+.pane .pane-s{width:90.5px;text-align:right;order:2}
+.pane [data-os=mac]{display:inline}

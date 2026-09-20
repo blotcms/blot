@@ -27,11 +27,13 @@ const VIEW = { default: "list" };
 // The QA windows have the reference's fixed size and are never pinned: the harness
 // chooses the skin with <html data-os> and the theme with prefers-color-scheme.
 async function render(caseId, c) {
+  if (c.os !== "macos") return null; // the other skins are not built yet: fixtures
   const result = pane.folder(TREE, {
     title: sample.title,
     view: VIEW[c.view] || c.view,
     files: sample.files,
     now: sample.now,
+    height: `${c.windowSize.height}px`,
   });
   if (!result) return null;
   return { html: result.html, ...pane.assets() };

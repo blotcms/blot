@@ -1,0 +1,28 @@
+/* Structure shared by every skin: no colours, fonts or OS names (see DESIGN.md). */
+.pane{margin:0;position:relative;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;
+width:var(--pane-w,490px);max-width:100%;height:var(--pane-h,auto);max-height:var(--pane-h,var(--pane-max,360px));
+container-type:inline-size;-webkit-text-size-adjust:none}
+.pane-bar,.pane-head,.pane-icon,.pane-cell,.pane-head i{user-select:none;-webkit-user-select:none}
+.pane-bar,.pane-head{flex:none;position:relative}
+.pane-head{display:flex}
+.pane-head i{display:block;position:relative;font-style:normal;white-space:nowrap}
+.pane-tree,.pane-tree ul{list-style:none;margin:0;padding:0}
+.pane-tree{flex:1;min-height:0;overflow:auto}
+.pane-row{display:flex;align-items:center;position:relative}
+.pane-label{flex:none;min-width:0;position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pane-icon{position:absolute;top:50%;background:no-repeat center/contain}
+.pane-cell{white-space:nowrap}
+.pane [data-os]{display:none}
+.pane-name>[data-os]{display:none}
+.pane-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.pane-tree ul .pane-label{--x:var(--step)}
+.pane-tree ul ul .pane-label{--x:calc(var(--step)*2)}
+.pane-tree ul ul ul .pane-label{--x:calc(var(--step)*3)}
+.pane-tree ul ul ul ul .pane-label{--x:calc(var(--step)*4)}
+.pane-tree ul ul ul ul ul .pane-label{--x:calc(var(--step)*5)}
+@media (forced-colors:active){
+.pane{box-shadow:none;border:1px solid CanvasText;background:Canvas;color:CanvasText}
+.pane::before,.pane-bar::before,.pane-bar::after,.pane-head{background:none}
+.pane-row{background:none}
+.pane-icon{forced-color-adjust:none}
+}
