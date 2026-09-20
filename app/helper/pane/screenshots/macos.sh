@@ -172,14 +172,16 @@ done
 # and with source code ("code"; IgnoreHTML shows the markup instead of rendering it).
 EDIT="/private/tmp/pane-editors"; mkdir -p "$EDIT"  # not ~/Documents: TextEdit would block on a permission prompt there
 cp "$HERE/fixture-assets/text-sample.txt" "$EDIT/Essay.txt"
-cp "$HERE/fixture-assets/code-sample.html" "$EDIT/index.html"
+# TextEdit renders .html as rich text whatever the preferences say, so the code
+# sample is a .txt here (the window chrome is what matters)
+cp "$HERE/fixture-assets/code-sample.html" "$EDIT/Snippet.txt"
 defaults write com.apple.TextEdit RichText -bool false
 defaults write com.apple.TextEdit IgnoreHTML -bool true
 defaults write com.apple.TextEdit ShowRuler -bool false
 defaults write com.apple.TextEdit CheckSpellingWhileTyping -bool false
 defaults write -g NSAutomaticSpellingCorrectionEnabled -bool false
 osascript -e 'tell application "Finder" to close every window' >>"$OUT/finder.log" 2>&1
-for e in "Essay.txt:text" "index.html:code"; do
+for e in "Essay.txt:text" "Snippet.txt:code"; do
   open -a TextEdit "$EDIT/${e%%:*}"; sleep 6
   screencapture -x "$OUT/debug-textedit-${e##*:}.png"
   # System Events (not TextEdit itself, which is what timed out) places and reads the window

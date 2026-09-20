@@ -46,3 +46,10 @@ script paints a borderless window at `kCGDesktopWindowLevel` filled with 50% gre
 ## Captures
 `screencapture -x -R` in points, 96pt around the window. The window shadow is Finder's
 own. The gallery view looks sparse with dummy files (empty preview pane).
+
+## Editor windows (`-text`, `-code`)
+TextEdit, in plain-text mode (`RichText` false, spelling checks and ruler off). Files live in
+`/private/tmp/pane-editors`, not `~/Documents`: TextEdit blocks on a permission prompt
+there and every AppleEvent to it times out (-1712). The window is placed and read back
+through System Events. TextEdit renders `.html` files as rich text whatever
+`IgnoreHTML` says, so the code sample is `Snippet.txt`.

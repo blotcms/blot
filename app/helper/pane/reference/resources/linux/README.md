@@ -38,3 +38,11 @@ leaves the shadow off rather than faking one.
 
 ## Desktop
 `xsetroot -solid '#808080'`; the final image is composited on the same 50% grey.
+
+## Editor windows (`-text`, `-code`)
+GNOME Text Editor (`gnome-text-editor`, package of the same name). The code capture turns on
+line numbers (`org.gnome.TextEditor show-line-numbers`) and it highlights HTML by itself
+(the `-dark` variant follows the libadwaita colour scheme). It restores its last session
+(and shows a tab for each file) unless `~/.local/share/org.gnome.TextEditor` is removed
+between runs; spellcheck is switched off. `pkill -f gnome-text-editor` kills the capture
+script itself (its command line contains the string), use `pkill -x gnome-text-edit`.

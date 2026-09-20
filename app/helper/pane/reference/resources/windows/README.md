@@ -55,3 +55,12 @@ unreliable.)
 capture is that plus 80 logical px each side (less than the other OSes' 96: the screen is
 short and the watermark sits at the bottom right). At 2x the screen is only 800x600
 logical, which is why the window is 360px tall. The shadow is Windows' own (faint).
+
+## Editor windows (`-text`, `-code`)
+The runner only has the classic Notepad (menu bar, no dark mode). The Windows 11 Notepad
+(tabs, toolbar, dark mode; Microsoft.WindowsNotepad) is installed with
+`winget install --id 9MSMLRH6LZF3 --source msstore` (about a minute), and launched
+through its execution alias `%LOCALAPPDATA%\Microsoft\WindowsApps\notepad.exe`: plain
+`notepad.exe` still finds the classic one first. The new Notepad shows spell-check
+squiggles and a notification dot on the feedback icon; there is no setting to hide either
+from a script.
