@@ -300,9 +300,16 @@ try {
   [Native.Win]::SystemParametersInfo(0x14, 0, "", 3) | Out-Null
   [Native.Win]::SetSysColors(1, @(1), @(0x808080)) | Out-Null
   "desktop $desktop has $((Get-ChildItem $desktop | Measure-Object).Count) items; HideIcons=$((Get-ItemProperty $adv).HideIcons); explorer processes: $((Get-Process explorer -ErrorAction SilentlyContinue).Count)" | Out-File $log -Append
+  # starting Explorer opens a Home window: close any File Explorer windows
+  foreach ($try in 1..3) {
+    (New-Object -ComObject Shell.Application).Windows() | ForEach-Object { try { $_.Quit() } catch { } }
+    Start-Sleep -Seconds 2
+  }
   [System.Windows.Forms.SendKeys]::SendWait("{F5}")
   [Native.Mouse]::SetCursorPos($sw - 4, 4) | Out-Null
   Start-Sleep -Seconds 4
+  # the icons stack down the left edge; keep just that part of the screen
+  $sw = [int]($sw * 0.4)
   $bmp = New-Object System.Drawing.Bitmap $sw, ($sh - $taskbar)
   [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen(0, 0, 0, 0, $bmp.Size)
   $bmp.Save("$Out\$Label-$Theme$suffix-desktop.png", [System.Drawing.Imaging.ImageFormat]::Png)

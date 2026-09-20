@@ -129,7 +129,7 @@ CSS
   # (Old report.doc looks like Report.docx: leave it off, so 12 icons fill two columns of six)
   ls -1 "$FIXTURE" | grep -v "^Old report.doc$" | while IFS= read -r f; do cp -a "$FIXTURE/$f" "$DESK/"; done
   mkdir -p "$HOME/.config/gtk-3.0"
-  printf "window, .background { background-color: transparent; background-image: none; }\n" > "$HOME/.config/gtk-3.0/gtk.css"
+  printf "window, window.background, .background { background-color: #808080; background-image: none; }\n" > "$HOME/.config/gtk-3.0/gtk.css"
   DING=/usr/share/gnome-shell/extensions/ding@rastersoft.com/app
   ls "$DING" > "$OUT/ding.log" 2>&1
   # DING's window is transparent, which needs a compositing manager to show the grey desktop
@@ -146,7 +146,7 @@ CSS
   done
   sleep 4
   import -window root "$OUT/full.png"
-  convert "$OUT/full.png" -crop "$((300 * S))x$((560 * S))+0+0" +repage "$OUT/linux-$THEME$SUFFIX-desktop.png"
+  convert "$OUT/full.png" -crop "$((430 * S))x$((560 * S))+0+0" +repage "$OUT/linux-$THEME$SUFFIX-desktop.png"
   rm -f "$OUT/full.png"
   pkill -x gjs; pkill -x xcompmgr; sleep 2
 
