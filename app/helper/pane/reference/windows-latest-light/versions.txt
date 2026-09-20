@@ -4,4 +4,4 @@ Caption                                  Version    BuildNumber
 Microsoft Windows Server 2025 Datacenter 10.0.26100 26100
 
 
-window: 129,70 786x593
+window: 117,60 786x593; capture 57,0 906x700
