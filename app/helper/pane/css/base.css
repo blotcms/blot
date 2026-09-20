@@ -9,7 +9,7 @@ container-type:inline-size;-webkit-text-size-adjust:none}
 .pane-tree,.pane-tree ul{list-style:none;margin:0;padding:0}
 .pane-tree{flex:1;min-height:0;overflow:auto}
 .pane-row{display:flex;align-items:center;position:relative}
-.pane-label{flex:none;min-width:0;position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pane-label{box-sizing:border-box;flex:none;min-width:0;position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pane-icon{position:absolute;top:50%;background:no-repeat center/contain}
 .pane-cell{white-space:nowrap}
 .pane [data-os]{display:none}
