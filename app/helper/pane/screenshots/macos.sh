@@ -71,7 +71,9 @@ PLIST="$HOME/Library/Preferences/com.apple.finder.plist"
   echo "after:"; defaults read com.apple.finder "NSToolbar Configuration Browser"
 } > "$OUT/toolbar.log" 2>&1
 
-osascript >"$OUT/finder.log" 2>&1 <<OSA || true
+# Finder enforces a minimum width, so read the real window bounds back and capture
+# around them (60pt of desktop on every side, for the shadow).
+BOUNDS="$(osascript 2>"$OUT/finder.log" <<OSA
 tell application "Finder"
   activate
   close every window
@@ -90,8 +92,23 @@ tell application "System Events" to tell process "Finder"
   key code 124 using {option down}
 end tell
 delay 1
-tell application "Finder" to set selection to {}
+tell application "Finder"
+  set selection to {}
+  return bounds of front Finder window
+end tell
 OSA
+)"
+echo "bounds: $BOUNDS" > "$OUT/bounds.txt"
+IFS=', ' read -r L T R B <<< "$BOUNDS"
+capture() { screencapture -x -R$((L - 60)),$((T - 60)),$((R - L + 120)),$((B - T + 120)) "$OUT/$1.png" >>"$OUT/screencapture.log" 2>&1 || true; }
 sleep 4
-screencapture -x -R40,40,520,640 "$OUT/macos-$THEME$SUFFIX.png" >"$OUT/screencapture.log" 2>&1 || true
+capture "macos-$THEME$SUFFIX"
+
+# the other Finder views: icons, columns, gallery
+for v in "icon view:icons" "column view:columns" "flow view:gallery"; do
+  osascript -e "tell application \"Finder\" to set current view of front Finder window to ${v%%:*}" -e 'delay 3' >>"$OUT/finder.log" 2>&1
+  osascript -e 'tell application "Finder" to set selection to {}' >>"$OUT/finder.log" 2>&1
+  sleep 2
+  capture "macos-$THEME$SUFFIX-${v##*:}"
+done
 rm -f "$OUT/grey.png"; ls -la "$OUT" >> "$OUT/screencapture.log"

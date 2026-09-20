@@ -182,21 +182,43 @@ Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name Background -Value "128
 [Native.Win]::SetSysColors(1, @(1), @(0x808080)) | Out-Null
 
 # Size the window (logical px x scale) and keep it clear of the screen edges and
-# taskbar, leaving room for its shadow
+# taskbar, leaving room for its shadow. Icons sit in a column at the left of the
+# desktop, so the window (and so the capture) stays to their right.
 $sw = [Hidpi]::GetSystemMetrics(0); $sh = [Hidpi]::GetSystemMetrics(1)
-$taskbar = 48 * $Scale; $pad = 60 * $Scale; $left = 140 * $Scale
+$taskbar = 48 * $Scale; $pad = 60 * $Scale; $left = 200 * $Scale
 $winH = [Math]::Min(640 * $Scale, $sh - $taskbar - 2 * 30 * $Scale)
-[Native.Win]::MoveWindow($h, $left, 30 * $Scale, $Width * $Scale, $winH, $true) | Out-Null
-Start-Sleep -Seconds 2
-
-$r = New-Object Native.Win+RECT
-[Native.Win]::DwmGetWindowAttribute($h, 9, [ref]$r, [System.Runtime.InteropServices.Marshal]::SizeOf($r)) | Out-Null
-$x0 = [Math]::Max(0, $r.Left - $pad); $y0 = [Math]::Max(0, $r.Top - $pad)
-$x1 = [Math]::Min($sw, $r.Right + $pad); $y1 = [Math]::Min($sh - $taskbar, $r.Bottom + $pad)
-"window: $($r.Left),$($r.Top) $($r.Right - $r.Left)x$($r.Bottom - $r.Top); capture $x0,$y0 $($x1 - $x0)x$($y1 - $y0)" | Out-File "$Out\versions.txt" -Append
-$bmp = New-Object System.Drawing.Bitmap ($x1 - $x0), ($y1 - $y0)
-$g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($x0, $y0, 0, 0, $bmp.Size)
 $suffix = if ($Scale -ne 1) { "@${Scale}x" } else { "" }
-$bmp.Save("$Out\$Label-$Theme$suffix.png", [System.Drawing.Imaging.ImageFormat]::Png)
+function Place($width) { [Native.Win]::MoveWindow($h, $left, 30 * $Scale, $width * $Scale, $winH, $true) | Out-Null; Start-Sleep -Seconds 2 }
+function Capture($name) {
+  $r = New-Object Native.Win+RECT
+  [Native.Win]::DwmGetWindowAttribute($h, 9, [ref]$r, [System.Runtime.InteropServices.Marshal]::SizeOf($r)) | Out-Null
+  $x0 = [Math]::Max(0, $r.Left - $pad); $y0 = [Math]::Max(0, $r.Top - $pad)
+  $x1 = [Math]::Min($sw, $r.Right + $pad); $y1 = [Math]::Min($sh - $taskbar, $r.Bottom + $pad)
+  "window: $($r.Left),$($r.Top) $($r.Right - $r.Left)x$($r.Bottom - $r.Top); capture $x0,$y0 $($x1 - $x0)x$($y1 - $y0)" | Out-File "$Out\versions.txt" -Append
+  $bmp = New-Object System.Drawing.Bitmap ($x1 - $x0), ($y1 - $y0)
+  [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($x0, $y0, 0, 0, $bmp.Size)
+  $bmp.Save("$Out\$name.png", [System.Drawing.Imaging.ImageFormat]::Png)
+}
+Place $Width
+Capture "$Label-$Theme$suffix"   # Details, Explorer's default
+
+# The other view options. The command bar collapses View into an overflow menu at
+# narrow widths, so widen the window to pick each one, then narrow it to capture.
+# Menu items sit at fixed offsets below the View button (measured at 100%).
+$views = @(
+  @("extra-large-icons", 47), @("large-icons", 79), @("medium-icons", 111), @("small-icons", 143),
+  @("list", 175), @("tiles", 239), @("content", 271)
+)
+foreach ($v in $views) {
+  try {
+    Place 800
+    $btn = Find-Element $root "View"
+    $rect = $btn.Current.BoundingRectangle
+    $cx = [int]($rect.X + $rect.Width / 2); $cy = [int]($rect.Y + $rect.Height / 2)
+    Click $cx $cy; Start-Sleep -Seconds 2
+    Click ($cx + 20 * $Scale) ($cy + $v[1] * $Scale); Start-Sleep -Seconds 2
+    Place $Width
+    Capture "$Label-$Theme$suffix-$($v[0])"
+  } catch { "view $($v[0]) failed: $_" | Out-File $log -Append }
+}
 Get-Process explorer | Select-Object Id, MainWindowTitle | Out-String | Out-File "$Out\processes.txt"
