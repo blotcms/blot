@@ -19,6 +19,10 @@ New-Item -Path $key -Force | Out-Null
 Set-ItemProperty -Path $key -Name AppsUseLightTheme -Value $light -Type DWord
 Set-ItemProperty -Path $key -Name SystemUsesLightTheme -Value $light -Type DWord
 
+# Try hiding the navigation pane by zeroing its saved width (read at launch).
+$sizer = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Modules\GlobalSettings\Sizer"
+New-Item -Path $sizer -Force | Out-Null
+Set-ItemProperty -Path $sizer -Name PageSpaceControlSizer -Type Binary -Value ([byte[]](0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)) -ErrorAction Continue
 # clear the runner's console windows off the desktop first
 (New-Object -ComObject Shell.Application).MinimizeAll()
 Start-Sleep -Seconds 2
