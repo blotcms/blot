@@ -1,6 +1,6 @@
-Check in on our dropbox sync verification job to make sure it's working well (docker green)
-
 Rebuild all sites to bake in folder CDN urls
+
+Run scripts/blog/find-template-tags.js and follow up with affected customers
 
 Why is Ross' template so slow to install? It takes a few seconds. Let's speed it up.
 
@@ -12,6 +12,14 @@ Finish cross platform folder renderer
 
 Redis outage follow-ups
 - Dropbox webhook drops syncs (listBlogs fails after the 200 ack) and git auth maps Redis errors to a 401 while Redis is unreachable
+
+Improve about section
+- Restructure /about into current principles and clearly dated working notes.
+- Rewrite the main page to surface Blot’s purpose, independence, longevity, portability, and open source code.
+- Update History, infrastructure, development tools, refunds, backups, and continuity claims.
+- Date historical material such as the CDN investigation, old mistakes, and threat assessments.
+- Remove outdated self-undermining statements, including dissatisfaction with the templates.
+- Fix incomplete passages, spelling errors, and inconsistent use of “I” and “we.”
 
 Fix performance bugs on various sites:
 - anchor and re-enable site
@@ -68,10 +76,6 @@ Improve Dropbox sync
 - Bug: reconnecting with the same account and same permissions should not create a new folder for `full_access=true`
 - Bug: add a check for folder storage before doing mass upload
 - Bug: handle folder full error appropriately
-- Bug: dropbox reset TO BLOT should handle removed folder
-- Bug: dropbox reset FROM BLOT should handle removed folder
-- Bug: dropbox reset TO BLOT should handle revoked token
-- Bug: dropbox reset FROM BLOT should handle revoked token
 - Bug: add sync lock process to dropbox connection when writing folder contents
 - Bug: ensure the app permission access_token is destroyed when switching to full-folder and vice versa
 - Add testing for dropbox:
@@ -311,6 +315,8 @@ Improve images:
 - Image cacher should work for webp, tiff, etc. as well as JPG
 
 Improvements to docs and documentation:
+- Add way in to the updates page on the index page (i.e. surface recent tasks done and to do)
+- Add way in to the questions page on the index page (i.e. surface recent questions)
 - Rewrite code which generates a fake 'macOS' folder to work cross platform:
   - if the user is browsing from Windows create a windows folder
   - if the user is browsing from linux create a linux folder
@@ -361,6 +367,8 @@ Improve importer:
 - Map excerpt metadata to summary for Jekyll converter importer
 - Look into how Hexo has written imports for [blogger](https://github.com/hexojs/hexo-migrator-blogger), [joomla](https://github.com/welksonramos/hexo-migrator-joomla), [rss](https://github.com/hexojs/hexo-migrator-rss), [wordpress](https://github.com/hexojs/hexo-migrator-wordpress).
 - Add an importer for Twitter and sell [Sawyer](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVMhRNdQhfDwlXsqqFNgmKfTk)
+
+Let customers duplicate an existing site as a starting point
 
 Improve exporter:
 - Make it possible to configure the export file format (e.g. instead of markdown, word documents) on the importer
