@@ -1,8 +1,6 @@
 
-  Id MainWindowTitle
-  -- ---------------
-1996 
-7556 
-9160 
+ Id MainWindowTitle
+ -- ---------------
+976 
 
 

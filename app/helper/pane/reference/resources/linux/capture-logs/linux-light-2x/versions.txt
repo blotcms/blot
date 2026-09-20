@@ -1,6 +1,8 @@
-** Message: 19:13:23.766: Connecting to org.freedesktop.Tracker3.Miner.Files
+** Message: 20:22:32.542: Connecting to org.freedesktop.Tracker3.Miner.Files
+libEGL warning: DRI3 error: Could not get DRI3 device
+libEGL warning: Ensure your X server supports DRI3 to get accelerated rendering
 
-** (org.gnome.Nautilus:4644): WARNING **: 19:13:23.869: Unable to get contents of the bookmarks file: Error opening file /home/runner/.gtk-bookmarks: No such file or directory
+** (org.gnome.Nautilus:6694): WARNING **: 20:22:32.648: Unable to get contents of the bookmarks file: Error opening file /home/runner/.gtk-bookmarks: No such file or directory
 nautilus: GNOME nautilus 46.4
 libadwaita: Version: 1.5.0-1ubuntu2
 Description:	Ubuntu 24.04.5 LTS
