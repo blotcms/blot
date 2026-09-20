@@ -62,6 +62,11 @@ a specific file.
 - **Simple**: only `{{entry.metadata.title}}` / `{{entry.metadata.<key>}}`
   substitutions. Fix: replace the tag with literal text in the file (title in
   the heading, dates and counts as plain values).
+- **"Last Update" lines** (`{{entry.metadata.date}}` in a footer/label): drop the
+  line and set `Show_Updated_Top: yes` (or `_bottom`) in front matter if the
+  template's `entry.html` already renders `{{#formatUpdated}}`. Note it shows
+  the file's modified time (`entry.updated`), not a hand-maintained date;
+  top-level `{{updated}}` is the *blog's* last sync, so don't use it per page.
 - **Data-driven**: `{{#entry.metadata}}…{{/entry.metadata}}` sections or many
   `{{key}}` cells, with the values in front matter. Fix without touching the
   body: in the template's `entry.html`, gate on a front-matter flag and embed
@@ -73,6 +78,10 @@ a specific file.
   (inside `{{#entry}}`; needs one gate and one flag per page). Moving markup
   into a template partial instead only works if it is rewritten as HTML,
   because template partials are not run through Markdown.
+
+Pages whose description/social preview is built from the body will leak the
+raw tags into `<meta name="description">`; give them a static `Summary:` in
+front matter.
 
 Check for **generated files**: if front matter changes often or has odd keys
 (`fake_last`, hourly values), the customer likely has an external script
