@@ -171,12 +171,16 @@ Scripts are in `screenshots/`. Findings from the first runs:
 - **Fixture.** `make-fixture.sh` / `windows.ps1` create one `Fruits` folder and one
   file per type we need an icon for (Markdown, images, Google Docs, Word, bookmarks,
   HTML, Org, text) with created/modified dates spread over the years.
-- **Window sizes.** Targeting ~400px wide: Finder stops at ~484px and Explorer at
-  ~386px, both re-laying out (columns clip) below their natural width. Linux keeps
-  the wider ~890px window with its sidebar, which reads better.
-- **Backgrounds.** All captures sit on 50% grey with 60px of padding so the window
-  shadow is visible. Linux has no compositor under Xvfb, so its rounded corners and
-  shadow are synthesised with ImageMagick.
+- **Window sizes.** All windows target 480px wide (logical), 96px of desktop around
+  them. Finder enforces ~484px and Explorer ~386px minimums; Linux has a `-sidebar`
+  variant at 890px. Heights differ per OS (Windows 2x is limited to a 600px-tall
+  logical screen).
+- **Backgrounds.** Captures sit on a checkerboard desktop of 20px white and mid-grey
+  squares, so shadows can be measured. Linux has no compositor under Xvfb, so its
+  rounded corners and shadow are synthesised with ImageMagick.
+- **Layout of `reference/`.** `macos/ windows/ linux/` hold only screenshots;
+  `resources/<os>/README.md` documents how each was captured, and CI puts logs in
+  `resources/<os>/capture-logs/`. Only @2x is committed (see `reference/README.md`).
 
 If a platform proves too limited, fall back to gathering screenshots from the
 web (or supplied by hand) into `reference/`.

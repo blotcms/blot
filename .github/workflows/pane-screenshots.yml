@@ -25,14 +25,14 @@ jobs:
       fail-fast: false
       matrix:
         theme: [light, dark]
-        scale: [1, 2]
+        scale: [2]
     steps:
       - uses: actions/checkout@v4
       - name: Install GNOME Files and screenshot tools
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            nautilus openbox xcompmgr x11-xserver-utils libglib2.0-bin xvfb xdotool imagemagick dbus-x11 dconf-gsettings-backend \
+            nautilus openbox feh x11-xserver-utils libglib2.0-bin xvfb xdotool imagemagick dbus-x11 dconf-gsettings-backend \
             gsettings-desktop-schemas adwaita-icon-theme gnome-themes-extra \
             fonts-cantarell libadwaita-1-0 librsvg2-common adwaita-icon-theme-full shared-mime-info
       - name: Screenshot
@@ -50,7 +50,7 @@ jobs:
       fail-fast: false
       matrix:
         theme: [light, dark]
-        scale: [1, 2]
+        scale: [2]
     steps:
       - uses: actions/checkout@v4
       - name: Screenshot
@@ -69,67 +69,30 @@ jobs:
       matrix:
         runner: [windows-latest]
         theme: [light, dark]
-        scale: [1, 2]
+        scale: [2]
     steps:
       # the repo contains filenames Windows can't check out, so fetch just the script
       - name: Fetch script
         shell: pwsh
-        run: Invoke-WebRequest "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/app/helper/pane/screenshots/windows.ps1" -OutFile windows.ps1
+        run: |
+          $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/app/helper/pane/screenshots"
+          Invoke-WebRequest "$base/windows.ps1" -OutFile windows.ps1
+          New-Item -ItemType Directory -Force fixture-assets | Out-Null
+          foreach ($f in "checker.png", "checker.gif", "checker.jpg", "checker.html") { Invoke-WebRequest "$base/fixture-assets/$f" -OutFile "fixture-assets/$f" }
       - name: Screenshot
         shell: pwsh
-        run: ./windows.ps1 -Theme ${{ matrix.theme }} -Out out -Label ${{ matrix.runner }} -Scale ${{ matrix.scale }}
+        run: ./windows.ps1 -Theme ${{ matrix.theme }} -Out out -Label windows -Scale ${{ matrix.scale }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pane-${{ matrix.runner }}-${{ matrix.theme }}-${{ matrix.scale }}x
-          path: out
-          if-no-files-found: warn
-
-  # Experiments: can a hosted Windows runner give us a 200% (HiDPI) Explorer capture?
-  # Each experiment gets a fresh VM. See app/helper/pane/screenshots/windows-hidpi.ps1.
-  windows-hidpi:
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        experiment: [res-1200]
-    steps:
-      - name: Fetch script
-        shell: pwsh
-        run: Invoke-WebRequest "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/app/helper/pane/screenshots/windows-hidpi.ps1" -OutFile windows-hidpi.ps1
-      - name: Run experiment
-        shell: pwsh
-        run: ./windows-hidpi.ps1 -Experiment ${{ matrix.experiment }} -Out out
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: pane-hidpi-windows-${{ matrix.experiment }}
-          path: out
-          if-no-files-found: warn
-
-  # Experiments: can a hosted macOS runner give us a Retina (2x) Finder capture?
-  # See app/helper/pane/screenshots/macos-hidpi.sh.
-  macos-hidpi:
-    runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        experiment: [modes, virtual]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run experiment
-        run: bash app/helper/pane/screenshots/macos-hidpi.sh ${{ matrix.experiment }} out
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: pane-hidpi-macos-${{ matrix.experiment }}
+          name: pane-windows-${{ matrix.theme }}-${{ matrix.scale }}x
           path: out
           if-no-files-found: warn
 
   # Commits the captures to app/helper/pane/reference so they show up in the
   # pull request. Pushes made with GITHUB_TOKEN don't trigger new workflow runs.
   commit:
-    needs: [linux, macos, windows, windows-hidpi, macos-hidpi]
+    needs: [linux, macos, windows]
     if: ${{ !cancelled() && github.ref_type == 'branch' && github.ref != 'refs/heads/master' }}
     runs-on: ubuntu-latest
     permissions:
@@ -141,15 +104,29 @@ jobs:
           path: captured
       - name: Commit images
         run: |
-          rm -rf app/helper/pane/reference
+          REF=app/helper/pane/reference
+          for os in macos windows linux; do
+            rm -f "$REF/$os"/*.png
+            rm -rf "$REF/resources/$os/capture-logs"
+            mkdir -p "$REF/$os" "$REF/resources/$os/capture-logs"
+          done
           for dir in captured/pane-*; do
-            name="${dir#captured/pane-}"
-            mkdir -p "app/helper/pane/reference/$name"
-            find "$dir" -maxdepth 1 -type f \( -name "*.png" -o -name "*.txt" -o -name "*.log" \) -exec cp {} "app/helper/pane/reference/$name/" \;
+            name="${dir#captured/pane-}"     # e.g. macos-light-2x
+            os="${name%%-*}"
+            [ -d "$REF/$os" ] || continue
+            for f in "$dir"/*; do
+              base="$(basename "$f")"
+              case "$base" in
+                # the screenshots are named <os>-<theme>[@2x][-view].png
+                "$os"-*.png) cp "$f" "$REF/$os/" ;;
+                # everything else (logs, versions, debug images) is a resource
+                *) mkdir -p "$REF/resources/$os/capture-logs/$name"; cp "$f" "$REF/resources/$os/capture-logs/$name/" ;;
+              esac
+            done
           done
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f app/helper/pane/reference
+          git add -f "$REF"
           git diff --cached --quiet && exit 0
           git commit -m "Update pane reference screenshots"
           git pull --rebase origin "${{ github.ref_name }}"

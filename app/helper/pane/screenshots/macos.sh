@@ -37,14 +37,17 @@ if [ "$SCALE" = 2 ]; then
   sleep 8
 fi
 
-# 50% grey desktop so the window's shadow is visible. Finder won't set a
+# Desktop: Photoshop-style white and mid-grey squares (20pt), which makes the
+# window's drop shadow easy to measure so the window's shadow is visible. Finder won't set a
 # wallpaper for us here, so paint a borderless desktop-level window instead.
-osascript -l JavaScript >"$OUT/wallpaper.log" 2>&1 <<'JXA' &
+TILE="$HERE/fixture-assets/desktop-tile.png" osascript -l JavaScript >"$OUT/wallpaper.log" 2>&1 <<'JXA' &
 ObjC.import('Cocoa');
 const app = $.NSApplication.sharedApplication;
 app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);
 const win = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer($.NSScreen.mainScreen.frame, 0, 2, false);
-win.backgroundColor = $.NSColor.colorWithSRGBRedGreenBlueAlpha(0.5, 0.5, 0.5, 1);
+const img = $.NSImage.alloc.initWithContentsOfFile(ObjC.unwrap($.NSProcessInfo.processInfo.environment.objectForKey('TILE')));
+img.setSize($.NSMakeSize(40, 40)); // the 80px tile is 20pt squares at 2x
+win.backgroundColor = $.NSColor.colorWithPatternImage(img);
 win.level = -2147483623; // kCGDesktopWindowLevel
 win.orderFront(null);
 $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(600));
@@ -79,7 +82,7 @@ tell application "Finder"
   close every window
   set w to make new Finder window to (POSIX file "$FIXTURE" as alias)
   set current view of w to list view
-  set bounds of w to {100, 100, 500, 620}
+  set bounds of w to {150, 150, 630, 510}
   set sidebar width of w to 160
 end tell
 delay 1
@@ -100,7 +103,7 @@ OSA
 )"
 echo "bounds: $BOUNDS" > "$OUT/bounds.txt"
 IFS=', ' read -r L T R B <<< "$BOUNDS"
-capture() { screencapture -x -R$((L - 60)),$((T - 60)),$((R - L + 120)),$((B - T + 120)) "$OUT/$1.png" >>"$OUT/screencapture.log" 2>&1 || true; }
+capture() { screencapture -x -R$((L - 96)),$((T - 96)),$((R - L + 192)),$((B - T + 192)) "$OUT/$1.png" >>"$OUT/screencapture.log" 2>&1 || true; }
 sleep 4
 capture "macos-$THEME$SUFFIX"
 

@@ -1,22 +1,24 @@
 # Try to screenshot File Explorer on a hosted Windows runner.
 # usage: windows.ps1 -Theme light|dark -Out <dir> -Label <name>
-param([string]$Theme = "light", [string]$Out = "out", [string]$Label = "windows", [int]$Scale = 1, [int]$Width = 400)
+param([string]$Theme = "light", [string]$Out = "out", [string]$Label = "windows", [int]$Scale = 1, [int]$Width = 480)
 $ErrorActionPreference = "Continue"
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 
 $fixture = Join-Path $env:USERPROFILE "Documents\Your site"
 Remove-Item -Recurse -Force $fixture -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path (Join-Path $fixture "Fruits") | Out-Null
-# One subfolder plus one file of every type we need an icon for (keep in sync with make-fixture.sh)
-$png = [Convert]::FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
-$gif = [Convert]::FromBase64String("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
-[IO.File]::WriteAllBytes((Join-Path $fixture "Logo.png"), $png)
-[IO.File]::WriteAllBytes((Join-Path $fixture "Animation.gif"), $gif)
+# One subfolder plus one file of every type we need an icon for (keep in sync with
+# make-fixture.sh). Images and HTML are Photoshop-style transparency grids.
+$assets = Join-Path $PSScriptRoot "fixture-assets"
+Copy-Item (Join-Path $assets "checker.png") (Join-Path $fixture "Logo.png")
+Copy-Item (Join-Path $assets "checker.gif") (Join-Path $fixture "Animation.gif")
+Copy-Item (Join-Path $assets "checker.jpg") (Join-Path $fixture "Photo.jpg")
+Copy-Item (Join-Path $assets "checker.html") (Join-Path $fixture "index.html")
 $text = @{
-  "Fruits\Apple.md" = "Apple"; "Notes.markdown" = "# Notes"; "Draft.md" = "# Draft"; "Photo.jpg" = "jpeg"
+  "Fruits\Apple.md" = "Apple"; "Notes.md" = "# Notes"; "Draft.md" = "# Draft"
   "Plan.gdoc" = '{"doc_id":"1abc","resource_id":"document:1abc"}'; "Report.docx" = "docx"; "Old report.doc" = "doc"
   "Blot.webloc" = '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>URL</key><string>https://blot.im</string></dict></plist>'
-  "Blot.url" = "[InternetShortcut]`r`nURL=https://blot.im"; "index.html" = "<h1>Hello</h1>"; "Tasks.org" = "* Heading"; "About.txt" = "Hello"
+  "Tasks.org" = "* Heading"; "About.txt" = "Hello"
 }
 foreach ($k in $text.Keys) { Set-Content -Path (Join-Path $fixture $k) -Value $text[$k] }
 # spread created/modified times across the years so each OS's date formats get exercised
@@ -184,19 +186,32 @@ if ($Scale -ne 1) {
 # a runner dialog ("System Properties") sometimes sits behind the window; close it
 $dlg = [Native.Win]::FindWindow("#32770", "System Properties")
 if ($dlg -ne [IntPtr]::Zero) { [Native.Win]::SendMessage($dlg, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null }
-# Plain mild-grey desktop (icons stay in a column at the left edge, which the capture avoids), so the window's shadow is visible
-Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name Background -Value "128 128 128"
-[Native.Win]::SystemParametersInfo(0x14, 0, "", 3) | Out-Null
-[Native.Win]::SetSysColors(1, @(1), @(0x808080)) | Out-Null
+# Desktop: Photoshop-style white and mid-grey squares (20 logical px), which makes
+# the window's drop shadow easy to measure. Tiled wallpaper is drawn at physical
+# pixel size, so build the tile at the current scale.
+$sq = 20 * $Scale
+$tb = New-Object System.Drawing.Bitmap (2 * $sq), (2 * $sq)
+$tg = [System.Drawing.Graphics]::FromImage($tb)
+$tg.Clear([System.Drawing.Color]::White)
+$greyBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(153, 153, 153))
+$tg.FillRectangle($greyBrush, 0, 0, $sq, $sq); $tg.FillRectangle($greyBrush, $sq, $sq, $sq, $sq)
+$tileFile = Join-Path $env:TEMP "desktop-tile.bmp"
+$tb.Save($tileFile, [System.Drawing.Imaging.ImageFormat]::Bmp)
+Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name WallpaperStyle -Value "0"
+Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name TileWallpaper -Value "1"
+[Native.Win]::SystemParametersInfo(0x14, 0, $tileFile, 3) | Out-Null
+Start-Sleep -Seconds 2
 
 # Size the window (logical px x scale) and keep it clear of the screen edges and
 # taskbar, leaving room for its shadow. Icons sit in a column at the left of the
 # desktop, so the window (and so the capture) stays to their right.
 $sw = [Hidpi]::GetSystemMetrics(0); $sh = [Hidpi]::GetSystemMetrics(1)
-$taskbar = 48 * $Scale; $pad = 60 * $Scale; $left = 200 * $Scale
-$winH = [Math]::Min(640 * $Scale, $sh - $taskbar - 2 * 30 * $Scale)
+$taskbar = 48 * $Scale; $pad = 96 * $Scale; $left = 176 * $Scale
+# 480x360 logical px. MoveWindow includes Explorer's invisible 7px resize borders
+# (left, right, bottom), so ask for a little more to get a visible 480 wide.
+$winH = (360 + 7) * $Scale
 $suffix = if ($Scale -ne 1) { "@${Scale}x" } else { "" }
-function Place($width) { [Native.Win]::MoveWindow($h, $left, 30 * $Scale, $width * $Scale, $winH, $true) | Out-Null; Start-Sleep -Seconds 2 }
+function Place($width) { [Native.Win]::MoveWindow($h, $left - 7 * $Scale, $pad, ($width + 14) * $Scale, $winH, $true) | Out-Null; Start-Sleep -Seconds 2 }
 function Capture($name) {
   $r = New-Object Native.Win+RECT
   [Native.Win]::DwmGetWindowAttribute($h, 9, [ref]$r, [System.Runtime.InteropServices.Marshal]::SizeOf($r)) | Out-Null

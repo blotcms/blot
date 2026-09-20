@@ -2,7 +2,8 @@
 # Screenshot GNOME Files (Nautilus) under Xvfb.
 # usage: linux.sh <light|dark> <out-dir> [scale]   (scale 2 = HiDPI, via GDK_SCALE)
 set -uo pipefail
-THEME="${1:-light}"; OUT="${2:-out}"; S="${3:-1}"; NARROW="${NARROW:-890}"; NARROW_H="${NARROW_H:-960}"; mkdir -p "$OUT"
+THEME="${1:-light}"; OUT="${2:-out}"; S="${3:-1}"; mkdir -p "$OUT"
+W="${W:-480}"; H="${H:-520}"; PAD=$((96 * S))
 HERE="$(cd "$(dirname "$0")" && pwd)"
 FIXTURE="$HOME/Your site"
 bash "$HERE/make-fixture.sh" "$FIXTURE"
@@ -16,17 +17,21 @@ else
 fi
 
 run() {
-  # tree view in list mode, like the docs' folder mock-ups, without the sidebar
-  gsettings set org.gnome.nautilus.preferences default-folder-viewer 'list-view' || true
   gsettings set org.gnome.nautilus.list-view use-tree-view true || true
-  gsettings set org.gnome.nautilus.window-state start-with-sidebar false || true
   gsettings set org.gnome.desktop.interface color-scheme "prefer-$THEME" || true
   gsettings list-recursively org.gnome.nautilus > "$OUT/gsettings.txt" 2>&1
-  xsetroot -solid "#808080"
+
+  # Desktop: Photoshop-style white and mid-grey squares (20px logical), which makes
+  # the window's drop shadow easy to measure
+  convert "$HERE/fixture-assets/desktop-tile.png" -filter point -resize $((40 * S))x$((40 * S))! "$OUT/tile.png"
+  convert -size 2560x2400 tile:"$OUT/tile.png" "$OUT/desktop.png"
+  feh --bg-tile "$OUT/tile.png"
+
   # a window manager is needed for keyboard focus (and the window needs focus)
   openbox >"$OUT/openbox.log" 2>&1 &
   sleep 2
-  open_nautilus() {
+
+  open_nautilus() {  # args: width height (logical px)
     nautilus --new-window "$FIXTURE" >"$OUT/nautilus.log" 2>&1 &
     sleep 8
     # several X windows share the class (helpers are 1x1); pick the largest one
@@ -35,42 +40,51 @@ run() {
       eval "$(xdotool getwindowgeometry --shell "$w")"
       if [ $((WIDTH * HEIGHT)) -gt "$BEST" ]; then BEST=$((WIDTH * HEIGHT)); WID="$w"; fi
     done
-    # (set NARROW=560 to collapse the sidebar; the default keeps the wider window)
-    xdotool windowsize "$WID" $((NARROW * S)) $((NARROW_H * S)); sleep 1
-    xdotool windowmove "$WID" $((100 * S)) $((100 * S)); sleep 1
+    # Nautilus collapses its sidebar below ~500px wide
+    xdotool windowsize "$WID" $(($1 * S)) $(($2 * S)); sleep 1
+    xdotool windowmove "$WID" $((PAD + 40 * S)) $((PAD + 40 * S)); sleep 1
     eval "$(xdotool getwindowgeometry --shell "$WID")"
     echo "window $WID: ${WIDTH}x${HEIGHT}+${X}+${Y}" >> "$OUT/geometry.txt"
-    xdotool mousemove $((X + 500 * S)) $((Y + 400 * S)) click 1; sleep 0.5
+    xdotool mousemove $((X + 200 * S)) $((Y + 400 * S)) click 1; sleep 0.5
     xdotool windowactivate --sync "$WID" || xdotool windowfocus "$WID" || true
     sleep 0.5
   }
-  capture() {
+  capture() {  # arg: output name
     xdotool key --clearmodifiers ctrl+shift+a; sleep 0.5  # clear the selection
-    xdotool mousemove $((X + 700 * S)) $((Y + 500 * S)); sleep 1
+    xdotool mousemove $((X + WIDTH / 2)) $((Y + HEIGHT + 2 * PAD)); sleep 1
     import -window root "$OUT/full.png"
     convert "$OUT/full.png" -crop "${WIDTH}x${HEIGHT}+${X}+${Y}" +repage "$OUT/window.png"
     # No compositor under Xvfb, so give the window its rounded corners and shadow
-    # ourselves, on a mild grey desktop with room around it.
+    # ourselves, on the checkerboard desktop with generous room around it.
     R=$((12 * S))
     convert "$OUT/window.png" -alpha set \( +clone -alpha transparent -fill white -draw "roundrectangle 0,0 $((WIDTH - 1)),$((HEIGHT - 1)) $R,$R" \) \
       -compose DstIn -composite "$OUT/rounded.png"
     convert "$OUT/rounded.png" \( +clone -background black -shadow 45x$((20 * S))+0+$((10 * S)) \) +swap -background none -layers merge +repage "$OUT/shadowed.png"
-    convert -size "$((WIDTH + 120 * S))x$((HEIGHT + 120 * S))" xc:"#808080" "$OUT/shadowed.png" -gravity center -composite "$OUT/$1.png"
+    convert -size "$((WIDTH + 2 * PAD))x$((HEIGHT + 2 * PAD))" tile:"$OUT/tile.png" "$OUT/shadowed.png" -gravity center -composite "$OUT/$1.png"
     rm -f "$OUT/full.png" "$OUT/window.png" "$OUT/rounded.png" "$OUT/shadowed.png"
   }
+  close_nautilus() { pkill nautilus; sleep 3; }
 
-  # list view with the tree expanded (the default capture)
-  open_nautilus
-  # expand the one folder: Fruits is the 6th row (folders sort among the files)
-  xdotool mousemove $((X + 222 * S)) $((Y + 368 * S)) click 1; sleep 0.7
-  capture "linux-$THEME$SUFFIX"
+  # list view with the tree expanded (the default capture). Fruits is the 6th row
+  # (folders sort among the files); the arrow is at x=41 with the sidebar collapsed.
+  gsettings set org.gnome.nautilus.preferences default-folder-viewer 'list-view' || true
+  open_nautilus "$W" "$H"
+  xdotool mousemove $((X + 41 * S)) $((Y + 368 * S)) click 1; sleep 0.7
+  capture "linux-$THEME$SUFFIX"; close_nautilus
 
   # icon view (the other Nautilus layout)
-  pkill nautilus; sleep 3
   gsettings set org.gnome.nautilus.preferences default-folder-viewer 'icon-view' || true
-  open_nautilus
-  capture "linux-$THEME$SUFFIX-icons"
+  open_nautilus "$W" "$H"
+  capture "linux-$THEME$SUFFIX-icons"; close_nautilus
+
+  # wide list view with the sidebar showing (arrow at x=222)
+  gsettings set org.gnome.nautilus.preferences default-folder-viewer 'list-view' || true
+  open_nautilus 890 "$H"
+  xdotool mousemove $((X + 222 * S)) $((Y + 368 * S)) click 1; sleep 0.7
+  capture "linux-$THEME$SUFFIX-sidebar"; close_nautilus
+
+  rm -f "$OUT/tile.png" "$OUT/desktop.png"
   { echo "nautilus: $(nautilus --version)"; echo "libadwaita: $(dpkg -s libadwaita-1-0 2>/dev/null | grep ^Version)"; lsb_release -d; echo "scale: $S"; } > "$OUT/versions.txt" 2>&1
 }
-export THEME OUT FIXTURE S SUFFIX NARROW NARROW_H
+export THEME OUT FIXTURE S SUFFIX W H PAD HERE
 dbus-run-session -- bash -c "$(declare -f run); run"

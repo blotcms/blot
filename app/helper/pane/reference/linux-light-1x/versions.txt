@@ -1,5 +1,0 @@
-** Message: 13:26:52.421: Connecting to org.freedesktop.Tracker3.Miner.Files
-nautilus: GNOME nautilus 46.4
-libadwaita: Version: 1.5.0-1ubuntu2
-Description:	Ubuntu 24.04.5 LTS
-scale: 1
