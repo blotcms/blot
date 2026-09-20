@@ -2,7 +2,7 @@
 # Screenshot GNOME Files (Nautilus) under Xvfb.
 # usage: linux.sh <light|dark> <out-dir> [scale]   (scale 2 = HiDPI, via GDK_SCALE)
 set -uo pipefail
-THEME="${1:-light}"; OUT="${2:-out}"; S="${3:-1}"; mkdir -p "$OUT"
+THEME="${1:-light}"; OUT="${2:-out}"; S="${3:-1}"; NARROW="${NARROW:-560}"; mkdir -p "$OUT"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 FIXTURE="$HOME/Your site"
 bash "$HERE/make-fixture.sh" "$FIXTURE"
@@ -34,21 +34,13 @@ run() {
     eval "$(xdotool getwindowgeometry --shell "$w")"
     if [ $((WIDTH * HEIGHT)) -gt "$BEST" ]; then BEST=$((WIDTH * HEIGHT)); WID="$w"; fi
   done
+  # Nautilus 46 has no setting to hide the sidebar, but libadwaita collapses it
+  # when the window is narrow, so use a narrow window.
+  xdotool windowsize "$WID" $((NARROW * S)) $((550 * S)); sleep 1
   xdotool windowmove "$WID" $((100 * S)) $((100 * S)); sleep 1
   eval "$(xdotool getwindowgeometry --shell "$WID")"
   echo "window $WID: ${WIDTH}x${HEIGHT}+${X}+${Y}" > "$OUT/geometry.txt"
   xdotool mousemove $((X + 500 * S)) $((Y + 400 * S)) click 1; sleep 0.5
-  # Nautilus 46 has no gsetting or working shortcut for the sidebar, so ask it
-  # over D-Bus: list the window's actions and fire any that mention "sidebar"
-  for n in 1 2 3; do
-    P=/org/gnome/Nautilus/window/$n
-    ACTS="$(gdbus call --session --dest org.gnome.Nautilus --object-path $P --method org.gtk.Actions.List 2>&1)"
-    echo "$P: $ACTS" >> "$OUT/actions.txt"
-    for a in $(echo "$ACTS" | grep -o "'[^']*sidebar[^']*'" | tr -d "'"); do
-      gdbus call --session --dest org.gnome.Nautilus --object-path $P --method org.gtk.Actions.Activate "$a" "[]" "{}" >> "$OUT/actions.txt" 2>&1
-    done
-  done
-  sleep 1.5
   xdotool windowactivate --sync "$WID" || xdotool windowfocus "$WID" || true
   sleep 0.5
   # expand folders bottom-up so row positions above don't shift, then the
@@ -68,5 +60,5 @@ run() {
   rm -f "$OUT/full.png" "$OUT/window.png" "$OUT/rounded.png" "$OUT/shadowed.png"
   { echo "nautilus: $(nautilus --version)"; echo "libadwaita: $(dpkg -s libadwaita-1-0 2>/dev/null | grep ^Version)"; lsb_release -d; echo "scale: $S"; } > "$OUT/versions.txt" 2>&1
 }
-export THEME OUT FIXTURE S SUFFIX
+export THEME OUT FIXTURE S SUFFIX NARROW
 dbus-run-session -- bash -c "$(declare -f run); run"
