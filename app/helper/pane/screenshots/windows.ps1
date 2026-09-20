@@ -181,6 +181,9 @@ if ($Scale -ne 1) {
   $h = if ($shellWin) { [IntPtr][int64]$shellWin.HWND } else { [Native.Win]::FindWindow("CabinetWClass", $null) }
   "explorer dpi: $([Hidpi]::GetDpiForWindow($h))" | Out-File "$Out\hidpi.log" -Append
 }
+# a runner dialog ("System Properties") sometimes sits behind the window; close it
+$dlg = [Native.Win]::FindWindow("#32770", "System Properties")
+if ($dlg -ne [IntPtr]::Zero) { [Native.Win]::SendMessage($dlg, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null }
 # Plain mild-grey desktop (icons stay in a column at the left edge, which the capture avoids), so the window's shadow is visible
 Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name Background -Value "128 128 128"
 [Native.Win]::SystemParametersInfo(0x14, 0, "", 3) | Out-Null
@@ -197,6 +200,11 @@ function Place($width) { [Native.Win]::MoveWindow($h, $left, 30 * $Scale, $width
 function Capture($name) {
   $r = New-Object Native.Win+RECT
   [Native.Win]::DwmGetWindowAttribute($h, 9, [ref]$r, [System.Runtime.InteropServices.Marshal]::SizeOf($r)) | Out-Null
+  # click the tab (moves keyboard focus off the toolbar), then park the mouse on the
+  # desktop so no tooltip or hover state is captured
+  Click ($r.Left + 40 * $Scale) ($r.Top + 22 * $Scale)
+  [Native.Mouse]::SetCursorPos($sw - 4, 4) | Out-Null
+  Start-Sleep -Seconds 2
   $x0 = [Math]::Max(0, $r.Left - $pad); $y0 = [Math]::Max(0, $r.Top - $pad)
   $x1 = [Math]::Min($sw, $r.Right + $pad); $y1 = [Math]::Min($sh - $taskbar, $r.Bottom + $pad)
   "window: $($r.Left),$($r.Top) $($r.Right - $r.Left)x$($r.Bottom - $r.Top); capture $x0,$y0 $($x1 - $x0)x$($y1 - $y0)" | Out-File "$Out\versions.txt" -Append
