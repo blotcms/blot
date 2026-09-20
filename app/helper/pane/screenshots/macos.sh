@@ -168,4 +168,24 @@ for v in "icon view:icons" "column view:columns" "flow view:gallery"; do
   sleep 2
   capture "macos-$THEME$SUFFIX-${v##*:}"
 done
+# Editors: TextEdit is the OS's text editor window. Capture it with prose ("text")
+# and with source code ("code"; IgnoreHTML shows the markup instead of rendering it).
+EDIT="$HOME/Documents/editors"; mkdir -p "$EDIT"
+cp "$HERE/fixture-assets/text-sample.txt" "$EDIT/Essay.txt"
+cp "$HERE/fixture-assets/code-sample.html" "$EDIT/index.html"
+defaults write com.apple.TextEdit RichText 0
+defaults write com.apple.TextEdit IgnoreHTML 1
+osascript -e 'tell application "Finder" to close every window' >>"$OUT/finder.log" 2>&1
+for e in "Essay.txt:text" "index.html:code"; do
+  open -a TextEdit "$EDIT/${e%%:*}"; sleep 5
+  BOUNDS="$(osascript -e 'tell application "TextEdit" to activate' \
+    -e 'tell application "TextEdit" to set bounds of front window to {150, 150, 640, 510}' \
+    -e 'delay 2' -e 'tell application "TextEdit" to return bounds of front window' 2>>"$OUT/editors.log")"
+  echo "${e##*:} bounds: $BOUNDS" >> "$OUT/bounds.txt"
+  IFS=', ' read -r L T R B <<< "$BOUNDS"
+  sleep 2
+  capture "macos-$THEME$SUFFIX-${e##*:}"
+  osascript -e 'tell application "TextEdit" to close every window saving no' >>"$OUT/editors.log" 2>&1
+  sleep 2
+done
 rm -f "$OUT/grey.png"; ls -la "$OUT" >> "$OUT/screencapture.log"

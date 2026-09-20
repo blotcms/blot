@@ -249,4 +249,26 @@ foreach ($v in $views) {
     Capture "$Label-$Theme$suffix-$($v[0])"
   } catch { "view $($v[0]) failed: $_" | Out-File $log -Append }
 }
+# Editors: Notepad is the OS's text editor window. Capture it with prose ("text")
+# and with source code ("code").
+try {
+  try { $shellWin.Quit() } catch { }
+  Start-Sleep -Seconds 2
+  $edit = Join-Path $env:USERPROFILE "Documents\editors"
+  New-Item -ItemType Directory -Force -Path $edit | Out-Null
+  Copy-Item (Join-Path $assets "text-sample.txt") (Join-Path $edit "Essay.txt")
+  Copy-Item (Join-Path $assets "code-sample.html") (Join-Path $edit "index.html")
+  foreach ($e in @(@("Essay.txt", "text"), @("index.html", "code"))) {
+    Start-Process notepad.exe -ArgumentList "`"$(Join-Path $edit $e[0])`""
+    Start-Sleep -Seconds 6
+    $np = Get-Process notepad -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+    if (-not $np) { "no notepad window for $($e[1])" | Out-File $log -Append; continue }
+    $h = $np.MainWindowHandle
+    "notepad $($e[1]): $($np.MainWindowTitle)" | Out-File $log -Append
+    Place $Width
+    Capture "$Label-$Theme$suffix-$($e[1])"
+    Get-Process notepad -ErrorAction SilentlyContinue | Stop-Process -Force
+    Start-Sleep -Seconds 2
+  }
+} catch { "editors failed: $_" | Out-File $log -Append }
 Get-Process explorer | Select-Object Id, MainWindowTitle | Out-String | Out-File "$Out\processes.txt"

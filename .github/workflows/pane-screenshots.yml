@@ -34,7 +34,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            nautilus openbox x11-xserver-utils libglib2.0-bin xvfb xdotool imagemagick dbus-x11 dconf-gsettings-backend \
+            nautilus gnome-text-editor openbox x11-xserver-utils libglib2.0-bin xvfb xdotool imagemagick dbus-x11 dconf-gsettings-backend \
             gsettings-desktop-schemas adwaita-icon-theme gnome-themes-extra \
             fonts-cantarell libadwaita-1-0 librsvg2-common adwaita-icon-theme-full shared-mime-info
       - name: Screenshot
@@ -80,7 +80,7 @@ jobs:
           $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/app/helper/pane/screenshots"
           Invoke-WebRequest "$base/windows.ps1" -OutFile windows.ps1
           New-Item -ItemType Directory -Force fixture-assets | Out-Null
-          foreach ($f in "checker.png", "checker.gif", "checker.jpg", "checker.html", "notes.md", "draft.md", "report.docx") { Invoke-WebRequest "$base/fixture-assets/$f" -OutFile "fixture-assets/$f" }
+          foreach ($f in "checker.png", "checker.gif", "checker.jpg", "checker.html", "notes.md", "draft.md", "report.docx", "text-sample.txt", "code-sample.html") { Invoke-WebRequest "$base/fixture-assets/$f" -OutFile "fixture-assets/$f" }
       - name: Screenshot
         shell: pwsh
         run: ./windows.ps1 -Theme ${{ matrix.theme }} -Out out -Label windows -Scale ${{ matrix.scale }}

@@ -91,6 +91,32 @@ CSS
   xdotool mousemove $((X + 222 * S)) $((Y + 326 * S)) click 1; sleep 0.7
   capture "linux-$THEME$SUFFIX-sidebar"; close_nautilus
 
+  # Editors: GNOME Text Editor with prose ("text") and source code ("code": line
+  # numbers on, and it highlights HTML by itself).
+  EDIT="$HOME/editors"; mkdir -p "$EDIT"
+  cp "$HERE/fixture-assets/text-sample.txt" "$EDIT/Essay.txt"
+  cp "$HERE/fixture-assets/code-sample.html" "$EDIT/index.html"
+  gsettings set org.gnome.TextEditor restore-session false || true
+  for e in "Essay.txt:text:false" "index.html:code:true"; do
+    IFS=: read -r file kind lines <<< "$e"
+    gsettings set org.gnome.TextEditor show-line-numbers "$lines" || true
+    gnome-text-editor --standalone "$EDIT/$file" >"$OUT/text-editor.log" 2>&1 &
+    sleep 8
+    WID=""; BEST=0
+    for w in $(xdotool search --class gnome-text-editor) $(xdotool search --class TextEditor); do
+      eval "$(xdotool getwindowgeometry --shell "$w")"
+      if [ $((WIDTH * HEIGHT)) -gt "$BEST" ]; then BEST=$((WIDTH * HEIGHT)); WID="$w"; fi
+    done
+    xdotool windowsize "$WID" $((W * S)) $((H * S)); sleep 1
+    xdotool windowmove "$WID" $((PAD + 40 * S)) $((PAD + 40 * S)); sleep 1
+    eval "$(xdotool getwindowgeometry --shell "$WID")"
+    echo "$kind window $WID: ${WIDTH}x${HEIGHT}+${X}+${Y}" >> "$OUT/geometry.txt"
+    xdotool windowactivate --sync "$WID" || true
+    sleep 1
+    capture "linux-$THEME$SUFFIX-$kind"
+    pkill -f gnome-text-editor; sleep 3
+  done
+
   { echo "nautilus: $(nautilus --version)"; echo "libadwaita: $(dpkg -s libadwaita-1-0 2>/dev/null | grep ^Version)"; lsb_release -d; echo "scale: $S"; } > "$OUT/versions.txt" 2>&1
 }
 export THEME OUT FIXTURE S SUFFIX W H PAD HERE
