@@ -16,8 +16,13 @@ Decisions so far:
 
 ## Getting the credentials (Microsoft Entra)
 
-You need a Microsoft account to sign in to the portal. A free Azure account is
-enough; app registrations cost nothing.
+Sign in to the portal with a **Microsoft Entra work or school account** for
+the organisation that will own the app (an account like you@blot.im in a
+tenant you control), not a personal Microsoft account: apps registered with a
+personal Microsoft account cannot be publisher verified later, and
+re-registering would change the client ID. A free Entra tenant is enough, and
+app registrations cost nothing. The signed-in user needs the Application
+Administrator or Cloud Application Administrator role.
 
 1. Go to <https://entra.microsoft.com> > **Identity > Applications > App
    registrations > New registration**. (Same page as Azure portal > "App
@@ -37,9 +42,13 @@ enough; app registrations cost nothing.
    ID**. This is `BLOT_ONEDRIVE_CLIENT_ID`.
 6. **Certificates & secrets > Client secrets > New client secret.** Copy the
    secret **Value** immediately (it is shown once; do not copy the Secret ID).
-   This is `BLOT_ONEDRIVE_CLIENT_SECRET`. Secrets expire (24 months maximum),
-   so put the expiry date in a calendar; an expired secret silently breaks
-   token refresh for every connected site.
+   This is `BLOT_ONEDRIVE_CLIENT_SECRET`. Secrets expire (the portal offers
+   presets and a custom date, up to 24 months), so put the expiry date in a
+   calendar. Rotate without downtime by creating a second secret before the
+   first expires, deploying it, then deleting the old one. Microsoft
+   recommends a certificate over a secret; that is a possible later
+   hardening, not needed for the skeleton. See "Secret expiry and user
+   re-authentication" below.
 7. **API permissions > Add a permission > Microsoft Graph > Delegated
    permissions**, add `Files.ReadWrite.AppFolder`, `offline_access` and
    `User.Read` (sign-in profile). None of these require admin consent for
@@ -52,10 +61,67 @@ enough; app registrations cost nothing.
 10. Set the three variables in the environment (`config/environment.sh` lists
     them). The client stays hidden on the dashboard until all three are set.
 
-Later, before real users connect: complete Microsoft **publisher
-verification** (Entra > the app > Branding & properties > Publisher domain,
-plus a Microsoft Partner Network account). Until then the consent screen shows
-an "unverified" warning. This has a business-process lead time, so start early.
+## Publisher verification
+
+Without it, the consent screen shows an "unverified publisher" warning. More
+importantly, Microsoft documents that when a tenant has risk-based step-up
+consent enabled, users **cannot consent at all** to newly registered
+multi-tenant apps that are not publisher verified and that request permissions
+beyond basic sign-in (our `Files.ReadWrite.AppFolder` is beyond that), so
+some work/school users would be blocked until an admin approves the app.
+Personal accounts are unaffected beyond the warning. Verification is therefore
+close to mandatory for work/school support, and optional polish for personal
+accounts only.
+
+**Cost:** none. Microsoft states there is no charge and no licence required.
+
+**Effort:** the verification step itself takes minutes once the prerequisites
+are met. The lead time is the prerequisite, a verified Microsoft AI Cloud
+Partner Program (CPP, formerly MPN) account; Microsoft does not publish how
+long that business verification takes, so allow for some back and forth.
+
+Prerequisites (all from Microsoft's "Publisher verification overview"):
+
+1. A **Partner One ID** for a CPP account that has completed verification
+   (enrol at <https://partner.microsoft.com/membership>). It must be the
+   organisation's **partner global account (PGA)**, not a location ID.
+2. The app registered with an **Entra work or school account** (see above).
+3. The Entra tenant that holds the app must be associated with the PGA.
+4. The app needs a **publisher domain** (Branding & properties) that is not
+   `*.onmicrosoft.com`.
+5. The domain of the email address used to verify the CPP account must match
+   the app's publisher domain, or be a DNS-verified custom domain on the
+   tenant.
+6. The person doing it needs Application Administrator or Cloud Application
+   Administrator in Entra **and** CPP Partner Admin or Account Admin in Partner
+   Center, and must sign in with **MFA**.
+7. Accept the Microsoft identity platform for developers Terms of Use.
+
+Then: Entra admin center > App registrations > the app > **Branding &
+properties** > **Add Partner ID to verify publisher** > enter the Partner One
+ID > **Verify and save**. A blue verified badge should appear on the consent
+screen shortly after (test with `prompt=consent`, never hard-code it).
+
+Do this for **each** app (`Blot` and, if wanted, `Blot Dev`). Not supported in
+national clouds or Azure AD B2C tenants.
+
+## Secret expiry and user re-authentication
+
+Expiry of the app's client secret does **not** force users to re-authenticate.
+Refresh tokens are bound to the user and client, and a secret expiring is not
+among Microsoft's documented revocation causes; a new secret works with
+existing refresh tokens. What an expired secret does do is stop every token
+refresh and code exchange until the new secret is deployed, so sync and new
+connections fail for everyone until then. Hence the calendar reminder and the
+overlapping-secret rotation above.
+
+The real re-authentication risk is refresh token age: Microsoft documents a
+90 day default lifetime for these flows, replaced with a fresh token on each
+use. A connection whose refresh token isn't used for 90 days will need the user
+to reconnect. The polling fallback in `init.js` (step 5 of the order below)
+keeps tokens in use, and the client should surface "reconnect OneDrive" via
+`getHealth` when a refresh fails with `invalid_grant`. Users can also revoke
+access, or an admin can, which has the same effect.
 
 Notification URLs must be public HTTPS, so local development needs a tunnel
 (or the existing `webhooks.blot.im` relay) to receive Graph webhooks.
