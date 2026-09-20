@@ -19,6 +19,9 @@ New-Item -Path $key -Force | Out-Null
 Set-ItemProperty -Path $key -Name AppsUseLightTheme -Value $light -Type DWord
 Set-ItemProperty -Path $key -Name SystemUsesLightTheme -Value $light -Type DWord
 
+# clear the runner's console windows off the desktop first
+(New-Object -ComObject Shell.Application).MinimizeAll()
+Start-Sleep -Seconds 2
 Start-Process explorer.exe -ArgumentList "`"$fixture`""
 Start-Sleep -Seconds 8
 

@@ -89,19 +89,64 @@ Reference screenshots per OS x light/dark x view, checked in under
 `reference/`. A Puppeteer test renders a fixture page per skin and diffs with
 `pixelmatch` at a per-region tolerance (text looser than chrome).
 
+## Payload budget
+
+Server-side code can be as large and slow as it needs; what ships to visitors
+must be tiny. Guidelines:
+
+- Build-time work does the heavy lifting (skin expansion, hashing, SVG
+  optimisation, CSS minification, dead-code removal per page).
+- One HTML content node per window (see above), no duplicated content, decorative
+  chrome kept to the minimum nodes the three skins need.
+- CSS: one shared stylesheet, minified, custom properties for shared values,
+  SVGs optimised (svgo) and de-duplicated (shared `mask-image` glyphs). It is
+  fine for it to be large in absolute terms; measure it gzip/brotli.
+- JS: a single inline `<head>` snippet (target well under 500 bytes minified)
+  that sets `data-os`. No runtime rendering, no text swapping.
+- CI reports the CSS/JS/HTML sizes (raw and brotli) so regressions are visible;
+  add a hard budget once we have a first version.
+
+## QA: real vs. rendered comparison
+
+Goal: for every OS x theme x view, compare a REAL screenshot (from CI runners,
+or sourced from the web/supplied by hand) with the pane rendering of the same
+fixture, captured in a browser in CI, and make the differences easy to inspect.
+Not pixel-identical, but close enough to judge by eye and by metric.
+
+- `reference/`: real screenshots (this PR's CI captures, plus web-sourced ones
+  where a runner can't produce one, e.g. Retina macOS).
+- `rendered/`: pane output for the same fixture, rendered by Puppeteer at the
+  same window size and captured by a CI job, committed like the references.
+- `qa/`: a small local server (`node app/helper/pane/qa`) that lists every
+  OS/theme/view pair and shows real | rendered | diff side by side, with a swipe
+  slider and overlay/blink modes, plus the pixel-difference score.
+- Agents can use it too: a CLI (`node app/helper/pane/qa/diff.js`) writes diff
+  PNGs and a JSON report of per-pair metrics, so a change can be checked without
+  a human looking at every image.
+- Both sides use one shared fixture definition (same tree, same window size and
+  crop) so images align without manual work.
+
 ## Phase 1 (this PR): gather reference screenshots
 
-`.github/workflows/pane-screenshots.yml` tries to screenshot a real file manager
-on GitHub-hosted runners (Ubuntu + GNOME Files, macOS + Finder, Windows +
-Explorer, light and dark) and uploads them as artifacts. Scripts live in
-`screenshots/`. Unverified assumptions, to be settled by the run:
+`.github/workflows/pane-screenshots.yml` screenshots a real file manager on
+GitHub-hosted runners (light and dark) and commits the results to `reference/`.
+Scripts are in `screenshots/`. Findings from the first runs:
 
-- macOS: TCC may block `screencapture` and Finder automation.
-- Windows: hosted runners are Windows Server; Explorer may not look like
-  Windows 11. `windows-11-arm` is included as a second attempt.
-- Display sizes are small and 1x.
+- **macOS: works.** `macos-latest` is macOS 26.6.2 (Tahoe); `screencapture` and
+  Finder AppleScript both work. Light/dark toggles via System Events. 1024x768,
+  1x (no Retina), so Retina detail needs web/supplied screenshots.
+- **Linux: works.** `ubuntu-latest` is Ubuntu 24.04 (GNOME Files 46,
+  libadwaita 1.5), so one release behind the newest GNOME. Needs `librsvg2-common`
+  and `adwaita-icon-theme-full` for icons, and `ADW_DEBUG_COLOR_SCHEME` for real
+  libadwaita dark mode. No compositor, so no window shadow or rounded outer
+  corners. Check if a newer Ubuntu runner image appears.
+- **Windows: works on `windows-latest`** (Windows Server 2025, build 26100), which
+  has the Windows 11 style Explorer. The repo can't be checked out on Windows
+  (a filename contains `|`), so the job downloads just the script.
+  `windows-11-arm` is stuck on the Windows first-run setup screen and is dropped.
+- Display sizes are small (1024x768 / 1280x800) and 1x on every platform.
 
-If a platform fails, fall back to gathering and organising screenshots from the
+If a platform proves too limited, fall back to gathering screenshots from the
 web (or supplied by hand) into `reference/`.
 
 ## Later

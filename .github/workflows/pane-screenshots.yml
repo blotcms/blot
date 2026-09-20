@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [windows-latest, windows-11-arm]
+        runner: [windows-latest]
         theme: [light, dark]
     steps:
       # the repo contains filenames Windows can't check out, so fetch just the script

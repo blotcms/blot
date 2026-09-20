@@ -31,6 +31,8 @@ tell application "System Events" to tell process "Finder"
   keystroke "a" using command down
   key code 124 using {option down}
 end tell
+delay 1
+tell application "Finder" to set selection to {}
 OSA
 sleep 4
 screencapture -x "$OUT/macos-$THEME-screen.png" >"$OUT/screencapture.log" 2>&1 || true
