@@ -102,7 +102,7 @@ jobs:
           for dir in captured/pane-*; do
             name="${dir#captured/pane-}"
             mkdir -p "app/helper/pane/reference/$name"
-            cp "$dir"/*.png "$dir"/*.txt "$dir"/*.log "app/helper/pane/reference/$name/" 2>/dev/null || true
+            find "$dir" -maxdepth 1 -type f \( -name "*.png" -o -name "*.txt" -o -name "*.log" \) -exec cp {} "app/helper/pane/reference/$name/" \;
           done
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

@@ -28,6 +28,26 @@ else
 fi
 sleep 3
 
+# Trim the Finder toolbar to back/forward, the view switcher and search: drop
+# the arrange, share, tag and action buttons. Identifiers are Finder's own.
+PLIST="$HOME/Library/Preferences/com.apple.finder.plist"
+{
+  echo "before:"; defaults read com.apple.finder "NSToolbar Configuration Browser"
+  PB=/usr/libexec/PlistBuddy
+  $PB -c 'Delete ":NSToolbar Configuration Browser"' "$PLIST" || true
+  $PB -c 'Add ":NSToolbar Configuration Browser" dict' "$PLIST"
+  $PB -c 'Add ":NSToolbar Configuration Browser:TB Display Mode" integer 2' "$PLIST"
+  $PB -c 'Add ":NSToolbar Configuration Browser:TB Icon Size Mode" integer 1' "$PLIST"
+  $PB -c 'Add ":NSToolbar Configuration Browser:TB Is Shown" integer 1' "$PLIST"
+  $PB -c 'Add ":NSToolbar Configuration Browser:TB Item Identifiers" array' "$PLIST"
+  i=0
+  for id in com.apple.finder.BACK NSToolbarFlexibleSpaceItem com.apple.finder.SWCH com.apple.finder.SRCH; do
+    $PB -c "Add \":NSToolbar Configuration Browser:TB Item Identifiers:$i\" string $id" "$PLIST"; i=$((i+1))
+  done
+  killall cfprefsd; killall Finder; sleep 4
+  echo "after:"; defaults read com.apple.finder "NSToolbar Configuration Browser"
+} > "$OUT/toolbar.log" 2>&1
+
 osascript >"$OUT/finder.log" 2>&1 <<OSA || true
 tell application "Finder"
   activate

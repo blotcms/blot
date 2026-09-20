@@ -53,14 +53,21 @@ try {
   }
   foreach ($step in "View", "Show", "Navigation pane") {
     $el = Find-Element $root $step
-    if (-not $el) { "not found: $step" | Out-File $log -Append; break }
+    if (-not $el) {
+      "not found: $step; menu items visible:" | Out-File $log -Append
+      $cond = New-Object System.Windows.Automation.PropertyCondition($A::ControlTypeProperty, [System.Windows.Automation.ControlType]::MenuItem)
+      foreach ($m in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond)) { "  $($m.Current.Name)" | Out-File $log -Append }
+      break
+    }
     "$step -> $(Press $el)" | Out-File $log -Append
-    Start-Sleep -Seconds 1
+    Start-Sleep -Seconds 2
   }
 } catch { "uia error: $_" | Out-File $log -Append }
 Start-Sleep -Seconds 1
 [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
-$h = [Native.Win]::FindWindow("CabinetWClass", $null)
+$shellWin = (New-Object -ComObject Shell.Application).Windows() | Where-Object { $_.LocationName -eq "Your site" } | Select-Object -First 1
+$h = if ($shellWin) { [IntPtr][int64]$shellWin.HWND } else { [IntPtr]::Zero }
+if ($h -eq [IntPtr]::Zero) { $h = [Native.Win]::FindWindow("CabinetWClass", $null) }
 $r = New-Object Native.Win+RECT
 [Native.Win]::DwmGetWindowAttribute($h, 9, [ref]$r, [System.Runtime.InteropServices.Marshal]::SizeOf($r)) | Out-Null
 $w = $r.Right - $r.Left; $ht = $r.Bottom - $r.Top
