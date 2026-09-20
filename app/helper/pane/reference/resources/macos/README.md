@@ -15,8 +15,7 @@ in a future macOS.
 
 ## Desktop
 Finder refuses to set the wallpaper over AppleScript (error -10000). Instead a JXA
-script paints a borderless window at `kCGDesktopWindowLevel` filled with a pattern
-image (`fixture-assets/desktop-tile.png`, 20pt white and mid-grey squares).
+script paints a borderless window at `kCGDesktopWindowLevel` filled with 50% grey.
 
 ## Finder window
 - Appearance: System Events `appearance preferences` dark mode on/off.

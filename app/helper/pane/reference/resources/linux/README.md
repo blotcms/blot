@@ -36,5 +36,4 @@ capture adds a 12px (x scale) corner radius and an ImageMagick shadow
 not measured from real GNOME; compare with real GNOME screenshots before copying them.
 
 ## Desktop
-`feh --bg-tile` of a 20px-square white and mid-grey tile; the final image is composited
-on the same tile so it lines up.
+`xsetroot -solid '#808080'`; the final image is composited on the same 50% grey.

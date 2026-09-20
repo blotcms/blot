@@ -14,9 +14,12 @@ Copy-Item (Join-Path $assets "checker.png") (Join-Path $fixture "Logo.png")
 Copy-Item (Join-Path $assets "checker.gif") (Join-Path $fixture "Animation.gif")
 Copy-Item (Join-Path $assets "checker.jpg") (Join-Path $fixture "Photo.jpg")
 Copy-Item (Join-Path $assets "checker.html") (Join-Path $fixture "index.html")
+Copy-Item (Join-Path $assets "notes.md") (Join-Path $fixture "Notes.md")
+Copy-Item (Join-Path $assets "draft.md") (Join-Path $fixture "Draft.md")
+Copy-Item (Join-Path $assets "report.docx") (Join-Path $fixture "Report.docx")
 $text = @{
-  "Fruits\Apple.md" = "Apple"; "Notes.md" = "# Notes"; "Draft.md" = "# Draft"
-  "Plan.gdoc" = '{"doc_id":"1abc","resource_id":"document:1abc"}'; "Report.docx" = "docx"; "Old report.doc" = "doc"
+  "Fruits\Apple.md" = "Apple"
+  "Plan.gdoc" = '{"doc_id":"1abc","resource_id":"document:1abc"}'; "Old report.doc" = "doc"
   "Blot.webloc" = '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>URL</key><string>https://blot.im</string></dict></plist>'
   "Tasks.org" = "* Heading"; "About.txt" = "Hello"
 }
@@ -38,6 +41,9 @@ Set-ItemProperty -Path $key -Name AppsUseLightTheme -Value $light -Type DWord
 Set-ItemProperty -Path $key -Name SystemUsesLightTheme -Value $light -Type DWord
 
 # clear the runner's console windows off the desktop first
+# hide the desktop icons (restart Explorer so it notices)
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name HideIcons -Value 1 -Type DWord
+Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 6
 # the runner leaves System Properties / Performance Options dialogs open
 Get-Process SystemProperties* -ErrorAction SilentlyContinue | Stop-Process -Force
 (New-Object -ComObject Shell.Application).MinimizeAll()
@@ -188,20 +194,10 @@ if ($Scale -ne 1) {
 # a runner dialog ("System Properties") sometimes sits behind the window; close it
 $dlg = [Native.Win]::FindWindow("#32770", "System Properties")
 if ($dlg -ne [IntPtr]::Zero) { [Native.Win]::SendMessage($dlg, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null }
-# Desktop: Photoshop-style white and mid-grey squares (20 logical px), which makes
-# the window's drop shadow easy to measure. Tiled wallpaper is drawn at physical
-# pixel size, so build the tile at the current scale.
-$sq = 20 * $Scale
-$tb = New-Object System.Drawing.Bitmap (2 * $sq), (2 * $sq)
-$tg = [System.Drawing.Graphics]::FromImage($tb)
-$tg.Clear([System.Drawing.Color]::White)
-$greyBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(153, 153, 153))
-$tg.FillRectangle($greyBrush, 0, 0, $sq, $sq); $tg.FillRectangle($greyBrush, $sq, $sq, $sq, $sq)
-$tileFile = Join-Path $env:TEMP "desktop-tile.bmp"
-$tb.Save($tileFile, [System.Drawing.Imaging.ImageFormat]::Bmp)
-Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name WallpaperStyle -Value "0"
-Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name TileWallpaper -Value "1"
-[Native.Win]::SystemParametersInfo(0x14, 0, $tileFile, 3) | Out-Null
+# Plain 50% grey desktop, which makes the window's drop shadow easy to see
+Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name Background -Value "128 128 128"
+[Native.Win]::SystemParametersInfo(0x14, 0, "", 3) | Out-Null   # no wallpaper
+[Native.Win]::SetSysColors(1, @(1), @(0x808080)) | Out-Null
 Start-Sleep -Seconds 2
 
 # Size the window (logical px x scale) and keep it clear of the screen edges and

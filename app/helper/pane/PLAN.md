@@ -175,8 +175,8 @@ Scripts are in `screenshots/`. Findings from the first runs:
   them. Finder enforces ~484px and Explorer ~386px minimums; Linux has a `-sidebar`
   variant at 890px. Heights differ per OS (Windows 2x is limited to a 600px-tall
   logical screen).
-- **Backgrounds.** Captures sit on a checkerboard desktop of 20px white and mid-grey
-  squares, so shadows can be measured. Linux has no compositor under Xvfb, so its
+- **Backgrounds.** Captures sit on a plain 50% grey desktop so shadows are easy to see;
+  the sample images and HTML page are white/mid-grey checkerboards. Linux has no compositor under Xvfb, so its
   rounded corners and shadow are synthesised with ImageMagick.
 - **Layout of `reference/`.** `macos/ windows/ linux/` hold only screenshots;
   `resources/<os>/README.md` documents how each was captured, and CI puts logs in

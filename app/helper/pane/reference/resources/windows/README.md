@@ -44,10 +44,11 @@ the `LogPixels` registry values (ignored), a loopback RDP session with
   `SystemProperties*` processes are killed.
 
 ## Desktop
-A tiled bitmap wallpaper (`WallpaperStyle 0`, `TileWallpaper 1`) of 20-logical-px
-white and mid-grey squares, drawn with System.Drawing at the current scale (tiles are
-physical pixels). Desktop icons stay in a column at the left; the window and capture are
-kept to their right. The Progman "toggle icons" message is stateful and unreliable.
+No wallpaper and a 50% grey desktop colour (`HKCU\Control Panel\Colors\Background`
+plus `SetSysColors`). Desktop icons are hidden with `HKCU\...\Explorer\Advanced
+HideIcons=1` and an Explorer restart; at 200% the runner's icons wrapped into a second
+column and crept into the capture. (The Progman "toggle icons" message is stateful and
+unreliable.)
 
 ## Captures
 `DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)` gives the visible frame; the

@@ -21,11 +21,8 @@ run() {
   gsettings set org.gnome.desktop.interface color-scheme "prefer-$THEME" || true
   gsettings list-recursively org.gnome.nautilus > "$OUT/gsettings.txt" 2>&1
 
-  # Desktop: Photoshop-style white and mid-grey squares (20px logical), which makes
-  # the window's drop shadow easy to measure
-  convert "$HERE/fixture-assets/desktop-tile.png" -filter point -resize $((40 * S))x$((40 * S))! "$OUT/tile.png"
-  convert -size 2560x2400 tile:"$OUT/tile.png" "$OUT/desktop.png"
-  feh --bg-tile "$OUT/tile.png"
+  # 50% grey desktop, which makes the window's drop shadow easy to see
+  xsetroot -solid "#808080"
 
   # a window manager is needed for keyboard focus (and the window needs focus)
   openbox >"$OUT/openbox.log" 2>&1 &
@@ -55,12 +52,12 @@ run() {
     import -window root "$OUT/full.png"
     convert "$OUT/full.png" -crop "${WIDTH}x${HEIGHT}+${X}+${Y}" +repage "$OUT/window.png"
     # No compositor under Xvfb, so give the window its rounded corners and shadow
-    # ourselves, on the checkerboard desktop with generous room around it.
+    # ourselves, on a 50% grey desktop with generous room around it.
     R=$((12 * S))
     convert "$OUT/window.png" -alpha set \( +clone -alpha transparent -fill white -draw "roundrectangle 0,0 $((WIDTH - 1)),$((HEIGHT - 1)) $R,$R" \) \
       -compose DstIn -composite "$OUT/rounded.png"
     convert "$OUT/rounded.png" \( +clone -background black -shadow 45x$((20 * S))+0+$((10 * S)) \) +swap -background none -layers merge +repage "$OUT/shadowed.png"
-    convert -size "$((WIDTH + 2 * PAD))x$((HEIGHT + 2 * PAD))" tile:"$OUT/tile.png" "$OUT/shadowed.png" -gravity center -composite "$OUT/$1.png"
+    convert -size "$((WIDTH + 2 * PAD))x$((HEIGHT + 2 * PAD))" xc:"#808080" "$OUT/shadowed.png" -gravity center -composite "$OUT/$1.png"
     rm -f "$OUT/full.png" "$OUT/window.png" "$OUT/rounded.png" "$OUT/shadowed.png"
   }
   close_nautilus() { pkill nautilus; sleep 3; }
@@ -83,7 +80,6 @@ run() {
   xdotool mousemove $((X + 222 * S)) $((Y + 368 * S)) click 1; sleep 0.7
   capture "linux-$THEME$SUFFIX-sidebar"; close_nautilus
 
-  rm -f "$OUT/tile.png" "$OUT/desktop.png"
   { echo "nautilus: $(nautilus --version)"; echo "libadwaita: $(dpkg -s libadwaita-1-0 2>/dev/null | grep ^Version)"; lsb_release -d; echo "scale: $S"; } > "$OUT/versions.txt" 2>&1
 }
 export THEME OUT FIXTURE S SUFFIX W H PAD HERE

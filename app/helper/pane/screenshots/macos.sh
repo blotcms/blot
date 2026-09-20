@@ -37,17 +37,14 @@ if [ "$SCALE" = 2 ]; then
   sleep 8
 fi
 
-# Desktop: Photoshop-style white and mid-grey squares (20pt), which makes the
-# window's drop shadow easy to measure so the window's shadow is visible. Finder won't set a
+# 50% grey desktop, which makes the window's drop shadow easy to see so the window's shadow is visible. Finder won't set a
 # wallpaper for us here, so paint a borderless desktop-level window instead.
-TILE="$HERE/fixture-assets/desktop-tile.png" osascript -l JavaScript >"$OUT/wallpaper.log" 2>&1 <<'JXA' &
+osascript -l JavaScript >"$OUT/wallpaper.log" 2>&1 <<'JXA' &
 ObjC.import('Cocoa');
 const app = $.NSApplication.sharedApplication;
 app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);
 const win = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer($.NSScreen.mainScreen.frame, 0, 2, false);
-const img = $.NSImage.alloc.initWithContentsOfFile(ObjC.unwrap($.NSProcessInfo.processInfo.environment.objectForKey('TILE')));
-img.setSize($.NSMakeSize(40, 40)); // the 80px tile is 20pt squares at 2x
-win.backgroundColor = $.NSColor.colorWithPatternImage(img);
+win.backgroundColor = $.NSColor.colorWithSRGBRedGreenBlueAlpha(0.5, 0.5, 0.5, 1);
 win.level = -2147483623; // kCGDesktopWindowLevel
 win.orderFront(null);
 $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(600));
