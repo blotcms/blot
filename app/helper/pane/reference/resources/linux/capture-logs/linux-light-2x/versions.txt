@@ -1,6 +1,6 @@
-** Message: 14:36:59.470: Connecting to org.freedesktop.Tracker3.Miner.Files
+** Message: 14:40:54.605: Connecting to org.freedesktop.Tracker3.Miner.Files
 
-** (org.gnome.Nautilus:4467): WARNING **: 14:36:59.572: Unable to get contents of the bookmarks file: Error opening file /home/runner/.gtk-bookmarks: No such file or directory
+** (org.gnome.Nautilus:4421): WARNING **: 14:40:54.708: Unable to get contents of the bookmarks file: Error opening file /home/runner/.gtk-bookmarks: No such file or directory
 nautilus: GNOME nautilus 46.4
 libadwaita: Version: 1.5.0-1ubuntu2
 Description:	Ubuntu 24.04.5 LTS
