@@ -64,6 +64,15 @@ async function runPostListenTasks() {
   }
 
   try {
+    if (config.master || process.env.BLOT_EVENT_LOOP_MONITOR === "true") {
+      log("Starting event loop monitor");
+      require("helper/eventLoopMonitor").start();
+    }
+  } catch (err) {
+    logError("Failed to start event loop monitor", err);
+  }
+
+  try {
     if (config.master) {
       log("Starting scheduler asynchronously");
       scheduler();

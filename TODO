@@ -1,3 +1,7 @@
+Investigate green crashes (`Lock was lost` / ECOMPROMISED at 2026-09-21 18:02 and 20:01 UTC) and slow `/health` in the first minutes of each hour; the Dropbox hourly validation is only a suspect, not confirmed
+- Check green logs for `validation lag` and `[EVENT LOOP]` after the event loop monitor ships (PR #1950)
+- Remove the event loop monitor (app/helper/eventLoopMonitor*.js, its setup.js hook, and `logLag`/`measureEventLoop` in app/clients/dropbox/init.js) once the cause is fixed
+
 12 factor screenshot as api
 - use macserver  (docker container?)
 

@@ -218,28 +218,10 @@ function adaptServerConf(content) {
     "server.conf webhooks upstream"
   );
 
-  // The pinned openresty/openresty:1.25.3.1-alpine-fat image is not
-  // guaranteed to have --with-http_v3_module (docker-openresty added it in
-  // 1.25.3.1-1). Bare-metal has HTTP/3; drop it in the container copy so
-  // `openresty -t` stays green. Fold back in once the image is rebuilt with
-  // v3, or once proxy/ is canon on an image that has it.
-  content = replaceAllCounted(
-    content,
-    "        listen 443 quic;\n        add_header Alt-Svc 'h3=\":443\"; ma=86400' always;\n",
-    "",
-    5,
-    "server.conf strip http3"
-  );
-  content = replaceExactly(
-    content,
-    "        listen 443 quic reuseport default_server;\n        add_header Alt-Svc 'h3=\":443\"; ma=86400' always;\n",
-    "",
-    "server.conf strip http3 default_server"
-  );
-
   // reuseport may appear only once per address:port; putting it on the
   // default server is enough for the shared :80 / :443 ssl sockets. A
-  // second container can then bind the same ports during blue/green.
+  // second container can then bind the same ports during blue/green. (The
+  // UDP :443 quic socket already carries reuseport in the canonical config.)
   content = replaceExactly(
     content,
     "        listen 80 default_server;\n        listen 443 ssl default_server;\n",
