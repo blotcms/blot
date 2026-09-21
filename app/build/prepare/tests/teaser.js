@@ -81,4 +81,19 @@ describe("teaser parser", function () {
     "<h1>A</h1><p>B</p><p>C</p>",
     false
   );
+
+  describe("stripBreakPoint", function () {
+    function strip(html, expected) {
+      it("removes the marker from " + html, function () {
+        expect(makeTeaser.stripBreakPoint(html)).toEqual(expected);
+      });
+    }
+
+    strip("<p>A</p><p>{{more}}</p><p>B</p>", "<p>A</p><p>B</p>");
+    strip("<p>A<!-- more -->BCD</p>", "<p>ABCD</p>");
+    strip("<p>A</p><p>&lt;&lt; more &gt;&gt;</p><p>B</p>", "<p>A</p><p>B</p>");
+    strip("Hello {{more}} there {{more}} is...", "Hello  there {{more}} is...");
+    strip("<p>No marker</p>", "<p>No marker</p>");
+    strip("<pre>{{more}}</pre><p>A</p>", "<pre>{{more}}</pre><p>A</p>");
+  });
 });
