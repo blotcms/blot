@@ -197,8 +197,9 @@ done
 # like the editors. Best-effort: debug screenshots and logs show what the runner allowed.
 WEB="/private/tmp/pane-browser"; mkdir -p "$WEB"
 cp "$HERE/fixture-assets/browser-sample.html" "$WEB/index.html"
-(cd "$WEB" && python3 -m http.server 8765 --bind 127.0.0.1 >"$OUT/browser-server.log" 2>&1 &)
+python3 -m http.server 8765 --bind 127.0.0.1 --directory "$WEB" >"$OUT/browser-server.log" 2>&1 &
 sleep 2
+curl -sS -o /dev/null -w "server: %{http_code}\n" http://localhost:8765/ >>"$OUT/browser.log" 2>&1
 osascript -e 'tell application "Finder" to close every window' >>"$OUT/browser.log" 2>&1
 open -a Safari "http://localhost:8765/"; sleep 8
 screencapture -x "$OUT/debug-safari.png"
