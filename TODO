@@ -2,6 +2,9 @@ Can local worktrees for agents get their own docker compose ups on their own bra
 - share redis / nginx / data dir -> ?
 - get their own node container
 
+12 factor screenshot as api
+- use macserver  (docker container?)
+
 Make sure next bill amount is in all billing emails to customers
 
 Move towards proxy container deployment
