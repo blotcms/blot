@@ -73,7 +73,8 @@ up() {
 
   local host="$slot-local.blot" i
   for i in $(seq 1 60); do
-    if curl -ksf --max-time 3 "https://$host/health" >/dev/null; then break; fi
+    # Ask the sidecar itself: until nginx routes the slot, $host would hit the main stack
+    if docker exec "blot-node-$slot" node -e "fetch('http://localhost:8080/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))" 2>/dev/null; then break; fi
     sleep 2
   done
 

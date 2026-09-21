@@ -60,6 +60,9 @@ Sidecars share the live dev database, so:
 - Native-module or `package.json` changes need a rebuilt `blot` image.
 - Cloud Agent VMs already have their own `local.blot`.
 - At most five concurrent previews.
+- Memory: the Docker VM is small (~2 GB here). A running sidecar (up to 768m)
+  on top of the main stack can push it into OOM; during testing the main
+  `node-app` was OOM-killed with one sidecar running. Release slots when done.
 
 Unverified: whether anything cached in shared Redis embeds `config.host`
 (rendered blog output, CDN URLs). If so, slots would need a cache namespace.
