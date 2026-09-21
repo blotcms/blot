@@ -59,8 +59,16 @@ one child per OS, and the same CSS that skins the windows shows one of them
     <span class="pane-name"><span data-os="mac">Finder</span><span data-os="win">File Explorer</span><span data-os="linux">Files</span></span>
 
 A small dictionary (`name`, `trash`, `modifier`, `rightclick`, ...) drives it.
-An audit of `app/views` found very little OS-specific UI language (a handful of
-Finder/Trash/Recycle Bin mentions), so the dictionary stays small.
+An audit of `app/views` found very little OS-specific UI language, so the dictionary stays small.
+**Nothing in the docs is converted today (audited again when the docs build was wired):** the only
+Finder / Trash / Recycle Bin mentions are in `how/not-synced.html`, a table of system files Blot
+ignores (".DS_Store: Finder metadata file", "Recycle bin folder", ".trash"). Those describe a specific
+OS's files whichever OS the visitor uses, so making them follow the visitor would be wrong (a
+Windows visitor would read "File Explorer metadata file" for `.DS_Store`). The other OS mentions are
+platform lists and tool pages ("on Mac, you can open the folder directly"), also specific, and
+`app/clients/icloud/views/setup.html` ("Right-click the new folder") is Mac-only setup text. Use
+`pane-name` in new prose that talks about the visitor's own file manager (e.g. "open the folder in
+<span class="pane-name">Finder</span>"); the build expands it and warns on an unknown term.
 
 ### List view
 
