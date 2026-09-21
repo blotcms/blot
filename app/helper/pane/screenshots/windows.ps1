@@ -312,9 +312,9 @@ try {
   Clear-Stage "browser"
   $edge = Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application\msedge.exe"
   if (-not (Test-Path $edge)) { $edge = "msedge.exe" }
-  $profile = Join-Path $env:TEMP "pane-edge"
-  Remove-Item -Recurse -Force $profile -ErrorAction SilentlyContinue
-  Start-Process $edge -ArgumentList @("--user-data-dir=`"$profile`"", "--no-first-run", "--no-default-browser-check", "--disable-sync", "--new-window", "https://example.com/")
+  $edgeProfile = Join-Path $env:TEMP "pane-edge"
+  Remove-Item -Recurse -Force $edgeProfile -ErrorAction SilentlyContinue
+  Start-Process $edge -ArgumentList @("--user-data-dir=`"$edgeProfile`"", "--no-first-run", "--no-default-browser-check", "--disable-sync", "--new-window", "https://example.com/")
   Start-Sleep -Seconds 12
   $eg = Get-Process msedge -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
   if (-not $eg) { "no edge window" | Out-File $log -Append } else {
