@@ -196,10 +196,10 @@ done
 # ask "Allow Python to find devices on local networks?", and the dialog ended up in the capture).
 # Placed and read back through System Events, like the editors. Best-effort: debug screenshots
 # and logs show what the runner allowed.
-WEB="/private/tmp/pane-browser"; mkdir -p "$WEB"
-cp "$HERE/fixture-assets/browser-sample.html" "$WEB/index.html"
+WEB="/tmp"  # short path: it shows in the address bar
+cp "$HERE/fixture-assets/browser-sample.html" "$WEB/blot.html"
 osascript -e 'tell application "Finder" to close every window' >>"$OUT/browser.log" 2>&1
-open -a Safari "$WEB/index.html"; sleep 8
+open -a Safari "$WEB/blot.html"; sleep 8
 screencapture -x "$OUT/debug-safari.png"
 osascript >>"$OUT/browser.log" 2>&1 <<OSA
 tell application "System Events" to tell process "Safari"

@@ -56,7 +56,7 @@ through System Events. TextEdit renders `.html` files as rich text whatever
 
 ## Browser window (`-browser`)
 Safari, sized 600x400pt (deliberately small; a browser window is mostly chrome). It opens
-`fixture-assets/browser-sample.html` copied to `/private/tmp/pane-browser/index.html`, as a
+`fixture-assets/browser-sample.html` copied to `/tmp/blot.html` (a short path, because Safari shows it in the address bar), as a
 file. A local `python3 -m http.server` worked too, but made macOS ask "Allow Python to find
 devices on local networks?", and the dialog landed in the capture. Safari's compact layout
 (Tahoe) shows the sidebar and tab buttons, back/forward, the address pill and no tab bar.
