@@ -102,8 +102,11 @@ jobs:
             cache-to: ${{ env.PUSH_IMAGES == 'true' && format('type=registry,ref={0}:cache-{1},mode=max', env.IMAGE_NAME, matrix.arch) || '' }}
 
       # What the deploy scripts require of the image, checked on the image
-      # itself: the config renders and parses, and the access log goes to the
-      # file the host's fail2ban reads.
+      # itself: the config renders and parses, the access log goes to the
+      # file the host's fail2ban reads, and the tools that issue custom-domain
+      # certificates are present and trust the public CAs (the cert-issuance
+      # job in integration.yml points curl at Pebble's CA only, so it never
+      # exercises the image's own CA bundle).
       - name: Check the image
         run: |
           set -euo pipefail
@@ -114,6 +117,12 @@ jobs:
               render-config
               /usr/local/openresty/bin/openresty -t
               grep -Eq "^[[:space:]]*access_log /var/log/openresty/access.log" /usr/local/openresty/nginx/conf/nginx.conf
+              test -x /usr/bin/resty-auto-ssl/dehydrated
+              test -x /usr/bin/resty-auto-ssl/sockproc
+              /usr/bin/resty-auto-ssl/dehydrated --version
+              test -z "${CURL_CA_BUNDLE:-}${SSL_CERT_FILE:-}"
+              curl -fsS -o /dev/null https://acme-staging-v02.api.letsencrypt.org/directory
+              curl -fsS -o /dev/null https://acme-v02.api.letsencrypt.org/directory
             '
 
   manifest-proxy:

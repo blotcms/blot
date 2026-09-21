@@ -23,6 +23,8 @@
 #   PROXY_HEALTH_TIMEOUT   60                   seconds to wait for a new container
 #   PROXY_DRAIN_TIMEOUT    30                   seconds an old container may drain
 #   PROXY_DEPLOY_LOCK      /tmp/blot-proxy-deploy.lock  held by every deploy script
+#   PROXY_SKIP_CERT_SWEEP  (unset)              1 skips the custom-domain certificate
+#                                               comparison (see cert_baseline)
 #
 # PROXY_DEPLOY_SLEEP replaces `sleep` (the tests set it to a no-op).
 
@@ -170,6 +172,56 @@ snapshot() { # snapshot [port] -> "host=status host=status ..."
   echo "${out% }"
 }
 
+# ---- custom-domain certificates ---------------------------------------------
+# lua-resty-auto-ssl keeps one certificate per custom domain in Redis
+# (ssl:<domain>:latest). The wildcard file is checked above, but these are the
+# certificates customers see, and the ones a broken container would get wrong
+# without any of the checked hosts noticing. So ask the proxy for every one of
+# them (by SNI) and require the same certificates from the replacement.
+
+custom_cert_domains() {
+  redis-cli -h "$REDIS_HOST" --scan --count 1000 --pattern 'ssl:*:latest' \
+    | sed -E 's/^ssl:(.*):latest$/\1/' | sort -u
+}
+
+# cert_sweep [port] -> sorted "<domain> <sha256 fingerprint | none>" lines
+cert_sweep() {
+  local port="${1:-443}"
+  custom_cert_domains | xargs -r -P 16 -I{} bash -c '
+    fp=$(echo | timeout 5 openssl s_client -connect "$1:$2" -servername "$3" 2>/dev/null \
+      | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
+    echo "$3 ${fp:-none}"' _ "$SITE_IP" "$port" {} | sort
+}
+
+# Every domain that presented a certificate before must present the same one
+# now. (A domain with none before is not held against the replacement.)
+certs_unchanged() { # certs_unchanged <baseline> <now>
+  local bad
+  bad=$(comm -23 <(printf '%s\n' "$1" | grep -v ' none$' | sort) <(printf '%s\n' "$2" | sort))
+  [ -z "$bad" ] || {
+    log "custom-domain certificates changed or went missing ($(printf '%s\n' "$bad" | wc -l | tr -d ' ')): first few, as they were:"
+    printf '%s\n' "$bad" | head -5 | while read -r line; do log "  $line"; done
+    return 1
+  }
+}
+
+# Record the certificates the running proxy serves; CERT_BASELINE is what
+# live_checks and the rehearsal compare against. Refuses to go on with no
+# certificates to compare unless PROXY_SKIP_CERT_SWEEP=1.
+cert_baseline() {
+  CERT_BASELINE=""
+  [ "${PROXY_SKIP_CERT_SWEEP:-}" != 1 ] || { log "PROXY_SKIP_CERT_SWEEP=1: not comparing custom-domain certificates"; return 0; }
+  command -v redis-cli >/dev/null 2>&1 \
+    || { log "redis-cli is not installed, so custom-domain certificates cannot be compared (PROXY_SKIP_CERT_SWEEP=1 to skip)"; return 1; }
+  CERT_BASELINE="$(cert_sweep | sed '/^$/d')"
+  local total served
+  total=$(printf '%s\n' "$CERT_BASELINE" | sed '/^$/d' | wc -l | tr -d ' ')
+  served=$(printf '%s\n' "$CERT_BASELINE" | sed '/^$/d' | grep -vc ' none$' || true)
+  [ "$served" -gt 0 ] \
+    || { log "no custom-domain certificate could be read from the running proxy ($total in Redis): nothing to compare (PROXY_SKIP_CERT_SWEEP=1 to skip)"; return 1; }
+  log "Custom-domain certificates: $served of $total in Redis are being served"
+}
+
 all_ok() { ! echo "$1" | tr ' ' '\n' | grep -v '=200$' | grep -q .; }
 
 # The certificate being served must be the file on disk, not the image's
@@ -234,8 +286,9 @@ upstreams_reachable() {
 
 # Every checked host answers as it did before ($1, from snapshot; empty = no
 # baseline, so every host must answer 200), the certificate served is the one
-# on disk, Node can still reach the purge endpoint, and Redis and every
-# upstream are reachable.
+# on disk, every custom-domain certificate is the one served before
+# (CERT_BASELINE, when set), Node can still reach the purge endpoint, and
+# Redis and every upstream are reachable.
 live_checks() { # live_checks <expected-snapshot | ""> [port]
   local got
   got=$(snapshot "${2:-443}")
@@ -246,6 +299,7 @@ live_checks() { # live_checks <expected-snapshot | ""> [port]
   fi
   served_cert_matches_disk "${2:-443}" \
     || { log "the certificate served is not $CERT_DIR/letsencrypt-domain.pem"; return 1; }
+  if [ -n "${CERT_BASELINE:-}" ]; then certs_unchanged "$CERT_BASELINE" "$(cert_sweep "${2:-443}")" || return 1; fi
   purge_reachable || return 1
   redis_reachable || return 1
   upstreams_reachable || return 1

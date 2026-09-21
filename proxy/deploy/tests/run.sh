@@ -86,7 +86,13 @@ esac
 F
 cat > "$T/bin/timeout" <<'F'
 #!/usr/bin/env bash
-[ -z "${FAKE_REDIS_DOWN:-}" ]
+shift
+if [[ "$*" == */dev/tcp/* ]]; then [ -z "${FAKE_REDIS_DOWN:-}" ]; exit; fi
+exec "$@"
+F
+cat > "$T/bin/redis-cli" <<'F'
+#!/usr/bin/env bash
+for d in ${FAKE_CUSTOM_DOMAINS-a.custom.test b.custom.test}; do echo "ssl:$d:latest"; done
 F
 cat > "$T/bin/flock" <<'F'
 #!/usr/bin/env bash
@@ -103,12 +109,21 @@ case "$1" in
     if [[ "$*" == *-checkend* ]]; then [ -z "${FAKE_CERT_EXPIRING:-}" ]; exit; fi
     if [[ "$*" == *-pubkey* ]]; then echo pub; exit; fi
     if [[ "$*" == *-fingerprint* ]]; then
+      if [[ "$*" != *" -in "* ]] && [[ "$(cat)" == *custom* ]]; then
+        # a custom domain: the certificate comes from Redis, not the wildcard file
+        if [ "$(cat "$FAKE/sclient_port" 2>/dev/null)" = 18443 ]; then echo "fp=${FAKE_CUSTOM_FP_REHEARSAL:-C}"
+        elif [ -n "${FAKE_CUSTOM_FP_AFTER_STOP:-}" ] && [ -e "$FAKE/stopped" ]; then echo "fp=$FAKE_CUSTOM_FP_AFTER_STOP"
+        elif [ "$(cat "$FAKE/serving")" = container ]; then echo "fp=${FAKE_CUSTOM_FP_CONTAINER:-C}"
+        elif [[ "$(cat "$FAKE/serving")" = baremetal ]]; then echo "fp=${FAKE_CUSTOM_FP_BAREMETAL:-C}"; fi
+        exit
+      fi
       if [[ "$*" == *" -in "* ]]; then echo fp=A
       elif [ "$(cat "$FAKE/sclient_port" 2>/dev/null)" = 443 ]; then echo "fp=${FAKE_SERVED_FP:-A}"   # only the live port
       else echo fp=A; fi; exit; fi ;;
   pkey) echo "${FAKE_KEY_PUB:-pub}" ;;
   sha256) sha256sum ;;
-  s_client) [[ "$*" =~ :([0-9]+)\  ]] && echo "${BASH_REMATCH[1]}" > "$FAKE/sclient_port"; echo served ;;
+  s_client) [[ "$*" =~ :([0-9]+)\  ]] && echo "${BASH_REMATCH[1]}" > "$FAKE/sclient_port"
+    [[ "$*" =~ -servername\ ([^ ]+) ]] && echo "served ${BASH_REMATCH[1]}" || echo served ;;
 esac
 F
 chmod +x "$T"/bin/*
@@ -239,6 +254,26 @@ check "Redis unreachable after the cutover: rolls back" '[ $RC != 0 ] && serving
 
 reset baremetal; FAKE_UPSTREAM_DOWN=8089 cutover
 check "an upstream is down: refused before anything changes" '[ $RC != 0 ] && ! called "systemctl stop"'
+
+echo "custom-domain certificates"
+
+reset baremetal; cutover
+check "success: the custom-domain certificates are recorded and still match after the cutover" '[ $RC = 0 ] && mentions "2 of 2 in Redis are being served"'
+
+reset baremetal; FAKE_CUSTOM_FP_REHEARSAL=B cutover --dry-run
+check "rehearsal serves a different custom-domain certificate: refused before the stop" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "custom-domain certificates"'
+
+reset baremetal; FAKE_CUSTOM_FP_CONTAINER=B cutover
+check "container serves a different custom-domain certificate live: rolls back to bare-metal" '[ $RC != 0 ] && serving baremetal && ! called "systemctl disable" && mentions "custom-domain certificates"'
+
+reset baremetal; FAKE_CUSTOM_DOMAINS="" cutover
+check "no custom-domain certificate to compare: refused (unless skipped)" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "nothing to compare"'
+
+reset baremetal; FAKE_CUSTOM_DOMAINS="" PROXY_SKIP_CERT_SWEEP=1 cutover
+check "PROXY_SKIP_CERT_SWEEP=1 skips the comparison" '[ $RC = 0 ] && mentions "not comparing"'
+
+reset container; FAKE_CUSTOM_FP_AFTER_STOP=B bluegreen
+check "blue-green: a custom-domain certificate differs after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm blot-proxy-blue" && mentions "custom-domain certificates"'
 
 echo "blue-green.sh"
 
