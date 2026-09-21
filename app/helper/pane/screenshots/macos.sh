@@ -244,8 +244,25 @@ screencapture -x "$OUT/debug-safari.png"
     sleep 2
     screencapture -x "$OUT/debug-safari-customized-$i.png"
   done
-  osascript -e 'tell application "System Events" to tell process "Safari" to key code 36'  # Done
-  sleep 2
+  # Done: Return did not close the sheet, so click the button (the sheet is a sheet of window 1)
+  osascript <<OSA
+tell application "System Events" to tell process "Safari"
+  try
+    log "sheets: " & (count of sheets of window 1)
+    click button "Done" of sheet 1 of window 1
+  on error e1
+    log "sheet Done failed: " & e1
+    try
+      click button "Done" of window 1
+    on error e2
+      log "window Done failed: " & e2
+      log (name of every button of window 1)
+    end try
+  end try
+end tell
+OSA
+  sleep 3
+  screencapture -x "$OUT/debug-safari-done.png"
 } >>"$OUT/browser.log" 2>&1
 place   # the sheet widened the window; put it back
 # Finder must not show below the browser; read what is open, then capture
