@@ -48,8 +48,10 @@ function observe(platform, options = {}) {
   if (key === "linux") {
     const out = { os: key, release: (/^VERSION_ID="?([\d.]+)"?/m.exec(osRelease) || [])[1] };
     if (!options.basic) {
-      out.nautilus = major((/(\d+(?:\.\d+)*)\s*$/.exec(sh("nautilus", ["--version"])) || [])[1]);
-      out.libadwaita = majorMinor(sh("dpkg-query", ["-W", "-f=${Version}", "libadwaita-1-0"]).replace(/^\d+:/, ""));
+      // from the package database: `nautilus --version` prints nothing useful without a display
+      const packageVersion = (name) => sh("dpkg-query", ["-W", "-f=${Version}", name]).replace(/^\d+:/, "");
+      out.nautilus = major(packageVersion("nautilus"));
+      out.libadwaita = majorMinor(packageVersion("libadwaita-1-0"));
     }
     return out;
   }

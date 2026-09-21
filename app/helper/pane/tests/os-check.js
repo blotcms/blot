@@ -7,7 +7,8 @@ describe("pane runner OS guard", function () {
   it("reads the visually relevant versions on each platform", function () {
     expect(observe("darwin", { sh: () => "26.6.2" })).toEqual({ os: "macos", version: "26.6" });
     expect(observe("win32", { release: "10.0.26100" })).toEqual({ os: "windows", build: "26100" });
-    const sh = (cmd) => (cmd === "nautilus" ? "GNOME nautilus 46.4" : "1:1.5.0-1ubuntu1");
+    // dpkg-query answers per package (with an epoch on some)
+    const sh = (cmd, args) => (cmd === "dpkg-query" && args[args.length - 1] === "nautilus" ? "1:46.4-0ubuntu2" : cmd === "dpkg-query" ? "1.5.0-1ubuntu1" : "");
     expect(observe("linux", { sh, osRelease: 'NAME="Ubuntu"\nVERSION_ID="24.04"\n' })).toEqual({ os: "linux", release: "24.04", nautilus: "46", libadwaita: "1.5" });
     expect(observe("linux", { basic: true, sh, osRelease: 'VERSION_ID="24.04"' })).toEqual({ os: "linux", release: "24.04" });
   });
