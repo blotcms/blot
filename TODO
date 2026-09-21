@@ -1,10 +1,14 @@
 Make sure next bill amount is in all billing emails to customers
 
-Get proxy horizontally scalable
+Add fast rollback action
+
+Get proxy horizontally scalable and multi-region
 - Get proxy container deployed
 
-Get node container horizontally scalable 
-- finish app/storage module
+Explain on the about page the websites started out as files in a folder. But they had to be HTML. Blot makes other file types possible too.
+
+Get node container horizontally scalable and multi-region
+- finish app/storage module with s3
 - solve git storage problem 
 
 Add clear bill change info to new blog flow
@@ -12,8 +16,6 @@ Add clear bill change info to new blog flow
 Check in on our dropbox sync verification job to make sure it's working well (docker green)
 
 Rebuild all sites to bake in folder CDN urls
-
-Run scripts/blog/find-template-tags.js and follow up with affected customers
 
 Why is Ross' template so slow to install? It takes a few seconds. Let's speed it up.
 
