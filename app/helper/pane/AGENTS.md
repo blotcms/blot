@@ -53,6 +53,10 @@ WCAG contrast; contrast is reported by `tests/size.js`, never enforced.
    log is in `gh run view <id> --log-failed`.
 
 ## Gotchas in the module
+- **Accessibility and mobile (DESIGN.md §5, §6).** `node app/helper/pane/qa/a11y.js` audits every skin
+  (named window, focusable scrollers, forced colours, narrow widths); run it after any change to a
+  skin's layout or a column. Text that gets longer (new date forms, longer names) is the usual way to
+  break it: cells truncate with an ellipsis instead of overflowing.
 - **Backdrop independence (DESIGN.md §10).** A window must look right on any desktop, not only
   the grey of the references: exterior effects (shadow, ring, corners) are alpha or clipping,
   never the desktop colour. `node app/helper/pane/qa/backdrop.js` checks it (black vs white

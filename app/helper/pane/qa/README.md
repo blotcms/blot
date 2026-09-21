@@ -125,6 +125,21 @@ compared pixels that differ overall and per region name or kind, shadow RMSE (lu
 levels), window size difference (CSS px) and text row offset (CSS px). They start loose;
 tighten them as the rendering improves, per case when one view lags.
 
+## Accessibility and mobile audit
+
+```sh
+node app/helper/pane/qa/a11y.js [--skin mac|win|linux] [--verbose]
+```
+
+Renders sample windows (few rows, many rows, long names, empty, fixed height) in every skin and
+theme in Chrome and checks what DESIGN.md §5 and §6 promise: a named `figure`, aria-hidden chrome,
+real nested `ul`/`li` (no `role=tree`), one visible OS variant per cell, every scrollable region
+keyboard-focusable and named, a visible focus ring after Tab, forced-colors (border, no shadow),
+no animation whatever `prefers-reduced-motion` says, and at container widths from 600 down to 280px:
+no page overflow, a readable name column, columns dropping in order (Type and Size before Date) and
+staying dropped. Fonts don't matter. `tests/a11y.js` runs it in CI and checks each rule fires on
+the defect it is for.
+
 ## Backdrop check
 
 ```sh

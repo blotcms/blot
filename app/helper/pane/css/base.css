@@ -11,7 +11,7 @@ container-type:inline-size;-webkit-text-size-adjust:none}
 .pane-row{display:flex;align-items:center;position:relative}
 .pane-label{box-sizing:border-box;flex:none;min-width:0;position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pane-icon{position:absolute;top:50%;background:no-repeat center/contain}
-.pane-cell{white-space:nowrap}
+.pane-cell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pane-t{display:none}
 .pane [data-os]{display:none}
 .pane-name>[data-os]{display:none}

@@ -26,6 +26,7 @@
     "app/helper/pane/qa/diff.js",
     "app/helper/pane/qa/render.js",
     "app/helper/pane/qa/backdrop.js",
+    "app/helper/pane/qa/a11y.js",
     "app/helper/pane/qa/pane-adapter.js",
     "app/helper/pane/qa/public/app.js"
   ],
