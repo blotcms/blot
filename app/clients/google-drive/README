@@ -246,3 +246,7 @@ Run tests with your normal test runner; consult individual test files for setup 
 - **Post-Sync Fix**: Calls `sync/fix` after sync completes to validate blog state.
 - **Webhooks**: Registers routes in the main Express app via `site_routes` and `dashboard_routes`.
 - **Service Account Selection**: Consulted by blog setup and write operations to choose where to store new content.
+
+## Testing error states locally
+
+`scripts/google-drive/fake-error.js` answers the folder lookup with a chosen Drive error (trashed, deleted, forbidden, rate limits, quota, ...) via `scripts/development/fake-google-drive-errors.js`, so `sync`, the classifier and `getHealth` run for real. Run `node scripts/google-drive/fake-error.js modes` for the list; `run <mode> <blogID>` syncs a connected blog, prints the resulting health, and restores the row.
