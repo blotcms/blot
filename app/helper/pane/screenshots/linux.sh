@@ -29,8 +29,13 @@ run() {
 CSS
   gsettings set org.gnome.nautilus.list-view use-tree-view true || true
   gsettings set org.gnome.desktop.interface color-scheme "prefer-$THEME" || true
-  # Stock GNOME's UI font. Ubuntu's schema default names a font that isn't on the runner, so
-  # without this everything falls back to DejaVu Sans (wider than anything a GNOME user sees).
+  # Stock GNOME's UI font. There is no settings daemon under Xvfb, so GTK ignores the
+  # gsettings font-name and uses its default "Sans", which fontconfig maps to DejaVu Sans
+  # (wider than anything a GNOME user sees). GTK's own settings files do work.
+  for gtk in gtk-3.0 gtk-4.0; do
+    mkdir -p "$HOME/.config/$gtk"
+    printf '[Settings]\ngtk-font-name=Cantarell 11\n' > "$HOME/.config/$gtk/settings.ini"
+  done
   gsettings set org.gnome.desktop.interface font-name 'Cantarell 11' || true
   gsettings set org.gnome.desktop.interface document-font-name 'Cantarell 11' || true
   { echo "font-name: $(gsettings get org.gnome.desktop.interface font-name)"; fc-match "Cantarell:style=Regular"; fc-match sans-serif; } > "$OUT/fonts.txt" 2>&1

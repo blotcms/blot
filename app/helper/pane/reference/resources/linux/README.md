@@ -11,10 +11,13 @@ Xvfb (2560x2400) plus `openbox` (a window manager is needed for keyboard focus) 
 `xdotool`, `imagemagick`, `x11-xserver-utils`.
 
 ## Font
-The UI font is set explicitly to `Cantarell 11` (stock GNOME's) with `gsettings` in `linux.sh`;
-the log `capture-logs/*/fonts.txt` shows what resolved. Before that was added the captures were
-in DejaVu Sans: Ubuntu's schema default names a font that isn't installed on the runner, so
-GTK fell back. If the references ever look wide and DejaVu-like again, check that file. The
+The UI font is set explicitly to `Cantarell 11` (stock GNOME's) in `linux.sh`, through
+`~/.config/gtk-{3,4}.0/settings.ini` (`gtk-font-name`). Setting only the gsettings `font-name`
+is NOT enough: there is no settings daemon under Xvfb, GTK falls back to its default "Sans",
+and fontconfig maps that to DejaVu Sans (wider than anything a GNOME user sees). The captures
+were in DejaVu until this was fixed. `capture-logs/*/fonts.txt` shows what gsettings and
+fontconfig resolve, but only the screenshot shows what GTK actually used: look at the digits
+and the letter shapes (Cantarell is narrower than DejaVu). The
 monospace font of the editor windows (`-code`) is separate (`monospace-font-name`) and has
 not been set yet.
 
