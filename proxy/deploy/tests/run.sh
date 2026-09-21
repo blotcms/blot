@@ -32,7 +32,7 @@ case "$1" in
     if [[ " $* " == *" -d "* ]]; then n=$(name_arg "$@"); touch "$R/$n" "$FAKE/all/$n" 2>/dev/null || { mkdir -p "$FAKE/all"; touch "$R/$n" "$FAKE/all/$n"; }; exit 0; fi
     if [[ "$*" == *"openresty -t"* ]]; then [ -z "${FAKE_VALIDATE_FAIL:-}" ] || { echo "nginx: [emerg] bad"; exit 1; }; exit 0; fi
     if [[ "$*" == *"access_log"* ]]; then [ -z "${FAKE_STDOUT_LOGS:-}" ]; exit; fi ;;
-  create) n=$(name_arg "$@"); mkdir -p "$FAKE/all"; touch "$FAKE/all/$n" ;;
+  create) [ -z "${FAKE_CREATE_FAILS:-}" ] || exit 1; n=$(name_arg "$@"); mkdir -p "$FAKE/all"; touch "$FAKE/all/$n" ;;
   start)
     n="$2"; [ "$n" != "${FAKE_START_FAILS:-}" ] || exit 1
     touch "$R/$n"; rm -f "$FAKE/stopped"
@@ -87,6 +87,10 @@ cat > "$T/bin/timeout" <<'F'
 #!/usr/bin/env bash
 [ -z "${FAKE_REDIS_DOWN:-}" ]
 F
+cat > "$T/bin/flock" <<'F'
+#!/usr/bin/env bash
+[ -z "${FAKE_LOCK_HELD:-}" ]
+F
 cat > "$T/bin/sudo" <<'F'
 #!/usr/bin/env bash
 shift; exec "$@"
@@ -110,7 +114,7 @@ chmod +x "$T"/bin/*
 export PATH="$T/bin:$PATH"
 
 export PROXY_ENV_FILE="$T/proxy.env" PROXY_CACHE_DIR="$T/cache" PROXY_LOG_DIR="$T/logs" \
-  PROXY_CERT_DIR="$T/certs" PROXY_RENEW_SCRIPT="$T/renew.sh" \
+  PROXY_CERT_DIR="$T/certs" PROXY_DEPLOY_LOCK="$T/lock" PROXY_RENEW_SCRIPT="$T/renew.sh" \
   PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 TMUX=fake
 
 pass=0; failed=0
@@ -223,6 +227,12 @@ check "rollback cannot start bare-metal: the container is started again and kept
 reset baremetal; FAKE_DISABLE_FAILS=1 FAKE_BM_START_FAILS=1 cutover
 check "finalize fails and bare-metal cannot come back: container kept, unit ends disabled" '[ $RC != 0 ] && after_last "docker start blot-proxy-blue" "docker stop" && [ -e "$FAKE/unit_disabled" ]'
 
+reset baremetal; FAKE_CREATE_FAILS=1 cutover
+check "docker create fails: the container is cleaned up, bare-metal untouched" '[ $RC != 0 ] && serving baremetal && ! called "systemctl stop" && called "docker rm -f blot-proxy-blue"'
+
+reset baremetal; FAKE_LOCK_HELD=1 cutover
+check "another deploy holds the lock: refused, nothing changed" '[ $RC != 0 ] && ! called "systemctl stop" && ! called "docker create" && mentions "already running"'
+
 reset baremetal; FAKE_REDIS_DOWN=1 cutover
 check "Redis unreachable after the cutover: rolls back" '[ $RC != 0 ] && serving baremetal && mentions "Redis"'
 
@@ -255,6 +265,9 @@ check "fresh start: checked, then made permanent" '[ $RC = 0 ] && before "docker
 
 reset none; FAKE_CONTAINER_CODE=502 bluegreen
 check "fresh start whose site does not answer 200: removed, never made permanent" '[ $RC != 0 ] && ! called "docker update" && after_last "docker rm -f blot-proxy-blue" "docker start blot-proxy-blue"'
+
+reset container; FAKE_LOCK_HELD=1 bluegreen
+check "another deploy holds the lock: refused, nothing touched" '[ $RC != 0 ] && ! called "docker create" && ! called "docker stop" && ! called "docker rm" && mentions "already running"'
 
 reset container; FAKE_REDIS_DOWN=1 bluegreen
 check "Redis unreachable after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm blot-proxy-blue"'

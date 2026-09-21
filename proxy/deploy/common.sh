@@ -22,6 +22,7 @@
 #   PROXY_REGISTRY_URL     ghcr.io/blotcms/blot-proxy  for a bare tag / commit SHA
 #   PROXY_HEALTH_TIMEOUT   60                   seconds to wait for a new container
 #   PROXY_DRAIN_TIMEOUT    30                   seconds an old container may drain
+#   PROXY_DEPLOY_LOCK      /tmp/blot-proxy-deploy.lock  held by every deploy script
 #
 # PROXY_DEPLOY_SLEEP replaces `sleep` (the tests set it to a no-op).
 
@@ -34,6 +35,7 @@ NODE_CONTAINER="${PROXY_NODE_CONTAINER:-blot-container-blue}"
 HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-60}"
 DRAIN_TIMEOUT="${PROXY_DRAIN_TIMEOUT:-30}"
 HEALTH_SOCK="/run/openresty/health.sock"
+LOCK_FILE="${PROXY_DEPLOY_LOCK:-/tmp/blot-proxy-deploy.lock}"
 SITE_IP="127.0.0.1"
 
 # Never fail because the terminal went away: the cutover ignores SIGPIPE and
@@ -46,6 +48,14 @@ nap() { ${PROXY_DEPLOY_SLEEP:-sleep} "$1"; }
 # fail early and clearly rather than hanging on a prompt mid-cutover.
 sys() {
   if [ "$(id -u)" = 0 ]; then "$@"; else sudo -n "$@"; fi
+}
+
+# One deploy at a time on this host: two scripts would pick the same colours
+# and remove each other's containers. Held (fd 9) until the script exits.
+acquire_lock() {
+  exec 9>>"$LOCK_FILE" || die "cannot open the deploy lock $LOCK_FILE"
+  chmod 666 "$LOCK_FILE" 2>/dev/null || true
+  flock -n 9 || die "another proxy deploy is already running on this host (lock $LOCK_FILE)"
 }
 
 running() { docker ps --format '{{.Names}}' | grep -qx "$1"; }

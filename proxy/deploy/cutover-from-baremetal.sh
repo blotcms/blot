@@ -131,6 +131,7 @@ fi
 
 sys true 2>/dev/null || refuse "passwordless sudo is required (systemctl)"
 load_env
+acquire_lock
 log "Host $BLOT_HOST, canary $CANARY_HOST, image $IMAGE"
 
 sys systemctl is-active --quiet openresty || refuse "bare-metal openresty is not active: nothing to cut over from (use blue-green.sh to start a container fresh)"
@@ -222,11 +223,14 @@ if [ "$ASSUME_YES" != 1 ]; then
 fi
 
 # ---- 4. cutover -------------------------------------------------------------
+# From here an exit must remove $NEW (an interrupt during `docker create` can
+# leave it behind, and the next cutover refuses to run beside a stale one).
+# Rolling back before the stop is harmless: starting the active unit is a no-op.
+PHASE=critical
+trap '' HUP PIPE   # a dropped connection must not stop us half way
 run_args "$NEW"
 docker create --restart no "${RUN_ARGS[@]}" "$IMAGE" >/dev/null   # everything that can fail is done before the stop
 
-PHASE=critical
-trap '' HUP PIPE   # a dropped connection must not stop us half way
 START=$(date +%s)
 log "Stopping bare-metal OpenResty"
 sys systemctl stop openresty

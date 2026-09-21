@@ -48,6 +48,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 NEW_IMAGE="$(resolve_image "$NEW_IMAGE")"
 load_env
+acquire_lock
 [ -r "$CERT_DIR/letsencrypt-domain.pem" ] && [ -r "$CERT_DIR/letsencrypt-domain.key" ] \
   || die "no certificate in $CERT_DIR (letsencrypt-domain.pem / .key)"
 [ -d "$CACHE_DIR" ] || die "cache directory $CACHE_DIR does not exist"
