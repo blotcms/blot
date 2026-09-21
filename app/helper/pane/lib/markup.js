@@ -5,8 +5,9 @@ const { formatDate, formatSize, formatFolderSize, formatType, splitExtension, ki
 const { OS_KEYS } = require("./os");
 const css = require("./css");
 
-// The OSes whose skin shows a Type cell; the cell is only emitted for them.
-const TYPE_OS = ["win", "linux"];
+// The OSes whose skin shows a Type cell; the cell is only emitted for them (GNOME's
+// default columns have none, and macOS hides Kind).
+const TYPE_OS = ["win"];
 
 const escape = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
@@ -21,6 +22,7 @@ function folder(tree, options = {}) {
   // A pin only holds for an OS whose skin is built; otherwise the window is unpinned and
   // follows the visitor (or the default skin), as if the author had not pinned it.
   const pin = OS_KEYS.includes(options.os) && css.SKINS.includes(options.os) ? options.os : null;
+  if (options.os && !pin) console.warn(`pane: ignoring os pin "${String(options.os)}" (no skin built for it); the window follows the visitor`);
   const theme = ["light", "dark"].includes(options.theme) ? options.theme : null;
   const title = options.title || "Folder";
   const files = options.files || {};

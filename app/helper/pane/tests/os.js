@@ -27,6 +27,7 @@ function combos(skins) {
       const built = pin && skins.includes(pin);
       const expected = built ? pin : skins.includes(visitor) ? visitor : css.DEFAULT_SKIN;
       it(`data-os=${visitor} pin=${pin} -> ${expected} of [${skins}]`, function () {
+        spyOn(console, "warn");
         const html = pane.folder(TREE, { files: FILES, os: pin }).html;
         const m = matching(visitor, html, skins);
         expect(m).toEqual([expected]);
@@ -77,13 +78,20 @@ describe("pane skins and the default fallback", function () {
   });
 
   describe("a pin for an OS with no skin", function () {
-    it("is ignored: no data-pin, follows the visitor", function () {
+    it("is ignored with a build-time warning: no data-pin, follows the visitor", function () {
+      spyOn(console, "warn");
       const html = pane.folder(TREE, { os: "win" }).html;
       expect(html).not.toContain("data-pin");
       expect(html).toContain('data-os="win"');
+      expect(console.warn).toHaveBeenCalledWith(jasmine.stringMatching(/ignoring os pin "win"/));
+      console.warn.calls.reset();
+      pane.folder(TREE, { os: "mac" });
+      pane.folder(TREE);
+      expect(console.warn).not.toHaveBeenCalled();
     });
 
     it("does not throw for odd input", function () {
+      spyOn(console, "warn");
       for (const os of [null, "", "BSD", "__proto__", 5, {}, ["win"]]) {
         expect(() => pane.folder(TREE, { os })).not.toThrow();
       }
@@ -101,6 +109,8 @@ describe("pane Type cell and extension hiding", function () {
     expect(formatType("Logo.JPG", false, "win")).toBe("JPG File");
     expect(formatType("Draft.md", false, "win")).toBe("MD File");
     expect(formatType("index.html", false, "win")).toBe("Microsoft Edge HTML Document");
+    expect(formatType("Report.docx", false, "win")).toBe("DOCX File");
+    expect(formatType("Old report.doc", false, "win")).toBe("DOC File");
     expect(formatType("data.xyz", false, "win")).toBe("XYZ File");
     expect(formatType("LICENSE", false, "win")).toBe("File");
     expect(formatType("constructor", false, "win")).toBe("File");
@@ -111,11 +121,17 @@ describe("pane Type cell and extension hiding", function () {
     expect(formatType("a.txt", false, "mac")).toBe("");
   });
 
-  it("emits a Type cell with win and linux children only, and none for a window pinned to macOS", function () {
+  it("emits a Type cell with a win child only, and none for a window pinned to macOS or Linux", function () {
     const $ = cheerio.load(pane.folder("Fruits\n  a.gif").html);
     expect($(".pane-t").length).toBe(2);
-    expect($(".pane-t").first().children().toArray().map((c) => c.attribs["data-os"])).toEqual(["win", "linux"]);
-    expect($(".pane-t").first().text()).toBe("File folderFolder");
+    expect($(".pane-t").first().children().toArray().map((c) => c.attribs["data-os"])).toEqual(["win"]);
+    expect($(".pane-t").first().text()).toBe("File folder");
+    css.SKINS.push("linux");
+    try {
+      expect(pane.folder("a.gif", { os: "linux" }).html).not.toContain("pane-cell pane-t");
+    } finally {
+      css.SKINS.pop();
+    }
     expect(pane.folder("a.gif", { os: "mac" }).html).not.toContain("pane-cell pane-t");
   });
 
@@ -129,6 +145,13 @@ describe("pane Type cell and extension hiding", function () {
     const html = pane.folder("About.txt\nDraft.md").html;
     expect(html).toContain('About<span class="pane-x">.txt</span>');
     expect(html).toContain("Draft.md</span>");
+    // Word is not installed in the reference: .doc/.docx keep their extension and the doc icon kind
+    const word = pane.folder("Report.docx\nOld report.doc").html;
+    expect(word).not.toContain("pane-x");
+    expect(word).toContain("Report.docx</span>");
+    expect(word.match(/pane-k-doc/g).length).toBe(2);
+    // .pane-x only on rows that hide something
+    expect(pane.folder("Draft.md\nFruits\nBlot.webloc").html).not.toContain("pane-x");
   });
 
   it("keeps one string per pinned window", function () {

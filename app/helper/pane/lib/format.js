@@ -44,7 +44,8 @@ function formatFolderSize(items, os) {
 // One row per extension: the icon kind (shared by every OS), Explorer's Type text and
 // whether Explorer hides the extension (only for types Windows has a handler for), and
 // GNOME's Type text. Types Windows doesn't know show as "<EXT> File" with the extension
-// kept ("Draft.md", "Blot.webloc": see reference/windows/windows-light@2x.png).
+// kept ("Draft.md", "Blot.webloc": see reference/windows/windows-light@2x.png). The runner has
+// no Word, so .doc/.docx are "DOC File"/"DOCX File" with the extension shown, as captured.
 const EXTENSIONS = {
   txt: { kind: "text", win: "Text Document", hide: true, linux: "Text" },
   md: { kind: "md", win: "MD File", linux: "Markdown" },
@@ -54,8 +55,8 @@ const EXTENSIONS = {
   jpg: { kind: "image", win: "JPG File", hide: true, linux: "Image" },
   jpeg: { kind: "image", win: "JPEG File", hide: true, linux: "Image" },
   webloc: { kind: "link", win: "WEBLOC File", linux: "Link" },
-  doc: { kind: "doc", win: "Microsoft Word 97 - 2003 Document", hide: true, linux: "Document" },
-  docx: { kind: "doc", win: "Microsoft Word Document", hide: true, linux: "Document" },
+  doc: { kind: "doc", win: "DOC File", linux: "Document" },
+  docx: { kind: "doc", win: "DOCX File", linux: "Document" },
   pdf: { win: "Microsoft Edge PDF Document", hide: true, linux: "PDF Document" },
   css: { win: "CSS File", linux: "CSS" },
   js: { win: "JavaScript File", linux: "JavaScript" },

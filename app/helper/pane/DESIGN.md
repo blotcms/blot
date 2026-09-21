@@ -22,7 +22,7 @@ One `figure` per window. Semantic content is a nested list. Chrome is drawn by C
         <span class="pane-label"><i class="pane-icon pane-k-doc"></i>About<span class="pane-x">.txt</span></span>
         <span class="pane-cell pane-d"><span data-os="mac">7:11 PM</span><span data-os="win">…</span><span data-os="linux">…</span></span>
         <span class="pane-cell pane-s"><span data-os="mac">…</span><span data-os="win">…</span><span data-os="linux">…</span></span>
-        <span class="pane-cell pane-t"><span data-os="win">Text Document</span><span data-os="linux">Text</span></span>
+        <span class="pane-cell pane-t"><span data-os="win">Text Document</span></span>
       </span>
       <ul role="list"> …children… </ul>          <!-- only for a folder with children -->
     </li>
@@ -60,13 +60,14 @@ Rules:
   |---|---|---|---|
   | `pane-d` | Date modified | mac, win, linux | all |
   | `pane-s` | Size | mac, win, linux | all |
-  | `pane-t` | Type (Kind) | win, linux | win (linux may, GNOME has an optional Type column) |
+  | `pane-t` | Type (Kind) | win only | win |
 
   Column order and which columns exist are the skin's: `order` on the cell (and on the
   matching `.pane-head i`), `display:none` for a column that OS doesn't have. macOS: Name,
   `pane-d`, `pane-s`. Windows: Name, `pane-d`, `pane-t`, `pane-s`. GNOME: Name, `pane-s`,
-  `pane-d`. `base.css` hides `.pane-t` by default, so it costs nothing on macOS; a window
-  pinned to macOS does not emit it at all. A skin shows a child with
+  `pane-d`. `base.css` hides `.pane-t` by default. It is emitted only for unpinned and
+  Windows-pinned windows (no other skin shows it), and GNOME wording exists in `formatType` but
+  is not emitted. `.pane-x` is emitted only on rows with a hideable extension. A skin shows a child with
   `.pane [data-os=X]{display:inline}` (base hides every `[data-os]`).
 - **Extension hiding (Windows).** Explorer hides the extension of known types (`About`), not
   of others (`Draft.md`, `Blot.webloc`); the list is `hide` in `EXTENSIONS` (`lib/format.js`).
@@ -184,7 +185,7 @@ generates missing columns.
 | date, today | `7:11 PM` | `9/20/2026 7:11 PM` | `Today 15:38` |
 | date, other | `8/14/26` | `8/14/2026 3:25 PM` | `14 Aug 2026` |
 | extensions | shown | hidden for known types (`About`) | shown |
-| Type text | not shown | `File folder`, `Text Document`, `GIF File`, `JPG File`, `MD File`, `Microsoft Edge HTML Document`, unknown: `XYZ File` | `Folder`, `Text`, `Image`, `HTML`, unknown: `Unknown` (optional column) |
+| Type text | not shown | `File folder`, `Text Document`, `GIF File`, `JPG File`, `MD File`, `DOC File`, `Microsoft Edge HTML Document`, unknown: `XYZ File` | `Folder`, `Text`, `Image`, `HTML`, unknown: `Unknown` (not emitted) |
 
 Anything not in the table stays as in the skeleton and is covered by unit tests
 (`tests/format.js`), including the boundaries (999/1000/1001 bytes, 1023/1024, midnight,
@@ -293,7 +294,8 @@ skin), contrast (reported), and size (reported).
 ## Implementation notes (Stage 1, as built)
 
 - Cell classes are `pane-d` (date), `pane-s` (size) and `pane-t` (Type), ordered per OS with
-  CSS `order`. Windows' hidden extensions are `.pane-x` (§1); `win.css` hides it.
+  CSS `order`. Windows' hidden extensions are `.pane-x` (§1); `win.css` hides it. `.doc`/`.docx` keep the kind `doc` (macOS has a Word-style
+  icon); `win.css` draws the generic icon for `pane-k-doc`, as in the reference.
 - The OS list is `lib/os.js` (shared by `css.js` and `markup.js`, which would otherwise be
   circular); the built skins are `css.SKINS`, read live by `markup.js`, so a test can extend it.
 - The contrast report from §5 is in `tests/size.js` (reported, never enforced).

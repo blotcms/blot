@@ -227,3 +227,5 @@ Scripts are in `screenshots/`. Findings from the first runs:
 - Locale-aware dates/sizes (English formats only for now).
 - Site-wide dark mode for the docs.
 - Retire `tools/finder` after all views migrate.
+- Optional Word-installed Windows variant: the Word icon and hidden `.doc`/`.docx` extensions,
+  if we ever want that look (the reference has no Word, so it shows "DOC File" today).
