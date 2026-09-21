@@ -9,6 +9,7 @@ const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
 const sync = promisify(require("./sync"));
 const countChanges = require("./sync/count-changes");
+const { measure: measureEventLoop } = require("helper/eventLoopMonitor");
 
 const getAllIDs = promisify(Blog.getAllIDs);
 const getBlog = promisify(Blog.get);
@@ -37,6 +38,21 @@ const resetToBlotWithLock = async (blogID, publish) => {
         console.error(clfdate(), "Dropbox: Error releasing lock", blogID, err);
     });
   }
+};
+
+// Event loop delay while one blog was validated, to find which blog and which
+// phase blocks the loop (a stall longer than the folder lock TTL crashes the
+// process). Every blog is logged so quiet blogs are a baseline.
+const logLag = (blogID, phase, { durationMs, maxLagMs, p99LagMs }) => {
+  console.log(
+    clfdate(),
+    "Dropbox: validation lag",
+    blogID,
+    phase,
+    `duration=${durationMs}ms`,
+    `maxLag=${maxLagMs}ms`,
+    `p99Lag=${p99LagMs}ms`
+  );
 };
 
 const fixBlog = (blog) =>
@@ -124,10 +140,13 @@ const validateAllBlogs = async () => {
       };
 
       let summary;
+      const stopWalkMeasure = measureEventLoop();
 
       try {
         summary = await resetToBlotWithLock(blogID, publish);
+        logLag(blogID, "walk", stopWalkMeasure());
       } catch (err) {
+        stopWalkMeasure();
         // A sync is already running for this blog, and that sync will pick
         // up whatever changed. Check it again next hour.
         if (err.message === "Failed to acquire folder lock") {
@@ -150,9 +169,13 @@ const validateAllBlogs = async () => {
         });
       }
 
-      await fixBlog(blog);
-
-      await catchUpSync(blog);
+      const stopFollowUpMeasure = measureEventLoop();
+      try {
+        await fixBlog(blog);
+        await catchUpSync(blog);
+      } finally {
+        logLag(blogID, "fix+catch-up", stopFollowUpMeasure());
+      }
     } catch (err) {
       console.error(
         clfdate(),

@@ -85,6 +85,8 @@ Improve Google Drive sync
 - Add proper testing for this
 
 Improve Dropbox sync
+- Check green logs for `Dropbox: validation lag` and `[EVENT LOOP]` after the event loop monitor ships (hourly validation blocks the loop >10s and crashes green via lost folder lock, 2026-09-21 18:02 and 20:01 UTC)
+- Remove event loop monitor (app/helper/eventLoopMonitor*.js, its setup.js hook, and `logLag`/`measureEventLoop` in app/clients/dropbox/init.js) once the loop-blocking root cause is fixed
 - Bug: removing a directory in Dropbox resync only updates the directory path; child entries wait for Fix
 - Bug: Dropbox validation's catch-up sync restores last_sync from outside sync() after releasing the lock, so it can clobber a webhook sync's stamp; teach sync() not to stamp last_sync for catch-up instead
 - Sync verification should instrument the sync/fix function to also report errors where the folder doesn't match the database.

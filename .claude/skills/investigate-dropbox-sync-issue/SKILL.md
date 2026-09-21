@@ -151,3 +151,23 @@ Entry template:
   alert if the diff persists on the next hourly run. Unrelated 401/409
   `Error validating` lines for other blogs appeared in the same run
   (revoked/moved Dropbox accounts).
+
+### 2026-09-21 15:00:00 UTC validation run — race with a live edit (benign)
+
+- Alert: 1 change for 1 blog, sent after the run completed at 15:08:49 UTC
+  (green container; run started 15:00:00).
+- Key events (UTC): 15:01:18 and 15:01:27 a normal sync (`sync_61eeebe`)
+  applied two draft-toggle renames (file renamed with a leading underscore).
+  15:01:41.629 validation (`sync_e6eb1b0`) took the folder lock; its running
+  total grew 1614→1615→1616 mid-walk as the user kept editing. It removed one
+  file and re-downloaded/saved another (the 1 "change"), finishing 15:03:11.617.
+- The user's webhook sync (`sync_76144f8`, 15:02:12) logged `Failed to acquire
+  lock on folder` (by design). Catch-up sync (`sync_d28563b`, 15:03:13) re-applied
+  the same two changes (hash matched, no re-download); in sync by 15:03:17.
+  Further edits synced normally (15:04:12, 15:04:36). Later hourly runs
+  completed with `issues=0` (16:00, 17:00, 19:00).
+- Cause: not a missed webhook; user editing during the validation walk.
+- Follow-up: same as the 2026-09-19 entry (defer/skip recently-synced blogs).
+  Separately, the 18:00 and 20:00 runs never logged `complete`: the process
+  restarted (`Scheduling hourly sync validation` at 18:03:16 and 20:01:50), so
+  those runs were cut short — worth checking with the restart skill.
