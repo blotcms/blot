@@ -4,6 +4,7 @@
 // fall through to fixtures.
 
 const pane = require("../index");
+const { referenceGeometry } = require("./lib/geometry");
 const sample = require("./sample.json");
 
 const TREE = `About.txt
@@ -21,19 +22,25 @@ Plan.gdoc
 Report.docx
 Tasks.org`;
 
+// Explorer's Details view can't expand a folder, so its window lists the top level only
+// (the reference says "13 items": Fruits is a row with no children).
+const FLAT = TREE.replace(/\n  .*/g, "");
+
 // the harness names the default view "default"; the module calls it "list"
 const VIEW = { default: "list" };
 
 // The QA windows have the reference's fixed size and are never pinned: the harness
 // chooses the skin with <html data-os> and the theme with prefers-color-scheme.
 async function render(caseId, c) {
-  if (c.os !== "macos") return null; // the other skins are not built yet: fixtures
-  const result = pane.folder(TREE, {
+  if (c.os === "linux" || (c.os === "windows" && c.view !== "default")) return null; // no skin yet, or a view study: fixtures
+  // the Explorer window is 504x367 (frame included), not the nominal 490x360
+  const height = c.os === "windows" ? (await referenceGeometry(c)).size.height : c.windowSize.height;
+  const result = pane.folder(c.os === "windows" ? FLAT : TREE, {
     title: sample.title,
     view: VIEW[c.view] || c.view,
     files: sample.files,
     now: sample.now,
-    height: `${c.windowSize.height}px`,
+    height: `${height}px`,
   });
   if (!result) return null;
   return { html: result.html, ...pane.assets() };

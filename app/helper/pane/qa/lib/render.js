@@ -21,10 +21,13 @@ const FREEZE_DATE = `(() => {
   window.Date = FrozenDate;
 })();`;
 
-async function launch() {
+// Headless Chrome hides scrollbars by default; the Explorer skin styles its scrollbars
+// (they are part of what the reference shows), so its cases need them visible.
+async function launch(scrollbars = false) {
   const puppeteer = require("puppeteer");
   return puppeteer.launch({
     headless: true,
+    ignoreDefaultArgs: scrollbars ? ["--hide-scrollbars"] : [],
     args: process.env.CI ? ["--no-sandbox", "--disable-setuid-sandbox"] : [],
   });
 }
@@ -50,10 +53,23 @@ async function platformFonts(page) {
   }
 }
 
+// The browser for a case: the given one, or (Windows) a companion with scrollbars shown,
+// started on first use and closed with the given browser.
+async function browserFor(browser, c) {
+  if (c.os !== "windows") return browser;
+  if (!browser.__scrollbars) {
+    browser.__scrollbars = launch(true);
+    const close = browser.close.bind(browser);
+    browser.close = async () => (await browser.__scrollbars).close().then(close);
+  }
+  return browser.__scrollbars;
+}
+
 // Returns { file, fonts }, or null if the adapter has nothing for this case.
-async function renderCase(browser, c) {
+async function renderCase(given, c) {
   const result = await adapter.render(c.id);
   if (!result) return null;
+  const browser = await browserFor(given, c);
 
   const geometry = await referenceGeometry(c);
   const page = await browser.newPage();
@@ -72,10 +88,13 @@ async function renderCase(browser, c) {
     const shot = await page.screenshot({ type: "png", omitBackground: false });
     // match the reference's pixel size exactly (fractional logical sizes round up)
     const { width, height } = c.imageSize;
-    const out = await sharp(shot)
-      .resize({ width, height, position: "left top", fit: "contain", background: "#808080" })
-      .png()
-      .toBuffer();
+    // (cropped, not resized: the screenshot is at most a pixel bigger, and resampling it
+    // would blur every hairline)
+    const meta = await sharp(shot).metadata();
+    const out =
+      meta.width >= width && meta.height >= height
+        ? await sharp(shot).extract({ left: 0, top: 0, width, height }).png().toBuffer()
+        : await sharp(shot).resize({ width, height, position: "left top", fit: "contain", background: "#808080" }).png().toBuffer();
     fs.mkdirSync(path.dirname(c.renderedPath), { recursive: true });
     fs.writeFileSync(c.renderedPath, out);
     return { file: c.renderedPath, fonts };

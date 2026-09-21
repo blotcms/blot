@@ -1,0 +1,90 @@
+/* Windows 11 File Explorer, Details view. Every rule is rooted at .pane; the build wraps it.
+   Coordinates are CSS px from the window's top-left (the capture is 2x). The window is 504x367:
+   a 6.5px frame in the Mica colour around a 491px client area. Top to bottom: tab strip (0-40),
+   navigation row (40-88), command bar (89-135), column header (136-168), rows (28px each),
+   the scrollbars, then the status bar (335.5-360.5). All chrome is background layers and
+   pseudo-elements of .pane-bar / .pane-head / .pane; see DESIGN.md. */
+@light{--bg:#fff;--frame:#e8e8e8;--nav:#f8f8f8;--box:#fdfdfd;--line:#d6d6d6;--tabline:#dadada;--hl:#e5e5e5;--fg:#1a1a1a;--name:#000;--dim:#616161;--head:#5c5c5c;--track:#f0f0f0;--thumb:#858585;--stat:#fff;--caret:#f7f7f7;--sep:#f0f0f0;--i-bar:url(icon:win/bar);--i-det:url(icon:win/details);--i-tab:url(icon:win/tab);--i-stat:url(icon:win/status)}
+@dark{--bg:#191919;--frame:#202020;--nav:#2c2c2c;--box:#383838;--line:#3a3a3a;--tabline:#1d1d1d;--hl:#636363;--fg:#fff;--name:#fff;--dim:#dedede;--head:#dedede;--track:#171717;--thumb:#959595;--stat:#1c1c1c;--caret:#f7f7f7;--sep:#2c2c2c;--i-bar:url(icon:win/bar-d);--i-det:url(icon:win/details-d);--i-tab:url(icon:win/tab-d);--i-stat:url(icon:win/status-d)}
+.pane{--pane-max:367px;--step:16px;--g-l:url(icon:win/glyphs-l);--g-rt:url(icon:win/glyphs-rt);--g-rm:url(icon:win/glyphs-rm);--g-caret:url(icon:win/caret);
+width:var(--pane-w,504px);padding-bottom:31.5px;color:var(--fg);font:12px/16px "Segoe UI Variable Text","Segoe UI Variable","Segoe UI",system-ui,sans-serif;
+background:
+var(--i-stat) right 6.5px bottom 6.5px/57.5px 25px no-repeat,
+linear-gradient(var(--caret),var(--caret)) left 76px bottom 13px/1px 12.5px no-repeat,
+linear-gradient(var(--stat),var(--stat)) left 6.5px bottom 6.5px/calc(100% - 13px) 25px no-repeat,
+var(--frame)}
+.pane::before{content:attr(aria-label);position:absolute;z-index:1;left:310.5px;right:100px;top:48px;height:32px;font-size:14px;line-height:32px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pane::after{content:"13 items";position:absolute;z-index:1;left:21px;bottom:6.5px;height:25px;line-height:25px}
+.pane .pane-bar{--b-ico:var(--i-bar) 0 0/330px 136px no-repeat;
+--b-det:var(--i-det) right 73.5px top 105px/16px 16px no-repeat;
+--b-top:url(icon:win/folder) 23.5px 16px/16px 16px no-repeat,var(--i-tab) 9.5px 9px/250px 31px no-repeat;
+--b-sep:linear-gradient(var(--sep),var(--sep)) 102px 97.5px/1px 30px no-repeat;
+--b-sr:linear-gradient(var(--box),var(--box)) right 17.5px top 48px/70px 32px no-repeat;
+--b-ad:linear-gradient(var(--box),var(--box)) 207.5px 48px/calc(100% - 303px) 32px no-repeat;
+--b-l2:linear-gradient(var(--line),var(--line)) 6.5px 135px/calc(100% - 13px) 1px no-repeat;
+--b-cmd:linear-gradient(var(--bg),var(--bg)) 6.5px 89px/calc(100% - 13px) 46px no-repeat;
+--b-l1:linear-gradient(var(--line),var(--line)) 6.5px 88px/calc(100% - 13px) 1px no-repeat;
+--b-tl:linear-gradient(var(--tabline),var(--tabline)) 6.5px 39px/calc(100% - 13px) 1px no-repeat;
+--b-nav:linear-gradient(var(--nav),var(--nav)) 6.5px 40px/calc(100% - 13px) 48px no-repeat;
+--m:var(--g-l) 0 0/330px 136px no-repeat,var(--g-rt) right top/152px 40px no-repeat,var(--g-rm) right top 40px/152px 96px no-repeat;
+height:136px;padding:9px 0 0 48.5px;box-sizing:border-box;line-height:31px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+background:var(--b-ico),var(--b-det),var(--b-top),var(--b-sep),var(--b-sr),var(--b-ad),var(--b-l2),var(--b-cmd),var(--b-l1),var(--b-tl),var(--b-nav)}
+.pane .pane-bar::before{content:"New";position:absolute;left:48px;top:89px;height:46px;line-height:46px}
+.pane .pane-bar::after{content:"";position:absolute;left:0;top:0;width:100%;height:136px;background:var(--fg);-webkit-mask:var(--m);mask:var(--m)}
+.pane .pane-head{margin:0 6.5px;height:32px;color:var(--head);
+background:linear-gradient(var(--track),var(--track)) right top/16.5px 100% no-repeat,linear-gradient(var(--hl),var(--hl)) 271.5px 0/.5px 26px no-repeat,linear-gradient(var(--hl),var(--hl)) 415.5px 0/.5px 26px no-repeat,var(--bg)}
+.pane .pane-head::after{content:"Details";position:absolute;right:22.5px;top:-47px;height:46px;line-height:46px;color:var(--fg)}
+.pane .pane-head i{box-sizing:border-box;flex:none;height:32px;line-height:28px}
+.pane .pane-head i:nth-child(1){width:271.5px;padding-left:30px}
+.pane .pane-head i:nth-child(2){width:144px;padding-left:7px}
+.pane .pane-head i:nth-child(3){width:125px;padding-left:7px}
+.pane .pane-head i:nth-child(1)::before{content:"Name"}
+.pane .pane-head i:nth-child(2)::before{content:"Date modified"}
+.pane .pane-head i:nth-child(3)::before{content:"Type"}
+.pane .pane-head i:nth-child(1)::after{content:"";position:absolute;left:145px;top:.5px;width:7px;height:4px;background:var(--head);-webkit-mask:var(--g-caret) center/7px 4px no-repeat;mask:var(--g-caret) center/7px 4px no-repeat}
+.pane .pane-head i:nth-child(2)::after{content:"Search";position:absolute;left:153.5px;top:-88px;width:11px;height:32px;overflow:hidden;font-size:14px;line-height:32px;color:var(--dim)}
+.pane .pane-tree{margin:0 6.5px;background:var(--bg);color:var(--name)}
+.pane .pane-tree,.pane .pane-tree ul{display:flex;flex-direction:column}
+.pane .pane-tree li{flex:none}
+.pane .pane-tree li:has(>.pane-row .pane-k-folder){order:-1}
+.pane .pane-row{width:627.5px;height:28px}
+.pane .pane-label{width:271.5px;padding-left:calc(38.5px + var(--x,0px));line-height:28px}
+.pane .pane-icon{left:calc(17.5px + var(--x,0px));width:16px;height:16px;margin-top:-9.5px}
+.pane .pane-x{display:none}
+.pane .pane-cell{flex:none;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;line-height:28px;color:var(--dim)}
+.pane .pane-d{width:144px;padding-left:7px;order:1}
+.pane .pane-t{display:block;width:125px;padding-left:7px;order:2}
+.pane .pane-s{width:87px;padding-right:7px;text-align:right;order:3}
+.pane [data-os=win]{display:inline}
+.pane .pane-k-folder{background-image:url(icon:win/folder)}
+.pane .pane-k-text{background-image:url(icon:win/text)}
+.pane .pane-k-html{background-image:url(icon:win/html)}
+.pane .pane-k-image{background-image:url(icon:win/image)}
+.pane .pane-k-md,.pane .pane-k-doc,.pane .pane-k-link,.pane .pane-k-generic{background-image:url(icon:win/generic)}
+.pane .pane-tree::-webkit-scrollbar{width:16.5px;height:16.5px;background:var(--track)}
+/* not :vertical/:horizontal: those pseudo-classes don't match under the :is() the build wraps rules in */
+.pane .pane-tree::-webkit-scrollbar-track{background:var(--track)}
+.pane .pane-tree::-webkit-scrollbar-corner{background:var(--bg)}
+.pane .pane-tree::-webkit-scrollbar-thumb{background:var(--thumb);background-clip:padding-box;border-style:solid;border-color:var(--track);border-width:7px}
+.pane .pane-tree::-webkit-scrollbar-button{display:block;width:10px;height:0;background:var(--track)}
+@container (max-width:480px){
+.pane .pane-bar{--b-det:none;--b-sr:none;--b-ad:linear-gradient(var(--box),var(--box)) 207.5px 48px/calc(100% - 225px) 32px no-repeat;--m:var(--g-l) 0 0/330px 136px no-repeat,var(--g-rt) right top/152px 40px no-repeat}
+.pane::before{right:26px}
+.pane .pane-head::after,.pane .pane-head i:nth-child(2)::after{display:none}
+}
+@container (max-width:439px){
+.pane .pane-bar{height:40px;--b-ico:none;--b-det:none;--b-sep:none;--b-sr:none;--b-ad:none;--b-l2:none;--b-cmd:none;--b-l1:none;--b-nav:none;--m:var(--g-l) 0 0/330px 40px no-repeat,var(--g-rt) right top/152px 40px no-repeat}
+.pane .pane-bar::before,.pane::before{display:none}
+.pane .pane-row{width:auto}
+.pane .pane-label,.pane .pane-head i:nth-child(1){flex:1;width:auto;min-width:0}
+.pane .pane-t,.pane .pane-s,.pane .pane-head i:nth-child(3){display:none}
+.pane .pane-head{background:linear-gradient(var(--track),var(--track)) right top/16.5px 100% no-repeat,var(--bg)}
+}
+@container (max-width:299px){
+.pane .pane-d,.pane .pane-head i:nth-child(2){display:none}
+}
+@media (forced-colors:active){
+.pane .pane-bar{background:none}
+.pane .pane-head{background:none}
+.pane{background:Canvas}
+}
