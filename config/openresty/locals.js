@@ -92,11 +92,17 @@ function baremetal({ env = process.env, config, cdn_ips }) {
 // when the container starts. runtimeDefaults() is the value used when a
 // variable is not set at runtime; it is written to defaults.env at build time.
 //
+// PROXY_ACME_CA: the ACME directory custom-domain certificates are issued
+// from. Let's Encrypt production unless set (e.g. its staging directory, to
+// try issuance without rate limits; a Pebble server in CI).
+//
 // PROXY_UPSTREAM_*: host:port of the Node containers. The upstream groups in
 // http.conf keep their weights and failover roles; only where each container
 // is changes. GREEN is the master (webhooks, /clients), BLUE serves the
 // dashboard and is the failover for the others, YELLOW serves blogs.
 const placeholder = (name) => "${" + name + "}";
+
+const LETS_ENCRYPT = "https://acme-v02.api.letsencrypt.org/directory";
 
 // What each runtime variable is when it is not set at runtime. Build-time
 // REDIS_IP, SERVER_LABEL and OPENRESTY_RESOLVER still work as defaults.
@@ -106,6 +112,7 @@ function runtimeDefaults(env = process.env) {
     PROXY_SERVER_LABEL: env.SERVER_LABEL || "us",
     PROXY_PRIVATE_IP: env.OPENRESTY_INSTANCE_PRIVATE_IP || "127.0.0.1",
     PROXY_RESOLVER: env.OPENRESTY_RESOLVER || "8.8.8.8 ipv6=off",
+    PROXY_ACME_CA: env.ACME_CA || LETS_ENCRYPT,
     PROXY_UPSTREAM_GREEN: "127.0.0.1:8089",
     PROXY_UPSTREAM_BLUE: "127.0.0.1:8088",
     PROXY_UPSTREAM_YELLOW: "127.0.0.1:8090",
@@ -152,9 +159,9 @@ function container({ env = process.env, config }) {
       env.GLOBAL_STATIC_FILES_DIR || "/var/www/blot/app/blog/static",
 
     // ACME directory URL lua-resty-auto-ssl uses to issue custom-domain
-    // certificates on demand. Production default is Let's Encrypt; CI points
-    // this at a Pebble test server (see .github/workflows/integration.yml).
-    acme_ca: env.ACME_CA || "https://acme-v02.api.letsencrypt.org/directory",
+    // certificates on demand: a runtime setting (PROXY_ACME_CA), Let's Encrypt
+    // production unless set. A build-time ACME_CA still works as the default.
+    acme_ca: placeholder("PROXY_ACME_CA"),
 
     // Add `reuseport` to the default server's listen directives so a second
     // container can bind the same :80/:443 during a blue/green handover

@@ -159,7 +159,7 @@ function adaptInitConf(content) {
     "init.conf hook listen reuseport"
   );
 
-  // ca: Let's Encrypt in production, Pebble in CI (ACME_CA / build.sh).
+  // ca: Let's Encrypt in production, Pebble in CI (PROXY_ACME_CA).
   // dir: matches the volume + chown in proxy/Dockerfile; lua-resty-auto-ssl
   // defaults here anyway, but being explicit keeps dehydrated state on the
   // persistent volume.
@@ -168,8 +168,9 @@ function adaptInitConf(content) {
     '    auto_ssl = (require "resty.auto-ssl").new()\n',
     '    auto_ssl = (require "resty.auto-ssl").new()\n' +
       "\n" +
-      "    -- ACME directory URL. Baked at generate time: Let's Encrypt in\n" +
-      "    -- production, a Pebble test server in CI (see ACME_CA / build.sh).\n" +
+      "    -- ACME directory URL, filled in when the container starts\n" +
+      "    -- (PROXY_ACME_CA): Let's Encrypt in production, a Pebble test server\n" +
+      "    -- in CI, Let's Encrypt staging to try issuance.\n" +
       '    auto_ssl:set("ca", "{{{acme_ca}}}")\n' +
       "\n" +
       "    -- Root for the dehydrated hook scripts and their working files. The\n" +

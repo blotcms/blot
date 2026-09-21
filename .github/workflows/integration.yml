@@ -192,11 +192,10 @@ jobs:
           npm init -y >/dev/null
           npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
 
-      - name: Generate proxy config (ACME_CA -> Pebble)
+      - name: Generate proxy config
         run: bash proxy/build/build.sh
         env:
           NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
-          ACME_CA: https://127.0.0.1:14000/dir
 
       - name: Build proxy image
         run: docker build -f proxy/Dockerfile -t blot-proxy:acme proxy/
@@ -275,6 +274,7 @@ jobs:
           docker volume create blot-acme-storage
           docker run -d --name proxy --network host --cap-add SYS_NICE \
             -e BLOT_HOST=localhost \
+            -e PROXY_ACME_CA=https://127.0.0.1:14000/dir \
             -e ACME_CA_CERT=/pebble-ca.pem \
             -v "$PWD/pebble.minica.pem:/pebble-ca.pem:ro" \
             -v blot-acme-storage:/etc/resty-auto-ssl \
@@ -349,6 +349,7 @@ jobs:
           docker rm -f proxy
           docker run -d --name proxy --network host --cap-add SYS_NICE \
             -e BLOT_HOST=localhost \
+            -e PROXY_ACME_CA=https://127.0.0.1:14000/dir \
             -e ACME_CA_CERT=/pebble-ca.pem \
             -v "$PWD/pebble.minica.pem:/pebble-ca.pem:ro" \
             -v blot-acme-storage:/etc/resty-auto-ssl \

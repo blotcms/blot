@@ -39,6 +39,7 @@ DRAIN_TIMEOUT="${PROXY_DRAIN_TIMEOUT:-30}"
 HEALTH_SOCK="/run/openresty/health.sock"
 LOCK_FILE="${PROXY_DEPLOY_LOCK:-/tmp/blot-proxy-deploy.lock}"
 SITE_IP="127.0.0.1"
+PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
 
 # Never fail because the terminal went away: the cutover ignores SIGPIPE and
 # must still be able to finish and roll back with nobody watching.
@@ -79,6 +80,18 @@ load_env() {
   # binds the unauthenticated /purge, /inspect and /rehydrate on every interface.
   [ -n "$(env_value "$ENV_FILE" PROXY_PRIVATE_IP)" ] || die "PROXY_PRIVATE_IP is not set in $ENV_FILE"
   CANARY_HOST="${PROXY_CANARY_HOST:-preview-of-wireframe-on-david.$BLOT_HOST}"
+  # Any other PROXY_* setting left empty overrides the image's default with
+  # nothing too (an empty CA, resolver or upstream renders an unusable config).
+  local empty
+  empty="$(grep -E "^(export )?PROXY_[A-Z_]+=[\"']*$" "$ENV_FILE" | cut -d= -f1 | tr '\n' ' ' || true)"
+  [ -z "$empty" ] || die "$ENV_FILE sets $empty to nothing, which overrides the image's default with an empty value: give it a value or remove the line"
+  # A staging (or test) ACME directory left in the env file would have every
+  # new custom domain issued a certificate no browser trusts.
+  local ca
+  ca="$(env_value "$ENV_FILE" PROXY_ACME_CA || true)"
+  if [ -n "$ca" ] && [ "$ca" != "$PRODUCTION_ACME_CA" ] && [ "${PROXY_ALLOW_ACME_CA:-}" != 1 ]; then
+    die "PROXY_ACME_CA in $ENV_FILE is $ca, not Let's Encrypt production: remove it (it is for try-issuance.sh, which sets it itself), or set PROXY_ALLOW_ACME_CA=1"
+  fi
 }
 
 # A bare tag or commit SHA means the image CI publishes
