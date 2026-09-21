@@ -181,7 +181,10 @@ The adapter passes the module the **view** (`list` for the default view, then `i
 `columns`, `gallery`, `tiles`, `content`, `sidebar`); the module returns `null` for views
 it doesn't implement (`SUPPORTED_VIEWS`), and add a view there to have the harness render
 it instead of the fixture. Authors can only ask for `list` and `icons` (`VIEWS`), the two
-views every OS has; the others are OS-specific studies used to compare skins. It also passes the **sample data** in `sample.json` (true
+views every OS has; the others are OS-specific studies used to compare skins. The macOS `icons` cases are rendered by
+the module too (`pane-adapter.js`, from a tree of the items Finder's hand-placed layout shows);
+`masks.json` masks the cut fifth column and the tiny-text previews there (masks of kind `time` are
+the ones `tests/masks.js` checks for text). It also passes the **sample data** in `sample.json` (true
 byte sizes and frozen modified times of the "Your site" folder) as `files`, with `now`.
 Per-OS formatting ("6 bytes" / "2.7 kB", "3:38 PM" / "Today 15:38" / `9/20/2026 3:38 PM`)
 is module logic, tested in `../tests/index.js`.

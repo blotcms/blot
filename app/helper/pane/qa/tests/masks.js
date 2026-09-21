@@ -8,12 +8,12 @@ const { detectWindowRect, resolveRects, dominantColor } = require("../lib/compar
 
 describe("pane qa masks", function () {
   loadCases()
-    .filter((c) => c.masks.length)
+    .filter((c) => c.masks.some((m) => m.kind === "time"))
     .forEach((c) => {
       it(`${c.id}: masks cover the time-dependent text`, async function () {
         const img = await loadPng(c.referencePath);
         const rect = detectWindowRect(img);
-        const masks = resolveRects(c.masks, rect.w / c.scale, rect.h / c.scale, c.scale, 0);
+        const masks = resolveRects(c.masks.filter((m) => m.kind === "time"), rect.w / c.scale, rect.h / c.scale, c.scale, 0);
         for (const m of masks) {
           const x0 = rect.x + m.x;
           const y0 = rect.y + m.y;

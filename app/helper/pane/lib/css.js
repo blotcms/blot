@@ -56,10 +56,24 @@ const minify = (css) =>
 // It shrinks as skins land, and never overlaps html[data-os=<built>].
 const unbuilt = (skins) => `html:not(:is(${skins.map((s) => `[data-os=${s}]`).join(",")}))`;
 
+// The views a skin has (the folder views an author can ask for, see index.js VIEWS): list is
+// the skin's own file, another view is css/<os>-<view>.css. A window in a view its skin lacks
+// is styled by the default skin instead (which has them all), so it is never half-styled.
+const VIEWS = ["list", "icons"];
+const lacks = (os) => VIEWS.filter((v) => v !== "list" && !fs.existsSync(path.join(ROOT, "css", `${os}-${v}.css`)));
+const viewsOf = (os) => VIEWS.filter((v) => !lacks(os).includes(v));
+
 // what the skin's rules apply to: the windows of that skin. The default skin also takes
 // the visitors nothing else covers. Every path has the same specificity.
-const group = (os, skins = SKINS) =>
-  `:is(html[data-os=${os}] .pane:not([data-pin]),.pane[data-pin=${os}]${os === DEFAULT_SKIN ? `,${unbuilt(skins)} .pane:not([data-pin])` : ""})`;
+const group = (os, skins = SKINS) => {
+  const not = lacks(os).map((v) => `:not([data-view=${v}])`).join("");
+  const fallback =
+    os === DEFAULT_SKIN
+      ? `,${unbuilt(skins)} .pane:not([data-pin])` +
+        skins.filter((s) => s !== os).flatMap((s) => lacks(s).map((v) => `,html[data-os=${s}] .pane[data-view=${v}]:not([data-pin])`)).join("")
+      : "";
+  return `:is(html[data-os=${os}] .pane:not([data-pin])${not},.pane[data-pin=${os}]${not}${fallback})`;
+};
 
 // Replaces the leading `.pane` of each selector in a comma list; `extra` is appended to
 // the root (theme qualifiers).
@@ -98,11 +112,13 @@ function skin(os, source, skins = SKINS) {
   let light = "";
   let dark = "";
   for (const it of items(strip(source))) {
-    if (it.sel === "@light") light += it.body;
-    else if (it.sel === "@dark") dark += it.body;
+    // several files of one skin each have their own @light/@dark: keep the declarations apart
+    const end = (b) => (/[;}]\s*$/.test(b) ? b : b + ";");
+    if (it.sel === "@light") light += end(it.body);
+    else if (it.sel === "@dark") dark += end(it.body);
     else rules += it.text || `${it.sel}{${it.body}}`;
   }
-  const scheme = (tokens, name) => (tokens ? `${tokens};color-scheme:${name}` : "");
+  const scheme = (tokens, name) => (tokens ? `${tokens.replace(/;\s*$/, "")};color-scheme:${name}` : "");
   // dark: the tokens (declarations) and any rules
   const decls = [];
   const darkRules = [];
@@ -136,4 +152,4 @@ function build(options = {}) {
   return minify(icons(css));
 }
 
-module.exports = { build, skin, minify, items, root, group, unbuilt, SKINS, DEFAULT_SKIN };
+module.exports = { viewsOf, build, skin, minify, items, root, group, unbuilt, SKINS, DEFAULT_SKIN };

@@ -24,7 +24,7 @@ describe("pane", function () {
 
   describe("options", function () {
     it("returns null for views that are not implemented yet", function () {
-      expect(pane.folder("a.md", { view: "icons" })).toBeNull();
+      expect(pane.folder("a.md", { view: "icons" })).not.toBeNull();
       expect(pane.folder("a.md", { view: "list" })).not.toBeNull();
       expect(pane.folder("a.md", { view: "columns" })).toBeNull();
     });

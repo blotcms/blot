@@ -24,7 +24,7 @@ describeIfChrome("pane backdrop independence", function () {
   afterAll(async () => browser && (await browser.close()));
 
   loadCases()
-    .filter((c) => c.view === "default")
+    .filter((c) => c.view === "default" || (c.view === "icons" && c.os === "macos"))
     .forEach((c) => {
       it(`${c.id}: opaque inside, clear outside, transparent corners`, async function () {
         const r = await matte(browser, c);

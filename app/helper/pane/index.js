@@ -1,6 +1,6 @@
 // pane: renders docs blocks as mock OS windows (macOS, Windows 11, GNOME Files).
-// Stage 1: the macOS folder window in list view is built; win and linux skins, the icons
-// view and the editor windows are not. Skins are switched by <html data-os>, light/dark by
+// Built: folder windows in list view (macOS, Windows, GNOME) and the icons view (macOS; the
+// other skins fall back to it, DESIGN.md), not the editor windows. Skins are switched by <html data-os>, light/dark by
 // prefers-color-scheme. See DESIGN.md (how) and PLAN.md (what).
 //
 // API
@@ -19,7 +19,7 @@
 // "/", has children, or has no "." in its name (the docs' existing convention, so an
 // empty folder like "Posts" works). Options:
 //   title    accessible name and title bar text
-//   view     "list" (default) or "icons": the two views every OS has. The captured
+//   view     "list" (default) or "icons" (the top-level items only, as a grid): the two views every OS has. The captured
 //            references have more (columns, gallery, tiles, content, sidebar); they are
 //            OS-specific studies, not something an author can ask for.
 //   files    name -> { bytes, modified: "YYYY-MM-DDTHH:MM:SS", folder? } for the columns
@@ -44,7 +44,7 @@ const { expand } = require("./lib/names");
 
 // what an author can ask for; the QA harness has more views (see the header)
 const VIEWS = ["list", "icons"];
-const SUPPORTED_VIEWS = ["list"];
+const SUPPORTED_VIEWS = ["list", "icons"];
 
 function folder(tree, options = {}) {
   const view = options.view === "tree" ? "list" : options.view || "list"; // the list view is a tree

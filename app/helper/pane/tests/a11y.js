@@ -59,6 +59,15 @@ try {
       expect(await rules(ok.replace('role="list"', 'role="list" tabindex="0" aria-label="x"'), css)).toEqual([]);
     }, timeout);
 
+    it("an icons window with a nested list, an item without label or icon, or a folder without 'folder'", async function () {
+      const icons = '<figure class="pane" data-view="icons" aria-label="x"><div class="pane-bar" aria-hidden="true"></div><div class="pane-head" aria-hidden="true"></div><ul class="pane-tree" role="list"><li><i class="pane-icon"></i><span class="pane-label">a.md</span></li></ul></figure>';
+      expect(await rules(icons)).toEqual([]);
+      expect(await rules(icons.replace("</li>", '<ul role="list"><li>b</li></ul></li>'))).toContain("icons");
+      expect(await rules(icons.replace(">a.md<", "><"))).toContain("label");
+      expect(await rules(icons.replace('<i class="pane-icon"></i>', ""))).toContain("icons");
+      expect(await rules(icons.replace('class="pane-icon"', 'class="pane-icon pane-k-folder"'))).toContain("label");
+    }, timeout);
+
     it("a cell showing two OS variants, and a focusable element inside aria-hidden", async function () {
       const cell = '<span class="pane-cell"><span data-os="mac">1</span><span data-os="win">2</span></span>';
       expect(await rules(ok.replace("</span></span></li>", `</span>${cell}</span></li>`))).toContain("cell");

@@ -30,7 +30,7 @@ describe("pane GNOME Files skin", function () {
 
   it("emits its rules only for data-os=linux and data-pin=linux, never the fallback", function () {
     const out = css.skin("linux", SOURCE);
-    expect(css.group("linux")).toBe(":is(html[data-os=linux] .pane:not([data-pin]),.pane[data-pin=linux])");
+    expect(css.group("linux")).toBe(":is(html[data-os=linux] .pane:not([data-pin]):not([data-view=icons]),.pane[data-pin=linux]:not([data-view=icons]))");
     expect(out).toContain(`${css.group("linux")} .pane-bar::before{`);
     expect(out).not.toContain("html:not(");
     // every top-level selector in the built skin starts with the group

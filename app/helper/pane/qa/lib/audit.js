@@ -18,6 +18,10 @@ const SAMPLES = {
   many: { tree: MANY },
   long: { tree: "A very long file name that goes on and on and on for the width test 2026-09-21 final v2.md\nShort.md" },
   empty: { tree: "" },
+  icons: { tree: "Fruits\n  Apple.md\nAbout.txt\nReport.docx\nPhoto.jpg", options: { view: "icons" } },
+  iconsMany: { tree: MANY, options: { view: "icons" } },
+  iconsLong: { tree: "A very long file name that goes on and on and on for the width test 2026-09-21 final v2.md\nunbrokenunbrokenunbrokenunbrokenunbrokenunbroken.txt\nShort.md", options: { view: "icons" } },
+  iconsFixed: { tree: "a.md\nb.md", options: { view: "icons", height: "180px", title: "Fixed" } },
   fixed: { tree: "a.md\nb.md", options: { height: "180px", title: "Fixed" } },
 };
 
@@ -39,6 +43,16 @@ function inspect() {
     const label = row.querySelector(".pane-label");
     if (!label || !label.innerText.trim()) f("label", "a row without label text");
     if (row.querySelector(".pane-k-folder") && !/folder/.test(row.textContent)) f("label", "a folder row without the visually hidden 'folder' text");
+  }
+  // the icons view: one li per top-level item, each with an icon and a label, and no nested lists
+  if (win.dataset.view === "icons") {
+    if (win.querySelector("li ul")) f("icons", "the icons view has a nested list (a folder can't expand in place)");
+    for (const li of win.querySelectorAll(".pane-tree > li")) {
+      const label = li.querySelector(".pane-label");
+      if (!label || !label.textContent.trim()) f("label", "an icons item without label text");
+      if (!li.querySelector(".pane-icon")) f("icons", "an icons item without an icon");
+      if (li.querySelector(".pane-k-folder") && !/folder/.test(li.textContent)) f("label", "a folder item without the visually hidden 'folder' text");
+    }
   }
   for (const cell of win.querySelectorAll(".pane-cell")) {
     const shown = [...cell.children].filter((c) => c.hasAttribute("data-os") && getComputedStyle(c).display !== "none");
@@ -80,6 +94,13 @@ function layout() {
     size: shown(".pane-s"),
     type: shown(".pane-t"),
     treeOverflow: tree ? tree.scrollWidth - tree.clientWidth : 0,
+    // icons view: a label that sticks out of its grid cell, or an item outside the window
+    itemOut: [...win.querySelectorAll('[data-view="icons"] .pane-tree > li')].filter((li) => {
+      const r = li.getBoundingClientRect();
+      const l = li.querySelector(".pane-label").getBoundingClientRect();
+      return l.left < r.left - 0.5 || l.right > r.right + 0.5 || r.right > win.getBoundingClientRect().right + 0.5;
+    }).length,
+    headShown: shown(".pane-head"),
   };
 }
 
@@ -112,11 +133,13 @@ async function audit(browser, { skins = SKINS, themes = THEMES, log = () => {} }
           add(skin, theme, sample, WIDE, await page.evaluate(inspect));
         }
         // keyboard: a scroller can be reached with Tab and shows where the focus is
-        await page_(skin, theme, "many", WIDE);
-        await page.keyboard.press("Tab");
-        const ring = await page.evaluate(focusRing);
-        if (!ring) add(skin, theme, "many", WIDE, [{ rule: "focus", message: "Tab does not reach the scrollable list" }]);
-        else if (!ring.visible) add(skin, theme, "many", WIDE, [{ rule: "focus", message: "the focused list shows no focus ring" }]);
+        for (const sample of ["many", "iconsMany"]) {
+          await page_(skin, theme, sample, WIDE);
+          await page.keyboard.press("Tab");
+          const ring = await page.evaluate(focusRing);
+          if (!ring) add(skin, theme, sample, WIDE, [{ rule: "focus", message: "Tab does not reach the scrollable list" }]);
+          else if (!ring.visible) add(skin, theme, sample, WIDE, [{ rule: "focus", message: "the focused list shows no focus ring" }]);
+        }
         // forced colours: the frame is a plain border and nothing casts a shadow
         await page_(skin, theme, "small", WIDE);
         await emulate({ "forced-colors": "active" });
@@ -136,7 +159,7 @@ async function audit(browser, { skins = SKINS, themes = THEMES, log = () => {} }
         }
         await emulate({ "prefers-reduced-motion": "no-preference" });
         // narrow containers: the columns drop in the documented order, and nothing spills out
-        for (const sample of ["small", "long"]) {
+        for (const sample of ["small", "long", "icons", "iconsLong"]) {
           const seen = [];
           for (const width of [WIDE, ...NARROW]) {
             await page_(skin, theme, sample, width);
@@ -144,6 +167,8 @@ async function audit(browser, { skins = SKINS, themes = THEMES, log = () => {} }
             seen.push({ width, ...l });
             if (l.pageOverflow > 0) add(skin, theme, sample, width, [{ rule: "overflow", message: `the page scrolls sideways by ${l.pageOverflow}px` }]);
             if (l.winWidth > width + 0.5) add(skin, theme, sample, width, [{ rule: "overflow", message: `the window is ${l.winWidth}px wide in a ${width}px page` }]);
+            if (l.itemOut) add(skin, theme, sample, width, [{ rule: "overflow", message: `${l.itemOut} icon item(s) stick out of their cell or the window` }]);
+            if (sample.startsWith("icons") && l.headShown) add(skin, theme, sample, width, [{ rule: "columns", message: "the column header is shown in the icons view" }]);
             if (l.labelWidth !== null && l.labelWidth < 60) add(skin, theme, sample, width, [{ rule: "columns", message: `the name column is only ${Math.round(l.labelWidth)}px wide` }]);
             // DESIGN.md §6: Size (and Type) drop before Date
             if (!l.date && l.size) add(skin, theme, sample, width, [{ rule: "columns", message: "the Size column is shown after the Date column is dropped" }]);

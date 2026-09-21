@@ -17,12 +17,16 @@ const perOs = (fn, pin, oses = OS_KEYS) => (pin ? [pin] : oses).map((os) => `<sp
 // Rows that can exceed the window's height cap make the list a scroller, which must be
 // keyboard reachable.
 const SCROLLS_AFTER = 11;
+// The icons view is a grid whose row count depends on the container width, so it is a scroller
+// whenever it holds more items than one row of the narrowest usual window (DESIGN.md, icons view).
+const ICON_SCROLLS_AFTER = 4;
 
 function folder(tree, options = {}) {
   // A pin only holds for an OS whose skin is built; otherwise the window is unpinned and
   // follows the visitor (or the default skin), as if the author had not pinned it.
-  const pin = OS_KEYS.includes(options.os) && css.SKINS.includes(options.os) ? options.os : null;
-  if (options.os && !pin) console.warn(`pane: ignoring os pin "${String(options.os)}" (no skin built for it); the window follows the visitor`);
+  const view = options.view === "icons" ? "icons" : "list";
+  const pin = OS_KEYS.includes(options.os) && css.SKINS.includes(options.os) && css.viewsOf(options.os).includes(view) ? options.os : null;
+  if (options.os && !pin) console.warn(`pane: ignoring os pin "${String(options.os)}" (no ${view} view built for it); the window follows the visitor`);
   const theme = ["light", "dark"].includes(options.theme) ? options.theme : null;
   const title = options.title || "Folder";
   const files = options.files || {};
@@ -43,7 +47,7 @@ function folder(tree, options = {}) {
   const allNodes = (ns) => ns.flatMap((x) => [x, ...allNodes(x.children)]);
   // GNOME Files widens the Modified column to fit "Yesterday 11:35" and moves Size left; the
   // skin needs to know (class pane-yd), because CSS can't measure the column's widest text
-  const widerDates = (pin === null || pin === "linux") && allNodes(nodes).some((n) => dateOf(n, "linux").startsWith("Yesterday"));
+  const widerDates = view === "list" && (pin === null || pin === "linux") && allNodes(nodes).some((n) => dateOf(n, "linux").startsWith("Yesterday"));
 
   const cells = (node) => {
     const meta = files[node.name] || { bytes: inventSize(node.path) };
@@ -81,16 +85,32 @@ function folder(tree, options = {}) {
       .join("") +
     "</ul>";
 
+  // Icons view: the top-level items only, as a flat list (a folder can't expand in place). One
+  // li per item: the icon and the label. A generic file carries its extension for the icon's
+  // caption (macOS prints it on the page); the label is the same string as in the list view.
+  const items = () =>
+    `<ul class="pane-tree" role="list"${scrollsIcons ? ` tabindex="0" aria-label="${escape(title)}"` : ""}>` +
+    nodes
+      .map((n) => {
+        const kind = kindOf(n);
+        const ext = kind === "generic" && !n.folder && /\.([^.]+)$/.test(n.name) ? ` data-ext="${escape(/\.([^.]+)$/.exec(n.name)[1].toUpperCase())}"` : "";
+        const sr = n.folder ? '<span class="pane-sr">, folder</span>' : "";
+        return `<li><i class="pane-icon pane-k-${kind}"${ext}></i><span class="pane-label">${label(n)}${sr}</span></li>`;
+      })
+      .join("") +
+    "</ul>";
+  const scrollsIcons = options.height || nodes.length > ICON_SCROLLS_AFTER;
+
   // A scroller must be keyboard reachable and named. With an explicit height we can't know
   // whether the rows fit, so it always is. The Windows list is always wider than its window
   // (the Size column runs off the edge, as in Explorer), so any window a Windows skin can
   // apply to is a scroller too. (Costs macOS and Linux visitors one extra tab stop.)
   const winList = (pin === null || pin === "win") && css.SKINS.includes("win");
   const scrolls = options.height || winList || total(nodes) > SCROLLS_AFTER;
-  const body = list(nodes, ` class="pane-tree"${scrolls ? ` tabindex="0" aria-label="${escape(title)}"` : ""}`);
+  const body = view === "icons" ? items() : list(nodes, ` class="pane-tree"${scrolls ? ` tabindex="0" aria-label="${escape(title)}"` : ""}`);
   const size = [options.width && `--pane-w:${escape(options.width)}`, options.height && `--pane-h:${escape(options.height)}`].filter(Boolean).join(";");
   return (
-    `<figure class="pane${widerDates ? " pane-yd" : ""}" data-view="list"${pin ? ` data-pin="${pin}"` : ""}${theme ? ` data-theme="${theme}"` : ""}${size ? ` style="${size}"` : ""} aria-label="${escape(title)}">` +
+    `<figure class="pane${widerDates ? " pane-yd" : ""}" data-view="${view}"${pin ? ` data-pin="${pin}"` : ""}${theme ? ` data-theme="${theme}"` : ""}${size ? ` style="${size}"` : ""} aria-label="${escape(title)}">` +
     `<div class="pane-bar" aria-hidden="true">${escape(title)}</div><div class="pane-head" aria-hidden="true"><i></i><i></i><i></i></div>` +
     body +
     "</figure>"

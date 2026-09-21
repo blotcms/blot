@@ -27,7 +27,8 @@ describe("pane qa cases", function () {
   it("masks the date column of views that show dates", function () {
     const cases = loadCases();
     expect(getCase("macos-light", cases).masks.length).toBe(1);
-    expect(getCase("macos-light-icons", cases).masks.length).toBe(0);
+    expect(getCase("macos-light-icons", cases).masks.map((m) => m.kind)).not.toContain("time"); // no dates in the icons view
+    expect(getCase("windows-light-icons", cases).masks.length).toBe(0);
   });
 
   it("picks up new screenshots automatically", function () {

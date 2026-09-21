@@ -161,6 +161,52 @@
       "shadowError": 1,
       "sizeDelta": 1,
       "rowYOffset": 1
+    },
+    "macos-light-icons": {
+      "diffPercent": {
+        "overall": 1.4,
+        "chrome": 0.4,
+        "text": 1.6
+      },
+      "inkPercent": {
+        "chrome": 5,
+        "text": 23
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.7,
+        "chrome": 0.5,
+        "text": 0.8
+      },
+      "shadowError": 3,
+      "sizeDelta": 1,
+      "rowYOffset": 1
+    },
+    "macos-dark-icons": {
+      "diffPercent": {
+        "overall": 1.6,
+        "chrome": 1.2,
+        "text": 1.6
+      },
+      "inkPercent": {
+        "chrome": 16,
+        "text": 13
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.8,
+        "chrome": 0.6,
+        "text": 0.8
+      },
+      "shadowError": 1,
+      "sizeDelta": 1,
+      "rowYOffset": 1
     }
   }
 }

@@ -191,6 +191,6 @@ describe("pane Type cell and extension hiding", function () {
     const { css: out } = pane.assets();
     expect(out).toContain(".pane-t{display:none}");
     expect(out).not.toContain("}.pane-x{display:none}");
-    expect(out).toContain("[data-pin=win]) .pane-x{display:none}");
+    expect(out).toContain("[data-pin=win]:not([data-view=icons])) .pane-x{display:none}");
   });
 });

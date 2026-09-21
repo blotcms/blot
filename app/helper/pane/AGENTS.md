@@ -98,6 +98,10 @@ WCAG contrast; contrast is reported by `tests/size.js`, never enforced.
   (tokens) and full rules; the build emits them under `prefers-color-scheme` (unless the
   window pins light) and under `data-theme=dark`. Skin files must be parsed by
   `items()`: keep statements before nested blocks, no comments containing `{`/`}`.
+- **Views a skin lacks.** A skin has the icons view when `css/<os>-icons.css` exists; until then
+  the default (mac) skin styles that view for that OS's visitors, and `os` pins for it are dropped
+  (`css.viewsOf`, DESIGN.md "Icons view"). Creating the file is the switch. A new per-OS icons
+  skin must also override the *dark* list icons (`.pane-icon.pane-k-<kind>`, one class more).
 - **The minifier is deliberately dumb** (whitespace and comments only). It collapses runs
   of spaces, including inside `content:"..."` strings, and strips spaces around `> , { } ;`.
 - **Icons** are `url(icon:<os>/<name>)`, inlined as percent-encoded data URIs, so each SVG

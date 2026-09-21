@@ -391,3 +391,88 @@ of the references. The rendering must not depend on the desktop behind it:
   (shown only when the list can scroll); it does not move, and the native scrollbar is hidden.
   Text is Cantarell 11pt (14.67px) as in the references (`screenshots/linux.sh` sets it).
   Icons are redrawn from the desktop-icon study; shadows are an SVG blur, not per-theme variants.
+
+### Icons view (`view:"icons"`), macOS built; the contract for the other skins
+
+Built as css/mac-icons.css on the shared markup below. Windows and Linux add `css/win-icons.css` /
+`css/linux-icons.css` and change nothing else (no JS, no markup, no `base.css`).
+
+**DOM (identical for every OS, no per-OS text)**
+
+```html
+<figure class="pane" data-view="icons" [data-pin] [data-theme] aria-label="Your site" [style="--pane-w;--pane-h"]>
+  <div class="pane-bar" aria-hidden="true">Your site</div>
+  <div class="pane-head" aria-hidden="true"><i></i><i></i><i></i></div>      <!-- same 5 chrome nodes -->
+  <ul class="pane-tree" role="list" [tabindex="0" aria-label="Your site"]>
+    <li><i class="pane-icon pane-k-doc" [data-ext="ORG"]></i><span class="pane-label">About<span class="pane-x">.txt</span><span class="pane-sr">, folder</span></span></li>
+  </ul>
+</figure>
+```
+
+- **Top-level rows only.** Real icon views (Finder, Explorer's medium icons, Nautilus) can't expand a
+  folder in place, so children of folders are dropped from the markup (not hidden: they'd be read by
+  screen readers and copied). The folder icon shows nothing about them, as in all three captures. The
+  docs' tree syntax stays the source, so switching a block between `list` and `icons` needs no
+  rewrite. A folder's sr text is `, folder` (never `, expanded`).
+- **Per item: 1 `li`, 1 `i.pane-icon` (`pane-k-<kind>` as in the list view), 1 `span.pane-label`.**
+  No `.pane-row`, no `.pane-cell`s, no `pane-odd`, no `pane-yd`, no `data-os` children: the icons view
+  shows the label only. The label is one string per OS as in the list view (`.pane-x` wraps the
+  extension Windows hides, for unpinned and win-pinned windows; `.pane-sr` for folders).
+- `data-ext` (uppercase extension) is on the icon of a *generic* file (kind `generic` with an extension):
+  macOS prints it on the page icon (`ORG`, `GDOC`) from `::after{content:attr(data-ext)}`. Other OSes
+  ignore it. A link icon's "HTTP" is a constant in the skin.
+- `.pane-head` is kept (a fixed chrome node) and is `display:none` in every icons skin: column
+  headers exist only in the list view. `base.css` stays view-agnostic (it has no icons rules).
+- **Scroller**: `.pane-tree` is `tabindex=0` + `aria-label` when there are more than 4 items (rows
+  depend on width, so it can't be known; one row of the default window holds 4 on macOS) or with an
+  explicit `height`. The default height fits the rows, capped at the skin's `--pane-max`.
+- The window height in the QA case is the reference's; `pane-adapter.js` renders the icons cases from a
+  tree of the items Finder's capture shows (its hand-placed layout has a fifth column cut by the window
+  edge and two items off-screen; a reflowing grid can't copy that, so `qa/masks.json` masks the cut
+  column and the three tiny-text previews, kind `artifact`/`preview`).
+
+**Grid rules (skin CSS; the structure is the same on every OS)**
+
+`.pane[data-view=icons] .pane-tree{display:grid;grid-template-columns:repeat(auto-fill,<cell w>);grid-auto-rows:<cell h>;justify-content:start;padding:…}`,
+`li` a centred flex column (icon, then label), `.pane-icon` a block of the OS's icon size, `.pane-label`
+`display:-webkit-box; -webkit-line-clamp:2` (two lines, end ellipsis; Finder truncates in the middle,
+CSS can't, and `overflow-wrap:anywhere` breaks names with no spaces) in a fixed two-line box so cells
+stay aligned. Columns follow the container width with no JS; the chrome's container-query drops
+(§6) still apply, and the grid just has fewer columns. No selection or hover state (none in the
+captures). Rules are scoped `[data-view=icons]` and must override the skin's list rules for the same
+elements (`.pane-icon` is absolutely positioned in list rows; `.pane-label` has a fixed width and
+`flex:1` in the narrow container queries; `.pane-tree` padding). In dark mode the mac list rules
+re-set `.pane .pane-k-<kind>` icons under `:not([data-theme=light])`, so icons rules use
+`.pane[data-view=icons] .pane-icon.pane-k-<kind>` (one class more).
+
+**What the skin decides**: icon artwork (`icons/<os>/big-*.svg`, standalone SVG, 64×64 viewBox), cell size,
+paddings, label font/colour, the shadow token. macOS metrics (measured on the 2× capture, CSS px):
+cell 112×112, grid padding 14 top / 10 left / 8 bottom, icon box 64×64 (page 42×56, image 56×42, folder
+60×47, at 4px from the box top for pages), 7px between icon and label, label 12px/16px, width 104,
+`--fg`; the icon shadow is `--ish: drop-shadow(0 1px 1.5px rgba(0,0,0,.18))` in light and `none` in dark (pages
+are pure white in both); the checker is 3.5px cells (#9a9a9a on white). Kinds: `text` a blank page (a
+tiny mark), `md` a page with faint lines, `doc` a blank page, `html` a page with `</>`, `generic` a
+folded-corner page with `?` and the extension, `link` the same with a globe and `HTTP`, `image` the
+checker, `folder` the blue folder. Real thumbnails (tiny rendered text) are not reproduced.
+
+**Skins without the view (the fallback, `lib/css.js`)**: a skin has a view when `css/<os>-icons.css`
+exists (`css.viewsOf(os)`). `group(os)` adds `:not([data-view=<v>])` for a view the skin lacks, and the
+default skin's group adds `html[data-os=<other>] .pane[data-view=<v>]:not([data-pin])` for every
+other skin's missing view. So today a Windows or Linux visitor sees the *mac* window (chrome and
+icons) for an icons block, a complete window that passes the audit, until their skin lands; an
+`os` pin for a skin without the view is dropped with a warning (as for an unbuilt skin). Adding the
+file is the whole switch.
+
+**What `css/<os>-icons.css` must supply**: (1) `.pane[data-view=icons] .pane-head{display:none}` (or the
+OS's own use of it); (2) the grid on `.pane-tree` with its padding, and anything the list skin does to
+`.pane-tree` reset (`overflow`, the status-bar counter `::after` can stay: it counts top-level `li`,
+which now are the items, as Explorer does); (3) `li`, `.pane-icon` (size, `position:relative`, `background`
+per kind, `filter` if it wants a shadow) and `.pane-label` (two-line clamp, centred, font/colour);
+(4) the icon artwork for the 8 kinds (+ `-d` variants via `@dark`), and the ext caption if the OS
+prints one; (5) folders first: the list skins sort with `li:has(>.pane-row .pane-k-folder)`, which
+matches nothing here, use `li:has(>.pane-k-folder){order:-1}`; (6) the `@container` drops
+of the chrome as in the list skin (the label/columns ones don't apply); (7) tokens in `@light`/`@dark`
+of its own file (files of one skin are joined; each `@light`/`@dark` body now gets its own `;`).
+Also extend `qa/pane-adapter.js` (drop the `c.os !== "macos"` line in the icons branch and give the
+OS its tree) and `qa/thresholds.json`, and `qa/backdrop.js`'s icons filter. Windows' Explorer hides
+extensions of known types (already in the label markup) and has no Type/Size text in this view.

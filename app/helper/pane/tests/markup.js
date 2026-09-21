@@ -34,7 +34,7 @@ describe("pane markup", function () {
 
   it("accepts the tree view as the list view, and returns null for views not built", function () {
     expect(pane.folder("a.md", { view: "tree" })).not.toBeNull();
-    expect(pane.folder("a.md", { view: "icons" })).toBeNull();
+    expect(pane.folder("a.md", { view: "gallery" })).toBeNull();
   });
 
   it("gives every icon a kind and never uses bitmap chrome", function () {
