@@ -370,8 +370,19 @@ EOF_REMOTE
     info "Restarting Blot Docker containers"
     ssh "$BLOT_HOST" "docker ps --format '{{.Names}}' | grep '^blot-container-' | xargs -r docker restart"
 
-    info "Reloading OpenResty"
-    ssh "$BLOT_HOST" "sudo openresty -t && sudo openresty -s reload"
+    # The proxy container has its own copy of the Redis host (/etc/blot/proxy.env,
+    # fixed when the container is created). Update it, and tell the operator to
+    # replace the container: bare-metal OpenResty reads Redis settings at build time.
+    if ssh "$BLOT_HOST" "docker ps --format '{{.Names}}' | grep -qE '^blot-proxy-(blue|green)\$'"; then
+      info "Updating PROXY_REDIS_HOST in /etc/blot/proxy.env"
+      ssh "$BLOT_HOST" "sudo sed -i.bak 's/^PROXY_REDIS_HOST=.*/PROXY_REDIS_HOST=${private_ip}/' /etc/blot/proxy.env && grep -q '^PROXY_REDIS_HOST=${private_ip}\$' /etc/blot/proxy.env"
+      proxy_image=$(ssh "$BLOT_HOST" "docker ps --format '{{.Names}} {{.Image}}' | grep -E '^blot-proxy-(blue|green) ' | head -1 | cut -d' ' -f2")
+      warn "The proxy container still uses the old Redis host. Replace it NOW:"
+      warn "  ssh ${BLOT_HOST} '~/proxy-deploy/blue-green.sh ${proxy_image}'"
+    else
+      info "Reloading OpenResty"
+      ssh "$BLOT_HOST" "sudo openresty -t && sudo openresty -s reload"
+    fi
   else
     info "Environment update skipped by operator"
   fi

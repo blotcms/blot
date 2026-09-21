@@ -284,7 +284,7 @@ Proxy container (OpenResty) - remaining before it can replace config/openresty:
 - Can the proxy remember bad urls and avoid repeatedly sending them to upstream?
 - Fold proxy/build/sync-config.js container adaptations back into the files once proxy/ is canon (stdout logs, reuseport, ACME CA, health socket)
 - Blue/green hook server: :8999 is in a reuseport group, so during a deploy overlap an ACME hook request can hit the other instance (different secret) - needs per-instance hook routing, not a shared reuseport port
-- Wire proxy/deploy/{blue-green,reload-config}.sh into the real deploy pipeline
+- Run the proxy cutover (proxy/deploy/README.md), then run proxy/deploy/blue-green.sh from a deploy workflow like scripts/deploy (images are published by proxy-image.yml)
 - dehydrated version drift: the proxy image vendors dehydrated 0.7.2 (0.6.5, which lua-resty-auto-ssl pins, is rejected by current ACME servers); bare-metal config/openresty still installs the 0.6.5 pin via luarocks - unify (bump lua-resty-auto-ssl, or vendor 0.7.2 there too)
 - Investigate replacing unmaintained lua-resty-auto-ssl (would also resolve the two items above): lua-resty-acme (keeps OpenResty, drops dehydrated/sockproc/:8999) or issuing from the Blot app into Redis; see proxy/README.md
 - Redis auth/TLS; container equivalent for fail2ban

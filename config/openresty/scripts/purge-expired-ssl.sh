@@ -62,11 +62,23 @@ do
 done
 
 
-echo "Restarting openresty"
+# A restart, not a reload: the certificate cache lives in a shared dict, which
+# survives a reload. Once the proxy runs as a container (proxy/deploy) restart
+# that instead; the bare-metal unit is stopped and must not be started beside it.
+proxy_containers=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^blot-proxy-(blue|green)$' || true)
+if [ -n "$proxy_containers" ]; then
+    echo "Restarting proxy container(s): $proxy_containers"
+    for container in $proxy_containers; do
+        docker restart --time 30 "$container"
+    done
+    echo "Restarted proxy container(s)"
+else
+    echo "Restarting openresty"
 
-sudo systemctl restart openresty
+    sudo systemctl restart openresty
 
-echo "Restarted openresty"
+    echo "Restarted openresty"
+fi
 echo ""
 
 # now we loop over the INVALID_HOSTS and check that the SSL cert is now valid
