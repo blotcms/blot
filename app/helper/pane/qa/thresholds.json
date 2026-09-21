@@ -1,5 +1,5 @@
 {
-  "_comment": "Limits for diff.js. diffPercent is % of compared (unmasked) pixels that differ, per region name or kind (chrome is stricter than text). inkPercent is differing pixels / pixels that are ink in either image, per region. flatDeltaE is the CIE76 colour difference between a region's dominant colours (wrong greys). blurMae is the mean absolute error of blurred images, % of full scale. shadowError is RMSE in luminance levels. sizeDelta is the window size difference in CSS px. rowYOffset is the mean vertical offset of text rows in CSS px. Per-case entries in \"cases\" override the defaults key by key. These start loose so crude fixtures pass or fail meaningfully; tighten as the module improves. macos-light and macos-dark (the built skin) are held to the tightened limits.",
+  "_comment": "Limits for diff.js. diffPercent is % of compared (unmasked) pixels that differ, per region name or kind (chrome is stricter than text). inkPercent is differing pixels / pixels that are ink in either image, per region. flatDeltaE is the CIE76 colour difference between a region's dominant colours (wrong greys). blurMae is the mean absolute error of blurred images, % of full scale. shadowError is RMSE in luminance levels. sizeDelta is the window size difference in CSS px. rowYOffset is the mean vertical offset of text rows in CSS px. Per-case entries in \"cases\" override the defaults key by key. These start loose so crude fixtures pass or fail meaningfully; tighten as the module improves. macos-light and macos-dark (the built skin) are held to the tightened limits, and so are windows-light and windows-dark (measured on the Windows runner, where the reference has ClearType text and the rendering has grayscale, so the text ink limits are looser than macOS's). windows-dark's toolbars have two surfaces of almost the same area (the Mica navigation row and the command bar), so its flat colour is a near tie: a change that flips it shows as a large flatDeltaE without a real colour error.",
   "default": {
     "diffPercent": {
       "overall": 8,
@@ -69,6 +69,52 @@
       "shadowError": 1,
       "sizeDelta": 1,
       "rowYOffset": 1.5
+    },
+    "windows-light": {
+      "diffPercent": {
+        "overall": 2.0,
+        "chrome": 2.1,
+        "text": 2.7
+      },
+      "inkPercent": {
+        "chrome": 35,
+        "text": 48
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.6,
+        "chrome": 0.8,
+        "text": 0.8
+      },
+      "shadowError": 1,
+      "sizeDelta": 1,
+      "rowYOffset": 1
+    },
+    "windows-dark": {
+      "diffPercent": {
+        "overall": 1.8,
+        "chrome": 2.0,
+        "text": 2.5
+      },
+      "inkPercent": {
+        "chrome": 33,
+        "text": 38
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.7,
+        "chrome": 0.7,
+        "text": 1.0
+      },
+      "shadowError": 1,
+      "sizeDelta": 1,
+      "rowYOffset": 1
     }
   }
 }
