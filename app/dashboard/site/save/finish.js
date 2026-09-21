@@ -14,6 +14,9 @@ var dictionary = {
   dateFormat: "Saved changes to the order in which you write your dates",
 };
 
+// N.B. In production this POST runs on green while the page you are redirected
+// to renders on blue (config/openresty/conf/http.conf, $dashboard_upstream).
+// Don't rely on in-process cache invalidation here; see dashboard/site/index.js.
 module.exports = function (req, res, next) {
   var updates = req.updates || {};
   // req.path is relative to the router mount, so fall back to the full

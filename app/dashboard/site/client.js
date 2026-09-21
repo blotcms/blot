@@ -137,6 +137,8 @@ client_routes
     });
   });
 
+// N.B. these reset POSTs run on green, the redirect target renders on blue;
+// see dashboard/site/index.js.
 client_routes.post("/reset/rebuild", function (req, res) {
   Sync(req.blog.id, function (err, folder, done) {
     if (err) {

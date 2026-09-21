@@ -1,5 +1,17 @@
 var express = require("express");
 var site = express.Router();
+
+// N.B. In production a GET/HEAD to /sites/:handle/... is served by blue but any
+// other method (POST etc.) is served by green - see $dashboard_upstream in
+// config/openresty/conf/http.conf. A page load right after a save can therefore
+// run in a different process from the write, so in-process caches (LRUs,
+// memoized lookups) can be stale across the redirect. Key caches on something
+// stored in Redis (e.g. blog.cacheID, which sync bumps, as the folder caches do)
+// rather than relying on in-process invalidation. Sessions, CSRF and Redis reads
+// are already safe across containers. The /import routes are the exception: they
+// run entirely on green because import state lives in per-container temp files.
+// A GET that mutates or does heavy work (e.g. the Dropbox OAuth callback) stays on
+// blue unless pinned: make it a POST, or add a location in blot-site.conf.
 var load = require("./load");
 var save = require("./save");
 var trace = require("helper/trace");
