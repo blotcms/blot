@@ -215,23 +215,56 @@ function stripOtherText (node) {
 // Returns the HTML with the first breakpoint marker removed and all
 // content kept. Called after the teaser is calculated so the marker
 // does not leak into the rendered entry.
+var invisibleToMarker = ["code", "head", "pre", "script", "style"];
+
 function stripBreakPoint (html) {
+  // Cheap precheck: every marker contains "more"
+  if (!html || !/more/i.test(html)) return html;
+
   var $ = cheerio.load(html, { decodeEntities: false }, false);
   var found = false;
+
+  function earliestMarker (text) {
+    var lower = text.toLowerCase();
+    var best = null;
+
+    breakPoints.forEach(function (marker) {
+      var i = lower.indexOf(marker);
+      if (i > -1 && (!best || i < best.index || (i === best.index && marker.length > best.length)))
+        best = { index: i, length: marker.length };
+    });
+
+    return best;
+  }
 
   function walk (nodes) {
     nodes.each(function (i, node) {
       if (found) return false;
 
-      if ($(node).closest("code, head, pre, script, style").length) return;
+      if (node.type === "comment") {
+        if (node.data.trim().toLowerCase() === "more") {
+          found = true;
+          $(node).remove();
+        }
+      } else if (node.type === "text") {
+        var marker = earliestMarker(node.data);
+        if (!marker) return;
 
-      if (isBreakPoint(node) && node.type !== "text") {
         found = true;
-        $(node).remove();
-      } else if (containsBreakPoint(node) || isBreakPoint(node)) {
-        found = true;
-        node.data = stripOtherText(node)[1];
-      } else {
+        node.data =
+          node.data.slice(0, marker.index) +
+          node.data.slice(marker.index + marker.length);
+
+        // The marker was the only content of its element (e.g. <p>{{more}}</p>)
+        var parent = node.parent;
+        if (
+          !node.data.trim() &&
+          parent &&
+          parent.type === "tag" &&
+          parent.children.length === 1
+        )
+          $(parent).remove();
+      } else if (node.type === "tag" && invisibleToMarker.indexOf(node.name) === -1) {
         walk($(node).contents());
       }
     });

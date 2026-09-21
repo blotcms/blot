@@ -93,6 +93,11 @@ describe("teaser parser", function () {
     strip("<p>A<!-- more -->BCD</p>", "<p>ABCD</p>");
     strip("<p>A</p><p>&lt;&lt; more &gt;&gt;</p><p>B</p>", "<p>A</p><p>B</p>");
     strip("Hello {{more}} there {{more}} is...", "Hello  there {{more}} is...");
+    strip("<p>{{more}} <em>After</em></p>", "<p> <em>After</em></p>");
+    strip("<p><!-- more --><em>After</em></p>", "<p><em>After</em></p>");
+    strip("  Before {{more}} After", "  Before  After");
+    strip("Before {{more}} middle &lt;&lt; more &gt;&gt; after", "Before  middle &lt;&lt; more &gt;&gt; after");
+    strip("<p>Explain <code>{{more}}</code> syntax</p>", "<p>Explain <code>{{more}}</code> syntax</p>");
     strip("<p>No marker</p>", "<p>No marker</p>");
     strip("<pre>{{more}}</pre><p>A</p>", "<pre>{{more}}</pre><p>A</p>");
   });
