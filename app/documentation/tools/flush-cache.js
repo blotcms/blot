@@ -1,8 +1,6 @@
 const config = require("config");
 const host = config.host;
-const reverse_proxies = config.reverse_proxies;
-const flushCache = require("helper/flushCache");
-const flush = flushCache({ reverse_proxies });
+const flush = require("helper/flushProxies");
 
 module.exports = () => {
   flush(host)
