@@ -212,4 +212,36 @@ function stripOtherText (node) {
   }
 }
 
+// Returns the HTML with the first breakpoint marker removed and all
+// content kept. Called after the teaser is calculated so the marker
+// does not leak into the rendered entry.
+function stripBreakPoint (html) {
+  var $ = cheerio.load(html, { decodeEntities: false }, false);
+  var found = false;
+
+  function walk (nodes) {
+    nodes.each(function (i, node) {
+      if (found) return false;
+
+      if ($(node).closest("code, head, pre, script, style").length) return;
+
+      if (isBreakPoint(node) && node.type !== "text") {
+        found = true;
+        $(node).remove();
+      } else if (containsBreakPoint(node) || isBreakPoint(node)) {
+        found = true;
+        node.data = stripOtherText(node)[1];
+      } else {
+        walk($(node).contents());
+      }
+    });
+  }
+
+  walk($.root().contents());
+
+  return found ? $.html() : html;
+}
+
+makeTeaser.stripBreakPoint = stripBreakPoint;
+
 module.exports = makeTeaser;
