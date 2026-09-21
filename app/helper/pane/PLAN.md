@@ -222,6 +222,33 @@ Scripts are in `screenshots/`. Findings from the first runs:
   `resources/<os>/README.md` documents how each was captured, and CI puts logs in
   `resources/<os>/capture-logs/`. Only @2x is committed (see `reference/README.md`).
 
+## Fresh dates (decided, not built yet)
+
+The docs are rendered once per deploy (`RUN node app/documentation/build` in the Dockerfile,
+`build/html.js` runs the transformers), so the windows can show dates relative to the build
+time without any runtime work: every visitor sees the same static HTML until the next deploy.
+
+- **`now` is the build timestamp.** The docs build passes one `now` per build process (captured
+  once at start, never per page or per call, so all pages agree) through
+  `pane.transform($, { now })` down to `folder()`. Times are formatted in UTC. The
+  QA harness and the screenshot tooling keep the constant default, so their output stays
+  deterministic. Tests pass an explicit `now`.
+- **Staleness is accepted:** dates are "as of the last deploy". No build argument to force a rebuild.
+- **Recency-weighted invented dates**, replacing the uniform 1 to 900 days back: rank the rows
+  by hash (stable for a given folder), then give the first rank "hours ago today", the next
+  "yesterday", a few more "this week", some "this month", and the rest up to about 18 months back.
+  Never later than `now`. Ranking (not a per-file hash) guarantees even a two-file folder shows
+  something recent.
+- **Relative dates in the source** as the date column: `Apple.md | 2 KB | 3d`, meaning three
+  days before `now`. Units `m`, `h`, `d`, `w`, `mo`, `y`, plus `today` and `yesterday`.
+  Absolute dates stay verbatim (`Mar 3, 2024`).
+- **Deferred:** add files at -1 and -5 days to the capture fixture, so each OS's "Yesterday"
+  and weekday formats are seen in a real capture (Finder and GNOME Files use them, Explorer does
+  not) and `lib/format.js` can be checked against them. Do this after the Windows and Linux skins
+  are merged, since it changes their references.
+- **Order of work:** after the Windows and Linux skins land (they edit `lib/format.js` and
+  `lib/markup.js` too), then the fixture change.
+
 ## Later
 
 - Locale-aware dates/sizes (English formats only for now).
