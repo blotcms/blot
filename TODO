@@ -1,6 +1,7 @@
-Can local worktrees for agents get their own docker compose ups on their own branch-subdomains which I can view and interact with?
-- share redis / nginx / data dir -> ?
-- get their own node container
+Worktree preview stacks so local agents don't need a dupe-branch checkout
+- Plan: scripts/development/worktrees.md
+- Each worktree: own node container on https://<slug>.wt.local.blot
+- Share redis, nginx, data dir, airlock; sidecar is not master
 
 Make sure next bill amount is in all billing emails to customers
 
