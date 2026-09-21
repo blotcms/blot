@@ -1,6 +1,6 @@
 # Linux (GNOME Files / Nautilus) capture notes
 
-Runner `ubuntu-latest`: Ubuntu 24.04, GNOME Files (Nautilus) 46.4, libadwaita 1.5. That
+Runner `ubuntu-24.04` (pinned; see `screenshots/UPDATING-OS.md`; `ubuntu-26.04` exists): Ubuntu 24.04, GNOME Files (Nautilus) 46.4, libadwaita 1.5. That
 is one release behind the newest GNOME; use a newer runner image when one appears.
 Script: `screenshots/linux.sh`.
 
@@ -9,6 +9,17 @@ Xvfb (2560x2400) plus `openbox` (a window manager is needed for keyboard focus) 
 `dbus-run-session`. Packages that matter: `nautilus`, `librsvg2-common`,
 `adwaita-icon-theme-full`, `shared-mime-info` (without them icons are broken),
 `xdotool`, `imagemagick`, `x11-xserver-utils`.
+
+## Font
+The UI font is set explicitly to `Cantarell 11` (stock GNOME's) in `linux.sh`, through
+`~/.config/gtk-{3,4}.0/settings.ini` (`gtk-font-name`). Setting only the gsettings `font-name`
+is NOT enough: there is no settings daemon under Xvfb, GTK falls back to its default "Sans",
+and fontconfig maps that to DejaVu Sans (wider than anything a GNOME user sees). The captures
+were in DejaVu until this was fixed. `capture-logs/*/fonts.txt` shows what gsettings and
+fontconfig resolve, but only the screenshot shows what GTK actually used: look at the digits
+and the letter shapes (Cantarell is narrower than DejaVu). The
+monospace font of the editor windows (`-code`) is separate (`monospace-font-name`) and has
+not been set yet.
 
 ## Themes
 Real libadwaita dark mode needs `ADW_DEBUG_COLOR_SCHEME=prefer-dark` (and the

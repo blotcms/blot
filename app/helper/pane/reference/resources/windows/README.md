@@ -1,6 +1,6 @@
 # Windows (File Explorer) capture notes
 
-Runner `windows-latest`: Windows Server 2025 (build 26100), which has the Windows 11
+Runner `windows-2025` (pinned; see `screenshots/UPDATING-OS.md`): Windows Server 2025 (build 26100), which has the Windows 11
 style Explorer (tabs, command bar, Mica title bar). A "Test Mode / Windows Server 2025"
 watermark sits at the bottom right of the screen; the capture is cropped to avoid it.
 `windows-11-arm` was tried and is stuck on the first-run setup screen. Script:
