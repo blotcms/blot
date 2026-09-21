@@ -57,7 +57,10 @@ cat > "$T/bin/curl" <<'F'
 #!/usr/bin/env bash
 echo "curl $*" >> "$FAKE/calls"
 args="$*"
-if [[ "$args" == *"/health"* ]]; then printf 200; exit 0; fi
+if [[ "$args" == *"/health"* ]]; then
+  if [ -n "${FAKE_UPSTREAM_DOWN:-}" ] && [[ "$args" == *":$FAKE_UPSTREAM_DOWN/"* ]]; then printf 000; exit 7; fi
+  printf 200; exit 0
+fi
 port=443; [[ "$args" =~ :443:127.0.0.1:([0-9]+) ]] && port="${BASH_REMATCH[1]}"
 if [ "$port" = 18443 ]; then printf '%s' "${FAKE_REHEARSAL_CODE:-200}"; exit 0; fi
 case "$(cat "$FAKE/serving")" in
@@ -75,10 +78,14 @@ echo "systemctl $*" >> "$FAKE/calls"
 case "$1" in
   is-active) [ -e "$FAKE/unit_active" ] ;;
   stop) rm -f "$FAKE/unit_active"; echo none > "$FAKE/serving" ;;
-  start) touch "$FAKE/unit_active"; echo baremetal > "$FAKE/serving" ;;
+  start) [ -z "${FAKE_BM_START_FAILS:-}" ] || exit 1; touch "$FAKE/unit_active"; echo baremetal > "$FAKE/serving" ;;
   disable) touch "$FAKE/unit_disabled"; [ -z "${FAKE_DISABLE_FAILS:-}" ] || exit 1 ;;
   enable) rm -f "$FAKE/unit_disabled" ;;
 esac
+F
+cat > "$T/bin/timeout" <<'F'
+#!/usr/bin/env bash
+[ -z "${FAKE_REDIS_DOWN:-}" ]
 F
 cat > "$T/bin/sudo" <<'F'
 #!/usr/bin/env bash
@@ -210,6 +217,15 @@ for bad in abc -5 1.5 ""; do
   check "invalid soak '$bad': refused before anything runs" '[ $RC != 0 ] && ! called "systemctl stop" && ! called "docker"'
 done
 
+reset baremetal; FAKE_CONTAINER_CODE=502 FAKE_BM_START_FAILS=1 cutover
+check "rollback cannot start bare-metal: the container is started again and kept" '[ $RC != 0 ] && after_last "docker start blot-proxy-blue" "docker stop" && ! after_last "docker rm -f blot-proxy-blue" "docker stop"'
+
+reset baremetal; FAKE_REDIS_DOWN=1 cutover
+check "Redis unreachable after the cutover: rolls back" '[ $RC != 0 ] && serving baremetal && mentions "Redis"'
+
+reset baremetal; FAKE_UPSTREAM_DOWN=8089 cutover
+check "an upstream is down: refused before anything changes" '[ $RC != 0 ] && ! called "systemctl stop"'
+
 echo "blue-green.sh"
 
 reset container; bluegreen
@@ -236,6 +252,15 @@ check "fresh start: checked, then made permanent" '[ $RC = 0 ] && before "docker
 
 reset none; FAKE_CONTAINER_CODE=502 bluegreen
 check "fresh start whose site does not answer 200: removed, never made permanent" '[ $RC != 0 ] && ! called "docker update" && after_last "docker rm -f blot-proxy-blue" "docker start blot-proxy-blue"'
+
+reset container; FAKE_REDIS_DOWN=1 bluegreen
+check "Redis unreachable after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm blot-proxy-blue"'
+
+reset container; FAKE_UPSTREAM_DOWN=8089 bluegreen
+check "master upstream unreachable after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm blot-proxy-blue"'
+
+reset container; touch "$FAKE/running/blot-proxy-green" "$FAKE/all/blot-proxy-green"; bluegreen
+check "both colours running: refused, nothing touched" '[ $RC != 0 ] && ! called "docker create" && ! called "docker stop" && ! called "docker rm" && mentions "both running"'
 
 reset container; FAKE_PURGE_FAIL=1 bluegreen
 check "purge endpoint lost after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue"'

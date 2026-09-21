@@ -180,8 +180,10 @@ purge_urls() {
 }
 
 # Blot purges the proxy cache from inside a Node container, which sits on a
-# Docker bridge and cannot see the host's 127.0.0.1. Any HTTP answer (even a
-# 404) proves the address in BLOT_REVERSE_PROXY_URLS reaches a proxy.
+# Docker bridge and cannot see the host's 127.0.0.1. The probe sends the Node
+# container's own BLOT_PURGE_TOKEN (as the app does) to the listener's root: an
+# authorised request gets the listener's 404, an unreachable address or a
+# rejected token (403, a token mismatch between Node and the proxy) fails.
 purge_reachable() {
   local url urls
   urls="$(purge_urls)"
@@ -190,16 +192,40 @@ purge_reachable() {
     docker exec "$NODE_CONTAINER" node -e '
       const u = new URL(process.argv[1]);
       require(u.protocol === "https:" ? "https" : "http")
-        .get(u, { timeout: 5000 }, (r) => { r.resume(); process.exit(0); })
+        .get(u, { timeout: 5000, headers: process.env.BLOT_PURGE_TOKEN
+          ? { "X-Blot-Purge-Token": process.env.BLOT_PURGE_TOKEN } : {} },
+          (r) => { r.resume(); process.exit(r.statusCode === 404 || r.statusCode === 200 ? 0 : 1); })
         .on("timeout", function () { this.destroy(); process.exit(1); })
         .on("error", () => process.exit(1));
-    ' "$url" || { log "purge endpoint $url is not reachable from $NODE_CONTAINER"; return 1; }
+    ' "$url" || { log "purge endpoint $url is not reachable from $NODE_CONTAINER, or rejects its BLOT_PURGE_TOKEN"; return 1; }
   done <<< "$urls"
+}
+
+# Redis holds the custom-domain certificates and allowlist; none of the hosts
+# checked above needs it, so probe it directly (host networking: the container
+# sees what the host sees).
+redis_reachable() {
+  timeout 5 bash -c "</dev/tcp/$REDIS_HOST/6379" 2>/dev/null \
+    || { log "the proxy cannot reach Redis at $REDIS_HOST:6379"; return 1; }
+}
+
+# The webhook route goes straight to the master upstream (PROXY_UPSTREAM_GREEN)
+# and no checked host exercises it, so probe every configured upstream.
+upstreams_reachable() {
+  local var default addr
+  for var in BLUE:127.0.0.1:8088 GREEN:127.0.0.1:8089 YELLOW:127.0.0.1:8090; do
+    default="${var#*:}"
+    addr="$(env_value "$ENV_FILE" "PROXY_UPSTREAM_${var%%:*}")"
+    addr="${addr:-$default}"
+    [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://$addr/health" || true)" = 200 ] \
+      || { log "upstream $addr (PROXY_UPSTREAM_${var%%:*}) is not healthy"; return 1; }
+  done
 }
 
 # Every checked host answers as it did before ($1, from snapshot; empty = no
 # baseline, so every host must answer 200), the certificate served is the one
-# on disk, and Node can still reach the purge endpoint.
+# on disk, Node can still reach the purge endpoint, and Redis and every
+# upstream are reachable.
 live_checks() { # live_checks <expected-snapshot | ""> [port]
   local got
   got=$(snapshot "${2:-443}")
@@ -211,4 +237,6 @@ live_checks() { # live_checks <expected-snapshot | ""> [port]
   served_cert_matches_disk "${2:-443}" \
     || { log "the certificate served is not $CERT_DIR/letsencrypt-domain.pem"; return 1; }
   purge_reachable || return 1
+  redis_reachable || return 1
+  upstreams_reachable || return 1
 }

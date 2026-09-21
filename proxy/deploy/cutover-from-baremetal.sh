@@ -88,11 +88,12 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
-# Put bare-metal back. Only `docker rm -f` and `systemctl start`: fast, and
-# each step is retried by hand from the message if it fails.
+# Put bare-metal back. The container is stopped, not removed: bare-metal cannot
+# bind :80/:443 beside it, but until bare-metal answers it is the only working
+# proxy, so if the fallback fails it is started again and kept for the operator.
 rollback() {
   log "ROLLING BACK to bare-metal OpenResty"
-  docker rm -f "$NEW" >/dev/null 2>&1 || true
+  docker stop --time 10 "$NEW" >/dev/null 2>&1 || true
   # finalizing had started: the unit must come back enabled or the next reboot
   # starts neither proxy
   if [ "$DISABLED" = 1 ]; then
@@ -101,10 +102,15 @@ rollback() {
   sys systemctl start openresty || log "WARNING: could not start openresty: run 'sudo systemctl start openresty' NOW"
   local i
   for i in $(seq 1 30); do
-    [ "$(https_status "$BLOT_HOST")" = 200 ] && { log "Bare-metal OpenResty is serving again."; PHASE=preflight; return 0; }
+    if [ "$(https_status "$BLOT_HOST")" = 200 ]; then
+      docker rm -f "$NEW" >/dev/null 2>&1 || true
+      log "Bare-metal OpenResty is serving again."; PHASE=preflight; return 0
+    fi
     nap 1
   done
-  log "WARNING: bare-metal OpenResty is not answering 200: check 'systemctl status openresty' NOW"
+  log "WARNING: bare-metal OpenResty is not answering 200: starting $NEW again and keeping it. Check 'systemctl status openresty' NOW"
+  sys systemctl stop openresty >/dev/null 2>&1 || true
+  docker start "$NEW" >/dev/null 2>&1 || log "WARNING: could not start $NEW either: no proxy is serving"
   PHASE=preflight
   return 1
 }

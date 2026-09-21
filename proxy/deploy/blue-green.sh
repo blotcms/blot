@@ -53,6 +53,11 @@ load_env
 [ -d "$CACHE_DIR" ] || die "cache directory $CACHE_DIR does not exist"
 [ -d "$LOG_DIR" ] || die "log directory $LOG_DIR does not exist"
 
+if running blot-proxy-blue && running blot-proxy-green; then
+  # e.g. a rollback that kept the new colour because the old one would not come
+  # back: by name alone we might remove the one that is actually healthy.
+  die "blot-proxy-blue and blot-proxy-green are both running: stop the unhealthy one by hand first"
+fi
 if running blot-proxy-blue; then
   OLD=blot-proxy-blue; NEW=blot-proxy-green
 elif running blot-proxy-green; then
