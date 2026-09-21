@@ -65,13 +65,16 @@ async function lock(blogID, options = {}) {
   const timer = setInterval(async () => {
     if (released || compromised) return;
     let err;
+    // Redis starts the new TTL when it runs the script, so measure from
+    // before the round trip; a delayed reply must not lengthen our lease.
+    const attemptedAt = Date.now();
     try {
       const ok = await client.eval(EXTEND, {
         keys: [lockKey],
         arguments: [token, String(ttl)],
       });
       if (ok) {
-        lastExtended = Date.now();
+        lastExtended = attemptedAt;
         return;
       }
       err = new Error("Lock was lost: " + lockKey);
@@ -95,7 +98,17 @@ async function lock(blogID, options = {}) {
       if (released) return;
       released = true;
       clearInterval(timer);
-      await client.eval(RELEASE, { keys: [lockKey], arguments: [token] });
+      const deleted = await client.eval(RELEASE, {
+        keys: [lockKey],
+        arguments: [token],
+      });
+      if (!deleted && !compromised) {
+        compromised = true;
+        const err = new Error("Lock was lost before release: " + lockKey);
+        err.code = "ECOMPROMISED";
+        onCompromised(err);
+        throw err;
+      }
     },
   };
 }

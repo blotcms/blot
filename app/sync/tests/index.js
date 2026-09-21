@@ -180,3 +180,28 @@ describe("sync folder lock", function () {
     expect(err.code).toEqual("ECOMPROMISED");
   });
 });
+
+describe("sync folder lock release", function () {
+  const folderLock = require("../lock");
+  const client = require("models/client");
+
+  global.test.blog();
+
+  it("reports compromise when the lock is gone at release", async function () {
+    let compromised;
+    const lock = await folderLock.lock(this.blog.id, {
+      heartbeat: 60 * 1000,
+      onCompromised: (err) => (compromised = err),
+    });
+    await client.del(folderLock.key(this.blog.id));
+
+    let error;
+    try {
+      await lock.release();
+    } catch (e) {
+      error = e;
+    }
+    expect(error && error.code).toEqual("ECOMPROMISED");
+    expect(compromised && compromised.code).toEqual("ECOMPROMISED");
+  });
+});

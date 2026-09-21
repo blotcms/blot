@@ -163,7 +163,14 @@ function sync(blogID, callback) {
           // We could do these next two things in parallel
           // but it's a little bit of refactoring...
           log("Releasing lock");
-          await release();
+          try {
+            await release();
+          } catch (releaseError) {
+            // Redis unreachable or the lock was already lost. Never leave
+            // the caller's callback pending; surface the failure instead.
+            log("Failed to release lock", releaseError.message);
+            return callback(syncError || releaseError);
+          }
           log("Finished sync");
 
           if (!changes) {
