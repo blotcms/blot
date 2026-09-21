@@ -7,37 +7,37 @@
 padding:4px;border:1px solid var(--o1);border-radius:12px;color:var(--fg);
 /* outer edge, 3px ring, 1px inner line, then the content: all inner edges are square */
 background:linear-gradient(var(--bg),var(--bg)) 4px 4px/calc(100% - 8px) calc(100% - 8px) no-repeat,linear-gradient(var(--o2),var(--o2)) 3px 3px/calc(100% - 6px) calc(100% - 6px) no-repeat var(--ring);
-font:13.33px/20px Cantarell,"Adwaita Sans",system-ui,sans-serif}
+font:14.67px/20px Cantarell,"Adwaita Sans",system-ui,sans-serif}
 /* header bar: sidebar button, path pill, search, window buttons (glyphs are one mask sprite each) */
-.pane .pane-bar{isolation:isolate;height:47px;padding-left:155.5px;font-weight:700;line-height:47px;white-space:nowrap;
+.pane .pane-bar{isolation:isolate;height:47px;padding-left:153px;font-weight:700;line-height:47px;white-space:nowrap;
 background:radial-gradient(circle 12px at calc(100% - 97px) 23px,var(--btn) 11.5px,transparent 12px),radial-gradient(circle 12px at calc(100% - 60px) 23px,var(--btn) 11.5px,transparent 12px),radial-gradient(circle 12px at calc(100% - 23px) 23px,var(--btn) 11.5px,transparent 12px)}
-.pane .pane-bar::before{content:"Home";position:absolute;left:46px;right:160px;top:6px;height:34px;box-sizing:border-box;padding-left:36px;border-radius:6px;background:var(--btn);color:var(--dim);line-height:34px;z-index:-1}
+.pane .pane-bar::before{content:"Home";position:absolute;left:46px;right:160px;top:6px;height:34px;box-sizing:border-box;padding-left:35px;border-radius:6px;background:var(--btn);color:var(--dim);line-height:34px;z-index:-1}
 .pane .pane-bar::after{content:"";position:absolute;inset:0;
 background:linear-gradient(90deg,var(--fg) 45px,var(--dim) 45px 150px,var(--fg) 150px);
 -webkit-mask:url(icon:linux/bar-l) 15px 16px no-repeat,url(icon:linux/crumb) 46px 6px no-repeat,url(icon:linux/bar-r) right top no-repeat;
 mask:url(icon:linux/bar-l) 15px 16px no-repeat,url(icon:linux/crumb) 46px 6px no-repeat,url(icon:linux/bar-r) right top no-repeat}
 /* column headers */
-.pane .pane-head{height:41px;font-weight:700;font-size:11.6px;color:var(--head)}
+.pane .pane-head{height:41px;font-weight:700;font-size:12px;color:var(--head)}
 .pane .pane-head i{box-sizing:border-box;height:27px;line-height:27px}
-.pane .pane-head i:nth-child(1){width:237.5px;padding-left:30.5px}
-.pane .pane-head i:nth-child(2){width:85px;order:2}
-.pane .pane-head i:nth-child(3){width:80px;order:1}
+.pane .pane-head i:nth-child(1){width:242px;padding-left:30.5px}
+.pane .pane-head i:nth-child(2){width:82px;order:2}
+.pane .pane-head i:nth-child(3){width:77px;order:1}
 .pane .pane-head i:nth-child(1)::before{content:"Name"}
 .pane .pane-head i:nth-child(2)::before{content:"Modified"}
 .pane .pane-head i:nth-child(3)::before{content:"Size"}
-.pane .pane-head i:nth-child(1)::after{content:"";position:absolute;left:77px;top:11px;width:12px;height:6px;background:var(--head);transform:scaleY(-1);-webkit-mask:var(--g-tri) center/12px 6px no-repeat;mask:var(--g-tri) center/12px 6px no-repeat}
+.pane .pane-head i:nth-child(1)::after{content:"";position:absolute;left:71px;top:11px;width:12px;height:6px;background:var(--head);transform:scaleY(-1);-webkit-mask:var(--g-tri) center/12px 6px no-repeat;mask:var(--g-tri) center/12px 6px no-repeat}
 /* rows */
 .pane .pane-tree{margin-bottom:47px;scrollbar-width:none}
 .pane .pane-tree::-webkit-scrollbar{display:none}
 .pane .pane-tree[tabindex]{background:linear-gradient(var(--thumb),var(--thumb)) right 3px top 0/3px 175px no-repeat}
 .pane .pane-row{height:52px}
-.pane .pane-label{height:52px;line-height:52px;width:237.5px;padding-left:calc(84px + var(--x,0px))}
+.pane .pane-label{height:52px;line-height:52px;width:242px;padding-left:calc(84px + var(--x,0px))}
 .pane .pane-icon{left:calc(46px + var(--x,0px));width:32px;height:32px;margin-top:-16px}
 .pane .pane-open .pane-label::before{content:"";position:absolute;left:calc(32px + var(--x,0px));top:23px;width:12px;height:6px;background:var(--fg);-webkit-mask:var(--g-tri) center/12px 6px no-repeat;mask:var(--g-tri) center/12px 6px no-repeat}
 .pane .pane-row::after{content:"";position:absolute;left:425px;top:18px;width:16px;height:16px;background:var(--star);-webkit-mask:var(--g-star) center/16px no-repeat;mask:var(--g-star) center/16px no-repeat}
 .pane .pane-cell{color:var(--dim)}
-.pane .pane-s{width:80px;order:1}
-.pane .pane-d{width:85px;text-align:right;order:2}
+.pane .pane-s{width:77px;order:1}
+.pane .pane-d{width:82px;text-align:right;order:2}
 .pane [data-os=linux]{display:inline}
 .pane .pane-k-folder{background-image:url(icon:linux/folder)}
 .pane .pane-k-text,.pane .pane-k-generic{background-image:var(--i-text)}
