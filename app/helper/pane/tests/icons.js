@@ -103,7 +103,9 @@ describe("pane icons view skins", function () {
 
   it("joins the tokens of the skin's files instead of gluing them together", function () {
     const out = pane.assets().css;
-    expect(out).toContain("--pill-sh:rgba(0,0,0,.13);--ish:");
+    // mac.css, mac-editor.css, mac-icons.css, in name order: each block's last token is followed by the next block's first
+    expect(out).toContain("--pill-sh:rgba(0,0,0,.13);--ed-fg:");
+    expect(out).toContain("--tok-v:currentColor;--ish:");
     expect(out).not.toContain(";;");
   });
 });
