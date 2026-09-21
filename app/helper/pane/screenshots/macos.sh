@@ -198,6 +198,9 @@ done
 # dialog ended up in the capture, so the page is a real site instead.)
 close_finder() { osascript -e 'tell application "Finder" to close every window' >>"$OUT/browser.log" 2>&1; }
 close_finder
+# TextEdit's windows from the editor captures are still open at this same position (closing them
+# through AppleScript times out, -1712), and showed behind Safari: force-quit it.
+pkill -x TextEdit; sleep 2
 open -a Safari "https://example.com/"; sleep 10
 # One Safari window only (a start page or restored window would show behind it). Safari's own
 # AppleEvents time out here (-1712), so use System Events: press the close button of window 2.
@@ -215,7 +218,7 @@ place() {  # size the window (System Events), read it back into L T R B
   osascript >>"$OUT/browser.log" 2>&1 <<OSA
 tell application "System Events" to tell process "Safari"
   set frontmost to true
-  set position of window 1 to {170, 170}  -- DEBUG: 20pt off the usual 150,150 to expose what is behind
+  set position of window 1 to {150, 150}
   set size of window 1 to {600, 400}
 end tell
 OSA
@@ -270,7 +273,7 @@ place   # the sheet widened the window; put it back
 close_finder
 osascript -e 'tell application "System Events" to return (name of every process whose visible is true)' >>"$OUT/browser.log" 2>&1
 sleep 2
-# DEBUG: every window on screen (owner, name, position, size), and the whole screen
+# every window on screen (owner, name, position, size), and the whole screen, for the capture logs
 osascript >>"$OUT/browser-windows.log" 2>&1 <<OSA
 tell application "System Events"
   repeat with p in (every process whose background only is false)

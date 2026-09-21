@@ -60,8 +60,8 @@ Safari, sized 600x400pt (deliberately small; a browser window is mostly chrome),
 work well: an HTTP server made macOS ask "Allow Python to find devices on local networks?"
 (the dialog landed in the capture), and a `file://` address is long and ugly. Safari's compact
 layout (Tahoe) has no tab bar. Extra Safari windows are closed and Finder's windows are closed
-right before the capture (the Finder window from the earlier captures otherwise peeks out from
-behind at the same position). The sidebar / tab group button is dragged off the toolbar through
+right before the capture, and TextEdit is force-quit (its two editor windows stay open at the same position and showed
+behind Safari; closing them through AppleScript times out). The sidebar / tab group button is dragged off the toolbar through
 View > Customize Toolbar with `cliclick`, like Finder's column dividers (there is no documented
 preference for it); `debug-safari*.png` and `browser.log` in the capture logs show each step.
 
