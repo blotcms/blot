@@ -109,7 +109,7 @@ validate_image() { # validate_image <image>
 image_logs_to_file() { # image_logs_to_file <image>
   docker run --rm --entrypoint bash --env-file "$ENV_FILE" \
     -e PROXY_FETCH_CDN_IPS=false "$1" \
-    -c 'render-config >/dev/null && grep -q "^access_log /var/log/openresty/access.log" /usr/local/openresty/nginx/conf/nginx.conf'
+    -c 'render-config >/dev/null && grep -Eq "^[[:space:]]*access_log /var/log/openresty/access.log" /usr/local/openresty/nginx/conf/nginx.conf'
 }
 
 # The container answers on a per-container Unix socket, so during a blue/green

@@ -108,7 +108,7 @@ jobs:
               set -e
               render-config
               /usr/local/openresty/bin/openresty -t
-              grep -q "^access_log /var/log/openresty/access.log" /usr/local/openresty/nginx/conf/nginx.conf
+              grep -Eq "^[[:space:]]*access_log /var/log/openresty/access.log" /usr/local/openresty/nginx/conf/nginx.conf
             '
 
   manifest-proxy:
