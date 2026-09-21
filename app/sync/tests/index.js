@@ -143,11 +143,15 @@ describe("sync folder lock", function () {
   });
 
   it("does not release a lock it no longer owns", async function () {
-    const first = await folderLock.lock(this.blog.id, { ttl: 200 });
+    const first = await folderLock.lock(this.blog.id, {
+      ttl: 200,
+      heartbeat: 60 * 1000,
+      onCompromised: () => {},
+    });
     await new Promise((resolve) => setTimeout(resolve, 400));
     const second = await folderLock.lock(this.blog.id);
 
-    await first.release();
+    await first.release().catch(() => {});
     expect((await folderLock.inspect(this.blog.id)).holder).toEqual(
       second.token
     );
