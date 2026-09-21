@@ -243,12 +243,13 @@ time without any runtime work: every visitor sees the same static HTML until the
   days before `now`. Units `m`, `h`, `d`, `w`, `mo`, `y`, plus `today` and `yesterday`.
   Absolute dates stay verbatim (`Mar 3, 2024`).
 - **Built:** `lib/format.js` (`isoNow`, `resolveAge`, `inventDates`; `formatDate` knows today,
-  yesterday and the weekday), `lib/markup.js`, `pane.transform($, { now })`, `tests/dates.js`.
+  and yesterday), `lib/markup.js`, `pane.transform($, { now })`, `tests/dates.js`.
 - **Fixture:** `make-fixture.sh` and `windows.ps1` now date files today, yesterday, 5 days back, then
-  further, so the references show each OS's forms. **To verify** once the recapture lands: Finder's
-  "Yesterday" and GNOME's "Yesterday HH:MM" / "Wed HH:MM" in `formatDate` are from memory, not from
-  captures (the date columns are masked in QA, so this is by eye), and the masks
-  (`qa/lib/cases.js`) must still cover the widest new text.
+  further, so the references show each OS's forms. **Verified against the recapture:** Finder shows
+  "Yesterday", then `9/16/26`; GNOME shows `Yesterday 11:35`, then `16 Sep 2026` (no weekday names).
+  GNOME also widens the Modified column by 22px (Name narrower, Size shifted left) when a row says
+  Yesterday: `folder()` adds the class `pane-yd` and `linux.css` applies the measured widths. The date
+  columns are still masked in QA, so the masks (`qa/lib/cases.js`) must cover the widest new text.
 
 ## Docs integration (built)
 

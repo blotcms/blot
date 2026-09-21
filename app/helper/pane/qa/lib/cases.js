@@ -51,7 +51,7 @@ function defaultMasks(os, view) {
     return [{ name: "date-column", kind: "time", x: 278, y: 165, w: 136, h: 150 }];
   }
   if (os === "linux" && (view === "default" || view === "sidebar")) {
-    return [{ name: "date-column", kind: "time", right: 74, y: 76, w: 100, h: 380 }];
+    return [{ name: "date-column", kind: "time", right: 74, y: 76, w: 126, h: 380 }];
   }
   return [];
 }

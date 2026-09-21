@@ -36,6 +36,9 @@ mask:url(icon:linux/bar-l) 15px 16px no-repeat,url(icon:linux/crumb) 46px 6px no
 .pane .pane-open .pane-label::before{content:"";position:absolute;left:calc(32px + var(--x,0px));top:23px;width:12px;height:6px;background:var(--fg);-webkit-mask:var(--g-tri) center/12px 6px no-repeat;mask:var(--g-tri) center/12px 6px no-repeat}
 .pane .pane-row::after{content:"";position:absolute;left:425px;top:18px;width:16px;height:16px;background:var(--star);-webkit-mask:var(--g-star) center/16px no-repeat;mask:var(--g-star) center/16px no-repeat}
 .pane .pane-cell{padding-top:1px;color:var(--dim)}
+/* a "Yesterday" date: the Modified column is 22px wider, Name 22px narrower (measured from the capture) */
+.pane.pane-yd .pane-label,.pane.pane-yd .pane-head i:nth-child(1){width:220px}
+.pane.pane-yd .pane-d,.pane.pane-yd .pane-head i:nth-child(2){width:104px}
 .pane .pane-s{width:77px;order:1}
 .pane .pane-d{width:82px;text-align:right;order:2}
 .pane [data-os=linux]{display:inline}

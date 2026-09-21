@@ -4,7 +4,7 @@ describe("pane markup", function () {
   const html = pane.folder("Fruits\n  Apple.md\nAbout.txt", { title: "Your site" }).html;
 
   it("is a figure with aria-hidden chrome and a nested list", function () {
-    expect(html).toMatch(/^<figure class="pane"/);
+    expect(html).toMatch(/^<figure class="pane[ "]/);
     expect(html).toContain('<div class="pane-bar" aria-hidden="true">Your site</div>');
     expect(html).toContain('<div class="pane-head" aria-hidden="true">');
     expect(html).toContain('<li><span class="pane-row pane-open">');

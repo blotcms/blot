@@ -33,13 +33,23 @@ function folder(tree, options = {}) {
   const invented = inventDates(paths(nodes), now);
   let row = 0; // visible row index, for the stripes
 
-  const cells = (node) => {
-    const meta = files[node.name] || { bytes: inventSize(node.path), modified: invented[node.path] };
-    const [given, written] = node.cols;
-    // a written date is either an age ("3d", "yesterday"), formatted per OS relative to now, or shown as written
+  // a written date is either an age ("3d", "yesterday"), formatted per OS relative to now, or shown as written
+  const dateOf = (node, os) => {
+    const meta = files[node.name] || { modified: invented[node.path] };
+    const [, written] = node.cols;
     const age = written ? resolveAge(written, now) : null;
+    return age ? formatDate(age, os, now) : written ? written : formatDate(meta.modified, os, now);
+  };
+  const allNodes = (ns) => ns.flatMap((x) => [x, ...allNodes(x.children)]);
+  // GNOME Files widens the Modified column to fit "Yesterday 11:35" and moves Size left; the
+  // skin needs to know (class pane-yd), because CSS can't measure the column's widest text
+  const widerDates = (pin === null || pin === "linux") && allNodes(nodes).some((n) => dateOf(n, "linux").startsWith("Yesterday"));
+
+  const cells = (node) => {
+    const meta = files[node.name] || { bytes: inventSize(node.path) };
+    const given = node.cols[0];
     const size = (os) => (given ? given : node.folder ? formatFolderSize(node.children.length, os) : formatSize(meta.bytes, os));
-    const date = (os) => (age ? formatDate(age, os, now) : written ? written : formatDate(meta.modified, os, now));
+    const date = (os) => dateOf(node, os);
     const type = (os) => formatType(node.name, node.folder, os);
     // Type is emitted only where a skin can show it (not for a window pinned to macOS)
     const typeCell = !pin || TYPE_OS.includes(pin) ? `<span class="pane-cell pane-t">${perOs(type, pin, TYPE_OS)}</span>` : "";
@@ -80,7 +90,7 @@ function folder(tree, options = {}) {
   const body = list(nodes, ` class="pane-tree"${scrolls ? ` tabindex="0" aria-label="${escape(title)}"` : ""}`);
   const size = [options.width && `--pane-w:${escape(options.width)}`, options.height && `--pane-h:${escape(options.height)}`].filter(Boolean).join(";");
   return (
-    `<figure class="pane" data-view="list"${pin ? ` data-pin="${pin}"` : ""}${theme ? ` data-theme="${theme}"` : ""}${size ? ` style="${size}"` : ""} aria-label="${escape(title)}">` +
+    `<figure class="pane${widerDates ? " pane-yd" : ""}" data-view="list"${pin ? ` data-pin="${pin}"` : ""}${theme ? ` data-theme="${theme}"` : ""}${size ? ` style="${size}"` : ""} aria-label="${escape(title)}">` +
     `<div class="pane-bar" aria-hidden="true">${escape(title)}</div><div class="pane-head" aria-hidden="true"><i></i><i></i><i></i></div>` +
     body +
     "</figure>"

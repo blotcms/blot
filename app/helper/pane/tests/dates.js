@@ -80,23 +80,22 @@ describe("pane ages written in the source", function () {
     const dates = (os) => $(`.pane-d [data-os=${os}]`).toArray().map((e) => $(e).text());
     expect(dates("mac")).toEqual(["Yesterday", "9/18/26", "Mar 3, 2024"]);
     expect(dates("win")).toEqual(["9/20/2026 12:00 PM", "9/18/2026 3:30 PM", "Mar 3, 2024"]);
-    expect(dates("linux")).toEqual(["Yesterday 12:00", "Fri 15:30", "Mar 3, 2024"]);
+    expect(dates("linux")).toEqual(["Yesterday 12:00", "18 Sep 2026", "Mar 3, 2024"]);
     const later = cheerio.load(pane.folder("Pear.md | 1 KB | 3d", { now: "2026-10-05T09:00:00" }).html);
     expect(later(".pane-d [data-os=mac]").text()).toBe("10/2/26");
   });
 });
 
 describe("pane date formats close to now", function () {
-  it("says Today, Yesterday and the weekday like each OS", function () {
+  it("says Today and Yesterday like each OS, and plain dates after that (checked against captures)", function () {
     const at = (day, time) => `2026-09-${day}T${time}:00`;
     expect(formatDate(at(21, "09:05"), "mac", NOW)).toBe("9:05 AM");
     expect(formatDate(at(20, "23:59"), "mac", NOW)).toBe("Yesterday");
     expect(formatDate(at(19, "10:00"), "mac", NOW)).toBe("9/19/26");
     expect(formatDate(at(21, "09:05"), "linux", NOW)).toBe("Today 9:05");
     expect(formatDate(at(20, "23:59"), "linux", NOW)).toBe("Yesterday 23:59");
-    expect(formatDate(at(19, "10:00"), "linux", NOW)).toBe("Sat 10:00");
-    expect(formatDate(at(15, "10:00"), "linux", NOW)).toBe("Tue 10:00"); // 6 days back
-    expect(formatDate(at(14, "10:00"), "linux", NOW)).toBe("14 Sep 2026"); // a week back
+    expect(formatDate(at(19, "10:00"), "linux", NOW)).toBe("19 Sep 2026"); // no weekday names
+    expect(formatDate(at(15, "10:00"), "linux", NOW)).toBe("15 Sep 2026");
     expect(formatDate(at(20, "23:59"), "win", NOW)).toBe("9/20/2026 11:59 PM");
   });
 
@@ -123,3 +122,24 @@ describe("pane transform and now", function () {
     expect(render(undefined)).toBe(render(undefined));
   });
 });
+
+describe("pane GNOME window with a Yesterday date", function () {
+  const yd = (html) => /^<figure class="pane pane-yd"/.test(html);
+
+  it("gets the wider Modified column (class pane-yd) only when a row says Yesterday", function () {
+    expect(yd(pane.folder("a.md | 1 KB | yesterday", { now: NOW }).html)).toBe(true);
+    expect(yd(pane.folder("a.md | 1 KB | 3d", { now: NOW }).html)).toBe(false);
+    expect(yd(pane.folder("a.md | 1 KB | 2h", { now: NOW }).html)).toBe(false);
+  });
+
+  it("applies to windows that GNOME can show, not to ones pinned to another OS", function () {
+    expect(yd(pane.folder("a.md | 1 KB | yesterday", { now: NOW, os: "linux" }).html)).toBe(true);
+    expect(yd(pane.folder("a.md | 1 KB | yesterday", { now: NOW, os: "mac" }).html)).toBe(false);
+    expect(yd(pane.folder("a.md | 1 KB | yesterday", { now: NOW, os: "win" }).html)).toBe(false);
+  });
+
+  it("is what an invented-date window usually is, so the docs' windows get it", function () {
+    expect(yd(pane.folder("a.md\nb.md\nc.md", { now: NOW }).html)).toBe(true); // rank 1 is yesterday
+  });
+});
+

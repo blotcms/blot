@@ -7,16 +7,14 @@ function parseDate(iso) {
   return { y: +m[1], mo: +m[2], d: +m[3], h: +m[4], mi: +m[5] };
 }
 
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const two = (n) => String(n).padStart(2, "0");
 const clock12 = (t) => `${t.h % 12 || 12}:${two(t.mi)} ${t.h < 12 ? "AM" : "PM"}`;
 const dayNumber = (t) => Math.floor(Date.UTC(t.y, t.mo - 1, t.d) / 86400000);
-const weekday = (t) => DAYS[new Date(Date.UTC(t.y, t.mo - 1, t.d)).getUTCDay()];
 
-// Date column text as each OS shows it in its list view. Calendar days back from `nowIso`:
-// 0 is today, 1 yesterday, 2 to 6 the current week (GNOME names the weekday).
-// Unverified against captures: Finder's "Yesterday" and GNOME's "Yesterday HH:MM" / "Wed HH:MM"
-// (the references have only today and older dates); Explorer always shows the absolute date.
+// Date column text as each OS shows it in its list view (Finder and GNOME checked against
+// captures with files dated today, yesterday and five days back). Calendar days back from
+// `nowIso`: 0 is today, 1 yesterday; older dates are plain dates on every OS (Finder
+// "9/16/26", GNOME "16 Sep 2026"; no weekday names). Explorer always shows the absolute date.
 function formatDate(iso, os, nowIso) {
   const t = parseDate(iso);
   const back = dayNumber(parseDate(nowIso)) - dayNumber(t);
@@ -25,7 +23,6 @@ function formatDate(iso, os, nowIso) {
   const clock = `${t.h}:${two(t.mi)}`;
   if (back === 0) return `Today ${clock}`;
   if (back === 1) return `Yesterday ${clock}`;
-  if (back > 1 && back < 7) return `${weekday(t)} ${clock}`;
   return `${t.d} ${MONTHS[t.mo - 1]} ${t.y}`;
 }
 
