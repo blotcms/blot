@@ -99,7 +99,13 @@ async function matte(browser, c, { images = false } = {}) {
     bottom: reach(mx, Math.round(ry + rh), 0, 1),
     left: reach(Math.round(rx) - 1, my, -1, 0),
   };
-  const cornerAlpha = alpha[Math.round(ry) * w + Math.round(rx)];
+  // The corner's alpha: a 3x3 block a tenth of the radius in from the top-left corner. That
+  // point is 1.27 radii from the arc's centre, so it is outside any correctly rounded window
+  // (alpha ~0) but inside the box (a filled-in corner is opaque there). Not the corner pixel
+  // itself: browsers snap a fractional box edge differently, so that pixel can be either.
+  const off = Math.max(1, rect.radius * 0.1 * s);
+  let cornerAlpha = 0;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) cornerAlpha += alpha[(Math.floor(ry + off) + dy) * w + Math.floor(rx + off) + dx] / 9;
 
   const failures = [];
   if (minInterior < OPAQUE) {
