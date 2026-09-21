@@ -51,7 +51,7 @@ describeIfChrome("pane backdrop independence", function () {
     it("a rounded window whose corners are filled in", async function () {
       // the box is rounded, but a square layer paints over the corners
       spyOn(adapter, "render").and.returnValue(
-        Promise.resolve({ html: `<div class="pane"></div>`, css: `.pane{position:relative;width:300px;height:200px;background:#fff;border-radius:30px}.pane::before{content:"";position:absolute;inset:0;background:#fff}` })
+        Promise.resolve({ html: `<div class="pane"><div class="fill"></div></div>`, css: `.pane{position:relative;width:300px;height:200px;background:#fff;border-radius:30px}.fill{position:absolute;top:0;left:0;right:0;bottom:0;background:#fff}` })
       );
       expect((await matte(browser, c)).failures.join()).toContain("corner");
     }, timeout);

@@ -100,11 +100,13 @@ describe("pane Windows skin", function () {
 let chrome = true;
 try {
   require("puppeteer");
+  require("sharp");
 } catch (e) {
   chrome = false;
 }
 
 (chrome ? describe : xdescribe)("pane Windows status bar", function () {
+  const sharp = require("sharp");
   let browser;
   const timeout = 60000;
   beforeAll(async () => {
@@ -113,37 +115,42 @@ try {
   afterAll(async () => browser && (await browser.close()));
 
   // getComputedStyle(...).content is the unresolved counter() expression and digits are
-  // equally wide, so compare pixels: does the window look exactly like the same window with
-  // the literal text forced into the status bar?
-  const looksLike = async (tree, literal) => {
+  // equally wide, so compare pixels: force each candidate text into the status bar and see
+  // which one the window already looks like. (Not "is it identical": one text run vs two
+  // antialiases the first glyph differently on some platforms; a wrong digit differs far more.)
+  const CANDIDATES = ["0 items", "1 item", "1 items", "2 items", "3 items", "4 items", "5 items", "13 items"];
+  const said = async (tree) => {
     const shoot = async (extra) => {
       const page = await browser.newPage();
       try {
         const { css: sheet } = pane.assets();
         await page.setViewport({ width: 700, height: 500 });
         await page.setContent(`<html data-os="win"><style>${sheet}${extra}</style><body style="margin:10px">${pane.folder(tree, { title: "Docs" }).html}</body></html>`);
-        return await (await page.$(".pane")).screenshot();
+        return await sharp(await (await page.$(".pane")).screenshot()).raw().toBuffer();
       } finally {
         await page.close();
       }
     };
     const counted = await shoot("");
-    const forced = await shoot(`.pane .pane-tree::after{content:"${literal}" !important}`);
-    return Buffer.compare(counted, forced) === 0;
+    const scores = [];
+    for (const text of CANDIDATES) {
+      const forced = await shoot(`.pane .pane-tree::after{content:"${text}" !important}`);
+      let diff = 0;
+      for (let i = 0; i < counted.length; i++) if (counted[i] !== forced[i]) diff++;
+      scores.push([text, diff]);
+    }
+    return scores.sort((x, y) => x[1] - y[1])[0][0];
   };
 
   it("says how many items the window holds, not a constant", async function () {
-    expect(await looksLike("a.md\nb.md\nc.md", "3 items")).toBe(true);
-    expect(await looksLike("a.md\nb.md\nc.md\nd.md\ne.md", "5 items")).toBe(true);
-    expect(await looksLike("a.md\nb.md\nc.md", "13 items")).toBe(false); // it is not a constant
-    expect(await looksLike("a.md\nb.md\nc.md", "5 items")).toBe(false);
+    expect(await said("a.md\nb.md\nc.md")).toBe("3 items");
+    expect(await said("a.md\nb.md\nc.md\nd.md\ne.md")).toBe("5 items");
   }, timeout);
 
   it("counts the top-level rows only, and uses the singular for one", async function () {
-    expect(await looksLike("Fruits\n  a.md\n  b.md\nAbout.txt", "2 items")).toBe(true);
-    expect(await looksLike("Fruits\n  a.md\n  b.md", "1 item")).toBe(true);
-    expect(await looksLike("Only.md", "1 item")).toBe(true);
-    expect(await looksLike("Only.md", "1 items")).toBe(false);
+    expect(await said("Fruits\n  a.md\n  b.md\nAbout.txt")).toBe("2 items");
+    expect(await said("Fruits\n  a.md\n  b.md")).toBe("1 item");
+    expect(await said("Only.md")).toBe("1 item");
   }, timeout);
 
   it("has a scrollbar fallback for browsers without ::-webkit-scrollbar", function () {
