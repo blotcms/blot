@@ -367,6 +367,14 @@ TemplateEditor.route("/:templateSlug/rename")
     res.render("dashboard/template/rename");
   })
   .post(function (req, res, next) {
+    if (req.template.localEditing) {
+      return next(
+        new Error(
+          "You cannot rename a locally edited template — rename its folder instead"
+        )
+      );
+    }
+
     Template.setMetadata(
       req.template.id,
       { name: req.body.name },
