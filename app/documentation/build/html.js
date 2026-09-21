@@ -1,4 +1,19 @@
 const cheerio = require("cheerio");
+const pane = require("helper/pane");
+const finder = require("../tools/finder");
+
+// "Now" for the dates in the folder windows: one value per build process (this module is
+// loaded once per build), so every page of a build agrees and the dates are as fresh as the
+// deploy. See app/helper/pane/PLAN.md, "Fresh dates".
+const BUILD_NOW = pane.isoNow();
+
+// pane renders the folder windows (pre.folder). Whatever it doesn't render yet (the text and
+// code editor windows, inline code.file / code.folder) is left for the old finder, which runs
+// after it and so never sees the windows pane replaced. Retire the finder when pane covers all.
+const windows = ($) => {
+  pane.transform($, { now: BUILD_NOW });
+  finder.html_parser($);
+};
 
 module.exports = async (contents) => {
   const transformers = [
@@ -6,7 +21,7 @@ module.exports = async (contents) => {
     require("../tools/typeset"),
     require("../tools/anchor-links"),
     require("../tools/tex"),
-    require("../tools/finder").html_parser,
+    windows,
   ];
 
   // we want to remove any indentation before the partial tag {{> body}}

@@ -51,6 +51,10 @@ async function computeViewsHash() {
     join(__dirname, "../tools/git-commits.js"),
     join(__dirname, "../tools/hljs.js"),
     join(__dirname, "../tools/finder/build.js"),
+    // pane renders the folder windows and its stylesheet is in the docs bundle
+    ...recursiveReadDir(join(__dirname, "../../helper/pane")).filter((f) =>
+      /\/helper\/pane\/(index\.js|lib\/|css\/|icons\/)/.test(f)
+    ),
   ];
 
   for (const script of buildScripts) {

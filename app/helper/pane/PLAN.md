@@ -250,6 +250,18 @@ time without any runtime work: every visitor sees the same static HTML until the
   captures (the date columns are masked in QA, so this is by eye), and the masks
   (`qa/lib/cases.js`) must still cover the widest new text.
 
+## Docs integration (built)
+
+`app/documentation/build/html.js` runs `pane.transform($, { now })` (one `now` per build process) and then
+the old finder for what pane doesn't render yet (editor windows, inline `code.file`/`code.folder`), so
+`pre.folder` windows are pane's and everything else is unchanged. `build/css.js` appends
+`pane.assets().css` to `documentation.min.css`; `views/partials/head.html` carries the head script
+(a test keeps it identical to `pane.assets().js`). The dev cache hash includes pane's sources.
+`<background>` wrappers around windows still come from the old finder CSS (wallpapers are deferred).
+Tested in `app/documentation/tests/pane.js`. Checked against the real docs stylesheet and real pages
+(all three skins, light): no leakage from the docs' global CSS. To retire the finder, build `text`, `code`
+and the icons view, then drop `finder.html_parser` from `windows()` and the finder CSS from the bundle.
+
 ## Wallpapers (not built)
 
 Detail crops of paintings, gradients, etc. as desktop backgrounds behind the windows, for the
