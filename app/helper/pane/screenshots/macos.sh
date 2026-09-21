@@ -192,15 +192,21 @@ OSA
   osascript -e 'tell application "TextEdit" to close every window saving no' >>"$OUT/editors.log" 2>&1
   sleep 2
 done
-# Browser: Safari, a small window on a local page opened as a file (a local HTTP server made macOS
-# ask "Allow Python to find devices on local networks?", and the dialog ended up in the capture).
-# Placed and read back through System Events, like the editors. Best-effort: debug screenshots
-# and logs show what the runner allowed.
-WEB="/tmp"  # short path: it shows in the address bar
-cp "$HERE/fixture-assets/browser-sample.html" "$WEB/blot.html"
-osascript -e 'tell application "Finder" to close every window' >>"$OUT/browser.log" 2>&1
-open -a Safari "$WEB/blot.html"; sleep 8
-screencapture -x "$OUT/debug-safari.png"
+# Browser: Safari, a small window on https://example.com. Placed and read back through System
+# Events, like the editors. Best-effort: debug screenshots and logs show what the runner allowed.
+# (A local HTTP server made macOS ask "Allow Python to find devices on local networks?", and the
+# dialog ended up in the capture, so the page is a real site instead.)
+close_finder() { osascript -e 'tell application "Finder" to close every window' >>"$OUT/browser.log" 2>&1; }
+close_finder
+open -a Safari "https://example.com/"; sleep 10
+# One Safari window only (a start page or restored window would show behind it)
+osascript >>"$OUT/browser.log" 2>&1 <<OSA
+tell application "Safari"
+  repeat while (count of windows) > 1
+    close window 2
+  end repeat
+end tell
+OSA
 osascript >>"$OUT/browser.log" 2>&1 <<OSA
 tell application "System Events" to tell process "Safari"
   set frontmost to true
@@ -214,6 +220,23 @@ IFS=', ' read -r PX PY SX SY <<< "$BOUNDS"
 BOUNDS="$PX, $PY, $((PX + SX)), $((PY + SY))"
 echo "browser bounds: $BOUNDS" >> "$OUT/bounds.txt"
 IFS=', ' read -r L T R B <<< "$BOUNDS"
+screencapture -x "$OUT/debug-safari.png"
+# Remove the sidebar / tab group button from the toolbar: View > Customize Toolbar, drag it (at
+# 115pt, 26pt from the window's top left, measured from the capture) off the toolbar, Done.
+{
+  osascript -e 'tell application "System Events" to tell process "Safari" to click menu item "Customize Toolbar…" of menu "View" of menu bar 1'
+  sleep 3
+  screencapture -x "$OUT/debug-safari-customize.png"
+  SX0=$((L + 115)); SY0=$((T + 26))
+  cliclick -w 100 dd:$SX0,$SY0 dm:$SX0,$((SY0 + 60)) dm:$SX0,$((SY0 + 200)) du:$SX0,$((SY0 + 200))
+  sleep 2
+  screencapture -x "$OUT/debug-safari-customized.png"
+  osascript -e 'tell application "System Events" to tell process "Safari" to key code 36'  # Done
+  sleep 2
+} >>"$OUT/browser.log" 2>&1
+# Finder must not show below the browser; read what is open, then capture
+close_finder
+osascript -e 'tell application "System Events" to return (name of every process whose visible is true)' >>"$OUT/browser.log" 2>&1
 sleep 2
 capture "macos-$THEME$SUFFIX-browser"
 osascript -e 'tell application "Safari" to quit' >>"$OUT/browser.log" 2>&1
