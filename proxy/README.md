@@ -36,6 +36,28 @@ docker run --rm --cap-add SYS_NICE -p 8080:80 -p 8443:443 \
 curl -i http://localhost:8080/health   # -> 200
 ```
 
+### Runtime settings
+
+The image holds the generated config as a template. On every start
+`entrypoint.sh` runs [`render-config.sh`](render-config.sh), which fills in
+these from the container's environment (`-e` or `--env-file`), so one image
+serves any host:
+
+| Variable | Default | |
+| --- | --- | --- |
+| `PROXY_REDIS_HOST` | build-time `REDIS_IP`, else `127.0.0.1` | Redis for certificates and the domain allowlist |
+| `PROXY_SERVER_LABEL` | build-time `SERVER_LABEL`, else `us` | the `Blot-Server` response header |
+| `PROXY_RESOLVER` | build-time `OPENRESTY_RESOLVER`, else `8.8.8.8 ipv6=off` | DNS resolver (`127.0.0.11` on a user-defined Docker network) |
+| `PROXY_UPSTREAM_GREEN` | `127.0.0.1:8089` | the master Node (webhooks, `/clients`) |
+| `PROXY_UPSTREAM_BLUE` | `127.0.0.1:8088` | the dashboard Node, and failover for the others |
+| `PROXY_UPSTREAM_YELLOW` | `127.0.0.1:8090` | the blog Node |
+| `PROXY_FETCH_CDN_IPS` | `true` | fetch the Bunny edge list (exempt from rate limits) at start; `false` uses the list baked into the image |
+
+The upstream groups keep their weights and failover roles from
+`config/openresty/conf/http.conf`; only where each Node is changes. The Bunny
+list is fetched on start and falls back to the baked-in one, so a running
+container does not pick up changes to it until it restarts.
+
 `BLOT_HOST` at `docker run` time is only read by `entrypoint.sh` for
 certificate handling; it does not change the already-generated vhosts. Set it
 when running `build.sh` to change the domain the config is built for.
@@ -190,8 +212,6 @@ the deploy mechanism and persistent volumes now exist and are covered by CI
   bits belong in the files themselves and the copy step goes away.
 - **Redis auth/TLS**. `config/openresty/conf/init.conf` hard-codes port 6379 with no auth;
   production Redis credentials need wiring.
-- **Secret delivery**. `NODE_SERVER_IP`, `REDIS_IP` and the netdata creds are
-  build-time inputs to the generator; decide build-arg vs runtime-env.
 - **`fail2ban` / `logrotate`** are host-level in `config/openresty`; the
   container logs to stdout/stderr (so `docker logs` and the host's log
   shipper work) but has no equivalent request-ban layer.

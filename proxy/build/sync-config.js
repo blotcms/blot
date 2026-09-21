@@ -59,7 +59,7 @@ function replaceExactly(content, find, replacement, label) {
       `sync-config: ${label}: expected exactly 1 occurrence of:\n---\n${find}\n---\nfound ${n}`
     );
   }
-  return content.replace(find, replacement);
+  return content.replace(find, () => replacement);
 }
 
 function replaceAllCounted(content, find, replacement, expected, label) {
@@ -99,6 +99,42 @@ function adaptHttpConf(content) {
       "access_log {{{log_directory}}}/access.log access_log_format;\n" +
       "{{/log_to_stdout}}\n",
     "http.conf log_to_stdout"
+  );
+}
+
+// Values which can change without rebuilding the image become ${NAME}
+// placeholders that proxy/render-config.sh fills in from the environment when
+// the container starts (see config/openresty/locals.js, runtimeDefaults).
+function adaptHttpConfRuntime(content) {
+  content = replaceAllCounted(
+    content,
+    "127.0.0.1:8089",
+    "${PROXY_UPSTREAM_GREEN}",
+    2,
+    "http.conf green upstream"
+  );
+  content = replaceAllCounted(
+    content,
+    "127.0.0.1:8088",
+    "${PROXY_UPSTREAM_BLUE}",
+    3,
+    "http.conf blue upstream"
+  );
+  content = replaceAllCounted(
+    content,
+    "127.0.0.1:8090",
+    "${PROXY_UPSTREAM_YELLOW}",
+    1,
+    "http.conf yellow upstream"
+  );
+
+  // The Bunny edge list is fetched when the container starts (falling back to
+  // the list baked in at build time), so it is an include, not inlined.
+  return replaceExactly(
+    content,
+    "    {{#cdn_ips}}\n    {{ip}} 1;\n    {{/cdn_ips}}\n",
+    "    include /etc/openresty/cdn-ips.conf;\n",
+    "http.conf cdn_ips include"
   );
 }
 
@@ -164,6 +200,14 @@ function adaptInitialConf(content) {
 }
 
 function adaptServerConf(content) {
+  // webhooks. only ever goes to the master (see the comment in server.conf)
+  content = replaceExactly(
+    content,
+    "proxy_pass http://127.0.0.1:8089;",
+    "proxy_pass http://${PROXY_UPSTREAM_GREEN};",
+    "server.conf webhooks upstream"
+  );
+
   // The pinned openresty/openresty:1.25.3.1-alpine-fat image is not
   // guaranteed to have --with-http_v3_module (docker-openresty added it in
   // 1.25.3.1-1). Bare-metal has HTTP/3; drop it in the container copy so
@@ -249,6 +293,7 @@ function sync() {
   fs.copySync(SRC_HTML, DEST_HTML);
 
   writeAdapted("http.conf", adaptHttpConf);
+  writeAdapted("http.conf", adaptHttpConfRuntime);
   writeAdapted("init.conf", adaptInitConf);
   writeAdapted("initial.conf", adaptInitialConf);
   writeAdapted("server.conf", adaptServerConf);

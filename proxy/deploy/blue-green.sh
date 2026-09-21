@@ -33,6 +33,10 @@ DRAIN_TIMEOUT="${PROXY_DRAIN_TIMEOUT:-30}"
 HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-60}"
 HEALTH_SOCK="/run/openresty/health.sock"
 CERT_MOUNT="${PROXY_CERT_MOUNT:-}"   # e.g. "-v /host/certs:/etc/ssl/private:ro"
+# Runtime settings for the new container (PROXY_REDIS_HOST, PROXY_UPSTREAM_*,
+# ...; see proxy/render-config.sh), as a docker --env-file. Unset = image defaults.
+ENV_ARGS=()
+if [ -n "${PROXY_ENV_FILE:-}" ]; then ENV_ARGS=(--env-file "$PROXY_ENV_FILE"); fi
 
 # The image ships only a self-signed `blot-proxy-placeholder` certificate. A
 # swap with no real wildcard cert mounted would leave the base domain and its
@@ -64,6 +68,7 @@ docker run -d --name "$NEW" \
   --cap-add SYS_NICE \
   --restart unless-stopped \
   -e BLOT_HOST="$BLOT_HOST" \
+  ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} \
   -v "$CACHE_VOLUME":/var/cache/openresty \
   -v "$AUTOSSL_VOLUME":/etc/resty-auto-ssl \
   $CERT_MOUNT \

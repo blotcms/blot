@@ -71,11 +71,9 @@ const CONFIG_DIRECTORY = path.resolve(__dirname, "../config");
 const template = fs.readFileSync(`${CONFIG_DIRECTORY}/server.conf`, "utf8");
 const partials = {};
 
-const locals = require("../../config/openresty/locals").container({
-  env: process.env,
-  config,
-  cdn_ips: loadCDNIPs(),
-});
+const { container, runtimeDefaults } = require("../../config/openresty/locals");
+const locals = container({ env: process.env, config });
+const cdnIPs = loadCDNIPs();
 
 // move the previous contents of the data directory to a backup
 // so we can compare the new contents with the old
@@ -118,6 +116,20 @@ const warning = `
 const result = mustache.render(template, locals, partials);
 
 fs.outputFileSync(OUTPUT + "/openresty.conf", warning + result);
+
+// Used by proxy/render-config.sh when the container starts. defaults.env is
+// what each ${PROXY_*} placeholder is when it is not set at runtime;
+// cdn-ips.conf is the Bunny edge list to use when it cannot be fetched then.
+fs.outputFileSync(
+  OUTPUT + "/defaults.env",
+  Object.entries(runtimeDefaults(process.env))
+    .map(([name, value]) => `${name}=${value}\n`)
+    .join("")
+);
+fs.outputFileSync(
+  OUTPUT + "/cdn-ips.conf",
+  cdnIPs.map((ip) => `${ip} 1;\n`).join("")
+);
 
 // used by the proxy-tests ci action on github
 if (process.argv.includes("--skip-confirmation")) {
