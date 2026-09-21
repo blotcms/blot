@@ -19,8 +19,8 @@ which stays untouched until every view has migrated.
 ## API
 
     pane.folder(tree, opts) -> { html } | null   one folder window (markup only)
-    pane.text(text, opts)   -> { html } | null   text editor window (not built yet)
-    pane.code(code, opts)   -> { html } | null   code editor window (not built yet)
+    pane.text(text, opts)   -> { html }          text editor window (macOS built; see DESIGN.md)
+    pane.code(code, opts)   -> { html }          code editor window: highlighted, no wrapping (macOS built)
     pane.assets()           -> { css, js }       once per page: static and cacheable
     pane.transform($)                            cheerio hook for the docs build
 
@@ -278,8 +278,8 @@ available; follow `screenshots/UPDATING-OS.md`).
 ## Docs integration (built)
 
 `app/documentation/build/html.js` runs `pane.transform($, { now })` (one `now` per build process) and then
-the old finder for what pane doesn't render yet (editor windows, inline `code.file`/`code.folder`), so
-`pre.folder` windows are pane's and everything else is unchanged. `build/css.js` appends
+the old finder for what pane doesn't render yet (inline `code.file`/`code.folder`), so
+the folder and editor windows (`pre.folder`, `pre.text`, `pre.code`) are pane's and everything else is unchanged. `build/css.js` appends
 `pane.assets().css` to `documentation.min.css`; `views/partials/head.html` carries the head script
 (a test keeps it identical to `pane.assets().js`). The dev cache hash includes pane's sources.
 `<background>` wrappers around windows still come from the old finder CSS (wallpapers are deferred).

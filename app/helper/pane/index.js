@@ -1,12 +1,12 @@
 // pane: renders docs blocks as mock OS windows (macOS, Windows 11, GNOME Files).
-// Built: folder windows in list view (macOS, Windows, GNOME) and the icons view (macOS; the
-// other skins fall back to it, DESIGN.md), not the editor windows. Skins are switched by <html data-os>, light/dark by
+// Built: folder windows in list view (macOS, Windows, GNOME), the icons view (macOS; the other skins fall
+// back to it, DESIGN.md) and the editor windows (macOS; the other skins fall back to it). Skins are switched by <html data-os>, light/dark by
 // prefers-color-scheme. See DESIGN.md (how) and PLAN.md (what).
 //
 // API
 //   pane.folder(tree, opts) -> { html } | null     markup for one folder window
-//   pane.text(text, opts)   -> { html } | null     text editor window (not built yet)
-//   pane.code(code, opts)   -> { html } | null     code editor window (not built yet)
+//   pane.text(text, opts)   -> { html }            text editor window (macOS built)
+//   pane.code(code, opts)   -> { html }            code editor window: highlighted, no wrapping (macOS built)
 //   pane.assets()           -> { css, js }         once per page (static, cacheable)
 //   pane.transform($, { now })                     cheerio: replaces pre.folder|text|code
 //   pane.isoNow()                                  "now" in the form `now` takes (UTC)
@@ -34,6 +34,14 @@
 //   theme    "light" | "dark": pin the colour scheme (default: prefers-color-scheme)
 //   width, height   CSS lengths, set as --pane-w / --pane-h (default: the reference size)
 //
+// Editor windows (text, code) take the same title, os, theme, width, height, now, plus
+//   title     the file name in the title bar and the window's accessible name ("Text"/"Code" if absent)
+//   chrome    false: the text panel alone, without the title bar and traffic lights (default true)
+//   language  code only: a highlight.js language name (default "html"); "text" or an unknown name
+//             shows plain text (highlight.js is optional: without it the code is plain, with a warning)
+// Text is shown exactly as given (whitespace and line breaks kept, everything escaped, never
+// interpreted). The text editor wraps long lines; the code editor scrolls sideways.
+//
 // Values that differ per OS ("6 bytes"/"2.7 kB", "Today 15:38"/"5:29 PM") are rendered
 // once per OS and shown by the same data-os CSS that skins the window.
 
@@ -41,6 +49,8 @@ const { folder: renderFolder, OS_KEYS } = require("./lib/markup");
 const { formatSize, formatDate, formatFolderSize, isoNow } = require("./lib/format");
 const css = require("./lib/css");
 const { expand } = require("./lib/names");
+const { editor } = require("./lib/editor");
+const { resolve: resolveLanguage } = require("./lib/highlight");
 
 // what an author can ask for; the QA harness has more views (see the header)
 const VIEWS = ["list", "icons"];
@@ -52,9 +62,10 @@ function folder(tree, options = {}) {
   return { html: renderFolder(tree, options) };
 }
 
-// Editor windows are not built yet; null tells the caller to fall back.
-const text = () => null;
-const code = () => null;
+// Editor windows (DESIGN.md "Editor windows"). `chrome: false` shows the text panel alone,
+// without the title bar and traffic lights.
+const text = (source, options = {}) => ({ html: editor("text", source, options) });
+const code = (source, options = {}) => ({ html: editor("code", source, options) });
 
 // Sets data-os unless the page already chose one (the QA harness does).
 const JS =
@@ -79,12 +90,22 @@ function transform($, options = {}) {
   $("pre.folder, pre.text, pre.code").each((i, el) => {
     const kind = ["folder", "text", "code"].find((k) => $(el).hasClass(k));
     const source = $(el).find("code").length ? $(el).find("code").first() : $(el);
+    const classes = ($(el).attr("class") || "").split(/\s+/).filter(Boolean);
+    // the editors' old syntax: `with-chrome` shows a text window's title bar (a code window always had
+    // its dots); data-chrome="true|false" says it outright
+    const dataChrome = $(el).attr("data-chrome");
+    const chrome = dataChrome ? dataChrome !== "false" : kind === "code" || classes.includes("with-chrome");
     const result = kinds[kind](source.text().replace(/^\n+|\s+$/g, ""), {
       now: options.now,
       title: ($(el).attr("title") || "").trim() || undefined,
       view: $(el).attr("data-view") || undefined,
       os: $(el).attr("data-os") || undefined,
       theme: $(el).attr("data-theme") || undefined,
+      chrome,
+      // a class naming a language ("javascript") picks it; the default is html, as the old renderer had
+      language: $(el).attr("data-language") || classes.find((c) => c !== "code" && resolveLanguage(c) && resolveLanguage(c) !== "plain") || undefined,
+      width: $(el).attr("data-width") || undefined,
+      height: $(el).attr("data-height") || undefined,
     });
     if (result) $(el).replaceWith(result.html);
   });

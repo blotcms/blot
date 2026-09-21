@@ -15,7 +15,9 @@ describe("pane size report", function () {
     const rows = Array.from({ length: 15 }, (_, i) => `File ${i}.md`).join("\n");
     const window15 = pane.folder(rows).html;
     const line = (name, s) => `${name.padEnd(22)} ${String(Buffer.byteLength(s)).padStart(7)} B raw ${String(brotli(s)).padStart(6)} B brotli`;
-    console.log(["pane sizes", line("css", css), line("js", js), line("html, 3 rows", one), line("html, 15 rows", window15)].join("\n  "));
+    const text = pane.text("The first frost came late this year.\n\nNext weekend: mend the fence.", { title: "Essay.txt" }).html;
+    const code = pane.code('<!doctype html>\n<html lang="en">\n<head>\n  <title>Your site</title>\n</head>\n<body>\n  <h1>Hello, world</h1>\n</body>\n</html>', { title: "Snippet.txt" }).html;
+    console.log(["pane sizes", line("css", css), line("js", js), line("html, 3 rows", one), line("html, 15 rows", window15), line("html, text, 3 lines", text), line("html, code, 9 lines", code)].join("\n  "));
     expect(css.length).toBeGreaterThan(0);
   });
 

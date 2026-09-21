@@ -722,9 +722,11 @@ function compareImages(reference, rendered, def, opts = {}) {
   const stats = regionStats(diff.mask, ignore, crop.w, crop.h, [inner, ...regions]);
 
   const rowRegion = regions.find((r) => r.kind === "text") || inner;
+  // the editors' lines are packed (26 device px apart at 2x): bands may only join across a 1 css px gap
+  const bandOpts = def.view === "text" || def.view === "code" ? { joinGap: Math.round(scale) } : {};
   const rows = compareRowBands(
-    textRowBands(refCrop, rowRegion, ignore),
-    textRowBands(rendCrop, rowRegion, ignore)
+    textRowBands(refCrop, rowRegion, ignore, bandOpts),
+    textRowBands(rendCrop, rowRegion, ignore, bandOpts)
   );
 
   const flat = flatColorCheck(refCrop, rendCrop, ignore, regions);

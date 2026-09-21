@@ -112,6 +112,13 @@ WCAG contrast; contrast is reported by `tests/size.js`, never enforced.
   only its rendering is; don't write tests that pin its exact bytes.
 - **`transform($)`** never throws for author input. Unknown `pane-name` terms and dropped
   pins log a warning and render something sensible.
+- **Editor windows (DESIGN.md, Editor windows).** Skin them in `css/<os>-editor.css` against `.pane.pane-ed`; the
+  folder skin's `.pane-bar`/`.pane-head`/`::before` rules also hit the editors and must be overridden (mac-editor.css
+  shows how). Token colours are `--tok-*` properties, not classes. `qa/lib/cases.js` masks the capture's caret and
+  spell-check squiggle (`kind:"artifact"`): runner artifacts, not part of the look (Windows Notepad's squiggles and
+  notification dot are the same kind of thing; mask them, don't draw them). highlight.js is an optional dependency
+  (the pane-qa workflow installs it); without it code windows are plain, with a warning.
+- **Token blocks across files:** `@light`/`@dark` bodies of a skin's files are joined with `;` by `css.skin()`.
 - **Metrics that were hard to see:** all references are 2x (2 physical px = 1 CSS px); the
   window is measured from the detected window rect, not the image edge; an icon with a
   1px-period pattern is scored as noise by the diff (macOS image icon phase was chosen

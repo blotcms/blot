@@ -15,9 +15,9 @@ const pad = (t, n, right) => (right ? String(t).padStart(n) : String(t).padEnd(n
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  // the default view (and macOS's icons view) is what the module renders; other views are
-  // hand-written fixtures
-  const cases = selectCases(loadCases(), args).filter((c) => args.all || args.view || c.view === "default" || (c.view === "icons" && c.os === "macos"));
+  // the default view, macOS's icons view and the editor windows are what the module renders (an OS whose
+  // editor skin isn't built has no render, and is skipped); other views are hand-written fixtures
+  const cases = selectCases(loadCases(), args).filter((c) => args.all || args.view || ["default", "text", "code"].includes(c.view) || (c.view === "icons" && c.os === "macos"));
   if (!cases.length) {
     console.error("No cases match.");
     process.exit(2);

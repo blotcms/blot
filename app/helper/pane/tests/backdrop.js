@@ -24,7 +24,7 @@ describeIfChrome("pane backdrop independence", function () {
   afterAll(async () => browser && (await browser.close()));
 
   loadCases()
-    .filter((c) => c.view === "default" || (c.view === "icons" && c.os === "macos"))
+    .filter((c) => c.view === "default" || (c.view === "icons" && c.os === "macos") || (["text", "code"].includes(c.view) && c.os === "macos")) // add the editors of Windows and Linux when their skins exist
     .forEach((c) => {
       it(`${c.id}: opaque inside, clear outside, transparent corners`, async function () {
         const r = await matte(browser, c);
@@ -32,6 +32,22 @@ describeIfChrome("pane backdrop independence", function () {
         expect(r.failures).toEqual([]);
       }, timeout);
     });
+
+  // an OS whose editor skin isn't built shows the default skin, which must be opaque too
+  describe("editor windows on the default skin", function () {
+    [
+      ["windows-light", "text"],
+      ["linux-dark", "code"],
+    ].forEach(([id, kind]) => {
+      it(`${id}: a ${kind} window`, async function () {
+        const pane = require("../index");
+        const html = kind === "text" ? pane.text("Hello\nworld", { title: "A.txt" }).html : pane.code("<p>hi</p>", { title: "A.html" }).html;
+        spyOn(adapter, "render").and.returnValue(Promise.resolve({ html, ...pane.assets() }));
+        const r = await matte(browser, loadCases().find((x) => x.id === id));
+        expect(r.failures).toEqual([]);
+      }, timeout);
+    });
+  });
 
   // the check must actually catch what it is for
   describe("catches", function () {

@@ -25,6 +25,12 @@ describe("pane css build", function () {
     expect(skin).toMatch(/\[data-theme=dark\]\{--bg:#000;--fg:#eee;color-scheme:dark\}$/);
   });
 
+  it("joins the token blocks of a skin's files, whether or not the last declaration ends with a semicolon", function () {
+    const s = css.skin("mac", "@light{--a:1}\n@light{--b:2;}\n@dark{--a:3;.pane .x{top:0}}\n@dark{--b:4}");
+    expect(s).toMatch(/\{--a:1;--b:2;color-scheme:light\}/);
+    expect(s).toMatch(/\[data-theme=dark\]\{--a:3;--b:4;color-scheme:dark\}/);
+  });
+
   it("refuses a selector that is not rooted at .pane", function () {
     expect(() => css.skin("mac", ".pane-bar{color:red}")).toThrowError(/must start with \.pane/);
   });

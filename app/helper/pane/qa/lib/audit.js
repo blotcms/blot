@@ -25,8 +25,26 @@ const SAMPLES = {
   fixed: { tree: "a.md\nb.md", options: { height: "180px", title: "Fixed" } },
 };
 
+// The editor windows. `expect` is what the body's text must be exactly: token spans, line
+// numbers and chrome must not change what is selected or copied.
+const PROSE = "The first frost came late this year, and the garden held on to its colour well into November.\n\n  Indented, with   spaces,\ttabs & <b>markup</b>.\nhttps://example.com/a-very-long-address-that-has-no-spaces-to-wrap-at/and/keeps/going/and/going/and/going";
+const SNIPPET = '<!doctype html>\n<html lang="en">\n<head>\n  <link rel="stylesheet" href="/style.css">\n</head>\n<body>\n  <p class="intro">A page made from a plain text file, with a line long enough to scroll sideways.</p>\n</body>\n</html>';
+const LINES = Array.from({ length: 40 }, (_, i) => `line ${i + 1}`).join("\n");
+const EDITORS = {
+  text: { text: PROSE, options: { title: "Post.txt" } },
+  textMany: { text: LINES, options: { title: "Long.txt" } },
+  code: { code: SNIPPET, options: { title: "Snippet.txt" } },
+  codeMany: { code: LINES, options: { title: "Long.html", language: "plain" } },
+  bare: { text: "Just the panel, no title bar.", options: { chrome: false } },
+  fixedText: { text: "a\nb", options: { height: "180px", title: "Fixed" } },
+  emptyCode: { code: "", options: {} },
+};
+Object.assign(SAMPLES, EDITORS);
+const isEditor = (name) => name in EDITORS;
+const render = (s) => (s.code !== undefined ? pane.code(s.code, s.options) : s.text !== undefined ? pane.text(s.text, s.options) : pane.folder(s.tree, { title: "Docs", ...(s.options || {}) })).html;
+
 // Runs in the page: findings for one window.
-function inspect() {
+function inspect(expected) {
   const out = [];
   const f = (rule, message) => out.push({ rule, message });
   const win = document.querySelector(".pane");
@@ -34,6 +52,17 @@ function inspect() {
 
   if (win.tagName !== "FIGURE" || !(win.getAttribute("aria-label") || "").trim()) f("name", "the window has no accessible name (figure + aria-label)");
   for (const el of win.querySelectorAll(".pane-bar, .pane-head")) if (el.getAttribute("aria-hidden") !== "true") f("chrome", `${name(el)} is not aria-hidden`);
+  const body = win.querySelector(".pane-body");
+  if (body) {
+    if (body.tagName !== "PRE") f("body", "the editor's text is not in a pre");
+    if (typeof expected === "string" && body.textContent !== expected) f("copy", "the text differs from the source (line numbers, tokens or chrome leaked into it)");
+    if (win.querySelectorAll(".pane-body *").length && [...win.querySelectorAll(".pane-body *")].some((e) => !["SPAN", "CODE"].includes(e.tagName))) f("body", "the editor's text holds elements other than code and token spans");
+    for (const l of win.querySelectorAll(".pane-l")) {
+      const g = getComputedStyle(l, "::before");
+      if (g.display !== "none" && g.userSelect !== "none") f("copy", "the line numbers can be selected");
+    }
+    if (win.querySelector("script, style, a, img, iframe, form, [onclick]")) f("body", "the editor's text was interpreted as markup");
+  }
   if (win.querySelector("[role=tree], [role=treeitem]")) f("tree", "role=tree/treeitem is used (it promises arrow-key behaviour that isn't there)");
   for (const ul of win.querySelectorAll("ul")) {
     if (ul.getAttribute("role") !== "list") f("list", "a ul without role=list (Safari drops list semantics from list-style:none)");
@@ -101,6 +130,8 @@ function layout() {
       return l.left < r.left - 0.5 || l.right > r.right + 0.5 || r.right > win.getBoundingClientRect().right + 0.5;
     }).length,
     headShown: shown(".pane-head"),
+    bodyOverflow: win.querySelector(".pane-body") ? win.querySelector(".pane-body").scrollWidth - win.querySelector(".pane-body").clientWidth : 0,
+    barOverflow: win.querySelector(".pane-bar") ? Math.max(0, win.querySelector(".pane-bar").scrollWidth - win.querySelector(".pane-bar").clientWidth) : 0,
   };
 }
 
@@ -117,12 +148,12 @@ async function audit(browser, { skins = SKINS, themes = THEMES, log = () => {} }
   };
   const { css: sheet } = pane.assets();
   const page_ = async (skin, theme, sample, width, extra = "") => {
-    const s = SAMPLES[sample];
-    const html = pane.folder(s.tree, { title: "Docs", ...(s.options || {}) }).html;
+    const html = render(SAMPLES[sample]);
     await page.setViewport({ width, height: 800 });
     await emulate({ "prefers-color-scheme": theme });
     await page.setContent(`<!doctype html><html lang="en" data-os="${skin}"><head><meta charset="utf-8"><style>${sheet}${extra}</style></head><body style="margin:0">${html}</body></html>`);
   };
+  const expected = (sample) => (isEditor(sample) ? SAMPLES[sample].code ?? SAMPLES[sample].text : undefined);
   const add = (skin, theme, sample, width, list) => list.forEach((x) => findings.push({ skin, theme, sample, width, ...x }));
   try {
     for (const skin of skins) {
@@ -130,32 +161,38 @@ async function audit(browser, { skins = SKINS, themes = THEMES, log = () => {} }
         // structure and accessibility, at a comfortable width
         for (const sample of Object.keys(SAMPLES)) {
           await page_(skin, theme, sample, WIDE);
-          add(skin, theme, sample, WIDE, await page.evaluate(inspect));
+          add(skin, theme, sample, WIDE, await page.evaluate(inspect, expected(sample)));
         }
         // keyboard: a scroller can be reached with Tab and shows where the focus is
-        for (const sample of ["many", "iconsMany"]) {
+        for (const sample of ["many", "iconsMany", "textMany", "code", "codeMany"]) {
           await page_(skin, theme, sample, WIDE);
           await page.keyboard.press("Tab");
           const ring = await page.evaluate(focusRing);
-          if (!ring) add(skin, theme, sample, WIDE, [{ rule: "focus", message: "Tab does not reach the scrollable list" }]);
-          else if (!ring.visible) add(skin, theme, sample, WIDE, [{ rule: "focus", message: "the focused list shows no focus ring" }]);
+          if (!ring) add(skin, theme, sample, WIDE, [{ rule: "focus", message: "Tab does not reach the scrollable region" }]);
+          else if (!ring.visible) add(skin, theme, sample, WIDE, [{ rule: "focus", message: "the focused region shows no focus ring" }]);
         }
         // forced colours: the frame is a plain border and nothing casts a shadow
-        await page_(skin, theme, "small", WIDE);
-        await emulate({ "forced-colors": "active" });
-        const forced = await page.evaluate(() => {
-          const cs = getComputedStyle(document.querySelector(".pane"));
-          return { shadow: cs.boxShadow, border: parseFloat(cs.borderTopWidth) };
-        });
-        if (forced.shadow !== "none") add(skin, theme, "small", WIDE, [{ rule: "forced-colors", message: "the window keeps its shadow in forced-colors mode" }]);
-        if (!(forced.border >= 1)) add(skin, theme, "small", WIDE, [{ rule: "forced-colors", message: "the window has no border in forced-colors mode" }]);
-        await emulate({ "forced-colors": "none" });
+        for (const sample of ["small", "text", "code"]) {
+          await page_(skin, theme, sample, WIDE);
+          await emulate({ "forced-colors": "active" });
+          const forced = await page.evaluate(() => {
+            const cs = getComputedStyle(document.querySelector(".pane"));
+            const body = document.querySelector(".pane-body");
+            return { shadow: cs.boxShadow, border: parseFloat(cs.borderTopWidth), text: body ? getComputedStyle(body).color : null, bg: cs.backgroundColor };
+          });
+          if (forced.shadow !== "none") add(skin, theme, sample, WIDE, [{ rule: "forced-colors", message: "the window keeps its shadow in forced-colors mode" }]);
+          if (!(forced.border >= 1)) add(skin, theme, sample, WIDE, [{ rule: "forced-colors", message: "the window has no border in forced-colors mode" }]);
+          if (forced.text !== null && forced.text === forced.bg) add(skin, theme, sample, WIDE, [{ rule: "forced-colors", message: "the text is the background colour in forced-colors mode" }]);
+          await emulate({ "forced-colors": "none" });
+        }
         // motion: nothing animates, whatever the preference
         for (const motion of ["no-preference", "reduce"]) {
           await emulate({ "prefers-reduced-motion": motion });
-          await page_(skin, theme, "small", WIDE);
-          const moving = await page.evaluate(() => document.getAnimations().length);
-          if (moving) add(skin, theme, "small", WIDE, [{ rule: "motion", message: `${moving} animation(s) running with prefers-reduced-motion: ${motion}` }]);
+          for (const sample of ["small", "text", "code"]) {
+            await page_(skin, theme, sample, WIDE);
+            const moving = await page.evaluate(() => document.getAnimations().length);
+            if (moving) add(skin, theme, sample, WIDE, [{ rule: "motion", message: `${moving} animation(s) running with prefers-reduced-motion: ${motion}` }]);
+          }
         }
         await emulate({ "prefers-reduced-motion": "no-preference" });
         // narrow containers: the columns drop in the documented order, and nothing spills out
@@ -181,6 +218,19 @@ async function audit(browser, { skins = SKINS, themes = THEMES, log = () => {} }
             if (gone > 0 && seen.slice(gone).some((s) => s[col])) add(skin, theme, sample, seen[gone].width, [{ rule: "columns", message: `the ${col} column comes back at a narrower width` }]);
           }
           log(`${skin} ${theme} ${sample}: ` + seen.map((s) => `${s.width}:${[s.date && "D", s.size && "S", s.type && "T"].filter(Boolean).join("") || "-"}`).join(" "));
+        }
+        // narrow editors: nothing spills out, prose wraps instead of scrolling sideways, and a
+        // region that does scroll (code, or long text) is still reachable and named
+        for (const sample of ["text", "code", "bare"]) {
+          for (const width of [WIDE, ...NARROW]) {
+            await page_(skin, theme, sample, width);
+            const l = await page.evaluate(layout);
+            if (l.pageOverflow > 0) add(skin, theme, sample, width, [{ rule: "overflow", message: `the page scrolls sideways by ${l.pageOverflow}px` }]);
+            if (l.winWidth > width + 0.5) add(skin, theme, sample, width, [{ rule: "overflow", message: `the window is ${l.winWidth}px wide in a ${width}px page` }]);
+            if (l.bodyOverflow > 1 && SAMPLES[sample].text !== undefined) add(skin, theme, sample, width, [{ rule: "overflow", message: `the text scrolls sideways by ${l.bodyOverflow}px instead of wrapping` }]);
+            if (l.barOverflow > 0) add(skin, theme, sample, width, [{ rule: "overflow", message: `the title overflows the title bar by ${l.barOverflow}px` }]);
+            if (width !== WIDE) add(skin, theme, sample, width, await page.evaluate(inspect, expected(sample)));
+          }
         }
       }
     }

@@ -6,6 +6,17 @@
 const pane = require("../index");
 const { referenceGeometry } = require("./lib/geometry");
 const sample = require("./sample.json");
+const fs = require("fs");
+const path = require("path");
+
+// The editor windows show what the capture typed (screenshots/macos.sh opens these files as
+// Essay.txt and Snippet.txt), so they come from the same fixture assets.
+const asset = (name) => fs.readFileSync(path.join(__dirname, "..", "screenshots", "fixture-assets", name), "utf8").replace(/\s+$/, "");
+const EDITORS = {
+  text: { render: (o) => pane.text(asset("text-sample.txt"), o), title: "Essay.txt" },
+  code: { render: (o) => pane.code(asset("code-sample.html"), { ...o, language: "html" }), title: "Snippet.txt" },
+};
+const BUILT_EDITORS = ["macos"]; // the OSes whose editor skin exists; the others fall through to fixtures
 
 const TREE = `About.txt
 Animation.gif
@@ -44,6 +55,11 @@ const VIEW = { default: "list" };
 // The QA windows have the reference's fixed size and are never pinned: the harness
 // chooses the skin with <html data-os> and the theme with prefers-color-scheme.
 async function render(caseId, c) {
+  if (EDITORS[c.view]) {
+    if (!BUILT_EDITORS.includes(c.os)) return null;
+    const result = EDITORS[c.view].render({ title: EDITORS[c.view].title, height: `${c.windowSize.height}px` });
+    return { html: result.html, ...pane.assets() };
+  }
   if (c.os === "windows" && c.view !== "default") return null; // a view study: fixtures
   // Only the mac skin has an icons view so far; the others use their fixtures. Finder's capture
   // lays its icons out by hand (a fifth column is cut by the window edge, index.html and

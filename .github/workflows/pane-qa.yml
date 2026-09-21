@@ -87,7 +87,7 @@ jobs:
         shell: bash
         run: |
           # single-quoted script, no nested quotes: macOS's Bash 3.2 mis-parses those
-          PKGS=$(node -e 'const p=require("./repo/package.json");const d={...p.dependencies,...p.devDependencies};console.log(["puppeteer","sharp","pixelmatch","express"].map(n=>n+"@"+d[n]).join(" "))')
+          PKGS=$(node -e 'const p=require("./repo/package.json");const d={...p.dependencies,...p.devDependencies};console.log(["puppeteer","sharp","pixelmatch","express","highlight.js"].map(n=>n+"@"+d[n]).join(" "))')
           echo "pkgs=$PKGS" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         id: cache
@@ -160,7 +160,7 @@ jobs:
         id: deps
         run: |
           # single-quoted script, no nested quotes: macOS's Bash 3.2 mis-parses those
-          PKGS=$(node -e 'const p=require("./package.json");const d={...p.dependencies,...p.devDependencies};console.log(["puppeteer","sharp","pixelmatch","express","jasmine","cheerio"].map(n=>n+"@"+d[n]).join(" "))')
+          PKGS=$(node -e 'const p=require("./package.json");const d={...p.dependencies,...p.devDependencies};console.log(["puppeteer","sharp","pixelmatch","express","jasmine","cheerio","highlight.js"].map(n=>n+"@"+d[n]).join(" "))')
           echo "pkgs=$PKGS" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         id: cache

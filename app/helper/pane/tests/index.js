@@ -28,9 +28,9 @@ describe("pane", function () {
       expect(pane.folder("a.md", { view: "list" })).not.toBeNull();
       expect(pane.folder("a.md", { view: "columns" })).toBeNull();
     });
-    it("returns null for the editor windows, which are not built yet", function () {
-      expect(pane.text("hello")).toBeNull();
-      expect(pane.code("<p>", { lang: "html" })).toBeNull();
+    it("renders the editor windows (tests/editor.js has the details)", function () {
+      expect(pane.text("hello").html).toContain('data-view="text"');
+      expect(pane.code("<p>", { language: "html" }).html).toContain('data-view="code"');
     });
     it("can pin a window to an OS and a theme", function () {
       const html = pane.folder("About.txt", { os: "mac", theme: "dark", files: { "About.txt": { bytes: 6, modified: "2026-09-20T15:38:00" } }, now: "2026-09-20T15:38:00" }).html;
@@ -65,12 +65,12 @@ describe("pane", function () {
   describe("transform", function () {
     const cheerio = require("cheerio");
     it("replaces pre.folder blocks and leaves unsupported ones alone", function () {
-      const $ = cheerio.load('<pre class="folder" title="Your site"><code>Pages\n  About.txt\nPosts/</code></pre><pre class="code"><code>x</code></pre>', { decodeEntities: false }, false);
+      const $ = cheerio.load('<pre class="folder" title="Your site"><code>Pages\n  About.txt\nPosts/</code></pre><pre class="folder" data-view="columns"><code>x</code></pre>', { decodeEntities: false }, false);
       pane.transform($);
       expect($("figure.pane").length).toBe(1);
       expect($("figure.pane").attr("aria-label")).toBe("Your site");
       expect($("figure.pane .pane-row").length).toBe(3);
-      expect($("pre.code").length).toBe(1);
+      expect($("pre.folder").length).toBe(1); // a view that isn't built: left for the caller
     });
   });
 

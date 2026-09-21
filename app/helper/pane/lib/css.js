@@ -124,7 +124,7 @@ function skin(os, source, skins = SKINS) {
   const darkRules = [];
   for (const it of items(dark)) {
     if (it.sel) darkRules.push(`${it.sel}{${it.body}}`);
-    else decls.push(it.text);
+    else if (it.text !== ";") decls.push(it.text);
   }
   const tokens = decls.join("");
   const asDark = (extra) => (tokens ? `${root(".pane", os, extra, skins)}{${scheme(tokens, "dark")}}` : "") + darkRules.map((r) => rootRules(r, os, extra, skins)).join("");

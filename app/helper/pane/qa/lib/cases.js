@@ -47,6 +47,20 @@ function defaultMasks(os, view) {
   if (os === "macos" && view === "default") {
     return [{ name: "date-column", kind: "time", x: 264, y: 84, w: 74, h: null }];
   }
+  // TextEdit's capture shows a text caret and a spell-check squiggle under one word. Both are runner
+  // artifacts (kind "artifact": not text, so tests/masks.js skips them), not part of the look.
+  if (os === "macos" && view === "text") {
+    return [
+      { name: "caret", kind: "artifact", x: 8, y: 32, w: 5, h: 16 },
+      { name: "spell-check squiggle", kind: "artifact", x: 9, y: 53, w: 43, h: 7 },
+    ];
+  }
+  if (os === "macos" && view === "code") {
+    return [
+      { name: "caret", kind: "artifact", x: 8, y: 32, w: 5, h: 16 },
+      { name: "spell-check squiggle", kind: "artifact", x: 122, y: 78, w: 35, h: 8 },
+    ];
+  }
   if (os === "windows" && view === "default") {
     return [{ name: "date-column", kind: "time", x: 278, y: 165, w: 136, h: 150 }];
   }
@@ -60,7 +74,7 @@ function defaultMasks(os, view) {
 // in the references; the default views have an extra column header row.
 function defaultRegions(os, view) {
   if (os === "macos") {
-    const top = view === "default" ? 80 : 52;
+    const top = view === "default" ? 80 : view === "text" || view === "code" ? 32 : 52; // TextEdit has no toolbar
     return [
       { name: "titlebar", kind: "chrome", x: 0, y: 0, w: null, h: top },
       { name: "content", kind: "text", x: 0, y: top, w: null, h: null },

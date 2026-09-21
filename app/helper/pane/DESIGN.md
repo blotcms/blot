@@ -476,3 +476,78 @@ of its own file (files of one skin are joined; each `@light`/`@dark` body now ge
 Also extend `qa/pane-adapter.js` (drop the `c.os !== "macos"` line in the icons branch and give the
 OS its tree) and `qa/thresholds.json`, and `qa/backdrop.js`'s icons filter. Windows' Explorer hides
 extensions of known types (already in the label markup) and has no Type/Size text in this view.
+- **Editor windows** (`pane.text`, `pane.code`; `lib/editor.js`, `lib/highlight.js`; macOS skin `css/mac-editor.css`;
+  structure in `css/base.css`). One contract for all three OSes, so the Windows and Linux skins are CSS only.
+
+  ```html
+  <figure class="pane pane-ed [pane-bare]" data-view="text|code" [data-lang="html"] [data-pin] [data-theme]
+          aria-label="Essay.txt" [style="--pane-w:…;--pane-h:…"]>
+    <div class="pane-bar" aria-hidden="true">Essay.txt</div>     <!-- not emitted when chrome:false -->
+    <div class="pane-head" aria-hidden="true"></div>              <!-- ditto; empty, for a skin's second chrome row -->
+    <pre class="pane-body" [tabindex="0" aria-label="Essay.txt"]>the text, escaped</pre>                  <!-- text -->
+    <pre class="pane-body" …><code><span class="pane-l">line <span class="pane-t-t">…</span></span>
+    <span class="pane-l">next line</span></code></pre>                                                     <!-- code -->
+  </figure>
+  ```
+
+  - **Options** (`opts`): `title` (file name: bar text and accessible name; default "Text"/"Code", and a code window
+    with no title has an empty bar), `chrome` (default true; false = the text panel alone: no `.pane-bar`/`.pane-head`,
+    class `pane-bare`), `language` (code; a highlight.js name or alias, default `html`; `text`/`plain` or an unknown name
+    is shown plain, an unknown one warns), `os`, `theme`, `width`, `height` (as the folder), `now` (accepted, unused).
+    Never throws: any input is coerced to text. `transform` maps the old authoring syntax: `title` -> `title`;
+    `pre.text` has chrome only with class `with-chrome` (or `data-chrome="true"`), `pre.code` always (or not with
+    `data-chrome="false"`); `language` comes from `data-language` or a class that names a highlight.js language
+    (`<pre class="code javascript">`), else html; `data-width`, `data-height`, `data-os`, `data-theme` as for folders.
+    The source is the `code` child's text (so an earlier hljs pass over it changes nothing) trimmed like a folder's.
+  - **Content is text.** The body is one `pre`; whitespace, tabs and line breaks are exactly the source (`tab-size:4`),
+    everything is escaped, nothing is interpreted (a leading newline is doubled, because the parser drops the first).
+    Text wraps (`pre-wrap`, `overflow-wrap:break-word`); code does not (`white-space:pre`, sideways scroll). Tokens are
+    inline spans and every line is an inline `.pane-l` span with the real `\n` *between* spans, so selecting or copying
+    gives the source byte for byte (`tests/editor-chrome.js`, `qa/lib/audit.js` check it).
+  - **Line numbers** are a CSS gutter for a skin to switch on: `.pane-l` increments the counter `pane-line`, and
+    `.pane-l::before` (in `base.css`, `display:none`) prints it, `position:sticky;left:0` so it stays put while the code
+    scrolls, `user-select:none`, sized by `--gut-w` (default 3ch), `--gut-gap` (1ch), `--gut-fg`, `--gut-bg` (opaque, the
+    window's `--bg`, so scrolled text goes under it). A skin shows it with one declaration
+    (`.pane .pane-l::before{display:inline-block}`) and sets those properties; macOS has none, as in TextEdit.
+  - **Tokens.** `lib/highlight.js` runs highlight.js at build time (optional: without it, or for an unknown language, the
+    code is plain escaped text and one warning is logged) and maps its scopes to 10 classes, split per line so no span
+    crosses a line break: `pane-t-k` keyword, `-s` string/regexp, `-c` comment, `-n` number/literal, `-f` function/title/
+    section, `-a` attribute/property, `-t` tag/name/selector, `-m` meta/doctype, `-y` type/class/built-in, `-v` variable/
+    symbol/params. `base.css` colours each with `var(--tok-X, inherit)`, so **palette = the custom properties `--tok-k
+    … --tok-v` in the skin's `@light`/`@dark`**. Decision: the markup always carries tokens; a skin styles them as its
+    reference shows. macOS sets them all to `currentColor` (TextEdit shows plain text); a colourful docs palette is one
+    edit away (the values are in the comment at the top of `mac-editor.css`). GNOME Text Editor highlights HTML itself, so
+    Linux sets real colours; Notepad has none, so Windows sets `currentColor`.
+  - **Chrome budget:** 2 of 8 nodes (`.pane-bar`, `.pane-head`), both `aria-hidden`, identical for every OS and for both
+    views. Everything else is pseudo-elements: `.pane::before/::after`, `.pane-bar::before/::after`, `.pane-head::…`.
+    Scroller: the body gets `tabindex="0"` and the title as `aria-label` when it can scroll: an explicit `height`, more
+    than 22 lines (wrapped at an assumed 40 columns for text), or, for code, a line over 44 characters (a phone-width window
+    scrolls long before 490px does). The build can't measure, so it over-approximates (an extra tab stop, never a missing
+    one). Height: the window fits its text, capped at `--pane-max` (360px), or `--pane-h`.
+  - **What a skin supplies** (`css/<os>-editor.css`, rooted at `.pane` like every skin; each rule needs `.pane-ed` (or
+    `.pane[data-view=…]`) to beat the folder rules of `<os>.css`, as `mac-editor.css` does with `.pane.pane-ed …`):
+    1. tokens in `@light`/`@dark`: the editor's text/background colours (`--bg` is the body's background and the gutter's),
+       and the ten `--tok-*`; the window edge and shadow if they differ from the folder's (macOS: radius 16 instead of 26);
+    2. the title bar on `.pane-bar` (height, the file name's font and colour, the window buttons, tab or proxy icon) and, if
+       the OS has a second row (Notepad's menu bar), `.pane-head` (empty; it is `display:none` for a skin that has no use
+       for it, which the folder skin's `.pane-head` rules would otherwise style); the folder skin's `::before/::after` on
+       `.pane` and `.pane-bar` (macOS traffic lights, navigation pill) must be overridden or hidden, and status bars are
+       `.pane::after` etc.; `.pane-bare`: no bar, no head, no buttons (hide `.pane::before`);
+    3. `.pane-body`: font (monospace stack, size, line height), `padding`, colour (`padding-left:0` on code if the gutter is
+       on, since the sticky gutter sits at the scrollport edge), scrollbars (`::-webkit-scrollbar` as the folder skins do;
+       Firefox gets `scrollbar-width`/`scrollbar-color`);
+    4. optionally the gutter (above) and a `@container` ladder in the order of §6 (drop decorative chrome below 440px);
+    5. forced-colors and reduced-motion come from `base.css`; add no animation, and draw no caret or selection.
+  - **macOS (TextEdit, plain text)** measures to the 2x captures: window 490x360, radius 16 (the folder window's 26 has a
+    toolbar), a 32px bar (31px + a 1px `--ed-line` hairline; traffic lights at x=9, 23px apart; the proxy icon is
+    `icons/mac/text.svg` at x=84, the name is 13.5px 600 SF, then a chevron), text at 11px/13px Menlo, 10px side padding,
+    #000 on #fff and #fff on #1e1e1e. The dark window adds a 1px lighter top edge. The blue caret and the red
+    spell-check squiggle in the captures are runner artifacts and are not drawn (they are masked in the QA cases,
+    `kind:"artifact"`, so `tests/masks.js` does not treat them as text). The two code captures have a deeper window
+    shadow than the text and folder captures, which the CSS cannot match for both, so their `shadowError` is looser.
+  - **QA:** `qa/pane-adapter.js` renders `text`/`code` for macOS from `screenshots/fixture-assets/` (the files the capture
+    typed); other OSes fall through to fixtures/null. `defaultRegions` gives the editors a 32px chrome region, and
+    `compare.js` joins text rows across a 1px gap only for them (their lines are packed). `qa/lib/audit.js` has editor
+    samples (prose, code, long, bare, fixed, empty) for every skin, `qa/backdrop.js` covers the editor cases.
+  - **`lib/css.js` fix:** the token blocks of a skin's several files are now joined with `;` (a block's last declaration
+    need not end with one, and `mac.css`'s didn't: the first token of the next file was swallowed).

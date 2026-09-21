@@ -7,9 +7,9 @@ const finder = require("../tools/finder");
 // deploy. See app/helper/pane/PLAN.md, "Fresh dates".
 const BUILD_NOW = pane.isoNow();
 
-// pane renders the folder windows (pre.folder). Whatever it doesn't render yet (the text and
-// code editor windows, inline code.file / code.folder) is left for the old finder, which runs
-// after it and so never sees the windows pane replaced. Retire the finder when pane covers all.
+// pane renders the folder and editor windows (pre.folder, pre.text, pre.code). Whatever it doesn't
+// render yet (inline code.file / code.folder) is left for the old finder, which runs after it and so
+// never sees the windows pane replaced. Retire the finder when pane covers all.
 const windows = ($) => {
   pane.transform($, { now: BUILD_NOW });
   finder.html_parser($);

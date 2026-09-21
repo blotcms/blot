@@ -131,7 +131,8 @@ tighten them as the rendering improves, per case when one view lags.
 node app/helper/pane/qa/a11y.js [--skin mac|win|linux] [--verbose]
 ```
 
-Renders sample windows (few rows, many rows, long names, empty, fixed height) in every skin and
+Renders sample windows (few rows, many rows, long names, empty, fixed height; and the editor windows: prose, code, long
+text, long code, bare, fixed, empty) in every skin and
 theme in Chrome and checks what DESIGN.md §5 and §6 promise: a named `figure`, aria-hidden chrome,
 real nested `ul`/`li` (no `role=tree`), one visible OS variant per cell, every scrollable region
 keyboard-focusable and named, a visible focus ring after Tab, forced-colors (border, no shadow),
@@ -171,10 +172,9 @@ masks, `c` clusters, `[` `]` cluster, `b` blink, `+` `-` `0` zoom, `r` re-render
 apart: `pane.folder(tree, opts)` returns `{ html }` (one figure per window),
 `pane.assets()` returns the `{ css, js }` a page ships **once** (one stylesheet skinned by
 `html[data-os]`, and a tiny head snippet that sets `data-os`), and `pane.transform($)` is the
-cheerio hook the docs build will call. `text()` and `code()` return `null` until the editor
-windows exist. The header of `../index.js` documents the options (view, files, now, os,
+cheerio hook the docs build calls. `text()` and `code()` render the editor windows (macOS skin built). The header of `../index.js` documents the options (view, files, now, os,
 theme, width, height). `pane-adapter.js` plugs it into the harness for the default view of
-every OS/theme, adding `assets()` to each window; other views fall back to `fixtures/`.
+every OS/theme and the `text`/`code` views of macOS, adding `assets()` to each window; other views fall back to `fixtures/`.
 Set `PANE_QA_FIXTURES=1` to use only the fixtures.
 
 The adapter passes the module the **view** (`list` for the default view, then `icons`,
