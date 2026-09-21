@@ -83,6 +83,14 @@ up() {
     sleep 2
   done
 
+  # The slot block lives in development_server.conf, which the main stack's nginx
+  # mounts from the main checkout. Without it, <slot>-local.blot shows "no site here".
+  if ! docker exec blot-nginx-1 grep -q preview_upstream /etc/nginx/nginx.conf 2>/dev/null; then
+    echo "WARNING: the running nginx has no preview routing, so https://$host will not reach this sidecar." >&2
+    echo "  Update the main checkout to a commit containing config/openresty/development_server.conf's" >&2
+    echo "  preview block, then: docker compose -f $MAIN_ROOT/scripts/development/docker-compose.yml restart nginx" >&2
+  fi
+
   local login work
   login="$(docker exec "blot-node-$slot" node scripts/blog/access.js example@example.com 2>/dev/null | grep -m1 '^https://')" || true
 
