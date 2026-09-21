@@ -16,6 +16,8 @@
 
 ## Edit, fork, and preview
 
+From a worktree, `scripts/development/preview.sh up <url-or-path>` prints a login URL and a direct URL to the work at `https://<slot>-local.blot`; it shows dashboard and blog rendering, but not template source changes under `app/templates/source` (only the main stack rebuilds those); check those on `https://local.blot`.
+
 1. Ensure [`https://local.blot/`](https://local.blot/) is reachable. If it is offline, stop and ask the operator to run `npm start`; never substitute another server or URL.
 2. If authentication is needed, generate a one-time dashboard link with:
 

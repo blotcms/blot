@@ -69,8 +69,11 @@ setup(async (err) => {
     }
 
     // Send an email notification if the server starts or restarts
-    serverStartEvent().then((event) =>
-      email.SERVER_START(null, { container: config.container, event })
-    );
+    // Worktree preview sidecars (scripts/development/preview.sh) are not master
+    if (config.master || config.environment !== "development") {
+      serverStartEvent().then((event) =>
+        email.SERVER_START(null, { container: config.container, event })
+      );
+    }
   });
 });
