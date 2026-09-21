@@ -31,7 +31,8 @@
 #      before, certificate served is the one on disk, Node can still reach
 #      the purge endpoint. If any check fails the old colour is started again
 #      and the new one removed (kept if the old one cannot be brought back).
-#   5. Only then give the new one its restart policy and remove the old one.
+#   5. Only then remove the old one. (The new one gets its restart policy
+#      before step 3, so a daemon restart in between still leaves a proxy.)
 #      Steps 2-5 run under a trap: any failure or interrupt undoes them.
 #
 # Known limitation: while both are up (seconds), a cache purge sent to
@@ -65,8 +66,8 @@ elif running blot-proxy-green; then
   OLD=blot-proxy-green; NEW=blot-proxy-blue
 else
   OLD=""; NEW=blot-proxy-blue
-  if sys systemctl is-active --quiet openresty; then
-    die "bare-metal OpenResty is serving and no proxy container is running: use cutover-from-baremetal.sh"
+  if sys systemctl is-active --quiet openresty || sys systemctl is-enabled --quiet openresty; then
+    die "bare-metal OpenResty is active or still enabled (it would race the container for :80/:443 after a reboot) and no proxy container is running: use cutover-from-baremetal.sh"
   fi
   log "No proxy container running - starting $NEW fresh (no overlap)."
 fi
@@ -140,6 +141,12 @@ if [ -z "$OLD" ]; then
   exit 0
 fi
 
+# The new colour must survive a daemon or host restart BEFORE the old one is
+# stopped: a container that was stopped by hand is not restarted, so between the
+# stop and a later policy change a restart would leave neither colour running.
+# If this fails the old one is untouched and the trap removes the new one.
+docker update --restart unless-stopped "$NEW" >/dev/null
+
 STATE=swapping
 log "Draining and stopping $OLD (timeout ${DRAIN_TIMEOUT}s)"
 docker stop --time "$DRAIN_TIMEOUT" "$OLD" >/dev/null
@@ -147,9 +154,6 @@ docker stop --time "$DRAIN_TIMEOUT" "$OLD" >/dev/null
 log "Checking the site through $NEW"
 live_checks "$BASELINE" || die "checks failed after the swap to $NEW_IMAGE"
 
-# Give the new colour its restart policy BEFORE removing the old one: if this
-# fails we can still roll back. Only then is the swap committed.
-docker update --restart unless-stopped "$NEW" >/dev/null
 STATE=committed
 docker rm "$OLD" >/dev/null 2>&1 || true
 log "Swapped $OLD -> $NEW"

@@ -77,6 +77,7 @@ cat > "$T/bin/systemctl" <<'F'
 echo "systemctl $*" >> "$FAKE/calls"
 case "$1" in
   is-active) [ -e "$FAKE/unit_active" ] ;;
+  is-enabled) [ -n "${FAKE_UNIT_ENABLED:-}" ] ;;
   stop) rm -f "$FAKE/unit_active"; echo none > "$FAKE/serving" ;;
   start) [ -z "${FAKE_BM_START_FAILS:-}" ] || exit 1; touch "$FAKE/unit_active"; echo baremetal > "$FAKE/serving" ;;
   disable) [ -z "${FAKE_DISABLE_FAILS:-}" ] || [ -e "$FAKE/disable_failed" ] || { touch "$FAKE/disable_failed"; exit 1; }; touch "$FAKE/unit_disabled" ;;
@@ -252,19 +253,17 @@ reset container; FAKE_FAIL_AFTER_STOP=1 bluegreen
 check "checks fail after the old one stops: old one restarted, new removed" '[ $RC != 0 ] && after_last "docker start blot-proxy-blue" "docker stop" && called "docker rm -f blot-proxy-green" && ! called "docker rm blot-proxy-blue"'
 
 reset container; FAKE_UPDATE_FAILS=1 bluegreen
-check "restart policy cannot be set: old one restored, nothing removed first" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && called "docker rm -f blot-proxy-green" && ! called "docker rm blot-proxy-blue" && serving container'
+check "restart policy cannot be set: the old one is never stopped, the new one is removed" '[ $RC != 0 ] && ! called "docker stop" && after_last "docker rm -f blot-proxy-green" "docker update" && ! called "docker rm blot-proxy-blue" && serving container'
 
-reset container; FAKE_FAIL_AFTER_STOP=1 FAKE_START_FAILS=blot-proxy-blue bluegreen
-check "old one cannot be restarted: the new one is kept (it may be the only proxy)" '[ $RC != 0 ] && called "docker stop" && ! after_last "docker rm -f blot-proxy-green" "docker stop"'
+reset container; bluegreen
+check "success: the new colour is restartable BEFORE the old one is stopped" '[ $RC = 0 ] && before "docker update --restart unless-stopped blot-proxy-green" "docker stop"'
 
-reset container; FAKE_START_FAILS=blot-proxy-green bluegreen
-check "new colour fails to start: it is removed, the old one never stopped" '[ $RC != 0 ] && ! called "docker stop" && after_last "docker rm -f blot-proxy-green" "docker start blot-proxy-green"'
+reset none; FAKE_UNIT_ENABLED=1 bluegreen
+check "fresh start while the bare-metal unit is still enabled: refused" '[ $RC != 0 ] && ! called "docker create" && mentions "cutover-from-baremetal.sh"'
 
-reset none; bluegreen
-check "fresh start: checked, then made permanent" '[ $RC = 0 ] && before "docker start blot-proxy-blue" "docker update --restart unless-stopped blot-proxy-blue"' 
-
-reset none; FAKE_CONTAINER_CODE=502 bluegreen
-check "fresh start whose site does not answer 200: removed, never made permanent" '[ $RC != 0 ] && ! called "docker update" && after_last "docker rm -f blot-proxy-blue" "docker start blot-proxy-blue"'
+reset baremetal; echo "PROXY_UPSTREAM_GREEN=127.0.0.1:9999" >> "$T/proxy.env"; FAKE_UPSTREAM_DOWN=9999 cutover
+check "custom upstream down: refused in preflight, before the rehearsal" '[ $RC != 0 ] && ! called "docker run -d" && ! called "systemctl stop" && mentions "PROXY_UPSTREAM_GREEN"'
+sed -i.bak '/^PROXY_UPSTREAM_GREEN=/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
 
 reset container; FAKE_LOCK_HELD=1 bluegreen
 check "another deploy holds the lock: refused, nothing touched" '[ $RC != 0 ] && ! called "docker create" && ! called "docker stop" && ! called "docker rm" && mentions "already running"'

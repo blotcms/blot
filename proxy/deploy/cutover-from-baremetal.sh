@@ -163,6 +163,10 @@ for port in $UPSTREAM_PORTS; do
     || refuse "the Node container on :$port is not healthy"
 done
 
+# The configured upstreams themselves (the rehearsal can only reach the default
+# ports through the bridge, so a custom PROXY_UPSTREAM_* would go untested).
+upstreams_reachable || refuse "a configured upstream is not healthy"
+
 ensure_image "$IMAGE"
 report=$(validate_image "$IMAGE") || { echo "$report" >&2; refuse "$IMAGE does not render a valid config with $ENV_FILE"; }
 if [ "${ALLOW_STDOUT_LOGS:-}" != "1" ]; then
