@@ -164,6 +164,8 @@ dashboard.get("/permission", function (req, res) {
 // This route recieves the user back from
 // Dropbox when they have accepted or denied
 // the request to access their folder.
+// N.B. This GET mutates and starts the initial upload, so nginx pins it to
+// green rather than serving it on blue like other GETs (blot-site.conf).
 dashboard.get("/authenticate", function (req, res, next) {
   // the user has reloaded this page
   // if (req.session.dropbox && req.session.dropbox.preparing === true) {
