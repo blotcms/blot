@@ -1,10 +1,14 @@
 Make sure next bill amount is in all billing emails to customers
 
-Get proxy horizontally scalable
+Add fast rollback action
+
+Get proxy horizontally scalable and multi-region
 - Get proxy container deployed
 
-Get node container horizontally scalable 
-- finish app/storage module
+Explain on the about page the websites started out as files in a folder. But they had to be HTML. Blot makes other file types possible too.
+
+Get node container horizontally scalable and multi-region
+- finish app/storage module with s3
 - solve git storage problem 
 
 Add clear bill change info to new blog flow
@@ -12,8 +16,6 @@ Add clear bill change info to new blog flow
 Check in on our dropbox sync verification job to make sure it's working well (docker green)
 
 Rebuild all sites to bake in folder CDN urls
-
-Run scripts/blog/find-template-tags.js and follow up with affected customers
 
 Why is Ross' template so slow to install? It takes a few seconds. Let's speed it up.
 
@@ -286,7 +288,7 @@ Proxy container (OpenResty) - remaining before it can replace config/openresty:
 - dehydrated version drift: the proxy image vendors dehydrated 0.7.2 (0.6.5, which lua-resty-auto-ssl pins, is rejected by current ACME servers); bare-metal config/openresty still installs the 0.6.5 pin via luarocks - unify (bump lua-resty-auto-ssl, or vendor 0.7.2 there too)
 - Investigate replacing unmaintained lua-resty-auto-ssl (would also resolve the two items above): lua-resty-acme (keeps OpenResty, drops dehydrated/sockproc/:8999) or issuing from the Blot app into Redis; see proxy/README.md
 - Redis auth/TLS; container equivalent for fail2ban
-- Harden the proxy against Redis outages (Node side shipped, see below): answer upstream 503 with a "temporarily unavailable" page plus Retry-After/no-store instead of the offline page (or stop intercepting 503 so Node's own page passes through); drop http_503 from proxy_next_upstream so each 503 does not take a container out of rotation via max_fails; make allow_domain in init.conf fail closed when Redis errors (it returns true today, which lets auto-ssl try to issue for any hostname); set resty.redis timeout to ~2s (default 60s stalls TLS handshakes), including the auto-ssl storage adapter, whose get_connection (v0.13.1, caches ngx.ctx.auto_ssl_redis_connection) can be overridden after auto_ssl:init(); add an e2e check with the stub upstream answering 503. Do this once the proxy container is built so it can be tested. Same changes apply to config/openresty until then
+- Purge follow-ups: BLOT_REVERSE_PROXY_URLS is a static list (proxies should register themselves in Redis), and purges queued in a Node process's memory are lost if it dies before sending them
 
 Follow-ups from drag-and-drop template upload:
 - Move the folder browser (views/dashboard/folder/directory.html) onto the shared views/js/collect-dropped-files.js instead of its inline copy of the same traversal

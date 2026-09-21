@@ -133,6 +133,7 @@ function container({ env = process.env, config }) {
     // 127.0.0.1:80, so they purge through the host's private address instead
     // (BLOT_REVERSE_PROXY_URLS). Loopback when unset: nothing else can use it.
     openresty_instance_private_ip: placeholder("PROXY_PRIVATE_IP"),
+
     resolver: placeholder("PROXY_RESOLVER"),
 
     // Base domain the generated virtual hosts are built from. This is a

@@ -71,11 +71,12 @@ docker rm -f blot-proxy-blue && sudo systemctl enable --now openresty
 
 ## Known gaps
 
-- **Purge during a blue/green overlap.** For the few seconds both containers
-  listen, a purge sent to `127.0.0.1`/the private address reaches only one, and
-  `cacher.lua` tracks keys in per-process memory, so keys the other cached in
-  that window are not purged. Deploy when few edits are happening; fixing it
-  properly means purging each proxy independently (#1936).
+- **Purge during a blue/green overlap.** Node now purges each proxy
+  independently and retries ones that were down (#1936), but the two
+  containers share `127.0.0.1` and the private address, so for the few seconds
+  both listen a purge is accepted by only one of them, which counts as
+  delivered. `cacher.lua` tracks keys in per-process memory, so keys the other
+  cached in that window are not purged. Deploy when few edits are happening.
 - **`:8999` ACME hook** during the overlap (see the root `TODO`).
 - The container has no `fail2ban` of its own; it relies on the host's reading
   the shared log directory (hence the log-mode guard above).

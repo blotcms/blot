@@ -33,7 +33,7 @@
 # Known limitation: while both are up (seconds), a cache purge sent to
 # 127.0.0.1 or the private address reaches only one of them. Keys the other
 # cached in that window are not purged (cacher.lua tracks keys in per-process
-# memory). Deploy at a quiet time, and see the TODO on purging every proxy.
+# memory). Deploy at a quiet time (see proxy/deploy/README.md).
 set -euo pipefail
 
 NEW_IMAGE="${1:?usage: blue-green.sh <commit-sha | image>}"
