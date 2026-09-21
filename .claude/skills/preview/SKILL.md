@@ -37,9 +37,10 @@ operator to check the branch out; use a preview slot. Design and limits:
 4. Edits to files in this worktree show up on the slot within seconds. Dashboard
    changes (site settings, template edits) are written to the shared dev
    database and also show on `local.blot`.
-5. Do not use a slot to test sync, the scheduler, SITE-template builds
-   (`app/templates/source`) or Redis-schema changes; only the main stack runs
-   those.
+5. Do not use a slot to test sync, the scheduler or Redis-schema changes; only
+   the main stack runs those. SITE-template edits (`app/templates/source`) do
+   rebuild on a slot, but write to the shared dev Redis, so they also show on
+   `local.blot`.
 6. When the task is finished or the operator is done, run
    `scripts/development/preview.sh down` to release the slot (`preview.sh ls`
    shows who holds each one).

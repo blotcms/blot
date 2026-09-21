@@ -17,6 +17,10 @@ services:
       - BLOT_REDIS_HOST=redis
       # Not blot-container-green, so this sidecar is not master
       - CONTAINER_NAME=blot-container-${SLOT}
+      # Slots build and watch SITE templates from this worktree's
+      # app/templates/source. Templates live in the shared dev Redis, so
+      # this overwrites what the main stack (and other slots) built.
+      - BLOT_BUILD_TEMPLATES=true
       - BLOT_AIRLOCK_BROWSER_URL=http://airlock:9222
       - BLOT_AIRLOCK_PROXY_URL=http://airlock:8888
     networks:
