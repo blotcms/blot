@@ -33,9 +33,12 @@ echo "Hello" > "$D/About.txt"
 # Spread modified (and, on macOS, created) times across the years so each OS's
 # date formats get exercised. `touch -t` on macOS also moves the creation date
 # back when it is earlier. GNU and BSD date differ, so try both.
+# Days back per file, in listing order: today, yesterday and a weekday first, so each OS's
+# "Today" / "Yesterday" / weekday forms appear in the captures, then further back.
+DAYS=(0 1 5 37 148 333 592 925 1332 1813 2368 2997 3700 4500)
 i=0
 for f in "$D"/* "$D"/Fruits/*; do
-  days=$(( (i * i * 37) % 4500 ))
+  days=${DAYS[$i]:-4500}
   if date -v-1d +%s >/dev/null 2>&1; then stamp=$(date -v-"${days}"d -v-"$((i * 13))"M +%Y%m%d%H%M); else stamp=$(date -d "$days days ago - $((i * 13)) minutes" +%Y%m%d%H%M); fi
   touch -t "$stamp" "$f"
   i=$((i + 1))

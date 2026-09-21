@@ -183,6 +183,7 @@ generates missing columns.
 | size ≥ 1 unit | 1000-based, whole KB (`3 KB`), MB with one decimal | 1024-based, ceil to whole KB with thousands separator (`2 KB`) | 1000-based, one decimal (`2.7 kB`) |
 | folder size | `--` | blank | `N items` |
 | date, today | `7:11 PM` | `9/20/2026 7:11 PM` | `Today 15:38` |
+| date, yesterday / this week | `Yesterday` / `8/14/26` | absolute | `Yesterday 15:38` / `Wed 15:38` (unverified against captures) |
 | date, other | `8/14/26` | `8/14/2026 3:25 PM` | `14 Aug 2026` |
 | extensions | shown | hidden for known types (`About`) | shown |
 | Type text | not shown | `File folder`, `Text Document`, `GIF File`, `JPG File`, `MD File`, `DOC File`, `Microsoft Edge HTML Document`, unknown: `XYZ File` | `Folder`, `Text`, `Image`, `HTML`, unknown: `Unknown` (not emitted) |

@@ -222,7 +222,7 @@ Scripts are in `screenshots/`. Findings from the first runs:
   `resources/<os>/README.md` documents how each was captured, and CI puts logs in
   `resources/<os>/capture-logs/`. Only @2x is committed (see `reference/README.md`).
 
-## Fresh dates (decided, not built yet)
+## Fresh dates (built; formats to verify)
 
 The docs are rendered once per deploy (`RUN node app/documentation/build` in the Dockerfile,
 `build/html.js` runs the transformers), so the windows can show dates relative to the build
@@ -242,12 +242,13 @@ time without any runtime work: every visitor sees the same static HTML until the
 - **Relative dates in the source** as the date column: `Apple.md | 2 KB | 3d`, meaning three
   days before `now`. Units `m`, `h`, `d`, `w`, `mo`, `y`, plus `today` and `yesterday`.
   Absolute dates stay verbatim (`Mar 3, 2024`).
-- **Deferred:** add files at -1 and -5 days to the capture fixture, so each OS's "Yesterday"
-  and weekday formats are seen in a real capture (Finder and GNOME Files use them, Explorer does
-  not) and `lib/format.js` can be checked against them. Do this after the Windows and Linux skins
-  are merged, since it changes their references.
-- **Order of work:** after the Windows and Linux skins land (they edit `lib/format.js` and
-  `lib/markup.js` too), then the fixture change.
+- **Built:** `lib/format.js` (`isoNow`, `resolveAge`, `inventDates`; `formatDate` knows today,
+  yesterday and the weekday), `lib/markup.js`, `pane.transform($, { now })`, `tests/dates.js`.
+- **Fixture:** `make-fixture.sh` and `windows.ps1` now date files today, yesterday, 5 days back, then
+  further, so the references show each OS's forms. **To verify** once the recapture lands: Finder's
+  "Yesterday" and GNOME's "Yesterday HH:MM" / "Wed HH:MM" in `formatDate` are from memory, not from
+  captures (the date columns are masked in QA, so this is by eye), and the masks
+  (`qa/lib/cases.js`) must still cover the widest new text.
 
 ## Wallpapers (not built)
 

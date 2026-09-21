@@ -25,7 +25,7 @@ $text = @{
 }
 foreach ($k in $text.Keys) { Set-Content -Path (Join-Path $fixture $k) -Value $text[$k] }
 # spread created/modified times across the years so each OS's date formats get exercised
-$when = @(0, -3, -20, -45, -100, -200, -400, -800, -1200, -2000, -3000, -4000, -5000)
+$when = @(0, -1, -5, -37, -148, -333, -592, -925, -1332, -1813, -2368, -2997, -3700)   # same spread as make-fixture.sh: today, yesterday, a weekday, then further back
 $i = 0
 foreach ($item in Get-ChildItem $fixture -Recurse) {
   $d = (Get-Date).AddDays($when[$i % $when.Count]).AddMinutes(-13 * $i); $i++

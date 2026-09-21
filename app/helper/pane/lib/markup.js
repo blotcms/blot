@@ -1,7 +1,7 @@
 // folder() -> the window's HTML. See DESIGN.md for the DOM contract.
 
 const parse = require("./parse");
-const { formatDate, formatSize, formatFolderSize, formatType, splitExtension, kindOf, invent } = require("./format");
+const { formatDate, formatSize, formatFolderSize, formatType, splitExtension, kindOf, inventDates, inventSize, resolveAge } = require("./format");
 const { OS_KEYS } = require("./os");
 const css = require("./css");
 
@@ -29,13 +29,17 @@ function folder(tree, options = {}) {
   const now = options.now || "2026-01-01T00:00:00";
   const nodes = parse(tree);
   const total = (ns) => ns.reduce((n, x) => n + 1 + total(x.children), 0);
+  const paths = (ns) => ns.flatMap((x) => [x.path, ...paths(x.children)]);
+  const invented = inventDates(paths(nodes), now);
   let row = 0; // visible row index, for the stripes
 
   const cells = (node) => {
-    const meta = files[node.name] || invent(node.path, now);
+    const meta = files[node.name] || { bytes: inventSize(node.path), modified: invented[node.path] };
     const [given, written] = node.cols;
+    // a written date is either an age ("3d", "yesterday"), formatted per OS relative to now, or shown as written
+    const age = written ? resolveAge(written, now) : null;
     const size = (os) => (given ? given : node.folder ? formatFolderSize(node.children.length, os) : formatSize(meta.bytes, os));
-    const date = (os) => (written ? written : formatDate(meta.modified, os, now));
+    const date = (os) => (age ? formatDate(age, os, now) : written ? written : formatDate(meta.modified, os, now));
     const type = (os) => formatType(node.name, node.folder, os);
     // Type is emitted only where a skin can show it (not for a window pinned to macOS)
     const typeCell = !pin || TYPE_OS.includes(pin) ? `<span class="pane-cell pane-t">${perOs(type, pin, TYPE_OS)}</span>` : "";
