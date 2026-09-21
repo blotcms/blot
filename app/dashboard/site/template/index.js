@@ -70,7 +70,7 @@ TemplateEditor.post("/new/upload", require("./save/upload-template"));
 
 TemplateEditor.route("/:templateSlug/install")
   .get(function (req, res) {
-    res.locals.title = `Install - ${req.template.name}`;
+    res.locals.title = `Install - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, install: "selected" };
     res.render("dashboard/template/install");
   })
@@ -202,7 +202,7 @@ TemplateEditor.route("/:templateSlug/uploads/:key")
   .get(require("./load/url-inputs"), function (req, res, next) {
     res.locals.upload = res.locals.uploads.find((i) => i.key === req.params.key);
     if (!res.locals.upload) return next();
-    res.locals.title = `${res.locals.upload.label} - ${req.template.name}`;
+    res.locals.title = `${res.locals.upload.label} - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
     res.render("dashboard/template/controls/upload-form");
   })
@@ -210,7 +210,7 @@ TemplateEditor.route("/:templateSlug/uploads/:key")
 
 TemplateEditor.route("/:templateSlug/favicon")
   .get(require("./load/favicon"), function (req, res) {
-    res.locals.title = `Favicon - ${req.template.name}`;
+    res.locals.title = `Favicon - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
     res.render("dashboard/template/controls/favicon-form");
   })
@@ -233,7 +233,7 @@ TemplateEditor.route("/:templateSlug/syntax-highlighter")
   )
   .get(function (req, res) {
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
-    res.locals.title = `Syntax highlighter - ${req.template.name}`;
+    res.locals.title = `Syntax highlighter - ${req.template.displayName}`;
     res.render("dashboard/template/syntax-highlighter");
   });
 
@@ -245,7 +245,7 @@ TemplateEditor.route("/:templateSlug/local-editing")
       source: "selected",
       local_editing: "selected",
     };
-    res.locals.title = `Local editing - ${req.template.name}`;
+    res.locals.title = `Local editing - ${req.template.displayName}`;
     res.render("dashboard/template/source-code/local-editing");
   })
   .post(require("./save/fork-if-needed"), function (req, res, next) {
@@ -337,7 +337,7 @@ TemplateEditor.route("/:templateSlug/download-zip").get(function (req, res) {
 
 TemplateEditor.route("/:templateSlug/duplicate")
   .get(function (req, res) {
-    res.locals.title = `Duplicate - ${req.template.name}`;
+    res.locals.title = `Duplicate - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, duplicate: "selected" };
     res.render("dashboard/template/duplicate");
   })
@@ -362,11 +362,19 @@ TemplateEditor.route("/:templateSlug/duplicate")
 
 TemplateEditor.route("/:templateSlug/rename")
   .get(function (req, res) {
-    res.locals.title = `Rename - ${req.template.name}`;
+    res.locals.title = `Rename - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, rename: "selected" };
     res.render("dashboard/template/rename");
   })
   .post(function (req, res, next) {
+    if (req.template.localEditing) {
+      return next(
+        new Error(
+          "You cannot rename a locally edited template — rename its folder instead"
+        )
+      );
+    }
+
     Template.setMetadata(
       req.template.id,
       { name: req.body.name },
@@ -379,7 +387,7 @@ TemplateEditor.route("/:templateSlug/rename")
 
 TemplateEditor.route("/:templateSlug/links")
   .get(require("dashboard/site/load/menu"), function (req, res) {
-    res.locals.title = `Links - ${req.template.name}`;
+    res.locals.title = `Links - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
     res.render("dashboard/template/links");
   })
@@ -389,7 +397,7 @@ TemplateEditor.route("/:templateSlug/links")
 
 TemplateEditor.route("/:templateSlug/photo")
   .get(function (req, res) {
-    res.locals.title = `Photo - ${req.template.name}`;
+    res.locals.title = `Photo - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
     res.render("dashboard/template/photo");
   })
@@ -399,7 +407,7 @@ TemplateEditor.route("/:templateSlug/photo")
 
 TemplateEditor.route("/:templateSlug/delete")
   .get(function (req, res, next) {
-    res.locals.title = `Delete - ${req.template.name}`;
+    res.locals.title = `Delete - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, delete: "selected" };
     res.render("dashboard/template/delete");
   })
@@ -418,7 +426,7 @@ TemplateEditor.route("/:templateSlug/delete")
           res.locals.dashboardBase +
             "/template/" +
             (currentTemplateIDSlug || ""),
-          "Deleted template <b>" + req.template.name + "</b>"
+          "Deleted template <b>" + req.template.displayName + "</b>"
         );
       });
     });
@@ -426,7 +434,7 @@ TemplateEditor.route("/:templateSlug/delete")
 
 TemplateEditor.route("/:templateSlug/reset")
   .get(function (req, res, next) {
-    res.locals.title = `Reset - ${req.template.name}`;
+    res.locals.title = `Reset - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, reset: "selected" };
     res.render("dashboard/template/reset");
   })
@@ -440,13 +448,13 @@ TemplateEditor.route("/:templateSlug/reset")
           if (err) return next(err);
           res.message(
             res.locals.dashboardBase + "/template/" + idSlug,
-            "Reset template <b>" + req.template.name + "</b>"
+            "Reset template <b>" + req.template.displayName + "</b>"
           );
         });
       } else {
         res.message(
           res.locals.dashboardBase + "/template/" + idSlug,
-          "Reset template <b>" + req.template.name + "</b>"
+          "Reset template <b>" + req.template.displayName + "</b>"
         );
       }
     });
