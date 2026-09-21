@@ -551,3 +551,6 @@ extensions of known types (already in the label markup) and has no Type/Size tex
     samples (prose, code, long, bare, fixed, empty) for every skin, `qa/backdrop.js` covers the editor cases.
   - **`lib/css.js` fix:** the token blocks of a skin's several files are now joined with `;` (a block's last declaration
     need not end with one, and `mac.css`'s didn't: the first token of the next file was swallowed).
+  - **Colourful code where the OS is plain:** `highlight:true` (or `data-highlight="true"`, or `transform($, {highlight:true})`
+    for the whole build) adds `pane-hl` to a highlighted code window; `mac-editor.css` then sets an Xcode-like `--tok-*`
+    palette (light and dark). Off by default: TextEdit shows plain text.

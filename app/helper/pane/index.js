@@ -39,6 +39,9 @@
 //   chrome    false: the text panel alone, without the title bar and traffic lights (default true)
 //   language  code only: a highlight.js language name (default "html"); "text" or an unknown name
 //             shows plain text (highlight.js is optional: without it the code is plain, with a warning)
+//   highlight true: colour the syntax where the OS's own editor doesn't (macOS TextEdit is plain); class
+//             pane-hl on the window, palette in the skin. transform() takes it as an option (one value per
+//             build) or from data-highlight="true".
 // Text is shown exactly as given (whitespace and line breaks kept, everything escaped, never
 // interpreted). The text editor wraps long lines; the code editor scrolls sideways.
 //
@@ -102,6 +105,7 @@ function transform($, options = {}) {
       os: $(el).attr("data-os") || undefined,
       theme: $(el).attr("data-theme") || undefined,
       chrome,
+      highlight: options.highlight || $(el).attr("data-highlight") === "true",
       // a class naming a language ("javascript") picks it; the default is html, as the old renderer had
       language: $(el).attr("data-language") || classes.find((c) => c !== "code" && resolveLanguage(c) && resolveLanguage(c) !== "plain") || undefined,
       width: $(el).attr("data-width") || undefined,

@@ -118,6 +118,16 @@ WCAG contrast; contrast is reported by `tests/size.js`, never enforced.
   spell-check squiggle (`kind:"artifact"`): runner artifacts, not part of the look (Windows Notepad's squiggles and
   notification dot are the same kind of thing; mask them, don't draw them). highlight.js is an optional dependency
   (the pane-qa workflow installs it); without it code windows are plain, with a warning.
+- **Lessons from the editor windows.** (1) Render locally, but measure against the runner's render:
+  Chrome on the macOS runner antialiases glyphs a little differently, so text ink is ~2x looser there;
+  set thresholds from the CI renders. (2) Densely packed text (editors) merges into one "row band" in
+  `compare.js` unless `joinGap` is small; a wrong band count shows as a huge `rowYOffset`. (3) A capture
+  can differ from its sibling in things CSS can't match (the code captures' deeper shadow): report it,
+  don't chase it. (4) Check computed values (`getComputedStyle`) when a colour is "almost right": a
+  swallowed token (`--a:1--b:2`) looked like a font-smoothing difference. (5) Folder rules of a skin also
+  hit editors (`.pane-bar`, `::before`): override with `.pane.pane-ed`. (6) Docs CSS has `pre{}` and
+  `code{}` rules; `.pane-body` beats them by specificity, keep it that way. (7) `git worktree`s share
+  refs: other agents' fetches move `origin/...` under you, so rebase before comparing to it.
 - **Token blocks across files:** `@light`/`@dark` bodies of a skin's files are joined with `;` by `css.skin()`.
 - **Metrics that were hard to see:** all references are 2x (2 physical px = 1 CSS px); the
   window is measured from the detected window rect, not the image edge; an icon with a

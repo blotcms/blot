@@ -227,6 +227,14 @@ describe("pane editor windows", function () {
       }
     });
 
+    it("has an opt-in palette: highlight:true adds pane-hl (only when the code is highlighted)", function () {
+      expect(pane.code("<p>", { highlight: true }).html).toContain("pane-ed pane-hl");
+      expect(pane.code("<p>").html).not.toContain("pane-hl");
+      expect(pane.code("<p>", { highlight: true, language: "text" }).html).not.toContain("pane-hl");
+      expect(built).toContain(".pane-hl{--tok-k:#ad3da4");
+      expect(pane.text("x", { highlight: true }).html).not.toContain("pane-hl");
+    });
+
     it("writes every selector against .pane, so the build roots it", function () {
       expect(() => css.skin("mac", source)).not.toThrow();
     });

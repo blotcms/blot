@@ -44,7 +44,7 @@ function editor(kind, source, options) {
   }
 
   const size = [options.width && `--pane-w:${escape(options.width)}`, options.height && `--pane-h:${escape(options.height)}`].filter(Boolean).join(";");
-  const classes = `pane pane-ed${chrome ? "" : " pane-bare"}`;
+  const classes = `pane pane-ed${chrome ? "" : " pane-bare"}${options.highlight && language ? " pane-hl" : ""}`;
   return (
     `<figure class="${classes}" data-view="${kind}"${language ? ` data-lang="${escape(language)}"` : ""}${pin ? ` data-pin="${pin}"` : ""}${theme ? ` data-theme="${theme}"` : ""}${size ? ` style="${size}"` : ""} aria-label="${escape(name)}">` +
     (chrome ? `<div class="pane-bar" aria-hidden="true">${title || kind === "text" ? escape(name) : ""}</div><div class="pane-head" aria-hidden="true"></div>` : "") +
