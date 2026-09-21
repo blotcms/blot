@@ -26,47 +26,47 @@
   "cases": {
     "macos-light": {
       "diffPercent": {
-        "overall": 2.5,
-        "chrome": 1.5,
-        "text": 3
+        "overall": 1.4,
+        "chrome": 0.4,
+        "text": 1.7
       },
       "inkPercent": {
-        "chrome": 20,
-        "text": 30
+        "chrome": 6,
+        "text": 20
       },
       "flatDeltaE": {
-        "chrome": 1,
-        "text": 1
+        "chrome": 0.3,
+        "text": 0.3
       },
       "blurMae": {
-        "overall": 1.2,
-        "chrome": 1,
-        "text": 1.5
+        "overall": 0.7,
+        "chrome": 0.5,
+        "text": 0.7
       },
-      "shadowError": 4,
+      "shadowError": 3,
       "sizeDelta": 1,
       "rowYOffset": 1.5
     },
     "macos-dark": {
       "diffPercent": {
-        "overall": 2.5,
-        "chrome": 1.5,
-        "text": 3
+        "overall": 1.6,
+        "chrome": 1,
+        "text": 1.8
       },
       "inkPercent": {
-        "chrome": 20,
-        "text": 30
+        "chrome": 14,
+        "text": 18
       },
       "flatDeltaE": {
-        "chrome": 1,
-        "text": 1
+        "chrome": 0.3,
+        "text": 0.3
       },
       "blurMae": {
-        "overall": 1.2,
-        "chrome": 1,
-        "text": 1.5
+        "overall": 0.8,
+        "chrome": 0.55,
+        "text": 0.85
       },
-      "shadowError": 4,
+      "shadowError": 1,
       "sizeDelta": 1,
       "rowYOffset": 1.5
     }

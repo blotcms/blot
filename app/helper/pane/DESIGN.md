@@ -300,3 +300,10 @@ skin), contrast (reported), and size (reported).
 - `pane-name` expansion (§8) is built: `lib/names.js`, `transform($)`, and the prose rule in `lib/css.js`.
 - The macOS skin measures to the 2× reference; `qa/thresholds.json` holds `macos-light` and
   `macos-dark` to tightened limits.
+- macOS icons (`icons/mac/`) are redrawn from the Tahoe references. List-size Finder icons are
+  soft paper (no stroke; a faint edge and shadow in light only, hence the `-d` variants, which
+  differ only by dropping that edge), a large folded flap, and a mid-grey line texture; images
+  are a checkerboard (~1.5px period, measured from the capture) with a shadow, not a photo;
+  the folder is a two-tone blue with a white highlight. Not reproducible in SVG: the real
+  text and md thumbnails are tiny rendered document previews, so we draw generic line texture.
+  A 1px-period checker is scored like noise, so the pattern phase was chosen by diff.
