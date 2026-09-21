@@ -110,6 +110,11 @@ rollback() {
   done
   log "WARNING: bare-metal OpenResty is not answering 200: starting $NEW again and keeping it. Check 'systemctl status openresty' NOW"
   sys systemctl stop openresty >/dev/null 2>&1 || true
+  # The container may already have its restart policy (finalizing got that far):
+  # put the unit back to disabled too, or a reboot would start both on :80/:443.
+  if [ "$DISABLED" = 1 ]; then
+    sys systemctl disable openresty >/dev/null 2>&1 || log "WARNING: could not disable openresty: run 'sudo systemctl disable openresty' NOW"
+  fi
   docker start "$NEW" >/dev/null 2>&1 || log "WARNING: could not start $NEW either: no proxy is serving"
   PHASE=preflight
   return 1

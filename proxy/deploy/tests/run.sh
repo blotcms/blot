@@ -79,7 +79,7 @@ case "$1" in
   is-active) [ -e "$FAKE/unit_active" ] ;;
   stop) rm -f "$FAKE/unit_active"; echo none > "$FAKE/serving" ;;
   start) [ -z "${FAKE_BM_START_FAILS:-}" ] || exit 1; touch "$FAKE/unit_active"; echo baremetal > "$FAKE/serving" ;;
-  disable) touch "$FAKE/unit_disabled"; [ -z "${FAKE_DISABLE_FAILS:-}" ] || exit 1 ;;
+  disable) [ -z "${FAKE_DISABLE_FAILS:-}" ] || [ -e "$FAKE/disable_failed" ] || { touch "$FAKE/disable_failed"; exit 1; }; touch "$FAKE/unit_disabled" ;;
   enable) rm -f "$FAKE/unit_disabled" ;;
 esac
 F
@@ -219,6 +219,9 @@ done
 
 reset baremetal; FAKE_CONTAINER_CODE=502 FAKE_BM_START_FAILS=1 cutover
 check "rollback cannot start bare-metal: the container is started again and kept" '[ $RC != 0 ] && after_last "docker start blot-proxy-blue" "docker stop" && ! after_last "docker rm -f blot-proxy-blue" "docker stop"'
+
+reset baremetal; FAKE_DISABLE_FAILS=1 FAKE_BM_START_FAILS=1 cutover
+check "finalize fails and bare-metal cannot come back: container kept, unit ends disabled" '[ $RC != 0 ] && after_last "docker start blot-proxy-blue" "docker stop" && [ -e "$FAKE/unit_disabled" ]'
 
 reset baremetal; FAKE_REDIS_DOWN=1 cutover
 check "Redis unreachable after the cutover: rolls back" '[ $RC != 0 ] && serving baremetal && mentions "Redis"'
