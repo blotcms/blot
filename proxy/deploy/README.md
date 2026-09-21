@@ -38,7 +38,7 @@ against fake `docker`/`systemctl` (CI runs it).
    `config/openresty/deploy-config.sh` from this branch so the host has it;
    the cutover refuses to run until it does, because otherwise the container
    would keep serving the old wildcard certificate after the next renewal.
-4. `PROXY_CUSTOM_DOMAIN=<a real custom domain>` is optional but worth setting:
+4. Optionally run the scripts with `PROXY_CUSTOM_DOMAIN=<a real custom domain>` set:
    it adds a domain whose certificate comes from Redis to every before/after
    comparison.
 
