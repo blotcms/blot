@@ -21,7 +21,7 @@ separately.
 | `build/data/latest/` | Generated output (git-ignored). |
 | `Dockerfile` | Two-stage build: vendors the Lua deps, then assembles the image. |
 | `entrypoint.sh` | Fixes volume ownership, optionally trusts a test ACME CA, then starts OpenResty with a SIGTERM drain (`openresty -s quit`). |
-| `deploy/` | `blue-green.sh` (image swap via SO_REUSEPORT + drain, per-container health socket, requires a real cert mount) and `reload-config.sh` (installs the regenerated `nginx.conf` and reloads). Mechanism only - not wired to production. |
+| `deploy/` | `blue-green.sh` (image swap via SO_REUSEPORT + drain, per-container health socket, requires a real cert mount) (and `reload-config.sh`, which needs a bind-mounted conf dir the production scripts do not use). They are run on the host; see [`deploy/README.md`](deploy/README.md) for the first cutover from bare-metal (`cutover-from-baremetal.sh`) and the checks each script makes. |
 | `tests/` | Cache (`cacher.lua`) behaviour specs. Run as the `proxy` suite in the `node` workflow's test matrix, same as `config/openresty`. |
 | `e2e/` | Full-stack checks driven through the built image (stub upstream + a real Blot app container + Pebble for certs). Run by the `integration` workflow. |
 
@@ -47,6 +47,7 @@ serves any host:
 | --- | --- | --- |
 | `PROXY_REDIS_HOST` | build-time `REDIS_IP`, else `127.0.0.1` | Redis for certificates and the domain allowlist |
 | `PROXY_SERVER_LABEL` | build-time `SERVER_LABEL`, else `us` | the `Blot-Server` response header |
+| `PROXY_PRIVATE_IP` | build-time `OPENRESTY_INSTANCE_PRIVATE_IP`, else `127.0.0.1` | address of the extra `:8077` cache-purge listener, for Node containers that cannot reach the host's `127.0.0.1:80` |
 | `PROXY_RESOLVER` | build-time `OPENRESTY_RESOLVER`, else `8.8.8.8 ipv6=off` | DNS resolver (`127.0.0.11` on a user-defined Docker network) |
 | `PROXY_UPSTREAM_GREEN` | `127.0.0.1:8089` | the master Node (webhooks, `/clients`) |
 | `PROXY_UPSTREAM_BLUE` | `127.0.0.1:8088` | the dashboard Node, and failover for the others |

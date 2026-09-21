@@ -104,6 +104,7 @@ function runtimeDefaults(env = process.env) {
   return {
     PROXY_REDIS_HOST: env.REDIS_IP || "127.0.0.1",
     PROXY_SERVER_LABEL: env.SERVER_LABEL || "us",
+    PROXY_PRIVATE_IP: env.OPENRESTY_INSTANCE_PRIVATE_IP || "127.0.0.1",
     PROXY_RESOLVER: env.OPENRESTY_RESOLVER || "8.8.8.8 ipv6=off",
     PROXY_UPSTREAM_GREEN: "127.0.0.1:8089",
     PROXY_UPSTREAM_BLUE: "127.0.0.1:8088",
@@ -126,6 +127,13 @@ function container({ env = process.env, config }) {
     }),
 
     server_label: placeholder("PROXY_SERVER_LABEL"),
+
+    // Address of the extra :8077 listener for the cache purge endpoint. The
+    // Node containers sit on a Docker bridge and cannot reach the host's
+    // 127.0.0.1:80, so they purge through the host's private address instead
+    // (BLOT_REVERSE_PROXY_URLS). Loopback when unset: nothing else can use it.
+    openresty_instance_private_ip: placeholder("PROXY_PRIVATE_IP"),
+
     resolver: placeholder("PROXY_RESOLVER"),
 
     // Base domain the generated virtual hosts are built from. This is a

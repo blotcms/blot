@@ -1,0 +1,140 @@
+# Publishes the proxy container image (proxy/) to GHCR as
+# ghcr.io/<owner>/blot-proxy:<commit sha>, for proxy/deploy/blue-green.sh and
+# cutover-from-baremetal.sh to pull. Mirrors the app and airlock jobs in
+# build.yml: one image per architecture, then a multi-arch manifest.
+#
+# Only runs when something the image is built from changes (same paths as
+# proxy.yml), so not every commit has an image: deploy a SHA from a run of this
+# workflow. Pull requests build and check the image; same-repo PRs also push it (as build.yml does), fork PRs do not.
+#
+# The image is built for production: file logging (LOG_TO_STDOUT=false, so
+# fail2ban and logrotate on the host keep working) and BLOT_HOST=blot.im. Host
+# specific settings (Redis, upstreams, ...) are runtime values; see
+# proxy/README.md.
+name: proxy-image
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/proxy-image.yml"
+      - "proxy/**"
+      - "config/openresty/**"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/proxy-image.yml"
+      - "proxy/**"
+      - "config/openresty/**"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/blot-proxy
+  # False for PRs from forks, whose token cannot write to GHCR (as build.yml)
+  PUSH_IMAGES: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+
+jobs:
+  build-proxy:
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runs-on: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 21.7.3
+
+      - name: Install config generator dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/gendeps"
+          cd "$RUNNER_TEMP/gendeps"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+
+      - name: Generate proxy config
+        run: bash proxy/build/build.sh
+        env:
+          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+          BLOT_HOST: blot.im
+          LOG_TO_STDOUT: "false"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ env.PUSH_IMAGES == 'true' && 'and push' || '(local only)' }} proxy (${{ matrix.arch }})
+        uses: Wandalen/wretry.action@v3
+        with:
+          action: docker/build-push-action@v6
+          attempt_limit: 2
+          attempt_delay: 10000
+          with: |
+            context: proxy
+            file: proxy/Dockerfile
+            platforms: ${{ matrix.platform }}
+            push: ${{ env.PUSH_IMAGES == 'true' }}
+            load: ${{ env.PUSH_IMAGES != 'true' }}
+            tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}-${{ matrix.arch }}
+            cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:cache-${{ matrix.arch }}
+            cache-to: ${{ env.PUSH_IMAGES == 'true' && format('type=registry,ref={0}:cache-{1},mode=max', env.IMAGE_NAME, matrix.arch) || '' }}
+
+      # What the deploy scripts require of the image, checked on the image
+      # itself: the config renders and parses, and the access log goes to the
+      # file the host's fail2ban reads.
+      - name: Check the image
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE_NAME:${{ github.sha }}-${{ matrix.arch }}" 2>/dev/null || true
+          docker run --rm --entrypoint bash -e PROXY_FETCH_CDN_IPS=false \
+            "$IMAGE_NAME:${{ github.sha }}-${{ matrix.arch }}" -c '
+              set -e
+              render-config
+              /usr/local/openresty/bin/openresty -t
+              grep -Eq "^[[:space:]]*access_log /var/log/openresty/access.log" /usr/local/openresty/nginx/conf/nginx.conf
+            '
+
+  manifest-proxy:
+    needs: build-proxy
+    runs-on: ubuntu-latest
+    if: ${{ always() && needs.build-proxy.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Create and push multi-arch manifest
+        run: |
+          set -euo pipefail
+          SHA="${{ github.sha }}"
+          docker buildx imagetools create \
+            -t "$IMAGE_NAME:$SHA" \
+            "$IMAGE_NAME:$SHA-amd64" \
+            "$IMAGE_NAME:$SHA-arm64"
