@@ -7,13 +7,15 @@ name: proxy
 
 # The path filters include the external inputs the config generator reads
 # directly (root package.json for mustache/fs-extra, app/config.js ->
-# config/index.js for icloud/webhooks limits), not just proxy/.
+# config/index.js for icloud/webhooks limits, config/openresty for the
+# canonical .conf / .lua files), not just proxy/.
 on:
   push:
     branches: [master]
     paths:
       - ".github/workflows/proxy.yml"
       - "proxy/**"
+      - "config/openresty/**"
       - "package.json"
       - "app/config.js"
       - "config/index.js"
@@ -22,6 +24,7 @@ on:
     paths:
       - ".github/workflows/proxy.yml"
       - "proxy/**"
+      - "config/openresty/**"
       - "package.json"
       - "app/config.js"
       - "config/index.js"

@@ -5,8 +5,8 @@ const mustache = require("mustache");
 const os = require("os");
 const { basename, resolve } = require("path");
 const fs = require("fs-extra");
-// proxy/config/cacher.lua is the module under test; its cache_directory
-// default comes from the app config.
+// Tests load cacher.lua from config/openresty/conf (canonical). proxy/config
+// is a generated copy; the node.yml proxy shard does not run the generator.
 const { cache_directory } = require("config");
 
 function openrestyIdentity() {
@@ -96,7 +96,7 @@ module.exports = configFile => {
       ...config,
       user: identity.username,
       group: identity.group,
-      lua_directory: CACHER_DIRECTORY + "/config",
+      lua_directory: resolve(__dirname, "../../../config/openresty/conf"),
       data_directory: DATA_DIRECTORY,
       cache_directory
     });

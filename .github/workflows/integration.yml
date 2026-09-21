@@ -22,6 +22,7 @@ on:
     paths:
       - ".github/workflows/integration.yml"
       - "proxy/**"
+      - "config/openresty/**"
       - "package.json"
       - "app/config.js"
       - "config/index.js"
@@ -30,6 +31,7 @@ on:
     paths:
       - ".github/workflows/integration.yml"
       - "proxy/**"
+      - "config/openresty/**"
       - "package.json"
       - "app/config.js"
       - "config/index.js"

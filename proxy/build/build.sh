@@ -8,7 +8,8 @@
 # environment the config is generated with.
 #
 # The paths below must match where proxy/Dockerfile copies the generated
-# files inside the image.
+# files inside the image. proxy/config and proxy/html are generated first
+# (from config/openresty, plus container adaptations) by build/index.js.
 
 set -e
 
