@@ -150,12 +150,35 @@ describe("openresty config locals", function () {
     });
   });
 
-  it("requires NODE_SERVER_IP and REDIS_IP", function () {
+  it("container: every runtime placeholder has a default", function () {
+    const directory = generators.container.directory();
+    const used = new Set();
+    const collect = (text) =>
+      (text.match(/\$\{PROXY_[A-Z_]+\}/g) || []).forEach((placeholder) =>
+        used.add(placeholder.slice(2, -1))
+      );
+
+    // some are written into the templates by sync-config, others come in
+    // through the locals
+    Object.values(readPartials(directory)).forEach(collect);
+    collect(JSON.stringify(generators.container.locals(REQUIRED)));
+
+    expect(used.size).toBeGreaterThan(0);
+    expect(Array.from(used).sort()).toEqual(
+      Object.keys(locals.runtimeDefaults({})).sort()
+    );
+  });
+
+  it("bare-metal requires NODE_SERVER_IP and REDIS_IP", function () {
     expect(() => locals.baremetal({ env: {}, config, cdn_ips })).toThrowError(
       "NODE_SERVER_IP not set"
     );
     expect(() =>
-      locals.container({ env: { NODE_SERVER_IP: "x" }, config, cdn_ips })
+      locals.baremetal({ env: { NODE_SERVER_IP: "x" }, config, cdn_ips })
     ).toThrowError("REDIS_IP not set");
+  });
+
+  it("the container does not need them: they are runtime settings", function () {
+    expect(() => locals.container({ env: {}, config })).not.toThrow();
   });
 });

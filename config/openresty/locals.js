@@ -15,10 +15,7 @@ function required(env, name) {
 
 // Locals whose value comes from the environment the same way in both.
 // cdn_ips is a list of addresses, fetched by the caller.
-function common({ env, config, cdn_ips }) {
-  const NODE_SERVER_IP = required(env, "NODE_SERVER_IP");
-  const REDIS_IP = required(env, "REDIS_IP");
-
+function common({ env, config, cdn_ips, node_ip, redis_host }) {
   // max file size for icloud uploads and webhooks bodies
   // nginx requires 'M' instead of 'MB' but unfortunately
   // node rawbody parser requires 'MB' instead of 'M'
@@ -30,7 +27,7 @@ function common({ env, config, cdn_ips }) {
 
   return {
     disable_http2: env.DISABLE_HTTP2,
-    node_ip: NODE_SERVER_IP,
+    node_ip,
     node_port: "8088",
 
     // The maximum size of icloud uploads
@@ -48,7 +45,7 @@ function common({ env, config, cdn_ips }) {
 
     // remote config directory on the ec2 instance to which we will copy the config files
     config_directory: env.OPENRESTY_CONFIG_DIRECTORY || "/home/ec2-user/openresty",
-    redis: { host: REDIS_IP },
+    redis: { host: redis_host },
 
     // used only by the ci test runner since this path changes on github actions
     lua_package_path: env.LUA_PACKAGE_PATH,
@@ -75,7 +72,13 @@ function common({ env, config, cdn_ips }) {
 // The bare-metal host: paths are the real ones on the machine.
 function baremetal({ env = process.env, config, cdn_ips }) {
   return {
-    ...common({ env, config, cdn_ips }),
+    ...common({
+      env,
+      config,
+      cdn_ips,
+      node_ip: required(env, "NODE_SERVER_IP"),
+      redis_host: required(env, "REDIS_IP"),
+    }),
     host: "blot.im",
     blot_directory: config.blot_directory,
     blog_static_files_dir: config.blog_static_files_dir,
@@ -83,11 +86,47 @@ function baremetal({ env = process.env, config, cdn_ips }) {
   };
 }
 
+// The values which can change without rebuilding the container image. nginx
+// cannot read the environment, so the generated config carries ${NAME}
+// placeholders and proxy/render-config.sh substitutes them (with envsubst)
+// when the container starts. runtimeDefaults() is the value used when a
+// variable is not set at runtime; it is written to defaults.env at build time.
+//
+// PROXY_UPSTREAM_*: host:port of the Node containers. The upstream groups in
+// http.conf keep their weights and failover roles; only where each container
+// is changes. GREEN is the master (webhooks, /clients), BLUE serves the
+// dashboard and is the failover for the others, YELLOW serves blogs.
+const placeholder = (name) => "${" + name + "}";
+
+// What each runtime variable is when it is not set at runtime. Build-time
+// REDIS_IP, SERVER_LABEL and OPENRESTY_RESOLVER still work as defaults.
+function runtimeDefaults(env = process.env) {
+  return {
+    PROXY_REDIS_HOST: env.REDIS_IP || "127.0.0.1",
+    PROXY_SERVER_LABEL: env.SERVER_LABEL || "us",
+    PROXY_RESOLVER: env.OPENRESTY_RESOLVER || "8.8.8.8 ipv6=off",
+    PROXY_UPSTREAM_GREEN: "127.0.0.1:8089",
+    PROXY_UPSTREAM_BLUE: "127.0.0.1:8088",
+    PROXY_UPSTREAM_YELLOW: "127.0.0.1:8090",
+  };
+}
+
 // The container image. Host paths from require("config") would bake the
 // generator's filesystem into the image, so these come from the environment.
-function container({ env = process.env, config, cdn_ips }) {
+function container({ env = process.env, config }) {
   return {
-    ...common({ env, config, cdn_ips }),
+    ...common({
+      env,
+      config,
+      // the Bunny edge list is an include file the container writes at start
+      // (proxy/build/sync-config.js, proxy/render-config.sh)
+      cdn_ips: [],
+      node_ip: undefined,
+      redis_host: placeholder("PROXY_REDIS_HOST"),
+    }),
+
+    server_label: placeholder("PROXY_SERVER_LABEL"),
+    resolver: placeholder("PROXY_RESOLVER"),
 
     // Base domain the generated virtual hosts are built from. This is a
     // build-time value; the BLOT_HOST passed to `docker run` only affects
@@ -95,8 +134,10 @@ function container({ env = process.env, config, cdn_ips }) {
     host: env.BLOT_HOST || "blot.im",
     blot_directory: env.BLOT_DIRECTORY || "/var/www/blot",
 
-    // The container does not mount the blog static tree yet; try_files falls
-    // through to @cdn_node. Override with env when it does.
+    // The container does not mount the blog static tree, so try_files finds
+    // nothing and every cdn. request that reaches it falls through to
+    // @cdn_node (blot_node), as it does on bare-metal for a file the disk
+    // does not have. Set these and mount the tree to serve from disk.
     blog_static_files_dir:
       env.BLOG_STATIC_FILES_DIR || "/var/www/blot/data/static",
     global_static_files_dir:
@@ -106,10 +147,6 @@ function container({ env = process.env, config, cdn_ips }) {
     // certificates on demand. Production default is Let's Encrypt; CI points
     // this at a Pebble test server (see .github/workflows/integration.yml).
     acme_ca: env.ACME_CA || "https://acme-v02.api.letsencrypt.org/directory",
-
-    // DNS resolver OpenResty uses for OCSP stapling and to reach the ACME
-    // server. A container on a user-defined Docker network wants 127.0.0.11.
-    resolver: env.OPENRESTY_RESOLVER || "8.8.8.8 ipv6=off",
 
     // Add `reuseport` to the default server's listen directives so a second
     // container can bind the same :80/:443 during a blue/green handover
@@ -123,4 +160,4 @@ function container({ env = process.env, config, cdn_ips }) {
   };
 }
 
-module.exports = { baremetal, container };
+module.exports = { baremetal, container, runtimeDefaults };

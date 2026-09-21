@@ -61,7 +61,35 @@ jobs:
         run: docker build -f proxy/Dockerfile -t blot-proxy:ci proxy/
 
       - name: Validate generated OpenResty config
-        run: docker run --rm --entrypoint /usr/local/openresty/bin/openresty blot-proxy:ci -t
+        # The image holds a template; render it (as the entrypoint does) first
+        run: |
+          docker run --rm -e PROXY_FETCH_CDN_IPS=false --entrypoint bash blot-proxy:ci \
+            -c 'render-config && /usr/local/openresty/bin/openresty -t'
+
+      - name: Runtime settings reach the rendered config
+        run: |
+          docker run --rm --entrypoint bash \
+            -e PROXY_FETCH_CDN_IPS=false \
+            -e PROXY_REDIS_HOST=10.1.2.3 \
+            -e PROXY_SERVER_LABEL=eu \
+            -e PROXY_RESOLVER=127.0.0.11 \
+            -e PROXY_UPSTREAM_GREEN=10.0.0.1:9089 \
+            -e PROXY_UPSTREAM_BLUE=10.0.0.2:9088 \
+            -e PROXY_UPSTREAM_YELLOW=10.0.0.3:9090 \
+            blot-proxy:ci -c '
+              set -e
+              render-config
+              conf=/usr/local/openresty/nginx/conf/nginx.conf
+              grep -q "host = \"10.1.2.3\"" $conf
+              grep -q "Blot-Server. .eu. always" $conf
+              grep -q "resolver 127.0.0.11;" $conf
+              grep -q "server 10.0.0.1:9089 weight=100;" $conf
+              grep -q "server 10.0.0.2:9088 weight=100;" $conf
+              grep -q "server 10.0.0.3:9090 weight=100;" $conf
+              grep -q "proxy_pass http://10.0.0.1:9089;" $conf
+              if grep -q "\${PROXY_" $conf; then echo "unsubstituted placeholder"; exit 1; fi
+              /usr/local/openresty/bin/openresty -t
+            '
 
       - name: Boot container and check health endpoint
         run: |
