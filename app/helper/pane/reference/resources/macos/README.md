@@ -54,6 +54,13 @@ there and every AppleEvent to it times out (-1712). The window is placed and rea
 through System Events. TextEdit renders `.html` files as rich text whatever
 `IgnoreHTML` says, so the code sample is `Snippet.txt`.
 
+## Browser window (`-browser`)
+Safari, sized 600x400pt (deliberately small; a browser window is mostly chrome). It loads
+`fixture-assets/browser-sample.html` from a throwaway `python3 -m http.server` on
+`localhost:8765` (files in the runner's temp directory are not readable by Safari). Placed
+and read back through System Events like the editors. Best-effort and unverified until the
+first capture: check `debug-safari.png` and `browser.log` in the capture logs.
+
 ## Desktop icons (`-desktop`)
 The "Your site" contents (all files and `Fruits`, except `Old report.doc`, which looks like
 `Report.docx`) copied to `~/Desktop` and captured straight off the desktop, on the grey
