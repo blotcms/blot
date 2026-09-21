@@ -47,11 +47,11 @@ background:linear-gradient(var(--hl),var(--hl)) 271.5px 0/.5px 26px no-repeat,li
 .pane .pane-tree,.pane .pane-tree ul{display:flex;flex-direction:column}
 .pane .pane-tree li{flex:none}
 .pane .pane-tree li:has(>.pane-row .pane-k-folder){order:-1}
-.pane .pane-row{width:627.5px;height:28px}
-.pane .pane-label{width:271.5px;padding-left:calc(38.5px + var(--x,0px));line-height:26px}
+.pane .pane-row{width:627.5px;height:28px;align-items:flex-start}
+.pane .pane-label{width:271.5px;padding-left:calc(38.5px + var(--x,0px));line-height:25.5px}
 .pane .pane-icon{left:calc(18.5px + var(--x,0px));width:16px;height:16px;margin-top:-9.5px}
 .pane .pane-x{display:none}
-.pane .pane-cell{flex:none;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;line-height:26px;color:var(--dim)}
+.pane .pane-cell{flex:none;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;line-height:25.5px;color:var(--dim)}
 .pane .pane-d{width:144px;padding-left:7px;order:1}
 .pane .pane-t{display:block;width:125px;padding-left:7px;order:2}
 .pane .pane-s{width:87px;padding-right:7px;text-align:right;order:3}
