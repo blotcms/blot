@@ -160,12 +160,18 @@ CSS
     if [ $((WIDTH * HEIGHT)) -gt "$BEST" ]; then BEST=$((WIDTH * HEIGHT)); WID="$w"; fi
   done
   if [ -n "$WID" ]; then
-    xdotool windowsize "$WID" $((600 * S)) $((400 * S)); sleep 1
+    # 720px wide: at 600 or less Epiphany switches to its phone layout (toolbar at the bottom)
+    xdotool windowsize "$WID" $((720 * S)) $((400 * S)); sleep 1
     xdotool windowmove "$WID" $((PAD + 40 * S)) $((PAD + 40 * S)); sleep 1
     eval "$(xdotool getwindowgeometry --shell "$WID")"
     echo "browser window $WID: ${WIDTH}x${HEIGHT}+${X}+${Y}" >> "$OUT/geometry.txt"
     xdotool windowactivate --sync "$WID" || true
-    sleep 3
+    sleep 2
+    # the address given on the command line was not opened (the start page showed), so type it
+    # in: it also leaves the focus in the page, which closes the address bar's suggestion popup
+    xdotool key --clearmodifiers ctrl+l; sleep 1
+    xdotool type --delay 80 "https://example.com/"; sleep 1
+    xdotool key Return; sleep 10
     import -window root "$OUT/debug-epiphany.png"
     capture "linux-$THEME$SUFFIX-browser" keep
   else
