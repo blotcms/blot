@@ -222,12 +222,12 @@ $taskbar = 48 * $Scale; $wm = 52 * $Scale; $pad = 80 * $Scale; $left = 176 * $Sc
 $winH = (360 + 7) * $Scale
 $suffix = if ($Scale -ne 1) { "@${Scale}x" } else { "" }
 function Place($width) { [Native.Win]::MoveWindow($h, $left - 7 * $Scale, $pad, ($width + 14) * $Scale, $winH, $true) | Out-Null; Start-Sleep -Seconds 2 }
-function Capture($name) {
+function Capture($name, $click = $true) {
   $r = New-Object Native.Win+RECT
   [Native.Win]::DwmGetWindowAttribute($h, 9, [ref]$r, [System.Runtime.InteropServices.Marshal]::SizeOf($r)) | Out-Null
   # click the tab (moves keyboard focus off the toolbar), then park the mouse on the
   # desktop so no tooltip or hover state is captured
-  Click ($r.Left + 40 * $Scale) ($r.Top + 22 * $Scale)
+  if ($click) { Click ($r.Left + 40 * $Scale) ($r.Top + 22 * $Scale) }
   [Native.Mouse]::SetCursorPos($sw - 4, 4) | Out-Null
   Start-Sleep -Seconds 2
   $x0 = [Math]::Max(0, $r.Left - $pad); $y0 = [Math]::Max(0, $r.Top - $pad)
@@ -236,6 +236,17 @@ function Capture($name) {
   $bmp = New-Object System.Drawing.Bitmap ($x1 - $x0), ($y1 - $y0)
   [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($x0, $y0, 0, 0, $bmp.Size)
   $bmp.Save("$Out\$name.png", [System.Drawing.Imaging.ImageFormat]::Png)
+}
+# An empty stage before every shot: a window left over from an earlier step sits at the same
+# spot and shows behind (or beside) the next one. Explorer's windows are closed through the shell,
+# the apps earlier steps used are killed, and what still has a window is logged (stage.log).
+# (See screenshots/README.md, "Rule: an empty stage before every shot".)
+function Clear-Stage($label) {
+  try { (New-Object -ComObject Shell.Application).Windows() | ForEach-Object { try { $_.Quit() } catch { } } } catch { }
+  Get-Process notepad, msedge -ErrorAction SilentlyContinue | Stop-Process -Force
+  Start-Sleep -Seconds 2
+  "== stage before: $label" | Out-File "$Out\stage.log" -Append
+  Get-Process | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object { "  $($_.ProcessName) | $($_.MainWindowTitle)" } | Out-File "$Out\stage.log" -Append
 }
 Place $Width
 Capture "$Label-$Theme$suffix"   # Details, Explorer's default
@@ -262,8 +273,7 @@ foreach ($v in $views) {
 # Editors: Notepad is the OS's text editor window. Capture it with prose ("text")
 # and with source code ("code").
 try {
-  try { $shellWin.Quit() } catch { }
-  Start-Sleep -Seconds 2
+  Clear-Stage "editors"
   $edit = Join-Path $env:USERPROFILE "Documents\editors"
   New-Item -ItemType Directory -Force -Path $edit | Out-Null
   Copy-Item (Join-Path $assets "text-sample.txt") (Join-Path $edit "Essay.txt")
@@ -279,6 +289,7 @@ try {
   }
   foreach ($e in @(@("Essay.txt", "text"), @("index.html", "code"))) {
     # the Store app is an execution alias in WindowsApps; plain "notepad.exe" finds the classic one first
+    Clear-Stage "editor $($e[1])"
     $alias = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\notepad.exe"
     $exe = if (Test-Path $alias) { $alias } else { "notepad.exe" }
     "launching $exe" | Out-File $log -Append
@@ -294,6 +305,30 @@ try {
     Start-Sleep -Seconds 2
   }
 } catch { "editors failed: $_" | Out-File $log -Append }
+# Browser: Microsoft Edge (on the runner) on https://example.com, a small window (600x400
+# logical px). A separate profile with first-run, sync and the default-browser prompt off, so the
+# window is just the browser. Best-effort: debug screenshots show what the runner allowed.
+try {
+  Clear-Stage "browser"
+  $edge = Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application\msedge.exe"
+  if (-not (Test-Path $edge)) { $edge = "msedge.exe" }
+  $profile = Join-Path $env:TEMP "pane-edge"
+  Remove-Item -Recurse -Force $profile -ErrorAction SilentlyContinue
+  Start-Process $edge -ArgumentList @("--user-data-dir=`"$profile`"", "--no-first-run", "--no-default-browser-check", "--disable-sync", "--new-window", "https://example.com/")
+  Start-Sleep -Seconds 12
+  $eg = Get-Process msedge -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+  if (-not $eg) { "no edge window" | Out-File $log -Append } else {
+    $h = $eg.MainWindowHandle
+    "edge: $($eg.MainWindowTitle)" | Out-File $log -Append
+    # 600x400 logical px, like the macOS reference; MoveWindow includes the 7px invisible borders
+    [Native.Win]::MoveWindow($h, $left - 7 * $Scale, $pad, (600 + 14) * $Scale, (400 + 7) * $Scale, $true) | Out-Null
+    Start-Sleep -Seconds 3
+    Shot "edge"
+    Capture "$Label-$Theme$suffix-browser" $false
+  }
+} catch { "browser failed: $_" | Out-File $log -Append }
+Get-Process msedge -ErrorAction SilentlyContinue | Stop-Process -Force
+Clear-Stage "before the desktop icons"
 # Desktop icons: the "Your site" contents (files and the Fruits folder) as icons on the
 # desktop itself, on the grey desktop; the capture stops above the taskbar.
 try {
