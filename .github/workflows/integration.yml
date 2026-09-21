@@ -374,6 +374,29 @@ jobs:
             exit 1
           fi
 
+      - name: A Redis which stops answering neither stalls nor allows issuance
+        run: |
+          set -eux
+          trap 'docker unpause redis 2>/dev/null || true' EXIT
+
+          before=$(docker logs proxy 2>&1 | grep -c "failed to obtain lock" || true)
+
+          # Redis accepts connections but never replies. For a domain the
+          # proxy cannot confirm is allowed, the handshake must give up after
+          # the short Redis timeout (not nginx's 60s default) and must not
+          # start an ACME order (which would first try to take the Redis lock).
+          docker pause redis
+          start=$(date +%s)
+          curl -sk -o /dev/null -m 30 \
+            --resolve "unlisted.example:443:$HOSTIP" https://unlisted.example/ || true
+          elapsed=$(( $(date +%s) - start ))
+          docker unpause redis
+          echo "handshake took ${elapsed}s"
+          [ "$elapsed" -lt 20 ]
+
+          after=$(docker logs proxy 2>&1 | grep -c "failed to obtain lock" || true)
+          [ "$after" -eq "$before" ]
+
       - name: Logs
         if: always()
         run: |

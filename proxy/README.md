@@ -192,14 +192,6 @@ the deploy mechanism and persistent volumes now exist and are covered by CI
   production Redis credentials need wiring.
 - **Secret delivery**. `NODE_SERVER_IP`, `REDIS_IP` and the netdata creds are
   build-time inputs to the generator; decide build-arg vs runtime-env.
-- **Redis outage handling**. Node answers 503 with a `Retry-After` and
-  `no-store` page when it cannot reach Redis, but the proxy does not handle
-  this yet. It replaces an upstream 503 with the "offline" page, retries it on
-  the next container (each 503 counts against `max_fails`), `allow_domain` in
-  `init.conf` returns true when the Redis lookup errors (it should fail
-  closed), and `resty.redis` timeouts default to 60s, including inside the
-  auto-ssl storage adapter. Fix these here and in `config/openresty`, with an
-  e2e check against the stub upstream. Tracked in `TODO`.
 - **`fail2ban` / `logrotate`** are host-level in `config/openresty`; the
   container logs to stdout/stderr (so `docker logs` and the host's log
   shipper work) but has no equivalent request-ban layer.
@@ -217,7 +209,8 @@ Tracked in the repo's `TODO` under "Proxy container (OpenResty)".
   - `proxy/e2e/checks.sh` drives the built image against
     `proxy/e2e/stub-upstream.js` - Host-based routing (site over HTTPS, blogs
     and custom domains over HTTP), `/.git` and `wp-admin` blocking, `Blot-Cache`
-    MISS then HIT, gzip negotiation, upstream-error handling.
+    MISS then HIT, gzip negotiation, upstream-error handling, and a Node 503
+    (Redis outage) passing through with its `Retry-After`.
   - `proxy/e2e/run.js` brings the image up with the Blot app image + Redis
     (`proxy/e2e/docker-compose.yml`, with persistent cache/auto-ssl volumes)
     and goes through the proxy end to end: the site loads, the sign-in page
@@ -225,8 +218,9 @@ Tracked in the repo's `TODO` under "Proxy container (OpenResty)".
     seeded blog (`proxy/e2e/seed-blog.js`) renders on its own vhost with the
     proxy cache going MISS then HIT.
   - `cert-issuance` issues a real custom-domain certificate through the proxy
-    against a Pebble ACME server and checks it persists across a container
-    recreate.
+    against a Pebble ACME server, checks it persists across a container
+    recreate, and checks that a Redis which stops answering neither stalls the
+    handshake nor lets the proxy start issuing for an unlisted domain.
   - `zero-downtime` runs two proxy containers sharing `:80`/`:443` via
     SO_REUSEPORT and asserts no request is dropped while the first is stopped
     with a drain timeout.

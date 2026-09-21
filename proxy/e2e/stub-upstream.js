@@ -15,6 +15,12 @@ const handler = (req, res) => {
     setTimeout(() => res.end("slow"), 2000);
     return;
   }
+  if (url.pathname === "/unavailable") {
+    // What Node answers when it cannot reach Redis (helper/redisUnavailable)
+    res.writeHead(503, { "Retry-After": "60", "Cache-Control": "no-store" });
+    res.end("temporarily unavailable");
+    return;
+  }
   if (url.pathname === "/boom") {
     res.writeHead(500);
     res.end("boom");
