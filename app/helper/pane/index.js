@@ -1,6 +1,7 @@
 // pane: renders docs blocks as mock OS windows (macOS, Windows 11, GNOME Files).
-// SKELETON: the folder window's default (list) view; three skins (mac, win, linux)
-// switched by <html data-os>, light/dark by prefers-color-scheme. See PLAN.md.
+// Stage 1: the macOS folder window in list view is built; win and linux skins, the icons
+// view and the editor windows are not. Skins are switched by <html data-os>, light/dark by
+// prefers-color-scheme. See DESIGN.md (how) and PLAN.md (what).
 //
 // API
 //   pane.folder(tree, opts) -> { html } | null     markup for one folder window
@@ -41,7 +42,8 @@ const VIEWS = ["list", "icons"];
 const SUPPORTED_VIEWS = ["list"];
 
 function folder(tree, options = {}) {
-  if (!SUPPORTED_VIEWS.includes(options.view || "list")) return null;
+  const view = options.view === "tree" ? "list" : options.view || "list"; // the list view is a tree
+  if (!SUPPORTED_VIEWS.includes(view)) return null;
   return { html: renderFolder(tree, options) };
 }
 

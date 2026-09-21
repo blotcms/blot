@@ -22,7 +22,13 @@ describe("pane markup", function () {
   it("makes the list a keyboard-reachable scroller only when it can scroll", function () {
     expect(html).not.toContain("tabindex");
     const many = Array.from({ length: 14 }, (_, i) => `f${i}.md`).join("\n");
-    expect(pane.folder(many).html).toContain('tabindex="0"');
+    expect(pane.folder(many, { title: "Site" }).html).toContain('tabindex="0" aria-label="Site"');
+    expect(pane.folder("a.md", { height: "200px" }).html).toContain('tabindex="0"');
+  });
+
+  it("accepts the tree view as the list view, and returns null for views not built", function () {
+    expect(pane.folder("a.md", { view: "tree" })).not.toBeNull();
+    expect(pane.folder("a.md", { view: "icons" })).toBeNull();
   });
 
   it("gives every icon a kind and never uses bitmap chrome", function () {

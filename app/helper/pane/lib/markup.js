@@ -52,7 +52,10 @@ function folder(tree, options = {}) {
       .join("") +
     "</ul>";
 
-  const body = list(nodes, ` class="pane-tree"${total(nodes) > SCROLLS_AFTER ? ' tabindex="0"' : ""}`);
+  // A scroller must be keyboard reachable and named. With an explicit height we can't know
+  // whether the rows fit, so it always is.
+  const scrolls = options.height || total(nodes) > SCROLLS_AFTER;
+  const body = list(nodes, ` class="pane-tree"${scrolls ? ` tabindex="0" aria-label="${escape(title)}"` : ""}`);
   const size = [options.width && `--pane-w:${escape(options.width)}`, options.height && `--pane-h:${escape(options.height)}`].filter(Boolean).join(";");
   return (
     `<figure class="pane" data-view="list"${pin ? ` data-pin="${pin}"` : ""}${theme ? ` data-theme="${theme}"` : ""}${size ? ` style="${size}"` : ""} aria-label="${escape(title)}">` +

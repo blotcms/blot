@@ -8,7 +8,7 @@ which stays untouched until every view has migrated.
 ## Goals
 
 - Latest macOS, Windows 11 and GNOME look, in light and dark.
-- Folder windows in tree and list views.
+- Folder windows in list (a tree) and icons views.
 - One content node per window with a fixed set of decorative chrome nodes; the
   skin is chosen by CSS from `<html data-os="mac|win|linux">`, set by a tiny
   inline script in `<head>`. The default skin is a build option (`mac`) and is
@@ -46,7 +46,7 @@ which stays untouched until every view has migrated.
 ## Authoring syntax
 
 Compatible with today's markup: `pre.folder`, `pre.text`, `pre.code`,
-`code.file`, `code.folder`. New attributes: `data-view="tree|list"`.
+`code.file`, `code.folder`. New attribute: `data-view="list|icons"` (`tree` is accepted as `list`).
 
 ### OS-specific prose
 
@@ -71,8 +71,9 @@ Rows are the same indented lines as the tree. Optional columns follow a pipe:
 Missing columns are generated deterministically from a hash of the full path
 (size scaled by extension, date within a fixed window relative to a constant,
 not the build time), so output is stable between builds. "Kind" comes from the
-extension and is named per OS. Columns: macOS Name / Date Modified / Size /
-Kind; Windows Name / Date modified / Type / Size; GNOME Name / Size / Modified.
+extension and is named per OS. Columns: macOS Name / Date Modified / Size (Kind is
+hidden, as in the references); Windows Name / Date modified / Type / Size; GNOME Name /
+Size / Modified.
 
 ## Skins
 

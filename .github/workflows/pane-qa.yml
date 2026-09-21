@@ -154,7 +154,7 @@ jobs:
         id: deps
         run: |
           # single-quoted script, no nested quotes: macOS's Bash 3.2 mis-parses those
-          PKGS=$(node -e 'const p=require("./package.json");const d={...p.dependencies,...p.devDependencies};console.log(["puppeteer","sharp","pixelmatch","express"].map(n=>n+"@"+d[n]).join(" "))')
+          PKGS=$(node -e 'const p=require("./package.json");const d={...p.dependencies,...p.devDependencies};console.log(["puppeteer","sharp","pixelmatch","express","jasmine","cheerio"].map(n=>n+"@"+d[n]).join(" "))')
           echo "pkgs=$PKGS" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         id: cache
@@ -168,6 +168,10 @@ jobs:
         run: |
           mkdir -p tools && cd tools && npm init -y >/dev/null
           npm install --no-audit --no-fund ${{ steps.deps.outputs.pkgs }}
+      # the module's and the QA harness's unit tests (nothing else in this branch runs them)
+      - name: Unit tests
+        run: |
+          NODE_PATH="$PWD/tools/node_modules" node tools/node_modules/jasmine/bin/jasmine.js "app/helper/pane/tests/*.js" "app/helper/pane/qa/tests/*.js"
       - name: Summarise differences
         run: |
           NODE_PATH="$PWD/tools/node_modules" node app/helper/pane/qa/smoke.js

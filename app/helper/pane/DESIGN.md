@@ -16,7 +16,7 @@ One `figure` per window. Semantic content is a nested list. Chrome is drawn by C
         aria-label="Your site" [style="--pane-w:…;--pane-h:…"]>
   <div class="pane-bar" aria-hidden="true">Your site</div>
   <div class="pane-head" aria-hidden="true"><i></i><i></i><i></i></div>
-  <ul class="pane-tree" role="list" [tabindex="0"]>
+  <ul class="pane-tree" role="list" [tabindex="0" aria-label="Your site"]>
     <li>
       <span class="pane-row [pane-odd]">
         <span class="pane-label"><i class="pane-icon pane-k-doc"></i>About.txt</span>
@@ -133,13 +133,13 @@ window in a wide page behaves the same as a wide window in a narrow page. See §
 ### Build output
 
 `assets().css` is generated once per process and cached (server-side cost is irrelevant, the
-output is what ships): expand skins, expand dark blocks, inline icons, drop unused
-declarations, minify (comments and whitespace only; we own the source so no minifier
-dependency). Stage 1 emits base + mac; skins for OSes not yet built are not emitted.
+output is what ships): expand skins, expand dark blocks, inline icons, minify (comments
+and whitespace only; we own the source so no minifier dependency, and no dead-code removal
+yet). Stage 1 emits base + mac; skins for OSes not yet built are not emitted.
 
 ## 3. Sizes and dates per OS
 
-Implemented in `lib/format.js` (currently in `index.js`, moved and re-exported); all output is
+Implemented in `lib/format.js` (re-exported by `index.js`); all output is
 deterministic, `now` is an option with a constant default, and hashing (FNV-1a of the full path)
 generates missing columns.
 
@@ -186,7 +186,7 @@ Anything not in the table stays as in the skeleton and is covered by unit tests
 - `forced-colors:active`: drop shadows, stripes and the traffic lights; borders and dividers use
   system colours (`CanvasText`, `GrayText`); text uses `CanvasText` on `Canvas`; masks still
   work through `currentColor`; coloured icons get `forced-color-adjust:none`.
-- Keyboard: scroller has `tabindex="0"` only when it can scroll (§1). Focus ring is the
+- Keyboard: scroller has `tabindex="0"` and the window title as `aria-label` when it can scroll (more than 11 rows, or always with an explicit `height`, §1). Focus ring is the
   browser's, not removed.
 - Print: windows print as-is (no special handling).
 
@@ -241,7 +241,7 @@ lib/parse.js    tree + `| col | col` parsing
 lib/format.js   sizes, dates, folder sizes, hashing
 lib/markup.js   folder() -> html
 lib/css.js      css build
-css/*.css  icons/  tests/{format,parse,markup,css,size}.js
+css/*.css  icons/  tests/{index,format,parse,markup,names,css,size}.js
 ```
 
 Unit tests (fast, pure): formatters (all boundaries), parser (indent, folder rule, columns),
@@ -261,7 +261,7 @@ skin), contrast (reported), and size (reported).
 
 - Cell classes are `pane-d` (date) and `pane-s` (size), ordered per OS with CSS `order`.
 - Windows' hidden file extensions (§3) need a per-OS label; that lands with the Windows skin.
-- The contrast report from §5 is not built yet (nothing enforces it either way).
+- The contrast report from §5 is in `tests/size.js` (reported, never enforced).
 - `pane-name` expansion (§8) is built: `lib/names.js`, `transform($)`, and the prose rule in `lib/css.js`.
 - The macOS skin measures to the 2× reference; `qa/thresholds.json` holds `macos-light` and
   `macos-dark` to tightened limits.
