@@ -89,7 +89,11 @@ module.exports = async function (req, res, next) {
 
     res.locals.preview = res.locals.previewOrigin;
 
-    res.locals.breadcrumbs.add(req.template.name, req.template.slug);
+    const breadcrumbLabel = req.template.localEditing
+      ? req.template.slug
+      : req.template.name;
+
+    res.locals.breadcrumbs.add(breadcrumbLabel, req.template.slug);
 
     next();
   } catch (err) {
