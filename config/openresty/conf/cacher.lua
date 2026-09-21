@@ -358,6 +358,35 @@ function cacher_monitor_free_space (self, ngx, monitor_interval)
     end, self)
 end
 
+-- Compare two strings without returning early on the first differing byte
+local function constant_time_equal(a, b)
+    if type(a) ~= "string" or type(b) ~= "string" or #a ~= #b then
+        return false
+    end
+
+    local diff = 0
+
+    for i = 1, #a do
+        diff = bit.bor(diff, bit.bxor(a:byte(i), b:byte(i)))
+    end
+
+    return diff == 0
+end
+
+-- Whether the request may use the internal purge / inspect / rehydrate
+-- endpoints. If the BLOT_PURGE_TOKEN environment variable is set (nginx must
+-- pass it through with `env BLOT_PURGE_TOKEN;`) the request must send the same
+-- value in X-Blot-Purge-Token. If it is unset, everything is allowed.
+local function cacher_authorized (self, ngx)
+    local token = os.getenv("BLOT_PURGE_TOKEN")
+
+    if token == nil or token == "" then
+        return true
+    end
+
+    return constant_time_equal(ngx.var.http_x_blot_purge_token, token)
+end
+
 --- Create a new cacher instance.
 function cacher.new()
     
@@ -372,6 +401,7 @@ function cacher.new()
 
     return {
         purge = cacher_purge,
+        authorized = cacher_authorized,
         set = cacher_set,
         add = cacher_add,
         inspect = cacher_inspect,

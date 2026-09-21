@@ -32,3 +32,8 @@ config/nginx/server.conf
 package-lock.json
 node_modules/*
 app/clients/icloud/macserver/node_modules
+
+# Generated from config/openresty by proxy/build/sync-config.js. Edit the
+# canonical files (or the adapter), not these copies.
+/proxy/config/
+/proxy/html/

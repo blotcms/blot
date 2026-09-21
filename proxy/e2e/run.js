@@ -56,7 +56,11 @@ function once(path, { method = "GET", jar, body, headers = {} } = {}) {
     hostname: url.hostname,
     port: url.port || (url.protocol === "https:" ? 443 : 80),
     path: url.pathname + url.search,
-    headers: { Host: HOST, ...headers },
+    headers: {
+      "User-Agent": "Mozilla/5.0 (compatible; blot-proxy-e2e)",
+      Host: HOST,
+      ...headers,
+    },
     rejectUnauthorized: false,
   };
   if (jar && Object.keys(jar).length) opts.headers.Cookie = cookieHeader(jar);
@@ -180,8 +184,23 @@ async function request(path, opts = {}, max = 5) {
   );
 
   // 8. The proxy's hardening rules apply end to end (blog traffic path).
-  const git = await once("/.git/config", { headers: { Host: BLOG_HOST } });
-  check("GET /.git/config on a blog host is blocked (404)", git.status === 404, "got " + git.status);
+  // nginx `return 444` closes the connection with no HTTP response, so Node
+  // sees ECONNRESET rather than a status code (see proxy/e2e/checks.sh).
+  let gitBlocked = false;
+  let gitDetail = "";
+  try {
+    const git = await once("/.git/config", { headers: { Host: BLOG_HOST } });
+    gitBlocked = git.status === 444 || git.status === 403 || git.status === 404;
+    gitDetail = "got " + git.status;
+  } catch (err) {
+    gitBlocked =
+      err &&
+      (err.code === "ECONNRESET" ||
+        err.code === "ECONNREFUSED" ||
+        /socket hang up/i.test(err.message || ""));
+    gitDetail = err && (err.code || err.message);
+  }
+  check("GET /.git/config on a blog host is blocked", gitBlocked, gitDetail);
 
   // 9. A real seeded blog renders through the proxy on its own vhost, and the
   //    proxy cache engages for blog traffic (MISS then HIT).

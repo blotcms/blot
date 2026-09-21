@@ -1,4 +1,4 @@
-// Extra coverage for proxy/config/cacher.lua beyond the ported basic/gzip/
+// Extra coverage for config/openresty/conf/cacher.lua beyond the ported basic/gzip/
 // inspect/lru_purge/rehydrate suites. Uses inspect.conf because it wires up
 // every endpoint the cacher exposes (/purge, /inspect, /).
 const fetch = require("node-fetch");
