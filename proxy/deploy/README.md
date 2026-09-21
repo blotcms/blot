@@ -22,11 +22,14 @@ against fake `docker`/`systemctl` (CI runs it).
 
 ## Before the first cutover
 
-1. **An image on the host.** Nothing publishes the proxy image yet. Build it
-   with `LOG_TO_STDOUT=false` (`fail2ban`, `logrotate` and the `.bashrc`
-   helpers read `/var/instance-ssd/logs/access.log`, and the container has no
-   ban layer of its own; both scripts refuse an image that logs to stdout) and
-   `BLOT_HOST` set, then push it somewhere the host can pull from.
+1. **An image.** `.github/workflows/proxy-image.yml` publishes
+   `ghcr.io/blotcms/blot-proxy:<sha>` (multi-arch, built with
+   `LOG_TO_STDOUT=false` because `fail2ban`, `logrotate` and the `.bashrc`
+   helpers read `/var/instance-ssd/logs/access.log` and the container has no
+   ban layer of its own; both scripts refuse an image that logs to stdout).
+   It only runs when `proxy/`, `config/openresty/` or the generator's inputs
+   change, so pick a SHA from a run of it. Pass the SHA to either script;
+   anything containing `/` or `:` is used as a full image reference.
 2. **`/etc/blot/proxy.env`** from the example. `PROXY_PRIVATE_IP` and
    `PROXY_REDIS_HOST` must equal what bare-metal uses today
    (`OPENRESTY_INSTANCE_PRIVATE_IP`, `REDIS_IP`), and `BLOT_REVERSE_PROXY_URLS`
@@ -47,8 +50,8 @@ against fake `docker`/`systemctl` (CI runs it).
 ```sh
 ssh blot
 tmux new -s proxy-cutover
-~/proxy-deploy/cutover-from-baremetal.sh --dry-run <image>   # preflight + rehearsal only
-~/proxy-deploy/cutover-from-baremetal.sh <image>             # asks you to type "cutover"
+~/proxy-deploy/cutover-from-baremetal.sh --dry-run <commit-sha>   # preflight + rehearsal only
+~/proxy-deploy/cutover-from-baremetal.sh <commit-sha>             # asks you to type "cutover"
 ```
 
 The dry run is safe at any time. The header of the script lists everything

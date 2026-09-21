@@ -203,6 +203,9 @@ check "bare-metal still serving and no container: refused, points at the cutover
 reset container; FAKE_CONTAINER_CODE=502 bluegreen
 check "site unhealthy before the deploy: not swapped" '[ $RC != 0 ] && ! called "docker create"'
 
+reset container; bash "$DEPLOY/blue-green.sh" abc123 >"$T/out" 2>&1; RC=$?
+check "a bare commit SHA is pulled from the proxy registry" '[ $RC = 0 ] && called "ghcr.io/blotcms/blot-proxy:abc123"'
+
 echo
 echo "$pass passed, $failed failed"
 [ "$failed" = 0 ]

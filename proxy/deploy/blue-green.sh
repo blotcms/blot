@@ -2,7 +2,7 @@
 #
 # Swap the running proxy container for a new IMAGE, container to container.
 #
-#   proxy/deploy/blue-green.sh <image>
+#   proxy/deploy/blue-green.sh <commit-sha | image>
 #
 # Run it on the production host. For the one-off move from the bare-metal
 # OpenResty to the first container use cutover-from-baremetal.sh instead; for a
@@ -36,12 +36,13 @@
 # memory). Deploy at a quiet time, and see the TODO on purging every proxy.
 set -euo pipefail
 
-NEW_IMAGE="${1:?usage: blue-green.sh <image>}"
+NEW_IMAGE="${1:?usage: blue-green.sh <commit-sha | image>}"
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 . "$DIR/common.sh"
 
+NEW_IMAGE="$(resolve_image "$NEW_IMAGE")"
 load_env
 [ -r "$CERT_DIR/letsencrypt-domain.pem" ] && [ -r "$CERT_DIR/letsencrypt-domain.key" ] \
   || die "no certificate in $CERT_DIR (letsencrypt-domain.pem / .key)"

@@ -20,6 +20,7 @@
 #   PROXY_NODE_ENV_FILE    /etc/blot/secrets.env  where BLOT_REVERSE_PROXY_URLS is
 #   PROXY_PURGE_URLS       (from PROXY_NODE_ENV_FILE)  comma separated
 #   PROXY_CANARY_HOST      preview-of-wireframe-on-david.<BLOT_HOST>
+#   PROXY_REGISTRY_URL     ghcr.io/blotcms/blot-proxy  for a bare tag / commit SHA
 #   PROXY_HEALTH_TIMEOUT   60                   seconds to wait for a new container
 #   PROXY_DRAIN_TIMEOUT    30                   seconds an old container may drain
 #
@@ -61,6 +62,13 @@ load_env() {
   BLOT_HOST="$(env_value "$ENV_FILE" BLOT_HOST)"
   [ -n "$BLOT_HOST" ] || die "BLOT_HOST is not set in $ENV_FILE"
   CANARY_HOST="${PROXY_CANARY_HOST:-preview-of-wireframe-on-david.$BLOT_HOST}"
+}
+
+# A bare tag or commit SHA means the image CI publishes
+# (.github/workflows/proxy-image.yml); anything with a / or : is used as given.
+PROXY_REGISTRY_URL="${PROXY_REGISTRY_URL:-ghcr.io/blotcms/blot-proxy}"
+resolve_image() {
+  case "$1" in */*|*:*) echo "$1" ;; *) echo "$PROXY_REGISTRY_URL:$1" ;; esac
 }
 
 ensure_image() { # pull only when it is not already on the host

@@ -3,7 +3,7 @@
 # ONE-OFF: move :80/:443 from the bare-metal OpenResty (systemd unit
 # `openresty`) to the first proxy container.
 #
-#   proxy/deploy/cutover-from-baremetal.sh [--dry-run] [--yes] [--soak <seconds>] <image>
+#   proxy/deploy/cutover-from-baremetal.sh [--dry-run] [--yes] [--soak <seconds>] <commit-sha | image>
 #
 # Run it on the production host, inside tmux or screen (so a dropped SSH
 # connection cannot interrupt it half way), at a quiet time. After this,
@@ -60,11 +60,12 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-IMAGE="${IMAGE:?usage: cutover-from-baremetal.sh [--dry-run] [--yes] [--soak <seconds>] <image>}"
+IMAGE="${IMAGE:?usage: cutover-from-baremetal.sh [--dry-run] [--yes] [--soak <seconds>] <commit-sha | image>}"
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 . "$DIR/common.sh"
+IMAGE="$(resolve_image "$IMAGE")"
 
 NEW=blot-proxy-blue
 REHEARSAL=blot-proxy-rehearsal
