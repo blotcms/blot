@@ -55,11 +55,13 @@ through System Events. TextEdit renders `.html` files as rich text whatever
 `IgnoreHTML` says, so the code sample is `Snippet.txt`.
 
 ## Browser window (`-browser`)
-Safari, sized 600x400pt (deliberately small; a browser window is mostly chrome). It loads
-`fixture-assets/browser-sample.html` from a throwaway `python3 -m http.server` on
-`localhost:8765` (files in the runner's temp directory are not readable by Safari). Placed
-and read back through System Events like the editors. Best-effort and unverified until the
-first capture: check `debug-safari.png` and `browser.log` in the capture logs.
+Safari, sized 600x400pt (deliberately small; a browser window is mostly chrome). It opens
+`fixture-assets/browser-sample.html` copied to `/private/tmp/pane-browser/index.html`, as a
+file. A local `python3 -m http.server` worked too, but made macOS ask "Allow Python to find
+devices on local networks?", and the dialog landed in the capture. Safari's compact layout
+(Tahoe) shows the sidebar and tab buttons, back/forward, the address pill and no tab bar.
+Placed and read back through System Events like the editors; `debug-safari.png` and
+`browser.log` in the capture logs show what the runner did.
 
 ## Desktop icons (`-desktop`)
 The "Your site" contents (all files and `Fruits`, except `Old report.doc`, which looks like

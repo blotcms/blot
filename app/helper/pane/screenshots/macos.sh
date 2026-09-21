@@ -192,16 +192,14 @@ OSA
   osascript -e 'tell application "TextEdit" to close every window saving no' >>"$OUT/editors.log" 2>&1
   sleep 2
 done
-# Browser: Safari, a small window on a local page (served over HTTP because Safari's sandbox
-# won't open files from a runner's temp directory). Placed and read back through System Events,
-# like the editors. Best-effort: debug screenshots and logs show what the runner allowed.
+# Browser: Safari, a small window on a local page opened as a file (a local HTTP server made macOS
+# ask "Allow Python to find devices on local networks?", and the dialog ended up in the capture).
+# Placed and read back through System Events, like the editors. Best-effort: debug screenshots
+# and logs show what the runner allowed.
 WEB="/private/tmp/pane-browser"; mkdir -p "$WEB"
 cp "$HERE/fixture-assets/browser-sample.html" "$WEB/index.html"
-python3 -m http.server 8765 --bind 127.0.0.1 --directory "$WEB" >"$OUT/browser-server.log" 2>&1 &
-sleep 2
-curl -sS -o /dev/null -w "server: %{http_code}\n" http://localhost:8765/ >>"$OUT/browser.log" 2>&1
 osascript -e 'tell application "Finder" to close every window' >>"$OUT/browser.log" 2>&1
-open -a Safari "http://localhost:8765/"; sleep 8
+open -a Safari "$WEB/index.html"; sleep 8
 screencapture -x "$OUT/debug-safari.png"
 osascript >>"$OUT/browser.log" 2>&1 <<OSA
 tell application "System Events" to tell process "Safari"
@@ -219,7 +217,6 @@ IFS=', ' read -r L T R B <<< "$BOUNDS"
 sleep 2
 capture "macos-$THEME$SUFFIX-browser"
 osascript -e 'tell application "Safari" to quit' >>"$OUT/browser.log" 2>&1
-pkill -f "http.server 8765" || true
 sleep 2
 # Desktop icons: the "Your site" contents (files and the Fruits folder) as icons on the
 # desktop itself. The grey window sits at the desktop level, below Finder's icons. The
