@@ -73,7 +73,7 @@ background:linear-gradient(var(--hl),var(--hl)) 271.5px 0/.5px 26px no-repeat,li
 .pane .pane-head::after,.pane .pane-head i:nth-child(2)::after{display:none}
 }
 @container (max-width:439px){
-.pane .pane-bar{height:40px;--b-ico:none;--b-det:none;--b-sep:none;--b-sr:none;--b-ad:none;--b-l2:none;--b-cmd:none;--b-l1:none;--b-nav:none;--m:var(--g-l) 0 0/330px 40px no-repeat,var(--g-rt) right top/152px 40px no-repeat}
+.pane .pane-bar{height:40px;--b-ico:none;--b-det:none;--b-sep:none;--b-sr:none;--b-ad:none;--b-l2:none;--b-cmd:none;--b-l1:none;--b-nav:none;--m:var(--g-l) 0 0/330px 136px no-repeat,var(--g-rt) right top/152px 40px no-repeat}
 .pane .pane-bar::before,.pane::before{display:none}
 .pane .pane-row{width:auto}
 .pane .pane-label,.pane .pane-head i:nth-child(1){flex:1;width:auto;min-width:0}
