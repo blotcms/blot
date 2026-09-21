@@ -86,6 +86,8 @@ describe("template loader", function () {
 
     await loader(req, res, jasmine.createSpy("next"));
 
+    expect(req.template.displayName).toBe(folderName);
+    expect(req.template.name).toBe(packageName);
     expect(res.locals.breadcrumbs.add).toHaveBeenCalledWith(
       folderName,
       folderName
