@@ -53,7 +53,9 @@ unreliable.)
 ## Captures
 `DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)` gives the visible frame; the
 capture is that plus 80 logical px each side (less than the other OSes' 96: the screen is
-short and the watermark sits at the bottom right). At 2x the screen is only 800x600
+short and the watermark sits at the bottom right). The bottom edge also stops 52px above the taskbar: the watermark
+is three lines ("Test Mode", "Windows Server 2025 Datacenter", the build) right above it, and its first
+letter, at screen (1481, 1010) at 2x, used to land in the crop's bottom right corner as a stray "T". At 2x the screen is only 800x600
 logical, which is why the window is 360px tall. The shadow is Windows' own (faint).
 
 ## Editor windows (`-text`, `-code`)

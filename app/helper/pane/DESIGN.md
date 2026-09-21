@@ -309,3 +309,29 @@ skin), contrast (reported), and size (reported).
   the folder is a two-tone blue with a white highlight. Not reproducible in SVG: the real
   text and md thumbnails are tiny rendered document previews, so we draw generic line texture.
   A 1px-period checker is scored like noise, so the pattern phase was chosen by diff.
+- The Windows skin (`css/win.css`, `icons/win/`) builds the Explorer Details view; measurements are CSS px from the
+  window's top-left, taken from the 2x reference. The window is 504x367: a 6.5px Mica frame around a 491px client
+  area (the "490" in the capture notes), so `.pane` defaults to `--pane-w:504px` / `--pane-max:367px`. Chrome is
+  layered backgrounds on `.pane-bar` (tab strip, navigation row, command bar: one element, 136px, each layer a
+  custom property so a container query can drop layers) and on `.pane` (status bar and view toggles), plus
+  pseudo-elements: `.pane-bar::after` is a three-layer `mask` (left glyph sprite, and two right-anchored sprites so
+  the window buttons and search glyphs stay at the right edge), `.pane::before` is the address text
+  (`content:attr(aria-label)`, so it follows the window title), `.pane-bar` itself shows the title as the tab text.
+  No chrome node was added (still 5). Two-tone glyphs (disabled command icons, Details) are coloured SVG sprites
+  (`bar.svg`/`bar-d.svg`, `details*.svg`, `status*.svg`, `tab*.svg`): the theme changes their colours, so each has a
+  `-d` twin selected by an `--i-*` token in `@light`/`@dark`.
+- Fixed decoration in the Windows window: **"13 items"**, the **Details** label, the search placeholder and the
+  command-bar labels ("New") are constant strings in the CSS. The item count is not in the markup (it would need a
+  node or a per-window rule), and it stays "13 items" whatever the window holds; the reference has 13.
+- Explorer's Details view cannot expand a folder and always lists folders first, so `win.css` sorts folders first with
+  CSS `order` (`li:has(>.pane-row .pane-k-folder)`), leaving the DOM order alone. Nested rows are still shown
+  (indented by `--step`, no chevron): the docs use them to show a structure, so nothing is hidden. The QA sample
+  for Windows lists the top level only, as the reference does.
+- Scrollbars are real: `.pane-tree` overflows (the rows are 627.5px wide, Name 271.5 + Date 144 + Type 125 + Size
+  87, so the Size column is cut off by the window edge and a horizontal scrollbar appears, as in the capture), styled
+  with `::-webkit-scrollbar` to Explorer's 16.5px track and 2.5px thumb. The `:vertical`/`:horizontal`
+  pseudo-classes do not match under the `:is()` the build wraps rules in, so the thumb and the buttons use plain
+  `::-webkit-scrollbar-thumb` / `-button` rules (a border shrinks the thumb on both axes). Headless Chrome hides
+  scrollbars by default, so the QA renderer launches a second browser with them shown for Windows cases.
+- Below 481px the search box, More and Details go; below 440px the navigation row and command bar go (the tab strip
+  and window buttons stay) and the Type and Size columns drop; below 300px the Date column drops (§6).
