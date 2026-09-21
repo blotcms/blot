@@ -53,9 +53,15 @@ function fixtureFor(caseId) {
 // The full page the renderer screenshots (and the viewer shows in an iframe).
 // `origin` is where the window's top-left corner sits (CSS px); defaults to the
 // nominal padding, but the renderer passes the reference's detected position.
-// A half-CSS-px origin (an odd device pixel at 2x, like the Windows capture's 73.5) is
-// painted one device pixel late on Windows; a quarter px less snaps to the right pixel.
-const snap = (v) => (v % 1 ? v - 0.25 : v);
+// Chrome on Windows snaps an absolutely positioned box to whole CSS px, so a half-px
+// origin (an odd device pixel at 2x, like the Windows capture's 73.5) lands one device
+// pixel off. Put the box on the next whole px and pull it back with a transform, which
+// is not snapped. (Only Windows: the other captures' origins are whole px or already
+// match.)
+const place = (o) => {
+  const [x, y] = [Math.ceil(o.x), Math.ceil(o.y)];
+  return `left:${x}px;top:${y}px` + (x !== o.x || y !== o.y ? `;transform:translate(${o.x - x}px,${o.y - y}px)` : "");
+};
 
 function composePage(c, { html, css, js }, origin = { x: c.padding, y: c.padding }) {
   return `<!doctype html>
@@ -64,7 +70,7 @@ function composePage(c, { html, css, js }, origin = { x: c.padding, y: c.padding
 <meta charset="utf-8">
 <style>
 html,body{margin:0;background:#808080}
-#pane-qa-stage{position:absolute;left:${snap(origin.x)}px;top:${snap(origin.y)}px}
+#pane-qa-stage{position:absolute;${c.os === "windows" ? place(origin) : `left:${origin.x}px;top:${origin.y}px`}}
 </style>
 <style>${css || ""}</style>
 ${js ? `<script>${js}</script>` : ""}
