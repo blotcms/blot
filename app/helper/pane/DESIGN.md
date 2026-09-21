@@ -100,7 +100,9 @@ Rules:
 ```
 css/base.css    structure: box model, list reset, rows, cells, .pane-sr, pinning, container queries,
                 forced-colors, reduced-motion. No colours, no fonts, no OS names.
-css/mac.css     one skin per OS (win.css, linux.css in Stage 2): metrics, chrome, glyphs, icons.
+css/mac.css     one skin per OS (win.css, linux.css): metrics, chrome, glyphs, icons. A skin may span
+                several files, read as one source in name order: css/<os>.css (the folder list view) plus
+                css/<os>-<part>.css (mac-icons.css, mac-editor.css, ...), so parts can be built independently.
 lib/css.js      the build: reads the files, expands them, minifies, caches. Pure function of the
                 files + options, so it is unit-tested.
 icons/<os>/<kind>.svg   hand-optimised sources, inlined as data URIs by the build.

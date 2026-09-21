@@ -53,3 +53,27 @@ describe("pane css build", function () {
     expect(out).toContain("container-type:inline-size");
   });
 });
+
+describe("pane skins spanning several css files", function () {
+  const fs = require("fs");
+  const path = require("path");
+  const dir = path.join(__dirname, "..", "css");
+  const part = path.join(dir, "mac-zzpart.css");
+
+  afterEach(function () {
+    fs.rmSync(part, { force: true });
+  });
+
+  it("read css/<os>-<part>.css as part of the same skin, wrapped like the rest", function () {
+    fs.writeFileSync(part, "@light{--zz:#123}\n.pane .zz-only{color:var(--zz)}\n");
+    const built = css.build({ skins: ["mac"] });
+    expect(built).toContain("--zz:#123");
+    expect(built).toContain(`${css.group("mac", ["mac"])} .zz-only{color:var(--zz)}`);
+  });
+
+  it("do not pick up another OS's parts", function () {
+    fs.writeFileSync(part, ".pane .zz-only{color:red}\n");
+    expect(css.build({ skins: ["win"] })).not.toContain("zz-only");
+  });
+});
+

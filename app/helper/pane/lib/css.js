@@ -123,9 +123,16 @@ function skin(os, source, skins = SKINS) {
 function build(options = {}) {
   const skins = options.skins || SKINS;
   const read = (f) => fs.readFileSync(path.join(ROOT, "css", f), "utf8");
+  // A skin may span several files so parts of it can be built independently: css/<os>.css (the
+  // folder list view) plus css/<os>-<part>.css (e.g. mac-icons.css, mac-editor.css), all read
+  // as one source, in name order, so tokens and rules of any part are shared.
+  const source = (os) =>
+    [`${os}.css`, ...fs.readdirSync(path.join(ROOT, "css")).filter((f) => f.startsWith(`${os}-`) && f.endsWith(".css")).sort()]
+      .map(read)
+      .join("\n");
   // prose: <span class="pane-name"> shows the child for the visitor's OS (or the default)
   const prose = skins.map((os) => `html[data-os=${os}] .pane-name>[data-os=${os}]${os === DEFAULT_SKIN ? `,${unbuilt(skins)} .pane-name>[data-os=${os}]` : ""}`).join(",") + "{display:inline}";
-  const css = read("base.css") + skins.map((os) => skin(os, read(`${os}.css`), skins)).join("") + prose;
+  const css = read("base.css") + skins.map((os) => skin(os, source(os), skins)).join("") + prose;
   return minify(icons(css));
 }
 
