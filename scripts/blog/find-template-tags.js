@@ -25,7 +25,7 @@ const localPath = require("helper/localPath");
 
 const TAG = /\{\{[\s\S]*?\}\}\}?/g;
 const MAX_BYTES = 5 * 1024 * 1024;
-const TEXT_EXTENSIONS = /\.(md|markdown|txt|text|html?|org|rtf|docx?|odt)$/i;
+const TEXT_EXTENSIONS = /\.(md|markdown|txt|text|html?|org|rtf)$/i;
 
 const args = process.argv.slice(2);
 const options = {};
@@ -67,7 +67,10 @@ async function scan(blog) {
       const file = localPath(blog.id, path);
       const stat = await fs.stat(file);
       if (!stat.isFile() || stat.size > MAX_BYTES) continue;
-      tags = (await fs.readFile(file, "utf8")).match(TAG);
+      const buffer = await fs.readFile(file);
+      // A NUL byte means binary data, not text, whatever the extension.
+      if (buffer.includes(0)) continue;
+      tags = buffer.toString("utf8").match(TAG);
     } catch (e) {
       continue;
     }
@@ -103,28 +106,11 @@ function summarise(blog, user, files) {
 }
 
 function printFiles(files) {
-  files.forEach(function (file) {
-    console.log("");
-    console.log(
-      file.path +
-        "  [" +
-        file.kind +
-        (file.published ? "" : ", unpublished") +
-        (file.url ? ", " + file.url : "") +
-        ", " +
-        file.tagCount +
-        " tag(s)]"
-    );
-    console.log("  " + file.tags.join("  "));
-  });
+  files.forEach((file) => console.log("  " + file.path));
 }
 
 function printResult(result) {
-  console.log("");
-  console.log("=".repeat(60));
-  console.log("email:  " + (result.email || "(unknown)"));
-  console.log("blog:   " + result.blogID + " " + (result.handle || ""));
-  console.log("domain: " + (result.domain || "(none)"));
+  console.log("blog:   " + result.blogID);
   printFiles(result.files);
 }
 
