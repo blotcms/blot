@@ -30,7 +30,7 @@ describe("{{more}} teaser marker", function () {
     });
     await this.template({
       "entry.html": `{{#entry}}[{{{body}}}][{{more}}]{{/entry}}`,
-      "entries.html": `{{#entries}}[{{{teaserBody}}}][{{summary}}][{{more}}]{{/entries}}`,
+      "entries.html": `{{#entries}}[{{{teaserBody}}}]|[{{summary}}]|[{{more}}]{{/entries}}`,
     });
 
     const entry = await this.text("/a");
@@ -41,7 +41,7 @@ describe("{{more}} teaser marker", function () {
     expect(entry).toContain("[true]");
 
     expect(list).toContain("Before the break");
-    expect(list).not.toContain("After the break]");
+    expect(list.split("|")[0]).not.toContain("After the break");
     expect(list).not.toContain("{{more}}");
   });
 
