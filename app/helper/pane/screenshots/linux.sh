@@ -48,7 +48,23 @@ CSS
   openbox >"$OUT/openbox.log" 2>&1 &
   sleep 2
 
+  # An empty stage before every shot: a window left over from an earlier step sits at the same
+  # spot and shows behind (or beside) the next one. The apps earlier steps used are killed (by
+  # exact process name: -f would match this script itself) and the windows still on screen are
+  # logged (stage.log). See screenshots/README.md, "Rule: an empty stage before every shot".
+  clear_stage() {
+    for app in nautilus gnome-text-edit epiphany gjs xcompmgr; do pkill -x "$app" 2>/dev/null; done
+    sleep 2
+    {
+      echo "== stage before: $1"
+      for w in $(xdotool search --onlyvisible --name "" 2>/dev/null); do
+        eval "$(xdotool getwindowgeometry --shell "$w" 2>/dev/null)"
+        echo "  $w | $(xdotool getwindowname "$w" 2>/dev/null) | ${WIDTH:-?}x${HEIGHT:-?}+${X:-?}+${Y:-?}"
+      done
+    } >> "$OUT/stage.log" 2>&1
+  }
   open_nautilus() {  # args: width height (logical px)
+    clear_stage "nautilus"
     nautilus --new-window "$FIXTURE" >"$OUT/nautilus.log" 2>&1 &
     sleep 8
     # several X windows share the class (helpers are 1x1); pick the largest one
@@ -67,7 +83,7 @@ CSS
     sleep 0.5
   }
   capture() {  # arg: output name
-    xdotool key --clearmodifiers ctrl+shift+a; sleep 0.5  # clear the selection
+    [ "${2:-}" = keep ] || { xdotool key --clearmodifiers ctrl+shift+a; sleep 0.5; }  # clear the selection (not in the browser: that key means something there)
     xdotool mousemove $((X + WIDTH / 2)) $((Y + HEIGHT + 2 * PAD)); sleep 1
     import -window root "$OUT/full.png"
     convert "$OUT/full.png" -crop "${WIDTH}x${HEIGHT}+${X}+${Y}" +repage "$OUT/window.png"
@@ -111,6 +127,7 @@ CSS
   gsettings set org.gnome.TextEditor highlight-current-line false || true
   for e in "Essay.txt:text:false" "index.html:code:true"; do
     IFS=: read -r file kind lines <<< "$e"
+    clear_stage "editor $kind"
     gsettings set org.gnome.TextEditor show-line-numbers "$lines" || true
     gnome-text-editor --standalone "$EDIT/$file" >"$OUT/text-editor.log" 2>&1 &
     sleep 8
@@ -128,6 +145,34 @@ CSS
     capture "linux-$THEME$SUFFIX-$kind"
     pkill -x gnome-text-edit; sleep 3; rm -rf "$HOME/.local/share/org.gnome.TextEditor"  # (comm is truncated to 15 chars; -f would match this script itself)
   done
+
+  # Browser: GNOME Web (Epiphany, WebKitGTK; a deb, unlike Firefox and Chromium which are snaps
+  # on this image) on https://example.com, a small window (600x400 logical px). A profile of its
+  # own so nothing is restored; WebKit and GTK are told to render in software (no GPU under Xvfb).
+  clear_stage "browser"
+  rm -rf "$HOME/pane-epiphany"
+  WEBKIT_DISABLE_COMPOSITING_MODE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 GSK_RENDERER=cairo \
+    epiphany --profile="$HOME/pane-epiphany" --new-window https://example.com/ >"$OUT/epiphany.log" 2>&1 &
+  sleep 20
+  WID=""; BEST=0
+  for w in $(xdotool search --class epiphany) $(xdotool search --class Epiphany); do
+    eval "$(xdotool getwindowgeometry --shell "$w")"
+    if [ $((WIDTH * HEIGHT)) -gt "$BEST" ]; then BEST=$((WIDTH * HEIGHT)); WID="$w"; fi
+  done
+  if [ -n "$WID" ]; then
+    xdotool windowsize "$WID" $((600 * S)) $((400 * S)); sleep 1
+    xdotool windowmove "$WID" $((PAD + 40 * S)) $((PAD + 40 * S)); sleep 1
+    eval "$(xdotool getwindowgeometry --shell "$WID")"
+    echo "browser window $WID: ${WIDTH}x${HEIGHT}+${X}+${Y}" >> "$OUT/geometry.txt"
+    xdotool windowactivate --sync "$WID" || true
+    sleep 3
+    import -window root "$OUT/debug-epiphany.png"
+    capture "linux-$THEME$SUFFIX-browser" keep
+  else
+    echo "no epiphany window" >> "$OUT/geometry.txt"
+    import -window root "$OUT/debug-epiphany.png"
+  fi
+  clear_stage "before the desktop icons"
 
   # Desktop icons: stock GNOME has none. Ubuntu ships Desktop Icons NG (DING), a GJS app
   # that draws GNOME-styled icons for ~/Desktop and can run without GNOME Shell.

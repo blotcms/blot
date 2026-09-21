@@ -104,7 +104,7 @@ jobs:
             nautilus gnome-text-editor openbox x11-xserver-utils libglib2.0-bin xvfb xdotool imagemagick dbus-x11 dconf-gsettings-backend \
             gsettings-desktop-schemas adwaita-icon-theme gnome-themes-extra \
             fonts-cantarell libadwaita-1-0 librsvg2-common adwaita-icon-theme-full shared-mime-info \
-            gnome-shell-extension-desktop-icons-ng gjs xcompmgr x11-utils
+            gnome-shell-extension-desktop-icons-ng gjs xcompmgr x11-utils epiphany-browser
       # after the install: it also reads the Nautilus and libadwaita versions
       - name: Check the runner's OS version
         run: node app/helper/pane/screenshots/check-os.js
