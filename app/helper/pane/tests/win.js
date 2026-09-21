@@ -95,3 +95,58 @@ describe("pane Windows skin", function () {
     expect(pane.folder(TREE, { height: "300px" }).html).toContain('tabindex="0"');
   });
 });
+
+// The status bar counts the window's top-level rows with a CSS counter (needs Chrome).
+let chrome = true;
+try {
+  require("puppeteer");
+} catch (e) {
+  chrome = false;
+}
+
+(chrome ? describe : xdescribe)("pane Windows status bar", function () {
+  let browser;
+  const timeout = 60000;
+  beforeAll(async () => {
+    browser = await require("../qa/lib/render").launch();
+  }, timeout);
+  afterAll(async () => browser && (await browser.close()));
+
+  // getComputedStyle(...).content is the unresolved counter() expression and digits are
+  // equally wide, so compare pixels: does the window look exactly like the same window with
+  // the literal text forced into the status bar?
+  const looksLike = async (tree, literal) => {
+    const shoot = async (extra) => {
+      const page = await browser.newPage();
+      try {
+        const { css: sheet } = pane.assets();
+        await page.setViewport({ width: 700, height: 500 });
+        await page.setContent(`<html data-os="win"><style>${sheet}${extra}</style><body style="margin:10px">${pane.folder(tree, { title: "Docs" }).html}</body></html>`);
+        return await (await page.$(".pane")).screenshot();
+      } finally {
+        await page.close();
+      }
+    };
+    const counted = await shoot("");
+    const forced = await shoot(`.pane .pane-tree::after{content:"${literal}" !important}`);
+    return Buffer.compare(counted, forced) === 0;
+  };
+
+  it("says how many items the window holds, not a constant", async function () {
+    expect(await looksLike("a.md\nb.md\nc.md", "3 items")).toBe(true);
+    expect(await looksLike("a.md\nb.md\nc.md\nd.md\ne.md", "5 items")).toBe(true);
+    expect(await looksLike("a.md\nb.md\nc.md", "13 items")).toBe(false); // it is not a constant
+    expect(await looksLike("a.md\nb.md\nc.md", "5 items")).toBe(false);
+  }, timeout);
+
+  it("counts the top-level rows only, and uses the singular for one", async function () {
+    expect(await looksLike("Fruits\n  a.md\n  b.md\nAbout.txt", "2 items")).toBe(true);
+    expect(await looksLike("Fruits\n  a.md\n  b.md", "1 item")).toBe(true);
+    expect(await looksLike("Only.md", "1 item")).toBe(true);
+    expect(await looksLike("Only.md", "1 items")).toBe(false);
+  }, timeout);
+
+  it("has a scrollbar fallback for browsers without ::-webkit-scrollbar", function () {
+    expect(pane.assets().css).toContain("@supports not selector(::-webkit-scrollbar)");
+  });
+});

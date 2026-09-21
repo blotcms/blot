@@ -14,7 +14,13 @@ linear-gradient(var(--caret),var(--caret)) left 76px bottom 13px/1px 12.5px no-r
 linear-gradient(var(--stat),var(--stat)) left 6.5px bottom 6.5px/calc(100% - 13px) 25px no-repeat,
 var(--frame)}
 .pane::before{content:attr(aria-label);position:absolute;z-index:1;left:311px;right:100px;top:48px;height:32px;font-size:14px;line-height:32px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pane::after{content:"13 items";position:absolute;z-index:1;left:21px;bottom:6.5px;height:25px;line-height:25px}
+/* The item count is CSS: each top-level row counts, and the text is the list's ::after (absolutely
+   positioned against .pane, so it neither scrolls nor is clipped). It can't be .pane::after: .pane is a
+   size container, and its style containment stops counters from reaching its own pseudo-element. */
+.pane .pane-tree{counter-reset:items}
+.pane .pane-tree>li{counter-increment:items}
+.pane .pane-tree::after{content:counter(items) " items";position:absolute;z-index:1;left:21px;bottom:6.5px;height:25px;line-height:25px}
+.pane .pane-tree:has(>li:only-child)::after{content:counter(items) " item"}
 .pane .pane-bar{--b-ico:var(--i-bar) 0 0/330px 136px no-repeat;
 --b-det:var(--i-det) right 73.5px top 105px/16px 16px no-repeat;
 --b-top:url(icon:win/folder) 23.5px 16px/16px 16px no-repeat,var(--i-tab) 9.5px 9px/250px 31px no-repeat;
@@ -61,6 +67,7 @@ background:linear-gradient(var(--hl),var(--hl)) 271.5px 0/.5px 26px no-repeat,li
 .pane .pane-k-html{background-image:url(icon:win/html)}
 .pane .pane-k-image{background-image:url(icon:win/image)}
 .pane .pane-k-md,.pane .pane-k-doc,.pane .pane-k-link,.pane .pane-k-generic{background-image:url(icon:win/generic)}
+@supports not selector(::-webkit-scrollbar){.pane .pane-tree{scrollbar-width:thin;scrollbar-color:var(--thumb) var(--track)}}
 .pane .pane-tree::-webkit-scrollbar{width:16.5px;height:16.5px;background:var(--track)}
 /* not :vertical/:horizontal: those pseudo-classes don't match under the :is() the build wraps rules in */
 .pane .pane-tree::-webkit-scrollbar-track{background:var(--track)}

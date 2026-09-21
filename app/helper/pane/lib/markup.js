@@ -68,8 +68,11 @@ function folder(tree, options = {}) {
     "</ul>";
 
   // A scroller must be keyboard reachable and named. With an explicit height we can't know
-  // whether the rows fit, so it always is.
-  const scrolls = options.height || total(nodes) > SCROLLS_AFTER;
+  // whether the rows fit, so it always is. The Windows list is always wider than its window
+  // (the Size column runs off the edge, as in Explorer), so any window a Windows skin can
+  // apply to is a scroller too. (Costs macOS and Linux visitors one extra tab stop.)
+  const winList = (pin === null || pin === "win") && css.SKINS.includes("win");
+  const scrolls = options.height || winList || total(nodes) > SCROLLS_AFTER;
   const body = list(nodes, ` class="pane-tree"${scrolls ? ` tabindex="0" aria-label="${escape(title)}"` : ""}`);
   const size = [options.width && `--pane-w:${escape(options.width)}`, options.height && `--pane-h:${escape(options.height)}`].filter(Boolean).join(";");
   return (

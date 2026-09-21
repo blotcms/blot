@@ -351,9 +351,19 @@ of the references. The rendering must not depend on the desktop behind it:
   No chrome node was added (still 5). Two-tone glyphs (disabled command icons, Details) are coloured SVG sprites
   (`bar.svg`/`bar-d.svg`, `details*.svg`, `status*.svg`, `tab*.svg`): the theme changes their colours, so each has a
   `-d` twin selected by an `--i-*` token in `@light`/`@dark`.
-- Fixed decoration in the Windows window: **"13 items"**, the **Details** label, the search placeholder and the
-  command-bar labels ("New") are constant strings in the CSS. The item count is not in the markup (it would need a
-  node or a per-window rule), and it stays "13 items" whatever the window holds; the reference has 13.
+- Fixed decoration in the Windows window: the **Details** label, the search placeholder and the command-bar labels
+  ("New") are constant strings in the CSS. The status bar's **item count is not**: `.pane-tree` resets a CSS counter, each
+  top-level `li` increments it, and `.pane-tree::after` (absolutely positioned against `.pane`, so it neither scrolls
+  nor is clipped) prints `counter(items) " items"` (singular for a lone row, via `:has(>li:only-child)`), so it is
+  right for any window and needs no node. It cannot be `.pane::after`: `.pane` is a size container, and its style
+  containment keeps counters from reaching its own pseudo-element (it printed "0 items"). (Explorer counts the folder's
+  own items, i.e. the top-level rows; the reference has 13.) Tested in Chrome in `tests/win.js`.
+- The Windows list is always wider than its window (628px of rows in a 491px area), so `folder()` makes it a
+  keyboard-reachable named scroller (`tabindex="0"` + `aria-label`) whenever a Windows skin can apply (unpinned or
+  pinned to `win`). The cost is one extra tab stop for macOS and Linux visitors; a window pinned to `mac` or `linux`
+  has none unless it can scroll. Firefox has no `::-webkit-scrollbar`, so `@supports not selector(::-webkit-scrollbar)`
+  gives it `scrollbar-width:thin` and `scrollbar-color` in the skin's colours (Chrome ignores the webkit rules once
+  those properties are set, hence the gate).
 - Explorer's Details view cannot expand a folder and always lists folders first, so `win.css` sorts folders first with
   CSS `order` (`li:has(>.pane-row .pane-k-folder)`), leaving the DOM order alone. Nested rows are still shown
   (indented by `--step`, no chevron): the docs use them to show a structure, so nothing is hidden. The QA sample

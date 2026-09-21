@@ -20,7 +20,13 @@ describe("pane markup", function () {
   });
 
   it("makes the list a keyboard-reachable scroller only when it can scroll", function () {
-    expect(html).not.toContain("tabindex");
+    // a window for macOS or Linux only: nothing to scroll with a few rows
+    const few = "Fruits\n  Apple.md\nAbout.txt";
+    expect(pane.folder(few, { os: "mac" }).html).not.toContain("tabindex");
+    expect(pane.folder(few, { os: "linux" }).html).not.toContain("tabindex");
+    // the Windows list is always wider than its window, so any window Windows can apply to scrolls
+    expect(pane.folder(few, { os: "win" }).html).toContain('tabindex="0"');
+    expect(html).toContain('tabindex="0"');
     const many = Array.from({ length: 14 }, (_, i) => `f${i}.md`).join("\n");
     expect(pane.folder(many, { title: "Site" }).html).toContain('tabindex="0" aria-label="Site"');
     expect(pane.folder("a.md", { height: "200px" }).html).toContain('tabindex="0"');

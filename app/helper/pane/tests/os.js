@@ -42,33 +42,36 @@ describe("pane skins and the default fallback", function () {
     combos(css.SKINS.slice());
   });
 
-  // the OS that has no skin yet (none once all three are built: nothing to test then)
-  const unbuiltOs = () => require("../lib/os").OS_KEYS.find((o) => !css.SKINS.includes(o));
+  // All three skins are built, so "an OS with no skin" is simulated by taking one out of
+  // SKINS for the length of a test (SKINS is read live by the CSS build and by markup.js).
+  const SIMULATED = "linux";
+  let saved;
+  beforeEach(function () {
+    saved = css.SKINS.slice();
+  });
+  afterEach(function () {
+    css.SKINS.splice(0, css.SKINS.length, ...saved);
+  });
+  const withoutSkin = () => css.SKINS.splice(css.SKINS.indexOf(SIMULATED), 1);
 
   describe("when a skin is added", function () {
-    let saved;
-    let added;
-    beforeEach(function () {
-      saved = css.SKINS.slice();
-      added = unbuiltOs();
-      if (added) css.SKINS.push(added);
-    });
-    afterEach(function () {
-      css.SKINS.splice(0, css.SKINS.length, ...saved);
-    });
-
     it("stops falling back for that OS, and honours its pin", function () {
-      if (!added) return pending("every OS has a skin");
+      withoutSkin();
+      const before = css.SKINS.slice();
+      expect(matching(SIMULATED, pane.folder(TREE).html, before)).toEqual([css.DEFAULT_SKIN]); // the fallback
+      css.SKINS.push(SIMULATED);
       const skins = css.SKINS.slice();
-      const html = pane.folder(TREE, { os: added }).html;
-      expect(html).toContain(`data-pin="${added}"`);
-      expect(matching(added, pane.folder(TREE).html, skins)).toEqual([added]);
+      const html = pane.folder(TREE, { os: SIMULATED }).html;
+      expect(html).toContain(`data-pin="${SIMULATED}"`);
+      expect(matching(SIMULATED, pane.folder(TREE).html, skins)).toEqual([SIMULATED]);
       expect(matching(undefined, pane.folder(TREE).html, skins)).toEqual(["mac"]);
     });
 
     it("builds the prose rule the same way", function () {
-      if (!added) return pending("every OS has a skin");
+      withoutSkin();
       expect(css.unbuilt(css.SKINS)).toBe(`html:not(:is(${css.SKINS.map((s) => `[data-os=${s}]`).join(",")}))`);
+      css.SKINS.push(SIMULATED);
+      expect(css.unbuilt(css.SKINS)).toContain(`[data-os=${SIMULATED}]`);
     });
   });
 
@@ -83,8 +86,8 @@ describe("pane skins and the default fallback", function () {
 
   describe("a pin for an OS with no skin", function () {
     it("is ignored with a build-time warning: no data-pin, follows the visitor", function () {
-      const os = unbuiltOs();
-      if (!os) return pending("every OS has a skin");
+      withoutSkin();
+      const os = SIMULATED;
       spyOn(console, "warn");
       const html = pane.folder(TREE, { os }).html;
       expect(html).not.toContain("data-pin");
