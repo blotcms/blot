@@ -9,14 +9,15 @@
 // root so the rule applies to windows following the visitor's OS (html[data-os]) and to
 // windows pinned to that OS (data-pin), never both:
 //   :is(html[data-os=mac] .pane:not([data-pin]),.pane[data-pin=mac])
-// The default skin also applies while <html> has no data-os (no JS).
+// The default skin also applies whenever data-os is not a built skin (absent without JS,
+// or an OS whose skin doesn't exist yet), see unbuilt().
 // url(icon:mac/folder) inlines icons/mac/folder.svg as a data URI.
 
 const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.join(__dirname, "..");
-const SKINS = ["mac"]; // win and linux land with their skins
+const SKINS = ["mac"]; // win and linux land with their skins; markup.js and group() read this live
 const DEFAULT_SKIN = "mac";
 
 // Splits CSS into top-level items: { sel, body } for a block, { text } for a statement.
@@ -51,30 +52,35 @@ const minify = (css) =>
     .replace(/;}/g, "}")
     .trim();
 
-// what the skin's rules apply to: the windows of that skin
-const group = (os) =>
-  `:is(html[data-os=${os}] .pane:not([data-pin]),.pane[data-pin=${os}]${os === DEFAULT_SKIN ? ",html:not([data-os]) .pane:not([data-pin])" : ""})`;
+// A visitor whose data-os is not a built skin (absent, or "win" before win.css exists).
+// It shrinks as skins land, and never overlaps html[data-os=<built>].
+const unbuilt = (skins) => `html:not(:is(${skins.map((s) => `[data-os=${s}]`).join(",")}))`;
+
+// what the skin's rules apply to: the windows of that skin. The default skin also takes
+// the visitors nothing else covers. Every path has the same specificity.
+const group = (os, skins = SKINS) =>
+  `:is(html[data-os=${os}] .pane:not([data-pin]),.pane[data-pin=${os}]${os === DEFAULT_SKIN ? `,${unbuilt(skins)} .pane:not([data-pin])` : ""})`;
 
 // Replaces the leading `.pane` of each selector in a comma list; `extra` is appended to
 // the root (theme qualifiers).
-function root(sel, os, extra = "") {
+function root(sel, os, extra = "", skins = SKINS) {
   return sel
     .split(",")
     .map((s) => {
       s = s.trim();
       if (!/^\.pane(?![\w-])/.test(s)) throw new Error(`skin selector must start with .pane: ${s}`);
-      return group(os) + extra + s.slice(5);
+      return group(os, skins) + extra + s.slice(5);
     })
     .join(",");
 }
 
 // Rules (possibly inside @container / @media) with every selector rooted.
-function rootRules(css, os, extra) {
+function rootRules(css, os, extra, skins = SKINS) {
   return items(css)
     .map((it) => {
       if (it.text) return it.text;
-      if (it.sel.startsWith("@")) return `${it.sel}{${rootRules(it.body, os, extra)}}`;
-      return `${root(it.sel, os, extra)}{${it.body}}`;
+      if (it.sel.startsWith("@")) return `${it.sel}{${rootRules(it.body, os, extra, skins)}}`;
+      return `${root(it.sel, os, extra, skins)}{${it.body}}`;
     })
     .join("");
 }
@@ -87,7 +93,7 @@ function icons(css) {
 }
 
 // One skin file -> plain CSS.
-function skin(os, source) {
+function skin(os, source, skins = SKINS) {
   let rules = "";
   let light = "";
   let dark = "";
@@ -105,10 +111,10 @@ function skin(os, source) {
     else decls.push(it.text);
   }
   const tokens = decls.join("");
-  const asDark = (extra) => (tokens ? `${root(".pane", os, extra)}{${scheme(tokens, "dark")}}` : "") + darkRules.map((r) => rootRules(r, os, extra)).join("");
+  const asDark = (extra) => (tokens ? `${root(".pane", os, extra, skins)}{${scheme(tokens, "dark")}}` : "") + darkRules.map((r) => rootRules(r, os, extra, skins)).join("");
   return [
-    light && `${root(".pane", os)}{${scheme(light, "light")}}`,
-    rootRules(rules, os),
+    light && `${root(".pane", os, "", skins)}{${scheme(light, "light")}}`,
+    rootRules(rules, os, "", skins),
     tokens || darkRules.length ? `@media (prefers-color-scheme:dark){${asDark(":not([data-theme=light])")}}` : "",
     asDark("[data-theme=dark]"),
   ].join("");
@@ -118,9 +124,9 @@ function build(options = {}) {
   const skins = options.skins || SKINS;
   const read = (f) => fs.readFileSync(path.join(ROOT, "css", f), "utf8");
   // prose: <span class="pane-name"> shows the child for the visitor's OS (or the default)
-  const prose = skins.map((os) => `html[data-os=${os}] .pane-name>[data-os=${os}]${os === DEFAULT_SKIN ? `,html:not([data-os]) .pane-name>[data-os=${os}]` : ""}`).join(",") + "{display:inline}";
-  const css = read("base.css") + skins.map((os) => skin(os, read(`${os}.css`))).join("") + prose;
+  const prose = skins.map((os) => `html[data-os=${os}] .pane-name>[data-os=${os}]${os === DEFAULT_SKIN ? `,${unbuilt(skins)} .pane-name>[data-os=${os}]` : ""}`).join(",") + "{display:inline}";
+  const css = read("base.css") + skins.map((os) => skin(os, read(`${os}.css`), skins)).join("") + prose;
   return minify(icons(css));
 }
 
-module.exports = { build, skin, minify, items, root, group, SKINS, DEFAULT_SKIN };
+module.exports = { build, skin, minify, items, root, group, unbuilt, SKINS, DEFAULT_SKIN };

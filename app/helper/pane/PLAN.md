@@ -37,7 +37,9 @@ which stays untouched until every view has migrated.
   constant default), so builds are stable and cacheable.
 - **Overrides**: `os` and `theme` pin one window (the copy around it may say "Finder");
   the CSS applies each per-OS rule to windows following the visitor's OS
-  (`html[data-os]`) and to windows pinned to that OS (`data-pin`), never both. `width`
+  (`html[data-os]`) and to windows pinned to that OS (`data-pin`), never both. An OS
+  without a built skin is not honoured: a pin for it is ignored and a visitor on it gets the
+  default skin. `width`
   and `height` are CSS variables (`--pane-w`, `--pane-h`).
 - **Chrome is CSS**: window chrome should be drawn with pseudo-elements and SVG
   backgrounds on a few wrapper elements, not many decorative DOM nodes, so 20 windows

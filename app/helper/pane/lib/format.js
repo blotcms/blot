@@ -41,6 +41,48 @@ function formatFolderSize(items, os) {
   return items === 1 ? "1 item" : `${items} items`;
 }
 
+// One row per extension: the icon kind (shared by every OS), Explorer's Type text and
+// whether Explorer hides the extension (only for types Windows has a handler for), and
+// GNOME's Type text. Types Windows doesn't know show as "<EXT> File" with the extension
+// kept ("Draft.md", "Blot.webloc": see reference/windows/windows-light@2x.png).
+const EXTENSIONS = {
+  txt: { kind: "text", win: "Text Document", hide: true, linux: "Text" },
+  md: { kind: "md", win: "MD File", linux: "Markdown" },
+  html: { kind: "html", win: "Microsoft Edge HTML Document", hide: true, linux: "HTML" },
+  gif: { kind: "image", win: "GIF File", hide: true, linux: "Image" },
+  png: { kind: "image", win: "PNG File", hide: true, linux: "Image" },
+  jpg: { kind: "image", win: "JPG File", hide: true, linux: "Image" },
+  jpeg: { kind: "image", win: "JPEG File", hide: true, linux: "Image" },
+  webloc: { kind: "link", win: "WEBLOC File", linux: "Link" },
+  doc: { kind: "doc", win: "Microsoft Word 97 - 2003 Document", hide: true, linux: "Document" },
+  docx: { kind: "doc", win: "Microsoft Word Document", hide: true, linux: "Document" },
+  pdf: { win: "Microsoft Edge PDF Document", hide: true, linux: "PDF Document" },
+  css: { win: "CSS File", linux: "CSS" },
+  js: { win: "JavaScript File", linux: "JavaScript" },
+  json: { win: "JSON File", linux: "JSON" },
+};
+
+const extOf = (name) => (/\.([^.]+)$/.exec(name) || [])[1] || "";
+const known = (name) => Object.prototype.hasOwnProperty.call(EXTENSIONS, extOf(name).toLowerCase()) && EXTENSIONS[extOf(name).toLowerCase()];
+
+const kindOf = (node) => (node.folder ? "folder" : (known(node.name) && known(node.name).kind) || "generic");
+
+// Type (Kind) column text. macOS has no Type column in the list view (Kind is hidden).
+function formatType(name, isFolder, os) {
+  if (os === "mac") return "";
+  const e = !isFolder && known(name);
+  if (os === "win") return isFolder ? "File folder" : e ? e.win : extOf(name) ? `${extOf(name).toUpperCase()} File` : "File";
+  return isFolder ? "Folder" : e ? e.linux : "Unknown";
+}
+
+// Splits a file name into [shown on Windows, the extension Explorer hides] or null when
+// Explorer shows the whole name.
+function splitExtension(name) {
+  const e = known(name);
+  const m = e && e.hide && /^(.+?)(\.[^.]+)$/.exec(name);
+  return m ? [m[1], m[2]] : null;
+}
+
 // FNV-1a: a stable 32-bit hash, used to invent missing sizes and dates.
 function hash(s) {
   let h = 0x811c9dc5;
@@ -63,4 +105,4 @@ function invent(path, now) {
   return { bytes: Math.round(bytes), modified: iso };
 }
 
-module.exports = { formatDate, formatSize, formatFolderSize, hash, invent, parseDate };
+module.exports = { formatDate, formatSize, formatFolderSize, formatType, splitExtension, kindOf, EXTENSIONS, hash, invent, parseDate };

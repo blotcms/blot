@@ -33,12 +33,12 @@ describe("pane", function () {
       expect(pane.code("<p>", { lang: "html" })).toBeNull();
     });
     it("can pin a window to an OS and a theme", function () {
-      const html = pane.folder("About.txt", { os: "win", theme: "dark", files: { "About.txt": { bytes: 6, modified: "2026-09-20T15:38:00" } }, now: "2026-09-20T15:38:00" }).html;
-      expect(html).toContain('data-pin="win"');
+      const html = pane.folder("About.txt", { os: "mac", theme: "dark", files: { "About.txt": { bytes: 6, modified: "2026-09-20T15:38:00" } }, now: "2026-09-20T15:38:00" }).html;
+      expect(html).toContain('data-pin="mac"');
       expect(html).toContain('data-theme="dark"');
-      // only the pinned OS's text is emitted
-      expect(html).toContain('<span data-os="win">');
-      expect(html).not.toContain('<span data-os="mac">');
+      // only the pinned OS's text is emitted (a pin needs a built skin: see tests/os.js)
+      expect(html).toContain('<span data-os="mac">');
+      expect(html).not.toContain('<span data-os="win">');
     });
     it("ignores an unknown OS or theme", function () {
       const html = pane.folder("a.md", { os: "beos", theme: "sepia" }).html;

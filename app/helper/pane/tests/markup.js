@@ -40,10 +40,10 @@ describe("pane markup", function () {
   it("emits one child per OS for cells, or only the pinned OS's", function () {
     const files = { "a.md": { bytes: 6, modified: "2026-09-20T15:38:00" } };
     const all = pane.folder("a.md", { files, now: "2026-09-20T15:38:00" }).html;
-    expect(all.match(/data-os="(mac|win|linux)"/g).length).toBe(6);
-    const pinned = pane.folder("a.md", { files, now: "2026-09-20T15:38:00", os: "linux" }).html;
-    expect(pinned.match(/data-os="/g).length).toBe(2);
-    expect(pinned).toContain("Today 15:38");
+    expect(all.match(/data-os="(mac|win|linux)"/g).length).toBe(8); // date, size, and Type for win and linux
+    const pinned = pane.folder("a.md", { files, now: "2026-09-20T15:38:00", os: "mac" }).html;
+    expect(pinned.match(/data-os="/g).length).toBe(2); // no Type cell: macOS hides Kind
+    expect(pinned).toContain("3:38 PM");
   });
 
   it("uses columns written after a pipe as they are", function () {

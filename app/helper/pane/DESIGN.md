@@ -19,9 +19,10 @@ One `figure` per window. Semantic content is a nested list. Chrome is drawn by C
   <ul class="pane-tree" role="list" [tabindex="0" aria-label="Your site"]>
     <li>
       <span class="pane-row [pane-odd]">
-        <span class="pane-label"><i class="pane-icon pane-k-doc"></i>About.txt</span>
-        <span class="pane-cell" data-c="d"><span data-os="mac">7:11 PM</span><span data-os="win">…</span><span data-os="linux">…</span></span>
-        <span class="pane-cell" data-c="s">…</span>
+        <span class="pane-label"><i class="pane-icon pane-k-doc"></i>About<span class="pane-x">.txt</span></span>
+        <span class="pane-cell pane-d"><span data-os="mac">7:11 PM</span><span data-os="win">…</span><span data-os="linux">…</span></span>
+        <span class="pane-cell pane-s"><span data-os="mac">…</span><span data-os="win">…</span><span data-os="linux">…</span></span>
+        <span class="pane-cell pane-t"><span data-os="win">Text Document</span><span data-os="linux">Text</span></span>
       </span>
       <ul role="list"> …children… </ul>          <!-- only for a folder with children -->
     </li>
@@ -45,14 +46,37 @@ Rules:
   buttons, the navigation pill, dividers and sort chevron are `::before`/`::after` with
   `content`, gradients and `mask-image`; the per-OS strings ("Date Modified" / "Date
   modified" / "Modified") live in the skin CSS, not the HTML.
-- **Per-row cost is 1 `li`, 1 row span, 1 icon `<i>`, 1 label, 2 cells.** Depth is not in the
+- **Per-row cost is 1 `li`, 1 row span, 1 icon `<i>`, 1 label, 3 cells** (plus one `.pane-x` span
+  inside the label on a row whose extension Windows hides, see below). Depth is not in the
   markup: indentation comes from nesting selectors (`.pane-tree .pane-row`, `ul .pane-row`,
   `ul ul .pane-row`, … six levels, deeper clamps). Zebra stripes are a build-time class
   (`pane-odd` on every second *visible* row, in document order) because `:nth-child` can't
   see across nesting; skins that have no stripes ignore it (3 bytes per odd row).
-- **Cells** are one `span` per column holding one child per OS (`data-os`), because sizes and
-  dates are formatted differently per OS (§3). A window pinned with `os` emits only that OS's
-  child. Hidden children are `display:none`, so screen readers and copy/paste see one.
+- **Cells** are one `span` per column, class-tagged, holding one child per OS (`data-os`),
+  because the text differs per OS (§3). A window pinned with `os` emits only that OS's child.
+  Hidden children are `display:none`, so screen readers and copy/paste see one.
+
+  | class | column | children | shown by |
+  |---|---|---|---|
+  | `pane-d` | Date modified | mac, win, linux | all |
+  | `pane-s` | Size | mac, win, linux | all |
+  | `pane-t` | Type (Kind) | win, linux | win (linux may, GNOME has an optional Type column) |
+
+  Column order and which columns exist are the skin's: `order` on the cell (and on the
+  matching `.pane-head i`), `display:none` for a column that OS doesn't have. macOS: Name,
+  `pane-d`, `pane-s`. Windows: Name, `pane-d`, `pane-t`, `pane-s`. GNOME: Name, `pane-s`,
+  `pane-d`. `base.css` hides `.pane-t` by default, so it costs nothing on macOS; a window
+  pinned to macOS does not emit it at all. A skin shows a child with
+  `.pane [data-os=X]{display:inline}` (base hides every `[data-os]`).
+- **Extension hiding (Windows).** Explorer hides the extension of known types (`About`), not
+  of others (`Draft.md`, `Blot.webloc`); the list is `hide` in `EXTENSIONS` (`lib/format.js`).
+  The label stays *one string*: an unpinned window wraps just the hidden part in
+  `<span class="pane-x">.txt</span>` and `win.css` sets `.pane-x{display:none}`, so a screen
+  reader gets "About.txt" on macOS and "About" on Windows, never both. A window pinned to
+  Windows emits `About` with no span; one pinned elsewhere emits `About.txt`. This is the one
+  extra node per row and only where the extension is hidden.
+- **Pins need a skin.** `os` for an OS with no skin yet (`css.SKINS`) is ignored: no
+  `data-pin`, the window follows the visitor and the default skin covers the rest (§2).
 - **Internal class names.** The skeleton used `pane-name` for the row label; that collides
   with the author-facing `pane-name` prose span (§8). Internal names are `pane-label`, `pane-cell`, …
 - **Height.** Default: the window fits its rows, capped at the reference height (360px on
@@ -108,19 +132,27 @@ Every rule in a skin file is written against plain `.pane` selectors. The build 
 :is(html[data-os=S] .pane:not([data-pin]), .pane[data-pin=S]) …
 ```
 
-and, for the default skin only, adds `html:not([data-os]) .pane:not([data-pin])` (no-JS
-visitors and the QA harness before it sets the attribute). Consequences:
+and, for the default skin only, adds `html:not(:is([data-os=S1],[data-os=S2],…)) .pane:not([data-pin])`
+over every *built* skin `S` (`css.SKINS`). So the default skin applies whenever `data-os`
+is absent (no JS, the QA harness before it sets the attribute) **or names an OS whose skin
+isn't built** (the head script sets `win` for Windows and `linux` for Linux visitors; until
+`win.css`/`linux.css` exist those visitors get the default). It's derived from `SKINS`, so
+it shrinks by itself as skins land, and it excludes every built skin, so it never applies
+together with a real skin's rule. Consequences (skins built: `mac`):
 
 | window | visitor's `data-os` | skin applied |
 |---|---|---|
 | no pin | `mac` | mac (via `html[data-os=mac]`) |
 | no pin | absent (no JS) | the default skin (build option, `mac`) |
-| `data-pin=win` | anything | win (via `[data-pin]`), never the visitor's |
+| no pin | `win`/`linux` while unbuilt | the default skin (via the fallback) |
+| no pin | `win`/`linux` once built | that skin |
+| `data-pin=mac` (built) | anything | mac (via `[data-pin]`), never the visitor's |
+| `os:"win"` while unbuilt | anything | markup drops the pin (no `data-pin`): as an unpinned window |
 
 `:not([data-pin])` guarantees exactly one path matches, so an OS rule never also applies to
 a pinned window. `:is()` takes the highest specificity among its arguments, so both paths
 have equal specificity and skin rules always beat `base.css` (which uses plain `.pane`
-selectors). Theme composes orthogonally: the `data-theme` selector only decides which token block
+selectors). The prose rule for `.pane-name` (§8) uses the same fallback. Theme composes orthogonally: the `data-theme` selector only decides which token block
 is active, and never mentions an OS. `data-pin` and `data-theme` are independent
 attributes, so all six combinations work with no extra rules.
 
@@ -152,6 +184,7 @@ generates missing columns.
 | date, today | `7:11 PM` | `9/20/2026 7:11 PM` | `Today 15:38` |
 | date, other | `8/14/26` | `8/14/2026 3:25 PM` | `14 Aug 2026` |
 | extensions | shown | hidden for known types (`About`) | shown |
+| Type text | not shown | `File folder`, `Text Document`, `GIF File`, `JPG File`, `MD File`, `Microsoft Edge HTML Document`, unknown: `XYZ File` | `Folder`, `Text`, `Image`, `HTML`, unknown: `Unknown` (optional column) |
 
 Anything not in the table stays as in the skeleton and is covered by unit tests
 (`tests/format.js`), including the boundaries (999/1000/1001 bytes, 1023/1024, midnight,
@@ -259,8 +292,10 @@ skin), contrast (reported), and size (reported).
 
 ## Implementation notes (Stage 1, as built)
 
-- Cell classes are `pane-d` (date) and `pane-s` (size), ordered per OS with CSS `order`.
-- Windows' hidden file extensions (§3) need a per-OS label; that lands with the Windows skin.
+- Cell classes are `pane-d` (date), `pane-s` (size) and `pane-t` (Type), ordered per OS with
+  CSS `order`. Windows' hidden extensions are `.pane-x` (§1); `win.css` hides it.
+- The OS list is `lib/os.js` (shared by `css.js` and `markup.js`, which would otherwise be
+  circular); the built skins are `css.SKINS`, read live by `markup.js`, so a test can extend it.
 - The contrast report from §5 is in `tests/size.js` (reported, never enforced).
 - `pane-name` expansion (§8) is built: `lib/names.js`, `transform($)`, and the prose rule in `lib/css.js`.
 - The macOS skin measures to the 2× reference; `qa/thresholds.json` holds `macos-light` and

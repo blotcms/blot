@@ -12,6 +12,7 @@ container-type:inline-size;-webkit-text-size-adjust:none}
 .pane-label{box-sizing:border-box;flex:none;min-width:0;position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pane-icon{position:absolute;top:50%;background:no-repeat center/contain}
 .pane-cell{white-space:nowrap}
+.pane-t{display:none}
 .pane [data-os]{display:none}
 .pane-name>[data-os]{display:none}
 .pane-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
