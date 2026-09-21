@@ -263,6 +263,7 @@ end tell
 OSA
   sleep 3
   screencapture -x "$OUT/debug-safari-done.png"
+  cliclick m:20,700; sleep 4   # a drag ghost of the palette lingered in the page for a moment
 } >>"$OUT/browser.log" 2>&1
 place   # the sheet widened the window; put it back
 # Finder must not show below the browser; read what is open, then capture
