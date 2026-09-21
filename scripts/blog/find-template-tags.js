@@ -22,8 +22,12 @@ const progress = require("../each/progress");
 const Entries = require("models/entries");
 const Entry = require("models/entry");
 const localPath = require("helper/localPath");
+const { relative } = require("path");
 
 const TAG = /\{\{[\s\S]*?\}\}\}?/g;
+// {{more}} marks the end of a teaser (see app/build/prepare/teaser.js) and is
+// not a template tag, so it is not reported.
+const MORE = /^\{\{more\}\}$/i;
 const MAX_BYTES = 5 * 1024 * 1024;
 const TEXT_EXTENSIONS = /\.(md|markdown|txt|text|html?|org|rtf)$/i;
 
@@ -75,7 +79,8 @@ async function scan(blog) {
       continue;
     }
 
-    if (!tags) continue;
+    if (tags) tags = tags.filter((tag) => !MORE.test(tag));
+    if (!tags || !tags.length) continue;
 
     const entry = await getEntry(blog.id, path);
     if (!entry || entry.deleted) continue;
@@ -105,13 +110,19 @@ function summarise(blog, user, files) {
   };
 }
 
-function printFiles(files) {
-  files.forEach((file) => console.log("  " + file.path));
+// Double-quoted for the shell, so escape the characters it treats specially.
+function catCommand(blogID, path) {
+  const file = relative(process.cwd(), localPath(blogID, path));
+  return 'cat "' + file.replace(/(["\\$`])/g, "\\$1") + '"';
+}
+
+function printFiles(blogID, files) {
+  files.forEach((file) => console.log("  " + catCommand(blogID, file.path)));
 }
 
 function printResult(result) {
   console.log("blog:   " + result.blogID);
-  printFiles(result.files);
+  printFiles(result.blogID, result.files);
 }
 
 function searchOne() {
@@ -134,7 +145,7 @@ function searchOne() {
       console.log("domain: " + (blog.domain || "(none)"));
       console.log("");
       console.log(files.length + " file(s) with template tags in their source");
-      printFiles(files);
+      printFiles(blog.id, files);
 
       process.exit();
     });
