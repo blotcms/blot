@@ -5,9 +5,11 @@ var site = express.Router();
 // other method (POST etc.) is served by green - see $dashboard_upstream in
 // config/openresty/conf/http.conf. A page load right after a save can therefore
 // run in a different process from the write, so in-process caches (LRUs,
-// memoized lookups) can be stale across the redirect. Invalidate via Redis, not
-// just local memory. The /import routes are the exception: they run entirely on
-// green because import state lives in per-container temp files.
+// memoized lookups) can be stale across the redirect. Key caches on something
+// stored in Redis (e.g. blog.cacheID, which sync bumps, as the folder caches do)
+// rather than relying on in-process invalidation. Sessions, CSRF and Redis reads
+// are already safe across containers. The /import routes are the exception: they
+// run entirely on green because import state lives in per-container temp files.
 var load = require("./load");
 var save = require("./save");
 var trace = require("helper/trace");
