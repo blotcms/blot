@@ -6,7 +6,21 @@ describe("multiple blogs", function () {
   // and remove them afterwards
   global.test.blogs(20);
 
-  it("locks are released when process dies", function (testDone) {
+  // Locks held by a dead process expire after their TTL (10s) instead of
+  // being freed by the OS, so retry until each one can be acquired.
+  function syncWhenFree(blogID, callback, deadline) {
+    deadline = deadline || Date.now() + 25 * 1000;
+    sync(blogID, function (err, folder, done) {
+      if (err && Date.now() < deadline) {
+        return setTimeout(function () {
+          syncWhenFree(blogID, callback, deadline);
+        }, 1000);
+      }
+      callback(err, folder, done);
+    });
+  }
+
+  it("locks are freed when process dies", function (testDone) {
     var child = require("child_process").fork(__dirname + "/kill");
     var responses = 0;
     var blogs = this.blogs;
@@ -31,7 +45,7 @@ describe("multiple blogs", function () {
       async.eachSeries(
         blogs,
         function (blog, next) {
-          sync(blog.id, function (err, folder, done) {
+          syncWhenFree(blog.id, function (err, folder, done) {
             if (err) return testDone.fail(err);
 
             done(null, next);
@@ -40,5 +54,5 @@ describe("multiple blogs", function () {
         testDone
       );
     });
-  });
+  }, 60 * 1000);
 });
