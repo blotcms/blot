@@ -60,10 +60,14 @@ Sidecars share the live dev database, so:
 - Dashboard/template-editor writes from a slot change data `local.blot` also
   sees.
 - Do not use a slot to test Redis-schema changes.
-- Folder sync, the scheduler and SITE-template builds only run in the main
-  (master) process, so changes under `app/sync`, `app/clients` or
-  `app/templates/source` are not exercised. Dashboard, docs, CSS/JS and blog
-  rendering are.
+- Folder sync and the scheduler only run in the main (master) process, so
+  changes under `app/sync` or `app/clients` are not exercised. Dashboard, docs,
+  CSS/JS and blog rendering are.
+- Slots also build and watch SITE templates (`BLOT_BUILD_TEMPLATES=true`), so
+  edits under `app/templates/source` rebuild on the slot. Templates live in
+  the shared dev Redis: a slot's startup build overwrites every template with
+  this worktree's copy, and its rebuilds show on `local.blot` and other slots
+  too. Last writer wins; expect one agent to edit one template.
 - Native-module or `package.json` changes need a rebuilt `blot` image.
 - Cloud Agent VMs already have their own `local.blot`.
 - At most five concurrent previews.
