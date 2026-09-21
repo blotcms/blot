@@ -10,6 +10,8 @@ var site = express.Router();
 // rather than relying on in-process invalidation. Sessions, CSRF and Redis reads
 // are already safe across containers. The /import routes are the exception: they
 // run entirely on green because import state lives in per-container temp files.
+// A GET that mutates or does heavy work (e.g. the Dropbox OAuth callback) stays on
+// blue unless pinned: make it a POST, or add a location in blot-site.conf.
 var load = require("./load");
 var save = require("./save");
 var trace = require("helper/trace");
