@@ -70,7 +70,7 @@ jobs:
 
       - name: Start proxy + stub upstream
         run: |
-          docker run -d --name proxy -p 8080:80 -p 8443:443 \
+          docker run -d --name proxy -p 8080:80 -p 8443:443 -p 8443:443/udp \
             -e BLOT_HOST=localhost blot-proxy:e2e
           docker run -d --name stub --network container:proxy \
             -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" \
@@ -85,6 +85,17 @@ jobs:
           PROXY_HTTP: http://127.0.0.1:8080
           PROXY_HTTPS: https://127.0.0.1:8443
         run: bash proxy/e2e/checks.sh
+
+      # HTTP/3 over UDP: a real QUIC handshake and request, for the site and
+      # for a custom domain (the default server, which owns the reuseport
+      # QUIC socket).
+      - name: HTTP/3 checks
+        run: |
+          set -eux
+          python3 -m venv "$RUNNER_TEMP/h3"
+          "$RUNNER_TEMP/h3/bin/pip" install --quiet aioquic
+          "$RUNNER_TEMP/h3/bin/python" proxy/e2e/h3-check.py 127.0.0.1 8443 localhost /
+          "$RUNNER_TEMP/h3/bin/python" proxy/e2e/h3-check.py 127.0.0.1 8443 someblog.example /
 
       - name: Proxy logs
         if: always()
