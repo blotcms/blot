@@ -54,17 +54,17 @@ describe("pane skins and the default fallback", function () {
 
     it("stops falling back for that OS, and honours its pin", function () {
       const skins = css.SKINS.slice();
-      expect(skins).toEqual(["mac", "win"]);
+      expect(skins).toEqual([...saved, "win"]);
       const html = pane.folder(TREE, { os: "win" }).html;
       expect(html).toContain('data-pin="win"');
       expect(matching("win", pane.folder(TREE).html, skins)).toEqual(["win"]);
-      expect(matching("linux", pane.folder(TREE).html, skins)).toEqual(["mac"]); // still unbuilt
+      expect(matching("bsd", pane.folder(TREE).html, skins)).toEqual(["mac"]); // no skin for it
       expect(matching(undefined, pane.folder(TREE).html, skins)).toEqual(["mac"]);
     });
 
     it("builds the prose rule the same way", function () {
       const out = css.unbuilt(css.SKINS);
-      expect(out).toBe("html:not(:is([data-os=mac],[data-os=win]))");
+      expect(out).toBe(`html:not(:is(${[...saved, "win"].map((s) => `[data-os=${s}]`).join(",")}))`);
     });
   });
 
@@ -73,7 +73,7 @@ describe("pane skins and the default fallback", function () {
     it("never matches a data-os of an unbuilt OS with a real skin's rule", function () {
       const { css: out } = pane.assets();
       expect(out).not.toContain("html:not([data-os])");
-      expect(out).toContain("html:not(:is([data-os=mac])) .pane:not([data-pin])");
+      expect(out).toContain(`${css.unbuilt(css.SKINS)} .pane:not([data-pin])`);
     });
   });
 

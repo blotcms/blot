@@ -11,7 +11,7 @@ describe("pane css build", function () {
   `);
 
   it("applies rules to windows following the visitor's OS and to pinned windows, never both", function () {
-    const group = ":is(html[data-os=mac] .pane:not([data-pin]),.pane[data-pin=mac],html:not(:is([data-os=mac])) .pane:not([data-pin]))";
+    const group = css.group("mac");
     expect(skin).toContain(`${group} .pane-bar{color:var(--fg)}`);
     expect(skin).toContain(`${group}::before{content:""}`);
     // the visitor's-OS path excludes every pinned window
