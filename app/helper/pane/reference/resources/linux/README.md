@@ -58,6 +58,18 @@ line numbers (`org.gnome.TextEditor show-line-numbers`) and it highlights HTML b
 between runs; spellcheck is switched off. `pkill -f gnome-text-editor` kills the capture
 script itself (its command line contains the string), use `pkill -x gnome-text-edit`.
 
+## Browser window (`-browser`)
+GNOME Web (Epiphany 46, `epiphany-browser`, a deb: Firefox and Chromium are snaps on this image) on
+`https://example.com/`, 720x400 logical px. It needs software rendering under Xvfb
+(`WEBKIT_DISABLE_COMPOSITING_MODE=1`, `WEBKIT_DISABLE_DMABUF_RENDERER=1`,
+`WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1`, `GSK_RENDERER=cairo`) and its own `--profile` so nothing is
+restored. Traps found: (1) at 600px wide or less Epiphany switches to its phone layout with the toolbar at
+the bottom, so this window is wider than the 600px of macOS and Windows; (2) passing `--new-window` together
+with a URL opened two windows (the one that was resized and captured showed the start page); (3) a "Set as
+Default Browser?" dialog is a window of its own over the browser's corner: `org.gnome.Epiphany
+ask-for-default false`. `capture` takes a `keep` argument to skip its Ctrl-Shift-A (that key means something
+in a browser). `clear_stage` runs before each window; `stage.log` lists what was on screen.
+
 ## Desktop icons (`-desktop`)
 Stock GNOME has no desktop icons. Ubuntu's Desktop Icons NG (DING,
 `gnome-shell-extension-desktop-icons-ng`, run with `gjs .../ding.js`) draws GNOME-styled ones for

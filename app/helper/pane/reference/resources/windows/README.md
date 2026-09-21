@@ -67,6 +67,18 @@ through its execution alias `%LOCALAPPDATA%\Microsoft\WindowsApps\notepad.exe`: 
 squiggles and a notification dot on the feedback icon; there is no setting to hide either
 from a script.
 
+## Browser window (`-browser`)
+Microsoft Edge (preinstalled), a 600x400 logical px window on `https://example.com/`, in a fresh profile
+(`--user-data-dir`, `--no-first-run`, `--no-default-browser-check`, `--disable-sync`). The toolbar
+clutter is switched off by machine policy under `HKLM:\SOFTWARE\Policies\Microsoft\Edge`:
+`Microsoft365CopilotChatIconEnabled` (the Copilot "Chat" button) and `HubsSidebarEnabled`,
+`BrowserSignin`, `HideFirstRunExperience` and a few promotional ones. The plain grey profile avatar stays
+(Edge keeps it even with sign-in off). The window is centred in the space above the taskbar and the
+"Test Mode" watermark, because the desktop icons are only copied at the end, so their column's room
+is not needed. `Capture` takes a flag to skip its "click the tab" step (that click hits Edge's tab
+strip). `Clear-Stage` runs before each window (see `screenshots/README.md`); `stage.log` shows what
+had a window.
+
 ## Desktop icons (`-desktop`)
 The "Your site" contents (except `Old report.doc`) copied onto the real desktop. The desktop
 is emptied at the start of the script instead of hiding its icons: remove the runner's

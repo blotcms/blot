@@ -46,9 +46,11 @@ newer image. **To move to a newer OS, follow `UPDATING-OS.md`.**
 Each script clears the desktop of everything the earlier steps left before it sets up the next
 window, and logs what is still on screen. A leftover window at the same position shows behind
 the new one and nothing in the QA harness will notice (masks and diffs only look at what is
-drawn). macOS does it in `clear_stage` (quits TextEdit and Safari, closes Finder's windows,
-writes `stage.log`), called before each window's setup. **Any new capture step (and the Windows
-and Linux scripts when they gain a browser or another window) starts with the same step.**
+drawn). Each script has the step: `clear_stage` in `macos.sh` (quits TextEdit and Safari, closes
+Finder's windows), `Clear-Stage` in `windows.ps1` (closes Explorer's windows through the shell,
+kills Notepad and Edge) and `clear_stage` in `linux.sh` (kills Nautilus, Text Editor and
+Epiphany); each writes `stage.log`, the windows still on screen, and is called before each
+window's setup. **Any new capture step starts with the same step.**
 Closing windows politely often fails (AppleScript `close every window` on TextEdit times out,
 -1712), so the reliable form is quitting the app. To check a capture, look at `stage.log`, or
 temporarily move the window 20px and see whether anything shows behind it.
