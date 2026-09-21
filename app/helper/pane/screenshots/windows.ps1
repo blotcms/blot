@@ -213,7 +213,10 @@ Start-Sleep -Seconds 2
 $sw = [Hidpi]::GetSystemMetrics(0); $sh = [Hidpi]::GetSystemMetrics(1)
 # 80px of desktop around the window (the screen is short at 200%, and the "Test Mode"
 # watermark sits above the taskbar at the bottom right)
-$taskbar = 48 * $Scale; $pad = 80 * $Scale; $left = 176 * $Scale
+# The capture stops 72px above the screen bottom: the taskbar is 48px, and the watermark's
+# first line ("Test Mode") sits just above it, so a shorter crop (48) showed its "T" in
+# the bottom right corner.
+$taskbar = 72 * $Scale; $pad = 80 * $Scale; $left = 176 * $Scale
 # 490x360 logical px. MoveWindow includes Explorer's invisible 7px resize borders
 # (left, right, bottom), so ask for a little more to get a visible 490 wide.
 $winH = (360 + 7) * $Scale
