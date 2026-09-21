@@ -43,6 +43,13 @@ script paints a borderless window at `kCGDesktopWindowLevel` filled with 50% gre
 - File dates: `touch -t` on macOS also moves the creation date back when the given
   time is earlier, so both dates vary.
 
+## Clean stage
+`clear_stage` in `macos.sh` runs before each window is set up (the editors, the browser, the
+desktop icons): it closes Finder's windows, force-quits TextEdit and Safari, and appends the
+windows still on screen to `stage.log` in the capture logs. Quitting is deliberate:
+TextEdit's `close every window` times out (-1712) and left both editor windows open at the same
+position, hidden behind the Safari capture. See `screenshots/README.md` (the rule).
+
 ## Captures
 `screencapture -x -R` in points, 96pt around the window. The window shadow is Finder's
 own. The gallery view looks sparse with dummy files (empty preview pane).

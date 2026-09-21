@@ -21,6 +21,17 @@ the extension visible and a generic icon on Windows, because the capture runner 
 Word; a Word-installed variant is a "Later" item, not a bug). Real OS colours also beat
 WCAG contrast; contrast is reported by `tests/size.js`, never enforced.
 
+## Every reference shot starts from an empty stage
+A capture script must clear the desktop of everything the earlier steps left before it sets up
+the next window. Windows from earlier steps sit at the same position and show behind (or
+beside) the new one, and the harness cannot tell: the macOS Safari reference once had
+TextEdit's two editor windows hidden right behind it (found only by moving the window 20px).
+Closing a window politely is not enough (TextEdit's AppleScript `close every window` times out
+and leaves them), so quit the app. In each script a `clear_stage`-style step runs before every
+window's setup, logs what is still on screen (`stage.log`) and only the desktop, the wallpaper
+and the window being captured may remain. New captures (a browser, an editor, a view) call it
+first. Details per OS: `screenshots/README.md` (principle) and `reference/resources/<os>/README.md`.
+
 ## Who owns what
 - Skins are per-OS files: `css/<os>.css` + `icons/<os>/`, and a skin may span
   `css/<os>-<part>.css` files (icons view, editors) that the build reads as one source, so

@@ -42,6 +42,17 @@ newer image. **To move to a newer OS, follow `UPDATING-OS.md`.**
 - Look at `capture-logs/<os>-<theme>-2x/` after any failure or odd image: process lists,
   UI Automation dumps, full-screen debug PNGs. Add more logging rather than guessing.
 
+## Rule: an empty stage before every shot
+Each script clears the desktop of everything the earlier steps left before it sets up the next
+window, and logs what is still on screen. A leftover window at the same position shows behind
+the new one and nothing in the QA harness will notice (masks and diffs only look at what is
+drawn). macOS does it in `clear_stage` (quits TextEdit and Safari, closes Finder's windows,
+writes `stage.log`), called before each window's setup. **Any new capture step (and the Windows
+and Linux scripts when they gain a browser or another window) starts with the same step.**
+Closing windows politely often fails (AppleScript `close every window` on TextEdit times out,
+-1712), so the reliable form is quitting the app. To check a capture, look at `stage.log`, or
+temporarily move the window 20px and see whether anything shows behind it.
+
 ## Runner quirks worth knowing
 - **Windows can't check out this repo** (a filename contains `|`). Jobs download the
   scripts with `raw.githubusercontent.com` or unpack `app/helper/pane` from the tarball

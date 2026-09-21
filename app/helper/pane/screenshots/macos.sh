@@ -145,6 +145,31 @@ IFS=', ' read -r L T R B <<< "$BOUNDS"
   drag $D1 $((D1 + 60))                    # Name 202pt -> 262pt (+30%)
 } >"$OUT/columns.log" 2>&1
 sleep 2
+# An empty stage before every shot: a window left over from an earlier step sits at the same
+# spot and shows behind (or beside) the next one. Closing windows through AppleScript is not
+# enough (TextEdit's "close every window" times out, -1712, and leaves them open), so the apps
+# the earlier steps used are force-quit. What is still on screen is logged (stage.log) and
+# anything unexpected is flagged there. Call it before setting up each window; a second argument
+# names an app to leave running (the one being captured).
+clear_stage() {
+  osascript -e 'tell application "Finder" to close every window' >>"$OUT/stage.log" 2>&1
+  for app in TextEdit Safari; do [ "$app" = "${2:-}" ] || pkill -x "$app" 2>/dev/null; done
+  sleep 2
+  {
+    echo "== stage before: $1"
+    osascript <<OSA
+tell application "System Events"
+  repeat with p in (every process whose background only is false)
+    try
+      repeat with w in (every window of p)
+        log "  " & (name of p) & " | " & (name of w) & " | " & (position of w as string) & " | " & (size of w as string)
+      end repeat
+    end try
+  end repeat
+end tell
+OSA
+  } >>"$OUT/stage.log" 2>&1
+}
 capture() { screencapture -x -R$((L - 96)),$((T - 96)),$((R - L + 192)),$((B - T + 192)) "$OUT/$1.png" >>"$OUT/screencapture.log" 2>&1 || true; }
 sleep 4
 capture "macos-$THEME$SUFFIX"
@@ -168,8 +193,8 @@ defaults write com.apple.TextEdit IgnoreHTML -bool true
 defaults write com.apple.TextEdit ShowRuler -bool false
 defaults write com.apple.TextEdit CheckSpellingWhileTyping -bool false
 defaults write -g NSAutomaticSpellingCorrectionEnabled -bool false
-osascript -e 'tell application "Finder" to close every window' >>"$OUT/finder.log" 2>&1
 for e in "Essay.txt:text" "Snippet.txt:code"; do
+  clear_stage "editor ${e##*:}"
   open -a TextEdit "$EDIT/${e%%:*}"; sleep 6
   screencapture -x "$OUT/debug-textedit-${e##*:}.png"
   # System Events (not TextEdit itself, which is what timed out) places and reads the window
@@ -196,11 +221,7 @@ done
 # Events, like the editors. Best-effort: debug screenshots and logs show what the runner allowed.
 # (A local HTTP server made macOS ask "Allow Python to find devices on local networks?", and the
 # dialog ended up in the capture, so the page is a real site instead.)
-close_finder() { osascript -e 'tell application "Finder" to close every window' >>"$OUT/browser.log" 2>&1; }
-close_finder
-# TextEdit's windows from the editor captures are still open at this same position (closing them
-# through AppleScript times out, -1712), and showed behind Safari: force-quit it.
-pkill -x TextEdit; sleep 2
+clear_stage "browser"
 open -a Safari "https://example.com/"; sleep 10
 # One Safari window only (a start page or restored window would show behind it). Safari's own
 # AppleEvents time out here (-1712), so use System Events: press the close button of window 2.
@@ -270,7 +291,7 @@ OSA
 } >>"$OUT/browser.log" 2>&1
 place   # the sheet widened the window; put it back
 # Finder must not show below the browser; read what is open, then capture
-close_finder
+clear_stage "browser, before the capture" Safari
 osascript -e 'tell application "System Events" to return (name of every process whose visible is true)' >>"$OUT/browser.log" 2>&1
 sleep 2
 # every window on screen (owner, name, position, size), and the whole screen, for the capture logs
@@ -293,7 +314,7 @@ sleep 2
 # Desktop icons: the "Your site" contents (files and the Fruits folder) as icons on the
 # desktop itself. The grey window sits at the desktop level, below Finder's icons. The
 # Dock is hidden and the capture starts under the menu bar.
-osascript -e 'tell application "TextEdit" to quit' >>"$OUT/finder.log" 2>&1
+clear_stage "desktop icons"
 defaults write com.apple.dock autohide -bool true; killall Dock; sleep 3
 # Old report.doc looks like Report.docx, so leave it off: 12 icons fill two columns of six
 cp -Rp "$FIXTURE/." "$HOME/Desktop/"; rm -f "$HOME/Desktop/Old report.doc"
