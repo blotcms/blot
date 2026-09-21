@@ -119,6 +119,7 @@ function Prepare (entry, options = {}) {
   entry.more = entry.teaser !== entry.html;
   entry.html = Teaser.stripBreakPoint(entry.html);
   entry.body = Teaser.stripBreakPoint(entry.body);
+  entry.summary = Teaser.stripBreakPoint(entry.summary);
   debug(entry.path, "Generated  teasers");
 
   debug(entry.path, "Generating makeSlug");
