@@ -3,7 +3,7 @@ const path = require("path");
 
 describe("proxy authentication body limits", function () {
   const contents = fs.readFileSync(
-    path.join(__dirname, "../config/blot-site.conf"),
+    path.join(__dirname, "../../config/openresty/conf/blot-site.conf"),
     "utf8"
   );
 

@@ -7,13 +7,15 @@ name: proxy
 
 # The path filters include the external inputs the config generator reads
 # directly (root package.json for mustache/fs-extra, app/config.js ->
-# config/index.js for icloud/webhooks limits), not just proxy/.
+# config/index.js for icloud/webhooks limits, config/openresty for the
+# canonical .conf / .lua files), not just proxy/.
 on:
   push:
     branches: [master]
     paths:
       - ".github/workflows/proxy.yml"
       - "proxy/**"
+      - "config/openresty/**"
       - "package.json"
       - "app/config.js"
       - "config/index.js"
@@ -22,6 +24,7 @@ on:
     paths:
       - ".github/workflows/proxy.yml"
       - "proxy/**"
+      - "config/openresty/**"
       - "package.json"
       - "app/config.js"
       - "config/index.js"
@@ -52,6 +55,7 @@ jobs:
         run: bash proxy/build/build.sh
         env:
           NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+          FETCH_CDN_IPS: "false"
 
       - name: Build proxy image
         run: docker build -f proxy/Dockerfile -t blot-proxy:ci proxy/
