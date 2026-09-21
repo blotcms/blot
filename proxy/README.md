@@ -129,6 +129,22 @@ The container runs with `--network host` (the generated upstreams are
     differs, so first-issuance for a brand-new domain can be briefly flaky
     *while a deploy is in progress*. Tracked in `TODO`.
 
+### Cache purging
+
+Node purges each proxy in `BLOT_REVERSE_PROXY_URLS` independently
+([`app/helper/flushCache.js`](../app/helper/flushCache.js)): a proxy that is
+down, slow (5s timeout) or returning errors does not stop the others being
+purged. Hosts a proxy missed are recorded in Redis
+(`flushCache:pending:<proxy url>`) and re-sent every 30s until it accepts
+them, so a proxy that was restarting during a purge does not keep serving
+stale pages from its warm cache.
+
+Set `BLOT_PURGE_TOKEN` on both Node and the proxy to require an
+`X-Blot-Purge-Token` header on the internal `/purge`, `/inspect` and
+`/rehydrate` endpoints. With it unset the endpoints are open, as before. To
+enable it, set it on Node first (an unauthenticated proxy ignores the header),
+then on the proxies.
+
 Run with persistent volumes:
 
 ```sh

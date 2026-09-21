@@ -26,7 +26,8 @@ echo "Starting openresty with $OPENRESTY -c $CONFIG"
 # nginx's `user` directive is only honoured when the master runs as root, so
 # escalate with sudo when we aren't root already and sudo is available.
 if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
-  sudo "$OPENRESTY" -c "$CONFIG"
+  # sudo resets the environment; keep the purge token for purge_auth.js
+  sudo env BLOT_PURGE_TOKEN="$BLOT_PURGE_TOKEN" "$OPENRESTY" -c "$CONFIG"
 else
   "$OPENRESTY" -c "$CONFIG"
 fi
