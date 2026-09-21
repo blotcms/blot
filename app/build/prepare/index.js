@@ -121,7 +121,7 @@ function Prepare (entry, options = {}) {
   debug(entry.path, "Generated  summary");
 
   debug(entry.path, "Generating internal links");
-  entry.internalLinks = internalLinks($, options.blogID);
+  entry.internalLinks = internalLinks($summary, options.blogID);
   debug(entry.path, "Generated internal links");
 
   debug(entry.path, "Generating teasers");

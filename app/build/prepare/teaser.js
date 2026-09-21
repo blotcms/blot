@@ -215,6 +215,10 @@ function stripOtherText (node) {
 // Returns the HTML with the first breakpoint marker removed and all
 // content kept. Called after the teaser is calculated so the marker
 // does not leak into the rendered entry.
+var markerPatterns = breakPoints.map(function (marker) {
+  return new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+});
+
 var invisibleToMarker = ["code", "head", "pre", "script", "style"];
 
 function stripBreakPoint (html) {
@@ -225,13 +229,13 @@ function stripBreakPoint (html) {
   var found = false;
 
   function earliestMarker (text) {
-    var lower = text.toLowerCase();
     var best = null;
 
-    breakPoints.forEach(function (marker) {
-      var i = lower.indexOf(marker);
-      if (i > -1 && (!best || i < best.index || (i === best.index && marker.length > best.length)))
-        best = { index: i, length: marker.length };
+    // Search the original string: lowercasing can change its length
+    markerPatterns.forEach(function (pattern) {
+      var m = pattern.exec(text);
+      if (m && (!best || m.index < best.index || (m.index === best.index && m[0].length > best.length)))
+        best = { index: m.index, length: m[0].length };
     });
 
     return best;
