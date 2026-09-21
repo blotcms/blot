@@ -22,6 +22,8 @@ describe("pane-name", function () {
     expect($("span.pane-name").last().text()).toBe("Nope");
     expect(console.warn).toHaveBeenCalled();
     const css = pane.assets().css;
-    expect(css).toContain("html[data-os=mac] .pane-name>[data-os=mac],html:not(:is([data-os=mac])) .pane-name>[data-os=mac]{display:inline}");
+    const unbuilt = require("../lib/css").unbuilt(require("../lib/css").SKINS);
+    expect(css).toContain(`html[data-os=mac] .pane-name>[data-os=mac],${unbuilt} .pane-name>[data-os=mac]`);
+    expect(css).toContain("html[data-os=win] .pane-name>[data-os=win]");
   });
 });

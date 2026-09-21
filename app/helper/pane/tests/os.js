@@ -42,29 +42,33 @@ describe("pane skins and the default fallback", function () {
     combos(css.SKINS.slice());
   });
 
+  // the OS that has no skin yet (none once all three are built: nothing to test then)
+  const unbuiltOs = () => require("../lib/os").OS_KEYS.find((o) => !css.SKINS.includes(o));
+
   describe("when a skin is added", function () {
     let saved;
+    let added;
     beforeEach(function () {
       saved = css.SKINS.slice();
-      css.SKINS.push("win");
+      added = unbuiltOs();
+      if (added) css.SKINS.push(added);
     });
     afterEach(function () {
       css.SKINS.splice(0, css.SKINS.length, ...saved);
     });
 
     it("stops falling back for that OS, and honours its pin", function () {
+      if (!added) return pending("every OS has a skin");
       const skins = css.SKINS.slice();
-      expect(skins).toEqual(["mac", "win"]);
-      const html = pane.folder(TREE, { os: "win" }).html;
-      expect(html).toContain('data-pin="win"');
-      expect(matching("win", pane.folder(TREE).html, skins)).toEqual(["win"]);
-      expect(matching("linux", pane.folder(TREE).html, skins)).toEqual(["mac"]); // still unbuilt
+      const html = pane.folder(TREE, { os: added }).html;
+      expect(html).toContain(`data-pin="${added}"`);
+      expect(matching(added, pane.folder(TREE).html, skins)).toEqual([added]);
       expect(matching(undefined, pane.folder(TREE).html, skins)).toEqual(["mac"]);
     });
 
     it("builds the prose rule the same way", function () {
-      const out = css.unbuilt(css.SKINS);
-      expect(out).toBe("html:not(:is([data-os=mac],[data-os=win]))");
+      if (!added) return pending("every OS has a skin");
+      expect(css.unbuilt(css.SKINS)).toBe(`html:not(:is(${css.SKINS.map((s) => `[data-os=${s}]`).join(",")}))`);
     });
   });
 
@@ -73,19 +77,22 @@ describe("pane skins and the default fallback", function () {
     it("never matches a data-os of an unbuilt OS with a real skin's rule", function () {
       const { css: out } = pane.assets();
       expect(out).not.toContain("html:not([data-os])");
-      expect(out).toContain("html:not(:is([data-os=mac])) .pane:not([data-pin])");
+      expect(out).toContain(`${css.unbuilt(css.SKINS)} .pane:not([data-pin])`);
     });
   });
 
   describe("a pin for an OS with no skin", function () {
     it("is ignored with a build-time warning: no data-pin, follows the visitor", function () {
+      const os = unbuiltOs();
+      if (!os) return pending("every OS has a skin");
       spyOn(console, "warn");
-      const html = pane.folder(TREE, { os: "win" }).html;
+      const html = pane.folder(TREE, { os }).html;
       expect(html).not.toContain("data-pin");
-      expect(html).toContain('data-os="win"');
-      expect(console.warn).toHaveBeenCalledWith(jasmine.stringMatching(/ignoring os pin "win"/));
+      expect(html).toContain(`data-os="${os}"`);
+      expect(console.warn).toHaveBeenCalledWith(jasmine.stringMatching(new RegExp(`ignoring os pin "${os}"`)));
       console.warn.calls.reset();
       pane.folder(TREE, { os: "mac" });
+      pane.folder(TREE, { os: "win" });
       pane.folder(TREE);
       expect(console.warn).not.toHaveBeenCalled();
     });
@@ -155,23 +162,17 @@ describe("pane Type cell and extension hiding", function () {
   });
 
   it("keeps one string per pinned window", function () {
-    // win is not built yet: the pin is ignored, so this is the unpinned form
     const $ = cheerio.load(pane.folder("About.txt", { os: "mac" }).html);
     expect($(".pane-label").text()).toBe("About.txt");
     expect($(".pane-x").length).toBe(0);
   });
 
-  it("drops a hidden extension from a window pinned to Windows once that skin is built", function () {
-    css.SKINS.push("win");
-    try {
-      const $ = cheerio.load(pane.folder("About.txt\nDraft.md", { os: "win" }).html);
-      expect($(".pane-label").toArray().map((l) => $(l).text())).toEqual(["About", "Draft.md"]);
-      expect($(".pane-x").length).toBe(0);
-      expect($(".pane-t [data-os]").length).toBe(2);
-      expect($(".pane-t").first().text()).toBe("Text Document");
-    } finally {
-      css.SKINS.pop();
-    }
+  it("drops a hidden extension from a window pinned to Windows", function () {
+    const $ = cheerio.load(pane.folder("About.txt\nDraft.md", { os: "win" }).html);
+    expect($(".pane-label").toArray().map((l) => $(l).text())).toEqual(["About", "Draft.md"]);
+    expect($(".pane-x").length).toBe(0);
+    expect($(".pane-t [data-os]").length).toBe(2);
+    expect($(".pane-t").first().text()).toBe("Text Document");
   });
 
   it("gives every OS its own folder size", function () {
@@ -183,9 +184,10 @@ describe("pane Type cell and extension hiding", function () {
     expect($(sizes[1]).children("[data-os=linux]").text()).toBe("0 items");
   });
 
-  it("costs nothing on macOS: the Type cell is hidden by base.css, the extension span is not", function () {
+  it("costs nothing on macOS: the Type cell is hidden by base.css, the extension is hidden only by the Windows skin", function () {
     const { css: out } = pane.assets();
     expect(out).toContain(".pane-t{display:none}");
-    expect(out).not.toContain(".pane-x{display:none}");
+    expect(out).not.toContain("}.pane-x{display:none}");
+    expect(out).toContain("[data-pin=win]) .pane-x{display:none}");
   });
 });
