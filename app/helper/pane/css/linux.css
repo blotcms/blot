@@ -4,8 +4,9 @@
 @light{--bg:#fff;--fg:rgba(0,0,0,.8);--dim:rgba(0,0,0,.44);--head:rgba(0,0,0,.32);--btn:#ebebeb;--ring:#fff;--o1:#e0e0e0;--o2:#e0e0e0;--line:#e7e7e7;--shade:rgba(0,0,0,.035);--vsep:#c2c2c2;--off:rgba(0,0,0,.12);--star:rgba(0,0,0,.15);--thumb:#f5f5f5}
 @dark{--bg:#1e1e1e;--fg:#fff;--dim:rgba(255,255,255,.55);--head:rgba(255,255,255,.4);--btn:#343434;--ring:#303030;--o1:#4f4f4f;--o2:#404040;--line:#141414;--shade:rgba(0,0,0,.13);--vsep:#626262;--off:rgba(255,255,255,.15);--star:rgba(255,255,255,.19);--thumb:#292929}
 .pane{--step:20px;--pane-max:520px;--g-tri:url(icon:linux/tri);--g-star:url(icon:linux/star);--i-text:url(icon:linux/text);--i-md:url(icon:linux/md);--i-html:url(icon:linux/html);
-padding:4px;border:1px solid var(--o1);border-radius:12px;background:var(--bg);color:var(--fg);
-box-shadow:inset 0 0 0 3px var(--ring),inset 0 0 0 4px var(--o2);
+padding:4px;border:1px solid var(--o1);border-radius:12px;color:var(--fg);
+/* outer edge, 3px ring, 1px inner line, then the content: all inner edges are square */
+background:linear-gradient(var(--bg),var(--bg)) 4px 4px/calc(100% - 8px) calc(100% - 8px) no-repeat,linear-gradient(var(--o2),var(--o2)) 3px 3px/calc(100% - 6px) calc(100% - 6px) no-repeat var(--ring);
 font:13.33px/20px Cantarell,"Adwaita Sans",system-ui,sans-serif}
 /* header bar: sidebar button, path pill, search, window buttons (glyphs are one mask sprite each) */
 .pane .pane-bar{isolation:isolate;height:47px;padding-left:155.5px;font-weight:700;line-height:47px;white-space:nowrap;
