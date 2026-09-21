@@ -1,3 +1,6 @@
+12 factor screenshot as api
+- use macserver  (docker container?)
+
 Make sure next bill amount is in all billing emails to customers
 
 Move towards proxy container deployment
