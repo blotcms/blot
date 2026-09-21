@@ -14,7 +14,6 @@ export FAKE="$T/fake"
 mkdir -p "$T/bin" "$T/certs" "$T/cache" "$T/logs" "$FAKE"
 echo cert > "$T/certs/letsencrypt-domain.pem"; echo key > "$T/certs/letsencrypt-domain.key"
 printf 'BLOT_HOST=blot.test\nPROXY_REDIS_HOST=10.0.0.5\n' > "$T/proxy.env"
-echo "BLOT_REVERSE_PROXY_URLS='http://10.0.0.9:8077'" > "$T/secrets.env"
 echo "docker exec blot-proxy-blue openresty -s reload" > "$T/renew.sh"
 
 cat > "$T/bin/docker" <<'F'
@@ -42,10 +41,12 @@ case "$1" in
     [ -n "$(ls "$R" | grep '^blot-proxy-[bg]')" ] || echo none > "$FAKE/serving" ;;
   rm) n="${!#}"; rm -f "$R/$n" "$FAKE/all/$n"
     [ -n "$(ls "$R" | grep '^blot-proxy-[bg]')" ] || { [ "$(cat "$FAKE/serving")" != container ] || echo none > "$FAKE/serving"; } ;;
-  update|logs) ;;
+  update) [ -z "${FAKE_UPDATE_FAILS:-}" ] || exit 1 ;;
+  logs) ;;
   exec)
     n="$2"
     if [[ "$*" == *"--unix-socket"* ]]; then [ -e "$R/$n" ] && [ "$n" != "${FAKE_UNHEALTHY:-}" ]; exit; fi
+    if [[ "$3" == printenv ]]; then [ -z "${FAKE_NO_PURGE_ENV:-}" ] && echo http://10.0.0.9:8077; exit 0; fi
     if [[ "$3" == node ]]; then [ -z "${FAKE_PURGE_FAIL:-}" ]; exit; fi ;;
 esac
 exit 0
@@ -73,7 +74,8 @@ case "$1" in
   is-active) [ -e "$FAKE/unit_active" ] ;;
   stop) rm -f "$FAKE/unit_active"; echo none > "$FAKE/serving" ;;
   start) touch "$FAKE/unit_active"; echo baremetal > "$FAKE/serving" ;;
-  disable) touch "$FAKE/unit_disabled" ;;
+  disable) touch "$FAKE/unit_disabled"; [ -z "${FAKE_DISABLE_FAILS:-}" ] || exit 1 ;;
+  enable) rm -f "$FAKE/unit_disabled" ;;
 esac
 F
 cat > "$T/bin/sudo" <<'F'
@@ -99,7 +101,7 @@ chmod +x "$T"/bin/*
 export PATH="$T/bin:$PATH"
 
 export PROXY_ENV_FILE="$T/proxy.env" PROXY_CACHE_DIR="$T/cache" PROXY_LOG_DIR="$T/logs" \
-  PROXY_CERT_DIR="$T/certs" PROXY_NODE_ENV_FILE="$T/secrets.env" PROXY_RENEW_SCRIPT="$T/renew.sh" \
+  PROXY_CERT_DIR="$T/certs" PROXY_RENEW_SCRIPT="$T/renew.sh" \
   PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 TMUX=fake
 
 pass=0; failed=0
@@ -131,7 +133,7 @@ check "dry run: rehearses, changes nothing" '[ $RC = 0 ] && called "run -d --nam
 
 reset baremetal; cutover
 check "success: bare-metal stops before the container starts" '[ $RC = 0 ] && before "systemctl stop openresty" "docker start blot-proxy-blue"'
-check "success: bare-metal is only disabled, and the container only made permanent, at the end" 'before "docker start blot-proxy-blue" "systemctl disable openresty" && before "systemctl disable" "docker update --restart unless-stopped" && serving container'
+check "success: the container is made permanent, then bare-metal disabled, only at the end" 'before "docker start blot-proxy-blue" "docker update --restart unless-stopped" && before "docker update --restart" "systemctl disable openresty" && serving container'
 check "success: the container is created with restart policy no" 'called "docker create --restart no"'
 
 reset baremetal; FAKE_CONTAINER_CODE=502 cutover
@@ -179,17 +181,33 @@ check "outside tmux: refused" '[ $RC != 0 ] && ! called "systemctl stop" && ment
 reset container; cutover
 check "bare-metal not running: refused" '[ $RC != 0 ] && ! called "systemctl stop"'
 
+reset baremetal; FAKE_UPDATE_FAILS=1 cutover
+check "finalizing fails (docker update): rolls back, bare-metal never disabled" '[ $RC != 0 ] && serving baremetal && ! called "systemctl disable" && called "docker rm -f blot-proxy-blue"'
+
+reset baremetal; FAKE_DISABLE_FAILS=1 cutover
+check "finalizing fails (systemctl disable): bare-metal is re-enabled and started" '[ $RC != 0 ] && serving baremetal && [ ! -e "$FAKE/unit_disabled" ] && called "systemctl enable openresty" && after_last "systemctl start openresty" "systemctl disable"'
+
+reset baremetal; sed -i.bak 's/^PROXY_REDIS_HOST=.*/PROXY_REDIS_HOST=/' "$T/proxy.env"; cutover
+check "empty PROXY_REDIS_HOST: refused" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "PROXY_REDIS_HOST"'
+mv "$T/proxy.env.bak" "$T/proxy.env"
+
+reset baremetal; FAKE_NO_PURGE_ENV=1 cutover
+check "Node container without BLOT_REVERSE_PROXY_URLS: refused" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "BLOT_REVERSE_PROXY_URLS"'
+
 echo "blue-green.sh"
 
 reset container; bluegreen
 check "success: green starts, blue drains and is only removed afterwards" '[ $RC = 0 ] && before "docker start blot-proxy-green" "docker stop --time 30 blot-proxy-blue" && before "docker stop --time 30" "docker rm blot-proxy-blue"'
-check "success: green becomes permanent last" 'before "docker rm blot-proxy-blue" "docker update --restart unless-stopped blot-proxy-green" && serving container'
+check "success: green gets its restart policy before blue is removed" 'before "docker update --restart unless-stopped blot-proxy-green" "docker rm blot-proxy-blue" && serving container'
 
 reset container; FAKE_UNHEALTHY=blot-proxy-green bluegreen
 check "new colour never healthy: old one is never stopped" '[ $RC != 0 ] && ! called "docker stop" && called "docker rm -f blot-proxy-green" && serving container'
 
 reset container; FAKE_FAIL_AFTER_STOP=1 bluegreen
 check "checks fail after the old one stops: old one restarted, new removed" '[ $RC != 0 ] && after_last "docker start blot-proxy-blue" "docker stop" && called "docker rm -f blot-proxy-green" && ! called "docker rm blot-proxy-blue"'
+
+reset container; FAKE_UPDATE_FAILS=1 bluegreen
+check "restart policy cannot be set: old one restored, nothing removed first" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && called "docker rm -f blot-proxy-green" && ! called "docker rm blot-proxy-blue" && serving container'
 
 reset container; FAKE_PURGE_FAIL=1 bluegreen
 check "purge endpoint lost after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue"'

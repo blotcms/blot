@@ -73,6 +73,7 @@ REHEARSAL_HTTPS=18443
 RENEW_SCRIPT="${PROXY_RENEW_SCRIPT:-/home/ec2-user/scripts/renew-wildcard-ssl.sh}"
 UPSTREAM_PORTS="${PROXY_UPSTREAM_PORTS:-8088 8089 8090}"
 
+DISABLED=0        # set once the unit has been (or is being) disabled
 PHASE=preflight   # preflight -> rehearsal -> critical -> committed
 cleanup() {
   status=$?
@@ -91,6 +92,11 @@ trap 'exit 130' INT TERM
 rollback() {
   log "ROLLING BACK to bare-metal OpenResty"
   docker rm -f "$NEW" >/dev/null 2>&1 || true
+  # finalizing had started: the unit must come back enabled or the next reboot
+  # starts neither proxy
+  if [ "$DISABLED" = 1 ]; then
+    sys systemctl enable openresty >/dev/null 2>&1 || log "WARNING: could not re-enable openresty: run 'sudo systemctl enable openresty' NOW"
+  fi
   sys systemctl start openresty || log "WARNING: could not start openresty: run 'sudo systemctl start openresty' NOW"
   local i
   for i in $(seq 1 30); do
@@ -175,10 +181,8 @@ docker run -d --name "$REHEARSAL" --cap-add SYS_NICE \
 wait_healthy "$REHEARSAL" "$HEALTH_TIMEOUT" \
   || { docker logs --tail 50 "$REHEARSAL" >&2 || true; refuse "the rehearsal container did not become healthy"; }
 REDIS_HOST="$(env_value "$ENV_FILE" PROXY_REDIS_HOST)"
-if [ -n "$REDIS_HOST" ]; then
-  docker exec "$REHEARSAL" bash -c "timeout 5 bash -c '</dev/tcp/$REDIS_HOST/6379'" \
-    || refuse "the proxy cannot reach Redis at $REDIS_HOST:6379"
-fi
+docker exec "$REHEARSAL" bash -c "timeout 5 bash -c '</dev/tcp/$REDIS_HOST/6379'" \
+  || refuse "the proxy cannot reach Redis at $REDIS_HOST:6379"
 got=$(snapshot "$REHEARSAL_HTTPS")
 [ "$got" = "$BASELINE" ] \
   || { docker logs --tail 50 "$REHEARSAL" >&2 || true; refuse "the rehearsal answers differ from bare-metal: expected [$BASELINE] got [$got]"; }
@@ -236,8 +240,9 @@ while [ "$elapsed" -lt "$SOAK" ]; do
 done
 
 # ---- 6. commit --------------------------------------------------------------
-sys systemctl disable openresty >/dev/null 2>&1 || log "WARNING: could not disable the openresty unit: do it by hand"
 docker update --restart unless-stopped "$NEW" >/dev/null
+DISABLED=1   # from here a failure or interrupt re-enables the unit as part of the rollback
+sys systemctl disable openresty >/dev/null || die "could not disable the openresty unit (rolling back)"
 PHASE=committed
 log "Cutover complete: $NEW serves :80/:443. Bare-metal OpenResty is stopped and disabled, still installed."
 log "Manual rollback: docker rm -f $NEW && sudo systemctl enable --now openresty"

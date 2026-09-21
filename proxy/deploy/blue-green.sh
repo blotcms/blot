@@ -6,7 +6,8 @@
 #
 # Run it on the production host. For the one-off move from the bare-metal
 # OpenResty to the first container use cutover-from-baremetal.sh instead; for a
-# config-only change use reload-config.sh (no new container needed).
+# config-only change, deploy a new image the same way (reload-config.sh needs a
+# bind-mounted conf dir, which these scripts' containers do not have).
 #
 # How it works
 # ------------
@@ -28,7 +29,8 @@
 #      before, certificate served is the one on disk, Node can still reach
 #      the purge endpoint. If any check fails the old colour is started again
 #      and the new one removed.
-#   5. Only then remove the old colour and give the new one its restart policy.
+#   5. Only then give the new one its restart policy and remove the old one.
+#      Steps 3-5 run under a trap: any failure or interrupt restores the old one.
 #
 # Known limitation: while both are up (seconds), a cache purge sent to
 # 127.0.0.1 or the private address reaches only one of them. Keys the other
@@ -95,19 +97,34 @@ if [ -z "$OLD" ]; then
   exit 0
 fi
 
+# From here the old colour is stopped and the new one has no restart policy, so
+# ANY exit before the commit below (a failed check, Ctrl-C, a failed docker
+# command) must put the old colour back.
+SWAPPING=1
+swap_rollback() {
+  local status=$?
+  if [ "$SWAPPING" = 1 ]; then
+    log "Swap interrupted or failed (exit $status): putting $OLD back and removing $NEW"
+    docker start "$OLD" >/dev/null 2>&1 || log "WARNING: could not start $OLD"
+    wait_healthy "$OLD" "$HEALTH_TIMEOUT" || log "WARNING: $OLD is not healthy"
+    docker logs --tail 50 "$NEW" >&2 || true
+    docker rm -f "$NEW" >/dev/null 2>&1 || true
+  fi
+  exit "$status"
+}
+trap swap_rollback EXIT
+trap 'exit 130' INT TERM
+trap '' HUP PIPE
+
 log "Draining and stopping $OLD (timeout ${DRAIN_TIMEOUT}s)"
 docker stop --time "$DRAIN_TIMEOUT" "$OLD" >/dev/null
 
 log "Checking the site through $NEW"
-if ! live_checks "$BASELINE"; then
-  log "Checks failed: putting $OLD back and removing $NEW"
-  docker start "$OLD" >/dev/null || log "WARNING: could not start $OLD"
-  wait_healthy "$OLD" "$HEALTH_TIMEOUT" || log "WARNING: $OLD is not healthy"
-  docker logs --tail 50 "$NEW" >&2 || true
-  docker rm -f "$NEW" >/dev/null 2>&1 || true
-  die "swap to $NEW_IMAGE failed and was rolled back to $OLD"
-fi
+live_checks "$BASELINE" || die "checks failed after the swap to $NEW_IMAGE"
 
-docker rm "$OLD" >/dev/null 2>&1 || true
+# Give the new colour its restart policy BEFORE removing the old one: if this
+# fails we can still roll back. Only then is the swap committed.
 docker update --restart unless-stopped "$NEW" >/dev/null
+SWAPPING=0
+docker rm "$OLD" >/dev/null 2>&1 || true
 log "Swapped $OLD -> $NEW"

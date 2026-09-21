@@ -11,7 +11,7 @@ scp -r proxy/deploy blot:~/proxy-deploy
 | --- | --- |
 | [`cutover-from-baremetal.sh`](cutover-from-baremetal.sh) | Once. Moves `:80`/`:443` from the bare-metal `openresty` systemd unit to the first container. Not zero-downtime (a few seconds), and built to be reversible at every step. |
 | [`blue-green.sh`](blue-green.sh) | Every image change after that. Container to container, zero-downtime. |
-| [`reload-config.sh`](reload-config.sh) | Config-only change, no new container. |
+| [`reload-config.sh`](reload-config.sh) | Not for these containers: it needs the conf directory bind-mounted, which `blue-green.sh` does not do. Ship config changes as a new image. |
 
 Both read the host's settings from `/etc/blot/proxy.env`
 ([`proxy.env.example`](proxy.env.example)) and share [`common.sh`](common.sh).
@@ -35,7 +35,8 @@ against fake `docker`/`systemctl` (CI runs it).
    (`OPENRESTY_INSTANCE_PRIVATE_IP`, `REDIS_IP`), and `BLOT_REVERSE_PROXY_URLS`
    in `/etc/blot/secrets.env` must point at `http://<PROXY_PRIVATE_IP>:8077`,
    because Node purges the cache from a Docker bridge that cannot see the
-   host's `127.0.0.1`.
+   host's `127.0.0.1`. The scripts read the value from the running Node
+   container, so recreate the Node containers (a normal deploy) after editing it.
 3. **Ship the certificate-renewal change.** `config/openresty/scripts/renew-wildcard-ssl.sh`
    now reloads the container when there is one. Run
    `config/openresty/deploy-config.sh` from this branch so the host has it;

@@ -5,7 +5,7 @@
 #
 # Only runs when something the image is built from changes (same paths as
 # proxy.yml), so not every commit has an image: deploy a SHA from a run of this
-# workflow. Pull requests build and check the image but do not push it.
+# workflow. Pull requests build and check the image; same-repo PRs also push it (as build.yml does), fork PRs do not.
 #
 # The image is built for production: file logging (LOG_TO_STDOUT=false, so
 # fail2ban and logrotate on the host keep working) and BLOT_HOST=blot.im. Host
@@ -27,6 +27,11 @@ on:
     branches: [master]
     paths:
       - ".github/workflows/proxy-image.yml"
+      - "proxy/**"
+      - "config/openresty/**"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
   workflow_dispatch:
 
 permissions:

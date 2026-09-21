@@ -17,8 +17,7 @@
 #   PROXY_CERT_DIR         /etc/ssl/private     wildcard cert + key (read-only)
 #   PROXY_AUTOSSL_VOLUME   blot-proxy-auto-ssl  dehydrated account state
 #   PROXY_NODE_CONTAINER   blot-container-blue  a Node container to purge from
-#   PROXY_NODE_ENV_FILE    /etc/blot/secrets.env  where BLOT_REVERSE_PROXY_URLS is
-#   PROXY_PURGE_URLS       (from PROXY_NODE_ENV_FILE)  comma separated
+#   PROXY_PURGE_URLS       (read from $PROXY_NODE_CONTAINER's environment)  comma separated
 #   PROXY_CANARY_HOST      preview-of-wireframe-on-david.<BLOT_HOST>
 #   PROXY_REGISTRY_URL     ghcr.io/blotcms/blot-proxy  for a bare tag / commit SHA
 #   PROXY_HEALTH_TIMEOUT   60                   seconds to wait for a new container
@@ -32,7 +31,6 @@ LOG_DIR="${PROXY_LOG_DIR:-/var/instance-ssd/logs}"
 CERT_DIR="${PROXY_CERT_DIR:-/etc/ssl/private}"
 AUTOSSL_VOLUME="${PROXY_AUTOSSL_VOLUME:-blot-proxy-auto-ssl}"
 NODE_CONTAINER="${PROXY_NODE_CONTAINER:-blot-container-blue}"
-NODE_ENV_FILE="${PROXY_NODE_ENV_FILE:-/etc/blot/secrets.env}"
 HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-60}"
 DRAIN_TIMEOUT="${PROXY_DRAIN_TIMEOUT:-30}"
 HEALTH_SOCK="/run/openresty/health.sock"
@@ -61,6 +59,10 @@ load_env() {
   [ -r "$ENV_FILE" ] || die "cannot read $ENV_FILE (see proxy/deploy/proxy.env.example)"
   BLOT_HOST="$(env_value "$ENV_FILE" BLOT_HOST)"
   [ -n "$BLOT_HOST" ] || die "BLOT_HOST is not set in $ENV_FILE"
+  # An empty value in an --env-file overrides the image's default, which
+  # would render an empty Redis host into the certificate adapter.
+  REDIS_HOST="$(env_value "$ENV_FILE" PROXY_REDIS_HOST)"
+  [ -n "$REDIS_HOST" ] || die "PROXY_REDIS_HOST is not set in $ENV_FILE"
   CANARY_HOST="${PROXY_CANARY_HOST:-preview-of-wireframe-on-david.$BLOT_HOST}"
 }
 
@@ -168,7 +170,9 @@ served_cert_matches_disk() { # served_cert_matches_disk [port]
 }
 
 purge_urls() {
-  local urls="${PROXY_PURGE_URLS:-$(env_value "$NODE_ENV_FILE" BLOT_REVERSE_PROXY_URLS)}"
+  # From the running container, not the secrets file: the file may have been
+  # edited since the container was created, and the app uses what it started with.
+  local urls="${PROXY_PURGE_URLS:-$(docker exec "$NODE_CONTAINER" printenv BLOT_REVERSE_PROXY_URLS 2>/dev/null || true)}"
   echo "$urls" | tr ',' '\n' | sed '/^$/d'
 }
 
@@ -178,7 +182,7 @@ purge_urls() {
 purge_reachable() {
   local url urls
   urls="$(purge_urls)"
-  [ -n "$urls" ] || { log "no BLOT_REVERSE_PROXY_URLS in $NODE_ENV_FILE (or PROXY_PURGE_URLS)"; return 1; }
+  [ -n "$urls" ] || { log "$NODE_CONTAINER has no BLOT_REVERSE_PROXY_URLS (recreate it after editing secrets.env, or set PROXY_PURGE_URLS)"; return 1; }
   while read -r url; do
     docker exec "$NODE_CONTAINER" node -e '
       const u = new URL(process.argv[1]);
