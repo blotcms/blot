@@ -1,8 +1,8 @@
 libEGL warning: DRI3 error: Could not get DRI3 device
 libEGL warning: Ensure your X server supports DRI3 to get accelerated rendering
 
-(epiphany:6691): Gtk-WARNING **: 21:03:51.147: Unable to acquire the address of the accessibility bus: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files. If you are attempting to run GTK without a11y support, GTK_A11Y should be set to 'none'.
+(epiphany:6960): Gtk-WARNING **: 21:10:12.826: Unable to acquire the address of the accessibility bus: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files. If you are attempting to run GTK without a11y support, GTK_A11Y should be set to 'none'.
 
-** (epiphany:6691): WARNING **: 21:03:51.175: webkit_settings_set_enable_dns_prefetching is deprecated and does nothing.
+** (epiphany:6960): WARNING **: 21:10:12.869: webkit_settings_set_enable_dns_prefetching is deprecated and does nothing.
 
-(epiphany:6691): epiphany-WARNING **: 21:03:51.267: Failed to search secret storage (is the secret service or secrets portal broken?): The name org.freedesktop.secrets was not provided by any .service files
+(epiphany:6960): epiphany-WARNING **: 21:10:12.931: Failed to search secret storage (is the secret service or secrets portal broken?): The name org.freedesktop.secrets was not provided by any .service files
