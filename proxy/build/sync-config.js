@@ -200,6 +200,15 @@ function adaptInitialConf(content) {
 }
 
 function adaptServerConf(content) {
+  // The purge listener on the host's private address: two containers on
+  // --network host would otherwise fight over it during a blue/green overlap.
+  content = replaceExactly(
+    content,
+    "        listen {{openresty_instance_private_ip}}:8077;\n",
+    "        listen {{openresty_instance_private_ip}}:8077 {{#reuseport}}reuseport{{/reuseport}};\n",
+    "server.conf purge listener reuseport"
+  );
+
   // webhooks. only ever goes to the master (see the comment in server.conf)
   content = replaceExactly(
     content,

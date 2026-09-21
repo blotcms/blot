@@ -57,5 +57,15 @@ cat /etc/ssl/private/letsencrypt-domain.pem | redis-cli -h $BLOT_REDIS_HOST -x s
 
 redis-cli -h $BLOT_REDIS_HOST set 'blot:openresty:ssl:updated' $(date -u +%s)
 
-# Restart openresty to use the new cert
-openresty -s reload
+# Reload whichever proxy is serving to use the new cert: the container(s)
+# (proxy/deploy, which mount /etc/ssl/private read-only) once the proxy has
+# moved off bare-metal, otherwise the bare-metal OpenResty. The cutover script
+# refuses to run until this host has this version of the script.
+containers=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^blot-proxy-(blue|green)$' || true)
+if [ -n "$containers" ]; then
+  for container in $containers; do
+    docker exec "$container" /usr/local/openresty/bin/openresty -s reload
+  done
+else
+  openresty -s reload
+fi
