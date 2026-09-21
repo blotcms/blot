@@ -65,7 +65,7 @@ background:linear-gradient(var(--hl),var(--hl)) 271.5px 0/.5px 26px no-repeat,li
 /* not :vertical/:horizontal: those pseudo-classes don't match under the :is() the build wraps rules in */
 .pane .pane-tree::-webkit-scrollbar-track{background:var(--track)}
 .pane .pane-tree::-webkit-scrollbar-corner{background:var(--bg)}
-.pane .pane-tree::-webkit-scrollbar-thumb{background:var(--thumb);background-clip:padding-box;border-style:solid;border-color:var(--track);border-width:6.75px}
+.pane .pane-tree::-webkit-scrollbar-thumb{background:var(--thumb);background-clip:padding-box;border-style:solid;border-color:var(--track);border-width:7px}
 .pane .pane-tree::-webkit-scrollbar-button{display:block;width:5px;height:5px;background:var(--track)}
 @container (max-width:480px){
 .pane .pane-bar{--b-det:none;--b-sr:none;--b-ad:linear-gradient(var(--box),var(--box)) 207.5px 48px/calc(100% - 225px) 32px no-repeat;--m:var(--g-l) 0 0/330px 136px no-repeat,var(--g-rt) right top/152px 40px no-repeat}
