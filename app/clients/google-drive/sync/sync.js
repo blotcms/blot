@@ -25,7 +25,7 @@ const localReaddir = require("./util/localReaddir");
 const truncateToSecond = require("./util/truncateToSecond");
 const transformDriveItems = require("./util/transformDriveItems");
 
-module.exports = async function sync(blogID, publish, update) {
+module.exports = async function sync(blogID, publish, update, options = {}) {
   publish = publish || function () {};
   update = update || function () {};
 
@@ -89,6 +89,15 @@ module.exports = async function sync(blogID, publish, update) {
     publish("Sync failed", err.message);
     console.error("Google Drive folder lookup failed", err);
     return false;
+  }
+
+  // A resync clears the folder's id-to-path mappings. Do it only once the
+  // folder lookup has succeeded, so a failed lookup does not leave them
+  // empty (which would make later writes duplicate remote files).
+  if (options.reset) {
+    await database
+      .folder(folderId, blogID)
+      .reset({ preserveVerifiedContent: true });
   }
 
   const walk = async (dir, dirId) => {

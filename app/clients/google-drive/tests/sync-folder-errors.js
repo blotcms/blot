@@ -9,6 +9,7 @@ function harness(options) {
   const stored = [];
   const published = [];
   let walked = false;
+  let resets = 0;
   const account = {
     folderId: "folder",
     folderName: "folder",
@@ -40,6 +41,9 @@ function harness(options) {
             return "";
           },
           setMigrationCursor: async function () {},
+          reset: async function () {
+            resets += 1;
+          },
           getVerifiedContents: async function () {
             return [];
           },
@@ -117,14 +121,18 @@ function harness(options) {
   return {
     stored: stored,
     published: published,
-    run: async function () {
+    run: async function (syncOptions) {
       return module.exports(
         "blog",
         function () {
           published.push(Array.prototype.slice.call(arguments));
         },
-        async function () {}
+        async function () {},
+        syncOptions
       );
+    },
+    resets: function () {
+      return resets;
     },
     didWalk: function () {
       return walked;
@@ -174,5 +182,20 @@ describe("google drive sync folder health", function () {
     expect(h.didWalk()).toBe(false);
     expect(h.stored).toEqual([]);
     expect(h.published[0][0]).toBe("Sync failed");
+  });
+
+  it("leaves folder mappings intact when a resync's lookup fails", async function () {
+    const h = harness({ lookupError: { code: 500, message: "backend" } });
+    expect(await h.run({ reset: true })).toBe(false);
+    expect(h.resets()).toBe(0);
+  });
+
+  it("resets folder mappings once the lookup succeeds", async function () {
+    const h = harness();
+    expect(await h.run({ reset: true })).toBe(true);
+    expect(h.resets()).toBe(1);
+    const plain = harness();
+    await plain.run();
+    expect(plain.resets()).toBe(0);
   });
 });

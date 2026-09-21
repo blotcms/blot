@@ -68,8 +68,15 @@ async function main() {
     }
   }
 
+  // Rows can change while the operator reads the report (e.g. a user
+  // reconnects), so recompute each patch against the current row.
   for (const item of patches) {
-    await database.blog.store(item.blogID, item.patch);
+    const patch = backfillPatch(await database.blog.get(item.blogID));
+    if (!patch) {
+      console.log("skipped (changed since scan)", item.blogID);
+      continue;
+    }
+    await database.blog.store(item.blogID, patch);
     console.log("updated", item.blogID);
   }
 
