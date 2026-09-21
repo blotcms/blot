@@ -36,6 +36,12 @@ describe("pane size report", function () {
       for (const scheme of ["light", "dark"]) {
         const body = blocks.find((b) => b.sel === `@${scheme}`).body;
         const tokens = Object.fromEntries([...body.matchAll(/--([\w-]+):(#[0-9a-f]{3,6})\b/gi)].map((m) => [m[1], m[2]]));
+        // translucent tokens (libadwaita's rgba(0,0,0,.8)) are composited over the background
+        for (const m of body.matchAll(/--([\w-]+):rgba\((\d+),(\d+),(\d+),([\d.]+)\)/g)) {
+          const [r, g, b, a] = [+m[2], +m[3], +m[4], +m[5]];
+          const under = tokens.bg && [0, 2, 4].map((i) => parseInt(tokens.bg.slice(1).padEnd(6, "0").slice(i, i + 2), 16));
+          if (under) tokens[m[1]] = "#" + [r, g, b].map((v, i) => Math.round(v * a + under[i] * (1 - a)).toString(16).padStart(2, "0")).join("");
+        }
         for (const [name, bg] of [["fg", "bg"], ["dim", "bg"], ["dim", "stripe"], ["title", "bg"]]) {
           if (tokens[name] && tokens[bg]) lines.push(`${os} ${scheme} ${name} on ${bg}`.padEnd(28) + ratio(tokens[name], tokens[bg]).toFixed(2));
         }

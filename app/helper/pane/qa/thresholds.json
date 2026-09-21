@@ -1,5 +1,5 @@
 {
-  "_comment": "Limits for diff.js. diffPercent is % of compared (unmasked) pixels that differ, per region name or kind (chrome is stricter than text). inkPercent is differing pixels / pixels that are ink in either image, per region. flatDeltaE is the CIE76 colour difference between a region's dominant colours (wrong greys). blurMae is the mean absolute error of blurred images, % of full scale. shadowError is RMSE in luminance levels. sizeDelta is the window size difference in CSS px. rowYOffset is the mean vertical offset of text rows in CSS px. Per-case entries in \"cases\" override the defaults key by key. These start loose so crude fixtures pass or fail meaningfully; tighten as the module improves. macos-light and macos-dark (the built skin) are held to the tightened limits, and so are windows-light and windows-dark (measured on the Windows runner, where the reference has ClearType text and the rendering has grayscale, so the text ink limits are looser than macOS's). windows-dark's toolbars have two surfaces of almost the same area (the Mica navigation row and the command bar), so its flat colour is a near tie: a change that flips it shows as a large flatDeltaE without a real colour error.",
+  "_comment": "Limits for diff.js. diffPercent is % of compared (unmasked) pixels that differ, per region name or kind (chrome is stricter than text). inkPercent is differing pixels / pixels that are ink in either image, per region. flatDeltaE is the CIE76 colour difference between a region's dominant colours (wrong greys). blurMae is the mean absolute error of blurred images, % of full scale. shadowError is RMSE in luminance levels. sizeDelta is the window size difference in CSS px. rowYOffset is the mean vertical offset of text rows in CSS px. Per-case entries in \"cases\" override the defaults key by key. These start loose so crude fixtures pass or fail meaningfully; tighten as the module improves. macos-light, macos-dark, linux-light and linux-dark (built skins) are held to the tightened limits, and so are windows-light and windows-dark (measured on the Windows runner, where the reference has ClearType text and the rendering has grayscale, so the text ink limits are looser than macOS's). windows-dark's toolbars have two surfaces of almost the same area (the Mica navigation row and the command bar), so its flat colour is a near tie: a change that flips it shows as a large flatDeltaE without a real colour error.",
   "default": {
     "diffPercent": {
       "overall": 8,
@@ -69,6 +69,52 @@
       "shadowError": 1,
       "sizeDelta": 1,
       "rowYOffset": 1.5
+    },
+    "linux-light": {
+      "diffPercent": {
+        "overall": 0.9,
+        "chrome": 0.5,
+        "text": 1.1
+      },
+      "inkPercent": {
+        "chrome": 6,
+        "text": 18
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.45,
+        "chrome": 0.55,
+        "text": 0.5
+      },
+      "shadowError": 1,
+      "sizeDelta": 1,
+      "rowYOffset": 0.5
+    },
+    "linux-dark": {
+      "diffPercent": {
+        "overall": 0.9,
+        "chrome": 0.5,
+        "text": 1.1
+      },
+      "inkPercent": {
+        "chrome": 6,
+        "text": 18
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.45,
+        "chrome": 0.55,
+        "text": 0.5
+      },
+      "shadowError": 1,
+      "sizeDelta": 1,
+      "rowYOffset": 0.5
     },
     "windows-light": {
       "diffPercent": {

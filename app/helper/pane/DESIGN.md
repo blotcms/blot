@@ -235,7 +235,7 @@ Windows scale down (`min(--pane-w, 100%)`). As the container narrows, in order:
 | < 300px | Date column |
 | always last | name ellipsis; then `overflow-x:auto` as a last resort, never before the above |
 
-Thresholds are per skin (Explorer's minimum is ~386px) but the *order* is a rule. Tap targets
+Thresholds are per skin (Explorer's minimum is ~386px) but the *order* is a rule. A skin with a border and padding on `.pane` (GNOME: 1px + 4px each side) writes its `@container` widths 10px lower than the table, because the container is the content box: window minus border and padding. Tap targets
 are irrelevant (nothing is interactive); text stays ≥ 13px.
 
 ## 7. Size
@@ -335,3 +335,15 @@ skin), contrast (reported), and size (reported).
   scrollbars by default, so the QA renderer launches a second browser with them shown for Windows cases.
 - Below 481px the search box, More and Details go; below 440px the navigation row and command bar go (the tab strip
   and window buttons stay) and the Type and Size columns drop; below 300px the Date column drops (§6).
+- GNOME Files skin (`css/linux.css`, `icons/linux/`): Nautilus 46 in its narrow layout (490px, sidebar
+  collapsed), so the view and back/forward buttons are in a bottom bar, drawn by `.pane::before`
+  (line, scroll shade, divider) and `.pane::after` (a mask sprite with a two-tone background: the
+  disabled back/forward chevrons, then the view and options glyphs). Header glyphs are one mask sprite
+  per side of `.pane-bar::after` (left anchored, right anchored) so the pill can shrink; the pill and
+  its "Home" text are `.pane-bar::before`, and the window buttons are radial gradients on `.pane-bar`.
+  No new DOM nodes. Rows are 52px with 32px icons; a star column (`.pane-row::after`) is shown as in the
+  reference and drops first when narrow. The window edge (1px line, 3px ring, 1px line) is background
+  layers with square inner corners, as in the capture. The scrollbar thumb is a fixed decoration
+  (shown only when the list can scroll); it does not move, and the native scrollbar is hidden.
+  Text is Cantarell 11pt (14.67px) as in the references (`screenshots/linux.sh` sets it).
+  Icons are redrawn from the desktop-icon study; shadows are an SVG blur, not per-theme variants.

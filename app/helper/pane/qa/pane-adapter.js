@@ -25,6 +25,8 @@ Tasks.org`;
 // Explorer's Details view can't expand a folder, so its window lists the top level only
 // (the reference says "13 items": Fruits is a row with no children).
 const FLAT = TREE.replace(/\n  .*/g, "");
+// GNOME Files sorts lower-case names after capitalised ones: index.html comes last
+const LINUX_TREE = TREE.replace("index.html\n", "") + "\nindex.html";
 
 // the harness names the default view "default"; the module calls it "list"
 const VIEW = { default: "list" };
@@ -32,10 +34,10 @@ const VIEW = { default: "list" };
 // The QA windows have the reference's fixed size and are never pinned: the harness
 // chooses the skin with <html data-os> and the theme with prefers-color-scheme.
 async function render(caseId, c) {
-  if (c.os === "linux" || (c.os === "windows" && c.view !== "default")) return null; // no skin yet, or a view study: fixtures
+  if (c.os === "windows" && c.view !== "default") return null; // a view study: fixtures
   // the Explorer window is 504x367 (frame included), not the nominal 490x360
   const height = c.os === "windows" ? (await referenceGeometry(c)).size.height : c.windowSize.height;
-  const result = pane.folder(c.os === "windows" ? FLAT : TREE, {
+  const result = pane.folder({ windows: FLAT, linux: LINUX_TREE }[c.os] || TREE, {
     title: sample.title,
     view: VIEW[c.view] || c.view,
     files: sample.files,

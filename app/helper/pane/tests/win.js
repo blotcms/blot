@@ -17,7 +17,8 @@ describe("pane Windows skin", function () {
     const { css: out } = pane.assets();
     expect(out).toContain("html[data-os=win] .pane:not([data-pin])");
     // the default (mac) skin's fallback excludes win
-    expect(out).toContain("html:not(:is([data-os=mac],[data-os=win])) .pane:not([data-pin])");
+    expect(out).toContain(`${css.unbuilt(css.SKINS)} .pane:not([data-pin])`);
+    expect(css.unbuilt(css.SKINS)).toContain("[data-os=win]");
     expect(out).not.toContain("html:not(:is([data-os=mac])) ");
   });
 
