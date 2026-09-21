@@ -60,6 +60,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+case "$SOAK" in ''|*[!0-9]*) echo "--soak / PROXY_SOAK_SECONDS must be a non-negative integer, got '$SOAK'" >&2; exit 2 ;; esac
 IMAGE="${IMAGE:?usage: cutover-from-baremetal.sh [--dry-run] [--yes] [--soak <seconds>] <commit-sha | image>}"
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -136,10 +137,14 @@ openssl x509 -in "$CERT_DIR/letsencrypt-domain.pem" -noout -checkend $((14 * 864
 [ -d "$CACHE_DIR" ] || refuse "cache directory $CACHE_DIR does not exist"
 [ -d "$LOG_DIR" ] || refuse "log directory $LOG_DIR does not exist"
 
-# The renewal cron job reloads OpenResty. Once the unit is stopped that fails,
-# and the container would keep serving the old certificate until it expires.
-grep -q 'blot-proxy' "$RENEW_SCRIPT" 2>/dev/null \
-  || refuse "$RENEW_SCRIPT does not reload the proxy container: run config/openresty/deploy-config.sh from this branch first"
+# The renewal cron job and the custom-certificate repair helpers reload or
+# restart OpenResty. Once the unit is stopped that fails, and the container
+# would keep serving the old certificate until it expires.
+SCRIPTS_DIR="$(dirname "$RENEW_SCRIPT")"
+for helper in "$RENEW_SCRIPT" "$SCRIPTS_DIR/identify-expiring-certs.sh" "$SCRIPTS_DIR/purge-expired-ssl.sh"; do
+  grep -q 'blot-proxy' "$helper" 2>/dev/null \
+    || refuse "$helper does not act on the proxy container: run config/openresty/deploy-config.sh from this branch first"
+done
 
 for port in $UPSTREAM_PORTS; do
   [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$port/health" || true)" = 200 ] \

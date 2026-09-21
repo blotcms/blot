@@ -13,8 +13,10 @@ trap 'rm -rf "$T"' EXIT
 export FAKE="$T/fake"
 mkdir -p "$T/bin" "$T/certs" "$T/cache" "$T/logs" "$FAKE"
 echo cert > "$T/certs/letsencrypt-domain.pem"; echo key > "$T/certs/letsencrypt-domain.key"
-printf 'BLOT_HOST=blot.test\nPROXY_REDIS_HOST=10.0.0.5\n' > "$T/proxy.env"
+printf 'BLOT_HOST=blot.test\nPROXY_REDIS_HOST=10.0.0.5\nPROXY_PRIVATE_IP=10.0.0.9\n' > "$T/proxy.env"
 echo "docker exec blot-proxy-blue openresty -s reload" > "$T/renew.sh"
+echo "docker restart blot-proxy-blue" > "$T/identify-expiring-certs.sh"
+cp "$T/identify-expiring-certs.sh" "$T/purge-expired-ssl.sh"
 
 cat > "$T/bin/docker" <<'F'
 #!/usr/bin/env bash
@@ -108,11 +110,12 @@ pass=0; failed=0
 ok() { pass=$((pass + 1)); echo "  ok   $*"; }
 bad() { failed=$((failed + 1)); echo "  FAIL $*"; echo "----- calls"; sed 's/^/    /' "$FAKE/calls"; echo "----- output"; sed 's/^/    /' "$T/out"; }
 
-# reset [baremetal|container]: fresh host state, `serving` says who owns :443
+# reset [baremetal|container|none]: fresh host state, `serving` says who owns :443
 reset() {
   rm -rf "$FAKE"; mkdir -p "$FAKE/running" "$FAKE/all"; : > "$FAKE/calls"
   unset "${!FAKE_@}" 2>/dev/null; export FAKE="$T/fake"
-  if [ "$1" = baremetal ]; then touch "$FAKE/unit_active"; echo baremetal > "$FAKE/serving"
+  if [ "$1" = none ]; then echo none > "$FAKE/serving"
+  elif [ "$1" = baremetal ]; then touch "$FAKE/unit_active"; echo baremetal > "$FAKE/serving"
   else touch "$FAKE/running/blot-proxy-blue" "$FAKE/all/blot-proxy-blue"; echo container > "$FAKE/serving"; fi
 }
 line() { grep -n -m1 -- "$1" "$FAKE/calls" | cut -d: -f1; }
@@ -194,6 +197,19 @@ mv "$T/proxy.env.bak" "$T/proxy.env"
 reset baremetal; FAKE_NO_PURGE_ENV=1 cutover
 check "Node container without BLOT_REVERSE_PROXY_URLS: refused" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "BLOT_REVERSE_PROXY_URLS"'
 
+reset baremetal; sed -i.bak 's/^PROXY_PRIVATE_IP=.*/PROXY_PRIVATE_IP=/' "$T/proxy.env"; cutover
+check "empty PROXY_PRIVATE_IP: refused" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "PROXY_PRIVATE_IP"'
+mv "$T/proxy.env.bak" "$T/proxy.env"
+
+reset baremetal; echo "sudo systemctl restart openresty" > "$T/purge-expired-ssl.sh"; cutover
+check "certificate repair helper that restarts bare-metal: refused" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "purge-expired-ssl.sh"'
+cp "$T/identify-expiring-certs.sh" "$T/purge-expired-ssl.sh"
+
+for bad in abc -5 1.5 ""; do
+  reset baremetal; bash "$DEPLOY/cutover-from-baremetal.sh" --yes --soak "$bad" img:1 >"$T/out" 2>&1; RC=$?
+  check "invalid soak '$bad': refused before anything runs" '[ $RC != 0 ] && ! called "systemctl stop" && ! called "docker"'
+done
+
 echo "blue-green.sh"
 
 reset container; bluegreen
@@ -208,6 +224,18 @@ check "checks fail after the old one stops: old one restarted, new removed" '[ $
 
 reset container; FAKE_UPDATE_FAILS=1 bluegreen
 check "restart policy cannot be set: old one restored, nothing removed first" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && called "docker rm -f blot-proxy-green" && ! called "docker rm blot-proxy-blue" && serving container'
+
+reset container; FAKE_FAIL_AFTER_STOP=1 FAKE_START_FAILS=blot-proxy-blue bluegreen
+check "old one cannot be restarted: the new one is kept (it may be the only proxy)" '[ $RC != 0 ] && called "docker stop" && ! after_last "docker rm -f blot-proxy-green" "docker stop"'
+
+reset container; FAKE_START_FAILS=blot-proxy-green bluegreen
+check "new colour fails to start: it is removed, the old one never stopped" '[ $RC != 0 ] && ! called "docker stop" && after_last "docker rm -f blot-proxy-green" "docker start blot-proxy-green"'
+
+reset none; bluegreen
+check "fresh start: checked, then made permanent" '[ $RC = 0 ] && before "docker start blot-proxy-blue" "docker update --restart unless-stopped blot-proxy-blue"' 
+
+reset none; FAKE_CONTAINER_CODE=502 bluegreen
+check "fresh start whose site does not answer 200: removed, never made permanent" '[ $RC != 0 ] && ! called "docker update" && after_last "docker rm -f blot-proxy-blue" "docker start blot-proxy-blue"'
 
 reset container; FAKE_PURGE_FAIL=1 bluegreen
 check "purge endpoint lost after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue"'

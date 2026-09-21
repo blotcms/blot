@@ -23,14 +23,16 @@
 #      renders and parses with this host's settings and certificate, it logs to
 #      the file fail2ban reads, and the site and canary blog answer today.
 #   2. Start the new colour (restart policy `no`) and wait for its health.
-#      If it never becomes healthy it is removed and the old one is untouched.
+#      If it never becomes healthy, or the script is interrupted, it is
+#      removed and the old one is untouched. With no old colour (a fresh
+#      start) the same site checks as step 4 run before it is made permanent.
 #   3. Stop the old colour, but do not remove it.
 #   4. Check the site as the outside world sees it: same status codes as
 #      before, certificate served is the one on disk, Node can still reach
 #      the purge endpoint. If any check fails the old colour is started again
-#      and the new one removed.
+#      and the new one removed (kept if the old one cannot be brought back).
 #   5. Only then give the new one its restart policy and remove the old one.
-#      Steps 3-5 run under a trap: any failure or interrupt restores the old one.
+#      Steps 2-5 run under a trap: any failure or interrupt undoes them.
 #
 # Known limitation: while both are up (seconds), a cache purge sent to
 # 127.0.0.1 or the private address reaches only one of them. Keys the other
@@ -79,43 +81,60 @@ fi
 
 log "Starting $NEW from $NEW_IMAGE"
 docker rm -f "$NEW" >/dev/null 2>&1 || true
-run_args "$NEW"
-docker create --restart no "${RUN_ARGS[@]}" "$NEW_IMAGE" >/dev/null
-docker start "$NEW" >/dev/null
 
-log "Waiting up to ${HEALTH_TIMEOUT}s for $NEW to answer its own health socket"
-if ! wait_healthy "$NEW" "$HEALTH_TIMEOUT"; then
-  docker logs --tail 50 "$NEW" >&2 || true
-  docker rm -f "$NEW" >/dev/null 2>&1 || true
-  die "$NEW did not become ready in ${HEALTH_TIMEOUT}s; ${OLD:-nothing} left as it was"
-fi
-log "$NEW is ready."
-
-if [ -z "$OLD" ]; then
-  docker update --restart unless-stopped "$NEW" >/dev/null
-  log "$NEW is now serving."
-  exit 0
-fi
-
-# From here the old colour is stopped and the new one has no restart policy, so
-# ANY exit before the commit below (a failed check, Ctrl-C, a failed docker
-# command) must put the old colour back.
-SWAPPING=1
+# From here $NEW exists and, once started, takes a share of live traffic via
+# reuseport, so ANY exit before the commit (a failed check, Ctrl-C, a failed
+# docker command) must undo what was done. STATE says how far we got:
+#   starting  $NEW may exist; $OLD untouched  -> remove $NEW
+#   swapping  $OLD stopped                    -> start $OLD, then remove $NEW
+#   committed nothing to undo
+STATE=starting
 swap_rollback() {
   local status=$?
-  if [ "$SWAPPING" = 1 ]; then
-    log "Swap interrupted or failed (exit $status): putting $OLD back and removing $NEW"
-    docker start "$OLD" >/dev/null 2>&1 || log "WARNING: could not start $OLD"
-    wait_healthy "$OLD" "$HEALTH_TIMEOUT" || log "WARNING: $OLD is not healthy"
-    docker logs --tail 50 "$NEW" >&2 || true
-    docker rm -f "$NEW" >/dev/null 2>&1 || true
-  fi
+  case "$STATE" in
+    starting)
+      log "Failed or interrupted before the swap (exit $status): removing $NEW, ${OLD:-nothing} left as it was"
+      docker logs --tail 50 "$NEW" >&2 || true
+      docker rm -f "$NEW" >/dev/null 2>&1 || true
+      ;;
+    swapping)
+      log "Swap interrupted or failed (exit $status): putting $OLD back and removing $NEW"
+      # $NEW may be the only proxy answering if $OLD cannot come back, so it is
+      # removed only once $OLD is up and healthy.
+      if docker start "$OLD" >/dev/null 2>&1 && wait_healthy "$OLD" "$HEALTH_TIMEOUT"; then
+        docker logs --tail 50 "$NEW" >&2 || true
+        docker rm -f "$NEW" >/dev/null 2>&1 || true
+      else
+        log "WARNING: $OLD did not come back healthy. Keeping $NEW running (it may be the only proxy serving): sort it out by hand"
+      fi
+      ;;
+  esac
   exit "$status"
 }
 trap swap_rollback EXIT
 trap 'exit 130' INT TERM
 trap '' HUP PIPE
 
+run_args "$NEW"
+docker create --restart no "${RUN_ARGS[@]}" "$NEW_IMAGE" >/dev/null
+docker start "$NEW" >/dev/null
+
+log "Waiting up to ${HEALTH_TIMEOUT}s for $NEW to answer its own health socket"
+wait_healthy "$NEW" "$HEALTH_TIMEOUT" || die "$NEW did not become ready in ${HEALTH_TIMEOUT}s"
+log "$NEW is ready."
+
+if [ -z "$OLD" ]; then
+  # Nothing to compare with, but the site must still answer 200 for every
+  # checked host with the right certificate before the container is made permanent.
+  log "Checking the site through $NEW"
+  live_checks "" || die "checks failed for $NEW_IMAGE"
+  docker update --restart unless-stopped "$NEW" >/dev/null
+  STATE=committed
+  log "$NEW is now serving."
+  exit 0
+fi
+
+STATE=swapping
 log "Draining and stopping $OLD (timeout ${DRAIN_TIMEOUT}s)"
 docker stop --time "$DRAIN_TIMEOUT" "$OLD" >/dev/null
 
@@ -125,6 +144,6 @@ live_checks "$BASELINE" || die "checks failed after the swap to $NEW_IMAGE"
 # Give the new colour its restart policy BEFORE removing the old one: if this
 # fails we can still roll back. Only then is the swap committed.
 docker update --restart unless-stopped "$NEW" >/dev/null
-SWAPPING=0
+STATE=committed
 docker rm "$OLD" >/dev/null 2>&1 || true
 log "Swapped $OLD -> $NEW"

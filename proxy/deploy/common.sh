@@ -63,6 +63,9 @@ load_env() {
   # would render an empty Redis host into the certificate adapter.
   REDIS_HOST="$(env_value "$ENV_FILE" PROXY_REDIS_HOST)"
   [ -n "$REDIS_HOST" ] || die "PROXY_REDIS_HOST is not set in $ENV_FILE"
+  # Same for the purge listener: an empty address renders `listen :8077`, which
+  # binds the unauthenticated /purge, /inspect and /rehydrate on every interface.
+  [ -n "$(env_value "$ENV_FILE" PROXY_PRIVATE_IP)" ] || die "PROXY_PRIVATE_IP is not set in $ENV_FILE"
   CANARY_HOST="${PROXY_CANARY_HOST:-preview-of-wireframe-on-david.$BLOT_HOST}"
 }
 
@@ -194,13 +197,17 @@ purge_reachable() {
   done <<< "$urls"
 }
 
-# Every checked host answers as it did before ($1, from snapshot), the
-# certificate served is the one on disk, and Node can still reach the purge
-# endpoint.
-live_checks() { # live_checks <expected-snapshot> [port]
+# Every checked host answers as it did before ($1, from snapshot; empty = no
+# baseline, so every host must answer 200), the certificate served is the one
+# on disk, and Node can still reach the purge endpoint.
+live_checks() { # live_checks <expected-snapshot | ""> [port]
   local got
   got=$(snapshot "${2:-443}")
-  [ "$got" = "$1" ] || { log "answers changed: expected [$1] got [$got]"; return 1; }
+  if [ -n "$1" ]; then
+    [ "$got" = "$1" ] || { log "answers changed: expected [$1] got [$got]"; return 1; }
+  else
+    all_ok "$got" || { log "not every host answers 200: [$got]"; return 1; }
+  fi
   served_cert_matches_disk "${2:-443}" \
     || { log "the certificate served is not $CERT_DIR/letsencrypt-domain.pem"; return 1; }
   purge_reachable || return 1

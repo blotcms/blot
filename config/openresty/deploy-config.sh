@@ -52,6 +52,8 @@ ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "chmod +x /home/ec2-user/scri
 if ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "docker ps --format '{{.Names}}' | grep -qE '^blot-proxy-(blue|green)\$'"; then
   echo "A proxy container is serving: not reloading bare-metal openresty."
   echo "Deploy proxy config changes with proxy/deploy/blue-green.sh instead."
+  # The bare-metal copy is the rollback target: still make sure it parses.
+  ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo openresty -t"
 else
   echo "Reloading openresty...."
   ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo openresty -t"

@@ -31,7 +31,7 @@ against fake `docker`/`systemctl` (CI runs it).
    change, so pick a SHA from a run of it. Pass the SHA to either script;
    anything containing `/` or `:` is used as a full image reference.
 2. **`/etc/blot/proxy.env`** from the example. `PROXY_PRIVATE_IP` and
-   `PROXY_REDIS_HOST` must equal what bare-metal uses today
+   `PROXY_REDIS_HOST` (both required, the scripts refuse empty values) must equal what bare-metal uses today
    (`OPENRESTY_INSTANCE_PRIVATE_IP`, `REDIS_IP`), and `BLOT_REVERSE_PROXY_URLS`
    in `/etc/blot/secrets.env` must point at `http://<PROXY_PRIVATE_IP>:8077`,
    because Node purges the cache from a Docker bridge that cannot see the
