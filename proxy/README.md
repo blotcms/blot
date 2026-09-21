@@ -67,6 +67,10 @@ when running `build.sh` to change the domain the config is built for.
 as `config/openresty/build-config.js`); CI sets `FETCH_CDN_IPS=false` so image
 builds do not depend on that API.
 
+HTTP/3 (QUIC) is served on UDP `:443` as on bare-metal, so the host firewall and
+security group must allow UDP 443 as well as TCP. `-p 443:443/udp` when not
+using `--network host`.
+
 `--cap-add SYS_NICE` avoids a harmless `setpriority(-20) failed` alert from
 `worker_priority` in an unprivileged container.
 
@@ -239,6 +243,7 @@ Tracked in the repo's `TODO` under "Proxy container (OpenResty)".
     renders, a seeded user signs in / reaches the dashboard / signs out, and a
     seeded blog (`proxy/e2e/seed-blog.js`) renders on its own vhost with the
     proxy cache going MISS then HIT.
+  - `proxy-behaviour` also makes real HTTP/3 requests (`proxy/e2e/h3-check.py`, aioquic) for the site and for a custom domain.
   - `cert-issuance` issues a real custom-domain certificate through the proxy
     against a Pebble ACME server, checks it persists across a container
     recreate, and checks that a Redis which stops answering neither stalls the
