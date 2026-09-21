@@ -39,6 +39,9 @@ on:
 env:
   BLOT_HOST: localhost
   BLOT_REPO: ${{ github.workspace }}
+  # Skip the BunnyCDN edge-IP fetch so image builds stay hermetic. Local and
+  # deploy generates still fetch by default (see proxy/build/index.js).
+  FETCH_CDN_IPS: "false"
 
 jobs:
   proxy-behaviour:

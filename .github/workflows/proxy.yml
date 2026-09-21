@@ -55,6 +55,7 @@ jobs:
         run: bash proxy/build/build.sh
         env:
           NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+          FETCH_CDN_IPS: "false"
 
       - name: Build proxy image
         run: docker build -f proxy/Dockerfile -t blot-proxy:ci proxy/

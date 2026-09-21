@@ -39,6 +39,9 @@ curl -i http://localhost:8080/health   # -> 200
 `BLOT_HOST` at `docker run` time is only read by `entrypoint.sh` for
 certificate handling; it does not change the already-generated vhosts. Set it
 when running `build.sh` to change the domain the config is built for.
+`build.sh` also fetches BunnyCDN edge IPs for the rate-limit whitelist (same
+as `config/openresty/build-config.js`); CI sets `FETCH_CDN_IPS=false` so image
+builds do not depend on that API.
 
 `--cap-add SYS_NICE` avoids a harmless `setpriority(-20) failed` alert from
 `worker_priority` in an unprivileged container.

@@ -56,7 +56,11 @@ function once(path, { method = "GET", jar, body, headers = {} } = {}) {
     hostname: url.hostname,
     port: url.port || (url.protocol === "https:" ? 443 : 80),
     path: url.pathname + url.search,
-    headers: { Host: HOST, ...headers },
+    headers: {
+      "User-Agent": "Mozilla/5.0 (compatible; blot-proxy-e2e)",
+      Host: HOST,
+      ...headers,
+    },
     rejectUnauthorized: false,
   };
   if (jar && Object.keys(jar).length) opts.headers.Cookie = cookieHeader(jar);

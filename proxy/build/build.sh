@@ -39,6 +39,10 @@ export ACME_CA="${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}"
 # DNS resolver baked into the generated config (OCSP stapling + ACME).
 export OPENRESTY_RESOLVER="${OPENRESTY_RESOLVER:-8.8.8.8 ipv6=off}"
 
+# BunnyCDN edge IPs for the rate-limit whitelist in http.conf. Default is
+# to fetch them (same as config/openresty/build-config.js). CI sets
+# FETCH_CDN_IPS=false so image builds do not depend on Bunny.
+
 # Container-oriented defaults: bind :80/:443 with SO_REUSEPORT so a second
 # container can join during a blue/green handover, and log to stdout/stderr.
 export ENABLE_REUSEPORT="${ENABLE_REUSEPORT:-true}"

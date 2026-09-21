@@ -35,19 +35,29 @@ loadEnvFile();
 
 function fetchCDNIPs() {
   const bunnyCDNIPURL = "https://bunnycdn.com/api/system/edgeserverlist";
-  try {
-    const result = child_process.spawnSync("curl", ["-sS", "--max-time", "15", bunnyCDNIPURL]);
-    if (result.error) throw result.error;
-    if (result.status !== 0) {
-      throw new Error(result.stderr.toString() || `curl exited ${result.status}`);
-    }
-    const ips = JSON.parse(result.stdout.toString());
-    if (!Array.isArray(ips)) throw new Error("Invalid response from BunnyCDN");
-    return ips;
-  } catch (error) {
-    console.error("Error fetching CDN IPs (continuing with none):", error.message || error);
-    return [];
+  const result = child_process.spawnSync("curl", [
+    "-sS",
+    "--max-time",
+    "15",
+    bunnyCDNIPURL,
+  ]);
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(result.stderr.toString() || `curl exited ${result.status}`);
   }
+  const ips = JSON.parse(result.stdout.toString());
+  if (!Array.isArray(ips) || !ips.length) {
+    throw new Error("No CDN IPs fetched");
+  }
+  return ips;
+}
+
+function loadCDNIPs() {
+  // Match config/openresty/build-config.js: production/local generates fetch
+  // the Bunny edge list (required for the rate-limit whitelist). CI sets
+  // FETCH_CDN_IPS=false so the proxy image build does not depend on Bunny.
+  if (process.env.FETCH_CDN_IPS === "false") return [];
+  return fetchCDNIPs();
 }
 
 const NETDATA_USER = process.env.NETDATA_USER;
@@ -157,12 +167,10 @@ const locals = {
   NETDATA_USER,
   NETDATA_PORT,
 
-  // BunnyCDN edge IPs, whitelisted from rate-limits in http.conf. Fetching
-  // them is opt-in (FETCH_CDN_IPS=true) so CI stays hermetic; an empty list
-  // just means the geo block only contains the hardcoded mac-server IP.
-  cdn_ips: (process.env.FETCH_CDN_IPS === "true" ? fetchCDNIPs() : []).map(
-    (ip) => ({ ip })
-  ),
+  // BunnyCDN edge IPs, whitelisted from rate-limits in http.conf. Fetched
+  // by default (same as config/openresty/build-config.js) so a deployable
+  // image does not rate-limit the CDN. CI sets FETCH_CDN_IPS=false.
+  cdn_ips: loadCDNIPs().map((ip) => ({ ip })),
 };
 
 // move the previous contents of the data directory to a backup
