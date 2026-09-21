@@ -201,6 +201,7 @@ async function resetFromBlotWithClient(
           await client.filesDelete({ path: join(dropboxRoot, path) });
           abortIfRequested(signal);
         } catch (e) {
+          rethrowIfDurable(e);
           log("Failed to remove", path, e.message);
         }
       }
