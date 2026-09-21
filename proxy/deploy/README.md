@@ -44,7 +44,29 @@ against fake `docker`/`systemctl` (CI runs it).
    would keep serving the old wildcard certificate after the next renewal.
 4. Optionally run the scripts with `PROXY_CUSTOM_DOMAIN=<a real custom domain>` set:
    it adds a domain whose certificate comes from Redis to every before/after
-   comparison.
+   comparison. This is in addition to the sweep below, which always runs.
+5. `redis-cli` must be on the host (the renewal scripts already use it).
+
+## Custom-domain certificates
+
+Custom domains are not among the checked hosts and their certificates come from
+Redis, not the wildcard file, so a container that could not read or serve them
+would pass every other check. Both scripts therefore record the certificate the
+running proxy presents for **every** `ssl:<domain>:latest` key in Redis (looked
+up by SNI on `127.0.0.1`), and require every one to be unchanged: on the
+rehearsal port before the cutover, and on the real ports after the swap
+(`blue-green.sh` rolls back, the cutover restores bare-metal). A domain that
+presented no certificate beforehand is not held against the replacement. A
+certificate that legitimately renews in the seconds between the two sweeps
+would fail the check; rerun the script.
+
+The scripts refuse to go on if `redis-cli` is missing or no certificate could
+be read from the running proxy. `PROXY_SKIP_CERT_SWEEP=1` skips the comparison.
+
+This does not cover *issuing* or *renewing* certificates: the `proxy-image`
+workflow checks that the image trusts the public CAs and has its ACME tooling,
+and the `cert-issuance` job issues against Pebble, but nothing yet exercises
+dehydrated 0.7.2 against Let's Encrypt.
 
 ## Cutover
 

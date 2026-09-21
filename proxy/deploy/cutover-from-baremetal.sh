@@ -26,17 +26,21 @@
 #      this host's settings and writes the access log fail2ban reads, the
 #      renewal script reloads the container too, and Node can reach the purge
 #      endpoint. The statuses the site, canary blog (and PROXY_CUSTOM_DOMAIN)
-#      return today are recorded as the baseline.
+#      return today are recorded as the baseline, together with the
+#      certificate bare-metal presents for EVERY custom domain in Redis
+#      (ssl:*:latest), looked up by SNI.
 #   2. Rehearsal: run the image on another port (127.0.0.1:18443) on the
 #      Docker bridge, pointed at the real Node containers and Redis with the
-#      real certificate, and require the same answers as the baseline. It does
+#      real certificate, and require the same answers and the same custom-domain
+#      certificates as the baseline. It does
 #      not mount the live cache or logs. Nothing user-facing changes.
 #      --dry-run stops here.
 #   3. Confirmation (type `cutover`, or --yes).
 #   4. Cutover: create the container (restart policy `no`), stop the bare-metal
 #      unit, start the container, wait for health, then require the same
 #      answers as the baseline over the real ports, the served certificate to
-#      be the file on disk, and the purge endpoint to be reachable.
+#      be the file on disk, every custom-domain certificate to be unchanged,
+#      and the purge endpoint to be reachable.
 #      ANY failure, or an interrupt, rolls back: the container is removed and
 #      the bare-metal unit started again. The unit stays ENABLED and the
 #      container has no restart policy, so a reboot at this point also returns
@@ -179,6 +183,7 @@ purge_reachable || refuse "Node cannot reach the purge endpoint (see BLOT_REVERS
 BASELINE=$(snapshot)
 all_ok "$BASELINE" || refuse "bare-metal is not answering 200 for every checked host [$BASELINE]"
 log "Baseline: $BASELINE"
+cert_baseline || refuse "cannot record the custom-domain certificates bare-metal serves"
 
 # ---- 2. rehearsal -----------------------------------------------------------
 PHASE=rehearsal
@@ -208,6 +213,10 @@ got=$(snapshot "$REHEARSAL_HTTPS")
 [ "$got" = "$BASELINE" ] \
   || { docker logs --tail 50 "$REHEARSAL" >&2 || true; refuse "the rehearsal answers differ from bare-metal: expected [$BASELINE] got [$got]"; }
 served_cert_matches_disk "$REHEARSAL_HTTPS" || refuse "the rehearsal is not serving $CERT_DIR/letsencrypt-domain.pem"
+if [ -n "$CERT_BASELINE" ]; then
+  certs_unchanged "$CERT_BASELINE" "$(cert_sweep "$REHEARSAL_HTTPS")" \
+    || refuse "the rehearsal does not serve the custom-domain certificates bare-metal does"
+fi
 docker rm -f "$REHEARSAL" >/dev/null
 log "Rehearsal passed: the image answers exactly as bare-metal does."
 
