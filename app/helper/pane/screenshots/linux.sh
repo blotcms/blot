@@ -147,12 +147,14 @@ CSS
   done
 
   # Browser: GNOME Web (Epiphany, WebKitGTK; a deb, unlike Firefox and Chromium which are snaps
-  # on this image) on https://example.com, a small window (600x400 logical px). A profile of its
+  # on this image) on https://example.com, a small window (720x400 logical px). A profile of its
   # own so nothing is restored; WebKit and GTK are told to render in software (no GPU under Xvfb).
   clear_stage "browser"
   rm -rf "$HOME/pane-epiphany"
+  # no "Set as Default Browser?" dialog (a window of its own, over the browser's corner)
+  gsettings set org.gnome.Epiphany ask-for-default false || true
   WEBKIT_DISABLE_COMPOSITING_MODE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 GSK_RENDERER=cairo \
-    epiphany --profile="$HOME/pane-epiphany" --new-window https://example.com/ >"$OUT/epiphany.log" 2>&1 &
+    epiphany --profile="$HOME/pane-epiphany" https://example.com/ >"$OUT/epiphany.log" 2>&1 &
   sleep 20
   WID=""; BEST=0
   for w in $(xdotool search --class epiphany) $(xdotool search --class Epiphany); do
@@ -166,12 +168,7 @@ CSS
     eval "$(xdotool getwindowgeometry --shell "$WID")"
     echo "browser window $WID: ${WIDTH}x${HEIGHT}+${X}+${Y}" >> "$OUT/geometry.txt"
     xdotool windowactivate --sync "$WID" || true
-    sleep 2
-    # the address given on the command line was not opened (the start page showed), so type it
-    # in: it also leaves the focus in the page, which closes the address bar's suggestion popup
-    xdotool key --clearmodifiers ctrl+l; sleep 1
-    xdotool type --delay 80 "https://example.com/"; sleep 1
-    xdotool key Return; sleep 10
+    sleep 8   # let the page load
     import -window root "$OUT/debug-epiphany.png"
     capture "linux-$THEME$SUFFIX-browser" keep
   else
