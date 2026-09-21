@@ -1,6 +1,6 @@
 # Linux (GNOME Files / Nautilus) capture notes
 
-Runner `ubuntu-latest`: Ubuntu 24.04, GNOME Files (Nautilus) 46.4, libadwaita 1.5. That
+Runner `ubuntu-24.04` (pinned; see `screenshots/UPDATING-OS.md`; `ubuntu-26.04` exists): Ubuntu 24.04, GNOME Files (Nautilus) 46.4, libadwaita 1.5. That
 is one release behind the newest GNOME; use a newer runner image when one appears.
 Script: `screenshots/linux.sh`.
 

@@ -7,14 +7,22 @@ this file is about running and changing the pipeline.
 
 | file | runs on | output |
 |---|---|---|
-| `macos.sh` (+ `hidpi.m`) | `macos-latest` | `reference/macos/` |
-| `windows.ps1` | `windows-latest` | `reference/windows/` |
-| `linux.sh` | `ubuntu-latest` | `reference/linux/` |
+| `macos.sh` (+ `hidpi.m`) | `macos-26` | `reference/macos/` |
+| `windows.ps1` | `windows-2025` | `reference/windows/` |
+| `linux.sh` | `ubuntu-24.04` | `reference/linux/` |
 | `make-fixture.sh`, `fixture-assets/` | all (Windows builds the same fixture in PowerShell) | the "Your site" sample folder |
 
 Workflow: `.github/workflows/pane-screenshots.yml`. It captures light and dark at 2x,
 then a `commit` job pushes the PNGs and `capture-logs/` (logs and debug screenshots,
 kept in `reference/resources/<os>/capture-logs/`) back to the branch as a bot.
+
+## OS versions are pinned
+The runner labels are pinned (`macos-26`, `windows-2025`, `ubuntu-24.04`, not `-latest`) and
+the versions the references were captured on are recorded in `os-versions.json`.
+`check-os.js` is the first step of every capture (and, release/build only, of every pane-qa
+render) and fails the job if the OS changed, so a runner image update can't silently alter
+`reference/`. A weekly workflow (`pane-os-watch.yml`) opens an issue when GitHub offers a
+newer image. **To move to a newer OS, follow `UPDATING-OS.md`.**
 
 ## Running it
 - It triggers only on changes to `screenshots/**` and the workflow itself, so module and QA

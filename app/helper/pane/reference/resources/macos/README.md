@@ -1,6 +1,6 @@
 # macOS (Finder) capture notes
 
-Runner `macos-latest`: macOS 26.6.2 (Tahoe), a 1024x768 virtual display. Script:
+Runner `macos-26` (pinned; see `screenshots/UPDATING-OS.md`): macOS 26.6 (Tahoe), a 1024x768 virtual display. Script:
 `screenshots/macos.sh`, helper `screenshots/hidpi.m`.
 
 ## Retina (2x)

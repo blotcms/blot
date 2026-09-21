@@ -1,0 +1,37 @@
+# Weekly: is there a newer hosted-runner image than the one the pane reference screenshots
+# are pinned to (app/helper/pane/screenshots/os-versions.json)? If so, open an issue that
+# points at the update guide. (Scheduled workflows only run from the default branch.)
+name: pane-os-watch
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: app/helper/pane/screenshots
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Open an issue for each newer runner image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          node app/helper/pane/screenshots/check-runner-images.js | while read -r family pinned newest; do
+            title="pane: update the $family reference screenshots to $newest"
+            existing="$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number')"
+            if [ -n "$existing" ]; then echo "already open: #$existing ($title)"; continue; fi
+            gh issue create --title "$title" --body "GitHub now offers the \`$newest\` runner image; the pane reference screenshots for $family are pinned to \`$pinned\` (\`app/helper/pane/screenshots/os-versions.json\`).
+
+          Follow \`app/helper/pane/screenshots/UPDATING-OS.md\`. Recapture, review the new references by eye, retune the $family skin, and only then move the pin. Nothing breaks until the pinned image is retired, so this is not urgent unless GitHub announces a retirement."
+          done

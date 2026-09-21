@@ -18,6 +18,12 @@ around it (80px on Windows), so drop shadows are easy to see. The image files an
 page in the sample folder are Photoshop-style white and mid-grey checkerboards; there is
 also a real Markdown document and a synthesised valid .docx.
 
+## Which OS versions
+
+Each OS's screenshots are taken on a pinned runner image; the recorded versions are in
+`../screenshots/os-versions.json` and CI fails if a runner no longer matches. To move to
+a newer OS, follow `../screenshots/UPDATING-OS.md`.
+
 ## Why only @2x
 
 Only 2x captures are committed. The layout at 1x is the same as at 2x (same logical

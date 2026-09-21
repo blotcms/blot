@@ -72,10 +72,13 @@ jobs:
           echo "linux=$linux" >> "$GITHUB_OUTPUT"
           echo "capturing: macos=$macos windows=$windows linux=$linux"
 
+  # The runner labels are pinned (not -latest) to the versions in
+  # app/helper/pane/screenshots/os-versions.json, and check-os.js fails the job when the OS
+  # is not what the references were captured on. To move to a new OS see UPDATING-OS.md.
   linux:
     needs: plan
     if: needs.plan.outputs.linux == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -102,6 +105,9 @@ jobs:
             gsettings-desktop-schemas adwaita-icon-theme gnome-themes-extra \
             fonts-cantarell libadwaita-1-0 librsvg2-common adwaita-icon-theme-full shared-mime-info \
             gnome-shell-extension-desktop-icons-ng gjs xcompmgr x11-utils
+      # after the install: it also reads the Nautilus and libadwaita versions
+      - name: Check the runner's OS version
+        run: node app/helper/pane/screenshots/check-os.js
       - name: Screenshot
         run: xvfb-run -a -s "-screen 0 2560x2400x24 +extension Composite" bash app/helper/pane/screenshots/linux.sh ${{ matrix.theme }} out ${{ matrix.scale }}
       - uses: actions/upload-artifact@v4
@@ -114,7 +120,7 @@ jobs:
   macos:
     needs: plan
     if: needs.plan.outputs.macos == 'true'
-    runs-on: macos-latest
+    runs-on: macos-26
     strategy:
       fail-fast: false
       matrix:
@@ -129,6 +135,8 @@ jobs:
         with:
           path: ~/Library/Caches/Homebrew
           key: brew-${{ runner.os }}-cliclick-1
+      - name: Check the runner's OS version
+        run: node app/helper/pane/screenshots/check-os.js
       - name: Screenshot
         run: bash app/helper/pane/screenshots/macos.sh ${{ matrix.theme }} out ${{ matrix.scale }}
       - uses: actions/upload-artifact@v4
@@ -145,7 +153,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [windows-latest]
+        runner: [windows-2025]
         theme: [light, dark]
         scale: [2]
     steps:
@@ -155,8 +163,13 @@ jobs:
         run: |
           $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/app/helper/pane/screenshots"
           Invoke-WebRequest "$base/windows.ps1" -OutFile windows.ps1
+          Invoke-WebRequest "$base/check-os.js" -OutFile check-os.js
+          Invoke-WebRequest "$base/os-versions.json" -OutFile os-versions.json
           New-Item -ItemType Directory -Force fixture-assets | Out-Null
           foreach ($f in "checker.png", "checker.gif", "checker.jpg", "checker.html", "notes.md", "draft.md", "report.docx", "text-sample.txt", "code-sample.html") { Invoke-WebRequest "$base/fixture-assets/$f" -OutFile "fixture-assets/$f" }
+      - name: Check the runner's OS version
+        shell: pwsh
+        run: node check-os.js
       - name: Screenshot
         shell: pwsh
         run: ./windows.ps1 -Theme ${{ matrix.theme }} -Out out -Label windows -Scale ${{ matrix.scale }}

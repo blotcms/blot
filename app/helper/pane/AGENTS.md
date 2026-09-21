@@ -11,6 +11,7 @@ rather than repeating them.
 | `qa/README.md` | the comparison harness (cases, metrics, viewer, adapter) |
 | `reference/README.md`, `reference/resources/<os>/README.md` | what the reference screenshots are and how each OS was captured |
 | `screenshots/README.md` | the capture pipeline and CI (workflows, runners, gotchas) |
+| `screenshots/UPDATING-OS.md` | **procedure for moving to a newer macOS/Windows/Ubuntu**; the CI guard (`check-os.js`) points here when a runner's OS changes |
 
 ## The one rule that explains most decisions
 **Fidelity to a real capture wins.** The references are real screenshots taken on real

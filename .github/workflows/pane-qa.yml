@@ -39,9 +39,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos, runner: macos-latest }
-          - { os: windows, runner: windows-latest }
-          - { os: linux, runner: ubuntu-latest }
+          # pinned to the OS the references were captured on (screenshots/os-versions.json,
+          # checked below); to move to a new OS see screenshots/UPDATING-OS.md
+          - { os: macos, runner: macos-26 }
+          - { os: windows, runner: windows-2025 }
+          - { os: linux, runner: ubuntu-24.04 }
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -67,6 +69,10 @@ jobs:
           ref: ${{ github.ref_name }}
           # the QA scripts only need the pane directory (root files, package.json, come with it)
           sparse-checkout: app/helper/pane
+
+      - name: Check the runner's OS version
+        shell: bash
+        run: node repo/app/helper/pane/screenshots/check-os.js --basic
 
       - name: Install fonts (Linux)
         if: matrix.os == 'linux'
