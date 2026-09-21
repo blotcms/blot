@@ -22,8 +22,9 @@ Word; a Word-installed variant is a "Later" item, not a bug). Real OS colours al
 WCAG contrast; contrast is reported by `tests/size.js`, never enforced.
 
 ## Who owns what
-- Skins are per-OS files: `css/<os>.css` + `icons/<os>/`. `css/base.css` is structure
-  only. `lib/` is shared and small; edit it surgically, because other agents work there
+- Skins are per-OS files: `css/<os>.css` + `icons/<os>/`, and a skin may span
+  `css/<os>-<part>.css` files (icons view, editors) that the build reads as one source, so
+  parallel agents own separate files. `css/base.css` is structure only. `lib/` is shared and small; edit it surgically, because other agents work there
   in parallel.
 - `reference/` and `rendered/` PNGs are written by bots (pane-screenshots, pane-qa). Never
   edit or regenerate them by hand; bot commits land on the branch at any time.
@@ -51,6 +52,14 @@ WCAG contrast; contrast is reported by `tests/size.js`, never enforced.
    capture lands, start pane-qa yourself: `gh workflow run pane-qa.yml --ref <branch>`.
 7. Check CI with `gh run list --branch <branch> --workflow pane-qa`; the failing step's
    log is in `gh run view <id> --log-failed`.
+8. **A test that fails only on CI is usually antialiasing or Chrome/Linux differences.**
+   Reproduce it on Linux with Docker instead of guessing across CI round trips: a
+   `node:22-bookworm` container with `apt-get install chromium`, the QA deps installed in a
+   scratch dir, `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium CI=1`, and **`--shm-size=1g`**
+   (without it Chromium crashes on screenshots). Write Chrome-based assertions so they don't
+   depend on pixel identity (pick the nearest of several candidates; sample a block, not a
+   single edge pixel): two text runs vs one antialias the first glyph differently, and a
+   fractional box edge snaps differently on Linux.
 
 ## Gotchas in the module
 - **Accessibility and mobile (DESIGN.md §5, §6).** `node app/helper/pane/qa/a11y.js` audits every skin
@@ -65,6 +74,20 @@ WCAG contrast; contrast is reported by `tests/size.js`, never enforced.
   back-dated, but "Today 10:52 PM" and column widths depend on when the job ran). The date
   columns are masked (`qa/lib/cases.js`, `qa/tests/masks.js`). A mask sized for "2:35 PM"
   cut through "10:52 PM" once; size masks for the widest possible time.
+- **The docs build uses this module.** `app/documentation/build/html.js` runs
+  `pane.transform($, { now })` (one `now` per build) and then the old finder for what pane
+  doesn't render yet; `build/css.js` appends `pane.assets().css`; `views/partials/head.html`
+  carries the head script (a test keeps it identical to `pane.assets().js`).
+  `app/documentation/tests/pane.js` covers it. Changing markup or CSS changes the production
+  docs at the next deploy.
+- **Dates are relative to `now`, never the clock.** Tests and the QA harness pass an explicit
+  `now` (or get a constant); only the docs build passes `pane.isoNow()`. Invented dates are
+  recency-weighted (`lib/format.js`), so a window nearly always has a "Yesterday" row, and
+  GNOME then widens its Modified column (class `pane-yd`). Text that gets longer in any
+  skin must truncate with an ellipsis, not overflow.
+- **CSS counters cannot reach `.pane::before/::after`**: `.pane` is a size container, and its
+  style containment scopes counters inside it. The Windows item count therefore lives on
+  `.pane-tree::after` (absolutely positioned against `.pane`).
 - **Skin selectors.** Every skin rule is written against `.pane` and wrapped by
   `lib/css.js` in a `:is()` group of equal specificity: `html[data-os=X] .pane:not([data-pin])`
   or `.pane[data-pin=X]`. The default skin also covers visitors whose skin isn't built
@@ -90,13 +113,22 @@ WCAG contrast; contrast is reported by `tests/size.js`, never enforced.
   1px-period pattern is scored as noise by the diff (macOS image icon phase was chosen
   by diff, treat it as tuned to the metric, not to the eye).
 - **Sizes:** `tests/size.js` prints CSS/JS/HTML sizes; there is no budget but watch for
-  jumps (`css` about 32 KB raw, 2.8 KB brotli with the mac skin).
+  jumps (`css` about 78 KB raw, 7.9 KB brotli with the three folder skins, all shipped to every
+  visitor; per-OS stylesheets chosen by the head script are a possible later saving).
 
 ## Before this PR leaves draft
 - Restore the workflows that were removed to keep CI fast on this branch (benchmarks-*,
-  build, deploy, integration, node, proxy, screenshots): `git checkout master --
-  .github/workflows/`, then re-check that pane-qa and pane-screenshots are still wanted.
-- Remove the root `TODO` entry for this work and, per `CLAUDE.md`, add any "tell someone"
-  item to the PR description.
+  build, deploy, integration, node, proxy, screenshots): `git checkout origin/master --
+  .github/workflows/{benchmarks-converters,benchmarks-corpus,benchmarks-render,benchmarks,build,deploy,integration,node,proxy,screenshots}.yml`
+  (from master's current versions: master changed `integration.yml` and `proxy.yml` while they were
+  removed here, and the merge kept them removed). Then decide whether `pane-qa.yml`,
+  `pane-screenshots.yml` and `pane-os-watch.yml` stay in the repo (the watch only runs from the
+  default branch) or become manual runs.
+- Remove the root `TODO` entries: "Finish cross platform folder renderer" and "Rewrite code which
+  generates a fake 'macOS' folder to work cross platform", once the docs migration is done; per
+  `CLAUDE.md`, add any "tell someone" item to the PR description.
 - Decide whether `rendered/` stays committed (it makes the viewer work without Chrome at
-  the cost of binary churn), and whether the capture workflows stay.
+  the cost of binary churn).
+- The `windows-*-list` QA cases (hand-written fixtures of a view authors can't pick) fail their
+  default thresholds; give them thresholds, mark them informational, or drop them.
+- Nothing needs a manual deploy step: the docs build picks pane up with the next image build.

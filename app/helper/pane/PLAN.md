@@ -259,6 +259,22 @@ time without any runtime work: every visitor sees the same static HTML until the
   Yesterday: `folder()` adds the class `pane-yd` and `linux.css` applies the measured widths. The date
   columns are still masked in QA, so the masks (`qa/lib/cases.js`) must cover the widest new text.
 
+## Status (end of the first long session)
+
+Built and passing: reference screenshots for all three OSes (folder views, text and code editor windows,
+desktop icons), pinned runner OS versions with a CI guard, the QA harness (pixel diff, backdrop matte
+check, accessibility and mobile audit), the folder list view for macOS, Windows 11 and GNOME Files in
+light and dark, fresh build-time dates, and the docs build rendering `pre.folder` with pane.
+Not built: the `text` and `code` editor windows and the icons view (`folder()` returns `null` for
+them, so the docs still use the old finder for editors), and `tools/finder` is not retired. Agent
+briefs for those (editor core + macOS, icons view core + macOS, then Windows and Linux skins for both)
+were written in the session; they follow the contracts in DESIGN.md and use the multi-file skins.
+Open decisions: whether docs code blocks should be coloured (the real TextEdit/Notepad captures are
+plain; GNOME's highlights), whether to keep `pane-name` (nothing in the docs uses it yet), and the
+pre-review cleanup in AGENTS.md. Later items: the viewer backdrop switcher, two-backdrop real
+captures for translucency, per-OS stylesheets, and the first real OS update (Ubuntu 26.04 is
+available; follow `screenshots/UPDATING-OS.md`).
+
 ## Docs integration (built)
 
 `app/documentation/build/html.js` runs `pane.transform($, { now })` (one `now` per build process) and then
