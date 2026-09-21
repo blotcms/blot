@@ -57,3 +57,7 @@ These instructions apply to work on the brochure and its documentation views.
 - Adjacent code blocks ending in `class="output"` become input → JSON → output tabs.
 - Escape literal HTML inside code and avoid leading or trailing blank lines inside `<code>`.
 - Developer guide ordering is manual; when renaming a guide, also update its breadcrumb title in `app/documentation/selected.js`.
+
+## Previewing from a worktree
+
+`https://local.blot` serves the main checkout, not a worktree. To see and click through a worktree's code, run `scripts/development/preview.sh up` from it and use the printed `https://<slot>-local.blot` URLs (and `blot-node-<slot>` for `docker exec`). Run `scripts/development/preview.sh down` when finished. See `scripts/development/worktrees.md`.
