@@ -16,7 +16,7 @@ separately.
 | `config/` | Generated copy of [`config/openresty/conf`](../config/openresty/conf). Do not edit. |
 | `html/` | Generated copy of [`config/openresty/html`](../config/openresty/html). Do not edit. |
 | `build/sync-config.js` | Copies the canonical files into `config/` + `html/` and applies container-only patches (stdout logs, `reuseport`, ACME CA, health socket, ...). |
-| `build/index.js` | Renders `config/server.conf` + partials into a single `openresty.conf`. |
+| `build/index.js` | Renders `config/server.conf` + partials into a single `openresty.conf`, with the locals from [`config/openresty/locals.js`](../config/openresty/locals.js) (shared with the bare-metal generator; `config/openresty/tests/locals.js` fails if a template reads a variable either leaves undefined). |
 | `build/build.sh` | Wrapper that runs `build/index.js` with the container's paths. Run this before `docker build`. |
 | `build/data/latest/` | Generated output (git-ignored). |
 | `Dockerfile` | Two-stage build: vendors the Lua deps, then assembles the image. |
