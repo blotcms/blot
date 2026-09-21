@@ -91,6 +91,16 @@ module.exports = async (req, res) => {
 
   const { folder, done } = await establishSyncLock(req.blog.id);
 
+  // done() bumps blog.cacheID, which is what invalidates the folder cache on
+  // the container that renders the listing (blue). Release before responding
+  // so the client's follow-up refresh can't beat it.
+  let released = false;
+  const release = async () => {
+    if (released) return;
+    released = true;
+    await done();
+  };
+
   try {
     await assertNoSymlinks(localPath(req.blog.id, "/"), destination.absolute);
     const connectedClient =
@@ -110,12 +120,16 @@ module.exports = async (req, res) => {
       folderMiddleware.invalidateCache(req.blog);
     }
 
+    await release();
+
     return res.json({
       ok: true,
       removed: normalizedPath,
       error: null,
     });
   } catch (err) {
+    await release();
+
     if (err && err.code === "ENOENT") {
       return res.status(404).json({
         ok: false,
@@ -146,6 +160,6 @@ module.exports = async (req, res) => {
       error: err && err.message ? err.message : "Failed to remove path",
     });
   } finally {
-    await done();
+    await release();
   }
 };
