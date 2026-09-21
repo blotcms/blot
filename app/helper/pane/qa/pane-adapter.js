@@ -21,14 +21,17 @@ Plan.gdoc
 Report.docx
 Tasks.org`;
 
+// GNOME Files sorts lower-case names after capitalised ones: index.html comes last
+const LINUX_TREE = TREE.replace("index.html\n", "") + "\nindex.html";
+
 // the harness names the default view "default"; the module calls it "list"
 const VIEW = { default: "list" };
 
 // The QA windows have the reference's fixed size and are never pinned: the harness
 // chooses the skin with <html data-os> and the theme with prefers-color-scheme.
 async function render(caseId, c) {
-  if (c.os !== "macos") return null; // the other skins are not built yet: fixtures
-  const result = pane.folder(TREE, {
+  if (c.os !== "macos" && c.os !== "linux") return null; // the other skins are not built yet: fixtures
+  const result = pane.folder(c.os === "linux" ? LINUX_TREE : TREE, {
     title: sample.title,
     view: VIEW[c.view] || c.view,
     files: sample.files,

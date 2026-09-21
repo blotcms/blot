@@ -17,7 +17,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.join(__dirname, "..");
-const SKINS = ["mac"]; // win and linux land with their skins; markup.js and group() read this live
+const SKINS = ["mac", "linux"]; // win lands with its skin; markup.js and group() read this live
 const DEFAULT_SKIN = "mac";
 
 // Splits CSS into top-level items: { sel, body } for a block, { text } for a statement.
