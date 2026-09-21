@@ -32,8 +32,9 @@ export OPENRESTY_USER="${OPENRESTY_USER:-ec2-user}"
 # Base domain the generated virtual hosts are built from (build-time value).
 export BLOT_HOST="${BLOT_HOST:-blot.im}"
 
-# ACME directory for on-demand custom-domain certificates. CI overrides this
-# with a Pebble test server; production leaves it at the Let's Encrypt default.
+# Default ACME directory for on-demand custom-domain certificates. It is a
+# runtime setting (PROXY_ACME_CA, see proxy/render-config.sh); this only sets
+# what the image uses when that is not given.
 export ACME_CA="${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}"
 
 # DNS resolver baked into the generated config (OCSP stapling + ACME).
