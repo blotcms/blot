@@ -2,6 +2,8 @@
 safari windows: 1
 menu item Customize Toolbar… of menu View of menu bar item View of menu bar 1 of application process Safari
 customize window at 150, 114
+sheets: 1
+missing value
 
 Finder, TextEdit, Safari
 29:33: execution error: Safari got an error: AppleEvent timed out. (-1712)
