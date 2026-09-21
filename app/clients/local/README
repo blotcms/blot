@@ -149,7 +149,7 @@ The sync flow coordinates changes between the file system and Blot's internal st
    - Events received while a batch is running remain available for a subsequent batch.
 
 3. **Sync Lock** (`app/sync/index.js`): Before processing any changes:
-   - Acquires an exclusive lock on the blog folder using `proper-lockfile`.
+   - Acquires an exclusive lock on the blog folder (a Redis mutex).
    - If lock acquisition fails, the sync is abandoned.
 
 4. **Update Processing** (`app/sync/index.js`): Once locked:
@@ -184,14 +184,14 @@ The sync flow coordinates changes between the file system and Blot's internal st
 ### File System Libraries
 - **chokidar**: Watches the blog folder for all file system events.
 - **fs-extra**: Performs file I/O operations (write, remove, check existence).
-- **proper-lockfile**: Manages exclusive locks on the blog folder during sync operations.
+- **sync/lock**: Redis mutex that manages exclusive locks on the blog during sync operations.
 
 ## Dependencies
 
 ### External NPM Modules
 - `chokidar`: File system event watching.
 - `fs-extra`: File system utilities with cross-platform support.
-- `proper-lockfile`: File-based locking mechanism.
+- `models/client`: Redis client backing the folder lock.
 - `debug`: Conditional debug logging.
 - `express`: HTTP routing framework.
 
@@ -257,4 +257,4 @@ localClient.disconnect(blogID, (err) => {
 - The local client is development-only and not available in production.
 - File watching only occurs in development environment; production deployments do not monitor changes.
 - The sync operation is single-threaded for a given blog (sequential queue per blog).
-- File locking is advisory (file-based) and relies on the `proper-lockfile` library; concurrent access from external processes is not protected.
+- The folder lock is advisory (a Redis mutex); concurrent access from external processes is not protected.

@@ -3,7 +3,7 @@ const { dirname } = require("path");
 const fs = require("fs-extra");
 const Bottleneck = require("bottleneck");
 const config = require("config");
-const lockfile = require("proper-lockfile");
+const folderLock = require("sync/lock");
 const retry = require("./retry");
 const clfdate = require("helper/clfdate");
 const airlock = require("helper/airlock");
@@ -19,12 +19,9 @@ const REMOTE_BROWSER_URL = config.airlock && config.airlock.browser_url;
 // Bottleneck's concurrency limit only serializes screenshots WITHIN this one
 // process - it can't stop blue, green and yellow from each independently
 // connect()ing to the one shared airlock Chromium and screenshotting at the
-// same time. AIRLOCK_LOCK_PATH is a placeholder file on the data directory
-// every container already mounts (config/deploy's DATA_DIRECTORY_ON_SERVER);
-// proper-lockfile locks it by atomically mkdir-ing "<path>.lock" beside it,
-// giving a cross-container mutex - the same mechanism/dependency app/sync
-// already uses to coordinate across containers sharing that directory.
-const AIRLOCK_LOCK_PATH = config.data_directory + "/airlock-screenshot";
+// same time. The Redis mutex from app/sync/lock is keyed by the airlock's
+// URL, so it is shared by every process using that airlock (and no others).
+const AIRLOCK_LOCK_NAME = "airlock-screenshot:" + REMOTE_BROWSER_URL;
 // Comfortably above the worst-case legitimate hold (PAGE_TIMEOUT plus the
 // screenshot/close budgets below), so a lock is never stolen out from under
 // a screenshot that's still genuinely in progress.
@@ -71,7 +68,7 @@ const VIEWPORT = {
 // whatever blue/green/yellow are doing on their own copies of this module -
 // so the "never shares an instance with another screenshot" invariant above
 // would otherwise break across containers sharing one airlock. See
-// AIRLOCK_LOCK_PATH and takeScreenshot() for the cross-container mutex that
+// AIRLOCK_LOCK_NAME and takeScreenshot() for the cross-container mutex that
 // restores it for the remote case.
 const idle = [];
 let poolSize = CONCURRENT_SCREENSHOTS;
@@ -130,17 +127,19 @@ function validateOptions(options) {
   return validatedOptions;
 }
 
-// Cross-container mutex around a remote screenshot - see AIRLOCK_LOCK_PATH
+// Cross-container mutex around a remote screenshot - see AIRLOCK_LOCK_NAME
 // above. Waits roughly up to AIRLOCK_LOCK_STALE_MS for the current holder
 // (a screenshot in another container) to finish or for its lock to go
 // stale, rather than failing fast, since the whole point is to wait for
 // the shared Chromium to be free rather than to detect contention.
 async function acquireAirlockLock() {
-  await fs.ensureFile(AIRLOCK_LOCK_PATH);
-  return lockfile.lock(AIRLOCK_LOCK_PATH, {
-    stale: AIRLOCK_LOCK_STALE_MS,
-    retries: { retries: 90, factor: 1, minTimeout: 500 },
+  // Retries back off 0.7s, 1.4s, ... 22.4s (~44s in total, as before).
+  const lock = await folderLock.lock(AIRLOCK_LOCK_NAME, {
+    ttl: AIRLOCK_LOCK_STALE_MS,
+    retries: 6,
+    minTimeout: 700,
   });
+  return lock.release;
 }
 
 async function launch() {
@@ -332,7 +331,7 @@ async function screenshotWithTimeout(page, path) {
 async function takeScreenshot(site, path, options = {}) {
   options = validateOptions(options);
 
-  // See AIRLOCK_LOCK_PATH above: only needed when there's a shared browser
+  // See AIRLOCK_LOCK_NAME above: only needed when there's a shared browser
   // to serialize access to. In launch mode every process already has its
   // own private Chromium, so there's nothing to coordinate and taking this
   // lock would only add unnecessary cross-container serialization - a real

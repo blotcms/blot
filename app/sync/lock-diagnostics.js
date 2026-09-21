@@ -1,4 +1,3 @@
-const fs = require("fs");
 const os = require("os");
 const { promisify } = require("util");
 const freeDiskSpace = require("../scheduler/free-disk-space");
@@ -7,6 +6,7 @@ const {
   getPendingUpdates
 } = require("./lock-diagnostics-state");
 
+const folderLock = require("./lock");
 const freeDiskSpaceAsync = promisify(freeDiskSpace);
 const DEFAULT_TIMEOUT_MS = 2000;
 
@@ -58,20 +58,16 @@ const addResult = (target, key, result) => {
 
 const gatherLockDiagnostics = async ({
   blogID,
-  lockPath,
   lockAcquiredAt,
   syncContext,
   timeoutMs = DEFAULT_TIMEOUT_MS
 } = {}) => {
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
-  const lockFilePath = lockPath ? `${lockPath}.lock` : undefined;
   const now = Date.now();
 
   const diagnostics = {
     blogID,
-    lockPath,
-    lockFilePath,
     now,
     pendingSyncs: getPendingSyncs(),
     pendingUpdates: getPendingUpdates(),
@@ -124,33 +120,11 @@ const gatherLockDiagnostics = async ({
     await runWithTimeout(() => freeDiskSpaceAsync(), timeLeft())
   );
 
-  if (lockFilePath) {
+  if (blogID) {
     addResult(
       diagnostics,
-      "lockFileStat",
-      await runWithTimeout(async () => {
-        const stat = await fs.promises.stat(lockFilePath);
-        return {
-          mtimeMs: stat.mtimeMs,
-          size: stat.size,
-          mode: stat.mode
-        };
-      }, timeLeft())
-    );
-  }
-
-  if (lockPath) {
-    addResult(
-      diagnostics,
-      "lockPathStat",
-      await runWithTimeout(async () => {
-        const stat = await fs.promises.stat(lockPath);
-        return {
-          mtimeMs: stat.mtimeMs,
-          size: stat.size,
-          mode: stat.mode
-        };
-      }, timeLeft())
+      "lockState",
+      await runWithTimeout(() => folderLock.inspect(blogID), timeLeft())
     );
   }
 

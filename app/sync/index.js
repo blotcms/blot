@@ -3,7 +3,7 @@ const Blog = require("models/blog");
 const Update = require("./update");
 const localPath = require("helper/localPath");
 const renames = require("./renames");
-const lockfile = require("proper-lockfile");
+const folderLock = require("./lock");
 const messenger = require("./messenger");
 const gatherLockDiagnostics = require("./lock-diagnostics");
 const clfdate = require("helper/clfdate");
@@ -40,15 +40,6 @@ function sync(blogID, callback) {
     log("Starting sync");
 
     let release;
-    let lockPath = localPath(blogID, "/");
-
-    // localPath currently returns a path with
-    // a trailing slash, we need to remove it
-    // for diagnostics to work properly
-    if (lockPath.endsWith("/") && lockPath !== "/") {
-      lockPath = lockPath.slice(0, -1);
-    }
-
     let lockAcquiredAt;
 
     try {
@@ -61,56 +52,35 @@ function sync(blogID, callback) {
           ? { retries: 1, minTimeout: LOCK_STALE_TIMEOUT_MS + 1000 } // 11s total
           : { retries: 3, minTimeout: 750 }; // 0.75s, 1.5s, 3s = 5.25s total
 
-      release = await lockfile.lock(lockPath, {
-        stale: LOCK_STALE_TIMEOUT_MS,
-        update: LOCK_UPDATE_INTERVAL_MS,
-        retries,
+      const lock = await folderLock.lock(blogID, {
+        ttl: LOCK_STALE_TIMEOUT_MS,
+        heartbeat: LOCK_UPDATE_INTERVAL_MS,
+        ...retries,
         onCompromised: (err) => {
-          // gatherLockDiagnostics returns a promise, handle via then/catch.
-          gatherLockDiagnostics({
-            blogID,
-            lockPath,
-            lockAcquiredAt
-          })
-          .then(diagnostics => {
-            console.error(clfdate(), "[LOCK COMPROMISED]", {
-              blogID,
-              lockPath,
-              error: {
-                message: err.message,
-                code: err.code,
-                stack: err.stack
-              },
-              lockConfig: {
-                stale: LOCK_STALE_TIMEOUT_MS,
-                update: LOCK_UPDATE_INTERVAL_MS
-              }
+          // Another process may now own the lock, so the sync can no longer
+          // be trusted to be exclusive. Log diagnostics, then crash the
+          // process (as proper-lockfile's handler did) so it stops writing.
+          gatherLockDiagnostics({ blogID, lockAcquiredAt, syncContext: { syncID } })
+            .catch((diagErr) => ({ diagnosticsError: String(diagErr) }))
+            .then((diagnostics) => {
+              console.error(clfdate(), "[LOCK COMPROMISED]", {
+                blogID,
+                error: { message: err.message, code: err.code },
+                lockConfig: {
+                  ttl: LOCK_STALE_TIMEOUT_MS,
+                  heartbeat: LOCK_UPDATE_INTERVAL_MS
+                },
+                diagnostics
+              });
+            })
+            .finally(() => {
+              setImmediate(() => {
+                throw err;
+              });
             });
-            console.error(clfdate(), "[LOCK COMPROMISED]", diagnostics);
-          })
-          .catch(diagErr => {
-            // If diagnostics gathering fails, still log compromise
-            console.error(clfdate(), "[LOCK COMPROMISED] (diagnostics error)", {
-              blogID,
-              lockPath,
-              error: {
-                message: err.message,
-                code: err.code,
-                stack: err.stack
-              },
-              lockConfig: {
-                stale: LOCK_STALE_TIMEOUT_MS,
-                update: LOCK_UPDATE_INTERVAL_MS
-              },
-              diagnosticsError: diagErr
-            });
-          })
-          .finally(() => {
-            // Ensure the error is always thrown synchronously
-            throw err;
-          });
         }
       });
+      release = lock.release;
       lockAcquiredAt = Date.now();
       addPendingSync(blogID, syncID);
       log("Successfully acquired lock on folder");
@@ -193,7 +163,14 @@ function sync(blogID, callback) {
           // We could do these next two things in parallel
           // but it's a little bit of refactoring...
           log("Releasing lock");
-          await release();
+          try {
+            await release();
+          } catch (releaseError) {
+            // Redis unreachable or the lock was already lost. Never leave
+            // the caller's callback pending; surface the failure instead.
+            log("Failed to release lock", releaseError.message);
+            return callback(syncError || releaseError);
+          }
           log("Finished sync");
 
           if (!changes) {
