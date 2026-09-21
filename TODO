@@ -1,5 +1,12 @@
 Make sure next bill amount is in all billing emails to customers
 
+Get proxy horizontally scalable
+- Get proxy container deployed
+
+Get node container horizontally scalable 
+- finish app/storage module
+- solve git storage problem 
+
 Add clear bill change info to new blog flow
 
 Check in on our dropbox sync verification job to make sure it's working well (docker green)
@@ -210,9 +217,6 @@ Fix bug with light mode colors
 Fix bug with menu which occur when multiple pages are added at once Menu needs concurrency or atomic operations (so we can build posts in parallel)
 - move menu into its own model (it's possible to add thousands of entries to it...)
 
-Fix bug where one bad page can take down upstream repeatedly 
-– perhaps we need to cache in proxy cache timeouts? or somehow detect if a request causes upstream to crash?
-
 Fix bug with many twitter embeds 
 - [and tell Nash](https://mail.google.com/mail/u/0/#inbox/FMfcgzGllMNfjvRBthVncQtPJQpmrksx)
 
@@ -274,6 +278,8 @@ Make it possible to create a site for free then require subscription to make it 
 ---
 
 Proxy container (OpenResty) - remaining before it can replace config/openresty:
+- Can we add modern compression to proxy?
+- Can the proxy remember bad urls and avoid repeatedly sending them to upstream?
 - Config de-dup: proxy/config/ is a hand-fork of config/openresty/conf/ and OMITS restrict-bot-uas.conf + reverse-proxy-limit-*.conf + reverse-proxy-preview/base/huge.conf (rate-limiting + bot restrictions - security-relevant, must land before cutover)
 - Blue/green hook server: :8999 is in a reuseport group, so during a deploy overlap an ACME hook request can hit the other instance (different secret) - needs per-instance hook routing, not a shared reuseport port
 - Wire proxy/deploy/{blue-green,reload-config}.sh into the real deploy pipeline
@@ -1157,6 +1163,7 @@ Add email newsletter system
 
 Create an API for Blot
 - Add webhooks and tell [Aurynn](https://mail.google.com/mail/u/0/#inbox/1554260da157b405) and [Shawn](https://twitter.com/soypunk)
+- Use it to build a minimal blot cli sync client run from the command line (could background itself?!)
 
 ---
 
