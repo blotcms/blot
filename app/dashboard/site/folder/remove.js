@@ -43,6 +43,9 @@ const removeClientPath = (client, blogID, relativePath) =>
     });
   });
 
+// N.B. In production this POST runs on green while the page you are redirected
+// to renders on blue (config/openresty/conf/http.conf, $dashboard_upstream).
+// Don't rely on in-process cache invalidation here; see dashboard/site/index.js.
 module.exports = async (req, res) => {
   const rawPath = (req.params.path || req.body.path || "")
     .normalize("NFC")
