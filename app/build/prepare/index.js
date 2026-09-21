@@ -106,17 +106,30 @@ function Prepare (entry, options = {}) {
   var title = entry.title;
   const metadataTitle = metadataValue("title");
   if (type(metadataTitle, Model.title)) title = metadataTitle;
-  entry.summary = Summary($, title || "");
+  // The summary is plain text, so strip the teaser marker from the parsed
+  // HTML first, while we still know which text is inside code blocks.
+  var htmlWithoutBreakPoint = Teaser.stripBreakPoint(entry.html);
+  var $summary =
+    htmlWithoutBreakPoint === entry.html
+      ? $
+      : cheerio.load(
+          htmlWithoutBreakPoint,
+          { decodeEntities: false, withDomLvl1: false },
+          false
+        );
+  entry.summary = Summary($summary, title || "");
   debug(entry.path, "Generated  summary");
 
   debug(entry.path, "Generating internal links");
-  entry.internalLinks = internalLinks($, options.blogID);
+  entry.internalLinks = internalLinks($summary, options.blogID);
   debug(entry.path, "Generated internal links");
 
   debug(entry.path, "Generating teasers");
   entry.teaser = Teaser(entry.html) || entry.html;
   entry.teaserBody = Teaser(entry.body) || entry.body;
   entry.more = entry.teaser !== entry.html;
+  entry.html = htmlWithoutBreakPoint;
+  entry.body = Teaser.stripBreakPoint(entry.body);
   debug(entry.path, "Generated  teasers");
 
   debug(entry.path, "Generating makeSlug");
