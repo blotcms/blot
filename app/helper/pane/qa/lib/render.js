@@ -65,8 +65,11 @@ async function browserFor(browser, c) {
   return browser.__scrollbars;
 }
 
-// Returns { file, fonts }, or null if the adapter has nothing for this case.
-async function renderCase(given, c) {
+// Screenshots a case's page (full viewport, PNG). `backdrop` replaces the desktop colour
+// behind the window; nothing else about the page changes. Returns
+// { shot, fonts, rect: { x, y, w, h, radius } } (the window's box in CSS px), or null if
+// the adapter has nothing for this case.
+async function capture(given, c, { backdrop } = {}) {
   const result = await adapter.render(c.id);
   if (!result) return null;
   const browser = await browserFor(given, c);
@@ -81,26 +84,38 @@ async function renderCase(given, c) {
     });
     await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: c.theme }]);
     await page.evaluateOnNewDocument(FREEZE_DATE);
-    await page.setContent(adapter.composePage(c, result, geometry.origin), { waitUntil: "load" });
+    await page.setContent(adapter.composePage(c, result, geometry.origin, backdrop), { waitUntil: "load" });
     await page.evaluate(() => document.fonts.ready);
     const fonts = await platformFonts(page);
+    const rect = await page.$eval("#pane-qa-stage > *", (el) => {
+      const r = el.getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height, radius: parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0 };
+    });
 
     const shot = await page.screenshot({ type: "png", omitBackground: false });
-    // match the reference's pixel size exactly (fractional logical sizes round up)
-    const { width, height } = c.imageSize;
-    // (cropped, not resized: the screenshot is at most a pixel bigger, and resampling it
-    // would blur every hairline)
-    const meta = await sharp(shot).metadata();
-    const out =
-      meta.width >= width && meta.height >= height
-        ? await sharp(shot).extract({ left: 0, top: 0, width, height }).png().toBuffer()
-        : await sharp(shot).resize({ width, height, position: "left top", fit: "contain", background: "#808080" }).png().toBuffer();
-    fs.mkdirSync(path.dirname(c.renderedPath), { recursive: true });
-    fs.writeFileSync(c.renderedPath, out);
-    return { file: c.renderedPath, fonts };
+    return { shot, fonts, rect };
   } finally {
     await page.close();
   }
+}
+
+// Returns { file, fonts }, or null if the adapter has nothing for this case.
+async function renderCase(given, c) {
+  const captured = await capture(given, c);
+  if (!captured) return null;
+  const { shot, fonts } = captured;
+  // match the reference's pixel size exactly (fractional logical sizes round up)
+  const { width, height } = c.imageSize;
+  // (cropped, not resized: the screenshot is at most a pixel bigger, and resampling it
+  // would blur every hairline)
+  const meta = await sharp(shot).metadata();
+  const out =
+    meta.width >= width && meta.height >= height
+      ? await sharp(shot).extract({ left: 0, top: 0, width, height }).png().toBuffer()
+      : await sharp(shot).resize({ width, height, position: "left top", fit: "contain", background: "#808080" }).png().toBuffer();
+  fs.mkdirSync(path.dirname(c.renderedPath), { recursive: true });
+  fs.writeFileSync(c.renderedPath, out);
+  return { file: c.renderedPath, fonts };
 }
 
 // One case failing (a bad fixture, a timeout) doesn't stop the rest. Returns
@@ -130,4 +145,4 @@ async function renderCases(cases, log = () => {}) {
   return { done, failed };
 }
 
-module.exports = { renderCases, renderCase, launch };
+module.exports = { renderCases, renderCase, capture, launch };

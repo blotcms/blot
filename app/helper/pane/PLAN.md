@@ -249,6 +249,40 @@ time without any runtime work: every visitor sees the same static HTML until the
 - **Order of work:** after the Windows and Linux skins land (they edit `lib/format.js` and
   `lib/markup.js` too), then the fixture change.
 
+## Wallpapers (not built)
+
+Detail crops of paintings, gradients, etc. as desktop backgrounds behind the windows, for the
+docs and brochure. Nothing is built into the module; the constraint is that windows stay
+backdrop independent (DESIGN.md §10), guarded by `qa/backdrop.js`.
+
+- **First:** the QA viewer gets a backdrop switcher (grey, white, black, and images from a local
+  folder; one public-domain painting crop from Wikimedia as the example, kept out of the repo
+  unless small), rendering the same live HTML over each. Do this after the Windows and Linux
+  skins have settled, since the viewer is the most-edited part of the harness.
+- **Translucent materials in CSS:** possible with `backdrop-filter` + a semi-transparent tint
+  (Mica, macOS materials), after the `.pane` opaque-fill refactor in DESIGN.md §10. Per skin,
+  choose which surfaces are translucent, and list them in `qa/backdrop.json`.
+- **Planned: two-backdrop reference captures.** The matte trick works on real screenshots too:
+  capture each OS's default view on a black and on a white desktop; per pixel,
+  `alpha = 1 - (white - black)/255`, so we measure the real alpha of Finder's toolbar, Mica, the
+  real shadow's alpha profile, and the real corner radius. That replaces guessing a tint from one
+  grey capture (which can only bound the alpha from below). Plan:
+  1. `macos.sh`: the borderless desktop-level window's colour is a parameter (today 0.5 grey);
+     `windows.ps1`: `SetSysColors` COLOR_BACKGROUND (as now) to black/white, no wallpaper;
+     `linux.sh`: `xsetroot -solid` (Linux has no shadow or translucency, so it may be skipped).
+  2. Each job takes two extra shots of the default view (`-onblack`, `-onwhite`) per theme; keep
+     everything else identical (window position, focus state, selection).
+  3. QA: a matte reference per case from those two images, compared with the rendering's matte
+     from `lib/matte.js` (alpha per region, shadow profile). New metric, not a pixel diff.
+  4. Fit the tint alpha and blur of the translucent layers from the measured alpha.
+  Open questions: whether Windows Mica follows a solid desktop colour (it samples the wallpaper;
+  a solid background may reduce it to a flat tint, which is what we would measure); whether
+  the macOS material blurs our desktop-level grey window; capture time is +2 shots per job (small).
+  Name the new captures with the existing suffix convention (`-onblack`), which makes them
+  cases automatically, so the adapter must return null or a fixture for them.
+- **Desktop icon labels** (the `-desktop` captures) are text on plain grey; on a wallpaper they
+  need alpha text shadows. Only relevant if the icon-grid rendering is built.
+
 ## Later
 
 - Locale-aware dates/sizes (English formats only for now).

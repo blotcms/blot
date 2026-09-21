@@ -63,13 +63,16 @@ const place = (o) => {
   return `left:${x}px;top:${y}px` + (x !== o.x || y !== o.y ? `;transform:translate(${o.x - x}px,${o.y - y}px)` : "");
 };
 
-function composePage(c, { html, css, js }, origin = { x: c.padding, y: c.padding }) {
+// `backdrop` is the desktop behind the window (any CSS background value). The references
+// are on 50% grey, so that is the default; the backdrop check renders the same page on
+// black and white to measure the window's alpha (see lib/matte.js).
+function composePage(c, { html, css, js }, origin = { x: c.padding, y: c.padding }, backdrop = "#808080") {
   return `<!doctype html>
 <html lang="en" data-os="${DATA_OS[c.os]}" data-theme="${c.theme}" style="color-scheme:${c.theme}">
 <head>
 <meta charset="utf-8">
 <style>
-html,body{margin:0;background:#808080}
+html,body{margin:0;background:${backdrop}}
 #pane-qa-stage{position:absolute;${c.os === "windows" ? place(origin) : `left:${origin.x}px;top:${origin.y}px`}}
 </style>
 <style>${css || ""}</style>

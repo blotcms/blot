@@ -53,6 +53,10 @@ WCAG contrast; contrast is reported by `tests/size.js`, never enforced.
    log is in `gh run view <id> --log-failed`.
 
 ## Gotchas in the module
+- **Backdrop independence (DESIGN.md §10).** A window must look right on any desktop, not only
+  the grey of the references: exterior effects (shadow, ring, corners) are alpha or clipping,
+  never the desktop colour. `node app/helper/pane/qa/backdrop.js` checks it (black vs white
+  render); run it after touching a skin's window edge, shadow or `background`.
 - **Time-dependent text.** Reference dates are relative to capture time (files are
   back-dated, but "Today 10:52 PM" and column widths depend on when the job ran). The date
   columns are masked (`qa/lib/cases.js`, `qa/tests/masks.js`). A mask sized for "2:35 PM"

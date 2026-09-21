@@ -283,6 +283,37 @@ markup (structure, pin, escaping, `null` for unsupported views), CSS build (`@li
 expansion, `data-os`/`data-pin` selector wrapping, uniqueness of the matching path, default
 skin), contrast (reported), and size (reported).
 
+## 10. Backdrop independence
+
+Windows will one day sit on wallpapers (a painting crop, a gradient), not only the plain grey
+of the references. The rendering must not depend on the desktop behind it:
+
+- **Nothing outside the window box paints or assumes the desktop colour.** Shadows, hairlines
+  and glows are `rgba()` (or an opaque hairline that is the window's own edge, like macOS
+  dark's `#070707` ring); corners come from `border-radius` clipping, never a mask filled
+  with grey; no full-bleed layer or `box-shadow` spread. Any `#808080` in a skin's *exterior*
+  effects is a bug (the QA harness's `#808080` is only the reference backdrop).
+- **Inside, the window is opaque today.** Real OS chrome is partly translucent (Windows 11
+  Mica in the title strip, macOS materials); our skins use opaque colours sampled from the
+  references, which were captured over 50% grey. On another wallpaper that chrome looks
+  neutral instead of tinted. That is accepted for now. Keep those colours as tokens.
+- **Known refactor point:** `.pane` paints one opaque `background`. A translucent surface
+  needs `backdrop-filter` on a layer over a semi-transparent tint, and a child's backdrop
+  filter samples what is painted behind it, so the opaque fill has to move from `.pane`
+  to the regions that are opaque (list area, toolbar body) and leave the material layers
+  alone. Calibration note: a tint that must reproduce a near-white chrome over mid-grey
+  can only be about 92% opaque or more, so a translucent skin fitted to grey references is
+  mostly a guess; the plan is to capture each OS on black and white desktops (PLAN.md,
+  "Wallpapers").
+- **Windows and Linux windows have no shadow** (the references have none, by decision). On a
+  wallpaper they look flat; a wallpaper mode would add an alpha shadow only when a backdrop is
+  set.
+- **The guard:** `qa/backdrop.js` (and `tests/backdrop.js`, run in CI) renders each default
+  case's window on black and on white and checks the matte: opaque inside, clear more than
+  72px outside, transparent corners on rounded windows. Intended translucency goes in
+  `qa/backdrop.json` (per case, rectangles in CSS px). It also writes `cutout.png` (the window
+  with real alpha) to `qa/out/<id>/`, which composites onto any image.
+
 ## Decisions (resolved in review)
 
 1. Default height fits the rows, capped at the reference height (§1).

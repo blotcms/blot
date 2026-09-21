@@ -125,6 +125,19 @@ compared pixels that differ overall and per region name or kind, shadow RMSE (lu
 levels), window size difference (CSS px) and text row offset (CSS px). They start loose;
 tighten them as the rendering improves, per case when one view lags.
 
+## Backdrop check
+
+```sh
+node app/helper/pane/qa/backdrop.js [--case ID] [--os X] [--all] [--json]
+```
+
+Renders each default-view case twice, on black and on white (same HTML/CSS/JS, only the page
+background differs), derives the window's alpha (`1 - (white - black)/255`) and fails if the
+window is translucent inside, painted more than 72px outside, or has an opaque corner when it
+is rounded. Also writes `qa/out/<id>/cutout.png` (the window with real alpha) and `matte.png`.
+Intended translucency is listed per case in `backdrop.json`. Fonts don't matter here, so it
+runs on any machine; `tests/backdrop.js` runs it in CI. See DESIGN.md §10.
+
 ## Viewer
 
 `node app/helper/pane/qa [--port N]` serves it on 127.0.0.1. The case list filters by OS,
