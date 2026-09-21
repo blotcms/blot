@@ -314,6 +314,16 @@ try {
   if (-not (Test-Path $edge)) { $edge = "msedge.exe" }
   $edgeProfile = Join-Path $env:TEMP "pane-edge"
   Remove-Item -Recurse -Force $edgeProfile -ErrorAction SilentlyContinue
+  # Toolbar clutter off, by policy (more reliable than driving the UI): the Copilot "Chat" button
+  # and the sidebar, the sign-in / profile avatar with its red dot, first-run and the shopping and
+  # rewards extras. A policy name Edge does not know is ignored.
+  $pol = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+  New-Item -Path $pol -Force | Out-Null
+  foreach ($kv in @(@("HubsSidebarEnabled", 0), @("Microsoft365CopilotChatIconEnabled", 0), @("BrowserSignin", 0),
+      @("HideFirstRunExperience", 1), @("ShowMicrosoftRewards", 0), @("EdgeShoppingAssistantEnabled", 0),
+      @("EdgeCollectionsEnabled", 0), @("SyncDisabled", 1), @("PromotionalTabsEnabled", 0), @("ShowRecommendationsEnabled", 0))) {
+    Set-ItemProperty -Path $pol -Name $kv[0] -Value $kv[1] -Type DWord
+  }
   Start-Process $edge -ArgumentList @("--user-data-dir=`"$edgeProfile`"", "--no-first-run", "--no-default-browser-check", "--disable-sync", "--new-window", "https://example.com/")
   Start-Sleep -Seconds 12
   $eg = Get-Process msedge -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
@@ -321,7 +331,12 @@ try {
     $h = $eg.MainWindowHandle
     "edge: $($eg.MainWindowTitle)" | Out-File $log -Append
     # 600x400 logical px, like the macOS reference; MoveWindow includes the 7px invisible borders
-    [Native.Win]::MoveWindow($h, $left - 7 * $Scale, $pad, (600 + 14) * $Scale, (400 + 7) * $Scale, $true) | Out-Null
+    # The desktop is still empty (its icons are copied last), so the icon column's room at the left is
+    # not needed: put the window where all four margins fit. The capture stops above the taskbar and
+    # the "Test Mode" watermark, so centre it in the space that is left.
+    $bx = $pad - 7 * $Scale
+    $by = [Math]::Max(0, [int](($sh - $taskbar - $wm - (400 + 7) * $Scale) / 2))
+    [Native.Win]::MoveWindow($h, $bx, $by, (600 + 14) * $Scale, (400 + 7) * $Scale, $true) | Out-Null
     Start-Sleep -Seconds 3
     Shot "edge"
     Capture "$Label-$Theme$suffix-browser" $false
