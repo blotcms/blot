@@ -16,7 +16,7 @@
 
 ## Edit, fork, and preview
 
-When working from an isolated git worktree, any request to “preview,” “show,” “set up a preview,” or “spin up a preview” must use `/Volumes/Blot/blot/.claude/skills/preview/SKILL.md`: read and follow that file for preview setup, URLs, login links, slot lifecycle, and cleanup. Those instructions take precedence over the main-checkout workflow below. Do not ask for `https://local.blot` or use it directly as the worktree preview.
+When working from an isolated git worktree, any request to “preview,” “show,” “set up a preview,” or “spin up a preview” must use `/Volumes/Blot/blot/.claude/skills/preview/SKILL.md`: read and follow that file for preview setup, URLs, login links, slot lifecycle, and cleanup. Those instructions take precedence over the main-checkout workflow below. Do not ask for `https://local.blot` or use it directly as the worktree preview. You must use host access to access the local server.
 
 ### Instructions for working on main-checkout or master-checkout
 
