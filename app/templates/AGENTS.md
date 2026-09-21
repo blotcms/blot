@@ -16,7 +16,11 @@
 
 ## Edit, fork, and preview
 
-When working from the main/master checkout without an isolated git worktree, follow the `https://local.blot` and dashboard workflow below. When working from an isolated git worktree, any request to “preview,” “show,” “set up a preview,” or “spin up a preview” must use `/Volumes/Blot/blot/.claude/skills/preview/SKILL.md`: read and follow that file for preview setup, URLs, login links, slot lifecycle, and cleanup. Those instructions take precedence over the main-checkout workflow below. Do not use `https://local.blot` directly as the worktree preview.
+When working from an isolated git worktree, any request to “preview,” “show,” “set up a preview,” or “spin up a preview” must use `/Volumes/Blot/blot/.claude/skills/preview/SKILL.md`: read and follow that file for preview setup, URLs, login links, slot lifecycle, and cleanup. Those instructions take precedence over the main-checkout workflow below. Do not ask for `https://local.blot` or use it directly as the worktree preview.
+
+### Instructions for working on main-checkout or master-checkout
+
+Do not follow these steps if you are on an isolated git worktree. You must use `/Volumes/Blot/blot/.claude/skills/preview/SKILL.md` instead. Here is what to do on main-checkout:
 
 1. Ensure [`https://local.blot/`](https://local.blot/) is reachable. If it is offline, stop and ask the operator to run `npm start`; never substitute another server or URL.
 2. If authentication is needed, generate a one-time dashboard link with:
