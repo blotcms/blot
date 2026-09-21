@@ -18,7 +18,9 @@ async function main() {
     const page = await browser.newPage();
     page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
     page.on("pageerror", (e) => problems.push(`page error: ${e.message}`));
-    page.on("requestfailed", (r) => problems.push(`request failed: ${r.url()}`));
+    // the keys below switch view modes quickly, and the viewer cancels the live HTML
+    // iframe's request when it leaves that mode: an abort is not a failure
+    page.on("requestfailed", (r) => !/ERR_ABORTED/.test(r.failure()?.errorText || "") && problems.push(`request failed: ${r.url()} (${r.failure()?.errorText})`));
     await page.goto(url, { waitUntil: "load" }); // not networkidle: the SSE stream never idles
     await page.waitForSelector("#case-list button");
 
