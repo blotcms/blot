@@ -36,8 +36,8 @@ background:linear-gradient(var(--hl),var(--hl)) 271.5px 0/.5px 26px no-repeat,li
 .pane .pane-head::after{content:"Details";position:absolute;right:6px;top:-46px;height:46px;line-height:46px;color:var(--fg)}
 .pane .pane-head i{box-sizing:border-box;flex:none;height:32px;line-height:26px}
 .pane .pane-head i:nth-child(1){width:271.5px;padding-left:30px}
-.pane .pane-head i:nth-child(2){width:144px;padding-left:7px}
-.pane .pane-head i:nth-child(3){width:125px;padding-left:7px}
+.pane .pane-head i:nth-child(2){width:144px;padding-left:6.5px}
+.pane .pane-head i:nth-child(3){width:125px;padding-left:6.5px}
 .pane .pane-head i:nth-child(1)::before{content:"Name"}
 .pane .pane-head i:nth-child(2)::before{content:"Date modified"}
 .pane .pane-head i:nth-child(3)::before{content:"Type"}
@@ -48,12 +48,12 @@ background:linear-gradient(var(--hl),var(--hl)) 271.5px 0/.5px 26px no-repeat,li
 .pane .pane-tree li{flex:none}
 .pane .pane-tree li:has(>.pane-row .pane-k-folder){order:-1}
 .pane .pane-row{width:627.5px;height:28px;align-items:flex-start}
-.pane .pane-label{width:271.5px;padding-left:calc(38.5px + var(--x,0px));line-height:26px}
+.pane .pane-label{width:271.5px;padding-left:calc(38px + var(--x,0px));line-height:26px}
 .pane .pane-icon{left:calc(18.5px + var(--x,0px));width:16px;height:16px;margin-top:-9.5px}
 .pane .pane-x{display:none}
 .pane .pane-cell{flex:none;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;line-height:26px;color:var(--dim)}
-.pane .pane-d{width:144px;padding-left:7px;order:1}
-.pane .pane-t{display:block;width:125px;padding-left:7px;order:2}
+.pane .pane-d{width:144px;padding-left:6.5px;order:1}
+.pane .pane-t{display:block;width:125px;padding-left:6.5px;order:2}
 .pane .pane-s{width:87px;padding-right:7px;text-align:right;order:3}
 .pane [data-os=win]{display:inline}
 .pane .pane-k-folder{background-image:url(icon:win/folder)}
