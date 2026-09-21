@@ -199,47 +199,62 @@ done
 close_finder() { osascript -e 'tell application "Finder" to close every window' >>"$OUT/browser.log" 2>&1; }
 close_finder
 open -a Safari "https://example.com/"; sleep 10
-# One Safari window only (a start page or restored window would show behind it)
+# One Safari window only (a start page or restored window would show behind it). Safari's own
+# AppleEvents time out here (-1712), so use System Events: press the close button of window 2.
 osascript >>"$OUT/browser.log" 2>&1 <<OSA
-tell application "Safari"
+tell application "System Events" to tell process "Safari"
+  set n to count of windows
+  log "safari windows: " & n
   repeat while (count of windows) > 1
-    close window 2
+    click button 1 of window 2
+    delay 1
   end repeat
 end tell
 OSA
-osascript >>"$OUT/browser.log" 2>&1 <<OSA
+place() {  # size the window (System Events), read it back into L T R B
+  osascript >>"$OUT/browser.log" 2>&1 <<OSA
 tell application "System Events" to tell process "Safari"
   set frontmost to true
   set position of window 1 to {150, 150}
   set size of window 1 to {600, 400}
 end tell
 OSA
-sleep 2
-BOUNDS="$(osascript -e 'tell application "System Events" to tell process "Safari" to return (position of window 1) & (size of window 1)' 2>>"$OUT/browser.log")"
-IFS=', ' read -r PX PY SX SY <<< "$BOUNDS"
-BOUNDS="$PX, $PY, $((PX + SX)), $((PY + SY))"
-echo "browser bounds: $BOUNDS" >> "$OUT/bounds.txt"
-IFS=', ' read -r L T R B <<< "$BOUNDS"
+  sleep 2
+  BOUNDS="$(osascript -e 'tell application "System Events" to tell process "Safari" to return (position of window 1) & (size of window 1)' 2>>"$OUT/browser.log")"
+  IFS=', ' read -r PX PY SX SY <<< "$BOUNDS"
+  L=$PX; T=$PY; R=$((PX + SX)); B=$((PY + SY))
+  echo "browser bounds: $L, $T, $R, $B" >> "$OUT/bounds.txt"
+}
+winpos() { osascript -e 'tell application "System Events" to tell process "Safari" to return (position of window 1)' 2>>"$OUT/browser.log"; }
+place
 screencapture -x "$OUT/debug-safari.png"
-# Remove the sidebar / tab group button from the toolbar: View > Customize Toolbar, drag it (at
-# 115pt, 26pt from the window's top left, measured from the capture) off the toolbar, Done.
+# Remove the sidebar and tab group buttons from the toolbar: View > Customize Toolbar, drag each off
+# the toolbar (into the palette), Done. The sheet moves and widens the window, so read where the
+# toolbar is once it is open: the first button is about 115pt right of the window's left edge and
+# 26pt below its top; the palette starts below the toolbar.
 {
   osascript -e 'tell application "System Events" to tell process "Safari" to click menu item "Customize Toolbar…" of menu "View" of menu bar 1'
   sleep 3
   screencapture -x "$OUT/debug-safari-customize.png"
-  SX0=$((L + 115)); SY0=$((T + 26))
-  cliclick -w 100 dd:$SX0,$SY0 dm:$SX0,$((SY0 + 60)) dm:$SX0,$((SY0 + 200)) du:$SX0,$((SY0 + 200))
-  sleep 2
-  screencapture -x "$OUT/debug-safari-customized.png"
+  IFS=', ' read -r WX WY <<< "$(winpos)"
+  echo "customize window at $WX, $WY"
+  SX0=$((WX + 115)); SY0=$((WY + 26)); DY=$((WY + 260))
+  for i in 1 2; do
+    cliclick -w 100 dd:$SX0,$SY0 dm:$SX0,$((SY0 + 60)) dm:$SX0,$DY du:$SX0,$DY
+    sleep 2
+    screencapture -x "$OUT/debug-safari-customized-$i.png"
+  done
   osascript -e 'tell application "System Events" to tell process "Safari" to key code 36'  # Done
   sleep 2
 } >>"$OUT/browser.log" 2>&1
+place   # the sheet widened the window; put it back
 # Finder must not show below the browser; read what is open, then capture
 close_finder
 osascript -e 'tell application "System Events" to return (name of every process whose visible is true)' >>"$OUT/browser.log" 2>&1
 sleep 2
 capture "macos-$THEME$SUFFIX-browser"
 osascript -e 'tell application "Safari" to quit' >>"$OUT/browser.log" 2>&1
+osascript -e 'tell application "TextEdit" to quit' >>"$OUT/browser.log" 2>&1
 sleep 2
 # Desktop icons: the "Your site" contents (files and the Fruits folder) as icons on the
 # desktop itself. The grey window sits at the desktop level, below Finder's icons. The
