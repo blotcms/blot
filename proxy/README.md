@@ -49,6 +49,7 @@ serves any host:
 | `PROXY_SERVER_LABEL` | build-time `SERVER_LABEL`, else `us` | the `Blot-Server` response header |
 | `PROXY_PRIVATE_IP` | build-time `OPENRESTY_INSTANCE_PRIVATE_IP`, else `127.0.0.1` | address of the extra `:8077` cache-purge listener, for Node containers that cannot reach the host's `127.0.0.1:80` |
 | `PROXY_RESOLVER` | build-time `OPENRESTY_RESOLVER`, else `8.8.8.8 ipv6=off` | DNS resolver (`127.0.0.11` on a user-defined Docker network) |
+| `PROXY_ACME_CA` | build-time `ACME_CA`, else Let's Encrypt production | ACME directory for custom-domain certificates. Leave it alone in production: the deploy scripts refuse anything else in `proxy.env` |
 | `PROXY_UPSTREAM_GREEN` | `127.0.0.1:8089` | the master Node (webhooks, `/clients`) |
 | `PROXY_UPSTREAM_BLUE` | `127.0.0.1:8088` | the dashboard Node, and failover for the others |
 | `PROXY_UPSTREAM_YELLOW` | `127.0.0.1:8090` | the blog Node |
@@ -85,9 +86,9 @@ self-signed placeholder so OpenResty can start).
   [`config/openresty/conf/init.conf`](../config/openresty/conf/init.conf) returns true only if
   `domain:<host>` exists in Redis (Blot writes this key in
   `app/models/blog/set.js`) or the cert is already cached.
-- **ACME endpoint**: baked at generate time from `ACME_CA`
-  (`proxy/build/build.sh`), default Let's Encrypt production. CI overrides it
-  with a local [Pebble](https://github.com/letsencrypt/pebble) server - see
+- **ACME endpoint**: the runtime setting `PROXY_ACME_CA`, default Let's
+  Encrypt production. CI sets it to a local
+  [Pebble](https://github.com/letsencrypt/pebble) server - see
   the `cert-issuance` job in
   [`.github/workflows/integration.yml`](../.github/workflows/integration.yml),
   which issues a real cert through the proxy and checks it survives a
@@ -95,11 +96,11 @@ self-signed placeholder so OpenResty can start).
 - **Trusting a test CA**: set `ACME_CA_CERT` to a PEM path (mounted into the
   container); `entrypoint.sh` exports `CURL_CA_BUNDLE`/`SSL_CERT_FILE` so the
   `dehydrated` hook accepts a non-public ACME endpoint. Unset in production.
-- **Manual pre-cutover check**: on a host with a throwaway public domain and
-  inbound :80, generate with
-  `ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory`, add
-  `domain:<that-domain>` to Redis, and confirm a staging-trusted cert is
-  issued on first request.
+- **Pre-cutover check against a real ACME server**:
+  [`deploy/try-issuance.sh`](deploy/try-issuance.sh) runs the image with
+  `PROXY_ACME_CA` set to Let's Encrypt staging for a throwaway domain and
+  confirms a staging certificate is issued. See
+  [`deploy/README.md`](deploy/README.md).
 
 ### Possible replacement for `lua-resty-auto-ssl` (to investigate)
 

@@ -28,7 +28,8 @@
 #      start) the same site checks as step 4 run before it is made permanent.
 #   3. Stop the old colour, but do not remove it.
 #   4. Check the site as the outside world sees it: same status codes as
-#      before, certificate served is the one on disk, Node can still reach
+#      before, certificate served is the one on disk, every custom-domain
+#      certificate in Redis is the one served before, Node can still reach
 #      the purge endpoint. If any check fails the old colour is started again
 #      and the new one removed (kept if the old one cannot be brought back).
 #   5. Only then remove the old one. (The new one gets its restart policy
@@ -84,6 +85,7 @@ fi
 if [ -n "$OLD" ]; then
   BASELINE=$(snapshot)
   all_ok "$BASELINE" || die "the site is not healthy before the deploy [$BASELINE]: not swapping"
+  cert_baseline || die "cannot record the custom-domain certificates the running proxy serves: not swapping"
 fi
 
 log "Starting $NEW from $NEW_IMAGE"

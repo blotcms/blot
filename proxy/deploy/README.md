@@ -11,6 +11,7 @@ scp -r proxy/deploy blot:~/proxy-deploy
 | --- | --- |
 | [`cutover-from-baremetal.sh`](cutover-from-baremetal.sh) | Once. Moves `:80`/`:443` from the bare-metal `openresty` systemd unit to the first container. Not zero-downtime (a few seconds), and built to be reversible at every step. |
 | [`blue-green.sh`](blue-green.sh) | Every image change after that. Container to container, zero-downtime. |
+| [`try-issuance.sh`](try-issuance.sh) | Before a cutover or an image change. Issues a Let's Encrypt **staging** certificate through the image for a throwaway domain, changing nothing that serves traffic. |
 | [`reload-config.sh`](reload-config.sh) | Not for these containers: it needs the conf directory bind-mounted, which `blue-green.sh` does not do. Ship config changes as a new image. |
 
 Both read the host's settings from `/etc/blot/proxy.env`
@@ -44,7 +45,50 @@ against fake `docker`/`systemctl` (CI runs it).
    would keep serving the old wildcard certificate after the next renewal.
 4. Optionally run the scripts with `PROXY_CUSTOM_DOMAIN=<a real custom domain>` set:
    it adds a domain whose certificate comes from Redis to every before/after
-   comparison.
+   comparison. This is in addition to the sweep below, which always runs.
+5. `redis-cli` must be on the host (the renewal scripts already use it).
+
+## Custom-domain certificates
+
+Custom domains are not among the checked hosts and their certificates come from
+Redis, not the wildcard file, so a container that could not read or serve them
+would pass every other check. Both scripts therefore record the certificate the
+running proxy presents for **every** `ssl:<domain>:latest` key in Redis (looked
+up by SNI on `127.0.0.1`), and require every one to be unchanged: on the
+rehearsal port before the cutover, and on the real ports after the swap
+(`blue-green.sh` rolls back, the cutover restores bare-metal). A domain that
+presented no certificate beforehand is not held against the replacement. A
+certificate that legitimately renews in the seconds between the two sweeps
+would fail the check; rerun the script.
+
+The scripts refuse to go on if `redis-cli` is missing or no certificate could
+be read from the running proxy. `PROXY_SKIP_CERT_SWEEP=1` skips the comparison.
+
+## Trying issuance against a real ACME server
+
+The sweep above covers certificates that already exist. For *issuing*, CI can
+only use Pebble, so run this once per new image, before the cutover:
+
+```sh
+~/proxy-deploy/try-issuance.sh <commit-sha> <throwaway-domain>
+```
+
+The domain must be one nobody uses (a subdomain of one you own is fine, not
+under `BLOT_HOST`), with DNS pointing at this host. The script starts the image
+on `127.0.0.1:18444` with `PROXY_ACME_CA` set to Let's Encrypt staging (its own
+auto-ssl volume; no cache or logs), allows the domain in Redis, makes a TLS
+request for it and waits for a staging-issued certificate. Let's Encrypt's
+HTTP-01 request lands on whichever proxy is serving `:80`: lua-resty-auto-ssl
+keeps challenge tokens in Redis, so the serving proxy can answer for the
+throwaway container. It removes `domain:<domain>`, the staging certificate and
+the container when it finishes, and refuses a domain Redis already knows.
+
+The deploy scripts refuse a `PROXY_ACME_CA` other than Let's Encrypt production
+in `proxy.env` (`PROXY_ALLOW_ACME_CA=1` overrides), so a staging directory
+cannot be left behind and start issuing certificates no browser trusts.
+
+*Renewal* is still untested: nothing yet exercises dehydrated 0.7.2 renewing a
+certificate.
 
 ## Cutover
 

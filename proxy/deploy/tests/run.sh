@@ -86,7 +86,18 @@ esac
 F
 cat > "$T/bin/timeout" <<'F'
 #!/usr/bin/env bash
-[ -z "${FAKE_REDIS_DOWN:-}" ]
+shift
+if [[ "$*" == */dev/tcp/* ]]; then [ -z "${FAKE_REDIS_DOWN:-}" ]; exit; fi
+exec "$@"
+F
+cat > "$T/bin/redis-cli" <<'F'
+#!/usr/bin/env bash
+if [[ "$*" == *--scan* ]]; then
+  for d in ${FAKE_CUSTOM_DOMAINS-a.custom.test b.custom.test}; do echo "ssl:$d:latest"; done
+  exit
+fi
+echo "redis-cli $*" >> "$FAKE/calls"
+if [[ "$*" == *" exists "* ]]; then echo "${FAKE_KEY_EXISTS:-0}"; fi
 F
 cat > "$T/bin/flock" <<'F'
 #!/usr/bin/env bash
@@ -100,15 +111,25 @@ cat > "$T/bin/openssl" <<'F'
 #!/usr/bin/env bash
 case "$1" in
   x509)
+    if [[ "$*" == *-issuer* ]]; then [ -z "${FAKE_NO_ISSUE:-}" ] && echo "issuer=O = (STAGING) Let's Encrypt"; exit 0; fi
     if [[ "$*" == *-checkend* ]]; then [ -z "${FAKE_CERT_EXPIRING:-}" ]; exit; fi
     if [[ "$*" == *-pubkey* ]]; then echo pub; exit; fi
     if [[ "$*" == *-fingerprint* ]]; then
+      if [[ "$*" != *" -in "* ]] && [[ "$(cat)" == *custom* ]]; then
+        # a custom domain: the certificate comes from Redis, not the wildcard file
+        if [ "$(cat "$FAKE/sclient_port" 2>/dev/null)" = 18443 ]; then echo "fp=${FAKE_CUSTOM_FP_REHEARSAL:-C}"
+        elif [ -n "${FAKE_CUSTOM_FP_AFTER_STOP:-}" ] && [ -e "$FAKE/stopped" ]; then echo "fp=$FAKE_CUSTOM_FP_AFTER_STOP"
+        elif [ "$(cat "$FAKE/serving")" = container ]; then echo "fp=${FAKE_CUSTOM_FP_CONTAINER:-C}"
+        elif [[ "$(cat "$FAKE/serving")" = baremetal ]]; then echo "fp=${FAKE_CUSTOM_FP_BAREMETAL:-C}"; fi
+        exit
+      fi
       if [[ "$*" == *" -in "* ]]; then echo fp=A
       elif [ "$(cat "$FAKE/sclient_port" 2>/dev/null)" = 443 ]; then echo "fp=${FAKE_SERVED_FP:-A}"   # only the live port
       else echo fp=A; fi; exit; fi ;;
   pkey) echo "${FAKE_KEY_PUB:-pub}" ;;
   sha256) sha256sum ;;
-  s_client) [[ "$*" =~ :([0-9]+)\  ]] && echo "${BASH_REMATCH[1]}" > "$FAKE/sclient_port"; echo served ;;
+  s_client) [[ "$*" =~ :([0-9]+)\  ]] && echo "${BASH_REMATCH[1]}" > "$FAKE/sclient_port"
+    [[ "$*" =~ -servername\ ([^ ]+) ]] && echo "served ${BASH_REMATCH[1]}" || echo served ;;
 esac
 F
 chmod +x "$T"/bin/*
@@ -239,6 +260,66 @@ check "Redis unreachable after the cutover: rolls back" '[ $RC != 0 ] && serving
 
 reset baremetal; FAKE_UPSTREAM_DOWN=8089 cutover
 check "an upstream is down: refused before anything changes" '[ $RC != 0 ] && ! called "systemctl stop"'
+
+echo "custom-domain certificates"
+
+reset baremetal; cutover
+check "success: the custom-domain certificates are recorded and still match after the cutover" '[ $RC = 0 ] && mentions "2 of 2 in Redis are being served"'
+
+reset baremetal; FAKE_CUSTOM_FP_REHEARSAL=B cutover --dry-run
+check "rehearsal serves a different custom-domain certificate: refused before the stop" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "custom-domain certificates"'
+
+reset baremetal; FAKE_CUSTOM_FP_CONTAINER=B cutover
+check "container serves a different custom-domain certificate live: rolls back to bare-metal" '[ $RC != 0 ] && serving baremetal && ! called "systemctl disable" && mentions "custom-domain certificates"'
+
+reset baremetal; FAKE_CUSTOM_DOMAINS="" cutover
+check "no custom-domain certificate to compare: refused (unless skipped)" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "nothing to compare"'
+
+reset baremetal; FAKE_CUSTOM_DOMAINS="" PROXY_SKIP_CERT_SWEEP=1 cutover
+check "PROXY_SKIP_CERT_SWEEP=1 skips the comparison" '[ $RC = 0 ] && mentions "not comparing"'
+
+reset container; FAKE_CUSTOM_FP_AFTER_STOP=B bluegreen
+check "blue-green: a custom-domain certificate differs after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm blot-proxy-blue" && mentions "custom-domain certificates"'
+
+echo "try-issuance.sh"
+
+issue() { bash "$DEPLOY/try-issuance.sh" img:3 "$@" >"$T/out" 2>&1; RC=$?; }
+
+reset baremetal; issue throwaway.example.org
+check "issues from staging in its own container, then removes the keys and the container" '[ $RC = 0 ] && called "PROXY_ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory" && called "redis-cli -h 10.0.0.5 set domain:throwaway.example.org" && called "redis-cli -h 10.0.0.5 del domain:throwaway.example.org ssl:throwaway.example.org:latest" && called "docker rm -f blot-proxy-issuance" && ! [ -e "$FAKE/running/blot-proxy-issuance" ]'
+check "the throwaway container uses no cache, log or auto-ssl volume and is not published beyond loopback" '! called "run -d.*/var/cache/openresty" && ! called "run -d.*/etc/resty-auto-ssl" && called "127.0.0.1:18444:443"'
+
+reset baremetal; FAKE_NO_ISSUE=1 PROXY_ISSUANCE_ATTEMPTS=2 issue throwaway.example.org
+check "no staging certificate: fails, and still cleans up" '[ $RC != 0 ] && mentions "no staging certificate" && called "redis-cli -h 10.0.0.5 del" && ! [ -e "$FAKE/running/blot-proxy-issuance" ]'
+
+reset baremetal; FAKE_KEY_EXISTS=1 issue real-customer.example.org
+check "a domain Redis already knows: refused, and its keys are never deleted" '[ $RC != 0 ] && ! called "docker run" && ! called "redis-cli.* del" && ! called "redis-cli.* set" && mentions "not a throwaway"'
+
+reset baremetal; issue staging.blot.test
+check "a domain under the site's own: refused" '[ $RC != 0 ] && ! called "docker run" && mentions "separate throwaway"'
+
+echo "PROXY_ACME_CA"
+
+reset baremetal; echo "PROXY_ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory" >> "$T/proxy.env"; cutover --dry-run
+check "a staging ACME directory in proxy.env: refused before anything runs" '[ $RC != 0 ] && ! called "docker run" && mentions "PROXY_ACME_CA"'
+reset container; bluegreen
+check "a staging ACME directory in proxy.env: blue-green refuses too" '[ $RC != 0 ] && ! called "docker create" && mentions "PROXY_ACME_CA"'
+reset baremetal; PROXY_ALLOW_ACME_CA=1 cutover --dry-run
+check "PROXY_ALLOW_ACME_CA=1 overrides it" '[ $RC = 0 ]'
+sed -i.bak '/^PROXY_ACME_CA=/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+echo "PROXY_ACME_CA=https://acme-v02.api.letsencrypt.org/directory" >> "$T/proxy.env"
+reset baremetal; cutover --dry-run
+check "the production ACME directory is accepted" '[ $RC = 0 ]'
+sed -i.bak '/^PROXY_ACME_CA=/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+
+reset baremetal; echo "PROXY_ACME_CA=" >> "$T/proxy.env"; cutover --dry-run
+check "an empty PROXY_ACME_CA in proxy.env: refused (it would override the default with nothing)" '[ $RC != 0 ] && ! called "docker run" && mentions "PROXY_ACME_CA"'
+reset container; bluegreen
+check "an empty PROXY_ACME_CA in proxy.env: blue-green refuses too" '[ $RC != 0 ] && ! called "docker create" && mentions "PROXY_ACME_CA"'
+sed -i.bak '/^PROXY_ACME_CA=$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+reset baremetal; echo "PROXY_RESOLVER=''" >> "$T/proxy.env"; cutover --dry-run
+check "any other empty PROXY_* setting is refused too" '[ $RC != 0 ] && ! called "docker run" && mentions "PROXY_RESOLVER"'
+sed -i.bak '/^PROXY_RESOLVER=/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
 
 echo "blue-green.sh"
 

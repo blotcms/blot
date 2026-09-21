@@ -9,3 +9,7 @@ When opening a pull request in this repo:
 - If the change closes out an item in the root `TODO` file, remove that entry as part of the diff, and if it implies telling someone the work shipped, add that as a checklist item in the PR description.
 
 Commit message trailers (e.g. `Co-Authored-By`) are unrelated to this and should still be included as instructed elsewhere.
+
+# Local preview
+
+`https://local.blot` serves the main checkout, not agent worktrees. To show the operator a worktree's running code, use the `preview` skill (`scripts/development/preview.sh up <url-or-path>`) rather than asking them to check out the branch.
