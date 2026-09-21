@@ -80,6 +80,11 @@ load_env() {
   # binds the unauthenticated /purge, /inspect and /rehydrate on every interface.
   [ -n "$(env_value "$ENV_FILE" PROXY_PRIVATE_IP)" ] || die "PROXY_PRIVATE_IP is not set in $ENV_FILE"
   CANARY_HOST="${PROXY_CANARY_HOST:-preview-of-wireframe-on-david.$BLOT_HOST}"
+  # Any other PROXY_* setting left empty overrides the image's default with
+  # nothing too (an empty CA, resolver or upstream renders an unusable config).
+  local empty
+  empty="$(grep -E "^(export )?PROXY_[A-Z_]+=[\"']*$" "$ENV_FILE" | cut -d= -f1 | tr '\n' ' ' || true)"
+  [ -z "$empty" ] || die "$ENV_FILE sets $empty to nothing, which overrides the image's default with an empty value: give it a value or remove the line"
   # A staging (or test) ACME directory left in the env file would have every
   # new custom domain issued a certificate no browser trusts.
   local ca

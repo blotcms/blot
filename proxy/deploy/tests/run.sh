@@ -312,6 +312,15 @@ reset baremetal; cutover --dry-run
 check "the production ACME directory is accepted" '[ $RC = 0 ]'
 sed -i.bak '/^PROXY_ACME_CA=/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
 
+reset baremetal; echo "PROXY_ACME_CA=" >> "$T/proxy.env"; cutover --dry-run
+check "an empty PROXY_ACME_CA in proxy.env: refused (it would override the default with nothing)" '[ $RC != 0 ] && ! called "docker run" && mentions "PROXY_ACME_CA"'
+reset container; bluegreen
+check "an empty PROXY_ACME_CA in proxy.env: blue-green refuses too" '[ $RC != 0 ] && ! called "docker create" && mentions "PROXY_ACME_CA"'
+sed -i.bak '/^PROXY_ACME_CA=$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+reset baremetal; echo "PROXY_RESOLVER=''" >> "$T/proxy.env"; cutover --dry-run
+check "any other empty PROXY_* setting is refused too" '[ $RC != 0 ] && ! called "docker run" && mentions "PROXY_RESOLVER"'
+sed -i.bak '/^PROXY_RESOLVER=/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+
 echo "blue-green.sh"
 
 reset container; bluegreen
