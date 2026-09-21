@@ -50,4 +50,47 @@ describe("template loader", function () {
       req.template.slug
     );
   });
+
+  it("uses the local folder name for locally edited template breadcrumbs", async function () {
+    const folderName = "jolly-5";
+    const packageName = "Jolly-5";
+
+    spyOn(Template, "getMetadata").and.callFake(function (id, callback) {
+      callback(
+        null,
+        id === Template.makeID(this.blog.id, folderName)
+          ? {
+              owner: this.blog.id,
+              id: Template.makeID(this.blog.id, folderName),
+              slug: folderName,
+              name: packageName,
+              localEditing: true,
+            }
+          : null
+      );
+    }.bind(this));
+
+    const req = {
+      blog: this.blog,
+      params: { templateSlug: folderName },
+      protocol: "https",
+      hostname: "example.com",
+      baseUrl: "/dashboard/site/template",
+    };
+
+    const res = {
+      locals: {
+        breadcrumbs: { add: jasmine.createSpy("add") },
+      },
+    };
+
+    await loader(req, res, jasmine.createSpy("next"));
+
+    expect(req.template.displayName).toBe(folderName);
+    expect(req.template.name).toBe(packageName);
+    expect(res.locals.breadcrumbs.add).toHaveBeenCalledWith(
+      folderName,
+      folderName
+    );
+  });
 });

@@ -74,7 +74,7 @@ SourceCode.route("/:viewSlug/edit")
       res.locals.base + "/source-code/" + req.view.name + "/edit";
     res.locals.selected = { ...res.locals.selected, edit: "selected" };
 
-    res.locals.title = `${req.view.name} - ${req.template.name}`;
+    res.locals.title = `${req.view.name} - ${req.template.displayName}`;
 
     res.locals.layout = "dashboard/template/layout";
     res.render("dashboard/template/source-code/edit");
@@ -198,7 +198,7 @@ SourceCode.route("/:viewSlug/configure")
       res.locals.base + "/source-code/" + req.view.name + "/configure";
     res.locals.selected = { ...res.locals.selected, config: "selected" };
 
-    res.locals.title = `${req.view.name} - ${req.template.name}`;
+    res.locals.title = `${req.view.name} - ${req.template.displayName}`;
     res.locals.layout = "dashboard/template/layout";
     res.render("dashboard/template/source-code/configure");
   })
@@ -313,7 +313,7 @@ SourceCode.route("/:viewSlug/rename")
       return next(new Error("You cannot rename package.json"));
     }
 
-    res.locals.title = `Rename - ${req.view.name} - ${req.template.name}`;
+    res.locals.title = `Rename - ${req.view.name} - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, rename: "selected" };
     res.render("dashboard/template/source-code/rename");
   })
@@ -352,7 +352,7 @@ SourceCode.route("/:viewSlug/rename")
 
 SourceCode.route("/:viewSlug/delete")
   .get(function (req, res) {
-    res.locals.title = `Delete - ${req.view.name} - ${req.template.name}`;
+    res.locals.title = `Delete - ${req.view.name} - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, delete: "selected" };
     res.render("dashboard/template/source-code/delete");
   })

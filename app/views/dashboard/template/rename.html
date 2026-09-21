@@ -4,6 +4,13 @@
 
     <input type="hidden" name="_csrf" value="{{csrftoken}}" />
     {{#template.isMine}}
+    {{#template.localEditing}}
+    <p>This template is edited locally, so its name comes from its folder. To rename it, rename the folder in your blog's Templates folder.</p>
+    <div class="buttons" style="opacity: 0.5;">
+        <a href="{{{base}}}">Cancel</a>
+    </div>
+    {{/template.localEditing}}
+    {{^template.localEditing}}
 	<input type="text" name="name" autofocus placeholder="{{template.name}}" value="{{template.name}}" />
     <div class="buttons">
         <button type="submit">
@@ -11,6 +18,7 @@
         </button>
         <a href="{{{base}}}">Cancel</a>
     </div>
+    {{/template.localEditing}}
     {{/template.isMine}}
     {{^template.isMine}}
     <p>You cannot rename a default template.</p>

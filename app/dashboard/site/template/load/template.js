@@ -71,6 +71,9 @@ module.exports = async function (req, res, next) {
     hydrated.previewPath = hydrated.previewPath || "";
     hydrated.isMine = hydrated.owner === req.blog.id;
 
+    // locally edited templates are identified by their folder name
+    hydrated.displayName = hydrated.localEditing ? hydrated.slug : hydrated.name;
+
     hydrated.checked = hydrated.id === req.blog.template ? "checked" : "";
 
     res.locals.templateMissing = templateMissing;
@@ -89,7 +92,7 @@ module.exports = async function (req, res, next) {
 
     res.locals.preview = res.locals.previewOrigin;
 
-    res.locals.breadcrumbs.add(req.template.name, req.template.slug);
+    res.locals.breadcrumbs.add(hydrated.displayName, hydrated.slug);
 
     next();
   } catch (err) {
