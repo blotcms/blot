@@ -348,9 +348,8 @@ they look different in the logs - only one is a security regression:
   Bottleneck limiter already prevents that within one process, but it can't
   stop blue, green and yellow from each independently taking a screenshot
   against the one shared airlock Chromium at the same time. Fixed with a
-  cross-container mutex: a `proper-lockfile` lock on a file in the data
-  directory every container already mounts (the same dependency/mechanism
-  `app/sync` already uses to coordinate across containers). It only
+  cross-container mutex: a Redis lock keyed by the airlock's URL (the same
+  mutex `app/sync` uses for blog folders). It only
   activates when `BLOT_AIRLOCK_BROWSER_URL` is set - in launch mode every
   process has its own private Chromium, so there's nothing to serialize,
   and taking the lock anyway would only add unnecessary contention (a real
