@@ -7,9 +7,10 @@
 #
 #   <host-conf-dir>  host directory bind-mounted at
 #                    /usr/local/openresty/nginx/conf in the container. This
-#                    script writes the regenerated nginx.conf there before
-#                    validating and reloading, so a successful run always
-#                    means the new config is live.
+#                    script writes the regenerated nginx.conf.template there,
+#                    renders it to nginx.conf (render-config, with the
+#                    container's environment), then validates and reloads, so
+#                    a successful run always means the new config is live.
 #
 # NOT wired to production. See proxy/README.md "Deployment".
 #
@@ -43,10 +44,15 @@ fi
 echo "Regenerating config (proxy/build/build.sh)"
 bash "$SCRIPT_DIR/../build/build.sh"
 
-echo "Installing $GEN/openresty.conf -> $CONF_DIR/nginx.conf"
-cp "$GEN/openresty.conf" "$CONF_DIR/nginx.conf"
-echo "NOTE: this installs nginx.conf only. If your change touched cacher.lua"
-echo "      or html/, copy $GEN/{cacher.lua,html} to their own bind-mounts too."
+echo "Installing $GEN/openresty.conf -> $CONF_DIR/nginx.conf.template"
+cp "$GEN/openresty.conf" "$CONF_DIR/nginx.conf.template"
+echo "NOTE: this installs the config template only. If your change touched"
+echo "      cacher.lua or html/, copy $GEN/{cacher.lua,html} to their own"
+echo "      bind-mounts too. The runtime values (PROXY_* variables) are the"
+echo "      container's own environment; changing them needs a new container."
+
+echo "Rendering nginx.conf inside $CONTAINER"
+docker exec "$CONTAINER" /usr/local/bin/render-config
 
 echo "Validating new config inside $CONTAINER"
 docker exec "$CONTAINER" /usr/local/openresty/bin/openresty -t

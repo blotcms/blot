@@ -38,14 +38,23 @@ expect "site host / redirects on http"    "$(code -H 'Host: localhost' "$HTTP/")
 expect "custom domain / (default server)" "$(code -H 'Host: someblog.example' "$HTTP/")" 200
 
 echo "hardening (blog traffic)"
-expect "/.git/config blocked"   "$(code -H 'Host: someblog.example' "$HTTP/.git/config")" 404
-expect "/wp-admin/ blocked"     "$(code -H 'Host: someblog.example' "$HTTP/wp-admin/")" 404
-expect "/wp-content/x blocked"  "$(code -H 'Host: someblog.example' "$HTTP/wp-content/x")" 404
+# nginx `return 444` closes the connection with no HTTP response; curl reports 000.
+expect "/.git/config blocked"   "$(code -H 'Host: someblog.example' "$HTTP/.git/config")" 000
+expect "/wp-admin/ blocked"     "$(code -H 'Host: someblog.example' "$HTTP/wp-admin/")" 000
+expect "/.env blocked"          "$(code -H 'Host: someblog.example' "$HTTP/.env")" 000
 
 echo "caching + compression (blog traffic)"
 expect_match "first hit is a MISS" "$(hdr -H 'Host: someblog.example' "$HTTP/cache-me")" "Blot-Cache: MISS"
 expect_match "second hit is a HIT" "$(hdr -H 'Host: someblog.example' "$HTTP/cache-me")" "Blot-Cache: HIT"
 expect_match "gzip negotiated"     "$(hdr -H 'Host: someblog.example' -H 'Accept-Encoding: gzip' "$HTTP/compress-me")" "Content-Encoding: gzip"
+
+echo "upstream 503 (Node cannot reach Redis) passes through"
+expect "503 status preserved" \
+  "$(code -H 'Host: someblog.example' "$HTTP/unavailable")" 503
+expect_match "Retry-After preserved" \
+  "$(hdr -H 'Host: someblog.example' "$HTTP/unavailable")" "Retry-After: 60"
+expect_match "Node's body, not the offline page" \
+  "$(curl -sk -m 10 -H 'Host: someblog.example' "$HTTP/unavailable")" "temporarily unavailable"
 
 echo "upstream failure surfaces an error, not a hang"
 expect "500 from upstream is passed through or replaced" \

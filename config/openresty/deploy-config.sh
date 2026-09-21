@@ -45,11 +45,21 @@ ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "rm -rf /home/ec2-user/script
 scp -P "$SSH_PORT" -i $SSH_KEY -r $SCRIPTS_DIRECTORY ec2-user@$PUBLIC_IP:/home/ec2-user/scripts
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "chmod +x /home/ec2-user/scripts/*"
 
-# run the setup.sh script as root and stream 
-echo "Reloading openresty...."
-ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo openresty -t"
-ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo openresty -s reload"
-echo "Reload complete."
+# Once the proxy runs as a container (proxy/deploy) the bare-metal openresty is
+# stopped, and its config is no longer what serves traffic: reloading it would
+# fail (and, with set -e, skip everything below). Config for the container ships
+# in its image via proxy/deploy/blue-green.sh, so only validate here.
+if ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "docker ps --format '{{.Names}}' | grep -qE '^blot-proxy-(blue|green)\$'"; then
+  echo "A proxy container is serving: not reloading bare-metal openresty."
+  echo "Deploy proxy config changes with proxy/deploy/blue-green.sh instead."
+  # The bare-metal copy is the rollback target: still make sure it parses.
+  ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo openresty -t"
+else
+  echo "Reloading openresty...."
+  ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo openresty -t"
+  ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo openresty -s reload"
+  echo "Reload complete."
+fi
 
 #########################################################
 # Begin Fail2Ban deployment section

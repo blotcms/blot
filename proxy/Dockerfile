@@ -62,7 +62,9 @@ RUN git clone https://github.com/juce/sockproc.git /tmp/sockproc && \
 # ---------------------------------------------------------------------------
 FROM openresty/openresty:${OPENRESTY_TAG}
 
-RUN apk add --no-cache bash openssl
+# gettext provides envsubst, which render-config.sh uses to fill in the
+# runtime placeholders in the generated config
+RUN apk add --no-cache bash openssl gettext
 
 # Match the production convention (workers run as ec2-user)
 RUN addgroup -S ec2-user && adduser -S -u 1000 -G ec2-user ec2-user
@@ -74,7 +76,8 @@ COPY --from=deps /vendor/resty-auto-ssl/ /usr/bin/resty-auto-ssl/
 RUN chmod 0755 /usr/bin/resty-auto-ssl/*
 
 # Per-container runtime dir for the health-probe Unix socket (see
-# proxy/config/server.conf). entrypoint.sh also (re)creates and chowns it.
+# proxy/build/sync-config.js, which injects it into the copied server.conf).
+# entrypoint.sh also (re)creates and chowns it.
 RUN mkdir -p /run/openresty
 
 # Directories referenced by the generated config and by lua-resty-auto-ssl.
@@ -98,9 +101,19 @@ RUN openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
 
 # Copy the generated configuration. Run proxy/build/build.sh first to produce
 # proxy/build/data/latest (CI does this in .github/workflows/proxy.yml).
-COPY build/data/latest/openresty.conf /usr/local/openresty/nginx/conf/nginx.conf
+# The generated config is a template: entrypoint.sh renders it to nginx.conf
+# (render-config.sh) so the Redis host, upstreams, resolver and server label
+# can be set with environment variables at `docker run` time. defaults.env
+# holds the values used when they are not set; cdn-ips.default.conf is the
+# Bunny edge list used when the current one cannot be fetched at start.
+COPY build/data/latest/openresty.conf /usr/local/openresty/nginx/conf/nginx.conf.template
+COPY build/data/latest/defaults.env /etc/openresty/defaults.env
+COPY build/data/latest/cdn-ips.conf /etc/openresty/cdn-ips.default.conf
 COPY build/data/latest/cacher.lua /etc/openresty/cacher.lua
 COPY build/data/latest/html /etc/openresty/html
+
+COPY render-config.sh /usr/local/bin/render-config
+RUN chmod +x /usr/local/bin/render-config
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

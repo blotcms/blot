@@ -22,10 +22,26 @@ deploy's automated rollback after a failed health check, or (3) an
 unplanned crash (in-process V8 OOM, or a Linux-level OOM kill) that Docker
 silently recovered from and which would otherwise go unnoticed.
 
-**Always confirm with the user before running anything against
-production**, and stick to read-only commands (log tailing, `docker
-inspect`, `docker logs`, read-only `redis-cli`) unless a state-changing
-action has been explicitly authorized.
+**Confirm with the user before running anything against production
+that isn't on the auto-approved list below**, and stick to read-only
+commands (log tailing, `docker inspect`, `docker logs`, read-only
+`redis-cli`) unless a state-changing action has been explicitly
+authorized.
+
+**Auto-approved (no confirmation needed)** — these read-only commands
+over `ssh blot` may be run without asking:
+
+- `docker ps -a` and `docker inspect` on blot-container-{blue,green,yellow}
+  (release ID, `CreatedAt`, `RestartCount`, `OOMKilled`, exit code)
+- `cat ~/docker-health-check.log`
+- `dmesg | grep -i kill` (or the `kills` helper)
+- `docker logs <container>` with `--since`/`--until`, including grepping
+  for `FATAL ERROR` / `JavaScript heap out of memory`
+- `grep <request-id> /var/instance-ssd/logs/access.log` (or the `req`
+  helper) to find the triggering request
+
+Anything else (state-changing commands, restarts, deploys) still needs
+explicit user approval.
 
 ## 1. Identify the most recent deployment
 

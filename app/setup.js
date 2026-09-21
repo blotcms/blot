@@ -26,7 +26,9 @@ async function runPostListenTasks() {
 
   let templatesBuilt = false;
 
-  if (config.master) {
+  // Preview slots opt in with BLOT_BUILD_TEMPLATES so template source edits
+  // in a worktree rebuild (and overwrite the shared dev templates).
+  if (config.master || process.env.BLOT_BUILD_TEMPLATES === "true") {
     log("Building templates after listen");
     try {
       await new Promise((resolve, reject) => {
