@@ -213,10 +213,10 @@ Start-Sleep -Seconds 2
 $sw = [Hidpi]::GetSystemMetrics(0); $sh = [Hidpi]::GetSystemMetrics(1)
 # 80px of desktop around the window (the screen is short at 200%, and the "Test Mode"
 # watermark sits above the taskbar at the bottom right)
-# The capture stops 72px above the screen bottom: the taskbar is 48px, and the watermark's
-# first line ("Test Mode") sits just above it, so a shorter crop (48) showed its "T" in
-# the bottom right corner.
-$taskbar = 72 * $Scale; $pad = 80 * $Scale; $left = 176 * $Scale
+# The "Test Mode" watermark is three lines (about 47px) right above the taskbar at the
+# bottom right of the screen. The window capture stops above it ($wm): with 80px of padding
+# it used to reach the watermark's first letter, a stray "T" in the corner.
+$taskbar = 48 * $Scale; $wm = 52 * $Scale; $pad = 80 * $Scale; $left = 176 * $Scale
 # 490x360 logical px. MoveWindow includes Explorer's invisible 7px resize borders
 # (left, right, bottom), so ask for a little more to get a visible 490 wide.
 $winH = (360 + 7) * $Scale
@@ -231,7 +231,7 @@ function Capture($name) {
   [Native.Mouse]::SetCursorPos($sw - 4, 4) | Out-Null
   Start-Sleep -Seconds 2
   $x0 = [Math]::Max(0, $r.Left - $pad); $y0 = [Math]::Max(0, $r.Top - $pad)
-  $x1 = [Math]::Min($sw, $r.Right + $pad); $y1 = [Math]::Min($sh - $taskbar, $r.Bottom + $pad)
+  $x1 = [Math]::Min($sw, $r.Right + $pad); $y1 = [Math]::Min($sh - $taskbar - $wm, $r.Bottom + $pad)
   "window: $($r.Left),$($r.Top) $($r.Right - $r.Left)x$($r.Bottom - $r.Top); capture $x0,$y0 $($x1 - $x0)x$($y1 - $y0)" | Out-File "$Out\versions.txt" -Append
   $bmp = New-Object System.Drawing.Bitmap ($x1 - $x0), ($y1 - $y0)
   [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($x0, $y0, 0, 0, $bmp.Size)
