@@ -29,6 +29,11 @@ run() {
 CSS
   gsettings set org.gnome.nautilus.list-view use-tree-view true || true
   gsettings set org.gnome.desktop.interface color-scheme "prefer-$THEME" || true
+  # Stock GNOME's UI font. Ubuntu's schema default names a font that isn't on the runner, so
+  # without this everything falls back to DejaVu Sans (wider than anything a GNOME user sees).
+  gsettings set org.gnome.desktop.interface font-name 'Cantarell 11' || true
+  gsettings set org.gnome.desktop.interface document-font-name 'Cantarell 11' || true
+  { echo "font-name: $(gsettings get org.gnome.desktop.interface font-name)"; fc-match "Cantarell:style=Regular"; fc-match sans-serif; } > "$OUT/fonts.txt" 2>&1
   gsettings list-recursively org.gnome.nautilus > "$OUT/gsettings.txt" 2>&1
 
   # 50% grey desktop, which makes the window's drop shadow easy to see

@@ -10,6 +10,14 @@ Xvfb (2560x2400) plus `openbox` (a window manager is needed for keyboard focus) 
 `adwaita-icon-theme-full`, `shared-mime-info` (without them icons are broken),
 `xdotool`, `imagemagick`, `x11-xserver-utils`.
 
+## Font
+The UI font is set explicitly to `Cantarell 11` (stock GNOME's) with `gsettings` in `linux.sh`;
+the log `capture-logs/*/fonts.txt` shows what resolved. Before that was added the captures were
+in DejaVu Sans: Ubuntu's schema default names a font that isn't installed on the runner, so
+GTK fell back. If the references ever look wide and DejaVu-like again, check that file. The
+monospace font of the editor windows (`-code`) is separate (`monospace-font-name`) and has
+not been set yet.
+
 ## Themes
 Real libadwaita dark mode needs `ADW_DEBUG_COLOR_SCHEME=prefer-dark` (and the
 `color-scheme` gsetting). `GTK_THEME=Adwaita:dark` gives the old GTK3-style dark theme,
