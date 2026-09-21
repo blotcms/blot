@@ -4,7 +4,11 @@ set -euo pipefail
 # Runs this git worktree in its own Node container on a-local.blot … e-local.blot,
 # sharing the main stack's nginx, Redis, data/ and airlock. See worktrees.md.
 #
-#   scripts/development/preview.sh up     claim a slot (or reuse this worktree's)
+#   scripts/development/preview.sh up [url-or-path]
+#                                         claim a slot (or reuse this worktree's) and print
+#                                         a dashboard login URL plus a direct URL to the
+#                                         work; give it the page being worked on, as a
+#                                         path (/sites/local) or a local.blot URL
 #   scripts/development/preview.sh down   release this worktree's slot
 #   scripts/development/preview.sh ls     show which worktree holds each slot
 
@@ -34,6 +38,7 @@ slot_of_this_worktree() {
 }
 
 up() {
+  local target="${1:-}"
   if [ "$WORKTREE_ROOT" = "$MAIN_ROOT" ]; then
     echo "This is the main checkout; it is already served at https://local.blot" >&2
     exit 1
@@ -78,12 +83,23 @@ up() {
     sleep 2
   done
 
+  local login work
+  login="$(docker exec "blot-node-$slot" node scripts/blog/access.js example@example.com 2>/dev/null | grep -m1 '^https://')" || true
+
+  case "$target" in
+    "") work="" ;;
+    http*) work="$(echo "$target" | sed -E "s#^(https?://[^/]*)local\.blot#\1$host#")" ;;
+    /*) work="https://$host$target" ;;
+    *) work="https://$host/$target" ;;
+  esac
+
   echo
   echo "Slot $slot  ($WORKTREE_ROOT)"
-  echo "  Dashboard: https://$host"
-  echo "  Blog:      https://<handle>.$host"
+  echo "  Login (one-time, opens dashboard): ${login:-failed; run: docker exec blot-node-$slot node scripts/blog/access.js example@example.com}"
+  echo "  Work:      ${work:-none given; pass a URL or path, e.g. up /sites/local}"
+  echo "  Dashboard: https://$host/sites"
+  echo "  Blogs:     https://<handle>.$host"
   echo "  Container: blot-node-$slot"
-  echo "  Login:     docker exec blot-node-$slot node scripts/blog/access.js 'example@example.com'"
 }
 
 down() {
@@ -108,7 +124,7 @@ ls_slots() {
 }
 
 case "${1:-}" in
-  up) up ;;
+  up) shift; up "$@" ;;
   down) down ;;
   ls) ls_slots ;;
   *) echo "Usage: $0 up|down|ls" >&2; exit 1 ;;

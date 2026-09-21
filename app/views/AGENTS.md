@@ -60,4 +60,4 @@ These instructions apply to work on the brochure and its documentation views.
 
 ## Previewing from a worktree
 
-`https://local.blot` serves the main checkout, not a worktree. To see and click through a worktree's code, run `scripts/development/preview.sh up` from it and use the printed `https://<slot>-local.blot` URLs (and `blot-node-<slot>` for `docker exec`). Run `scripts/development/preview.sh down` when finished. See `scripts/development/worktrees.md`.
+`https://local.blot` serves the main checkout, not a worktree. To let the operator see and click through a worktree's code, run `scripts/development/preview.sh up <url-or-path>` from it, passing the page being worked on (for example a docs page such as `/how/...`, or `https://local.blot/how/...`, which is rewritten to the slot host). Give the operator the printed **Login** URL (one-time, opens the dashboard) and **Work** URL, and use `blot-node-<slot>` for `docker exec`. Run `scripts/development/preview.sh down` when finished. See `scripts/development/worktrees.md`.

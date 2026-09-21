@@ -6,10 +6,17 @@ container instead, so it can be opened in the browser without checking the
 branch out in the main tree.
 
 ```
-scripts/development/preview.sh up     # claim a slot (or reuse this worktree's), print URLs
+scripts/development/preview.sh up [url-or-path]   # claim a slot (or reuse this worktree's), print login + work URLs
 scripts/development/preview.sh down   # release it
 scripts/development/preview.sh ls     # who holds which slot
 ```
+
+`up` prints a one-time dashboard **Login** URL (generated with `scripts/blog/access.js`
+inside the sidecar) and a **Work** URL: the page you pass, as a path
+(`/sites/local`) or a `local.blot` URL, rewritten to the slot host
+(`https://preview-of-blog-on-local.local.blot/` becomes
+`https://preview-of-blog-on-local.a-local.blot/`). Agents should always pass
+the page they are working on (a docs page, a template preview, …).
 
 Requires `npm start` to be running. Refuses to run in the main checkout.
 
