@@ -1,4 +1,5 @@
 const BackupDomain = require("./util/backupDomain");
+const config = require("config");
 const flush = require("helper/flushProxies");
 const debug = require("debug")("blot:blog:flushCache");
 const get = require("./get");
