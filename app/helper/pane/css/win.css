@@ -41,7 +41,7 @@ background:linear-gradient(var(--hl),var(--hl)) 271.5px 0/.5px 26px no-repeat,li
 .pane .pane-head i:nth-child(1)::before{content:"Name"}
 .pane .pane-head i:nth-child(2)::before{content:"Date modified"}
 .pane .pane-head i:nth-child(3)::before{content:"Type"}
-.pane .pane-head i:nth-child(1)::after{content:"";position:absolute;left:145px;top:.5px;width:7px;height:4px;background:var(--head);-webkit-mask:var(--g-caret) center/7px 4px no-repeat;mask:var(--g-caret) center/7px 4px no-repeat}
+.pane .pane-head i:nth-child(1)::after{content:"";position:absolute;left:143px;top:.5px;width:7px;height:4px;background:var(--thumb);-webkit-mask:var(--g-caret) center/7px 4px no-repeat;mask:var(--g-caret) center/7px 4px no-repeat}
 .pane .pane-head i:nth-child(2)::after{content:"Search";position:absolute;left:153.5px;top:-88px;width:11px;height:32px;overflow:hidden;font-size:14px;line-height:32px;color:var(--dim)}
 .pane .pane-tree{margin:-32px 6.5px 0;padding-top:32px;background:var(--bg);color:var(--name)}
 .pane .pane-tree,.pane .pane-tree ul{display:flex;flex-direction:column}
@@ -49,7 +49,7 @@ background:linear-gradient(var(--hl),var(--hl)) 271.5px 0/.5px 26px no-repeat,li
 .pane .pane-tree li:has(>.pane-row .pane-k-folder){order:-1}
 .pane .pane-row{width:627.5px;height:28px}
 .pane .pane-label{width:271.5px;padding-left:calc(38.5px + var(--x,0px));line-height:28px}
-.pane .pane-icon{left:calc(17.5px + var(--x,0px));width:16px;height:16px;margin-top:-9.5px}
+.pane .pane-icon{left:calc(18.5px + var(--x,0px));width:16px;height:16px;margin-top:-9.5px}
 .pane .pane-x{display:none}
 .pane .pane-cell{flex:none;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;line-height:28px;color:var(--dim)}
 .pane .pane-d{width:144px;padding-left:7px;order:1}
@@ -65,7 +65,7 @@ background:linear-gradient(var(--hl),var(--hl)) 271.5px 0/.5px 26px no-repeat,li
 /* not :vertical/:horizontal: those pseudo-classes don't match under the :is() the build wraps rules in */
 .pane .pane-tree::-webkit-scrollbar-track{background:var(--track)}
 .pane .pane-tree::-webkit-scrollbar-corner{background:var(--bg)}
-.pane .pane-tree::-webkit-scrollbar-thumb{background:var(--thumb);background-clip:padding-box;border-style:solid;border-color:var(--track);border-width:7px}
+.pane .pane-tree::-webkit-scrollbar-thumb{background:var(--thumb);background-clip:padding-box;border-style:solid;border-color:var(--track);border-width:6.75px}
 .pane .pane-tree::-webkit-scrollbar-button{display:block;width:5px;height:5px;background:var(--track)}
 @container (max-width:480px){
 .pane .pane-bar{--b-det:none;--b-sr:none;--b-ad:linear-gradient(var(--box),var(--box)) 207.5px 48px/calc(100% - 225px) 32px no-repeat;--m:var(--g-l) 0 0/330px 136px no-repeat,var(--g-rt) right top/152px 40px no-repeat}
