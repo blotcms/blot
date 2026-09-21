@@ -57,8 +57,9 @@ function sync(blogID, callback) {
         heartbeat: LOCK_UPDATE_INTERVAL_MS,
         ...retries,
         onCompromised: (err) => {
-          // Another process may now own the lock, so we cannot know the
-          // sync is safe. Log loudly for diagnosis; the process stays up.
+          // Another process may now own the lock, so the sync can no longer
+          // be trusted to be exclusive. Log diagnostics, then crash the
+          // process (as proper-lockfile's handler did) so it stops writing.
           gatherLockDiagnostics({ blogID, lockAcquiredAt, syncContext: { syncID } })
             .catch((diagErr) => ({ diagnosticsError: String(diagErr) }))
             .then((diagnostics) => {
@@ -70,6 +71,11 @@ function sync(blogID, callback) {
                   heartbeat: LOCK_UPDATE_INTERVAL_MS
                 },
                 diagnostics
+              });
+            })
+            .finally(() => {
+              setImmediate(() => {
+                throw err;
               });
             });
         }

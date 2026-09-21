@@ -284,7 +284,7 @@ sync(blogID, cb)
 
 ## Known Constraints
 
-- The lock lives in Redis (`blog:<id>:folder-lock`, 10s TTL, 3s heartbeat), so it coordinates across processes and hosts. A process that dies while holding it leaves the key until the TTL expires. If the heartbeat finds the lock lost, `[LOCK COMPROMISED]` is logged with diagnostics but the process is not killed. Git write/remove and template `writeToFolder`/`removeFromFolder` do not take this lock yet.
+- The lock lives in Redis (`blog:<id>:folder-lock`, 10s TTL, 3s heartbeat), so it coordinates across processes and hosts. A process that dies while holding it leaves the key until the TTL expires. If the heartbeat finds the lock lost, `[LOCK COMPROMISED]` is logged with diagnostics and the process crashes, so a sync never keeps writing without the lock. Git write/remove and template `writeToFolder`/`removeFromFolder` do not take this lock yet.
 - `renames.js` relies on a 30-second window and a heuristic match by file size or title. Renames involving empty files are skipped (zero `size` is excluded). Ambiguous renames — where multiple deleted entries have the same size or title — are not resolved.
 - `rebuildDependents` suppresses build errors for individual dependents and continues, so a broken dependent entry does not block other rebuilds.
 - `rebuild.js` does not acquire the sync lock itself; callers are responsible for ensuring no concurrent sync is in progress.
