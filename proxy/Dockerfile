@@ -74,7 +74,8 @@ COPY --from=deps /vendor/resty-auto-ssl/ /usr/bin/resty-auto-ssl/
 RUN chmod 0755 /usr/bin/resty-auto-ssl/*
 
 # Per-container runtime dir for the health-probe Unix socket (see
-# proxy/config/server.conf). entrypoint.sh also (re)creates and chowns it.
+# proxy/build/sync-config.js, which injects it into the copied server.conf).
+# entrypoint.sh also (re)creates and chowns it.
 RUN mkdir -p /run/openresty
 
 # Directories referenced by the generated config and by lua-resty-auto-ssl.

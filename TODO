@@ -1,6 +1,19 @@
+Make sure next bill amount is in all billing emails to customers
+
+Get proxy horizontally scalable
+- Get proxy container deployed
+
+Get node container horizontally scalable 
+- finish app/storage module
+- solve git storage problem 
+
+Add clear bill change info to new blog flow
+
 Check in on our dropbox sync verification job to make sure it's working well (docker green)
 
 Rebuild all sites to bake in folder CDN urls
+
+Run scripts/blog/find-template-tags.js and follow up with affected customers
 
 Why is Ross' template so slow to install? It takes a few seconds. Let's speed it up.
 
@@ -12,6 +25,14 @@ Finish cross platform folder renderer
 
 Redis outage follow-ups
 - Dropbox webhook drops syncs (listBlogs fails after the 200 ack) and git auth maps Redis errors to a 401 while Redis is unreachable
+
+Improve about section
+- Restructure /about into current principles and clearly dated working notes.
+- Rewrite the main page to surface Blot’s purpose, independence, longevity, portability, and open source code.
+- Update History, infrastructure, development tools, refunds, backups, and continuity claims.
+- Date historical material such as the CDN investigation, old mistakes, and threat assessments.
+- Remove outdated self-undermining statements, including dissatisfaction with the templates.
+- Fix incomplete passages, spelling errors, and inconsistent use of “I” and “we.”
 
 Fix performance bugs on various sites:
 - anchor and re-enable site
@@ -68,10 +89,6 @@ Improve Dropbox sync
 - Bug: reconnecting with the same account and same permissions should not create a new folder for `full_access=true`
 - Bug: add a check for folder storage before doing mass upload
 - Bug: handle folder full error appropriately
-- Bug: dropbox reset TO BLOT should handle removed folder
-- Bug: dropbox reset FROM BLOT should handle removed folder
-- Bug: dropbox reset TO BLOT should handle revoked token
-- Bug: dropbox reset FROM BLOT should handle revoked token
 - Bug: add sync lock process to dropbox connection when writing folder contents
 - Bug: ensure the app permission access_token is destroyed when switching to full-folder and vice versa
 - Add testing for dropbox:
@@ -200,9 +217,6 @@ Fix bug with light mode colors
 Fix bug with menu which occur when multiple pages are added at once Menu needs concurrency or atomic operations (so we can build posts in parallel)
 - move menu into its own model (it's possible to add thousands of entries to it...)
 
-Fix bug where one bad page can take down upstream repeatedly 
-– perhaps we need to cache in proxy cache timeouts? or somehow detect if a request causes upstream to crash?
-
 Fix bug with many twitter embeds 
 - [and tell Nash](https://mail.google.com/mail/u/0/#inbox/FMfcgzGllMNfjvRBthVncQtPJQpmrksx)
 
@@ -264,12 +278,14 @@ Make it possible to create a site for free then require subscription to make it 
 ---
 
 Proxy container (OpenResty) - remaining before it can replace config/openresty:
-- Config de-dup: proxy/config/ is a hand-fork of config/openresty/conf/ and OMITS restrict-bot-uas.conf + reverse-proxy-limit-*.conf + reverse-proxy-preview/base/huge.conf (rate-limiting + bot restrictions - security-relevant, must land before cutover)
+- Can we add modern compression to proxy?
+- Can the proxy remember bad urls and avoid repeatedly sending them to upstream?
+- Fold proxy/build/sync-config.js container adaptations back into the files once proxy/ is canon (stdout logs, reuseport, ACME CA, health socket)
 - Blue/green hook server: :8999 is in a reuseport group, so during a deploy overlap an ACME hook request can hit the other instance (different secret) - needs per-instance hook routing, not a shared reuseport port
 - Wire proxy/deploy/{blue-green,reload-config}.sh into the real deploy pipeline
 - dehydrated version drift: the proxy image vendors dehydrated 0.7.2 (0.6.5, which lua-resty-auto-ssl pins, is rejected by current ACME servers); bare-metal config/openresty still installs the 0.6.5 pin via luarocks - unify (bump lua-resty-auto-ssl, or vendor 0.7.2 there too)
 - Investigate replacing unmaintained lua-resty-auto-ssl (would also resolve the two items above): lua-resty-acme (keeps OpenResty, drops dehydrated/sockproc/:8999) or issuing from the Blot app into Redis; see proxy/README.md
-- Drop or provision the stats. vhost netdata passwords file; Redis auth/TLS; build-arg vs runtime-env for NODE_SERVER_IP/REDIS_IP/netdata creds; container equivalent for fail2ban
+- Redis auth/TLS; build-arg vs runtime-env for NODE_SERVER_IP/REDIS_IP/netdata creds; container equivalent for fail2ban
 - Harden the proxy against Redis outages (Node side shipped, see below): answer upstream 503 with a "temporarily unavailable" page plus Retry-After/no-store instead of the offline page (or stop intercepting 503 so Node's own page passes through); drop http_503 from proxy_next_upstream so each 503 does not take a container out of rotation via max_fails; make allow_domain in init.conf fail closed when Redis errors (it returns true today, which lets auto-ssl try to issue for any hostname); set resty.redis timeout to ~2s (default 60s stalls TLS handshakes), including the auto-ssl storage adapter, whose get_connection (v0.13.1, caches ngx.ctx.auto_ssl_redis_connection) can be overridden after auto_ssl:init(); add an e2e check with the stub upstream answering 503. Do this once the proxy container is built so it can be tested. Same changes apply to config/openresty until then
 
 Follow-ups from drag-and-drop template upload:
@@ -311,6 +327,8 @@ Improve images:
 - Image cacher should work for webp, tiff, etc. as well as JPG
 
 Improvements to docs and documentation:
+- Add way in to the updates page on the index page (i.e. surface recent tasks done and to do)
+- Add way in to the questions page on the index page (i.e. surface recent questions)
 - Rewrite code which generates a fake 'macOS' folder to work cross platform:
   - if the user is browsing from Windows create a windows folder
   - if the user is browsing from linux create a linux folder
@@ -361,6 +379,8 @@ Improve importer:
 - Map excerpt metadata to summary for Jekyll converter importer
 - Look into how Hexo has written imports for [blogger](https://github.com/hexojs/hexo-migrator-blogger), [joomla](https://github.com/welksonramos/hexo-migrator-joomla), [rss](https://github.com/hexojs/hexo-migrator-rss), [wordpress](https://github.com/hexojs/hexo-migrator-wordpress).
 - Add an importer for Twitter and sell [Sawyer](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVMhRNdQhfDwlXsqqFNgmKfTk)
+
+Let customers duplicate an existing site as a starting point
 
 Improve exporter:
 - Make it possible to configure the export file format (e.g. instead of markdown, word documents) on the importer
@@ -1143,6 +1163,7 @@ Add email newsletter system
 
 Create an API for Blot
 - Add webhooks and tell [Aurynn](https://mail.google.com/mail/u/0/#inbox/1554260da157b405) and [Shawn](https://twitter.com/soypunk)
+- Use it to build a minimal blot cli sync client run from the command line (could background itself?!)
 
 ---
 

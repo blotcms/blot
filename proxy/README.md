@@ -13,7 +13,9 @@ separately.
 
 | Path | Purpose |
 | --- | --- |
-| `config/` | Source `.conf` / `.lua` files (a hand-maintained fork of `config/openresty/conf`). |
+| `config/` | Generated copy of [`config/openresty/conf`](../config/openresty/conf). Do not edit. |
+| `html/` | Generated copy of [`config/openresty/html`](../config/openresty/html). Do not edit. |
+| `build/sync-config.js` | Copies the canonical files into `config/` + `html/` and applies container-only patches (stdout logs, `reuseport`, ACME CA, health socket, ...). |
 | `build/index.js` | Renders `config/server.conf` + partials into a single `openresty.conf`. |
 | `build/build.sh` | Wrapper that runs `build/index.js` with the container's paths. Run this before `docker build`. |
 | `build/data/latest/` | Generated output (git-ignored). |
@@ -37,13 +39,16 @@ curl -i http://localhost:8080/health   # -> 200
 `BLOT_HOST` at `docker run` time is only read by `entrypoint.sh` for
 certificate handling; it does not change the already-generated vhosts. Set it
 when running `build.sh` to change the domain the config is built for.
+`build.sh` also fetches BunnyCDN edge IPs for the rate-limit whitelist (same
+as `config/openresty/build-config.js`); CI sets `FETCH_CDN_IPS=false` so image
+builds do not depend on that API.
 
 `--cap-add SYS_NICE` avoids a harmless `setpriority(-20) failed` alert from
 `worker_priority` in an unprivileged container.
 
 CI runs the same steps in [`.github/workflows/proxy.yml`](../.github/workflows/proxy.yml)
-on any change under `proxy/` (plus `package.json` and `config/index.js`, which
-the generator reads).
+on any change under `proxy/` or `config/openresty/` (plus `package.json` and
+`config/index.js`, which the generator reads).
 
 ## Certificate issuance for custom domains
 
@@ -54,7 +59,7 @@ over `/etc/ssl/private/letsencrypt-domain.{pem,key}` (the image ships a
 self-signed placeholder so OpenResty can start).
 
 - **Which domains are allowed**: `allow_domain` in
-  [`config/init.conf`](config/init.conf) returns true only if
+  [`config/openresty/conf/init.conf`](../config/openresty/conf/init.conf) returns true only if
   `domain:<host>` exists in Redis (Blot writes this key in
   `app/models/blog/set.js`) or the cert is already cached.
 - **ACME endpoint**: baked at generate time from `ACME_CA`
@@ -163,18 +168,11 @@ Still build-only scaffolding: nothing here is deployed. Certificate issuance,
 the deploy mechanism and persistent volumes now exist and are covered by CI
 (above), but before this can replace `config/openresty`:
 
-- **Config de-duplication**. `proxy/config/` is a hand-fork of
-  `config/openresty/conf/` and is **missing** the rate-limit and
-  bot-restriction includes the bare-metal proxy has
-  (`restrict-bot-uas.conf`, `reverse-proxy-limit-default.conf`,
-  `reverse-proxy-limit-preview.conf`, `reverse-proxy-preview.conf`,
-  `reverse-proxy-base.conf`, `reverse-proxy-huge.conf`). This is
-  security-relevant and must land before cutover - ideally by making the two
-  copies one source.
-- **The `stats.` vhost** references
-  `/home/ec2-user/netdataconfig/netdata/passwords`, which is not in the
-  image. Drop the stats server from the container config or mount the file.
-- **Redis auth/TLS**. `config/init.conf` hard-codes port 6379 with no auth;
+- **Fold container adaptations back in.** `proxy/build/sync-config.js` still
+  patches a copy of `config/openresty` (stdout logs, `reuseport`, ACME CA,
+  the per-container health socket). When this directory becomes canon, those
+  bits belong in the files themselves and the copy step goes away.
+- **Redis auth/TLS**. `config/openresty/conf/init.conf` hard-codes port 6379 with no auth;
   production Redis credentials need wiring.
 - **Secret delivery**. `NODE_SERVER_IP`, `REDIS_IP` and the netdata creds are
   build-time inputs to the generator; decide build-arg vs runtime-env.
@@ -196,13 +194,13 @@ Tracked in the repo's `TODO` under "Proxy container (OpenResty)".
 
 - **`proxy` suite** (`.github/workflows/node.yml` test matrix) runs
   `proxy/tests/*.js` inside the Blot dev image, spinning up OpenResty against
-  `proxy/config` - the `cacher.lua` behaviour specs (`basic`, `gzip`,
+  `config/openresty/conf/cacher.lua` - the `cacher.lua` behaviour specs (`basic`, `gzip`,
   `inspect`, `lru_purge`, `rehydrate`, plus `coverage` for per-host keys,
   method/health cacheability, binary bodies and argument validation).
 - **`integration` workflow** (`.github/workflows/integration.yml`):
   - `proxy/e2e/checks.sh` drives the built image against
     `proxy/e2e/stub-upstream.js` - Host-based routing (site over HTTPS, blogs
-    and custom domains over HTTP), `/.git` and `wp-*` blocking, `Blot-Cache`
+    and custom domains over HTTP), `/.git` and `wp-admin` blocking, `Blot-Cache`
     MISS then HIT, gzip negotiation, upstream-error handling.
   - `proxy/e2e/run.js` brings the image up with the Blot app image + Redis
     (`proxy/e2e/docker-compose.yml`, with persistent cache/auto-ssl volumes)

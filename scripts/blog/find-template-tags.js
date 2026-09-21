@@ -10,6 +10,10 @@
 // with its progress display) and the results are aggregated (only blogs with matches are listed).
 //
 // Usage: node scripts/blog/find-template-tags.js [handle|domain|id] [--json]
+//        [-s START] [-e END] [-r]
+//
+// -s/-e/-r only apply when searching every blog: start at the Nth blog, end at
+// the Nth blog (1-based positions in the list), or reverse the order.
 
 const fs = require("fs-extra");
 const getBlog = require("../get/blog");
@@ -18,12 +22,26 @@ const progress = require("../each/progress");
 const Entries = require("models/entries");
 const Entry = require("models/entry");
 const localPath = require("helper/localPath");
+const { relative } = require("path");
 
 const TAG = /\{\{[\s\S]*?\}\}\}?/g;
+// {{more}} marks the end of a teaser (see app/build/prepare/teaser.js) and is
+// not a template tag, so it is not reported.
+const MORE = /^\{\{more\}\}$/i;
 const MAX_BYTES = 5 * 1024 * 1024;
-const TEXT_EXTENSIONS = /\.(md|markdown|txt|text|html?|org|rtf|docx?|odt)$/i;
+const TEXT_EXTENSIONS = /\.(md|markdown|txt|text|html?|org|rtf)$/i;
 
-const identifier = process.argv.slice(2).find((arg) => !arg.startsWith("--"));
+const args = process.argv.slice(2);
+const options = {};
+const positional = [];
+
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === "-s" || args[i] === "-e") options[args[i][1]] = args[++i];
+  else if (args[i] === "-r") options.r = true;
+  else if (!args[i].startsWith("-")) positional.push(args[i]);
+}
+
+const identifier = positional[0];
 const asJSON = process.argv.includes("--json");
 
 function getAllIDs(blogID) {
@@ -53,12 +71,16 @@ async function scan(blog) {
       const file = localPath(blog.id, path);
       const stat = await fs.stat(file);
       if (!stat.isFile() || stat.size > MAX_BYTES) continue;
-      tags = (await fs.readFile(file, "utf8")).match(TAG);
+      const buffer = await fs.readFile(file);
+      // A NUL byte means binary data, not text, whatever the extension.
+      if (buffer.includes(0)) continue;
+      tags = buffer.toString("utf8").match(TAG);
     } catch (e) {
       continue;
     }
 
-    if (!tags) continue;
+    if (tags) tags = tags.filter((tag) => !MORE.test(tag));
+    if (!tags || !tags.length) continue;
 
     const entry = await getEntry(blog.id, path);
     if (!entry || entry.deleted) continue;
@@ -88,21 +110,19 @@ function summarise(blog, user, files) {
   };
 }
 
-function printFiles(files) {
-  files.forEach(function (file) {
-    console.log("");
-    console.log(
-      file.path +
-        "  [" +
-        file.kind +
-        (file.published ? "" : ", unpublished") +
-        (file.url ? ", " + file.url : "") +
-        ", " +
-        file.tagCount +
-        " tag(s)]"
-    );
-    console.log("  " + file.tags.join("  "));
-  });
+// Double-quoted for the shell, so escape the characters it treats specially.
+function catCommand(blogID, path) {
+  const file = relative(process.cwd(), localPath(blogID, path));
+  return 'cat "' + file.replace(/(["\\$`])/g, "\\$1") + '"';
+}
+
+function printFiles(blogID, files) {
+  files.forEach((file) => console.log("  " + catCommand(blogID, file.path)));
+}
+
+function printResult(result) {
+  console.log("blog:   " + result.blogID);
+  printFiles(result.blogID, result.files);
 }
 
 function searchOne() {
@@ -125,7 +145,7 @@ function searchOne() {
       console.log("domain: " + (blog.domain || "(none)"));
       console.log("");
       console.log(files.length + " file(s) with template tags in their source");
-      printFiles(files);
+      printFiles(blog.id, files);
 
       process.exit();
     });
@@ -142,7 +162,13 @@ function searchAll() {
       scan(blog)
         .then(function (files) {
           searched++;
-          if (files.length) results.push(summarise(blog, user, files));
+          if (!files.length) return;
+
+          const result = summarise(blog, user, files);
+          results.push(result);
+
+          // Report matches as they are found (kept off stdout for --json).
+          if (!asJSON) printResult(result);
         })
         .catch(function (err) {
           console.error("Error scanning blog " + blog.id + ": " + err.message);
@@ -171,17 +197,11 @@ function searchAll() {
           " blog(s)"
       );
 
-      results.forEach(function (result) {
-        console.log("");
-        console.log("=".repeat(60));
-        console.log("email:  " + (result.email || "(unknown)"));
-        console.log("blog:   " + result.blogID + " " + (result.handle || ""));
-        console.log("domain: " + (result.domain || "(none)"));
-        printFiles(result.files);
-      });
+      results.forEach(printResult);
 
       process.exit();
-    }
+    },
+    options
   );
 }
 
