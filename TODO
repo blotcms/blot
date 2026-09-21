@@ -1,4 +1,13 @@
+Can local worktrees for agents get their own docker compose ups on their own branch-subdomains which I can view and interact with?
+- share redis / nginx / data dir -> ?
+- get their own node container
+
 Make sure next bill amount is in all billing emails to customers
+
+Move towards proxy container deployment
+- can we simplify anything to make it safer?
+- avoid data loss above all
+- tolerate a few dropped requests during cutover
 
 Add fast rollback action
 
