@@ -192,6 +192,14 @@ the deploy mechanism and persistent volumes now exist and are covered by CI
 
 Tracked in the repo's `TODO` under "Proxy container (OpenResty)".
 
+## Horizontal scale / multi-region
+
+Once this image is what production runs, nothing about customer-site
+certificates or independent proxy caches stops a fleet. The remaining
+blockers are loopback upstreams, loopback purge, wildcard PEM distribution,
+and customer DNS that can pin a single A record. See
+[HORIZONTAL-SCALE.md](HORIZONTAL-SCALE.md).
+
 ## Tests
 
 - **`proxy` suite** (`.github/workflows/node.yml` test matrix) runs

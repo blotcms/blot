@@ -2,6 +2,7 @@ Make sure next bill amount is in all billing emails to customers
 
 Get proxy horizontally scalable
 - Get proxy container deployed
+- After cutover: see proxy/HORIZONTAL-SCALE.md (certs/caches are not the blocker; loopback upstreams, purge, wildcard PEM distribution, and A-record DNS are)
 
 Get node container horizontally scalable 
 - finish app/storage module
