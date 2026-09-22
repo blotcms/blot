@@ -26,6 +26,32 @@ const createClient = promisify((blogID, cb) =>
   require("../util/createClient")(blogID, (err, ...results) => cb(err, results))
 );
 
+// Caps how many files in one directory are hashed/stat'd at once. Without
+// this, a directory with thousands of files fires that many concurrent
+// streaming sha256 hashes (helper/hashFile) in one Promise.all, and the
+// resulting callback/GC volume can stall the event loop long enough to blow
+// through the folder lock's TTL (app/sync/lock.js) and crash the process.
+const HASH_CONCURRENCY = 10;
+
+async function mapLimit(items, limit, iterator) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await iterator(items[index], index);
+    }
+  }
+
+  const workers = [];
+  for (let i = 0; i < Math.min(limit, items.length); i++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+  return results;
+}
+
 // const upload = promisify(require("clients/dropbox/util/upload"));
 // const get = promisify(require("../database").get);
 
@@ -345,22 +371,20 @@ const walk = async (
 const localReaddir = async (blogID, localRoot, dir) => {
   const contents = await fs.readdir(join(localRoot, dir));
 
-  return Promise.all(
-    contents.map(async (name) => {
-      const pathOnDisk = join(localRoot, dir, name);
-      const [content_hash, stat] = await Promise.all([
-        hashFile(pathOnDisk),
-        fs.stat(pathOnDisk),
-      ]);
+  return mapLimit(contents, HASH_CONCURRENCY, async (name) => {
+    const pathOnDisk = join(localRoot, dir, name);
+    const [content_hash, stat] = await Promise.all([
+      hashFile(pathOnDisk),
+      fs.stat(pathOnDisk),
+    ]);
 
-      return {
-        name,
-        path_display: join(dir, name),
-        is_directory: stat.isDirectory(),
-        content_hash,
-      };
-    })
-  );
+    return {
+      name,
+      path_display: join(dir, name),
+      is_directory: stat.isDirectory(),
+      content_hash,
+    };
+  });
 };
 
 const remoteReaddir = async (client, dir) => {

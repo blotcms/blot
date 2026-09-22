@@ -1,5 +1,6 @@
 const client = require("models/client");
 const { randomUUID } = require("crypto");
+const clfdate = require("helper/clfdate");
 
 // A per-blog mutex held in Redis so that it works across processes and hosts
 // without a shared disk. The value is a random token so that a holder whose
@@ -22,6 +23,14 @@ if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) 
 return 0`;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Logged when a heartbeat tick is this late (either the timer itself fired
+// late - an event-loop-side delay - or the Redis round trip took this long -
+// a Redis/network-side delay). Investigating green container crashes: the
+// event-loop lag monitor (helper/eventLoopMonitor) and Redis's own SLOWLOG
+// showed nothing near the lock TTL at crash time, so this instruments the
+// one remaining unmeasured hop to tell the two apart next time.
+const HEARTBEAT_LOG_THRESHOLD_MS = 500;
 
 function key(blogID) {
   return "blog:" + blogID + ":folder-lock";
@@ -61,6 +70,7 @@ async function lock(blogID, options = {}) {
   let released = false;
   let compromised = false;
   let lastExtended = Date.now();
+  let lastTickAt = lastExtended;
 
   const timer = setInterval(async () => {
     if (released || compromised) return;
@@ -68,17 +78,44 @@ async function lock(blogID, options = {}) {
     // Redis starts the new TTL when it runs the script, so measure from
     // before the round trip; a delayed reply must not lengthen our lease.
     const attemptedAt = Date.now();
+    // How much later than scheduled this tick actually fired: a JS-side
+    // (event-loop) delay, distinct from the Redis round trip measured below.
+    const tickDelayMs = attemptedAt - lastTickAt - heartbeat;
+    lastTickAt = attemptedAt;
+
     try {
       const ok = await client.eval(EXTEND, {
         keys: [lockKey],
         arguments: [token, String(ttl)],
       });
+      const roundTripMs = Date.now() - attemptedAt;
+      if (
+        tickDelayMs >= HEARTBEAT_LOG_THRESHOLD_MS ||
+        roundTripMs >= HEARTBEAT_LOG_THRESHOLD_MS
+      ) {
+        console.log(
+          clfdate(),
+          "[LOCK] slow heartbeat",
+          lockKey,
+          `tickDelay=${tickDelayMs}ms`,
+          `roundTrip=${roundTripMs}ms`
+        );
+      }
       if (ok) {
         lastExtended = attemptedAt;
         return;
       }
       err = new Error("Lock was lost: " + lockKey);
     } catch (e) {
+      const roundTripMs = Date.now() - attemptedAt;
+      console.error(
+        clfdate(),
+        "[LOCK] heartbeat error",
+        lockKey,
+        `tickDelay=${tickDelayMs}ms`,
+        `roundTrip=${roundTripMs}ms`,
+        e.message
+      );
       // Redis hiccup: only give up once the TTL has really elapsed, since
       // until then nobody else can have taken the lock.
       if (Date.now() - lastExtended < ttl) return;
