@@ -20,6 +20,11 @@ function parse(output) {
   const data = {};
   let current = null;
 
+  // The list is capped by entry count (~25h of slack), not age, so a
+  // lightly used container can retain points older than the chart's
+  // advertised 24h window - drop those rather than stretch the x-axis.
+  const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+
   for (const line of output.split("\n")) {
     const marker = line.match(/^==(\w+)==$/);
     if (marker) {
@@ -31,7 +36,7 @@ function parse(output) {
     if (!current || !line.trim()) continue;
 
     const [timestampMs, p95Ms] = line.trim().split(":").map(Number);
-    if (isNaN(timestampMs) || isNaN(p95Ms)) continue;
+    if (isNaN(timestampMs) || isNaN(p95Ms) || timestampMs < oneDayAgo) continue;
 
     data[current].push({ timestampMs, p95Ms });
   }

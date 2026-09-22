@@ -228,9 +228,15 @@ module.exports = function attachRenderView(req, res, _next) {
         // This lets browsers send 'If-Modified-Since' requests
         // to check if the page has changed since the last time
         res.header("Last-Modified", new Date(blog.cacheID).toUTCString());
-        renderTimeMetric.record(
-          Number(process.hrtime.bigint() - renderStartedAt) / 1e6
-        );
+        // Templates can expose CSS/JS through this same path (view.js routes
+        // any URL to whatever view matches, not just pages) - only count
+        // actual HTML page renders, not asset requests with very different
+        // latency and cache behavior.
+        if (viewType === "text/html") {
+          renderTimeMetric.record(
+            Number(process.hrtime.bigint() - renderStartedAt) / 1e6
+          );
+        }
         res.send(output);
       } catch (e) {
         next(e);
