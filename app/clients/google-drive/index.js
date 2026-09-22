@@ -5,6 +5,7 @@ module.exports = {
   resync: require('./sync/resetFromDrive'),
   remove: require("./remove"),
   write: require("./write"),
+  getHealth: require("./getHealth"),
   site_routes: require("./routes/site"),
   dashboard_routes: require("./routes/dashboard"),
   init: require('./init')
