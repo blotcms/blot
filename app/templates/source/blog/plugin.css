@@ -27,6 +27,7 @@ blockquote.twitter-tweet p {margin: 0}
 
 /* IMAGE SIZE */
 img {max-width: 100%;height: auto;}
+video {max-width: 100%;height: auto;}
 
 /* CODE HIGHLIGHTING */
 
