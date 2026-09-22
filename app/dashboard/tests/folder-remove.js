@@ -222,4 +222,29 @@ describe('dashboard folder remove route', function () {
     expect(res.statusCode).toBe(502);
     expect(done.calls.count()).toBe(3);
   });
+
+  it('returns 423 when the folder is locked by another sync', async function () {
+    establishSyncLock.and.returnValue(
+      Promise.reject(new Error('Failed to acquire folder lock'))
+    );
+
+    const handler = require('../site/folder/remove');
+    const req = { params: { path: 'post.md' }, body: {}, blog: { id: 'blog-1' } };
+    const res = createRes();
+    res.headers = {};
+    res.set = function (name, value) {
+      this.headers[name] = value;
+      return this;
+    };
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(423);
+    expect(res.body).toEqual({
+      ok: false,
+      removed: null,
+      error: 'Folder is locked by another sync; retry later',
+    });
+    expect(res.headers['Retry-After']).toBe('10');
+  });
 });
