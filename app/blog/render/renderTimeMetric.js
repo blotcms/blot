@@ -11,15 +11,27 @@ const config = require("config");
 // true merged percentile (see the daily step for why that tradeoff is fine
 // here), just a directional daily number.
 
-const FLUSH_INTERVAL_MS = 5 * 60 * 1000;
+const FLUSH_INTERVAL_MS = 60 * 1000;
 const WINDOWS_PER_DAY = Math.ceil((24 * 60 * 60 * 1000) / FLUSH_INTERVAL_MS);
 // A little slack over 24h of windows so a slightly-delayed flush doesn't
 // truncate the last window the daily email would otherwise have read.
-const LIST_MAX_LENGTH = WINDOWS_PER_DAY + 12;
+const LIST_MAX_LENGTH = WINDOWS_PER_DAY + 30;
 const LIST_TTL_SECONDS = 25 * 60 * 60;
 
 function redisKey(container) {
   return `metrics:render-time:p95:${container}`;
+}
+
+// Each list entry is "<window end unix ms>:<p95 ms>" so consumers (the daily
+// email, scripts/render-time-chart) can plot/aggregate over real time rather
+// than just "windows ago".
+function encodeEntry(timestampMs, p95Ms) {
+  return `${timestampMs}:${p95Ms}`;
+}
+
+function decodeEntry(entry) {
+  const [timestampMs, p95Ms] = entry.split(":").map(Number);
+  return { timestampMs, p95Ms };
 }
 
 const histogram = createHistogram();
@@ -46,7 +58,7 @@ async function flush() {
 
   try {
     const multi = client.multi();
-    multi.rPush(redisKey(container), String(p95Ms));
+    multi.rPush(redisKey(container), encodeEntry(Date.now(), p95Ms));
     multi.lTrim(redisKey(container), -LIST_MAX_LENGTH, -1);
     multi.expire(redisKey(container), LIST_TTL_SECONDS);
     await multi.exec();
@@ -67,4 +79,4 @@ function start() {
   timer.unref();
 }
 
-module.exports = { record, start, redisKey, FLUSH_INTERVAL_MS };
+module.exports = { record, start, redisKey, decodeEntry, FLUSH_INTERVAL_MS };

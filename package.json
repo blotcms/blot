@@ -21,7 +21,8 @@
     "featured": "docker exec blot-node-app-1 node app/documentation/featured/build",
     "folder": "./scripts/development/folder.sh",
     "translate": "./scripts/development/translate/translate.sh",
-    "preview-newsletter": "./scripts/development/preview-newsletter.sh"
+    "preview-newsletter": "./scripts/development/preview-newsletter.sh",
+    "render-time-chart": "node scripts/render-time-chart"
   },
   "version": "0.0.0",
   "dependencies": {

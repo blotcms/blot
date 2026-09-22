@@ -1,4 +1,4 @@
-const { redisKey } = require("blog/render/renderTimeMetric");
+const { redisKey, decodeEntry } = require("blog/render/renderTimeMetric");
 
 // Mirrors the three deploy containers in scripts/deploy (blue/green/yellow).
 // A container that never served traffic in the last 24h simply has no
@@ -13,7 +13,12 @@ async function main(callback) {
       CONTAINERS.map((container) => client.lRange(redisKey(container), 0, -1))
     );
 
-    const windowP95s = lists.flat().map(Number).filter((n) => !isNaN(n));
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const windowP95s = lists
+      .flat()
+      .map(decodeEntry)
+      .filter(({ timestampMs, p95Ms }) => timestampMs >= oneDayAgo && !isNaN(p95Ms))
+      .map(({ p95Ms }) => p95Ms);
 
     if (windowP95s.length === 0) {
       return callback(null, { p95_render_time: "no data" });
