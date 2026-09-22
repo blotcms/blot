@@ -86,6 +86,12 @@ documentation.get("/", require("./featured"), async function (req, res, next) {
 
 documentation.get("/examples", require("./featured"));
 
+documentation.get(
+  "/examples/:category",
+  require("./featured"),
+  require("./featured/filterByCategory")
+);
+
 documentation.get("/templates", (req, res) => {
   res.render("templates/index");
 });
@@ -97,6 +103,34 @@ documentation.get("/templates/for-:type", (req, res, next) => {
     if (err) return next();
     res.send(html);
   });
+});
+
+documentation.get("/templates/search", require("./templates-search"));
+
+documentation.get("/templates/search/:query", async (req, res, next) => {
+  try {
+    const { loadTemplates, categories } = require("./build/templates");
+    const { rank } = require("./templates-search");
+
+    const query = req.params.query || "";
+    const ranked = rank(query);
+    const rankedSlugs = ranked.map((r) => r.slug);
+
+    const allTemplates = await loadTemplates();
+    const bySlug = new Map(allTemplates.map((t) => [t.slug, t]));
+
+    res.locals.title = `“${query}” – Blot Templates`;
+    res.locals.hidebreadcrumbs = true;
+    res.locals.searchQuery = query;
+    res.locals.categories = categories;
+    res.locals.allTemplates = rankedSlugs
+      .map((slug) => bySlug.get(slug))
+      .filter(Boolean);
+
+    res.render("templates/search");
+  } catch (err) {
+    next(err);
+  }
 });
 
 documentation.get("/templates/:template", (req, res, next) => {

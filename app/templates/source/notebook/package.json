@@ -1,5 +1,6 @@
 {
   "name": "Notebook",
+  "popularity": 60,
   "locals": {
     "page_size": 20,
     "hide_dates": false,

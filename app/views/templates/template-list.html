@@ -1,16 +1,40 @@
 <h1>Templates</h1>
 
-<ul class="pill-navigation">
-
+<div class="templates-toolbar">
+  <ul class="pill-navigation">
     <li><a href="/templates" class="{{^category}}selected{{/category}}">All</a></li>
     {{#categories}}
     <li><a href="/templates/for-{{slug}}" class="{{selected}}">{{name}}</a></li>
     {{/categories}}
-    </ul>
+  </ul>
 
-    <ul class="clients templates">
+  <div class="templates-toolbar-right">
+    <div class="template-search">
+      <input
+        type="search"
+        id="template-search-input"
+        placeholder="Search templates"
+        aria-label="Search templates"
+        autocomplete="off"
+        value="{{searchQuery}}"
+      />
+    </div>
+
+    <div class="toggle-tabs" id="template-sort" data-default-sort="latest">
+      <ul>
+        <li><a href="#" data-sort="latest" class="selected">Latest</a></li>
+        <li><a href="#" data-sort="popular">Popular</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<p id="template-search-status" class="template-search-status" role="status">{{#searchQuery}}{{^allTemplates.length}}No templates found for “{{searchQuery}}”{{/allTemplates.length}}{{/searchQuery}}</p>
+
+    <div class="{{#sidebar}}templates-with-sidebar{{/sidebar}}">
+    <ul class="clients templates" id="template-grid">
     {{#allTemplates}}
-    <li class="template-item">
+    <li class="template-item" data-popularity="{{popularity}}" data-latest="{{latest_commit}}" data-slug="{{slug}}">
       <a href="/templates/{{slug}}" class="template-link">
         <img
           src="{{#cdn}}/images/examples/{{slug}}/0-thumb.png{{/cdn}}"
@@ -19,7 +43,17 @@
         <span class="template-name">
           {{name}}
         </span>
+        {{#updated_label}}
+        <span class="template-updated">Updated {{updated_label}}</span>
+        {{/updated_label}}
       </a>
     </li>
     {{/allTemplates}}
-</ul>
+    </ul>
+
+    {{#sidebar}}
+    <aside class="template-category-sidebar">
+      {{{sidebar}}}
+    </aside>
+    {{/sidebar}}
+    </div>

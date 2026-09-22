@@ -1,5 +1,6 @@
 {
   "name": "Organization",
+  "popularity": 25,
   "locals": {
     "page_size": 12,
     "hide_dates": false,

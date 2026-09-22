@@ -6,6 +6,7 @@
 // once per day to ensure sites are fresh.
 const fs = require("fs-extra");
 const config = require("config");
+const { CATEGORIES } = require("./categories");
 
 const modify = (i) => {
   return i[0].toUpperCase() + i.slice(1);
@@ -41,6 +42,13 @@ const loadFeatured = async () => {
 module.exports = async function (req, res, next) {
   try {
     res.locals.featured = await loadFeatured();
+    res.locals.categories = CATEGORIES.map((category) => ({
+      slug: category.slug,
+      label: category.label,
+      href: `/examples/${category.slug}`,
+      active: req.params.category === category.slug,
+    }));
+    res.locals.allCategoriesActive = !req.params.category;
     next();
   } catch (err) {
     next(err);

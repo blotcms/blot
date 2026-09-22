@@ -1,5 +1,6 @@
 {
   "name": "Zine",
+  "popularity": 35,
   "locals": {
     "text_color": "#000000",
     "page_size": 48,
