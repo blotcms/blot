@@ -1,8 +1,29 @@
+Fix Google Drive sync outage caused by Google account suspesion
+- Future fix to Google Drive client needs to never use the service account to create files (ask the user to handle the initial transfer)
+- Revert 1958
+
+Make Google Drive incremental sync efficient
+- Store hash of their api responses
+- Don’t touch disk
+- Support huge folders with huge directories
+- Start with recently changed files and dirs first
+
+Add fractions and raw numbers of current users using each client to daily update
+
+We need a plan for the suspension of the iCloud user as well... is the code resilient to data loss in this scenario?
+
 Investigate green crashes (`Lock was lost` / ECOMPROMISED at 2026-09-21 18:02 and 20:01 UTC) and slow `/health` in the first minutes of each hour; the Dropbox hourly validation is only a suspect, not confirmed
 - Checked green logs for `validation lag` and `[EVENT LOOP]` after PR #1950 shipped: neither showed any delay near the 10s lock TTL at the 2026-09-22 06:00:49 and 07:00:39 crashes, and Redis's own SLOWLOG had nothing near 10s either — ruled out a classic JS block and a single slow Redis command
 - The two compromised blogs' folders aren't large/flat or full of huge files (824 and 526 files, largest file 9.4MB) — the localReaddir concurrency fix (PR #1952) is good hygiene but isn't the cause here
 - Next: check green logs for `[LOCK] slow heartbeat` / `[LOCK] heartbeat error` after the heartbeat round-trip logging ships (PR #1952) — it separates event-loop-side delay (tickDelay) from Redis-side delay (roundTrip) for the first time
 - Remove the event loop monitor (app/helper/eventLoopMonitor*.js, its setup.js hook, and `logLag`/`measureEventLoop` in app/clients/dropbox/init.js) and the lock heartbeat logging (app/sync/lock.js) once the cause is fixed
+
+Add color and font presents to template editor (with edit manually options)
+- surface this on the templates subpages -> switch from png to iframe after hovering a selection
+
+Perform caching and header audit of site and templates
+- Check logs and headers via curl
+- Identify optimizations
 
 Analyze the proposed proxy container for possible performance regressions after we switch
 
