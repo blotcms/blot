@@ -6,6 +6,8 @@ Recurring revenue: {{annual_recurring_revenue}} per year, {{monthly_percentage}}
 
 Newsletter subscribers: {{newsletter_subscribers}}
 
+p95 render time (last 24h): {{p95_render_time}}
+
 {{#new_customers.length}}
 New customers:
 {{#new_customers}}
