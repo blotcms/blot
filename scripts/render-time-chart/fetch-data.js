@@ -44,16 +44,22 @@ function parseSections(output) {
   return sections;
 }
 
+// Chart display resolution for the 24h chart. The underlying storage stays
+// at 1-minute windows (the daily email's idle-window detection and average
+// depend on that cadence) - this only smooths what gets plotted, since a
+// raw 1-minute line is too noisy to read at a glance.
+const CHART_BUCKET_MS = 5 * 60 * 1000;
+
 // Raw per-container points don't land on the same wall-clock minute (each
 // container flushes every 60s from its own process start, not a shared
-// clock), so bucket by minute and average whatever containers reported in
-// that bucket into a single point.
-function mergeByMinute(containerLists) {
+// clock), so bucket by CHART_BUCKET_MS and average whatever containers
+// reported in that bucket into a single point.
+function mergeByBucket(containerLists, bucketMs) {
   const buckets = new Map();
 
   for (const entries of containerLists) {
     for (const { timestampMs, p95Ms } of entries) {
-      const bucket = Math.floor(timestampMs / 60000) * 60000;
+      const bucket = Math.floor(timestampMs / bucketMs) * bucketMs;
       if (!buckets.has(bucket)) buckets.set(bucket, []);
       buckets.get(bucket).push(p95Ms);
     }
@@ -91,7 +97,7 @@ function parse(output) {
   );
 
   return {
-    last24h: mergeByMinute(raw),
+    last24h: mergeByBucket(raw, CHART_BUCKET_MS),
     allTimeDaily: decodeLines(sections.daily || []),
   };
 }

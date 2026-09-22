@@ -24,7 +24,7 @@ function renderHTML({ last24h, allTimeDaily }) {
 </style>
 </head>
 <body>
-<h1>p95 page render time - last 24h (1 min resolution)</h1>
+<h1>p95 page render time - last 24h (5 min resolution)</h1>
 <div id="chart-24h"></div>
 <h1>p95 page render time - all time (1 day resolution)</h1>
 <div id="chart-all-time"></div>
