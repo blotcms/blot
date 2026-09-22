@@ -51,4 +51,75 @@ const initTemplateHero = () => {
   shuffledImages.forEach((image) => grid.appendChild(image));
 };
 
+const initTemplateGrid = () => {
+  const grid = document.getElementById("template-grid");
+
+  if (!grid) return;
+
+  const items = Array.from(grid.querySelectorAll(".template-item"));
+
+  let activeSort = "latest";
+
+  const sortBy = (key) => {
+    const sorted = [...items].sort((a, b) => {
+      const aValue = Number(a.dataset[key]) || 0;
+      const bValue = Number(b.dataset[key]) || 0;
+      return bValue - aValue;
+    });
+
+    sorted.forEach((item) => grid.appendChild(item));
+  };
+
+  // --- Latest / Popular toggle ---
+  const sortToggle = document.getElementById("template-sort");
+
+  if (sortToggle) {
+    const sortLinks = Array.from(sortToggle.querySelectorAll("a[data-sort]"));
+
+    sortLinks.forEach((link) => {
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+
+        activeSort = link.dataset.sort;
+
+        sortLinks.forEach((other) =>
+          other.classList.toggle("selected", other === link)
+        );
+
+        sortBy(activeSort === "popular" ? "popularity" : "latest");
+      });
+    });
+  }
+
+  // --- Search: title (heavy) + README, ranked server-side ---
+  // A search always navigates to /templates/search/:query for real,
+  // rather than filtering the current page's grid in place. That grid
+  // only ever contains the current category's templates (or none, on
+  // the search page itself), so a local filter would silently come up
+  // empty for a match outside it. A real navigation also drops whatever
+  // category filter was active, which is the correct behaviour for a
+  // search across every template.
+  const searchInput = document.getElementById("template-search-input");
+
+  if (!searchInput) return;
+
+  const submitSearch = () => {
+    const query = searchInput.value.trim();
+
+    window.location.href = query
+      ? "/templates/search/" + encodeURIComponent(query)
+      : "/templates";
+  };
+
+  searchInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    submitSearch();
+  });
+
+  // Fires when the input's native clear ("x") button is used.
+  searchInput.addEventListener("search", submitSearch);
+};
+
 initTemplateHero();
+initTemplateGrid();

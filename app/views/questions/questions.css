@@ -118,7 +118,7 @@ a.minor:hover {
   padding-bottom: 24px;
 }
 
-.questions-toolbar .question-sort-tabs {
+.questions-toolbar .toggle-tabs {
   margin-right: 1rem;
 }
 
@@ -153,27 +153,6 @@ a.minor:hover {
   margin: 0;
 }
 
-.question-sort-tabs ul {
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 6px;
-  margin: 0;
-  font-size: 14px;
-  display: flex;
-  list-style: none;
-}
-
-.question-sort-tabs ul li a {
-  margin: 0;
-  border: 1px solid transparent;
-  border-radius: 1em;
-  padding: 2px 4px;
-  text-decoration: none;
-}
-
-.question-sort-tabs ul li a.selected {
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 2px 4px;
-  color: var(--text-color);
-}
+/* .toggle-tabs itself (the segmented-control look) is a shared
+   component defined in blot.css, so it looks the same wherever it's
+   used - see the Latest/Popular toggle on /templates. */

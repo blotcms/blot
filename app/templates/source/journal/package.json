@@ -1,5 +1,6 @@
 {
   "name": "Journal",
+  "popularity": 75,
   "locals": {
     "page_size": 40,
     "background_color": "#FFFFF8",
