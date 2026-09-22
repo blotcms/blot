@@ -11,6 +11,12 @@ const clfdate = require("helper/clfdate");
 const SOURCE_DIRECTORY = join(__dirname, "../../views");
 const DESTINATION_DIRECTORY = config.views_directory;
 
+// templates.js renders its output from this directory as well as
+// SOURCE_DIRECTORY (see templatesSourceDirectory in templates.js). It must
+// be part of the cache's fingerprint below, or a change here goes
+// undetected and a stale cache gets restored on top of it.
+const TEMPLATES_SOURCE_DIRECTORY = join(__dirname, "../../templates/source");
+
 const buildCSS = require("./css")({
   source: SOURCE_DIRECTORY,
   destination: DESTINATION_DIRECTORY,
@@ -26,19 +32,44 @@ const templates = require("./templates");
 const generateThumbnail = require("./generate-thumbnail");
 const gitCommits = require("../tools/git-commits").build;
 
-// Cache-related functions (development only)
-async function computeViewsHash() {
-  const files = recursiveReadDir(SOURCE_DIRECTORY);
-  const hash = crypto.createHash("sha256");
+// Cache-related functions (development only).
+//
+// Decision on partial/targeted build helpers (e.g. running templates.js
+// directly for fast local iteration, or the "templates/" branch of the
+// watcher handler below): they are not made to update the cache
+// themselves, and the cache-restore path does not try to detect drift by
+// inspecting the destination. Instead, computeViewsHash() is required to
+// cover every input a helper reads from, so the hash is a complete
+// fingerprint of the build - a given hash can only ever correspond to one
+// possible output. Restoring a cache entry for a matching hash is then
+// always correct, and running a helper directly can't leave the
+// destination in a state a full rebuild wouldn't already produce for that
+// same hash. If a new build script starts reading from another directory,
+// that directory needs to be added to computeViewsHash() (or the script
+// added to buildScripts below), the same way TEMPLATES_SOURCE_DIRECTORY was.
+async function hashDirectory(hash, directory) {
+  if (!(await fs.pathExists(directory))) return;
 
-  // Hash all files in the views directory
+  const files = recursiveReadDir(directory);
+
   for (const file of files) {
     const stat = await fs.stat(file);
-    const relativePath = file.slice(SOURCE_DIRECTORY.length + 1);
+    const relativePath = file.slice(directory.length + 1);
     hash.update(relativePath);
     hash.update(stat.mtime.getTime().toString());
     hash.update(stat.size.toString());
   }
+}
+
+async function computeViewsHash() {
+  const hash = crypto.createHash("sha256");
+
+  // Hash all files in the views directory
+  await hashDirectory(hash, SOURCE_DIRECTORY);
+
+  // templates.js also reads from here (see loadTemplates in templates.js),
+  // so it must affect the cache's fingerprint too.
+  await hashDirectory(hash, TEMPLATES_SOURCE_DIRECTORY);
 
   // Also hash build scripts that affect the output
   const buildScripts = [
