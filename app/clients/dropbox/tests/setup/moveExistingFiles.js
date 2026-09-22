@@ -32,6 +32,6 @@ describe("dropbox createFolder moveExistingFiles", function () {
 
     await expectAsync(
       moveExistingFiles({}, { id: "blog-1", title: "Other blog" })
-    ).toBeRejectedWithError("Failed to acquire folder lock");
+    ).toBeRejectedWith(new Error("Failed to acquire folder lock"));
   });
 });
