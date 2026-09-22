@@ -11,7 +11,11 @@ module.exports = ({ cacheID, viewDirectory }) => {
     const path = render(text);
     const cacheKey = `${cacheID}-${path}`;
 
-    let identifier = cache[cacheKey]; // Check if the result is already cached
+    // In development the underlying file can change (e.g. a CSS rebuild)
+    // without the server restarting, so re-hash on every request rather
+    // than trusting a hash computed once at process start.
+    let identifier =
+      config.environment === "development" ? null : cache[cacheKey];
 
     if (!identifier) {
       try {

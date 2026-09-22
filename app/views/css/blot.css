@@ -1708,7 +1708,7 @@ body.watch-page footer {
 
 .pricing-panel__title {
   max-width: none;
-  margin: 0 0 24px;
+  margin: 0 0 8px;
   padding: 0;
   color: var(--medium-text-color);
   font-size: var(--font-size);
@@ -1733,6 +1733,19 @@ body.watch-page footer {
   min-width: 0;
 }
 
+@media (min-width: 1051px) {
+  .pricing-panel {
+    padding-top: 56px;
+    padding-bottom: 56px;
+  }
+}
+
+.pricing-note {
+  margin-top: 32px;
+  padding-left: 16px;
+  color: var(--text-color);
+}
+
 .pricing-price {
   display: flex;
   flex-wrap: wrap;
@@ -1743,7 +1756,7 @@ body.watch-page footer {
   font-size: calc(var(--font-size) + 4px);
   font-weight: 400;
   line-height: 1.2;
-  margin-bottom: 30px;
+  margin-bottom: 48px;
   text-decoration: none;
 }
 
@@ -1752,7 +1765,7 @@ body.watch-page footer {
 }
 
 .pricing-panel .feature-list {
-  margin: 0 0 28px;
+  margin: 0 0 36px;
 }
 
 .pricing-panel .feature-list li {
