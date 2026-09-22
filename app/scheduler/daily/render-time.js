@@ -1,17 +1,22 @@
-const { redisKey, decodeEntry } = require("blog/render/renderTimeMetric");
+const {
+  redisKey,
+  decodeEntry,
+  DAILY_HISTORY_KEY,
+} = require("blog/render/renderTimeMetric");
 
 // Mirrors the three deploy containers in scripts/deploy (blue/green/yellow).
 // A container that never served traffic in the last 24h simply has no
 // list in Redis, which is fine - lRange on a missing key returns [].
 const CONTAINERS = ["blue", "green", "yellow"];
 
-// One entry appended per daily run: today's p95 average, so later runs can
-// compare against a trailing average without keeping days of raw windows.
-const HISTORY_KEY = "metrics:render-time:daily-p95-history";
+// One entry appended per daily run: today's p95 average. Used both for the
+// email's trailing-average comparison (last HISTORY_DAYS entries) and, via
+// scripts/render-time-chart, as an all-time-so-far daily chart.
+const HISTORY_KEY = DAILY_HISTORY_KEY;
 const HISTORY_DAYS = 7;
-// Keep a few months of daily entries even though only the trailing window
-// is read back - cheap, and useful if HISTORY_DAYS is later widened.
-const HISTORY_MAX_LENGTH = 90;
+// One entry/day is trivially cheap to keep essentially forever - ~100 years
+// of daily history is still under a few hundred KB.
+const HISTORY_MAX_LENGTH = 100 * 366;
 
 // Only call out the comparison once there's a full trailing window to
 // compare against, and only when the move looks like more than day-to-day

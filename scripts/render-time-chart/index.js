@@ -11,8 +11,9 @@ async function main() {
   console.log("Fetching p95 render time from production (ssh blot, read-only)...");
 
   const data = await fetchRenderTimeData();
-  const total = Object.values(data).reduce((n, points) => n + points.length, 0);
-  console.log(`Got ${total} data points across ${Object.keys(data).length} containers.`);
+  console.log(
+    `Got ${data.last24h.length} points for the last 24h, ${data.allTimeDaily.length} daily points all-time.`
+  );
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
   fs.writeFileSync(OUT_FILE, renderHTML(data));

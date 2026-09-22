@@ -22,6 +22,11 @@ function redisKey(container) {
   return `metrics:render-time:p95:${container}`;
 }
 
+// Written by app/scheduler/daily/render-time.js: one entry per day, kept
+// effectively forever, for the "all time" chart and the daily email's
+// trailing-average comparison.
+const DAILY_HISTORY_KEY = "metrics:render-time:daily-p95-history";
+
 // Each list entry is "<window end unix ms>:<p95 ms>" so consumers (the daily
 // email, scripts/render-time-chart) can plot/aggregate over real time rather
 // than just "windows ago".
@@ -79,4 +84,11 @@ function start() {
   timer.unref();
 }
 
-module.exports = { record, start, redisKey, decodeEntry, FLUSH_INTERVAL_MS };
+module.exports = {
+  record,
+  start,
+  redisKey,
+  decodeEntry,
+  DAILY_HISTORY_KEY,
+  FLUSH_INTERVAL_MS,
+};
