@@ -4,6 +4,8 @@ Investigate green crashes (`Lock was lost` / ECOMPROMISED at 2026-09-21 18:02 an
 - Next: check green logs for `[LOCK] slow heartbeat` / `[LOCK] heartbeat error` after the heartbeat round-trip logging ships (PR #1952) — it separates event-loop-side delay (tickDelay) from Redis-side delay (roundTrip) for the first time
 - Remove the event loop monitor (app/helper/eventLoopMonitor*.js, its setup.js hook, and `logLag`/`measureEventLoop` in app/clients/dropbox/init.js) and the lock heartbeat logging (app/sync/lock.js) once the cause is fixed
 
+Analyze the proposed proxy container for possible performance regressions after we switch
+
 12 factor screenshot as api
 - use macserver  (docker container?)
 
