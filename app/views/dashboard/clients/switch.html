@@ -6,8 +6,16 @@
 
   <p>The folder syncs with <b>{{client.display_name}}</b></p>
   
+  {{#client.isGoogleDrive}}
+  <div class="error warning-banner">
+    <p><strong>Google Docs will not be transferred</strong></p>
+    <p>If you switch away from Google Drive, your Google Docs will not be copied to the new sync method. Google Docs are not regular files, so they will not appear in Dropbox, Git, or iCloud. Regular files in your folder will still transfer.</p>
+  </div>
+  {{/client.isGoogleDrive}}
+  {{^client.isGoogleDrive}}
   <p>You can choose another way and Blot will transfer the contents of your folder automatically.
   </p>
+  {{/client.isGoogleDrive}}
 
   
     <style type="text/css">
