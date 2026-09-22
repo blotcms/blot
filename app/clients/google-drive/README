@@ -26,6 +26,7 @@ The module exports the following properties via `/Volumes/Blot/blot/app/clients/
 - `write(blogID, path, input, callback)` — Writes a file to both local and remote storage.
 - `site_routes` — Express router for site-level webhooks and endpoints.
 - `dashboard_routes` — Express router for dashboard pages.
+- `getHealth(blogID)` — Returns the client's current health. Temporarily reports `UNAVAILABLE` while Google Drive API access is suspended.
 - `init` — Initialization function called on server startup.
 
 ## Core Architecture

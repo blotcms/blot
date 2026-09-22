@@ -34,7 +34,9 @@ client_routes
     // filter current client from list of clients
     res.locals.clients = JSON.parse(JSON.stringify(res.locals.clients)).filter(
       (client) => {
-        return client.name !== activeClient;
+        // Service accounts are down. Restore Google Drive as a switch
+        // target from git history.
+        return client.name !== activeClient && client.name !== "google-drive";
       }
     );
 
@@ -50,6 +52,11 @@ client_routes
 
     if (!req.body.client) {
       return next(new Error("Please select a client"));
+    }
+
+    // Service accounts are down. Restore switching to Google Drive from git history.
+    if (req.body.client === "google-drive") {
+      return next(new Error("Google Drive is not available"));
     }
 
     if (req.body.client === req.blog.client) return res.redirect(redirect);
@@ -264,11 +271,21 @@ client_routes
       return next(new Error("Please select a client"));
     }
 
+    // Service accounts are down. Restore Google Drive as a choice from git history.
+    if (req.body.client === "google-drive") {
+      return next(new Error("Google Drive is not available"));
+    }
+
     return res.redirect(req.baseUrl + "/" + req.body.client);
   });
 
 client_routes.use("/:client", function (req, res, next) {
   if (clients[req.params.client] === undefined) {
+    return res.redirect(res.locals.base + "/client");
+  }
+
+  // Service accounts are down. Restore new Google Drive connections from git history.
+  if (!req.blog.client && req.params.client === "google-drive") {
     return res.redirect(res.locals.base + "/client");
   }
 
