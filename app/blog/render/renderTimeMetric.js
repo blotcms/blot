@@ -88,6 +88,7 @@ module.exports = {
   record,
   start,
   redisKey,
+  encodeEntry,
   decodeEntry,
   DAILY_HISTORY_KEY,
   FLUSH_INTERVAL_MS,

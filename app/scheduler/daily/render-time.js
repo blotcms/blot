@@ -1,5 +1,6 @@
 const {
   redisKey,
+  encodeEntry,
   decodeEntry,
   DAILY_HISTORY_KEY,
 } = require("blog/render/renderTimeMetric");
@@ -50,7 +51,8 @@ async function main(callback) {
     );
 
     const priorDays = (await client.lRange(HISTORY_KEY, -HISTORY_DAYS, -1))
-      .map(Number)
+      .map(decodeEntry)
+      .map(({ p95Ms }) => p95Ms)
       .filter((n) => !isNaN(n));
 
     let message = `${average}ms`;
@@ -67,7 +69,7 @@ async function main(callback) {
     }
 
     const multi = client.multi();
-    multi.rPush(HISTORY_KEY, String(average));
+    multi.rPush(HISTORY_KEY, encodeEntry(Date.now(), average));
     multi.lTrim(HISTORY_KEY, -HISTORY_MAX_LENGTH, -1);
     await multi.exec();
 
