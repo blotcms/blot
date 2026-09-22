@@ -1,15 +1,9 @@
-const clfdate = require("helper/clfdate");
 const database = require("../database");
 const disconnect = require("../disconnect");
-const createDriveClient = require("../serviceAccount/createDriveClient");
-const requestServiceAccount = require("clients/google-drive/serviceAccount/request");
 const parseBody = require("body-parser").urlencoded({ extended: false });
-const Blog = require("models/blog");
 
 const express = require("express");
 const dashboard = new express.Router();
-
-const finishSetup = require("./setup");
 
 const VIEWS = require("path").resolve(__dirname + "/../views") + "/";
 
@@ -96,69 +90,11 @@ dashboard
         return disconnect(req.blog.id, next);
       }
 
-      if (!req.body.email) {
-        return res.message(req.baseUrl, "Please enter your email address");
-      }
-
-      if (existingAccount && existingAccount.email === req.body.email && !existingAccount.error) {
-        return res.redirect(req.baseUrl);
-      }
-
-      if (req.body.email.length > 100) {
-        return res.message(req.baseUrl, "Email address is too long");
-      }
-
-      if (req.body.email.indexOf("@") === -1) {
-        return res.message(req.baseUrl, "Please enter a valid email address");
-      }
-
-      const setClientError = await new Promise((resolve) => {
-        Blog.set(req.blog.id, { client: "google-drive" }, function (err) {
-          resolve(err);
-        });
-      });
-
-      if (setClientError) {
-        return next(setClientError);
-      }
-
-      // Determine the service account ID we'll use to sync this blog.
-      const serviceAccountId = await requestServiceAccount();
-      const blog = req.blog;
-      const email = req.body.email;
-
-      await database.blog.store(req.blog.id, {
-        email,
-        serviceAccountId,
-        error: null,
-        preparing: true,
-        startedSetup: Date.now(),
-        nonEmptyFolderShared: false,
-        nonEditorPermissions: false,
-        folderId: null,
-        folderName: null,
-      });
-
-      let drive;
-
-      try {
-        drive = await createDriveClient(serviceAccountId);
-      } catch (e) {
-        return res.message(
-          req.baseUrl,
-          "Failed to connect to Google Drive. Please try again later."
-        );
-      }
-
-      console.log(clfdate(), "Google Drive Client", "Setting up folder");
-      res.redirect(req.baseUrl);
-
-      // This can happen in the background
-      try {
-        await finishSetup(blog, drive, email, serviceAccountId);
-      } catch (e) {
-        console.log(clfdate(), "Google Drive Client: finishSetup", e);
-      }
+      // Service accounts are down. Restore setup from git history.
+      return res.message(
+        req.baseUrl,
+        "Google Drive setup is paused"
+      );
     } catch (err) {
       next(err);
     }

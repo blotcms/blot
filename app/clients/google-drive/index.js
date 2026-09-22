@@ -2,7 +2,6 @@ module.exports = {
   display_name: "Google Drive",
   description: "A file storage and synchronization service",
   disconnect: require("./disconnect"),
-  resync: async function () {},
   remove: require("./remove"),
   write: require("./write"),
   getHealth: require("./getHealth"),
