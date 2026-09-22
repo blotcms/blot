@@ -3,6 +3,7 @@ const path = require("path");
 const config = require("config");
 const mustache = require("mustache");
 const { marked } = require("marked");
+const { execFileSync } = require("child_process");
 const html = require("./html");
 const renderFolder = require("../tools/finder/render_folder");
 
@@ -12,69 +13,80 @@ const templatesSourceDirectory = path.join(__dirname, "../../templates/source");
 
 const NAME_MAP = { cv: "CV" };
 
+// Categories now deliberately mirror the Examples audience filters
+// (Writers, Artists, Researchers, Photographers, Designers) rather than
+// staying a separate "form" taxonomy - Developers has no template-form
+// counterpart here, so it's linked to from Research instead. A template
+// commonly belongs to more than one category.
 const categories = [
   {
     name: "Writing",
-    slug: "blogging",
-    templates: [
-      "blog",
-      "fieldnotes",
-      "hypertext",
-      "index",
-      "journal",
-      "keynote",
-      "magazine",
-      "notebook",
-      "text",
-      "wireframe",
-      "zine",
-    ],
+    slug: "writing",
+    templates: ["blog", "journal", "magazine", "text", "zine", "notebook", "fieldnotes", "index", "links"],
   },
   {
-    name: "Photos",
+    name: "Art",
+    slug: "art",
+    templates: ["portfolio", "gallery", "album", "zine", "studio", "cv"],
+  },
+  {
+    name: "Research",
+    slug: "research",
+    templates: ["documentation", "fieldnotes", "hypertext", "index", "links", "notebook", "keynote", "cv"],
+  },
+  {
+    name: "Photography",
     slug: "photography",
-    templates: ["album", "gallery", "links", "portfolio"],
+    templates: ["album", "gallery", "portfolio", "event"],
   },
   {
-    name: "Personal",
-    slug: "personal",
-    templates: [
-      "blog",
-      "cv",
-      "fieldnotes",
-      "hypertext",
-      "index",
-      "journal",
-      "keynote",
-      "notebook",
-      "portfolio",
-      "profile",
-      "text",
-      "wireframe",
-      "zine",
-    ],
-  },
-  {
-    name: "Organizations",
-    slug: "organizations",
-    templates: ["documentation", "event", "organization"],
-  },
-  {
-    name: "Portfolio",
-    slug: "portfolio",
-    templates: ["album", "cv", "gallery", "portfolio", "profile", "studio"],
-  },
-  {
-    name: "Editorial",
-    slug: "editorial",
-    templates: ["blog", "fieldnotes", "journal", "magazine", "text", "zine"],
-  },
-  {
-    name: "Notes",
-    slug: "notes",
-    templates: ["fieldnotes", "hypertext", "index", "journal", "keynote", "links", "notebook"],
+    name: "Design",
+    slug: "design",
+    templates: ["portfolio", "profile", "studio", "wireframe", "keynote", "organization", "event", "cv"],
   },
 ];
+
+// Cross-links from a template's category to the matching Examples
+// audience filter. This is the connective tissue the marketing plan
+// asks for, kept as links rather than merging the two catalogues
+// outright - Design is the one category with no exact audience match
+// of its own name, so it points at Designers same as the others.
+const EXAMPLES_LINKS = {
+  writing: [{ slug: "writers", label: "Writers" }],
+  art: [{ slug: "artists", label: "Artists" }],
+  research: [
+    { slug: "researchers", label: "Researchers" },
+    { slug: "developers", label: "Developers" },
+  ],
+  photography: [{ slug: "photographers", label: "Photographers" }],
+  design: [{ slug: "designers", label: "Designers" }],
+};
+
+const sidebarsDirectory = path.join(viewsDirectory, "sidebars");
+
+// A category's sidebar is a standalone HTML fragment (see
+// app/views/templates/sidebars/) so it can be edited without touching
+// this build script. Optional per category - a slug with no matching
+// file (or the unfiltered "All" page) simply gets no sidebar.
+const sidebarForCategory = (slug) => {
+  const sidebarPath = path.join(sidebarsDirectory, `${slug}.html`);
+  if (!fs.existsSync(sidebarPath)) return null;
+  return fs.readFileSync(sidebarPath, "utf8");
+};
+
+const relatedExampleCategoriesForTemplate = (slug) => {
+  const seen = new Map();
+
+  for (const category of categories) {
+    if (!category.templates.includes(slug)) continue;
+    for (const link of EXAMPLES_LINKS[category.slug] || []) {
+      if (seen.has(link.slug)) continue;
+      seen.set(link.slug, { ...link, href: `/examples/${link.slug}` });
+    }
+  }
+
+  return [...seen.values()];
+};
 
 const cdn = () => (text, render) => `{{#cdn}}${render(text)}{{/cdn}}`;
 
@@ -168,6 +180,44 @@ const loadPartials = async () => {
   return partials;
 };
 
+// "Latest" sorting is driven by each template's most recent commit,
+// so it stays accurate without a value anyone has to remember to update.
+const REPO_ROOT = path.join(__dirname, "../../../");
+
+const getLatestCommitTimestamp = (dir) => {
+  try {
+    const output = execFileSync(
+      "git",
+      ["log", "-1", "--format=%ct", "--", dir],
+      { cwd: REPO_ROOT, encoding: "utf8" }
+    ).trim();
+
+    if (!output) return 0;
+    return parseInt(output, 10) * 1000;
+  } catch (e) {
+    // No .git directory (e.g. a production image built without history)
+    // or git isn't installed — fall back to "unknown", sorted last.
+    return 0;
+  }
+};
+
+const formatUpdatedLabel = (msAgo) => {
+  if (!Number.isFinite(msAgo) || msAgo < 0) return null;
+
+  const DAY = 24 * 60 * 60 * 1000;
+  const days = Math.floor(msAgo / DAY);
+
+  if (days < 1) return "today";
+  if (days === 1) return "1 day ago";
+  if (days < 30) return `${days} days ago`;
+
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} month${months === 1 ? "" : "s"} ago`;
+
+  const years = Math.floor(months / 12);
+  return `${years} year${years === 1 ? "" : "s"} ago`;
+};
+
 const loadTemplates = async () => {
   const items = (await fs.readdir(templatesSourceDirectory)).filter((i) => !i.startsWith(".") && !i.endsWith(".md"));
 
@@ -178,18 +228,27 @@ const loadTemplates = async () => {
     if (!(await fs.pathExists(packagePath))) continue;
 
     const pkg = await fs.readJson(packagePath);
+    const latest_commit = getLatestCommitTimestamp(
+      path.join(templatesSourceDirectory, slug)
+    );
+
     templates.push({
       name: NAME_MAP[slug] || slug[0].toUpperCase() + slug.slice(1),
       slug,
       demo_folder: (pkg.locals && pkg.locals.demo_folder) || "david",
       source: `https://github.com/blotcms/blot/tree/master/app/templates/source/${slug}`,
+      // Estimated for now (see package.json) — there's no usage tracking
+      // to derive this from yet.
+      popularity: typeof pkg.popularity === "number" ? pkg.popularity : 0,
+      latest_commit,
+      updated_label: formatUpdatedLabel(Date.now() - latest_commit),
     });
   }
 
   const manifest = loadManifest();
 
   return templates
-    .sort((a, b) => a.slug.localeCompare(b.slug))
+    .sort((a, b) => b.latest_commit - a.latest_commit)
     .map((template) => ({
       ...template,
       folder_preview: folderPreviewForTemplate(template, manifest),
@@ -209,6 +268,24 @@ module.exports = async () => {
   const partials = await loadPartials();
   const templates = await loadTemplates();
 
+  // Everything under app/views/templates/ is normally build-time-only
+  // material (consumed here, then baked into static index.html /
+  // for-<category>/index.html pages) and never copied to views-built,
+  // since nothing routes directly to it. /templates/search/:query is
+  // the exception - its results are per-request, so it has to be a
+  // genuinely live Express view. Copy its source and the template-list
+  // partial it needs through unbaked (no mustache.render - the live
+  // request is what fills in {{...}} tags) so Express's view engine can
+  // find them under views-built like any other live docs page.
+  await fs.copy(
+    path.join(viewsDirectory, "search.html"),
+    path.join(outputDirectory, "search.html")
+  );
+  await fs.copy(
+    path.join(viewsDirectory, "template-list.html"),
+    path.join(outputDirectory, "template-list.html")
+  );
+
   await renderView(
     "index.html",
     {
@@ -227,6 +304,7 @@ module.exports = async () => {
         category: category.slug,
         categories: categories.map((c) => ({ ...c, selected: c.slug === category.slug ? "selected" : "" })),
         allTemplates: templates.filter((t) => category.templates.includes(t.slug)),
+        sidebar: sidebarForCategory(category.slug),
         cdn,
       },
       `for-${category.slug}/index.html`,
@@ -257,6 +335,7 @@ module.exports = async () => {
     }
 
     templateData.folder_preview = folderPreviewForTemplate(template, manifest);
+    templateData.relatedExampleCategories = relatedExampleCategoriesForTemplate(template.slug);
 
     await renderView("template.html", { template: templateData, cdn }, `${template.slug}/index.html`, partials);
   }
@@ -265,3 +344,4 @@ module.exports = async () => {
 module.exports.sanitizePreviewTree = sanitizePreviewTree;
 module.exports.formatTreeForPreview = formatTreeForPreview;
 module.exports.loadTemplates = loadTemplates;
+module.exports.categories = categories;

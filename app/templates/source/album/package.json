@@ -1,5 +1,6 @@
 {
   "name": "Album",
+  "popularity": 45,
   "isPublic": true,
   "locals": {
     "background_color": "#ffffff",

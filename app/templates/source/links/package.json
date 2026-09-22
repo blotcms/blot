@@ -1,5 +1,6 @@
 {
   "name": "Links",
+  "popularity": 22,
   "locals": {
     "page_size": 24,
     "background_color": "#fff",

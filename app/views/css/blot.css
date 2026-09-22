@@ -479,6 +479,60 @@ h2 + .clients {margin-top: 0}
 }
 
 
+/* Category filters on the left, search + Latest/Popular on the right,
+   all on one row; wraps to its own line on narrow viewports. */
+.templates-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75em 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.templates-toolbar .pill-navigation {
+  margin-bottom: 0;
+}
+
+.templates-toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75em;
+  margin-left: auto;
+}
+
+.template-search input[type="search"] {
+  width: 100%;
+  max-width: 220px;
+  padding: 0.6em 0.85em;
+  font-family: inherit;
+  font-size: 16px;
+  color: var(--text-color);
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 2em;
+  box-sizing: border-box;
+  box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.075);
+}
+
+.template-search input[type="search"]:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: inset 0 0 1px var(--accent-color);
+}
+
+.template-search-status {
+  font-size: var(--small-font-size);
+  color: var(--light-text-color);
+  margin: 0 0 1.5em;
+  text-align: right;
+}
+
+.template-search-status:empty {
+  margin: 0;
+}
+
 .clients.templates {
   display: flex;
   flex-wrap: wrap;
@@ -524,6 +578,12 @@ h2 + .clients {margin-top: 0}
   color: #94a3cc;
 }
 
+.clients.templates .template-updated {
+  font-size: var(--small-font-size);
+  color: var(--light-text-color);
+  margin-top: 2px;
+}
+
 .clients.templates img.template-image {
   background-color: white;
   width: 160px;
@@ -531,6 +591,77 @@ h2 + .clients {margin-top: 0}
   border-radius: var(--border-radius);
   margin-bottom: 16px;
   box-shadow: inset 0 1px 0 #f5f4f5, 0 -1px 0 rgba(0,0,0,.11), 0 1px 0 rgba(0,0,0,.26), -1px 0 0 rgba(0,0,0,.13), 1px 0 0 rgba(0,0,0,.13);
+}
+
+/* Category pages under /templates/for-:category can include a short,
+   factual sidebar (app/views/templates/sidebars/*.html) alongside the
+   template grid. Desktop-only two-column layout; stacks on mobile. */
+.templates-with-sidebar {
+  display: flex;
+  align-items: flex-start;
+  gap: 2.5em;
+}
+
+.templates-with-sidebar .clients.templates {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Two per row instead of three, since the sidebar takes up a third
+   of the width and three columns would get cramped. Scoped to widths
+   above the existing 1148px/600px grid breakpoints below, which already
+   step down to 50% and 100% and should keep doing so once the sidebar
+   has stacked underneath the grid. */
+@media (min-width: 1149px) {
+  .templates-with-sidebar .clients.templates .template-item {
+    width: 50%;
+  }
+}
+
+.template-category-sidebar {
+  flex: 0 0 33.333%;
+  width: 33.333%;
+  font-size: var(--small-font-size);
+  color: var(--medium-text-color);
+}
+
+.template-category-sidebar h2 {
+  font-size: var(--small-font-size);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--light-text-color);
+  margin: 0 0 0.75em;
+}
+
+.template-category-sidebar ul {
+  max-width: none;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.template-category-sidebar li {
+  margin-bottom: 1.25em;
+  line-height: 1.5;
+}
+
+.template-category-sidebar li a {
+  display: inline-block;
+  margin-left: 0.35em;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .templates-with-sidebar {
+    flex-direction: column;
+  }
+
+  .template-category-sidebar {
+    width: 100%;
+    flex-basis: auto;
+    padding-top: 1em;
+    border-top: 1px solid var(--light-background-color);
+  }
 }
 
 
@@ -1244,6 +1375,36 @@ ul.pill-navigation {
 .pill-navigation a.selected {
   color: var(--background-color);
   background-color: var(--accent-color);
+}
+
+/* A compact two-or-more-way sort/view toggle: a single bordered
+   segmented control, as opposed to pill-navigation's row of separate
+   filled pills. Shared by /questions (Recent / Most replies) and
+   /templates (Latest / Popular). */
+.toggle-tabs ul {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 6px;
+  margin: 0;
+  font-size: 14px;
+  display: flex;
+  list-style: none;
+}
+
+.toggle-tabs ul li a {
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: 1em;
+  padding: 2px 4px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.toggle-tabs ul li a.selected {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 2px 4px;
+  color: var(--text-color);
 }
 
 

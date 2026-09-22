@@ -1,5 +1,6 @@
 {
   "name": "Text",
+  "popularity": 55,
   "locals": {
     "max_width": 700,
     "max_width_range": [400, 1200],

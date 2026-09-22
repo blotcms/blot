@@ -14,7 +14,11 @@ module.exports = function (req, res, next) {
   // method to resync the folder from scratch
   const canResync = client && !!client.resync;
 
-  res.locals.client = { ...client, canResync };
+  res.locals.client = {
+    ...client,
+    canResync,
+    isGoogleDrive: effectiveClientName === "google-drive",
+  };
   res.locals.effectiveClient = effectiveClientName;
   res.locals.isDevelopment = config.environment === "development";
 
