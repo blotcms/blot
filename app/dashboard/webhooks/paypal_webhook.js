@@ -159,8 +159,8 @@ const updateSubscription = async subscriptionID => {
 
   // CLOSED waits until paid access has ended. The claim is taken before the
   // write, and the webhook stays open until Mailgun accepts the message.
-  // A failed send leaves the claim owed so the retry delivers it once;
-  // a second refresh loses the claim and does not send another copy.
+  // A failed send leaves the claim owed so the retry delivers it once.
+  // A second refresh does not win the claim, so it does not send another copy.
   if (status === "CANCELLED") {
     await settlePayPalCancellation(user.uid, {
       closed: shouldDisable && !user.isDisabled,
