@@ -26,6 +26,7 @@ cache/*
 static/*
 tmp/*
 scripts/deploy/out/*
+scripts/render-time-chart/out/*
 config/nginx/server.conf
 
 # Eventually ignore all node_modules directories
