@@ -4,8 +4,8 @@ const parser = require("body-parser");
 const User = require("models/user");
 const config = require("config");
 const clfdate = require("helper/clfdate");
+const email = require("helper/email");
 const subscriptionLifecycle = require("models/user/subscriptionLifecycle");
-const { settlePayPalCancellation } = require("./paypal_cancellation_notice");
 
 const SUBSCRIPTION_EVENTS = [
   "BILLING.SUBSCRIPTION.CANCELLED",
@@ -142,34 +142,34 @@ const updateSubscription = async subscriptionID => {
   }
 
   const previousStatus = user.paypal && user.paypal.status;
-  const status = String(paypal.status || "").toUpperCase();
-  const wasCancelled = String(previousStatus || "").toUpperCase() === "CANCELLED";
-  const shouldDisable = subscriptionLifecycle.shouldDisableFromPaypalSubscription(paypal);
-  // Preserve deliberate per-blog availability when the account is unchanged.
-  // The model saves the account flag last to keep failures retryable.
-  const shouldEnable = paypal.status === "ACTIVE" && user.isDisabled;
+  const becameCancelled =
+    paypal.status === "CANCELLED" && previousStatus !== "CANCELLED";
 
-  const persist = () => new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const updates = { paypal };
-    const done = err => err ? reject(err) : resolve();
+    const shouldDisable = subscriptionLifecycle.shouldDisableFromPaypalSubscription(paypal);
+    // Preserve deliberate per-blog availability when the account is unchanged.
+    // The model saves the account flag last to keep failures retryable.
+    const shouldEnable = paypal.status === "ACTIVE" && user.isDisabled;
+    // CLOSED says the account is now closed. PayPal CANCELLED still leaves
+    // access in place until the paid period ends, so send it only with the
+    // disable, and only after that write succeeds. A failed write returns
+    // 503 and PayPal retries; emailing before the save would resend.
+    const done = err => {
+      if (err) return reject(err);
+
+      if (shouldDisable && !user.isDisabled && paypal.status === "CANCELLED")
+        email.CLOSED(user.uid);
+      else if (becameCancelled && user.isDisabled)
+        email.ALREADY_CANCELLED(user.uid);
+
+      resolve();
+    };
+
     if (shouldDisable && !user.isDisabled) return User.disable(user, updates, done);
     if (shouldEnable) return User.enable(user, updates, done);
     User.set(user.uid, updates, done);
   });
-
-  // CLOSED waits until paid access has ended. The claim is taken before the
-  // write, and the webhook stays open until Mailgun accepts the message.
-  // A failed send leaves the claim owed so the retry delivers it once.
-  // A second refresh does not win the claim, so it does not send another copy.
-  if (status === "CANCELLED") {
-    await settlePayPalCancellation(user.uid, {
-      closed: shouldDisable && !user.isDisabled,
-      alreadyCancelled: !wasCancelled && !!user.isDisabled
-    }, persist);
-    return;
-  }
-
-  await persist();
 };
 
 paypal.updateSubscription = updateSubscription;
