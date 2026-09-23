@@ -42,7 +42,6 @@
     "spacing_range": [0, 5],
     "demo_folder": "bjorn"
   },
-  "isPublic": false,
   "views": {
     "archives.html": {
       "url": "/archives",

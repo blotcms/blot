@@ -77,7 +77,6 @@
       "portfolios"
     ]
   },
-  "isPublic": true,
   "views": {
     "search": {
       "partials": {

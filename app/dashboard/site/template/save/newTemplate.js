@@ -43,7 +43,6 @@ module.exports = function (req, res, next) {
   // from its folder as the template it was cloned from. Derive it rather than
   // building one which the 30-character truncation might shorten differently.
   template = {
-    isPublic: false,
     name: name,
     slug: slugForName(req.blog.id, name),
     cloneFrom: req.body.cloneFrom

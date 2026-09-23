@@ -19,11 +19,11 @@ All state is stored in Redis. There is no relational database or document store 
 | `metadataModel.js` | Schema definition for a template's metadata record (field names to type strings). |
 | `viewModel.js` | Schema definition for a single view record. |
 | `create.js` | Creates a new template record in Redis for a given owner. |
-| `update.js` | Updates template metadata and manages the public-template set membership. |
+| `update.js` | Delegates template metadata updates to `setMetadata`. |
 | `drop.js` | Deletes a template and all associated views, URL mappings, CDN records, and disk-cached rendered output. |
 | `clone.js` | Copies all views and metadata from one template ID to another. Used internally by `create` when `metadata.cloneFrom` is set. |
 | `getMetadata.js` | Retrieves a template's metadata hash from Redis by template ID. |
-| `setMetadata.js` | Writes metadata updates to Redis, manages public-template set membership, bumps the blog's `cacheID`, and triggers CDN manifest regeneration. |
+| `setMetadata.js` | Writes metadata updates to Redis, bumps a blog-owned template's blog `cacheID`, and triggers CDN manifest regeneration. |
 | `getView.js` | Retrieves a single view by name or by extension-less name (e.g. `"head"` resolves to `"head.html"`). |
 | `setView.js` | Writes a view to Redis. Validates Mustache syntax, enforces a 2 MB payload limit, normalizes URL patterns, detects infinite partial-dependency cycles, and triggers CDN manifest regeneration. |
 | `dropView.js` | Removes a single view from Redis along with its URL mapping, URL pattern entry, and allViews set membership. |
@@ -56,7 +56,7 @@ All state is stored in Redis. There is no relational database or document store 
 |------|-------------|
 | `util/makeID.js` | Derives a stable template ID from an owner string and a name by slugifying the name and joining with `":"`. Example: `"abc123:my-theme"`. |
 | `util/serialize.js` | Converts `object` and `array` typed fields in a model instance to JSON strings before writing to Redis hashes. |
-| `util/deserialize.js` | Converts JSON-stringified and boolean fields back to their native types after reading from Redis hashes. |
+| `util/deserialize.js` | Converts JSON-stringified and boolean fields back to their native types after reading from Redis hashes, and drops the retired `isPublic` field. Other undeclared fields, including a view's legacy `type`, are kept. |
 | `util/generateCdnUrl.js` | Constructs a CDN URL for a rendered view asset given a view name and content hash. Uses a three-level directory structure derived from the first four characters of the hash. |
 | `util/updateCdnManifest.js` | Recomputes the CDN manifest for a template: renders each view that declares a `retrieve.cdn` target, hashes the output, stores the result on disk and in Redis, cleans up stale hashes, and writes the updated manifest into the template's metadata. Skips SITE-owned templates and templates not currently installed on their owner blog. |
 | `util/forkSiteTemplate.js` | Creates a blog-owned copy of a SITE-owned template. If an existing fork already exists, it returns that fork's ID without duplicating. Handles name deduplication for repeated calls. |
@@ -83,7 +83,6 @@ Stored as a Redis hash at key `template:{id}:info`.
 | `shareID` | string | UUID share token, or empty string when sharing is disabled. |
 | `errors` | object | Map of view name to error message for views that failed to save. |
 | `previewPath` | string | URL path used for template previewing. Defaults to `"/"`. |
-| `isPublic` | boolean | Whether the template appears in the global public-template set. |
 | `description` | string | Free-text description. |
 | `localEditing` | boolean | Whether this template is managed from a folder on disk. |
 | `thumb` | string | URL or path to a thumbnail image. |
@@ -139,7 +138,7 @@ Returns the deserialized metadata object for a template ID. Calls back with `err
 ```js
 setMetadata(id, updates, callback)
 ```
-Merges `updates` into the existing metadata, writes to Redis, manages public-template set membership, bumps the blog's `cacheID` when changes are detected, and triggers `updateCdnManifest`.
+Merges `updates` into the existing metadata, writes to Redis, bumps the owning blog's `cacheID` when a blog-owned template changes, and triggers `updateCdnManifest`. SITE-owned templates do not have a per-blog cache to bump.
 
 ### Views
 
@@ -279,7 +278,6 @@ Defined in `key.js`:
 | `template:{id}:url_patterns` | hash | `viewName → JSON-encoded urlPatterns array` |
 | `template:{id}:url:{url}` | string | View name associated with a specific URL |
 | `template:share:{shareID}` | string | Template ID associated with a share token |
-| `template:public_templates` | set | IDs of all public (SITE) templates |
 | `template:owned_by:{blogID}` | set | IDs of all templates owned by a blog |
 | `cdn:rendered:{hash}` | string | Rendered and optionally minified asset content (Redis, kept for backward compatibility alongside on-disk storage) |
 

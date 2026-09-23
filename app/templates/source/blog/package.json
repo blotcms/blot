@@ -1,7 +1,6 @@
 {
   "name": "Blog",
   "popularity": 95,
-  "isPublic": false,
   "locals": {
     "page_size": 20,
     "hide_dates": false,

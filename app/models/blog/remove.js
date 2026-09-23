@@ -138,9 +138,6 @@ function deleteKeys(blog, callback) {
         } while (cursor !== START_CURSOR);
       }
 
-      if (ownedTemplates.length > 0) {
-        multi.sRem("template:public_templates", ownedTemplates);
-      }
 
       if (remove.length > 0) multi.del(remove);
       multi.sRem(key.ids, blog.id);

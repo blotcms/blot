@@ -20,7 +20,7 @@ module.exports = async function renameLocalTemplate(blogID, fromID, toID) {
 
   var changes = { localEditing: true };
 
-  ["description", "thumb", "previewPath", "isPublic", "cloneFrom"].forEach(function (field) {
+  ["description", "thumb", "previewPath", "cloneFrom"].forEach(function (field) {
     if (from[field] !== undefined) changes[field] = from[field];
   });
 

@@ -48,7 +48,6 @@
     "logo_url": "",
     "demo_folder": "bjorn"
   },
-  "isPublic": true,
   "views": {
     "archives.html": {
       "url": "/archives",

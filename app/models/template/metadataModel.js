@@ -7,7 +7,6 @@ module.exports = {
   shareID: "string",
   errors: "object",
   previewPath: "string",
-  isPublic: "boolean",
   description: "string",
   localEditing: "boolean",
   thumb: "string",
