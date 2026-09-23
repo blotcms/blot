@@ -190,7 +190,6 @@ describe("upload template route", function () {
 
     expect(template.owner).toEqual(this.blog.id);
     expect(template.localEditing).toBe(false);
-    expect(template.isPublic).toBe(false);
     expect(template.locals.color).toEqual("red");
 
     // Every temporary file is removed, whatever the outcome

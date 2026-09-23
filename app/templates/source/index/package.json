@@ -56,7 +56,6 @@
     "spacing": 3,
     "spacing_range": [1, 8]
   },
-  "isPublic": false,
   "views": {
     "archives.html": {
       "url": "/archives",

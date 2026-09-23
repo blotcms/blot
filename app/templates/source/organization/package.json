@@ -7,7 +7,6 @@
     "date_display": "MMMM D, Y",
     "demo_folder": "lecture"
   },
-  "isPublic": false,
   "views": {
     "error": {
       "partials": {

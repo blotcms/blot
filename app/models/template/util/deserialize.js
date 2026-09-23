@@ -8,6 +8,11 @@ module.exports = function deserialize(sourceObj, model) {
   var obj = _.cloneDeep(sourceObj);
 
   for (var i in obj) {
+    if (!Object.prototype.hasOwnProperty.call(model, i)) {
+      delete obj[i];
+      continue;
+    }
+
     if (model[i] === "object" || model[i] === "array")
       obj[i] = JSON.parse(obj[i]);
 

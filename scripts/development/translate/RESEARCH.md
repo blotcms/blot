@@ -532,7 +532,7 @@ before implementing). Key facts:
 - All state lives in **Redis** (`template:{id}:info`, `template:{id}:view:{name}`,
   `template:{id}:all_views`, `template:{id}:url_patterns`, `template:{id}:url:{url}`).
 - Metadata fields: `id name slug owner cloneFrom shareID errors previewPath
-  isPublic description localEditing thumb locals cdn`.
+  description localEditing thumb locals cdn`.
 - View fields: `name content partials locals retrieve url urlPatterns`.
 
 ### 4.2 Locally-edited templates: the lifecycle
@@ -580,7 +580,6 @@ Produced by `app/models/template/package.js#generate`, consumed by `#save`:
 ```json
 {
   "name": "Blog",
-  "isPublic": false,
   "enabled": true,
   "locals": { "page_size": 20, "background_color": "#FFFFFF", "…": "…" },
   "views": {

@@ -41,7 +41,6 @@
     "spacing": 4,
     "spacing_range": [1, 8]
   },
-  "isPublic": false,
   "views": {
     "public": {
       "partials": {
