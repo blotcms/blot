@@ -373,6 +373,93 @@ describe("parseUploadedTemplate", function () {
       expect(result.warnings[0]).toContain("localEditing");
     });
 
+    it("returns no presets when the manifest does not declare them", function () {
+      const result = parse([
+        entry("index.html", "<h1>Hi</h1>"),
+        entry("package.json", JSON.stringify({ locals: { background_color: "#fff" } })),
+      ]);
+
+      expect(result.presets).toBeUndefined();
+    });
+
+    it("keeps a valid preset list, including an unknown font id", function () {
+      const result = parse([
+        entry("index.html", "<h1>Hi</h1>"),
+        entry(
+          "package.json",
+          JSON.stringify({
+            locals: {
+              background_color: "#fff",
+              font: { id: "verdana" },
+            },
+            presets: {
+              colors: [
+                {
+                  id: "classic",
+                  name: "Classic",
+                  values: { background_color: "#ffffff" },
+                },
+              ],
+              fonts: [
+                {
+                  id: "missing",
+                  name: "Missing",
+                  values: { font: { id: "not-a-real-font" } },
+                },
+              ],
+            },
+          })
+        ),
+      ]);
+
+      expect(result.presets.colors[0].id).toEqual("classic");
+      expect(result.presets.fonts[0].values.font.id).toEqual("not-a-real-font");
+    });
+
+    it("reports malformed presets, duplicate ids, and unknown locals", function () {
+      const malformed = problemsFrom([
+        entry("index.html", "<h1>Hi</h1>"),
+        entry("package.json", JSON.stringify({ presets: [] })),
+      ]);
+      expect(malformed[0].reason).toEqual("presets");
+      expect(malformed[0].path).toEqual("package.json");
+
+      const duplicated = problemsFrom([
+        entry("index.html", "<h1>Hi</h1>"),
+        entry(
+          "package.json",
+          JSON.stringify({
+            locals: { background_color: "#fff" },
+            presets: {
+              colors: [
+                { id: "classic", name: "One", values: { background_color: "#fff" } },
+                { id: "classic", name: "Two", values: { background_color: "#000" } },
+              ],
+            },
+          })
+        ),
+      ]);
+      expect(duplicated[0].reason).toEqual("presets");
+      expect(duplicated[0].message).toContain("duplicated");
+
+      const unknown = problemsFrom([
+        entry("index.html", "<h1>Hi</h1>"),
+        entry(
+          "package.json",
+          JSON.stringify({
+            locals: { background_color: "#fff" },
+            presets: {
+              colors: [
+                { id: "bad", name: "Bad", values: { nope_color: "#fff" } },
+              ],
+            },
+          })
+        ),
+      ]);
+      expect(unknown[0].reason).toEqual("presets");
+      expect(unknown[0].message).toContain("nope_color");
+    });
+
     it("warns about settings for files which were not uploaded", function () {
       const result = parse([
         entry("index.html", "<h1>Hi</h1>"),

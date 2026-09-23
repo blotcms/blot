@@ -1,0 +1,177 @@
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.preset-grid--fonts {
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+}
+
+.preset-grid form {
+  margin: 0;
+  min-width: 0;
+}
+
+button.preset-tile {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.preset-tile {
+  position: relative;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.55rem 0.5rem 0.45rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background: #fff;
+}
+
+.preset-tile:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.preset-tile.is-selected {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 1px var(--accent-color);
+}
+
+.preset-tile:disabled,
+.preset-tile.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.preset-tile[hidden] {
+  display: none;
+}
+
+.preset-check {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  width: 14px;
+  height: 14px;
+  opacity: 0;
+  color: var(--accent-color);
+}
+
+.preset-tile.is-selected .preset-check {
+  opacity: 1;
+}
+
+.preset-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.preset-swatch {
+  display: inline-block;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 2px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg, #d0d0d0 25%, transparent 25%),
+    linear-gradient(-45deg, #d0d0d0 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #d0d0d0 75%),
+    linear-gradient(-45deg, transparent 75%, #d0d0d0 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+}
+
+.preset-swatch > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.preset-row + .preset-row {
+  margin-top: 0.35rem;
+}
+
+.preset-row-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--heading-color);
+}
+
+.preset-caption {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 11px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-font-sample {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-font-sample--heading {
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.preset-font-sample--body,
+.preset-font-sample--other {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.preset-error {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #a12626;
+  white-space: normal;
+}
+
+button.preset-edit {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.6rem 1rem;
+  border: none;
+  border-top: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--accent-color);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.preset-edit:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+.preset-controls[hidden] {
+  display: none;
+}
+
+.preset-controls .settings-group {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  border-top: 1px solid var(--border-color);
+}

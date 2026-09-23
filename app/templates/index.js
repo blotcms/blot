@@ -13,6 +13,7 @@ var chokidar = require("chokidar");
 var parseTemplate = require("models/template/parseTemplate");
 var urlNormalizer = require("helper/urlNormalizer");
 var updateCdnManifest = require("models/template/util/updateCdnManifest");
+var validatePresets = require("models/template/presets").validatePresets;
 var TEMPLATES_DIRECTORY = require("path").resolve(__dirname + "/source");
 var TEMPLATES_OWNER = "SITE";
 
@@ -195,11 +196,22 @@ function build(directory, callback) {
       );
     }
 
+    if (templatePackage.presets !== undefined) {
+      var checkedPresets = validatePresets(templatePackage.presets, template.locals);
+      if (checkedPresets.errors.length) {
+        throw new Error(
+          "Invalid presets: " + checkedPresets.errors.join("; ")
+        );
+      }
+      template.presets = checkedPresets.presets;
+    }
+
     snapshot = assembleTemplateSnapshot(
       directory,
       templatePackage,
       template.locals
     );
+    snapshot.presets = _.cloneDeep(template.presets || {});
   } catch (e) {
     // A template folder can be caught mid-edit (a save landing between
     // chokidar's change event and a template being fully rewritten, a
@@ -223,6 +235,7 @@ function build(directory, callback) {
         description: description,
         isPublic: isPublic,
         locals: normalizeLocalsForComparison(snapshot.locals, true),
+        presets: snapshot.presets || {},
       };
 
       var storedMetadataSnapshot = storedMetadata
@@ -231,6 +244,7 @@ function build(directory, callback) {
             description: storedMetadata.description,
             isPublic: storedMetadata.isPublic,
             locals: normalizeLocalsForComparison(storedMetadata.locals || {}),
+            presets: storedMetadata.presets || {},
           }
         : null;
 

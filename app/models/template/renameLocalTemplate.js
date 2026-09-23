@@ -26,6 +26,12 @@ module.exports = async function renameLocalTemplate(blogID, fromID, toID) {
 
   changes.locals = Object.assign({}, from.locals, to.locals);
 
+  // The renamed folder is read first, so its package.json wins when it
+  // declares presets. Otherwise keep presets that only existed in Redis.
+  if (to.presets === undefined || to.presets === null) {
+    if (from.presets) changes.presets = from.presets;
+  }
+
   // Switch first so the site never points at a template that's gone
   if (blog.template === fromID) await setBlog(blogID, { template: toID });
 

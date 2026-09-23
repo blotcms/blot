@@ -35,6 +35,12 @@ Array.from(document.querySelectorAll("form.color-picker")).forEach((form) => {
   pickr
     .on("save", (color, instance) => {
       form.querySelector("input.value").value = color.toHEXA().toString();
+      form.dispatchEvent(
+        new CustomEvent("template-local-changed", {
+          bubbles: true,
+          detail: { group: "colors" },
+        })
+      );
       fetch(withAjax(window.location.href), {
         method: "post",
         body: new URLSearchParams(new FormData(form)), // for application/x-www-form-urlencoded

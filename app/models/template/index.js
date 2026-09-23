@@ -34,6 +34,7 @@ module.exports = {
   removeEnabledFromAllTemplates: require("./removeEnabledFromAllTemplates"),
   
   package: require("./package"),
+  presets: require("./presets"),
   viewModel: require("./viewModel"),
   metadataModel: require("./metadataModel"),
 };

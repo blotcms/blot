@@ -22,7 +22,7 @@ module.exports = async function uploadTemplate (req, res) {
   try {
     const { entries, fallbackName } = await collectUploadEntries(req);
 
-    const { name, locals, views, ignored, warnings } = parseUploadedTemplate(
+    const { name, locals, presets, views, ignored, warnings } = parseUploadedTemplate(
       entries,
       { fallbackName }
     );
@@ -35,6 +35,7 @@ module.exports = async function uploadTemplate (req, res) {
       owner: req.blog.id,
       name,
       locals,
+      presets,
       views,
     });
 

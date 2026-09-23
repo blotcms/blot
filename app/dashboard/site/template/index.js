@@ -5,9 +5,7 @@ const Template = require("models/template");
 const Blog = require("models/blog");
 const archiver = require("archiver");
 const duplicateTemplate = require("./save/duplicate-template");
-const { isAjaxRequest, sendAjaxResponse } = require("./save/ajax-response");
-const writeChangeToFolder = require('./save/writeChangeToFolder');
-const previewReload = require("helper/publishPreviewReload");
+const persistTemplateUpdate = require("./save/persist-template-update");
 
 // /template/default and /template/default/... redirect to the installed template's slug
 // so docs can deep link to e.g. /sites/gitt/template/default/links
@@ -154,39 +152,18 @@ function prepareTemplateUpdate(req, res, next) {
   next();
 }
 
-function persistTemplateUpdate(req, res, next) {
-  Template.update(
-    req.blog.id,
-    req.params.templateSlug,
-    { locals: req.locals, partials: req.partials },
-    function (err) {
-      if (err) return next(err);
-      writeChangeToFolder(req.blog, req.template, {}, function (err) {
-        if (err) return next(err);
-
-        // background_color and other locals are package.json metadata. This
-        // save writes Redis directly. Preview tabs only reload when this
-        // event is published, which folder sync does for file changes.
-        previewReload.publish(req.blog.id);
-
-        if (isAjaxRequest(req)) {
-          const ajaxOptions = {};
-          if (res.locals.templateForked) {
-            ajaxOptions.headers = { "X-Template-Forked": "1" };
-          }
-          return sendAjaxResponse(res, ajaxOptions);
-        }
-
-        res.message(req.baseUrl + req.url, "Success!");
-      });
-    },
-  );
-}
+TemplateEditor.route("/:templateSlug/preset").post(
+  require("./save/fork-if-needed"),
+  require("./save/preset"),
+  require("./save/layout-inputs"),
+  persistTemplateUpdate
+);
 
 TemplateEditor.route("/:templateSlug")
   .all(require("./load/font-inputs"))
   .all(require("./load/syntax-highlighter"))
   .all(require("./load/color-inputs"))
+  .all(require("./load/presets"))
   .all(require("./load/url-inputs"))
   .all(require("./load/favicon"))
   .all(require("./load/index-inputs"))

@@ -4,6 +4,7 @@ const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const improveJSONErrorMessage = require("models/template/util/improveJSONErrorMessage");
 const improveMustacheErrorMessage = require("models/template/util/improveMustacheErrorMessage");
 const UploadValidationError = require("./upload-validation-error");
+const validatePresets = require("models/template/presets").validatePresets;
 const {
   UPLOAD_MAX_FILES,
   UPLOAD_MAX_RAW_FILES,
@@ -224,6 +225,20 @@ const parsePackage = (buffer, problems, warnings) => {
     manifest.views = parsed.views;
   } else if (parsed.views !== undefined) {
     warnings.push("package.json 'views' was ignored because it is not an object");
+  }
+
+  if (parsed.presets !== undefined) {
+    const checked = validatePresets(parsed.presets, manifest.locals || {});
+    checked.errors.forEach((message) => {
+      problems.push({
+        path: PACKAGE,
+        reason: "presets",
+        message: message,
+      });
+    });
+    if (!checked.errors.length && checked.presets && Object.keys(checked.presets).length) {
+      manifest.presets = checked.presets;
+    }
   }
 
   return manifest;
@@ -536,6 +551,7 @@ module.exports = function parseUploadedTemplate (entries = [], options = {}) {
   return {
     name: name.slice(0, 100),
     locals: manifest.locals || {},
+    presets: manifest.presets,
     views,
     ignored,
     warnings,

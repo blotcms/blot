@@ -103,7 +103,11 @@ SourceCode.route("/:viewSlug/edit")
         req.template.id,
         parsed,
         function (err, views) {
-          if (err) return sendError(err);
+          // A bad preset list is reported, but the rest of the package — locals
+          // and view metadata — is still saved.
+          const presetError = err && err.code === "EPRESETS" ? err : null;
+          if (err && !presetError) return sendError(err);
+          views = views || {};
 
           Template.getMetadata(req.template.id, function (err, metadata) {
             if (err) return sendError(err);
@@ -141,6 +145,9 @@ SourceCode.route("/:viewSlug/edit")
                     if (res.locals.templateForked) {
                       res.set("X-Template-Forked", "1");
                     }
+                    // Locals and views are stored. Surface the preset list
+                    // afterwards so the editor can fix it without losing them.
+                    if (presetError) return sendError(presetError);
                     res.send("Saved changes!");
                   }
                 );
