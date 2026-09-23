@@ -65,6 +65,7 @@
 .file-list.template-docs-support-group .template-row__link {
   padding-top: 0;
   padding-bottom: 0;
+  line-height: 1.25;
 }
 
 .file-list .template-row__link:hover,
