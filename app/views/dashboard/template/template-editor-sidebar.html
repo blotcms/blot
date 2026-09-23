@@ -24,6 +24,14 @@
         </div>
 	{{/uploads.length}}
 
+	{{#images.length}}
+	<div class="template-editor-group">
+	{{#images}}
+		{{> image}}
+	{{/images}}
+	</div>
+	{{/images.length}}
+
 	{{#favicon_supported}}
 	<div class="settings-group">
 		<h2 class="template-heading">Favicon</h2>

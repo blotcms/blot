@@ -188,6 +188,7 @@ TemplateEditor.route("/:templateSlug")
   .all(require("./load/syntax-highlighter"))
   .all(require("./load/color-inputs"))
   .all(require("./load/url-inputs"))
+  .all(require("./load/image-inputs"))
   .all(require("./load/favicon"))
   .all(require("./load/index-inputs"))
   .all(require("./load/sort-input"))
@@ -213,6 +214,20 @@ TemplateEditor.route("/:templateSlug/uploads/:key")
     res.render("dashboard/template/controls/upload-form");
   })
   .post(require("./save/fork-if-needed"), require("./save/upload-local"));
+
+TemplateEditor.route("/:templateSlug/images/:key")
+  .get(require("./load/image-inputs"), function (req, res, next) {
+    res.locals.image = res.locals.images.find((item) => item.key === req.params.key);
+    if (!res.locals.image) return next();
+    res.locals.title = `${res.locals.image.label} - ${req.template.displayName}`;
+    res.locals.selected = { ...res.locals.selected, settings: "selected" };
+    res.render("dashboard/template/controls/image-form");
+  })
+  .post(
+    require("./load/image-inputs"),
+    require("./save/fork-if-needed"),
+    require("./save/upload-image")
+  );
 
 TemplateEditor.route("/:templateSlug/favicon")
   .get(require("./load/favicon"), function (req, res) {
