@@ -3,42 +3,11 @@
 // Presets are editor metadata. They are not template rendering locals. A
 // template declares them next to `locals` in package.json:
 //
-// {
-//   "locals": {
-//     "background_color": "#ffffff",
-//     "text_color": "#111111",
-//     "font": { "id": "verdana", "font_size": 16, "line_height": 1.6 },
-//     "title_font": { "id": "gill-sans", "font_size": 28 }
-//   },
-//   "presets": {
-//     "colors": [
-//       {
-//         "id": "classic",
-//         "name": "Classic",
-//         "values": {
-//           "background_color": "#ffffff",
-//           "text_color": "#111111"
-//         }
-//       }
-//     ],
-//     "fonts": [
-//       {
-//         "id": "editorial",
-//         "name": "Editorial",
-//         "values": {
-//           "font": { "id": "source-sans" },
-//           "title_font": { "id": "vollkorn" }
-//         }
-//       }
-//     ]
-//   }
-// }
-//
-// `id` is stable and form-safe. `name` is the accessible label. `values` is a
-// patch in the same shape as `locals`. Color presets may only set scalar
-// `*_color` locals. Font presets may only patch recognized font locals, and
-// only `id`, `font_size` and `line_height`. A font pack should normally set
-// `id` alone so the user's size and line height survive.
+// Presets use their key as both id and label, with values in the same shape as
+// `locals`: { colors: { Classic: { background_color: "#fff" } } }.
+// Color presets may only set scalar `*_color` locals. Font presets may only
+// patch recognized font locals, and only `id`, `font_size` and `line_height`.
+// A font pack should normally set `id` alone so the user's sizing survives.
 //
 // Nothing here is stored as the selected preset. The sidebar derives that by
 // comparing the patch with the current locals. An edit that breaks the match
@@ -47,17 +16,102 @@
 const Mustache = require("mustache");
 const config = require("config");
 const FONTS = require("blog/static/fonts");
-const {
-  DANGEROUS_KEYS,
-  FONT_PATCH_PROPS,
-  isPlainObject,
-  ownKeys,
-  isSafeId,
-  isColorKey,
-  isFontKey,
-  normalizeColor,
-  presetMatches,
-} = require("./preset-values");
+const DANGEROUS_KEYS = Object.create(null);
+DANGEROUS_KEYS["__proto__"] = true;
+DANGEROUS_KEYS.constructor = true;
+DANGEROUS_KEYS.prototype = true;
+
+const FONT_PATCH_PROPS = {
+  id: true,
+  font_size: true,
+  line_height: true,
+};
+
+function isPlainObject(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function ownKeys(value) {
+  if (!isPlainObject(value)) return [];
+  return Object.keys(value).filter((key) => !DANGEROUS_KEYS[key]);
+}
+
+function isColorKey(key) {
+  return typeof key === "string" && key.indexOf("_color") !== -1;
+}
+
+function isFontKey(key) {
+  return key === "font" || (typeof key === "string" && key.indexOf("_font") !== -1);
+}
+
+function expandHex(hex) {
+  if (hex.length === 3 || hex.length === 4) {
+    hex = hex
+      .split("")
+      .map((character) => character + character)
+      .join("");
+  }
+  if (hex.length === 6) hex += "ff";
+  if (hex.length !== 8) return null;
+  return "#" + hex;
+}
+
+function normalizeColor(input) {
+  if (typeof input !== "string") return null;
+  const match = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(input.trim());
+  return match ? expandHex(match[1].toLowerCase()) : null;
+}
+
+function numericValue(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return null;
+  const number = Number(trimmed);
+  return Number.isFinite(number) ? number : null;
+}
+
+function scalarMatches(declared, current, prop) {
+  if (prop === "id") {
+    return String(declared == null ? "" : declared) === String(current == null ? "" : current);
+  }
+
+  if (prop === "font_size" || prop === "line_height") {
+    const left = numericValue(declared);
+    const right = numericValue(current);
+    return left !== null && right !== null && left === right;
+  }
+
+  const declaredColor = normalizeColor(declared);
+  const currentColor = normalizeColor(current);
+  if (declaredColor && currentColor) return declaredColor === currentColor;
+
+  return (
+    String(declared == null ? "" : declared).trim().toLowerCase() ===
+    String(current == null ? "" : current).trim().toLowerCase()
+  );
+}
+
+function valueMatches(declared, current) {
+  if (isPlainObject(declared)) {
+    if (!isPlainObject(current)) return false;
+    const props = ownKeys(declared);
+    if (!props.length) return false;
+    return props.every((prop) => scalarMatches(declared[prop], current[prop], prop));
+  }
+
+  return scalarMatches(declared, current);
+}
+
+// True when every property the preset supplies matches the live locals.
+// Properties the preset omits are ignored, so a font pack that only sets
+// `id` still matches after the user changes size or line height.
+function presetMatches(values, locals) {
+  const keys = ownKeys(values);
+  if (!keys.length) return false;
+  return keys.every((key) => valueMatches(values[key], locals && locals[key]));
+}
+
 
 const FONT_BY_ID = new Map();
 FONTS.forEach((font) => {
@@ -80,15 +134,9 @@ const BODY_FONT_KEYS = {
   paragraph_font: true,
 };
 
-function entryLabel(type, entry, index) {
+function entryLabel(type, id) {
   const kind = type === "colors" ? "Color preset" : "Font preset";
-  if (entry && typeof entry.name === "string" && entry.name.trim()) {
-    return kind + ' "' + entry.name.trim() + '"';
-  }
-  if (entry && typeof entry.id === "string" && entry.id.trim()) {
-    return kind + ' "' + entry.id.trim() + '"';
-  }
-  return kind + " " + (index + 1);
+  return kind + ' "' + id + '"';
 }
 
 function isColorLocal(key, value) {
@@ -193,35 +241,22 @@ function validateFontValues(values, locals) {
   return { errors, values: clean };
 }
 
-function validateEntry(type, entry, locals, index) {
-  const label = entryLabel(type, entry, index);
+function validateEntry(type, id, values, locals) {
+  const label = entryLabel(type, id);
   const errors = [];
 
-  if (!isPlainObject(entry)) {
+  if (!isSafePresetKey(id)) {
+    errors.push(label + " needs a non-empty key of at most 80 characters");
+  }
+
+  if (!isPlainObject(values)) {
     return { entry: null, errors: [label + " must be an object"] };
-  }
-
-  if (!isSafeId(entry.id)) {
-    errors.push(
-      label + ' needs an id made of letters, numbers, hyphens, or underscores'
-    );
-  }
-
-  if (typeof entry.name !== "string" || !entry.name.trim()) {
-    errors.push(label + " needs a name");
-  } else if (entry.name.trim().length > 80) {
-    errors.push(label + " has a name longer than 80 characters");
-  }
-
-  if (!isPlainObject(entry.values)) {
-    errors.push(label + " needs a values object");
-    return { entry: null, errors };
   }
 
   const checked =
     type === "colors"
-      ? validateColorValues(entry.values, locals)
-      : validateFontValues(entry.values, locals);
+      ? validateColorValues(values, locals)
+      : validateFontValues(values, locals);
 
   checked.errors.forEach((message) => errors.push(label + " " + message));
 
@@ -231,39 +266,39 @@ function validateEntry(type, entry, locals, index) {
 
   return {
     entry: {
-      id: entry.id,
-      name: entry.name.trim(),
+      id,
+      name: id,
       values: checked.values,
     },
     errors: [],
   };
 }
 
-function validatePresetList(type, list, locals, errors) {
+function isSafePresetKey(key) {
+  return (
+    typeof key === "string" &&
+    key.length > 0 &&
+    key.length <= 80 &&
+    key === key.trim() &&
+    !DANGEROUS_KEYS[key] &&
+    !/[\x00-\x1f\x7f]/.test(key)
+  );
+}
+
+function validatePresetMap(type, map, locals, errors) {
   const kind = type === "colors" ? "Color" : "Font";
-  if (list == null) return [];
-  if (!Array.isArray(list)) {
-    errors.push(kind + " presets must be a list");
+  if (map == null) return [];
+  if (!isPlainObject(map)) {
+    errors.push(kind + " presets must be an object");
     return [];
   }
 
-  const seen = new Set();
   const entries = [];
 
-  list.forEach((candidate, index) => {
-    const result = validateEntry(type, candidate, locals, index);
+  Object.keys(map).forEach((id) => {
+    const result = validateEntry(type, id, map[id], locals);
     result.errors.forEach((message) => errors.push(message));
     if (!result.entry) return;
-    if (seen.has(result.entry.id)) {
-      errors.push(
-        (type === "colors" ? "Color" : "Font") +
-          ' preset id "' +
-          result.entry.id +
-          '" is duplicated'
-      );
-      return;
-    }
-    seen.add(result.entry.id);
     entries.push(result.entry);
   });
 
@@ -280,12 +315,12 @@ function validatePresets(presets, locals) {
   const errors = [];
   Object.keys(presets).forEach((key) => {
     if (key !== "colors" && key !== "fonts") {
-      errors.push('presets.' + key + " is not a preset list");
+      errors.push('presets.' + key + " is not a preset object");
     }
   });
 
-  const colors = validatePresetList("colors", presets.colors, safeLocals, errors);
-  const fonts = validatePresetList("fonts", presets.fonts, safeLocals, errors);
+  const colors = validatePresetMap("colors", presets.colors, safeLocals, errors);
+  const fonts = validatePresetMap("fonts", presets.fonts, safeLocals, errors);
   const value = {};
   if (colors.length) value.colors = colors;
   if (fonts.length) value.fonts = fonts;
@@ -297,14 +332,19 @@ function toPackagePresets(presets) {
   const result = {};
   ["colors", "fonts"].forEach((type) => {
     if (!Array.isArray(presets[type]) || !presets[type].length) return;
-    result[type] = presets[type]
-      .filter((entry) => entry && entry.id && entry.name && isPlainObject(entry.values))
-      .map((entry) => ({
-        id: entry.id,
-        name: entry.name,
-        values: entry.values,
-      }));
-    if (!result[type].length) delete result[type];
+    result[type] = {};
+    presets[type].forEach((entry) => {
+      if (
+        !entry ||
+        !entry.name ||
+        !isSafePresetKey(entry.name) ||
+        !isPlainObject(entry.values)
+      ) {
+        return;
+      }
+      result[type][entry.name] = entry.values;
+    });
+    if (!Object.keys(result[type]).length) delete result[type];
   });
   return Object.keys(result).length ? result : null;
 }
@@ -614,7 +654,12 @@ function collectFontStyles(colors, fonts) {
 
 function presentPresets(template) {
   const locals = (template && template.locals) || {};
-  const validated = validatePresets(template && template.presets, locals);
+  const stored = template && template.presets;
+  const validated =
+    isPlainObject(stored) &&
+    (Array.isArray(stored.colors) || Array.isArray(stored.fonts))
+      ? { presets: stored, errors: [] }
+      : validatePresets(stored, locals);
   const colors = presentColors(validated.presets.colors || [], locals);
   const fonts = presentFonts(validated.presets.fonts || [], locals);
   return {
@@ -661,26 +706,23 @@ function applyResolvedPreset(template, type, id) {
   if (type !== "colors" && type !== "fonts") {
     return { error: "Choose a color palette or a font pack" };
   }
-  if (!isSafeId(id)) return { error: "That preset is not available" };
+  if (!isSafePresetKey(id)) return { error: "That preset is not available" };
 
   const list = Array.isArray(presets[type]) ? presets[type] : [];
   const found = list.find((entry) => entry && entry.id === id);
   if (!found) return { error: "That preset is not available" };
 
-  const errors = [];
-  const entries = validatePresetList(type, [found], locals, errors);
-  if (!entries.length) {
-    return { error: errors[0] || "That preset is not available" };
-  }
+  const checked = validateEntry(type, found.id, found.values, locals);
+  if (!checked.entry) return { error: checked.errors[0] || "That preset is not available" };
 
   if (type === "fonts") {
-    const missing = missingFontIds(entries[0].values);
+    const missing = missingFontIds(checked.entry.values);
     if (missing.length) {
       return { error: 'That font pack uses an unknown font "' + missing[0] + '"' };
     }
   }
 
-  return { locals: applyPatch(locals, entries[0].values, type) };
+  return { locals: applyPatch(locals, checked.entry.values, type) };
 }
 
 module.exports = {

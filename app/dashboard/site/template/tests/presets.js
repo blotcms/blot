@@ -37,54 +37,34 @@ describe("template editor presets", function () {
   };
 
   const presets = {
-    colors: [
-      {
-        id: "classic",
-        name: "Classic",
-        values: {
-          background_color: "#FFFFFF",
-          text_color: "#111111",
-          links_color: "#11111180",
-          dark_background_color: "#111318",
-          dark_text_color: "#f4f4f2",
-        },
+    colors: {
+      Classic: {
+        background_color: "#FFFFFF",
+        text_color: "#111111",
+        links_color: "#11111180",
+        dark_background_color: "#111318",
+        dark_text_color: "#f4f4f2",
       },
-      {
-        id: "midnight",
-        name: "A very long palette name that should stay available to assistive technology",
-        values: {
-          background_color: "#111318",
-          text_color: "#f4f4f2",
-          links_color: "#8cbcff",
-        },
+      "A very long palette name that should stay available to assistive technology": {
+        background_color: "#111318",
+        text_color: "#f4f4f2",
+        links_color: "#8cbcff",
       },
-    ],
-    fonts: [
-      {
-        id: "classic",
-        name: "Classic",
-        values: {
-          font: { id: "verdana" },
-          title_font: { id: "gill-sans" },
-        },
+    },
+    fonts: {
+      Classic: {
+        font: { id: "verdana" },
+        title_font: { id: "gill-sans" },
       },
-      {
-        id: "editorial",
-        name: "Editorial",
-        values: {
-          font: { id: "source-sans" },
-          title_font: { id: "vollkorn" },
-        },
+      Editorial: {
+        font: { id: "source-sans" },
+        title_font: { id: "vollkorn" },
       },
-      {
-        id: "missing",
-        name: "Missing",
-        values: {
-          font: { id: "not-a-real-font" },
-          title_font: { id: "gill-sans" },
-        },
+      Missing: {
+        font: { id: "not-a-real-font" },
+        title_font: { id: "gill-sans" },
       },
-    ],
+    },
   };
 
   function render(view) {
@@ -158,7 +138,7 @@ describe("template editor presets", function () {
     expect(html).toContain("preset-check");
     expect(html).toContain('action="/sites/demo/template/blog/preset"');
     expect(html).toContain('name="preset.type" value="colors"');
-    expect(html).toContain('name="preset.id" value="classic"');
+    expect(html).toContain('name="preset.id" value="Classic"');
     expect(html).not.toContain('value="custom"');
 
     const customAt = html.indexOf('data-preset-custom="colors"');
@@ -182,13 +162,7 @@ describe("template editor presets", function () {
     const presented = presentPresets({
       locals: Object.assign({}, locals, { background_color: "#123456" }),
       presets: {
-        colors: [
-          {
-            id: "only",
-            name: "Only",
-            values: { background_color: "#ffffff" },
-          },
-        ],
+        colors: { Only: { background_color: "#ffffff" } },
       },
     });
     const html = render({
@@ -201,7 +175,7 @@ describe("template editor presets", function () {
     });
 
     expect(html).toContain("Edit colors");
-    expect(html).toContain('name="preset.id" value="only"');
+    expect(html).toContain('name="preset.id" value="Only"');
     expect(html).toContain('data-preset-custom="colors"');
     expect(html).toContain('aria-current="true"');
     expect(html).not.toContain("Font packs");
@@ -213,9 +187,9 @@ describe("template editor presets", function () {
     const res = { locals: {} };
     loadPresets(req, res, function () {});
     expect(res.locals.colorPresets.items[0].selected).toBe(true);
-    expect(res.locals.fontPresets.items.find((item) => item.id === "missing").disabled).toBe(
-      true
-    );
+    expect(
+      res.locals.fontPresets.items.find((item) => item.id === "Missing").disabled
+    ).toBe(true);
     expect(res.locals.presetFontStyles).toEqual(jasmine.any(String));
   });
 
@@ -293,7 +267,10 @@ describe("template editor presets", function () {
       blog: this.blog,
       template: await getMetadata(template.id),
       params: { templateSlug: "owned-presets" },
-      body: { "preset.type": "colors", "preset.id": "midnight" },
+      body: {
+        "preset.type": "colors",
+        "preset.id": "A very long palette name that should stay available to assistive technology",
+      },
       query: { ajax: "true" },
       baseUrl: "/sites/demo/template",
       url: "/owned-presets/preset",
@@ -309,23 +286,19 @@ describe("template editor presets", function () {
     expect(saved.locals.links_color).toBe("#8cbcff");
     expect(saved.locals.font.id).toBe("verdana");
     expect(saved.locals.font.font_size).toBe(16);
-    expect(saved.presets.colors[0].id).toBe("classic");
+    expect(saved.presets.colors[0].id).toBe("Classic");
   });
 
   it("applies a font id and keeps the current size and line height", async function () {
     const template = await create(this.blog.id, "Owned Presets", {
       locals: locals,
       presets: {
-        fonts: [
-          {
-            id: "editorial",
-            name: "Editorial",
-            values: {
-              font: { id: "source-sans" },
-              title_font: { id: "vollkorn" },
-            },
+        fonts: {
+          Editorial: {
+            font: { id: "source-sans" },
+            title_font: { id: "vollkorn" },
           },
-        ],
+        },
       },
     });
 
@@ -335,7 +308,7 @@ describe("template editor presets", function () {
         blog: this.blog,
         template: await getMetadata(template.id),
         params: { templateSlug: "owned-presets" },
-        body: { preset: { type: "fonts", id: "editorial" } },
+        body: { preset: { type: "fonts", id: "Editorial" } },
         query: { ajax: "true" },
         baseUrl: "/sites/demo/template",
         url: "/owned-presets/preset",
@@ -390,7 +363,10 @@ describe("template editor presets", function () {
       blog: this.blog,
       template: await getMetadata(source.id),
       params: { templateSlug: "preset-source" },
-      body: { "preset.type": "colors", "preset.id": "midnight" },
+      body: {
+        "preset.type": "colors",
+        "preset.id": "A very long palette name that should stay available to assistive technology",
+      },
       query: { ajax: "true" },
       baseUrl: "/sites/demo/template",
       url: "/preset-source/preset",
@@ -401,7 +377,7 @@ describe("template editor presets", function () {
 
     const forked = await getMetadata(this.blog.id + ":preset-source");
     expect(forked.locals.background_color).toBe("#111318");
-    expect(forked.presets.fonts[0].id).toBe("classic");
+    expect(forked.presets.fonts[0].id).toBe("Classic");
     expect(forked.owner).toBe(this.blog.id);
 
     const untouched = await getMetadata(source.id);
@@ -422,7 +398,10 @@ describe("template editor presets", function () {
         blog: this.blog,
         template: await getMetadata(template.id),
         params: { templateSlug: "owned-presets" },
-        body: { "preset.type": "colors", "preset.id": "midnight" },
+        body: {
+          "preset.type": "colors",
+          "preset.id": "A very long palette name that should stay available to assistive technology",
+        },
         query: {},
         baseUrl: "/sites/demo/template",
         url: "/owned-presets/preset",
@@ -438,9 +417,9 @@ describe("template editor presets", function () {
 
     const written = JSON.parse(fs.readFileSync(writtenPath, "utf8"));
     expect(written.locals.background_color).toBe("#111318");
-    expect(written.presets.colors.map((entry) => entry.id)).toEqual([
-      "classic",
-      "midnight",
+    expect(Object.keys(written.presets.colors)).toEqual([
+      "Classic",
+      "A very long palette name that should stay available to assistive technology",
     ]);
   });
 });

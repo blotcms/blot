@@ -9,7 +9,7 @@ describe("template presets", function () {
     applyResolvedPreset,
     toPackagePresets,
   } = require("../presets");
-  const { presetMatches } = require("../preset-values");
+  const { presetMatches } = require("../presets");
 
   const create = promisify(Template.create);
   const getMetadata = promisify(Template.getMetadata);
@@ -30,46 +30,30 @@ describe("template presets", function () {
   };
 
   const presets = {
-    colors: [
-      {
-        id: "classic",
-        name: "Classic",
-        values: {
-          background_color: "#fff",
-          text_color: "#111111",
-          links_color: "rgb(17, 17, 17)",
-        },
+    colors: {
+      Classic: {
+        background_color: "#fff",
+        text_color: "#111111",
+        links_color: "#111111",
       },
-      {
-        id: "midnight",
-        name: "Midnight",
-        values: {
-          background_color: "#111318",
-          text_color: "#f4f4f2",
-          links_color: "#8cbcff",
-          dark_background_color: "#000000",
-          dark_text_color: "#ffffff",
-        },
+      Midnight: {
+        background_color: "#111318",
+        text_color: "#f4f4f2",
+        links_color: "#8cbcff",
+        dark_background_color: "#000000",
+        dark_text_color: "#ffffff",
       },
-    ],
-    fonts: [
-      {
-        id: "classic",
-        name: "Classic",
-        values: {
-          font: { id: "verdana" },
-          title_font: { id: "gill-sans" },
-        },
+    },
+    fonts: {
+      Classic: {
+        font: { id: "verdana" },
+        title_font: { id: "gill-sans" },
       },
-      {
-        id: "editorial",
-        name: "Editorial",
-        values: {
-          font: { id: "source-sans" },
-          title_font: { id: "vollkorn" },
-        },
+      Editorial: {
+        font: { id: "source-sans" },
+        title_font: { id: "vollkorn" },
       },
-    ],
+    },
   };
 
   function isolated(value) {
@@ -102,13 +86,7 @@ describe("template presets", function () {
 
     const unknown = validatePresets(
       {
-        colors: [
-          {
-            id: "bad",
-            name: "Bad",
-            values: { nope_color: "#fff" },
-          },
-        ],
+        colors: { Bad: { nope_color: "#fff" } },
         extra: [],
       },
       locals
@@ -119,46 +97,32 @@ describe("template presets", function () {
     expect(unknown.errors.join("\n")).toContain("presets.extra");
   });
 
-  it("keeps the first entry when an id is duplicated", function () {
+  it("uses a preset key for both its id and label", function () {
     const checked = validatePresets(
       {
-        colors: [
-          {
-            id: "classic",
-            name: "First",
-            values: { background_color: "#fff" },
-          },
-          {
-            id: "classic",
-            name: "Second",
-            values: { background_color: "#000" },
-          },
-        ],
+        colors: { First: { background_color: "#fff" } },
       },
       locals
     );
 
     expect(checked.presets.colors.length).toBe(1);
     expect(checked.presets.colors[0].name).toBe("First");
-    expect(checked.errors.join("\n")).toContain("duplicated");
+    expect(checked.presets.colors[0].id).toBe("First");
+    expect(checked.errors).toEqual([]);
   });
 
   it("drops dangerous keys instead of copying them onto object prototypes", function () {
     expect(Object.prototype.polluted).toBeUndefined();
 
-    const entry = {
-      id: "bad",
-      name: "Bad",
-      values: { background_color: "#ffffff" },
-    };
-    Object.defineProperty(entry.values, "__proto__", {
+    const entry = { background_color: "#ffffff" };
+    Object.defineProperty(entry, "__proto__", {
       value: { polluted: true },
       enumerable: true,
       configurable: true,
       writable: true,
     });
 
-    const checked = validatePresets({ colors: [entry] }, locals);
+    const checked = validatePresets({ colors: { Bad: entry } }, locals);
     expect(checked.presets.colors).toBeUndefined();
     expect(checked.errors.join("\n")).toContain("__proto__");
     expect(Object.prototype.polluted).toBeUndefined();
@@ -167,17 +131,11 @@ describe("template presets", function () {
       {
         locals: locals,
         presets: {
-          colors: [
-            {
-              id: "classic",
-              name: "Classic",
-              values: { background_color: "#000000" },
-            },
-          ],
+          colors: { Classic: { background_color: "#000000" } },
         },
       },
       "colors",
-      "__proto__"
+      "Classic"
     );
     expect(applied.error).toBeDefined();
     expect(Object.prototype.polluted).toBeUndefined();
@@ -191,9 +149,9 @@ describe("template presets", function () {
     expect(presented.colors.items[1].selected).toBe(false);
     expect(presented.colors.custom.selected).toBe(false);
     expect(presented.colors.custom.hidden).toBe(true);
-    expect(presetMatches({ background_color: "#fff" }, { background_color: "white" })).toBe(
-      true
-    );
+    expect(
+      presetMatches({ background_color: "#fff" }, { background_color: "#ffffff" })
+    ).toBe(true);
     expect(
       presetMatches({ background_color: "#fff" }, { background_color: "#ffffff80" })
     ).toBe(false);
@@ -214,10 +172,10 @@ describe("template presets", function () {
     const presented = presentPresets({
       locals,
       presets: {
-        colors: [
-          { id: "first", name: "First", values: { background_color: "#FFFFFF" } },
-          { id: "second", name: "Second", values: { background_color: "white" } },
-        ],
+        colors: {
+          First: { background_color: "#FFFFFF" },
+          Second: { background_color: "#ffffff" },
+        },
       },
     });
 
@@ -229,14 +187,14 @@ describe("template presets", function () {
     const presented = presentPresets({
       locals,
       presets: {
-        colors: [
-          { id: "ok", name: "Ok", values: { background_color: "#FFFFFF" } },
-          { id: "gone", name: "Gone", values: { missing_color: "#fff" } },
-        ],
+        colors: {
+          Ok: { background_color: "#FFFFFF" },
+          Gone: { missing_color: "#fff" },
+        },
       },
     });
 
-    expect(presented.colors.items.map((item) => item.id)).toEqual(["ok"]);
+    expect(presented.colors.items.map((item) => item.id)).toEqual(["Ok"]);
     expect(presented.errors.join("\n")).toContain("missing_color");
   });
 
@@ -266,13 +224,7 @@ describe("template presets", function () {
     const presented = presentPresets({
       locals,
       presets: {
-        fonts: [
-          {
-            id: "missing",
-            name: "Missing",
-            values: { font: { id: "not-a-real-font" } },
-          },
-        ],
+        fonts: { Missing: { font: { id: "not-a-real-font" } } },
       },
     });
 
@@ -285,17 +237,11 @@ describe("template presets", function () {
       {
         locals,
         presets: {
-          fonts: [
-            {
-              id: "missing",
-              name: "Missing",
-              values: { font: { id: "not-a-real-font" } },
-            },
-          ],
+          fonts: { Missing: { font: { id: "not-a-real-font" } } },
         },
       },
       "fonts",
-      "missing"
+      "Missing"
     );
     expect(applied.error).toContain("not-a-real-font");
     expect(applied.locals).toBeUndefined();
@@ -305,7 +251,7 @@ describe("template presets", function () {
     const applied = applyResolvedPreset(
       { locals: isolated(locals), presets: isolated(presets) },
       "fonts",
-      "editorial"
+      "Editorial"
     );
     expect(applied.locals.font.id).toBe("source-sans");
     expect(applied.locals.font.font_size).toBe(16);
@@ -317,7 +263,7 @@ describe("template presets", function () {
   });
 
   it("applies a color palette without changing fonts", function () {
-    const applied = applyResolvedPreset({ locals, presets }, "colors", "midnight");
+    const applied = applyResolvedPreset({ locals, presets }, "colors", "Midnight");
     expect(applied.locals.background_color).toBe("#111318");
     expect(applied.locals.font.id).toBe("verdana");
     expect(applied.locals.font.font_size).toBe(16);
@@ -332,13 +278,9 @@ describe("template presets", function () {
     const presented = presentPresets({
       locals,
       presets: {
-        colors: [
-          {
-            id: "pale",
-            name: "Pale",
-            values: { background_color: "#ffffff", text_color: "#fefefe" },
-          },
-        ],
+        colors: {
+          Pale: { background_color: "#ffffff", text_color: "#fefefe" },
+        },
       },
     });
     expect(presented.colors.items[0].warning).toContain("Low contrast");
@@ -353,16 +295,16 @@ describe("template presets", function () {
     expect(checked.errors).toEqual([]);
 
     const presented = presentPresets({ locals: blog.locals, presets: blog.presets });
-    expect(presented.colors.items[0].id).toBe("classic");
+    expect(presented.colors.items[0].id).toBe("Classic");
     expect(presented.colors.items[0].selected).toBe(true);
-    expect(presented.fonts.items.find((item) => item.id === "classic").selected).toBe(true);
+    expect(presented.fonts.items.find((item) => item.id === "Classic").selected).toBe(true);
     expect(presented.colors.items.map((item) => item.id)).toEqual([
-      "classic",
-      "midnight",
-      "paper",
-      "sea",
-      "blush",
-      "ink",
+      "Classic",
+      "Midnight",
+      "Paper",
+      "Sea",
+      "Blush",
+      "Ink",
     ]);
   });
 
@@ -373,9 +315,9 @@ describe("template presets", function () {
       presets: isolated(presets),
     });
     const generated = JSON.parse(Template.package.generate(this.blog.id, created, {}));
-    expect(generated.presets.colors[0].id).toBe("classic");
-    expect(generated.presets.fonts[1].values.font).toEqual({ id: "source-sans" });
-    expect(generated.presets.colors[0].selected).toBeUndefined();
+    expect(generated.presets.colors.Classic.background_color).toBe("#fff");
+    expect(generated.presets.fonts.Editorial.font).toEqual({ id: "source-sans" });
+    expect(generated.presets.colors.Classic.selected).toBeUndefined();
 
     const bare = JSON.parse(
       Template.package.generate(this.blog.id, { name: "Plain", locals: {} }, {})
@@ -385,26 +327,18 @@ describe("template presets", function () {
     fs.outputJsonSync(path.join(this.tmp, "package.json"), {
       locals: { background_color: "#abcdef", text_color: "#111111" },
       presets: {
-        colors: [
-          {
-            id: "ink",
-            name: "Ink",
-            values: { background_color: "#abcdef", text_color: "#111111" },
-          },
-          {
-            id: "ink",
-            name: "Duplicate",
-            values: { background_color: "#000000" },
-          },
-        ],
+        colors: {
+          Ink: { background_color: "#abcdef", text_color: "#111111" },
+          Invalid: { missing_color: "#000000" },
+        },
       },
     });
     fs.outputFileSync(path.join(this.tmp, "index.html"), "<p>Hi</p>");
 
     const read = await readFromFolder(this.blog.id, this.tmp);
     expect(read.presets.colors.length).toBe(1);
-    expect(read.presets.colors[0].id).toBe("ink");
-    expect(read.errors["package.json"]).toContain("duplicated");
+    expect(read.presets.colors[0].id).toBe("Ink");
+    expect(read.errors["package.json"]).toContain("missing_color");
 
     await writeToFolder(this.blog.id, created.id);
     const writtenPath = [
@@ -412,7 +346,7 @@ describe("template presets", function () {
       path.join(this.blogDirectory, "templates", created.slug, "package.json"),
     ].find((candidate) => fs.existsSync(candidate));
     const written = fs.readJsonSync(writtenPath);
-    expect(written.presets.fonts[0].name).toBe("Classic");
+    expect(written.presets.fonts.Classic.font).toEqual({ id: "verdana" });
     expect(written.locals.background_color).toBe("#FFFFFF");
   });
 
@@ -434,7 +368,7 @@ describe("template presets", function () {
     });
     const copy = await create(this.blog.id, "Preset Copy", { cloneFrom: source.id });
     const copied = await getMetadata(copy.id);
-    expect(copied.presets.colors[1].id).toBe("midnight");
+    expect(copied.presets.colors[1].id).toBe("Midnight");
     expect(copied.presets.fonts[0].values.font.id).toBe("verdana");
     await drop(this.blog.id, "Preset Copy");
 

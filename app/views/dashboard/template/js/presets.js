@@ -1,8 +1,78 @@
-const { presetMatches } = require("../../../../models/template/preset-values");
 const ajax = require("./ajax.js");
 
 const withAjax = ajax.withAjax;
 const handleAjaxSaveResponse = ajax.handleAjaxSaveResponse;
+
+function numericValue(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string" || !/^-?\d+(\.\d+)?$/.test(value.trim())) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function normalizeColor(value) {
+  if (typeof value !== "string") return null;
+  const color = value.trim().toLowerCase();
+  const hex = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/.exec(color);
+  if (hex) {
+    let digits = hex[1];
+    if (digits.length === 3 || digits.length === 4) {
+      digits = digits.split("").map((digit) => digit + digit).join("");
+    }
+    if (digits.length === 6) digits += "ff";
+    return "#" + digits;
+  }
+
+  if (!window.CSS || !window.CSS.supports("color", color)) return null;
+  const context = document.createElement("canvas").getContext("2d");
+  if (!context) return null;
+  context.fillStyle = color;
+  const parsed = context.fillStyle.toLowerCase();
+  const normalizedHex = /^#([0-9a-f]{6})$/.exec(parsed);
+  if (normalizedHex) return "#" + normalizedHex[1] + "ff";
+  const rgb = /^rgba?\((\d+)\D+(\d+)\D+(\d+)(?:\D+([\d.]+))?\)$/.exec(parsed);
+  if (!rgb) return parsed;
+  const channels = [rgb[1], rgb[2], rgb[3]].map((channel) =>
+    Number(channel).toString(16).padStart(2, "0")
+  );
+  const alpha = Math.round(Number(rgb[4] == null ? 1 : rgb[4]) * 255)
+    .toString(16)
+    .padStart(2, "0");
+  return "#" + channels.join("") + alpha;
+}
+
+function scalarMatches(declared, current, prop) {
+  if (prop === "id") return String(declared == null ? "" : declared) === String(current == null ? "" : current);
+  if (prop === "font_size" || prop === "line_height") {
+    const left = numericValue(declared);
+    const right = numericValue(current);
+    return left !== null && right !== null && left === right;
+  }
+  const leftColor = normalizeColor(declared);
+  const rightColor = normalizeColor(current);
+  if (leftColor && rightColor) return leftColor === rightColor;
+  return String(declared == null ? "" : declared).trim().toLowerCase() ===
+    String(current == null ? "" : current).trim().toLowerCase();
+}
+
+function valueMatches(declared, current) {
+  if (declared && typeof declared === "object" && !Array.isArray(declared)) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) return false;
+    const props = Object.keys(declared).filter(
+      (prop) => prop !== "__proto__" && prop !== "constructor" && prop !== "prototype"
+    );
+    return props.length > 0 && props.every((prop) => scalarMatches(declared[prop], current[prop], prop));
+  }
+  return scalarMatches(declared, current);
+}
+
+function presetMatches(values, locals) {
+  if (!values || typeof values !== "object" || Array.isArray(values)) return false;
+  const keys = Object.keys(values).filter(
+    (key) => key !== "__proto__" && key !== "constructor" && key !== "prototype"
+  );
+  return keys.length > 0 && keys.every((key) => valueMatches(values[key], locals && locals[key]));
+}
 
 const storageKey = (group) =>
   "blot-preset-edit:" + window.location.pathname + ":" + group;

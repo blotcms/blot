@@ -393,30 +393,18 @@ describe("parseUploadedTemplate", function () {
               font: { id: "verdana" },
             },
             presets: {
-              colors: [
-                {
-                  id: "classic",
-                  name: "Classic",
-                  values: { background_color: "#ffffff" },
-                },
-              ],
-              fonts: [
-                {
-                  id: "missing",
-                  name: "Missing",
-                  values: { font: { id: "not-a-real-font" } },
-                },
-              ],
+              colors: { Classic: { background_color: "#ffffff" } },
+              fonts: { Missing: { font: { id: "not-a-real-font" } } },
             },
           })
         ),
       ]);
 
-      expect(result.presets.colors[0].id).toEqual("classic");
+      expect(result.presets.colors[0].id).toEqual("Classic");
       expect(result.presets.fonts[0].values.font.id).toEqual("not-a-real-font");
     });
 
-    it("reports malformed presets, duplicate ids, and unknown locals", function () {
+    it("reports malformed presets, invalid keys, and unknown locals", function () {
       const malformed = problemsFrom([
         entry("index.html", "<h1>Hi</h1>"),
         entry("package.json", JSON.stringify({ presets: [] })),
@@ -424,23 +412,20 @@ describe("parseUploadedTemplate", function () {
       expect(malformed[0].reason).toEqual("presets");
       expect(malformed[0].path).toEqual("package.json");
 
-      const duplicated = problemsFrom([
+      const invalidKey = problemsFrom([
         entry("index.html", "<h1>Hi</h1>"),
         entry(
           "package.json",
           JSON.stringify({
             locals: { background_color: "#fff" },
             presets: {
-              colors: [
-                { id: "classic", name: "One", values: { background_color: "#fff" } },
-                { id: "classic", name: "Two", values: { background_color: "#000" } },
-              ],
+              colors: { " ": { background_color: "#fff" } },
             },
           })
         ),
       ]);
-      expect(duplicated[0].reason).toEqual("presets");
-      expect(duplicated[0].message).toContain("duplicated");
+      expect(invalidKey[0].reason).toEqual("presets");
+      expect(invalidKey[0].message).toContain("non-empty key");
 
       const unknown = problemsFrom([
         entry("index.html", "<h1>Hi</h1>"),
@@ -449,9 +434,7 @@ describe("parseUploadedTemplate", function () {
           JSON.stringify({
             locals: { background_color: "#fff" },
             presets: {
-              colors: [
-                { id: "bad", name: "Bad", values: { nope_color: "#fff" } },
-              ],
+              colors: { Bad: { nope_color: "#fff" } },
             },
           })
         ),
