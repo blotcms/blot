@@ -76,9 +76,14 @@
   top: -0.1em;
 }
 
-.file-list .template-row__link--move-to-folder svg {
-  width: 14px;
-  height: auto;
+.file-list .template-row__link--move-to-folder .template-row__move-to-folder-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.file-list .template-row__link--move-to-folder .template-row__move-to-folder-icon svg {
+  width: 1em;
+  height: 0.82em;
 }
 
 .file-list .template-row__link span,
