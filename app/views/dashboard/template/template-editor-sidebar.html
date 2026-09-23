@@ -24,6 +24,14 @@
         </div>
 	{{/uploads.length}}
 
+	{{#images.length}}
+	<div class="template-editor-group">
+	{{#images}}
+		{{> image}}
+	{{/images}}
+	</div>
+	{{/images.length}}
+
         <div class="settings-group">
                 <h2 class="template-heading">Menu</h2>
                 <a class="line links" href="{{{base}}}/links">

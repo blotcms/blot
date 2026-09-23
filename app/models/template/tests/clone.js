@@ -464,4 +464,34 @@ describe("template clone across blogs", function () {
     expect(copyMeta.locals.favicon).toBeUndefined();
     expect(copyMeta.locals.color).toEqual("red");
   });
+
+  it("clears uploaded image locals while preserving their declarations", async function () {
+    const [source, recipient] = this.blogs;
+    const image = {
+      url: "https://cdn.example/" + source.id + "/_template_assets/image-id-original.webp",
+      thumbnails: {
+        small: { url: "https://cdn.example/" + source.id + "/_template_assets/image-id-small.webp" },
+      },
+    };
+    const sourceTemplate = await create(source.id, "images", {
+      locals: { hero_image: image, empty_image: {}, color: "red" },
+    });
+
+    const toID = recipient.id + ":images";
+    await clone(sourceTemplate.id, toID, {
+      id: toID,
+      owner: recipient.id,
+      name: "images",
+      slug: "images",
+      locals: {},
+    });
+
+    const copyMeta = await getMetadataAsync(toID);
+    expect(copyMeta.locals.hero_image).toEqual({});
+    expect(copyMeta.locals.empty_image).toEqual({});
+    expect(copyMeta.locals.color).toEqual("red");
+
+    const originalMeta = await getMetadataAsync(sourceTemplate.id);
+    expect(originalMeta.locals.hero_image).toEqual(image);
+  });
 });

@@ -40,6 +40,25 @@
   }
 }</code></pre>
 
+<h2>Images</h2>
+<p>Any top-level local whose name ends in <code>_image</code> becomes an image control. Declare it with an empty object. Replacing or explicitly deleting an image removes its old files once no other template references them.</p>
+<pre class="json" data-file="package.json"><code>{
+  "locals": {
+    "profile_image": {}
+  }
+}</code></pre>
+<p>After upload, the value contains the original&rsquo;s oriented dimensions and four derivatives. <code>small</code>, <code>medium</code>, and <code>large</code> fit proportionally within 160, 640, and 1200 pixels without upscaling. <code>square</code> is a 160-pixel crop using the selected focal area, or an entropy-based crop when no selection is submitted. Animated images use their first frame.</p>
+<pre class="json" data-file="package.json"><code>{
+  "url": "…", "width": 1200, "height": 800,
+  "thumbnails": {
+    "small": { "url": "…", "width": 160, "height": 107 },
+    "medium": { "url": "…", "width": 640, "height": 427 },
+    "large": { "url": "…", "width": 1200, "height": 800 },
+    "square": { "url": "…", "width": 160, "height": 160 }
+  }
+}</code></pre>
+<pre class="html" data-file="index.html"><code>&lt;img src="{{{profile_image.thumbnails.small.url}}}" width="{{profile_image.thumbnails.small.width}}" height="{{profile_image.thumbnails.small.height}}" alt="Profile"&gt;</code></pre>
+
 <h2>Navigation options</h2>
 <p>Keys containing <code>navigation_</code> or <code>_navigation</code> are grouped together. Custom labels are defined for common navigation fields.</p>
 

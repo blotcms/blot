@@ -23,6 +23,10 @@ module.exports = function (req, res, next) {
 
   res.locals.index_page = Object.keys(locals)
 
+    // `_image` is a declaration even when its initial value is `{}`. Never
+    // allow companion range/options keys to turn it into a generic control.
+    .filter(key => !key.endsWith("_image"))
+
     // If the template uses the thumbnails per row
     // option then hide the page size option
     .filter(key =>
