@@ -1,13 +1,13 @@
-module.exports = function createFaviconCropper(root) {
+module.exports = function createFaviconCropper(root, fieldsRoot = root) {
   const cropper = root.querySelector("[data-favicon-cropper]");
   const image = root.querySelector("[data-favicon-image]");
   const selection = root.querySelector("[data-favicon-selection]");
   const previews = root.querySelector("[data-favicon-previews]");
   const previewImages = Array.from(previews.querySelectorAll("img"));
   const fields = {
-    x: root.querySelector("[data-favicon-crop-x]"),
-    y: root.querySelector("[data-favicon-crop-y]"),
-    size: root.querySelector("[data-favicon-crop-size]"),
+    x: fieldsRoot.querySelector("[data-favicon-crop-x]"),
+    y: fieldsRoot.querySelector("[data-favicon-crop-y]"),
+    size: fieldsRoot.querySelector("[data-favicon-crop-size]"),
   };
   let crop;
   let drag;
@@ -51,17 +51,26 @@ module.exports = function createFaviconCropper(root) {
   };
 
   const load = (source, options = {}) => new Promise((resolve, reject) => {
+    cropper.hidden = false;
     image.onload = () => {
-      const { width, height } = dimensions();
-      const side = Math.min(width, height);
-      crop = { left: (width - side) / 2, top: (height - side) / 2, side };
-      const square = image.naturalWidth === image.naturalHeight;
-      cropper.hidden = square && options.hideSquareCrop;
-      previews.hidden = false;
-      writeCrop();
-      resolve({ square });
+      // The dialog section is shown by the caller before load(). Wait for the
+      // browser to lay out the image before measuring its displayed size.
+      requestAnimationFrame(() => {
+        const { width, height } = dimensions();
+        if (!width || !height) {
+          reject(new Error("The selected image could not be displayed."));
+          return;
+        }
+        const side = Math.min(width, height);
+        crop = { left: (width - side) / 2, top: (height - side) / 2, side };
+        const square = image.naturalWidth === image.naturalHeight;
+        cropper.hidden = square && options.hideSquareCrop;
+        previews.hidden = false;
+        writeCrop();
+        resolve({ square });
+      });
     };
-    image.onerror = reject;
+    image.onerror = () => reject(new Error("The selected image could not be loaded."));
     image.src = source;
   });
 

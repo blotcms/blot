@@ -405,14 +405,11 @@ TemplateEditor.route("/:templateSlug/photo")
   .get(require("./load/favicon"), function (req, res) {
     res.locals.title = `Photo - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
+    res.locals.photoPath = `${req.baseUrl}/${req.params.templateSlug}/photo`;
     res.render("dashboard/template/photo");
   })
   .post(
     require("./load/favicon"),
-    function forkForFavicon(req, res, next) {
-      if (req.body.use_favicon !== "1" || !res.locals.favicon_supported) return next();
-      return require("./save/fork-if-needed")(req, res, next);
-    },
     require("./save/photo")
   );
 
