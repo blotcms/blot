@@ -1,8 +1,10 @@
 const fs = require("fs-extra");
 const os = require("os");
 const path = require("path");
+const { spawn } = require("child_process");
 const config = require("config");
 const build = require("documentation/build");
+const recursiveReadDir = require("helper/recursiveReadDirSync");
 
 describe("Blot's documentation'", function () {
 
@@ -83,7 +85,7 @@ describe("Blot's documentation'", function () {
   it("includes app/templates/source in computeViewsHash", async function () {
     const readmePath = path.join(
       config.blot_directory,
-      "app/templates/source/blog/README"
+      "app/templates/source/text/README"
     );
     const original = await fs.readFile(readmePath, "utf8");
 
@@ -107,11 +109,11 @@ describe("Blot's documentation'", function () {
   it("rebuilds template pages instead of restoring a stale cache when template source changes", async function () {
     const readmePath = path.join(
       config.blot_directory,
-      "app/templates/source/blog/README"
+      "app/templates/source/text/README"
     );
     const generatedPath = path.join(
       config.views_directory,
-      "templates/blog/index.html"
+      "templates/text/index.html"
     );
     const original = await fs.readFile(readmePath, "utf8");
     const originalTmpDirectory = config.tmp_directory;
@@ -145,6 +147,156 @@ describe("Blot's documentation'", function () {
         config.tmp_directory = originalTmpDirectory;
         await fs.remove(tmpDirectory);
       }
+    }
+  });
+
+  it("copies arbitrary template views into views-built", async function () {
+    const probeName = "__live-view-probe.html";
+    const probeContents = "LIVE_VIEW_PROBE\n{{mustache-stays}}\n";
+    const sourceDirectory = path.join(
+      config.blot_directory,
+      "app/views/templates"
+    );
+    const probeSource = path.join(sourceDirectory, probeName);
+    const probeBuilt = path.join(
+      config.views_directory,
+      "templates",
+      probeName
+    );
+    const originalTmpDirectory = config.tmp_directory;
+    const tmpDirectory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "blot-documentation-cache-")
+    );
+
+    config.tmp_directory = tmpDirectory;
+
+    try {
+      await fs.outputFile(probeSource, probeContents);
+      await fs.remove(probeBuilt);
+
+      await build({ watch: false, skipZip: true });
+
+      // build/index.js skips templates/ in the generic copy and leaves
+      // publication to build/templates.js. That step has to carry every
+      // source file it does not bake, or a new live view 404s with no error.
+      expect(await fs.readFile(probeBuilt, "utf8")).toEqual(probeContents);
+
+      for (const name of ["fonts.html", "search.html", "template-list.html"]) {
+        const source = await fs.readFile(path.join(sourceDirectory, name), "utf8");
+        const built = await fs.readFile(
+          path.join(config.views_directory, "templates", name),
+          "utf8"
+        );
+        expect(built).toEqual(source);
+      }
+    } finally {
+      await fs.remove(probeSource);
+      await fs.remove(probeBuilt);
+      config.tmp_directory = originalTmpDirectory;
+      await fs.remove(tmpDirectory);
+    }
+  });
+
+  it("overlapping builds do not crash or corrupt the cache", async function () {
+    const originalTmpDirectory = config.tmp_directory;
+    const tmpDirectory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "blot-documentation-cache-")
+    );
+
+    config.tmp_directory = tmpDirectory;
+
+    const snapshot = (dir) =>
+      recursiveReadDir(dir)
+        .map((file) => {
+          const stat = fs.statSync(file);
+          return file.slice(dir.length + 1) + ":" + stat.size;
+        })
+        .sort();
+
+    const cacheSnapshot = async () => {
+      const cacheDir = path.join(
+        tmpDirectory,
+        "documentation-cache",
+        await build.computeViewsHash(),
+        "views-built"
+      );
+      expect(await fs.pathExists(cacheDir)).toBe(true);
+      expect(snapshot(cacheDir)).toEqual(snapshot(config.views_directory));
+    };
+
+    const runChildBuild = () =>
+      new Promise((resolve, reject) => {
+        const child = spawn(
+          process.execPath,
+          [
+            "-e",
+            "const config = require('config');" +
+              "config.tmp_directory = " +
+              JSON.stringify(tmpDirectory) +
+              ";" +
+              "require('documentation/build')({ watch: false, skipZip: true })" +
+              ".then(() => process.exit(0), (err) => { console.error(err); process.exit(1); });",
+          ],
+          {
+            cwd: config.blot_directory,
+            env: {
+              ...process.env,
+              NODE_PATH:
+                process.env.NODE_PATH ||
+                path.join(config.blot_directory, "app"),
+            },
+          }
+        );
+        let output = "";
+        child.stdout.on("data", (chunk) => {
+          output += chunk;
+        });
+        child.stderr.on("data", (chunk) => {
+          output += chunk;
+        });
+        child.on("error", reject);
+        child.on("exit", (code) => {
+          if (code === 0) resolve();
+          else reject(new Error("child build exited " + code + "\n" + output));
+        });
+      });
+
+    try {
+      // A lock left by a dead process must not wedge the next build.
+      let deadPid = null;
+      for (let pid = 200000; pid < 900000; pid += 997) {
+        try {
+          process.kill(pid, 0);
+        } catch (err) {
+          if (err.code === "ESRCH") {
+            deadPid = pid;
+            break;
+          }
+        }
+      }
+      const lockPath = path.join(tmpDirectory, "documentation-build.lock");
+      await fs.ensureDir(lockPath);
+      await fs.writeFile(path.join(lockPath, "pid"), String(deadPid));
+      const past = new Date(Date.now() - 60 * 1000);
+      await fs.utimes(lockPath, past, past);
+
+      const overlapped = await Promise.allSettled([
+        build({ watch: false, skipZip: true }),
+        build({ watch: false, skipZip: true }),
+      ]);
+      const rejected = overlapped.filter((result) => result.status === "rejected");
+      if (rejected.length) throw rejected[0].reason;
+
+      await cacheSnapshot();
+
+      // A second process (nodemon restart, or a manual build while the
+      // server is rebuilding) shares the cache directory and used to hit
+      // ENOTEMPTY inside fs.rm while the other build was still copying.
+      await Promise.all([runChildBuild(), runChildBuild()]);
+      await cacheSnapshot();
+    } finally {
+      config.tmp_directory = originalTmpDirectory;
+      await fs.remove(tmpDirectory);
     }
   });
 

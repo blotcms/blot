@@ -149,6 +149,103 @@ async function refreshDevelopmentCache() {
   return { hash, cacheDir };
 }
 
+// Two builds that share a cache directory (same views hash) crash in
+// saveToCache. fs-extra's emptyDir/remove is Node's fs.rm, and fs.rm's
+// rmdir throws ENOTEMPTY when the other build is still copying files into
+// that directory. cleanOldCaches swallows the error; saveToCache does not,
+// so the rejection kills the process (nodemon restart overlapping a build,
+// or two build() calls). The same overlap also deletes files out from under
+// fs.copy (ENOENT) and leaves a partial cache that a later restore trusts.
+// A file lock covers both a second call in this process and a second process.
+const BUILD_LOCK_WAIT_MS = 50;
+const BUILD_LOCK_TIMEOUT_MS = 10 * 60 * 1000;
+
+function documentationBuildLockPath() {
+  return join(config.tmp_directory, "documentation-build.lock");
+}
+
+function processIsAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === "EPERM";
+  }
+}
+
+async function readLockOwner(lockPath) {
+  return String(await fs.readFile(join(lockPath, "pid"), "utf8").catch(() => "")).trim();
+}
+
+async function acquireDocumentationBuildLock() {
+  const lockPath = documentationBuildLockPath();
+  await fs.ensureDir(config.tmp_directory);
+  const deadline = Date.now() + BUILD_LOCK_TIMEOUT_MS;
+
+  for (;;) {
+    try {
+      // mkdir is atomic, so two builders cannot both enter this section.
+      await fs.mkdir(lockPath);
+      await fs.writeFile(join(lockPath, "pid"), String(process.pid));
+      return async function releaseDocumentationBuildLock() {
+        if ((await readLockOwner(lockPath)) !== String(process.pid)) return;
+        await fs.remove(lockPath);
+      };
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
+    }
+
+    const stat = await fs.stat(lockPath).catch(() => null);
+    if (!stat) continue;
+
+    if (!stat.isDirectory()) {
+      await fs.remove(lockPath).catch(() => {});
+      continue;
+    }
+
+    const ownerText = await readLockOwner(lockPath);
+    const owner = parseInt(ownerText, 10);
+    // The directory can exist for a moment before its pid file is written,
+    // and a holder can die without removing it. Leave a brand-new directory
+    // alone; rename a dead one aside. rename is atomic, so only one waiter
+    // succeeds and neither deletes a lock the other just created.
+    const fresh = Date.now() - stat.mtimeMs < 1000;
+    if (!processIsAlive(owner) && !fresh) {
+      const retired = lockPath + ".stale-" + process.pid + "-" + Date.now();
+      try {
+        await fs.rename(lockPath, retired);
+        await fs.remove(retired).catch(() => {});
+      } catch (err) {
+        if (err.code !== "ENOENT") throw err;
+      }
+      continue;
+    }
+
+    if (Date.now() > deadline) {
+      const error = new Error(
+        "Timed out waiting for the documentation build lock (holder pid " +
+          (ownerText || "unknown") +
+          ")"
+      );
+      error.code = "ELOCKED";
+      throw error;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, BUILD_LOCK_WAIT_MS));
+  }
+}
+
+function withDocumentationBuildLock(task) {
+  return acquireDocumentationBuildLock().then(async (release) => {
+    try {
+      return await task();
+    } finally {
+      await release();
+    }
+  });
+}
+
 async function rebuildTools() {
   console.log("Rebuilding tools");
   await tools();
@@ -232,7 +329,7 @@ const handle =
     }
   };
 
-module.exports = async ({ watch = false, skipZip = false } = {}) => {
+async function buildDocumentation({ watch = false, skipZip = false } = {}) {
   const now = Date.now();
 
   let cacheDir = null;
@@ -325,11 +422,19 @@ module.exports = async ({ watch = false, skipZip = false } = {}) => {
         cwd: SOURCE_DIRECTORY,
         ignoreInitial: true,
       })
-      .on("all", async (event, path) => {
-        if (path) handler(path);
+      .on("all", (event, filePath) => {
+        if (!filePath) return;
+        // handler catches its own build errors; this catches a lock failure
+        // so a watcher event cannot become an unhandled rejection.
+        withDocumentationBuildLock(() => handler(filePath)).catch((err) => {
+          console.error(err);
+        });
       });
   }
-};
+}
+
+module.exports = (options) =>
+  withDocumentationBuildLock(() => buildDocumentation(options));
 
 async function buildHTML(path) {
   const contents = await fs.readFile(join(SOURCE_DIRECTORY, path), "utf-8");
@@ -345,4 +450,4 @@ if (require.main === module) {
 }
 
 module.exports.computeViewsHash = computeViewsHash;
-module.exports.rebuildTools = rebuildTools;
+module.exports.rebuildTools = () => withDocumentationBuildLock(rebuildTools);

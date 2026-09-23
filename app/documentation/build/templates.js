@@ -268,23 +268,14 @@ module.exports = async () => {
   const partials = await loadPartials();
   const templates = await loadTemplates();
 
-  // Everything under app/views/templates/ is normally build-time-only
-  // material (consumed here, then baked into static index.html /
-  // for-<category>/index.html pages) and never copied to views-built,
-  // since nothing routes directly to it. /templates/search/:query is
-  // the exception - its results are per-request, so it has to be a
-  // genuinely live Express view. Copy its source and the template-list
-  // partial it needs through unbaked (no mustache.render - the live
-  // request is what fills in {{...}} tags) so Express's view engine can
-  // find them under views-built like any other live docs page.
-  await fs.copy(
-    path.join(viewsDirectory, "search.html"),
-    path.join(outputDirectory, "search.html")
-  );
-  await fs.copy(
-    path.join(viewsDirectory, "template-list.html"),
-    path.join(outputDirectory, "template-list.html")
-  );
+  // The generic copier in build/index.js does not publish anything under
+  // templates/: the initial pass returns immediately, and the watcher only
+  // calls this function. Copy the source directory through unbaked so a
+  // live view (search.html, fonts.html) or partial is actually on disk.
+  // Pages baked below overwrite the copies they own (index.html,
+  // for-<category>/index.html, <slug>/index.html). Anything else stays as
+  // source, so the next file under app/views/templates/ needs no special case.
+  await fs.copy(viewsDirectory, outputDirectory);
 
   await renderView(
     "index.html",
