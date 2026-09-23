@@ -1,5 +1,7 @@
 :root {
-  --select-control-padding: 0.5em 1em;
+  /* 8px 16px matches the checkbox and number rows. em would follow
+     this form's 14px font-size and shift the label 2px left. */
+  --select-control-padding: 8px 16px;
   --select-control-font-size: 14px;
   --select-dropdown-icon-right: 12px;
   --select-dropdown-icon-opacity: 0.3;
