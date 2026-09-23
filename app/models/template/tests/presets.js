@@ -105,9 +105,8 @@ describe("template presets", function () {
       locals
     );
 
-    expect(checked.presets.colors.length).toBe(1);
-    expect(checked.presets.colors[0].name).toBe("First");
-    expect(checked.presets.colors[0].id).toBe("First");
+    expect(Object.keys(checked.presets.colors).length).toBe(1);
+    expect(checked.presets.colors.First).toEqual({ background_color: "#fff" });
     expect(checked.errors).toEqual([]);
   });
 
@@ -336,8 +335,8 @@ describe("template presets", function () {
     fs.outputFileSync(path.join(this.tmp, "index.html"), "<p>Hi</p>");
 
     const read = await readFromFolder(this.blog.id, this.tmp);
-    expect(read.presets.colors.length).toBe(1);
-    expect(read.presets.colors[0].id).toBe("Ink");
+    expect(Object.keys(read.presets.colors).length).toBe(1);
+    expect(read.presets.colors.Ink.background_color).toBe("#abcdef");
     expect(read.errors["package.json"]).toContain("missing_color");
 
     await writeToFolder(this.blog.id, created.id);
@@ -368,8 +367,8 @@ describe("template presets", function () {
     });
     const copy = await create(this.blog.id, "Preset Copy", { cloneFrom: source.id });
     const copied = await getMetadata(copy.id);
-    expect(copied.presets.colors[1].id).toBe("Midnight");
-    expect(copied.presets.fonts[0].values.font.id).toBe("verdana");
+    expect(copied.presets.colors.Midnight.background_color).toBe("#111318");
+    expect(copied.presets.fonts.Classic.font.id).toBe("verdana");
     await drop(this.blog.id, "Preset Copy");
 
     const duplicated = await duplicateTemplate({
@@ -377,7 +376,7 @@ describe("template presets", function () {
       template: source,
     });
     const metadata = await getMetadata(duplicated.id);
-    expect(metadata.presets.colors[0].name).toBe("Classic");
+    expect(metadata.presets.colors.Classic.background_color).toBe("#fff");
     expect(metadata.locals.font.id).toBe("verdana");
   });
 });

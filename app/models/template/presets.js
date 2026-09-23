@@ -293,13 +293,13 @@ function validatePresetMap(type, map, locals, errors) {
     return [];
   }
 
-  const entries = [];
+  const entries = Object.create(null);
 
   Object.keys(map).forEach((id) => {
     const result = validateEntry(type, id, map[id], locals);
     result.errors.forEach((message) => errors.push(message));
     if (!result.entry) return;
-    entries.push(result.entry);
+    entries[id] = result.entry.values;
   });
 
   return entries;
@@ -322,8 +322,8 @@ function validatePresets(presets, locals) {
   const colors = validatePresetMap("colors", presets.colors, safeLocals, errors);
   const fonts = validatePresetMap("fonts", presets.fonts, safeLocals, errors);
   const value = {};
-  if (colors.length) value.colors = colors;
-  if (fonts.length) value.fonts = fonts;
+  if (Object.keys(colors).length) value.colors = colors;
+  if (Object.keys(fonts).length) value.fonts = fonts;
   return { presets: value, errors };
 }
 
@@ -331,22 +331,19 @@ function toPackagePresets(presets) {
   if (!isPlainObject(presets)) return null;
   const result = {};
   ["colors", "fonts"].forEach((type) => {
-    if (!Array.isArray(presets[type]) || !presets[type].length) return;
+    if (!isPlainObject(presets[type])) return;
     result[type] = {};
-    presets[type].forEach((entry) => {
-      if (
-        !entry ||
-        !entry.name ||
-        !isSafePresetKey(entry.name) ||
-        !isPlainObject(entry.values)
-      ) {
-        return;
-      }
-      result[type][entry.name] = entry.values;
+    Object.keys(presets[type]).forEach((id) => {
+      if (!isSafePresetKey(id) || !isPlainObject(presets[type][id])) return;
+      result[type][id] = presets[type][id];
     });
     if (!Object.keys(result[type]).length) delete result[type];
   });
   return Object.keys(result).length ? result : null;
+}
+
+function presetEntries(map) {
+  return ownKeys(map).map((id) => ({ id, name: id, values: map[id] }));
 }
 
 function fontRole(key) {
@@ -654,14 +651,9 @@ function collectFontStyles(colors, fonts) {
 
 function presentPresets(template) {
   const locals = (template && template.locals) || {};
-  const stored = template && template.presets;
-  const validated =
-    isPlainObject(stored) &&
-    (Array.isArray(stored.colors) || Array.isArray(stored.fonts))
-      ? { presets: stored, errors: [] }
-      : validatePresets(stored, locals);
-  const colors = presentColors(validated.presets.colors || [], locals);
-  const fonts = presentFonts(validated.presets.fonts || [], locals);
+  const validated = validatePresets(template && template.presets, locals);
+  const colors = presentColors(presetEntries(validated.presets.colors), locals);
+  const fonts = presentFonts(presetEntries(validated.presets.fonts), locals);
   return {
     colors,
     fonts,
@@ -708,11 +700,12 @@ function applyResolvedPreset(template, type, id) {
   }
   if (!isSafePresetKey(id)) return { error: "That preset is not available" };
 
-  const list = Array.isArray(presets[type]) ? presets[type] : [];
-  const found = list.find((entry) => entry && entry.id === id);
-  if (!found) return { error: "That preset is not available" };
+  const map = isPlainObject(presets[type]) ? presets[type] : {};
+  if (!Object.prototype.hasOwnProperty.call(map, id)) {
+    return { error: "That preset is not available" };
+  }
 
-  const checked = validateEntry(type, found.id, found.values, locals);
+  const checked = validateEntry(type, id, map[id], locals);
   if (!checked.entry) return { error: checked.errors[0] || "That preset is not available" };
 
   if (type === "fonts") {

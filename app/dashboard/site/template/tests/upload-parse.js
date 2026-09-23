@@ -400,8 +400,8 @@ describe("parseUploadedTemplate", function () {
         ),
       ]);
 
-      expect(result.presets.colors[0].id).toEqual("Classic");
-      expect(result.presets.fonts[0].values.font.id).toEqual("not-a-real-font");
+      expect(result.presets.colors.Classic.background_color).toEqual("#ffffff");
+      expect(result.presets.fonts.Missing.font.id).toEqual("not-a-real-font");
     });
 
     it("reports malformed presets, invalid keys, and unknown locals", function () {

@@ -286,7 +286,7 @@ describe("template editor presets", function () {
     expect(saved.locals.links_color).toBe("#8cbcff");
     expect(saved.locals.font.id).toBe("verdana");
     expect(saved.locals.font.font_size).toBe(16);
-    expect(saved.presets.colors[0].id).toBe("Classic");
+    expect(saved.presets.colors.Classic.background_color).toBe("#FFFFFF");
   });
 
   it("applies a font id and keeps the current size and line height", async function () {
@@ -377,7 +377,7 @@ describe("template editor presets", function () {
 
     const forked = await getMetadata(this.blog.id + ":preset-source");
     expect(forked.locals.background_color).toBe("#111318");
-    expect(forked.presets.fonts[0].id).toBe("Classic");
+    expect(forked.presets.fonts.Classic.font.id).toBe("verdana");
     expect(forked.owner).toBe(this.blog.id);
 
     const untouched = await getMetadata(source.id);
