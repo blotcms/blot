@@ -263,28 +263,66 @@ const renderView = async (viewName, data, destination, partials) => {
   await fs.outputFile(path.join(outputDirectory, destination), transformed);
 };
 
+const listRelativeFiles = async (root) => {
+  if (!(await fs.pathExists(root))) return [];
+  const files = [];
+  const walk = async (dir) => {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) await walk(abs);
+      else if (entry.isFile()) files.push(path.relative(root, abs));
+    }
+  };
+  await walk(root);
+  return files;
+};
+
+const pruneEmptyDirectories = async (root) => {
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const abs = path.join(root, entry.name);
+    await pruneEmptyDirectories(abs);
+    const left = await fs.readdir(abs).catch(() => null);
+    if (left && left.length === 0) await fs.remove(abs);
+  }
+};
+
 module.exports = async () => {
   const manifest = loadManifest();
   const partials = await loadPartials();
   const templates = await loadTemplates();
 
-  // Everything under app/views/templates/ is normally build-time-only
-  // material (consumed here, then baked into static index.html /
-  // for-<category>/index.html pages) and never copied to views-built,
-  // since nothing routes directly to it. /templates/search/:query is
-  // the exception - its results are per-request, so it has to be a
-  // genuinely live Express view. Copy its source and the template-list
-  // partial it needs through unbaked (no mustache.render - the live
-  // request is what fills in {{...}} tags) so Express's view engine can
-  // find them under views-built like any other live docs page.
-  await fs.copy(
-    path.join(viewsDirectory, "search.html"),
-    path.join(outputDirectory, "search.html")
-  );
-  await fs.copy(
-    path.join(viewsDirectory, "template-list.html"),
-    path.join(outputDirectory, "template-list.html")
-  );
+  // The generic copier in build/index.js does not publish anything under
+  // templates/: the initial pass returns immediately, and the watcher only
+  // calls this function. Copy every source file it does not bake (live views
+  // such as search.html and fonts.html, plus partials). index.html is both
+  // a source file and a baked output, so it is not copied raw — renderView
+  // below replaces the previous baked page only after rendering succeeds.
+  // fs.copy merges, so also delete published files that are no longer in
+  // source and are not a baked output. Otherwise a removed view stays
+  // reachable and the next cache save keeps it.
+  const bakedOutputs = [
+    "index.html",
+    ...categories.map((category) => path.join(`for-${category.slug}`, "index.html")),
+    ...templates.map((template) => path.join(template.slug, "index.html")),
+  ];
+  const sourceFiles = await listRelativeFiles(viewsDirectory);
+  const keep = new Set([
+    ...sourceFiles.filter((rel) => rel !== "index.html"),
+    ...bakedOutputs,
+  ]);
+
+  await fs.ensureDir(outputDirectory);
+  for (const rel of await listRelativeFiles(outputDirectory)) {
+    if (!keep.has(rel)) await fs.remove(path.join(outputDirectory, rel));
+  }
+  await pruneEmptyDirectories(outputDirectory);
+
+  await fs.copy(viewsDirectory, outputDirectory, {
+    filter: (src) => path.relative(viewsDirectory, src) !== "index.html",
+  });
 
   await renderView(
     "index.html",
