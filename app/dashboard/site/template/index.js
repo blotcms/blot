@@ -225,6 +225,7 @@ TemplateEditor.route("/:templateSlug/images/:key")
   })
   .post(
     require("./load/image-inputs"),
+    require("./save/preflight-image"),
     require("./save/fork-if-needed"),
     require("./save/upload-image")
   );
