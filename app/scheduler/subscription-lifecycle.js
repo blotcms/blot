@@ -4,6 +4,7 @@ var eachUser = require("../../scripts/each/user");
 var email = require("helper/email");
 var subscriptionLifecycle = require("models/user/subscriptionLifecycle");
 var removal = require("models/user/removal");
+var closePayPalSubscription = require("dashboard/webhooks/paypal_cancellation_notice").closePayPalSubscription;
 
 function deleteUserAccount(user, callback) {
   void user;
@@ -106,19 +107,25 @@ module.exports = function processSubscriptionLifecycle(callback) {
 
     if (!details.cancelled || !details.periodEnded) return next();
 
+    // PayPal stays CANCELLED through the end of the paid period, so the
+    // cancellation webhook does not close the account. This job disables it
+    // and sends CLOSED, including a notice that failed on an earlier run.
+    if (
+      details.provider === "paypal" &&
+      user.paypal &&
+      String(user.paypal.status).toUpperCase() === "CANCELLED"
+    ) {
+      return closePayPalSubscription(user, function (closeErr, didDisable) {
+        if (didDisable) disabled += 1;
+        if (closeErr) return next(closeErr);
+        queueRemoval(user, overdue, next);
+      });
+    }
+
     if (!user.isDisabled) {
       return User.disable(user, function (disableErr) {
         if (disableErr) return next(disableErr);
         disabled += 1;
-        // PayPal stays CANCELLED through the end of the paid period, so the
-        // cancellation webhook does not close the account. Email when this
-        // job is what disables it. Stripe already emails from its webhook.
-        if (
-          details.provider === "paypal" &&
-          user.paypal &&
-          String(user.paypal.status).toUpperCase() === "CANCELLED"
-        )
-          email.CLOSED(user.uid);
         queueRemoval(user, overdue, next);
       });
     }
