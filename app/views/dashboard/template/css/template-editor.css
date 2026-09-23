@@ -322,6 +322,14 @@ p.template-heading-note {
   --template-row-link-padding: 0.125em 0.6875em;
 }
 
+.template-docs-support-links-group .template-row__link {
+  gap: 0.5em;
+}
+
+.template-docs-support-links-group .template-row + .template-row {
+  border-top: 1px solid var(--border-color);
+}
+
 .line.links {
   padding-left: 0.4375em;
   border-bottom: 1px solid var(--light-border-color);
