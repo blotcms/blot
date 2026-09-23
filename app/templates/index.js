@@ -12,6 +12,7 @@ var _ = require("lodash");
 var chokidar = require("chokidar");
 var parseTemplate = require("models/template/parseTemplate");
 var urlNormalizer = require("helper/urlNormalizer");
+var updateCdnManifest = require("models/template/util/updateCdnManifest");
 var TEMPLATES_DIRECTORY = require("path").resolve(__dirname + "/source");
 var TEMPLATES_OWNER = "SITE";
 
@@ -245,33 +246,35 @@ function build(directory, callback) {
         return callback();
       }
 
-      Template.drop(TEMPLATES_OWNER, basename(directory), function () {
-        Template.create(TEMPLATES_OWNER, name, template, function (err) {
-          if (err) return callback(err);
+      collectDevelopmentForks(
+        id,
+        storedMetadata,
+        storedViews,
+        function (forkErr, developmentForks) {
+          if (forkErr) return callback(forkErr);
 
-          buildViews(id, snapshot.definitions, function (buildViewsErr) {
-            // Every valid view has already been persisted by buildViews
-            // regardless of buildViewsErr, so blogs using this template
-            // must still have their cache flushed to see them - a broken
-            // view elsewhere shouldn't leave the working views stuck
-            // behind a stale cache. We still propagate buildViewsErr to
-            // our own callback below, once that's done, so CI/dev logging
-            // of the underlying error is unaffected.
-            emptyCacheForBlogsUsing(id, function (err) {
+          Template.drop(TEMPLATES_OWNER, basename(directory), function () {
+            Template.create(TEMPLATES_OWNER, name, template, function (err) {
               if (err) return callback(err);
 
-              if (!isPublic || config.environment !== "development")
-                return callback(buildViewsErr);
+              buildViews(id, snapshot.definitions, function (buildViewsErr) {
+                // Every valid view has already been persisted by buildViews
+                // regardless of buildViewsErr, so blogs using this template
+                // must still have their cache flushed to see them - a broken
+                // view elsewhere shouldn't leave the working views stuck
+                // behind a stale cache.
+                emptyCacheForBlogsUsing(id, function (err) {
+                  if (err) return callback(err);
+                  if (buildViewsErr) return callback(buildViewsErr);
+                  if (config.environment !== "development") return callback();
 
-              // in development, we want to reset any versions of the template
-              // otherwise it seems local changes are not reflected
-              removeOldVersionFromTestBlogs(id, function () {
-                callback(buildViewsErr);
+                  refreshDevelopmentForks(id, developmentForks, callback);
+                });
               });
             });
           });
-        });
-      });
+        }
+      );
     });
   });
 }
@@ -623,12 +626,16 @@ function emptyCacheForBlogsUsing(templateID, callback) {
   });
 }
 
-function removeOldVersionFromTestBlogs(templateID, callback) {
-  // If we're not in development, we don't want to remove the template from any blogs
-  if (config.environment !== "development") return callback();
+var DELETED_PACKAGE_VALUE = { developmentRefreshDeleted: true };
 
+function collectDevelopmentForks(templateID, baseMetadata, baseViews, callback) {
+  if (config.environment !== "development") return callback(null, []);
+
+  var basePackage = packageConfiguration(baseMetadata, baseViews);
   Blog.getAllIDs(function (err, ids) {
     if (err) return callback(err);
+
+    var forks = [];
     async.eachSeries(
       ids,
       function (blogID, next) {
@@ -637,7 +644,7 @@ function removeOldVersionFromTestBlogs(templateID, callback) {
           Template.getTemplateList(blogID, function (err, templates) {
             if (err) return next(err);
 
-            const TemplateToRemove = templates.find(function (template) {
+            var fork = templates.find(function (template) {
               return (
                 template.cloneFrom === templateID &&
                 template.owner === blogID &&
@@ -646,33 +653,198 @@ function removeOldVersionFromTestBlogs(templateID, callback) {
               );
             });
 
-            if (!TemplateToRemove) return next();
+            if (!fork) return next();
 
-            console.log(
-              "Removing old version of development template",
-              TemplateToRemove.id
-            );
-            Template.drop(blogID, TemplateToRemove.slug, function (err) {
+            Template.getAllViews(fork.id, function (err, views) {
               if (err) return next(err);
 
-              if (TemplateToRemove.id === blog.template) {
-                Blog.set(
-                  blogID,
-                  { template: TemplateToRemove.cloneFrom },
-                  function (err) {
-                    if (err) return next(err);
-                    console.log("Removed template from", blogID);
-                    next();
-                  }
-                );
-              } else {
-                next();
-              }
+              forks.push({
+                blog: blog,
+                metadata: fork,
+                overlay: packageOverlay(
+                  basePackage,
+                  packageConfiguration(fork, views)
+                ),
+              });
+              next();
             });
           });
         });
       },
-      callback
+      function (err) {
+        callback(err, forks);
+      }
+    );
+  });
+}
+
+function packageConfiguration(metadata, views) {
+  var result = { locals: authoredLocals(metadata && metadata.locals) };
+
+  Object.keys(views || {}).forEach(function (name) {
+    var view = views[name];
+    if (!view) return;
+
+    var configuration = {};
+    var patterns = view.urlPatterns || (view.url ? [view.url] : []);
+    if (patterns.length > 1) configuration.url = _.cloneDeep(patterns);
+    else if (view.url && view.url !== "/" + name) configuration.url = view.url;
+
+    if (view.locals && Object.keys(view.locals).length)
+      configuration.locals = _.cloneDeep(view.locals);
+
+    var partials = _.cloneDeep(view.partials || {});
+    var parsedPartials = parseTemplate(view.content || "").partials || {};
+    Object.keys(parsedPartials).forEach(function (partial) {
+      if (_.isEqual(partials[partial], parsedPartials[partial]))
+        delete partials[partial];
+    });
+    if (Object.keys(partials).length) configuration.partials = partials;
+
+    if (Object.keys(configuration).length) {
+      result.views = result.views || {};
+      result.views[name] = configuration;
+    }
+  });
+
+  return result;
+}
+
+function authoredLocals(locals) {
+  var result = normalizeLocalsForComparison(locals || {});
+  Object.keys(result).forEach(function (key) {
+    if (
+      (key === "font" || key.indexOf("_font") !== -1) &&
+      result[key] &&
+      typeof result[key] === "object"
+    ) {
+      delete result[key].styles;
+    }
+  });
+  return result;
+}
+
+function packageOverlay(base, fork) {
+  if (_.isEqual(base, fork)) return undefined;
+
+  if (!_.isPlainObject(base) || !_.isPlainObject(fork))
+    return _.cloneDeep(fork);
+
+  var overlay = {};
+  Object.keys(base).forEach(function (key) {
+    if (!Object.prototype.hasOwnProperty.call(fork, key)) {
+      overlay[key] = DELETED_PACKAGE_VALUE;
+      return;
+    }
+    var difference = packageOverlay(base[key], fork[key]);
+    if (difference !== undefined) overlay[key] = difference;
+  });
+  Object.keys(fork).forEach(function (key) {
+    if (!Object.prototype.hasOwnProperty.call(base, key))
+      overlay[key] = _.cloneDeep(fork[key]);
+  });
+  return Object.keys(overlay).length ? overlay : undefined;
+}
+
+function applyPackageOverlay(value, overlay) {
+  if (overlay === DELETED_PACKAGE_VALUE) return undefined;
+  if (!_.isPlainObject(overlay)) return _.cloneDeep(overlay);
+
+  var result = _.isPlainObject(value) ? _.cloneDeep(value) : {};
+  Object.keys(overlay).forEach(function (key) {
+    var updated = applyPackageOverlay(result[key], overlay[key]);
+    if (updated === undefined) delete result[key];
+    else result[key] = updated;
+  });
+  return result;
+}
+
+function refreshDevelopmentForks(templateID, forks, callback) {
+  if (config.environment !== "development") return callback();
+
+  async.eachSeries(
+    forks || [],
+    function (saved, next) {
+      var old = saved.metadata;
+      console.log("Refreshing development template fork", old.id);
+
+      Template.drop(old.owner, old.slug, function (err) {
+        if (err) return next(err);
+
+        Template.create(
+          old.owner,
+          old.name,
+          {
+            slug: old.slug,
+            cloneFrom: templateID,
+            localEditing: old.localEditing === true,
+            isPublic: old.isPublic === true,
+          },
+          function (err, fresh) {
+            if (err) return next(err);
+
+            applyForkPackageOverlay(fresh.id, saved.overlay, function (err) {
+              if (err) return next(err);
+
+              function finish(err) {
+                if (err) return next(err);
+                updateCdnManifest(fresh.id, function (err) {
+                  if (err) return next(err);
+                  Blog.set(old.owner, { cacheID: Date.now() }, function (err) {
+                    if (err) return next(err);
+                    if (!old.localEditing) return next();
+                    Template.writeToFolder(old.owner, fresh.id, next);
+                  });
+                });
+              }
+
+              if (saved.blog.template === old.id && fresh.id !== old.id) {
+                return Blog.set(old.owner, { template: fresh.id }, finish);
+              }
+              finish();
+            });
+          }
+        );
+      });
+    },
+    callback
+  );
+}
+
+function applyForkPackageOverlay(templateID, overlay, callback) {
+  Template.getAllViews(templateID, function (err, views, metadata) {
+    if (err) return callback(err);
+
+    var packageData = applyPackageOverlay(
+      packageConfiguration(metadata, views),
+      overlay || {}
+    );
+
+    Template.setMetadata(
+      templateID,
+      { locals: packageData.locals || {} },
+      function (err) {
+        if (err) return callback(err);
+
+        async.eachSeries(
+          Object.keys(views || {}),
+          function (name, next) {
+            var configuration =
+              (packageData.views && packageData.views[name]) || {};
+            Template.setView(
+              templateID,
+              {
+                name: name,
+                url: configuration.url || "/" + name,
+                locals: configuration.locals || {},
+                partials: configuration.partials || {},
+              },
+              next
+            );
+          },
+          callback
+        );
+      }
     );
   });
 }
