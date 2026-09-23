@@ -1,5 +1,5 @@
 describe("template image crop controls", function () {
-  const initializeCrop = require("../image-crop");
+  const initializeCrop = require("../../../../views/dashboard/template/controls/image-crop");
 
   it("clears crop coordinates when another image is selected", function () {
     const listeners = {};
