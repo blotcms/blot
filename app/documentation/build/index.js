@@ -156,9 +156,10 @@ async function refreshDevelopmentCache() {
 // so the rejection kills the process (nodemon restart overlapping a build,
 // or two build() calls). The same overlap also deletes files out from under
 // fs.copy (ENOENT) and leaves a partial cache that a later restore trusts.
-// A file lock covers both a second call in this process and a second process.
+// A mkdir lock covers both a second call in this process and a second process.
 const BUILD_LOCK_WAIT_MS = 50;
 const BUILD_LOCK_TIMEOUT_MS = 10 * 60 * 1000;
+const BUILD_LOCK_FRESH_MS = 1000;
 
 function documentationBuildLockPath() {
   return join(config.tmp_directory, "documentation-build.lock");
@@ -174,8 +175,77 @@ function processIsAlive(pid) {
   }
 }
 
+// /proc/<pid>/stat field 22 is the process start time. A recycled pid has a
+// different start time, so a lock whose holder has exited can be reclaimed
+// even when the numeric pid now belongs to an unrelated process.
+function processStartTicks(pid) {
+  try {
+    const stat = fs.readFileSync("/proc/" + pid + "/stat", "utf8");
+    const rest = stat.slice(stat.lastIndexOf(")") + 2);
+    return rest.split(" ")[19] || "";
+  } catch (err) {
+    return "";
+  }
+}
+
+function currentLockToken() {
+  const start = processStartTicks(process.pid);
+  return start ? process.pid + ":" + start : String(process.pid);
+}
+
+function lockTokenIsLive(token) {
+  const [pidText, start] = String(token || "").split(":");
+  const pid = parseInt(pidText, 10);
+  if (!processIsAlive(pid)) return false;
+  if (!start) return true;
+  const now = processStartTicks(pid);
+  if (!now) return true;
+  return now === start;
+}
+
 async function readLockOwner(lockPath) {
   return String(await fs.readFile(join(lockPath, "pid"), "utf8").catch(() => "")).trim();
+}
+
+function releaseDocumentationBuildLock(lockPath) {
+  return async function release() {
+    if ((await readLockOwner(lockPath)) !== currentLockToken()) return;
+    await fs.remove(lockPath);
+  };
+}
+
+// Claim the existing directory in place. Renaming it aside would let another
+// waiter mkdir a new lock, then have this waiter's rename move that live lock
+// out from under them. The exclusive claim file is the revalidation: only one
+// waiter creates it, and it adopts the directory only if the owner token is
+// still the dead one it observed.
+async function takeOverStaleLock(lockPath, observedToken) {
+  const claimPath = join(lockPath, "claim");
+  try {
+    await fs.writeFile(claimPath, currentLockToken(), { flag: "wx" });
+  } catch (err) {
+    if (err.code !== "EEXIST") throw err;
+    const claimStat = await fs.stat(claimPath).catch(() => null);
+    const claimToken = String(await fs.readFile(claimPath, "utf8").catch(() => "")).trim();
+    const claimFresh = claimStat && Date.now() - claimStat.mtimeMs < BUILD_LOCK_FRESH_MS;
+    if (!lockTokenIsLive(claimToken) && !claimFresh) {
+      await fs.remove(claimPath).catch(() => {});
+    }
+    return false;
+  }
+
+  try {
+    const tokenNow = await readLockOwner(lockPath);
+    if (tokenNow !== observedToken || lockTokenIsLive(tokenNow)) return false;
+    if (!tokenNow) {
+      const stat = await fs.stat(lockPath).catch(() => null);
+      if (stat && Date.now() - stat.mtimeMs < BUILD_LOCK_FRESH_MS) return false;
+    }
+    await fs.writeFile(join(lockPath, "pid"), currentLockToken());
+    return true;
+  } finally {
+    await fs.remove(claimPath).catch(() => {});
+  }
 }
 
 async function acquireDocumentationBuildLock() {
@@ -187,11 +257,8 @@ async function acquireDocumentationBuildLock() {
     try {
       // mkdir is atomic, so two builders cannot both enter this section.
       await fs.mkdir(lockPath);
-      await fs.writeFile(join(lockPath, "pid"), String(process.pid));
-      return async function releaseDocumentationBuildLock() {
-        if ((await readLockOwner(lockPath)) !== String(process.pid)) return;
-        await fs.remove(lockPath);
-      };
+      await fs.writeFile(join(lockPath, "pid"), currentLockToken());
+      return releaseDocumentationBuildLock(lockPath);
     } catch (err) {
       if (err.code !== "EEXIST") throw err;
     }
@@ -205,26 +272,16 @@ async function acquireDocumentationBuildLock() {
     }
 
     const ownerText = await readLockOwner(lockPath);
-    const owner = parseInt(ownerText, 10);
-    // The directory can exist for a moment before its pid file is written,
-    // and a holder can die without removing it. Leave a brand-new directory
-    // alone; rename a dead one aside. rename is atomic, so only one waiter
-    // succeeds and neither deletes a lock the other just created.
-    const fresh = Date.now() - stat.mtimeMs < 1000;
-    if (!processIsAlive(owner) && !fresh) {
-      const retired = lockPath + ".stale-" + process.pid + "-" + Date.now();
-      try {
-        await fs.rename(lockPath, retired);
-        await fs.remove(retired).catch(() => {});
-      } catch (err) {
-        if (err.code !== "ENOENT") throw err;
+    const freshEmpty = !ownerText && Date.now() - stat.mtimeMs < BUILD_LOCK_FRESH_MS;
+    if (!lockTokenIsLive(ownerText) && !freshEmpty) {
+      if (await takeOverStaleLock(lockPath, ownerText)) {
+        return releaseDocumentationBuildLock(lockPath);
       }
-      continue;
     }
 
     if (Date.now() > deadline) {
       const error = new Error(
-        "Timed out waiting for the documentation build lock (holder pid " +
+        "Timed out waiting for the documentation build lock (holder " +
           (ownerText || "unknown") +
           ")"
       );
@@ -253,7 +310,7 @@ async function rebuildTools() {
 }
 
 const handle =
-  (initial = false, cacheDir = null) =>
+  (initial = false, cacheDir = null, options = {}) =>
   async (path) => {
     try {
       if (path.endsWith("README")) {
@@ -316,13 +373,11 @@ const handle =
         );
       }
 
-      // After partial rebuild, update cache if in development
-      if (!initial && config.environment === "development") {
-        const hash = await computeViewsHash();
-        const cacheRoot = join(config.tmp_directory, "documentation-cache");
-        const currentCacheDir = join(cacheRoot, hash, "views-built");
-        await saveToCache(currentCacheDir);
-        await cleanOldCaches(cacheRoot, hash);
+      // After partial rebuild, update cache if in development. A watcher
+      // batch defers this so one burst does not copy the whole output once
+      // per file.
+      if (!initial && !options.deferCache && config.environment === "development") {
+        await refreshDevelopmentCache();
       }
     } catch (e) {
       console.error(e);
@@ -415,7 +470,18 @@ async function buildDocumentation({ watch = false, skipZip = false } = {}) {
   );
 
   if (watch) {
-    const handler = handle(false, cacheDir);
+    const handler = handle(false, cacheDir, { deferCache: true });
+    // One queue for the whole burst. Each chokidar event used to start its
+    // own lock wait, so a branch switch could time out later files with
+    // ELOCKED before they were rebuilt.
+    const enqueue = createWatchQueue(async (batch) => {
+      await withDocumentationBuildLock(async () => {
+        for (const filePath of batch) await handler(filePath);
+        if (config.environment === "development") {
+          await refreshDevelopmentCache();
+        }
+      });
+    });
 
     chokidar
       .watch(SOURCE_DIRECTORY, {
@@ -423,14 +489,45 @@ async function buildDocumentation({ watch = false, skipZip = false } = {}) {
         ignoreInitial: true,
       })
       .on("all", (event, filePath) => {
-        if (!filePath) return;
-        // handler catches its own build errors; this catches a lock failure
-        // so a watcher event cannot become an unhandled rejection.
-        withDocumentationBuildLock(() => handler(filePath)).catch((err) => {
-          console.error(err);
-        });
+        enqueue(filePath);
       });
   }
+}
+
+function createWatchQueue(runBatch) {
+  const pending = [];
+  let draining = false;
+  let drainPromise = null;
+
+  function enqueue(filePath) {
+    if (filePath) pending.push(filePath);
+    if (draining) return drainPromise;
+
+    draining = true;
+    drainPromise = (async () => {
+      let failed = false;
+      try {
+        while (pending.length && !failed) {
+          const batch = [...new Set(pending.splice(0, pending.length))];
+          try {
+            await runBatch(batch);
+          } catch (err) {
+            console.error(err);
+            pending.unshift(...batch);
+            failed = true;
+          }
+        }
+      } finally {
+        draining = false;
+        drainPromise = null;
+        if (pending.length && !failed) enqueue();
+      }
+    })();
+
+    return drainPromise;
+  }
+
+  return enqueue;
 }
 
 module.exports = (options) =>
@@ -451,3 +548,4 @@ if (require.main === module) {
 
 module.exports.computeViewsHash = computeViewsHash;
 module.exports.rebuildTools = () => withDocumentationBuildLock(rebuildTools);
+module.exports.createWatchQueue = createWatchQueue;

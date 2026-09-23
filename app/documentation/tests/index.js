@@ -189,6 +189,32 @@ describe("Blot's documentation'", function () {
         );
         expect(built).toEqual(source);
       }
+
+      // index.html is baked. Copying the raw source over the published page
+      // would drop the build-time template data until renderView finishes.
+      const indexSource = await fs.readFile(
+        path.join(sourceDirectory, "index.html"),
+        "utf8"
+      );
+      const indexBuilt = await fs.readFile(
+        path.join(config.views_directory, "templates/index.html"),
+        "utf8"
+      );
+      expect(indexBuilt).not.toEqual(indexSource);
+
+      await fs.remove(probeSource);
+      await build({ watch: false, skipZip: true });
+
+      expect(await fs.pathExists(probeBuilt)).toBe(false);
+      const cachedProbe = path.join(
+        tmpDirectory,
+        "documentation-cache",
+        await build.computeViewsHash(),
+        "views-built",
+        "templates",
+        probeName
+      );
+      expect(await fs.pathExists(cachedProbe)).toBe(false);
     } finally {
       await fs.remove(probeSource);
       await fs.remove(probeBuilt);
@@ -298,6 +324,59 @@ describe("Blot's documentation'", function () {
       config.tmp_directory = originalTmpDirectory;
       await fs.remove(tmpDirectory);
     }
+  });
+
+  it("reclaims a documentation build lock whose pid was reused", async function () {
+    const originalTmpDirectory = config.tmp_directory;
+    const tmpDirectory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "blot-documentation-cache-")
+    );
+
+    config.tmp_directory = tmpDirectory;
+
+    try {
+      // Same pid as this process, but not this process's start time. A pid-only
+      // check would treat the lock as live and wait out the ten-minute timeout.
+      const lockPath = path.join(tmpDirectory, "documentation-build.lock");
+      await fs.ensureDir(lockPath);
+      await fs.writeFile(path.join(lockPath, "pid"), process.pid + ":bogus-start");
+      const past = new Date(Date.now() - 60 * 1000);
+      await fs.utimes(lockPath, past, past);
+
+      const started = Date.now();
+      await build({ watch: false, skipZip: true });
+      expect(Date.now() - started).toBeLessThan(60 * 1000);
+    } finally {
+      config.tmp_directory = originalTmpDirectory;
+      await fs.remove(tmpDirectory);
+    }
+  });
+
+  it("coalesces watcher paths into one rebuild batch", async function () {
+    const batches = [];
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const enqueue = build.createWatchQueue(async (batch) => {
+      batches.push(batch.slice());
+      if (batches.length === 1) await gate;
+    });
+
+    const first = enqueue("a.html");
+    enqueue("b.html");
+    enqueue("c.html");
+    enqueue("a.html");
+    release();
+    await first;
+
+    expect(batches.length).toBeGreaterThan(0);
+    expect(batches.length).toBeLessThan(4);
+    const flat = [].concat(...batches);
+    expect(flat).toContain("a.html");
+    expect(flat).toContain("b.html");
+    expect(flat).toContain("c.html");
+    expect(batches[batches.length - 1].sort()).toEqual(["a.html", "b.html", "c.html"]);
   });
 
   it("updates changed tool pages and refreshes their cache", async function () {

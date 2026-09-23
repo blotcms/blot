@@ -263,6 +263,32 @@ const renderView = async (viewName, data, destination, partials) => {
   await fs.outputFile(path.join(outputDirectory, destination), transformed);
 };
 
+const listRelativeFiles = async (root) => {
+  if (!(await fs.pathExists(root))) return [];
+  const files = [];
+  const walk = async (dir) => {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) await walk(abs);
+      else if (entry.isFile()) files.push(path.relative(root, abs));
+    }
+  };
+  await walk(root);
+  return files;
+};
+
+const pruneEmptyDirectories = async (root) => {
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const abs = path.join(root, entry.name);
+    await pruneEmptyDirectories(abs);
+    const left = await fs.readdir(abs).catch(() => null);
+    if (left && left.length === 0) await fs.remove(abs);
+  }
+};
+
 module.exports = async () => {
   const manifest = loadManifest();
   const partials = await loadPartials();
@@ -270,12 +296,33 @@ module.exports = async () => {
 
   // The generic copier in build/index.js does not publish anything under
   // templates/: the initial pass returns immediately, and the watcher only
-  // calls this function. Copy the source directory through unbaked so a
-  // live view (search.html, fonts.html) or partial is actually on disk.
-  // Pages baked below overwrite the copies they own (index.html,
-  // for-<category>/index.html, <slug>/index.html). Anything else stays as
-  // source, so the next file under app/views/templates/ needs no special case.
-  await fs.copy(viewsDirectory, outputDirectory);
+  // calls this function. Copy every source file it does not bake (live views
+  // such as search.html and fonts.html, plus partials). index.html is both
+  // a source file and a baked output, so it is not copied raw — renderView
+  // below replaces the previous baked page only after rendering succeeds.
+  // fs.copy merges, so also delete published files that are no longer in
+  // source and are not a baked output. Otherwise a removed view stays
+  // reachable and the next cache save keeps it.
+  const bakedOutputs = [
+    "index.html",
+    ...categories.map((category) => path.join(`for-${category.slug}`, "index.html")),
+    ...templates.map((template) => path.join(template.slug, "index.html")),
+  ];
+  const sourceFiles = await listRelativeFiles(viewsDirectory);
+  const keep = new Set([
+    ...sourceFiles.filter((rel) => rel !== "index.html"),
+    ...bakedOutputs,
+  ]);
+
+  await fs.ensureDir(outputDirectory);
+  for (const rel of await listRelativeFiles(outputDirectory)) {
+    if (!keep.has(rel)) await fs.remove(path.join(outputDirectory, rel));
+  }
+  await pruneEmptyDirectories(outputDirectory);
+
+  await fs.copy(viewsDirectory, outputDirectory, {
+    filter: (src) => path.relative(viewsDirectory, src) !== "index.html",
+  });
 
   await renderView(
     "index.html",
