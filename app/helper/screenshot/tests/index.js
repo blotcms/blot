@@ -5,6 +5,7 @@ const hashFile = require("helper/hashFile");
 
 describe("screenshot plugin", function () {
   let server;
+  const streams = new Set();
 
   global.test.timeout(60 * 1000); // 60s
 
@@ -20,6 +21,25 @@ describe("screenshot plugin", function () {
     // Return 404 for favicon requests
     app.get("/favicon.ico", (req, res) => {
       res.status(404).send("Not found");
+    });
+
+    // Stays open on purpose: this is the preview reload stream. A screenshot
+    // that waits for a quiet network has to ignore it, or navigation times out.
+    app.get("/__blot/preview/reload", (req, res) => {
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+      res.write("retry: 10000\n\n");
+      streams.add(res);
+      res.on("close", () => streams.delete(res));
+    });
+
+    app.get("/with-preview-reload", (req, res) => {
+      res.send(
+        "<html><head><style>body{background:white}</style></head><body><h1>Hello, world!</h1><script>new EventSource('/__blot/preview/reload').onmessage = function () { window.location.reload(); };</script></body></html>"
+      );
     });
 
     // Track request times for rate limiting tests
@@ -49,6 +69,7 @@ describe("screenshot plugin", function () {
 
   afterAll(() => {
     console.log("Closing server");
+    for (const res of streams) res.end();
     server.close();
   });
 
@@ -64,6 +85,16 @@ describe("screenshot plugin", function () {
       );
     }
 
+    fs.unlinkSync(path);
+  });
+
+  it("screenshots a page that keeps the preview reload stream open", async function () {
+    const expectedHash = await hashFile(expectedPath);
+    await screenshot(`${site}/with-preview-reload`, path);
+    expect(fs.existsSync(path)).toBe(true);
+    const hash = await hashFile(path);
+    expect(hash).toBe(expectedHash);
+    expect(streams.size).toBe(0);
     fs.unlinkSync(path);
   });
 

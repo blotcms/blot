@@ -116,6 +116,33 @@ function configure({ concurrency, minTime } = {}) {
   return { ...settings, closePageTimeout, screenshotTimeout };
 }
 
+// Runs in the page before its own scripts. A stand-in for the preview reload
+// stream keeps the inline `new EventSource(...).onmessage = ...` from opening
+// a connection that would pin networkidle0.
+function ignorePreviewReload() {
+  const NativeEventSource = window.EventSource;
+  if (!NativeEventSource) return;
+
+  function EventSource(url, options) {
+    if (String(url || "").indexOf("/__blot/preview/reload") !== -1) {
+      return {
+        close() {},
+        addEventListener() {},
+        removeEventListener() {},
+        set onmessage(_handler) {},
+        set onerror(_handler) {},
+      };
+    }
+    return new NativeEventSource(url, options);
+  }
+
+  EventSource.prototype = NativeEventSource.prototype;
+  EventSource.CONNECTING = NativeEventSource.CONNECTING;
+  EventSource.OPEN = NativeEventSource.OPEN;
+  EventSource.CLOSED = NativeEventSource.CLOSED;
+  window.EventSource = EventSource;
+}
+
 function validateOptions(options) {
   const validatedOptions = { ...options };
   if (options.width && typeof options.width !== "number") {
@@ -381,6 +408,11 @@ async function takeScreenshotLocked(site, path, options) {
     });
 
     await fs.ensureDir(dirname(path));
+
+    // Preview pages hold an EventSource open at /__blot/preview/reload so the
+    // template editor can refresh them. networkidle0 never arrives while that
+    // socket is up, which is what timed out the Blog template screenshots.
+    await page.evaluateOnNewDocument(ignorePreviewReload);
 
     console.log(prefix(), "Navigating browser to", site);
     await page.goto(site, {

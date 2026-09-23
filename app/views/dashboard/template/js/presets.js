@@ -89,6 +89,13 @@ function applyMatchToControls(group, match) {
       input.value = match[key];
       const previous = input.form && input.form.querySelector(".previous");
       if (previous) previous.style.background = match[key];
+      if (input.form) {
+        input.form.dispatchEvent(
+          new CustomEvent("template-preset-color", {
+            detail: { value: match[key] },
+          })
+        );
+      }
     });
     return;
   }
