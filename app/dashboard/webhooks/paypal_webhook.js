@@ -141,22 +141,30 @@ const updateSubscription = async subscriptionID => {
     throw new Error("Invalid PayPal subscription response");
   }
 
-  // Same notifications as the Stripe webhook. This function also refreshes
-  // an already-cancelled subscription from the dashboard, so only email on
-  // the transition into CANCELLED.
   const previousStatus = user.paypal && user.paypal.status;
-  if (paypal.status === "CANCELLED" && previousStatus !== "CANCELLED") {
-    if (user.isDisabled) email.ALREADY_CANCELLED(user.uid);
-    else email.CLOSED(user.uid);
-  }
+  const becameCancelled =
+    paypal.status === "CANCELLED" && previousStatus !== "CANCELLED";
 
   return new Promise((resolve, reject) => {
     const updates = { paypal };
-    const done = err => err ? reject(err) : resolve();
     const shouldDisable = subscriptionLifecycle.shouldDisableFromPaypalSubscription(paypal);
     // Preserve deliberate per-blog availability when the account is unchanged.
     // The model saves the account flag last to keep failures retryable.
     const shouldEnable = paypal.status === "ACTIVE" && user.isDisabled;
+    // CLOSED says the account is now closed. PayPal CANCELLED still leaves
+    // access in place until the paid period ends, so send it only with the
+    // disable, and only after that write succeeds. A failed write returns
+    // 503 and PayPal retries; emailing before the save would resend.
+    const done = err => {
+      if (err) return reject(err);
+
+      if (shouldDisable && !user.isDisabled && paypal.status === "CANCELLED")
+        email.CLOSED(user.uid);
+      else if (becameCancelled && user.isDisabled)
+        email.ALREADY_CANCELLED(user.uid);
+
+      resolve();
+    };
 
     if (shouldDisable && !user.isDisabled) return User.disable(user, updates, done);
     if (shouldEnable) return User.enable(user, updates, done);

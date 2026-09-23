@@ -110,6 +110,15 @@ module.exports = function processSubscriptionLifecycle(callback) {
       return User.disable(user, function (disableErr) {
         if (disableErr) return next(disableErr);
         disabled += 1;
+        // PayPal stays CANCELLED through the end of the paid period, so the
+        // cancellation webhook does not close the account. Email when this
+        // job is what disables it. Stripe already emails from its webhook.
+        if (
+          details.provider === "paypal" &&
+          user.paypal &&
+          String(user.paypal.status).toUpperCase() === "CANCELLED"
+        )
+          email.CLOSED(user.uid);
         queueRemoval(user, overdue, next);
       });
     }
