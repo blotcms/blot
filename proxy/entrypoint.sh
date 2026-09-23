@@ -27,6 +27,10 @@ if [[ "$(id -u)" == "0" ]]; then
   for d in /var/cache/openresty /var/log/openresty; do
     [[ -d "$d" ]] && chown ec2-user:ec2-user "$d" || true
   done
+  # Purge snapshot, mounted beside the cache. Chown the mount root only;
+  # the worker creates the files. Do not recurse into the cache.
+  mkdir -p /var/cache/cacher-index
+  chown ec2-user:ec2-user /var/cache/cacher-index || true
   # Pre-create the whole dehydrated tree owned by ec2-user. OpenResty's master
   # (root) runs generate_config in init_by_lua and would otherwise `mkdir`
   # these root-owned, leaving the ec2-user worker unable to write the ACME

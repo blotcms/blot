@@ -1,11 +1,15 @@
 # Stop dance for OpenResty
 # =========================
 #
-# ExecStop sends SIGSTOP (graceful stop) to OpenResty's nginx process.
-# If, after 5s (--retry QUIT/5) nginx is still running, systemd takes control
-# and sends SIGTERM (fast shutdown) to the main process.
-# After another 5s (TimeoutStopSec=5), and if nginx is alive, systemd sends
-# SIGKILL to all the remaining processes in the process group (KillMode=mixed).
+# ExecStop sends SIGQUIT (graceful stop) to OpenResty's nginx process.
+# Workers then write the cacher snapshot. That walks every host list in the
+# shared dictionary (bounded by cacher_dictionary, 75m) before it publishes
+# the clean marker. A short deadline kills the process first, the marker is
+# never written, and the next start walks the whole cache.
+# --retry QUIT/30 sends QUIT and waits 30s. That schedule does not itself
+# send KILL (a bare timeout would). TimeoutStopSec=30 is systemd's deadline
+# for the same stop: SIGTERM, then SIGKILL after another 30s (KillMode=mixed).
+# The process exits as soon as the snapshot is written; 30s is only the ceiling.
 #
 # nginx signals reference doc:
 # http://nginx.org/en/docs/control.html
@@ -21,8 +25,8 @@ PIDFile=/usr/local/openresty/nginx/logs/nginx.pid
 ExecStartPre=/usr/local/openresty/nginx/sbin/nginx -t -q -g 'daemon on; master_process on;'
 ExecStart=/usr/local/openresty/nginx/sbin/nginx -g 'daemon on; master_process on;'
 ExecReload=/usr/local/openresty/nginx/sbin/nginx -g 'daemon on; master_process on;' -s reload
-ExecStop=-/sbin/start-stop-daemon --quiet --stop --retry QUIT/5 --pidfile /usr/local/openresty/nginx/logs/nginx.pid
-TimeoutStopSec=5
+ExecStop=-/sbin/start-stop-daemon --quiet --stop --retry QUIT/30 --pidfile /usr/local/openresty/nginx/logs/nginx.pid
+TimeoutStopSec=30
 KillMode=mixed
 Restart=always
 

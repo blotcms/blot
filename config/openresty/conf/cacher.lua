@@ -9,13 +9,6 @@ local ffi = require("ffi")
 
 ffi.cdef[[
   typedef struct DIR DIR;
-  struct dirent {
-    uint64_t d_ino;
-    int64_t d_off;
-    uint16_t d_reclen;
-    uint8_t d_type;
-    char d_name[256];
-  };
   DIR *opendir(const char *name);
   struct dirent *readdir(DIR *dirp);
   int closedir(DIR *dirp);
@@ -39,6 +32,38 @@ ffi.cdef[[
   int close(int fd);
   int kill(int pid, int sig);
 ]]
+
+-- readdir's struct dirent is not the same shape on every OS. A Linux layout
+-- on macOS reads d_namlen as d_type/d_name, so a cold walk can index nothing
+-- and then report a purge of an empty host while the files are still there.
+local DIRENT_KNOWN = true
+
+if jit.os == "Linux" then
+    -- glibc and musl, x86_64 and aarch64: d_name begins at byte 19.
+    ffi.cdef[[
+      struct dirent {
+        uint64_t d_ino;
+        int64_t d_off;
+        uint16_t d_reclen;
+        uint8_t d_type;
+        char d_name[256];
+      };
+    ]]
+elseif jit.os == "OSX" then
+    -- 64-bit ino_t dirent from bsd/sys/dirent.h. d_name begins at byte 21.
+    ffi.cdef[[
+      struct dirent {
+        uint64_t d_ino;
+        uint64_t d_seekoff;
+        uint16_t d_reclen;
+        uint16_t d_namlen;
+        uint8_t d_type;
+        char d_name[1024];
+      };
+    ]]
+else
+    DIRENT_KNOWN = false
+end
 
 local O_RDONLY = 0
 local O_DIRECTORY = 65536
@@ -178,8 +203,12 @@ local function random_hex(nbytes)
     end))
 end
 
--- Snapshot lives next to the cache directory, not inside it. nginx's cache
--- manager deletes files under the cache path that are not cache entries.
+-- Sibling of the cache directory, never inside it. nginx's cache manager
+-- deletes files under proxy_cache_path that are not cache entries.
+-- Bare metal: /var/instance-ssd/cache -> /var/instance-ssd/cacher-index.
+-- Container: /var/cache/openresty -> /var/cache/cacher-index, which
+-- proxy/deploy bind-mounts from that same sibling so a replaced container
+-- still sees a snapshot the previous process published.
 local function index_directory(cache_directory)
     local parent = cache_directory:match("^(.*)/[^/]+/?$")
 
@@ -240,12 +269,35 @@ local function try_lock(self)
 
     local holder = state:get("building")
 
-    if holder ~= nil and not pid_alive(holder) then
-        state:delete("building")
+    if holder == nil then
         return state:add("building", pid) and true or false
     end
 
-    return false
+    if pid_alive(holder) then
+        return false
+    end
+
+    -- delete then add is not a swap. Two contenders can both observe the
+    -- dead pid; the second delete removes the pid the first one just stored,
+    -- and both walk. One can mark the index ready while the other has popped
+    -- a host list for dedupe. building_steal admits only one of them.
+    if not state:add("building_steal", pid, 10) then
+        return false
+    end
+
+    holder = state:get("building")
+
+    if holder ~= nil and pid_alive(holder) then
+        state:delete("building_steal")
+        return false
+    end
+
+    state:delete("building")
+
+    local got = state:add("building", pid)
+
+    state:delete("building_steal")
+    return got and true or false
 end
 
 local function unlock(self)
@@ -417,6 +469,10 @@ end
 -- Read a directory without forking. Yielding while an io.popen pipe is open
 -- makes LuaJIT report a failed find(1), so the startup walk never finishes.
 local function list_directory(path)
+    if not DIRENT_KNOWN then
+        return nil, "unsupported dirent for " .. tostring(jit.os)
+    end
+
     local handle = ffi.C.opendir(path)
 
     if handle == nil then
@@ -471,6 +527,15 @@ end
 -- Walk levels=1:2 cache files. Returns message, count, failed.
 -- failed means the index must not be marked ready.
 local function walk_cache(self, yield)
+    -- A failed attempt leaves a prefix of the tree in the dictionary. The
+    -- retry walks from the first file again; the copies can fill the
+    -- dictionary, and then every retry fails the same way. Disk is the
+    -- source of truth for this walk. Misses that arrive after the flush are
+    -- pushed as the responses are logged and folded in by the dedupe below.
+    if self.shared_dictionary then
+        self.shared_dictionary:flush_all()
+    end
+
     local cache_directory = self.cache_directory
     local shared_dictionary = self.shared_dictionary
     local bad = {}

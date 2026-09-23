@@ -171,6 +171,7 @@ reset baremetal; cutover
 check "success: bare-metal stops before the container starts" '[ $RC = 0 ] && before "systemctl stop openresty" "docker start blot-proxy-blue"'
 check "success: the container is made permanent, then bare-metal disabled, only at the end" 'before "docker start blot-proxy-blue" "docker update --restart unless-stopped" && before "docker update --restart" "systemctl disable openresty" && serving container'
 check "success: the container is created with restart policy no" 'called "docker create --restart no"'
+check "success: the cacher index is mounted beside the cache, and the rehearsal does not use it" 'called "docker create .*cacher-index:/var/cache/cacher-index" && ! called "run -d.*cacher-index"'
 
 reset baremetal; FAKE_CONTAINER_CODE=502 cutover
 check "failed live check: rolls back to bare-metal, never disables it" '[ $RC != 0 ] && serving baremetal && after_last "systemctl start openresty" "systemctl stop openresty" && ! called "systemctl disable" && ! called "docker update"'

@@ -179,12 +179,18 @@ Run with persistent volumes:
 docker run -d --network host --cap-add SYS_NICE \
   -e BLOT_HOST=blot.im \
   -v blot-proxy-cache:/var/cache/openresty \
+  -v blot-proxy-cacher-index:/var/cache/cacher-index \
   -v blot-proxy-auto-ssl:/etc/resty-auto-ssl \
   -v /host/certs:/etc/ssl/private:ro \
   blot-proxy
 ```
 
 - **`blot-proxy-cache`** keeps the proxy cache warm across a redeploy.
+- **`blot-proxy-cacher-index`** keeps the purge snapshot. It sits beside the
+  cache, not inside it, because the cache manager deletes files that are not
+  cache entries. The deploy scripts bind-mount the sibling of `PROXY_CACHE_DIR`
+  at this path (`/var/instance-ssd/cacher-index` next to
+  `/var/instance-ssd/cache`).
 - **`blot-proxy-auto-ssl`** keeps the dehydrated ACME account / hook state, so
   a redeploy does not re-register with the ACME server. The issued
   certificates themselves live in **Redis** (`storage_adapter = redis`), which

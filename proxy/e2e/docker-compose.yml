@@ -75,6 +75,7 @@ services:
     # to ec2-user on boot (they mount root-owned).
     volumes:
       - proxy-cache:/var/cache/openresty
+      - proxy-cacher-index:/var/cache/cacher-index
       - auto-ssl:/etc/resty-auto-ssl
     depends_on:
       app:
@@ -82,4 +83,5 @@ services:
 
 volumes:
   proxy-cache:
+  proxy-cacher-index:
   auto-ssl:

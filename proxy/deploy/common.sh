@@ -30,6 +30,14 @@
 
 ENV_FILE="${PROXY_ENV_FILE:-/etc/blot/proxy.env}"
 CACHE_DIR="${PROXY_CACHE_DIR:-/var/instance-ssd/cache}"
+# cacher.lua writes its snapshot next to the cache, not inside it (nginx's
+# cache manager would delete it). The container's cache path is
+# /var/cache/openresty, so the snapshot is /var/cache/cacher-index. Bind the
+# host sibling here or a replaced container starts with no snapshot. A
+# blue/green overlap still walks: the running container already retired the
+# clean marker, and it must not publish another after the new process has
+# taken the generation file.
+INDEX_DIR="${PROXY_INDEX_DIR:-$(dirname "$CACHE_DIR")/cacher-index}"
 LOG_DIR="${PROXY_LOG_DIR:-/var/instance-ssd/logs}"
 CERT_DIR="${PROXY_CERT_DIR:-/etc/ssl/private}"
 AUTOSSL_VOLUME="${PROXY_AUTOSSL_VOLUME:-blot-proxy-auto-ssl}"
@@ -109,6 +117,7 @@ ensure_image() { # pull only when it is not already on the host
 # Host networking: the generated upstreams are 127.0.0.1:8088-8090 and the
 # Node containers publish those ports on the host.
 run_args() { # run_args <name>
+  mkdir -p "$INDEX_DIR"
   RUN_ARGS=(
     --name "$1"
     --network host
@@ -116,6 +125,7 @@ run_args() { # run_args <name>
     --log-driver json-file --log-opt max-size=512m --log-opt max-file=1
     --env-file "$ENV_FILE"
     -v "$CACHE_DIR":/var/cache/openresty
+    -v "$INDEX_DIR":/var/cache/cacher-index
     -v "$LOG_DIR":/var/log/openresty
     -v "$AUTOSSL_VOLUME":/etc/resty-auto-ssl
     -v "$CERT_DIR":/etc/ssl/private:ro
