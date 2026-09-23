@@ -52,7 +52,7 @@ getHealth reports whether a blog's sync needs the user's attention, as structure
 
   { state: "ok" | "syncing" | "error", issues: [{ code, message, since }] }
 
-Issue codes are shared between clients (see health.js): REAUTH_REQUIRED, SOURCE_MISSING, QUOTA_EXCEEDED and SYNC_ERROR. Only report conditions the user must act on. Transient failures that will be retried belong in the sync status log, not in health. Any issue a client reports must be cleared once the underlying problem is resolved.
+Issue codes are shared between clients (see health.js): UNAVAILABLE, REAUTH_REQUIRED, SOURCE_MISSING, QUOTA_EXCEEDED and SYNC_ERROR. Only report conditions the user must act on. Transient failures that will be retried belong in the sync status log, not in health. Any issue a client reports must be cleared once the underlying problem is resolved.
 
 More abstractly: clients must be stateless. They must be able to run without issue in parallel and the server must be able to restart without issue. Blot's sync module exposes a distributed locking function that a client can use to determine whether it is safe to interact with the blog's folder.
 

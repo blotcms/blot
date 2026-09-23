@@ -24,6 +24,9 @@
     "app/build/plugins/katex/preview.js",
     "scripts/benchmarks/spec/build-render.spec.js"
   ],
+  "ignore": [
+    "app/clients/google-drive/**"
+  ],
   "paths": {
     "blog": ["app/blog"],
     "blog/*": ["app/blog/*"],

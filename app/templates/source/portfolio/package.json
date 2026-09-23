@@ -1,5 +1,6 @@
 {
   "name": "Portfolio",
+  "popularity": 90,
   "locals": {
     "page_size": 20,
     "page_size_range": [6, 60],

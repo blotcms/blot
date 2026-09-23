@@ -24,6 +24,10 @@ const STATES = {
 // Listed most severe first: this order picks the issue shown when a site
 // has more than one.
 const ISSUES = {
+  UNAVAILABLE: {
+    label: "Not syncing",
+    message: "Syncing is temporarily unavailable.",
+  },
   REAUTH_REQUIRED: {
     label: "Reconnect required",
     message: "Access to your folder was revoked. Reconnect to resume syncing.",

@@ -1,5 +1,6 @@
 {
   "name": "Gallery",
+  "popularity": 70,
   "locals": {
     "page_size": 96,
     "page_size_range": [12, 192],

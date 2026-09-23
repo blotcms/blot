@@ -1,5 +1,6 @@
 {
   "name": "Magazine",
+  "popularity": 50,
   "locals": {
     "accent_color": "#0078D9",
     "background_color": "#fff",
