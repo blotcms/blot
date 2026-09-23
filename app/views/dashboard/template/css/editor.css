@@ -76,6 +76,11 @@
   top: -0.1em;
 }
 
+.file-list .template-row__link--move-to-folder svg {
+  width: 14px;
+  height: auto;
+}
+
 .file-list .template-row__link span,
 .file-list .template-row__link svg {
   margin-right: 0;
