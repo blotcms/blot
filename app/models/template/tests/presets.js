@@ -134,7 +134,7 @@ describe("template presets", function () {
         },
       },
       "colors",
-      "Classic"
+      "__proto__"
     );
     expect(applied.error).toBeDefined();
     expect(Object.prototype.polluted).toBeUndefined();
