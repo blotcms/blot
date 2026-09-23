@@ -1,4 +1,4 @@
-module.exports = function initializeCrop(form) {
+function initializeCrop(form) {
   if (!form || form.dataset.cropReady) return;
   form.dataset.cropReady = "1";
 
@@ -49,6 +49,12 @@ module.exports = function initializeCrop(form) {
   input.addEventListener("change", () => {
     const file = input.files && input.files[0];
     if (!file) return;
+
+    // A crop only applies to the file selected when those coordinates were
+    // entered. Keep the centered preview optional for each new selection.
+    fields.x.value = "";
+    fields.y.value = "";
+    fields.size.value = "";
 
     if (objectURL) URL.revokeObjectURL(objectURL);
     objectURL = URL.createObjectURL(file);
@@ -142,4 +148,8 @@ module.exports = function initializeCrop(form) {
   }, { once: true });
 };
 
-module.exports(document.querySelector("[data-image-crop-form]"));
+module.exports = initializeCrop;
+
+if (typeof document !== "undefined") {
+  initializeCrop(document.querySelector("[data-image-crop-form]"));
+}

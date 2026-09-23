@@ -74,6 +74,17 @@ async function removeAssetsIfUnreferenced(req, old) {
   }
 }
 
+async function removeTemplateAssetsIfUnreferenced(req, images) {
+  const uniqueImages = new Map();
+  for (const image of images || []) {
+    if (image && image.url) uniqueImages.set(image.url, image);
+  }
+
+  await Promise.all([...uniqueImages.values()].map((image) =>
+    removeAssetsIfUnreferenced(req, image)
+  ));
+}
+
 function restoreLocal(locals, key, previous, hadPrevious) {
   if (hadPrevious) locals[key] = previous;
   else delete locals[key];
@@ -183,4 +194,5 @@ module.exports = async function uploadImage(req, res, next) {
 };
 
 module.exports.removeAssetsIfUnreferenced = removeAssetsIfUnreferenced;
+module.exports.removeTemplateAssetsIfUnreferenced = removeTemplateAssetsIfUnreferenced;
 module.exports.operations = operations;

@@ -6,6 +6,7 @@ const Blog = require("models/blog");
 const archiver = require("archiver");
 const duplicateTemplate = require("./save/duplicate-template");
 const { isAjaxRequest, sendAjaxResponse } = require("./save/ajax-response");
+const removeTemplateAssetsIfUnreferenced = require("./save/upload-image").removeTemplateAssetsIfUnreferenced;
 const writeChangeToFolder = require('./save/writeChangeToFolder');
 const previewReload = require("helper/publishPreviewReload");
 
@@ -437,21 +438,34 @@ TemplateEditor.route("/:templateSlug/delete")
   })
   .post(function (req, res, next) {
     const idSlug = req.template.id.split(":").slice(1).join(":");
+    const imageLocals = Object.values(req.template.locals || {})
+      .filter((value) => value && value.url)
+      .map((value) => ({
+        ...value,
+        thumbnails: Object.fromEntries(
+          Object.entries(value.thumbnails || {}).map(([name, thumbnail]) => [name, { ...thumbnail }])
+        ),
+      }));
+
     Template.removeFromFolder(req.blog.id, req.template.id, function () {
       Template.drop(req.blog.id, idSlug, function (err) {
         if (err) return next(err);
 
-        const currentTemplateIDSlug = req.blog.template
-          .split(":")
-          .slice(1)
-          .join(":");
+        removeTemplateAssetsIfUnreferenced({ blog: req.blog }, imageLocals)
+          .then(() => {
+            const currentTemplateIDSlug = req.blog.template
+              .split(":")
+              .slice(1)
+              .join(":");
 
-        res.message(
-          res.locals.dashboardBase +
-            "/template/" +
-            (currentTemplateIDSlug || ""),
-          "Deleted template <b>" + req.template.displayName + "</b>"
-        );
+            res.message(
+              res.locals.dashboardBase +
+                "/template/" +
+                (currentTemplateIDSlug || ""),
+              "Deleted template <b>" + req.template.displayName + "</b>"
+            );
+          })
+          .catch(next);
       });
     });
   });
@@ -464,22 +478,36 @@ TemplateEditor.route("/:templateSlug/reset")
   })
   .post(function (req, res, next) {
     const idSlug = req.template.id.split(":").slice(1).join(":");
+    const imageLocals = Object.values(req.template.locals || {})
+      .filter((value) => value && value.url)
+      .map((value) => ({
+        ...value,
+        thumbnails: Object.fromEntries(
+          Object.entries(value.thumbnails || {}).map(([name, thumbnail]) => [name, { ...thumbnail }])
+        ),
+      }));
+
+    const finishReset = () => {
+      removeTemplateAssetsIfUnreferenced({ blog: req.blog }, imageLocals)
+        .then(() => {
+          res.message(
+            res.locals.dashboardBase + "/template/" + idSlug,
+            "Reset template <b>" + req.template.displayName + "</b>"
+          );
+        })
+        .catch(next);
+    };
+
     // work out if this template is currently installed on this site
     Template.drop(req.blog.id, idSlug, function (err) {
       if (err) return next(err);
       if (req.blog.template === req.template.id) {
         Blog.set(req.blog.id, { template: "SITE:" + idSlug }, function (err) {
           if (err) return next(err);
-          res.message(
-            res.locals.dashboardBase + "/template/" + idSlug,
-            "Reset template <b>" + req.template.displayName + "</b>"
-          );
+          finishReset();
         });
       } else {
-        res.message(
-          res.locals.dashboardBase + "/template/" + idSlug,
-          "Reset template <b>" + req.template.displayName + "</b>"
-        );
+        finishReset();
       }
     });
   });

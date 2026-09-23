@@ -112,6 +112,23 @@ describe("upload template image", function () {
     expect(await fs.pathExists(oldPath)).toBe(true);
   });
 
+  it("removes generated assets after their local template is dropped", async function () {
+    const original = (await run(this, "hero_image", {}, await makeFile(this.tmp, "delete-template.png"))).image;
+    const oldPath = join(assetDir(this.blog), decodeURIComponent(new URL(original.url).pathname.split("/").pop()));
+    const imageLocals = Object.values(this.template.locals)
+      .filter((value) => value && value.url)
+      .map((value) => ({ ...value, thumbnails: { ...value.thumbnails } }));
+
+    await new Promise((resolve, reject) => Template.drop(
+      this.blog.id,
+      this.template.slug,
+      (error) => error ? reject(error) : resolve()
+    ));
+    await uploadImage.removeTemplateAssetsIfUnreferenced({ blog: this.blog }, imageLocals);
+
+    expect(await fs.pathExists(oldPath)).toBe(false);
+  });
+
   it("rolls back late metadata failures before removing generated files", async function () {
     const file = await makeFile(this.tmp, "persistence-failure.png");
     const realUpdate = Template.update;
