@@ -42,6 +42,11 @@ module.exports = function createFaviconCropper(root, fieldsRoot = root) {
     fields.y.value = crop.top / height;
     fields.size.value = crop.side / Math.min(width, height);
     selection.setAttribute("aria-valuenow", Math.round((crop.left / Math.max(1, width - crop.side)) * 100));
+    const percent = (value) => Math.round(value * 100);
+    selection.setAttribute(
+      "aria-valuetext",
+      `Crop position: ${percent(fields.x.value)}% from the left, ${percent(fields.y.value)}% from the top; size: ${percent(fields.size.value)}% of the shorter image edge.`
+    );
     renderPreviews();
   };
 

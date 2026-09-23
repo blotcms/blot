@@ -25,6 +25,7 @@ module.exports = async (req, res, next) => {
 
       const template = await createTemplate({
           owner: req.blog.id,
+          isPublic: false,
           // Derive the slug from the name so it stays in step with the id the
           // fork is stored under; the source template's slug may not.
           slug: slugForName(req.blog.id, req.template.name),
