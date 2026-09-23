@@ -117,6 +117,8 @@ jobs:
         (needs.detect-templates.result == 'success' &&
           needs.detect-templates.outputs.templates != ''))
     runs-on: macos-latest
+    permissions:
+      contents: write
 
     strategy:
       matrix:
@@ -347,6 +349,9 @@ jobs:
       # directory is emptied before a run, so committing a partial run would
       # publish a template gallery with missing images.
       - name: Commit changes
+        # Fork pull requests get a read-only GITHUB_TOKEN and cannot update
+        # their head branch. The screenshot job still validates their output.
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
