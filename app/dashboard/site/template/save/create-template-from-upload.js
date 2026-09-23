@@ -84,7 +84,6 @@ module.exports = async function createTemplateFromUpload ({
     // deduplication has had to trim the name
     locals,
     ...(presets ? { presets } : {}),
-    isPublic: false,
     exhaustedMessage:
       "You already have too many templates with this name — rename it and try again",
   });

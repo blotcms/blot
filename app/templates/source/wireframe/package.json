@@ -1,7 +1,6 @@
 {
   "name": "Wireframe",
   "popularity": 8,
-  "isPublic": false,
   "locals": {
     "page_size": 12,
     "hide_dates": false,

@@ -47,7 +47,6 @@
     "grid_columns_range": [2, 6],
     "demo_folder": "thoughtforms"
   },
-  "isPublic": false,
   "views": {
     "public": {
       "partials": {

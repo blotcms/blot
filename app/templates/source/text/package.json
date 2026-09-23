@@ -64,7 +64,6 @@
       "writing"
     ]
   },
-  "isPublic": true,
   "views": {
     "archives.html": {
       "url": "/archives",

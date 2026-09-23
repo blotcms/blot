@@ -45,7 +45,6 @@
     ],
     "show_tags": true
   },
-  "isPublic": false,
   "views": {
     "archives.html": {
       "url": "/archives",

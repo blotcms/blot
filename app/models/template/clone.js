@@ -61,7 +61,7 @@ module.exports = function clone(fromID, toID, metadata, callback) {
             updateCdnManifest(toID, callback);
           };
 
-          if (!metadata.owner || metadata.owner === "SITE" || metadata.isPublic) {
+          if (!metadata.owner || metadata.owner === "SITE") {
             return regenerateManifest();
           }
 

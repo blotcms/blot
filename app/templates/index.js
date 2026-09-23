@@ -115,7 +115,7 @@ function buildAll(directory, options, callback) {
 function build(directory, callback) {
   debug("..", require("path").basename(directory), directory);
 
-  var templatePackage, isPublic;
+  var templatePackage;
   var name, template, description, id;
   var snapshot;
 
@@ -131,10 +131,8 @@ function build(directory, callback) {
     id = TEMPLATES_OWNER + ":" + basename(directory);
     name = templatePackage.name || capitalize(basename(directory));
     description = templatePackage.description || "";
-    isPublic = templatePackage.isPublic !== false;
 
     template = {
-      isPublic: isPublic,
       description: description,
       // templatePackage can be {} (missing/unreadable/mid-write
       // package.json - see above, deliberately tolerated), so this
@@ -233,7 +231,6 @@ function build(directory, callback) {
       var metadataSnapshot = {
         name: name,
         description: description,
-        isPublic: isPublic,
         locals: normalizeLocalsForComparison(snapshot.locals, true),
         presets: snapshot.presets || {},
       };
@@ -242,7 +239,6 @@ function build(directory, callback) {
         ? {
             name: storedMetadata.name,
             description: storedMetadata.description,
-            isPublic: storedMetadata.isPublic,
             locals: normalizeLocalsForComparison(storedMetadata.locals || {}),
             presets: storedMetadata.presets || {},
           }
@@ -792,7 +788,6 @@ function refreshDevelopmentForks(templateID, forks, callback) {
             slug: old.slug,
             cloneFrom: templateID,
             localEditing: old.localEditing === true,
-            isPublic: old.isPublic === true,
           },
           function (err, fresh) {
             if (err) return next(err);

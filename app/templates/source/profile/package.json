@@ -1,7 +1,6 @@
 {
   "name": "Profile",
   "popularity": 38,
-  "isPublic": false,
   "locals": {
     "author": "",
     "description": "",

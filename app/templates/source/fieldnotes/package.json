@@ -1,7 +1,6 @@
 {
   "name": "Fieldnotes",
   "popularity": 40,
-  "isPublic": false,
   "locals": {
     "lang": "en-US",
     "page_size": 10,
