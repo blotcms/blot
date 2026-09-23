@@ -1,5 +1,5 @@
 :root {
-  --select-control-padding: 0.5em 1em;
+  --select-control-padding: 8px 16px;
   --select-control-font-size: 14px;
   --select-dropdown-icon-right: 12px;
   --select-dropdown-icon-opacity: 0.3;
