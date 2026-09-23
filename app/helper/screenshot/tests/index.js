@@ -6,6 +6,7 @@ const hashFile = require("helper/hashFile");
 describe("screenshot plugin", function () {
   let server;
   const streams = new Set();
+  let previewReloadRequests = 0;
 
   global.test.timeout(60 * 1000); // 60s
 
@@ -26,6 +27,7 @@ describe("screenshot plugin", function () {
     // Stays open on purpose: this is the preview reload stream. A screenshot
     // that waits for a quiet network has to ignore it, or navigation times out.
     app.get("/__blot/preview/reload", (req, res) => {
+      previewReloadRequests++;
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -61,6 +63,7 @@ describe("screenshot plugin", function () {
 
   beforeEach(() => {
     requestTimes = [];
+    previewReloadRequests = 0;
     // Clean up any leftover screenshots
     if (fs.existsSync(path)) {
       fs.unlinkSync(path);
@@ -94,6 +97,7 @@ describe("screenshot plugin", function () {
     expect(fs.existsSync(path)).toBe(true);
     const hash = await hashFile(path);
     expect(hash).toBe(expectedHash);
+    expect(previewReloadRequests).toBe(0);
     expect(streams.size).toBe(0);
     fs.unlinkSync(path);
   });
