@@ -579,9 +579,14 @@ h2 + .clients {margin-top: 0}
 }
 
 .clients.templates .template-updated {
+  display: none;
   font-size: var(--small-font-size);
   color: var(--light-text-color);
   margin-top: 2px;
+}
+
+#template-grid[data-sort="latest"] .template-updated {
+  display: block;
 }
 
 .clients.templates img.template-image {

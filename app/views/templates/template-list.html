@@ -20,10 +20,10 @@
       />
     </div>
 
-    <div class="toggle-tabs" id="template-sort" data-default-sort="latest">
+    <div class="toggle-tabs" id="template-sort" data-default-sort="{{^searchQuery}}popular{{/searchQuery}}">
       <ul>
-        <li><a href="#" data-sort="latest" class="selected">Latest</a></li>
-        <li><a href="#" data-sort="popular">Popular</a></li>
+        <li><a href="#" data-sort="latest">Latest</a></li>
+        <li><a href="#" data-sort="popular" class="{{^searchQuery}}selected{{/searchQuery}}">Popular</a></li>
       </ul>
     </div>
   </div>

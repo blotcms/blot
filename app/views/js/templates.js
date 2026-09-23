@@ -58,7 +58,8 @@ const initTemplateGrid = () => {
 
   const items = Array.from(grid.querySelectorAll(".template-item"));
 
-  let activeSort = "latest";
+  const sortToggle = document.getElementById("template-sort");
+  let activeSort = sortToggle?.dataset.defaultSort;
 
   const sortBy = (key) => {
     const sorted = [...items].sort((a, b) => {
@@ -70,23 +71,28 @@ const initTemplateGrid = () => {
     sorted.forEach((item) => grid.appendChild(item));
   };
 
-  // --- Latest / Popular toggle ---
-  const sortToggle = document.getElementById("template-sort");
-
   if (sortToggle) {
     const sortLinks = Array.from(sortToggle.querySelectorAll("a[data-sort]"));
+
+    const setSort = (sort) => {
+      activeSort = sort;
+      sortLinks.forEach((link) =>
+        link.classList.toggle("selected", link.dataset.sort === activeSort)
+      );
+      grid.dataset.sort = activeSort;
+      sortBy(activeSort === "popular" ? "popularity" : "latest");
+    };
+
+    if (activeSort) {
+      setSort(activeSort);
+    } else {
+      grid.dataset.sort = "relevance";
+    }
 
     sortLinks.forEach((link) => {
       link.addEventListener("click", (event) => {
         event.preventDefault();
-
-        activeSort = link.dataset.sort;
-
-        sortLinks.forEach((other) =>
-          other.classList.toggle("selected", other === link)
-        );
-
-        sortBy(activeSort === "popular" ? "popularity" : "latest");
+        setSort(link.dataset.sort);
       });
     });
   }
