@@ -1,4 +1,10 @@
 describe("template image upload preflight", function () {
+  global.test.blog();
+  global.test.tmp();
+
+  const fs = require("fs-extra");
+  const { join } = require("path");
+  const sharp = require("sharp");
   const preflight = require("../save/preflight-image");
 
   function response(images) {
@@ -46,8 +52,14 @@ describe("template image upload preflight", function () {
   });
 
   it("allows uploads and explicit removals to reach the fork middleware", async function () {
+    const uploadPath = join(this.tmp, "valid-image.png");
+    await sharp({ create: { width: 80, height: 60, channels: 3, background: "#123456" } })
+      .png()
+      .toFile(uploadPath);
+    const upload = { path: uploadPath, size: (await fs.stat(uploadPath)).size };
+
     for (const request of [
-      { files: { image: [{ size: 1 }] }, body: {} },
+      { files: { image: [upload] }, body: {} },
       { files: {}, body: { remove: "1" } },
     ]) {
       const req = {
@@ -63,5 +75,25 @@ describe("template image upload preflight", function () {
 
       expect(next).toHaveBeenCalledWith();
     }
+  });
+
+  it("rejects corrupt image data before the fork middleware and removes the upload", async function () {
+    const path = join(this.tmp, "corrupt-image.png");
+    await fs.writeFile(path, "not an image");
+    const file = { path, size: 12 };
+    const req = {
+      template: { locals: { hero_image: {} } },
+      params: { key: "hero_image" },
+      files: { image: [file] },
+      body: {},
+      query: {},
+    };
+    const result = response([{ key: "hero_image" }]);
+    const next = jasmine.createSpy("next");
+
+    await preflight(req, result.res, next);
+
+    expect(next).toHaveBeenCalledWith(jasmine.objectContaining({ status: 400 }));
+    expect(await fs.pathExists(path)).toBe(false);
   });
 });

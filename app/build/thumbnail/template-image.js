@@ -23,6 +23,32 @@ function parseCrop(value, width, height) {
   return extraction;
 }
 
+async function validate(sourcePath, crop) {
+  let metadata;
+  try { metadata = await sharp(sourcePath, { pages: 1, limitInputPixels: MAX_PIXELS }).metadata(); }
+  catch (_) { throw invalid("Please choose a valid image"); }
+
+  const oriented = dimensions(metadata);
+  if (!SUPPORTED.has(metadata.format) || !oriented.width || !oriented.height || oriented.width * oriented.height > MAX_PIXELS) {
+    throw invalid("Please choose a supported image under 100 megapixels");
+  }
+
+  parseCrop(crop, oriented.width, oriented.height);
+
+  // metadata() only reads the image header. Decode a small derivative here so
+  // corrupt pixel data is rejected before a shared template is forked.
+  try {
+    await sharp(sourcePath, { pages: 1, limitInputPixels: MAX_PIXELS })
+      .rotate()
+      .resize({ width: 1, height: 1, fit: "inside" })
+      .toBuffer();
+  } catch (_) {
+    throw invalid("Please choose a valid image");
+  }
+
+  return { width: oriented.width, height: oriented.height, format: metadata.format };
+}
+
 // Decode one page deliberately: animated uploads have a deterministic first
 // frame. This mirrors the existing thumbnail pipeline's non-animated output.
 async function generate(sourcePath, outputDirectory, crop) {
@@ -65,4 +91,4 @@ async function generate(sourcePath, outputDirectory, crop) {
   } finally { await fs.remove(temporary); }
 }
 
-module.exports = { generate, MAX_PIXELS, parseCrop };
+module.exports = { generate, validate, MAX_PIXELS, parseCrop };

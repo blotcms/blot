@@ -90,16 +90,39 @@ describe("upload template image", function () {
   it("retains old files when template references cannot be listed", async function () {
     const original = (await run(this, "hero_image", {}, await makeFile(this.tmp, "lookup.png"))).image;
     const oldPath = join(assetDir(this.blog), decodeURIComponent(new URL(original.url).pathname.split("/").pop()));
-    spyOn(Template, "getTemplateList").and.callFake((id, callback) => callback(new Error("redis unavailable")));
+    let sibling;
+    await new Promise((resolve, reject) => Template.create(
+      this.blog.id,
+      "Sibling image reference",
+      { locals: { shared_image: original } },
+      (error, template) => {
+        if (error) return reject(error);
+        sibling = template;
+        resolve();
+      }
+    ));
+    const getMetadata = Template.getMetadata;
+    spyOn(Template, "getMetadata").and.callFake((id, callback) => {
+      if (id === sibling.id) return callback(new Error("metadata read failed"));
+      return getMetadata(id, callback);
+    });
 
     await uploadImage.removeAssetsIfUnreferenced({ blog: this.blog, template: this.template }, original);
 
     expect(await fs.pathExists(oldPath)).toBe(true);
   });
 
-  it("removes freshly generated files when metadata persistence fails", async function () {
+  it("rolls back late metadata failures before removing generated files", async function () {
     const file = await makeFile(this.tmp, "persistence-failure.png");
-    spyOn(Template, "update").and.callFake((id, slug, updates, callback) => callback(new Error("redis unavailable")));
+    const realUpdate = Template.update;
+    let calls = 0;
+    spyOn(Template, "update").and.callFake((id, slug, updates, callback) => {
+      calls += 1;
+      if (calls === 1) {
+        return realUpdate(id, slug, updates, (error) => callback(error || new Error("manifest unavailable")));
+      }
+      return realUpdate(id, slug, updates, callback);
+    });
     const req = {
       blog: this.blog,
       template: this.template,
@@ -113,7 +136,70 @@ describe("upload template image", function () {
 
     await uploadImage(req, res, next);
 
-    expect(next).toHaveBeenCalledWith(jasmine.objectContaining({ message: "redis unavailable" }));
+    expect(next).toHaveBeenCalledWith(jasmine.objectContaining({ message: "manifest unavailable" }));
+    expect(calls).toBe(2);
+    const saved = (await list(this.blog)).find((template) => template.id === this.template.id);
+    expect(saved.locals.hero_image).toEqual({});
+    const assets = await fs.readdir(assetDir(this.blog)).catch(() => []);
+    expect(assets.filter((name) => name.startsWith("image-")).length).toBe(0);
+  });
+
+  it("retains generated files if metadata rollback cannot be confirmed", async function () {
+    const file = await makeFile(this.tmp, "rollback-failure.png");
+    const realUpdate = Template.update;
+    let calls = 0;
+    spyOn(Template, "update").and.callFake((id, slug, updates, callback) => {
+      calls += 1;
+      if (calls === 1) {
+        return realUpdate(id, slug, updates, (error) => callback(error || new Error("manifest unavailable")));
+      }
+      callback(new Error("rollback unavailable"));
+    });
+    const req = {
+      blog: this.blog,
+      template: this.template,
+      params: { templateSlug: this.template.slug, key: "hero_image" },
+      files: { image: [file] },
+      body: {},
+      query: { ajax: "1" },
+    };
+    const res = { locals: { images: [{ key: "hero_image" }] } };
+    const next = jasmine.createSpy("next");
+
+    await uploadImage(req, res, next);
+
+    expect(next).toHaveBeenCalledWith(jasmine.objectContaining({ message: "manifest unavailable" }));
+    expect(calls).toBe(2);
+    const saved = (await list(this.blog)).find((template) => template.id === this.template.id);
+    expect(saved.locals.hero_image.url).toMatch(/image-[a-f0-9-]+-original\.webp$/);
+    const assets = await fs.readdir(assetDir(this.blog));
+    expect(assets.filter((name) => name.startsWith("image-")).length).toBe(5);
+  });
+
+  it("restores metadata and removes the new assets when folder synchronization fails", async function () {
+    const file = await makeFile(this.tmp, "folder-sync-failure.png");
+    let calls = 0;
+    spyOn(uploadImage.operations, "sync").and.callFake(() => {
+      calls += 1;
+      return calls === 1 ? Promise.reject(new Error("folder sync failed")) : Promise.resolve();
+    });
+    const req = {
+      blog: this.blog,
+      template: this.template,
+      params: { templateSlug: this.template.slug, key: "hero_image" },
+      files: { image: [file] },
+      body: {},
+      query: { ajax: "1" },
+    };
+    const res = { locals: { images: [{ key: "hero_image" }] } };
+    const next = jasmine.createSpy("next");
+
+    await uploadImage(req, res, next);
+
+    expect(next).toHaveBeenCalledWith(jasmine.objectContaining({ message: "folder sync failed" }));
+    expect(calls).toBe(2);
+    const saved = (await list(this.blog)).find((template) => template.id === this.template.id);
+    expect(saved.locals.hero_image).toEqual({});
     const assets = await fs.readdir(assetDir(this.blog)).catch(() => []);
     expect(assets.filter((name) => name.startsWith("image-")).length).toBe(0);
   });
