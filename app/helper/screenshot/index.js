@@ -116,32 +116,7 @@ function configure({ concurrency, minTime } = {}) {
   return { ...settings, closePageTimeout, screenshotTimeout };
 }
 
-// Runs in the page before its own scripts. A stand-in for the preview reload
-// stream keeps the inline `new EventSource(...).onmessage = ...` from opening
-// a connection that would pin networkidle0.
-function ignorePreviewReload() {
-  const NativeEventSource = window.EventSource;
-  if (!NativeEventSource) return;
-
-  function EventSource(url, options) {
-    if (String(url || "").indexOf("/__blot/preview/reload") !== -1) {
-      return {
-        close() {},
-        addEventListener() {},
-        removeEventListener() {},
-        set onmessage(_handler) {},
-        set onerror(_handler) {},
-      };
-    }
-    return new NativeEventSource(url, options);
-  }
-
-  EventSource.prototype = NativeEventSource.prototype;
-  EventSource.CONNECTING = NativeEventSource.CONNECTING;
-  EventSource.OPEN = NativeEventSource.OPEN;
-  EventSource.CLOSED = NativeEventSource.CLOSED;
-  window.EventSource = EventSource;
-}
+const PREVIEW_RELOAD_PATH = "/__blot/preview/reload";
 
 function validateOptions(options) {
   const validatedOptions = { ...options };
@@ -410,9 +385,14 @@ async function takeScreenshotLocked(site, path, options) {
     await fs.ensureDir(dirname(path));
 
     // Preview pages hold an EventSource open at /__blot/preview/reload so the
-    // template editor can refresh them. networkidle0 never arrives while that
-    // socket is up, which is what timed out the Blog template screenshots.
-    await page.evaluateOnNewDocument(ignorePreviewReload);
+    // template editor can refresh them. Block that request before it reaches
+    // the server; networkidle0 never arrives while the stream is open.
+    await page.setRequestInterception(true);
+    page.on("request", (request) => {
+      const pathname = new URL(request.url()).pathname;
+      if (pathname === PREVIEW_RELOAD_PATH) return request.abort();
+      return request.continue();
+    });
 
     console.log(prefix(), "Navigating browser to", site);
     await page.goto(site, {
