@@ -16,6 +16,7 @@
         <span>Select an image</span>
         <input type="file" name="favicon" accept="image/*,.svg" data-favicon-input />
       </label>
+      <p class="favicon-form__help" role="alert" hidden data-favicon-load-error>The selected image could not be previewed. Please choose another image.</p>
 
       {{> favicon-crop-ui}}
 

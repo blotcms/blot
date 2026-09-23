@@ -5,6 +5,7 @@ const form = document.querySelector("[data-favicon-form]");
 if (form) {
   const input = form.querySelector("[data-favicon-input]");
   const cropper = createFaviconCropper(form);
+  const loadError = form.querySelector("[data-favicon-load-error]");
   let objectURL;
 
   input.addEventListener("change", () => {
@@ -12,7 +13,10 @@ if (form) {
     if (!file) return;
     if (objectURL) URL.revokeObjectURL(objectURL);
     objectURL = URL.createObjectURL(file);
-    cropper.load(objectURL);
+    loadError.hidden = true;
+    cropper.load(objectURL).catch(() => {
+      loadError.hidden = false;
+    });
   });
 
   window.addEventListener("pagehide", () => {

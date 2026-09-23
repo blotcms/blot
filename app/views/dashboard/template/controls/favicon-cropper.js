@@ -13,6 +13,7 @@ module.exports = function createFaviconCropper(root, fieldsRoot = root) {
   let drag;
 
   const limit = (value, min, max) => Math.min(max, Math.max(min, value));
+  const percent = (value) => Math.round(value * 100);
   const dimensions = () => ({ width: image.clientWidth, height: image.clientHeight });
 
   const renderPreviews = () => {
@@ -42,7 +43,6 @@ module.exports = function createFaviconCropper(root, fieldsRoot = root) {
     fields.y.value = crop.top / height;
     fields.size.value = crop.side / Math.min(width, height);
     selection.setAttribute("aria-valuenow", Math.round((crop.left / Math.max(1, width - crop.side)) * 100));
-    const percent = (value) => Math.round(value * 100);
     selection.setAttribute(
       "aria-valuetext",
       `Crop position: ${percent(fields.x.value)}% from the left, ${percent(fields.y.value)}% from the top; size: ${percent(fields.size.value)}% of the shorter image edge.`
@@ -63,6 +63,7 @@ module.exports = function createFaviconCropper(root, fieldsRoot = root) {
       requestAnimationFrame(() => {
         const { width, height } = dimensions();
         if (!width || !height) {
+          cropper.hidden = true;
           reject(new Error("The selected image could not be displayed."));
           return;
         }
@@ -75,7 +76,10 @@ module.exports = function createFaviconCropper(root, fieldsRoot = root) {
         resolve({ square });
       });
     };
-    image.onerror = () => reject(new Error("The selected image could not be loaded."));
+    image.onerror = () => {
+      cropper.hidden = true;
+      reject(new Error("The selected image could not be loaded."));
+    };
     image.src = source;
   });
 

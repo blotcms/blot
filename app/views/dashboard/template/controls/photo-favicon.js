@@ -8,7 +8,6 @@ if (form) {
   const prompt = dialog.querySelector("[data-photo-favicon-prompt]");
   const crop = dialog.querySelector("[data-photo-favicon-crop]");
   const errorMessage = dialog.querySelector("[data-photo-favicon-error]");
-  const title = dialog.querySelector("[data-photo-favicon-title]");
   const useButton = dialog.querySelector("[data-photo-use-as-favicon]");
   const useField = form.querySelector("[data-photo-use-favicon]");
   const cropper = createFaviconCropper(dialog, form);
@@ -37,8 +36,6 @@ if (form) {
     ) return;
     event.preventDefault();
     errorMessage.hidden = true;
-    title.textContent = "Use this photo to replace your favicon?";
-    useButton.textContent = "Replace favicon";
     prompt.hidden = false;
     crop.hidden = true;
     dialog.showModal();
