@@ -205,10 +205,9 @@ module.exports = function attachRenderView(req, res, _next) {
             "<script>window.onload = function() {window.top.postMessage('iframe:' +  window.location.pathname, '*');};</script></body>"
           );
 
-        // Reload the preview whenever the blog's folder finishes syncing
-        // and its rendered output actually changed. See the "reload" event
-        // published in sync/index.js and streamed by
-        // blog/routes/preview-reload.js.
+        // Reload the preview when rendered output changes: folder sync, or a
+        // template editor save of package.json locals. See
+        // helper/publishPreviewReload.js and blog/routes/preview-reload.js.
         output = output
           .split("</body>")
           .join(
