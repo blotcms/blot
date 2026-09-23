@@ -52,7 +52,11 @@ module.exports = async function savePhoto(req, res, next) {
   const uploaded = req.files && (Array.isArray(req.files.avatar) ? req.files.avatar[0] : req.files.avatar);
   const previousAvatar = req.blog.avatar || "";
   const hasUpload = Boolean(uploaded && uploaded.size);
-  const wantsFavicon = Boolean(req.body.use_favicon === "1" && res.locals.favicon_supported && hasUpload);
+  const hasFavicon = Boolean(req.template.locals && req.template.locals.favicon);
+  const canSaveFavicon = Boolean(res.locals.favicon_supported && hasUpload);
+  // New favicons are generated automatically from the center square crop of
+  // the uploaded photo. Replacing an existing favicon remains opt-in.
+  const wantsFavicon = Boolean(canSaveFavicon && (!hasFavicon || req.body.use_favicon === "1"));
   let photoPath = `${req.baseUrl}/${req.params.templateSlug}/photo`;
   let avatarWriteStarted = false;
   let avatarChanged = false;

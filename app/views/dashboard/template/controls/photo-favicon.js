@@ -29,13 +29,16 @@ if (form) {
 
   form.addEventListener("submit", (event) => {
     selectedFile = input.files && input.files[0];
-    if (submitting || !selectedFile || form.dataset.faviconSupported !== "true") return;
+    if (
+      submitting ||
+      !selectedFile ||
+      form.dataset.faviconSupported !== "true" ||
+      form.dataset.hasFavicon !== "true"
+    ) return;
     event.preventDefault();
     errorMessage.hidden = true;
-    title.textContent = form.dataset.hasFavicon === "true"
-      ? "Use this photo to replace your favicon?"
-      : "Use this photo as your favicon?";
-    useButton.textContent = form.dataset.hasFavicon === "true" ? "Replace favicon" : "Use as favicon";
+    title.textContent = "Use this photo to replace your favicon?";
+    useButton.textContent = "Replace favicon";
     prompt.hidden = false;
     crop.hidden = true;
     dialog.showModal();
