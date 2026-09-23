@@ -116,6 +116,8 @@ function configure({ concurrency, minTime } = {}) {
   return { ...settings, closePageTimeout, screenshotTimeout };
 }
 
+const PREVIEW_RELOAD_PATH = "/__blot/preview/reload";
+
 function validateOptions(options) {
   const validatedOptions = { ...options };
   if (options.width && typeof options.width !== "number") {
@@ -381,6 +383,16 @@ async function takeScreenshotLocked(site, path, options) {
     });
 
     await fs.ensureDir(dirname(path));
+
+    // Preview pages hold an EventSource open at /__blot/preview/reload so the
+    // template editor can refresh them. Block that request before it reaches
+    // the server; networkidle0 never arrives while the stream is open.
+    await page.setRequestInterception(true);
+    page.on("request", (request) => {
+      const pathname = new URL(request.url()).pathname;
+      if (pathname === PREVIEW_RELOAD_PATH) return request.abort();
+      return request.continue();
+    });
 
     console.log(prefix(), "Navigating browser to", site);
     await page.goto(site, {
