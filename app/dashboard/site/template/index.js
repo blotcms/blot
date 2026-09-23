@@ -402,14 +402,16 @@ TemplateEditor.route("/:templateSlug/links")
   });
 
 TemplateEditor.route("/:templateSlug/photo")
-  .get(function (req, res) {
+  .get(require("./load/favicon"), function (req, res) {
     res.locals.title = `Photo - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
+    res.locals.photoPath = `${req.baseUrl}/${req.params.templateSlug}/photo`;
     res.render("dashboard/template/photo");
   })
-  .post(function (req, res, next) {
-    res.message(res.locals.base, "Saved photo!");
-  });
+  .post(
+    require("./load/favicon"),
+    require("./save/photo")
+  );
 
 TemplateEditor.route("/:templateSlug/delete")
   .get(function (req, res, next) {

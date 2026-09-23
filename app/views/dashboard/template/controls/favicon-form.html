@@ -16,21 +16,9 @@
         <span>Select an image</span>
         <input type="file" name="favicon" accept="image/*,.svg" data-favicon-input />
       </label>
+      <p class="favicon-form__help" role="alert" hidden data-favicon-load-error>The selected image could not be previewed. Please choose another image.</p>
 
-      <div class="favicon-cropper" hidden data-favicon-cropper>
-        <div class="favicon-cropper__image" data-favicon-image-wrap>
-          <img alt="Crop your favicon" data-favicon-image />
-          <div class="favicon-cropper__selection" data-favicon-selection></div>
-        </div>
-        <p class="favicon-form__help">Drag the square to reposition it. Drag its lower-right corner to resize it.</p>
-      </div>
-
-      <div class="favicon-previews" data-favicon-previews {{^favicon}}hidden{{/favicon}}>
-        <span>Preview</span>
-        <img width="16" height="16" src="{{#favicon}}{{{png16}}}{{/favicon}}" alt="16 pixel favicon" data-favicon-preview="16" />
-        <img width="32" height="32" src="{{#favicon}}{{{png32}}}{{/favicon}}" alt="32 pixel favicon" data-favicon-preview="32" />
-        <img width="64" height="64" src="{{#favicon}}{{{appleTouch}}}{{/favicon}}" alt="Large favicon preview" data-favicon-preview="180" />
-      </div>
+      {{> favicon-crop-ui}}
 
       {{#favicon}}
       <button type="submit" name="remove" value="1">Delete favicon</button>

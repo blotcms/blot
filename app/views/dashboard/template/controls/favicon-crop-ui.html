@@ -1,0 +1,14 @@
+<div class="favicon-cropper" hidden data-favicon-cropper>
+  <div class="favicon-cropper__image" data-favicon-image-wrap>
+    <img alt="Crop your favicon" data-favicon-image />
+    <div class="favicon-cropper__selection" role="slider" tabindex="0" aria-label="Favicon crop position" aria-valuemin="0" aria-valuemax="100" data-favicon-selection></div>
+  </div>
+  <p class="favicon-form__help">Drag the square to reposition it. Drag its lower-right corner to resize it. Use the arrow keys to reposition it, or Shift and the arrow keys to resize it.</p>
+</div>
+
+<div class="favicon-previews" data-favicon-previews {{^favicon}}hidden{{/favicon}}>
+  <span>Preview</span>
+  <img width="16" height="16" src="{{#favicon}}{{{png16}}}{{/favicon}}" alt="16 pixel favicon" data-favicon-preview="16" />
+  <img width="32" height="32" src="{{#favicon}}{{{png32}}}{{/favicon}}" alt="32 pixel favicon" data-favicon-preview="32" />
+  <img width="64" height="64" src="{{#favicon}}{{{appleTouch}}}{{/favicon}}" alt="Large favicon preview" data-favicon-preview="180" />
+</div>

@@ -11,11 +11,15 @@ var INVALID_EXTENSION =
 module.exports = function (req, res, next) {
   if (!req.files || !req.files.avatar) return next();
 
-  if (!req.files.avatar.size) {
+  var avatar = Array.isArray(req.files.avatar)
+    ? req.files.avatar[0]
+    : req.files.avatar;
+
+  if (!avatar || !avatar.size) {
     return next();
   }
 
-  var extension = extname(req.files.avatar.path).toLowerCase();
+  var extension = extname(avatar.path).toLowerCase();
 
   if (VALID_EXTENSIONS.indexOf(extension) === -1) {
     return next(new Error(INVALID_EXTENSION));
@@ -32,10 +36,14 @@ module.exports = function (req, res, next) {
     name;
   var url = config.cdn.origin + "/" + req.blog.id + "/" + folder + "/" + name;
 
-  fs.move(req.files.avatar.path, finalPath, function (err) {
+  // The combined photo/favicon flow needs the temporary upload after the
+  // avatar has been stored, so it opts into copying rather than moving it.
+  var store = req.preserveAvatarUpload ? fs.copy : fs.move;
+  store(avatar.path, finalPath, function (err) {
     if (err) return next(err);
 
     req.updates.avatar = url;
+    req.savedAvatarPath = finalPath;
     next();
   });
 };

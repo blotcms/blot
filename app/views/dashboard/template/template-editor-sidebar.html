@@ -24,24 +24,6 @@
         </div>
 	{{/uploads.length}}
 
-	{{#favicon_supported}}
-	<div class="settings-group">
-		<h2 class="template-heading">Favicon</h2>
-		<a class="line" href="{{{base}}}/favicon" style="padding: 11px 14px;border-bottom: none;">
-			{{#favicon}}
-			<span class="center" style="width:48px;height:48px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;">
-				<img style="width:32px;height:32px;image-rendering:pixelated;" src="{{{png32}}}" alt="Favicon preview" />
-			</span>
-			<span class="link">Edit favicon</span>
-			{{/favicon}}
-			{{^favicon}}
-			<span class="center" style="border:1px dashed var(--border-color);width:48px;height:48px;display:inline-block;vertical-align:middle;margin-right:0.5rem;border-radius:var(--border-radius);"></span>
-			<span class="link">Choose a favicon</span>
-			{{/favicon}}
-		</a>
-	</div>
-	{{/favicon_supported}}
-
         <div class="settings-group">
                 <h2 class="template-heading">Menu</h2>
                 <a class="line links" href="{{{base}}}/links">
@@ -63,7 +45,7 @@
 
 	<div class="settings-group">
 		<h2 class="template-heading">Photo</h2>
-		<a class="line" href="{{{base}}}/photo"  style="padding: 11px 14px;border-bottom: none;"> 
+		<a class="line" href="{{{base}}}/photo" style="padding:11px 14px;{{^favicon_supported}}border-bottom:none;{{/favicon_supported}}">
 		{{^blog.avatar}}
 		<span class="center" style="border: 1px dashed var(--border-color);width: 48px;height:48px;display:inline-block; vertical-align: middle;margin-right: 0.5rem;border-radius: var(--border-radius);">
 		</span>
@@ -74,9 +56,18 @@
 		<span class="center" style="width: 48px;height:48px;display:inline-block; vertical-align: middle;">
 			<img style="max-width:48px;max-height:48px;vertical-align: baseline; display: inline;" src="{{blog.avatar}}" class="{{#blog.roundAvatar}}rounded{{/blog.roundAvatar}}" />
 		</span>
-		<span class="link" >Edit</span>    
+		<span class="link">Edit photo</span>
 			{{/blog.avatar}}
 		</a>
+		{{#favicon_supported}}
+		<a class="line" href="{{{base}}}/favicon" style="padding:7px 14px;border-bottom:none;">
+			<span class="center" style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-right:0.5rem;">
+				{{#favicon}}<img width="16" height="16" style="width:16px;height:16px;image-rendering:pixelated;" src="{{{png16}}}" alt="Favicon preview" />{{/favicon}}
+				{{^favicon}}<span aria-hidden="true" style="box-sizing:border-box;border:1px dashed var(--border-color);width:16px;height:16px;display:block;border-radius:2px;"></span>{{/favicon}}
+			</span>
+			<span class="link">{{#favicon}}Edit favicon{{/favicon}}{{^favicon}}Choose a favicon{{/favicon}}</span>
+		</a>
+		{{/favicon_supported}}
 	</div>
 
 
