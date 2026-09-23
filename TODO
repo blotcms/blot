@@ -1,5 +1,11 @@
+How do we think about a shared asset library across templates? 
+- e.g. shared favicons
+
 Add script to pause a subscription and make sure these users don't appear in the list of users to cancel
 - investigate the situation with hans first
+
+Under templates index
+- Clicking on file in folder pulls up post on preview site ?
 
 Fix Google Drive sync outage caused by Google account suspesion
 - Future fix to Google Drive client needs to never use the service account to create files (ask the user to handle the initial transfer)
