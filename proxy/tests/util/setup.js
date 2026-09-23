@@ -43,7 +43,80 @@ const config = {
 
 const inspectCache = require("./inspect-cache");
 
-const startOpenresty = async (pathToConf, origin) => {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function masterPid() {
+  const output = child_process
+    .execSync(
+      "ps aux | grep openresty | grep 'master process' | awk '{print $2}'"
+    )
+    .toString()
+    .trim();
+  const pid = output.split("\n")[0];
+  if (!pid || !/^\d+$/.test(pid)) {
+    return "";
+  }
+  return pid;
+}
+
+function signalMaster(pid, sig) {
+  const kill = process.getuid() === 0 ? "kill" : "sudo kill";
+  child_process.execSync(`${kill} -s ${sig} ${pid}`);
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(Number(pid), 0);
+    return true;
+  } catch (error) {
+    // A root-owned master denies the signal but is still running.
+    return error.code === "EPERM";
+  }
+}
+
+async function waitUntilDead(pid) {
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    if (!pidAlive(pid)) return;
+    await sleep(50);
+  }
+  throw new Error(`openresty ${pid} did not exit`);
+}
+
+// /purge returns 503 until the on-disk index has been rebuilt or reloaded.
+// Poll that instead of assuming listen() means the index is safe to purge.
+async function waitForCacheIndex(origin) {
+  const deadline = Date.now() + 30000;
+  let last = "no response";
+  const headers = {};
+  if (process.env.BLOT_PURGE_TOKEN) {
+    headers["X-Blot-Purge-Token"] = process.env.BLOT_PURGE_TOKEN;
+  }
+
+  while (Date.now() < deadline) {
+    try {
+      let res = await fetch(origin + "/purge?host=__index_probe__", {
+        timeout: 1000,
+        headers,
+      });
+      if (res.status === 404) {
+        res = await fetch(origin + "/inspect?host=__index_probe__", {
+          timeout: 1000,
+          headers,
+        });
+      }
+      if (res.status !== 503) return;
+      last = `${res.status} ${(await res.text()).trim()}`;
+    } catch (error) {
+      last = error.message;
+    }
+    await sleep(20);
+  }
+
+  throw new Error(`cache index did not become ready (${last})`);
+}
+
+const startOpenresty = async (pathToConf, origin, options = {}) => {
   try {
     const output = child_process.execSync(
       __dirname + "/start-openresty.sh " + pathToConf
@@ -67,6 +140,10 @@ const startOpenresty = async (pathToConf, origin) => {
     } catch (e) {
       //   console.log("Openresty not started yet");
     }
+  }
+
+  if (options.waitForIndex !== false) {
+    await waitForCacheIndex(origin);
   }
 };
 
@@ -114,23 +191,21 @@ module.exports = configFile => {
     this.inspectCache = ({ verbose = false, host = null } = {}) =>
       inspectCache(origin + "/inspect", cache_directory, host, verbose);
 
-    this.restartOpenresty = async () => {
-      // get the pid of the current openresty process
-      const masterpid = () =>
-        child_process
-          .execSync(
-            "ps aux | grep openresty | grep 'master process' | awk '{print $2}'"
-          )
-          .toString()
-          .trim();
+    this.signalOpenresty = (sig) => signalMaster(masterPid(), sig);
 
-      const pidBefore = masterpid();
+    this.restartOpenresty = async ({ waitForIndex = true, graceful = false } = {}) => {
+      const pidBefore = masterPid();
 
-      await stopOpenresty();
-      await startOpenresty(configPath, origin);
+      if (graceful) {
+        signalMaster(pidBefore, "QUIT");
+        await waitUntilDead(pidBefore);
+      } else {
+        await stopOpenresty();
+      }
+      await startOpenresty(configPath, origin, { waitForIndex });
 
       // check that the pid has changed
-      const pidAfter = masterpid();
+      const pidAfter = masterPid();
 
       if (!pidBefore) {
         throw new Error("Openresty was not running");
