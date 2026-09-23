@@ -62,12 +62,6 @@
   transition: var(--editor-file-link-transition);
 }
 
-.file-list.template-docs-support-group .template-row__link {
-  padding-top: 0;
-  padding-bottom: 0;
-  line-height: 1.25;
-}
-
 .file-list .template-row__link:hover,
 .file-list .template-row__link:focus-visible {
   background-color: var(--light-background-color);

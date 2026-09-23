@@ -318,6 +318,10 @@ p.template-heading-note {
   overflow: hidden;
 }
 
+.template-docs-support-links-group {
+  --template-row-link-padding: 0.125em 0.6875em;
+}
+
 .line.links {
   padding-left: 0.4375em;
   border-bottom: 1px solid var(--light-border-color);
