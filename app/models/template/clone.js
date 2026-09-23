@@ -46,6 +46,23 @@ module.exports = function clone(fromID, toID, metadata, callback) {
           delete metadata.locals.favicon;
         }
 
+        // Uploaded template images also live under the source blog's asset
+        // directory. Preserve each declaration on a cross-owner clone, but
+        // clear its value so the recipient cannot retain a URL whose files are
+        // owned and eventually cleaned up by another blog.
+        if (
+          metadata.locals &&
+          existingMetadata.owner &&
+          metadata.owner !== existingMetadata.owner
+        ) {
+          Object.keys(metadata.locals).forEach(function (key) {
+            var value = metadata.locals[key];
+            if (key.endsWith("_image") && value && value.url) {
+              metadata.locals[key] = {};
+            }
+          });
+        }
+
         // Don't copy the CDN manifest - it will be regenerated with new hashes
         // based on the new template ID to ensure hashes reflect the new template
         // and files are stored on disk with the correct hash

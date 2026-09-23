@@ -33,8 +33,8 @@ const persistToFolder = (blog, template) => new Promise((resolve, reject) =>
   writeChangeToFolder(blog, template, {}, (err) => err ? reject(err) : resolve())
 );
 
-const listTemplates = (blogID) => new Promise((resolve) =>
-  Template.getTemplateList(blogID, (err, list) => resolve(err || !list ? [] : list))
+const listTemplates = (blogID) => new Promise((resolve, reject) =>
+  Template.getTemplateList(blogID, (err, list) => err ? reject(err) : resolve(list || []))
 );
 
 // Duplicating a template copies its favicon local verbatim, so two templates in
@@ -44,9 +44,15 @@ async function removeAssetsIfUnreferenced(req, favicon) {
   const paths = assetPaths(req.blog, favicon);
   if (!paths.length) return;
 
-  const others = await listTemplates(req.blog.id);
+  let others;
+  try {
+    others = await listTemplates(req.blog.id);
+  } catch (err) {
+    console.log(clfdate(), "uploadFavicon", "Unable to check old asset references; retaining files", err.message);
+    return;
+  }
   const stillUsed = others.some(
-    (t) => t && t.id !== req.template.id && t.locals && t.locals.favicon && t.locals.favicon.prefix === favicon.prefix
+    (t) => t && t.locals && t.locals.favicon && t.locals.favicon.prefix === favicon.prefix
   );
   if (stillUsed) return;
 
@@ -121,10 +127,18 @@ module.exports = async function uploadFavicon(req, res, next) {
   try {
     await persistToFolder(req.blog, req.template);
   } catch (error) {
-    // Redis now points at the new favicon but the folder's package.json still
-    // points at the old one. Leave both sets of files in place: a folder reload
-    // will restore the old (working) favicon, and deleting either set here would
-    // leave one of the two references dangling.
+    // Put Redis and package.json back on the previous working value. Only
+    // discard the generated files after both references have been restored.
+    if (previous) req.template.locals.favicon = previous;
+    else delete req.template.locals.favicon;
+    try {
+      await update(req.blog, req.params.templateSlug, req.template.locals);
+      await persistToFolder(req.blog, req.template);
+      await Promise.all(assetPaths(req.blog, favicon).map((path) => fs.remove(path).catch(() => {})));
+    } catch (_) {
+      // A failed rollback may still have a package.json reference to either
+      // set, so retaining both is safer than creating a broken favicon URL.
+    }
     return next(error);
   }
 
@@ -134,3 +148,5 @@ module.exports = async function uploadFavicon(req, res, next) {
 
   return isAjaxRequest(req) ? res.json({ favicon }) : res.message(req.body.redirect || res.locals.base, "Updated favicon");
 };
+
+module.exports.removeAssetsIfUnreferenced = removeAssetsIfUnreferenced;

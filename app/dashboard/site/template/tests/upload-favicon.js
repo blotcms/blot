@@ -110,4 +110,15 @@ describe("upload favicon", function () {
     );
     expect(templates.find((t) => t.id === this.template.id).locals.favicon).toBeUndefined();
   });
+
+  it("retains favicon assets when template references cannot be listed", async function () {
+    const first = await run(await makeReq(this, { crop_x: "", crop_y: "", crop_size: "" }, { withFile: {} }));
+    const favicon = first.result.body.favicon;
+    const path = join(assetDir(this.blog), `${favicon.prefix}.ico`);
+    spyOn(Template, "getTemplateList").and.callFake((id, callback) => callback(new Error("redis unavailable")));
+
+    await uploadFavicon.removeAssetsIfUnreferenced({ blog: this.blog, template: this.template }, favicon);
+
+    expect(await fs.pathExists(path)).toBe(true);
+  });
 });
