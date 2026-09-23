@@ -7,6 +7,7 @@ const archiver = require("archiver");
 const duplicateTemplate = require("./save/duplicate-template");
 const { isAjaxRequest, sendAjaxResponse } = require("./save/ajax-response");
 const writeChangeToFolder = require('./save/writeChangeToFolder');
+const previewReload = require("helper/publishPreviewReload");
 
 // /template/default and /template/default/... redirect to the installed template's slug
 // so docs can deep link to e.g. /sites/gitt/template/default/links
@@ -162,6 +163,11 @@ function persistTemplateUpdate(req, res, next) {
       if (err) return next(err);
       writeChangeToFolder(req.blog, req.template, {}, function (err) {
         if (err) return next(err);
+
+        // background_color and other locals are package.json metadata. This
+        // save writes Redis directly. Preview tabs only reload when this
+        // event is published, which folder sync does for file changes.
+        previewReload.publish(req.blog.id);
 
         if (isAjaxRequest(req)) {
           const ajaxOptions = {};
