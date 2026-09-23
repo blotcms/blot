@@ -1,4 +1,5 @@
 describe("template image thumbnails", function () {
+  global.test.blog();
   global.test.tmp();
 
   const fs = require("fs-extra");
@@ -51,7 +52,7 @@ describe("template image thumbnails", function () {
       return realMove(from, to, options);
     });
 
-    await expectAsync(generate(input, output, {})).toBeRejectedWithError("move failed");
+    await expectAsync(generate(input, output, {})).toBeRejectedWith(new Error("move failed"));
     expect(await fs.readdir(output)).toEqual([]);
   });
 });

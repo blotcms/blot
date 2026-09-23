@@ -47,7 +47,7 @@ async function generate(sourcePath, outputDirectory, crop) {
       if (name === "square" && selected) operation = operation.extract(selected);
       const fit = options.crop ? "cover" : "inside";
       const info = await operation.resize(options.size, options.size, {
-        fit, withoutEnlargement: true,
+        fit, withoutEnlargement: name !== "square",
         position: selected ? "centre" : sharp.strategy.entropy,
       }).webp().toFile(join(temporary, names[name]));
       results[name] = { name: names[name], width: info.width, height: info.height };

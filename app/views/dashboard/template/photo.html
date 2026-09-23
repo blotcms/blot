@@ -1,10 +1,14 @@
 {{> template-settings-back}}
 
-<form method='post' action='{{{dashboardBase}}}' enctype='multipart/form-data' class="dashboard-form">
+<form method="post" action="{{{base}}}/photo" enctype="multipart/form-data" class="dashboard-form" data-photo-form data-favicon-supported="{{#favicon_supported}}true{{/favicon_supported}}{{^favicon_supported}}false{{/favicon_supported}}" data-has-favicon="{{#favicon}}true{{/favicon}}{{^favicon}}false{{/favicon}}">
 
   <input type="hidden" name="_csrf" value="{{csrftoken}}" />
 
-  <input type="hidden" name="redirect" value="{{{base}}}/photo" />
+  <input type="hidden" name="redirect" value="{{photoPath}}" />
+  <input type="hidden" name="use_favicon" value="0" data-photo-use-favicon />
+  <input type="hidden" name="crop_x" value="" data-favicon-crop-x />
+  <input type="hidden" name="crop_y" value="" data-favicon-crop-y />
+  <input type="hidden" name="crop_size" value="" data-favicon-crop-size />
 
 	<div class="settings-group">
 		<h2 class="template-heading">Photo</h2>
@@ -28,11 +32,34 @@
     
     <span style="margin-top:0;color:rgb(158, 154, 152);font-size:14px;display:inline;margin-right:10px">Select {{#blog.avatar}}new{{/blog.avatar}} photo:</span>
 
-    <input type='file' id="avatarUpload" style="display:inline;margin:0;cursor: pointer;" name='avatar' />
+    <input type="file" id="avatarUpload" style="display:inline;margin:0;cursor:pointer;" name="avatar" accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif" data-photo-input />
     </label>
   </section>
-    {{> form-footer}}
+    <div class="buttons">
+      <button type="submit">Save changes</button>
+      <a href="{{{base}}}">Cancel</a>
+    </div>
       </div>
 
 </div>
+
+  <dialog class="photo-favicon-dialog" data-photo-favicon-dialog aria-labelledby="photo-favicon-title">
+    <div data-photo-favicon-prompt>
+      <h2 id="photo-favicon-title">Use this photo to replace your favicon?</h2>
+      <p>Your favicon appears in browser tabs and bookmarks. Skipping keeps your current favicon; your photo will still be saved.</p>
+      <p role="alert" hidden data-photo-favicon-error>This image could not be used as a favicon. You can still skip and save the photo.</p>
+      <div class="buttons">
+        <button type="button" data-photo-use-as-favicon>Replace favicon</button>
+        <button type="button" data-photo-skip-favicon>Skip</button>
+      </div>
+    </div>
+    <div hidden data-photo-favicon-crop>
+      <h2>Crop favicon</h2>
+      {{> favicon-crop-ui}}
+      <div class="buttons">
+        <button type="button" data-photo-confirm-crop>Use as favicon</button>
+        <button type="button" data-photo-cancel-crop>Back</button>
+      </div>
+    </div>
+  </dialog>
 </form>
