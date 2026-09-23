@@ -373,13 +373,13 @@ describe("parseUploadedTemplate", function () {
       expect(result.warnings[0]).toContain("localEditing");
     });
 
-    it("returns no presets when the manifest does not declare them", function () {
+    it("returns no presets when locals does not declare them", function () {
       const result = parse([
         entry("index.html", "<h1>Hi</h1>"),
         entry("package.json", JSON.stringify({ locals: { background_color: "#fff" } })),
       ]);
 
-      expect(result.presets).toBeUndefined();
+      expect(result.locals.presets).toBeUndefined();
     });
 
     it("keeps a valid preset list, including an unknown font id", function () {
@@ -391,23 +391,23 @@ describe("parseUploadedTemplate", function () {
             locals: {
               background_color: "#fff",
               font: { id: "verdana" },
-            },
-            presets: {
-              colors: { Classic: { background_color: "#ffffff" } },
-              fonts: { Missing: { font: { id: "not-a-real-font" } } },
+              presets: {
+                colors: { Classic: { background_color: "#ffffff" } },
+                fonts: { Missing: { font: { id: "not-a-real-font" } } },
+              },
             },
           })
         ),
       ]);
 
-      expect(result.presets.colors.Classic.background_color).toEqual("#ffffff");
-      expect(result.presets.fonts.Missing.font.id).toEqual("not-a-real-font");
+      expect(result.locals.presets.colors.Classic.background_color).toEqual("#ffffff");
+      expect(result.locals.presets.fonts.Missing.font.id).toEqual("not-a-real-font");
     });
 
     it("reports malformed presets, invalid keys, and unknown locals", function () {
       const malformed = problemsFrom([
         entry("index.html", "<h1>Hi</h1>"),
-        entry("package.json", JSON.stringify({ presets: [] })),
+        entry("package.json", JSON.stringify({ locals: { presets: [] } })),
       ]);
       expect(malformed[0].reason).toEqual("presets");
       expect(malformed[0].path).toEqual("package.json");
@@ -417,9 +417,11 @@ describe("parseUploadedTemplate", function () {
         entry(
           "package.json",
           JSON.stringify({
-            locals: { background_color: "#fff" },
-            presets: {
-              colors: { " ": { background_color: "#fff" } },
+            locals: {
+              background_color: "#fff",
+              presets: {
+                colors: { " ": { background_color: "#fff" } },
+              },
             },
           })
         ),
@@ -432,9 +434,11 @@ describe("parseUploadedTemplate", function () {
         entry(
           "package.json",
           JSON.stringify({
-            locals: { background_color: "#fff" },
-            presets: {
-              colors: { Bad: { nope_color: "#fff" } },
+            locals: {
+              background_color: "#fff",
+              presets: {
+                colors: { Bad: { nope_color: "#fff" } },
+              },
             },
           })
         ),

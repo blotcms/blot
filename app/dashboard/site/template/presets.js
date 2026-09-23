@@ -1,10 +1,10 @@
-// Package-level color palettes and font packs.
+// Color palettes and font packs declared in template.locals.presets.
 //
 // Presets are editor metadata. They are not template rendering locals. A
-// template declares them next to `locals` in package.json:
+// template declares them inside `locals` in package.json:
 //
-// Presets use their key as both id and label, with values in the same shape as
-// `locals`: { colors: { Classic: { background_color: "#fff" } } }.
+// Preset keys are both the id and UI label, with values matching the shape of
+// other locals: { presets: { colors: { Classic: { background_color: "#fff" } } } }.
 // Color presets may only set scalar `*_color` locals. Font presets may only
 // patch recognized font locals, and only `id`, `font_size` and `line_height`.
 // A font pack should normally set `id` alone so the user's sizing survives.
@@ -327,21 +327,6 @@ function validatePresets(presets, locals) {
   return { presets: value, errors };
 }
 
-function toPackagePresets(presets) {
-  if (!isPlainObject(presets)) return null;
-  const result = {};
-  ["colors", "fonts"].forEach((type) => {
-    if (!isPlainObject(presets[type])) return;
-    result[type] = {};
-    Object.keys(presets[type]).forEach((id) => {
-      if (!isSafePresetKey(id) || !isPlainObject(presets[type][id])) return;
-      result[type][id] = presets[type][id];
-    });
-    if (!Object.keys(result[type]).length) delete result[type];
-  });
-  return Object.keys(result).length ? result : null;
-}
-
 function presetEntries(map) {
   return ownKeys(map).map((id) => ({ id, name: id, values: map[id] }));
 }
@@ -651,7 +636,7 @@ function collectFontStyles(colors, fonts) {
 
 function presentPresets(template) {
   const locals = (template && template.locals) || {};
-  const validated = validatePresets(template && template.presets, locals);
+  const validated = validatePresets(locals.presets, locals);
   const colors = presentColors(presetEntries(validated.presets.colors), locals);
   const fonts = presentFonts(presetEntries(validated.presets.fonts), locals);
   return {
@@ -693,7 +678,7 @@ function applyPatch(locals, values, type) {
 
 function applyResolvedPreset(template, type, id) {
   const locals = (template && isPlainObject(template.locals) && template.locals) || {};
-  const presets = (template && isPlainObject(template.presets) && template.presets) || {};
+  const presets = (isPlainObject(locals.presets) && locals.presets) || {};
 
   if (type !== "colors" && type !== "fonts") {
     return { error: "Choose a color palette or a font pack" };
@@ -722,7 +707,6 @@ module.exports = {
   validatePresets,
   presentPresets,
   applyResolvedPreset,
-  toPackagePresets,
   normalizeColor,
   presetMatches,
 };

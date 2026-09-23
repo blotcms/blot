@@ -1,4 +1,4 @@
-const applyResolvedPreset = require("models/template/presets").applyResolvedPreset;
+const applyResolvedPreset = require("../presets").applyResolvedPreset;
 const { isAjaxRequest, sendAjaxResponse } = require("./ajax-response");
 
 // preset.type and preset.id are resolved against the template package.

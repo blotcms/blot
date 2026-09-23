@@ -11,6 +11,5 @@ module.exports = {
   localEditing: "boolean",
   thumb: "string",
   locals: "object",
-  presets: "object",
   cdn: "object",
 };

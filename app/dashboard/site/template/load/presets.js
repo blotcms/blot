@@ -1,4 +1,4 @@
-const presentPresets = require("models/template/presets").presentPresets;
+const presentPresets = require("../presets").presentPresets;
 
 module.exports = function loadPresets(req, res, next) {
   const presented = presentPresets(req.template || {});

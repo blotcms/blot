@@ -4,7 +4,7 @@ describe("template editor presets", function () {
   const Mustache = require("mustache");
   const { promisify } = require("util");
   const Template = require("models/template");
-  const presentPresets = require("models/template/presets").presentPresets;
+  const presentPresets = require("../presets").presentPresets;
   const loadPresets = require("../load/presets");
   const forkIfNeeded = require("../save/fork-if-needed");
   const savePreset = require("../save/preset");
@@ -67,6 +67,10 @@ describe("template editor presets", function () {
     },
   };
 
+  function localsWithPresets(templateLocals = locals, templatePresets = presets) {
+    return Object.assign({}, templateLocals, { presets: templatePresets });
+  }
+
   function render(view) {
     return Mustache.render(sidebar, view, partials);
   }
@@ -118,7 +122,7 @@ describe("template editor presets", function () {
   });
 
   it("renders palette and font cards with edit disclosures", function () {
-    const presented = presentPresets({ locals, presets });
+    const presented = presentPresets({ locals: localsWithPresets() });
     const html = render({
       base: "/sites/demo/template/blog",
       csrftoken: "token",
@@ -160,10 +164,12 @@ describe("template editor presets", function () {
 
   it("renders one preset with an edit disclosure and a custom state", function () {
     const presented = presentPresets({
-      locals: Object.assign({}, locals, { background_color: "#123456" }),
-      presets: {
-        colors: { Only: { background_color: "#ffffff" } },
-      },
+      locals: localsWithPresets(
+        Object.assign({}, locals, { background_color: "#123456" }),
+        {
+          colors: { Only: { background_color: "#ffffff" } },
+        }
+      ),
     });
     const html = render({
       base: "/sites/demo/template/blog",
@@ -183,7 +189,7 @@ describe("template editor presets", function () {
   });
 
   it("exposes the derived selection on the template route", function () {
-    const req = { template: { locals, presets } };
+    const req = { template: { locals: localsWithPresets() } };
     const res = { locals: {} };
     loadPresets(req, res, function () {});
     expect(res.locals.colorPresets.items[0].selected).toBe(true);
@@ -258,8 +264,7 @@ describe("template editor presets", function () {
 
   it("applies a color preset and publishes a preview reload", async function () {
     const template = await create(this.blog.id, "Owned Presets", {
-      locals: locals,
-      presets: presets,
+      locals: localsWithPresets(),
     });
 
     const res = response();
@@ -286,20 +291,19 @@ describe("template editor presets", function () {
     expect(saved.locals.links_color).toBe("#8cbcff");
     expect(saved.locals.font.id).toBe("verdana");
     expect(saved.locals.font.font_size).toBe(16);
-    expect(saved.presets.colors.Classic.background_color).toBe("#FFFFFF");
+    expect(saved.locals.presets.colors.Classic.background_color).toBe("#FFFFFF");
   });
 
   it("applies a font id and keeps the current size and line height", async function () {
     const template = await create(this.blog.id, "Owned Presets", {
-      locals: locals,
-      presets: {
+      locals: localsWithPresets(locals, {
         fonts: {
           Editorial: {
             font: { id: "source-sans" },
             title_font: { id: "vollkorn" },
           },
         },
-      },
+      }),
     });
 
     const res = response();
@@ -327,8 +331,7 @@ describe("template editor presets", function () {
 
   it("rejects an unknown preset without changing locals", async function () {
     const template = await create(this.blog.id, "Owned Presets", {
-      locals: locals,
-      presets: presets,
+      locals: localsWithPresets(),
     });
     const res = response();
     const req = {
@@ -353,8 +356,7 @@ describe("template editor presets", function () {
   it("forks a stock template before applying a preset", async function () {
     const source = await create("SITE", "Preset Source", {
       isPublic: true,
-      locals: locals,
-      presets: presets,
+      locals: localsWithPresets(),
     });
     this.blog.template = source.id;
 
@@ -377,7 +379,7 @@ describe("template editor presets", function () {
 
     const forked = await getMetadata(this.blog.id + ":preset-source");
     expect(forked.locals.background_color).toBe("#111318");
-    expect(forked.presets.fonts.Classic.font.id).toBe("verdana");
+    expect(forked.locals.presets.fonts.Classic.font.id).toBe("verdana");
     expect(forked.owner).toBe(this.blog.id);
 
     const untouched = await getMetadata(source.id);
@@ -388,8 +390,7 @@ describe("template editor presets", function () {
   it("writes the preset into package.json for a locally edited template", async function () {
     const template = await create(this.blog.id, "Owned Presets", {
       localEditing: true,
-      locals: locals,
-      presets: presets,
+      locals: localsWithPresets(),
     });
 
     const res = response();
@@ -417,7 +418,7 @@ describe("template editor presets", function () {
 
     const written = JSON.parse(fs.readFileSync(writtenPath, "utf8"));
     expect(written.locals.background_color).toBe("#111318");
-    expect(Object.keys(written.presets.colors)).toEqual([
+    expect(Object.keys(written.locals.presets.colors)).toEqual([
       "Classic",
       "A very long palette name that should stay available to assistive technology",
     ]);

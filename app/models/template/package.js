@@ -1,7 +1,5 @@
 var setMetadata = require("./setMetadata");
 var type = require("helper/type");
-var validatePresets = require("./presets").validatePresets;
-var toPackagePresets = require("./presets").toPackagePresets;
 
 module.exports = {
   generate: function (blogID, metadata, views) {
@@ -13,11 +11,6 @@ module.exports = {
 
     if (metadata.locals) {
       Package.locals = metadata.locals;
-    }
-
-    var packagePresets = toPackagePresets(metadata.presets);
-    if (packagePresets) {
-      Package.presets = packagePresets;
     }
 
     if (metadata.enabled) {
@@ -88,30 +81,12 @@ module.exports = {
       changes.locals = metadata.locals;
     }
 
-    // package.json is the source of truth for presets. A document which omits
-    // them clears any presets stored earlier. Invalid entries are dropped and
-    // reported after the rest of the package has been saved.
-    var localsForPresets =
-      metadata.locals && type(metadata.locals, "object") ? metadata.locals : {};
-    var checkedPresets = validatePresets(
-      Object.prototype.hasOwnProperty.call(metadata, "presets") ? metadata.presets : null,
-      localsForPresets
-    );
-    changes.presets = checkedPresets.presets;
-    var presetError = null;
-    if (checkedPresets.errors.length) {
-      presetError = new Error(checkedPresets.errors.join("\n"));
-      presetError.code = "EPRESETS";
-      presetError.status = 400;
-    }
-
     if (metadata.views && type(metadata.views, "object")) {
       views = metadata.views;
     }
 
     setMetadata(id, changes, function (err) {
-      if (err) return callback(err);
-      callback(presetError, views);
+      callback(err, views);
     });
   }
 };
