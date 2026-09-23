@@ -1,6 +1,6 @@
 <div class="preset-grid" data-preset-grid="colors">
 	{{#items}}
-	<form method="post" action="{{{base}}}/preset" data-preset-form>
+	<form method="post" action="{{{base}}}" data-preset-form>
 		<input type="hidden" name="_csrf" value="{{csrftoken}}">
 		<input type="hidden" name="preset.type" value="colors">
 		<input type="hidden" name="preset.id" value="{{id}}">
@@ -14,25 +14,11 @@
 			{{#disabled}}disabled{{/disabled}}
 		>
 			<svg class="preset-check" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path></svg>
-			{{#hasDark}}
-			{{#rows}}
-			<span class="preset-row">
-				<span class="preset-row-label">{{label}}</span>
-				<span class="preset-swatches">
-					{{#swatches}}
-					<span class="preset-swatch" data-preset-swatch="{{key}}"><span style="background:{{value}}"></span></span>
-					{{/swatches}}
-				</span>
-			</span>
-			{{/rows}}
-			{{/hasDark}}
-			{{^hasDark}}
 			<span class="preset-swatches">
 				{{#swatches}}
-				<span class="preset-swatch" data-preset-swatch="{{key}}"><span style="background:{{value}}"></span></span>
+				<span class="preset-swatch"><span style="background:{{value}}"></span></span>
 				{{/swatches}}
 			</span>
-			{{/hasDark}}
 			<span class="preset-caption">{{name}}</span>
 			{{#error}}<span class="preset-error">{{error}}</span>{{/error}}
 		</button>
@@ -45,27 +31,13 @@
 		aria-label="Custom colors"
 		{{#selected}}aria-current="true"{{/selected}}
 		{{#hidden}}hidden{{/hidden}}
-	>
+		>
 		<svg class="preset-check" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path></svg>
-		{{#hasDark}}
-		{{#rows}}
-		<span class="preset-row">
-			<span class="preset-row-label">{{label}}</span>
-			<span class="preset-swatches">
-				{{#swatches}}
-				<span class="preset-swatch" data-preset-swatch="{{key}}"><span style="background:{{value}}"></span></span>
-				{{/swatches}}
-			</span>
-		</span>
-		{{/rows}}
-		{{/hasDark}}
-		{{^hasDark}}
 		<span class="preset-swatches">
 			{{#swatches}}
-			<span class="preset-swatch" data-preset-swatch="{{key}}"><span style="background:{{value}}"></span></span>
+			<span class="preset-swatch"><span style="background:{{value}}"></span></span>
 			{{/swatches}}
 		</span>
-		{{/hasDark}}
 		<span class="preset-caption">{{label}}</span>
 	</div>
 	{{/custom}}

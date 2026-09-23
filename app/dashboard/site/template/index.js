@@ -153,14 +153,6 @@ function prepareTemplateUpdate(req, res, next) {
   next();
 }
 
-TemplateEditor.route("/:templateSlug/preset").post(
-  require("./save/validate-preset"),
-  require("./save/fork-if-needed"),
-  require("./save/preset"),
-  require("./save/layout-inputs"),
-  persistTemplateUpdate
-);
-
 TemplateEditor.route("/:templateSlug")
   .all(require("./load/font-inputs"))
   .all(require("./load/syntax-highlighter"))
@@ -174,6 +166,7 @@ TemplateEditor.route("/:templateSlug")
   .all(require("./load/navigation-inputs"))
   .all(require("./load/dates"))
   .post(
+    require("./save/resolve-preset"),
     require("./save/fork-if-needed"),
     prepareTemplateUpdate,
     require("./save/layout-inputs"),

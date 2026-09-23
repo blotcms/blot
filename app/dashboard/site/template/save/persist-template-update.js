@@ -26,11 +26,7 @@ function persistTemplateUpdate(req, res, next) {
           return sendAjaxResponse(res, ajaxOptions);
         }
 
-        const redirect =
-          req.path && req.path.endsWith("/preset")
-            ? req.baseUrl + "/" + req.params.templateSlug
-            : req.baseUrl + req.url;
-        res.message(redirect, "Success!");
+        res.message(req.baseUrl + req.url, "Success!");
       });
     }
   );

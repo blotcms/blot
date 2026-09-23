@@ -1,23 +1,18 @@
 <div class="inputs">
 
-	{{#presetFontStyles}}
-	<style data-preset-fonts>{{{presetFontStyles}}}</style>
-	{{/presetFontStyles}}
-
-	{{#colorPresets.hasPresets}}
-	<div class="settings-group" data-preset-group="colors">
-	<h2 class="template-heading">Color palettes</h2>
-	{{#colorPresets}}
-	{{> preset-colors}}
-	{{/colorPresets}}
-	<button type="button" class="preset-edit" data-preset-edit="colors" aria-expanded="false" aria-controls="preset-colors-controls">Edit colors</button>
-	<div id="preset-colors-controls" class="preset-controls" data-preset-controls hidden>
-	{{#colors}}
-	{{> color}}
-	{{/colors}}
-	</div>
-	</div>
-	{{/colorPresets.hasPresets}}
+{{#colorPresets.hasPresets}}
+<details class="settings-group" data-preset-group="colors">
+<summary class="template-heading">Color palettes</summary>
+{{#colorPresets}}
+{{> preset-colors}}
+{{/colorPresets}}
+<div class="preset-controls">
+{{#colors}}
+{{> color}}
+{{/colors}}
+</div>
+</details>
+{{/colorPresets.hasPresets}}
 	{{^colorPresets.hasPresets}}
 	{{#colors.length}}
 	<div class="settings-group">
@@ -29,20 +24,19 @@
 	{{/colors.length}}
 	{{/colorPresets.hasPresets}}
 
-	{{#fontPresets.hasPresets}}
-	<div class="settings-group" data-preset-group="fonts">
-	<h2 class="template-heading">Font packs</h2>
-	{{#fontPresets}}
-	{{> preset-fonts}}
-	{{/fontPresets}}
-	<button type="button" class="preset-edit" data-preset-edit="fonts" aria-expanded="false" aria-controls="preset-fonts-controls">Edit fonts</button>
-	<div id="preset-fonts-controls" class="preset-controls" data-preset-controls hidden>
-	{{#fonts}}
-	{{> font}}
-	{{/fonts}}
-	</div>
-	</div>
-	{{/fontPresets.hasPresets}}
+{{#fontPresets.hasPresets}}
+<details class="settings-group" data-preset-group="fonts">
+<summary class="template-heading">Font packs</summary>
+{{#fontPresets}}
+{{> preset-fonts}}
+{{/fontPresets}}
+<div class="preset-controls">
+{{#fonts}}
+{{> font}}
+{{/fonts}}
+</div>
+</details>
+{{/fontPresets.hasPresets}}
 	{{^fontPresets.hasPresets}}
 	{{#fonts.length}} 	
         {{#fonts}}

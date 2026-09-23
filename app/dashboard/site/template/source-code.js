@@ -100,7 +100,6 @@ SourceCode.route("/:viewSlug/edit")
       } catch (e) {
         return sendError(e);
       }
-      let presetError = null;
       if (
         parsed.locals &&
         typeof parsed.locals === "object" &&
@@ -108,18 +107,19 @@ SourceCode.route("/:viewSlug/edit")
         Object.prototype.hasOwnProperty.call(parsed.locals, "presets")
       ) {
         const checked = validatePresets(parsed.locals.presets, parsed.locals);
-        parsed.locals.presets = checked.presets;
         if (checked.errors.length) {
-          presetError = new Error(checked.errors.join("; "));
-          presetError.code = "EPRESETS";
-          presetError.status = 400;
+          const error = new Error(checked.errors.join("; "));
+          error.code = "EPRESETS";
+          error.status = 400;
+          return sendError(error);
         }
+        parsed.locals.presets = checked.presets;
       }
       Template.package.save(
         req.template.id,
         parsed,
         function (err, views) {
-          if (err && !presetError) return sendError(err);
+          if (err) return sendError(err);
           views = views || {};
 
           Template.getMetadata(req.template.id, function (err, metadata) {
@@ -158,9 +158,6 @@ SourceCode.route("/:viewSlug/edit")
                     if (res.locals.templateForked) {
                       res.set("X-Template-Forked", "1");
                     }
-                    // Locals and views are stored. Surface the preset list
-                    // afterwards so the editor can fix it without losing them.
-                    if (presetError) return sendError(presetError);
                     res.send("Saved changes!");
                   }
                 );
