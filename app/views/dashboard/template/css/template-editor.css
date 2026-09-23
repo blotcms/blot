@@ -319,7 +319,7 @@ p.template-heading-note {
 }
 
 .template-docs-support-links-group {
-  --template-row-link-padding: 0.125em 0.6875em;
+  --template-row-link-padding: 8px 16px;
 }
 
 .template-docs-support-links-group .template-row__link {
