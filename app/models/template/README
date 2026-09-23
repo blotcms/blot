@@ -56,7 +56,7 @@ All state is stored in Redis. There is no relational database or document store 
 |------|-------------|
 | `util/makeID.js` | Derives a stable template ID from an owner string and a name by slugifying the name and joining with `":"`. Example: `"abc123:my-theme"`. |
 | `util/serialize.js` | Converts `object` and `array` typed fields in a model instance to JSON strings before writing to Redis hashes. |
-| `util/deserialize.js` | Discards undeclared fields and converts JSON-stringified and boolean fields back to their native types after reading from Redis hashes. |
+| `util/deserialize.js` | Converts JSON-stringified and boolean fields back to their native types after reading from Redis hashes, and drops the retired `isPublic` field. Other undeclared fields, including a view's legacy `type`, are kept. |
 | `util/generateCdnUrl.js` | Constructs a CDN URL for a rendered view asset given a view name and content hash. Uses a three-level directory structure derived from the first four characters of the hash. |
 | `util/updateCdnManifest.js` | Recomputes the CDN manifest for a template: renders each view that declares a `retrieve.cdn` target, hashes the output, stores the result on disk and in Redis, cleans up stale hashes, and writes the updated manifest into the template's metadata. Skips SITE-owned templates and templates not currently installed on their owner blog. |
 | `util/forkSiteTemplate.js` | Creates a blog-owned copy of a SITE-owned template. If an existing fork already exists, it returns that fork's ID without duplicating. Handles name deduplication for repeated calls. |
