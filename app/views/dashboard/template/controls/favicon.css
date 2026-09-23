@@ -9,3 +9,6 @@
 .favicon-previews img { object-fit: contain; background: var(--background-color); }
 .favicon-previews img[data-favicon-preview="16"],
 .favicon-previews img[data-favicon-preview="32"] { image-rendering: pixelated; }
+.photo-favicon-dialog { border: 1px solid var(--border-color); border-radius: var(--border-radius); color: inherit; max-width: min(520px, calc(100% - 2em)); padding: 2em; }
+.photo-favicon-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+.photo-favicon-dialog h2 { margin-top: 0; }
