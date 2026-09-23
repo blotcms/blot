@@ -153,6 +153,7 @@ function prepareTemplateUpdate(req, res, next) {
 }
 
 TemplateEditor.route("/:templateSlug/preset").post(
+  require("./save/validate-preset"),
   require("./save/fork-if-needed"),
   require("./save/preset"),
   require("./save/layout-inputs"),

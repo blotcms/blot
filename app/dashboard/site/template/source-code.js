@@ -6,6 +6,7 @@ const extend = require("helper/extend");
 const async = require("async");
 const writeChangeToFolder = require("./save/writeChangeToFolder");
 const previewReload = require("helper/publishPreviewReload");
+const validatePresets = require("./presets").validatePresets;
 
 SourceCode.param("viewSlug", require("./load/template-views"));
 SourceCode.param("viewSlug", require("./load/template-view"));
@@ -99,13 +100,25 @@ SourceCode.route("/:viewSlug/edit")
       } catch (e) {
         return sendError(e);
       }
+      let presetError = null;
+      if (
+        parsed.locals &&
+        typeof parsed.locals === "object" &&
+        !Array.isArray(parsed.locals) &&
+        Object.prototype.hasOwnProperty.call(parsed.locals, "presets")
+      ) {
+        const checked = validatePresets(parsed.locals.presets, parsed.locals);
+        parsed.locals.presets = checked.presets;
+        if (checked.errors.length) {
+          presetError = new Error(checked.errors.join("; "));
+          presetError.code = "EPRESETS";
+          presetError.status = 400;
+        }
+      }
       Template.package.save(
         req.template.id,
         parsed,
         function (err, views) {
-          // A bad preset list is reported, but the rest of the package — locals
-          // and view metadata — is still saved.
-          const presetError = err && err.code === "EPRESETS" ? err : null;
           if (err && !presetError) return sendError(err);
           views = views || {};
 

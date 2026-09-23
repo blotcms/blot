@@ -16,6 +16,7 @@
 const Mustache = require("mustache");
 const config = require("config");
 const FONTS = require("blog/static/fonts");
+const tinyColor = require("helper/tinyColor");
 const DANGEROUS_KEYS = Object.create(null);
 DANGEROUS_KEYS["__proto__"] = true;
 DANGEROUS_KEYS.constructor = true;
@@ -58,8 +59,12 @@ function expandHex(hex) {
 
 function normalizeColor(input) {
   if (typeof input !== "string") return null;
-  const match = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(input.trim());
-  return match ? expandHex(match[1].toLowerCase()) : null;
+  const value = input.trim();
+  const match = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(value);
+  if (match) return expandHex(match[1].toLowerCase());
+
+  const color = tinyColor(value);
+  return color.isValid() ? color.toHex8String().toLowerCase() : null;
 }
 
 function numericValue(value) {
@@ -189,6 +194,10 @@ function validateFontValues(values, locals) {
   keys.forEach((key) => {
     if (DANGEROUS_KEYS[key]) {
       errors.push('cannot set "' + key + '"');
+      return;
+    }
+    if (key === "syntax_highlighter_font") {
+      errors.push('sets "' + key + '", which is not available to font presets');
       return;
     }
     if (!Object.prototype.hasOwnProperty.call(locals, key) || !isFontLocal(key, locals[key])) {
