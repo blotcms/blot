@@ -803,6 +803,36 @@ local function write_snapshot(self)
     return true
 end
 
+-- Resizing cacher_dictionary on reload throws away its keys and leaves
+-- cacher_state in place. ready would still be "1", and /purge would
+-- report success while every cache file stayed on disk.
+local function dictionary_was_reset(self)
+    local state = self.state_dictionary
+    local capacity = self.shared_dictionary:capacity()
+    local recorded = state:get("dict_capacity")
+
+    if recorded == capacity then
+        return false
+    end
+
+    local ok, err = state:set("dict_capacity", capacity)
+
+    if not ok then
+        ngx.log(ngx.ERR, "cacher: could not record dictionary capacity: ", err)
+    end
+
+    -- Nil means this state zone has never recorded a capacity (first start,
+    -- or the zone itself is new). A number that no longer matches means
+    -- cacher_dictionary was resized and its keys were dropped.
+    if recorded == nil then
+        return false
+    end
+
+    state:delete("ready")
+    ngx.log(ngx.NOTICE, "cacher: shared dictionary capacity changed, index will be rebuilt")
+    return true
+end
+
 local function cacher_prepare(self)
     if not self.cache_directory or not self.state_dictionary or not self.shared_dictionary then
         ngx.log(ngx.ERR, "cacher: prepare missing configuration")
@@ -868,6 +898,8 @@ local function cacher_prepare(self)
     -- must not reload a snapshot that missed later cache misses.
     os.remove(paths.marker)
 
+    dictionary_was_reset(self)
+
     if state:get("ready") == "1" then
         -- Shared dict survived a reload. The in-memory index is still authoritative.
         return
@@ -885,12 +917,8 @@ local function cacher_prepare(self)
     state:set("managed", "1")
 end
 
-local function cacher_start_worker(self, ngx)
-    if ngx.worker.id() ~= 0 then
-        return
-    end
-
-    local function attempt(premature)
+local function schedule_build(self, delay)
+    local ok, err = ngx.timer.at(delay, function(premature)
         if premature or worker_exiting() then
             return
         end
@@ -898,19 +926,21 @@ local function cacher_start_worker(self, ngx)
         local built = build_index(self)
 
         if not built and not cacher_is_ready(self) and not worker_exiting() then
-            local ok, err = ngx.timer.at(1, attempt)
-
-            if not ok then
-                ngx.log(ngx.ERR, "cacher: failed to reschedule index build: ", err)
-            end
+            schedule_build(self, 1)
         end
-    end
-
-    local ok, err = ngx.timer.at(0, attempt)
+    end)
 
     if not ok then
         ngx.log(ngx.ERR, "cacher: failed to schedule index build: ", err)
     end
+end
+
+local function cacher_start_worker(self, ngx)
+    if ngx.worker.id() ~= 0 then
+        return
+    end
+
+    schedule_build(self, 0)
 end
 
 local function cacher_on_worker_exit(self, ngx)
@@ -971,10 +1001,15 @@ local function cacher_rehydrate (self)
         self.state_dictionary:delete("ready")
     end
 
+    -- A retry must read the disk. The snapshot from the previous shutdown
+    -- does not include files written since this process started.
+    self._trusted_snapshot = nil
+
     local message, _, failed = walk_cache(self, false)
     unlock(self)
 
     if failed or message == nil then
+        schedule_build(self, 1)
         ngx.status = ngx.HTTP_SERVICE_UNAVAILABLE
         return "cache index rebuild failed"
     end

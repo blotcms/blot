@@ -75,6 +75,11 @@ describe("cacher", function () {
 
     await this.restartOpenresty();
 
+    const cached = await fetch(this.origin);
+    expect(cached.status).toBe(200);
+    expect(cached.headers.get("Cache-Status")).toBe("HIT");
+    expect(await cached.text()).toBe("Hello Node!");
+
     expect((await this.listCache()).length).toEqual(1);
 
     const purgeResponse = await fetch(this.origin + "/purge?host=127.0.0.1");
@@ -83,6 +88,10 @@ describe("cacher", function () {
     expect(purgeText.trim()).toBe("127.0.0.1: 1");
 
     expect(await this.listCache({ watch: false })).toEqual([]);
+
+    const purged = await fetch(this.origin);
+    expect(purged.status).toBe(200);
+    expect(purged.headers.get("Cache-Status")).toBe("MISS");
   });
 
   it("can purge multiple hosts", async function () {
