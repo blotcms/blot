@@ -8,6 +8,8 @@ Make Google Drive incremental sync efficient
 - Support huge folders with huge directories
 - Start with recently changed files and dirs first
 
+Clarify on cancel / delete / overdue pages for accounts with grandfathered subscription prices that if they re-join Blot they will lose their grandfathered rate.
+
 Add fractions and raw numbers of current users using each client to daily update
 
 We need a plan for the suspension of the iCloud user as well... is the code resilient to data loss in this scenario?
