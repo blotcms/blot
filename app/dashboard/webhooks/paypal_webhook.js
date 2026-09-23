@@ -4,6 +4,7 @@ const parser = require("body-parser");
 const User = require("models/user");
 const config = require("config");
 const clfdate = require("helper/clfdate");
+const email = require("helper/email");
 const subscriptionLifecycle = require("models/user/subscriptionLifecycle");
 
 const SUBSCRIPTION_EVENTS = [
@@ -139,6 +140,16 @@ const updateSubscription = async subscriptionID => {
   if (!paypal || paypal.id !== subscriptionID || typeof paypal.status !== "string") {
     throw new Error("Invalid PayPal subscription response");
   }
+
+  // Same notifications as the Stripe webhook. This function also refreshes
+  // an already-cancelled subscription from the dashboard, so only email on
+  // the transition into CANCELLED.
+  const previousStatus = user.paypal && user.paypal.status;
+  if (paypal.status === "CANCELLED" && previousStatus !== "CANCELLED") {
+    if (user.isDisabled) email.ALREADY_CANCELLED(user.uid);
+    else email.CLOSED(user.uid);
+  }
+
   return new Promise((resolve, reject) => {
     const updates = { paypal };
     const done = err => err ? reject(err) : resolve();
