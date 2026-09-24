@@ -186,9 +186,16 @@ check "success: the container gets the CDN static mounts and the fd ulimit" \
   'called "docker create --restart no --name blot-proxy-blue --network host --cap-add SYS_NICE --ulimit nofile=10000:10000" \
    && called "-v /var/www/blot/data/static:/var/www/blot/data/static:ro" \
    && called "-v /var/www/blot/app/blog/static:/var/www/blot/app/blog/static:ro"'
-check "success: the rehearsal gets the real cache read-only and the same ulimit" \
+check "success: the rehearsal gets the static mounts and the fd ulimit, but not the cache" \
   'called "run -d --name blot-proxy-rehearsal --cap-add SYS_NICE --ulimit nofile=10000:10000" \
-   && called "-v $T/cache:/var/cache/openresty:ro"'
+   && called "-v /var/www/blot/data/static:/var/www/blot/data/static:ro" \
+   && called "-v /var/www/blot/app/blog/static:/var/www/blot/app/blog/static:ro" \
+   && ! called "run -d --name blot-proxy-rehearsal.*/var/cache/openresty"'
+check "success: the rehydrate probe gets the real cache read-only, takes no traffic, and is cleaned up" \
+  'called "run -d --name blot-proxy-rehydrate-probe --cap-add SYS_NICE" \
+   && called "-v $T/cache:/var/cache/openresty:ro" \
+   && ! called "run -d --name blot-proxy-rehydrate-probe.*-p " \
+   && ! [ -e "$FAKE/running/blot-proxy-rehydrate-probe" ]'
 
 reset baremetal; PROXY_BLOG_STATIC_DIR="$T/blog-static" PROXY_GLOBAL_STATIC_DIR="$T/global-static" cutover
 check "static mount paths are overridable" 'called "-v $T/blog-static:/var/www/blot/data/static:ro" && called "-v $T/global-static:/var/www/blot/app/blog/static:ro"'
@@ -211,16 +218,21 @@ check "purge endpoint unreachable: refused before anything changes" '[ $RC != 0 
 
 reset baremetal; FAKE_REHEARSAL_CODE=502 cutover
 check "rehearsal differs from bare-metal: refused before the stop" '[ $RC != 0 ] && ! called "systemctl stop" && ! called "docker create" && mentions "rehearsal answers differ"'
-check "rehearsal container is cleaned up on refusal" '! [ -e "$FAKE/running/blot-proxy-rehearsal" ]'
+check "rehearsal container is cleaned up on refusal" '! [ -e "$FAKE/running/blot-proxy-rehearsal" ] && ! [ -e "$FAKE/running/blot-proxy-rehydrate-probe" ]'
 
 reset baremetal; cutover --dry-run
-check "rehearsal against the real cache: passes when the log shows rehydrate: complete" '[ $RC = 0 ]'
+check "rehydrate probe against the real cache: passes when the log shows rehydrate: complete" '[ $RC = 0 ]'
+
+reset baremetal; FAKE_UNHEALTHY=blot-proxy-rehydrate-probe cutover --dry-run
+check "rehydrate probe never healthy: refused, mentions cache ownership" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "never became healthy" && mentions "owned by uid 1000"'
+check "rehydrate probe never healthy: both containers cleaned up" '! [ -e "$FAKE/running/blot-proxy-rehearsal" ] && ! [ -e "$FAKE/running/blot-proxy-rehydrate-probe" ]'
 
 reset baremetal; FAKE_NO_REHYDRATE=1 cutover --dry-run
-check "rehearsal: refused when the cache never finishes rehydrating" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "rehydrate: complete" && mentions "cacher_dictionary"'
+check "rehydrate probe: refused when the cache never finishes rehydrating" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "rehydrate: complete" && mentions "cacher_dictionary"'
+check "rehydrate probe: cleaned up on refusal too" '! [ -e "$FAKE/running/blot-proxy-rehearsal" ] && ! [ -e "$FAKE/running/blot-proxy-rehydrate-probe" ]'
 
 reset baremetal; FAKE_REHYDRATE_ERROR=1 cutover --dry-run
-check "rehearsal: refused when the cache logs a rehydrate error" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "rehydrate: complete"'
+check "rehydrate probe: refused when the cache logs a rehydrate error" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "rehydrate: complete"'
 
 reset baremetal; FAKE_STDOUT_LOGS=1 cutover
 check "image that logs to stdout: refused (fail2ban would go blind)" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "LOG_TO_STDOUT"'

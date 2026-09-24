@@ -16,18 +16,9 @@
 #                                               read the access log here
 #   PROXY_CERT_DIR         /etc/ssl/private     wildcard cert + key (read-only)
 #   PROXY_BLOG_STATIC_DIR  /var/www/blot/data/static  per-blog static files
-#                                               (thumbnails, etc), read-only.
-#                                               Mounted at the same path, which
-#                                               is also the image's default for
-#                                               BLOG_STATIC_FILES_DIR
-#                                               (config/openresty/locals.js),
-#                                               so `location /` on cdn.<host>
-#                                               can serve it straight off disk
-#                                               instead of falling through to
-#                                               @cdn_node (config/openresty/conf/server.conf)
+#                                               (thumbnails, etc), read-only (see run_args())
 #   PROXY_GLOBAL_STATIC_DIR /var/www/blot/app/blog/static  the app's own static
-#                                               assets, read-only, same reasoning
-#                                               (the image's GLOBAL_STATIC_FILES_DIR default)
+#                                               assets, read-only (see run_args())
 #   PROXY_AUTOSSL_VOLUME   blot-proxy-auto-ssl  dehydrated account state
 #   PROXY_NODE_CONTAINER   blot-container-blue  a Node container to purge from
 #   PROXY_PURGE_URLS       (read from $PROXY_NODE_CONTAINER's environment)  comma separated
