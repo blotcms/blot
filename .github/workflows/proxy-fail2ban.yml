@@ -11,7 +11,17 @@ name: proxy-fail2ban
 # 403 / 404 / 429 / 444, and runs the real `fail2ban-regex` against the
 # resulting access.log with every filter in
 # config/openresty/fail2ban/filter.d/ - asserting each one matches exactly
-# the requests meant to trigger it.
+# the requests meant to trigger it, AND that the <HOST> it extracts is the
+# real client IP (not an attacker-supplied X-Forwarded-For), since that's
+# what fail2ban actually bans.
+#
+# Runs the proxy with --network host, like production (proxy/deploy/
+# common.sh run_args) - not -p-published ports - so $remote_addr is the real
+# peer address rather than a docker bridge gateway, and targets the runner's
+# routable IP rather than 127.0.0.1: the internal cache-purge server also
+# binds 127.0.0.1:80 (config/openresty/conf/server.conf) and would shadow
+# the custom-domain default_server for anything sent to loopback. Same
+# pattern integration.yml's zero-downtime job uses and for the same reason.
 
 on:
   push:
@@ -69,17 +79,20 @@ jobs:
       - name: Build proxy image
         run: docker build -f proxy/Dockerfile -t blot-proxy:f2b proxy/
 
-      - name: Start proxy (log dir bind-mounted from the runner) + stub upstream
+      - name: Start proxy (host networking, as production) + stub upstream
         run: |
           set -eux
           mkdir -p "$RUNNER_TEMP/proxylogs"
           echo "ACCESS_LOG=$RUNNER_TEMP/proxylogs/access.log" >> "$GITHUB_ENV"
 
-          docker run -d --name proxy -p 8080:80 -p 8443:443 \
+          HOSTIP=$(hostname -I | awk '{print $1}')
+          echo "HOSTIP=$HOSTIP" >> "$GITHUB_ENV"
+
+          docker run -d --name proxy --network host --cap-add SYS_NICE \
             -e BLOT_HOST=localhost -e PROXY_FETCH_CDN_IPS=false \
             -v "$RUNNER_TEMP/proxylogs:/var/log/openresty" \
             blot-proxy:f2b
-          docker run -d --name stub --network container:proxy \
+          docker run -d --name stub --network host \
             -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" \
             node:22-alpine node /s.js
           for i in $(seq 1 30); do
@@ -89,7 +102,7 @@ jobs:
 
       - name: Traffic + fail2ban-regex checks
         env:
-          PROXY_HTTP: http://127.0.0.1:8080
+          PROXY_HTTP: http://${{ env.HOSTIP }}
         run: bash proxy/e2e/fail2ban-check.sh
 
       - name: access.log (for debugging)
