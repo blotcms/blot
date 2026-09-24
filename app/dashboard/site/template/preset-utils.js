@@ -34,10 +34,7 @@ function scalarMatches(declared, current, property) {
 
   const leftColor = normalizeColor(declared);
   const rightColor = normalizeColor(current);
-  if (leftColor && rightColor) return leftColor === rightColor;
-
-  return String(declared == null ? "" : declared).trim().toLowerCase() ===
-    String(current == null ? "" : current).trim().toLowerCase();
+  return leftColor !== null && rightColor !== null && leftColor === rightColor;
 }
 
 function valuesMatch(declared, current) {
