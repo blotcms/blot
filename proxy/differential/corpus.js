@@ -79,16 +79,19 @@ const corpus = [
   // applies to the named @cdn_node fallback.
   { name: "cdn. missing file falls through to node", scheme: "http", host: "cdn.blot.im", path: "/does-not-exist-on-disk.png", sanity: { status: 200 } },
   // global-only.txt exists ONLY in the "global" static dir (run.sh), not the
-  // "blog" one that server.conf's cdn. location sets as `root`. try_files'
-  // other two candidates - {{global_static_files_dir}}$uri and .../$uri/ -
-  // are absolute paths (start with "/"), which nginx treats as URIs to
-  // internally redirect to, not filesystem paths to check, so this file is
-  // never actually found on disk today: it falls through to @cdn_node like
-  // the missing-file case above, on both configs identically (not a
-  // difference between them - a pre-existing config bug, being fixed in
-  // sibling PR blotcms/blot#1975). No `servedFromDisk` assertion for now;
-  // add one once #1975 lands and this starts being served from disk. Keep
-  // the status assertion regardless - both configs still have to agree.
+  // "blog" one that server.conf's cdn. location sets as `root`. try_files
+  // resolves every non-final argument relative to that `root`, even one
+  // that already looks like an absolute path - so
+  // {{global_static_files_dir}}$uri does not check
+  // "$global_static_files_dir$uri", it checks
+  // "$blog_static_files_dir$global_static_files_dir$uri", which never
+  // exists. So this file is never actually found on disk today: it falls
+  // through to @cdn_node like the missing-file case above, on both configs
+  // identically (not a difference between them - a pre-existing config bug,
+  // being fixed in sibling PR blotcms/blot#1975). No `servedFromDisk`
+  // assertion for now; add one once #1975 lands and this starts being
+  // served from disk. Keep the status assertion regardless - both configs
+  // still have to agree.
   { name: "cdn. file only in global static dir (not yet found - blotcms/blot#1975)", scheme: "http", host: "cdn.blot.im", path: "/global-only.txt", sanity: { status: 200 } },
 
   // webhooks. host (SSE relay to the green/master upstream) - only a :443

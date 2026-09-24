@@ -52,8 +52,15 @@ function checkSanity(name, sanity, result) {
     if (result.headers["blot-upstream"] !== undefined) {
       return `expected no Blot-Upstream header (should be served from disk, not proxied to node), got '${result.headers["blot-upstream"]}'`;
     }
-    if (result.headers["cache-control"] !== "public, max-age=31536000") {
-      return `expected Cache-Control 'public, max-age=31536000' (the cdn. location's on-disk add_header), got '${result.headers["cache-control"]}'`;
+    // Substring, not equality: the location sets both `expires 1y` and an
+    // explicit `add_header Cache-Control "public, max-age=31536000"`, and
+    // nginx emits BOTH (add_header does not replace what expires already
+    // added) - e.g. "max-age=31536000, public, max-age=31536000". Pre-existing
+    // and identical on both configs (same conf file); not this PR's bug to
+    // fix, just to not choke on.
+    const cacheControl = result.headers["cache-control"] || "";
+    if (!cacheControl.includes("public, max-age=31536000")) {
+      return `expected Cache-Control to include 'public, max-age=31536000' (the cdn. location's on-disk add_header), got '${cacheControl}'`;
     }
   }
   return null;
