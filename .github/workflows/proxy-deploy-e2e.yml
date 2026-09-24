@@ -41,26 +41,12 @@ jobs:
       # var (config/openresty/locals.js's baremetal()); the harness uses the
       # same value on both sides - see proxy/deploy/e2e/README.md.
       PROXY_CANARY_HOST: preview-of-wireframe-on-david.blot.im
-      # Everything the harness writes lives under RUNNER_TEMP, not the
-      # checkout, so there's nothing to .gitignore and nothing left behind
-      # for the next job on a reused runner.
-      PROXY_ENV_FILE: ${{ runner.temp }}/proxy-e2e/proxy.env
-      # A second env file, identical except for an unroutable
-      # PROXY_PRIVATE_IP, for the deterministic forced-failure scenarios
-      # below (see proxy/deploy/e2e/setup.sh, which writes it).
-      PROXY_ENV_FILE_BAD: ${{ runner.temp }}/proxy-e2e/proxy-unroutable-private-ip.env
-      PROXY_CACHE_DIR: ${{ runner.temp }}/proxy-e2e/cache
-      PROXY_LOG_DIR: ${{ runner.temp }}/proxy-e2e/logs
-      PROXY_CERT_DIR: ${{ runner.temp }}/proxy-e2e/certs
-      PROXY_BLOG_STATIC_DIR: ${{ runner.temp }}/proxy-e2e/blog-static
-      PROXY_GLOBAL_STATIC_DIR: ${{ runner.temp }}/proxy-e2e/global-static
       PROXY_AUTOSSL_VOLUME: blot-e2e-auto-ssl
       PROXY_NODE_CONTAINER: blot-container-blue
       PROXY_RENEW_SCRIPT: ${{ github.workspace }}/config/openresty/scripts/renew-wildcard-ssl.sh
       PROXY_SKIP_CERT_SWEEP: "1" # no Pebble/lua-resty-auto-ssl storage in this harness - see README.md
       # Run every deploy script call detached (the runner has no tty/tmux).
       PROXY_CUTOVER_DETACHED: "1"
-      E2E_ROOT: ${{ runner.temp }}/proxy-e2e
       IMAGE: blot-proxy:e2e
     steps:
       - uses: actions/checkout@v4
@@ -68,6 +54,29 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 21.7.3
+
+      # The `runner` context (RUNNER_TEMP) isn't available in a job-level
+      # `env:` block, only in steps - so these are exported to $GITHUB_ENV
+      # here instead, as early as possible, rather than declared statically
+      # above. Everything the harness writes lives under RUNNER_TEMP, not the
+      # checkout, so there's nothing to .gitignore and nothing left behind
+      # for the next job on a reused runner.
+      - name: Compute harness paths
+        run: |
+          E2E_ROOT="$RUNNER_TEMP/proxy-e2e"
+          {
+            echo "E2E_ROOT=$E2E_ROOT"
+            echo "PROXY_ENV_FILE=$E2E_ROOT/proxy.env"
+            # A second env file, identical except for an unroutable
+            # PROXY_PRIVATE_IP, for the deterministic forced-failure
+            # scenarios below (see proxy/deploy/e2e/setup.sh, which writes it).
+            echo "PROXY_ENV_FILE_BAD=$E2E_ROOT/proxy-unroutable-private-ip.env"
+            echo "PROXY_CACHE_DIR=$E2E_ROOT/cache"
+            echo "PROXY_LOG_DIR=$E2E_ROOT/logs"
+            echo "PROXY_CERT_DIR=$E2E_ROOT/certs"
+            echo "PROXY_BLOG_STATIC_DIR=$E2E_ROOT/blog-static"
+            echo "PROXY_GLOBAL_STATIC_DIR=$E2E_ROOT/global-static"
+          } >> "$GITHUB_ENV"
 
       - name: Install config generator dependencies
         run: |
