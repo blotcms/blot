@@ -26,6 +26,14 @@ const handler = (req, res) => {
     res.end("boom");
     return;
   }
+  if (url.pathname.startsWith("/notfound")) {
+    // A plain Node 404 (unlike the 444/403 paths blocked by nginx itself
+    // before reaching an upstream) - proxy_intercept_errors only covers
+    // 500/502/504/429, so this passes straight through.
+    res.writeHead(404);
+    res.end("not found");
+    return;
+  }
   if (url.pathname.endsWith(".png")) {
     res.writeHead(200, { "Content-Type": "image/png" });
     res.end(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64"));
