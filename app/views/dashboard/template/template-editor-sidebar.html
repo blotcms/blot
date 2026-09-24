@@ -1,8 +1,8 @@
 <div class="inputs">
 
 {{#colorPresets.hasPresets}}
-<details class="settings-group" data-preset-group="colors">
-<summary class="template-heading">Color palettes</summary>
+<details class="settings-group" data-preset-group="colors" open>
+<summary class="template-heading">Colors</summary>
 {{#colorPresets}}
 {{> preset-colors}}
 {{/colorPresets}}
@@ -25,8 +25,8 @@
 	{{/colorPresets.hasPresets}}
 
 {{#fontPresets.hasPresets}}
-<details class="settings-group" data-preset-group="fonts">
-<summary class="template-heading">Font packs</summary>
+<details class="settings-group" data-preset-group="fonts" open>
+<summary class="template-heading">Fonts</summary>
 {{#fontPresets}}
 {{> preset-fonts}}
 {{/fontPresets}}
