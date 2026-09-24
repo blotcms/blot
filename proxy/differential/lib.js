@@ -29,14 +29,17 @@ const CAPTURED_HEADERS = [
 
 // Header values that legitimately vary run-to-run (or would in a real
 // deployment) rather than between the two configs, so a value difference
-// here is not a behavioural difference. blot-upstream carries an
-// upstream ip:port - stable in this harness (both sides hit the same stub
-// on the same hardcoded ports) but still runtime-dependent in principle, so
-// treat it the same way the task asks Date/ETag/request-ids to be treated:
-// presence is compared, value is not. set-cookie is a session cookie in a
-// real deployment (e.g. a CSRF/session id) - never stable value-for-value,
-// so only whether one was set is meaningful here.
-const IGNORE_VALUE_OF = new Set(["blot-upstream", "set-cookie"]);
+// here is not a behavioural difference. blot-upstream is deliberately NOT
+// here: both sides target the same hardcoded 127.0.0.1:8088-8090 upstreams
+// (http.conf), so its value should be deterministic and worth comparing
+// exactly - the container's ${PROXY_UPSTREAM_*} substitution (sync-config.js)
+// rewriting the mapping wrong is exactly the kind of bug this harness exists
+// to catch. Where a specific case's upstream genuinely isn't deterministic
+// (a failover, not a config difference), allow it explicitly in diff.js's
+// ALLOWED_DIFFERENCES instead of loosening this globally. set-cookie is a
+// session cookie in a real deployment (e.g. a CSRF/session id) - never
+// stable value-for-value, so only whether one was set is meaningful here.
+const IGNORE_VALUE_OF = new Set(["set-cookie"]);
 
 function request({ scheme, host, base, path, method = "GET", headers = {} }) {
   const mod = scheme === "https" ? https : http;
