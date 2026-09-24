@@ -35,7 +35,8 @@
     "navigation_location": "left",
     "navigation_location_options": [
       "left",
-      "right"
+      "right",
+      "top"
     ],
     "sticky_navigation": false,
     "uppercase_navigation": true,

@@ -25,6 +25,12 @@
 body {
   word-wrap: break-word; /* for long words & urls */
   position: relative;
+  {{#is.navigation_location.top}}
+  margin: 2.5em auto;
+  width: min(var(--content-width), 100vw - 4em);
+  padding: 0 2em;
+  {{/is.navigation_location.top}}
+  {{^is.navigation_location.top}}
   /* Width is the reading column; padding reserves the sidebar and gutters. */
   width: min(
     var(--content-width),
@@ -35,6 +41,7 @@ body {
   {{#is.navigation_location.right}}
   padding: 0 calc(var(--sidebar-width) + var(--sidebar-gap)) 0 var(--gutter-padding);
   {{/is.navigation_location.right}}
+  {{/is.navigation_location.top}}
   color: var(--text-color);
   background-color: var(--background-color);
 }
@@ -149,6 +156,43 @@ h2, h3, h4, h5, h6 {
 }
 
 .sidebar a {display: block;}
+
+{{#is.navigation_location.top}}
+.sidebar {
+  width: 100%;
+  left: auto;
+  right: auto;
+  {{#sticky_navigation}}
+  position: sticky;
+  top: 2.5em;
+  margin: 0 0 3.5em;
+  padding-bottom: 0.5em;
+  background: var(--background-color);
+  max-height: calc(100vh - 2.5em);
+  overflow-y: auto;
+  {{/sticky_navigation}}
+  {{^sticky_navigation}}
+  position: relative;
+  top: auto;
+  margin: 0 0 4em;
+  background: none;
+  max-height: none;
+  overflow: visible;
+  {{/sticky_navigation}}
+}
+
+.sidebar a {display: inline-block; margin: 0 0.45em;}
+
+{{#is.navigation_alignment.left}}
+.sidebar .logo + a {margin-left: 0;}
+{{/is.navigation_alignment.left}}
+
+.sidebar .logo {margin: 0 0 0.85em; display: block;}
+
+.sidebar .logo.hasAvatar,
+.sidebar .logo.hasLogo {word-spacing: 0}
+
+{{/is.navigation_location.top}}
 
 
 hr {
