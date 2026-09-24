@@ -38,10 +38,13 @@
 </details>
 {{/fontPresets.hasPresets}}
 	{{^fontPresets.hasPresets}}
-	{{#fonts.length}} 	
+	{{#fonts.length}}
+	<div class="settings-group">
+	<h2 class="template-heading">Fonts</h2>
         {{#fonts}}
         {{> font}}
         {{/fonts}}
+	</div>
         {{/fonts.length}}
 	{{/fontPresets.hasPresets}}
 
