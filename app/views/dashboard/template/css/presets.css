@@ -164,6 +164,13 @@ button.preset-tile {
   white-space: nowrap;
 }
 
+.preset-font-sample svg {
+  display: block;
+  width: auto;
+  height: 1.4rem;
+  max-width: 100%;
+}
+
 .preset-error {
   display: block;
   margin-top: 0.25rem;
