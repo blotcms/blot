@@ -3,8 +3,6 @@ var list = [];
 
 // Build the list of clients for the dashboard
 for (var i in clients) {
-  // Service accounts are down. Restore Google Drive as a choice from git history.
-  if (i === "google-drive") continue;
   list.push({
     name: i,
     display_name: clients[i].display_name,
