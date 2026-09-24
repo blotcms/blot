@@ -286,6 +286,7 @@ client_routes.use("/:client", function (req, res, next) {
       "/redirect",
       "/authenticate",
       "/create",
+      "/disconnect",
     ]);
 
     if (!allowedUnpersistedPaths.has(relativePath)) {

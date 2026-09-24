@@ -21,7 +21,7 @@ describe("sort-input (Post sorting control)", function () {
     [undefined, {}, { lang: "en" }].forEach(locals => {
       const control = load(locals);
       expect(control.key).toBe("sort_by");
-      expect(control.label).toBe("Order");
+      expect(control.label).toBe("Sort");
       expect(control.isSelect).toBe(true);
       expect(control.options.map(o => o.value)).toEqual(
         SORT_OPTIONS.map(o => o.value)
