@@ -138,9 +138,15 @@ jobs:
       # ---- 3. blue-green: no failed requests during the swap --------------
       # HTTPS with --connect-to (same technique https_status() in common.sh
       # uses, already proven above against both bare metal and the
-      # container): a plain-HTTP request with only a Host header hits the
-      # "preview subdomains" server block by a different path than every
-      # check the deploy scripts themselves make, all of which are HTTPS.
+      # container). A plain-HTTP request to 127.0.0.1 with only a Host header
+      # (tried first) got 404 for every attempt, not just during the swap:
+      # server.conf's internal purge/inspect server also `listen`s on
+      # `127.0.0.1:80` (plain HTTP only, no `:443`), a more specific bind
+      # than the vhosts' `listen 80`, so nginx sends a connection that
+      # literally targets 127.0.0.1 there regardless of Host header - not a
+      # config bug, and not something HTTPS on the same address hits, since
+      # that internal server has no `127.0.0.1:443` counterpart. Other proxy
+      # CI work has hit the same thing.
       - name: blue-green swaps blot-proxy-blue for blot-proxy-green with zero failed requests
         run: |
           set -euo pipefail

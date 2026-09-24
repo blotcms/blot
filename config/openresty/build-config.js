@@ -3,6 +3,32 @@ const config = require("config");
 const fs = require("fs-extra");
 const child_process = require("child_process");
 
+function loadEnvFile() {
+  const envPath = require('path').join(__dirname, "..", "..", ".env");
+  try {
+    const envContent = fs.readFileSync(envPath, "utf8");
+    const envVars = envContent
+      .split("\n")
+      .filter((line) => line.trim() && !line.startsWith("#"))
+      .reduce((vars, line) => {
+        const [key, ...valueParts] = line.split("=");
+        const value = valueParts.join("=").trim();
+        if (key && value) {
+          vars[key.trim()] = value.replace(/^["']|["']$/g, "");
+        }
+        return vars;
+      }, {});
+
+    Object.assign(process.env, envVars);
+  } catch (error) {
+    console.error("Error reading .env file:", error);
+  }
+}
+
+// Load .env BEFORE reading FETCH_CDN_IPS below - it's a var a .env file can
+// set, and reading it first would ignore that.
+loadEnvFile();
+
 function fetchCDNIPs() {
   const bunnyCDNIPURL = `https://bunnycdn.com/api/system/edgeserverlist`;
   try {
@@ -30,30 +56,6 @@ if (process.env.FETCH_CDN_IPS !== "false" && !cdnIPs.length) {
 }
 
 console.log(`Using ${cdnIPs.length} CDN IPs`);
-
-function loadEnvFile() {
-  const envPath = require('path').join(__dirname, "..", "..", ".env");
-  try {
-    const envContent = fs.readFileSync(envPath, "utf8");
-    const envVars = envContent
-      .split("\n")
-      .filter((line) => line.trim() && !line.startsWith("#"))
-      .reduce((vars, line) => {
-        const [key, ...valueParts] = line.split("=");
-        const value = valueParts.join("=").trim();
-        if (key && value) {
-          vars[key.trim()] = value.replace(/^["']|["']$/g, "");
-        }
-        return vars;
-      }, {});
-
-    Object.assign(process.env, envVars);
-  } catch (error) {
-    console.error("Error reading .env file:", error);
-  }
-}
-
-loadEnvFile();
 
 const OUTPUT = __dirname + "/data/latest";
 const PREVIOUS = OUTPUT + "-previous-" + Date.now();
