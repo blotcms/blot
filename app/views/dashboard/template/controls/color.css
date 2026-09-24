@@ -7,7 +7,7 @@
   --color-picker-height-chooser: 0.65em;
   --color-picker-spacing: 0.65em;
   --color-swatch-size: 2rem;
-  --color-swatch-height: 2rem;
+  --color-swatch-height: 1.25rem;
 }
 
 .pickr {
@@ -56,7 +56,7 @@
   margin: 0 1em 0 0;
   width: var(--color-swatch-size);
   height: var(--color-swatch-height);
-  border-radius: 6px;
+  border-radius: 2px;
   display: block;
 }
 
