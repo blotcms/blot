@@ -16,7 +16,7 @@
   <link rel="icon" type="image/png" sizes="16x16" href="{{{png16}}}">
   <link rel="apple-touch-icon" sizes="180x180" href="{{{appleTouch}}}">
   {{/favicon}}
-  {{^favicon}}{{#avatar}}<link rel="icon" href="{{{avatar}}}">{{/avatar}}{{/favicon}}
+  {{^favicon}}{{#profile_image.thumbnails.square}}<link rel="icon" href="{{{url}}}">{{/profile_image.thumbnails.square}}{{^profile_image.thumbnails.square.url}}{{#avatar}}<link rel="icon" href="{{{avatar}}}">{{/avatar}}{{/profile_image.thumbnails.square.url}}{{/favicon}}
   <link rel="preconnect" href="{{{cdn}}}" />
   <link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">
   <link href="/feed.rss" title="RSS Feed for {{title}}" type="application/rss+xml" rel="alternate">
@@ -28,7 +28,14 @@
   {{/url}}
   <meta property="og:title" content="{{> title}}">
   <meta property="og:description" content="{{description}}">
+  {{#profile_image.thumbnails.large}}
+  <meta property="og:image" content="{{{url}}}">
+  <meta property="og:image:width" content="{{width}}">
+  <meta property="og:image:height" content="{{height}}">
+  {{/profile_image.thumbnails.large}}
+  {{^profile_image.thumbnails.large.url}}
   {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
+  {{/profile_image.thumbnails.large.url}}
 </head>
 
 <body>
@@ -37,11 +44,18 @@
 <div class="profile">
 <section id="wrapper">
 <header class="h-card">
+{{#profile_image.thumbnails.square}}
+<a href="/">
+<img id="avatar" class="u-photo" width="{{width}}" height="{{height}}" src="{{{url}}}" alt="">
+</a>
+{{/profile_image.thumbnails.square}}
+{{^profile_image.thumbnails.square.url}}
 {{#avatar}}
 <a href="/">
 <img id="avatar" class="u-photo" src="{{{avatar}}}" alt="">
 </a>
 {{/avatar}}
+{{/profile_image.thumbnails.square.url}}
 <h1 class="p-name"><a class="u-url" href="/" rel="me">{{title}}</a></h1>
 {{#description}}
 <h4 class="p-role">{{description}}</h4>

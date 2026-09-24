@@ -36,7 +36,8 @@
     "max_width_range": [400, 900],
     "navigation_alignment": "right",
     "navigation_alignment_options": ["left", "center", "right"],
-    "sticky_navigation": false
+    "sticky_navigation": false,
+    "profile_image": {}
   },
   "views": {
     "tagged": {

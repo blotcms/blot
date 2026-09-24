@@ -12,7 +12,7 @@
     {{^entry}}<meta name="description" content="{{> description}}">{{/entry}}
   
     <link rel="alternate" type="application/rss+xml" title="RSS Feed for {{title}}" href="{{{siteURL}}}{{{feedURL}}}">
-    {{#avatar}}<link rel="icon" href="{{{avatar}}}" type="image/x-icon">{{/avatar}}
+    {{#profile_image.thumbnails.square}}<link rel="icon" href="{{{url}}}" type="image/x-icon">{{/profile_image.thumbnails.square}}{{^profile_image.thumbnails.square.url}}{{#avatar}}<link rel="icon" href="{{{avatar}}}" type="image/x-icon">{{/avatar}}{{/profile_image.thumbnails.square.url}}
     <link rel="preconnect" href="{{{cdn}}}" />
     <link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">
   
@@ -36,7 +36,14 @@
     <meta property="og:image:height" content="{{height}}">
     {{/thumbnail.large}}
     {{^thumbnail.large}}
+    {{#profile_image.thumbnails.large}}
+    <meta property="og:image" content="{{{url}}}">
+    <meta property="og:image:width" content="{{width}}">
+    <meta property="og:image:height" content="{{height}}">
+    {{/profile_image.thumbnails.large}}
+    {{^profile_image.thumbnails.large.url}}
     {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
+    {{/profile_image.thumbnails.large.url}}
     {{/thumbnail.large}}
   
     <!-- (E) Content type (article for posts) -->
@@ -46,7 +53,12 @@
     {{#summary}}<meta name="twitter:description" content="{{summary}}">{{/summary}}{{^summary}}<meta name="twitter:description" content="{{title}}">{{/summary}}
     {{#thumbnail.large}}<meta name="twitter:image" content="{{{url}}}">{{/thumbnail.large}}
     {{^thumbnail.large}}
+    {{#profile_image.thumbnails.large}}
+    <meta name="twitter:image" content="{{{url}}}">
+    {{/profile_image.thumbnails.large}}
+    {{^profile_image.thumbnails.large.url}}
     {{#avatar}}<meta name="twitter:image" content="{{{avatar}}}">{{/avatar}}
+    {{/profile_image.thumbnails.large.url}}
     {{/thumbnail.large}}
   
     <!-- (F) Author (defaults to siteURL) -->

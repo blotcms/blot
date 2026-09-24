@@ -29,6 +29,7 @@
     "heading_font": {
       "id": "system-sans"
     },
+    "profile_image": {},
     "navigation_alignment": "left",
     "navigation_alignment_options": ["left", "center"],
     "demo_folder": "clara"
