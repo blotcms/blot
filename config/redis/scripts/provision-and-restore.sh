@@ -371,17 +371,33 @@ EOF_REMOTE
     ssh "$BLOT_HOST" "docker ps --format '{{.Names}}' | grep '^blot-container-' | xargs -r docker restart"
 
     # The proxy container has its own copy of the Redis host (/etc/blot/proxy.env,
-    # fixed when the container is created). Update it, and tell the operator to
-    # replace the container: bare-metal OpenResty reads Redis settings at build time.
-    if ssh "$BLOT_HOST" "docker ps --format '{{.Names}}' | grep -qE '^blot-proxy-(blue|green)\$'"; then
+    # rendered into nginx.conf by render-config when the container starts - see
+    # proxy/entrypoint.sh). A `docker exec ... openresty -s reload` re-parses that
+    # already-rendered config, so it would NOT pick up the new host; the container
+    # has to be replaced, which is what proxy/deploy/blue-green.sh does. Detect it
+    # the same way renew-wildcard-ssl.sh does.
+    containers=$(ssh "$BLOT_HOST" "docker ps --format '{{.Names}}' | grep -E '^blot-proxy-(blue|green)\$'" || true)
+    if [ -n "$containers" ]; then
       info "Updating PROXY_REDIS_HOST in /etc/blot/proxy.env"
       ssh "$BLOT_HOST" "sudo sed -i.bak 's/^PROXY_REDIS_HOST=.*/PROXY_REDIS_HOST=${private_ip}/' /etc/blot/proxy.env && grep -q '^PROXY_REDIS_HOST=${private_ip}\$' /etc/blot/proxy.env"
       proxy_image=$(ssh "$BLOT_HOST" "docker ps --format '{{.Names}} {{.Image}}' | grep -E '^blot-proxy-(blue|green) ' | head -1 | cut -d' ' -f2")
-      warn "The proxy container still uses the old Redis host. Replace it NOW:"
-      warn "  ssh ${BLOT_HOST} '~/proxy-deploy/blue-green.sh ${proxy_image}'"
-    else
+      if ssh "$BLOT_HOST" "[ -x ~/proxy-deploy/blue-green.sh ]"; then
+        info "Replacing the proxy container with ${proxy_image} (new Redis host) via blue-green.sh"
+        if ssh "$BLOT_HOST" "~/proxy-deploy/blue-green.sh '${proxy_image}'"; then
+          info "Proxy container replaced"
+        else
+          warn "blue-green.sh failed. The proxy container still uses the old Redis host. Replace it by hand:"
+          warn "  ssh ${BLOT_HOST} '~/proxy-deploy/blue-green.sh ${proxy_image}'"
+        fi
+      else
+        warn "~/proxy-deploy/blue-green.sh not found on ${BLOT_HOST}. The proxy container still uses the old Redis host. Replace it NOW:"
+        warn "  ssh ${BLOT_HOST} '~/proxy-deploy/blue-green.sh ${proxy_image}'"
+      fi
+    elif ssh "$BLOT_HOST" "systemctl is-active --quiet openresty"; then
       info "Reloading OpenResty"
       ssh "$BLOT_HOST" "sudo openresty -t && sudo openresty -s reload"
+    else
+      warn "No proxy container and no active bare-metal OpenResty found on ${BLOT_HOST}. Nothing was reloaded - find and restart whatever is serving :80/:443."
     fi
   else
     info "Environment update skipped by operator"
