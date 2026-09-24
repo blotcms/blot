@@ -4,7 +4,7 @@
 // and writes the results as JSON, for diff.js to compare against the other
 // config's capture.
 //
-// Usage: node capture.js <label> <out-file>
+// Usage: DIFFERENTIAL_HOST=<ip> node capture.js <label> <out-file>
 //   label     "container" or "baremetal" - included in the output for
 //             readability; also used in sanity-check failure messages.
 const fs = require("fs");
@@ -18,9 +18,14 @@ if (!label || !outFile) {
   process.exit(1);
 }
 
-// 127.0.0.1 - both configs run with --network host, bound directly to the
-// runner's own ports (see run.sh; only one of the two is up at a time).
-const BASE = "127.0.0.1";
+// Both configs run with --network host, bound directly to the runner's own
+// ports (see run.sh; only one of the two is up at a time). NOT 127.0.0.1:
+// server.conf's internal purge/inspect server also binds 127.0.0.1:80 -
+// loopback only - and on --network host that's the SAME loopback this
+// client uses, so it shadows the blog/custom-domain default_server for
+// anything sent there (every corpus case came back 404 from the wrong
+// server - see run.sh). run.sh passes the runner's own routable IP here.
+const BASE = process.env.DIFFERENTIAL_HOST || "127.0.0.1";
 
 function checkSanity(name, sanity, result) {
   if (!sanity) return null;
