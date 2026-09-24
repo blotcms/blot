@@ -813,8 +813,6 @@ Improvements to local folder experience
 - Interpolate fonts based on an ID (a la web template editor)
 - Interpolate syntax highlighting based on an ID
 
-Use [thumbhash](https://github.com/evanw/thumbhash?tab=readme-ov-file) to generate placeholders so thumbnails can have clean lazy loading and tell [David](https://mail.google.com/mail/u/0/#inbox/FMfcgxwJXfqzZvHgrtSxzLBCwcvTsFFB) and [Marius](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLtQPwXwJrwgMzjfvDtcwFZzFC)
-
 Surface recently edited posts on the sites tab of the dashboard
 
 Can we support white-label cdn subdomain so there are no Blot CDN links?
