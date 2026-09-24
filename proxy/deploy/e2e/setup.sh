@@ -8,15 +8,22 @@
 # E2E_ROOT set (the workflow exports it, along with the PROXY_* variables
 # below, so later steps see the same values without re-sourcing this file).
 #
-#   BLOT_HOST=blot.im REDIS/upstream/etc all on 127.0.0.1 (--network host
-#   everywhere, so containers share the runner's loopback - the simplest
-#   stand-in for the private IP Node containers use in production; see
-#   README.md).
+#   BLOT_HOST=blot.im. Most containers run --network host and so share the
+#   runner's loopback, but the cutover rehearsal container does not (it's on
+#   the default Docker bridge, published only as 127.0.0.1:18443 - see
+#   cutover-from-baremetal.sh), so anything it needs to reach - namely Redis,
+#   read from PROXY_REDIS_HOST in proxy.env - has to be the runner's real,
+#   routable interface IP, not 127.0.0.1 (which inside the bridge container
+#   means itself). The script already handles this itself for the upstreams
+#   (it overrides them to the bridge gateway for the rehearsal) and for
+#   PROXY_PRIVATE_IP (overridden to 127.0.0.1 for the rehearsal only, since
+#   that address only needs to be bindable, not reachable from the bridge).
 set -euo pipefail
 
 E2E_ROOT="${E2E_ROOT:?E2E_ROOT must be set}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOSTIP="$(hostname -I | awk '{print $1}')"
 
 log() { printf '[setup] %s\n' "$*"; }
 
@@ -40,9 +47,14 @@ done
 sudo chown -R 1000:1000 "$PROXY_CACHE_DIR" "$PROXY_LOG_DIR"
 
 # ---- proxy.env ------------------------------------------------------------
+# PROXY_REDIS_HOST is $HOSTIP, not 127.0.0.1: the cutover rehearsal container
+# reads it too (it's not one of the things the script overrides for the
+# rehearsal - see the top of this file) and needs to reach Redis from the
+# bridge network. $HOSTIP is also reachable from every --network host
+# container and from this shell, so one value works everywhere.
 cat > "$PROXY_ENV_FILE" <<EOF
 BLOT_HOST=$BLOT_HOST
-PROXY_REDIS_HOST=127.0.0.1
+PROXY_REDIS_HOST=$HOSTIP
 PROXY_PRIVATE_IP=127.0.0.1
 EOF
 
@@ -59,12 +71,17 @@ sed 's/^PROXY_PRIVATE_IP=.*/PROXY_PRIVATE_IP=198.51.100.7/' "$PROXY_ENV_FILE" > 
 docker volume create "$PROXY_AUTOSSL_VOLUME" >/dev/null
 
 # ---- redis ------------------------------------------------------------
+# --protected-mode no: the image's default config otherwise refuses
+# connections that arrive on a non-loopback address with no bind/requirepass
+# configured, which is exactly how the rehearsal container (on the bridge)
+# and this preflight check below reach it - over $HOSTIP, not loopback.
 log "Starting Redis"
-docker run -d --name blot-e2e-redis --network host redis:7-alpine >/dev/null
+docker run -d --name blot-e2e-redis --network host redis:7-alpine \
+  redis-server --protected-mode no >/dev/null
 for i in $(seq 1 30); do
-  timeout 2 bash -c '</dev/tcp/127.0.0.1/6379' 2>/dev/null && break
+  timeout 2 bash -c "</dev/tcp/$HOSTIP/6379" 2>/dev/null && break
   sleep 1
-  [ "$i" -lt 30 ] || { echo "redis never came up" >&2; exit 1; }
+  [ "$i" -lt 30 ] || { echo "redis never came up" >&2; docker logs blot-e2e-redis; exit 1; }
 done
 
 # ---- stub upstream (127.0.0.1:8088-8090) ---------------------------------
