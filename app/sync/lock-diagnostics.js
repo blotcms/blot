@@ -7,6 +7,7 @@ const {
 } = require("./lock-diagnostics-state");
 
 const folderLock = require("./lock");
+const { getRunningCheck } = require("./fix");
 const freeDiskSpaceAsync = promisify(freeDiskSpace);
 const DEFAULT_TIMEOUT_MS = 2000;
 
@@ -66,11 +67,20 @@ const gatherLockDiagnostics = async ({
   const deadline = startedAt + timeoutMs;
   const now = Date.now();
 
+  const runningCheck = getRunningCheck();
+
   const diagnostics = {
     blogID,
     now,
     pendingSyncs: getPendingSyncs(),
     pendingUpdates: getPendingUpdates(),
+    // Fix() doesn't hold the folder lock while it runs, so it's absent from
+    // pendingSyncs above - this is the only way to see it was in progress.
+    runningFixCheck: runningCheck && {
+      blogID: runningCheck.blogID,
+      check: runningCheck.check,
+      runningForMs: now - runningCheck.startedAt
+    },
     lockDurationMs:
       typeof lockAcquiredAt === "number" ? now - lockAcquiredAt : null,
     processUptimeSec: (() => {
