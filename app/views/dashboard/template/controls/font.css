@@ -36,7 +36,7 @@
 .font-row-label {
   flex: 0 0 auto;
   min-width: 2.75em;
-  font-size: var(--select-control-font-size);
+  font-size: var(--heading-font-size);
   color: var(--text-color);
 }
 
