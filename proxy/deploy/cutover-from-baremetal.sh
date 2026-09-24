@@ -32,9 +32,11 @@
 #   2. Rehearsal: run the image on another port (127.0.0.1:18443) on the
 #      Docker bridge, pointed at the real Node containers and Redis with the
 #      real certificate, and require the same answers and the same custom-domain
-#      certificates as the baseline. It does
-#      not mount the live cache or logs. Nothing user-facing changes.
-#      --dry-run stops here.
+#      certificates as the baseline. The real cache is mounted read-only (not
+#      the logs), and the rehearsal fails unless the container's error.log
+#      shows the purge index finished rebuilding from it ("rehydrate:
+#      complete", no rehydrate error) within PROXY_REHYDRATE_TIMEOUT. Nothing
+#      user-facing changes. --dry-run stops here.
 #   3. Confirmation (type `cutover`, or --yes).
 #   4. Cutover: create the container (restart policy `no`), stop the bare-metal
 #      unit, start the container, wait for health, then require the same
@@ -192,8 +194,23 @@ GATEWAY=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gatew
 [ -n "$GATEWAY" ] || refuse "cannot find the Docker bridge gateway"
 read -r -a PORTS <<< "$UPSTREAM_PORTS"
 docker rm -f "$REHEARSAL" >/dev/null 2>&1 || true
-# No cache or log mounts: the rehearsal must not write to the live ones.
+# The cache is mounted (read-only, at the same path run_args() uses) so the
+# rehearsal proves the container's worker (ec2-user, uid 1000 in the image)
+# can actually read the whole real cache and that its index fits in
+# cacher_dictionary (see wait_rehydrated below) - the one thing a rehearsal
+# with an empty cache cannot show. No log mount: the rehearsal must not write
+# to the live access/error logs, so its own error.log is read with `docker
+# exec` instead (below), and it gets no --ulimit nofile beyond the image
+# default, which is not what is under test here.
+#
+# Read-only means anything that tries to WRITE to the cache logs an [error]
+# during the rehearsal: nginx's periodic cache-manager housekeeping (evicting
+# entries past `inactive`/`max_size`) is the main one, though it is very
+# unlikely to fire in the few minutes the rehearsal runs. Those errors do not
+# contain "rehydrate:", so wait_rehydrated below cannot mistake them for a
+# rehydrate failure. The rehydrate walk itself (`find`) only reads.
 docker run -d --name "$REHEARSAL" --cap-add SYS_NICE \
+  --ulimit "nofile=$NOFILE:$NOFILE" \
   --env-file "$ENV_FILE" \
   -e PROXY_FETCH_CDN_IPS=false \
   -e PROXY_PRIVATE_IP=127.0.0.1 \
@@ -202,6 +219,7 @@ docker run -d --name "$REHEARSAL" --cap-add SYS_NICE \
   -e PROXY_UPSTREAM_YELLOW="$GATEWAY:${PORTS[2]}" \
   -p "127.0.0.1:$REHEARSAL_HTTPS:443" \
   -v "$CERT_DIR":/etc/ssl/private:ro \
+  -v "$CACHE_DIR":/var/cache/openresty:ro \
   "$IMAGE" >/dev/null
 
 wait_healthy "$REHEARSAL" "$HEALTH_TIMEOUT" \
@@ -217,8 +235,12 @@ if [ -n "$CERT_BASELINE" ]; then
   certs_unchanged "$CERT_BASELINE" "$(cert_sweep "$REHEARSAL_HTTPS")" \
     || refuse "the rehearsal does not serve the custom-domain certificates bare-metal does"
 fi
+wait_rehydrated "$REHEARSAL" "$REHYDRATE_TIMEOUT" || {
+  docker exec "$REHEARSAL" tail -n 50 /var/log/openresty/error.log >&2 || true
+  refuse "the container never logged 'rehydrate: complete' for the real cache within ${REHYDRATE_TIMEOUT}s (or logged a rehydrate error): either the worker (ec2-user, uid 1000 in the image) cannot read $CACHE_DIR, or the purge index does not fit cacher_dictionary. Until this is fixed every /purge on the real cutover returns 503 indefinitely"
+}
 docker rm -f "$REHEARSAL" >/dev/null
-log "Rehearsal passed: the image answers exactly as bare-metal does."
+log "Rehearsal passed: the image answers exactly as bare-metal does, and rehydrated the real cache."
 
 if [ "$DRY_RUN" = 1 ]; then
   log "--dry-run: stopping here. Nothing user-facing was changed."
