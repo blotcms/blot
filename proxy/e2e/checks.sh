@@ -37,6 +37,17 @@ expect "site host / over https"           "$(code -H 'Host: localhost' "$HTTPS/"
 expect "site host / redirects on http"    "$(code -H 'Host: localhost' "$HTTP/")" 301
 expect "custom domain / (default server)" "$(code -H 'Host: someblog.example' "$HTTP/")" 200
 
+echo "cdn. static files"
+# integration.yml mounts a file under the global static dir; this proves
+# location @cdn_global in server.conf actually serves it from disk (with
+# location /'s headers) rather than falling through to @cdn_node.
+expect "cdn. serves a file from the global static dir" \
+  "$(code -H 'Host: cdn.localhost' "$HTTP/cdn-test.txt")" 200
+expect_match "cdn. sets the long Cache-Control for it" \
+  "$(hdr -H 'Host: cdn.localhost' "$HTTP/cdn-test.txt")" "Cache-Control: public, max-age=31536000"
+expect_match "cdn. sets CORS for it" \
+  "$(hdr -H 'Host: cdn.localhost' "$HTTP/cdn-test.txt")" "Access-Control-Allow-Origin: *"
+
 echo "hardening (blog traffic)"
 # nginx `return 444` closes the connection with no HTTP response; curl reports 000.
 expect "/.git/config blocked"   "$(code -H 'Host: someblog.example' "$HTTP/.git/config")" 000

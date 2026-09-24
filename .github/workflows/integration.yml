@@ -70,8 +70,16 @@ jobs:
 
       - name: Start proxy + stub upstream
         run: |
+          # A file under the image's default GLOBAL_STATIC_FILES_DIR
+          # (config/openresty/locals.js), read-only, so checks.sh can prove
+          # cdn. serves it from disk (location @cdn_global in server.conf)
+          # instead of falling through to the stub upstream.
+          mkdir -p "$RUNNER_TEMP/global-static"
+          echo -n "served from disk" > "$RUNNER_TEMP/global-static/cdn-test.txt"
           docker run -d --name proxy -p 8080:80 -p 8443:443 -p 8443:443/udp \
-            -e BLOT_HOST=localhost blot-proxy:e2e
+            -e BLOT_HOST=localhost \
+            -v "$RUNNER_TEMP/global-static":/var/www/blot/app/blog/static:ro \
+            blot-proxy:e2e
           docker run -d --name stub --network container:proxy \
             -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" \
             node:22-alpine node /s.js

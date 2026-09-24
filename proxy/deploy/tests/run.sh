@@ -44,12 +44,31 @@ case "$1" in
   rm) n="${!#}"; rm -f "$R/$n" "$FAKE/all/$n"
     [ -n "$(ls "$R" | grep '^blot-proxy-[bg]')" ] || { [ "$(cat "$FAKE/serving")" != container ] || echo none > "$FAKE/serving"; } ;;
   update) [ -z "${FAKE_UPDATE_FAILS:-}" ] || exit 1 ;;
-  logs) ;;
+  logs)
+    # wait_rehydrated also reads `docker logs`, for ALLOW_STDOUT_LOGS=1 images
+    # whose error_log goes to stderr instead of the file (FAKE_REHYDRATE_VIA_LOGS_ONLY).
+    [ -z "${FAKE_REHYDRATE_VIA_LOGS_ONLY:-}" ] \
+      || echo "2024/01/01 00:00:00 [notice] 1#1: *1 rehydrate: complete files=200000 hosts=5000 unparsed=0 seconds=20"
+    ;;
   exec)
     n="$2"
     if [[ "$*" == *"--unix-socket"* ]]; then [ -e "$R/$n" ] && [ "$n" != "${FAKE_UNHEALTHY:-}" ]; exit; fi
     if [[ "$3" == printenv ]]; then [ -z "${FAKE_NO_PURGE_ENV:-}" ] && echo http://10.0.0.9:8077; exit 0; fi
-    if [[ "$3" == node ]]; then [ -z "${FAKE_PURGE_FAIL:-}" ]; exit; fi ;;
+    if [[ "$3" == node ]]; then [ -z "${FAKE_PURGE_FAIL:-}" ]; exit; fi
+    if [[ "$3" == cat || "$3" == tail ]]; then
+      # wait_rehydrated's view of the rehearsal's error.log (no log mount, so
+      # it is read with `docker exec`, not from the host). Empty when
+      # FAKE_REHYDRATE_VIA_LOGS_ONLY simulates error_log going to stderr
+      # instead - only `docker logs` above has the line then.
+      if [ -z "${FAKE_REHYDRATE_VIA_LOGS_ONLY:-}" ]; then
+        if [ -n "${FAKE_REHYDRATE_ERROR:-}" ]; then
+          echo "2024/01/01 00:00:00 [error] 1#1: *1 rehydrate: could not add to index, increase lua_shared_dict cacher_dictionary"
+        elif [ -z "${FAKE_NO_REHYDRATE:-}" ]; then
+          echo "2024/01/01 00:00:00 [notice] 1#1: *1 rehydrate: complete files=200000 hosts=5000 unparsed=0 seconds=20"
+        fi
+      fi
+      exit 0
+    fi ;;
 esac
 exit 0
 F
@@ -137,7 +156,8 @@ export PATH="$T/bin:$PATH"
 
 export PROXY_ENV_FILE="$T/proxy.env" PROXY_CACHE_DIR="$T/cache" PROXY_LOG_DIR="$T/logs" \
   PROXY_CERT_DIR="$T/certs" PROXY_DEPLOY_LOCK="$T/lock" PROXY_RENEW_SCRIPT="$T/renew.sh" \
-  PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 TMUX=fake
+  PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 TMUX=fake \
+  PROXY_REHYDRATE_TIMEOUT=1 # nap() is a no-op above, so a refusal still busy-waits out this many real seconds
 
 pass=0; failed=0
 ok() { pass=$((pass + 1)); echo "  ok   $*"; }
@@ -171,6 +191,23 @@ reset baremetal; cutover
 check "success: bare-metal stops before the container starts" '[ $RC = 0 ] && before "systemctl stop openresty" "docker start blot-proxy-blue"'
 check "success: the container is made permanent, then bare-metal disabled, only at the end" 'before "docker start blot-proxy-blue" "docker update --restart unless-stopped" && before "docker update --restart" "systemctl disable openresty" && serving container'
 check "success: the container is created with restart policy no" 'called "docker create --restart no"'
+check "success: the container gets the CDN static mounts and the fd ulimit" \
+  'called "docker create --restart no --name blot-proxy-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536" \
+   && called "-v /var/www/blot/data/static:/var/www/blot/data/static:ro" \
+   && called "-v /var/www/blot/app/blog/static:/var/www/blot/app/blog/static:ro"'
+check "success: the rehearsal gets the static mounts and the fd ulimit, but not the cache" \
+  'called "run -d --name blot-proxy-rehearsal --cap-add SYS_NICE --ulimit nofile=65536:65536" \
+   && called "-v /var/www/blot/data/static:/var/www/blot/data/static:ro" \
+   && called "-v /var/www/blot/app/blog/static:/var/www/blot/app/blog/static:ro" \
+   && ! called "run -d --name blot-proxy-rehearsal.*/var/cache/openresty"'
+check "success: the rehydrate probe gets the real cache read-only, takes no traffic, and is cleaned up" \
+  'called "run -d --name blot-proxy-rehydrate-probe --cap-add SYS_NICE" \
+   && called "-v $T/cache:/var/cache/openresty:ro" \
+   && ! called "run -d --name blot-proxy-rehydrate-probe.*-p " \
+   && ! [ -e "$FAKE/running/blot-proxy-rehydrate-probe" ]'
+
+reset baremetal; PROXY_BLOG_STATIC_DIR="$T/blog-static" PROXY_GLOBAL_STATIC_DIR="$T/global-static" cutover
+check "static mount paths are overridable" 'called "-v $T/blog-static:/var/www/blot/data/static:ro" && called "-v $T/global-static:/var/www/blot/app/blog/static:ro"'
 
 reset baremetal; FAKE_CONTAINER_CODE=502 cutover
 check "failed live check: rolls back to bare-metal, never disables it" '[ $RC != 0 ] && serving baremetal && after_last "systemctl start openresty" "systemctl stop openresty" && ! called "systemctl disable" && ! called "docker update"'
@@ -190,7 +227,24 @@ check "purge endpoint unreachable: refused before anything changes" '[ $RC != 0 
 
 reset baremetal; FAKE_REHEARSAL_CODE=502 cutover
 check "rehearsal differs from bare-metal: refused before the stop" '[ $RC != 0 ] && ! called "systemctl stop" && ! called "docker create" && mentions "rehearsal answers differ"'
-check "rehearsal container is cleaned up on refusal" '! [ -e "$FAKE/running/blot-proxy-rehearsal" ]'
+check "rehearsal container is cleaned up on refusal" '! [ -e "$FAKE/running/blot-proxy-rehearsal" ] && ! [ -e "$FAKE/running/blot-proxy-rehydrate-probe" ]'
+
+reset baremetal; cutover --dry-run
+check "rehydrate probe against the real cache: passes when the log shows rehydrate: complete" '[ $RC = 0 ]'
+
+reset baremetal; FAKE_UNHEALTHY=blot-proxy-rehydrate-probe cutover --dry-run
+check "rehydrate probe never healthy: refused, mentions cache ownership" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "never became healthy" && mentions "owned by uid 1000"'
+check "rehydrate probe never healthy: both containers cleaned up" '! [ -e "$FAKE/running/blot-proxy-rehearsal" ] && ! [ -e "$FAKE/running/blot-proxy-rehydrate-probe" ]'
+
+reset baremetal; FAKE_NO_REHYDRATE=1 cutover --dry-run
+check "rehydrate probe: refused when the cache never finishes rehydrating" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "rehydrate: complete" && mentions "cacher_dictionary"'
+check "rehydrate probe: cleaned up on refusal too" '! [ -e "$FAKE/running/blot-proxy-rehearsal" ] && ! [ -e "$FAKE/running/blot-proxy-rehydrate-probe" ]'
+
+reset baremetal; FAKE_REHYDRATE_ERROR=1 cutover --dry-run
+check "rehydrate probe: refused when the cache logs a rehydrate error" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "rehydrate: complete"'
+
+reset baremetal; ALLOW_STDOUT_LOGS=1 FAKE_STDOUT_LOGS=1 FAKE_REHYDRATE_VIA_LOGS_ONLY=1 cutover --dry-run
+check "rehydrate probe: passes when the line is only in docker logs (ALLOW_STDOUT_LOGS=1 image)" '[ $RC = 0 ]'
 
 reset baremetal; FAKE_STDOUT_LOGS=1 cutover
 check "image that logs to stdout: refused (fail2ban would go blind)" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "LOG_TO_STDOUT"'
@@ -326,6 +380,9 @@ echo "blue-green.sh"
 reset container; bluegreen
 check "success: green starts, blue drains and is only removed afterwards" '[ $RC = 0 ] && before "docker start blot-proxy-green" "docker stop --time 30 blot-proxy-blue" && before "docker stop --time 30" "docker rm blot-proxy-blue"'
 check "success: green gets its restart policy before blue is removed" 'before "docker update --restart unless-stopped blot-proxy-green" "docker rm blot-proxy-blue" && serving container'
+check "success: green also gets the CDN static mounts and the fd ulimit" \
+  'called "docker create --restart no --name blot-proxy-green --network host --cap-add SYS_NICE --ulimit nofile=65536:65536" \
+   && called "-v /var/www/blot/data/static:/var/www/blot/data/static:ro"'
 
 reset container; FAKE_UNHEALTHY=blot-proxy-green bluegreen
 check "new colour never healthy: old one is never stopped" '[ $RC != 0 ] && ! called "docker stop" && called "docker rm -f blot-proxy-green" && serving container'
