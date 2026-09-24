@@ -136,6 +136,11 @@ jobs:
           [ "$code" = 200 ]
 
       # ---- 3. blue-green: no failed requests during the swap --------------
+      # HTTPS with --connect-to (same technique https_status() in common.sh
+      # uses, already proven above against both bare metal and the
+      # container): a plain-HTTP request with only a Host header hits the
+      # "preview subdomains" server block by a different path than every
+      # check the deploy scripts themselves make, all of which are HTTPS.
       - name: blue-green swaps blot-proxy-blue for blot-proxy-green with zero failed requests
         run: |
           set -euo pipefail
@@ -145,7 +150,8 @@ jobs:
             # refused/dropped request during the swap shows up as non-200.
             for i in $(seq 1 400); do
               curl -s -o /dev/null -w '%{http_code}\n' --max-time 5 \
-                -H "Host: $PROXY_CANARY_HOST" http://127.0.0.1/ >> codes.txt || echo curl-err >> codes.txt
+                --connect-to "$PROXY_CANARY_HOST:443:127.0.0.1:443" "https://$PROXY_CANARY_HOST/" \
+                >> codes.txt || echo curl-err >> codes.txt
               sleep 0.05
             done
           ) &
@@ -255,3 +261,11 @@ jobs:
           done
           echo "=== openresty.service ==="
           sudo journalctl -u openresty --no-pager -n 100 2>&1 || true
+          # LOG_TO_STDOUT=false, so `docker logs` above is near-empty for the
+          # proxy containers - the real access/error logs are these files on
+          # $PROXY_LOG_DIR, shared by bare metal and every blot-proxy-*
+          # container (see run_args() in common.sh).
+          echo "=== $PROXY_LOG_DIR/access.log (tail) ==="
+          sudo tail -n 100 "$PROXY_LOG_DIR/access.log" 2>&1 || true
+          echo "=== $PROXY_LOG_DIR/error.log (tail) ==="
+          sudo tail -n 100 "$PROXY_LOG_DIR/error.log" 2>&1 || true
