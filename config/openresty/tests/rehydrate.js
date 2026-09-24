@@ -128,4 +128,21 @@ describe("cacher", function () {
     const purgeResponse = await fetch(this.origin + "/purge?host=127.0.0.1");
     expect(purgeResponse.status).toBe(503);
   });
+
+  it("stops accepting purges when a cache miss cannot be indexed", async function () {
+    // rehydrate.conf's 300k cacher_dictionary holds a few thousand entries
+    let status = 200;
+
+    for (let batch = 0; batch < 200 && status === 200; batch++) {
+      await Promise.all(
+        Array.from({ length: 50 }, (_, i) =>
+          fetch(`${this.origin}/timestamp/${batch}-${i}`).then((res) => res.text())
+        )
+      );
+      status = (await fetch(this.origin + "/purge?host=nothing.example")).status;
+    }
+
+    // the index is missing a cached file, so a purge could not remove it
+    expect(status).toBe(503);
+  }, 1000 * 60 * 5);
 });

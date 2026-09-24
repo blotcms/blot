@@ -12,18 +12,23 @@ local cacher = {
 -- and retries it. The index survives `nginx -s reload` (shared dicts do), so
 -- a reload does not walk the cache again.
 --
--- The flags share the dictionary with the index so that they disappear with
--- it (a restart, or a reload that resizes the zone). Host names never start
--- with "__", so they cannot collide.
-local READY = "__cacher_ready"
-local BUILDING = "__cacher_building"
-
--- Incremented when a walk starts, so a purge that overlapped one can tell
+-- Readiness is two numbers. GENERATION is taken (incremented) whenever the
+-- index stops being trustworthy: when a walk starts, and when a cache file
+-- could not be added. A walk that completes stores the generation it took in
+-- READY. The index is ready while READY equals GENERATION, so a single incr
+-- makes it not ready, and a walk that was superseded cannot publish.
+--
+-- These share the dictionary with the index so that they disappear with it
+-- (a restart, or a reload that resizes the zone). Host names never start with
+-- "__", so they cannot collide.
 local GENERATION = "__cacher_generation"
+local READY = "__cacher_ready"
 
--- The walk lock. It holds a token naming its owner and is renewed as the walk
--- goes, so it only expires if the worker holding it dies or stalls for longer
--- than this (find output is read with a 60s timeout).
+-- The walk lock: one walk at a time, to avoid duplicate work (correctness
+-- comes from the generation). It holds a token naming its owner and is
+-- renewed as the walk goes, so it only expires if the worker holding it dies
+-- or stalls for longer than this (find output is read with a 60s timeout).
+local BUILDING = "__cacher_building"
 local BUILDING_TTL = 120
 
 -- Hand control back to the event loop this often during a walk
@@ -33,8 +38,34 @@ local function is_flag(key)
     return key:sub(1, 2) == "__"
 end
 
+-- The current generation if the index is ready, else nil. GENERATION is read
+-- first: a caller that sees the same generation again after its work knows
+-- no walk started and no cache file went unindexed in between.
+local function ready_generation(shared_dictionary)
+    local generation = shared_dictionary:get(GENERATION)
+
+    if generation ~= nil and shared_dictionary:get(READY) == generation then
+        return generation
+    end
+end
+
 local function cacher_is_ready(self)
-    return self.shared_dictionary:get(READY) == true
+    return ready_generation(self.shared_dictionary) ~= nil
+end
+
+-- Add a cache file to a host's list. rpush fails (it does not evict) when the
+-- dictionary is full, and the index is then missing a file that a purge of
+-- that host would leave behind, so it stops being ready until a walk rebuilds it.
+local function index_push(shared_dictionary, host, hash)
+    local ok, err = shared_dictionary:rpush(host, hash)
+
+    if not ok then
+        shared_dictionary:incr(GENERATION, 1, 0)
+        ngx.log(ngx.ERR, "cacher: could not add to index (", err,
+            "), rebuilding; increase lua_shared_dict cacher_dictionary if this repeats")
+    end
+
+    return ok, err
 end
 
 local function respond_rebuilding(ngx)
@@ -44,8 +75,21 @@ local function respond_rebuilding(ngx)
     ngx.exit(ngx.OK)
 end
 
-local function reject_until_ready(self, ngx)
-    if not cacher_is_ready(self) then
+-- Answer 503 unless the index is ready; returns its generation
+local function require_ready(self, ngx)
+    local generation = ready_generation(self.shared_dictionary)
+
+    if generation == nil then
+        respond_rebuilding(ngx)
+    end
+
+    return generation
+end
+
+-- Answer 503 if the index changed since require_ready: the lists read may
+-- have been cleared by a walk, or be missing a file that could not be added.
+local function require_unchanged(self, ngx, generation)
+    if self.shared_dictionary:get(GENERATION) ~= generation then
         respond_rebuilding(ngx)
     end
 end
@@ -54,7 +98,7 @@ local function cacher_add (self, host, cache_key)
     local shared_dictionary = self.shared_dictionary
     local cache_key_hash = ngx.md5(cache_key)
     ngx.log(ngx.NOTICE, "add hash=" .. cache_key_hash .. " host=" .. host .. " key=" .. cache_key)
-    shared_dictionary:rpush(host, cache_key_hash)
+    index_push(shared_dictionary, host, cache_key_hash)
 end  
 
 local function cacher_inspect (self, ngx)
@@ -79,7 +123,7 @@ local function cacher_inspect (self, ngx)
         ngx.exit(ngx.OK)
     end
 
-    reject_until_ready(self, ngx)
+    local generation = require_ready(self, ngx)
 
     ngx.log(ngx.NOTICE, "inspecting host: " .. host)
 
@@ -97,8 +141,10 @@ local function cacher_inspect (self, ngx)
 
     -- reinstate the keys in the list
     for _, hash in ipairs(hash_list) do
-        shared_dictionary:rpush(host, hash)
+        index_push(shared_dictionary, host, hash)
     end
+
+    require_unchanged(self, ngx, generation)
 
     -- append the list of cache keys to the message seperated by newlines
     local message = table.concat(hash_list, "\n")
@@ -128,7 +174,7 @@ local function deduplicate_key_list_by_host (host, shared_dict)
 
     -- reinsert the keys into the list
     for _, cache_key_hash in ipairs(deduplicated_key_list) do
-        shared_dict:rpush(host, cache_key_hash)
+        index_push(shared_dict, host, cache_key_hash)
     end
 end
 
@@ -180,7 +226,9 @@ local function clear_hosts(shared_dictionary)
     end
 end
 
--- Renew the walk lock if this walk still owns it
+-- Renew the walk lock if this walk still owns it. The check and the renewal
+-- are separate operations, so at worst two walks overlap after a lease
+-- expires; only the one holding the current generation can publish.
 local function renew_lock(shared_dictionary, token)
     if shared_dictionary:get(BUILDING) ~= token then
         return false
@@ -200,7 +248,9 @@ end
 -- Rebuilds the index from the files in the cache directory. Returns the
 -- sorted list of files whose host could not be parsed, or nil and an error:
 -- "busy" if another walk holds the lock, "exiting" if this worker is shutting
--- down (a reload or stop), or why the directory could not be listed.
+-- down (a reload or stop), "superseded" if the index changed during the
+-- walk (a newer walk started, or a cache file could not be added), or why
+-- the directory could not be listed.
 --
 -- The host lists are emptied first, which is safe while cache misses keep
 -- arriving: a miss recorded before the clear already has its file on disk
@@ -219,11 +269,6 @@ local function build_index (self)
 
     local started = ngx.now()
 
-    -- in this order: see cacher_purge
-    shared_dictionary:delete(READY)
-    shared_dictionary:incr(GENERATION, 1, 0)
-    clear_hosts(shared_dictionary)
-
     -- stop the walk, releasing the lock, and return why
     local function abandon (proc, err)
         if proc then
@@ -232,6 +277,22 @@ local function build_index (self)
         release_lock(shared_dictionary, token)
         return nil, err
     end
+
+    -- Taking a generation makes the index not ready before any list is
+    -- cleared (see ready_generation). incr only needs memory the first time,
+    -- when the index has never been ready, so clearing first is then safe.
+    local generation = shared_dictionary:incr(GENERATION, 1, 0)
+
+    if not generation then
+        clear_hosts(shared_dictionary)
+        generation = shared_dictionary:incr(GENERATION, 1, 0)
+
+        if not generation then
+            return abandon(nil, "could not start a walk: cacher_dictionary is full")
+        end
+    end
+
+    clear_hosts(shared_dictionary)
 
     ngx.log(ngx.NOTICE, "rehydrate: " .. cache_directory)
 
@@ -277,13 +338,8 @@ local function build_index (self)
                     hosts[host] = true
                 end
 
-                -- a full dictionary makes rpush fail (it does not evict), and
-                -- an index missing files must not be marked ready
-                local pushed, push_err = shared_dictionary:rpush(host, name)
-
-                if not pushed then
-                    return abandon(proc, "could not add to index (" .. tostring(push_err)
-                        .. "), increase lua_shared_dict cacher_dictionary")
+                if not index_push(shared_dictionary, host, name) then
+                    return abandon(proc, "could not add to index, increase lua_shared_dict cacher_dictionary")
                 end
             end
         end
@@ -294,6 +350,10 @@ local function build_index (self)
             -- the next process (a reload, or a respawned worker) rebuilds
             if ngx.worker.exiting() then
                 return abandon(proc, "exiting")
+            end
+
+            if shared_dictionary:get(GENERATION) ~= generation then
+                return abandon(proc, "superseded")
             end
 
             if not renew_lock(shared_dictionary, token) then
@@ -317,13 +377,14 @@ local function build_index (self)
         deduplicate_key_list_by_host(host, shared_dictionary)
     end
 
-    -- a walk whose lock expired may overlap a newer one: leave it to that one
-    if not renew_lock(shared_dictionary, token) then
-        return nil, "walk lock expired"
-    end
-
-    shared_dictionary:set(READY, true)
+    -- Publish. If the generation moved on (a newer walk, or a cache miss that
+    -- could not be added) this READY no longer matches it, so it has no effect.
+    shared_dictionary:set(READY, generation)
     release_lock(shared_dictionary, token)
+
+    if shared_dictionary:get(GENERATION) ~= generation then
+        return nil, "superseded"
+    end
 
     ngx.log(ngx.NOTICE, "rehydrate: complete files=", count, " hosts=", #hosts,
         " unparsed=", #unparsed, " seconds=", ngx.now() - started)
@@ -407,14 +468,7 @@ local function cacher_purge (self, ngx)
         ngx.exit(ngx.OK)
     end
 
-    -- Read before the ready check. A walk (a /rehydrate) removes the ready
-    -- flag, then bumps the generation, then clears the host lists. So either
-    -- this read precedes the bump and the check after the purge sees it
-    -- change, or the flag was already gone and the purge is refused here (or
-    -- that walk had finished and the purge reads the complete index).
-    local generation = shared_dictionary:get(GENERATION)
-
-    reject_until_ready(self, ngx)
+    local generation = require_ready(self, ngx)
 
     for host in string.gmatch(ngx.var.args, "host=([^&]+)") do
         ngx.log(ngx.NOTICE, "purging host: " .. host)
@@ -425,9 +479,7 @@ local function cacher_purge (self, ngx)
     -- A walk that started while this purge ran may have cleared the lists
     -- before they were read, and will add back files this purge did not see;
     -- the caller retries after the rebuild.
-    if not cacher_is_ready(self) or shared_dictionary:get(GENERATION) ~= generation then
-        respond_rebuilding(ngx)
-    end
+    require_unchanged(self, ngx, generation)
 
     -- if message is empty then replace it with a message saying that no hosts were purged
     if (message == '') then
