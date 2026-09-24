@@ -33,13 +33,14 @@ dashboard.get("/", function (req, res, next) {
 });
 
 dashboard.get("/", function (req, res) {
-  database.getStatus(req.blog.owner, function (err, status) {
+  database.getRecordForBlog(req.blog, function (err, record) {
     database.getToken(req.blog.owner, function (err, token) {
+      var status = record && record.status;
       res.render(__dirname + "/views/index.html", {
         title: "Git",
         token: token,
-        createFailed: status === 'createFailed',
-        createInProgress: status === 'createInProgress',
+        createFailed: status === database.STATUSES.CREATE_FAILED,
+        createInProgress: status === database.STATUSES.CREATE_IN_PROGRESS,
         host,
       });
     });

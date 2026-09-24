@@ -21,6 +21,9 @@ environment, this module warrants a lighter security review bar than the
 real sync clients (Dropbox, Google Drive, iCloud, Git) — issues here can't
 expose or corrupt a real user's blog, only development/test fixtures.
 
+It has no persisted error state and does not implement `getHealth`.
+Callers treat a missing `getHealth` as healthy (`app/clients/health.js`).
+
 ## Purpose
 
 The local folder client provides a minimal implementation of Blot's client interface for syncing a blog folder stored directly on the Blot server. This client is intended for development and testing environments only and is not available in production. It serves as a reference implementation that demonstrates the core responsibilities and contract that all clients must fulfill.

@@ -3,6 +3,8 @@ var localPath = require("helper/localPath");
 var Git = require("simple-git");
 var debug = require("debug")("blot:clients:git:remove");
 var checkGitRepoExists = require("./checkGitRepoExists");
+var database = require("./database");
+var { issueFromSyncError } = require("./error");
 
 // This should probably copy the file to a
 // temporary location so the removal can be
@@ -20,7 +22,11 @@ module.exports = function remove (blogID, path, callback) {
     blogDirectory = blogDirectory.slice(0, -1);
 
   checkGitRepoExists(blogDirectory, function (err) {
-    if (err) return callback(err);
+    if (err) {
+      return database.setIssue(blogID, issueFromSyncError(err), function () {
+        callback(err);
+      });
+    }
 
     fs.remove(localPath(blogID, path), function (err) {
       if (err) return callback(err);
@@ -60,7 +66,9 @@ module.exports = function remove (blogID, path, callback) {
             if (err) return callback(new Error(err));
 
             debug("Blog:", blogID, "Successfully removed", path);
-            callback(null);
+            database.clearIssue(blogID, function () {
+              callback(null);
+            });
           });
         });
       });

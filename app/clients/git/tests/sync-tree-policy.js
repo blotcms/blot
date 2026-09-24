@@ -24,6 +24,11 @@ describe("Git sync tree policy", function () {
       sync: (id, cb) => cb(null, {path:"/test-blog",log(){}}, (err, cb) => {released = true; cb(err);}),
       "./checkGitRepoExists":(path, cb)=>cb(null), "./dataDir":"/test-data",
       "models/blog":{}, "./validateTree":validateTree,
+      "./database": {
+        setIssue: function (id, issue, cb) { cb(null); },
+        clearIssue: function (id, cb) { cb(null); },
+      },
+      "./error": require("../error"),
     };
     const module = {exports:{}};
     vm.runInNewContext(fs.readFileSync(require.resolve("../sync"), "utf8"), {
