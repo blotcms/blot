@@ -1,7 +1,7 @@
 .preset-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(4.75rem, 1fr));
-  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(2.3rem, 1fr));
+  gap: 0.3rem;
   padding: 0.75rem;
 }
 
@@ -73,34 +73,40 @@ button.preset-tile {
   gap: 3px;
 }
 
+[data-preset-grid="colors"] .preset-tile {
+  padding: 0;
+}
+
 .preset-sample {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.15rem;
-  margin: -0.55rem -0.5rem -0.45rem;
-  padding: 0.75rem 0.3rem 0.6rem;
+  gap: 0.1rem;
+  padding: 0.4rem 0.1rem 0.3rem;
   border-radius: calc(var(--border-radius) - 1px);
+  overflow: hidden;
 }
 
 .preset-sample-aa {
-  font-size: 1.1rem;
+  font-size: 0.85rem;
   font-weight: 700;
   line-height: 1;
 }
 
 .preset-sample-link {
-  font-size: 0.7rem;
+  font-size: 0.55rem;
+  line-height: 1;
   text-decoration: underline;
+  white-space: nowrap;
 }
 
 .preset-check-badge {
   position: absolute;
-  top: -7px;
-  right: -7px;
-  width: 18px;
-  height: 18px;
+  top: -6px;
+  right: -6px;
+  width: 15px;
+  height: 15px;
   border-radius: 50%;
   background: var(--accent-color);
   color: #fff;
@@ -111,8 +117,8 @@ button.preset-tile {
 }
 
 .preset-check-badge svg {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 .preset-swatch {
