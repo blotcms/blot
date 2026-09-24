@@ -5,6 +5,45 @@ local cacher = {
     _LICENSE     = ""
   }
 
+-- The host -> cache file index lives in shared_dictionary and is rebuilt from
+-- the cache directory in the background after a start (see cacher_start), so
+-- nginx listens and serves cached files straight away. /purge and /inspect
+-- answer 503 until the index is complete: flushCache records a failed purge
+-- and retries it. The index survives `nginx -s reload` (shared dicts do), so
+-- a reload does not walk the cache again.
+--
+-- The flags share the dictionary with the index so that they disappear with
+-- it (a restart, or a reload that resizes the zone). Host names never start
+-- with "__", so they cannot collide.
+local READY = "__cacher_ready"
+local BUILDING = "__cacher_building"
+
+-- Held while a walk runs; refreshed as it goes so it only expires if the
+-- worker holding it dies.
+local BUILDING_TTL = 30
+
+-- Hand control back to the event loop this often during a walk
+local YIELD_EVERY = 200
+
+local function is_flag(key)
+    return key:sub(1, 2) == "__"
+end
+
+local function cacher_is_ready(self)
+    return self.shared_dictionary:get(READY) == true
+end
+
+local function reject_until_ready(self, ngx)
+    if cacher_is_ready(self) then
+        return
+    end
+
+    ngx.status = ngx.HTTP_SERVICE_UNAVAILABLE
+    ngx.header["Retry-After"] = "30"
+    ngx.say("cache index is being rebuilt, retry later")
+    ngx.exit(ngx.OK)
+end
+
 local function cacher_add (self, host, cache_key) 
     local shared_dictionary = self.shared_dictionary
     local cache_key_hash = ngx.md5(cache_key)
@@ -34,6 +73,8 @@ local function cacher_inspect (self, ngx)
         ngx.exit(ngx.OK)
     end
 
+    reject_until_ready(self, ngx)
+
     ngx.log(ngx.NOTICE, "inspecting host: " .. host)
 
     local hash_list = {};
@@ -60,13 +101,9 @@ local function cacher_inspect (self, ngx)
     ngx.exit(ngx.OK)
 end
 
--- this file will read the contents of the cache directory and store them in 
--- the lua shared dict shared_dictionary so we can purge them later 
-
--- I'm not sure why we need to deduplicate the keys?-- 
+-- A cache miss recorded while a walk is running can also be found on disk by
+-- that walk, so the list for a host can hold the same hash twice.
 local function deduplicate_key_list_by_host (host, shared_dict)
-
-    ngx.log(ngx.NOTICE, "deduplicate_key_list_by_host: " .. host)
 
     local deduplicated_key_list = {}
 
@@ -78,8 +115,6 @@ local function deduplicate_key_list_by_host (host, shared_dict)
         if (deduplicated_key_list[cache_key_hash] == nil) then
             table.insert(deduplicated_key_list, cache_key_hash)
             deduplicated_key_list[cache_key_hash] = true
-        else
-            ngx.log(ngx.NOTICE, "duplicate hash " .. cache_key_hash)
         end
 
         cache_key_hash = shared_dict:lpop(host)
@@ -87,34 +122,35 @@ local function deduplicate_key_list_by_host (host, shared_dict)
 
     -- reinsert the keys into the list
     for _, cache_key_hash in ipairs(deduplicated_key_list) do
-        ngx.log(ngx.NOTICE, "reinserting " .. cache_key_hash)
         shared_dict:rpush(host, cache_key_hash)
     end
 end
 
-local function extractHostFromCacheFile (ngx, cache_file_path)
+-- Returns the host from the cache file's "KEY: http://example.com/xyz/abc"
+-- header line, or nil if the file is gone or has no parsable key.
+local function extractHostFromCacheFile (cache_file_path)
 
-    -- we need to read the first line of the cache file to get the host
-    -- the first line is in the format:
-    -- KEY: http://example.com/xyz/abc
     local file = io.open(cache_file_path, "r")
-    local first_line = file:read()
 
-    local number_of_lines_read = 1
-
-    -- keep reading the file until we get a line that contains "KEY: ", up to a max of 10 lines
-    while (first_line ~= nil and number_of_lines_read < 10 and string.match(first_line, "KEY: ") == nil) do
-        first_line = file:read()
-    end
-
-    if (first_line == nil) then
+    -- purged or evicted since it was listed
+    if (file == nil) then
         return nil
     end
 
-    local key = string.match(first_line, "KEY: (.*)")
+    local line = file:read()
+    local number_of_lines_read = 1
+
+    -- keep reading the file until we get a line that contains "KEY: ", up to a max of 10 lines
+    while (line ~= nil and number_of_lines_read < 10 and string.match(line, "KEY: ") == nil) do
+        line = file:read()
+        number_of_lines_read = number_of_lines_read + 1
+    end
+
+    file:close()
+
+    local key = line and string.match(line, "KEY: (.*)")
 
     if (key == nil) then
-        ngx.log(ngx.NOTICE, "key is nil")
         return nil
     end
 
@@ -124,101 +160,196 @@ local function extractHostFromCacheFile (ngx, cache_file_path)
     if (uri_without_protocol == nil) then
         return nil
     end
-    
+
     -- the host is the first part of the uri, up to question mark or slash or colon if there is one
-    local host = string.match(uri_without_protocol, "([^/?#:]+)")
-
-    if (host == nil) then
-        return nil
-    end
-    
-    file:close()
-
-    return host
+    return string.match(uri_without_protocol, "([^/?#:]+)")
 end
 
--- returns a list of file or directory names in the given directory
-local function readdirectory(directory)
-    local i, t, popen = 0, {}, io.popen
-    local pfile = popen('ls -a "'..directory..'"')
-
-    -- we want to skip the lines that are . or ..
-    for filename in pfile:lines() do
-        if (filename ~= "." and filename ~= "..") then
-            i = i + 1
-            ngx.log(ngx.NOTICE, "found file: " .. filename)
-            t[i] = filename
+-- Remove every host list, leaving the flags
+local function clear_hosts(shared_dictionary)
+    for _, key in ipairs(shared_dictionary:get_keys(0)) do
+        if not is_flag(key) then
+            shared_dictionary:delete(key)
         end
     end
-
-    pfile:close()
-    return t
 end
 
-
-local function cacher_rehydrate (self)
-
-    -- we need to read the contents of the cache directory and store them in 
-    -- the lua shared dict shared_dictionary so we can purge them later
+-- Rebuilds the index from the files in the cache directory. Returns the
+-- sorted list of files whose host could not be parsed, or nil and an error:
+-- "busy" if another walk holds the lock, "exiting" if this worker is shutting
+-- down (a reload or stop), or why the directory could not be listed.
+--
+-- The host lists are emptied first, which is safe while cache misses keep
+-- arriving: a miss recorded before the clear already has its file on disk
+-- (log_by_lua runs after nginx has stored it), so the walk finds it again,
+-- and one recorded after the clear is added by cacher_add. So a walk can be
+-- rerun at any time, e.g. by a worker respawned after one died mid-walk.
+local function build_index (self)
     local cache_directory = self.cache_directory
-
-    -- local purged_files = purge_host(ngx.var.arg_host)
     local shared_dictionary = self.shared_dictionary
 
-    local message = ''
+    if not shared_dictionary:add(BUILDING, true, BUILDING_TTL) then
+        return nil, "busy"
+    end
 
-    ngx.log(ngx.NOTICE, "rehydrate: " .. cache_directory )
+    local started = ngx.now()
 
-    -- first we list all the top level directories in the cache directory
-    local top_level_directories = readdirectory(cache_directory)
+    shared_dictionary:delete(READY)
+    clear_hosts(shared_dictionary)
 
-    -- store a list of hosts
+    ngx.log(ngx.NOTICE, "rehydrate: " .. cache_directory)
+
+    -- One child process lists the whole tree. ngx.pipe reads it without
+    -- blocking the worker, which keeps serving requests during the walk.
+    local proc, err = require("ngx.pipe").spawn({"find", cache_directory, "-type", "f"})
+
+    if not proc then
+        shared_dictionary:delete(BUILDING)
+        return nil, "find failed: " .. tostring(err)
+    end
+
+    -- a cold disk can take a while to list a large tree
+    proc:set_timeouts(nil, 60000, 60000, 60000)
+
+    local prefix_length = #cache_directory + 2
     local hosts = {}
+    local unparsed = {}
+    local count = 0
+    local failed = 0
 
-    -- then for each directory we list all the files in that directory
-    for _, top_level_directory in ipairs(top_level_directories) do
+    while true do
+        local path, read_err = proc:stdout_read_line()
 
-        local top_level_directory_path = cache_directory .. "/" .. top_level_directory
-        local second_level_directories = readdirectory(top_level_directory_path)
-  
-        for _, second_level_directory in ipairs(second_level_directories) do
-            local second_level_directory_path = top_level_directory_path .. "/" .. second_level_directory
-            local files = readdirectory(second_level_directory_path)
- 
-            for _, cache_key_hash in ipairs(files) do
-                local cache_file_path = top_level_directory .. "/" .. second_level_directory .. "/" .. cache_key_hash
-                local host = extractHostFromCacheFile(ngx, second_level_directory_path .. "/" .. cache_key_hash)
-                
+        if not path then
+            if read_err ~= "closed" then
+                proc:kill(9)
+                shared_dictionary:delete(BUILDING)
+                return nil, "reading find output failed: " .. tostring(read_err)
+            end
+            break
+        end
 
-                -- if the host was not parsed, log the file
-                if (host == nil) then
-                    ngx.log(ngx.NOTICE, "rehydrate: failed to parse host: " .. cache_file_path)
-                    message = message .. cache_file_path .. "\n"
-                else
-                    -- add the host to the list of hosts
-                    if (hosts[host] == nil) then
-                        table.insert(hosts, host)
-                        hosts[host] = true
+        local name = path:match("[^/]+$")
+
+        -- with use_temp_path=off, a response being written sits in the same
+        -- tree as <hash>.<number> until nginx renames it; cacher_add records
+        -- it once it is stored
+        if not name:match("^%x+%.%d+$") then
+            local host = extractHostFromCacheFile(path)
+
+            if (host == nil) then
+                table.insert(unparsed, path:sub(prefix_length))
+            else
+                if (hosts[host] == nil) then
+                    table.insert(hosts, host)
+                    hosts[host] = true
+                end
+
+                local pushed, push_err = shared_dictionary:rpush(host, name)
+
+                if not pushed then
+                    failed = failed + 1
+                    if failed == 1 then
+                        ngx.log(ngx.ERR, "rehydrate: could not add to index: ", push_err)
                     end
-    
-                    ngx.log(ngx.NOTICE, "rehydrate: adding FILE=" .. cache_key_hash  .. " HOST=" .. host )
-                    shared_dictionary:rpush(host, cache_key_hash)
                 end
             end
         end
+
+        count = count + 1
+
+        if count % YIELD_EVERY == 0 then
+            -- the next process (a reload, or a respawned worker) rebuilds
+            if ngx.worker.exiting() then
+                proc:kill(9)
+                shared_dictionary:delete(BUILDING)
+                return nil, "exiting"
+            end
+
+            shared_dictionary:set(BUILDING, true, BUILDING_TTL)
+            ngx.sleep(0)
+        end
     end
- 
+
+    local ok, reason, status = proc:wait()
+
+    if not ok and reason ~= "exit" then
+        shared_dictionary:delete(BUILDING)
+        return nil, "find " .. tostring(reason) .. " " .. tostring(status)
+    end
+
+    -- find exits non-zero if a directory vanished mid-walk (the cache
+    -- manager removes empty ones); everything it could list was indexed
+    if not ok then
+        ngx.log(ngx.WARN, "rehydrate: find exited with status ", status)
+    end
+
     for _, host in ipairs(hosts) do
         deduplicate_key_list_by_host(host, shared_dictionary)
     end
 
-    ngx.log(ngx.NOTICE, "rehydrate: complete")
+    shared_dictionary:set(READY, true)
+    shared_dictionary:delete(BUILDING)
 
-    if (message == '') then
-        message = "OK"
+    ngx.log(ngx.NOTICE, "rehydrate: complete files=", count, " hosts=", #hosts,
+        " unparsed=", #unparsed, " failed=", failed, " seconds=", ngx.now() - started)
+
+    table.sort(unparsed)
+
+    return unparsed
+end
+
+-- Called from init_worker_by_lua. Worker 0 rebuilds the index unless it is
+-- already complete (after `nginx -s reload`), then checks it periodically so
+-- a failed walk is retried. The check also rebuilds if the ready flag itself
+-- was lost: rpush evicts the least recently used keys when the dictionary is
+-- full, and without the flag every purge would be refused.
+local function cacher_start (self)
+    local id = ngx.worker.id()
+
+    if id ~= nil and id ~= 0 then
+        return
     end
 
-    return message
+    local function check (premature)
+        if premature or cacher_is_ready(self) then
+            return
+        end
+
+        local unparsed, err = build_index(self)
+
+        if not unparsed and err ~= "busy" and err ~= "exiting" then
+            ngx.log(ngx.ERR, "rehydrate: ", err)
+        end
+    end
+
+    ngx.timer.at(0, check)
+    ngx.timer.every(30, check)
+end
+
+-- The /rehydrate endpoint. Returns "OK" or the files whose host could not be
+-- parsed, one per line.
+local function cacher_rehydrate (self)
+    local unparsed, err = build_index(self)
+
+    if unparsed == nil then
+        if err == "busy" then
+            ngx.status = ngx.HTTP_SERVICE_UNAVAILABLE
+            ngx.header["Retry-After"] = "30"
+            return "cache index is being rebuilt, retry later"
+        end
+
+        -- the host lists may be partial: purges wait for cacher_start's
+        -- periodic check to rebuild them
+        ngx.status = ngx.HTTP_INTERNAL_SERVER_ERROR
+        return "rehydrate failed: " .. err
+    end
+
+    if #unparsed == 0 then
+        return "OK"
+    end
+
+    return table.concat(unparsed, "\n")
 end
 
 local function cacher_purge (self, ngx)
@@ -243,6 +374,8 @@ local function cacher_purge (self, ngx)
         ngx.say("please pass host to purge as an argument")
         ngx.exit(ngx.OK)
     end
+
+    reject_until_ready(self, ngx)
 
     for host in string.gmatch(ngx.var.args, "host=([^&]+)") do
         ngx.log(ngx.NOTICE, "purging host: " .. host)
@@ -293,16 +426,24 @@ function purge_lru_hosts (self)
     -- we want to purge the least recently used hosts first
     for i = #hosts, 1, -1 do
         local host = hosts[i]
-        purge_host(host, self.shared_dictionary, self.cache_directory)
-        number_of_hosts_purged = number_of_hosts_purged + 1
-        if (number_of_hosts_purged >= maximum_hosts_to_purge) then
-            break
+        if not is_flag(host) then
+            purge_host(host, self.shared_dictionary, self.cache_directory)
+            number_of_hosts_purged = number_of_hosts_purged + 1
+            if (number_of_hosts_purged >= maximum_hosts_to_purge) then
+                break
+            end
         end
     end    
 end
 
 function cacher_check_free_space (self, ngx) 
     local minimum_free_space = self.minimum_free_space
+
+    -- until the index is complete, evicting by it could miss files and a
+    -- running walk would add back the hosts it removed
+    if not cacher_is_ready(self) then
+        return
+    end
 
     -- if minimum_free_space is not nil then we need to check if we need to purge the lru hosts
     if (minimum_free_space ~= nil) then
@@ -392,17 +533,13 @@ function cacher.new()
     
     local function cacher_set(self, key, value)
         self[key] = value
-
-        -- if both cache_directory and shared_dictionary are set then we can rehydrate
-        if (self.cache_directory ~= nil and self.shared_dictionary ~= nil) then
-            cacher_rehydrate(self)
-        end
     end
 
     return {
         purge = cacher_purge,
         authorized = cacher_authorized,
         set = cacher_set,
+        start = cacher_start,
         add = cacher_add,
         inspect = cacher_inspect,
         rehydrate = cacher_rehydrate,
