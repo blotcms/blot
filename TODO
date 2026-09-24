@@ -2,6 +2,10 @@ How do we think about a shared asset library across templates?
 - e.g. shared favicons
 - can we unwind some of the complete delete favion on template delete, etc. code?
 
+iCloud server should periodically:
+- quit safari (some error flow during auth sometimes opens it)
+- close all system UI prompts (sometimes we get error for maybe accessing a revoked folder?)
+
 Create simple config option to disable a given client when something like the Google Drive issue happens. Make it clear on the dashboard and docs that it's not working. 
 Add script to pause a subscription and make sure these users don't appear in the list of users to cancel
 - investigate the situation with hans first
