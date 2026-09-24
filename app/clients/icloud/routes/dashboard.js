@@ -161,7 +161,10 @@ dashboard
         const message =
           "Couldn't reach the setup server, please try again in a moment";
         try {
-          await database.store(blogID, { error: message });
+          await database.store(blogID, {
+          error: message,
+          errorCode: "SYNC_ERROR",
+        });
           const { folder, done } = await establishSyncLock(blogID);
           folder.status("Error: " + message);
           await done();

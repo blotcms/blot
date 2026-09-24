@@ -230,6 +230,7 @@ export default async (req, res) => {
       return reportStatus({
         acceptedSharingLink: false,
         error: error.message,
+        errorCode: "SYNC_ERROR",
       });
     });
 

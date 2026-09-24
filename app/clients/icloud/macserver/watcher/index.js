@@ -125,7 +125,10 @@ const handleFileEvent = async (event, blogID, filePath) => {
         limiterCountAfter < limiterCountBefore,
         `Expected limiter map size to decrease after deleting ${blogID}. Before: ${limiterCountBefore}, After: ${limiterCountAfter}`
       );
-      await status(blogID, { error: "Blog directory deleted" });
+      await status(blogID, {
+        error: "Blog directory deleted",
+        errorCode: "SOURCE_MISSING",
+      });
       await unwatch(blogID); // Stop watching this blog folder
       removeBlog(blogID); // Remove from largest files map
       return;

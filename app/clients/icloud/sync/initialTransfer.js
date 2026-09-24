@@ -58,6 +58,7 @@ module.exports = async function initialTransfer(blogID) {
     await database.store(blogID, {
       transferringToiCloud: false,
       error: error?.message || String(error),
+      errorCode: "SYNC_ERROR",
     });
     throw error;
   } finally {
