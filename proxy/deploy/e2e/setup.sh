@@ -98,10 +98,15 @@ docker run -d --name "$PROXY_NODE_CONTAINER" --network host \
 # is-active/is-enabled all genuinely work, no state file, no PATH shimming
 # needed - see README.md) with less to maintain than a hand-rolled shim.
 log "Creating the bare-metal container and its systemd unit"
-# --cap-add SYS_NICE: config/openresty/conf/initial.conf sets
-# `worker_priority -20`, shared by both generators (see common.sh's
-# run_args(), which grants the same capability to the real containers).
+# --cap-add SYS_NICE / --ulimit nofile: config/openresty/conf/initial.conf
+# sets `worker_priority -20` and `worker_rlimit_nofile 10000`, shared by both
+# generators (see common.sh's run_args(), which gives the real containers the
+# same capability and a >=10000 nofile ulimit - PROXY_NOFILE, default
+# 65536). A real bare-metal host has no such limit to begin with; this
+# harness's bare-metal stand-in is itself a container, so it needs the same
+# treatment or nginx logs a setrlimit failure trying to raise it.
 docker create --name blot-e2e-baremetal --network host --cap-add SYS_NICE \
+  --ulimit "nofile=${PROXY_NOFILE:-65536}:${PROXY_NOFILE:-65536}" \
   -v "$PROXY_CERT_DIR":/etc/ssl/private:ro \
   -v "$PROXY_CACHE_DIR":/var/cache/openresty \
   -v "$PROXY_LOG_DIR":/var/log/openresty \
