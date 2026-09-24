@@ -45,27 +45,19 @@ ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "rm -rf /home/ec2-user/script
 scp -P "$SSH_PORT" -i $SSH_KEY -r $SCRIPTS_DIRECTORY ec2-user@$PUBLIC_IP:/home/ec2-user/scripts
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "chmod +x /home/ec2-user/scripts/*"
 
-#########################################################
-# Begin mount-instance-store / docker.service ordering section
-#########################################################
 # Install (or update) the mount-instance-store unit and the docker.service
 # drop-in that requires it, so a Docker restart at boot can never bind-mount
-# a not-yet-mounted, empty /var/instance-ssd into a proxy container.
-#
-# This only installs the files and runs daemon-reload. It must NOT restart
-# docker.service or mount-instance-store.service here: both are live on a
-# running proxy host (restarting docker would kill the running blot-proxy-*
-# containers, restarting the mount unit would unmount the cache under them),
-# and neither the unit's Type= nor its ordering affects an already-running
-# unit. daemon-reload alone is safe against a running unit; the new ordering
-# only takes effect the next time docker.service or the mount unit starts,
-# i.e. at the next reboot.
+# a not-yet-mounted, empty /var/instance-ssd into a container. Only installs
+# files + daemon-reload: it must NOT restart docker.service or
+# mount-instance-store.service here, since both are live on a running host
+# (restarting docker would kill the running containers, restarting the mount
+# unit would unmount the cache under them) and daemon-reload alone is safe
+# against a running unit. The new ordering takes effect at the next reboot.
 echo "Installing mount-instance-store.service and docker.service.d drop-in on $PUBLIC_IP"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo cp /home/ec2-user/scripts/mount-instance-store.service /etc/systemd/system/mount-instance-store.service"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo mkdir -p /etc/systemd/system/docker.service.d && sudo cp /home/ec2-user/scripts/docker.service.d/10-instance-store.conf /etc/systemd/system/docker.service.d/10-instance-store.conf"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo systemctl daemon-reload"
 echo "mount-instance-store / docker.service ordering installed (takes effect on next boot)."
-#########################################################
 
 # Once the proxy runs as a container (proxy/deploy) the bare-metal openresty is
 # stopped, and its config is no longer what serves traffic: reloading it would
