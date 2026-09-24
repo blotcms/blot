@@ -34,7 +34,6 @@ describe("client health", function () {
     const result = health.error([
       { code: "SYNC_ERROR" },
       { code: "SOURCE_MISSING" },
-      { code: "UNAVAILABLE" },
       { code: "REAUTH_REQUIRED" },
     ]);
 
@@ -42,8 +41,8 @@ describe("client health", function () {
       result.issues.map(function (item) {
         return item.code;
       })
-    ).toEqual(["UNAVAILABLE", "REAUTH_REQUIRED", "SOURCE_MISSING", "SYNC_ERROR"]);
-    expect(health.primaryIssue(result).code).toBe("UNAVAILABLE");
+    ).toEqual(["REAUTH_REQUIRED", "SOURCE_MISSING", "SYNC_ERROR"]);
+    expect(health.primaryIssue(result).code).toBe("REAUTH_REQUIRED");
   });
 
   it("returns ok rather than an empty error", function () {

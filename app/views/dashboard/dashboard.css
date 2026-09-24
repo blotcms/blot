@@ -168,34 +168,8 @@ a.blog-link .icon-chevron {
   padding-right: 9rem;
 }
 
-.health-issue {
-  align-items: flex-start;
-}
-
 .health-issue .center {
   color: var(--error-text-color);
-  flex: 1 1 14em;
-  min-width: 0;
-}
-
-.error.warning-banner {
-  font-size: 16px;
-  padding: 18px 20px;
-  line-height: 1.45;
-}
-
-.error.warning-banner p {
-  margin: 0 0 0.7em 0;
-}
-
-.error.warning-banner p:last-child {
-  margin-bottom: 0;
-}
-
-.error.warning-banner strong {
-  display: block;
-  font-size: 1.15em;
-  margin-bottom: 0.35em;
 }
 
 a.blog-link:hover .icon-chevron {
