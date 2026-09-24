@@ -82,8 +82,8 @@ button.preset-tile {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.1rem;
-  padding: 0.4rem 0.1rem 0.3rem;
+  gap: 0.5rem;
+  padding: 1.3rem 0.1rem 1.2rem;
   border-radius: calc(var(--border-radius) - 1px);
   overflow: hidden;
 }
