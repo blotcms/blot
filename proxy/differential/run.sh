@@ -24,12 +24,22 @@ cd "$SCRIPT_DIR"
 
 cleanup() {
   docker rm -f stub redis proxy baremetal >/dev/null 2>&1 || true
-  [ -n "${STATIC_DIR:-}" ] && rm -rf "$STATIC_DIR"
+  # `[ -n "$STATIC_DIR" ] && rm -rf ...` would make this function - and, under
+  # set -e, the whole script - exit non-zero on the FIRST cleanup call below
+  # (before STATIC_DIR is set), silently, since nothing has echoed yet. Use
+  # if/fi, which returns 0 when the condition is false, instead of `&&`.
+  if [ -n "${STATIC_DIR:-}" ]; then
+    rm -rf "$STATIC_DIR"
+  fi
 }
 trap cleanup EXIT
 
-cleanup # in case a previous run left containers behind
+echo "=== proxy/differential/run.sh starting ==="
 
+echo "--- cleanup (in case a previous run left containers behind) ---"
+cleanup
+
+echo "--- writing the cdn. fixture ---"
 STATIC_DIR="$(mktemp -d)"
 
 # A fixture for the cdn. corpus cases (corpus.js): both generators default to

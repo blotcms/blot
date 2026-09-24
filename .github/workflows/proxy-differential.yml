@@ -82,7 +82,11 @@ jobs:
             -t blot-proxy:baremetal-differential .
 
       - name: Run the differential corpus
-        run: bash proxy/differential/run.sh
+        # -x: a failure anywhere in this script (which does a fair amount of
+        # setup - trap/cleanup, a temp static-file fixture - before the first
+        # docker command) must never be silent again, even one under set -e
+        # that happens before run.sh's own phase echoes would print anything.
+        run: bash -x proxy/differential/run.sh
 
       - name: Captures and container logs
         if: always()
