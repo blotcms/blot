@@ -92,4 +92,16 @@ describe("cacher", function () {
     },
     1000 * 60 * 5
   );
+
+  it("keeps refusing purges when the cache directory cannot be listed", async function () {
+    await fs.remove(this.cache_directory);
+
+    const rehydrateResponse = await fetch(this.origin + "/rehydrate");
+    expect(rehydrateResponse.status).toBe(500);
+    expect(await rehydrateResponse.text()).toContain("rehydrate failed: find exit");
+
+    // an incomplete index must not be used to report a purge as done
+    const purgeResponse = await fetch(this.origin + "/purge?host=127.0.0.1");
+    expect(purgeResponse.status).toBe(503);
+  });
 });

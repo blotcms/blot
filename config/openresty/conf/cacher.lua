@@ -271,17 +271,14 @@ local function build_index (self)
         end
     end
 
+    local stderr = proc:stderr_read_all() or ""
     local ok, reason, status = proc:wait()
 
-    if not ok and reason ~= "exit" then
-        shared_dictionary:delete(BUILDING)
-        return nil, "find " .. tostring(reason) .. " " .. tostring(status)
-    end
-
-    -- find exits non-zero if a directory vanished mid-walk (the cache
-    -- manager removes empty ones); everything it could list was indexed
+    -- e.g. a directory the worker cannot read: an index missing those files
+    -- must not be marked ready, or purges would succeed without removing them
     if not ok then
-        ngx.log(ngx.WARN, "rehydrate: find exited with status ", status)
+        shared_dictionary:delete(BUILDING)
+        return nil, "find " .. tostring(reason) .. " " .. tostring(status) .. ": " .. stderr:sub(1, 500)
     end
 
     for _, host in ipairs(hosts) do
