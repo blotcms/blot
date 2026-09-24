@@ -29,9 +29,12 @@
 #   PROXY_DEPLOY_LOCK      /tmp/blot-proxy-deploy.lock  held by every deploy script
 #   PROXY_SKIP_CERT_SWEEP  (unset)              1 skips the custom-domain certificate
 #                                               comparison (see cert_baseline)
-#   PROXY_NOFILE           10000                --ulimit nofile=N:N, must be >=
-#                                               worker_rlimit_nofile / worker_connections
-#                                               (config/openresty/conf/initial.conf)
+#   PROXY_NOFILE           65536                --ulimit nofile=N:N. Each proxied
+#                                               connection holds ~2 fds (client +
+#                                               upstream), so worker_connections
+#                                               10000 (config/openresty/conf/initial.conf)
+#                                               needs ~20000 plus cache/log fds;
+#                                               this leaves headroom above that
 #   PROXY_REHYDRATE_TIMEOUT 180                 seconds the rehearsal waits for
 #                                               "rehydrate: complete" in error.log
 #                                               (~20s for today's ~200k files)
@@ -52,11 +55,15 @@ HEALTH_SOCK="/run/openresty/health.sock"
 LOCK_FILE="${PROXY_DEPLOY_LOCK:-/tmp/blot-proxy-deploy.lock}"
 SITE_IP="127.0.0.1"
 PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
-# worker_rlimit_nofile and worker_connections are both 10000
-# (config/openresty/conf/initial.conf); the soft nofile limit must be at least
-# that many, plus headroom for non-connection fds (cache files, log files,
-# the health/purge sockets). Docker's default (1024) is well under it.
-NOFILE="${PROXY_NOFILE:-10000}"
+# worker_connections is 10000 (config/openresty/conf/initial.conf) and each
+# proxied connection holds about two fds (client + upstream), so 10000
+# connections can need about 20000; add cache/log/socket fds on top and
+# Docker's default (1024) is nowhere close. 65536 leaves real headroom above
+# that - a root dockerd allows it. Note this raises the CONTAINER's limit
+# only: nginx itself is still capped by worker_rlimit_nofile 10000 in
+# initial.conf (parity with bare metal, unchanged here), so this alone does
+# not let nginx use more than 10000.
+NOFILE="${PROXY_NOFILE:-65536}"
 REHYDRATE_TIMEOUT="${PROXY_REHYDRATE_TIMEOUT:-180}"
 
 # Never fail because the terminal went away: the cutover ignores SIGPIPE and
