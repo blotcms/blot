@@ -18,9 +18,13 @@ local cacher = {
 local READY = "__cacher_ready"
 local BUILDING = "__cacher_building"
 
--- Held while a walk runs; refreshed as it goes so it only expires if the
--- worker holding it dies.
-local BUILDING_TTL = 30
+-- Incremented when a walk starts, so a purge that overlapped one can tell
+local GENERATION = "__cacher_generation"
+
+-- The walk lock. It holds a token naming its owner and is renewed as the walk
+-- goes, so it only expires if the worker holding it dies or stalls for longer
+-- than this (find output is read with a 60s timeout).
+local BUILDING_TTL = 120
 
 -- Hand control back to the event loop this often during a walk
 local YIELD_EVERY = 200
@@ -33,15 +37,17 @@ local function cacher_is_ready(self)
     return self.shared_dictionary:get(READY) == true
 end
 
-local function reject_until_ready(self, ngx)
-    if cacher_is_ready(self) then
-        return
-    end
-
+local function respond_rebuilding(ngx)
     ngx.status = ngx.HTTP_SERVICE_UNAVAILABLE
     ngx.header["Retry-After"] = "30"
     ngx.say("cache index is being rebuilt, retry later")
     ngx.exit(ngx.OK)
+end
+
+local function reject_until_ready(self, ngx)
+    if not cacher_is_ready(self) then
+        respond_rebuilding(ngx)
+    end
 end
 
 local function cacher_add (self, host, cache_key) 
@@ -174,6 +180,23 @@ local function clear_hosts(shared_dictionary)
     end
 end
 
+-- Renew the walk lock if this walk still owns it
+local function renew_lock(shared_dictionary, token)
+    if shared_dictionary:get(BUILDING) ~= token then
+        return false
+    end
+
+    shared_dictionary:set(BUILDING, token, BUILDING_TTL)
+    return true
+end
+
+-- Release the walk lock unless it expired and another walk took it
+local function release_lock(shared_dictionary, token)
+    if shared_dictionary:get(BUILDING) == token then
+        shared_dictionary:delete(BUILDING)
+    end
+end
+
 -- Rebuilds the index from the files in the cache directory. Returns the
 -- sorted list of files whose host could not be parsed, or nil and an error:
 -- "busy" if another walk holds the lock, "exiting" if this worker is shutting
@@ -188,14 +211,27 @@ local function build_index (self)
     local cache_directory = self.cache_directory
     local shared_dictionary = self.shared_dictionary
 
-    if not shared_dictionary:add(BUILDING, true, BUILDING_TTL) then
+    local token = ngx.worker.pid() .. ":" .. ngx.now() .. ":" .. math.random()
+
+    if not shared_dictionary:add(BUILDING, token, BUILDING_TTL) then
         return nil, "busy"
     end
 
     local started = ngx.now()
 
+    -- in this order: see cacher_purge
+    shared_dictionary:incr(GENERATION, 1, 0)
     shared_dictionary:delete(READY)
     clear_hosts(shared_dictionary)
+
+    -- stop the walk, releasing the lock, and return why
+    local function abandon (proc, err)
+        if proc then
+            proc:kill(9)
+        end
+        release_lock(shared_dictionary, token)
+        return nil, err
+    end
 
     ngx.log(ngx.NOTICE, "rehydrate: " .. cache_directory)
 
@@ -204,8 +240,7 @@ local function build_index (self)
     local proc, err = require("ngx.pipe").spawn({"find", cache_directory, "-type", "f"})
 
     if not proc then
-        shared_dictionary:delete(BUILDING)
-        return nil, "find failed: " .. tostring(err)
+        return abandon(nil, "find failed: " .. tostring(err))
     end
 
     -- a cold disk can take a while to list a large tree
@@ -215,16 +250,13 @@ local function build_index (self)
     local hosts = {}
     local unparsed = {}
     local count = 0
-    local failed = 0
 
     while true do
         local path, read_err = proc:stdout_read_line()
 
         if not path then
             if read_err ~= "closed" then
-                proc:kill(9)
-                shared_dictionary:delete(BUILDING)
-                return nil, "reading find output failed: " .. tostring(read_err)
+                return abandon(proc, "reading find output failed: " .. tostring(read_err))
             end
             break
         end
@@ -245,13 +277,13 @@ local function build_index (self)
                     hosts[host] = true
                 end
 
+                -- a full dictionary makes rpush fail (it does not evict), and
+                -- an index missing files must not be marked ready
                 local pushed, push_err = shared_dictionary:rpush(host, name)
 
                 if not pushed then
-                    failed = failed + 1
-                    if failed == 1 then
-                        ngx.log(ngx.ERR, "rehydrate: could not add to index: ", push_err)
-                    end
+                    return abandon(proc, "could not add to index (" .. tostring(push_err)
+                        .. "), increase lua_shared_dict cacher_dictionary")
                 end
             end
         end
@@ -261,12 +293,13 @@ local function build_index (self)
         if count % YIELD_EVERY == 0 then
             -- the next process (a reload, or a respawned worker) rebuilds
             if ngx.worker.exiting() then
-                proc:kill(9)
-                shared_dictionary:delete(BUILDING)
-                return nil, "exiting"
+                return abandon(proc, "exiting")
             end
 
-            shared_dictionary:set(BUILDING, true, BUILDING_TTL)
+            if not renew_lock(shared_dictionary, token) then
+                return abandon(proc, "walk lock expired")
+            end
+
             ngx.sleep(0)
         end
     end
@@ -277,19 +310,23 @@ local function build_index (self)
     -- e.g. a directory the worker cannot read: an index missing those files
     -- must not be marked ready, or purges would succeed without removing them
     if not ok then
-        shared_dictionary:delete(BUILDING)
-        return nil, "find " .. tostring(reason) .. " " .. tostring(status) .. ": " .. stderr:sub(1, 500)
+        return abandon(nil, "find " .. tostring(reason) .. " " .. tostring(status) .. ": " .. stderr:sub(1, 500))
     end
 
     for _, host in ipairs(hosts) do
         deduplicate_key_list_by_host(host, shared_dictionary)
     end
 
+    -- a walk whose lock expired may overlap a newer one: leave it to that one
+    if not renew_lock(shared_dictionary, token) then
+        return nil, "walk lock expired"
+    end
+
     shared_dictionary:set(READY, true)
-    shared_dictionary:delete(BUILDING)
+    release_lock(shared_dictionary, token)
 
     ngx.log(ngx.NOTICE, "rehydrate: complete files=", count, " hosts=", #hosts,
-        " unparsed=", #unparsed, " failed=", failed, " seconds=", ngx.now() - started)
+        " unparsed=", #unparsed, " seconds=", ngx.now() - started)
 
     table.sort(unparsed)
 
@@ -298,9 +335,7 @@ end
 
 -- Called from init_worker_by_lua. Worker 0 rebuilds the index unless it is
 -- already complete (after `nginx -s reload`), then checks it periodically so
--- a failed walk is retried. The check also rebuilds if the ready flag itself
--- was lost: rpush evicts the least recently used keys when the dictionary is
--- full, and without the flag every purge would be refused.
+-- a failed walk is retried.
 local function cacher_start (self)
     local id = ngx.worker.id()
 
@@ -374,10 +409,20 @@ local function cacher_purge (self, ngx)
 
     reject_until_ready(self, ngx)
 
+    local generation = shared_dictionary:get(GENERATION)
+
     for host in string.gmatch(ngx.var.args, "host=([^&]+)") do
         ngx.log(ngx.NOTICE, "purging host: " .. host)
         local total_keys = purge_host(host, shared_dictionary, cache_directory)
         message = message .. host .. ": " .. total_keys .. "\n"
+    end
+
+    -- A walk (a /rehydrate) that started while this purge ran may have
+    -- cleared the lists before they were read, and will add back files this
+    -- purge did not see. A walk bumps the generation before clearing
+    -- anything, so this catches it; the caller retries after the rebuild.
+    if not cacher_is_ready(self) or shared_dictionary:get(GENERATION) ~= generation then
+        respond_rebuilding(ngx)
     end
 
     -- if message is empty then replace it with a message saying that no hosts were purged

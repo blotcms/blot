@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const fs = require("fs-extra");
 const fetch = require("node-fetch");
 const setup = require("./util/setup");
@@ -101,6 +102,29 @@ describe("cacher", function () {
     expect(await rehydrateResponse.text()).toContain("rehydrate failed: find exit");
 
     // an incomplete index must not be used to report a purge as done
+    const purgeResponse = await fetch(this.origin + "/purge?host=127.0.0.1");
+    expect(purgeResponse.status).toBe(503);
+  });
+
+  it("keeps refusing purges when the index does not fit in the dictionary", async function () {
+    // far more entries than rehydrate.conf's 300k cacher_dictionary holds
+    const writes = [];
+    for (let i = 0; i < 10000; i++) {
+      const key = `${this.origin}/filler/${i}`;
+      const hash = crypto.createHash("md5").update(key).digest("hex");
+      writes.push(
+        fs.outputFile(
+          `${this.cache_directory}/${hash.slice(-1)}/${hash.slice(-3, -1)}/${hash}`,
+          `\nKEY: ${key}\n`
+        )
+      );
+    }
+    await Promise.all(writes);
+
+    const rehydrateResponse = await fetch(this.origin + "/rehydrate");
+    expect(rehydrateResponse.status).toBe(500);
+    expect(await rehydrateResponse.text()).toContain("could not add to index");
+
     const purgeResponse = await fetch(this.origin + "/purge?host=127.0.0.1");
     expect(purgeResponse.status).toBe(503);
   });
