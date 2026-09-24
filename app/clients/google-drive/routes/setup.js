@@ -7,6 +7,18 @@ const config = require("config");
 // before aborting and requiring them to start again
 const SETUP_TIMEOUT = 1000 * 60 * 60 * 2; // 2 hours
 
+// Cancelling setup (disconnect) deletes the account hash outright. The
+// background polling loop below writes status fields (nonEmptyFolderShared,
+// folderId, etc.) after awaiting slow Drive API calls, so without this guard
+// a write that lands after a concurrent disconnect will resurrect a corrupt,
+// partial account hash instead of leaving the blog fully disconnected.
+async function storeIfAccountExists(blogID, data) {
+  const account = await database.blog.get(blogID);
+  if (!account) return null;
+  await database.blog.store(blogID, data);
+  return account;
+}
+
 async function finishSetup(blog, drive, email, serviceAccountId) {
   let folderId;
   let folderName;
@@ -90,7 +102,7 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
       throw new Error("Folder no longer eligible");
     }
 
-    await database.blog.store(blog.id, {
+    await storeIfAccountExists(blog.id, {
       folderId,
       folderName,
       nonEmptyFolderShared: false,
@@ -102,7 +114,7 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
 
     await resetFromBlot(blog.id, status, { publishSyncProgress: true });
 
-    await database.blog.store(blog.id, { preparing: false });
+    await storeIfAccountExists(blog.id, { preparing: false });
     status("All files transferred");
   } catch (e) {
     console.log(clfdate(), "Google Drive Client", e);
@@ -149,7 +161,7 @@ async function findEmptySharedFolder(blogID, drive, email, status, serviceAccoun
   );
 
   if (availableFolders.length === 0) {
-    await database.blog.store(blogID, {
+    await storeIfAccountExists(blogID, {
       nonEmptyFolderShared: false,
       nonEditorPermissions: false,
     });
@@ -245,7 +257,7 @@ async function processFolder(folder, drive, blogID, status, isLastFolder, servic
   if (!isEmpty) {
     if (isLastFolder) {
       status("Waiting for invite to empty Google Drive folder");
-      await database.blog.store(blogID, {
+      await storeIfAccountExists(blogID, {
         nonEmptyFolderShared: true,
         nonEditorPermissions: false,
       });
@@ -263,7 +275,7 @@ async function processFolder(folder, drive, blogID, status, isLastFolder, servic
   if (!hasEditorPermission) {
     if (isLastFolder) {
       status("Waiting for editor permission on Google Drive folder");
-      await database.blog.store(blogID, {
+      await storeIfAccountExists(blogID, {
         nonEditorPermissions: true,
         nonEmptyFolderShared: false,
       });
