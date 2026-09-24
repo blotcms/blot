@@ -1,8 +1,15 @@
 #!/bin/sh
 
+# mount-instance-store.service runs this as Type=oneshot: systemd (and the
+# docker.service.d drop-in that Requires= this unit) treats a non-zero exit
+# as failure, so every step below must actually abort the script on error
+# rather than leave it to silently fall through to `mount` returning success
+# on an empty/unformatted disk.
+set -e
+
 # Mount ephemeral disk to cache
 ##########################################################
-# This is part of the upstart script for Blot so if 
+# This is part of the upstart script for Blot so if
 # you move it, make sure to update the upstart script
 
 

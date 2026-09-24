@@ -26,6 +26,14 @@ yum -y install openresty
 # copy the file /home/ec2-user/scripts/mount-instance-store.service to /etc/systemd/system/mount-instance-store.service
 cp /home/ec2-user/scripts/mount-instance-store.service /etc/systemd/system/mount-instance-store.service
 
+# Drop-in that orders/requires docker.service after mount-instance-store.service,
+# so a proxy container is never (re)started with the not-yet-mounted, empty
+# /var/instance-ssd bind-mounted in. Docker itself is installed separately;
+# this just needs to exist under docker.service.d before docker.service does
+# for systemd to pick it up.
+mkdir -p /etc/systemd/system/docker.service.d
+cp /home/ec2-user/scripts/docker.service.d/10-instance-store.conf /etc/systemd/system/docker.service.d/10-instance-store.conf
+
 # reload systemd
 systemctl daemon-reload
 
