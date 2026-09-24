@@ -1,6 +1,7 @@
 #!/bin/sh
 
 CONFIG=$1
+shift
 
 if [ -z "$CONFIG" ]; then
   echo "No config file specified"
@@ -27,7 +28,7 @@ echo "Starting openresty with $OPENRESTY -c $CONFIG"
 # escalate with sudo when we aren't root already and sudo is available.
 if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
   # sudo resets the environment; keep the purge token for purge_auth.js
-  sudo env BLOT_PURGE_TOKEN="$BLOT_PURGE_TOKEN" "$OPENRESTY" -c "$CONFIG"
+  sudo env BLOT_PURGE_TOKEN="$BLOT_PURGE_TOKEN" "$OPENRESTY" -c "$CONFIG" "$@"
 else
-  "$OPENRESTY" -c "$CONFIG"
+  "$OPENRESTY" -c "$CONFIG" "$@"
 fi

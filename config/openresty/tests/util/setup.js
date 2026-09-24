@@ -41,7 +41,38 @@ const config = {
 
 const inspectCache = require("./inspect-cache");
 
-const startOpenresty = async (pathToConf, origin) => {
+const ERROR_LOG = DATA_DIRECTORY + "/error.log";
+
+const logSize = async () => {
+  try {
+    return (await fs.stat(ERROR_LOG)).size;
+  } catch (e) {
+    return 0;
+  }
+};
+
+// cacher.lua rebuilds its index in the background once nginx is up. Resolve
+// when it logs that the rebuild which started after `offset` is complete.
+const waitForIndex = async (offset) => {
+  const deadline = Date.now() + 30 * 1000;
+
+  while (Date.now() < deadline) {
+    try {
+      const log = await fs.readFile(ERROR_LOG);
+      if (log.subarray(offset).toString().includes("rehydrate: complete")) {
+        return;
+      }
+    } catch (e) {}
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+
+  throw new Error("cacher index was not rebuilt");
+};
+
+const startOpenresty = async (pathToConf, origin, { waitForIndex: wait = true } = {}) => {
+  const offset = await logSize();
+
   try {
     const output = child_process.execSync(
       __dirname + "/start-openresty.sh " + pathToConf
@@ -66,6 +97,8 @@ const startOpenresty = async (pathToConf, origin) => {
       //   console.log("Openresty not started yet");
     }
   }
+
+  if (wait) await waitForIndex(offset);
 };
 
 const stopOpenresty = async () => {
@@ -112,7 +145,16 @@ module.exports = configFile => {
     this.inspectCache = ({ verbose = false, host = null } = {}) =>
       inspectCache(origin + "/inspect", cache_directory, host, verbose);
 
-    this.restartOpenresty = async () => {
+    this.logSize = logSize;
+    this.waitForIndex = waitForIndex;
+
+    this.reloadOpenresty = async () => {
+      child_process.execSync(
+        __dirname + "/start-openresty.sh " + configPath + " -s reload"
+      );
+    };
+
+    this.restartOpenresty = async (options) => {
       // get the pid of the current openresty process
       const masterpid = () =>
         child_process
@@ -125,7 +167,7 @@ module.exports = configFile => {
       const pidBefore = masterpid();
 
       await stopOpenresty();
-      await startOpenresty(configPath, origin);
+      await startOpenresty(configPath, origin, options);
 
       // check that the pid has changed
       const pidAfter = masterpid();

@@ -1,6 +1,7 @@
 #!/bin/sh
 
 CONFIG=$1
+shift
 
 if [ -z "$CONFIG" ]; then
   echo "No config file specified"
@@ -26,7 +27,7 @@ echo "Starting openresty with $OPENRESTY -c $CONFIG"
 # nginx's `user` directive is only honoured when the master runs as root, so
 # escalate with sudo when we aren't root already and sudo is available.
 if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
-  sudo "$OPENRESTY" -c "$CONFIG"
+  sudo "$OPENRESTY" -c "$CONFIG" "$@"
 else
-  "$OPENRESTY" -c "$CONFIG"
+  "$OPENRESTY" -c "$CONFIG" "$@"
 fi
