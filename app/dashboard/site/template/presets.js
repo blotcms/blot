@@ -107,14 +107,11 @@ function presentColors(map, locals) {
     }
   });
 
-  const selected = markSelected(items, locals);
+  markSelected(items, locals);
 
   return {
     hasPresets: items.length > 0,
     items,
-    custom: items.length
-      ? { label: "Custom", selected: !selected, hidden: selected }
-      : null,
   };
 }
 

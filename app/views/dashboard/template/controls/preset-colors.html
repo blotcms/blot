@@ -36,20 +36,4 @@
 		</button>
 	</form>
 	{{/items}}
-	{{#custom}}
-	<div
-		class="preset-tile is-custom{{#selected}} is-selected{{/selected}}"
-		data-preset-custom="colors"
-		aria-label="Custom colors"
-		{{#selected}}aria-current="true"{{/selected}}
-		{{#hidden}}hidden{{/hidden}}
-		>
-		<span class="preset-swatches">
-			{{#swatches}}
-			<span class="preset-swatch"><span style="background:{{value}}"></span></span>
-			{{/swatches}}
-		</span>
-		<span class="preset-caption">{{label}}</span>
-	</div>
-	{{/custom}}
 </div>
