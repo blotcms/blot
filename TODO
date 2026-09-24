@@ -2,6 +2,10 @@ How do we think about a shared asset library across templates?
 - e.g. shared favicons
 - can we unwind some of the complete delete favion on template delete, etc. code?
 
+Begin triaging iCLoud sync issues
+
+Add script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago)
+
 iCloud server should periodically:
 - quit safari (some error flow during auth sometimes opens it)
 - close all system UI prompts (sometimes we get error for maybe accessing a revoked folder?)
@@ -18,6 +22,7 @@ Fix Google Drive sync outage caused by Google account suspesion
 - Revert 1958
 
 Dropbox initial transfer of existing site folder needs to handle the user running out of Dropbox space properly. Basically we could check quota before beginning the transfer. And if we run into quota mid-transfer, we should stop, display an error, ask the user to either free up space or disconnect from Dropbox.
+- This triggered DATA LOSS
 
 Make Google Drive incremental sync efficient
 - Store hash of their api responses
