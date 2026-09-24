@@ -1,7 +1,7 @@
 .preset-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
-  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
+  gap: 0.6rem;
   padding: 0.75rem;
 }
 
@@ -71,6 +71,48 @@ button.preset-tile {
   display: flex;
   flex-wrap: wrap;
   gap: 3px;
+}
+
+.preset-sample {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  margin: -0.55rem -0.5rem -0.45rem;
+  padding: 1rem 0.5rem 0.85rem;
+  border-radius: calc(var(--border-radius) - 1px);
+}
+
+.preset-sample-aa {
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.preset-sample-link {
+  font-size: 0.8rem;
+  text-decoration: underline;
+}
+
+.preset-check-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.preset-check-badge svg {
+  width: 11px;
+  height: 11px;
 }
 
 .preset-swatch {

@@ -7,7 +7,7 @@
   --color-picker-height-chooser: 0.65em;
   --color-picker-spacing: 0.65em;
   --color-swatch-size: 2rem;
-  --color-swatch-height: 1.25rem;
+  --color-swatch-height: 2rem;
 }
 
 .pickr {
@@ -56,7 +56,7 @@
   margin: 0 1em 0 0;
   width: var(--color-swatch-size);
   height: var(--color-swatch-height);
-  border-radius: 2px;
+  border-radius: 6px;
   display: block;
 }
 
@@ -94,6 +94,13 @@
 
 .color-picker-popup:hover {
   background-color: var(--light-background-color);
+}
+
+.color-picker-chevron {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--light-text-color);
 }
 
 .color-label {

@@ -28,6 +28,13 @@ function colorSwatches(patch) {
     .filter(Boolean);
 }
 
+function colorSample(patch) {
+  const background = normalizeColor(patch.background_color);
+  const text = normalizeColor(patch.text_color);
+  if (!background || !text) return null;
+  return { background, text, link: normalizeColor(patch.links_color) || text };
+}
+
 function colorFields(patch) {
   return ownKeys(patch).map((key) => ({ name: "locals." + key, value: patch[key] }));
 }
@@ -91,6 +98,7 @@ function presentColors(map, locals) {
         ariaLabel: id,
         match: JSON.stringify(patch),
         swatches,
+        sample: colorSample(patch),
         selected: false,
         pressed: "false",
       });
