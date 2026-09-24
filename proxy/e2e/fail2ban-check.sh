@@ -51,7 +51,7 @@ done
 expected[403]=$n403
 
 echo "-- nginx-444 (deliberately-malicious paths, connection closed - curl reports 000)"
-paths444=("/.git/config" "/.env" "/wp-admin/setup.php" "/.aws/credentials")
+paths444=("/.git/config" "/.env" "/wp-admin/" "/.aws/credentials")
 for p in "${paths444[@]}"; do
   send_until 000 -H 'Host: someblog.example' "$HTTP$p" || fail=1
 done
