@@ -65,31 +65,12 @@
 	</div>
 	{{/other_images.length}}
 
-        <div class="settings-group">
-                <h2 class="template-heading">Menu</h2>
-                <a class="line links" href="{{{base}}}/links">
-                        <span class="center">
-                                {{#blog.menu}}
-				<span class="tablet">{{label}}</span>
-				{{/blog.menu}}
-				
-				{{^blog.menu.length}}
-				<i>Your menu is empty</i>
-				{{/blog.menu.length}}
-				<span class="link" >Edit</span>
-			</span>
-			</a>
-{{#navigation}}
-	{{> template-editor-group}}
-	{{/navigation}}			
-	</div>	
-
 	<div class="settings-group">
 		<h2 class="template-heading">Photo</h2>
 		{{#profile_image_control}}
 		<a class="line" href="{{{base}}}/images/{{key}}" style="padding:11px 14px;{{^favicon_supported}}border-bottom:none;{{/favicon_supported}}">
 		{{#value}}<img src="{{{thumbnails.small.url}}}" width="48" height="48" style="object-fit:contain;vertical-align:middle;margin-right:.5rem" alt="" /><span class="link">Edit {{label}}</span>{{/value}}
-		{{^value}}<span class="center" style="border:1px dashed var(--border-color);width:48px;height:48px;display:inline-block;vertical-align:middle;margin-right:.5rem"></span><span class="link">Choose a {{label}}</span>{{/value}}
+		{{^value}}<span class="center" style="border:1px dashed var(--border-color);width:48px;height:48px;display:inline-block;vertical-align:middle;margin-right:.5rem"></span><span class="link">Choose a photo</span>{{/value}}
 		</a>
 		{{/profile_image_control}}
 		{{^profile_image_control}}
@@ -99,7 +80,7 @@
 		</span>
 		<span class="link">Choose a photo</span>
 		{{/blog.avatar}}
-		
+
 		{{#blog.avatar}}
 		<span class="center" style="width: 48px;height:48px;display:inline-block; vertical-align: middle;">
 			<img style="max-width:48px;max-height:48px;vertical-align: baseline; display: inline;" src="{{blog.avatar}}" class="{{#blog.roundAvatar}}rounded{{/blog.roundAvatar}}" />
@@ -119,13 +100,34 @@
 		{{/favicon_supported}}
 	</div>
 
+        <div class="settings-group">
+                <h2 class="template-heading">Menu</h2>
+                <a class="line links" href="{{{base}}}/links">
+                        <span class="center">
+                                {{#blog.menu}}
+				<span class="tablet">{{label}}</span>
+				{{/blog.menu}}
+
+				{{^blog.menu.length}}
+				<i>Your menu is empty</i>
+				{{/blog.menu.length}}
+				<span class="link" >Edit</span>
+			</span>
+			</a>
+{{#navigation}}
+	{{> template-editor-group}}
+	{{/navigation}}
+	</div>
+
+
+
 
 
 
 
 	{{#index_page.length}}
 	<div class="settings-group">
-	<h2 class="template-heading">Index page</h2>
+		<h2 class="template-heading">Index</h2>
 	{{#index_page}}
 	{{> template-editor-group}}
 	{{/index_page}}
@@ -134,23 +136,21 @@
 
 	{{#post_sorting}}
 	<div class="settings-group">
-	<h2 class="template-heading">Post sorting</h2>
+	<h2 class="template-heading">Posts</h2>
 	{{> template-editor-group}}
-	<p class="template-heading-note">Applies to the index page, tag pages, search results and feeds.</p>
-	</div>
-	{{/post_sorting}}
-
+	{{#post_adjacent_posts}}
+	{{> boolean}}
+	{{/post_adjacent_posts}}
 	{{> date}}
 
 {{#syntax_themes}}
-        <div class="settings-group">
-                <h2 class="template-heading">Syntax highlighter</h2>
-                <a class="line" href="{{{base}}}/syntax-highlighter" style="padding: 11px 20px;border-bottom: none;">
-                        <span class="center">Open syntax controls</span>
-                        <span class="right">Edit</span>
-                </a>
-        </div>
-        {{/syntax_themes}}
+	<a class="line" href="{{{base}}}/syntax-highlighter" style="padding: 11px 20px;border-bottom: none;">
+		<span class="center">Open syntax controls</span>
+		<span class="right">Edit</span>
+	</a>
+	{{/syntax_themes}}
+	</div>
+	{{/post_sorting}}
 </div>
 
 	<div class="settings-group template-docs-support-links-group">
