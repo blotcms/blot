@@ -67,9 +67,10 @@
   <div class="line">
     <div class="label">Set up folder</div>
     <div class="center">
-      <ul class="steps">
+      <div class="steps">
+      <ol>
         <li class="complete">
-           <span style="color:green;font-size: 12px;position: absolute;top:6px;left:-7px;z-index: 1;" class="icon-small-check"></span> 
+           <span style="color:green;font-size: 12px;position: absolute;top:6px;left:-7px;z-index: 1;" class="icon-small-check"></span>
            <span style="font-size:14px;color:var(--medium-text-color)">Add your Google Drive account</span><br>
                  <a href="{{{base}}}/setup" style="margin-top:4px;display: block;">
     <span class="center">{{email}}</span>
@@ -79,19 +80,17 @@
 {{#nonEditorPermissions}}
     <li class="complete">
       <span style="color: orange; font-size: 12px; margin-right: 4px; position: absolute;top:6px;left:-7px;z-index: 1;" class="icon-small-alert"></span>
-            
+
             <span style="font-size:14px;color:var(--medium-text-color)">The permissions granted to Blot are not sufficient. </span><br>
       <span class="center">Please give Blot 'Editor' permissions.</span>
-    </a>
     </li>
   {{/nonEditorPermissions}}
 {{#nonEmptyFolderShared}}
    <li class="complete">
      <span style="color: orange; font-size: 12px; margin-right: 4px; position: absolute;top:6px;left:-7px;z-index: 1;" class="icon-small-alert"></span>
-          
+
            <span style="font-size:14px;color:var(--medium-text-color)">The folder on Google Drive which you shared has items inside. </span><br>
     <span class="center">Please share an empty folder.</span>
-   </a>
   </li>
 {{/nonEmptyFolderShared}}
 <li>
@@ -110,7 +109,8 @@
 " href="https://drive.google.com/drive/my-drive" target="_blank">Open Google Drive <svg style="fill:currentColor;transform:rotate(-45deg);position:relative;top:3px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042l2.97-2.97H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"></path></svg></a>
 
 </li>
-      </ul>
+      </ol>
+      </div>
 
     </div>
   </div>
