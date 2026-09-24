@@ -20,13 +20,16 @@ function fetchCDNIPs() {
   }
 }
 
-const cdnIPs = fetchCDNIPs();
+// Matches proxy/build/index.js's loadCDNIPs: FETCH_CDN_IPS=false skips the
+// Bunny lookup so a config generate (e.g. proxy/differential's bare-metal
+// side) doesn't depend on an external service.
+const cdnIPs = process.env.FETCH_CDN_IPS === "false" ? [] : fetchCDNIPs();
 
-if (!cdnIPs.length) {
+if (process.env.FETCH_CDN_IPS !== "false" && !cdnIPs.length) {
   throw new Error("No CDN IPs fetched");
 }
 
-console.log(`Fetched ${cdnIPs.length} CDN IPs`);
+console.log(`Using ${cdnIPs.length} CDN IPs`);
 
 function loadEnvFile() {
   const envPath = require('path').join(__dirname, "..", "..", ".env");
