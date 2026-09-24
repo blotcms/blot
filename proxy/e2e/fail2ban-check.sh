@@ -9,8 +9,12 @@
 #   2. the <HOST> fail2ban-regex extracts from those matches is the real
 #      client IP - that's what fail2ban actually bans, so matching the
 #      right lines is only half the story; and
-#   3. an attacker-supplied X-Forwarded-For can't change what gets banned
-#      (either by getting an innocent IP banned, or dodging a ban itself).
+#   3. an attacker-supplied X-Forwarded-For or CF-Connecting-IP can't change
+#      what gets banned (either by getting an innocent IP banned, or
+#      dodging a ban itself); and
+#   4. every filter in config/openresty/fail2ban/filter.d/ has a traffic
+#      case here, and vice versa - a filter added later without updating
+#      this script would otherwise be silently skipped.
 #
 #   PROXY_HTTP   http base URL (default http://127.0.0.1)
 #   ACCESS_LOG   path to the container's access.log on the runner (required)
@@ -34,8 +38,20 @@ HTTP="${PROXY_HTTP:-http://127.0.0.1}"
 ACCESS_LOG="${ACCESS_LOG:?ACCESS_LOG must be set}"
 HOSTIP="${HOSTIP:?HOSTIP must be set}"
 FILTER_DIR="config/openresty/fail2ban/filter.d"
-SPOOFED_IP="203.0.113.9"
+SPOOFED_XFF_IP="203.0.113.9"
+SPOOFED_CF_IP="203.0.113.10"
 fail=0
+
+# The statuses this script must have a traffic case for, derived from the
+# filter files themselves (nginx-<status>.conf) rather than hard-coded, so a
+# filter added later without a matching traffic case fails loudly instead of
+# being silently skipped.
+FILTER_STATUSES=()
+for f in "$FILTER_DIR"/nginx-*.conf; do
+  base="$(basename "$f")"
+  FILTER_STATUSES+=("${base#nginx-}")
+done
+FILTER_STATUSES=("${FILTER_STATUSES[@]%.conf}")
 
 code() { curl -sk -o /dev/null -m 10 -w '%{http_code}' "$@"; }
 
@@ -95,12 +111,21 @@ done
 expected[444]=${#paths444[@]}
 
 echo "-- nginx-403 again, this time with a spoofed X-Forwarded-For"
-# set_real_ip_from (config/openresty/conf/cloudflare-real-ip.conf) only
-# trusts CF-Connecting-IP from Cloudflare's edge ranges, and this request
-# doesn't come from one - X-Forwarded-For isn't consulted at all - so
-# $remote_addr, and therefore what fail2ban bans, must still be REAL_IP.
-send_until 403 -H 'Host: someblog.example' -H "X-Forwarded-For: $SPOOFED_IP" "$HTTP/probe-xff.php" || fail=1
+# nginx never reads X-Forwarded-For here at all (real_ip_header is
+# CF-Connecting-IP, below) - so $remote_addr, and therefore what fail2ban
+# bans, must still be REAL_IP.
+send_until 403 -H 'Host: someblog.example' -H "X-Forwarded-For: $SPOOFED_XFF_IP" "$HTTP/probe-xff.php" || fail=1
 n403=$((n403 + 1))
+
+echo "-- nginx-403 again, this time with a spoofed CF-Connecting-IP"
+# This is the header config/openresty/conf/cloudflare-real-ip.conf actually
+# trusts (real_ip_header CF-Connecting-IP) - but only when the *immediate*
+# TCP peer is one of Cloudflare's own edge ranges (set_real_ip_from). This
+# request comes directly from the runner, not from one of those ranges, so
+# nginx must ignore the header and $remote_addr must still be REAL_IP.
+send_until 403 -H 'Host: someblog.example' -H "CF-Connecting-IP: $SPOOFED_CF_IP" "$HTTP/probe-cf.php" || fail=1
+n403=$((n403 + 1))
+
 expected[403]=$n403
 
 echo "-- nginx-404 (upstream's own 404, passed through)"
@@ -126,19 +151,40 @@ expected[429]=$n429
 
 echo "expected counts: 403=${expected[403]} 404=${expected[404]} 429=${expected[429]} 444=${expected[444]}"
 
+echo "== filter coverage ($FILTER_DIR/*.conf vs traffic cases in this script) =="
+for status in "${FILTER_STATUSES[@]}"; do
+  if [ -z "${expected[$status]+x}" ]; then
+    echo "FAIL - $FILTER_DIR/nginx-$status.conf has no traffic case in this script; add one above that sends request(s) producing a $status and sets expected[$status]" >&2
+    fail=1
+  fi
+done
+for status in "${!expected[@]}"; do
+  known=0
+  for s in "${FILTER_STATUSES[@]}"; do [ "$s" = "$status" ] && known=1 && break; done
+  if [ "$known" = 0 ]; then
+    echo "FAIL - this script has a traffic case for '$status' but no $FILTER_DIR/nginx-$status.conf filter exists" >&2
+    fail=1
+  fi
+done
+
 # Give the access log a moment to land (buffered file I/O) before reading it.
 sleep 1
 
-echo "== spoofed X-Forwarded-For never reached the log =="
-if grep -q "$SPOOFED_IP" "$ACCESS_LOG"; then
-  echo "FAIL - the spoofed X-Forwarded-For ($SPOOFED_IP) appears in $ACCESS_LOG; an attacker could get arbitrary IPs banned or dodge a ban" >&2
-  fail=1
-else
-  echo "  ok  - $SPOOFED_IP never appears in the log"
-fi
+echo "== spoofed IPs never reached the log =="
+for spoofed in "$SPOOFED_XFF_IP" "$SPOOFED_CF_IP"; do
+  if grep -q "$spoofed" "$ACCESS_LOG"; then
+    echo "FAIL - the spoofed IP ($spoofed) appears in $ACCESS_LOG; an attacker could get arbitrary IPs banned or dodge a ban" >&2
+    fail=1
+  else
+    echo "  ok  - $spoofed never appears in the log"
+  fi
+done
 
 echo "== fail2ban-regex =="
-for status in 403 404 429 444; do
+for status in "${FILTER_STATUSES[@]}"; do
+  if [ -z "${expected[$status]+x}" ]; then
+    continue  # already reported by the coverage check above
+  fi
   filter="$FILTER_DIR/nginx-$status.conf"
   # -v also prints, per matched failregex, the <HOST> it extracted (indented
   # under the regex, e.g. "|      1.2.3.4  Wed Sep 24 ..."), distinct from
