@@ -3,6 +3,23 @@ const config = require("config");
 const fs = require("fs-extra");
 const child_process = require("child_process");
 
+function fetchCDNIPs() {
+  const bunnyCDNIPURL = `https://bunnycdn.com/api/system/edgeserverlist`;
+  try {
+    const result = child_process.spawnSync("/usr/bin/curl", [
+      "-s",
+      bunnyCDNIPURL,
+    ]);
+    if (result.error) throw result.error;
+    const ips = JSON.parse(result.stdout.toString());
+    if (!Array.isArray(ips)) throw new Error("Invalid response from BunnyCDN");
+    return ips;
+  } catch (error) {
+    console.error("Error fetching CDN IPs:", error);
+    return [];
+  }
+}
+
 function loadEnvFile() {
   const envPath = require('path').join(__dirname, "..", "..", ".env");
   try {
@@ -25,29 +42,13 @@ function loadEnvFile() {
   }
 }
 
-// Load .env BEFORE reading FETCH_CDN_IPS below - it's a var a .env file can
-// set, and reading it first would ignore that.
+// Must run before FETCH_CDN_IPS (and anything else in env.js/locals.js) is
+// read below - otherwise setting it in .env has no effect, since
+// process.env wouldn't be populated from the file yet.
 loadEnvFile();
 
-function fetchCDNIPs() {
-  const bunnyCDNIPURL = `https://bunnycdn.com/api/system/edgeserverlist`;
-  try {
-    const result = child_process.spawnSync("/usr/bin/curl", [
-      "-s",
-      bunnyCDNIPURL,
-    ]);
-    if (result.error) throw result.error;
-    const ips = JSON.parse(result.stdout.toString());
-    if (!Array.isArray(ips)) throw new Error("Invalid response from BunnyCDN");
-    return ips;
-  } catch (error) {
-    console.error("Error fetching CDN IPs:", error);
-    return [];
-  }
-}
-
 // Matches proxy/build/index.js's loadCDNIPs: FETCH_CDN_IPS=false skips the
-// Bunny lookup so a config generate (e.g. proxy/deploy/e2e's bare-metal
+// Bunny lookup so a config generate (e.g. proxy/differential's bare-metal
 // side) doesn't depend on an external service.
 const cdnIPs = process.env.FETCH_CDN_IPS === "false" ? [] : fetchCDNIPs();
 
