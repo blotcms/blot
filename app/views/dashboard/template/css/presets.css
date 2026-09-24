@@ -67,20 +67,6 @@ button.preset-tile {
   display: none;
 }
 
-.preset-check {
-  position: absolute;
-  top: 0.3rem;
-  right: 0.3rem;
-  width: 14px;
-  height: 14px;
-  opacity: 0;
-  color: var(--accent-color);
-}
-
-.preset-tile.is-selected .preset-check {
-  opacity: 1;
-}
-
 .preset-swatches {
   display: flex;
   flex-wrap: wrap;
@@ -136,9 +122,6 @@ button.preset-tile {
   white-space: normal;
 }
 
-.preset-controls .settings-group {
-  margin: 0;
-  border: none;
-  border-radius: 0;
+.preset-controls {
   border-top: 1px solid var(--border-color);
 }
