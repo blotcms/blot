@@ -34,20 +34,18 @@ const baremetal = JSON.parse(fs.readFileSync(baremetalFile, "utf8"));
 //     did (a rate-limit allowlist, not externally observable per-request).
 // ---------------------------------------------------------------------------
 const ALLOWED_DIFFERENCES = new Set([
-  // Observed on a green run (blotcms/blot#1977, commit 962c07b, job
-  // 107622786236): container=127.0.0.1:8090, baremetal=127.0.0.1:8088 for
-  // this one case, while every other blog-host case in the same run (and
-  // that same MISS/HIT sequence's own second request) landed on 8090 on
-  // both sides. blot_blogs_node's upstream block (http.conf) is byte-identical
-  // between the two configs here (the container's ${PROXY_UPSTREAM_*}
-  // placeholders resolve to these same literal defaults in this harness), so
-  // this isn't a config difference - 127.0.0.1:8088 is that upstream's
-  // `backup`, only ever chosen when the primary errors for that one request
-  // (proxy_next_upstream), which can happen under CI resource contention for
-  // the last of ~35 rapid back-to-back requests. Not allowlisting the whole
-  // header (see IGNORE_VALUE_OF in lib.js) - only this specific case, so a
-  // real, reproducible upstream-mapping bug elsewhere still fails the diff.
-  "Blot-Cache MISS then HIT (first)|blot-upstream",
+  // "<case name>|<header>" entries go here if a real, expected difference is
+  // ever found. Empty: every case below is expected to match exactly.
+  //
+  // A "Blot-Cache MISS then HIT (first)|blot-upstream" difference showed up
+  // here briefly (blotcms/blot#1977, commit 962c07b, job 107622786236): the
+  // corpus's own /boom case (stub 500) trips blot_blogs_node's `max_fails` on
+  // its primary upstream, and since nginx counts fails per worker with no
+  // shared zone, whichever worker picks up the next request to that upstream
+  // nondeterministically decides whether it still sees the primary disabled.
+  // Fixed at the source instead of allowlisted here: capture.js now runs the
+  // cache sequence before the corpus loop, and /boom and /unavailable are
+  // the last entries in corpus.js - see the comment there.
 ]);
 
 let failures = 0;

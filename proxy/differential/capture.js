@@ -70,18 +70,14 @@ async function main() {
   const results = {};
   let sanityFailures = 0;
 
-  for (const c of corpus) {
-    const result = await request({ scheme: c.scheme, host: c.host, base: BASE, path: c.path, method: c.method, headers: c.headers });
-    results[c.name] = result;
-
-    const problem = checkSanity(c.name, c.sanity, result);
-    if (problem) {
-      sanityFailures++;
-      console.error(`  SANITY FAIL [${label}] ${c.name}: ${problem}`);
-    }
-  }
-
-  // Blot-Cache MISS -> HIT: two sequential requests to the same key.
+  // Blot-Cache MISS -> HIT: two sequential requests to the same key. Run
+  // BEFORE the corpus loop below, not after: the loop's "/boom" case (stub
+  // 500) trips blot_blogs_node's `max_fails` on its primary upstream, and
+  // since nginx counts fails per worker (no shared zone), whichever worker
+  // picks up the NEXT request to that upstream nondeterministically decides
+  // whether it still sees the primary disabled and falls to `backup` - see
+  // the comment next to /boom in corpus.js. Running the cache sequence first
+  // keeps it, and everything before /boom, deterministic.
   const first = await request({ scheme: cacheSequence.scheme, host: cacheSequence.host, base: BASE, path: cacheSequence.path });
   const second = await request({ scheme: cacheSequence.scheme, host: cacheSequence.host, base: BASE, path: cacheSequence.path });
   results[cacheSequence.name] = { first, second };
@@ -93,6 +89,17 @@ async function main() {
   if (second.headers["blot-cache"] !== "HIT") {
     sanityFailures++;
     console.error(`  SANITY FAIL [${label}] ${cacheSequence.name}: second request Blot-Cache was '${second.headers["blot-cache"]}', want HIT`);
+  }
+
+  for (const c of corpus) {
+    const result = await request({ scheme: c.scheme, host: c.host, base: BASE, path: c.path, method: c.method, headers: c.headers });
+    results[c.name] = result;
+
+    const problem = checkSanity(c.name, c.sanity, result);
+    if (problem) {
+      sanityFailures++;
+      console.error(`  SANITY FAIL [${label}] ${c.name}: ${problem}`);
+    }
   }
 
   fs.writeFileSync(outFile, JSON.stringify({ label, results }, null, 2));

@@ -98,10 +98,6 @@ const corpus = [
   // server is defined.
   { name: "webhooks. over https", scheme: "https", host: "webhooks.blot.im", path: "/", sanity: { status: 200 } },
 
-  // upstream error passthrough (both configs proxy_pass to the same stub)
-  { name: "upstream 503 passes through", scheme: "http", host: "someblog.blot.im", path: "/unavailable", sanity: { status: 503 } },
-  { name: "upstream 500 (offline page body, status preserved)", scheme: "http", host: "someblog.blot.im", path: "/boom", sanity: { status: 500 } },
-
   ...BLOCKED_PATHS.map((path) => ({
     name: `blocked: ${path}`,
     scheme: "http",
@@ -111,11 +107,26 @@ const corpus = [
     // in this harness - see lib.js) or 403; never 200.
     sanity: { statusNot: 200 },
   })),
+
+  // upstream error passthrough (both configs proxy_pass to the same stub).
+  // MUST stay last: /boom always gets a 500 from whichever upstream serves
+  // it, which trips blot_blogs_node's `max_fails` on that upstream (its
+  // primary). nginx counts fails per WORKER, with no shared zone across
+  // them, so which worker picks up the NEXT request to that upstream group
+  // nondeterministically decides whether it still sees the primary disabled
+  // and falls to `backup` instead - observed in blotcms/blot#1977 (job
+  // 107622786236) as the cache-sequence case's Blot-Upstream flipping
+  // between the two configs. capture.js also runs the Blot-Cache MISS/HIT
+  // sequence before this whole corpus, for the same reason.
+  { name: "upstream 503 passes through", scheme: "http", host: "someblog.blot.im", path: "/unavailable", sanity: { status: 503 } },
+  { name: "upstream 500 (offline page body, status preserved)", scheme: "http", host: "someblog.blot.im", path: "/boom", sanity: { status: 500 } },
 ];
 
 // Blot-Cache MISS -> HIT: two sequential requests to the same cache key.
 // Captured separately from `corpus` because it needs two correlated
-// requests, not one.
+// requests, not one. capture.js runs this BEFORE `corpus`, so it isn't
+// affected by /boom's upstream `max_fails` trip - see the comment next to
+// /boom above.
 const cacheSequence = {
   name: "Blot-Cache MISS then HIT",
   scheme: "http",
