@@ -46,9 +46,27 @@ function currentLocals(group) {
   return locals;
 }
 
+const CHECK_BADGE_HTML =
+  '<span class="preset-check-badge" aria-hidden="true"><svg viewBox="0 0 16 16">' +
+  '<path fill="currentColor" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path>' +
+  "</svg></span>";
+
+function setCheckBadge(button, show) {
+  const existing = button.querySelector(".preset-check-badge");
+  if (show) {
+    if (!existing) button.insertAdjacentHTML("beforeend", CHECK_BADGE_HTML);
+  } else if (existing) {
+    existing.remove();
+  }
+}
+
 function setPressed(button, pressed) {
   button.classList.toggle("is-selected", pressed);
   button.setAttribute("aria-pressed", pressed ? "true" : "false");
+  // Only color tiles render a checkmark badge; font tiles don't have one.
+  if (button.closest('[data-preset-grid="colors"]')) {
+    setCheckBadge(button, pressed);
+  }
 }
 
 function applyMatchToControls(group, match) {
