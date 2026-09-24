@@ -24,10 +24,21 @@ cd "$SCRIPT_DIR"
 
 cleanup() {
   docker rm -f stub redis proxy baremetal >/dev/null 2>&1 || true
+  [ -n "${STATIC_DIR:-}" ] && rm -rf "$STATIC_DIR"
 }
 trap cleanup EXIT
 
 cleanup # in case a previous run left containers behind
+
+STATIC_DIR="$(mktemp -d)"
+
+# A fixture for the cdn. corpus cases (corpus.js): both generators default to
+# these same two paths for the static mount blotcms/blot#1975 adds in
+# production (see build-baremetal-config.sh's BLOT_DIRECTORY and
+# config/openresty/locals.js's blog_static_files_dir/global_static_files_dir),
+# so mounting the same fixture at both, into both containers, exercises the
+# on-disk `try_files` path identically on each side.
+echo "differential-cdn-fixture" > "$STATIC_DIR/hello.txt"
 
 echo "--- starting redis + stub upstream ---"
 docker run -d --name redis --network host redis:6.2.12-alpine
@@ -40,24 +51,41 @@ for i in $(seq 1 30); do
 done
 
 # Waits for a config's readiness endpoint, then runs the corpus against it.
-# `host.blot.im` matches the wildcard blog vhost (config/openresty/conf/
-# server.conf) on plain :80, so this doesn't depend on the stub, Redis or TLS
-# being up - only that OpenResty itself parsed the config and is listening.
+# Host: blot.im over :443 hits blot-site.conf's `location = /health { return
+# 200; }` directly - an EXACT server_name match (server.conf's "blot.im"
+# server block, not the wildcard blog regex), so there's no ambiguity about
+# which server block it lands on, and it doesn't depend on the stub, Redis,
+# or any upstream being reachable - only that OpenResty parsed the config and
+# is listening. (An earlier version of this probe used a made-up
+# "readiness.blot.im" Host over :80 relying on the wildcard blog server's
+# regex `server_name`; that landed on the custom-domain default_server
+# instead and 404'd - see the "blot.im /health" corpus case in corpus.js,
+# which exercises the same location this probes.)
 wait_ready() {
   local container="$1"
+  local code
   for i in $(seq 1 30); do
-    code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: readiness.blot.im' http://127.0.0.1/health || true)
+    code=$(curl -sk -o /dev/null -w '%{http_code}' -m 5 -H 'Host: blot.im' https://127.0.0.1/health || echo curl-error)
     [ "$code" = "200" ] && return 0
     sleep 1
   done
-  echo "$container did not become ready" >&2
-  docker logs "$container" || true
+  echo "$container did not become ready (last probe: https://127.0.0.1/health Host:blot.im -> '$code')" >&2
+  echo "--- docker logs $container (stdout/stderr) ---" >&2
+  docker logs "$container" >&2 2>&1 || true
+  # The container config logs to stdout (LOG_TO_STDOUT, already above); the
+  # bare-metal-in-a-container config logs to a file instead (see
+  # build-baremetal-config.sh's OPENRESTY_LOG_DIRECTORY), which `docker logs`
+  # does not show.
+  echo "--- docker exec $container tail error.log ---" >&2
+  docker exec "$container" tail -n 100 /var/log/openresty/error.log >&2 2>&1 || true
   return 1
 }
 
 echo "--- container config ---"
 docker run -d --name proxy --network host --cap-add SYS_NICE \
   -e BLOT_HOST=blot.im -e PROXY_REDIS_HOST=127.0.0.1 -e PROXY_FETCH_CDN_IPS=false \
+  -v "$STATIC_DIR:/var/www/blot/data/static:ro" \
+  -v "$STATIC_DIR:/var/www/blot/app/blog/static:ro" \
   blot-proxy:differential
 wait_ready proxy
 node capture.js container container-capture.json
@@ -66,6 +94,8 @@ docker rm -f proxy >/dev/null
 
 echo "--- bare-metal config ---"
 docker run -d --name baremetal --network host --cap-add SYS_NICE \
+  -v "$STATIC_DIR:/var/www/blot/data/static:ro" \
+  -v "$STATIC_DIR:/var/www/blot/app/blog/static:ro" \
   blot-proxy:baremetal-differential
 wait_ready baremetal
 node capture.js baremetal baremetal-capture.json

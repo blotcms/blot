@@ -44,18 +44,35 @@ const corpus = [
   { name: "blog / over https", scheme: "https", host: "someblog.blot.im", path: "/", sanity: { status: 200 } },
   { name: "blog /health", scheme: "http", host: "someblog.blot.im", path: "/health", sanity: { status: 200 } },
   { name: "blog /random bypasses cache", scheme: "http", host: "someblog.blot.im", path: "/random", sanity: { status: 200 } },
+  { name: "blog / with HEAD", scheme: "http", host: "someblog.blot.im", path: "/", method: "HEAD", sanity: { status: 200 } },
+  // reverse-proxy-cache.conf's `limit_except GET HEAD { deny all; }` on the
+  // cached `location /` - a write method there is refused outright, not
+  // forwarded to Node.
+  { name: "blog / with POST is refused (limit_except)", scheme: "http", host: "someblog.blot.im", path: "/", method: "POST", sanity: { status: 403 } },
+  // reverse-proxy-cache.conf's proxy_ignore_headers includes Set-Cookie, so a
+  // request carrying a cookie is still cached/served like any other - there
+  // is no `proxy_cache_bypass`/`$cookie_*` cache-bypass logic in this config
+  // (checked config/openresty/conf/*.conf) for either generator to diverge on.
+  { name: "blog / with a cookie (no cache bypass)", scheme: "http", host: "someblog.blot.im", path: "/", headers: { Cookie: "session=abc123" }, sanity: { status: 200 } },
 
   // custom domain (blot-blogs.conf, default_server)
   { name: "custom domain / over http", scheme: "http", host: "a-custom-domain.example", path: "/", sanity: { status: 200 } },
   { name: "custom domain / over https", scheme: "https", host: "a-custom-domain.example", path: "/", sanity: { status: 200 } },
 
-  // cdn. host - neither config here mounts the static file tree
-  // (blotcms/blot#1941's "Serve cdn. files from disk" item), so both fall
-  // through to @cdn_node identically: this corpus can't tell the Cache-Control
-  // + CORS headers are missing from that fallback, only that both configs are
-  // equally missing them.
+  // cdn. host. run.sh mounts a one-file fixture static tree into both
+  // containers at the same paths both generators emit by default
+  // (/var/www/blot/data/static, /var/www/blot/app/blog/static - see
+  // proxy/differential/build-baremetal-config.sh's BLOT_DIRECTORY), the same
+  // mount blotcms/blot#1975 adds in production for #1941's "Serve cdn. files
+  // from disk" item, so this exercises the on-disk `try_files` path (and its
+  // Cache-Control/CORS headers) on both sides, not only the fallback.
   { name: "cdn. root redirects to blot.im", scheme: "http", host: "cdn.blot.im", path: "/", sanity: { status: 301, locationStartsWith: "https://blot.im" } },
-  { name: "cdn. file falls through to node", scheme: "http", host: "cdn.blot.im", path: "/some/file.png", sanity: { status: 200 } },
+  { name: "cdn. file served from disk", scheme: "http", host: "cdn.blot.im", path: "/hello.txt", sanity: { status: 200 } },
+  // A path with no mounted file still falls through to @cdn_node - a
+  // pre-existing gap (blotcms/blot#1941's cdn. checklist item), present
+  // identically on both sides here since neither add_header in `location /`
+  // applies to the named @cdn_node fallback.
+  { name: "cdn. missing file falls through to node", scheme: "http", host: "cdn.blot.im", path: "/does-not-exist-on-disk.png", sanity: { status: 200 } },
 
   // webhooks. host (SSE relay to the green/master upstream) - only a :443
   // server is defined.

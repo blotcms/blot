@@ -44,7 +44,7 @@ async function main() {
   let sanityFailures = 0;
 
   for (const c of corpus) {
-    const result = await request({ scheme: c.scheme, host: c.host, base: BASE, path: c.path, method: c.method });
+    const result = await request({ scheme: c.scheme, host: c.host, base: BASE, path: c.path, method: c.method, headers: c.headers });
     results[c.name] = result;
 
     const problem = checkSanity(c.name, c.sanity, result);

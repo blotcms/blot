@@ -17,6 +17,11 @@ const CAPTURED_HEADERS = [
   "blot-server",
   "blot-upstream",
   "x-content-type-options",
+  "strict-transport-security",
+  "x-frame-options",
+  "content-type",
+  "vary",
+  "set-cookie",
   "alt-svc",
   "content-encoding",
   "retry-after",
@@ -28,17 +33,19 @@ const CAPTURED_HEADERS = [
 // upstream ip:port - stable in this harness (both sides hit the same stub
 // on the same hardcoded ports) but still runtime-dependent in principle, so
 // treat it the same way the task asks Date/ETag/request-ids to be treated:
-// presence is compared, value is not.
-const IGNORE_VALUE_OF = new Set(["blot-upstream"]);
+// presence is compared, value is not. set-cookie is a session cookie in a
+// real deployment (e.g. a CSRF/session id) - never stable value-for-value,
+// so only whether one was set is meaningful here.
+const IGNORE_VALUE_OF = new Set(["blot-upstream", "set-cookie"]);
 
-function request({ scheme, host, base, path, method = "GET" }) {
+function request({ scheme, host, base, path, method = "GET", headers = {} }) {
   const mod = scheme === "https" ? https : http;
   const opts = {
     method,
     hostname: base,
     port: scheme === "https" ? 443 : 80,
     path,
-    headers: { Host: host, "User-Agent": "blot-proxy-differential" },
+    headers: { Host: host, "User-Agent": "blot-proxy-differential", ...headers },
     rejectUnauthorized: false, // both sides serve a self-signed placeholder cert
     timeout: 10000,
   };
@@ -49,11 +56,11 @@ function request({ scheme, host, base, path, method = "GET" }) {
       // the port it was served from, neither of which is meaningful to diff.
       res.on("data", () => {});
       res.on("end", () => {
-        const headers = {};
+        const capturedHeaders = {};
         for (const name of CAPTURED_HEADERS) {
-          if (res.headers[name] !== undefined) headers[name] = res.headers[name];
+          if (res.headers[name] !== undefined) capturedHeaders[name] = res.headers[name];
         }
-        resolve({ status: res.statusCode, headers });
+        resolve({ status: res.statusCode, headers: capturedHeaders });
       });
     });
     req.on("timeout", () => req.destroy());

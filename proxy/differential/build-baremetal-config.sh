@@ -38,6 +38,16 @@ export OPENRESTY_CACHE_DIRECTORY="${OPENRESTY_CACHE_DIRECTORY:-/var/cache/openre
 export OPENRESTY_CONFIG_DIRECTORY="${OPENRESTY_CONFIG_DIRECTORY:-/etc/openresty}"
 export OPENRESTY_USER="${OPENRESTY_USER:-ec2-user}"
 
+# config/openresty/locals.js's baremetal() takes blog_static_files_dir /
+# global_static_files_dir from require("config") (config/index.js), which
+# derives both from BLOT_DIRECTORY - not overridable per-variable like the
+# container side's BLOG_STATIC_FILES_DIR/GLOBAL_STATIC_FILES_DIR. Setting it
+# to the container side's own default (proxy/build/index.js's
+# BLOT_DIRECTORY default) makes both generators emit the same two paths, so
+# run.sh can mount one fixture directory into both containers at the same
+# paths - see corpus.js's "cdn. file served from disk" case.
+export BLOT_DIRECTORY="${BLOT_DIRECTORY:-/var/www/blot}"
+
 # Do not depend on the BunnyCDN edge-IP list being reachable from CI (same
 # reasoning as proxy/build/build.sh; see config/openresty/build-config.js).
 export FETCH_CDN_IPS="${FETCH_CDN_IPS:-false}"
