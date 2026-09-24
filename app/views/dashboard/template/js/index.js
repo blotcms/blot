@@ -13,3 +13,4 @@ require('../controls/favicon.js');
 require('../controls/image-crop.js');
 require('../controls/photo-favicon.js');
 require('./menu-links.js')
+require('./presets.js')

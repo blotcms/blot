@@ -33,8 +33,7 @@ Investigate green crashes (`Lock was lost` / ECOMPROMISED at 2026-09-21 18:02 an
 - Next: check green logs for `[LOCK] slow heartbeat` / `[LOCK] heartbeat error` after the heartbeat round-trip logging ships (PR #1952) — it separates event-loop-side delay (tickDelay) from Redis-side delay (roundTrip) for the first time
 - Remove the event loop monitor (app/helper/eventLoopMonitor*.js, its setup.js hook, and `logLag`/`measureEventLoop` in app/clients/dropbox/init.js) and the lock heartbeat logging (app/sync/lock.js) once the cause is fixed
 
-Add color and font presents to template editor (with edit manually options)
-- surface this on the templates subpages -> switch from png to iframe after hovering a selection
+Surface template choices on the templates subpages: switch from png to iframe after hovering a selection
 
 Perform caching and header audit of site and templates
 - Check logs and headers via curl
@@ -470,8 +469,7 @@ Investigate replybox for comments
 
 Add checkbox to toggle newsletter subscription to account page
 
-Adjust color settings into a simple 'presets' picker, then an option to dive into specific altertions on seperate view.
-- make it possible to conenct two colors, e.g. navigation background color -> same as background color
+Make it possible to connect two colors in the template editor, e.g. navigation background color -> same as background color
 
 Add lang selector (map english -> en) to template editor
 

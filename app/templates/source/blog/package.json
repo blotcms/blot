@@ -52,7 +52,23 @@
     "content_width": 39,
     "content_width_range": [24, 64],
     "sidebar_width": 15,
-    "sidebar_width_range": [8, 24]
+    "sidebar_width_range": [8, 24],
+    "presets": {
+      "colors": {
+        "Classic": { "background_color": "#FFFFFF", "text_color": "#111111", "links_color": "#111111" },
+        "Blush": { "background_color": "#fff5f7", "text_color": "#3b2430", "links_color": "#c23b6e" },
+        "Sea": { "background_color": "#f3f7f8", "text_color": "#1c2b33", "links_color": "#1f6f8b" },
+        "Paper": { "background_color": "#f6f1e7", "text_color": "#2a2118", "links_color": "#8a4b08" },
+        "Ink": { "background_color": "#0e0e0e", "text_color": "#f7f7f5", "links_color": "#d7c4a3" }
+      },
+      "fonts": {
+        "Classic": { "font": { "id": "verdana" }, "title_font": { "id": "gill-sans" } },
+        "Editorial": { "font": { "id": "source-sans" }, "title_font": { "id": "vollkorn" } },
+        "Literary": { "font": { "id": "georgia" }, "title_font": { "id": "source-serif" } },
+        "Modern": { "font": { "id": "inter" }, "title_font": { "id": "et-book" } },
+        "System": { "font": { "id": "system-sans" }, "title_font": { "id": "system-serif" } }
+      }
+    }
   },
   "views": {
     "archives.html": {

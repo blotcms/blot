@@ -1,5 +1,19 @@
 <div class="inputs">
 
+{{#colorPresets.hasPresets}}
+<details class="settings-group" data-preset-group="colors" open>
+<summary class="template-heading">Colors</summary>
+{{#colorPresets}}
+{{> preset-colors}}
+{{/colorPresets}}
+<div class="preset-controls">
+{{#colors}}
+{{> color}}
+{{/colors}}
+</div>
+</details>
+{{/colorPresets.hasPresets}}
+	{{^colorPresets.hasPresets}}
 	{{#colors.length}}
 	<div class="settings-group">
 	<h2 class="template-heading">Colors</h2>
@@ -8,12 +22,31 @@
 	{{/colors}}
 	</div>
 	{{/colors.length}}
+	{{/colorPresets.hasPresets}}
 
-	{{#fonts.length}} 	
+{{#fontPresets.hasPresets}}
+<details class="settings-group" data-preset-group="fonts" open>
+<summary class="template-heading">Fonts</summary>
+{{#fontPresets}}
+{{> preset-fonts}}
+{{/fontPresets}}
+<div class="preset-controls">
+{{#fonts}}
+{{> font}}
+{{/fonts}}
+</div>
+</details>
+{{/fontPresets.hasPresets}}
+	{{^fontPresets.hasPresets}}
+	{{#fonts.length}}
+	<div class="settings-group">
+	<h2 class="template-heading">Fonts</h2>
         {{#fonts}}
         {{> font}}
         {{/fonts}}
+	</div>
         {{/fonts.length}}
+	{{/fontPresets.hasPresets}}
 
         {{#uploads.length}}
         <div class="settings-group">
