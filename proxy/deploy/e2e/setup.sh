@@ -84,9 +84,14 @@ for i in $(seq 1 30); do
   [ "$i" -lt 30 ] || { echo "redis never came up" >&2; docker logs blot-e2e-redis; exit 1; }
 done
 
-# ---- stub upstream (127.0.0.1:8088-8090) ---------------------------------
+# ---- stub upstream (8088-8090, bound to every interface) -----------------
+# STUB_BIND=0.0.0.0: the stub's default (127.0.0.1) is unreachable from the
+# cutover rehearsal container, which runs on the default Docker bridge (not
+# --network host) and connects to the upstream via the bridge gateway
+# address - real production Node containers are reachable the same way
+# (docker -p publishes to every interface by default).
 log "Starting the stub upstream"
-docker run -d --name blot-e2e-stub --network host \
+docker run -d --name blot-e2e-stub --network host -e STUB_BIND=0.0.0.0 \
   -v "$REPO_ROOT/proxy/e2e/stub-upstream.js":/s.js:ro \
   node:22-alpine node /s.js >/dev/null
 for i in $(seq 1 30); do
