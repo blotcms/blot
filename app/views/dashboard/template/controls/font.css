@@ -24,7 +24,8 @@
   display: flex;
   align-items: center;
   gap: 0.6em;
-  padding: 0.5em 1em;
+  padding: var(--select-control-padding);
+  font-size: var(--select-control-font-size);
   border-bottom: 1px solid var(--light-border-color);
 }
 
