@@ -36,7 +36,8 @@
 .font-row-label {
   flex: 0 0 auto;
   min-width: 2.75em;
-  color: var(--light-text-color);
+  font-size: var(--select-control-font-size);
+  color: var(--text-color);
 }
 
 .font-picker-trigger {
