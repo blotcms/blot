@@ -386,8 +386,17 @@ EOF_REMOTE
         if ssh "$BLOT_HOST" "~/proxy-deploy/blue-green.sh '${proxy_image}'"; then
           info "Proxy container replaced"
         else
+          # blue-green.sh takes its baseline (snapshot + cert_baseline) from the
+          # OLD container, which is still pointed at the OLD Redis. Since this
+          # script is usually run because the old Redis is gone or unhealthy,
+          # that baseline step is a likely reason for the refusal above: rerunning
+          # the exact same command will fail the same way. If it's the old Redis
+          # that's unreachable (not some other problem), the operator can skip the
+          # certificate comparison with PROXY_SKIP_CERT_SWEEP=1.
           warn "blue-green.sh failed. The proxy container still uses the old Redis host. Replace it by hand:"
           warn "  ssh ${BLOT_HOST} '~/proxy-deploy/blue-green.sh ${proxy_image}'"
+          warn "If it refused because the OLD Redis (now replaced) is unreachable - e.g. \"cannot record the custom-domain certificates\" or \"not swapping\" - skip the certificate comparison instead:"
+          warn "  ssh ${BLOT_HOST} 'PROXY_SKIP_CERT_SWEEP=1 ~/proxy-deploy/blue-green.sh ${proxy_image}'"
         fi
       else
         warn "~/proxy-deploy/blue-green.sh not found on ${BLOT_HOST}. The proxy container still uses the old Redis host. Replace it NOW:"
