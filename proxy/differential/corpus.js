@@ -59,20 +59,37 @@ const corpus = [
   { name: "custom domain / over http", scheme: "http", host: "a-custom-domain.example", path: "/", sanity: { status: 200 } },
   { name: "custom domain / over https", scheme: "https", host: "a-custom-domain.example", path: "/", sanity: { status: 200 } },
 
-  // cdn. host. run.sh mounts a one-file fixture static tree into both
-  // containers at the same paths both generators emit by default
-  // (/var/www/blot/data/static, /var/www/blot/app/blog/static - see
-  // proxy/differential/build-baremetal-config.sh's BLOT_DIRECTORY), the same
-  // mount blotcms/blot#1975 adds in production for #1941's "Serve cdn. files
-  // from disk" item, so this exercises the on-disk `try_files` path (and its
+  // cdn. host. run.sh mounts a fixture static tree into both containers at
+  // the same paths both generators emit by default (/var/www/blot/data/static,
+  // /var/www/blot/app/blog/static - see proxy/differential/
+  // build-baremetal-config.sh's BLOT_DIRECTORY), the same mount
+  // blotcms/blot#1975 adds in production for #1941's "Serve cdn. files from
+  // disk" item, so this exercises the on-disk `try_files` path (and its
   // Cache-Control/CORS headers) on both sides, not only the fallback.
   { name: "cdn. root redirects to blot.im", scheme: "http", host: "cdn.blot.im", path: "/", sanity: { status: 301, locationStartsWith: "https://blot.im" } },
-  { name: "cdn. file served from disk", scheme: "http", host: "cdn.blot.im", path: "/hello.txt", sanity: { status: 200 } },
+  // servedFromDisk asserts this is genuinely served from the mounted file,
+  // not the @cdn_node fallback below (which is also a 200 - status alone
+  // doesn't distinguish them, which is how a file the OpenResty worker
+  // couldn't even read - see run.sh's fixture permissions comment - passed
+  // this case for a while without being caught).
+  { name: "cdn. file served from disk", scheme: "http", host: "cdn.blot.im", path: "/hello.txt", sanity: { status: 200, servedFromDisk: true } },
   // A path with no mounted file still falls through to @cdn_node - a
   // pre-existing gap (blotcms/blot#1941's cdn. checklist item), present
   // identically on both sides here since neither add_header in `location /`
   // applies to the named @cdn_node fallback.
   { name: "cdn. missing file falls through to node", scheme: "http", host: "cdn.blot.im", path: "/does-not-exist-on-disk.png", sanity: { status: 200 } },
+  // global-only.txt exists ONLY in the "global" static dir (run.sh), not the
+  // "blog" one that server.conf's cdn. location sets as `root`. try_files'
+  // other two candidates - {{global_static_files_dir}}$uri and .../$uri/ -
+  // are absolute paths (start with "/"), which nginx treats as URIs to
+  // internally redirect to, not filesystem paths to check, so this file is
+  // never actually found on disk today: it falls through to @cdn_node like
+  // the missing-file case above, on both configs identically (not a
+  // difference between them - a pre-existing config bug, being fixed in
+  // sibling PR blotcms/blot#1975). No `servedFromDisk` assertion for now;
+  // add one once #1975 lands and this starts being served from disk. Keep
+  // the status assertion regardless - both configs still have to agree.
+  { name: "cdn. file only in global static dir (not yet found - blotcms/blot#1975)", scheme: "http", host: "cdn.blot.im", path: "/global-only.txt", sanity: { status: 200 } },
 
   // webhooks. host (SSE relay to the green/master upstream) - only a :443
   // server is defined.

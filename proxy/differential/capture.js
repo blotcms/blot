@@ -41,6 +41,21 @@ function checkSanity(name, sanity, result) {
       return `expected Location to start with '${sanity.locationStartsWith}', got '${loc}'`;
     }
   }
+  if (sanity.servedFromDisk) {
+    // The `location /` this is served from (server.conf's cdn. host) proxies
+    // to Node - and sets Blot-Server/Blot-Cache/Blot-Upstream - only in its
+    // @cdn_node fallback; a real on-disk hit never reaches proxy_pass, so
+    // Blot-Upstream must be absent. Cache-Control is the header that specific
+    // fallback is missing (blotcms/blot#1941), so its presence here is what
+    // actually distinguishes "served from disk" from "fell through to node
+    // but still returned 200" - status alone doesn't.
+    if (result.headers["blot-upstream"] !== undefined) {
+      return `expected no Blot-Upstream header (should be served from disk, not proxied to node), got '${result.headers["blot-upstream"]}'`;
+    }
+    if (result.headers["cache-control"] !== "public, max-age=31536000") {
+      return `expected Cache-Control 'public, max-age=31536000' (the cdn. location's on-disk add_header), got '${result.headers["cache-control"]}'`;
+    }
+  }
   return null;
 }
 

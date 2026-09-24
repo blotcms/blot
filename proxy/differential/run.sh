@@ -42,13 +42,28 @@ cleanup
 echo "--- writing the cdn. fixture ---"
 STATIC_DIR="$(mktemp -d)"
 
-# A fixture for the cdn. corpus cases (corpus.js): both generators default to
-# these same two paths for the static mount blotcms/blot#1975 adds in
-# production (see build-baremetal-config.sh's BLOT_DIRECTORY and
-# config/openresty/locals.js's blog_static_files_dir/global_static_files_dir),
-# so mounting the same fixture at both, into both containers, exercises the
-# on-disk `try_files` path identically on each side.
-echo "differential-cdn-fixture" > "$STATIC_DIR/hello.txt"
+# Two fixtures for the cdn. corpus cases (corpus.js), mounted read-only into
+# both containers at the same two paths both generators default to
+# (build-baremetal-config.sh's BLOT_DIRECTORY and config/openresty/locals.js's
+# blog_static_files_dir/global_static_files_dir - the same mount
+# blotcms/blot#1975 adds in production):
+#   blog/hello.txt        - in the "blog" static dir (server.conf's `root`
+#                            for the cdn. location) - found by try_files.
+#   global/global-only.txt - in the "global" static dir ONLY - see the "cdn.
+#                            file only in global static dir" corpus case for
+#                            why this one is NOT currently found.
+#
+# The container's OpenResty worker runs as uid 1000 (ec2-user); a plain
+# `mktemp -d` is 0700, owned by the runner (a different uid), so the worker
+# could not even stat the file (open() ... Permission denied -> silently
+# falls through to @cdn_node, which returns 200 too, so the wrong path
+# passed the corpus's status-only sanity check without being caught - see
+# the comment on `servedFromDisk` in corpus.js). Make the tree world-readable.
+mkdir -p "$STATIC_DIR/blog" "$STATIC_DIR/global"
+echo "differential-cdn-fixture" > "$STATIC_DIR/blog/hello.txt"
+echo "differential-cdn-fixture-global-only" > "$STATIC_DIR/global/global-only.txt"
+chmod 755 "$STATIC_DIR" "$STATIC_DIR/blog" "$STATIC_DIR/global"
+chmod 644 "$STATIC_DIR/blog/hello.txt" "$STATIC_DIR/global/global-only.txt"
 
 # server.conf's internal purge/inspect server binds 127.0.0.1:80 - loopback
 # only, but on --network host that's the SAME loopback the client (curl,
@@ -109,8 +124,8 @@ wait_ready() {
 echo "--- container config ---"
 docker run -d --name proxy --network host --cap-add SYS_NICE \
   -e BLOT_HOST=blot.im -e PROXY_REDIS_HOST=127.0.0.1 -e PROXY_FETCH_CDN_IPS=false \
-  -v "$STATIC_DIR:/var/www/blot/data/static:ro" \
-  -v "$STATIC_DIR:/var/www/blot/app/blog/static:ro" \
+  -v "$STATIC_DIR/blog:/var/www/blot/data/static:ro" \
+  -v "$STATIC_DIR/global:/var/www/blot/app/blog/static:ro" \
   blot-proxy:differential
 wait_ready proxy
 # capture.js exits non-zero when one of the corpus's own sanity checks fails
@@ -126,8 +141,8 @@ docker rm -f proxy >/dev/null
 
 echo "--- bare-metal config ---"
 docker run -d --name baremetal --network host --cap-add SYS_NICE \
-  -v "$STATIC_DIR:/var/www/blot/data/static:ro" \
-  -v "$STATIC_DIR:/var/www/blot/app/blog/static:ro" \
+  -v "$STATIC_DIR/blog:/var/www/blot/data/static:ro" \
+  -v "$STATIC_DIR/global:/var/www/blot/app/blog/static:ro" \
   blot-proxy:baremetal-differential
 wait_ready baremetal
 BAREMETAL_SANITY_OK=1
