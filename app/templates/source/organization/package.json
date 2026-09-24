@@ -5,7 +5,8 @@
     "page_size": 12,
     "hide_dates": false,
     "date_display": "MMMM D, Y",
-    "demo_folder": "lecture"
+    "demo_folder": "lecture",
+    "profile_image": {}
   },
   "views": {
     "error": {

@@ -18,7 +18,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="{{{png16}}}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{{appleTouch}}}">
     {{/favicon}}
-    {{^favicon}}{{#avatar}}<link rel="icon" href="{{{avatar}}}">{{/avatar}}{{/favicon}}
+    {{^favicon}}{{#profile_image.thumbnails.square}}<link rel="icon" href="{{{url}}}">{{/profile_image.thumbnails.square}}{{^profile_image.thumbnails.square.url}}{{#avatar}}<link rel="icon" href="{{{avatar}}}">{{/avatar}}{{/profile_image.thumbnails.square.url}}{{/favicon}}
     <link rel="preconnect" href="{{{cdn}}}" />
     <link rel="stylesheet" href="{{#asset}}/css-theme.css{{/asset}}">
 
@@ -35,7 +35,14 @@
     <meta property="og:image:height" content="{{height}}">
     {{/thumbnail.large}}
     {{^thumbnail.large}}
+    {{#profile_image.thumbnails.large}}
+    <meta property="og:image" content="{{{url}}}">
+    <meta property="og:image:width" content="{{width}}">
+    <meta property="og:image:height" content="{{height}}">
+    {{/profile_image.thumbnails.large}}
+    {{^profile_image.thumbnails.large.url}}
     {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
+    {{/profile_image.thumbnails.large.url}}
     {{/thumbnail.large}}
     <meta property="og:type" content="article">
     {{#thumbnail.large}}<meta name="twitter:card" content="summary_large_image">{{/thumbnail.large}}{{^thumbnail.large}}<meta name="twitter:card" content="summary">{{/thumbnail.large}}
@@ -43,7 +50,12 @@
     {{#summary}}<meta name="twitter:description" content="{{summary}}">{{/summary}}{{^summary}}<meta name="twitter:description" content="{{title}}">{{/summary}}
     {{#thumbnail.large}}<meta name="twitter:image" content="{{{url}}}">{{/thumbnail.large}}
     {{^thumbnail.large}}
+    {{#profile_image.thumbnails.large}}
+    <meta name="twitter:image" content="{{{url}}}">
+    {{/profile_image.thumbnails.large}}
+    {{^profile_image.thumbnails.large.url}}
     {{#avatar}}<meta name="twitter:image" content="{{{avatar}}}">{{/avatar}}
+    {{/profile_image.thumbnails.large.url}}
     {{/thumbnail.large}}
     <meta property="article:author" content="{{{siteURL}}}">
     <meta property="article:published_time" content="{{#formatDate}}YYYY-MM-DDTHH:mm:ssZ{{/formatDate}}">
@@ -61,6 +73,13 @@
     {{/url}}
     <meta property="og:title" content="{{> title}}">
     <meta property="og:description" content="{{> description}}">
+    {{#profile_image.thumbnails.large}}
+    <meta property="og:image" content="{{{url}}}">
+    <meta property="og:image:width" content="{{width}}">
+    <meta property="og:image:height" content="{{height}}">
+    {{/profile_image.thumbnails.large}}
+    {{^profile_image.thumbnails.large.url}}
     {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
+    {{/profile_image.thumbnails.large.url}}
     {{/entry}}
 </head>

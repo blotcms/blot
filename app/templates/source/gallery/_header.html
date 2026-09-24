@@ -1,6 +1,6 @@
 <header>
 
-<a href="/" title="Home" class="site-title {{#is_active}}/{{/is_active}}">{{#logo_url}}<img src="{{{logo_url}}}" alt="" class="site-logo">{{/logo_url}}<strong>{{title}}</strong></a>
+<a href="/" title="Home" class="site-title {{#is_active}}/{{/is_active}}">{{#logo_url}}<img src="{{{logo_url}}}" alt="" class="site-logo">{{/logo_url}}{{^logo_url}}{{#profile_image.thumbnails.square}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" alt="" class="site-logo">{{/profile_image.thumbnails.square}}{{/logo_url}}<strong>{{title}}</strong></a>
 
 {{#show_tags_in_navigation}}
 <nav class="tags">
