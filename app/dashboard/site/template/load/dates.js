@@ -15,16 +15,30 @@ var displays = [
 module.exports = function (req, res, next) {
   let date_display = req.template.locals.date_display;
   let hide_dates = req.template.locals.hide_dates;
+  const hideDatesValue = "__hide_dates__";
+
+  res.locals.hide_dates_value = hideDatesValue;
 
   if (date_display) {
-    var displayFormats = [];
+    var displayFormats = [
+      {
+        value: hideDatesValue,
+        selected: hide_dates ? "selected" : "",
+        date: "Hide dates"
+      }
+    ];
+    const hasMatchingFormat = displays.includes(date_display);
 
-    displays.forEach(function (display) {
+    displays.forEach(function (display, index) {
       var now = moment.utc(Date.now()).tz(req.blog.timeZone).format(display);
 
       displayFormats.push({
         value: display,
-        selected: display === date_display ? "selected" : "",
+        selected:
+          !hide_dates &&
+          (display === date_display || (!hasMatchingFormat && index === 0))
+            ? "selected"
+            : "",
         date: now
       });
     });

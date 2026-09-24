@@ -9,6 +9,7 @@
 form.select {
   display: flex;
   align-items: center;
+  gap: 0.5em;
   position: relative;
   padding: var(--select-control-padding);
   font-size: var(--select-control-font-size);
@@ -35,16 +36,33 @@ form.select select,
   text-align: right;
 }
 
+form.select--full-width select {
+  width: 100%;
+  min-width: 0;
+  text-align: right;
+}
+
 #date_display {
   margin: 0;
-  padding: 0.6875em 1em;
+  padding: 0 1.125em 0 0;
+  min-width: 0;
   flex-grow: 1;
-  text-align: left;
-  border-bottom: 1px solid var(--light-border-color);
+  text-align: right;
+  border: none;
 }
 
 #date_display_container {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
   position: relative;
+  padding: var(--select-control-padding);
+  font-size: var(--select-control-font-size);
+  border-bottom: 1px solid var(--light-border-color);
+}
+
+#date_display_container:hover {
+  background-color: var(--light-background-color);
 }
 
 #date_display:hover {
