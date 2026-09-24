@@ -32,12 +32,12 @@ bash "$HERE/gen-certs.sh" "$BLOT_HOST" "$PROXY_CERT_DIR"
 # the cache root, and cutover's own rehydrate check needs to read it. Seed a
 # couple of files so the walk (config/openresty/conf/cacher.lua build_index)
 # has something to count, though an empty, writable directory rehydrates
-# ("rehydrate: complete files=0") just as well.
-sudo chown -R 1000:1000 "$PROXY_CACHE_DIR" "$PROXY_LOG_DIR"
+# ("rehydrate: complete files=0") just as well. Seed BEFORE chowning to 1000:
+# the runner user (not uid 1000) cannot write into the directory afterwards.
 for f in warm-1 warm-2 warm-3; do
   echo "seeded by proxy/deploy/e2e for the rehydrate probe" > "$PROXY_CACHE_DIR/$f"
 done
-sudo chown 1000:1000 "$PROXY_CACHE_DIR"/warm-*
+sudo chown -R 1000:1000 "$PROXY_CACHE_DIR" "$PROXY_LOG_DIR"
 
 # ---- proxy.env ------------------------------------------------------------
 cat > "$PROXY_ENV_FILE" <<EOF
@@ -45,6 +45,16 @@ BLOT_HOST=$BLOT_HOST
 PROXY_REDIS_HOST=127.0.0.1
 PROXY_PRIVATE_IP=127.0.0.1
 EOF
+
+# A second env file, identical except for PROXY_PRIVATE_IP, for the
+# deterministic forced-failure scenarios in the workflow: 198.51.100.7 is
+# TEST-NET-2 (RFC 5737), never assigned to a runner interface, so the real
+# container's :8077 listener fails to bind and it never becomes healthy.
+# validate_image() only runs `openresty -t` (parses, does not bind) and the
+# cutover rehearsal explicitly overrides PROXY_PRIVATE_IP=127.0.0.1 for its
+# own container, so preflight and the rehearsal both still pass with this
+# file - only the real container fails, which is the point.
+sed 's/^PROXY_PRIVATE_IP=.*/PROXY_PRIVATE_IP=198.51.100.7/' "$PROXY_ENV_FILE" > "$E2E_ROOT/proxy-unroutable-private-ip.env"
 
 docker volume create "$PROXY_AUTOSSL_VOLUME" >/dev/null
 

@@ -37,6 +37,12 @@ export OPENRESTY_CACHE_DIRECTORY="${OPENRESTY_CACHE_DIRECTORY:-/var/cache/openre
 export OPENRESTY_CONFIG_DIRECTORY="${OPENRESTY_CONFIG_DIRECTORY:-/etc/openresty}"
 export OPENRESTY_USER="${OPENRESTY_USER:-ec2-user}"
 
+# Bare metal already listens for Node's cache purges today (locals.js's
+# common() reads this for both generators) - proxy/deploy/common.sh's
+# purge_reachable() checks that endpoint in preflight, against whichever side
+# is currently serving, so bare metal needs it too, not just the container.
+export OPENRESTY_INSTANCE_PRIVATE_IP="${OPENRESTY_INSTANCE_PRIVATE_IP:-127.0.0.1}"
+
 # Do not depend on the BunnyCDN edge-IP list being reachable from CI (same
 # reasoning as proxy/build/build.sh; see config/openresty/build-config.js).
 export FETCH_CDN_IPS="${FETCH_CDN_IPS:-false}"

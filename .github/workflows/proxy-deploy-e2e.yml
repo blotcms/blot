@@ -41,19 +41,26 @@ jobs:
       # var (config/openresty/locals.js's baremetal()); the harness uses the
       # same value on both sides - see proxy/deploy/e2e/README.md.
       PROXY_CANARY_HOST: preview-of-wireframe-on-david.blot.im
-      PROXY_ENV_FILE: ${{ github.workspace }}/.e2e/proxy.env
-      PROXY_CACHE_DIR: ${{ github.workspace }}/.e2e/cache
-      PROXY_LOG_DIR: ${{ github.workspace }}/.e2e/logs
-      PROXY_CERT_DIR: ${{ github.workspace }}/.e2e/certs
-      PROXY_BLOG_STATIC_DIR: ${{ github.workspace }}/.e2e/blog-static
-      PROXY_GLOBAL_STATIC_DIR: ${{ github.workspace }}/.e2e/global-static
+      # Everything the harness writes lives under RUNNER_TEMP, not the
+      # checkout, so there's nothing to .gitignore and nothing left behind
+      # for the next job on a reused runner.
+      PROXY_ENV_FILE: ${{ runner.temp }}/proxy-e2e/proxy.env
+      # A second env file, identical except for an unroutable
+      # PROXY_PRIVATE_IP, for the deterministic forced-failure scenarios
+      # below (see proxy/deploy/e2e/setup.sh, which writes it).
+      PROXY_ENV_FILE_BAD: ${{ runner.temp }}/proxy-e2e/proxy-unroutable-private-ip.env
+      PROXY_CACHE_DIR: ${{ runner.temp }}/proxy-e2e/cache
+      PROXY_LOG_DIR: ${{ runner.temp }}/proxy-e2e/logs
+      PROXY_CERT_DIR: ${{ runner.temp }}/proxy-e2e/certs
+      PROXY_BLOG_STATIC_DIR: ${{ runner.temp }}/proxy-e2e/blog-static
+      PROXY_GLOBAL_STATIC_DIR: ${{ runner.temp }}/proxy-e2e/global-static
       PROXY_AUTOSSL_VOLUME: blot-e2e-auto-ssl
       PROXY_NODE_CONTAINER: blot-container-blue
       PROXY_RENEW_SCRIPT: ${{ github.workspace }}/config/openresty/scripts/renew-wildcard-ssl.sh
       PROXY_SKIP_CERT_SWEEP: "1" # no Pebble/lua-resty-auto-ssl storage in this harness - see README.md
       # Run every deploy script call detached (the runner has no tty/tmux).
       PROXY_CUTOVER_DETACHED: "1"
-      E2E_ROOT: ${{ github.workspace }}/.e2e
+      E2E_ROOT: ${{ runner.temp }}/proxy-e2e
       IMAGE: blot-proxy:e2e
     steps:
       - uses: actions/checkout@v4
@@ -145,62 +152,86 @@ jobs:
           ! docker ps -a --format '{{.Names}}' | grep -qx blot-proxy-blue
           [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-proxy-green)" = unless-stopped ]
 
-      # ---- 4a. blue-green forced-failure rollback --------------------------
-      # Stop the stub upstream the instant blue-green.sh starts the new
-      # colour (blot-proxy-blue): well before the old colour (green) is
-      # drained and the post-swap live_checks (which need the upstream) run,
-      # and well before the 35s blip below restores it - see
-      # proxy/deploy/e2e/README.md's timing note is inline here since it's
-      # specific to this step. The old colour must be left serving.
-      - name: blue-green rolls back when the new colour fails its post-swap checks
+      # ---- 4. blue-green forced failure, "swapping" state: the old colour
+      # was already stopped and must be restarted. This is timing-sensitive
+      # (STATE=swapping only after the old colour starts draining), so it's
+      # triggered off the script's own log line rather than a sleep, and the
+      # stub is restored the instant the backgrounded script exits - also an
+      # event, not a fixed delay. wait_healthy only polls the container's own
+      # health socket (not the upstream), so the stub being down does not
+      # stop the rollback itself from completing; it only has to be down
+      # while live_checks (which does need the upstream) runs, which starts
+      # right after "Draining and stopping" is logged.
+      - name: blue-green restarts the old colour when the swap's post-swap checks fail
         run: |
           set -euo pipefail
-          rm -f bg.log
-          bash proxy/deploy/blue-green.sh "$IMAGE" > bg.log 2>&1 &
+          rm -f bg-swap.log
+          bash proxy/deploy/blue-green.sh "$IMAGE" > bg-swap.log 2>&1 &
           pid=$!
           triggered=0
-          for i in $(seq 1 60); do
-            if grep -q 'Starting blot-proxy-blue from' bg.log; then triggered=1; break; fi
+          for i in $(seq 1 90); do
+            if grep -q 'Draining and stopping' bg-swap.log; then triggered=1; break; fi
             kill -0 "$pid" 2>/dev/null || break
             sleep 1
           done
-          [ "$triggered" = 1 ] || { echo "never saw blue-green start the new colour" >&2; cat bg.log; exit 1; }
-          ( docker stop blot-e2e-stub >/dev/null 2>&1; sleep 35; docker start blot-e2e-stub >/dev/null 2>&1 ) &
-          blip=$!
-          rc=0; wait "$pid" || rc=$?
-          wait "$blip"
-          cat bg.log
-          [ "$rc" -ne 0 ]
+          if [ "$triggered" != 1 ]; then
+            echo "never saw blue-green start draining the old colour" >&2
+            cat bg-swap.log; kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; exit 1
+          fi
+          docker stop blot-e2e-stub >/dev/null   # event: the drain/live_checks window has started
+          rc=0; wait "$pid" || rc=$?             # event: the script itself has finished
+          docker start blot-e2e-stub >/dev/null  # event: restore right after, no fixed delay
           for i in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:8088/ && break; sleep 1; done
+          cat bg-swap.log
+          [ "$rc" -ne 0 ]
           docker ps --format '{{.Names}}' | grep -qx blot-proxy-green
+          [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-proxy-green)" = unless-stopped ]
           ! docker ps -a --format '{{.Names}}' | grep -qx blot-proxy-blue
           code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
           [ "$code" = 200 ]
 
-      # ---- 4b. cutover forced-failure rollback, from a fresh bare-metal ----
+      # ---- 5. blue-green forced failure, "starting" state: the new colour
+      # never becomes healthy, so the old one is never touched. Deterministic
+      # (no timing/log-line trigger needed): PROXY_ENV_FILE_BAD's
+      # PROXY_PRIVATE_IP is 198.51.100.7 (TEST-NET-2, RFC 5737), which no
+      # runner interface owns, so the real new container's :8077 listener
+      # fails to bind and openresty exits immediately - wait_healthy sees it
+      # not running and fails fast. validate_image() only runs `openresty -t`
+      # (parses, does not bind), so preflight still passes with this file.
+      - name: blue-green never touches the old colour when the new one never becomes healthy
+        env:
+          PROXY_ENV_FILE: ${{ env.PROXY_ENV_FILE_BAD }}
+        run: |
+          set +e
+          bash proxy/deploy/blue-green.sh "$IMAGE"
+          rc=$?
+          set -e
+          [ "$rc" -ne 0 ]
+          docker ps --format '{{.Names}}' | grep -qx blot-proxy-green
+          [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-proxy-green)" = unless-stopped ]
+          ! docker ps -a --format '{{.Names}}' | grep -qx blot-proxy-blue
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
+          [ "$code" = 200 ]
+
+      # ---- 6. cutover forced failure, from a fresh bare-metal state --------
       - name: reset to a fresh bare-metal state
         run: bash proxy/deploy/e2e/reset-baremetal.sh
 
-      - name: cutover rolls back to bare metal when the container fails its post-cutover checks
+      # Same deterministic technique as step 5: PROXY_ENV_FILE_BAD's
+      # unroutable PROXY_PRIVATE_IP means the real container never becomes
+      # healthy (preflight and the rehearsal both pass: preflight never binds
+      # anything, and the rehearsal explicitly overrides PROXY_PRIVATE_IP to
+      # 127.0.0.1 for its own container), so the cutover rolls back before
+      # ever disabling bare metal - enabled is asserted, not just active.
+      - name: cutover rolls back to bare metal when the container never becomes healthy
+        env:
+          PROXY_ENV_FILE: ${{ env.PROXY_ENV_FILE_BAD }}
         run: |
-          set -euo pipefail
-          rm -f co.log
-          bash proxy/deploy/cutover-from-baremetal.sh --yes --soak 5 "$IMAGE" > co.log 2>&1 &
-          pid=$!
-          triggered=0
-          for i in $(seq 1 90); do
-            if grep -q 'Starting blot-proxy-blue$' co.log; then triggered=1; break; fi
-            kill -0 "$pid" 2>/dev/null || break
-            sleep 1
-          done
-          [ "$triggered" = 1 ] || { echo "never saw the cutover start the container" >&2; cat co.log; exit 1; }
-          ( docker stop blot-e2e-stub >/dev/null 2>&1; sleep 35; docker start blot-e2e-stub >/dev/null 2>&1 ) &
-          blip=$!
-          rc=0; wait "$pid" || rc=$?
-          wait "$blip"
-          cat co.log
+          set +e
+          bash proxy/deploy/cutover-from-baremetal.sh --yes --soak 5 "$IMAGE"
+          rc=$?
+          set -e
           [ "$rc" -ne 0 ]
-          for i in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:8088/ && break; sleep 1; done
           sudo systemctl is-active --quiet openresty
           sudo systemctl is-enabled --quiet openresty
           ! docker ps -a --format '{{.Names}}' | grep -q '^blot-proxy-'
