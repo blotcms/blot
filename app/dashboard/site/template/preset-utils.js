@@ -1,34 +1,11 @@
 const tinyColor = require("../../../helper/tinyColor");
 
-const DANGEROUS_KEYS = Object.create(null);
-DANGEROUS_KEYS.__proto__ = true;
-DANGEROUS_KEYS.constructor = true;
-DANGEROUS_KEYS.prototype = true;
-
-const FONT_PATCH_PROPS = Object.freeze({
-  id: true,
-  font_size: true,
-  line_height: true,
-});
-
 function isPlainObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 function ownKeys(value) {
-  if (!isPlainObject(value)) return [];
-  return Object.keys(value).filter((key) => !DANGEROUS_KEYS[key]);
-}
-
-function isSafePresetKey(key) {
-  return (
-    typeof key === "string" &&
-    key.length > 0 &&
-    key.length <= 80 &&
-    key === key.trim() &&
-    !DANGEROUS_KEYS[key] &&
-    !/[\x00-\x1f\x7f]/.test(key)
-  );
+  return isPlainObject(value) ? Object.keys(value) : [];
 }
 
 function normalizeColor(value) {
@@ -78,11 +55,8 @@ function presetMatches(patch, locals) {
 }
 
 module.exports = {
-  DANGEROUS_KEYS,
-  FONT_PATCH_PROPS,
   isPlainObject,
   ownKeys,
-  isSafePresetKey,
   normalizeColor,
   numericValue,
   presetMatches,

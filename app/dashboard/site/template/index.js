@@ -166,7 +166,6 @@ TemplateEditor.route("/:templateSlug")
   .all(require("./load/navigation-inputs"))
   .all(require("./load/dates"))
   .post(
-    require("./save/resolve-preset"),
     require("./save/fork-if-needed"),
     prepareTemplateUpdate,
     require("./save/layout-inputs"),

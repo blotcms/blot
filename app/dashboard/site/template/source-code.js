@@ -6,7 +6,6 @@ const extend = require("helper/extend");
 const async = require("async");
 const writeChangeToFolder = require("./save/writeChangeToFolder");
 const previewReload = require("helper/publishPreviewReload");
-const validatePresets = require("./presets").validatePresets;
 
 SourceCode.param("viewSlug", require("./load/template-views"));
 SourceCode.param("viewSlug", require("./load/template-view"));
@@ -99,21 +98,6 @@ SourceCode.route("/:viewSlug/edit")
         parsed = JSON.parse(view.content);
       } catch (e) {
         return sendError(e);
-      }
-      if (
-        parsed.locals &&
-        typeof parsed.locals === "object" &&
-        !Array.isArray(parsed.locals) &&
-        Object.prototype.hasOwnProperty.call(parsed.locals, "presets")
-      ) {
-        const checked = validatePresets(parsed.locals.presets, parsed.locals);
-        if (checked.errors.length) {
-          const error = new Error(checked.errors.join("; "));
-          error.code = "EPRESETS";
-          error.status = 400;
-          return sendError(error);
-        }
-        parsed.locals.presets = checked.presets;
       }
       Template.package.save(
         req.template.id,

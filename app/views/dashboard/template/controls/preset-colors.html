@@ -1,9 +1,10 @@
 <div class="preset-grid" data-preset-grid="colors">
 	{{#items}}
-	<form method="post" action="{{{base}}}" data-preset-form>
+	<form method="post" action="{{{base}}}" data-preset-form data-preset-group="colors">
 		<input type="hidden" name="_csrf" value="{{csrftoken}}">
-		<input type="hidden" name="preset.type" value="colors">
-		<input type="hidden" name="preset.id" value="{{id}}">
+		{{#fields}}
+		<input type="hidden" name="{{name}}" value="{{value}}">
+		{{/fields}}
 		<button
 			type="submit"
 			class="preset-tile{{#selected}} is-selected{{/selected}}{{#disabled}} is-disabled{{/disabled}}"

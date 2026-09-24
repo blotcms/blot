@@ -4,7 +4,6 @@ const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const improveJSONErrorMessage = require("models/template/util/improveJSONErrorMessage");
 const improveMustacheErrorMessage = require("models/template/util/improveMustacheErrorMessage");
 const UploadValidationError = require("./upload-validation-error");
-const validatePresets = require("../presets").validatePresets;
 const {
   UPLOAD_MAX_FILES,
   UPLOAD_MAX_RAW_FILES,
@@ -225,20 +224,6 @@ const parsePackage = (buffer, problems, warnings) => {
     manifest.views = parsed.views;
   } else if (parsed.views !== undefined) {
     warnings.push("package.json 'views' was ignored because it is not an object");
-  }
-
-  if (manifest.locals && manifest.locals.presets !== undefined) {
-    const checked = validatePresets(manifest.locals.presets, manifest.locals);
-    checked.errors.forEach((message) => {
-      problems.push({
-        path: PACKAGE,
-        reason: "presets",
-        message: message,
-      });
-    });
-    if (!checked.errors.length && checked.presets && Object.keys(checked.presets).length) {
-      manifest.locals.presets = checked.presets;
-    }
   }
 
   return manifest;

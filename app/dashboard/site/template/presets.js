@@ -1,188 +1,45 @@
-// Presets are compact patches declared in template.locals.presets. The
-// settings editor derives the selected card from the live locals; it never
-// stores a separate selected-preset value.
+// Presets are compact patches declared in template.locals.presets, written by
+// whoever authors the template's package.json. They aren't validated: a
+// preset that doesn't fit the current locals just fails to build a tile and
+// is skipped, the same way a broken swatch or an unknown font id already is.
+//
+// The settings editor derives the selected card from the live locals; it
+// never stores a separate selected-preset value.
 
 const FONTS = require("blog/static/fonts");
-const {
-  DANGEROUS_KEYS,
-  FONT_PATCH_PROPS,
-  isPlainObject,
-  ownKeys,
-  isSafePresetKey,
-  normalizeColor,
-  presetMatches,
-} = require("./preset-utils");
+const { isPlainObject, ownKeys, normalizeColor, presetMatches } = require("./preset-utils");
 
 const FONT_BY_ID = new Map();
 FONTS.forEach((font) => {
   if (font && font.id) FONT_BY_ID.set(font.id, font);
 });
 
-function isColorKey(key) {
-  return typeof key === "string" && key.indexOf("_color") !== -1;
-}
-
-function isFontKey(key) {
-  return key === "font" || (typeof key === "string" && key.indexOf("_font") !== -1);
-}
-
-function isColorLocal(key, value) {
-  return isColorKey(key) && typeof value === "string";
-}
-
 function isFontLocal(key, value) {
-  return isFontKey(key) && isPlainObject(value);
+  const isFontKey = key === "font" || key.indexOf("_font") !== -1;
+  return isFontKey && key !== "syntax_highlighter_font" && isPlainObject(value) && value.id;
 }
 
-function labelFor(type, id) {
-  return (type === "colors" ? "Color preset" : "Font preset") + ' "' + id + '"';
-}
-
-function validatePatch(type, id, patch, locals) {
-  const label = labelFor(type, id);
-  const errors = [];
-  const clean = {};
-
-  if (!isSafePresetKey(id)) {
-    errors.push(label + " needs a non-empty key of at most 80 characters");
-  }
-  if (!isPlainObject(patch)) {
-    return { patch: null, errors: errors.concat(label + " must be an object") };
-  }
-
-  const keys = Object.keys(patch);
-  if (!keys.length) {
-    errors.push(label + " must set at least one " + (type === "colors" ? "color" : "font"));
-  }
-
-  keys.forEach((key) => {
-    if (DANGEROUS_KEYS[key]) {
-      errors.push(label + ' cannot set "' + key + '"');
-      return;
-    }
-    if (!Object.prototype.hasOwnProperty.call(locals, key)) {
-      errors.push(label + ' sets "' + key + '", which is not on this template');
-      return;
-    }
-
-    if (type === "colors") {
-      if (!isColorLocal(key, locals[key])) {
-        errors.push(label + ' sets "' + key + '", which is not a color on this template');
-      } else if (typeof patch[key] !== "string" || !normalizeColor(patch[key])) {
-        errors.push(label + ' sets "' + key + '" to a value that is not a color');
-      } else {
-        clean[key] = patch[key];
-      }
-      return;
-    }
-
-    if (key === "syntax_highlighter_font") {
-      errors.push(label + ' sets "' + key + '", which is not available to font presets');
-      return;
-    }
-    if (!isFontLocal(key, locals[key])) {
-      errors.push(label + ' sets "' + key + '", which is not a font on this template');
-      return;
-    }
-
-    const fontPatch = patch[key];
-    if (!isPlainObject(fontPatch)) {
-      errors.push(label + ' sets "' + key + '" to a value that is not a font');
-      return;
-    }
-    const properties = Object.keys(fontPatch);
-    if (!properties.length) {
-      errors.push(label + ' sets "' + key + '" without a font id, size, or line height');
-      return;
-    }
-
-    const cleanFontPatch = {};
-    properties.forEach((property) => {
-      if (DANGEROUS_KEYS[property]) {
-        errors.push(label + ' cannot set "' + key + "." + property + '"');
-        return;
-      }
-      if (!FONT_PATCH_PROPS[property]) {
-        errors.push(
-          label + ' sets "' + key + "." + property + '", which a font preset cannot change'
-        );
-        return;
-      }
-      if (property === "id") {
-        if (typeof fontPatch.id !== "string" || !fontPatch.id.trim()) {
-          errors.push(label + ' sets "' + key + '.id" to a value that is not a font id');
-        } else {
-          cleanFontPatch.id = fontPatch.id.trim();
-        }
-        return;
-      }
-      if (
-        typeof fontPatch[property] !== "number" ||
-        !Number.isFinite(fontPatch[property]) ||
-        fontPatch[property] <= 0
-      ) {
-        errors.push(
-          label +
-            ' sets "' +
-            key +
-            "." +
-            property +
-            '" to a value that is not a positive number'
-        );
-        return;
-      }
-      cleanFontPatch[property] = fontPatch[property];
-    });
-
-    if (Object.keys(cleanFontPatch).length) clean[key] = cleanFontPatch;
-  });
-
-  return { patch: errors.length ? null : clean, errors };
-}
-
-function validatePresetMap(type, map, locals, errors) {
-  if (map == null) return {};
-  if (!isPlainObject(map)) {
-    errors.push((type === "colors" ? "Color" : "Font") + " presets must be an object");
-    return {};
-  }
-
-  const clean = {};
-  Object.keys(map).forEach((id) => {
-    const result = validatePatch(type, id, map[id], locals);
-    errors.push(...result.errors);
-    if (result.patch) clean[id] = result.patch;
-  });
-  return clean;
-}
-
-function validatePresets(presets, locals) {
-  const safeLocals = isPlainObject(locals) ? locals : {};
-  if (presets == null) return { presets: {}, errors: [] };
-  if (!isPlainObject(presets)) return { presets: {}, errors: ["presets must be an object"] };
-
-  const errors = [];
-  Object.keys(presets).forEach((key) => {
-    if (key !== "colors" && key !== "fonts") {
-      errors.push("presets." + key + " is not a preset object");
-    }
-  });
-
-  const value = {};
-  const colors = validatePresetMap("colors", presets.colors, safeLocals, errors);
-  const fonts = validatePresetMap("fonts", presets.fonts, safeLocals, errors);
-  if (Object.keys(colors).length) value.colors = colors;
-  if (Object.keys(fonts).length) value.fonts = fonts;
-  return { presets: value, errors };
-}
-
-function colorSwatches(values) {
-  return ownKeys(values)
+function colorSwatches(patch) {
+  return ownKeys(patch)
     .map((key) => {
-      const value = normalizeColor(values[key]);
+      const value = normalizeColor(patch[key]);
       return value ? { value } : null;
     })
     .filter(Boolean);
+}
+
+function colorFields(patch) {
+  return ownKeys(patch).map((key) => ({ name: "locals." + key, value: patch[key] }));
+}
+
+function fontFields(patch) {
+  const fields = [];
+  ownKeys(patch).forEach((key) => {
+    ownKeys(patch[key]).forEach((property) => {
+      fields.push({ name: "locals." + key + "." + property, value: patch[key][property] });
+    });
+  });
+  return fields;
 }
 
 function fontPreview(key, patch, locals) {
@@ -196,35 +53,53 @@ function fontPreview(key, patch, locals) {
   };
 }
 
-function missingFontIds(values) {
-  return ownKeys(values)
-    .map((key) => values[key] && values[key].id)
+function missingFontIds(patch) {
+  return ownKeys(patch)
+    .map((key) => patch[key] && patch[key].id)
     .filter((id) => id && !FONT_BY_ID.has(id));
 }
 
-function presentColors(map, locals) {
-  const items = Object.keys(map).map((id) => ({
-    id,
-    name: id,
-    values: map[id],
-    disabled: false,
-    error: "",
-    title: id,
-    ariaLabel: id,
-    match: JSON.stringify(map[id]),
-    swatches: colorSwatches(map[id]),
-    selected: false,
-    pressed: "false",
-  }));
-
+function markSelected(items, locals) {
   let selected = false;
   items.forEach((item) => {
-    if (!selected && presetMatches(item.values, locals)) {
+    if (!selected && !item.disabled && presetMatches(item.values, locals)) {
       item.selected = true;
       item.pressed = "true";
       selected = true;
     }
   });
+  return selected;
+}
+
+function presentColors(map, locals) {
+  const items = [];
+
+  Object.keys(map).forEach((id) => {
+    try {
+      const patch = map[id];
+      const swatches = colorSwatches(patch);
+      if (!swatches.length) return;
+      items.push({
+        id,
+        name: id,
+        group: "colors",
+        values: patch,
+        fields: colorFields(patch),
+        disabled: false,
+        error: "",
+        title: id,
+        ariaLabel: id,
+        match: JSON.stringify(patch),
+        swatches,
+        selected: false,
+        pressed: "false",
+      });
+    } catch (e) {
+      // Malformed preset in package.json; skip it rather than breaking the sidebar.
+    }
+  });
+
+  const selected = markSelected(items, locals);
 
   return {
     hasPresets: items.length > 0,
@@ -236,38 +111,40 @@ function presentColors(map, locals) {
 }
 
 function presentFonts(map, locals) {
-  const items = Object.keys(map).map((id) => {
-    const missing = missingFontIds(map[id]);
-    const error = missing.length ? 'Unknown font "' + missing[0] + '"' : "";
-    return {
-      id,
-      name: id,
-      values: map[id],
-      disabled: missing.length > 0,
-      error,
-      title: error ? id + ". " + error : id,
-      ariaLabel: error ? id + ". unavailable: " + error : id,
-      match: JSON.stringify(map[id]),
-      samples: ownKeys(map[id]).map((key) => fontPreview(key, map[id][key], locals)),
-      selected: false,
-      pressed: "false",
-    };
-  });
+  const items = [];
 
-  let selected = false;
-  items.forEach((item) => {
-    if (!selected && !item.disabled && presetMatches(item.values, locals)) {
-      item.selected = true;
-      item.pressed = "true";
-      selected = true;
+  Object.keys(map).forEach((id) => {
+    try {
+      const patch = map[id];
+      const samples = ownKeys(patch).map((key) => fontPreview(key, patch[key], locals));
+      if (!samples.length) return;
+      const missing = missingFontIds(patch);
+      const error = missing.length ? 'Unknown font "' + missing[0] + '"' : "";
+      items.push({
+        id,
+        name: id,
+        group: "fonts",
+        values: patch,
+        fields: fontFields(patch),
+        disabled: missing.length > 0,
+        error,
+        title: error ? id + ". " + error : id,
+        ariaLabel: error ? id + ". unavailable: " + error : id,
+        match: JSON.stringify(patch),
+        samples,
+        selected: false,
+        pressed: "false",
+      });
+    } catch (e) {
+      // Malformed preset in package.json; skip it rather than breaking the sidebar.
     }
   });
+
+  const selected = markSelected(items, locals);
 
   const current = {};
   Object.keys(locals).forEach((key) => {
-    if (key !== "syntax_highlighter_font" && isFontLocal(key, locals[key])) {
-      current[key] = { id: locals[key].id };
-    }
+    if (isFontLocal(key, locals[key])) current[key] = { id: locals[key].id };
   });
 
   return {
@@ -286,45 +163,15 @@ function presentFonts(map, locals) {
 
 function presentPresets(template) {
   const locals = (template && isPlainObject(template.locals) && template.locals) || {};
-  const validated = validatePresets(locals.presets, locals);
+  const presets = isPlainObject(locals.presets) ? locals.presets : {};
   return {
-    colors: presentColors(validated.presets.colors || {}, locals),
-    fonts: presentFonts(validated.presets.fonts || {}, locals),
-    errors: validated.errors,
+    colors: presentColors(isPlainObject(presets.colors) ? presets.colors : {}, locals),
+    fonts: presentFonts(isPlainObject(presets.fonts) ? presets.fonts : {}, locals),
   };
 }
 
-function resolvePreset(template, type, id) {
-  const locals = (template && isPlainObject(template.locals) && template.locals) || {};
-  const presets = (isPlainObject(locals.presets) && locals.presets) || {};
-
-  if (type !== "colors" && type !== "fonts") {
-    return { error: "Choose a color palette or a font pack" };
-  }
-  if (!isSafePresetKey(id)) return { error: "That preset is not available" };
-
-  const map = isPlainObject(presets[type]) ? presets[type] : {};
-  if (!Object.prototype.hasOwnProperty.call(map, id)) {
-    return { error: "That preset is not available" };
-  }
-
-  const checked = validatePatch(type, id, map[id], locals);
-  if (!checked.patch) return { error: checked.errors[0] || "That preset is not available" };
-
-  if (type === "fonts") {
-    const missing = missingFontIds(checked.patch);
-    if (missing.length) {
-      return { error: 'That font pack uses an unknown font "' + missing[0] + '"' };
-    }
-  }
-
-  return { values: checked.patch };
-}
-
 module.exports = {
-  validatePresets,
   presentPresets,
-  resolvePreset,
   normalizeColor,
   presetMatches,
 };

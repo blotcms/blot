@@ -136,8 +136,7 @@ document.querySelectorAll("[data-preset-form]").forEach((form) => {
     event.preventDefault();
     const body = new URLSearchParams(new FormData(form));
     const submitted = form.querySelector("button[type=submit]");
-    const typeInput = form.querySelector('input[name="preset.type"]');
-    const group = typeInput && typeInput.value;
+    const group = form.getAttribute("data-preset-group");
 
     fetch(withAjax(form.action), { method: "post", body }).then((response) => {
       if (response.ok) {

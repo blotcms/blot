@@ -382,7 +382,7 @@ describe("parseUploadedTemplate", function () {
       expect(result.locals.presets).toBeUndefined();
     });
 
-    it("keeps a valid preset list, including an unknown font id", function () {
+    it("passes presets through unvalidated, including an unknown font id", function () {
       const result = parse([
         entry("index.html", "<h1>Hi</h1>"),
         entry(
@@ -402,49 +402,6 @@ describe("parseUploadedTemplate", function () {
 
       expect(result.locals.presets.colors.Classic.background_color).toEqual("#ffffff");
       expect(result.locals.presets.fonts.Missing.font.id).toEqual("not-a-real-font");
-    });
-
-    it("reports malformed presets, invalid keys, and unknown locals", function () {
-      const malformed = problemsFrom([
-        entry("index.html", "<h1>Hi</h1>"),
-        entry("package.json", JSON.stringify({ locals: { presets: [] } })),
-      ]);
-      expect(malformed[0].reason).toEqual("presets");
-      expect(malformed[0].path).toEqual("package.json");
-
-      const invalidKey = problemsFrom([
-        entry("index.html", "<h1>Hi</h1>"),
-        entry(
-          "package.json",
-          JSON.stringify({
-            locals: {
-              background_color: "#fff",
-              presets: {
-                colors: { " ": { background_color: "#fff" } },
-              },
-            },
-          })
-        ),
-      ]);
-      expect(invalidKey[0].reason).toEqual("presets");
-      expect(invalidKey[0].message).toContain("non-empty key");
-
-      const unknown = problemsFrom([
-        entry("index.html", "<h1>Hi</h1>"),
-        entry(
-          "package.json",
-          JSON.stringify({
-            locals: {
-              background_color: "#fff",
-              presets: {
-                colors: { Bad: { nope_color: "#fff" } },
-              },
-            },
-          })
-        ),
-      ]);
-      expect(unknown[0].reason).toEqual("presets");
-      expect(unknown[0].message).toContain("nope_color");
     });
 
     it("warns about settings for files which were not uploaded", function () {
