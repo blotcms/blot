@@ -220,8 +220,8 @@ local function build_index (self)
     local started = ngx.now()
 
     -- in this order: see cacher_purge
-    shared_dictionary:incr(GENERATION, 1, 0)
     shared_dictionary:delete(READY)
+    shared_dictionary:incr(GENERATION, 1, 0)
     clear_hosts(shared_dictionary)
 
     -- stop the walk, releasing the lock, and return why
@@ -407,9 +407,14 @@ local function cacher_purge (self, ngx)
         ngx.exit(ngx.OK)
     end
 
-    reject_until_ready(self, ngx)
-
+    -- Read before the ready check. A walk (a /rehydrate) removes the ready
+    -- flag, then bumps the generation, then clears the host lists. So either
+    -- this read precedes the bump and the check after the purge sees it
+    -- change, or the flag was already gone and the purge is refused here (or
+    -- that walk had finished and the purge reads the complete index).
     local generation = shared_dictionary:get(GENERATION)
+
+    reject_until_ready(self, ngx)
 
     for host in string.gmatch(ngx.var.args, "host=([^&]+)") do
         ngx.log(ngx.NOTICE, "purging host: " .. host)
@@ -417,10 +422,9 @@ local function cacher_purge (self, ngx)
         message = message .. host .. ": " .. total_keys .. "\n"
     end
 
-    -- A walk (a /rehydrate) that started while this purge ran may have
-    -- cleared the lists before they were read, and will add back files this
-    -- purge did not see. A walk bumps the generation before clearing
-    -- anything, so this catches it; the caller retries after the rebuild.
+    -- A walk that started while this purge ran may have cleared the lists
+    -- before they were read, and will add back files this purge did not see;
+    -- the caller retries after the rebuild.
     if not cacher_is_ready(self) or shared_dictionary:get(GENERATION) ~= generation then
         respond_rebuilding(ngx)
     end
