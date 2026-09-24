@@ -67,10 +67,15 @@
   <div class="line">
     <div class="label">Set up folder</div>
     <div class="center">
-      <div class="steps">
+      <div class="steps google-drive-setup-steps">
+      <style>
+        .google-drive-setup-steps ol li.complete::before {
+          display: none;
+        }
+      </style>
       <ol>
         <li class="complete">
-           <span style="color:green;font-size: 12px;position: absolute;top:6px;left:-7px;z-index: 1;" class="icon-small-check"></span>
+           <span style="color:green;font-size: 14px;position: absolute;top:0;left:-32px;width:1.25rem;height:1.25rem;display:flex;align-items:center;justify-content:center;" class="icon-small-check"></span>
            <span style="font-size:14px;color:var(--medium-text-color)">Add your Google Drive account</span><br>
                  <a href="{{{base}}}/setup" style="margin-top:4px;display: block;">
     <span class="center">{{email}}</span>
@@ -79,7 +84,7 @@
 </li>
 {{#nonEditorPermissions}}
     <li class="complete">
-      <span style="color: orange; font-size: 12px; margin-right: 4px; position: absolute;top:6px;left:-7px;z-index: 1;" class="icon-small-alert"></span>
+      <span style="color: orange; font-size: 14px; position: absolute;top:0;left:-32px;width:1.25rem;height:1.25rem;display:flex;align-items:center;justify-content:center;" class="icon-small-alert"></span>
 
             <span style="font-size:14px;color:var(--medium-text-color)">The permissions granted to Blot are not sufficient. </span><br>
       <span class="center">Please give Blot 'Editor' permissions.</span>
@@ -87,7 +92,7 @@
   {{/nonEditorPermissions}}
 {{#nonEmptyFolderShared}}
    <li class="complete">
-     <span style="color: orange; font-size: 12px; margin-right: 4px; position: absolute;top:6px;left:-7px;z-index: 1;" class="icon-small-alert"></span>
+     <span style="color: orange; font-size: 14px; position: absolute;top:0;left:-32px;width:1.25rem;height:1.25rem;display:flex;align-items:center;justify-content:center;" class="icon-small-alert"></span>
 
            <span style="font-size:14px;color:var(--medium-text-color)">The folder on Google Drive which you shared has items inside. </span><br>
     <span class="center">Please share an empty folder.</span>
