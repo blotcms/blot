@@ -32,8 +32,13 @@
 #   2. Rehearsal: run the image on another port (127.0.0.1:18443) on the
 #      Docker bridge, pointed at the real Node containers and Redis with the
 #      real certificate, and require the same answers and the same custom-domain
-#      certificates as the baseline. It does
-#      not mount the live cache or logs. Nothing user-facing changes.
+#      certificates as the baseline. It does not mount the live cache (nginx
+#      writes new cache entries on every MISS, and rehearsal traffic would
+#      turn a read-only mount into 500s) or logs. Alongside it, a second,
+#      traffic-free container mounts the real cache read-only and must log
+#      "rehydrate: complete" (no rehydrate error) within
+#      PROXY_REHYDRATE_TIMEOUT - proof the worker can read the whole cache and
+#      the purge index fits cacher_dictionary. Nothing user-facing changes.
 #      --dry-run stops here.
 #   3. Confirmation (type `cutover`, or --yes).
 #   4. Cutover: create the container (restart policy `no`), stop the bare-metal
@@ -74,6 +79,7 @@ IMAGE="$(resolve_image "$IMAGE")"
 
 NEW=blot-proxy-blue
 REHEARSAL=blot-proxy-rehearsal
+PROBE=blot-proxy-rehydrate-probe   # traffic-free, mounts the real cache read-only
 REHEARSAL_HTTPS=18443
 RENEW_SCRIPT="${PROXY_RENEW_SCRIPT:-/home/ec2-user/scripts/renew-wildcard-ssl.sh}"
 UPSTREAM_PORTS="${PROXY_UPSTREAM_PORTS:-8088 8089 8090}"
@@ -83,6 +89,7 @@ PHASE=preflight   # preflight -> rehearsal -> critical -> committed
 cleanup() {
   status=$?
   docker rm -f "$REHEARSAL" >/dev/null 2>&1 || true
+  docker rm -f "$PROBE" >/dev/null 2>&1 || true
   if [ "$PHASE" = critical ]; then
     log "Interrupted or failed during the cutover (exit $status)"
     rollback
@@ -192,8 +199,14 @@ GATEWAY=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gatew
 [ -n "$GATEWAY" ] || refuse "cannot find the Docker bridge gateway"
 read -r -a PORTS <<< "$UPSTREAM_PORTS"
 docker rm -f "$REHEARSAL" >/dev/null 2>&1 || true
-# No cache or log mounts: the rehearsal must not write to the live ones.
+# No cache or log mounts: with use_temp_path=off (http.conf) nginx writes new
+# cache entries straight into the cache dir on every MISS, so mounting the
+# real cache here would turn ordinary rehearsal traffic (the snapshot/cert
+# checks below) into 500s the moment anything misses. It gets the same static
+# mounts and --ulimit as run_args(), since those affect ordinary request
+# handling and are worth rehearsing.
 docker run -d --name "$REHEARSAL" --cap-add SYS_NICE \
+  --ulimit "nofile=$NOFILE:$NOFILE" \
   --env-file "$ENV_FILE" \
   -e PROXY_FETCH_CDN_IPS=false \
   -e PROXY_PRIVATE_IP=127.0.0.1 \
@@ -202,6 +215,28 @@ docker run -d --name "$REHEARSAL" --cap-add SYS_NICE \
   -e PROXY_UPSTREAM_YELLOW="$GATEWAY:${PORTS[2]}" \
   -p "127.0.0.1:$REHEARSAL_HTTPS:443" \
   -v "$CERT_DIR":/etc/ssl/private:ro \
+  -v "$BLOG_STATIC_DIR":/var/www/blot/data/static:ro \
+  -v "$GLOBAL_STATIC_DIR":/var/www/blot/app/blog/static:ro \
+  "$IMAGE" >/dev/null
+
+docker rm -f "$PROBE" >/dev/null 2>&1 || true
+# A separate, traffic-free container to prove what the rehearsal above
+# cannot: that the container's worker (ec2-user, uid 1000 in the image) can
+# read the whole real cache and rebuild the purge index from it within
+# cacher_dictionary's capacity (wait_rehydrated below checks its error.log
+# for "rehydrate: complete"). It takes no requests (no -p), so nothing it
+# does needs to WRITE to the read-only cache mount - except nginx's own
+# startup: the master's ngx_create_paths chowns/chmods the cache root to the
+# worker user if it is not already owned by it, which fails [emerg] on a :ro
+# mount and the probe never becomes healthy. That is the right outcome: it is
+# exactly the cache-ownership problem this check exists to catch (see the
+# refuse message below). Started right after the rehearsal so the two overlap.
+docker run -d --name "$PROBE" --cap-add SYS_NICE \
+  --env-file "$ENV_FILE" \
+  -e PROXY_FETCH_CDN_IPS=false \
+  -e PROXY_PRIVATE_IP=127.0.0.1 \
+  -v "$CERT_DIR":/etc/ssl/private:ro \
+  -v "$CACHE_DIR":/var/cache/openresty:ro \
   "$IMAGE" >/dev/null
 
 wait_healthy "$REHEARSAL" "$HEALTH_TIMEOUT" \
@@ -217,8 +252,21 @@ if [ -n "$CERT_BASELINE" ]; then
   certs_unchanged "$CERT_BASELINE" "$(cert_sweep "$REHEARSAL_HTTPS")" \
     || refuse "the rehearsal does not serve the custom-domain certificates bare-metal does"
 fi
+
+wait_healthy "$PROBE" "$HEALTH_TIMEOUT" || {
+  docker logs --tail 50 "$PROBE" >&2 || true
+  refuse "the rehydrate probe never became healthy: check that $CACHE_DIR is owned by uid 1000 (ec2-user in the image) - see the probe's logs above"
+}
+wait_rehydrated "$PROBE" "$REHYDRATE_TIMEOUT" || {
+  # Same two sinks wait_rehydrated reads: error.log normally, or `docker logs`
+  # when ALLOW_STDOUT_LOGS=1 sent error_log to stderr instead.
+  docker exec "$PROBE" tail -n 50 /var/log/openresty/error.log >&2 || true
+  docker logs --tail 50 "$PROBE" >&2 || true
+  refuse "the probe never logged 'rehydrate: complete' for the real cache within ${REHYDRATE_TIMEOUT}s (or logged a rehydrate error): either the worker (ec2-user, uid 1000 in the image) cannot read $CACHE_DIR, or the purge index does not fit cacher_dictionary. Until this is fixed every /purge on the real cutover returns 503 indefinitely"
+}
 docker rm -f "$REHEARSAL" >/dev/null
-log "Rehearsal passed: the image answers exactly as bare-metal does."
+docker rm -f "$PROBE" >/dev/null
+log "Rehearsal passed: the image answers exactly as bare-metal does, and rehydrated the real cache."
 
 if [ "$DRY_RUN" = 1 ]; then
   log "--dry-run: stopping here. Nothing user-facing was changed."
