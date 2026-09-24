@@ -23,6 +23,6 @@ module.exports = (key, value) => {
       ...(FONTS.find(({ id }) => id === value.id) || {}),
       ...value
     },
-    label: key ? desnake(key) : ""
+    label: key ? desnake(key).replace(/ font$/i, "") : ""
   };
 };

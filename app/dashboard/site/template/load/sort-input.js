@@ -29,7 +29,9 @@ const buildSortControl = locals => {
 
   return {
     key: "sort_by",
-    label: "Order",
+    label: "Sort",
+    fullWidth: true,
+    showLabel: true,
     value: selectedValue,
     isSelect: true,
     options: options.map(option => ({

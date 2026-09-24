@@ -19,6 +19,7 @@
     "config/openresty/build-config.js",
     "proxy/build/index.js",
     "proxy/e2e/*.js",
+    "proxy/differential/*.js",
     "app/blog/static/fonts/test.js",
     "app/blog/static/syntax-highlighter/build.js",
     "app/build/plugins/katex/preview.js",

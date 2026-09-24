@@ -22,9 +22,10 @@ directories `/var/www/blot/data/static` and `/var/www/blot/app/blog/static`),
 so the cache stays warm across the cutover, a rollback loses nothing, and
 `cdn.` requests are served from disk (with the `Cache-Control`/CORS headers of
 `location /`) instead of falling through to Node. Containers also get
-`--ulimit nofile=65536:65536` (`PROXY_NOFILE`) - headroom above the ~20000 fds
-`worker_connections 10000` (config's two fds per proxied connection) can need,
-though nginx itself is still capped at `worker_rlimit_nofile 10000`.
+`--ulimit nofile=65536:65536` (`PROXY_NOFILE`) - headroom above both the
+~20000 fds `worker_connections 10000` can need (two fds per proxied
+connection) and the config's own `worker_rlimit_nofile 20480`
+(`config/openresty/conf/initial.conf`).
 `bash tests/run.sh` exercises both against fake `docker`/`systemctl` (CI runs it).
 
 ## Before the first cutover
