@@ -1,10 +1,7 @@
-	<div class="settings-group">
-<h2 class="template-heading">{{label}}</h2>
-
 <form
   method="post"
   id="font_picker_{{key}}"
-  class="template-font-control"
+  class="template-font-control font-row"
   data-font-picker-form
   data-font-picker-key="{{key}}"
 >
@@ -15,6 +12,8 @@
     value="{{{value.id}}}"
     data-font-picker-value
   >
+
+  <span class="font-row-label">{{label}}</span>
 
   <button
     type="button"
@@ -39,28 +38,18 @@
     </span>
   </button>
 
-    <div class="sizing">
-      <label for="locals.{{key}}.font_size">Font size:</label>
-      <input
-        type="number"
-        id="locals.{{key}}.font_size"
-        name="locals.{{key}}.font_size"
-        value="{{font_size}}"
-        min="9"
-        max="96"
-      >
-    </div>
-    <div class="sizing">
-      <label for="locals.{{key}}.line_height">Line height:</label>
-      <input
-        type="number"
-        id="locals.{{key}}.line_height"
-        name="locals.{{key}}.line_height"
-        value="{{line_height}}"
-        min="0.9"
-        step="0.05"
-        max="2.4"
-      >
-    </div>
+  <div class="font-size-stepper">
+    <button type="button" class="font-size-step" data-font-size-step="-1" aria-label="Decrease font size">&minus;</button>
+    <input
+      type="number"
+      class="font-size-value"
+      id="locals.{{key}}.font_size"
+      name="locals.{{key}}.font_size"
+      value="{{font_size}}"
+      min="9"
+      max="96"
+      inputmode="numeric"
+    >
+    <button type="button" class="font-size-step" data-font-size-step="1" aria-label="Increase font size">+</button>
+  </div>
 </form>
-	</div>

@@ -32,9 +32,23 @@ Array.from(document.querySelectorAll("form.color-picker")).forEach((form) => {
     },
   });
 
+  // Choosing a palette writes the new value into the hidden input. Pickr
+  // keeps the color it was created with unless told, and saving from that
+  // stale picker would put the previous color back.
+  form.addEventListener("template-preset-color", (event) => {
+    const value = event.detail && event.detail.value;
+    if (value) pickr.setColor(value, true);
+  });
+
   pickr
     .on("save", (color, instance) => {
       form.querySelector("input.value").value = color.toHEXA().toString();
+      form.dispatchEvent(
+        new CustomEvent("template-local-changed", {
+          bubbles: true,
+          detail: { group: "colors" },
+        })
+      );
       fetch(withAjax(window.location.href), {
         method: "post",
         body: new URLSearchParams(new FormData(form)), // for application/x-www-form-urlencoded

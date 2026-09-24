@@ -373,6 +373,37 @@ describe("parseUploadedTemplate", function () {
       expect(result.warnings[0]).toContain("localEditing");
     });
 
+    it("returns no presets when locals does not declare them", function () {
+      const result = parse([
+        entry("index.html", "<h1>Hi</h1>"),
+        entry("package.json", JSON.stringify({ locals: { background_color: "#fff" } })),
+      ]);
+
+      expect(result.locals.presets).toBeUndefined();
+    });
+
+    it("passes presets through unvalidated, including an unknown font id", function () {
+      const result = parse([
+        entry("index.html", "<h1>Hi</h1>"),
+        entry(
+          "package.json",
+          JSON.stringify({
+            locals: {
+              background_color: "#fff",
+              font: { id: "verdana" },
+              presets: {
+                colors: { Classic: { background_color: "#ffffff" } },
+                fonts: { Missing: { font: { id: "not-a-real-font" } } },
+              },
+            },
+          })
+        ),
+      ]);
+
+      expect(result.locals.presets.colors.Classic.background_color).toEqual("#ffffff");
+      expect(result.locals.presets.fonts.Missing.font.id).toEqual("not-a-real-font");
+    });
+
     it("warns about settings for files which were not uploaded", function () {
       const result = parse([
         entry("index.html", "<h1>Hi</h1>"),

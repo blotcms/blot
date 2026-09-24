@@ -1,0 +1,40 @@
+<div class="preset-grid preset-grid--fonts" data-preset-grid="fonts">
+	{{#items}}
+	<form method="post" action="{{{base}}}" data-preset-form data-preset-group="fonts">
+		<input type="hidden" name="_csrf" value="{{csrftoken}}">
+		{{#fields}}
+		<input type="hidden" name="{{name}}" value="{{value}}">
+		{{/fields}}
+		<button
+			type="submit"
+			class="preset-tile{{#selected}} is-selected{{/selected}}{{#disabled}} is-disabled{{/disabled}}"
+			aria-pressed="{{pressed}}"
+			aria-label="{{ariaLabel}}"
+			title="{{title}}"
+			data-preset-match="{{match}}"
+			{{#disabled}}disabled{{/disabled}}
+		>
+			{{#samples}}
+			{{#svg}}<span class="preset-font-sample">{{{svg}}}</span>{{/svg}}
+			{{^svg}}<span class="preset-font-sample" style="font-family: {{stack}};">{{name}}</span>{{/svg}}
+			{{/samples}}
+			{{#error}}<span class="preset-error">{{error}}</span>{{/error}}
+		</button>
+	</form>
+	{{/items}}
+	{{#custom}}
+	<div
+		class="preset-tile is-custom{{#selected}} is-selected{{/selected}}"
+		data-preset-custom="fonts"
+		aria-label="Custom fonts"
+		{{#selected}}aria-current="true"{{/selected}}
+		{{#hidden}}hidden{{/hidden}}
+	>
+		{{#samples}}
+		{{#svg}}<span class="preset-font-sample">{{{svg}}}</span>{{/svg}}
+		{{^svg}}<span class="preset-font-sample" style="font-family: {{stack}};">{{name}}</span>{{/svg}}
+		{{/samples}}
+		<span class="preset-caption">{{label}}</span>
+	</div>
+	{{/custom}}
+</div>

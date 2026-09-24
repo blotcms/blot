@@ -104,6 +104,7 @@ SourceCode.route("/:viewSlug/edit")
         parsed,
         function (err, views) {
           if (err) return sendError(err);
+          views = views || {};
 
           Template.getMetadata(req.template.id, function (err, metadata) {
             if (err) return sendError(err);

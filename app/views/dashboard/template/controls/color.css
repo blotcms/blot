@@ -89,11 +89,22 @@
   cursor: pointer;
   transition: background-color 0.2s;
   background-color: white;
-  padding: 0 1em;
+  padding: 0 2.5em 0 1em;
 }
 
 .color-picker-popup:hover {
   background-color: var(--light-background-color);
+}
+
+.color-picker-chevron {
+  position: absolute;
+  top: 50%;
+  right: 1em;
+  width: 16px;
+  height: 16px;
+  transform: translateY(-50%);
+  color: var(--light-text-color);
+  pointer-events: none;
 }
 
 .color-label {
@@ -103,6 +114,7 @@
 }
 
 .color-picker {
+  position: relative;
   border-bottom: 1px solid var(--light-border-color);
 }
 
