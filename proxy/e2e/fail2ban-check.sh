@@ -14,6 +14,11 @@
 #
 #   PROXY_HTTP   http base URL (default http://127.0.0.1)
 #   ACCESS_LOG   path to the container's access.log on the runner (required)
+#   HOSTIP       the runner's routable IP that PROXY_HTTP targets (required) -
+#                the independent expectation for "what is the real client
+#                IP", so a canary read back from the log that happens to
+#                match some other wrong address (e.g. a gateway) can't pass
+#                trivially by comparing the log only to itself
 #
 # Requires `fail2ban-regex` on PATH (apt install fail2ban) and the proxy +
 # stub-upstream containers already running against it, on --network host
@@ -27,6 +32,7 @@ set -u
 
 HTTP="${PROXY_HTTP:-http://127.0.0.1}"
 ACCESS_LOG="${ACCESS_LOG:?ACCESS_LOG must be set}"
+HOSTIP="${HOSTIP:?HOSTIP must be set}"
 FILTER_DIR="config/openresty/fail2ban/filter.d"
 SPOOFED_IP="203.0.113.9"
 fail=0
@@ -64,6 +70,15 @@ if [ -z "$REAL_IP" ]; then
   exit 1
 fi
 echo "  observed real client IP: $REAL_IP"
+# Check that against an expectation independent of the log itself: traffic
+# sent to the runner's own routable IP (HOSTIP) arrives from that address,
+# so if the log recorded something else for every request (e.g. a gateway),
+# that's a real bug this must catch, not something that gets to pass by
+# only ever comparing the log against itself.
+if [ "$REAL_IP" != "$HOSTIP" ]; then
+  echo "FAIL - the log's client IP ($REAL_IP) does not match HOSTIP ($HOSTIP); \$remote_addr is not the real peer address" >&2
+  exit 1
+fi
 
 echo "-- nginx-403 (blocked file extension)"
 n403=4

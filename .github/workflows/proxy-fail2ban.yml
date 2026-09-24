@@ -103,6 +103,7 @@ jobs:
       - name: Traffic + fail2ban-regex checks
         env:
           PROXY_HTTP: http://${{ env.HOSTIP }}
+          HOSTIP: ${{ env.HOSTIP }}
         run: bash proxy/e2e/fail2ban-check.sh
 
       - name: access.log (for debugging)
