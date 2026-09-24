@@ -58,11 +58,10 @@ PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
 # worker_connections is 10000 (config/openresty/conf/initial.conf) and each
 # proxied connection holds about two fds (client + upstream), so 10000
 # connections can need about 20000; add cache/log/socket fds on top and
-# Docker's default (1024) is nowhere close. 65536 leaves real headroom above
-# that - a root dockerd allows it. Note this raises the CONTAINER's limit
-# only: nginx itself is still capped by worker_rlimit_nofile 10000 in
-# initial.conf (parity with bare metal, unchanged here), so this alone does
-# not let nginx use more than 10000.
+# Docker's default (1024) is nowhere close. This is the CONTAINER's limit; the
+# config also raises worker_rlimit_nofile itself (to 20480, initial.conf) for
+# the same reason. 65536 leaves real headroom above both - a root dockerd
+# allows it.
 NOFILE="${PROXY_NOFILE:-65536}"
 REHYDRATE_TIMEOUT="${PROXY_REHYDRATE_TIMEOUT:-180}"
 
