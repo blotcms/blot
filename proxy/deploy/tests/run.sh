@@ -44,7 +44,12 @@ case "$1" in
   rm) n="${!#}"; rm -f "$R/$n" "$FAKE/all/$n"
     [ -n "$(ls "$R" | grep '^blot-proxy-[bg]')" ] || { [ "$(cat "$FAKE/serving")" != container ] || echo none > "$FAKE/serving"; } ;;
   update) [ -z "${FAKE_UPDATE_FAILS:-}" ] || exit 1 ;;
-  logs) ;;
+  logs)
+    # wait_rehydrated also reads `docker logs`, for ALLOW_STDOUT_LOGS=1 images
+    # whose error_log goes to stderr instead of the file (FAKE_REHYDRATE_VIA_LOGS_ONLY).
+    [ -z "${FAKE_REHYDRATE_VIA_LOGS_ONLY:-}" ] \
+      || echo "2024/01/01 00:00:00 [notice] 1#1: *1 rehydrate: complete files=200000 hosts=5000 unparsed=0 seconds=20"
+    ;;
   exec)
     n="$2"
     if [[ "$*" == *"--unix-socket"* ]]; then [ -e "$R/$n" ] && [ "$n" != "${FAKE_UNHEALTHY:-}" ]; exit; fi
@@ -52,11 +57,15 @@ case "$1" in
     if [[ "$3" == node ]]; then [ -z "${FAKE_PURGE_FAIL:-}" ]; exit; fi
     if [[ "$3" == cat || "$3" == tail ]]; then
       # wait_rehydrated's view of the rehearsal's error.log (no log mount, so
-      # it is read with `docker exec`, not from the host).
-      if [ -n "${FAKE_REHYDRATE_ERROR:-}" ]; then
-        echo "2024/01/01 00:00:00 [error] 1#1: *1 rehydrate: could not add to index, increase lua_shared_dict cacher_dictionary"
-      elif [ -z "${FAKE_NO_REHYDRATE:-}" ]; then
-        echo "2024/01/01 00:00:00 [notice] 1#1: *1 rehydrate: complete files=200000 hosts=5000 unparsed=0 seconds=20"
+      # it is read with `docker exec`, not from the host). Empty when
+      # FAKE_REHYDRATE_VIA_LOGS_ONLY simulates error_log going to stderr
+      # instead - only `docker logs` above has the line then.
+      if [ -z "${FAKE_REHYDRATE_VIA_LOGS_ONLY:-}" ]; then
+        if [ -n "${FAKE_REHYDRATE_ERROR:-}" ]; then
+          echo "2024/01/01 00:00:00 [error] 1#1: *1 rehydrate: could not add to index, increase lua_shared_dict cacher_dictionary"
+        elif [ -z "${FAKE_NO_REHYDRATE:-}" ]; then
+          echo "2024/01/01 00:00:00 [notice] 1#1: *1 rehydrate: complete files=200000 hosts=5000 unparsed=0 seconds=20"
+        fi
       fi
       exit 0
     fi ;;
@@ -233,6 +242,9 @@ check "rehydrate probe: cleaned up on refusal too" '! [ -e "$FAKE/running/blot-p
 
 reset baremetal; FAKE_REHYDRATE_ERROR=1 cutover --dry-run
 check "rehydrate probe: refused when the cache logs a rehydrate error" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "rehydrate: complete"'
+
+reset baremetal; ALLOW_STDOUT_LOGS=1 FAKE_STDOUT_LOGS=1 FAKE_REHYDRATE_VIA_LOGS_ONLY=1 cutover --dry-run
+check "rehydrate probe: passes when the line is only in docker logs (ALLOW_STDOUT_LOGS=1 image)" '[ $RC = 0 ]'
 
 reset baremetal; FAKE_STDOUT_LOGS=1 cutover
 check "image that logs to stdout: refused (fail2ban would go blind)" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "LOG_TO_STDOUT"'
