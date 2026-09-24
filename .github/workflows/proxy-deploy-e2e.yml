@@ -174,36 +174,28 @@ jobs:
           [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-proxy-green)" = unless-stopped ]
 
       # ---- 4. blue-green forced failure, "swapping" state: the old colour
-      # was already stopped and must be restarted. This is timing-sensitive
-      # (STATE=swapping only after the old colour starts draining), so it's
-      # triggered off the script's own log line rather than a sleep, and the
-      # stub is restored the instant the backgrounded script exits - also an
-      # event, not a fixed delay. wait_healthy only polls the container's own
-      # health socket (not the upstream), so the stub being down does not
-      # stop the rollback itself from completing; it only has to be down
-      # while live_checks (which does need the upstream) runs, which starts
-      # right after "Draining and stopping" is logged.
+      # was already stopped and must be restarted. A first version of this
+      # triggered off the script's own "Draining and stopping" log line, but
+      # that raced live_checks for real: with the stub already healthy and a
+      # local container that drains in well under a second, the window
+      # between that log line and live_checks running was sometimes too
+      # narrow for even a log-tailing trigger to reliably win. Redis
+      # unreachable is deterministic instead: blue-green's preflight only
+      # calls redis_reachable() when PROXY_SKIP_CERT_SWEEP is unset (it's
+      # set here), so stopping Redis before the run and for its whole
+      # duration doesn't affect preflight or the new colour's health (its
+      # health socket doesn't need Redis either) - only post-swap
+      # live_checks(), which does call redis_reachable(), fails, no timing
+      # required at all.
       - name: blue-green restarts the old colour when the swap's post-swap checks fail
         run: |
-          set -euo pipefail
-          rm -f bg-swap.log
-          bash proxy/deploy/blue-green.sh "$IMAGE" > bg-swap.log 2>&1 &
-          pid=$!
-          triggered=0
-          for i in $(seq 1 90); do
-            if grep -q 'Draining and stopping' bg-swap.log; then triggered=1; break; fi
-            kill -0 "$pid" 2>/dev/null || break
-            sleep 1
-          done
-          if [ "$triggered" != 1 ]; then
-            echo "never saw blue-green start draining the old colour" >&2
-            cat bg-swap.log; kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; exit 1
-          fi
-          docker stop blot-e2e-stub >/dev/null   # event: the drain/live_checks window has started
-          rc=0; wait "$pid" || rc=$?             # event: the script itself has finished
-          docker start blot-e2e-stub >/dev/null  # event: restore right after, no fixed delay
-          for i in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:8088/ && break; sleep 1; done
-          cat bg-swap.log
+          set +e
+          docker stop blot-e2e-redis >/dev/null
+          bash proxy/deploy/blue-green.sh "$IMAGE"
+          rc=$?
+          docker start blot-e2e-redis >/dev/null
+          set -e
+          for i in $(seq 1 30); do timeout 2 bash -c "</dev/tcp/127.0.0.1/6379" 2>/dev/null && break; sleep 1; done
           [ "$rc" -ne 0 ]
           docker ps --format '{{.Names}}' | grep -qx blot-proxy-green
           [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-proxy-green)" = unless-stopped ]

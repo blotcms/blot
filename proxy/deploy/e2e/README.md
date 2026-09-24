@@ -57,30 +57,34 @@ therefore not covered here.
 
 ## Forced-failure rollbacks
 
-The workflow forces three different rollback paths, each with the least
-timing-dependent trigger that still exercises it for real:
+Both forced-failure scenarios are deterministic - no timing, no log-line
+trigger, no sleep:
 
 - **A container that never becomes healthy** (cutover's rollback, and
-  blue-green's "starting" state, where the old colour is never touched) -
-  deterministic, no timing at all. The forced-failure steps override
-  `PROXY_ENV_FILE` with a copy of the real one whose `PROXY_PRIVATE_IP` is
-  `198.51.100.7` (TEST-NET-2, RFC 5737 - never assigned to a runner
-  interface). `validate_image()` only runs `openresty -t` (parses the
-  config, never binds), and the cutover rehearsal always overrides
-  `PROXY_PRIVATE_IP=127.0.0.1` for its own container, so preflight and the
-  rehearsal both still pass; only the real container's `:8077` listener
-  fails to bind, so it exits immediately and `wait_healthy` sees it not
-  running.
+  blue-green's "starting" state, where the old colour is never touched).
+  The forced-failure steps override `PROXY_ENV_FILE` with a copy of the
+  real one whose `PROXY_PRIVATE_IP` is `198.51.100.7` (TEST-NET-2, RFC 5737
+  - never assigned to a runner interface). `validate_image()` only runs
+  `openresty -t` (parses the config, never binds), and the cutover
+  rehearsal always overrides `PROXY_PRIVATE_IP=127.0.0.1` for its own
+  container, so preflight and the rehearsal both still pass; only the real
+  container's `:8077` listener fails to bind, so it exits immediately and
+  `wait_healthy` sees it not running.
 - **A healthy new colour whose post-swap checks fail** (blue-green's
   "swapping" state, where the old colour was already stopped and must be
-  restarted) - this can't be made deterministic the same way (the new
-  colour has to become healthy first), so it's triggered off the script's
-  own "Draining and stopping" log line (stop the stub there, well before
-  the drain + `live_checks` that need it) and the stub is restored the
-  instant the backgrounded script process exits - both events, not sleeps.
-  `wait_healthy` only polls the container's own health socket, not the
-  upstream, so the stub being down doesn't stop the rollback itself from
-  completing.
+  restarted). A first version of this stopped the stub upstream, triggered
+  off the script's own "Draining and stopping" log line. That raced
+  `live_checks` for real: with the stub already healthy and a local
+  container that drains in well under a second, the window between that
+  log line and `live_checks` running was sometimes too narrow even for a
+  log-tailing trigger to reliably win - the swap occasionally completed
+  successfully before the stub could be stopped. Stopping **Redis**
+  instead, for the whole duration of the `blue-green.sh` call, is
+  deterministic: `cert_baseline()` (the only redis-cli use in preflight) is
+  skipped by `PROXY_SKIP_CERT_SWEEP=1`, and the new colour's health socket
+  doesn't need Redis either, so nothing before the swap notices - only the
+  post-swap `live_checks()`, which does call `redis_reachable()`, fails,
+  regardless of how fast the drain and check happen to run.
 
 ## Why `BLOT_HOST=blot.im`
 
