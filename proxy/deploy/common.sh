@@ -193,14 +193,18 @@ wait_healthy() { # wait_healthy <name> <timeout>
 # Worker 0 rebuilds the purge index (cacher.lua build_index) once nginx starts
 # listening, and logs "rehydrate: complete files=... hosts=..." to error.log
 # when it finishes, or "[error] ... rehydrate: <reason>" (e.g. cannot read a
-# file, or "increase lua_shared_dict cacher_dictionary") if it gives up. Poll
-# the container's own error.log (no log mount on the rehearsal) until one or
-# the other shows up, or <timeout> seconds pass (~20s for today's ~200k files;
-# a cold disk can take longer, hence a generous default).
+# file, or "increase lua_shared_dict cacher_dictionary") if it gives up. Read
+# BOTH log sinks: normally the container's own error.log (no log mount here),
+# but with ALLOW_STDOUT_LOGS=1 (image_logs_to_file's override) error_log goes
+# to stderr instead, where only `docker logs` sees it - checking just the file
+# would then time out and refuse every cutover on such an image. Poll until
+# one or the other shows the complete/error line, or <timeout> seconds pass
+# (~20s for today's ~200k files; a cold disk can take longer, hence a
+# generous default).
 wait_rehydrated() { # wait_rehydrated <name> <timeout>
   local deadline=$(( $(date +%s) + $2 )) log
   while true; do
-    log="$(docker exec "$1" cat /var/log/openresty/error.log 2>/dev/null || true)"
+    log="$( { docker exec "$1" cat /var/log/openresty/error.log 2>/dev/null; docker logs "$1" 2>&1; } || true)"
     echo "$log" | grep -q '\[error\].*rehydrate:' && return 1
     echo "$log" | grep -q 'rehydrate: complete' && return 0
     running "$1" || return 1

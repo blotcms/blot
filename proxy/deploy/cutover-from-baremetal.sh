@@ -258,7 +258,10 @@ wait_healthy "$PROBE" "$HEALTH_TIMEOUT" || {
   refuse "the rehydrate probe never became healthy: check that $CACHE_DIR is owned by uid 1000 (ec2-user in the image) - see the probe's logs above"
 }
 wait_rehydrated "$PROBE" "$REHYDRATE_TIMEOUT" || {
+  # Same two sinks wait_rehydrated reads: error.log normally, or `docker logs`
+  # when ALLOW_STDOUT_LOGS=1 sent error_log to stderr instead.
   docker exec "$PROBE" tail -n 50 /var/log/openresty/error.log >&2 || true
+  docker logs --tail 50 "$PROBE" >&2 || true
   refuse "the probe never logged 'rehydrate: complete' for the real cache within ${REHYDRATE_TIMEOUT}s (or logged a rehydrate error): either the worker (ec2-user, uid 1000 in the image) cannot read $CACHE_DIR, or the purge index does not fit cacher_dictionary. Until this is fixed every /purge on the real cutover returns 503 indefinitely"
 }
 docker rm -f "$REHEARSAL" >/dev/null
