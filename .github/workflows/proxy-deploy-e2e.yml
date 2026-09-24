@@ -1,0 +1,217 @@
+# Runs the REAL proxy/deploy/cutover-from-baremetal.sh and
+# proxy/deploy/blue-green.sh against real Docker: a container built from the
+# bare-metal OpenResty config standing in for the `openresty` systemd unit
+# (managed by a real systemd unit - see proxy/deploy/e2e/README.md), real
+# Redis, a stub upstream, and a fake Node container for the purge probe.
+#
+# proxy/deploy/tests/run.sh (which this workflow does not replace) covers the
+# same scripts' order-of-operations against fake docker/systemctl/curl and is
+# much faster; this workflow instead proves the scripts work against the real
+# things. Recommended item under blotcms/blot#1941.
+#
+# No `branches: [master]` filter on the pull_request trigger: this workflow
+# is meant to run on a PR based on another feature branch (a stacked PR), not
+# only ones based on master.
+on:
+  push:
+    paths:
+      - ".github/workflows/proxy-deploy-e2e.yml"
+      - "proxy/**"
+      - "config/openresty/**"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
+  pull_request:
+    paths:
+      - ".github/workflows/proxy-deploy-e2e.yml"
+      - "proxy/**"
+      - "config/openresty/**"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
+  workflow_dispatch:
+
+jobs:
+  proxy-deploy-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BLOT_HOST: blot.im
+      # BLOT_HOST is baked into the bare-metal config regardless of the env
+      # var (config/openresty/locals.js's baremetal()); the harness uses the
+      # same value on both sides - see proxy/deploy/e2e/README.md.
+      PROXY_CANARY_HOST: preview-of-wireframe-on-david.blot.im
+      PROXY_ENV_FILE: ${{ github.workspace }}/.e2e/proxy.env
+      PROXY_CACHE_DIR: ${{ github.workspace }}/.e2e/cache
+      PROXY_LOG_DIR: ${{ github.workspace }}/.e2e/logs
+      PROXY_CERT_DIR: ${{ github.workspace }}/.e2e/certs
+      PROXY_BLOG_STATIC_DIR: ${{ github.workspace }}/.e2e/blog-static
+      PROXY_GLOBAL_STATIC_DIR: ${{ github.workspace }}/.e2e/global-static
+      PROXY_AUTOSSL_VOLUME: blot-e2e-auto-ssl
+      PROXY_NODE_CONTAINER: blot-container-blue
+      PROXY_RENEW_SCRIPT: ${{ github.workspace }}/config/openresty/scripts/renew-wildcard-ssl.sh
+      PROXY_SKIP_CERT_SWEEP: "1" # no Pebble/lua-resty-auto-ssl storage in this harness - see README.md
+      # Run every deploy script call detached (the runner has no tty/tmux).
+      PROXY_CUTOVER_DETACHED: "1"
+      E2E_ROOT: ${{ github.workspace }}/.e2e
+      IMAGE: blot-proxy:e2e
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 21.7.3
+
+      - name: Install config generator dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/gendeps"
+          cd "$RUNNER_TEMP/gendeps"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+          echo "NODE_PATH=$RUNNER_TEMP/gendeps/node_modules:${{ github.workspace }}/app" >> "$GITHUB_ENV"
+
+      # Container side (the image the deploy scripts install).
+      - name: Generate proxy (container) config
+        run: bash proxy/build/build.sh
+        env:
+          LOG_TO_STDOUT: "false" # both deploy scripts refuse an image that logs to stdout
+          FETCH_CDN_IPS: "false"
+
+      - name: Build proxy image
+        run: docker build -f proxy/Dockerfile -t "$IMAGE" proxy/
+
+      # Bare-metal side (config/openresty), the systemd unit's stand-in.
+      - name: Generate bare-metal config
+        run: bash proxy/deploy/e2e/build-baremetal-config.sh
+        env:
+          FETCH_CDN_IPS: "false"
+
+      - name: Build bare-metal-in-a-container image
+        run: |
+          docker build -f proxy/deploy/e2e/baremetal.Dockerfile \
+            --build-arg PROXY_IMAGE="$IMAGE" \
+            -t blot-baremetal:e2e .
+
+      - name: Set up the harness (Redis, stub upstream, bare-metal + systemd unit, certs)
+        run: bash proxy/deploy/e2e/setup.sh
+
+      # ---- 1. --dry-run: rehearses only, changes nothing ----------------
+      - name: cutover --dry-run leaves bare metal serving and enabled
+        run: |
+          set -euo pipefail
+          bash proxy/deploy/cutover-from-baremetal.sh --dry-run "$IMAGE"
+          sudo systemctl is-active --quiet openresty
+          sudo systemctl is-enabled --quiet openresty
+          ! docker ps -a --format '{{.Names}}' | grep -q '^blot-proxy-'
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
+          [ "$code" = 200 ]
+
+      # ---- 2. a real cutover ----------------------------------------------
+      - name: cutover moves :80/:443 to blot-proxy-blue
+        run: |
+          set -euo pipefail
+          bash proxy/deploy/cutover-from-baremetal.sh --yes --soak 5 "$IMAGE"
+          [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-proxy-blue)" = unless-stopped ]
+          [ "$(docker inspect -f '{{.State.Running}}' blot-proxy-blue)" = true ]
+          ! sudo systemctl is-enabled --quiet openresty
+          ! sudo systemctl is-active --quiet openresty
+          [ "$(docker inspect -f '{{.State.Running}}' blot-e2e-baremetal)" != true ]
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
+          [ "$code" = 200 ]
+
+      # ---- 3. blue-green: no failed requests during the swap --------------
+      - name: blue-green swaps blot-proxy-blue for blot-proxy-green with zero failed requests
+        run: |
+          set -euo pipefail
+          : > codes.txt
+          (
+            # No --retry: every attempt is recorded as-is, so a single
+            # refused/dropped request during the swap shows up as non-200.
+            for i in $(seq 1 400); do
+              curl -s -o /dev/null -w '%{http_code}\n' --max-time 5 \
+                -H "Host: $PROXY_CANARY_HOST" http://127.0.0.1/ >> codes.txt || echo curl-err >> codes.txt
+              sleep 0.05
+            done
+          ) &
+          loop=$!
+          sleep 1
+          bash proxy/deploy/blue-green.sh "$IMAGE"
+          wait "$loop"
+          total=$(wc -l < codes.txt); bad=$(grep -vc '^200$' codes.txt || true)
+          echo "total=$total bad=$bad"; sort codes.txt | uniq -c
+          [ "$total" -ge 50 ]
+          [ "$bad" -eq 0 ]
+          docker ps --format '{{.Names}}' | grep -qx blot-proxy-green
+          ! docker ps -a --format '{{.Names}}' | grep -qx blot-proxy-blue
+          [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-proxy-green)" = unless-stopped ]
+
+      # ---- 4a. blue-green forced-failure rollback --------------------------
+      # Stop the stub upstream the instant blue-green.sh starts the new
+      # colour (blot-proxy-blue): well before the old colour (green) is
+      # drained and the post-swap live_checks (which need the upstream) run,
+      # and well before the 35s blip below restores it - see
+      # proxy/deploy/e2e/README.md's timing note is inline here since it's
+      # specific to this step. The old colour must be left serving.
+      - name: blue-green rolls back when the new colour fails its post-swap checks
+        run: |
+          set -euo pipefail
+          rm -f bg.log
+          bash proxy/deploy/blue-green.sh "$IMAGE" > bg.log 2>&1 &
+          pid=$!
+          triggered=0
+          for i in $(seq 1 60); do
+            if grep -q 'Starting blot-proxy-blue from' bg.log; then triggered=1; break; fi
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+          done
+          [ "$triggered" = 1 ] || { echo "never saw blue-green start the new colour" >&2; cat bg.log; exit 1; }
+          ( docker stop blot-e2e-stub >/dev/null 2>&1; sleep 35; docker start blot-e2e-stub >/dev/null 2>&1 ) &
+          blip=$!
+          rc=0; wait "$pid" || rc=$?
+          wait "$blip"
+          cat bg.log
+          [ "$rc" -ne 0 ]
+          for i in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:8088/ && break; sleep 1; done
+          docker ps --format '{{.Names}}' | grep -qx blot-proxy-green
+          ! docker ps -a --format '{{.Names}}' | grep -qx blot-proxy-blue
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
+          [ "$code" = 200 ]
+
+      # ---- 4b. cutover forced-failure rollback, from a fresh bare-metal ----
+      - name: reset to a fresh bare-metal state
+        run: bash proxy/deploy/e2e/reset-baremetal.sh
+
+      - name: cutover rolls back to bare metal when the container fails its post-cutover checks
+        run: |
+          set -euo pipefail
+          rm -f co.log
+          bash proxy/deploy/cutover-from-baremetal.sh --yes --soak 5 "$IMAGE" > co.log 2>&1 &
+          pid=$!
+          triggered=0
+          for i in $(seq 1 90); do
+            if grep -q 'Starting blot-proxy-blue$' co.log; then triggered=1; break; fi
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+          done
+          [ "$triggered" = 1 ] || { echo "never saw the cutover start the container" >&2; cat co.log; exit 1; }
+          ( docker stop blot-e2e-stub >/dev/null 2>&1; sleep 35; docker start blot-e2e-stub >/dev/null 2>&1 ) &
+          blip=$!
+          rc=0; wait "$pid" || rc=$?
+          wait "$blip"
+          cat co.log
+          [ "$rc" -ne 0 ]
+          for i in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:8088/ && break; sleep 1; done
+          sudo systemctl is-active --quiet openresty
+          sudo systemctl is-enabled --quiet openresty
+          ! docker ps -a --format '{{.Names}}' | grep -q '^blot-proxy-'
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
+          [ "$code" = 200 ]
+
+      - name: Logs
+        if: always()
+        run: |
+          for c in blot-e2e-baremetal blot-proxy-blue blot-proxy-green blot-e2e-stub blot-container-blue blot-e2e-redis; do
+            echo "=== $c ==="; docker logs --tail 100 "$c" 2>&1 || true
+          done
+          echo "=== openresty.service ==="
+          sudo journalctl -u openresty --no-pager -n 100 2>&1 || true
