@@ -144,9 +144,9 @@
 	{{/post_adjacent_posts}}
 
 {{#syntax_themes}}
-	<a class="line" href="{{{base}}}/syntax-highlighter" style="padding: 11px 20px;border-bottom: none;">
-		<span class="center">Open syntax controls</span>
-		<span class="right">Edit</span>
+	<a class="line syntax-highlighter-summary" href="{{{base}}}/syntax-highlighter">
+		<span class="syntax-highlighter-summary__label">Syntax highlighting:</span>
+		<span class="syntax-highlighter-summary__theme">{{#value}}{{#name}}{{name}}{{/name}}{{^name}}Select a color scheme{{/name}}{{/value}}</span>
 	</a>
 	{{/syntax_themes}}
 	</div>

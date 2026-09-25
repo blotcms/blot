@@ -391,6 +391,30 @@ p.template-heading-note {
   background: linear-gradient(90deg, transparent, var(--light-background-color) 50%);
 }
 
+.line.syntax-highlighter-summary {
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 11px 20px;
+  border-bottom: none;
+  font-size: 14px;
+}
+
+.syntax-highlighter-summary__label {
+  flex-shrink: 0;
+  color: var(--text-color);
+}
+
+.syntax-highlighter-summary__theme {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--text-color);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .segmented-control {
   display: flex;
   position: relative;
