@@ -11,6 +11,19 @@ const fullViewCache = new LRUCache({
   // shouldn't be able to fill the cache's memory budget on their own.
   maxSize: 20 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
+  // Without this, an in-flight fetch evicted by LRU/size pressure aborts and
+  // every request coalesced onto it rejects with "Error: evicted" instead
+  // of getting its view - let the already-running getFullView call finish
+  // and hand its result back even if it can't be cached.
+  ignoreFetchAbort: true,
+  // Coalesce concurrent misses on the same key into one in-flight
+  // getFullView call, rather than one per simultaneous request for the
+  // same blog/template/view.
+  fetchMethod: async (key, staleValue, { context }) => {
+    const { blogID, templateID, viewName } = context;
+    const response = await getFullView(blogID, templateID, viewName);
+    return prepareCacheValue(response);
+  },
 });
 
 function createCacheKey(blog, template, viewName) {
@@ -33,14 +46,9 @@ async function getCachedFullView(options) {
 
   const key = createCacheKey(blog, template, viewName);
 
-  if (fullViewCache.has(key)) {
-    return cloneDeep(fullViewCache.get(key).payload);
-  }
-
-  const response = await getFullView(blog.id, template.id, viewName);
-
-  const prepared = prepareCacheValue(response);
-  fullViewCache.set(key, prepared);
+  const prepared = await fullViewCache.fetch(key, {
+    context: { blogID: blog.id, templateID: template.id, viewName },
+  });
 
   return cloneDeep(prepared.payload);
 }

@@ -4,6 +4,7 @@ const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
+const { Uncacheable } = require("../../lib/uncacheableFetch");
 const LRUCache = require("lru-cache").LRUCache;
 const { normalizePathPrefix } = require("helper/pathPrefix");
 const {
@@ -27,6 +28,56 @@ const taggedCache = new LRUCache({
   // other blogs sharing this process.
   maxSize: 100 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
+  // Without this, an in-flight fetch evicted by LRU/size pressure aborts and
+  // every request coalesced onto it rejects with "Error: evicted" instead
+  // of getting its page - let the already-running fetchTaggedEntries/
+  // Entry.get pass finish and hand its result back even if it can't be
+  // cached.
+  ignoreFetchAbort: true,
+  // Coalesce concurrent misses on the same key into one in-flight load.
+  fetchMethod: async (key, staleValue, { context }) => {
+    const { blogID, tags, limit, offset, pathPrefix, sortOptions } = context;
+
+    const result = await fetchTaggedEntries(blogID, tags, {
+      limit,
+      offset,
+      pathPrefix,
+      ...sortOptions,
+    });
+
+    const entryIDs = result.entryIDs || [];
+    let entries = await getEntry(blogID, entryIDs);
+    entries = sortEntries(entries, sortOptions);
+
+    const totalEntries =
+      result.total !== undefined ? result.total : entryIDs.length;
+
+    const payload = {
+      tag: result.tag,
+      tagged: result.tagged,
+      is: result.tagged, // alias
+      entries,
+      pagination: result.pagination,
+      total: totalEntries,
+      entryIDs,
+      slugs: result.slugs,
+      prettyTags: result.prettyTags,
+    };
+
+    const prepared = prepareCacheValue(payload, { preserveEntryInstances: true });
+
+    // Entry.get swallows Redis MGET failures as [] (models/entry/get.js).
+    // If we received IDs but no hydrated entries, that is indistinguishable
+    // from a total hydration miss - do not persist it, or later requests
+    // would serve an empty tagged page until cacheID changes. Uncacheable
+    // still hands the (broken) result back to this render and every request
+    // coalesced onto it, without writing it to the cache.
+    if (entryIDs.length > 0 && entries.length === 0) {
+      throw new Uncacheable(prepared);
+    }
+
+    return prepared;
+  },
 });
 
 function cloneTagged(value) {
@@ -92,51 +143,21 @@ async function tagged(req, res) {
     limit,
   });
 
-  let payload;
-
-  if (taggedCache.has(key)) {
-    log("Retrieved tagged entries from cache");
-    payload = cloneTagged(taggedCache.get(key).payload);
-  } else {
-    const result = await fetchTaggedEntries(blogID, tags, {
-      limit,
-      offset,
-      pathPrefix,
-      ...sortOptions,
+  const status = {};
+  let prepared;
+  try {
+    prepared = await taggedCache.fetch(key, {
+      status,
+      context: { blogID, tags, limit, offset, pathPrefix, sortOptions },
     });
-
-    const entryIDs = result.entryIDs || [];
-    let entries = await getEntry(blogID, entryIDs);
-    entries = sortEntries(entries, sortOptions);
-
-    const totalEntries =
-      result.total !== undefined
-        ? result.total
-        : (result.entryIDs || []).length;
-
-    payload = {
-      tag: result.tag,
-      tagged: result.tagged,
-      is: result.tagged, // alias
-      entries,
-      pagination: result.pagination,
-      total: totalEntries,
-      entryIDs: result.entryIDs || [],
-      slugs: result.slugs,
-      prettyTags: result.prettyTags,
-    };
-
-    // Entry.get swallows Redis MGET failures as [] (models/entry/get.js).
-    // If we received IDs but no hydrated entries, that is indistinguishable
-    // from a total hydration miss - do not persist it, or later requests
-    // would serve an empty tagged page until cacheID changes.
-    if (!(entryIDs.length > 0 && (payload.entries || []).length === 0)) {
-      taggedCache.set(
-        key,
-        prepareCacheValue(payload, { preserveEntryInstances: true }),
-      );
-    }
+  } catch (e) {
+    if (!(e instanceof Uncacheable)) throw e;
+    prepared = e.payload;
   }
+
+  if (status.fetch === "hit") log("Retrieved tagged entries from cache");
+
+  const payload = cloneTagged(prepared.payload);
 
   res.locals.pagination = res.locals.pagination || payload.pagination || {};
 

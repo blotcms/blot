@@ -4,6 +4,7 @@ const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
+const { Uncacheable } = require("../../lib/uncacheableFetch");
 
 const ALIASES = ["latestEntry", "latest_entry"];
 
@@ -13,6 +14,34 @@ const latestEntryCache = new LRUCache({
   // posts cannot dominate the process by item count alone.
   maxSize: 20 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
+  // Without this, an in-flight fetch evicted by LRU/size pressure aborts and
+  // every request coalesced onto it rejects with "Error: evicted" instead
+  // of getting its entry - let the already-running getPage call finish and
+  // hand its result back even if it can't be cached.
+  ignoreFetchAbort: true,
+  // Coalesce concurrent misses on the same key into one in-flight
+  // getPage call.
+  fetchMethod: async (key, staleValue, { context }) => {
+    const { blogID, log } = context;
+
+    log("Loading latest entry");
+    const { entries } = await getPage(blogID, { pageNumber: 1, pageSize: 1 });
+    log("Loaded latest entry");
+    const latest = entries && entries.length ? entries[0] : {};
+
+    const prepared = prepareCacheValue(latest, { preserveEntryInstances: true });
+
+    // getPage can resolve to [] both for a genuinely empty blog and when
+    // Entry.get swallows a failed MGET after a successful zRange - see
+    // models/entry/get.js and entries handlePaginationAndCallback.
+    // Uncacheable still hands the (possibly empty) result back without
+    // writing it to the cache; refetching a page of size 1 is cheap.
+    if (!entries || !entries.length) {
+      throw new Uncacheable(prepared);
+    }
+
+    return prepared;
+  },
 });
 
 function cloneEntry(value) {
@@ -30,35 +59,21 @@ async function latestEntry(req, res) {
   const log = typeof req?.log === "function" ? req.log.bind(req) : () => {};
   const key = createCacheKey(req.blog);
 
-  if (latestEntryCache.has(key)) {
-    log("Retrieved latest entry from cache");
-    return projectEntryFields(
-      cloneEntry(latestEntryCache.get(key).payload),
-      req.retrieve,
-      ALIASES,
-    );
+  const status = {};
+  let prepared;
+  try {
+    prepared = await latestEntryCache.fetch(key, {
+      status,
+      context: { blogID: req.blog.id, log },
+    });
+  } catch (e) {
+    if (!(e instanceof Uncacheable)) throw e;
+    prepared = e.payload;
   }
 
-  log("Loading latest entry");
-  const { entries } = await getPage(req.blog.id, {
-    pageNumber: 1,
-    pageSize: 1,
-  });
-  log("Loaded latest entry");
-  const latest = entries && entries.length ? entries[0] : {};
+  if (status.fetch === "hit") log("Retrieved latest entry from cache");
 
-  // getPage can resolve to [] both for a genuinely empty blog and when
-  // Entry.get swallows a failed MGET after a successful zRange - see
-  // models/entry/get.js and entries handlePaginationAndCallback. Don't
-  // cache an empty result; refetching a page of size 1 is cheap.
-  if (entries && entries.length) {
-    latestEntryCache.set(
-      key,
-      prepareCacheValue(latest, { preserveEntryInstances: true }),
-    );
-  }
-
-  return projectEntryFields(cloneEntry(latest), req.retrieve, ALIASES);
+  return projectEntryFields(cloneEntry(prepared.payload), req.retrieve, ALIASES);
 }
 
 module.exports = asRetriever(latestEntry);

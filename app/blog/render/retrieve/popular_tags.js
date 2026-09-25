@@ -11,6 +11,30 @@ const popularTagsCache = new LRUCache({
   // Bound by bytes too, for consistency with the other render-path caches.
   maxSize: 5 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
+  // Without this, an in-flight fetch evicted by LRU/size pressure aborts and
+  // every request coalesced onto it rejects with "Error: evicted" instead
+  // of getting its tags - let the already-running getPopularTags call
+  // finish and hand its result back even if it can't be cached.
+  ignoreFetchAbort: true,
+  // Coalesce concurrent misses on the same key into one in-flight
+  // getPopularTags call, rather than one per simultaneous request.
+  fetchMethod: async (key, staleValue, { context }) => {
+    const { blogID, options, log } = context;
+
+    let tags = await getPopularTags(blogID, options);
+
+    log("Formatting popular tags");
+    tags = tags.map((tag) => ({
+      name: tag.name,
+      tag: tag.name, // for backward compatibility
+      entries: tag.entries,
+      total: tag.count,
+      slug: encodeURIComponent(tag.slug),
+    }));
+
+    log("Listed popular tags");
+    return prepareCacheValue(compactTags(tags));
+  },
 });
 
 function createCacheKey(blog, options) {
@@ -34,27 +58,14 @@ async function popularTags(req, res) {
   const options = { limit: 100, offset: 0 };
   const key = createCacheKey(req.blog, options);
 
-  if (popularTagsCache.has(key)) {
-    req.log("Retrieved popular tags from cache");
-    return expandTags(cloneDeep(popularTagsCache.get(key).payload));
-  }
+  const status = {};
+  const prepared = await popularTagsCache.fetch(key, {
+    status,
+    context: { blogID: req.blog.id, options, log: req.log },
+  });
 
-  let tags = await getPopularTags(req.blog.id, options);
+  if (status.fetch === "hit") req.log("Retrieved popular tags from cache");
 
-  // Map to match expected format
-  req.log("Formatting popular tags");
-  tags = tags.map((tag) => ({
-    name: tag.name,
-    tag: tag.name, // for backward compatibility
-    entries: tag.entries,
-    total: tag.count,
-    slug: encodeURIComponent(tag.slug),
-  }));
-
-  const prepared = prepareCacheValue(compactTags(tags));
-  popularTagsCache.set(key, prepared);
-
-  req.log("Listed popular tags");
   return expandTags(cloneDeep(prepared.payload));
 }
 
