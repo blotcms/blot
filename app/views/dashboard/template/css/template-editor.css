@@ -4,6 +4,8 @@
   --breadcrumbs-margin-bottom: 24px;
   --template-row-gap: 0.25rem;
   --template-row-hover-background-color: #f3f3f3;
+  --template-row-selected-background-color: #ebebeb;
+  --template-row-selected-text-color: #6f7278;
   --template-row-link-font-size: 14px;
   --template-row-link-padding: 0.219em 0 0.219em 0.5em;
   --template-preview-height: 16px;
@@ -179,10 +181,9 @@ h2 {
 }
 
 .template-row.selected .template-row__link {
-  background-color: var(--accent-color);
+  background-color: var(--template-row-selected-background-color);
   border-radius: var(--border-radius);
-  color: #fff;
-  font-weight: 600;
+  color: var(--template-row-selected-text-color);
 }
 
 .template-sidebar {
