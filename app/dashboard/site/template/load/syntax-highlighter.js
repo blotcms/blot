@@ -21,7 +21,7 @@ module.exports = function (req, res, next) {
             "syntax_highlighter_font",
             req.template.locals.syntax_highlighter_font
           ),
-          label: "Code font"
+          label: "Font"
         }
       : null,
     label: "Code colors",
