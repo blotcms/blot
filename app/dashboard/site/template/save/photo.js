@@ -3,7 +3,8 @@ const Blog = require("models/blog");
 const Template = require("models/template");
 const saveAvatar = require("dashboard/site/save/avatar");
 const forkIfNeeded = require("./fork-if-needed");
-const uploadFavicon = require("./upload-favicon");
+const cleanupFiles = require("./cleanup-files");
+const { createFavicon } = require("./upload-favicon");
 
 const setBlog = (id, updates) => new Promise((resolve, reject) => {
   Blog.set(id, updates, (error) => error ? reject(error) : resolve());
@@ -76,24 +77,23 @@ module.exports = async function savePhoto(req, res, next) {
     }
 
     if (wantsFavicon) {
-      const routeTemplateSlug = req.params.templateSlug;
       try {
         // Validate and save the photo first. A later favicon failure should be
         // shown to the user without discarding the photo they chose to save.
         await runForkIfNeeded(req, res);
-        if (req.templateFork) {
-          req.params.templateSlug = req.template.id.split(":").slice(1).join(":");
-        }
-        req.files = { favicon: uploaded };
-        req.query = { ...req.query, ajax: "1" };
-        let faviconError;
-        await uploadFavicon(req, { json() {} }, (error) => { faviconError = error; });
-        if (faviconError) throw faviconError;
-        res.locals.favicon = req.template.locals.favicon;
-        if (req.templateFork) photoPath = `${req.baseUrl}/${req.params.templateSlug}/photo`;
-        req.params.templateSlug = routeTemplateSlug;
+        const faviconTemplateSlug = req.templateFork
+          ? req.template.id.split(":").slice(1).join(":")
+          : req.params.templateSlug;
+        res.locals.favicon = await createFavicon(
+          req.blog,
+          req.template,
+          faviconTemplateSlug,
+          uploaded.path,
+          { x: req.body.crop_x, y: req.body.crop_y, size: req.body.crop_size },
+          { onFileProcessed: () => cleanupFiles({ favicon: uploaded }) }
+        );
+        if (req.templateFork) photoPath = `${req.baseUrl}/${faviconTemplateSlug}/photo`;
       } catch (error) {
-        req.params.templateSlug = routeTemplateSlug;
         try {
           await rollbackFork(req, res);
         } catch (rollbackError) {

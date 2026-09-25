@@ -1,14 +1,21 @@
 {{> template-settings-back}}
-<form method="post" action="{{{base}}}/images/{{image.key}}" enctype="multipart/form-data" class="dashboard-form favicon-form" data-image-crop-form>
+<form method="post" action="{{{base}}}/images/{{image.key}}" enctype="multipart/form-data" class="dashboard-form favicon-form" data-image-crop-form{{#image.isProfileImage}} data-photo-form data-favicon-supported="{{#favicon_supported}}true{{/favicon_supported}}{{^favicon_supported}}false{{/favicon_supported}}" data-has-favicon="{{#favicon}}true{{/favicon}}{{^favicon}}false{{/favicon}}"{{/image.isProfileImage}}>
   <input type="hidden" name="_csrf" value="{{csrftoken}}" />
   <input type="hidden" name="redirect" value="{{{base}}}/images/{{image.key}}" />
   <input type="hidden" name="crop_x" value="" data-crop-x /><input type="hidden" name="crop_y" value="" data-crop-y /><input type="hidden" name="crop_size" value="" data-crop-size />
+  {{#image.isProfileImage}}
+  <input type="hidden" name="use_favicon" value="0" data-photo-use-favicon />
+  <input type="hidden" name="favicon_crop_x" value="" data-favicon-crop-x />
+  <input type="hidden" name="favicon_crop_y" value="" data-favicon-crop-y />
+  <input type="hidden" name="favicon_crop_size" value="" data-favicon-crop-size />
+  {{/image.isProfileImage}}
   <div class="settings-group"><h2 class="template-heading">{{image.label}}</h2><div class="favicon-form__body">
     {{#image.value}}<p><img src="{{{url}}}" style="max-width:100%;max-height:320px" alt="Current {{image.label}}" /></p><p>{{width}} × {{height}} pixels</p>{{/image.value}}
     <p class="favicon-form__help">Select an image to {{#image.value}}replace it{{/image.value}}{{^image.value}}upload it{{/image.value}}. The optional square selection chooses the focal area of the square thumbnail; other versions remain proportional.</p>
-    <label class="favicon-form__file"><span>Select an image</span><input type="file" name="image" accept="image/*" data-crop-input /></label>
+    <label class="favicon-form__file"><span>Select an image</span><input type="file" name="image" accept="image/*" data-crop-input{{#image.isProfileImage}} data-photo-input{{/image.isProfileImage}} /></label>
     <div class="favicon-cropper" hidden data-cropper><div class="favicon-cropper__image"><img alt="Choose the square thumbnail area" data-crop-image /><div class="favicon-cropper__selection" role="slider" tabindex="0" aria-label="Square thumbnail crop" aria-valuemin="0" aria-valuemax="100" data-crop-selection></div></div><p class="favicon-form__help">Optional: drag the square to set the square thumbnail. Use the arrow keys to reposition it, or Shift and the arrow keys to resize it. Without this selection, Blot uses an entropy-based crop.</p></div>
     {{#image.value}}<button type="submit" name="remove" value="1">Delete image</button>{{/image.value}}
     {{> form-footer}}
   </div></div>
+  {{#image.isProfileImage}}{{> photo-favicon-dialog}}{{/image.isProfileImage}}
 </form>

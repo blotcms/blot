@@ -26,7 +26,7 @@
 
 {{#fontPresets.hasPresets}}
 <details class="settings-group" data-preset-group="fonts" open>
-<summary class="template-heading">Fonts</summary>
+<summary class="template-heading">{{#singleFontInput}}Font{{/singleFontInput}}{{^singleFontInput}}Fonts{{/singleFontInput}}</summary>
 {{#fontPresets}}
 {{> preset-fonts}}
 {{/fontPresets}}
@@ -40,7 +40,7 @@
 	{{^fontPresets.hasPresets}}
 	{{#fonts.length}}
 	<div class="settings-group">
-	<h2 class="template-heading">Fonts</h2>
+	<h2 class="template-heading">{{#singleFontInput}}Font{{/singleFontInput}}{{^singleFontInput}}Fonts{{/singleFontInput}}</h2>
         {{#fonts}}
         {{> font}}
         {{/fonts}}
@@ -68,15 +68,15 @@
 	<div class="settings-group">
 		<h2 class="template-heading">Photo</h2>
 		{{#profile_image_control}}
-		<a class="line" href="{{{base}}}/images/{{key}}" style="padding:11px 14px;{{^favicon_supported}}border-bottom:none;{{/favicon_supported}}">
-		{{#value}}<img src="{{{thumbnails.small.url}}}" width="48" height="48" style="object-fit:contain;vertical-align:middle;margin-right:.5rem" alt="" /><span class="link">Edit {{label}}</span>{{/value}}
-		{{^value}}<span class="center" style="border:1px dashed var(--border-color);width:48px;height:48px;display:inline-block;vertical-align:middle;margin-right:.5rem"></span><span class="link">Choose a photo</span>{{/value}}
+		<a class="line" href="{{{base}}}/images/{{key}}" style="padding:11px 14px;border-bottom:1px solid var(--light-border-color);{{^favicon_supported}}border-bottom:none;{{/favicon_supported}}">
+		{{#value}}<span style="width:40px;height:40px;border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-right:.5rem;flex:0 0 40px"><img src="{{{thumbnails.small.url}}}" style="max-width:40px;max-height:40px;object-fit:contain" alt="" /></span><span class="link">Edit photo</span>{{/value}}
+		{{^value}}<span class="center" style="border:1px dashed var(--dark-border-color);width:40px;height:40px;display:inline-block;vertical-align:middle;margin-right:.5rem"></span><span class="link">Choose a photo</span>{{/value}}
 		</a>
 		{{/profile_image_control}}
 		{{^profile_image_control}}
-		<a class="line" href="{{{base}}}/photo" style="padding:11px 14px;{{^favicon_supported}}border-bottom:none;{{/favicon_supported}}">
+		<a class="line" href="{{{base}}}/photo" style="padding:11px 14px;border-bottom:1px solid var(--light-border-color);{{^favicon_supported}}border-bottom:none;{{/favicon_supported}}">
 		{{^blog.avatar}}
-		<span class="center" style="border: 1px dashed var(--border-color);width: 48px;height:48px;display:inline-block; vertical-align: middle;margin-right: 0.5rem;border-radius: var(--border-radius);">
+		<span class="center" style="border: 1px dashed var(--dark-border-color);width: 40px;height:40px;display:inline-block; vertical-align: middle;margin-right: 0.5rem;border-radius: var(--border-radius);">
 		</span>
 		<span class="link">Choose a photo</span>
 		{{/blog.avatar}}
@@ -91,9 +91,9 @@
 		{{/profile_image_control}}
 		{{#favicon_supported}}
 		<a class="line" href="{{{base}}}/favicon" style="padding:7px 14px;border-bottom:none;">
-			<span class="center" style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-right:0.5rem;">
+			<span class="center" style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-left:26px;margin-right:0.5rem;">
 				{{#favicon}}<img width="16" height="16" style="width:16px;height:16px;image-rendering:pixelated;" src="{{{png16}}}" alt="Favicon preview" />{{/favicon}}
-				{{^favicon}}<span aria-hidden="true" style="box-sizing:border-box;border:1px dashed var(--border-color);width:16px;height:16px;display:block;border-radius:2px;"></span>{{/favicon}}
+				{{^favicon}}<span aria-hidden="true" style="box-sizing:border-box;border:1px dashed var(--dark-border-color);width:16px;height:16px;display:block;"></span>{{/favicon}}
 			</span>
 			<span class="link">{{#favicon}}Edit favicon{{/favicon}}{{^favicon}}Choose a favicon{{/favicon}}</span>
 		</a>
@@ -101,7 +101,7 @@
 	</div>
 
         <div class="settings-group">
-                <h2 class="template-heading">Menu</h2>
+                <h2 class="template-heading">Navigation</h2>
                 <a class="line links" href="{{{base}}}/links">
                         <span class="center">
                                 {{#blog.menu}}
@@ -111,7 +111,7 @@
 				{{^blog.menu.length}}
 				<i>Your menu is empty</i>
 				{{/blog.menu.length}}
-				<span class="link" >Edit</span>
+				<span class="link">Edit links</span>
 			</span>
 			</a>
 {{#navigation}}
@@ -138,15 +138,15 @@
 	<div class="settings-group">
 	<h2 class="template-heading">Posts</h2>
 	{{> template-editor-group}}
+	{{> date}}
 	{{#post_adjacent_posts}}
 	{{> boolean}}
 	{{/post_adjacent_posts}}
-	{{> date}}
 
 {{#syntax_themes}}
-	<a class="line" href="{{{base}}}/syntax-highlighter" style="padding: 11px 20px;border-bottom: none;">
-		<span class="center">Open syntax controls</span>
-		<span class="right">Edit</span>
+	<a class="line syntax-highlighter-summary" href="{{{base}}}/syntax-highlighter">
+		<span class="syntax-highlighter-summary__label">Syntax highlighting:</span>
+		<span class="syntax-highlighter-summary__theme">{{#value}}{{#name}}{{name}}{{/name}}{{^name}}Select a color scheme{{/name}}{{/value}}</span>
 	</a>
 	{{/syntax_themes}}
 	</div>

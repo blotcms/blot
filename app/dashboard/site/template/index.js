@@ -7,6 +7,12 @@ const archiver = require("archiver");
 const duplicateTemplate = require("./save/duplicate-template");
 const persistTemplateUpdate = require("./save/persist-template-update");
 const removeTemplateAssetsIfUnreferenced = require("./save/upload-image").removeTemplateAssetsIfUnreferenced;
+const loadFavicon = require("./load/favicon");
+const syntaxHighlighterPreview = require("./syntax-highlighter-preview");
+
+function loadFaviconForProfileImage(req, res, next) {
+  return req.params.key === "profile_image" ? loadFavicon(req, res, next) : next();
+}
 
 // /template/default and /template/default/... redirect to the installed template's slug
 // so docs can deep link to e.g. /sites/gitt/template/default/links
@@ -114,9 +120,8 @@ TemplateEditor.route("/:templateSlug/install")
               removeErr
             );
           }
-          res.message(
-            "/sites/" + req.blog.handle + "/template/" + req.params.templateSlug,
-            "Installed template"
+          res.redirect(
+            "/sites/" + req.blog.handle + "/template/" + req.params.templateSlug
           );
         }
       );
@@ -187,15 +192,17 @@ TemplateEditor.route("/:templateSlug/uploads/:key")
   .post(require("./save/fork-if-needed"), require("./save/upload-local"));
 
 TemplateEditor.route("/:templateSlug/images/:key")
-  .get(require("./load/image-inputs"), function (req, res, next) {
+  .get(require("./load/image-inputs"), loadFaviconForProfileImage, function (req, res, next) {
     res.locals.image = res.locals.images.find((item) => item.key === req.params.key);
     if (!res.locals.image) return next();
+    res.locals.image.isProfileImage = res.locals.image.key === "profile_image";
     res.locals.title = `${res.locals.image.label} - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
     res.render("dashboard/template/controls/image-form");
   })
   .post(
     require("./load/image-inputs"),
+    loadFaviconForProfileImage,
     require("./save/preflight-image"),
     require("./save/fork-if-needed"),
     require("./save/upload-image")
@@ -227,6 +234,7 @@ TemplateEditor.route("/:templateSlug/syntax-highlighter")
   .get(function (req, res) {
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
     res.locals.title = `Syntax highlighter - ${req.template.displayName}`;
+    res.locals.syntaxHighlighterPreview = syntaxHighlighterPreview;
     res.render("dashboard/template/syntax-highlighter");
   });
 

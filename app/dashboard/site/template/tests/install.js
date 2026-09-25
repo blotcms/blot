@@ -20,13 +20,16 @@ describe("install template route", function () {
         body: { template: templateID },
         params: { templateSlug: "installed-template" },
       };
-      const res = { message: jasmine.createSpy("message") };
+      const res = {
+        message: jasmine.createSpy("message"),
+        redirect: jasmine.createSpy("redirect"),
+      };
 
       installHandler(req, res, function (err) {
         resolve({ err: err, res: res });
       });
 
-      if (res.message.calls.any()) resolve({ res: res });
+      if (res.redirect.calls.any()) resolve({ res: res });
     });
   }
 
@@ -54,7 +57,10 @@ describe("install template route", function () {
       { template: templateID },
       jasmine.any(Function)
     );
-    expect(result.res.message).toHaveBeenCalled();
+    expect(result.res.redirect).toHaveBeenCalledWith(
+      "/sites/" + blog.handle + "/template/installed-template"
+    );
+    expect(result.res.message).not.toHaveBeenCalled();
   });
 
   it("installs a shared SITE template", async function () {
@@ -69,7 +75,10 @@ describe("install template route", function () {
       { template: templateID },
       jasmine.any(Function)
     );
-    expect(result.res.message).toHaveBeenCalled();
+    expect(result.res.redirect).toHaveBeenCalledWith(
+      "/sites/" + blog.handle + "/template/installed-template"
+    );
+    expect(result.res.message).not.toHaveBeenCalled();
   });
 
   it("rejects an existing template owned by a different blog", async function () {

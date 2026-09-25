@@ -16,7 +16,7 @@ summary.template-heading {
   font-size: 12px;
   font-weight: 400;
   color: var(--heading-color);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--light-border-color);
   cursor: pointer;
 }
 

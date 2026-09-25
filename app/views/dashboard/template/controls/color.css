@@ -36,9 +36,9 @@
   border-radius: 0;
 }
 
-.pcr-app[data-theme=monolith] {
+.pcr-app[data-theme="monolith"] {
   width: var(--color-picker-width);
-  padding: 1em;
+  padding: 0.25em 1em 1em;
   margin: -8px 0 0 -1px;
   border-radius: 0 0 var(--border-radius) var(--border-radius);
   box-sizing: border-box;
@@ -96,6 +96,14 @@
   background-color: var(--light-background-color);
 }
 
+.color-picker-popup:hover + .color-picker-chevron {
+  color: #000;
+}
+
+.color-picker.is-open .color-picker-popup:hover {
+  background-color: white;
+}
+
 .color-picker-chevron {
   position: absolute;
   top: 50%;
@@ -107,9 +115,14 @@
   pointer-events: none;
 }
 
+.color-picker.is-open .color-picker-chevron {
+  transform: translateY(-50%) rotate(180deg);
+}
+
 .color-label {
   margin: 0.3125em 1em 0.3125em 0;
   flex-grow: 1;
+  font-size: 14px;
   user-select: none;
 }
 

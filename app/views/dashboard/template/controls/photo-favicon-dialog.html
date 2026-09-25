@@ -1,0 +1,19 @@
+<dialog class="photo-favicon-dialog" data-photo-favicon-dialog aria-labelledby="photo-favicon-title">
+  <div data-photo-favicon-prompt>
+    <h2 id="photo-favicon-title">Use this photo to replace your favicon?</h2>
+    <p>Your favicon appears in browser tabs and bookmarks. Skipping keeps your current favicon; your photo will still be saved.</p>
+    <p role="alert" hidden data-photo-favicon-error>This image could not be used as a favicon. You can still skip and save the photo.</p>
+    <div class="buttons">
+      <button type="button" data-photo-use-as-favicon>Replace favicon</button>
+      <button type="button" data-photo-skip-favicon>Skip</button>
+    </div>
+  </div>
+  <div hidden data-photo-favicon-crop>
+    <h2>Crop favicon</h2>
+    {{> favicon-crop-ui}}
+    <div class="buttons">
+      <button type="button" data-photo-confirm-crop>Use as favicon</button>
+      <button type="button" data-photo-cancel-crop>Back</button>
+    </div>
+  </div>
+</dialog>

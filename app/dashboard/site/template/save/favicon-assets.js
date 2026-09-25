@@ -78,10 +78,13 @@ function cropFor(metadata, crop) {
   return { left, top, width: side, height: side };
 }
 
-async function generate(sourcePath, outputDirectory, crop) {
+// `source`, when passed, is a sharp() instance already opened on sourcePath
+// (e.g. by a profile-photo upload that also generates thumbnails from the
+// same file) - cloning it avoids decoding the same file from disk twice.
+async function generate(sourcePath, outputDirectory, crop, { source: input } = {}) {
   let metadata;
   try {
-    metadata = await sharp(sourcePath, { pages: 1 }).metadata();
+    metadata = await (input ? input.clone() : sharp(sourcePath, { pages: 1 })).metadata();
   } catch (_) {
     throw badRequest("Please choose an image for your favicon");
   }
@@ -96,7 +99,7 @@ async function generate(sourcePath, outputDirectory, crop) {
     // so the extraction rectangle lines up with what the user saw. ensureAlpha()
     // guarantees 4-channel input: to-ico@1.1.5 mis-encodes 24-bit PNGs (e.g. a
     // straight RGB JPEG upload) into a malformed ICO otherwise.
-    const source = sharp(sourcePath, { pages: 1 }).rotate().ensureAlpha().extract(extraction).png();
+    const source = (input ? input.clone() : sharp(sourcePath, { pages: 1 })).rotate().ensureAlpha().extract(extraction).png();
     const icoBuffers = await Promise.all(
       ICO_SIZES.map((size) => source.clone().resize(size, size).png().toBuffer())
     );

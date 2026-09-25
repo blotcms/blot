@@ -87,27 +87,10 @@ Array.from(document.querySelectorAll('[data-font-picker-form]')).forEach(form =>
     scheduleHide();
   });
 
-
-
   form.querySelectorAll('input[type="number"]').forEach(input => {
     input.addEventListener('change', () => {
       submitUpdate(form, input.name, input.value);
     });
   });
 
-  const sizeInput = form.querySelector('.font-size-value');
-  if (sizeInput) {
-    form.querySelectorAll('[data-font-size-step]').forEach(button => {
-      button.addEventListener('click', () => {
-        const step = Number(button.getAttribute('data-font-size-step')) || 0;
-        const min = sizeInput.min === '' ? -Infinity : Number(sizeInput.min);
-        const max = sizeInput.max === '' ? Infinity : Number(sizeInput.max);
-        const current = Number(sizeInput.value) || 0;
-        const next = Math.min(max, Math.max(min, current + step));
-        if (next === current) return;
-        sizeInput.value = next;
-        sizeInput.dispatchEvent(new Event('change', { bubbles: true }));
-      });
-    });
-  }
 });

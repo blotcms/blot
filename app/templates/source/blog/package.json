@@ -2,6 +2,12 @@
   "name": "Blog",
   "popularity": 95,
   "locals": {
+    "index_layout": "post_in_full",
+    "index_layout_options": [
+      "titles",
+      "title_and_summary",
+      "post_in_full"
+    ],
     "page_size": 20,
     "hide_dates": false,
     "date_display": "MMMM D, Y",
@@ -40,20 +46,14 @@
     ],
     "sticky_navigation": false,
     "uppercase_navigation": true,
-    "show_tags": true,
     "show_adjacent_posts": true,
-    "index_layout": "post_in_full",
-    "index_layout_options": [
-      "titles",
-      "title_and_summary",
-      "post_in_full"
-    ],
     "spacing": 7,
     "spacing_range": [2, 14],
     "content_width": 39,
     "content_width_range": [24, 64],
     "sidebar_width": 15,
-    "sidebar_width_range": [8, 24]
+    "sidebar_width_range": [8, 24],
+    "show_tags": true
   },
   "views": {
     "archives.html": {

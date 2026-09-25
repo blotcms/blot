@@ -4,8 +4,110 @@
     </a>
 </div>
 
-<div style="display: flex;margin-top:2rem">
-    <div style="width: 33.33333%;flex-grow: 0;flex-shrink: 0;box-sizing: border-box;padding:0 1rem 0 0">
+<style data-syntax-highlighter-styles>
+.template-main {
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+{{#syntax_themes}}
+  {{#value}}{{{styles}}}{{/value}}
+  {{#font}}
+    {{#value}}{{{styles}}}{{/value}}
+    .syntax-highlighter-preview pre,
+    .syntax-highlighter-preview code {
+      font-family: {{{value.stack}}};
+      font-size: {{{font_size}}}px;
+    }
+  {{/font}}
+  {{^font}}
+    .syntax-highlighter-preview pre,
+    .syntax-highlighter-preview code {
+      font-family: monospace;
+    }
+  {{/font}}
+{{/syntax_themes}}
+
+.syntax-highlighter-preview {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  max-width: 100%;
+  height: var(--iframe-container-height);
+  overflow: auto;
+  border: 1px solid var(--light-border-color);
+  border-radius: var(--border-radius);
+  box-sizing: border-box;
+  background: var(--background-color);
+  transform: none;
+}
+
+.syntax-highlighter-preview__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid var(--light-border-color);
+  color: var(--medium-text-color);
+  font-size: 12px;
+}
+
+.syntax-highlighter-preview__pre {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 1rem;
+  background: transparent;
+  transform: none;
+}
+
+.syntax-highlighter-docs {
+  margin-top: 1rem;
+  font-size: 14px;
+}
+
+.syntax-highlighter-docs p {
+  margin: 0 0 0.25rem;
+  color: var(--medium-text-color);
+}
+
+.syntax-highlighter-docs ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.syntax-highlighter-docs .smallLink {
+  margin-left: 0;
+}
+
+.syntax-highlighter-layout {
+  display: block;
+  margin-top: 2rem;
+}
+
+.syntax-highlighter-layout__settings {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+.syntax-highlighter-layout__preview {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin-top: 1rem;
+}
+
+@media (max-width: 900px) {
+  .syntax-highlighter-preview {
+    position: static;
+    height: auto;
+    max-height: 70vh;
+  }
+}
+</style>
+
+<div class="syntax-highlighter-layout">
+    <div class="syntax-highlighter-layout__settings">
         {{#syntax_themes}}
         {{> highlighter}}
         {{/syntax_themes}}
@@ -15,24 +117,26 @@
         </div>
         {{/syntax_themes}}
     </div>
-    <div style="box-sizing: border-box;flex-grow: 1;width: 66.66666%;flex-grow: 0;flex-shrink: 0;padding:0 0 0 1rem;            position: sticky;top: 0;">
-        <div class="iframe-container" data-origin="{{{previewOrigin}}}">
-            <div class="iframe-scroll">
-                <iframe id="full_size_preview"
-                          width="960"
-                          height="1400"
-                          scrolling="no"
-                        src="{{{preview}}}"
-                        ></iframe>
+    <div class="syntax-highlighter-layout__preview">
+        {{#syntax_themes}}
+        <div class="syntax-highlighter-preview" data-syntax-highlighter-preview>
+            <div class="syntax-highlighter-preview__header">
+                <span>Theme preview</span>
+                <span>JavaScript</span>
             </div>
-            <div class="iframe-loading" data-iframe-loading aria-hidden="true">
-                <span class="iframe-loading-dot"></span>
-                <span class="iframe-loading-dot"></span>
-                <span class="iframe-loading-dot"></span>
-            </div>
+            <pre class="syntax-highlighter-preview__pre"><code class="hljs javascript">{{{syntaxHighlighterPreview}}}</code></pre>
         </div>
-        <br><br>
+        {{/syntax_themes}}
     </div>
+    {{#syntax_themes}}
+    <div class="syntax-highlighter-docs">
+        <p>Here’s how to add code snippets:</p>
+        <ul>
+            <li><a class="smallLink" href="/how/files/markdown#code">Markdown</a></li>
+            <li><a class="smallLink" href="/how/files/google-docs#code">Google Docs</a></li>
+        </ul>
+    </div>
+    {{/syntax_themes}}
 </div>
 
 <div
@@ -41,7 +145,7 @@
   data-template-font-picker
   hidden
 >
-  <div class="template-font-picker__filters" data-font-picker-filters>
+  <div class="template-font-picker__filters" data-font-picker-filters data-font-picker-default-filter="mono">
     <button
       type="button"
       class="template-font-picker__filter is-active"
