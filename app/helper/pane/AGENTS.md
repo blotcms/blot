@@ -47,7 +47,8 @@ first. Details per OS: `screenshots/README.md` (principle) and `reference/resour
    root `package.json` into a scratch directory and set `NODE_PATH` to its
    `node_modules`. The repo has no local install for these.
 2. Unit tests: `jasmine "app/helper/pane/tests/*.js" "app/helper/pane/qa/tests/*.js"`.
-   pane-qa CI runs them on every push under `app/helper/pane`.
+   pane-qa CI runs them on every push under `app/helper/pane`. The unit tests also run in the repo's
+   normal test suite (`npm test`), which uses the root jasmine glob `**/tests/**/*.js`.
 3. **`qa/diff.js` compares the reference with whatever is already in `rendered/`; it does
    not render.** After changing CSS or markup, run `qa/render.js --case <id>` first (the
    macOS cases locally). Otherwise you are measuring the last CI render and will "verify"
@@ -148,19 +149,18 @@ first. Details per OS: `screenshots/README.md` (principle) and `reference/resour
   jumps (`css` about 78 KB raw, 7.9 KB brotli with the three folder skins, all shipped to every
   visitor; per-OS stylesheets chosen by the head script are a possible later saving).
 
-## Before this PR leaves draft
-- Restore the workflows that were removed to keep CI fast on this branch (benchmarks-*,
-  build, deploy, integration, node, proxy, screenshots): `git checkout origin/master --
-  .github/workflows/{benchmarks-converters,benchmarks-corpus,benchmarks-render,benchmarks,build,deploy,integration,node,proxy,screenshots}.yml`
-  (from master's current versions: master changed `integration.yml` and `proxy.yml` while they were
-  removed here, and the merge kept them removed). Then decide whether `pane-qa.yml`,
-  `pane-screenshots.yml` and `pane-os-watch.yml` stay in the repo (the watch only runs from the
-  default branch) or become manual runs.
-- Remove the root `TODO` entries: "Finish cross platform folder renderer" and "Rewrite code which
-  generates a fake 'macOS' folder to work cross platform", once the docs migration is done; per
-  `CLAUDE.md`, add any "tell someone" item to the PR description.
-- Decide whether `rendered/` stays committed (it makes the viewer work without Chrome at
-  the cost of binary churn).
-- The `windows-*-list` QA cases (hand-written fixtures of a view authors can't pick) fail their
-  default thresholds; give them thresholds, mark them informational, or drop them.
-- Nothing needs a manual deploy step: the docs build picks pane up with the next image build.
+## Done before leaving draft
+- Restored all workflows removed from this branch (benchmarks-*, build, deploy, integration, node,
+  proxy, screenshots) from master.
+- Decided: all three pane workflows stay in the repo. `pane-qa.yml` stays path-filtered on
+  `app/helper/pane/**`; `pane-os-watch.yml` stays unchanged (scheduled, from the default branch only);
+  `pane-screenshots.yml` is now manual-only (use `gh workflow run pane-screenshots.yml --ref <branch>`).
+- Marked `windows-light-list` and `windows-dark-list` QA cases as `"informational": true` in
+  `qa/thresholds.json` (they report status but don't fail the run).
+- Kept `rendered/` committed (makes the viewer work without Chrome).
+- Debug screenshot captures moved to Actions artifacts (no longer committed).
+
+## Still open
+- The root `TODO` entries "Finish cross platform folder renderer" and "Rewrite code which generates a fake
+  'macOS' folder to work cross platform" stay until the Windows/Linux icons and editor skins land and
+  `tools/finder` is retired; remove them then (per `CLAUDE.md`, add any "tell someone" item to that PR).
