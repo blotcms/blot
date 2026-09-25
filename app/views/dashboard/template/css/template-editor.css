@@ -54,11 +54,6 @@ h2 {
   border-bottom: none;
 }
 
-.template-list-section__heading h2 a {
-  color: inherit;
-  text-decoration: none;
-}
-
 .template-list-section__heading {
   display: flex;
   align-items: center;

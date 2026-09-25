@@ -40,19 +40,21 @@
     <hr class="template-list-divider">
     <section class="template-list-section" data-template-list-section>
       <div class="template-list-section__heading">
-        <h2><a href="{{{dashboardBase}}}/template">Templates</a></h2>
-        <button
-          type="button"
-          class="template-list-section__toggle"
-          data-template-list-toggle
-          data-section-key="base-templates"
-          data-section-label="Templates"
-          aria-expanded="true"
-          aria-controls="template-list-base-templates"
-          aria-label="Collapse Templates"
-        >
-          <span class="icon-small-chevron-right template-list-section__chevron" aria-hidden="true"></span>
-        </button>
+        <h2>
+          <button
+            type="button"
+            class="template-list-section__toggle template-list-section__toggle--heading"
+            data-template-list-toggle
+            data-section-key="base-templates"
+            data-section-label="Templates"
+            aria-expanded="true"
+            aria-controls="template-list-base-templates"
+            aria-label="Collapse Templates"
+          >
+            <span>Templates</span>
+            <span class="icon-small-chevron-right template-list-section__chevron" aria-hidden="true"></span>
+          </button>
+        </h2>
       </div>
       <div id="template-list-base-templates">
         {{#blotTemplates}} {{> template-row}} {{/blotTemplates}}
