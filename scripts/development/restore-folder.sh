@@ -65,6 +65,55 @@ fi
 [ -z "$DATA_VOLUME_ID" ] && { error "No volume ID entered"; exit 1; }
 
 # ---------------------------------------------------------------------------
+# Estimate cost/time before touching anything, and get the operator to
+# confirm. The volume's size is read from AWS at runtime so nothing about
+# the production volume is baked into this script.
+# ---------------------------------------------------------------------------
+VOLUME_SIZE_GB=$("${AWS_BASE[@]}" ec2 describe-volumes --volume-ids "$DATA_VOLUME_ID" \
+  --query 'Volumes[0].Size' --output text)
+
+if [ -z "$VOLUME_SIZE_GB" ] || [ "$VOLUME_SIZE_GB" = "None" ]; then
+  error "Could not determine the size of volume $DATA_VOLUME_ID"
+  exit 1
+fi
+
+GP3_RATE_PER_GB_MONTH="0.08"
+INSTANCE_RATE_PER_HOUR="0.0104"
+EST_LOW_MINUTES="5"
+EST_HIGH_MINUTES="15"
+
+read -r EST_LOW_COST EST_HIGH_COST <<<"$(python3 - \
+  "$VOLUME_SIZE_GB" "$GP3_RATE_PER_GB_MONTH" "$INSTANCE_RATE_PER_HOUR" "$EST_LOW_MINUTES" "$EST_HIGH_MINUTES" <<'PY'
+import sys
+
+size_gb, gp3_rate, instance_rate, low_min, high_min = (float(x) for x in sys.argv[1:])
+
+
+def cost(minutes):
+    hours = minutes / 60
+    volume_cost = size_gb * gp3_rate / 730 * hours
+    instance_cost = instance_rate * hours
+    return volume_cost + instance_cost
+
+
+print(f"{cost(low_min):.2f} {cost(high_min):.2f}")
+PY
+)"
+
+info "Volume $DATA_VOLUME_ID is ${VOLUME_SIZE_GB}GB."
+info "Estimated time: ${EST_LOW_MINUTES}-${EST_HIGH_MINUTES} min (instance boot/teardown dominate; the tar/scp step depends on the individual blog folder's size, not the full volume)."
+info "Estimated cost: \$${EST_LOW_COST}-\$${EST_HIGH_COST} (gp3 volume + t3.micro instance, prorated for the run duration; excludes data transfer for the downloaded folder)."
+
+read -r -p "Proceed? [y/N] " CONFIRM
+case "$CONFIRM" in
+  y | Y | yes | YES) ;;
+  *)
+    info "Aborted - nothing was created."
+    exit 0
+    ;;
+esac
+
+# ---------------------------------------------------------------------------
 # Cleanup: every AWS resource we create is torn down here, best-effort, no
 # matter how the script exits. IDs are logged as soon as they're known so a
 # failed cleanup can still be finished by hand.
