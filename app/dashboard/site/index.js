@@ -51,21 +51,16 @@ site.get("/folder", (req, res) => {
   res.redirect(`/sites/${req.params.handle}/client`);
 });
 
-site.use("/template", require("./template"));
-// A sibling of /template/:slug (not nested under it) rather than a special
-// value of :templateSlug, so it can't collide with an actual template slug
-// and doesn't need to teach ./template/load/template.js's owner-preferring
-// resolution about a second meaning. It reuses the same sidebar/layout the
-// /template router sets up for itself, since it isn't nested inside it.
-site.get(
-  "/template-folder/:templateFolderSlug",
-  (req, res, next) => {
-    res.locals.layout = "dashboard/template/layout";
-    next();
-  },
-  require("./template/templates"),
-  require("./template/template-folder")
-);
+const templateEditor = require("./template");
+site.use("/template", templateEditor);
+// A template the blog has moved into its local editing folder is reachable
+// at the same slug under /template-folder/ too (see templates.js, which
+// links a row's editURL through whichever of these two mounts applies to
+// it) — mounting the same router twice means every existing route, save
+// handler and redirect under app/dashboard/site/template/ works the same
+// way regardless of which prefix was used to reach it, since express.Router
+// sets req.baseUrl to whichever one actually matched.
+site.use("/template-folder", templateEditor);
 site.use("/delete", require("./delete"));
 site.use("/import", require("./import"));
 site.use("/export", require("./export"));

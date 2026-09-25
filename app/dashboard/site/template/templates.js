@@ -8,23 +8,15 @@ module.exports = function (req, res, next) {
     blogID = blog.id,
     currentTemplate = blog.template;
 
+  // /template and /template-folder both mount this same router (see
+  // app/dashboard/site/index.js) — express.Router sets req.baseUrl to
+  // whichever prefix actually matched, so this tells the two apart without
+  // needing a different param name or resolution rule for either.
+  var onFolderMount = /\/template-folder$/.test(req.baseUrl);
+
   Template.getTemplateList(blogID, function (err, templates) {
     var yourTemplates = [];
     var blotTemplates = [];
-
-    // Slugs the blog has its own localEditing copy of. A SITE-owned template
-    // at one of these slugs is still shown alongside that copy in the
-    // sidebar (see the dedup step below), but /template/<slug> always
-    // resolves to the blog's copy once one exists, so the SITE row needs a
-    // URL of its own to stay reachable and to highlight independently. See
-    // ./template-folder.js.
-    var localEditingSlugs = {};
-    for (var templateID in templates) {
-      var t = templates[templateID];
-      if (t.owner === blogID && t.localEditing) {
-        localEditingSlugs[t.id.split(":").slice(1).join(":")] = true;
-      }
-    }
 
     // Turn the dictionary of templates returned
     // from the DB into a list that Mustache can render
@@ -40,15 +32,19 @@ module.exports = function (req, res, next) {
       // remap the slug to be everything after the first colon in the ID
       template.slug = template.id.split(':').slice(1).join(':');
 
-      var inFolder = template.owner === "SITE" && localEditingSlugs[template.slug];
-      template.isTemplateFolder = !!inFolder;
-      var pathParts = req.path.split("/");
+      // A template moved into the blog's local editing folder gets its own
+      // URL under /template-folder/ instead of /template/ — otherwise it'd
+      // share a slug (and a URL, since /template/:slug prefers the blog's
+      // own copy once one exists) with the SITE-owned template it was
+      // forked from, and the sidebar couldn't tell which row was open.
+      var inFolder = template.isMine && template.localEditing;
 
-      template.selected = inFolder
-        ? pathParts[1] === "template-folder" && pathParts[2] === template.slug
-          ? "selected"
-          : ""
-        : pathParts[1] === template.slug
+      template.editURL = inFolder
+        ? "/sites/" + blog.handle + "/template-folder/" + template.slug
+        : "/sites/" + blog.handle + "/template/" + template.slug;
+
+      template.selected =
+        req.path.split("/")[1] === template.slug && onFolderMount === !!inFolder
           ? "selected"
           : "";
 
@@ -66,10 +62,6 @@ module.exports = function (req, res, next) {
       } else {
         template.thumbnailSlug = template.slug;
       }
-
-      template.editURL = inFolder
-        ? "/sites/" + blog.handle + "/template-folder/" + template.slug
-        : "/sites/" + blog.handle + "/template/" + template.slug;
 
       template.previewURL =
         previewHost +
