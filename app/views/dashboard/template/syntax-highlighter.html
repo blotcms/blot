@@ -75,37 +75,24 @@
 }
 
 .syntax-highlighter-layout {
-  display: flex;
+  display: block;
   margin-top: 2rem;
 }
 
 .syntax-highlighter-layout__settings {
   box-sizing: border-box;
-  flex: 0 0 33.33333%;
+  width: 100%;
   min-width: 0;
-  padding-right: 1rem;
 }
 
 .syntax-highlighter-layout__preview {
   box-sizing: border-box;
-  flex: 1 1 66.66667%;
+  width: 100%;
   min-width: 0;
-  padding-left: 1rem;
+  margin-top: 1rem;
 }
 
 @media (max-width: 900px) {
-  .syntax-highlighter-layout {
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .syntax-highlighter-layout__settings,
-  .syntax-highlighter-layout__preview {
-    flex: 0 1 auto;
-    width: 100%;
-    padding: 0;
-  }
-
   .syntax-highlighter-preview {
     position: static;
     height: auto;
@@ -124,15 +111,6 @@
             <p>Syntax highlighting controls are not available for this template.</p>
         </div>
         {{/syntax_themes}}
-        {{#syntax_themes}}
-        <div class="syntax-highlighter-docs">
-            <p>Here’s how to add code snippets:</p>
-            <ul>
-                <li><a class="smallLink" href="/how/files/markdown#code">Markdown</a></li>
-                <li><a class="smallLink" href="/how/files/google-docs#code">Google Docs</a></li>
-            </ul>
-        </div>
-        {{/syntax_themes}}
     </div>
     <div class="syntax-highlighter-layout__preview">
         {{#syntax_themes}}
@@ -145,6 +123,15 @@
         </div>
         {{/syntax_themes}}
     </div>
+    {{#syntax_themes}}
+    <div class="syntax-highlighter-docs">
+        <p>Here’s how to add code snippets:</p>
+        <ul>
+            <li><a class="smallLink" href="/how/files/markdown#code">Markdown</a></li>
+            <li><a class="smallLink" href="/how/files/google-docs#code">Google Docs</a></li>
+        </ul>
+    </div>
+    {{/syntax_themes}}
 </div>
 
 <div
