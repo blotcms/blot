@@ -3,6 +3,7 @@
   --heading-color: #969caa;
   --breadcrumbs-margin-bottom: 24px;
   --template-row-gap: 0.25rem;
+  --template-row-hover-background-color: #f3f3f3;
   --template-row-link-font-size: 14px;
   --template-row-link-padding: 0.219em 0 0.219em 0.25em;
   --template-preview-height: 16px;
@@ -142,12 +143,12 @@ h2 {
 }
 
 .template-row:hover {
-  background: var(--light-background-color);
+  background: var(--template-row-hover-background-color);
   border-radius: var(--border-radius);
 }
 
 .template-row.menu-open {
-  background: var(--light-background-color);
+  background: var(--template-row-hover-background-color);
   border-radius: var(--border-radius);
 }
 
