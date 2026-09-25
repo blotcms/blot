@@ -20,6 +20,8 @@ function main (callback) {
       log("Starting daily update"),
       log("Checking number of users"),
       require("./revenue"),
+      log("Checking clients used by current users"),
+      require("./clients"),
       log("Checking for blogs with new posts"),
       require("./new-posts"),
       log("Checking number of newsletter subscribers"),
