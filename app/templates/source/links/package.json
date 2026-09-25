@@ -27,15 +27,10 @@
       1,
       6
     ],
-    "body_font": {
+    "font": {
       "id": "system-sans",
       "font_size": 16,
       "line_height": 1.4
-    },
-    "heading_font": {
-      "id": "system-sans",
-      "font_size": 16,
-      "line_height": 1.2
     },
     "syntax_highlighter": {
       "id": "stackoverflow-light"
@@ -45,7 +40,6 @@
       "font_size": 16,
       "line_height": 1.6
     },
-    "logo_url": "",
     "profile_image": {},
     "demo_folder": "bjorn"
   },

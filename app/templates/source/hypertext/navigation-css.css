@@ -67,7 +67,7 @@
   display: flex;
   align-items: center;
   color: var(--text-color);
-  font-family: var(--heading-font-family, var(--font-family));
+  font-family: var(--font-family);
   font-weight: 600;
   margin: 0;
   font-size: inherit;
@@ -84,7 +84,7 @@
   display: flex;
   align-items: center;
   gap: 0.4em;
-  font-family: var(--heading-font-family, var(--font-family));
+  font-family: var(--font-family);
 }
 
 .control-bar .site-logo {

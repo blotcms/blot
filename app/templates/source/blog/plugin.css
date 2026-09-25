@@ -159,12 +159,7 @@ p, div, section {position: relative;overflow: visible;}
   .sidebar .logo {text-align: center;}
   {{/is.navigation_location.top}}
 
-  .logo.hasAvatar,
-  .logo.hasLogo {word-spacing: 0}
-
-  {{^is.navigation_location.top}}
-  .logo-image {margin-left: auto; margin-right: auto;}
-  {{/is.navigation_location.top}}
+  .logo.hasAvatar {word-spacing: 0}
 
   .margin,
   .margin.right,

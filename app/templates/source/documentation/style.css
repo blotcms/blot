@@ -52,23 +52,6 @@
 
 {{{syntax_highlighter.styles}}}
 
-/* Dark mode variables */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background-color: {{dark_background_color}};
-    --off-background-color: rgba({{#rgb}}{{dark_text_color}}{{/rgb}}, 0.04);
-    --text-color: {{dark_text_color}};
-    --border-color: rgba({{#rgb}}{{dark_text_color}}{{/rgb}}, 0.08);
-    --light-text-color: rgba({{#rgb}}{{dark_text_color}}{{/rgb}}, 0.3333);
-    --medium-text-color: rgba({{#rgb}}{{dark_text_color}}{{/rgb}}, 0.6666);
-    --link-color: {{dark_link_color}};
-  }
-
-  /**/
-  {{{dark_syntax_highlighter.styles}}}
-  /**/
-}
-
 /* General resets */
 html, body {
   width: 100%; padding: 0; margin: 0 auto; -webkit-font-smoothing: antialiased;

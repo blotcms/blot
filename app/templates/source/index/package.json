@@ -9,20 +9,10 @@
     "background_color": "#ffffff",
     "text_color": "#333333",
     "link_color": "#468CC7",
-    "body_font": {
+    "font": {
       "id": "system-sans",
       "font_size": 18,
       "line_height": 1.4
-    },
-    "heading_font": {
-      "id": "system-sans",
-      "font_size": 18,
-      "line_height": 1.75
-    },
-    "navigation_font": {
-      "id": "system-sans",
-      "font_size": 18,
-      "line_height": 1.75
     },
     "syntax_highlighter": {
       "id": "vs"
@@ -31,7 +21,6 @@
       "id": "system-mono",
       "font_size": 16
     },
-    "logo_url": "",
     "profile_image": {},
     "navigation_alignment": "left",
     "navigation_alignment_options": [

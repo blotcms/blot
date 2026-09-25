@@ -9,15 +9,10 @@
     "background_color": "#000000",
     "text_color": "#808080",
     "link_color": "#ffffff",
-    "body_font": {
+    "font": {
       "id": "system-sans",
       "font_size": 20,
       "line_height": 1.7
-    },
-    "heading_font": {
-      "id": "system-sans",
-      "font_size": 20,
-      "line_height": 1.4
     },
     "syntax_highlighter": {
       "id": "solarized-dark"
@@ -26,7 +21,6 @@
       "id": "system-mono",
       "font_size": 19
     },
-    "logo_url": "",
     "profile_image": {},
     "navigation_alignment": "justified",
     "navigation_alignment_options": [

@@ -48,8 +48,7 @@
   <meta property="og:image:height" content="{{height}}">
   {{/profile_image.thumbnails.large}}
   {{^profile_image.thumbnails.large.url}}
-  {{#logo_url}}<meta property="og:image" content="{{{logo_url}}}">{{/logo_url}}
-  {{^logo_url}}{{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}{{/logo_url}}
+  {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
   {{/profile_image.thumbnails.large.url}}
   {{/thumbnail.large}}
 
@@ -64,8 +63,7 @@
   <meta name="twitter:image" content="{{{url}}}">
   {{/profile_image.thumbnails.large}}
   {{^profile_image.thumbnails.large.url}}
-  {{#logo_url}}<meta name="twitter:image" content="{{{logo_url}}}">{{/logo_url}}
-  {{^logo_url}}{{#avatar}}<meta name="twitter:image" content="{{{avatar}}}">{{/avatar}}{{/logo_url}}
+  {{#avatar}}<meta name="twitter:image" content="{{{avatar}}}">{{/avatar}}
   {{/profile_image.thumbnails.large.url}}
   {{/thumbnail.large}}
 
@@ -91,7 +89,6 @@
   {{/url}}
   <meta property="og:title" content="{{> title}}">
   <meta property="og:description" content="{{> description}}">
-  {{#logo_url}}<meta property="og:image" content="{{{logo_url}}}">{{/logo_url}}
-  {{^logo_url}}{{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}{{/logo_url}}
+  {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
   {{/entry}}
 </head>

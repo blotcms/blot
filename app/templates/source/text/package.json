@@ -5,23 +5,12 @@
     "max_width": 700,
     "max_width_range": [400, 1200],
     "page_size": 6,
-    "text_color": "#000000",
     "background_color": "#FFFFFF",
-    "navigation_background_color": "#F7F7F7",
-    "accent_color": "#0078D9",
+    "text_color": "#000000",
+    "link_color": "#0078D9",
     "hide_dates": false,
     "date_display": "MMMM D, Y",
     "font": {
-      "id": "system-sans",
-      "font_size": 19,
-      "line_height": 1.4
-    },
-    "heading_font": {
-      "id": "system-sans",
-      "font_size": 30,
-      "line_height": 1.2
-    },
-    "navigation_font": {
       "id": "system-sans",
       "font_size": 19,
       "line_height": 1.4
@@ -33,7 +22,6 @@
       "id": "system-mono",
       "font_size": 18
     },
-    "logo_url": "",
     "profile_image": {},
     "index_layout": "post_in_full",
     "index_layout_options": [

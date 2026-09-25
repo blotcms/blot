@@ -1,7 +1,6 @@
 {{{app_css}}}
 
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
@@ -14,16 +13,13 @@
   --muted-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.5);
   --border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.12);
   --max-width: {{max_width}}px;
-  {{#body_font}}
-  --body-font-family: {{{stack}}};
-  --body-font-size: {{{font_size}}}px;
-  --body-line-height: {{{line_height}}};
-  {{/body_font}}
-  {{#heading_font}}
-  --heading-font-family: {{{stack}}};
-  --heading-font-size: {{{font_size}}}px;
-  --heading-line-height: {{{line_height}}};
-  {{/heading_font}}
+  {{#font}}
+  --font-family: {{{stack}}};
+  --font-size: {{{font_size}}}px;
+  --line-height: {{{line_height}}};
+  {{/font}}
+  --heading-font-size: 30px;
+  --heading-line-height: 1.35;
   {{#syntax_highlighter_font}}
   --code-font-family: {{{stack}}};
   --code-font-size: {{{font_size}}}px;
@@ -436,9 +432,9 @@ html, body {
 }
 
 body {
-  font-size: var(--body-font-size);
-  font-family: var(--body-font-family);
-  line-height: var(--body-line-height);
+  font-size: var(--font-size);
+  font-family: var(--font-family);
+  line-height: var(--line-height);
   color: var(--text-color);
   background: var(--background-color);
   text-rendering: optimizeLegibility;
@@ -529,14 +525,14 @@ nav.main-nav a.cta:hover {
 /* Typography */
 
 p, li {
-  line-height: var(--body-line-height);
+  line-height: var(--line-height);
   orphans: 2;
   widows: 2;
 }
 
 h1, h2, h3, h4, h5, h6 {
   color: var(--link-color);
-  font-family: var(--heading-font-family);
+  font-family: var(--font-family);
   line-height: var(--heading-line-height);
 }
 

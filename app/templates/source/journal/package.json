@@ -8,15 +8,10 @@
     "link_color": "#111111",
     "hide_dates": false,
     "date_display": "Y-MM-DD",
-    "body_font": {
+    "font": {
       "id": "et-book",
       "font_size": 18,
       "line_height": 1.4
-    },
-    "heading_font": {
-      "id": "et-book",
-      "font_size": 48,
-      "line_height": 1
     },
     "syntax_highlighter": {
       "id": "stackoverflow-light"
@@ -25,7 +20,6 @@
       "id": "source-code",
       "font_size": 15
     },
-    "logo_url": "",
     "profile_image": {},
     "navigation_alignment": "justified",
     "navigation_alignment_options": [

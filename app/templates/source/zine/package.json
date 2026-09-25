@@ -2,22 +2,17 @@
   "name": "Zine",
   "popularity": 35,
   "locals": {
-    "text_color": "#000000",
     "page_size": 48,
     "page_size_range": [12, 96],
     "background_color": "#ffffff",
-    "accent_color": "#0000FF",
+    "text_color": "#000000",
+    "link_color": "#0000FF",
     "hide_dates": false,
     "date_display": "MMMM D, Y",
-    "body_font": {
+    "font": {
       "id": "charter",
       "font_size": 24,
       "line_height": 1.5
-    },
-    "heading_font": {
-      "id": "charter",
-      "font_size": 16,
-      "line_height": 1.2
     },
     "syntax_highlighter": {
       "id": "stackoverflow-light"
@@ -26,7 +21,6 @@
       "id": "system-mono",
       "font_size": 18
     },
-    "logo_url": "",
     "profile_image": {},
     "navigation_alignment": "justified",
     "navigation_alignment_options": [
