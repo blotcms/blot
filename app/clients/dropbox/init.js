@@ -16,7 +16,10 @@ const getAllIDs = promisify(Blog.getAllIDs);
 const getBlog = promisify(Blog.get);
 const getDropboxAccount = promisify(getAccount);
 const setDropboxAccount = promisify(setAccount);
-const getEntryTotal = promisify(Entries.getTotal);
+// getAllTotal, not getTotal - Fix()'s entry-ghosts (Entries.each) scans the
+// "all" list (drafts/pages/scheduled/deleted included), not just published
+// "entries", so getTotal would under-count the workload this field tracks.
+const getEntryTotal = promisify(Entries.getAllTotal);
 
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_IN_MS = 15 * 60 * 1000;
