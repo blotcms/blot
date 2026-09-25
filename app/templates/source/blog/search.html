@@ -2,8 +2,10 @@
 <html>
   {{> head}}
   <body>
+    <div class="page-layout">
     {{> sidebar}}
 
+    <div class="content-column">
 
       <form>
         <input placeholder="Search for an entry..." value="{{#query}}{{query}}{{/query}}" name="q" id="search" type="text" />&nbsp; <input type="submit" value="Go"/>
@@ -26,5 +28,7 @@
 
     <script type="text/javascript">document.getElementById('search').focus();</script>
     {{> footer}}
+    </div>
+    </div>
   </body>
 </html>

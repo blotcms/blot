@@ -7,15 +7,15 @@
     "date_display": "MMMM D, Y",
     "background_color": "#FFFFFF",
     "text_color": "#111111",
-    "links_color": "#111111",
-    "font": {
-      "id": "verdana",
-      "font_size": 11,
-      "line_height": 1.8
-    },
+    "link_color": "#111111",
     "title_font": {
       "id": "gill-sans",
       "font_size": 19
+    },
+    "text_font": {
+      "id": "verdana",
+      "font_size": 11,
+      "line_height": 1.8
     },
     "demo_folder": "notes",
     "syntax_highlighter": {

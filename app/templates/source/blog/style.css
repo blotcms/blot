@@ -2,7 +2,7 @@
 /* Values below come from package.json and scale from the selected body font. */
 
 /* Inserts the @font-face rules required to load whichever fonts are selected. */
-{{{font.styles}}}
+{{{text_font.styles}}}
 {{{title_font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
@@ -10,16 +10,15 @@
 :root {
   --background-color: {{background_color}};
   --text-color: {{text_color}};
-  --links-color: {{links_color}};
+  --link-color: {{link_color}};
   --light-text-color: rgba({{#rgb}}{{text_color}}{{/rgb}},0.5);
   --border-color: rgba({{#rgb}}{{text_color}}{{/rgb}},0.2);
-  --base-font-size: {{#font}}{{{font_size}}}{{/font}}px;
+  --base-font-size: {{#text_font}}{{{font_size}}}{{/text_font}}px;
   --spacing: calc(var(--base-font-size) * {{spacing}});
   --content-width: calc(var(--base-font-size) * {{content_width}});
   --sidebar-width: calc(var(--base-font-size) * {{sidebar_width}});
   --sidebar-gap: calc(var(--base-font-size) * 5.637);
   --gutter-padding: calc(var(--base-font-size) * 6.727);
-  --body-outer-width: calc(var(--content-width) + var(--sidebar-width) + var(--sidebar-gap) + var(--gutter-padding));
 }
 
 body {
@@ -42,16 +41,61 @@ body {
   padding: 0 calc(var(--sidebar-width) + var(--sidebar-gap)) 0 var(--gutter-padding);
   {{/is.navigation_location.right}}
   {{/is.navigation_location.top}}
+  {{#sticky_navigation}}
+  {{^is.navigation_location.top}}
+  width: auto;
+  margin: 0;
+  padding: 0;
+  {{/is.navigation_location.top}}
+  {{/sticky_navigation}}
   color: var(--text-color);
   background-color: var(--background-color);
 }
 
+.page-layout {position: static;}
+
+{{#sticky_navigation}}
+{{^is.navigation_location.top}}
+.page-layout {
+  box-sizing: content-box;
+  --reading-width: min(
+    var(--content-width),
+    100vw - 4em - var(--sidebar-width) - var(--sidebar-gap) - var(--gutter-padding)
+  );
+  display: flex;
+  align-items: flex-start;
+  width: calc(var(--sidebar-width) + var(--sidebar-gap) + var(--reading-width));
+  padding-right: var(--gutter-padding);
+  margin: var(--spacing) auto;
+  {{#is.navigation_location.right}}
+  flex-direction: row-reverse;
+  padding-right: 0;
+  padding-left: var(--gutter-padding);
+  {{/is.navigation_location.right}}
+}
+
+.sidebar {
+  flex: 0 0 var(--sidebar-width);
+}
+
+.content-column {
+  flex: 0 0 var(--reading-width);
+  margin-left: var(--sidebar-gap);
+  min-width: 0;
+}
+
+{{#is.navigation_location.right}}
+.content-column {margin-left: 0;margin-right: var(--sidebar-gap);}
+{{/is.navigation_location.right}}
+{{/is.navigation_location.top}}
+{{/sticky_navigation}}
+
 html, body {
-  {{#font}}
+  {{#text_font}}
   font-family: {{{stack}}};
   font-size: var(--base-font-size);
   line-height: {{{line_height}}};
-  {{/font}}
+  {{/text_font}}
 }
 
 /* Typography */
@@ -124,13 +168,15 @@ h2, h3, h4, h5, h6 {
   position: absolute;
   {{/sticky_navigation}}
   {{#sticky_navigation}}
-  position: fixed;
+  position: sticky;
   top: var(--spacing);
-  left: calc(50% - var(--body-outer-width) / 2);
+  left: auto;
+  right: auto;
   z-index: 2;
   background: var(--background-color);
   /* A long title or menu can outgrow the viewport; keep every link reachable. */
-  max-height: 100vh;
+  max-height: calc(100vh - var(--spacing));
+  overflow-x: hidden;
   overflow-y: auto;
   {{/sticky_navigation}}
   {{#uppercase_navigation}}
@@ -147,10 +193,9 @@ h2, h3, h4, h5, h6 {
   text-align: center;
   {{/is.navigation_alignment.center}}
   {{#is.navigation_location.right}}
+  {{^sticky_navigation}}
   left: auto;
   right: 0;
-  {{#sticky_navigation}}
-  right: calc(50% - var(--body-outer-width) / 2);
   {{/sticky_navigation}}
   {{/is.navigation_location.right}}
 }
@@ -237,10 +282,9 @@ hr {
 
 /* Make round avatars slightly bigger for balance */
 .avatar.round {
-  border-radius: 50%;
   height: 50px;
   width: 50px;
-  margin: -4px -4px 0;
+  margin: -4px 0 0;
 }
 
 
@@ -290,7 +334,7 @@ blockquote {
 
 .entry a {
   text-decoration: underline;
-  color: var(--links-color);
+  color: var(--link-color);
 }
 
 .entry a:hover {
@@ -321,7 +365,7 @@ blockquote {
 }
 
 .pagination a {
-  color: var(--links-color);
+  color: var(--link-color);
   margin: 0 0.75em;
 }
 
