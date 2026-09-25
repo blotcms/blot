@@ -58,6 +58,7 @@ jobs:
         - app/helper:1
         - app/models|app/models/entry:2
         - app/models/entry:1
+        - app/scheduler:1
         - app/site:1
         - app/sync:1
         - app/templates:1
