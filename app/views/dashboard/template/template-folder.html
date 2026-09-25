@@ -1,0 +1,26 @@
+<hr style="border:none;border-top:1px solid var(--border-color);margin:-16px 0 0">
+<br><br>
+
+<div class="template-heading-row">
+  <h1>{{templateFolder.name}}</h1>
+  {{#templateFolder.checked}}
+  <span class="template-in-use">Template in use</span>
+  {{/templateFolder.checked}}
+  <a href="{{{templateFolder.previewURL}}}" target="_blank" class="template-button">
+    <span class="icon-eye"></span>
+    Preview
+  </a>
+</div>
+
+<p>
+  This is one of Blot's built-in templates, unmodified. It updates automatically when Blot improves the template.
+</p>
+
+<p>
+  You're already editing your own copy of it.
+</p>
+<div class="buttons">
+  <a href="{{{dashboardBase}}}/{{templateFolder.fork.slug}}" class="button">
+    Edit your copy
+  </a>
+</div>

@@ -24,6 +24,13 @@ if (template_list) {
       return baseUrl;
     };
 
+    // /template-folder/:slug (see app/dashboard/site/template/template-folder.js)
+    // is a read-only reference page — it only has a settings view, none of
+    // the other sub-pages these links point at.
+    var isTemplateFolderRow = function (dataset) {
+      return dataset.templateFolder === "1";
+    };
+
     initSidebarActionMenu({
       container: template_list,
       menuElement: templateActionMenu,
@@ -36,22 +43,27 @@ if (template_list) {
           return baseUrl || null;
         },
         use: function (dataset) {
+          if (isTemplateFolderRow(dataset)) return null;
           var baseUrl = cleanTemplateBase(dataset);
           return baseUrl ? baseUrl + "/install" : null;
         },
         source: function (dataset) {
+          if (isTemplateFolderRow(dataset)) return null;
           var baseUrl = cleanTemplateBase(dataset);
           return baseUrl ? baseUrl + "/source-code" : null;
         },
         rename: function (dataset) {
+          if (isTemplateFolderRow(dataset)) return null;
           var baseUrl = cleanTemplateBase(dataset);
           return baseUrl ? baseUrl + "/rename" : null;
         },
         "delete": function (dataset) {
+          if (isTemplateFolderRow(dataset)) return null;
           var baseUrl = cleanTemplateBase(dataset);
           return baseUrl ? baseUrl + "/delete" : null;
         },
         duplicate: function (dataset) {
+          if (isTemplateFolderRow(dataset)) return null;
           var baseUrl = cleanTemplateBase(dataset);
           return baseUrl ? baseUrl + "/duplicate" : null;
         },

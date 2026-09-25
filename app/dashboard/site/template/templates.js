@@ -12,6 +12,20 @@ module.exports = function (req, res, next) {
     var yourTemplates = [];
     var blotTemplates = [];
 
+    // Slugs the blog has its own localEditing copy of. A SITE-owned template
+    // at one of these slugs is still shown alongside that copy in the
+    // sidebar (see the dedup step below), but /template/<slug> always
+    // resolves to the blog's copy once one exists, so the SITE row needs a
+    // URL of its own to stay reachable and to highlight independently. See
+    // ./template-folder.js.
+    var localEditingSlugs = {};
+    for (var templateID in templates) {
+      var t = templates[templateID];
+      if (t.owner === blogID && t.localEditing) {
+        localEditingSlugs[t.id.split(":").slice(1).join(":")] = true;
+      }
+    }
+
     // Turn the dictionary of templates returned
     // from the DB into a list that Mustache can render
     templates = arrayify(templates, function (template) {
@@ -26,8 +40,17 @@ module.exports = function (req, res, next) {
       // remap the slug to be everything after the first colon in the ID
       template.slug = template.id.split(':').slice(1).join(':');
 
-      template.selected =
-        req.path.split("/")[1] === template.slug ? "selected" : "";
+      var inFolder = template.owner === "SITE" && localEditingSlugs[template.slug];
+      template.isTemplateFolder = !!inFolder;
+      var pathParts = req.path.split("/");
+
+      template.selected = inFolder
+        ? pathParts[1] === "template-folder" && pathParts[2] === template.slug
+          ? "selected"
+          : ""
+        : pathParts[1] === template.slug
+          ? "selected"
+          : "";
 
       // Todo replace the thumbnail with a real thumbnail of the template
       if (template.owner === blog.id) {
@@ -44,7 +67,9 @@ module.exports = function (req, res, next) {
         template.thumbnailSlug = template.slug;
       }
 
-      template.editURL = "/sites/" + blog.handle + "/template/" + template.slug;
+      template.editURL = inFolder
+        ? "/sites/" + blog.handle + "/template-folder/" + template.slug
+        : "/sites/" + blog.handle + "/template/" + template.slug;
 
       template.previewURL =
         previewHost +

@@ -52,6 +52,20 @@ site.get("/folder", (req, res) => {
 });
 
 site.use("/template", require("./template"));
+// A sibling of /template/:slug (not nested under it) rather than a special
+// value of :templateSlug, so it can't collide with an actual template slug
+// and doesn't need to teach ./template/load/template.js's owner-preferring
+// resolution about a second meaning. It reuses the same sidebar/layout the
+// /template router sets up for itself, since it isn't nested inside it.
+site.get(
+  "/template-folder/:templateFolderSlug",
+  (req, res, next) => {
+    res.locals.layout = "dashboard/template/layout";
+    next();
+  },
+  require("./template/templates"),
+  require("./template/template-folder")
+);
 site.use("/delete", require("./delete"));
 site.use("/import", require("./import"));
 site.use("/export", require("./export"));
