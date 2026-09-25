@@ -59,6 +59,7 @@ require_command scp
 require_command python3
 require_command tar
 require_command base64
+require_command curl
 
 if [ -z "${DATA_VOLUME_ID:-}" ]; then
   read -r -p "Enter the EBS volume ID for the production data volume: " DATA_VOLUME_ID
@@ -141,14 +142,52 @@ fi
 
 # ---------------------------------------------------------------------------
 # Estimate cost/time before touching anything, and get the operator to
-# confirm.
+# confirm. Instance pricing is looked up live for the actual
+# $INSTANCE_TYPE/$AWS_REGION in use (both operator-configurable via env
+# vars), falling back to the t3.micro/us-west-2 rate with a clear warning
+# if that lookup fails or isn't permitted.
 # ---------------------------------------------------------------------------
 GP3_RATE_PER_GB_MONTH="0.08"
-INSTANCE_RATE_PER_HOUR="0.0104"
+FALLBACK_INSTANCE_RATE_PER_HOUR="0.0104"
 EST_LOW_MINUTES="5"
 EST_HIGH_MINUTES="15"
 
-read -r EST_LOW_COST EST_HIGH_COST <<<"$(python3 - \
+PRICING_JSON=$(aws pricing get-products --region us-east-1 --service-code AmazonEC2 \
+  --filters \
+    "Type=TERM_MATCH,Field=instanceType,Value=$INSTANCE_TYPE" \
+    "Type=TERM_MATCH,Field=regionCode,Value=$AWS_REGION" \
+    "Type=TERM_MATCH,Field=operatingSystem,Value=Linux" \
+    "Type=TERM_MATCH,Field=tenancy,Value=Shared" \
+    "Type=TERM_MATCH,Field=capacitystatus,Value=Used" \
+    "Type=TERM_MATCH,Field=preInstalledSw,Value=NA" \
+  --output json 2>/dev/null) || true
+
+INSTANCE_RATE_PER_HOUR=""
+if [ -n "$PRICING_JSON" ]; then
+  INSTANCE_RATE_PER_HOUR=$(python3 - "$PRICING_JSON" 2>/dev/null <<'PY'
+import json, sys
+
+try:
+    data = json.loads(sys.argv[1])
+    product = json.loads(data["PriceList"][0])
+    for term in product["terms"]["OnDemand"].values():
+        for dim in term["priceDimensions"].values():
+            price = dim["pricePerUnit"].get("USD")
+            if price:
+                print(price)
+                raise SystemExit(0)
+except Exception:
+    pass
+PY
+) || true
+fi
+
+if [ -z "$INSTANCE_RATE_PER_HOUR" ]; then
+  INSTANCE_RATE_PER_HOUR="$FALLBACK_INSTANCE_RATE_PER_HOUR"
+  warn "Could not look up live pricing for $INSTANCE_TYPE in $AWS_REGION - falling back to the t3.micro/us-west-2 rate (\$${FALLBACK_INSTANCE_RATE_PER_HOUR}/hr), which may be inaccurate for a different instance type or region."
+fi
+
+read -r EST_LOW_COST EST_HIGH_COST INSTANCE_RATE_DISPLAY <<<"$(python3 - \
   "$VOLUME_SIZE_GB" "$GP3_RATE_PER_GB_MONTH" "$INSTANCE_RATE_PER_HOUR" "$EST_LOW_MINUTES" "$EST_HIGH_MINUTES" <<'PY'
 import sys
 
@@ -162,13 +201,13 @@ def cost(minutes):
     return volume_cost + instance_cost
 
 
-print(f"{cost(low_min):.2f} {cost(high_min):.2f}")
+print(f"{cost(low_min):.2f} {cost(high_min):.2f} {instance_rate:.4f}")
 PY
 )"
 
-info "Volume $DATA_VOLUME_ID is ${VOLUME_SIZE_GB}GB."
+info "Volume $DATA_VOLUME_ID is ${VOLUME_SIZE_GB}GB. Instance type: $INSTANCE_TYPE in $AWS_REGION."
 info "Estimated time: ${EST_LOW_MINUTES}-${EST_HIGH_MINUTES} min (instance boot/teardown dominate; the tar/scp step depends on the individual blog folder's size, not the full volume)."
-info "Estimated cost: \$${EST_LOW_COST}-\$${EST_HIGH_COST} (gp3 volume + t3.micro instance, prorated for the run duration; excludes data transfer for the downloaded folder)."
+info "Estimated cost: \$${EST_LOW_COST}-\$${EST_HIGH_COST} (gp3 volume + $INSTANCE_TYPE @ \$${INSTANCE_RATE_DISPLAY}/hr in $AWS_REGION, prorated for the run duration; excludes data transfer for the downloaded folder)."
 
 read -r -p "Proceed? [y/N] " CONFIRM
 case "$CONFIRM" in
@@ -258,37 +297,48 @@ else
   IDENTIFIER_B64=$(printf '%s' "$IDENTIFIER" | base64 | tr -d '\n')
   INFO_OUTPUT=$(ssh "$BLOT_HOST" "docker exec blot-container-blue node /usr/src/app/scripts/info \"\$(printf '%s' '$IDENTIFIER_B64' | base64 -d)\"") || true
 
-  # scripts/info prints every blog_id it finds for the identifier - one for
-  # a direct blog match, or one per blog owned by a matched user. Pull out
-  # every occurrence rather than assuming there's exactly one.
-  RESOLVED=$(printf '%s\n' "$INFO_OUTPUT" | grep -o 'blog_[0-9a-f]\{32\}' | sort -u)
-  RESOLVED_COUNT=$(printf '%s\n' "$RESOLVED" | grep -c .)
+  # scripts/info prints a direct "Found blog_... client=..." line when the
+  # identifier matches one specific blog (a URL, handle, or blog id), and
+  # separately always prints a "Blogs: ..." line listing every blog owned
+  # by the matched user (which, for a blog match, is that blog's owner and
+  # so includes any of their other blogs too). Prefer the direct match -
+  # it's the one the operator actually asked for - and only fall back to
+  # the "Blogs:" list (with disambiguation) when there's no direct match,
+  # i.e. the identifier was a user id/email rather than a specific blog.
+  DIRECT_MATCH=$(printf '%s\n' "$INFO_OUTPUT" | grep -o 'Found blog_[0-9a-f]\{32\} client=' | grep -o 'blog_[0-9a-f]\{32\}' | head -n1)
 
-  if [ "$RESOLVED_COUNT" -eq 0 ]; then
-    error "Could not resolve '$IDENTIFIER' to a blog_id"
-    exit 1
-  elif [ "$RESOLVED_COUNT" -eq 1 ]; then
-    BLOG_ID="$RESOLVED"
+  if [ -n "$DIRECT_MATCH" ]; then
+    BLOG_ID="$DIRECT_MATCH"
   else
-    info "'$IDENTIFIER' matches multiple blogs:"
-    BLOG_ID_OPTIONS=()
-    blog_index=1
-    while IFS= read -r blog_option; do
-      [ -z "$blog_option" ] && continue
-      BLOG_ID_OPTIONS+=("$blog_option")
-      printf '  [%d] %s\n' "$blog_index" "$blog_option"
-      blog_index=$((blog_index + 1))
-    done <<<"$RESOLVED"
+    RESOLVED=$(printf '%s\n' "$INFO_OUTPUT" | grep '^Blogs: ' | grep -o 'blog_[0-9a-f]\{32\}' | sort -u)
+    RESOLVED_COUNT=$(printf '%s\n' "$RESOLVED" | grep -c .)
 
-    blog_selection=""
-    while [ -z "$blog_selection" ]; do
-      read -r -p "Select blog by number: " blog_selection
-      if ! [[ "$blog_selection" =~ ^[0-9]+$ ]] || [ "$blog_selection" -lt 1 ] || [ "$blog_selection" -gt "${#BLOG_ID_OPTIONS[@]}" ]; then
-        warn "Please enter a number between 1 and ${#BLOG_ID_OPTIONS[@]}"
-        blog_selection=""
-      fi
-    done
-    BLOG_ID="${BLOG_ID_OPTIONS[$((blog_selection-1))]}"
+    if [ "$RESOLVED_COUNT" -eq 0 ]; then
+      error "Could not resolve '$IDENTIFIER' to a blog_id"
+      exit 1
+    elif [ "$RESOLVED_COUNT" -eq 1 ]; then
+      BLOG_ID="$RESOLVED"
+    else
+      info "'$IDENTIFIER' matches multiple blogs:"
+      BLOG_ID_OPTIONS=()
+      blog_index=1
+      while IFS= read -r blog_option; do
+        [ -z "$blog_option" ] && continue
+        BLOG_ID_OPTIONS+=("$blog_option")
+        printf '  [%d] %s\n' "$blog_index" "$blog_option"
+        blog_index=$((blog_index + 1))
+      done <<<"$RESOLVED"
+
+      blog_selection=""
+      while [ -z "$blog_selection" ]; do
+        read -r -p "Select blog by number: " blog_selection
+        if ! [[ "$blog_selection" =~ ^[0-9]+$ ]] || [ "$blog_selection" -lt 1 ] || [ "$blog_selection" -gt "${#BLOG_ID_OPTIONS[@]}" ]; then
+          warn "Please enter a number between 1 and ${#BLOG_ID_OPTIONS[@]}"
+          blog_selection=""
+        fi
+      done
+      BLOG_ID="${BLOG_ID_OPTIONS[$((blog_selection-1))]}"
+    fi
   fi
 fi
 
@@ -464,22 +514,28 @@ fi
 #    intermediate copy on the instance's own (small) root volume, which
 #    could otherwise fill up before scp even starts for a large folder.
 # ---------------------------------------------------------------------------
-ARCHIVE_NAME="${BLOG_ID}-${TARGET_DATE}.tar.gz"
+# Names include the snapshot ID (not just the date) since the volume can
+# have more than one completed snapshot on the same UTC date - the date
+# alone isn't a unique key and would let a second same-day run silently
+# collide with the first.
+ARCHIVE_NAME="${BLOG_ID}-${TARGET_DATE}-${SNAPSHOT_ID}.tar.gz"
 ARCHIVE_PATH="$DOWNLOAD_DIR/$ARCHIVE_NAME"
+RESTORE_DIR="$DOWNLOAD_DIR/${BLOG_ID}-${TARGET_DATE}-${SNAPSHOT_ID}"
+
+# Check both destinations up front, before streaming anything - extracting
+# into an existing $RESTORE_DIR would overlay this snapshot on top of
+# whatever's already there (silently mixing two points in time together),
+# and starting the stream first would truncate an existing archive before
+# we ever got to check that.
+if [ -e "$ARCHIVE_PATH" ] || [ -e "$RESTORE_DIR" ]; then
+  error "$ARCHIVE_PATH or $RESTORE_DIR already exists - remove it first or pick a different snapshot"
+  exit 1
+fi
+
 mkdir -p "$DOWNLOAD_DIR"
 info "Archiving $REMOTE_BLOG_PATH and streaming to ${ARCHIVE_PATH}..."
 ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "sudo tar czf - -C /mnt/restore/blogs ${BLOG_ID}" >"$ARCHIVE_PATH"
 
-# Extract into a fresh, uniquely named directory instead of overlaying
-# $BLOG_ID directly - if that folder already exists from an earlier run,
-# overlaying this snapshot into it would leave behind any files that are
-# absent from THIS snapshot but present from before, silently mixing two
-# points in time together and reporting success either way.
-RESTORE_DIR="$DOWNLOAD_DIR/${BLOG_ID}-${TARGET_DATE}"
-if [ -e "$RESTORE_DIR" ]; then
-  error "$RESTORE_DIR already exists - remove it first or pick a different snapshot"
-  exit 1
-fi
 mkdir -p "$RESTORE_DIR"
 info "Extracting to $RESTORE_DIR..."
 tar xzf "$ARCHIVE_PATH" -C "$RESTORE_DIR" --strip-components=1
