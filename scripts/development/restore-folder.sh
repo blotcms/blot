@@ -19,21 +19,19 @@ set -euo pipefail
 #   5. Tears everything it created back down (volume, instance, temporary
 #      SSH key pair, temporary security group).
 #
-# NOTE: the DLM policy (policy-0ca9ce565a4b9889f) only keeps 7 daily
+# NOTE: the production data volume's DLM policy only keeps 7 daily
 # snapshots, so at most ~7 dates will be offered.
 #
 # Requires: aws CLI (configured/authenticated), ssh access to the `blot`
 # host (for identifier resolution), python3.
 
 DEFAULT_REGION="us-west-2"
-DEFAULT_VOLUME_ID="vol-0a2e04d301e025e60"
 DEFAULT_INSTANCE_TYPE="t3.micro"
 DEFAULT_BLOT_HOST="blot"
 DEFAULT_DOWNLOAD_DIR="$HOME/Downloads"
 
 AWS_PROFILE=${AWS_PROFILE:-default}
 AWS_REGION=${AWS_REGION:-$DEFAULT_REGION}
-DATA_VOLUME_ID=${DATA_VOLUME_ID:-$DEFAULT_VOLUME_ID}
 INSTANCE_TYPE=${INSTANCE_TYPE:-$DEFAULT_INSTANCE_TYPE}
 BLOT_HOST=${BLOT_HOST:-$DEFAULT_BLOT_HOST}
 DOWNLOAD_DIR=${DOWNLOAD_DIR:-$DEFAULT_DOWNLOAD_DIR}
@@ -60,6 +58,11 @@ require_command ssh
 require_command scp
 require_command python3
 require_command tar
+
+if [ -z "${DATA_VOLUME_ID:-}" ]; then
+  read -r -p "Enter the EBS volume ID for the production data volume: " DATA_VOLUME_ID
+fi
+[ -z "$DATA_VOLUME_ID" ] && { error "No volume ID entered"; exit 1; }
 
 # ---------------------------------------------------------------------------
 # Cleanup: every AWS resource we create is torn down here, best-effort, no
