@@ -11,6 +11,7 @@ const { Dropbox } = require("dropbox");
 const views = __dirname + "/../views/";
 const client = require("models/client");
 const Blog = require("models/blog");
+const { INSUFFICIENT_SPACE_ERROR_CODE } = require("clients/dropbox/util/constants");
 
 dashboard.use(function loadDropboxAccount (req, res, next) {
   Database.get(req.blog.id, function (err, account) {
@@ -30,7 +31,19 @@ dashboard.use(function loadDropboxAccount (req, res, next) {
     if (error_code) {
       res.locals.account.folder_missing = error_code === 409;
       res.locals.account.revoked = error_code === 401;
+      res.locals.account.insufficient_space =
+        error_code === INSUFFICIENT_SPACE_ERROR_CODE;
     }
+
+    // A stuck/interrupted initial transfer for any reason other than the
+    // out-of-space case above, which gets its own more specific message.
+    // While a setup is actually in progress, the "/" route below replaces
+    // res.locals.account with req.session.dropbox before rendering, so this
+    // flag (computed from the persisted account) never reaches the view for
+    // a normal, still-running transfer - only a genuinely stuck one.
+    res.locals.account.transfer_incomplete =
+      account.transfer_pending === true &&
+      error_code !== INSUFFICIENT_SPACE_ERROR_CODE;
 
     return next();
   });

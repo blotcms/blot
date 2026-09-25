@@ -5,6 +5,7 @@ var _require = require("../util/constants");
 var MAX_FILE_SIZE = _require.MAX_FILE_SIZE;
 var hasUnsupportedExtension = _require.hasUnsupportedExtension;
 var isDotfileOrDotfolder = _require.isDotfileOrDotfolder;
+var transferIncomplete = _require.transferIncomplete;
 var hashFile = require("helper/hashFile");
 var Database = require("../database");
 var Path = require("path");
@@ -50,6 +51,20 @@ module.exports = function main(blog, callback) {
             done(err, callback);
           }
         );
+      }
+
+      // The initial transfer to Dropbox hasn't finished (or never started
+      // cleanly - e.g. it was interrupted by a deploy). Dropbox doesn't yet
+      // have every file Blot has, so running delta/apply here - which
+      // deletes any local file with no Dropbox counterpart - would delete
+      // exactly the files still waiting to be uploaded. Skip this sync
+      // entirely and leave error_code/cursor untouched; the next webhook
+      // (or retry of the transfer) will pick things up once it's safe.
+      if (transferIncomplete(account)) {
+        folder.log(
+          "Skipping sync: Dropbox initial transfer has not finished for this blog"
+        );
+        return done(null, callback);
       }
 
       folder.log("Constructing methods to sync changes");

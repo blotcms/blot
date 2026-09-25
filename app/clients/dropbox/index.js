@@ -4,7 +4,7 @@ module.exports = {
     "A file storage and synchronization service",
   init: require("./init"),
   disconnect: require("./disconnect"),
-  resync: require('./sync/reset-to-blot'),
+  resync: require('./resync'),
   remove: require("./remove"),
   write: require("./write"),
   site_routes: require("./routes").site,

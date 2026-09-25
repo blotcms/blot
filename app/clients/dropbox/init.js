@@ -5,6 +5,7 @@ const Entries = require("models/entries");
 const clfdate = require("helper/clfdate");
 const email = require("helper/email");
 const resetToBlot = require("./sync/reset-to-blot");
+const { transferIncomplete } = require("./util/constants");
 const { get: getAccount, set: setAccount } = require("./database");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
@@ -103,6 +104,7 @@ const hasRecentSync = (account) => {
   return Date.now() - account.last_sync <= ONE_HOUR_IN_MS;
 };
 
+
 let validationRunning = false;
 
 const runValidation = async () => {
@@ -142,6 +144,10 @@ const validateAllBlogs = async () => {
 
       const account = await getDropboxAccount(blogID);
       if (!hasRecentSync(account)) continue;
+      if (transferIncomplete(account)) {
+        console.log(clfdate(), "Dropbox: Skipping blog with incomplete transfer", blogID);
+        continue;
+      }
 
       checkedBlogs += 1;
 
@@ -239,6 +245,10 @@ const resyncRecentSyncsOnStartup = async () => {
       if (!account || typeof account.last_sync !== "number") continue;
 
       if (Date.now() - account.last_sync >= FIFTEEN_MINUTES_IN_MS) continue;
+      if (transferIncomplete(account)) {
+        console.log(clfdate(), "Dropbox: Skipping blog with incomplete transfer", blogID);
+        continue;
+      }
 
       blogsToResync.push({ blog, blogID });
     } catch (err) {
@@ -288,3 +298,9 @@ module.exports = async function init() {
     console.error(clfdate(), "Dropbox: Startup resync failed", err);
   });
 };
+
+// Exposed for tests: both resyncRecentSyncsOnStartup and validateAllBlogs
+// gate on transferIncomplete() (util/constants.js) before ever calling
+// resetToBlotWithLock for a blog.
+module.exports.resyncRecentSyncsOnStartup = resyncRecentSyncsOnStartup;
+module.exports.validateAllBlogs = validateAllBlogs;

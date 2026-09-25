@@ -1,4 +1,5 @@
 var async = require("async");
+var { isInsufficientSpaceError } = require("./constants");
 
 function retry(fn, options) {
   options = options || {};
@@ -26,6 +27,10 @@ function retry(fn, options) {
     function (err) {
       console.log("dropbox:retry invoked with err", err);
       if (err.code === "ENAMETOOLONG") return false;
+      // Retrying an out-of-space upload can never succeed until the user
+      // frees up room in Dropbox, which won't happen mid-retry-loop. Fail
+      // fast instead of burning through all 6 attempts.
+      if (isInsufficientSpaceError(err)) return false;
       return [401, 409].indexOf(err.status) === -1;
     };
 
