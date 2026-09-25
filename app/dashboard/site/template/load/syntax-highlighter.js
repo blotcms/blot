@@ -24,7 +24,7 @@ module.exports = function (req, res, next) {
           label: "Font"
         }
       : null,
-    label: "Code colors",
+    label: "Syntax highlighting",
     options: Themes.map(option => {
       return {
         selected:
