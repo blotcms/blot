@@ -8,6 +8,7 @@ const duplicateTemplate = require("./save/duplicate-template");
 const persistTemplateUpdate = require("./save/persist-template-update");
 const removeTemplateAssetsIfUnreferenced = require("./save/upload-image").removeTemplateAssetsIfUnreferenced;
 const loadFavicon = require("./load/favicon");
+const syntaxHighlighterPreview = require("./syntax-highlighter-preview");
 
 function loadFaviconForProfileImage(req, res, next) {
   return req.params.key === "profile_image" ? loadFavicon(req, res, next) : next();
@@ -233,6 +234,7 @@ TemplateEditor.route("/:templateSlug/syntax-highlighter")
   .get(function (req, res) {
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
     res.locals.title = `Syntax highlighter - ${req.template.displayName}`;
+    res.locals.syntaxHighlighterPreview = syntaxHighlighterPreview;
     res.render("dashboard/template/syntax-highlighter");
   });
 
