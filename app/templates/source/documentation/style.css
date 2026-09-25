@@ -2,8 +2,7 @@
 
 /* Injected styles from templates and external sources */
 {{{app_css}}}
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 {{> toc-styles.css}}
@@ -15,16 +14,14 @@
 
 /* Root variables for theme customization */
 :root {
-  {{#body_font}}
+  {{#font}}
   --font-family: {{{stack}}};
   --font-size: {{{font_size}}}px;
   --line-height: {{{line_height}}};
-  {{/body_font}}
-  {{#heading_font}}
   --heading-font-family: {{{stack}}};
   --heading-font-size: {{{font_size}}}px;
   --heading-line-height: {{{line_height}}};
-  {{/heading_font}}
+  {{/font}}
   {{#syntax_highlighter_font}}
   --code-font-family: {{{stack}}};
   {{/syntax_highlighter_font}}

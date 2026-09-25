@@ -27,13 +27,9 @@
 		"syntax_highlighter_font": {
 			"id": "plex-mono"
 		},
-		"body_font": {
+		"font": {
 			"id": "system-sans"
 		},
-		"heading_font": {
-			"id": "system-sans"
-		},
-		"logo_url": "",
 		"profile_image": {},
 		"sticky_navigation": false,
 		"navigation_alignment": "justified",

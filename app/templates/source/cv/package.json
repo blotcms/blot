@@ -10,9 +10,6 @@
     "background_color": "#fff",
     "text_color": "#000",
     "link_color": "#000",
-    "dark_background_color": "#111",
-    "dark_text_color": "#eee",
-    "dark_link_color": "#eee",
     "hide_dates": false,
     "date_display": "MMM D",
     "syntax_highlighter": {
@@ -21,13 +18,10 @@
     "syntax_highlighter_font": {
       "id": "system-mono"
     },
-    "body_font": {
+    "font": {
       "id": "system-sans",
       "line_height": 1.6,
       "font_size": 15
-    },
-    "heading_font": {
-      "id": "system-sans"
     },
     "profile_image": {},
     "navigation_alignment": "left",
