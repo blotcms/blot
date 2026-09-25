@@ -22,14 +22,7 @@ document.querySelectorAll("form.syntax-highlighter").forEach(function (form) {
       }
 
       fetch(withAjax(window.location.href), { method: "post", body }).then(
-        function (response) {
-          if (document.querySelector("[data-syntax-highlighter-preview]")) {
-            window.location.reload();
-            return response;
-          }
-
-          return handleAjaxSaveResponse(response);
-        }
+        handleAjaxSaveResponse
       );
 
       if (toggleInput) {

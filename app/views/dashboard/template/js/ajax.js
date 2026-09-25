@@ -25,6 +25,11 @@ const handleAjaxSaveResponse = (response) => {
     return response;
   }
 
+  if (document.querySelector("[data-syntax-highlighter-preview]")) {
+    window.location.reload();
+    return response;
+  }
+
   refreshTemplatePreview();
   return response;
 };
