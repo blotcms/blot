@@ -2,7 +2,6 @@ var arrayify = require("helper/arrayify");
 var previewHost = "https://preview-of";
 var config = require("config");
 var Template = require("models/template");
-var { routeSlugFromID } = require("./util/route-slug");
 
 module.exports = function (req, res, next) {
   var blog = req.blog,
@@ -27,14 +26,8 @@ module.exports = function (req, res, next) {
       // remap the slug to be everything after the first colon in the ID
       template.slug = template.id.split(':').slice(1).join(':');
 
-      // SITE-owned rows route through a "site:" prefixed slug (see
-      // load/template.js) so they resolve to the original default even when
-      // the blog also has its own fork of the same slug — otherwise both
-      // rows would point at (and highlight for) the same URL.
-      template.routeSlug = routeSlugFromID(template.id);
-
       template.selected =
-        req.path.split("/")[1] === template.routeSlug ? "selected" : "";
+        req.path.split("/")[1] === template.slug ? "selected" : "";
 
       // Todo replace the thumbnail with a real thumbnail of the template
       if (template.owner === blog.id) {
@@ -51,7 +44,7 @@ module.exports = function (req, res, next) {
         template.thumbnailSlug = template.slug;
       }
 
-      template.editURL = "/sites/" + blog.handle + "/template/" + template.routeSlug;
+      template.editURL = "/sites/" + blog.handle + "/template/" + template.slug;
 
       template.previewURL =
         previewHost +
