@@ -1,3 +1,4 @@
+const { inspect } = require("util");
 const buildFromFolder = require("models/template").buildFromFolder;
 const Blog = require("models/blog");
 const Update = require("./update");
@@ -63,15 +64,27 @@ function sync(blogID, callback) {
           gatherLockDiagnostics({ blogID, lockAcquiredAt, syncContext: { syncID } })
             .catch((diagErr) => ({ diagnosticsError: String(diagErr) }))
             .then((diagnostics) => {
-              console.error(clfdate(), "[LOCK COMPROMISED]", {
-                blogID,
-                error: { message: err.message, code: err.code },
-                lockConfig: {
-                  ttl: LOCK_STALE_TIMEOUT_MS,
-                  heartbeat: LOCK_UPDATE_INTERVAL_MS
-                },
-                diagnostics
-              });
+              // console.error's default util.inspect depth (2) was silently
+              // flattening diagnostics.pendingSyncs/pendingUpdates to
+              // "[Object]" - exactly the detail needed to tell whether some
+              // other blog's sync was starving this heartbeat. depth: null
+              // prints it in full.
+              console.error(
+                clfdate(),
+                "[LOCK COMPROMISED]",
+                inspect(
+                  {
+                    blogID,
+                    error: { message: err.message, code: err.code },
+                    lockConfig: {
+                      ttl: LOCK_STALE_TIMEOUT_MS,
+                      heartbeat: LOCK_UPDATE_INTERVAL_MS
+                    },
+                    diagnostics
+                  },
+                  { depth: null, maxArrayLength: null }
+                )
+              );
             })
             .finally(() => {
               setImmediate(() => {

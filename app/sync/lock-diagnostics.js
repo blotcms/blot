@@ -7,6 +7,7 @@ const {
 } = require("./lock-diagnostics-state");
 
 const folderLock = require("./lock");
+const { getRunningChecks } = require("./fix");
 const freeDiskSpaceAsync = promisify(freeDiskSpace);
 const DEFAULT_TIMEOUT_MS = 2000;
 
@@ -71,6 +72,16 @@ const gatherLockDiagnostics = async ({
     now,
     pendingSyncs: getPendingSyncs(),
     pendingUpdates: getPendingUpdates(),
+    // Fix() doesn't hold the folder lock while it runs, so it's absent from
+    // pendingSyncs above - this is the only way to see it was in progress.
+    // An array because more than one blog's Fix() can run at once (the
+    // Dropbox/iCloud validators and dashboard fixes all call it
+    // independently) - this compromise may not even involve the blog above.
+    runningFixChecks: getRunningChecks().map(runningCheck => ({
+      blogID: runningCheck.blogID,
+      check: runningCheck.check,
+      runningForMs: now - runningCheck.startedAt
+    })),
     lockDurationMs:
       typeof lockAcquiredAt === "number" ? now - lockAcquiredAt : null,
     processUptimeSec: (() => {
