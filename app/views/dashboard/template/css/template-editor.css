@@ -154,6 +154,11 @@ h2 {
   border-radius: var(--border-radius);
 }
 
+.template-row.selected {
+  background: var(--template-row-selected-background-color);
+  border-radius: var(--border-radius);
+}
+
 .template-row > a,
 .template-row__link {
   display: flex;
@@ -181,8 +186,7 @@ h2 {
 }
 
 .template-row.selected .template-row__link {
-  background-color: var(--template-row-selected-background-color);
-  border-radius: var(--border-radius);
+  background-color: transparent;
   color: var(--template-row-selected-text-color);
 }
 
