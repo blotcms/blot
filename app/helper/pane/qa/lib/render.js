@@ -23,12 +23,22 @@ const FREEZE_DATE = `(() => {
 
 // Headless Chrome hides scrollbars by default; the Explorer skin styles its scrollbars
 // (they are part of what the reference shows), so its cases need them visible.
+//
+// --no-sandbox/--disable-setuid-sandbox are needed whenever Chrome runs as root (Chrome
+// refuses to start otherwise: "Running as root without --no-sandbox is not supported"). This
+// used to be gated on process.env.CI, which every CI *runner* sets but which is NOT forwarded
+// into the node.yml test container (its `docker run` has no `-e CI`), so the repo's normal test
+// suite (unlike pane-qa, which runs directly on the runner) launched as root with no
+// sandbox-disabling args and failed instantly. Pass them unconditionally instead - harmless for
+// a non-root launch (pane-qa, local dev). --disable-dev-shm-usage matches
+// app/helper/screenshot's launch args: containers get a small /dev/shm by default, which a
+// screenshot at 2x device scale can exhaust (AGENTS.md step 8: reproduce with --shm-size=1g).
 async function launch(scrollbars = false) {
   const puppeteer = require("puppeteer");
   return puppeteer.launch({
     headless: true,
     ignoreDefaultArgs: scrollbars ? ["--hide-scrollbars"] : [],
-    args: process.env.CI ? ["--no-sandbox", "--disable-setuid-sandbox"] : [],
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
   });
 }
 
