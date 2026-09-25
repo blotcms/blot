@@ -258,7 +258,8 @@ function update_subscription(customer_id, subscription, callback) {
     if (subscription.status === "canceled" && !user.isDisabled)
       email.CLOSED(user.uid);
 
-    if (subscription.status === "past_due") email.OVERDUE(user.uid);
+    if (subscription.status === "past_due" && !subscription.pause_collection)
+      email.OVERDUE(user.uid);
 
     if (
       subscription.status === "active" &&

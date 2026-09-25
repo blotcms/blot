@@ -23,24 +23,61 @@ if (!email) {
 }
 
 // pause_collection only stops invoices from being created going forward -
-// any invoice already open (e.g. the one that made the account overdue in
-// the first place) keeps retrying on its own schedule unless we void it too.
-function voidOpenInvoices(subscriptionId, callback) {
-  var voided = [];
+// anything already generated (e.g. the invoice that made the account
+// overdue in the first place) keeps retrying/finalizing on its own schedule
+// unless we clear it too. Open invoices are voided; draft invoices haven't
+// been finalized yet (never charged), so they're deleted outright instead.
+function clearExistingInvoices(subscriptionId, callback) {
+  var toVoid = [];
+  var toDelete = [];
 
-  stripe.invoices
-    .list({ subscription: subscriptionId, status: "open", limit: 100 })
-    .autoPagingEach(function (invoice) {
-      voided.push(invoice.id);
-    })
-    .then(function () {
-      async.each(voided, function (invoiceId, next) {
-        stripe.invoices.voidInvoice(invoiceId, next);
-      }, function (err) {
-        callback(err, voided);
-      });
-    })
-    .catch(callback);
+  async.parallel(
+    [
+      function (next) {
+        stripe.invoices
+          .list({ subscription: subscriptionId, status: "open", limit: 100 })
+          .autoPagingEach(function (invoice) {
+            toVoid.push(invoice.id);
+          })
+          .then(function () {
+            next();
+          })
+          .catch(next);
+      },
+      function (next) {
+        stripe.invoices
+          .list({ subscription: subscriptionId, status: "draft", limit: 100 })
+          .autoPagingEach(function (invoice) {
+            toDelete.push(invoice.id);
+          })
+          .then(function () {
+            next();
+          })
+          .catch(next);
+      },
+    ],
+    function (err) {
+      if (err) return callback(err);
+
+      async.series(
+        [
+          function (next) {
+            async.each(toVoid, function (invoiceId, done) {
+              stripe.invoices.voidInvoice(invoiceId, done);
+            }, next);
+          },
+          function (next) {
+            async.each(toDelete, function (invoiceId, done) {
+              stripe.invoices.del(invoiceId, done);
+            }, next);
+          },
+        ],
+        function (err) {
+          callback(err, { voided: toVoid, deleted: toDelete });
+        }
+      );
+    }
+  );
 }
 
 get(email, function (err, user) {
@@ -79,42 +116,56 @@ get(email, function (err, user) {
       return process.exit();
     }
 
-    var pause = alreadyPaused
-      ? function (next) {
-          stripe.customers.retrieveSubscription(
-            user.subscription.customer,
-            user.subscription.id,
-            next
-          );
-        }
-      : function (next) {
-          stripe.customers.updateSubscription(
-            user.subscription.customer,
-            user.subscription.id,
-            { pause_collection: { behavior: "void" } },
-            next
-          );
-        };
+    function pauseSubscription(next) {
+      stripe.customers.updateSubscription(
+        user.subscription.customer,
+        user.subscription.id,
+        { pause_collection: { behavior: "void" } },
+        next
+      );
+    }
 
-    pause(function (err, subscription) {
-      if (err) throw err;
-
-      voidOpenInvoices(subscription.id, function (err, voided) {
+    // Always check the live subscription rather than trusting our cached
+    // copy: pause_collection can have a resumes_at in the past, or the cache
+    // can simply be stale, so "already paused" isn't reliable evidence that
+    // it's still paused right now.
+    stripe.customers.retrieveSubscription(
+      user.subscription.customer,
+      user.subscription.id,
+      function (err, liveSubscription) {
         if (err) throw err;
 
-        if (voided.length) {
-          console.log(colors.yellow("Voided " + voided.length + " open invoice(s): " + voided.join(", ")));
-        }
+        var next = liveSubscription.pause_collection
+          ? function (cb) {
+              cb(null, liveSubscription);
+            }
+          : pauseSubscription;
 
-        // Disabling always happens, even if collection was already paused by
-        // hand on Stripe: this is what keeps the blogs from rendering.
-        User.disable(user, { subscription: subscription }, function (err) {
+        next(function (err, subscription) {
           if (err) throw err;
 
-          console.log(colors.green("Paused and disabled " + user.email));
-          process.exit();
+          clearExistingInvoices(subscription.id, function (err, cleared) {
+            if (err) throw err;
+
+            if (cleared.voided.length) {
+              console.log(colors.yellow("Voided " + cleared.voided.length + " open invoice(s): " + cleared.voided.join(", ")));
+            }
+            if (cleared.deleted.length) {
+              console.log(colors.yellow("Deleted " + cleared.deleted.length + " draft invoice(s): " + cleared.deleted.join(", ")));
+            }
+
+            // Disabling always happens, even if collection was already
+            // paused by hand on Stripe: this is what keeps the blogs from
+            // rendering.
+            User.disable(user, { subscription: subscription }, function (err) {
+              if (err) throw err;
+
+              console.log(colors.green("Paused and disabled " + user.email));
+              process.exit();
+            });
+          });
         });
-      });
-    });
+      }
+    );
   });
 });
