@@ -7,6 +7,7 @@ const archiver = require("archiver");
 const duplicateTemplate = require("./save/duplicate-template");
 const persistTemplateUpdate = require("./save/persist-template-update");
 const removeTemplateAssetsIfUnreferenced = require("./save/upload-image").removeTemplateAssetsIfUnreferenced;
+const { routeSlugFromID } = require("./util/route-slug");
 
 // /template/default and /template/default/... redirect to the installed template's slug
 // so docs can deep link to e.g. /sites/gitt/template/default/links
@@ -423,15 +424,10 @@ TemplateEditor.route("/:templateSlug/delete")
 
         removeTemplateAssetsIfUnreferenced({ blog: req.blog }, imageLocals)
           .then(() => {
-            const currentTemplateIDSlug = req.blog.template
-              .split(":")
-              .slice(1)
-              .join(":");
-
             res.message(
               res.locals.dashboardBase +
                 "/template/" +
-                (currentTemplateIDSlug || ""),
+                (req.blog.template ? routeSlugFromID(req.blog.template) : ""),
               "Deleted template <b>" + req.template.displayName + "</b>"
             );
           })
@@ -460,8 +456,15 @@ TemplateEditor.route("/:templateSlug/reset")
     const finishReset = () => {
       removeTemplateAssetsIfUnreferenced({ blog: req.blog }, imageLocals)
         .then(() => {
+          // The blog's fork was just dropped, so only the SITE-owned
+          // template remains at this slug — route there explicitly rather
+          // than the bare slug, which the sidebar never links a SITE
+          // template through (see util/route-slug.js) and would leave
+          // nothing highlighted on the page we land on.
           res.message(
-            res.locals.dashboardBase + "/template/" + idSlug,
+            res.locals.dashboardBase +
+              "/template/" +
+              routeSlugFromID("SITE:" + idSlug),
             "Reset template <b>" + req.template.displayName + "</b>"
           );
         })

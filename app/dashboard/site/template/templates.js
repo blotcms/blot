@@ -2,6 +2,7 @@ var arrayify = require("helper/arrayify");
 var previewHost = "https://preview-of";
 var config = require("config");
 var Template = require("models/template");
+var { routeSlugFromID } = require("./util/route-slug");
 
 module.exports = function (req, res, next) {
   var blog = req.blog,
@@ -30,8 +31,7 @@ module.exports = function (req, res, next) {
       // load/template.js) so they resolve to the original default even when
       // the blog also has its own fork of the same slug — otherwise both
       // rows would point at (and highlight for) the same URL.
-      template.routeSlug =
-        template.owner === "SITE" ? "site:" + template.slug : template.slug;
+      template.routeSlug = routeSlugFromID(template.id);
 
       template.selected =
         req.path.split("/")[1] === template.routeSlug ? "selected" : "";

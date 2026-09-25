@@ -1,14 +1,14 @@
 var config = require("config");
 var Template = require("models/template");
 var makeSlug = require("helper/makeSlug");
+var { SITE_PREFIX } = require("../util/route-slug");
 
 // A URL param prefixed with "site:" (e.g. "site:index") always addresses the
 // SITE-owned default template, even when the blog also has its own fork of
 // the same slug. Without this, a forked template with localEditing enabled
 // is unreachable by its own slug (the blog's copy always wins below) and the
 // sidebar can't tell the two rows in the list apart when highlighting the
-// active one. See templates.js's `routeSlug`, which generates these links.
-const SITE_PREFIX = "site:";
+// active one. See util/route-slug.js, which generates these links.
 
 // should return a template owned by the blog, if it exists,
 // or a template owned by the site if it exists or null if neither exist.
