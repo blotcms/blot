@@ -50,6 +50,25 @@
   padding: 1rem;
   background: transparent;
 }
+
+.syntax-highlighter-docs {
+  margin-top: 1rem;
+  font-size: 14px;
+}
+
+.syntax-highlighter-docs p {
+  margin: 0 0 0.25rem;
+  color: var(--medium-text-color);
+}
+
+.syntax-highlighter-docs ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.syntax-highlighter-docs .smallLink {
+  margin-left: 0;
+}
 </style>
 
 <div style="display: flex;margin-top:2rem">
@@ -63,7 +82,13 @@
         </div>
         {{/syntax_themes}}
         {{#syntax_themes}}
-        <a class="smallLink" href="/how/files/markdown#code">Learn more about syntax highlighting</a>
+        <div class="syntax-highlighter-docs">
+            <p>Here’s how to add code snippets:</p>
+            <ul>
+                <li><a class="smallLink" href="/how/files/markdown#code">Markdown</a></li>
+                <li><a class="smallLink" href="/how/files/google-docs#code">Google Docs</a></li>
+            </ul>
+        </div>
         {{/syntax_themes}}
     </div>
     <div style="box-sizing: border-box;flex-grow: 1;width: 66.66666%;flex-grow: 0;flex-shrink: 0;padding:0 0 0 1rem;">
