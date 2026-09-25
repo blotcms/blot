@@ -7,12 +7,7 @@
 >
   <a href="{{{editURL}}}" class="template-row__link">
     <span class="preview" style="position: relative">
-      {{^localEditing}}
-      <img
-        src="{{#cdn}}/images/examples/{{thumbnailSlug}}/0-icon.png{{/cdn}}"
-        width="48" height="35"
-      />
-      {{/localEditing}} {{#localEditing}}
+      {{#localEditing}}
       <span
         style="
           position: absolute;
