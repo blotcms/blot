@@ -58,6 +58,7 @@ require_command ssh
 require_command scp
 require_command python3
 require_command tar
+require_command base64
 
 if [ -z "${DATA_VOLUME_ID:-}" ]; then
   read -r -p "Enter the EBS volume ID for the production data volume: " DATA_VOLUME_ID
@@ -201,9 +202,12 @@ cleanup() {
       "${AWS_BASE[@]}" ec2 detach-volume --volume-id "$NEW_VOLUME_ID" --force >/dev/null 2>&1 || true
       "${AWS_BASE[@]}" ec2 wait volume-available --volume-ids "$NEW_VOLUME_ID" >/dev/null 2>&1 || true
     fi
-    "${AWS_BASE[@]}" ec2 terminate-instances --instance-ids "$INSTANCE_ID" >/dev/null 2>&1 || true
-    "${AWS_BASE[@]}" ec2 wait instance-terminated --instance-ids "$INSTANCE_ID" >/dev/null 2>&1 || true
-    info "Terminated instance $INSTANCE_ID"
+    if "${AWS_BASE[@]}" ec2 terminate-instances --instance-ids "$INSTANCE_ID" >/dev/null 2>&1 \
+      && "${AWS_BASE[@]}" ec2 wait instance-terminated --instance-ids "$INSTANCE_ID" >/dev/null 2>&1; then
+      info "Terminated instance $INSTANCE_ID"
+    else
+      warn "Could not confirm instance $INSTANCE_ID was terminated - check the console NOW, it may still be running and billing"
+    fi
   fi
 
   if [ -n "$NEW_VOLUME_ID" ]; then
@@ -232,16 +236,62 @@ trap cleanup EXIT
 # 1. Resolve the blog identifier to its actual data/blogs/<blog_id> folder
 #    name, the same way `npm run download-folder` does.
 # ---------------------------------------------------------------------------
-read -r -p "Enter blog identifier (URL, handle, or blog id): " IDENTIFIER
+read -r -p "Enter blog identifier (URL, handle, blog id, or user id): " IDENTIFIER
 [ -z "$IDENTIFIER" ] && { error "No identifier entered"; exit 1; }
 
-info "Resolving '$IDENTIFIER' to a blog_id via $BLOT_HOST..."
-BLOG_ID=$(ssh "$BLOT_HOST" "docker exec blot-container-blue node /usr/src/app/scripts/info \"$IDENTIFIER\"" | grep 'blog_' | head -n1 | cut -d ' ' -f 2 || true)
+BLOG_ID_RE='^blog_[0-9a-f]{32}$'
 
-if [ -z "$BLOG_ID" ]; then
-  error "Could not resolve '$IDENTIFIER' to a blog_id"
-  exit 1
+if [[ "$IDENTIFIER" =~ $BLOG_ID_RE ]]; then
+  # Already a literal blog_id - use it as-is. This also covers blogs that
+  # have since been deleted from the live service: scripts/info can no
+  # longer resolve anything for them (the record is gone from Redis) even
+  # though the folder may still exist in an older snapshot.
+  BLOG_ID="$IDENTIFIER"
+  info "Using literal blog_id: $BLOG_ID"
+else
+  info "Resolving '$IDENTIFIER' to a blog_id via $BLOT_HOST..."
+
+  # The identifier is base64-encoded before being embedded in the remote
+  # command string so an identifier containing shell metacharacters (e.g.
+  # $(...) or quotes) can't be interpreted by the remote login shell -
+  # base64 output never contains characters that are special to it.
+  IDENTIFIER_B64=$(printf '%s' "$IDENTIFIER" | base64 | tr -d '\n')
+  INFO_OUTPUT=$(ssh "$BLOT_HOST" "docker exec blot-container-blue node /usr/src/app/scripts/info \"\$(printf '%s' '$IDENTIFIER_B64' | base64 -d)\"") || true
+
+  # scripts/info prints every blog_id it finds for the identifier - one for
+  # a direct blog match, or one per blog owned by a matched user. Pull out
+  # every occurrence rather than assuming there's exactly one.
+  RESOLVED=$(printf '%s\n' "$INFO_OUTPUT" | grep -o 'blog_[0-9a-f]\{32\}' | sort -u)
+  RESOLVED_COUNT=$(printf '%s\n' "$RESOLVED" | grep -c .)
+
+  if [ "$RESOLVED_COUNT" -eq 0 ]; then
+    error "Could not resolve '$IDENTIFIER' to a blog_id"
+    exit 1
+  elif [ "$RESOLVED_COUNT" -eq 1 ]; then
+    BLOG_ID="$RESOLVED"
+  else
+    info "'$IDENTIFIER' matches multiple blogs:"
+    BLOG_ID_OPTIONS=()
+    blog_index=1
+    while IFS= read -r blog_option; do
+      [ -z "$blog_option" ] && continue
+      BLOG_ID_OPTIONS+=("$blog_option")
+      printf '  [%d] %s\n' "$blog_index" "$blog_option"
+      blog_index=$((blog_index + 1))
+    done <<<"$RESOLVED"
+
+    blog_selection=""
+    while [ -z "$blog_selection" ]; do
+      read -r -p "Select blog by number: " blog_selection
+      if ! [[ "$blog_selection" =~ ^[0-9]+$ ]] || [ "$blog_selection" -lt 1 ] || [ "$blog_selection" -gt "${#BLOG_ID_OPTIONS[@]}" ]; then
+        warn "Please enter a number between 1 and ${#BLOG_ID_OPTIONS[@]}"
+        blog_selection=""
+      fi
+    done
+    BLOG_ID="${BLOG_ID_OPTIONS[$((blog_selection-1))]}"
+  fi
 fi
+
 info "Resolved to blog_id: $BLOG_ID"
 
 # ---------------------------------------------------------------------------
@@ -372,7 +422,7 @@ SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/de
 
 info "Waiting for SSH on $PUBLIC_IP..."
 ssh_ready=false
-for _ in $(seq 1 30); do
+for ((_i = 0; _i < 30; _i++)); do
   if ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "echo ready" >/dev/null 2>&1; then
     ssh_ready=true
     break
@@ -392,7 +442,7 @@ info "Attaching $NEW_VOLUME_ID to $INSTANCE_ID..."
 ATTACHED=true
 
 NEW_DEVICE=""
-for _ in $(seq 1 15); do
+for ((_i = 0; _i < 15; _i++)); do
   AFTER_DISKS=$(ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "lsblk -ndo NAME")
   NEW_DEVICE=$(comm -13 <(echo "$BEFORE_DISKS" | sort) <(echo "$AFTER_DISKS" | sort) | head -n1)
   [ -n "$NEW_DEVICE" ] && break
@@ -410,20 +460,30 @@ if ! ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "[ -d '$REMOTE_BLOG_PATH' ]
 fi
 
 # ---------------------------------------------------------------------------
-# 7. Tar it up on the instance and scp it down.
+# 7. Tar it up on the instance and stream it straight down over SSH - no
+#    intermediate copy on the instance's own (small) root volume, which
+#    could otherwise fill up before scp even starts for a large folder.
 # ---------------------------------------------------------------------------
 ARCHIVE_NAME="${BLOG_ID}-${TARGET_DATE}.tar.gz"
-info "Archiving $REMOTE_BLOG_PATH..."
-ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "sudo tar czf /tmp/${ARCHIVE_NAME} -C /mnt/restore/blogs ${BLOG_ID} && sudo chown ${SSH_USER} /tmp/${ARCHIVE_NAME}"
-
+ARCHIVE_PATH="$DOWNLOAD_DIR/$ARCHIVE_NAME"
 mkdir -p "$DOWNLOAD_DIR"
-info "Downloading to ${DOWNLOAD_DIR}/${ARCHIVE_NAME}..."
-scp "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}:/tmp/${ARCHIVE_NAME}" "$DOWNLOAD_DIR/"
-ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "rm -f /tmp/${ARCHIVE_NAME}"
+info "Archiving $REMOTE_BLOG_PATH and streaming to ${ARCHIVE_PATH}..."
+ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "sudo tar czf - -C /mnt/restore/blogs ${BLOG_ID}" >"$ARCHIVE_PATH"
 
-info "Extracting locally..."
-tar xzf "$DOWNLOAD_DIR/$ARCHIVE_NAME" -C "$DOWNLOAD_DIR"
-command -v open >/dev/null 2>&1 && open "$DOWNLOAD_DIR/$BLOG_ID"
+# Extract into a fresh, uniquely named directory instead of overlaying
+# $BLOG_ID directly - if that folder already exists from an earlier run,
+# overlaying this snapshot into it would leave behind any files that are
+# absent from THIS snapshot but present from before, silently mixing two
+# points in time together and reporting success either way.
+RESTORE_DIR="$DOWNLOAD_DIR/${BLOG_ID}-${TARGET_DATE}"
+if [ -e "$RESTORE_DIR" ]; then
+  error "$RESTORE_DIR already exists - remove it first or pick a different snapshot"
+  exit 1
+fi
+mkdir -p "$RESTORE_DIR"
+info "Extracting to $RESTORE_DIR..."
+tar xzf "$ARCHIVE_PATH" -C "$RESTORE_DIR" --strip-components=1
+command -v open >/dev/null 2>&1 && open "$RESTORE_DIR"
 
-info "Done. Folder restored to $DOWNLOAD_DIR/$BLOG_ID (and archive at $DOWNLOAD_DIR/$ARCHIVE_NAME)"
+info "Done. Folder restored to $RESTORE_DIR (and archive at $ARCHIVE_PATH)"
 # cleanup trap runs automatically from here
