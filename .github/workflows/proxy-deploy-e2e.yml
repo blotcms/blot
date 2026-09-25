@@ -11,9 +11,12 @@
 #
 # No `branches: [master]` filter on the pull_request trigger: this workflow
 # is meant to run on a PR based on another feature branch (a stacked PR), not
-# only ones based on master.
+# only ones based on master. The push trigger IS filtered to master, so a
+# push to a branch with an open (possibly stacked) PR doesn't fire this
+# ~30-minute real-Docker/systemd job twice for the same commit.
 on:
   push:
+    branches: [master]
     paths:
       - ".github/workflows/proxy-deploy-e2e.yml"
       - "proxy/**"

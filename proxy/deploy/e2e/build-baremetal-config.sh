@@ -43,6 +43,16 @@ export OPENRESTY_USER="${OPENRESTY_USER:-ec2-user}"
 # is currently serving, so bare metal needs it too, not just the container.
 export OPENRESTY_INSTANCE_PRIVATE_IP="${OPENRESTY_INSTANCE_PRIVATE_IP:-127.0.0.1}"
 
+# config/openresty/locals.js's baremetal() takes blog_static_files_dir /
+# global_static_files_dir from require("config") (config/index.js), which
+# derives both from BLOT_DIRECTORY - not overridable per-variable like the
+# container side's BLOG_STATIC_FILES_DIR/GLOBAL_STATIC_FILES_DIR. Without this,
+# BLOT_DIRECTORY defaults to the checkout root (config/index.js), so the
+# generated bare-metal config would bake in static-file paths that don't match
+# /var/www/blot, the paths proxy/deploy/common.sh's run_args() mounts
+# PROXY_BLOG_STATIC_DIR/PROXY_GLOBAL_STATIC_DIR at for the container side.
+export BLOT_DIRECTORY="${BLOT_DIRECTORY:-/var/www/blot}"
+
 # Do not depend on the BunnyCDN edge-IP list being reachable from CI (same
 # reasoning as proxy/build/build.sh; see config/openresty/build-config.js).
 export FETCH_CDN_IPS="${FETCH_CDN_IPS:-false}"
