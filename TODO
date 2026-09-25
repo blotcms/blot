@@ -12,6 +12,8 @@ iCloud server should periodically:
 - quit safari (some error flow during auth sometimes opens it)
 - close all system UI prompts (sometimes we get error for maybe accessing a revoked folder?)
 
+Add script to freeze a subscription / site that excludes it from the daily accounts to delete check
+
 Create simple config option to disable a given client when something like the Google Drive issue happens. Make it clear on the dashboard and docs that it's not working. 
 Add script to pause a subscription and make sure these users don't appear in the list of users to cancel
 - investigate the situation with hans first
