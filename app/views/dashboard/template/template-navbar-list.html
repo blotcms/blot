@@ -1,24 +1,65 @@
 <div id="template-list" style="padding-top: 2rem">
-  <h2>Your templates</h2>
+  <section class="template-list-section" data-template-list-section>
+    <div class="template-list-section__heading">
+      <h2>
+        <button
+          type="button"
+          class="template-list-section__toggle template-list-section__toggle--heading"
+          data-template-list-toggle
+          data-section-key="your-templates"
+          data-section-label="Your templates"
+          aria-expanded="true"
+          aria-controls="template-list-your-templates"
+          aria-label="Collapse Your templates"
+        >
+          <span>Your templates</span>
+          <span class="icon-small-chevron-right template-list-section__chevron" aria-hidden="true"></span>
+        </button>
+      </h2>
+    </div>
+    <div id="template-list-your-templates">
+      <div class="template-row {{newSelected}}">
+        <a href="{{{dashboardBase}}}/template/new">
+          <span
+            class="preview"
+            style="border:1px dashed #ccc;{{#newSelected}}border-color:var(--accent-color);{{/newSelected}}border-radius:3px;box-shadow: none;"
+          >
+          </span>Create template
+        </a>
+      </div>
 
-  {{#yourTemplates}} {{> template-row}} {{/yourTemplates}}
+      {{#yourTemplates}} {{> template-row}} {{/yourTemplates}}
 
-  <div class="template-row {{newSelected}}">
-    <a href="{{{dashboardBase}}}/template/new">
-      <span
-        class="preview"
-        style="border:1px dashed #ccc;{{#newSelected}}border-color:var(--accent-color);{{/newSelected}}border-radius:3px;box-shadow: none;"
-      >
-      </span>Create template
-    </a>
-  </div>
+      {{#templatesInYourFolder.length}}
+        {{#templatesInYourFolder}} {{> template-row}} {{/templatesInYourFolder}}
+      {{/templatesInYourFolder.length}}
+    </div>
+  </section>
 
-  {{#templatesInYourFolder.length}}
-  <h2>Templates in folder</h2>
-  {{/templatesInYourFolder.length}} {{#templatesInYourFolder}} {{>
-  template-row}} {{/templatesInYourFolder}} {{#blotTemplates.length}}
-  
-  <h2>Default templates</h2>
-  {{/blotTemplates.length}} {{#blotTemplates}} {{> template-row}}
-  {{/blotTemplates}} {{#pastTemplates}} {{> template-row}} {{/pastTemplates}}
+  {{#blotTemplates.length}}
+    <hr class="template-list-divider">
+    <section class="template-list-section" data-template-list-section>
+      <div class="template-list-section__heading">
+        <h2>
+          <button
+            type="button"
+            class="template-list-section__toggle template-list-section__toggle--heading"
+            data-template-list-toggle
+            data-section-key="base-templates"
+            data-section-label="Templates"
+            aria-expanded="true"
+            aria-controls="template-list-base-templates"
+            aria-label="Collapse Templates"
+          >
+            <span>Templates</span>
+            <span class="icon-small-chevron-right template-list-section__chevron" aria-hidden="true"></span>
+          </button>
+        </h2>
+      </div>
+      <div id="template-list-base-templates">
+        {{#blotTemplates}} {{> template-row}} {{/blotTemplates}}
+        {{#pastTemplates}} {{> template-row}} {{/pastTemplates}}
+      </div>
+    </section>
+  {{/blotTemplates.length}}
 </div>

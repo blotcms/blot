@@ -2,7 +2,7 @@
 <html lang="en">
 {{> head}}
 <body>
-    <a href="/sites/{{blog.handle}}" class="close-button">
+    <a href="/sites/{{blog.handle}}" class="close-button template-editor-close-button">
                             <span>
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path d="M5.72 5.72a.75.75 0 0 1 1.06 0L12 10.94l5.22-5.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L13.06 12l5.22 5.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L12 13.06l-5.22 5.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L10.94 12 5.72 6.78a.75.75 0 0 1 0-1.06Z"></path></svg>
                             </span>
@@ -15,28 +15,39 @@
 
 <div id="template-action-menu" class="template-action-menu row-action-menu" aria-hidden="true">
   <ul>
-    <li><a data-menu-link="settings" href="#">Settings</a></li>
-    <li><a data-menu-link="use" href="#">Use template</a></li>
+    <li><a data-menu-link="use" href="#">Install</a></li>
     <li><a data-menu-link="source" href="#">Edit code</a></li>
     <li><a data-menu-link="rename" href="#">Rename</a></li>
     <li><a data-menu-link="delete" href="#">Delete</a></li>
-    <li><a data-menu-link="duplicate" href="#">Duplicate</a></li>
+    <li><a data-menu-link="reset" href="#">Reset changes</a></li>
+    <li><a data-menu-link="duplicate" href="#">Make a copy</a></li>
   </ul>
 </div>
         </div>
         <div class="template-main">
                 {{#template.name}}
                 <div class="template-heading-row">
-                  <h1><a href="{{{base}}}">{{template.displayName}}</a></h1>
+                  <h1>
+                    {{#template.localEditing}}
+                      <a href="{{{dashboardBase}}}/folder/Templates/{{template.slug}}">
+                        <span class="icon-folder"></span> Templates
+                        <span class="icon-small-chevron-right dashboard-breadcrumb-separator" aria-hidden="true"></span>
+                        {{template.slug}}
+                      </a>
+                    {{/template.localEditing}}
+                    {{^template.localEditing}}
+                      <a href="{{{base}}}">{{template.displayName}}</a>
+                    {{/template.localEditing}}
+                  </h1>
         {{#template.checked}}
-                  <span class="template-in-use">Template in use</span>
+                  <span class="template-in-use">Installed</span>
         {{/template.checked}}
 
         {{^template.checked}}
 
 	<a href="{{{base}}}/install" class="template-button {{selected.install}}">
         <span class="icon-download"></span> 
-        Use template
+        Install
     </a>
     {{/template.checked}}
 
@@ -53,7 +64,7 @@
 
     <a href="{{{base}}}/duplicate" class="template-button {{selected.duplicate}}">
         <span class="icon-copy"></span>
-        Duplicate
+        Make a copy
     </a>
 
     {{#template.isMirror}}

@@ -51,9 +51,13 @@ async function validate(sourcePath, crop) {
 
 // Decode one page deliberately: animated uploads have a deterministic first
 // frame. This mirrors the existing thumbnail pipeline's non-animated output.
-async function generate(sourcePath, outputDirectory, crop) {
+//
+// `source`, when passed, is a sharp() instance already opened on sourcePath
+// (e.g. by a caller that also needs to derive a favicon from the same
+// upload) - cloning it avoids decoding the same file from disk twice.
+async function generate(sourcePath, outputDirectory, crop, { source } = {}) {
   let metadata;
-  try { metadata = await sharp(sourcePath, { pages: 1, limitInputPixels: MAX_PIXELS }).metadata(); }
+  try { metadata = await (source ? source.clone() : sharp(sourcePath, { pages: 1, limitInputPixels: MAX_PIXELS })).metadata(); }
   catch (_) { throw invalid("Please choose a valid image"); }
   const oriented = dimensions(metadata);
   if (!SUPPORTED.has(metadata.format) || !oriented.width || !oriented.height || oriented.width * oriented.height > MAX_PIXELS) throw invalid("Please choose a supported image under 100 megapixels");
@@ -64,7 +68,7 @@ async function generate(sourcePath, outputDirectory, crop) {
   const published = [];
   Object.keys(THUMBNAILS).forEach((name) => { names[name] = `${prefix}-${name}.webp`; });
   try {
-    const base = sharp(sourcePath, { pages: 1, limitInputPixels: MAX_PIXELS }).rotate().keepIccProfile();
+    const base = (source ? source.clone() : sharp(sourcePath, { pages: 1, limitInputPixels: MAX_PIXELS })).rotate().keepIccProfile();
     const originalInfo = await base.clone().webp().toFile(join(temporary, names.original));
     const selected = parseCrop(crop, oriented.width, oriented.height);
     const results = {};

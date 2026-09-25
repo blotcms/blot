@@ -41,6 +41,8 @@ Array.from(document.querySelectorAll("form.color-picker")).forEach((form) => {
   });
 
   pickr
+    .on("show", () => form.classList.add("is-open"))
+    .on("hide", () => form.classList.remove("is-open"))
     .on("save", (color, instance) => {
       form.querySelector("input.value").value = color.toHEXA().toString();
       form.dispatchEvent(

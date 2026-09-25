@@ -45,7 +45,6 @@
 .font-picker-trigger {
   flex: 1 1 auto;
   min-width: 0;
-  max-width: 55%;
   box-sizing: border-box;
   padding: 0.4em 1.6em 0.4em 0.6em;
   cursor: pointer;
@@ -92,50 +91,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.font-size-stepper {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: stretch;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  overflow: hidden;
-}
-
-.font-size-step {
-  width: 1.75em;
-  padding: 0.4em 0;
-  box-sizing: border-box;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  line-height: 1;
-  color: var(--light-text-color);
-}
-
-.font-size-step:hover {
-  background-color: var(--light-background-color);
-}
-
-.font-size-value {
-  width: 2.4em;
-  padding: 0.4em 0;
-  box-sizing: border-box;
-  border: none;
-  border-left: 1px solid var(--border-color);
-  border-right: 1px solid var(--border-color);
-  text-align: center;
-  font: inherit;
-  font-variant-numeric: tabular-nums;
-  -moz-appearance: textfield;
-}
-
-.font-size-value::-webkit-outer-spin-button,
-.font-size-value::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
 }
 
 /* Shared picker */

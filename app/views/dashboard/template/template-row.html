@@ -2,36 +2,23 @@
   class="template-row row-action-menu-row {{#selected}}selected{{/selected}}"
   data-template-slug="{{slug}}"
   data-template-name="{{#localEditing}}{{slug}}{{/localEditing}}{{^localEditing}}{{name}}{{/localEditing}}"
+  data-is-mine="{{#isMine}}true{{/isMine}}{{^isMine}}false{{/isMine}}"
+  data-is-mirror="{{#isMirror}}true{{/isMirror}}{{^isMirror}}false{{/isMirror}}"
 >
   <a href="{{{editURL}}}" class="template-row__link">
-    <span class="preview" style="position: relative">
-      {{^localEditing}}
-      <img
-        src="{{#cdn}}/images/examples/{{thumbnailSlug}}/0-icon.png{{/cdn}}"
-        width="48" height="35"
-      />
-      {{/localEditing}} {{#localEditing}}
-      <span
-        style="
-          position: absolute;
-          bottom: 0;
-          right: -0;
-          font-size: 16px;
-          width: 16px;
-          height: 16px;
-        "
-      >
-        <span
-          class="icon-folder"
-          style="position: absolute; top: 0; left: 0"
-        ></span>
-      </span>
-      {{/localEditing}}
+    {{#localEditing}}
+    <span class="template-row__folder-icon" aria-hidden="true">
+      <span class="icon-folder"></span>
     </span>
+    {{/localEditing}}
 
-    {{^localEditing}} {{name}} {{/localEditing}} {{#localEditing}} {{slug}}
-    {{/localEditing}} {{#checked}}
     <span
+      class="template-row__name"
+      >{{^localEditing}}{{name}}{{/localEditing}}{{#localEditing}}{{slug}}{{/localEditing}}</span
+    >
+    {{#checked}}
+    <span
+      class="template-row__installed"
       style="
         color: var(--success-text-color);
         background-color: var(--success-background-color);
@@ -40,9 +27,8 @@
         border-radius: var(--border-radius);
         padding: 2px 4px;
         margin-left: 6px;
-        text-wrap: nowrap;
       "
-      >In use</span
+      >Installed</span
     >
     {{/checked}}
   </a>

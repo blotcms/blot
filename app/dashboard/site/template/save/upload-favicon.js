@@ -40,13 +40,13 @@ const listTemplates = (blogID) => new Promise((resolve, reject) =>
 // Duplicating a template copies its favicon local verbatim, so two templates in
 // the same blog can point at the same generated files. Only remove a previous
 // favicon's assets once no other template still references that prefix.
-async function removeAssetsIfUnreferenced(req, favicon) {
-  const paths = assetPaths(req.blog, favicon);
+async function removeAssetsIfUnreferenced(blog, favicon) {
+  const paths = assetPaths(blog, favicon);
   if (!paths.length) return;
 
   let others;
   try {
-    others = await listTemplates(req.blog.id);
+    others = await listTemplates(blog.id);
   } catch (err) {
     console.log(clfdate(), "uploadFavicon", "Unable to check old asset references; retaining files", err.message);
     return;
@@ -65,6 +65,71 @@ async function removeAssetsIfUnreferenced(req, favicon) {
   );
 }
 
+async function deleteFavicon(blog, template, slug) {
+  const previous = template.locals.favicon;
+  delete template.locals.favicon;
+  await update(blog, slug, template.locals);
+  // Keep the old files until the folder's package.json also stops
+  // referencing them: if this fails, a folder reload restores the old
+  // (working) favicon rather than pointing at deleted files.
+  await persistToFolder(blog, template);
+  await removeAssetsIfUnreferenced(blog, previous);
+}
+
+// Generates a favicon from filePath and persists it to the template's
+// metadata and folder, rolling back on failure. This is the part shared by
+// the upload route below and the profile-photo upload flow (upload-image.js),
+// which needs the same generate/persist/rollback behavior but isn't itself
+// an Express request - calling this directly keeps that call site from
+// depending on req/res internals it doesn't otherwise need.
+async function createFavicon(blog, template, slug, filePath, cropBox, { onFileProcessed, source } = {}) {
+  const previous = template.locals.favicon;
+
+  const created = await generate(filePath, faviconDirectory(blog), cropBox, { source });
+  if (onFileProcessed) await onFileProcessed();
+
+  const favicon = {
+    prefix: created.prefix,
+    ico: faviconURL(blog, `${created.prefix}.ico`),
+    png16: faviconURL(blog, `${created.prefix}-16.png`),
+    png32: faviconURL(blog, `${created.prefix}-32.png`),
+    appleTouch: faviconURL(blog, `${created.prefix}-180.png`),
+  };
+  template.locals.favicon = favicon;
+
+  try {
+    await update(blog, slug, template.locals);
+  } catch (error) {
+    // Metadata never took on the new URLs, so discard the freshly generated files.
+    await Promise.all(assetPaths(blog, favicon).map((path) => fs.remove(path).catch(() => {})));
+    throw error;
+  }
+
+  try {
+    await persistToFolder(blog, template);
+  } catch (error) {
+    // Put Redis and package.json back on the previous working value. Only
+    // discard the generated files after both references have been restored.
+    if (previous) template.locals.favicon = previous;
+    else delete template.locals.favicon;
+    try {
+      await update(blog, slug, template.locals);
+      await persistToFolder(blog, template);
+      await Promise.all(assetPaths(blog, favicon).map((path) => fs.remove(path).catch(() => {})));
+    } catch (_) {
+      // A failed rollback may still have a package.json reference to either
+      // set, so retaining both is safer than creating a broken favicon URL.
+    }
+    throw error;
+  }
+
+  // Redis and the folder now agree on the new favicon; the previous files are
+  // safe to drop unless another template still references them.
+  await removeAssetsIfUnreferenced(blog, previous);
+
+  return favicon;
+}
+
 module.exports = async function uploadFavicon(req, res, next) {
   const file = firstFile(req.files);
   const previous = req.template.locals.favicon;
@@ -80,73 +145,31 @@ module.exports = async function uploadFavicon(req, res, next) {
 
   if (isDelete) {
     await cleanupFiles(req.files);
-    delete req.template.locals.favicon;
     try {
-      await update(req.blog, req.params.templateSlug, req.template.locals);
-      // Keep the old files until the folder's package.json also stops
-      // referencing them: if this fails, a folder reload restores the old
-      // (working) favicon rather than pointing at deleted files.
-      await persistToFolder(req.blog, req.template);
+      await deleteFavicon(req.blog, req.template, req.params.templateSlug);
     } catch (error) {
       return next(error);
     }
-    await removeAssetsIfUnreferenced(req, previous);
     return isAjaxRequest(req) ? res.json({ favicon: null }) : res.message(req.body.redirect || res.locals.base, "Removed favicon");
   }
 
-  let created;
+  let favicon;
   try {
-    created = await generate(file.path, faviconDirectory(req.blog), {
-      x: req.body.crop_x,
-      y: req.body.crop_y,
-      size: req.body.crop_size,
-    });
-    await cleanupFiles(req.files);
+    favicon = await createFavicon(
+      req.blog,
+      req.template,
+      req.params.templateSlug,
+      file.path,
+      { x: req.body.crop_x, y: req.body.crop_y, size: req.body.crop_size },
+      { onFileProcessed: () => cleanupFiles(req.files) }
+    );
   } catch (error) {
     await cleanupFiles(req.files);
     return next(error);
   }
-
-  const favicon = {
-    prefix: created.prefix,
-    ico: faviconURL(req.blog, `${created.prefix}.ico`),
-    png16: faviconURL(req.blog, `${created.prefix}-16.png`),
-    png32: faviconURL(req.blog, `${created.prefix}-32.png`),
-    appleTouch: faviconURL(req.blog, `${created.prefix}-180.png`),
-  };
-  req.template.locals.favicon = favicon;
-
-  try {
-    await update(req.blog, req.params.templateSlug, req.template.locals);
-  } catch (error) {
-    // Metadata never took on the new URLs, so discard the freshly generated files.
-    await Promise.all(assetPaths(req.blog, favicon).map((path) => fs.remove(path).catch(() => {})));
-    return next(error);
-  }
-
-  try {
-    await persistToFolder(req.blog, req.template);
-  } catch (error) {
-    // Put Redis and package.json back on the previous working value. Only
-    // discard the generated files after both references have been restored.
-    if (previous) req.template.locals.favicon = previous;
-    else delete req.template.locals.favicon;
-    try {
-      await update(req.blog, req.params.templateSlug, req.template.locals);
-      await persistToFolder(req.blog, req.template);
-      await Promise.all(assetPaths(req.blog, favicon).map((path) => fs.remove(path).catch(() => {})));
-    } catch (_) {
-      // A failed rollback may still have a package.json reference to either
-      // set, so retaining both is safer than creating a broken favicon URL.
-    }
-    return next(error);
-  }
-
-  // Redis and the folder now agree on the new favicon; the previous files are
-  // safe to drop unless another template still references them.
-  await removeAssetsIfUnreferenced(req, previous);
 
   return isAjaxRequest(req) ? res.json({ favicon }) : res.message(req.body.redirect || res.locals.base, "Updated favicon");
 };
 
 module.exports.removeAssetsIfUnreferenced = removeAssetsIfUnreferenced;
+module.exports.createFavicon = createFavicon;
