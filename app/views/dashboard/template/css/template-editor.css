@@ -196,7 +196,9 @@ h2 {
   width: var(--template-preview-width);
   height: var(--template-preview-height);
   border: none;
-  margin-right: 0.5em;
+  margin-right: 8px;
+  margin-top: 4px;
+  margin-bottom: 1px;
 }
 
 .preview img {
