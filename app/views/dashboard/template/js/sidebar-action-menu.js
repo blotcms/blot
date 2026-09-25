@@ -80,9 +80,13 @@ function initSidebarActionMenu(options) {
     }
   }
 
-  function updateMenu(trigger) {
+  function updateMenu(trigger, row) {
     if (!trigger) return;
-    var dataset = trigger.dataset || {};
+    var dataset = Object.assign(
+      {},
+      (row && row.dataset) || {},
+      trigger.dataset || {}
+    );
 
     linkEntries.forEach(function (entry) {
       var resolver = linkMap[entry.key];
@@ -144,7 +148,7 @@ function initSidebarActionMenu(options) {
       activeRow.classList.remove("menu-open");
     }
 
-    updateMenu(trigger);
+    updateMenu(trigger, row);
     positionMenu(row);
 
     menuElement.classList.add("is-open");
