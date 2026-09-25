@@ -37,8 +37,14 @@ async function rollbackFork(req, res) {
     req.blog.template = fork.originalBlogTemplate;
   }
 
-  await removeTemplateFromFolder(req.blog.id, fork.template.id);
-  await dropTemplate(req.blog.id, fork.template.id.split(":").slice(1).join(":"));
+  // Only drop a fork this request created — fork-if-needed can hand back one
+  // that already existed (a local editing copy, edited via /template/:slug
+  // which shows the SITE original once one exists), and deleting that would
+  // destroy the user's existing template, not just undo this request.
+  if (fork.isNewFork) {
+    await removeTemplateFromFolder(req.blog.id, fork.template.id);
+    await dropTemplate(req.blog.id, fork.template.id.split(":").slice(1).join(":"));
+  }
   req.template = res.locals.template = fork.originalTemplate;
   res.locals.templateForked = false;
   req.templateFork = null;

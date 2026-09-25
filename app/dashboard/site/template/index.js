@@ -278,7 +278,7 @@ TemplateEditor.route("/:templateSlug/local-editing")
           res.message(
             "/sites/" +
               req.blog.handle +
-              "/template/" +
+              "/template-folder/" +
               req.template.id.split(":").slice(1).join(":") +
               "/source-code",
             "Moved template to your folder"

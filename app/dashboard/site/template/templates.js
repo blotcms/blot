@@ -8,6 +8,12 @@ module.exports = function (req, res, next) {
     blogID = blog.id,
     currentTemplate = blog.template;
 
+  // /template and /template-folder both mount this same router (see
+  // app/dashboard/site/index.js) — express.Router sets req.baseUrl to
+  // whichever prefix actually matched, so this tells the two apart without
+  // needing a different param name or resolution rule for either.
+  var onFolderMount = /\/template-folder$/.test(req.baseUrl);
+
   Template.getTemplateList(blogID, function (err, templates) {
     var yourTemplates = [];
     var blotTemplates = [];
@@ -26,8 +32,21 @@ module.exports = function (req, res, next) {
       // remap the slug to be everything after the first colon in the ID
       template.slug = template.id.split(':').slice(1).join(':');
 
+      // A template moved into the blog's local editing folder gets its own
+      // URL under /template-folder/ instead of /template/ — otherwise it'd
+      // share a slug (and a URL, since /template/:slug prefers the blog's
+      // own copy once one exists) with the SITE-owned template it was
+      // forked from, and the sidebar couldn't tell which row was open.
+      var inFolder = template.isMine && template.localEditing;
+
+      template.editURL = inFolder
+        ? "/sites/" + blog.handle + "/template-folder/" + template.slug
+        : "/sites/" + blog.handle + "/template/" + template.slug;
+
       template.selected =
-        req.path.split("/")[1] === template.slug ? "selected" : "";
+        req.path.split("/")[1] === template.slug && onFolderMount === !!inFolder
+          ? "selected"
+          : "";
 
       // Todo replace the thumbnail with a real thumbnail of the template
       if (template.owner === blog.id) {
@@ -43,8 +62,6 @@ module.exports = function (req, res, next) {
       } else {
         template.thumbnailSlug = template.slug;
       }
-
-      template.editURL = "/sites/" + blog.handle + "/template/" + template.slug;
 
       template.previewURL =
         previewHost +
