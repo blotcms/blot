@@ -5,12 +5,8 @@
 name: pane-screenshots
 
 on:
-  push:
-    # Only the capture scripts and fixture assets: QA and module changes must not
-    # re-run (and cancel) the capture matrix.
-    paths:
-      - "app/helper/pane/screenshots/**"
-      - ".github/workflows/pane-screenshots.yml"
+  # Manual only: reference captures should never run on a normal push (they commit
+  # new reference PNGs, which should be a deliberate act, not a side effect of a push).
   workflow_dispatch:
     inputs:
       os:
