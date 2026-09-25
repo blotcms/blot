@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { loadPng, savePng } = require("./image");
 const { compareImages } = require("./compare");
-const { evaluate } = require("./thresholds");
+const { evaluate, isInformational } = require("./thresholds");
 const { OUT_DIR } = require("./cases");
 
 const IMAGES = ["reference", "rendered", "diff", "heatmap"];
@@ -116,7 +116,9 @@ async function analyze(c, thresholds, opts = {}) {
     }),
   };
   const verdict = evaluate(entry, thresholds);
-  entry.status = verdict.pass ? "pass" : "fail";
+  const informational = isInformational(thresholds, c.id);
+  entry.status = verdict.pass ? "pass" : informational ? "informational" : "fail";
+  entry.informational = informational;
   entry.failures = verdict.failures;
 
   if (opts.writeImages !== false) {

@@ -20,6 +20,13 @@ function limitsFor(thresholds, id) {
   };
 }
 
+// A case entry can set "informational": true (e.g. a hand-written fixture of a view
+// authors can't pick from the editor, with no meaningful default thresholds): it is
+// still measured and reported, but a threshold miss shouldn't fail the run.
+function isInformational(thresholds, id) {
+  return !!((thresholds.cases || {})[id] || {}).informational;
+}
+
 // Returns { pass, failures: [{ metric, region?, value, limit }] }
 function evaluate(entry, thresholds) {
   const limits = limitsFor(thresholds, entry.id);
@@ -49,4 +56,4 @@ function evaluate(entry, thresholds) {
   return { pass: failures.length === 0, failures };
 }
 
-module.exports = { loadThresholds, limitsFor, evaluate };
+module.exports = { loadThresholds, limitsFor, evaluate, isInformational };

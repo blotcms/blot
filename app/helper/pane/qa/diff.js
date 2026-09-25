@@ -97,6 +97,8 @@ async function main() {
     total: entries.length,
     pass: entries.filter((e) => e.status === "pass").length,
     fail: entries.filter((e) => e.status === "fail").length,
+    // measured and reported, but doesn't fail the run (thresholds.json "informational")
+    informational: entries.filter((e) => e.status === "informational").length,
     missing: entries.filter((e) => e.status === "missing").length,
     error: entries.filter((e) => e.status === "error").length,
   };
@@ -109,7 +111,7 @@ async function main() {
   } else {
     console.log(table(report.cases));
     console.log(
-      `\n${summary.pass} pass, ${summary.fail} fail, ${summary.missing} missing, ${summary.error} error (of ${summary.total})`
+      `\n${summary.pass} pass, ${summary.fail} fail, ${summary.informational} informational, ${summary.missing} missing, ${summary.error} error (of ${summary.total})`
     );
     if (args.explain) {
       const top = args.top ? parseInt(args.top, 10) : 8;

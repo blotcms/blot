@@ -115,15 +115,19 @@ toolbars, borders, icons) has the strict limit, so fix it first.
 
 `--json` prints the report to stdout (also saved to `qa/out/report.json`): stable
 keys, numbers rounded to 3 places, no timestamps. Per case: `status`
-(`pass`/`fail`/`missing`/`error`), `failures`, `diff`, per-`regions` percentages, text
-`rows`, `shadow` (error, per-edge error and both curves), `geometry`, `masks` and
-`clusters` (ranked by area). Exit status is 0 when everything passes, 1 on failures or
-missing renders, 2 on errors.
+(`pass`/`fail`/`informational`/`missing`/`error`), `failures`, `diff`, per-`regions`
+percentages, text `rows`, `shadow` (error, per-edge error and both curves), `geometry`,
+`masks` and `clusters` (ranked by area). Exit status is 0 when everything passes (or only
+has informational misses), 1 on failures or missing renders, 2 on errors.
 
 Limits are in `thresholds.json` (`default`, overridden per case in `cases`): the % of
 compared pixels that differ overall and per region name or kind, shadow RMSE (luminance
 levels), window size difference (CSS px) and text row offset (CSS px). They start loose;
-tighten them as the rendering improves, per case when one view lags.
+tighten them as the rendering improves, per case when one view lags. A case entry can also
+set `"informational": true` (e.g. `windows-light-list`/`windows-dark-list`, hand-written
+fixtures of a view authors can't pick from the editor): it is still measured and shown in
+the table/viewer, but a threshold miss reports as `informational` instead of `fail` and
+doesn't fail the run.
 
 ## Accessibility and mobile audit
 
