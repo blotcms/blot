@@ -1,4 +1,5 @@
 const fs = require("fs-extra");
+const sharp = require("sharp");
 const { join, basename } = require("path");
 const config = require("config");
 const Template = require("models/template");
@@ -10,7 +11,7 @@ const { createFavicon } = require("./upload-favicon");
 const writeChangeToFolder = require("./writeChangeToFolder");
 const previewReload = require("helper/publishPreviewReload");
 const { isAjaxRequest } = require("./ajax-response");
-const { generate } = require("../../../../build/thumbnail/template-image");
+const { generate, MAX_PIXELS } = require("../../../../build/thumbnail/template-image");
 
 const directory = (blog) => join(config.blog_static_files_dir, blog.id, "_template_assets");
 const url = (blog, name) => `${config.cdn.origin}/${blog.id}/_template_assets/${encodeURIComponent(name)}`;
@@ -19,7 +20,7 @@ const update = (blog, slug, locals) => new Promise((resolve, reject) => Template
 const sync = (blog, template) => new Promise((resolve, reject) => writeChangeToFolder(blog, template, {}, (error) => error ? reject(error) : resolve()));
 const operations = { update, sync };
 
-async function saveProfileImageFavicon(req, file) {
+async function saveProfileImageFavicon(req, file, source) {
   const templateSlug = req.templateFork
     ? req.template.id.split(":").slice(1).join(":")
     : req.params.templateSlug;
@@ -30,6 +31,7 @@ async function saveProfileImageFavicon(req, file) {
   };
   return createFavicon(req.blog, req.template, templateSlug, file.path, cropBox, {
     onFileProcessed: () => cleanupFiles({ favicon: file }),
+    source,
   });
 }
 
@@ -173,13 +175,18 @@ module.exports = async function uploadImage(req, res, next) {
       : res.message(req.body.redirect || res.locals.base, "Removed image");
   }
 
+  // wantsFavicon also derives a separately-cropped favicon from this same
+  // file below; sharing one decoded sharp() source across both avoids
+  // reading and decoding the upload from disk twice.
+  const source = wantsFavicon ? sharp(file.path, { pages: 1, limitInputPixels: MAX_PIXELS }) : null;
+
   let made;
   try {
     made = await generate(file.path, directory(req.blog), {
       x: req.body.crop_x,
       y: req.body.crop_y,
       size: req.body.crop_size,
-    });
+    }, { source });
     if (!wantsFavicon) await cleanupFiles(req.files);
   } catch (error) {
     await cleanupFiles(req.files);
@@ -209,7 +216,7 @@ module.exports = async function uploadImage(req, res, next) {
   await removeAssetsIfUnreferenced(req, previous);
   if (wantsFavicon) {
     try {
-      await saveProfileImageFavicon(req, file);
+      await saveProfileImageFavicon(req, file, source);
     } catch (error) {
       await cleanupFiles({ favicon: file });
       previewReload.publish(req.blog.id);

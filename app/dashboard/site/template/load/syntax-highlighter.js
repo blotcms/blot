@@ -21,7 +21,13 @@ module.exports = function (req, res, next) {
             "syntax_highlighter_font",
             req.template.locals.syntax_highlighter_font
           ),
-          label: "Font"
+          label: "Font",
+          // This font control is standalone, not part of the sidebar's
+          // `fonts` list, so it must not inherit the sidebar's
+          // singleFontInput flag (which would otherwise hide this label
+          // whenever the sidebar happens to have exactly one other font
+          // local).
+          singleFontInput: false
         }
       : null,
     label: "Syntax highlighting",
