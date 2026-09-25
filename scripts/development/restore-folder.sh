@@ -65,18 +65,83 @@ fi
 [ -z "$DATA_VOLUME_ID" ] && { error "No volume ID entered"; exit 1; }
 
 # ---------------------------------------------------------------------------
-# Estimate cost/time before touching anything, and get the operator to
-# confirm. The volume's size is read from AWS at runtime so nothing about
-# the production volume is baked into this script.
+# Look up the volume's size and current (live) attachment - this tells us
+# its AZ/subnet/VPC (so we never hardcode networking details) and gives us
+# what we need for the cost/time estimate and the permission preflight
+# below, all before anything gets created.
 # ---------------------------------------------------------------------------
-VOLUME_SIZE_GB=$("${AWS_BASE[@]}" ec2 describe-volumes --volume-ids "$DATA_VOLUME_ID" \
-  --query 'Volumes[0].Size' --output text)
+read -r VOLUME_SIZE_GB AZ SOURCE_INSTANCE_ID <<<"$("${AWS_BASE[@]}" ec2 describe-volumes --volume-ids "$DATA_VOLUME_ID" \
+  --query 'Volumes[0].[Size,AvailabilityZone,Attachments[0].InstanceId]' --output text)"
 
 if [ -z "$VOLUME_SIZE_GB" ] || [ "$VOLUME_SIZE_GB" = "None" ]; then
   error "Could not determine the size of volume $DATA_VOLUME_ID"
   exit 1
 fi
 
+if [ -z "$SOURCE_INSTANCE_ID" ] || [ "$SOURCE_INSTANCE_ID" = "None" ]; then
+  error "Volume $DATA_VOLUME_ID is not currently attached to any instance - can't auto-discover networking"
+  exit 1
+fi
+
+read -r SUBNET_ID VPC_ID <<<"$(${AWS_BASE[@]} ec2 describe-instances --instance-ids "$SOURCE_INSTANCE_ID" \
+  --query 'Reservations[0].Instances[0].[SubnetId,VpcId]' --output text)"
+
+info "AZ=$AZ Subnet=$SUBNET_ID VPC=$VPC_ID (derived from live instance $SOURCE_INSTANCE_ID)"
+
+AMI_ID=$("${AWS_BASE[@]}" ssm get-parameter \
+  --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+  --query 'Parameter.Value' --output text)
+
+# ---------------------------------------------------------------------------
+# Permission preflight: dry-run every mutating EC2 call this script needs,
+# before creating anything. --dry-run performs the IAM authorization check
+# only and never creates a resource - AWS returns "DryRunOperation" if
+# you're allowed, "UnauthorizedOperation" if you're not.
+# ---------------------------------------------------------------------------
+PREFLIGHT_OK=true
+
+check_permission() {
+  local label="$1"
+  shift
+  local output
+  output=$("${AWS_BASE[@]}" "$@" --dry-run 2>&1) || true
+  if echo "$output" | grep -q "DryRunOperation"; then
+    info "  ok: $label"
+  elif echo "$output" | grep -q "UnauthorizedOperation"; then
+    error "  missing permission: $label"
+    PREFLIGHT_OK=false
+  else
+    error "  could not verify: $label -> $output"
+    PREFLIGHT_OK=false
+  fi
+}
+
+info "Checking required AWS permissions..."
+check_permission "ec2:CreateVolume" ec2 create-volume \
+  --availability-zone "$AZ" --size 1 --volume-type gp3
+check_permission "ec2:CreateKeyPair" ec2 create-key-pair \
+  --key-name "${RUN_ID}-preflight"
+check_permission "ec2:CreateSecurityGroup" ec2 create-security-group \
+  --group-name "${RUN_ID}-preflight" --description "preflight check" --vpc-id "$VPC_ID"
+check_permission "ec2:RunInstances" ec2 run-instances \
+  --image-id "$AMI_ID" --instance-type "$INSTANCE_TYPE" --subnet-id "$SUBNET_ID"
+
+if [ "$PREFLIGHT_OK" != true ]; then
+  error "Missing one or more required AWS permissions - aborting before creating anything."
+  exit 1
+fi
+
+# Note: ec2:AttachVolume, ec2:AuthorizeSecurityGroupIngress, and the
+# terminate/delete permissions used during cleanup can't be dry-run checked
+# here since they need real resource IDs that don't exist yet. They're
+# normally granted alongside the create/run permissions above, but if one
+# of them is missing it will surface later in the run - the cleanup trap
+# still does its best to tear down whatever was created.
+
+# ---------------------------------------------------------------------------
+# Estimate cost/time before touching anything, and get the operator to
+# confirm.
+# ---------------------------------------------------------------------------
 GP3_RATE_PER_GB_MONTH="0.08"
 INSTANCE_RATE_PER_HOUR="0.0104"
 EST_LOW_MINUTES="5"
@@ -238,24 +303,8 @@ TARGET_DATE=$(cut -d' ' -f1 <<<"${SNAPSHOT_DATES[$((selection-1))]}")
 info "Selected snapshot: $SNAPSHOT_ID ($TARGET_DATE)"
 
 # ---------------------------------------------------------------------------
-# 3. Discover AZ/subnet/VPC from the volume's current (live) attachment so
-#    we don't have to hardcode networking details.
-# ---------------------------------------------------------------------------
-read -r AZ SOURCE_INSTANCE_ID <<<"$(${AWS_BASE[@]} ec2 describe-volumes --volume-ids "$DATA_VOLUME_ID" \
-  --query 'Volumes[0].[AvailabilityZone,Attachments[0].InstanceId]' --output text)"
-
-if [ -z "$SOURCE_INSTANCE_ID" ] || [ "$SOURCE_INSTANCE_ID" = "None" ]; then
-  error "Volume $DATA_VOLUME_ID is not currently attached to any instance - can't auto-discover networking"
-  exit 1
-fi
-
-read -r SUBNET_ID VPC_ID <<<"$(${AWS_BASE[@]} ec2 describe-instances --instance-ids "$SOURCE_INSTANCE_ID" \
-  --query 'Reservations[0].Instances[0].[SubnetId,VpcId]' --output text)"
-
-info "AZ=$AZ Subnet=$SUBNET_ID VPC=$VPC_ID (derived from live instance $SOURCE_INSTANCE_ID)"
-
-# ---------------------------------------------------------------------------
-# 4. Create the restored volume from the chosen snapshot.
+# 3. Create the restored volume from the chosen snapshot (AZ/subnet/VPC/AMI
+#    were already discovered above, before the permission preflight).
 # ---------------------------------------------------------------------------
 info "Creating volume from snapshot $SNAPSHOT_ID in $AZ..."
 NEW_VOLUME_ID=$("${AWS_BASE[@]}" ec2 create-volume \
@@ -269,7 +318,7 @@ info "Created volume $NEW_VOLUME_ID"
 "${AWS_BASE[@]}" ec2 wait volume-available --volume-ids "$NEW_VOLUME_ID"
 
 # ---------------------------------------------------------------------------
-# 5. Temporary key pair + security group (SSH from this machine's IP only).
+# 4. Temporary key pair + security group (SSH from this machine's IP only).
 # ---------------------------------------------------------------------------
 MY_IP=$(curl -s https://checkip.amazonaws.com | tr -d '[:space:]')
 [ -z "$MY_IP" ] && { error "Could not determine your public IP"; exit 1; }
@@ -291,12 +340,9 @@ log_resource sg_id "$SG_ID"
   --group-id "$SG_ID" --protocol tcp --port 22 --cidr "${MY_IP}/32" >/dev/null
 
 # ---------------------------------------------------------------------------
-# 6. Launch the cheapest instance that can mount the volume and scp the data
+# 5. Launch the cheapest instance that can mount the volume and scp the data
 #    off (a stock Amazon Linux 2023 box - no Blot app image needed).
 # ---------------------------------------------------------------------------
-AMI_ID=$("${AWS_BASE[@]}" ssm get-parameter \
-  --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
-  --query 'Parameter.Value' --output text)
 info "Launching $INSTANCE_TYPE ($AMI_ID) in $SUBNET_ID..."
 
 INSTANCE_ID=$("${AWS_BASE[@]}" ec2 run-instances \
@@ -336,7 +382,7 @@ done
 [ "$ssh_ready" = true ] || { error "Could not SSH into $PUBLIC_IP"; exit 1; }
 
 # ---------------------------------------------------------------------------
-# 7. Attach the restored volume, find its device name, mount read-only.
+# 6. Attach the restored volume, find its device name, mount read-only.
 # ---------------------------------------------------------------------------
 BEFORE_DISKS=$(ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "lsblk -ndo NAME")
 
@@ -364,7 +410,7 @@ if ! ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "[ -d '$REMOTE_BLOG_PATH' ]
 fi
 
 # ---------------------------------------------------------------------------
-# 8. Tar it up on the instance and scp it down.
+# 7. Tar it up on the instance and scp it down.
 # ---------------------------------------------------------------------------
 ARCHIVE_NAME="${BLOG_ID}-${TARGET_DATE}.tar.gz"
 info "Archiving $REMOTE_BLOG_PATH..."
