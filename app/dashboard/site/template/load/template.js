@@ -2,11 +2,25 @@ var config = require("config");
 var Template = require("models/template");
 var makeSlug = require("helper/makeSlug");
 
+// A URL param prefixed with "site:" (e.g. "site:index") always addresses the
+// SITE-owned default template, even when the blog also has its own fork of
+// the same slug. Without this, a forked template with localEditing enabled
+// is unreachable by its own slug (the blog's copy always wins below) and the
+// sidebar can't tell the two rows in the list apart when highlighting the
+// active one. See templates.js's `routeSlug`, which generates these links.
+const SITE_PREFIX = "site:";
+
 // should return a template owned by the blog, if it exists,
-// or a template owned by the site if it exists or null if neither exist
-const loadTemplate = async (blogID, templateSlug) => {
+// or a template owned by the site if it exists or null if neither exist.
+// When forceOwner is "SITE", only the site-owned template is considered.
+const loadTemplate = async (blogID, templateSlug, forceOwner) => {
   const slug = makeSlug(templateSlug);
   const defaultTemplate = await getMetadata(Template.makeID("SITE", slug));
+
+  if (forceOwner === "SITE") {
+    return defaultTemplate;
+  }
+
   const blogTemplate = await getMetadata(Template.makeID(blogID, slug));
 
   if (blogTemplate && defaultTemplate) {
@@ -38,23 +52,27 @@ const getMetadata = (templateID) => {
 
 module.exports = async function (req, res, next) {
   try {
-    const slug = makeSlug(req.params.templateSlug);
-    const template = await loadTemplate(req.blog.id, slug);
+    const rawParam = req.params.templateSlug || "";
+    const forceSiteOwner = rawParam.startsWith(SITE_PREFIX);
+    const slugParam = forceSiteOwner ? rawParam.slice(SITE_PREFIX.length) : rawParam;
+    const slug = makeSlug(slugParam);
+    const forceOwner = forceSiteOwner ? "SITE" : null;
+    const template = await loadTemplate(req.blog.id, slug, forceOwner);
     const templateMissing = !template;
 
     const hydrated = template || {
-      owner: req.blog.id,
+      owner: forceOwner || req.blog.id,
       slug,
-      id: Template.makeID(req.blog.id, slug),
+      id: Template.makeID(forceOwner || req.blog.id, slug),
       locals: {},
       partials: {},
       previewPath: "",
     };
 
     hydrated.owner = hydrated.owner || req.blog.id;
-    hydrated.slug = hydrated.id.split(':').slice(1).join(':') || req.params.templateSlug || slug || "";
+    hydrated.slug = hydrated.id.split(':').slice(1).join(':') || slugParam || slug || "";
 
-    const nameSource = hydrated.slug || req.params.templateSlug || "";
+    const nameSource = hydrated.slug || slugParam || "";
 
     if (!hydrated.name) {
       hydrated.name = nameSource

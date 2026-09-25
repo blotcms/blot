@@ -82,7 +82,7 @@ module.exports = async function uploadFavicon(req, res, next) {
     await cleanupFiles(req.files);
     delete req.template.locals.favicon;
     try {
-      await update(req.blog, req.params.templateSlug, req.template.locals);
+      await update(req.blog, req.template.slug, req.template.locals);
       // Keep the old files until the folder's package.json also stops
       // referencing them: if this fails, a folder reload restores the old
       // (working) favicon rather than pointing at deleted files.
@@ -117,7 +117,7 @@ module.exports = async function uploadFavicon(req, res, next) {
   req.template.locals.favicon = favicon;
 
   try {
-    await update(req.blog, req.params.templateSlug, req.template.locals);
+    await update(req.blog, req.template.slug, req.template.locals);
   } catch (error) {
     // Metadata never took on the new URLs, so discard the freshly generated files.
     await Promise.all(assetPaths(req.blog, favicon).map((path) => fs.remove(path).catch(() => {})));
@@ -132,7 +132,7 @@ module.exports = async function uploadFavicon(req, res, next) {
     if (previous) req.template.locals.favicon = previous;
     else delete req.template.locals.favicon;
     try {
-      await update(req.blog, req.params.templateSlug, req.template.locals);
+      await update(req.blog, req.template.slug, req.template.locals);
       await persistToFolder(req.blog, req.template);
       await Promise.all(assetPaths(req.blog, favicon).map((path) => fs.remove(path).catch(() => {})));
     } catch (_) {

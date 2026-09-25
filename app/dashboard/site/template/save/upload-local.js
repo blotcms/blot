@@ -60,7 +60,7 @@ module.exports = async (req, res, next) => {
     try {
       await updateTemplate(
         req.blog.id,
-        req.params.templateSlug,
+        req.template.slug,
         req.template.locals
       );
     } catch (err) {
@@ -99,7 +99,7 @@ module.exports = async (req, res, next) => {
   try {
     await updateTemplate(
       req.blog.id,
-      req.params.templateSlug,
+      req.template.slug,
       req.template.locals
     );
   } catch (err) {
