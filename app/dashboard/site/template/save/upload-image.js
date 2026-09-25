@@ -6,7 +6,7 @@ const client = require("models/client");
 const templateKey = require("models/template/key");
 const clfdate = require("helper/clfdate");
 const cleanupFiles = require("./cleanup-files");
-const uploadFavicon = require("./upload-favicon");
+const { createFavicon } = require("./upload-favicon");
 const writeChangeToFolder = require("./writeChangeToFolder");
 const previewReload = require("helper/publishPreviewReload");
 const { isAjaxRequest } = require("./ajax-response");
@@ -23,22 +23,14 @@ async function saveProfileImageFavicon(req, file) {
   const templateSlug = req.templateFork
     ? req.template.id.split(":").slice(1).join(":")
     : req.params.templateSlug;
-  const faviconReq = {
-    ...req,
-    params: { ...req.params, templateSlug },
-    query: { ...req.query, ajax: "1" },
-    body: {
-      crop_x: req.body.favicon_crop_x,
-      crop_y: req.body.favicon_crop_y,
-      crop_size: req.body.favicon_crop_size,
-    },
-    files: { favicon: file },
+  const cropBox = {
+    x: req.body.favicon_crop_x,
+    y: req.body.favicon_crop_y,
+    size: req.body.favicon_crop_size,
   };
-  let faviconError;
-  await uploadFavicon(faviconReq, { json() {} }, (error) => {
-    faviconError = error;
+  return createFavicon(req.blog, req.template, templateSlug, file.path, cropBox, {
+    onFileProcessed: () => cleanupFiles({ favicon: file }),
   });
-  if (faviconError) throw faviconError;
 }
 
 function filenames(value) {

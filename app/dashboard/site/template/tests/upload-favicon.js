@@ -117,7 +117,7 @@ describe("upload favicon", function () {
     const path = join(assetDir(this.blog), `${favicon.prefix}.ico`);
     spyOn(Template, "getTemplateList").and.callFake((id, callback) => callback(new Error("redis unavailable")));
 
-    await uploadFavicon.removeAssetsIfUnreferenced({ blog: this.blog, template: this.template }, favicon);
+    await uploadFavicon.removeAssetsIfUnreferenced(this.blog, favicon);
 
     expect(await fs.pathExists(path)).toBe(true);
   });
