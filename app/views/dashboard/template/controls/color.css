@@ -122,6 +122,7 @@
 .color-label {
   margin: 0.3125em 1em 0.3125em 0;
   flex-grow: 1;
+  font-size: 14px;
   user-select: none;
 }
 
