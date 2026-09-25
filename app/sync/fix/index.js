@@ -12,11 +12,17 @@ const clfdate = require("helper/clfdate");
 // entry-ghosts reads every entry one at a time) without holding the blog's
 // folder lock, so it's invisible to sync/lock-diagnostics's pendingSyncs -
 // a [LOCK COMPROMISED] elsewhere gave no sign Fix() was running at all.
-// Tracking the currently-running check here lets lock-diagnostics report it.
-let runningCheck = null;
+// Tracking the currently-running checks here lets lock-diagnostics report
+// them. Fix() runs for more than one blog at a time in this process (the
+// Dropbox and iCloud hourly validators and user-triggered dashboard fixes
+// all call it independently), so this is keyed per call, not a singleton -
+// a single shared variable would get clobbered by whichever call started
+// most recently and misattribute a compromise to the wrong blog.
+let nextCallID = 0;
+const runningChecks = new Map();
 
-function getRunningCheck() {
-  return runningCheck;
+function getRunningChecks() {
+  return Array.from(runningChecks.values());
 }
 
 module.exports = function (blog, options, callback) {
@@ -49,6 +55,7 @@ module.exports = function (blog, options, callback) {
     { name: "entries-path-index", fn: entriesPathIndex },
   ];
   let current = 0;
+  const callID = nextCallID++;
 
   async.eachSeries(
     checks,
@@ -56,11 +63,11 @@ module.exports = function (blog, options, callback) {
       current += 1;
       status(`(${current}/${checks.length}) Checking ${check.name}`);
       const startedAt = Date.now();
-      runningCheck = { blogID: blog.id, check: check.name, startedAt };
+      runningChecks.set(callID, { blogID: blog.id, check: check.name, startedAt });
       check.fn(
         blog,
         callOnce(function (err, report) {
-          runningCheck = null;
+          runningChecks.delete(callID);
           console.log(
             clfdate(),
             "Fix:",
@@ -75,6 +82,8 @@ module.exports = function (blog, options, callback) {
       );
     },
     function (err) {
+      runningChecks.delete(callID);
+
       // if final report is empty return immediately
       if (!Object.keys(finalReport).length) {
         return callback(err, finalReport);
@@ -91,4 +100,4 @@ module.exports = function (blog, options, callback) {
   );
 };
 
-module.exports.getRunningCheck = getRunningCheck;
+module.exports.getRunningChecks = getRunningChecks;
