@@ -37,10 +37,7 @@ const Sortable = require('../../../js/sortable.js');
           name.slice(0, firstDot + 1) + index + name.slice(lastDot);
 
         input.setAttribute("name", newName);
-        console.log(name + " > " + newName);
       });
-
-      console.log("");
     });
   }
 

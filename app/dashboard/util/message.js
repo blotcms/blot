@@ -9,17 +9,7 @@ function middleware(req, res, next) {
     const currentURL = req.baseUrl ? join(req.baseUrl, req.path) : req.path;
 
     if (normalize(req.session.message.url) === normalize(currentURL)) {
-      console.log("showing message", req.session.message);
       res.locals.message = req.session.message;
-    } else {
-      console.log(
-        "skipping message with url",
-        req.session.message.url,
-        "and currentURL",
-        currentURL,
-        "message=",
-        req.session.message
-      );
     }
 
     if (req.session.message.error) {
@@ -87,7 +77,6 @@ function errorHandler(err, req, res, next) {
   // otherwise just display the error on the current page
   // if you don't check this you can get stuck in a redirect loop
   if (req.method.toLowerCase() === "post") {
-    console.log("redirecting to", redirect, "with message", message);
     return res.message(redirect, new Error(message));
   }
 

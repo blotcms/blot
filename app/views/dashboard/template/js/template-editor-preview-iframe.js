@@ -118,10 +118,7 @@ if (previewIframeContainer) {
   var pathname = URL.parse(iframe.getAttribute("src")).pathname;
 
   if (storedPath && storedPath !== pathname) {
-    console.log('updating iframe url')
     iframe.setAttribute("src", previewOrigin + storedPath);
-  } else {
-    console.log('iframe matches');
   }
 
   updatePreviewLink(storedPath);
