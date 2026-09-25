@@ -1,0 +1,216 @@
+name: Deploy to EC2
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Optional commit hash or short code on master (defaults to the dispatched commit)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY_URL: ghcr.io/blotcms/blot
+  AIRLOCK_REGISTRY_URL: ghcr.io/blotcms/blot-airlock
+  BLOT_DEPLOY_SSH_HOST: ${{ secrets.BLOT_DEPLOY_SSH_HOST }}
+  BLOT_DEPLOY_SSH_PORT: ${{ secrets.BLOT_DEPLOY_SSH_PORT }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: deploy
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Need full commit history so an older commit or short code can be
+          # resolved and verified against master. blob:none makes this a
+          # treeless partial clone: all commits/trees, but file contents are
+          # fetched on demand - this repo's blob history is multiple GB and
+          # the deploy only needs rev-parse / merge-base / a single checkout.
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Check branch
+        run: |
+          if [ "${{ github.ref }}" != "refs/heads/master" ]; then
+            echo "❌ Error: This workflow can only be run on the master branch."
+            echo "Current branch: ${{ github.ref }}"
+            exit 1
+          fi
+          echo "✅ Branch check passed: running on master branch"
+
+      - name: Resolve target commit
+        id: resolve
+        env:
+          # Bind inputs to the environment so a dispatcher cannot inject
+          # shell syntax into the script below.
+          COMMIT_INPUT: ${{ github.event.inputs.commit }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          git fetch --quiet origin master
+
+          if [ -z "$COMMIT_INPUT" ]; then
+            # Default: the immutable commit the run was dispatched against.
+            SHA="$DISPATCH_SHA"
+            CUSTOM=false
+          else
+            SHA=$(git rev-parse --verify --quiet "${COMMIT_INPUT}^{commit}") || {
+              echo "❌ Error: could not resolve commit '$COMMIT_INPUT'"
+              exit 1
+            }
+            CUSTOM=true
+          fi
+
+          # The deploy environment's branch policy is evaluated against the
+          # run ref (master), so the target must live on master too - both to
+          # honour that policy and because build.yml only publishes images
+          # for master commits.
+          if ! git merge-base --is-ancestor "$SHA" origin/master; then
+            echo "❌ Error: commit $SHA is not on master"
+            exit 1
+          fi
+
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "custom=$CUSTOM" >> "$GITHUB_OUTPUT"
+          echo "✅ Target commit: $SHA (custom=$CUSTOM)"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for build images to be available
+        env:
+          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
+          CUSTOM: ${{ steps.resolve.outputs.custom }}
+        run: |
+          IMAGE="${{ env.REGISTRY_URL }}:${TARGET_SHA}"
+          AIRLOCK_IMAGE="${{ env.AIRLOCK_REGISTRY_URL }}:${TARGET_SHA}"
+          WAIT_INTERVAL=10
+
+          # For the default (dispatched) commit the build workflow may still
+          # be running, so wait up to 25 min. For an explicitly chosen commit
+          # the image should already exist - build.yml tags only the push-tip
+          # github.sha of each master push, so an intermediate or merged-in
+          # commit never gets one. Fail fast with a clear reason instead of
+          # polling 25 min for a tag that will never appear.
+          if [ "$CUSTOM" = "true" ]; then
+            MAX_APP_TRIES=12   # ~2 min grace
+          else
+            MAX_APP_TRIES=150  # ~25 min
+          fi
+
+          # The app image is required.
+          echo "Waiting for app image: $IMAGE (up to $((MAX_APP_TRIES * WAIT_INTERVAL / 60)) min)"
+          for i in $(seq 1 "$MAX_APP_TRIES"); do
+            if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+              echo "✅ App image found: $IMAGE"
+              break
+            fi
+            if [ "$i" -eq "$MAX_APP_TRIES" ]; then
+              echo "❌ App image not found: $IMAGE"
+              if [ "$CUSTOM" = "true" ]; then
+                echo "   build.yml only publishes an image for the tip commit of each master push."
+                echo "   Pick a commit that was a push tip on master (not an intermediate or merge parent)."
+              fi
+              exit 1
+            fi
+            echo "  not ready yet ($i/$MAX_APP_TRIES)..."; sleep $WAIT_INTERVAL
+          done
+
+          # The airlock image is best-effort. build-airlock runs in parallel
+          # with the app build and is usually a little slower (Alpine +
+          # Chromium + the verify step), so give it a bounded grace window
+          # once the app image is up - but do NOT let it block the deploy:
+          # deployAirlockIfNeeded() in scripts/deploy already skips a missing
+          # airlock manifest non-fatally, and an airlock build failure must
+          # not be able to hold up an app hotfix.
+          echo "Waiting (best-effort) for airlock image: $AIRLOCK_IMAGE"
+          AIRLOCK_AVAILABLE=false
+          for i in $(seq 1 30); do   # up to 5 min
+            if docker manifest inspect "$AIRLOCK_IMAGE" > /dev/null 2>&1; then
+              echo "✅ Airlock image found: $AIRLOCK_IMAGE"
+              AIRLOCK_AVAILABLE=true
+              break
+            fi
+            echo "  not ready yet ($i/30)..."; sleep $WAIT_INTERVAL
+          done
+
+          if [ "$AIRLOCK_AVAILABLE" = false ]; then
+            echo "::warning::Airlock image $AIRLOCK_IMAGE not available after the grace period - the deploy will run, but scripts/deploy will skip the airlock update for this commit (see deployAirlockIfNeeded). Re-deploy this commit once build-airlock succeeds."
+          fi
+
+      # Keep the single checkout above, but switch the existing workspace to
+      # the requested commit before running the deploy script.
+      - name: Switch workspace to target commit
+        env:
+          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
+        run: git checkout --detach "$TARGET_SHA"
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BLOT_DEPLOY_SSH_KEY }}
+
+      - name: Configure SSH alias
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          cat >> ~/.ssh/config << EOF
+          Host blot
+            HostName ${BLOT_DEPLOY_SSH_HOST}
+            User deploy
+            Port ${BLOT_DEPLOY_SSH_PORT}
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Verify SSH connection
+        run: ssh blot "echo 'SSH connection successful'"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: "npm"
+          cache-dependency-path: ./package.json
+
+      - name: Cache Node modules and the Puppeteer browser
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            ~/.cache/puppeteer
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-22-${{ hashFiles('package.json') }}
+
+      - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm install
+
+      - name: Deploy via npm script
+        env:
+          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
+          # Skip branch check since we're in CI and may be checking out a specific commit
+          SKIP_BRANCH_CHECK: true
+        run: npm run deploy-node -- "$TARGET_SHA"
+
+      - name: Deployment summary
+        if: success()
+        env:
+          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "Deployment Summary"
+          echo "=========================================="
+          echo "Commit SHA: ${TARGET_SHA}"
+          echo "Deployment completed successfully! 🚀"

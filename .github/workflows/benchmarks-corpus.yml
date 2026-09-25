@@ -1,0 +1,133 @@
+name: benchmarks-corpus
+
+# What this workflow does
+# ------------------------
+# Builds the large, production-shaped corpus (default: 1000 sites, ~160k
+# posts, skewed distribution - see scripts/benchmarks/spec/util/workload.js)
+# ONCE, then snapshots it into three cache-able artifacts:
+#
+#   - a Redis dump (every entry/tag/index key)
+#   - data/blogs/ tarball (raw source + hard-linked media - small)
+#   - data/static/ tarball (derived/build output - the expensive part)
+#
+# and saves them to the Actions cache under a benchmark-corpus-v<version> key
+# (CORPUS_SCHEMA_VERSION below), plus a 90-day artifact backup. This is the
+# ONLY workflow that writes that cache - benchmarks-render.yml only reads it.
+#
+# See scripts/benchmarks/README.md for the whole picture.
+
+on:
+  schedule:
+    # Weekly, low-traffic UTC slot.
+    - cron: "17 5 * * 0"
+  workflow_dispatch:
+    inputs:
+      sites:
+        description: "Number of sites (default: corpusSites in defaults.js)"
+        default: ""
+      files:
+        description: "Total posts across all sites (default: corpusFiles in defaults.js)"
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  # Bump whenever the *shape* of the corpus changes (site/post/tag/media
+  # distribution, symlink->hardlink layout, converter fixture set, etc) -
+  # independent of historySchemaVersion, which only tracks metric
+  # definitions for the render/build benchmark itself. Keep this in sync
+  # with corpusSchemaVersion in scripts/benchmarks/spec/util/defaults.js.
+  CORPUS_SCHEMA_VERSION: 1
+
+jobs:
+  build-corpus:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # build-corpus.js is the host-side orchestrator (it shells out to
+      # `docker run` itself for the actual corpus build) and `require`s
+      # fs-extra directly, so the bare runner needs the repo's deps
+      # installed too. No committed package-lock.json, so `npm ci` isn't an
+      # option here - see benchmarks-converters.yml's identical step.
+      - name: Install dependencies
+        run: npm install
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Verbatim copy of benchmarks.yml's "Build benchmark image" step, for
+      # consistency (same image, same cache scope naming convention).
+      - name: Build benchmark image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: dev
+          load: true
+          tags: blot-bench:latest
+          cache-from: |
+            type=gha,scope=benchmarks-amd64
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:buildcache
+          cache-to: type=gha,scope=benchmarks-amd64,mode=max
+
+      - name: Build corpus
+        run: |
+          ARGS=()
+          [ -n "${{ github.event.inputs.sites }}" ] && ARGS+=(--sites "${{ github.event.inputs.sites }}")
+          [ -n "${{ github.event.inputs.files }}" ] && ARGS+=(--files "${{ github.event.inputs.files }}")
+          node scripts/benchmarks/build-corpus.js --out-dir .benchmarks/corpus "${ARGS[@]}"
+
+      - name: Save corpus cache
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .benchmarks/corpus/redis-dump.rdb
+            .benchmarks/corpus/blogs.tar.gz
+            .benchmarks/corpus/static.tar.gz
+            .benchmarks/corpus/manifest.json
+          key: benchmark-corpus-v${{ env.CORPUS_SCHEMA_VERSION }}-${{ github.run_id }}
+
+      - name: Upload corpus artifacts (durable fallback)
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-corpus-artifacts
+          path: |
+            .benchmarks/corpus/redis-dump.rdb
+            .benchmarks/corpus/blogs.tar.gz
+            .benchmarks/corpus/static.tar.gz
+            .benchmarks/corpus/manifest.json
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Report artifact sizes
+        if: always()
+        run: |
+          {
+            echo "## Corpus artifact sizes"
+            echo ""
+            du -h .benchmarks/corpus/redis-dump.rdb .benchmarks/corpus/blogs.tar.gz .benchmarks/corpus/static.tar.gz 2>/dev/null | while read -r size file; do
+              echo "- \`$(basename "$file")\`: $size"
+            done
+            echo ""
+            TOTAL=$(du -ch .benchmarks/corpus/redis-dump.rdb .benchmarks/corpus/blogs.tar.gz .benchmarks/corpus/static.tar.gz 2>/dev/null | tail -1 | cut -f1)
+            echo "- **total**: $TOTAL"
+            echo ""
+            echo "_Target: keep the combined total in the low single-digit GB range - the GitHub Actions cache cap is 10GB per repo, shared with every other cache._"
+          } >> "$GITHUB_STEP_SUMMARY"

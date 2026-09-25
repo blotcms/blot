@@ -1,0 +1,518 @@
+# The reason this is so complicated is because github actions cache for docker
+# build doesn't seem to work as well as it should. Ideally it just caches the
+# work it has done before but I couldn't get this to work with much trying.
+# So we manually compute the hash of the files which the base docker image layer
+# depends upon and use this to tag images. If for some reason at some point
+# the github actions docker cache works more efficiently, we can simplyify.
+
+# The goals are:
+# - reproducible builds
+# - fast tests
+# - fast deployments
+name: node
+
+on:
+  push:
+    branches:
+      - "master"
+  pull_request:
+    branches:
+      - "master"
+
+permissions:
+  contents: read  # To check out code
+  packages: write # To push to GitHub Container Registry
+
+jobs:
+  setup-tests:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      image_hash: ${{ steps.hash.outputs.image_hash }}
+      image_tag: ${{ steps.set-image-tag.outputs.image_tag }}
+    env:
+      # Define test suites here - single source of truth.
+      #
+      # Format is "<path>[|<exclude>,<exclude>...]:<shards>". Each entry is
+      # split into <shards> jobs that run in parallel; the runner
+      # (scripts/tests) takes --shard=i/n and runs a deterministic 1/n slice
+      # of that path's spec files. An optional "|"-separated exclude list is
+      # passed as --exclude= so a heavy sub-tree can be carved out into its
+      # own entry (e.g. app/models/entry, which holds the slow
+      # entry/tests/search.js fixtures, runs separately from the rest of
+      # app/models).
+      #
+      # Bump a path's shard count when its jobs become the long pole; the
+      # per-job "Slowest specs" list printed at the end shows where the time
+      # goes. Keep the total job count within the account's concurrent-job
+      # limit (20 on GitHub Free) with headroom for build.yml.
+      #
+      # A bare "<path>" (no ":") is treated as ":1".
+      TEST_SUITES: |
+        - app/blog:2
+        - app/build:1
+        - app/clients|app/clients/git:1
+        - app/clients/git:2
+        - app/dashboard:1
+        - app/documentation:1
+        - app/helper:1
+        - app/models|app/models/entry:2
+        - app/models/entry:1
+        - app/site:1
+        - app/sync:1
+        - app/templates:1
+        - config/openresty:1
+        - config/redis:1
+        - proxy:1
+        - scripts/deploy:1
+    steps:
+      - name: Sparse checkout for hash calculation
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            Dockerfile
+            .dockerignore
+            package.json
+            .github/workflows/node.yml
+            .github/workflows/build.yml
+          sparse-checkout-cone-mode: false
+
+      - name: Calculate hash of build-related files
+        id: hash
+        run: |
+          # Create a list of files to hash
+          FILES_TO_HASH="Dockerfile .dockerignore package.json .github/workflows/node.yml .github/workflows/build.yml"
+          
+          echo "Hashing files: $FILES_TO_HASH"
+          
+          # Calculate hash of all these files combined
+          HASH=$(cat $FILES_TO_HASH 2>/dev/null | sha256sum | cut -d ' ' -f 1)
+          echo "image_hash=$HASH" >> $GITHUB_OUTPUT
+          echo "Hash: $HASH"
+      
+      - name: Set image tag
+        id: set-image-tag
+        run: |
+          IMAGE_TAG="ghcr.io/${{ github.repository_owner }}/blot:test-${{ steps.hash.outputs.image_hash }}"
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "Image tag: $IMAGE_TAG"
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if image exists
+        id: check-image
+        run: |
+          IMAGE_TAG="${{ steps.set-image-tag.outputs.image_tag }}"
+          
+          if docker manifest inspect "$IMAGE_TAG" > /dev/null 2>&1; then
+            echo "Image $IMAGE_TAG exists, skipping build"
+            echo "image_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Image $IMAGE_TAG does not exist, will build it"
+            echo "image_exists=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Checkout full code for build
+        if: steps.check-image.outputs.image_exists != 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        if: steps.check-image.outputs.image_exists != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test image
+        if: steps.check-image.outputs.image_exists != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          platforms: linux/amd64
+          target: dev
+          context: .
+          # Push zstd-compressed layers instead of gzip. Every one of the ~17
+          # matrix jobs pays a fresh `docker run` image pull; zstd decompresses
+          # several times faster than gzip (and packs a little smaller), which
+          # is the bulk of that per-job overhead. force-compression re-encodes
+          # layers restored from the gzip build cache. Needs a runner Docker
+          # >= 23 to pull, which GitHub-hosted ubuntu images satisfy.
+          outputs: type=image,push=true,compression=zstd,force-compression=true,oci-mediatypes=true
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:buildcache
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:${{ github.sha }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:buildcache,mode=max
+          tags: |
+            ${{ steps.set-image-tag.outputs.image_tag }}
+            ghcr.io/${{ github.repository_owner }}/blot:test-latest
+            
+      - name: Convert test suites to matrix
+        id: set-matrix
+        run: |
+          # Read test suites from environment variable
+          echo "Test suites defined:"
+          echo "$TEST_SUITES"
+
+          # Expand each "<path>:<shards>" line into <shards> matrix entries of
+          # the form {test_suite, shard}. A matrix.include with no base keys
+          # produces exactly these combinations (no cross-product).
+          MATRIX_JSON=$(printf '%s\n' "$TEST_SUITES" | jq -R -s -c '
+            [ splits("\n")
+              | gsub("^\\s*-?\\s*|\\s*$"; "")
+              | select(length > 0)
+              | (split(":") + ["1"]) as $p
+              | ($p[1] | if test("^[0-9]+$") then tonumber else 1 end) as $shards
+              | ($p[0] | split("|")) as $paths
+              | range(1; $shards + 1) as $i
+              | {
+                  test_suite: $paths[0],
+                  exclude: ($paths[1:] | join(",")),
+                  shard: "\($i)/\($shards)"
+                }
+            ] | { include: . }
+          ')
+
+          echo "Creating matrix JSON..."
+          echo "$MATRIX_JSON" | jq '.' # Validate JSON format
+          echo "Total test jobs: $(echo "$MATRIX_JSON" | jq '.include | length')"
+          echo "matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
+
+  detect-unused-dependencies:
+    needs: setup-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Find unused dependencies
+        # node-addon-api,node-gyp are required to build sharp
+        run: npx depcheck --ignores=node-addon-api,node-gyp,depcheck,nyc,nodemon,blessed-contrib,fontkit,text-to-svg --skip-missing
+
+  detect-unused-files:
+    needs: setup-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Find unused files
+        run: npx knip --config scripts/development/knip.json --files
+  
+  detect-unexecuted-specs:
+    needs: setup-tests
+    runs-on: ubuntu-latest
+    # Every file with describe()/it() must sit in a <suite>/tests/ directory
+    # (or be named tests.js) so the runner picks it up. The only exception is
+    # scripts/benchmarks/spec/build-render.spec.js: it is a Jasmine spec run
+    # by its own workflow (benchmarks.yml), never by the unit-test matrix.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract test suites from matrix
+        run: |
+          # Extract test suites directly from the matrix JSON
+          echo "Test suites defined in matrix:"
+          MATRIX_JSON='${{ needs.setup-tests.outputs.matrix }}'
+          echo "$MATRIX_JSON"
+          
+          # Extract the distinct suite paths from the matrix JSON (one entry
+          # per shard, so de-duplicate).
+          TEST_SUITES=$(echo "$MATRIX_JSON" | jq -r '.include[].test_suite' | sort -u)
+          echo "Extracted test suites:"
+          echo "$TEST_SUITES"
+          
+          # Save to file for validation script
+          echo "$TEST_SUITES" > matrix_suites.txt
+
+      - name: Find all spec files
+        run: |
+          # First find files containing "describe("
+          echo "Finding all potential spec files..."
+          DESCRIBE_FILES=$(grep -r --include="*.js" -l "describe(" . | 
+                        grep -v "node_modules" || true)
+          
+          echo "Files with describe():"
+          echo "$DESCRIBE_FILES"
+          
+          # Then among those, find files also containing "it("
+          if [ -n "$DESCRIBE_FILES" ]; then
+            echo "Filtering for files with both describe() and it()..."
+            SPEC_FILES=$(echo "$DESCRIBE_FILES" | xargs grep -l "it(" || true)
+          else
+            SPEC_FILES=""
+          fi
+
+          # scripts/benchmarks/spec is a benchmark spec run by benchmarks.yml,
+          # not the unit-test matrix - exclude it from this check.
+          SPEC_FILES=$(echo "$SPEC_FILES" | grep -v "scripts/benchmarks/spec/" || true)
+
+          echo "Files with both describe() and it():"
+          echo "$SPEC_FILES"
+
+          # Save the list to a file for further processing
+          echo "$SPEC_FILES" > all_spec_files.txt
+
+      - name: Check if all specs are executed by test matrix
+        run: |
+          if [ ! -s all_spec_files.txt ]; then
+            echo "No spec files found or all have been filtered out. Nothing to check."
+            exit 0
+          fi
+          
+          # Create a regex pattern from the matrix suites for RUNNABLE test files
+          # This matches files in /tests/ directories or named tests.js within the matrix suites
+          PATTERN=""
+          while read -r suite; do
+            if [ -n "$suite" ]; then
+              # Only match files in /tests/ directories or named tests.js within each suite
+              PATTERN="${PATTERN}|^\./${suite}/.*/tests/.*\.js|^\./${suite}/.*tests\.js|^\./${suite}/tests/.*\.js"
+            fi
+          done < matrix_suites.txt
+          
+          if [ -z "$PATTERN" ]; then
+            echo "No test suites defined in matrix. Cannot perform check."
+            exit 1
+          fi
+          
+          PATTERN="${PATTERN:1}" # Remove the leading |
+          echo "Test execution pattern: $PATTERN"
+          
+          # Find spec files not matching the execution pattern
+          echo "Checking for spec files not executed by any test suite in the matrix..."
+          UNEXECUTED_SPECS=$(grep -v -E "$PATTERN" all_spec_files.txt || true)
+          
+          if [ -n "$UNEXECUTED_SPECS" ]; then
+            echo "WARNING: Found spec files that contain tests but won't be executed by the test runner:"
+            echo "$UNEXECUTED_SPECS"
+            echo ""
+            echo "These files contain describe() and it() blocks but aren't in a /tests/ directory or named tests.js,"
+            echo "so they won't be picked up by the test runner within their respective test suites."
+            echo ""
+            echo "Please either move them into a <suite>/tests/ directory, rename"
+            echo "them to tests.js, or add their suite to TEST_SUITES in setup-tests"
+            echo "so the runner executes them."
+            exit 1
+          else
+            echo "All spec files are properly located to be executed by the test runner. Good job!"
+          fi
+                
+  test:
+    needs: setup-tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.setup-tests.outputs.matrix) }}
+      fail-fast: false
+
+    services:
+      redis:
+        image: redis:6.2.12
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sanitize coverage artifact name
+        id: artifact-name
+        run: |
+          SAFE_SUITE=$(echo "${{ matrix.test_suite }}" | tr '/|' '--')
+          SAFE_SHARD=$(echo "${{ matrix.shard }}" | tr '/' '-')
+          echo "name=coverage-${SAFE_SUITE}-${SAFE_SHARD}" >> "$GITHUB_OUTPUT"
+
+      - name: Run tests - ${{ matrix.test_suite }} (shard ${{ matrix.shard }})
+        env:
+          BLOT_STRIPE_KEY: ${{ secrets.BLOT_STRIPE_KEY }}
+          BLOT_STRIPE_SECRET: ${{ secrets.BLOT_STRIPE_SECRET }}
+          BLOT_STRIPE_PRODUCT: ${{ secrets.BLOT_STRIPE_PRODUCT }}
+          IMAGE_TAG: ${{ needs.setup-tests.outputs.image_tag }}
+          TEST_SUITE: ${{ matrix.test_suite }}
+          TEST_SHARD: ${{ matrix.shard }}
+          TEST_EXCLUDE: ${{ matrix.exclude }}
+        run: |
+          EXCLUDE_ARG=""
+          if [ -n "$TEST_EXCLUDE" ]; then
+            EXCLUDE_ARG="--exclude=$TEST_EXCLUDE"
+          fi
+          mkdir -p .nyc_output
+          # include/exclude formerly lived in .nycrc.json; pass them as CLI
+          # args so we don't need a config file. node_modules is excluded by
+          # nyc's default --exclude-node-modules.
+          NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/views-built/** --exclude=app/templates/source/**"
+          docker run --rm \
+            --network host \
+            -e BLOT_REDIS_HOST=localhost \
+            -e BLOT_STRIPE_KEY=$BLOT_STRIPE_KEY \
+            -e BLOT_STRIPE_SECRET=$BLOT_STRIPE_SECRET \
+            -e BLOT_STRIPE_PRODUCT=$BLOT_STRIPE_PRODUCT \
+            -v ${{ github.workspace }}/app:/usr/src/app/app \
+            -v ${{ github.workspace }}/scripts:/usr/src/app/scripts \
+            -v ${{ github.workspace }}/config:/usr/src/app/config \
+            -v ${{ github.workspace }}/proxy:/usr/src/app/proxy \
+            -v ${{ github.workspace }}/.nyc_output:/usr/src/app/.nyc_output \
+            $IMAGE_TAG \
+            sh -c "nyc --silent --no-clean $NYC_ARGS node scripts/tests '$TEST_SUITE' --shard='$TEST_SHARD' $EXCLUDE_ARG"
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact-name.outputs.name }}
+          path: .nyc_output
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+          # A re-run of this job (e.g. after a flaky failure) reuses the same
+          # workflow run, so without this the previous attempt's artifact of
+          # the same name sticks around too. coverage-report then downloads
+          # both copies into one folder and nyc chokes on the stale/partial
+          # one. Overwriting keeps only the latest attempt's coverage.
+          overwrite: true
+
+  coverage-report:
+    needs: [setup-tests, test]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write # to read/write the coverage-baseline cache
+      pull-requests: write # to post/update the sticky PR comment
+      packages: read # to pull the test image from GitHub Container Registry
+    env:
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download coverage from every shard
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage-raw
+
+      # Master's most recent line-coverage % (if any), so a PR run can show a
+      # delta. Keyed by run so every push to master adds a fresh entry;
+      # restore-keys picks up the most recent one.
+      - name: Restore coverage baseline
+        uses: actions/cache/restore@v4
+        with:
+          path: .coverage/history
+          key: coverage-master-${{ github.run_id }}
+          restore-keys: |
+            coverage-master-
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge shard coverage and build report
+        id: merge-coverage
+        env:
+          IMAGE_TAG: ${{ needs.setup-tests.outputs.image_tag }}
+        run: |
+          mkdir -p .nyc_output coverage
+
+          # Each shard's raw coverage json files are the direct children of
+          # coverage-raw/<artifact-name>/ - flatten them into one directory so
+          # `nyc report` can treat it as a single temp dir. Filenames are
+          # content-addressed UUIDs, so collisions across shards aren't a concern.
+          find coverage-raw -mindepth 2 -maxdepth 2 -type f -name '*.json' \
+            -exec cp {} .nyc_output/ \;
+
+          echo "Merging $(ls .nyc_output | wc -l) raw coverage files from $(ls coverage-raw | wc -l) shards"
+
+          # Capture stdout via command substitution (not a pipe) so the
+          # docker run exit code - and therefore this step's - is nyc's own,
+          # not tee's.
+          NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/views-built/** --exclude=app/templates/source/**"
+          REPORT_OUTPUT=$(docker run --rm \
+            -v ${{ github.workspace }}/app:/usr/src/app/app \
+            -v ${{ github.workspace }}/.nyc_output:/usr/src/app/.nyc_output \
+            -v ${{ github.workspace }}/coverage:/usr/src/app/coverage \
+            $IMAGE_TAG \
+            sh -c "nyc report -t .nyc_output $NYC_ARGS --reporter=text --reporter=text-summary --reporter=lcov --reporter=json-summary -o coverage")
+          DOCKER_EXIT=$?
+          echo "$REPORT_OUTPUT" | tee coverage/text-report.txt
+          exit $DOCKER_EXIT
+
+      - name: Add coverage summary to job summary
+        if: steps.merge-coverage.outcome == 'success'
+        run: |
+          echo "## Code coverage - \`${{ env.HEAD_SHA }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -n 20 coverage/text-report.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload merged coverage report
+        id: upload-report
+        if: steps.merge-coverage.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          # Deliberately NOT prefixed "coverage-" - the "Download coverage
+          # from every shard" step above matches that prefix, and on a rerun
+          # within the same workflow run (e.g. re-running just one flaky test
+          # job) a prior successful attempt's merged report would otherwise
+          # get swept back in as if it were a raw per-shard coverage file,
+          # which crashes nyc ("Invalid file coverage object, missing keys")
+          # since a coverage-summary.json isn't shaped like raw nyc output.
+          name: merged-coverage-report-${{ github.sha }}
+          path: coverage
+          if-no-files-found: warn
+          retention-days: 30
+          overwrite: true
+
+      # master: record this run's line coverage % as the new baseline for
+      # future PRs to diff against.
+      - name: Save coverage baseline
+        if: steps.merge-coverage.outcome == 'success' && github.event_name == 'push'
+        run: |
+          mkdir -p .coverage/history
+          node -e "
+            const fs = require('fs');
+            const s = JSON.parse(fs.readFileSync('coverage/coverage-summary.json', 'utf8'));
+            fs.writeFileSync(
+              '.coverage/history/latest.json',
+              JSON.stringify({ sha: process.env.HEAD_SHA, linesPct: s.total.lines.pct })
+            );
+          "
+
+      - name: Save coverage baseline cache
+        if: steps.merge-coverage.outcome == 'success' && github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: .coverage/history
+          key: coverage-master-${{ github.run_id }}
+
+      # pull_request: post/update the sticky coverage comment.
+      - name: Post PR coverage comment
+        if: always() && github.event_name == 'pull_request' && steps.merge-coverage.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/coverage/pr-comment.js \
+            --pr "${{ github.event.pull_request.number }}" \
+            --sha "$HEAD_SHA" \
+            --status done \
+            --summary coverage/coverage-summary.json \
+            --baseline .coverage/history/latest.json \
+            --artifact-url "${{ steps.upload-report.outputs.artifact-url }}"
+
+      - name: Post PR coverage comment (failed)
+        if: always() && github.event_name == 'pull_request' && steps.merge-coverage.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/coverage/pr-comment.js \
+            --pr "${{ github.event.pull_request.number }}" \
+            --sha "$HEAD_SHA" \
+            --status failed
