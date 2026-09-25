@@ -8,6 +8,13 @@ const PORTS = (process.env.STUB_PORTS || "8088,8089,8090,8091")
   .split(",")
   .map((p) => parseInt(p.trim(), 10));
 
+// 127.0.0.1 by default (every existing caller reaches this over the same
+// network namespace or host loopback). proxy/deploy/e2e sets this to
+// 0.0.0.0: cutover-from-baremetal.sh's rehearsal runs on the default Docker
+// bridge, not --network host, and connects to the upstream via the bridge
+// gateway address - unreachable on a loopback-only bind.
+const BIND = process.env.STUB_BIND || "127.0.0.1";
+
 const handler = (req, res) => {
   const url = new URL(req.url, "http://x");
 
@@ -53,7 +60,7 @@ const handler = (req, res) => {
 };
 
 for (const port of PORTS) {
-  http.createServer(handler).listen(port, "127.0.0.1", () => {
-    console.log("stub upstream listening on 127.0.0.1:" + port);
+  http.createServer(handler).listen(port, BIND, () => {
+    console.log("stub upstream listening on " + BIND + ":" + port);
   });
 }

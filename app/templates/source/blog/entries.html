@@ -3,8 +3,10 @@
   {{> head}}
   <body>
 
+    <div class="page-layout">
     {{> sidebar}}
 
+    <div class="content-column">
     {{#posts}}
 
       {{#is.index_layout.titles}}
@@ -49,5 +51,7 @@
     <p class="entry archives-link">View <a href="/archives">the archives</a></p>
 
     {{> footer}}
+    </div>
+    </div>
   </body>
 </html>

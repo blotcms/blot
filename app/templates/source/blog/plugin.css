@@ -130,6 +130,13 @@ p, div, section {position: relative;overflow: visible;}
 
 @media screen and (max-width: 933px) {
 
+  {{#sticky_navigation}}
+  {{^is.navigation_location.top}}
+  .page-layout {display: block;width: auto;margin: 0;padding: 0;}
+  .content-column {margin: 0;}
+  {{/is.navigation_location.top}}
+  {{/sticky_navigation}}
+
   {{^is.navigation_location.top}}
   body {padding: 0 2em;margin: 2em auto;width: auto;}
   {{/is.navigation_location.top}}
@@ -139,6 +146,9 @@ p, div, section {position: relative;overflow: visible;}
 
   {{^is.navigation_location.top}}
   .sidebar {position: relative;width: 100%;margin: 0 0 2.5em;left: auto;right: auto;top: auto;background: none;text-align: center;}
+  {{#sticky_navigation}}
+  .sidebar {position: sticky;top: 2em;z-index: 2;background: var(--background-color);max-height: calc(100vh - 2em);overflow-y: auto;}
+  {{/sticky_navigation}}
   {{/is.navigation_location.top}}
 
   .sidebar a {display: inline-block; margin: 0 0.45em;}
