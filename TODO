@@ -1253,3 +1253,5 @@ Self-hosting:
   - Tell [Frank](https://mail.google.com/mail/u/0/#inbox/FMfcgzGkZkZWrprNcThxMPQKzSTLbkDs)
   - Tell [Zip](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmthffLmfRBswqGmsDKQWdJZFB)
 - Tell Nick when it's possible to deploy a self-hosted [Blot on Vercel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKjxHWSvgjKtCWrbhccKFPlkdD) and [Zia](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsSXWPRNNxDNcdhGHQXBkTtsx)
+
+Add preflight checks in proxy/deploy/{cutover-from-baremetal,blue-green}.sh for PROXY_BLOG_STATIC_DIR/PROXY_GLOBAL_STATIC_DIR existing and readable - docker -v silently creates an empty dir for a missing host path, so a typo or host-layout change would 404 cdn.* static assets with no check catching it
