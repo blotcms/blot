@@ -415,6 +415,12 @@ NEW_VOLUME_ID=$("${AWS_BASE[@]}" ec2 create-volume \
   --query 'VolumeId' --output text)
 log_resource volume_id "$NEW_VOLUME_ID"
 info "Created volume $NEW_VOLUME_ID"
+
+if [ "$NEW_VOLUME_ID" = "$DATA_VOLUME_ID" ]; then
+  error "SAFETY CHECK FAILED: restored volume is the production volume"
+  exit 1
+fi
+
 "${AWS_BASE[@]}" ec2 wait volume-available --volume-ids "$NEW_VOLUME_ID"
 
 # ---------------------------------------------------------------------------
@@ -501,7 +507,14 @@ done
 [ -n "$NEW_DEVICE" ] || { error "Could not find the newly attached device on the instance"; exit 1; }
 info "New device: /dev/$NEW_DEVICE"
 
-ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "sudo mkdir -p /mnt/restore && sudo mount -o ro /dev/${NEW_DEVICE} /mnt/restore"
+FSTYPE=$(ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "lsblk -ndo FSTYPE /dev/${NEW_DEVICE}")
+case "$FSTYPE" in
+  ext4) MOUNT_OPTS="ro,noload" ;;
+  xfs) MOUNT_OPTS="ro,norecovery,nouuid" ;;
+  *) MOUNT_OPTS="ro" ;;
+esac
+info "Mounting /dev/${NEW_DEVICE} ($FSTYPE) read-only with -o $MOUNT_OPTS..."
+ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "sudo blockdev --setro /dev/${NEW_DEVICE} && sudo mkdir -p /mnt/restore && sudo mount -o ${MOUNT_OPTS} /dev/${NEW_DEVICE} /mnt/restore"
 
 REMOTE_BLOG_PATH="/mnt/restore/blogs/${BLOG_ID}"
 if ! ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "[ -d '$REMOTE_BLOG_PATH' ]"; then
