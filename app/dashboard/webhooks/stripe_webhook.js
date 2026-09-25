@@ -270,7 +270,8 @@ function update_subscription(customer_id, subscription, callback) {
 
     if (
       subscription.status === "unpaid" &&
-      previousSubscription.status !== "unpaid"
+      previousSubscription.status !== "unpaid" &&
+      !subscription.pause_collection
     )
       email.OVERDUE_CLOSURE(user.uid);
 
