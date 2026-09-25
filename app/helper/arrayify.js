@@ -52,9 +52,5 @@ module.exports = function arrayify(obj, manipulate) {
     if (foo !== false) list.push(obj[i]);
   }
 
-  // console.log(sourceObj);
-  // console.log('-------- TOO: -------')
-  // console.log(list);
-
   return list;
 };

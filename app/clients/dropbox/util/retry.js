@@ -39,7 +39,6 @@ function retry(fn, options) {
     async.retry(
       options,
       function (done) {
-        console.log("dropbox:retry attempting");
         fn.apply(null, args.concat(done));
       },
       callback

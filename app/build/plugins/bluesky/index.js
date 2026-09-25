@@ -60,8 +60,6 @@ function render($, callback) {
         "https://embed.bsky.app/oembed?" +
         new URLSearchParams(params).toString();
 
-      // console.log(oembedUrl);
-
       fetch(oembedUrl)
         .then((res) => res.json())
         .then((data) => {

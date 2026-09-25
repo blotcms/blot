@@ -56,7 +56,6 @@ const determineYearJoined = domain =>
     if (config.environment === "development")
       return resolve(new Date().getFullYear() - Math.floor(Math.random() * 6));
 
-    console.log("domain", domain);
     Blog.get({ domain }, function (err, blog) {
       if (err || !blog)
         return reject(err || new Error("No blog with domain " + domain));
@@ -75,7 +74,6 @@ const determineYearJoined = domain =>
           joined = new Date().getFullYear();
         }
 
-        console.log("joined", joined);
         resolve(joined);
       });
     });

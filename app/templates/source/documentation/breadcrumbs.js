@@ -31,8 +31,6 @@ function renderBreadcrumbs() {
     parent = parent.parentElement;
   }
 
-  console.log("breadcrumbs", breadcrumbs);
-
   if (breadcrumbs.length > 1) {
     breadcrumbsContainer.innerHTML = breadcrumbs
       .map(

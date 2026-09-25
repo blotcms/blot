@@ -24,8 +24,6 @@ module.exports = function (blogID, callback) {
         throw new Error("Length mismatch");
       }
 
-      // console.log(tos);
-
       var allRedirects = _.zip(froms, tos);
 
       var i = 0;
@@ -37,8 +35,6 @@ module.exports = function (blogID, callback) {
           index: i++,
         };
       });
-
-      // console.log(allRedirects);
 
       callback(null, allRedirects);
     } catch (err) {

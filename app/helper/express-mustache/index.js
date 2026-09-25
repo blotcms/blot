@@ -60,7 +60,6 @@ const render = async function (filePath, options, callback) {
 
     return callback(null, result);
   } catch (err) {
-    console.log(err);
     // if (err.message.indexOf(" at ") > -1) {
     //   const index = parseInt(err.message.split(" ").pop());
     // }

@@ -34,7 +34,6 @@ module.exports = function (blogID, handle, callback) {
     // a new blog. If so, we don't know
     // the blog's ID yet.
     if (blog && blog.id && blogID !== blog.id && blog.handle === handle) {
-      console.log("HANDLE IN USE BY", blog);
       err = new Error(IN_USE);
       err.code = "EEXISTS";
       return callback(err);
