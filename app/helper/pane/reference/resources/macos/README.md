@@ -70,7 +70,8 @@ layout (Tahoe) has no tab bar. Extra Safari windows are closed and Finder's wind
 right before the capture, and TextEdit is force-quit (its two editor windows stay open at the same position and showed
 behind Safari; closing them through AppleScript times out). The sidebar / tab group button is dragged off the toolbar through
 View > Customize Toolbar with `cliclick`, like Finder's column dividers (there is no documented
-preference for it); `debug-safari*.png` and `browser.log` in the capture logs show each step.
+preference for it); `debug-safari*.png` (kept in the run's Actions artifacts, not committed) and
+`browser.log` in the capture logs show each step.
 
 ## Desktop icons (`-desktop`)
 The "Your site" contents (all files and `Fruits`, except `Old report.doc`, which looks like

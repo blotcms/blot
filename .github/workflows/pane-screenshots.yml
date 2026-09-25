@@ -214,7 +214,8 @@ jobs:
               case "$base" in
                 # the screenshots are named <os>-<theme>[@2x][-view].png
                 "$os"-*.png) cp "$f" "$REF/$os/" ;;
-                # everything else (logs, versions, debug images) is a resource
+                debug-*.png) ;;  # debug images stay in the run's artifacts, not the repo
+                # everything else (logs, versions) is a resource
                 *) mkdir -p "$REF/resources/$os/capture-logs/$name"; cp "$f" "$REF/resources/$os/capture-logs/$name/" ;;
               esac
             done

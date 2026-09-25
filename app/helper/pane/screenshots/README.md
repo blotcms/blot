@@ -13,8 +13,9 @@ this file is about running and changing the pipeline.
 | `make-fixture.sh`, `fixture-assets/` | all (Windows builds the same fixture in PowerShell) | the "Your site" sample folder |
 
 Workflow: `.github/workflows/pane-screenshots.yml`. It captures light and dark at 2x,
-then a `commit` job pushes the PNGs and `capture-logs/` (logs and debug screenshots,
-kept in `reference/resources/<os>/capture-logs/`) back to the branch as a bot.
+then a `commit` job pushes the PNGs and `capture-logs/` (logs, kept in
+`reference/resources/<os>/capture-logs/`) back to the branch as a bot. Debug screenshots
+(`debug-*.png`) are dropped from that commit; they stay in the run's Actions artifacts.
 
 ## OS versions are pinned
 The runner labels are pinned (`macos-26`, `windows-2025`, `ubuntu-24.04`, not `-latest`) and
@@ -40,7 +41,9 @@ newer image. **To move to a newer OS, follow `UPDATING-OS.md`.**
 - `concurrency` cancels an in-progress run for the same ref: a second push during a
   capture kills it. Debug on a quiet branch.
 - Look at `capture-logs/<os>-<theme>-2x/` after any failure or odd image: process lists,
-  UI Automation dumps, full-screen debug PNGs. Add more logging rather than guessing.
+  UI Automation dumps. Full-screen debug PNGs are in the same folder inside the run's
+  uploaded artifact (`pane-<os>-<theme>-<scale>x`), not in the committed `capture-logs/`.
+  Add more logging rather than guessing.
 
 ## Rule: an empty stage before every shot
 Each script clears the desktop of everything the earlier steps left before it sets up the next
