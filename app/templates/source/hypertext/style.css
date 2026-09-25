@@ -345,6 +345,11 @@ pre code {
   outline: none;
 }
 
+.entry video,
+.entry iframe {
+  max-width: 100%;
+}
+
 .entry a:hover {
 filter: brightness(1.15);
 }

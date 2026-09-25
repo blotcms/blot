@@ -1,5 +1,6 @@
 {
   "name": "Zine",
+  "popularity": 35,
   "locals": {
     "text_color": "#000000",
     "page_size": 48,
@@ -26,6 +27,7 @@
       "font_size": 18
     },
     "logo_url": "",
+    "profile_image": {},
     "navigation_alignment": "justified",
     "navigation_alignment_options": [
       "justified",
@@ -44,7 +46,6 @@
     ],
     "show_tags": true
   },
-  "isPublic": false,
   "views": {
     "archives.html": {
       "url": "/archives",

@@ -1,5 +1,6 @@
 {
   "name": "Text",
+  "popularity": 55,
   "locals": {
     "max_width": 700,
     "max_width_range": [400, 1200],
@@ -33,6 +34,7 @@
       "font_size": 18
     },
     "logo_url": "",
+    "profile_image": {},
     "index_layout": "post_in_full",
     "index_layout_options": [
       "titles",
@@ -63,7 +65,6 @@
       "writing"
     ]
   },
-  "isPublic": true,
   "views": {
     "archives.html": {
       "url": "/archives",

@@ -75,6 +75,8 @@ function moveExistingFiles(client, otherBlog) {
     // Get a lock on the blog
     // we should add a way to retry this sync attempt
     sync(otherBlog.id, async function (err, folder, done) {
+      if (err) return reject(err);
+
       try {
         const { folder, folder_id } = await mkdir(client, otherBlog.title);
 
@@ -153,3 +155,4 @@ async function mkdir(client, title) {
 }
 
 module.exports = createFolder;
+module.exports.moveExistingFiles = moveExistingFiles;

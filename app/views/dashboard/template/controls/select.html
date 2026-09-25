@@ -1,9 +1,18 @@
-<form method="post" class="select">
+<form method="post" class="select{{#fullWidth}} select--full-width{{/fullWidth}}">
   <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+  {{#showLabel}}
   <label for="select.{{key}}" style="flex-shrink: 0;">
     {{label}}:
   </label>
-  <select id="select.{{key}}" name="locals.{{key}}" style="flex-grow: 1;">
+  {{/showLabel}}
+  {{^fullWidth}}
+  {{^showLabel}}
+  <label for="select.{{key}}" style="flex-shrink: 0;">
+    {{label}}:
+  </label>
+  {{/showLabel}}
+  {{/fullWidth}}
+  <select id="select.{{key}}" name="locals.{{key}}" {{#fullWidth}}{{^showLabel}}aria-label="{{label}}"{{/showLabel}}{{/fullWidth}} style="flex-grow: 1;">
     {{#options}}
     <option value="{{value}}" {{selected}}>{{label}}</option>
     {{/options}}

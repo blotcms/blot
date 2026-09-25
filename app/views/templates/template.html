@@ -24,4 +24,15 @@
 </div>
 {{/README}}
 
+{{#relatedExampleCategories.length}}
+<div class="template-related-examples">
+    <h2>Who uses this template</h2>
+    <ul class="pill-navigation">
+        {{#relatedExampleCategories}}
+        <li><a href="{{href}}">{{label}}</a></li>
+        {{/relatedExampleCategories}}
+    </ul>
+</div>
+{{/relatedExampleCategories.length}}
+
 {{/template}}

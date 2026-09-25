@@ -1,5 +1,6 @@
 {
   "name": "Hypertext",
+  "popularity": 15,
   "locals": {
     "page_size": 100,
     "page_size_range": [1, 200],
@@ -32,6 +33,7 @@
       "line_height": 1.6
     },
     "logo_url": "",
+    "profile_image": {},
     "sticky_navigation": true,
     "collapse_navigation_by_default": true,
     "navigation_width": 280,

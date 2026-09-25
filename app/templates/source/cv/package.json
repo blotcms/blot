@@ -1,5 +1,6 @@
 {
   "name": "CV",
+  "popularity": 48,
   "locals": {
     "page_size": 18,
     "spacing": 1,
@@ -28,6 +29,7 @@
     "heading_font": {
       "id": "system-sans"
     },
+    "profile_image": {},
     "navigation_alignment": "left",
     "navigation_alignment_options": ["left", "center"],
     "demo_folder": "clara"

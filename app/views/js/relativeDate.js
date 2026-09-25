@@ -49,9 +49,9 @@ var dates = document.querySelectorAll('[date-from-now]');
 dates.forEach(function(el){
   var dateStamp = parseInt(el.getAttribute('date-from-now'));
   if (isNaN(dateStamp))
-    return console.log('No date parsed');
+    return;
   if (Date.now() - dateStamp > 1000*60*60*24*30*3)
-    return console.log('Date too old');
+    return;
   var new_str = relativeDate(new Date(dateStamp));
   el.innerHTML = new_str;
 });

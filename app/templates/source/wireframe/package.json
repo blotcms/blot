@@ -1,6 +1,6 @@
 {
   "name": "Wireframe",
-  "isPublic": false,
+  "popularity": 8,
   "locals": {
     "page_size": 12,
     "hide_dates": false,
@@ -26,6 +26,7 @@
       "font_size": 14
     },
     "logo_url": "",
+    "profile_image": {},
     "navigation_alignment": "left",
     "navigation_alignment_options": [
       "left",

@@ -1,5 +1,6 @@
 {
   "name": "Keynote",
+  "popularity": 12,
   "locals": {
     "page_size": 12,
     "hide_dates": false,
@@ -25,6 +26,7 @@
       "font_size": 13
     },
     "logo_url": "",
+    "profile_image": {},
     "navigation_alignment": "justified",
     "navigation_alignment_options": [
       "justified",
@@ -40,7 +42,6 @@
     "spacing": 4,
     "spacing_range": [1, 8]
   },
-  "isPublic": false,
   "views": {
     "public": {
       "partials": {

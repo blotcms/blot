@@ -1,5 +1,6 @@
 {
   "name": "Portfolio",
+  "popularity": 90,
   "locals": {
     "page_size": 20,
     "page_size_range": [6, 60],
@@ -27,6 +28,7 @@
       "font_size": 14
     },
     "logo_url": "",
+    "profile_image": {},
     "show_title": false,
     "show_search": false,
     "show_adjacent_posts": true,
@@ -76,7 +78,6 @@
       "portfolios"
     ]
   },
-  "isPublic": true,
   "views": {
     "search": {
       "partials": {

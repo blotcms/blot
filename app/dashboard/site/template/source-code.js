@@ -5,6 +5,7 @@ const formJSON = require("helper/formJSON");
 const extend = require("helper/extend");
 const async = require("async");
 const writeChangeToFolder = require("./save/writeChangeToFolder");
+const previewReload = require("helper/publishPreviewReload");
 
 SourceCode.param("viewSlug", require("./load/template-views"));
 SourceCode.param("viewSlug", require("./load/template-view"));
@@ -103,6 +104,7 @@ SourceCode.route("/:viewSlug/edit")
         parsed,
         function (err, views) {
           if (err) return sendError(err);
+          views = views || {};
 
           Template.getMetadata(req.template.id, function (err, metadata) {
             if (err) return sendError(err);
@@ -133,6 +135,10 @@ SourceCode.route("/:viewSlug/edit")
                   view,
                   function (err) {
                     if (err) return sendError(err);
+                    // package.json is metadata, not a view file. Publish after the
+                    // locals and any view metadata from it are stored so an
+                    // open preview tab reloads.
+                    previewReload.publish(req.blog.id);
                     if (res.locals.templateForked) {
                       res.set("X-Template-Forked", "1");
                     }

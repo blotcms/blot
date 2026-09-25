@@ -1,6 +1,7 @@
 const scheduler = require("node-schedule");
 const { promisify } = require("util");
 const Blog = require("models/blog");
+const Entries = require("models/entries");
 const clfdate = require("helper/clfdate");
 const email = require("helper/email");
 const resetToBlot = require("./sync/reset-to-blot");
@@ -15,6 +16,10 @@ const getAllIDs = promisify(Blog.getAllIDs);
 const getBlog = promisify(Blog.get);
 const getDropboxAccount = promisify(getAccount);
 const setDropboxAccount = promisify(setAccount);
+// getAllTotal, not getTotal - Fix()'s entry-ghosts (Entries.each) scans the
+// "all" list (drafts/pages/scheduled/deleted included), not just published
+// "entries", so getTotal would under-count the workload this field tracks.
+const getEntryTotal = promisify(Entries.getAllTotal);
 
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_IN_MS = 15 * 60 * 1000;
@@ -42,8 +47,12 @@ const resetToBlotWithLock = async (blogID, publish) => {
 
 // Event loop delay while one blog was validated, to find which blog and which
 // phase blocks the loop (a stall longer than the folder lock TTL crashes the
-// process). Every blog is logged so quiet blogs are a baseline.
-const logLag = (blogID, phase, { durationMs, maxLagMs, p99LagMs }) => {
+// process). Every blog is logged so quiet blogs are a baseline. entryCount is
+// included because "fix+catch-up" runs Fix()'s entry-ghosts check, which does
+// one sequential Redis round trip per entry - a large count is the leading
+// suspect for starving another blog's lock heartbeat on the shared
+// connection, and without it that theory can only be checked after the fact.
+const logLag = (blogID, phase, entryCount, { durationMs, maxLagMs, p99LagMs }) => {
   console.log(
     clfdate(),
     "Dropbox: validation lag",
@@ -51,7 +60,8 @@ const logLag = (blogID, phase, { durationMs, maxLagMs, p99LagMs }) => {
     phase,
     `duration=${durationMs}ms`,
     `maxLag=${maxLagMs}ms`,
-    `p99Lag=${p99LagMs}ms`
+    `p99Lag=${p99LagMs}ms`,
+    `entries=${entryCount == null ? "unknown" : entryCount}`
   );
 };
 
@@ -139,12 +149,14 @@ const validateAllBlogs = async () => {
         console.log(clfdate(), "Dropbox:", blogID, ...args);
       };
 
+      const entryCount = await getEntryTotal(blogID).catch(() => null);
+
       let summary;
       const stopWalkMeasure = measureEventLoop();
 
       try {
         summary = await resetToBlotWithLock(blogID, publish);
-        logLag(blogID, "walk", stopWalkMeasure());
+        logLag(blogID, "walk", entryCount, stopWalkMeasure());
       } catch (err) {
         stopWalkMeasure();
         // A sync is already running for this blog, and that sync will pick
@@ -174,7 +186,7 @@ const validateAllBlogs = async () => {
         await fixBlog(blog);
         await catchUpSync(blog);
       } finally {
-        logLag(blogID, "fix+catch-up", stopFollowUpMeasure());
+        logLag(blogID, "fix+catch-up", entryCount, stopFollowUpMeasure());
       }
     } catch (err) {
       console.error(

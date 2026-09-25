@@ -101,6 +101,23 @@ module.exports = (function () {
       });
   }
 
+  // Count of the "all" list, the same set Fix()'s each()-based checks (e.g.
+  // entry-ghosts) scan one Redis round trip at a time - includes drafts,
+  // pages, scheduled and deleted entries that getTotal's "entries" list
+  // excludes, so this is the count that actually predicts that workload.
+  function getAllTotal(blogID, callback) {
+    var allKey = listKey(blogID, "all");
+
+    redis
+      .zCard(allKey)
+      .then(function (count) {
+        callback(null, count);
+      })
+      .catch(function (err) {
+        callback(err);
+      });
+  }
+
   // includes deleted entries
   function getAllIDs(blogID, callback) {
     var allKey = listKey(blogID, "all");
@@ -913,6 +930,7 @@ module.exports = (function () {
     getAll: getAll,
     getAllIDs: getAllIDs,
     getTotal: getTotal,
+    getAllTotal: getAllTotal,
     getRecent: getRecent,
     lastUpdate: lastUpdate,
     getCreated: getCreated,

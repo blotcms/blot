@@ -1,5 +1,6 @@
 {
   "name": "Magazine",
+  "popularity": 50,
   "locals": {
     "accent_color": "#0078D9",
     "background_color": "#fff",
@@ -27,12 +28,12 @@
       "font_size": 36,
       "line_height": 1.15
     },
+    "profile_image": {},
     "demo_folder": "bjorn",
     "template_categories": [
       "writing"
     ]
   },
-  "isPublic": true,
   "views": {
     "style": {
       "url": "/style.css"

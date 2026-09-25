@@ -1,6 +1,6 @@
 {
   "name": "Fieldnotes",
-  "isPublic": false,
+  "popularity": 40,
   "locals": {
     "lang": "en-US",
     "page_size": 10,
@@ -18,6 +18,7 @@
       "line_height": 1.625
     },
     "header_image_url": "",
+    "profile_image": {},
     "infinite_scroll": true,
     "show_related_posts": true,
     "syntax_highlighter": {

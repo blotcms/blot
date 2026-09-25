@@ -15,6 +15,10 @@
 #   PROXY_LOG_DIR          /var/instance-ssd/logs   fail2ban and logrotate
 #                                               read the access log here
 #   PROXY_CERT_DIR         /etc/ssl/private     wildcard cert + key (read-only)
+#   PROXY_BLOG_STATIC_DIR  /var/www/blot/data/static  per-blog static files
+#                                               (thumbnails, etc), read-only (see run_args())
+#   PROXY_GLOBAL_STATIC_DIR /var/www/blot/app/blog/static  the app's own static
+#                                               assets, read-only (see run_args())
 #   PROXY_AUTOSSL_VOLUME   blot-proxy-auto-ssl  dehydrated account state
 #   PROXY_NODE_CONTAINER   blot-container-blue  a Node container to purge from
 #   PROXY_PURGE_URLS       (read from $PROXY_NODE_CONTAINER's environment)  comma separated
@@ -25,6 +29,15 @@
 #   PROXY_DEPLOY_LOCK      /tmp/blot-proxy-deploy.lock  held by every deploy script
 #   PROXY_SKIP_CERT_SWEEP  (unset)              1 skips the custom-domain certificate
 #                                               comparison (see cert_baseline)
+#   PROXY_NOFILE           65536                --ulimit nofile=N:N. Each proxied
+#                                               connection holds ~2 fds (client +
+#                                               upstream), so worker_connections
+#                                               10000 (config/openresty/conf/initial.conf)
+#                                               needs ~20000 plus cache/log fds;
+#                                               this leaves headroom above that
+#   PROXY_REHYDRATE_TIMEOUT 180                 seconds the rehearsal waits for
+#                                               "rehydrate: complete" in error.log
+#                                               (~20s for today's ~200k files)
 #
 # PROXY_DEPLOY_SLEEP replaces `sleep` (the tests set it to a no-op).
 
@@ -32,6 +45,8 @@ ENV_FILE="${PROXY_ENV_FILE:-/etc/blot/proxy.env}"
 CACHE_DIR="${PROXY_CACHE_DIR:-/var/instance-ssd/cache}"
 LOG_DIR="${PROXY_LOG_DIR:-/var/instance-ssd/logs}"
 CERT_DIR="${PROXY_CERT_DIR:-/etc/ssl/private}"
+BLOG_STATIC_DIR="${PROXY_BLOG_STATIC_DIR:-/var/www/blot/data/static}"
+GLOBAL_STATIC_DIR="${PROXY_GLOBAL_STATIC_DIR:-/var/www/blot/app/blog/static}"
 AUTOSSL_VOLUME="${PROXY_AUTOSSL_VOLUME:-blot-proxy-auto-ssl}"
 NODE_CONTAINER="${PROXY_NODE_CONTAINER:-blot-container-blue}"
 HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-60}"
@@ -40,6 +55,15 @@ HEALTH_SOCK="/run/openresty/health.sock"
 LOCK_FILE="${PROXY_DEPLOY_LOCK:-/tmp/blot-proxy-deploy.lock}"
 SITE_IP="127.0.0.1"
 PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
+# worker_connections is 10000 (config/openresty/conf/initial.conf) and each
+# proxied connection holds about two fds (client + upstream), so 10000
+# connections can need about 20000; add cache/log/socket fds on top and
+# Docker's default (1024) is nowhere close. This is the CONTAINER's limit; the
+# config also raises worker_rlimit_nofile itself (to 20480, initial.conf) for
+# the same reason. 65536 leaves real headroom above both - a root dockerd
+# allows it.
+NOFILE="${PROXY_NOFILE:-65536}"
+REHYDRATE_TIMEOUT="${PROXY_REHYDRATE_TIMEOUT:-180}"
 
 # Never fail because the terminal went away: the cutover ignores SIGPIPE and
 # must still be able to finish and roll back with nobody watching.
@@ -113,12 +137,20 @@ run_args() { # run_args <name>
     --name "$1"
     --network host
     --cap-add SYS_NICE
+    --ulimit "nofile=$NOFILE:$NOFILE"
     --log-driver json-file --log-opt max-size=512m --log-opt max-file=1
     --env-file "$ENV_FILE"
     -v "$CACHE_DIR":/var/cache/openresty
     -v "$LOG_DIR":/var/log/openresty
     -v "$AUTOSSL_VOLUME":/etc/resty-auto-ssl
     -v "$CERT_DIR":/etc/ssl/private:ro
+    # Mounted at the same paths the image defaults to
+    # (BLOG_STATIC_FILES_DIR / GLOBAL_STATIC_FILES_DIR in
+    # config/openresty/locals.js), so `try_files` on cdn.<host> finds files on
+    # disk instead of falling through to @cdn_node, which misses the
+    # Cache-Control/CORS headers `location /` sets.
+    -v "$BLOG_STATIC_DIR":/var/www/blot/data/static:ro
+    -v "$GLOBAL_STATIC_DIR":/var/www/blot/app/blog/static:ro
   )
 }
 
@@ -151,6 +183,29 @@ healthy() { # healthy <name>
 wait_healthy() { # wait_healthy <name> <timeout>
   local deadline=$(( $(date +%s) + $2 ))
   while ! healthy "$1"; do
+    running "$1" || return 1
+    [ "$(date +%s)" -lt "$deadline" ] || return 1
+    nap 1
+  done
+}
+
+# Worker 0 rebuilds the purge index (cacher.lua build_index) once nginx starts
+# listening, and logs "rehydrate: complete files=... hosts=..." to error.log
+# when it finishes, or "[error] ... rehydrate: <reason>" (e.g. cannot read a
+# file, or "increase lua_shared_dict cacher_dictionary") if it gives up. Read
+# BOTH log sinks: normally the container's own error.log (no log mount here),
+# but with ALLOW_STDOUT_LOGS=1 (image_logs_to_file's override) error_log goes
+# to stderr instead, where only `docker logs` sees it - checking just the file
+# would then time out and refuse every cutover on such an image. Poll until
+# one or the other shows the complete/error line, or <timeout> seconds pass
+# (~20s for today's ~200k files; a cold disk can take longer, hence a
+# generous default).
+wait_rehydrated() { # wait_rehydrated <name> <timeout>
+  local deadline=$(( $(date +%s) + $2 )) log
+  while true; do
+    log="$( { docker exec "$1" cat /var/log/openresty/error.log 2>/dev/null; docker logs "$1" 2>&1; } || true)"
+    echo "$log" | grep -q '\[error\].*rehydrate:' && return 1
+    echo "$log" | grep -q 'rehydrate: complete' && return 0
     running "$1" || return 1
     [ "$(date +%s)" -lt "$deadline" ] || return 1
     nap 1

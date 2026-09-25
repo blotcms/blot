@@ -58,12 +58,6 @@ module.exports = function create(owner, name, metadata, callback) {
       }
 
       await client.sAdd(key.blogTemplates(owner), id);
-      if (metadata.isPublic) {
-        await client.sAdd(key.publicTemplates(), id);
-      } else {
-        await client.sRem(key.publicTemplates(), id);
-      }
-
       setMetadata(id, metadata, function (setErr) {
         if (setErr) return callback(setErr);
 

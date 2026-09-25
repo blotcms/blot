@@ -6,6 +6,47 @@ var initSidebarActionMenu = require("./sidebar-action-menu");
 var template_list = document.getElementById("template-list");
 
 if (template_list) {
+  Array.from(
+    template_list.querySelectorAll("[data-template-list-toggle]")
+  ).forEach(function (toggle) {
+    var content = document.getElementById(toggle.getAttribute("aria-controls"));
+    if (!content) return;
+
+    var sectionKey = toggle.getAttribute("data-section-key");
+    var sectionLabel = toggle.getAttribute("data-section-label");
+    var storageKey = "template-list-section:" + sectionKey;
+    var expanded = true;
+
+    try {
+      expanded = window.sessionStorage.getItem(storageKey) !== "collapsed";
+    } catch (err) {}
+
+    var setExpanded = function (nextExpanded, persist) {
+      expanded = nextExpanded;
+      toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+      toggle.setAttribute(
+        "aria-label",
+        (expanded ? "Collapse " : "Expand ") + sectionLabel
+      );
+      content.hidden = !expanded;
+
+      if (persist) {
+        try {
+          window.sessionStorage.setItem(
+            storageKey,
+            expanded ? "expanded" : "collapsed"
+          );
+        } catch (err) {}
+      }
+    };
+
+    setExpanded(expanded, false);
+
+    toggle.addEventListener("click", function () {
+      setExpanded(!expanded, true);
+    });
+  });
+
   var scroll_offset = sessionStorage.getItem("scroll_offset");
   if (scroll_offset) {
     template_list.scrollTop = scroll_offset;
@@ -29,12 +70,8 @@ if (template_list) {
       menuElement: templateActionMenu,
       rowSelector: ".template-row",
       triggerSelector: ".row-action-menu__trigger",
-      initialFocusKey: "settings",
+      initialFocusKey: "use",
       linkMap: {
-        settings: function (dataset) {
-          var baseUrl = cleanTemplateBase(dataset);
-          return baseUrl || null;
-        },
         use: function (dataset) {
           var baseUrl = cleanTemplateBase(dataset);
           return baseUrl ? baseUrl + "/install" : null;
@@ -49,7 +86,17 @@ if (template_list) {
         },
         "delete": function (dataset) {
           var baseUrl = cleanTemplateBase(dataset);
-          return baseUrl ? baseUrl + "/delete" : null;
+          return {
+            href: baseUrl ? baseUrl + "/delete" : null,
+            hidden: dataset.isMine !== "true" || dataset.isMirror === "true",
+          };
+        },
+        reset: function (dataset) {
+          var baseUrl = cleanTemplateBase(dataset);
+          return {
+            href: baseUrl ? baseUrl + "/reset" : null,
+            hidden: dataset.isMirror !== "true",
+          };
         },
         duplicate: function (dataset) {
           var baseUrl = cleanTemplateBase(dataset);

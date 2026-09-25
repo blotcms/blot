@@ -1,10 +1,7 @@
-	<div class="settings-group">
-<h2 class="template-heading">{{label}}</h2>
-
 <form
   method="post"
   id="font_picker_{{key}}"
-  class="template-font-control"
+  class="template-font-control font-row"
   data-font-picker-form
   data-font-picker-key="{{key}}"
 >
@@ -15,6 +12,8 @@
     value="{{{value.id}}}"
     data-font-picker-value
   >
+
+  {{^singleFontInput}}<span class="font-row-label">{{label}}</span>{{/singleFontInput}}
 
   <button
     type="button"
@@ -39,28 +38,17 @@
     </span>
   </button>
 
-    <div class="sizing">
-      <label for="locals.{{key}}.font_size">Font size:</label>
-      <input
-        type="number"
-        id="locals.{{key}}.font_size"
-        name="locals.{{key}}.font_size"
-        value="{{font_size}}"
-        min="9"
-        max="96"
-      >
-    </div>
-    <div class="sizing">
-      <label for="locals.{{key}}.line_height">Line height:</label>
-      <input
-        type="number"
-        id="locals.{{key}}.line_height"
-        name="locals.{{key}}.line_height"
-        value="{{line_height}}"
-        min="0.9"
-        step="0.05"
-        max="2.4"
-      >
-    </div>
+  <input
+    type="number"
+    class="number-stepper__input"
+    data-number-stepper
+    data-number-stepper-label="font size"
+    id="locals.{{key}}.font_size"
+    name="locals.{{key}}.font_size"
+    value="{{font_size}}"
+    min="9"
+    max="96"
+    step="1"
+    inputmode="numeric"
+  >
 </form>
-	</div>

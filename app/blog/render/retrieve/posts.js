@@ -20,6 +20,59 @@ const postsCache = new LRUCache({
   // blog sharing this process's memory.
   maxSize: 100 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
+  // Without this, an in-flight fetch that gets evicted by LRU/size pressure
+  // (busy process, byte-capped cache) aborts and every request coalesced
+  // onto it rejects with "Error: evicted" - a 500 - instead of getting the
+  // page it asked for. ignoreFetchAbort lets the already-running getPage/
+  // fetchTaggedEntries call finish and hand its result to those callers; it
+  // just won't be re-inserted into the (already full) cache.
+  ignoreFetchAbort: true,
+  // fetchMethod makes concurrent misses on the same key share a single
+  // in-flight load instead of each request fetching independently - e.g. a
+  // burst of near-simultaneous requests (a page full of broken <img> tags
+  // all 404ing at once) that all miss the same cold page of posts would
+  // otherwise each hit Redis/Mongo for the same data.
+  fetchMethod: async (key, staleValue, { context }) => {
+    const { blogID, tags, options, offset, pageSize, req, log } = context;
+
+    let payload;
+
+    if (!tags) {
+      log("Loading page of entries");
+      // Forward the raw, unnormalized pageNumber/pageSize here: models/entries
+      // getPage does its own validation (default page size 5, max 100, and a
+      // 400 for a non-digit :page) which bots probe for. lib/pagination's
+      // normalizePageNumber/normalizePageSize (used for pagination math and
+      // the tagged branch) have different defaults (100/500) and never
+      // reject, so they're only used for the tagged branch and the cache
+      // key - never as an override here.
+      const page = await getPage(blogID, options);
+      payload = { entries: page.entries, pagination: page.pagination };
+    } else {
+      log("Loading tagged page of entries");
+      const result = await fetchTaggedEntries(blogID, tags, {
+        limit: pageSize,
+        offset,
+        pathPrefix: options.pathPrefix,
+        sortBy: options.sortBy,
+        order: options.order,
+      });
+
+      const entries = await getEntry(blogID, result.entryIDs || []);
+      payload = {
+        // fetchTaggedEntries paginated in the selected order; re-apply it to
+        // the hydrated page so Entry.get's ordering can't drift.
+        entries: sortEntries(entries, options),
+        pagination: result.pagination || {},
+      };
+    }
+
+    // Resolve/project before insertion so large unrequested bodies never
+    // enter the LRU. A null field signature deliberately preserves the full
+    // variant.
+    projectEntryFields(payload.entries, req.retrieve, ["posts", "entries"]);
+    return prepareCacheValue(payload, { preserveEntryInstances: true });
+  },
 });
 
 function clonePosts(value) {
@@ -106,51 +159,14 @@ async function posts(req, res) {
   };
 
   const key = createCacheKey(req, res, normalizedOptions);
-  let cached = postsCache.get(key);
+  const status = {};
+  const prepared = await postsCache.fetch(key, {
+    status,
+    context: { blogID, tags, options, offset, pageSize, req, log },
+  });
 
-  if (cached) {
-    const cachedPayload = clonePosts(cached.payload);
-    log("Retrieved posts from cache");
-    res.locals.pagination = cachedPayload.pagination;
-    return projectEntryFields(cachedPayload.entries, req.retrieve, ["posts", "entries"]);
-  }
+  if (status.fetch === "hit") log("Retrieved posts from cache");
 
-  let payload;
-
-  if (!tags) {
-    log("Loading page of entries");
-    // Forward the raw, unnormalized pageNumber/pageSize here: models/entries
-    // getPage does its own validation (default page size 5, max 100, and a
-    // 400 for a non-digit :page) which bots probe for. lib/pagination's
-    // normalizePageNumber/normalizePageSize above have different defaults
-    // (100/500) and never reject, so they're only used for the tagged
-    // branch and the cache key below - never as an override here.
-    const page = await getPage(blogID, options);
-    payload = { entries: page.entries, pagination: page.pagination };
-  } else {
-    log("Loading tagged page of entries");
-    const result = await fetchTaggedEntries(blogID, tags, {
-      limit: pageSize,
-      offset,
-      pathPrefix: options.pathPrefix,
-      sortBy: options.sortBy,
-      order: options.order,
-    });
-
-    const entries = await getEntry(blogID, result.entryIDs || []);
-    payload = {
-      // fetchTaggedEntries paginated in the selected order; re-apply it to
-      // the hydrated page so Entry.get's ordering can't drift.
-      entries: sortEntries(entries, options),
-      pagination: result.pagination || {},
-    };
-  }
-
-  // Resolve/project before insertion so large unrequested bodies never enter
-  // the LRU. A null field signature deliberately preserves the full variant.
-  projectEntryFields(payload.entries, req.retrieve, ["posts", "entries"]);
-  const prepared = prepareCacheValue(payload, { preserveEntryInstances: true });
-  postsCache.set(key, prepared);
   const responsePayload = clonePosts(prepared.payload);
 
   res.locals.pagination = responsePayload.pagination;

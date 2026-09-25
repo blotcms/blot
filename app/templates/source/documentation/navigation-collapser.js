@@ -7,7 +7,6 @@ class SidebarNavigation {
   
   calculateDepthsAndFilename() {
     this.items.forEach(item => {
-      console.log(item.dataset.path);
       const depth = item.dataset.path.split('/').length;
       const filename = item.dataset.path.split('/').pop();
       item.dataset.depth = depth;

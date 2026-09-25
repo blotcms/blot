@@ -113,8 +113,6 @@ document.querySelectorAll("button").forEach(btn => {
 // Attach submit handler to the form
 document.querySelectorAll("form").forEach(form => {
   form.addEventListener("submit", event => {
-    console.log('HERE!');
-
     const textarea = form.querySelector("textarea");
     if (!textarea) return;
 

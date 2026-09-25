@@ -1,6 +1,61 @@
+How do we think about a shared asset library across templates? 
+- e.g. shared favicons
+- can we unwind some of the complete delete favion on template delete, etc. code?
+
+Decide whether or not to revert the preset system – should it only be used for the templates index for explaining the customization features?
+
+Begin triaging iCLoud sync issues
+
+Add script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago)
+
+iCloud server should periodically:
+- quit safari (some error flow during auth sometimes opens it)
+- close all system UI prompts (sometimes we get error for maybe accessing a revoked folder?)
+
+Add script to freeze a subscription / site that excludes it from the daily accounts to delete check
+
+Create simple config option to disable a given client when something like the Google Drive issue happens. Make it clear on the dashboard and docs that it's not working. 
+Add script to pause a subscription and make sure these users don't appear in the list of users to cancel
+- investigate the situation with hans first
+
+Under templates index
+- Clicking on file in folder pulls up post on preview site ?
+
+Fix Google Drive sync outage caused by Google account suspesion
+- Future fix to Google Drive client needs to never use the service account to create files (ask the user to handle the initial transfer)
+- Revert 1958
+
+Dropbox initial transfer of existing site folder needs to handle the user running out of Dropbox space properly. Basically we could check quota before beginning the transfer. And if we run into quota mid-transfer, we should stop, display an error, ask the user to either free up space or disconnect from Dropbox.
+- This triggered DATA LOSS
+
+Make Google Drive incremental sync efficient
+- Store hash of their api responses
+- Don’t touch disk
+- Support huge folders with huge directories
+- Start with recently changed files and dirs first
+
+Clarify on cancel / delete / overdue pages for accounts with grandfathered subscription prices that if they re-join Blot they will lose their grandfathered rate.
+
+Add fractions and raw numbers of current users using each client to daily update
+
+We need a plan for the suspension of the iCloud user as well... is the code resilient to data loss in this scenario?
+
 Investigate green crashes (`Lock was lost` / ECOMPROMISED at 2026-09-21 18:02 and 20:01 UTC) and slow `/health` in the first minutes of each hour; the Dropbox hourly validation is only a suspect, not confirmed
-- Check green logs for `validation lag` and `[EVENT LOOP]` after the event loop monitor ships (PR #1950)
-- Remove the event loop monitor (app/helper/eventLoopMonitor*.js, its setup.js hook, and `logLag`/`measureEventLoop` in app/clients/dropbox/init.js) once the cause is fixed
+- Checked green logs for `validation lag` and `[EVENT LOOP]` after PR #1950 shipped: neither showed any delay near the 10s lock TTL at the 2026-09-22 06:00:49 and 07:00:39 crashes, and Redis's own SLOWLOG had nothing near 10s either — ruled out a classic JS block and a single slow Redis command
+- The two compromised blogs' folders aren't large/flat or full of huge files (824 and 526 files, largest file 9.4MB) — the localReaddir concurrency fix (PR #1952) is good hygiene but isn't the cause here
+- Next: check green logs for `[LOCK] slow heartbeat` / `[LOCK] heartbeat error` after the heartbeat round-trip logging ships (PR #1952) — it separates event-loop-side delay (tickDelay) from Redis-side delay (roundTrip) for the first time
+- 2026-09-24 crashes at 15:04:34 and 16:01:08 UTC (green): `[LOCK] slow heartbeat` showed tickDelay~0ms with roundTrip 1.6-11.3s, so it's neither event-loop block nor a single slow Redis command (SLOWLOG still clean) — it's queueing on the shared singleton Redis connection (app/models/client.js, one TCP connection per process, no pooling). Both crashes landed right as validation's `Fix()` stage (app/sync/fix) started on some other blog with several hundred posts - `entry-ghosts` does one sequential Redis round trip per entry, over that same shared connection, which is enough to starve an unrelated blog's heartbeat. Full timeline (no customer-identifying details) in the investigate-dropbox-sync-issue skill's incident log
+- Added diagnostics for next time: per-check timing in Fix() (app/sync/fix/index.js), an `entries=N` field on the `validation lag` log line (app/clients/dropbox/init.js), a `runningFixCheck` field on `[LOCK COMPROMISED]` diagnostics (app/sync/lock-diagnostics.js) since Fix() doesn't hold the folder lock and was invisible to pendingSyncs, and fixed `[LOCK COMPROMISED]`'s console.error silently truncating pendingSyncs/pendingUpdates to `[Object]` (app/sync/index.js)
+- Not yet fixed: give the lock heartbeat its own dedicated Redis connection so Fix()'s traffic can't queue ahead of it, or batch Fix()'s per-entry reads
+- Remove the event loop monitor (app/helper/eventLoopMonitor*.js, its setup.js hook, and `logLag`/`measureEventLoop` in app/clients/dropbox/init.js) and the lock heartbeat logging (app/sync/lock.js) once the cause is fixed
+
+Surface template choices on the templates subpages: switch from png to iframe after hovering a selection
+
+Perform caching and header audit of site and templates
+- Check logs and headers via curl
+- Identify optimizations
+
+Analyze the proposed proxy container for possible performance regressions after we switch
 
 12 factor screenshot as api
 - use macserver  (docker container?)
@@ -430,8 +485,7 @@ Investigate replybox for comments
 
 Add checkbox to toggle newsletter subscription to account page
 
-Adjust color settings into a simple 'presets' picker, then an option to dive into specific altertions on seperate view.
-- make it possible to conenct two colors, e.g. navigation background color -> same as background color
+Make it possible to connect two colors in the template editor, e.g. navigation background color -> same as background color
 
 Add lang selector (map english -> en) to template editor
 
@@ -765,8 +819,6 @@ Add an option to use the date modified property of the file, rather than the dat
 Improvements to local folder experience
 - Interpolate fonts based on an ID (a la web template editor)
 - Interpolate syntax highlighting based on an ID
-
-Use [thumbhash](https://github.com/evanw/thumbhash?tab=readme-ov-file) to generate placeholders so thumbnails can have clean lazy loading and tell [David](https://mail.google.com/mail/u/0/#inbox/FMfcgxwJXfqzZvHgrtSxzLBCwcvTsFFB) and [Marius](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLtQPwXwJrwgMzjfvDtcwFZzFC)
 
 Surface recently edited posts on the sites tab of the dashboard
 
@@ -1203,3 +1255,5 @@ Self-hosting:
   - Tell [Frank](https://mail.google.com/mail/u/0/#inbox/FMfcgzGkZkZWrprNcThxMPQKzSTLbkDs)
   - Tell [Zip](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmthffLmfRBswqGmsDKQWdJZFB)
 - Tell Nick when it's possible to deploy a self-hosted [Blot on Vercel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKjxHWSvgjKtCWrbhccKFPlkdD) and [Zia](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsSXWPRNNxDNcdhGHQXBkTtsx)
+
+Add preflight checks in proxy/deploy/{cutover-from-baremetal,blue-green}.sh for PROXY_BLOG_STATIC_DIR/PROXY_GLOBAL_STATIC_DIR existing and readable - docker -v silently creates an empty dir for a missing host path, so a typo or host-layout change would 404 cdn.* static assets with no check catching it

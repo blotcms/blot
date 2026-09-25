@@ -17,9 +17,16 @@ scp -r proxy/deploy blot:~/proxy-deploy
 Both read the host's settings from `/etc/blot/proxy.env`
 ([`proxy.env.example`](proxy.env.example)) and share [`common.sh`](common.sh).
 Paths default to the ones bare-metal uses (`/var/instance-ssd/cache`,
-`/var/instance-ssd/logs`, `/etc/ssl/private`), so the cache stays warm across
-the cutover and a rollback loses nothing. `bash tests/run.sh` exercises both
-against fake `docker`/`systemctl` (CI runs it).
+`/var/instance-ssd/logs`, `/etc/ssl/private`, and the `cdn.` static
+directories `/var/www/blot/data/static` and `/var/www/blot/app/blog/static`),
+so the cache stays warm across the cutover, a rollback loses nothing, and
+`cdn.` requests are served from disk (with the `Cache-Control`/CORS headers of
+`location /`) instead of falling through to Node. Containers also get
+`--ulimit nofile=65536:65536` (`PROXY_NOFILE`) - headroom above both the
+~20000 fds `worker_connections 10000` can need (two fds per proxied
+connection) and the config's own `worker_rlimit_nofile 20480`
+(`config/openresty/conf/initial.conf`).
+`bash tests/run.sh` exercises both against fake `docker`/`systemctl` (CI runs it).
 
 ## Before the first cutover
 
@@ -102,11 +109,23 @@ tmux new -s proxy-cutover
 The dry run is safe at any time. The header of the script lists everything
 checked. In short, the image is run on `127.0.0.1:18443` against the real Node
 containers, Redis and certificate and must answer exactly as bare-metal does,
-*before* anything is stopped. Then bare-metal stops, the container starts, the
-same checks run over the real ports, and any failure (or Ctrl-C, or a dropped
-connection) puts bare-metal back. The bare-metal unit stays enabled, and the
-container has no restart policy, until a two-minute soak passes, so a reboot
-during the cutover also lands on bare-metal.
+*before* anything is stopped. The rehearsal itself does not mount the real
+cache (`use_temp_path=off` means nginx writes new cache entries on every MISS,
+so a read-only mount would turn ordinary rehearsal traffic into 500s).
+Instead, a second, traffic-free container (`blot-proxy-rehydrate-probe`) mounts
+the real cache read-only alongside it, and the cutover fails unless that
+container's `error.log` shows the purge index finished rebuilding from it
+(`rehydrate: complete`, no rehydrate error) within `PROXY_REHYDRATE_TIMEOUT`
+(default 180s; ~20s for today's ~200k files) - proof the container's worker
+can read the whole cache and that the index fits `cacher_dictionary`, without
+which every `/purge` after a real cutover returns 503 indefinitely. Neither
+container has a log mount, so this is read with `docker exec ... cat
+error.log` rather than from the host. Then bare-metal stops, the container
+starts, the same checks run over the real ports, and any failure (or Ctrl-C,
+or a dropped connection) puts bare-metal back. The bare-metal unit stays
+enabled, and the container has
+no restart policy, until a two-minute soak passes, so a reboot during the
+cutover also lands on bare-metal.
 
 Afterwards bare-metal OpenResty stays installed but disabled. To go back by hand:
 
