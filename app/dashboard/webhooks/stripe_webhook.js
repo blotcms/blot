@@ -281,11 +281,19 @@ function update_subscription(customer_id, subscription, callback) {
     // Change blog availability only on an account transition: individual
     // blogs can also be disabled deliberately by an administrator. The model
     // saves the account flag last so failed transitions remain retryable.
+    // Never auto re-enable a subscription with collection paused - an admin
+    // paused it on purpose (see scripts/user/pause-account.js), and a
+    // reactivation-looking webhook shouldn't undo that.
     if (shouldDisable && !user.isDisabled) {
       handler = function (next) {
         User.disable(user, updates, next);
       };
-    } else if (!shouldDisable && subscription.status === "active" && user.isDisabled) {
+    } else if (
+      !shouldDisable &&
+      subscription.status === "active" &&
+      !subscription.pause_collection &&
+      user.isDisabled
+    ) {
       handler = function (next) {
         User.enable(user, updates, next);
       };

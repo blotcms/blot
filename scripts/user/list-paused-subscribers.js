@@ -19,10 +19,13 @@ each(
       user.blogs || [],
       function (blogID, done) {
         Blog.get({ id: blogID }, function (err, blog) {
+          if (err) return done(err);
           done(null, blog ? blog.domain || blog.handle : blogID + " (missing)");
         });
       },
       function (err, blogs) {
+        if (err) return next(err);
+
         found.push({
           email: user.email,
           uid: user.uid,
