@@ -115,6 +115,17 @@ dashboard.use(function (req, res, next) {
 dashboard.use(function (err, req, res, next) {
   // If the user is not logged in, we sent them to the documentation
   if (err.message === "NOUSER") {
+    // An EventSource (e.g. the sync-status stream on a site's folder page)
+    // can't usefully follow a redirect to the log-in page: browsers treat
+    // the redirect target as the stream's new URL, and our reconnecting
+    // client retries indefinitely, so a session expiring while a tab is
+    // left open turns into a permanent loop of requests to /log-in. Fail
+    // with a plain 401 on the same URL instead, so any retries stay on
+    // this cheap, authenticated endpoint rather than spilling onto /log-in.
+    if (req.headers.accept === "text/event-stream") {
+      return res.sendStatus(401);
+    }
+
     let from;
     try {
       let referrer = require("url").parse(req.get("Referrer"));
