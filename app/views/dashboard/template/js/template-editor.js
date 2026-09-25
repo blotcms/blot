@@ -6,6 +6,47 @@ var initSidebarActionMenu = require("./sidebar-action-menu");
 var template_list = document.getElementById("template-list");
 
 if (template_list) {
+  Array.from(
+    template_list.querySelectorAll("[data-template-list-toggle]")
+  ).forEach(function (toggle) {
+    var content = document.getElementById(toggle.getAttribute("aria-controls"));
+    if (!content) return;
+
+    var sectionKey = toggle.getAttribute("data-section-key");
+    var sectionLabel = toggle.getAttribute("data-section-label");
+    var storageKey = "template-list-section:" + sectionKey;
+    var expanded = true;
+
+    try {
+      expanded = window.sessionStorage.getItem(storageKey) !== "collapsed";
+    } catch (err) {}
+
+    var setExpanded = function (nextExpanded, persist) {
+      expanded = nextExpanded;
+      toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+      toggle.setAttribute(
+        "aria-label",
+        (expanded ? "Collapse " : "Expand ") + sectionLabel
+      );
+      content.hidden = !expanded;
+
+      if (persist) {
+        try {
+          window.sessionStorage.setItem(
+            storageKey,
+            expanded ? "expanded" : "collapsed"
+          );
+        } catch (err) {}
+      }
+    };
+
+    setExpanded(expanded, false);
+
+    toggle.addEventListener("click", function () {
+      setExpanded(!expanded, true);
+    });
+  });
+
   var scroll_offset = sessionStorage.getItem("scroll_offset");
   if (scroll_offset) {
     template_list.scrollTop = scroll_offset;

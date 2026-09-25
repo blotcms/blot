@@ -54,9 +54,55 @@ h2 {
   border-bottom: none;
 }
 
-#template-list > h2 a {
+.template-list-section__heading h2 a {
   color: inherit;
   text-decoration: none;
+}
+
+.template-list-section__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 20px;
+  margin-bottom: 0.25rem;
+}
+
+.template-list-section__heading h2 {
+  flex: 1;
+}
+
+.template-list-section__toggle.template-list-section__toggle--heading {
+  width: 100%;
+  justify-content: space-between;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.template-list-section__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--border-radius);
+  background: transparent;
+  color: var(--heading-color);
+  cursor: pointer;
+}
+
+.template-list-section__toggle:hover {
+  color: var(--text-color);
+}
+
+.template-list-section__chevron {
+  transform: rotate(0deg);
+}
+
+.template-list-section__toggle[aria-expanded="true"] .template-list-section__chevron {
+  transform: rotate(90deg);
 }
 
 .inputs form label {
