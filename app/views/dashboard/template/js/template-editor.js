@@ -70,12 +70,8 @@ if (template_list) {
       menuElement: templateActionMenu,
       rowSelector: ".template-row",
       triggerSelector: ".row-action-menu__trigger",
-      initialFocusKey: "settings",
+      initialFocusKey: "use",
       linkMap: {
-        settings: function (dataset) {
-          var baseUrl = cleanTemplateBase(dataset);
-          return baseUrl || null;
-        },
         use: function (dataset) {
           var baseUrl = cleanTemplateBase(dataset);
           return baseUrl ? baseUrl + "/install" : null;
