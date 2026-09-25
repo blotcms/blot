@@ -178,8 +178,10 @@ h2 {
   white-space: nowrap;
 }
 
-.template-row.selected a {
-  color: var(--accent-color);
+.template-row.selected .template-row__link {
+  background-color: var(--accent-color);
+  border-radius: var(--border-radius);
+  color: #fff;
   font-weight: 600;
 }
 
