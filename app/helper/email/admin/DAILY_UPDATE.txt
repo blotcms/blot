@@ -8,6 +8,13 @@ Newsletter subscribers: {{newsletter_subscribers}}
 
 Response time: {{p95_render_time}}
 
+{{#users_by_client.length}}
+Users by client (users on several clients count once each):
+{{#users_by_client}}
+- {{client}}: {{users}} ({{percentage}})
+{{/users_by_client}}
+{{/users_by_client.length}}
+
 {{#new_customers.length}}
 New customers:
 {{#new_customers}}
