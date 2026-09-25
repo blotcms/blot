@@ -258,7 +258,8 @@ function update_subscription(customer_id, subscription, callback) {
     if (subscription.status === "canceled" && !user.isDisabled)
       email.CLOSED(user.uid);
 
-    if (subscription.status === "past_due") email.OVERDUE(user.uid);
+    if (subscription.status === "past_due" && !subscription.pause_collection)
+      email.OVERDUE(user.uid);
 
     if (
       subscription.status === "active" &&
@@ -269,7 +270,8 @@ function update_subscription(customer_id, subscription, callback) {
 
     if (
       subscription.status === "unpaid" &&
-      previousSubscription.status !== "unpaid"
+      previousSubscription.status !== "unpaid" &&
+      !subscription.pause_collection
     )
       email.OVERDUE_CLOSURE(user.uid);
 
@@ -281,11 +283,19 @@ function update_subscription(customer_id, subscription, callback) {
     // Change blog availability only on an account transition: individual
     // blogs can also be disabled deliberately by an administrator. The model
     // saves the account flag last so failed transitions remain retryable.
+    // Never auto re-enable a subscription with collection paused - an admin
+    // paused it on purpose (see scripts/user/pause-account.js), and a
+    // reactivation-looking webhook shouldn't undo that.
     if (shouldDisable && !user.isDisabled) {
       handler = function (next) {
         User.disable(user, updates, next);
       };
-    } else if (!shouldDisable && subscription.status === "active" && user.isDisabled) {
+    } else if (
+      !shouldDisable &&
+      subscription.status === "active" &&
+      !subscription.pause_collection &&
+      user.isDisabled
+    ) {
       handler = function (next) {
         User.enable(user, updates, next);
       };
