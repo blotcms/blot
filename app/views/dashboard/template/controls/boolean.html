@@ -1,8 +1,14 @@
 <form method="post" class="boolean" id="{{key}}">
   <input type="hidden" name="_csrf" value="{{csrftoken}}" />
-<label class="bool" style="padding:8px 16px;border-bottom: 1px solid var(--light-border-color);display: block;display: flex;">
-   <span style="flex-grow: 1;">{{label}}:</span>
-   <input type="hidden" value="off" name="locals.{{key}}" />
-  <input type="checkbox" name="locals.{{key}}" {{#value}}checked{{/value}} />
-</label>
+  <label class="bool">
+    <span class="boolean-label">{{label}}:</span>
+    <input type="hidden" value="off" name="locals.{{key}}" />
+    <input
+      type="checkbox"
+      class="boolean-switch-input"
+      name="locals.{{key}}"
+      {{#value}}checked{{/value}}
+    />
+    <span class="boolean-switch" aria-hidden="true"></span>
+  </label>
 </form>

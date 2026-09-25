@@ -2,6 +2,8 @@
   class="template-row row-action-menu-row {{#selected}}selected{{/selected}}"
   data-template-slug="{{slug}}"
   data-template-name="{{#localEditing}}{{slug}}{{/localEditing}}{{^localEditing}}{{name}}{{/localEditing}}"
+  data-is-mine="{{#isMine}}true{{/isMine}}{{^isMine}}false{{/isMine}}"
+  data-is-mirror="{{#isMirror}}true{{/isMirror}}{{^isMirror}}false{{/isMirror}}"
 >
   <a href="{{{editURL}}}" class="template-row__link">
     <span class="preview" style="position: relative">
@@ -29,9 +31,14 @@
       {{/localEditing}}
     </span>
 
-    {{^localEditing}} {{name}} {{/localEditing}} {{#localEditing}} {{slug}}
-    {{/localEditing}} {{#checked}}
     <span
+      class="template-row__name"
+      style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+      >{{^localEditing}}{{name}}{{/localEditing}}{{#localEditing}}{{slug}}{{/localEditing}}</span
+    >
+    {{#checked}}
+    <span
+      class="template-row__installed"
       style="
         color: var(--success-text-color);
         background-color: var(--success-background-color);
@@ -40,9 +47,8 @@
         border-radius: var(--border-radius);
         padding: 2px 4px;
         margin-left: 6px;
-        text-wrap: nowrap;
       "
-      >In use</span
+      >Installed</span
     >
     {{/checked}}
   </a>

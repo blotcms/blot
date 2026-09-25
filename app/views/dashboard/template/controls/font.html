@@ -13,7 +13,7 @@
     data-font-picker-value
   >
 
-  <span class="font-row-label">{{label}}</span>
+  {{^singleFontInput}}<span class="font-row-label">{{label}}</span>{{/singleFontInput}}
 
   <button
     type="button"
@@ -38,18 +38,17 @@
     </span>
   </button>
 
-  <div class="font-size-stepper">
-    <button type="button" class="font-size-step" data-font-size-step="-1" aria-label="Decrease font size">&minus;</button>
-    <input
-      type="number"
-      class="font-size-value"
-      id="locals.{{key}}.font_size"
-      name="locals.{{key}}.font_size"
-      value="{{font_size}}"
-      min="9"
-      max="96"
-      inputmode="numeric"
-    >
-    <button type="button" class="font-size-step" data-font-size-step="1" aria-label="Increase font size">+</button>
-  </div>
+  <input
+    type="number"
+    class="number-stepper__input"
+    data-number-stepper
+    data-number-stepper-label="font size"
+    id="locals.{{key}}.font_size"
+    name="locals.{{key}}.font_size"
+    value="{{font_size}}"
+    min="9"
+    max="96"
+    step="1"
+    inputmode="numeric"
+  >
 </form>

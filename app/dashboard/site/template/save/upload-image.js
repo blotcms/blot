@@ -6,6 +6,7 @@ const client = require("models/client");
 const templateKey = require("models/template/key");
 const clfdate = require("helper/clfdate");
 const cleanupFiles = require("./cleanup-files");
+const uploadFavicon = require("./upload-favicon");
 const writeChangeToFolder = require("./writeChangeToFolder");
 const previewReload = require("helper/publishPreviewReload");
 const { isAjaxRequest } = require("./ajax-response");
@@ -17,6 +18,28 @@ const first = (files) => Array.isArray(files && files.image) ? files.image[0] : 
 const update = (blog, slug, locals) => new Promise((resolve, reject) => Template.update(blog.id, slug, { locals }, (error) => error ? reject(error) : resolve()));
 const sync = (blog, template) => new Promise((resolve, reject) => writeChangeToFolder(blog, template, {}, (error) => error ? reject(error) : resolve()));
 const operations = { update, sync };
+
+async function saveProfileImageFavicon(req, file) {
+  const templateSlug = req.templateFork
+    ? req.template.id.split(":").slice(1).join(":")
+    : req.params.templateSlug;
+  const faviconReq = {
+    ...req,
+    params: { ...req.params, templateSlug },
+    query: { ...req.query, ajax: "1" },
+    body: {
+      crop_x: req.body.favicon_crop_x,
+      crop_y: req.body.favicon_crop_y,
+      crop_size: req.body.favicon_crop_size,
+    },
+    files: { favicon: file },
+  };
+  let faviconError;
+  await uploadFavicon(faviconReq, { json() {} }, (error) => {
+    faviconError = error;
+  });
+  if (faviconError) throw faviconError;
+}
 
 function filenames(value) {
   if (!value || !value.url) return [];
@@ -137,6 +160,8 @@ module.exports = async function uploadImage(req, res, next) {
   const previous = locals[key];
   const file = first(req.files);
   const remove = req.body.remove === "1";
+  const wantsFavicon = key === "profile_image" && res.locals.favicon_supported &&
+    (!locals.favicon || req.body.use_favicon === "1");
 
   if (!remove && (!file || !file.size)) {
     await cleanupFiles(req.files);
@@ -163,7 +188,7 @@ module.exports = async function uploadImage(req, res, next) {
       y: req.body.crop_y,
       size: req.body.crop_size,
     });
-    await cleanupFiles(req.files);
+    if (!wantsFavicon) await cleanupFiles(req.files);
   } catch (error) {
     await cleanupFiles(req.files);
     return next(error);
@@ -184,13 +209,27 @@ module.exports = async function uploadImage(req, res, next) {
   }
 
   const error = await persistLocal(req, key, image, previous, hadPrevious);
-  if (error) return next(error);
+  if (error) {
+    await cleanupFiles(req.files);
+    return next(error);
+  }
 
   await removeAssetsIfUnreferenced(req, previous);
+  if (wantsFavicon) {
+    try {
+      await saveProfileImageFavicon(req, file);
+    } catch (error) {
+      await cleanupFiles({ favicon: file });
+      previewReload.publish(req.blog.id);
+      error.message = `Your profile image was saved, but the favicon could not be created: ${error.message}`;
+      return next(error);
+    }
+  }
+
   previewReload.publish(req.blog.id);
   return isAjaxRequest(req)
     ? res.json({ image })
-    : res.message(req.body.redirect || res.locals.base, "Updated image");
+    : res.message(req.body.redirect || res.locals.base, wantsFavicon ? "Updated profile photo and favicon!" : "Updated image");
 };
 
 module.exports.removeAssetsIfUnreferenced = removeAssetsIfUnreferenced;

@@ -13,10 +13,9 @@
   --template-grid-gap: 20px;
   --template-grid-columns: repeat(auto-fill, minmax(140px, 1fr));
   --settings-group-margin-bottom: 1.5rem;
-  --sidebar-width: 240px;
+  --sidebar-width: 220px;
   --sidebar-padding: 0 3px 0 20px;
   --sidebar-height: 100vh;
-  --main-padding: 2rem 4rem 0 2rem;
   --main-min-height: 101vh;
   --scroll-container-width: 100%;
   --scroll-container-max-width: 400px;
@@ -27,7 +26,7 @@
   --segmented-control-gap: 2px;
   --segmented-control-border-radius: 7px;
   --segmented-control-margin-bottom: 24px;
-  --segmented-control-bg: #f5f5f5;
+  --sidebar-background-color: #f9f9f9;
   --segmented-control-button-basis: 50%;
   --segmented-control-button-padding: 0.375em 0;
   --iframe-container-height: calc(100vh - 148px);
@@ -40,12 +39,21 @@
   margin-bottom: var(--breadcrumbs-margin-bottom);
 }
 
+a.close-button.template-editor-close-button {
+  right: 2rem;
+}
+
 h2 {
   margin: 0;
   font-size: var(--heading-font-size);
   font-weight: 400;
   color: var(--heading-color);
   border-bottom: none;
+}
+
+#template-list > h2 a {
+  color: inherit;
+  text-decoration: none;
 }
 
 .inputs form label {
@@ -78,6 +86,7 @@ h2 {
   top: 0;
   z-index: 1;
   width: var(--sidebar-width);
+  background: var(--sidebar-background-color);
   padding: var(--sidebar-padding);
   height: var(--sidebar-height);
   box-sizing: border-box;
@@ -87,7 +96,7 @@ h2 {
 
 .template-main {
   box-sizing: border-box;
-  padding: var(--main-padding);
+  padding: 2rem;
   min-height: var(--main-min-height);
   flex-grow: 1;
   flex-shrink: 0;
@@ -113,6 +122,12 @@ h2 {
   content: "";
   display: block;
   height: var(--template-list-padding-bottom);
+}
+
+.template-list-divider {
+  border: 0;
+  border-top: 1px solid var(--border-color);
+  margin: 0.5rem 0;
 }
 
 #source-file-list {
@@ -141,11 +156,25 @@ h2 {
   display: flex;
   align-items: center;
   flex: 1;
+  min-width: 0;
   padding: var(--template-row-link-padding);
   font-size: var(--template-row-link-font-size);
-  color: #656e82;
+  color: #7f8288;
   text-decoration: none;
   box-sizing: border-box;
+}
+
+.template-row__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-row__installed {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .template-row.selected a {
@@ -156,6 +185,10 @@ h2 {
 .template-sidebar {
   --row-action-menu-right: -120px;
   --row-action-menu-margin-top: 28px;
+}
+
+.template-row__menu-trigger {
+  flex: 0 0 auto;
 }
 
 .template-row .preview {
@@ -189,6 +222,9 @@ h2 {
 
 
 .iframe-container {
+  --iframe-container-inset-shadow: inset 0 1px rgba(0, 0, 0, 0.1),
+    inset 0 -1px rgba(0, 0, 0, 0.1), inset -1px 0 rgba(0, 0, 0, 0.1),
+    inset 1px 0 rgba(0, 0, 0, 0.1);
   position: relative;
   width: 100%;
   height: var(--iframe-container-height);
@@ -230,7 +266,7 @@ h2 {
   z-index: 2;
   border-radius: var(--border-radius);
   pointer-events: none;
-  box-shadow: inset 0 1px rgba(0, 0, 0, 0.1), inset 0 -1px rgba(0, 0, 0, 0.1), inset -1px 0 rgba(0, 0, 0, 0.1), inset 1px 0 rgba(0, 0, 0, 0.1);
+  box-shadow: var(--iframe-container-inset-shadow);
 }
 
 .iframe-loading {
@@ -241,7 +277,9 @@ h2 {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  background: var(--light-background-color);
+  background: var(--sidebar-background-color);
+  border-radius: var(--border-radius);
+  box-shadow: var(--iframe-container-inset-shadow);
   opacity: 1;
   visibility: visible;
   transition: opacity 0.2s ease;
@@ -282,7 +320,7 @@ h2.template-heading {
   font-size: 12px;
   font-weight: 400;
   color: var(--heading-color);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--light-border-color);
 }
 
 h2.template-heading:not(:first-child) {
@@ -341,7 +379,7 @@ p.template-heading-note {
   position: absolute;
   top: 0;
   right: 0;
-  padding: 0 0 1em 2em;
+  padding: 0 0 1em 4em;
   background: linear-gradient(90deg, transparent, var(--background-color) 50%);
   transition: background-color 0.2s;
 }
@@ -356,7 +394,7 @@ p.template-heading-note {
   margin-bottom: var(--segmented-control-margin-bottom);
   padding: var(--segmented-control-padding);
   border-radius: var(--segmented-control-border-radius);
-  background: var(--segmented-control-bg);
+  background: var(--sidebar-background-color);
   overflow: hidden;
   gap: var(--segmented-control-gap);
   font-size: 14px;
@@ -369,6 +407,10 @@ p.template-heading-note {
   background: transparent;
   font-size: inherit;
   text-align: center;
+}
+
+.segmented-control .template-button svg {
+  fill: currentColor;
 }
 
 .segmented-control .template-button:hover {

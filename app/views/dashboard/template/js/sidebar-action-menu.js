@@ -58,7 +58,15 @@ function initSidebarActionMenu(options) {
     menuElement.style.top = offsetTop + "px";
   }
 
-  function applyLinkState(link, href, disabled) {
+  function isUnavailable(link) {
+    var menuItem = link.closest("li");
+    return link.classList.contains("is-disabled") || !!(menuItem && menuItem.hidden);
+  }
+
+  function applyLinkState(link, href, disabled, hidden) {
+    var menuItem = link.closest("li");
+    if (menuItem) menuItem.hidden = hidden;
+
     if (disabled || !href) {
       link.classList.add("is-disabled");
       link.setAttribute("aria-disabled", "true");
@@ -81,10 +89,12 @@ function initSidebarActionMenu(options) {
       var value = typeof resolver === "function" ? resolver(dataset, trigger) : resolver;
       var href = null;
       var disabled = false;
+      var hidden = false;
 
       if (value && typeof value === "object") {
         href = value.href;
         disabled = !!value.disabled;
+        hidden = !!value.hidden;
       } else {
         href = value;
       }
@@ -93,7 +103,7 @@ function initSidebarActionMenu(options) {
         href = href.trim();
       }
 
-      applyLinkState(entry.element, href, disabled);
+      applyLinkState(entry.element, href, disabled, hidden);
     });
   }
 
@@ -103,7 +113,7 @@ function initSidebarActionMenu(options) {
     if (initialFocusKey) {
       for (var i = 0; i < linkEntries.length; i += 1) {
         if (linkEntries[i].key === initialFocusKey) {
-          if (!linkEntries[i].element.classList.contains("is-disabled")) {
+          if (!isUnavailable(linkEntries[i].element)) {
             target = linkEntries[i].element;
           }
           break;
@@ -113,7 +123,7 @@ function initSidebarActionMenu(options) {
 
     if (!target) {
       for (var j = 0; j < linkEntries.length; j += 1) {
-        if (!linkEntries[j].element.classList.contains("is-disabled")) {
+        if (!isUnavailable(linkEntries[j].element)) {
           target = linkEntries[j].element;
           break;
         }

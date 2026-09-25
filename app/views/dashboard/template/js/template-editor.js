@@ -49,7 +49,17 @@ if (template_list) {
         },
         "delete": function (dataset) {
           var baseUrl = cleanTemplateBase(dataset);
-          return baseUrl ? baseUrl + "/delete" : null;
+          return {
+            href: baseUrl ? baseUrl + "/delete" : null,
+            hidden: dataset.isMine !== "true" || dataset.isMirror === "true",
+          };
+        },
+        reset: function (dataset) {
+          var baseUrl = cleanTemplateBase(dataset);
+          return {
+            href: baseUrl ? baseUrl + "/reset" : null,
+            hidden: dataset.isMirror !== "true",
+          };
         },
         duplicate: function (dataset) {
           var baseUrl = cleanTemplateBase(dataset);
