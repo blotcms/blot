@@ -20,6 +20,13 @@ const postsCache = new LRUCache({
   // blog sharing this process's memory.
   maxSize: 100 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
+  // Without this, an in-flight fetch that gets evicted by LRU/size pressure
+  // (busy process, byte-capped cache) aborts and every request coalesced
+  // onto it rejects with "Error: evicted" - a 500 - instead of getting the
+  // page it asked for. ignoreFetchAbort lets the already-running getPage/
+  // fetchTaggedEntries call finish and hand its result to those callers; it
+  // just won't be re-inserted into the (already full) cache.
+  ignoreFetchAbort: true,
   // fetchMethod makes concurrent misses on the same key share a single
   // in-flight load instead of each request fetching independently - e.g. a
   // burst of near-simultaneous requests (a page full of broken <img> tags

@@ -14,6 +14,11 @@ const latestEntryCache = new LRUCache({
   // posts cannot dominate the process by item count alone.
   maxSize: 20 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
+  // Without this, an in-flight fetch evicted by LRU/size pressure aborts and
+  // every request coalesced onto it rejects with "Error: evicted" instead
+  // of getting its entry - let the already-running getPage call finish and
+  // hand its result back even if it can't be cached.
+  ignoreFetchAbort: true,
   // Coalesce concurrent misses on the same key into one in-flight
   // getPage call.
   fetchMethod: async (key, staleValue, { context }) => {

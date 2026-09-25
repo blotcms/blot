@@ -14,6 +14,11 @@ const recentEntriesCache = new LRUCache({
   // distinct blogs cannot fill the process by item count alone.
   maxSize: 20 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
+  // Without this, an in-flight fetch evicted by LRU/size pressure aborts and
+  // every request coalesced onto it rejects with "Error: evicted" instead
+  // of getting its entries - let the already-running getRecent call finish
+  // and hand its result back even if it can't be cached.
+  ignoreFetchAbort: true,
   // Coalesce concurrent misses on the same key into one in-flight
   // getRecent call.
   fetchMethod: async (key, staleValue, { context }) => {

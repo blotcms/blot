@@ -28,6 +28,12 @@ const taggedCache = new LRUCache({
   // other blogs sharing this process.
   maxSize: 100 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
+  // Without this, an in-flight fetch evicted by LRU/size pressure aborts and
+  // every request coalesced onto it rejects with "Error: evicted" instead
+  // of getting its page - let the already-running fetchTaggedEntries/
+  // Entry.get pass finish and hand its result back even if it can't be
+  // cached.
+  ignoreFetchAbort: true,
   // Coalesce concurrent misses on the same key into one in-flight load.
   fetchMethod: async (key, staleValue, { context }) => {
     const { blogID, tags, limit, offset, pathPrefix, sortOptions } = context;

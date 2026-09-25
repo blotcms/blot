@@ -11,6 +11,11 @@ const popularTagsCache = new LRUCache({
   // Bound by bytes too, for consistency with the other render-path caches.
   maxSize: 5 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
+  // Without this, an in-flight fetch evicted by LRU/size pressure aborts and
+  // every request coalesced onto it rejects with "Error: evicted" instead
+  // of getting its tags - let the already-running getPopularTags call
+  // finish and hand its result back even if it can't be cached.
+  ignoreFetchAbort: true,
   // Coalesce concurrent misses on the same key into one in-flight
   // getPopularTags call, rather than one per simultaneous request.
   fetchMethod: async (key, staleValue, { context }) => {

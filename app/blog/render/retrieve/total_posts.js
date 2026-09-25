@@ -10,6 +10,11 @@ const totalPostsCache = new LRUCache({
   // consistency with the other retrieve-path caches.
   maxSize: 1 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
+  // Without this, an in-flight fetch evicted by LRU/size pressure aborts and
+  // every request coalesced onto it rejects with "Error: evicted" instead
+  // of getting its count - let the already-running getTotal call finish and
+  // hand its result back even if it can't be cached.
+  ignoreFetchAbort: true,
   // Coalesce concurrent misses on the same key into one in-flight
   // getTotal call.
   fetchMethod: async (key, staleValue, { context }) => {

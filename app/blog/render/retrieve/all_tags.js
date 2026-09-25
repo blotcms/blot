@@ -47,6 +47,11 @@ const allTagsCache = new LRUCache({
   max: 1000,
   maxSize: 50 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
+  // Without this, an in-flight fetch evicted by LRU/size pressure aborts and
+  // every request coalesced onto it rejects with "Error: evicted" instead
+  // of getting its tags - let the already-running loadAllTags call finish
+  // and hand its result back even if it can't be cached.
+  ignoreFetchAbort: true,
   // Coalesce concurrent misses on the same key into one in-flight
   // loadAllTags call. Preview requests never reach this - see the
   // bypassCache branch below.
