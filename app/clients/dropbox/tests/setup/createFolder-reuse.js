@@ -237,4 +237,49 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
     expect(getMetadataCalled).toEqual(false);
     expect(filesCreateFolderCalled).toEqual(true);
   });
+
+  it("propagates a database read failure instead of falling through to mkdir", async function () {
+    require.cache[databasePath] = {
+      exports: {
+        get: function (_blogID, callback) {
+          callback(new Error("redis blip"));
+        },
+        listBlogs: function (_accountID, callback) {
+          callback(null, []);
+        },
+        set: function (_blogID, _values, callback) {
+          callback(null);
+        },
+      },
+    };
+    delete require.cache[createFolderPath];
+    const createFolder = require("../../routes/setup/createFolder");
+
+    let filesCreateFolderCalled = false;
+    const account = {
+      blog: { id: blogID, title: "My Blog" },
+      account_id: "abc123",
+      full_access: true,
+      client: {
+        filesGetMetadata: async () => ({
+          result: { ".tag": "folder", path_display: "/My Blog" },
+        }),
+        filesCreateFolder: async ({ path }) => {
+          filesCreateFolderCalled = true;
+          return { result: { id: "id:newfolder", path_display: path } };
+        },
+      },
+    };
+
+    let error;
+    try {
+      await createFolder(account);
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).toBeDefined();
+    expect(error.message).toEqual("redis blip");
+    expect(filesCreateFolderCalled).toEqual(false);
+  });
 });

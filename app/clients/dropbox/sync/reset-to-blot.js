@@ -13,6 +13,7 @@ const {
   MAX_FILE_SIZE,
   hasUnsupportedExtension,
   isDotfileOrDotfolder,
+  transferIncomplete,
 } = require("../util/constants");
 const modifiedSince = require("./modified-since");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
@@ -87,6 +88,23 @@ async function resetToBlot(blogID, publish, update) {
   // if (signal.aborted) return;
   // const account = await get(blogID);
   const [client, account] = await createClient(blogID);
+
+  // Guard this at the source rather than only in each caller: resetToBlot
+  // treats Dropbox as the source of truth and deletes any local file with no
+  // Dropbox counterpart (see the walk below), which is exactly wrong while
+  // the initial transfer to Dropbox (reset-from-blot.js, run during setup)
+  // hasn't finished - those are exactly the files that would get wrongly
+  // deleted. init.js's resetToBlotWithLock, the manual "Resync from Dropbox"
+  // dashboard action, and the scripts/dropbox/*.js CLI tools all end up
+  // here, so checking once here (before touching anything, fs or Dropbox)
+  // covers every caller instead of relying on each of them to check first.
+  if (transferIncomplete(account)) {
+    const error = new Error(
+      "Dropbox hasn't finished receiving this blog's initial transfer yet, so it can't be treated as the source of truth without risking deleting files that were never uploaded. Free up space in Dropbox (if that's the issue) and retry the transfer from the Dropbox settings page, or disconnect, then try again."
+    );
+    error.code = "DROPBOX_TRANSFER_INCOMPLETE";
+    throw error;
+  }
 
   let dropboxRoot = "/";
 

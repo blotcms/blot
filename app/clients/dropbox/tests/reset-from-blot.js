@@ -291,4 +291,43 @@ describe("dropbox resetFromBlot", function () {
     expect(error.code).toEqual("DROPBOX_INSUFFICIENT_SPACE");
     expect(uploadCalls.length).toEqual(0);
   });
+
+  it("does not block a zero-net-growth retry even when the account is already over quota", async function () {
+    // used (2000) > allocated (1000) makes freeSpaceBytes negative (-1000).
+    // Naively comparing netBytesToUpload > freeSpaceBytes would reject this
+    // forever (0 > -1000), even though this transfer needs zero additional
+    // bytes: existingRemoteBytes (500, from an unrelated file already on
+    // Dropbox) already covers the local folder's size (500).
+    await fs.outputFile(join(blogDirectory, "a.txt"), Buffer.alloc(500));
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 2000,
+        allocation: { ".tag": "individual", allocated: 1000 },
+      },
+      remote: {
+        "/": [
+          {
+            ".tag": "file",
+            name: "other.txt",
+            path_display: "/other.txt",
+            content_hash: "unrelated",
+            size: 500,
+            server_modified: "2026-01-01T00:00:00Z",
+          },
+        ],
+      },
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    let error;
+    try {
+      await resetFromBlot(blogID, () => {}, { aborted: false });
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).toBeUndefined();
+    expect(uploadCalls.length).toEqual(1);
+  });
 });

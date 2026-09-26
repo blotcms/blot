@@ -130,29 +130,30 @@ describe("dropbox init", function () {
     });
   });
 
-  // establishSyncLock's retry loop can take several seconds, so the account
-  // state a caller saw before queuing for the lock can be stale by the time
-  // it's actually held - e.g. a "Retry transfer" reconnect could start (or a
-  // transfer could fail) in that window. resetToBlotWithLock must re-read the
-  // account after acquiring the lock and refuse to run resetToBlot if it's
-  // now (or still) incomplete, rather than trusting the caller's earlier check.
-  describe("resetToBlotWithLock rechecks transferIncomplete once the lock is held", function () {
-    const databasePath = require.resolve("../database");
+  // The authoritative guard now lives in sync/reset-to-blot.js itself (it
+  // throws a DROPBOX_TRANSFER_INCOMPLETE-coded error right after loading the
+  // account, before touching anything) so that every caller is covered, not
+  // just the ones that remember to check first - see its own guard spec in
+  // tests/reset-to-blot.js. This means resetToBlotWithLock doesn't need to
+  // re-read the account itself: it just needs to recognize that error and
+  // translate it into the TRANSFER_INCOMPLETE sentinel its callers expect,
+  // rather than treating it as a real failure.
+  describe("resetToBlotWithLock", function () {
     const resetToBlotPath = require.resolve("../sync/reset-to-blot");
     const lockPath = require.resolve("sync/establishSyncLock");
     const initPath = require.resolve("../init");
 
-    const blogID = "blog_lockrecheck" + Date.now();
+    const blogID = "blog_lockwrappertest" + Date.now();
     const originals = {};
 
     beforeEach(function () {
-      [databasePath, resetToBlotPath, lockPath, initPath].forEach(
+      [resetToBlotPath, lockPath, initPath].forEach(
         (path) => (originals[path] = require.cache[path])
       );
     });
 
     afterEach(function () {
-      [databasePath, resetToBlotPath, lockPath].forEach((path) => {
+      [resetToBlotPath, lockPath].forEach((path) => {
         if (originals[path]) require.cache[path] = originals[path];
         else delete require.cache[path];
       });
@@ -160,17 +161,7 @@ describe("dropbox init", function () {
       if (originals[initPath]) require.cache[initPath] = originals[initPath];
     });
 
-    function load(accountUnderLock, resetToBlotBehavior) {
-      require.cache[databasePath] = {
-        exports: {
-          get: function (_blogID, callback) {
-            callback(null, accountUnderLock);
-          },
-          set: function (_blogID, _values, callback) {
-            callback(null);
-          },
-        },
-      };
+    function load(resetToBlotBehavior) {
       require.cache[resetToBlotPath] = {
         exports: resetToBlotBehavior,
       };
@@ -190,24 +181,20 @@ describe("dropbox init", function () {
       return require("../init");
     }
 
-    it("returns the TRANSFER_INCOMPLETE sentinel and never calls resetToBlot when the account is incomplete under the lock", async function () {
-      let resetToBlotCalled = false;
-      const init = load(
-        { error_code: 0, transfer_pending: true },
-        function () {
-          resetToBlotCalled = true;
-          return Promise.resolve({ downloaded: 1 });
-        }
-      );
+    it("returns the TRANSFER_INCOMPLETE sentinel (not a rejection) when resetToBlot refuses", async function () {
+      const init = load(function () {
+        const error = new Error("Dropbox hasn't finished receiving this blog's initial transfer yet");
+        error.code = "DROPBOX_TRANSFER_INCOMPLETE";
+        return Promise.reject(error);
+      });
 
       const result = await init.resetToBlotWithLock(blogID, () => {});
 
       expect(result).toEqual(init.TRANSFER_INCOMPLETE);
-      expect(resetToBlotCalled).toEqual(false);
     });
 
-    it("runs resetToBlot and returns its summary when the account is still complete under the lock", async function () {
-      const init = load({ error_code: 0, transfer_pending: false }, function () {
+    it("returns the summary when resetToBlot succeeds", async function () {
+      const init = load(function () {
         return Promise.resolve({ downloaded: 1 });
       });
 
@@ -215,20 +202,37 @@ describe("dropbox init", function () {
 
       expect(result).toEqual({ downloaded: 1 });
     });
+
+    it("rethrows any other error from resetToBlot", async function () {
+      const init = load(function () {
+        return Promise.reject(new Error("some other failure"));
+      });
+
+      let error;
+      try {
+        await init.resetToBlotWithLock(blogID, () => {});
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error).toBeDefined();
+      expect(error.message).toEqual("some other failure");
+    });
   });
 
-  // End-to-end version of the same race, through validateAllBlogs: its own
-  // cheap pre-check (before queuing for the lock) sees a complete transfer,
-  // but the account has become incomplete by the time resetToBlotWithLock
-  // actually acquires the lock and re-reads it.
-  describe("validateAllBlogs does not run resetToBlot when the account becomes incomplete while queued for the lock", function () {
+  // End-to-end versions of the same thing, through validateAllBlogs and
+  // resyncRecentSyncsOnStartup: resetToBlot (stubbed here to simulate its
+  // real guard) refuses, and neither caller should treat that as a failure -
+  // no thrown/uncaught error, no fixBlog/catchUpSync follow-up, no issue
+  // reported.
+  describe("skips a blog when resetToBlot itself refuses mid-run", function () {
     const blogPath = require.resolve("models/blog");
     const databasePath = require.resolve("../database");
     const resetToBlotPath = require.resolve("../sync/reset-to-blot");
     const lockPath = require.resolve("sync/establishSyncLock");
     const initPath = require.resolve("../init");
 
-    const blogID = "blog_lockracetest" + Date.now();
+    const blogID = "blog_refusedmidrun" + Date.now();
     const originals = {};
 
     beforeEach(function () {
@@ -246,35 +250,28 @@ describe("dropbox init", function () {
       if (originals[initPath]) require.cache[initPath] = originals[initPath];
     });
 
-    it("skips it", async function () {
-      let resetToBlotCalled = false;
-      let call = 0;
-
+    function load(onResetToBlotCalled) {
       require.cache[blogPath] = {
         exports: {
           getAllIDs: function (callback) {
             callback(null, [blogID]);
           },
           get: function (query, callback) {
-            callback(null, { id: blogID, handle: "race-blog", client: "dropbox" });
+            callback(null, { id: blogID, handle: "refused-blog", client: "dropbox" });
           },
         },
       };
       require.cache[databasePath] = {
         exports: {
-          // Call 1: validateAllBlogs' own pre-check, before queuing for the
-          // lock - reports the transfer as complete.
-          // Call 2: resetToBlotWithLock's re-check, once the lock is held -
-          // reports it as incomplete (a retry started, or it failed, in the
-          // meantime).
+          // The outer pre-check sees a complete transfer - resetToBlot
+          // itself is the one that refuses, as if the transfer became
+          // incomplete in the time it took to acquire the lock.
           get: function (_blogID, callback) {
-            call += 1;
-            callback(
-              null,
-              call === 1
-                ? { error_code: 0, transfer_pending: false, last_sync: Date.now() }
-                : { error_code: 0, transfer_pending: true, last_sync: Date.now() }
-            );
+            callback(null, {
+              error_code: 0,
+              transfer_pending: false,
+              last_sync: Date.now(),
+            });
           },
           set: function (_blogID, _values, callback) {
             callback(null);
@@ -283,8 +280,10 @@ describe("dropbox init", function () {
       };
       require.cache[resetToBlotPath] = {
         exports: function () {
-          resetToBlotCalled = true;
-          return Promise.resolve({ downloaded: 1 });
+          if (onResetToBlotCalled) onResetToBlotCalled();
+          const error = new Error("refused");
+          error.code = "DROPBOX_TRANSFER_INCOMPLETE";
+          return Promise.reject(error);
         },
       };
       require.cache[lockPath] = {
@@ -300,11 +299,33 @@ describe("dropbox init", function () {
         },
       };
       delete require.cache[initPath];
-      const init = require("../init");
+      return require("../init");
+    }
 
+    it("validateAllBlogs completes without throwing", async function () {
+      const init = load();
       await init.validateAllBlogs();
+    });
 
-      expect(resetToBlotCalled).toEqual(false);
+    it("resyncRecentSyncsOnStartup completes without throwing", async function () {
+      // The actual resync work runs inside an un-awaited setImmediate (see
+      // resyncRecentSyncsOnStartup), so wait for resetToBlot to actually be
+      // called before asserting, rather than trusting the outer function's
+      // own promise to have done all the work.
+      let resolveCalled;
+      const called = new Promise((resolve) => {
+        resolveCalled = resolve;
+      });
+
+      const init = load(resolveCalled);
+
+      await init.resyncRecentSyncsOnStartup();
+      await called;
+      // Let the rest of the (all-stubbed, no real I/O) promise chain after
+      // resetToBlot rejects - resetToBlotWithLock catching it, the loop's
+      // continue - actually run before the test ends.
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
     });
   });
 });

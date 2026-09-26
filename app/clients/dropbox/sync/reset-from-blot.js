@@ -287,7 +287,16 @@ async function resetFromBlot(blogID, publish, signal) {
   // for why it's local minus what's already there, not the full local size.
   const netBytesToUpload = Math.max(0, localBytes - existingRemoteBytes);
 
-  if (typeof freeSpaceBytes === "number" && netBytesToUpload > freeSpaceBytes) {
+  // freeSpaceBytes can be negative if the account is already over quota
+  // (used > allocated) - clamp it to 0 before comparing so a retry that
+  // needs zero additional bytes (everything's already on Dropbox) isn't
+  // rejected forever just because the account happens to be over quota for
+  // reasons unrelated to this transfer.
+  if (
+    typeof freeSpaceBytes === "number" &&
+    netBytesToUpload > 0 &&
+    netBytesToUpload > Math.max(0, freeSpaceBytes)
+  ) {
     log(
       "Not enough free space in Dropbox to transfer this folder:",
       netBytesToUpload,

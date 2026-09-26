@@ -70,12 +70,12 @@ async function createFolder(account) {
 async function tryReuseIncompleteTransferFolder(account) {
   const { client, full_access, account_id, blog } = account;
 
-  let existing;
-  try {
-    existing = await get(blog.id);
-  } catch (e) {
-    return null;
-  }
+  // Not wrapped in try/catch: a failure to read our own database here is a
+  // transient infrastructure problem (e.g. Redis blip), not a confirmed "no
+  // existing account" - swallowing it and falling through to mkdir would
+  // risk the same abandoned-partial-folder problem this function exists to
+  // prevent. Let it propagate and fail this setup attempt instead.
+  const existing = await get(blog.id);
 
   if (!existing) return null;
   if (!transferIncomplete(existing)) return null;

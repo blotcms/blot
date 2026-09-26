@@ -39,25 +39,18 @@ const resetToBlotWithLock = async (blogID, publish) => {
   let error = null;
 
   try {
-    // The caller's own transferIncomplete check ran before we even queued
-    // for this lock, and establishSyncLock can retry for several seconds
-    // (see sync/lock.js) - long enough for a setup run, a "Retry transfer"
-    // reconnect, or reset-from-blot.js itself to start or finish in that
-    // window and change the account's state out from under that check.
-    // Re-read the account now that the lock is actually held: any other
-    // Dropbox code path that could change transfer_pending/error_code for
-    // this blog also needs this same lock, so nothing can change underneath
-    // us from here on.
-    const account = await getDropboxAccount(blogID);
-    if (transferIncomplete(account)) {
-      publish(
-        "Skipping: Dropbox initial transfer has not finished for this blog"
-      );
-      return TRANSFER_INCOMPLETE;
-    }
-
     return await resetToBlot(blogID, publish, folder.update);
   } catch (err) {
+    // resetToBlot itself refuses (see sync/reset-to-blot.js) if the account's
+    // initial transfer to Dropbox hasn't finished - that guard runs right
+    // after acquiring the lock's account read, so it's not vulnerable to the
+    // caller's own (cheap, pre-lock) transferIncomplete check having gone
+    // stale while establishSyncLock's retry loop waited to acquire this
+    // lock. Treat that refusal as "nothing happened", not a failure.
+    if (err && err.code === "DROPBOX_TRANSFER_INCOMPLETE") {
+      publish(err.message);
+      return TRANSFER_INCOMPLETE;
+    }
     error = err;
     throw err;
   } finally {
