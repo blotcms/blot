@@ -6,6 +6,12 @@ describe("dropbox sync/index skips a blog with an incomplete transfer", function
   const lockPath = require.resolve("sync");
   const createClientPath = require.resolve("../util/createClient");
   const databasePath = require.resolve("../database");
+  // persistError.js does `const database = require("../database")` once,
+  // at module load. Its cache entry has to be cleared alongside
+  // databasePath's or a persistError already loaded (with the real,
+  // Redis-backed database module bound in its closure) from an earlier
+  // spec file keeps using that instead of the mock below.
+  const persistErrorPath = require.resolve("../util/persistError");
 
   const blogID = "blog_synctransferincomplete" + Date.now();
   const originals = {};
@@ -13,7 +19,7 @@ describe("dropbox sync/index skips a blog with an incomplete transfer", function
 
   beforeEach(function () {
     saved = [];
-    [syncPath, lockPath, createClientPath, databasePath].forEach(
+    [syncPath, lockPath, createClientPath, databasePath, persistErrorPath].forEach(
       (path) => (originals[path] = require.cache[path])
     );
   });
@@ -23,6 +29,10 @@ describe("dropbox sync/index skips a blog with an incomplete transfer", function
       if (originals[path]) require.cache[path] = originals[path];
       else delete require.cache[path];
     });
+    delete require.cache[persistErrorPath];
+    if (originals[persistErrorPath]) {
+      require.cache[persistErrorPath] = originals[persistErrorPath];
+    }
     delete require.cache[syncPath];
     if (originals[syncPath]) require.cache[syncPath] = originals[syncPath];
   });
@@ -71,8 +81,25 @@ describe("dropbox sync/index skips a blog with an incomplete transfer", function
           saved.push(values);
           callback(null);
         },
+        // Mirrors database.js's real setError closely enough for these
+        // specs: only a persistable classification writes anything, and
+        // what it writes is the same error_code/error_source/error_since
+        // shape so `saved` reflects it the same way a direct set() would.
+        setError: function (_blogID, classification, callback) {
+          if (!classification || !classification.persist) return callback(null);
+          saved.push({
+            error_code: classification.status || 0,
+            error_source: classification.source || "",
+            error_since: Date.now(),
+          });
+          callback(null);
+        },
       },
     };
+    // Force persistError.js to reload so its own `require("../database")`
+    // picks up the mock above instead of a stale reference cached from an
+    // earlier spec file.
+    delete require.cache[persistErrorPath];
     delete require.cache[syncPath];
     return require("../sync");
   }

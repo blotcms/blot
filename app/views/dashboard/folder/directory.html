@@ -16,6 +16,8 @@
       <span class="center">
         <img width="16" height="16" src="{{#cdn}}/images/sync/{{blog.client}}.svg{{/cdn}}" />
         {{client.display_name}}
+        {{! Header and footer health elements sit outside .live-updates, so live refresh doesn't replace them automatically — sync_status.js swaps them explicitly when health changes. }}
+        <span class="header-health-badge">{{#blog.healthIssue}}<span class="health-badge" data-health="{{code}}" title="{{message}}">{{label}}</span>{{/blog.healthIssue}}</span>
         <span class="link" style="margin-left: 12px;">Edit</span>
 
       </span>

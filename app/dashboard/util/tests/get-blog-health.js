@@ -42,6 +42,7 @@ describe("getBlogHealth", function () {
       label: "Reconnect required",
       message: health.ISSUES.REAUTH_REQUIRED.message,
       since: 1758000000000,
+      action: health.ISSUES.REAUTH_REQUIRED.action,
     });
   });
 

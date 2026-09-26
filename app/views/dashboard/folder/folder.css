@@ -13,6 +13,26 @@
     width: 16px;height:16px;position: relative;top:3px;margin-right: 3px;
   }
 
+  /* Always rendered so sync_status.js has a stable element to diff against
+     on live reload; empty (no margin) when there's no health issue. Not an
+     <a> like the sites-list badge (see dashboard.css) because it sits
+     inside a.line, and nested anchors are invalid. */
+  .header-health-badge:empty {
+    display: none;
+  }
+
+  .header-health-badge .health-badge {
+    display: inline-block;
+    margin-left: 12px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: var(--small-font-size);
+    line-height: 1.4;
+    white-space: nowrap;
+    color: var(--error-text-color);
+    background: var(--error-background-color);
+  }
+
   .folder-box {
     flex-grow: 1;
   }

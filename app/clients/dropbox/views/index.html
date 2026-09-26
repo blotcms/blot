@@ -2,51 +2,6 @@
 
 {{#account}}
 
-      {{#insufficient_space}}
-
-      <div class="mess error">
-
-        <b>Dropbox ran out of space</b><br><br>
-
-        Dropbox ran out of storage space while Blot was transferring the folder for <b>{{blog.title}}</b> to it. No files on Blot were removed. To fix this, free up space in your Dropbox account, then retry the transfer below. If you'd rather not free up space, you can disconnect from Dropbox instead. <br><br>
-
-        <a href="{{{base}}}/redirect{{#full_access}}?full_access=true{{/full_access}}" class="button">Retry transfer</a>
-      </div>
-
-      {{/insufficient_space}}
-
-      {{^insufficient_space}}
-
-      {{#transfer_incomplete}}
-
-      <div class="mess error">
-
-        <b>Dropbox transfer incomplete</b><br><br>
-
-        Blot couldn't finish transferring the folder for <b>{{blog.title}}</b> to Dropbox. No files on Blot were removed. Retry the transfer below, or disconnect from Dropbox instead. <br><br>
-
-        <a href="{{{base}}}/redirect{{#full_access}}?full_access=true{{/full_access}}" class="button">Retry transfer</a>
-      </div>
-
-      {{/transfer_incomplete}}
-
-      {{^transfer_incomplete}}
-      {{#error_code}}
-
-      <a href="{{{base}}}/redirect{{#full_access}}?full_access=true{{/full_access}}" class="mess error">
-
-        <b>Error</b><br><br>
-
-        Blot cannot sync the folder for <b>{{blog.title}}</b>. You can probably fix this by reconnecting to Dropbox. If you can't fix this, please contact support. <br><br>
-
-        <span class="button">Re-connect to Dropbox</span>
-      </a>
-
-      {{/error_code}}
-      {{/transfer_incomplete}}
-
-      {{/insufficient_space}}
-
 <div class="live-updates">
 
   {{#dropboxBreadcrumbs.length}}
@@ -56,10 +11,23 @@
       
 <span style="margin-top:0em;display:inline-block;">
   <img src="/images/sync/dropbox.svg" style="position:relative;top:2px;flex-shrink:0;margin-right:2px" width="16">
+  <span class="icon-small-chevron-right" style="opacity: 0.5;;position:relative;top:-3px;font-size: 12px;color:var(--light-text-color)"></span>
 
   {{#dropboxBreadcrumbs}}
    <span style="color:var(--text-color)">{{name}} {{^last}}<span class="icon-small-chevron-right" style="opacity: 0.5;;position:relative;top:-3px;font-size: 12px;color:var(--light-text-color)"></span>{{/last}}</span>
   {{/dropboxBreadcrumbs}}
+  <br>
+  <a style="border-radius: 5px;
+  background-color: #e4eafb;
+  color: #2c00ff;
+  font-size: 14px;
+  font-weight: 600;
+  right: 0;
+  border: none;
+  margin:12px 0 6px 0;
+  display: inline-block;
+  padding: 10px 13px;
+" href="{{dropboxUrl}}" target="_blank">Open in Dropbox <svg style="fill:currentColor;transform:rotate(-45deg);position:relative;top:3px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042l2.97-2.97H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"></path></svg></a>
 
   <span style="color:rgb(158, 154, 152);max-width:500px;display: block;margin-top: 10px;font-size: 14px;">
       {{#preparing}}
@@ -120,9 +88,10 @@
   {{#preparing}}
   </div>
   {{/preparing}}
-</div>
 
   {{> disconnect-line}}
+
+</div>
 
 {{/account}}
 

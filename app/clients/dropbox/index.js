@@ -9,4 +9,5 @@ module.exports = {
   write: require("./write"),
   site_routes: require("./routes").site,
   dashboard_routes: require("./routes").dashboard,
+  getHealth: require("./getHealth"),
 };

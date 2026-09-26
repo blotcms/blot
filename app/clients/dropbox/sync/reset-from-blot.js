@@ -12,10 +12,12 @@ const hashFile = promisify((path, cb) => {
 const upload = promisify(require("../util/upload"));
 const {
   isDotfileOrDotfolder,
-  isInsufficientSpaceError,
   INSUFFICIENT_SPACE_ERROR_CODE,
 } = require("../util/constants");
 const set = promisify(require("../database").set);
+const persistError = promisify(require("../util/persistError"));
+const { SOURCES, classify } = require("../util/classifyError");
+const tagSource = require("../util/tagSource");
 const createClient = promisify((blogID, cb) =>
   require("../util/createClient")(blogID, (err, ...results) => cb(err, results))
 );
@@ -219,8 +221,60 @@ async function resetFromBlot(blogID, publish, signal) {
   // const account = await get(blogID);
   abortIfRequested(signal);
 
-  const [client, account] = await createClient(blogID);
+  let client, account;
+  try {
+    [client, account] = await createClient(blogID);
+  } catch (err) {
+    await persistError(blogID, err, SOURCES.AUTH);
+    throw err;
+  }
 
+  try {
+    await resetFromBlotWithClient(
+      blogID,
+      publish,
+      signal,
+      client,
+      account
+    );
+  } catch (err) {
+    if (!err || err.name !== "AbortError") {
+      await persistError(blogID, err, SOURCES.APPLY);
+    }
+    throw err;
+  }
+}
+
+// A failed upload is logged and skipped, unless retrying can never
+// help (revoked access, full storage): that must fail the resync.
+function rethrowIfDurable(err) {
+  if (err && err.name === "AbortError") throw err;
+
+  const classified = classify(err, SOURCES.APPLY);
+  if (!classified.persist) return;
+
+  // Running out of space mid-transfer is the same durable condition the
+  // pre-flight check guards against (classify normalizes both the
+  // pre-flight 409 and an upload's insufficient_space failure to status
+  // 507) - tag it the same way so callers checking error.code see one
+  // consistent shape instead of only the pre-flight check's synthesized
+  // error carrying it. Mutate rather than replace: the outer catch in
+  // resetFromBlot still needs the original status/tag intact to classify
+  // and persist this error via persistError.
+  if (classified.status === 507 && !err.code) {
+    err.code = "DROPBOX_INSUFFICIENT_SPACE";
+  }
+
+  throw err;
+}
+
+async function resetFromBlotWithClient(
+  blogID,
+  publish,
+  signal,
+  client,
+  account
+) {
   abortIfRequested(signal);
 
   let dropboxRoot = "/";
@@ -230,9 +284,10 @@ async function resetFromBlot(blogID, publish, signal) {
   if (account.folder_id) {
     abortIfRequested(signal);
 
-    const { result } = await client.filesGetMetadata({
-      path: account.folder_id,
-    });
+    const { result } = await tagSource(
+      SOURCES.DELTA,
+      client.filesGetMetadata({ path: account.folder_id })
+    );
 
     abortIfRequested(signal);
     const { path_display } = result;
@@ -257,11 +312,14 @@ async function resetFromBlot(blogID, publish, signal) {
 
   const {
     result: { cursor },
-  } = await client.filesListFolderGetLatestCursor({
-    path: account.folder_id || "",
-    include_deleted: true,
-    recursive: true,
-  });
+  } = await tagSource(
+    SOURCES.DELTA,
+    client.filesListFolderGetLatestCursor({
+      path: account.folder_id || "",
+      include_deleted: true,
+      recursive: true,
+    })
+  );
 
   abortIfRequested(signal);
 
@@ -326,20 +384,16 @@ async function resetFromBlot(blogID, publish, signal) {
   // counterpart.
   const failures = [];
 
-  // Shared by both upload sites below. An insufficient-space error means
-  // every subsequent upload will fail the same way, so we stop the whole
-  // transfer immediately rather than continuing to grind through retries
-  // (retry.js also stops retrying this specific error - see util/retry.js)
-  // and persist the error state so resetToBlot/validation know not to treat
-  // Dropbox as authoritative until this is resolved (see init.js).
+  // Shared by both upload sites below. A durable error (revoked access,
+  // full storage, missing folder) means every subsequent upload will fail
+  // the same way, so rethrowIfDurable stops the whole transfer immediately
+  // rather than continuing to grind through retries; the outer catch in
+  // resetFromBlot persists it so resetToBlot/validation know not to treat
+  // Dropbox as authoritative until this is resolved (see init.js). Anything
+  // else is a transient per-file failure: log it and keep going, but track
+  // it so we don't report success at the end (see the DATA LOSS note above).
   const handleUploadFailure = async (e, path) => {
-    if (isInsufficientSpaceError(e) || e.code === "DROPBOX_INSUFFICIENT_SPACE") {
-      log("Dropbox ran out of space while transferring", path);
-      await set(blogID, { error_code: INSUFFICIENT_SPACE_ERROR_CODE });
-      throw insufficientSpaceError(
-        "Dropbox ran out of space while transferring this blog's folder"
-      );
-    }
+    rethrowIfDurable(e);
     log("Failed to transfer", path);
     failures.push(path);
   };
@@ -367,6 +421,7 @@ async function resetFromBlot(blogID, publish, signal) {
           await client.filesDelete({ path: join(dropboxRoot, path) });
           abortIfRequested(signal);
         } catch (e) {
+          rethrowIfDurable(e);
           log("Failed to remove", path, e.message);
         }
       }
