@@ -36,11 +36,24 @@ module.exports = function checkToken(req, res, next) {
       if (isRedisUnavailableError(err)) return next(err);
       if (err || !user) return next(new LogInError("NOUSER"));
 
+      // Read the persisted flag before extend() overwrites it with a
+      // forward-looking prediction of whether Stripe/PayPal state means the
+      // account *should* be disabled - see dashboard/util/load-user.js.
+      var isDisabled = user.isDisabled;
+
       User.extend(user);
+
+      // A subscription an admin has paused (scripts/user/pause-account.js)
+      // stays disabled without billing even if its Stripe status still
+      // reads past_due/unpaid - don't treat that as payable.
+      var canPayToReactivate =
+        user.needsToPay &&
+        !(user.subscription && user.subscription.pause_collection);
 
       // A disabled account can still log in via a token and pay if that's
       // why it was disabled - see dashboard/util/load-user.js.
-      if (user.isDisabled && !user.needsToPay) return res.redirect("/disabled");
+      if (isDisabled && !canPayToReactivate)
+        return res.redirect("/sites/disabled");
 
       // Store the valid user'd ID in the session.
       authenticate(req, res, user);
