@@ -34,8 +34,8 @@ const ISSUES = {
   SOURCE_MISSING: {
     label: "Folder missing",
     message:
-      "The folder used to sync this site no longer exists. Choose a new folder to resume syncing.",
-    action: "Choose a folder",
+      "The folder used to sync this site no longer exists. Recreate it to resume syncing.",
+    action: "Recreate folder",
   },
   QUOTA_EXCEEDED: {
     label: "Storage full",
