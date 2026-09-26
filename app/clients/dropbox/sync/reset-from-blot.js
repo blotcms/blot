@@ -60,20 +60,14 @@ async function countLocalItems(localRoot, dir, signal) {
   return total;
 }
 
-// Sums the size on disk of every local file (not folders) so we can compare
-// it against the free space in Dropbox before uploading anything. This is
-// deliberately conservative: some of these files might already be identical
-// on Dropbox and wouldn't actually need to be re-uploaded (see the
-// identicalOnRemote check in walk() below), so this can overestimate the
-// space actually required. Overestimating just means we might block a
-// transfer that would technically have fit - far safer than the alternative
-// of underestimating and running out of space mid-transfer, which is what
-// caused the data loss this guards against.
-async function sumLocalBytes(localRoot, dir, signal) {
+// Records the size on disk of every local file (not folders), keyed by its
+// lowercased path relative to the blog folder (Dropbox paths are
+// case-insensitive), so the pre-flight check below can work out how many
+// bytes this transfer will add to Dropbox.
+async function listLocalSizes(localRoot, dir, signal, sizes = new Map()) {
   abortIfRequested(signal);
 
   const contents = await fs.readdir(join(localRoot, dir));
-  let total = 0;
 
   for (const name of contents) {
     abortIfRequested(signal);
@@ -84,13 +78,13 @@ async function sumLocalBytes(localRoot, dir, signal) {
     const stat = await fs.stat(join(localRoot, path));
 
     if (stat.isDirectory()) {
-      total += await sumLocalBytes(localRoot, path, signal);
+      await listLocalSizes(localRoot, path, signal, sizes);
     } else {
-      total += stat.size;
+      sizes.set(path.toLowerCase(), stat.size);
     }
   }
 
-  return total;
+  return sizes;
 }
 
 // Returns the user's free space in bytes, or null if it can't be determined
@@ -127,16 +121,23 @@ async function getFreeSpaceBytes(client) {
       allocation.user_within_team_space_limit_type &&
       allocation.user_within_team_space_limit_type[".tag"];
 
+    const teamFree =
+      typeof allocation.allocated === "number" &&
+      typeof allocation.used === "number"
+        ? allocation.allocated - allocation.used
+        : null;
+
+    // A stop_sync member is bound by both their own cap and the shared pool.
     if (
       limitType === "stop_sync" &&
       typeof allocation.user_within_team_space_allocated === "number" &&
       allocation.user_within_team_space_allocated > 0
     ) {
-      return allocation.user_within_team_space_allocated - used;
+      const memberFree = allocation.user_within_team_space_allocated - used;
+      return teamFree === null ? memberFree : Math.min(memberFree, teamFree);
     }
-    if (typeof allocation.allocated === "number") {
-      return allocation.allocated - allocation.used;
-    }
+
+    return teamFree;
   }
 
   // allocation[".tag"] === "other", or a shape we don't recognize - don't
@@ -144,18 +145,17 @@ async function getFreeSpaceBytes(client) {
   return null;
 }
 
-// Recursively sums the size of every file already present under `dir` in
-// Dropbox. resetFromBlot makes the Dropbox folder mirror the local folder
-// (see walk() below: it deletes anything on Dropbox with no local
-// counterpart), so the actual net growth in Dropbox's usage from this
-// transfer is (local bytes) minus (bytes already sitting in this folder on
-// Dropbox), not the full local size - a repeat transfer after a partial
-// failure would otherwise be blocked by the full local size even once the
-// user has freed up exactly enough room for what's left to upload.
+// Records the size of every file already under `root` in Dropbox, keyed the
+// same way as listLocalSizes. A retry after a partial transfer finds most
+// files already at their destination, so only the growth of each file
+// counts against free space. Stale remote files that walk() will delete
+// are deliberately not credited: walk() may upload into a folder before it
+// reaches (and cleans up) the one holding them, so that space can't be
+// relied on during the transfer.
 // remoteReaddir is defined further down this file (const, module scope) -
 // safe to reference here since this only runs once the module has finished
 // loading.
-async function sumRemoteBytes(client, dir, signal) {
+async function listRemoteSizes(client, root, dir, signal, sizes = new Map()) {
   abortIfRequested(signal);
 
   let items;
@@ -163,22 +163,26 @@ async function sumRemoteBytes(client, dir, signal) {
     items = await remoteReaddir(client, dir, signal);
   } catch (e) {
     // Best-effort, same as getFreeSpaceBytes above: if we can't list what's
-    // already there, treat it as nothing rather than blocking setup.
+    // already there, treat it as nothing (the conservative choice).
     log("Failed to list existing Dropbox folder contents for quota check", e.message);
-    return 0;
+    return sizes;
   }
 
-  let total = 0;
+  const prefix = root === "/" ? "" : root.toLowerCase();
+
   for (const item of items) {
     abortIfRequested(signal);
     if (item.is_directory) {
-      total += await sumRemoteBytes(client, item.path_display, signal);
+      await listRemoteSizes(client, root, item.path_display, signal, sizes);
     } else if (typeof item.size === "number") {
-      total += item.size;
+      const path = (item.path_lower || item.path_display.toLowerCase()).slice(
+        prefix.length
+      );
+      sizes.set(path, item.size);
     }
   }
 
-  return total;
+  return sizes;
 }
 
 function insufficientSpaceError(message) {
@@ -275,17 +279,20 @@ async function resetFromBlot(blogID, publish, signal) {
   // space partway through, resetToBlot later treats the files we never
   // managed to upload as "deleted on Dropbox" and removes them from Blot.
   publish("Checking Dropbox storage space...");
-  const [localBytes, freeSpaceBytes, existingRemoteBytes] = await Promise.all([
-    sumLocalBytes(localRoot, "/", signal),
+  const [localSizes, freeSpaceBytes, remoteSizes] = await Promise.all([
+    listLocalSizes(localRoot, "/", signal),
     getFreeSpaceBytes(client),
-    sumRemoteBytes(client, dropboxRoot, signal),
+    listRemoteSizes(client, dropboxRoot, dropboxRoot, signal),
   ]);
 
   abortIfRequested(signal);
 
-  // Net new bytes this transfer needs room for - see sumRemoteBytes' comment
-  // for why it's local minus what's already there, not the full local size.
-  const netBytesToUpload = Math.max(0, localBytes - existingRemoteBytes);
+  // Bytes this transfer adds to Dropbox: each local file's size minus
+  // whatever already sits at the same path (see listRemoteSizes).
+  let netBytesToUpload = 0;
+  for (const [path, size] of localSizes) {
+    netBytesToUpload += Math.max(0, size - (remoteSizes.get(path) || 0));
+  }
 
   // freeSpaceBytes can be negative if the account is already over quota
   // (used > allocated) - clamp it to 0 before comparing so a retry that
@@ -300,11 +307,7 @@ async function resetFromBlot(blogID, publish, signal) {
     log(
       "Not enough free space in Dropbox to transfer this folder:",
       netBytesToUpload,
-      "net bytes needed (",
-      localBytes,
-      "local -",
-      existingRemoteBytes,
-      "already on Dropbox ), ",
+      "bytes needed,",
       freeSpaceBytes,
       "bytes free"
     );

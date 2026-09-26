@@ -296,13 +296,48 @@ describe("dropbox resetFromBlot", function () {
     // used (2000) > allocated (1000) makes freeSpaceBytes negative (-1000).
     // Naively comparing netBytesToUpload > freeSpaceBytes would reject this
     // forever (0 > -1000), even though this transfer needs zero additional
-    // bytes: existingRemoteBytes (500, from an unrelated file already on
-    // Dropbox) already covers the local folder's size (500).
+    // bytes: a 500-byte copy of a.txt is already on Dropbox.
     await fs.outputFile(join(blogDirectory, "a.txt"), Buffer.alloc(500));
 
     const resetFromBlot = load({
       spaceUsage: {
         used: 2000,
+        allocation: { ".tag": "individual", allocated: 1000 },
+      },
+      remote: {
+        "/": [
+          {
+            ".tag": "file",
+            name: "a.txt",
+            path_display: "/a.txt",
+            content_hash: "different-hash-so-it-still-gets-reuploaded",
+            size: 500,
+            server_modified: "2026-01-01T00:00:00Z",
+          },
+        ],
+      },
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    let error;
+    try {
+      await resetFromBlot(blogID, () => {}, { aborted: false });
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).toBeUndefined();
+    expect(uploadCalls.length).toEqual(1);
+  });
+
+  it("does not credit stale remote files at other paths against the quota check", async function () {
+    // walk() may upload a.txt before it deletes other.txt, so the 500 bytes
+    // other.txt occupies can't be counted as free during the transfer.
+    await fs.outputFile(join(blogDirectory, "a.txt"), Buffer.alloc(500));
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 1000,
         allocation: { ".tag": "individual", allocated: 1000 },
       },
       remote: {
@@ -327,7 +362,36 @@ describe("dropbox resetFromBlot", function () {
       error = err;
     }
 
-    expect(error).toBeUndefined();
-    expect(uploadCalls.length).toEqual(1);
+    expect(error && error.code).toEqual("DROPBOX_INSUFFICIENT_SPACE");
+    expect(uploadCalls.length).toEqual(0);
+  });
+
+  it("applies the shared team pool as well as a stop_sync member cap", async function () {
+    // Plenty of room under the member's own cap, but the team pool is full.
+    await fs.outputFile(join(blogDirectory, "a.txt"), Buffer.alloc(100));
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: {
+          ".tag": "team",
+          allocated: 1000,
+          used: 1000,
+          user_within_team_space_allocated: 1000000,
+          user_within_team_space_limit_type: { ".tag": "stop_sync" },
+        },
+      },
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    let error;
+    try {
+      await resetFromBlot(blogID, () => {}, { aborted: false });
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error && error.code).toEqual("DROPBOX_INSUFFICIENT_SPACE");
+    expect(uploadCalls.length).toEqual(0);
   });
 });

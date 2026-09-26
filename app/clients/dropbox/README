@@ -350,26 +350,21 @@ Specifically for running out of space, `resetFromBlot()` also:
 1. Runs a best-effort pre-flight check (`client.usersGetSpaceUsage()`)
    comparing how much this transfer would actually grow Dropbox's usage by
    against free space, and aborts before uploading anything if there's
-   clearly not enough room. The amount needed is **local folder size minus
-   bytes already sitting in the target Dropbox folder** (summed recursively
-   via `filesListFolder`/`filesListFolderContinue`, using the same pagination
-   as `remoteReaddir`) rather than the full local size - since `resetFromBlot`
-   makes the Dropbox folder mirror the local one (it deletes remote extras),
-   that's the actual net growth, and using the full local size would
-   otherwise block a retry of a partially-completed transfer even once the
-   user has freed up exactly enough room for what's left. If free space or
-   the existing remote size can't be determined (an unrecognized account
-   allocation shape, or either request failing), that check is skipped
-   (treating missing remote size as `0`) rather than blocking setup. The
-   comparison only rejects when the net bytes needed are actually positive
-   and exceed free space clamped to `0` - an account that's already over its
-   quota for unrelated reasons has a *negative* free-space figure, which
-   would otherwise reject even a zero-growth retry forever. For a team
-   account, the per-member allocation (`user_within_team_space_allocated`)
-   is only treated as a hard ceiling when Dropbox's own
-   `user_within_team_space_limit_type` is `stop_sync`; `off` and `alert_only`
-   fall back to the shared team pool, since neither of those actually stops
-   sync at that per-member number.
+   clearly not enough room. The amount needed is the sum, over local files,
+   of how much bigger each is than whatever already sits at the same path
+   in the target Dropbox folder - so a retry of a partially-completed
+   transfer only needs room for what's left. Stale remote files that the
+   transfer will delete are not credited, since uploads can happen before
+   the walk reaches and removes them. If free space can't be determined (an
+   unrecognized allocation shape, or the request failing) the check is
+   skipped; if the remote listing fails, nothing is credited. The check only
+   rejects when the bytes needed are positive and exceed free space clamped
+   to `0`, so an account already over quota can still complete a
+   zero-growth retry. For a team account, the per-member allocation
+   (`user_within_team_space_allocated`) only applies when
+   `user_within_team_space_limit_type` is `stop_sync`, and then alongside
+   the shared team pool (whichever is smaller); `off` and `alert_only` use
+   the shared pool alone.
 2. Detects a Dropbox "insufficient_space" error from an individual upload
    (`util/constants.js`'s `isInsufficientSpaceError`) and stops the transfer
    immediately instead of logging and continuing - `util/retry.js` also
