@@ -7,7 +7,7 @@ const debug = require("debug")("blot:clients:google-drive:download");
 const tempDir = require("helper/tempDir")();
 const guid = require("helper/guid");
 const verifyContent = require("./verifyContent");
-const config = require("config");
+const assets = require("storage/assets");
 const hash = require("helper/hash");
 const cheerio = require("cheerio");
 const yauzl = require("yauzl");
@@ -160,8 +160,7 @@ const downloadGoogleDocAsZip = async ({
     await extractZip(zipPath, extractDir);
     const { htmlPath, imagesDir } = await resolveHtmlAndImagesDir(extractDir);
     const docHash = hash(path);
-    const blogDir = join(config.blog_static_files_dir, blogID);
-    const assetDir = join(blogDir, "_assets", docHash);
+    const assetDir = assets.path(blogID, "_assets", docHash);
     await fs.ensureDir(assetDir);
 
     if (imagesDir) {

@@ -2,6 +2,7 @@ var fs = require("fs-extra");
 var { v4: uuid } = require("uuid");
 var extname = require("path").extname;
 var config = require("config");
+var assets = require("storage/assets");
 var folder = "_avatars";
 
 var VALID_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif"];
@@ -26,14 +27,7 @@ module.exports = function (req, res, next) {
   }
 
   var name = uuid() + extension;
-  var finalPath =
-    config.blog_static_files_dir +
-    "/" +
-    req.blog.id +
-    "/" +
-    folder +
-    "/" +
-    name;
+  var finalPath = assets.path(req.blog.id, folder, name);
   var url = config.cdn.origin + "/" + req.blog.id + "/" + folder + "/" + name;
 
   // The combined photo/favicon flow needs the temporary upload after the
