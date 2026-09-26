@@ -5,6 +5,7 @@ const setup = require("./setup");
 const config = require("config");
 const fetch = require("node-fetch");
 const Database = require("clients/dropbox/database");
+const health = require("clients/health");
 const join = require("path").join;
 const moment = require("moment");
 const { Dropbox } = require("dropbox");
@@ -54,6 +55,16 @@ dashboard.get("/", function (req, res) {
         state: "syncing"
       };
     }
+
+    // getBlogHealth (dashboard/util/load-blog.js) already read this blog's
+    // health before this route ran, straight from the persisted account
+    // row - which, right after a fresh connect/reconnect, can still carry
+    // the old durable error (e.g. REAUTH_REQUIRED) for the first few
+    // seconds, until setup() (routes/setup/index.js) gets far enough to
+    // clear error_code. We know better here: a session-tracked setup is
+    // actively running, so show it as syncing instead of a stale error.
+    delete res.locals.blog.healthIssue;
+    res.locals.blog.health = health.syncing();
   }
 
   var dropboxBreadcrumbs = [];
