@@ -105,6 +105,30 @@ dashboard.get("/", function (req, res) {
 
   res.locals.dropboxBreadcrumbs = dropboxBreadcrumbs;
 
+  // REAUTH_REQUIRED and SOURCE_MISSING are both resolved by sending the
+  // user through Dropbox's OAuth flow again (setup() recreates the folder
+  // afterwards if it's missing, for either access mode - see createFolder.js).
+  // Point the health action straight at /redirect instead of the generic
+  // /setup interstitial, so clicking it doesn't require clicking through
+  // an explanation of something that's already happened before. Preserve
+  // the account's existing access mode - full_access selects a different
+  // Dropbox OAuth app (see redirectToDropbox below), so getting this wrong
+  // would silently switch the user's permission level.
+  if (res.locals.blog.healthIssue) {
+    var issueCode = res.locals.blog.healthIssue.code;
+    if (
+      issueCode === health.CODES.REAUTH_REQUIRED ||
+      issueCode === health.CODES.SOURCE_MISSING
+    ) {
+      res.locals.blog.healthIssue.actionUrl =
+        res.locals.base +
+        "/redirect" +
+        (res.locals.account && res.locals.account.full_access
+          ? "?full_access=true"
+          : "");
+    }
+  }
+
   res.render(views + "index");
 });
 

@@ -17,7 +17,12 @@
     </span>
     <span style="display:block;margin-top:6px;color:var(--medium-text-color);font-size:14px;">{{message}}</span>
     <div class="buttons" style="margin:12px 0 0;">
+      {{#actionUrl}}
+      <a href="{{{actionUrl}}}">{{action}}</a>
+      {{/actionUrl}}
+      {{^actionUrl}}
       <a href="{{{base}}}/setup">{{action}}</a>
+      {{/actionUrl}}
       <a href="{{{dashboardBase}}}/client/activity">View activity</a>
     </div>
   </span>
