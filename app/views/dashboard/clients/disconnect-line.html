@@ -16,7 +16,10 @@
       {{> sync-status}}
     </span>
     <span style="display:block;margin-top:6px;color:var(--medium-text-color);font-size:14px;">{{message}}</span>
-    <a href="{{{base}}}/setup" class="button" style="margin-top:8px;display:inline-block;">{{action}}</a>
+    <div class="buttons" style="margin:12px 0 0;">
+      <a href="{{{base}}}/setup">{{action}}</a>
+      <a href="{{{dashboardBase}}}/client/activity">View activity</a>
+    </div>
   </span>
 </div>
 {{/blog.healthIssue}}
