@@ -67,12 +67,6 @@ dashboard.get("/", function (req, res) {
     res.locals.blog.health = health.syncing();
   }
 
-  console.log("[DEBUG dropbox GET /]", Date.now(), {
-    hasSessionDropbox: !!req.session.dropbox,
-    accountErrorCode: req.account && req.account.error_code,
-    blogHealthIssueFinal: res.locals.blog && res.locals.blog.healthIssue,
-  });
-
   var dropboxBreadcrumbs = [];
   var folder;
 
@@ -128,6 +122,18 @@ dashboard.get("/edit", function (req, res) {
 
 // Redirects the user to the OAuth page on Dropbox.com
 dashboard.get("/redirect", function (req, res) {
+  // Clear the durable error now, before the user ever leaves for Dropbox,
+  // instead of waiting for setup() to get through getAccount()/createFolder()
+  // (real network round trips) after they come back. That gap is exactly what
+  // showed the old REAUTH_REQUIRED error for a few seconds after a successful
+  // reconnect - clearing it here removes the race instead of papering over it
+  // downstream. error_source/error_since clear too - see database.js.
+  Database.set(req.blog.id, { error_code: 0 }, function () {
+    redirectToDropbox(req, res);
+  });
+});
+
+function redirectToDropbox(req, res) {
   var redirectUri, key, secret;
 
   var redirectHost =
@@ -183,7 +189,7 @@ dashboard.get("/redirect", function (req, res) {
     });
 
   // res.redirect(authentication_url);
-});
+}
 
 // Explains to the user what happens when they change the
 // permission they grant to Blot per access to their Dropbox
@@ -227,7 +233,6 @@ dashboard.get("/authenticate", function (req, res, next) {
 
   // this the first time the user has visited this page
   req.session.dropbox = account;
-  console.log("[DEBUG dropbox GET /authenticate] set session.dropbox", Date.now(), req.blog.id);
 
   Blog.set(req.blog.id, { client: "dropbox" }, function (err) {
     if (err) return next(err);
@@ -243,7 +248,6 @@ dashboard.get("/authenticate", function (req, res, next) {
     // pre-reconnect error for a render or two until a later request
     // catches up. res.redirect() doesn't wait for that on its own.
     req.session.save(function () {
-      console.log("[DEBUG dropbox GET /authenticate] session saved, redirecting", Date.now());
       res.redirect(req.baseUrl);
     });
   });
