@@ -60,6 +60,7 @@ jobs:
         - app/models/entry:1
         - app/scheduler:1
         - app/site:1
+        - app/storage:1
         - app/sync:1
         - app/templates:1
         - config/openresty:1
