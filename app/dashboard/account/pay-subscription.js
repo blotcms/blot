@@ -222,8 +222,11 @@ function updateSubscription(req, res, next) {
         // (see dashboard/util/load-user.js) - re-enable them here instead
         // of waiting on the Stripe webhook, which could otherwise lose the
         // race with the redirect below and bounce them to /sites/disabled.
+        // Gate on the persisted reason, not req.user.isDisabled - that's
+        // been through User.extend, which can predict isDisabled from
+        // stale/cached subscription state.
         if (
-          req.user.isDisabled &&
+          req.user.disabledForNonpayment &&
           subscription.status === "active" &&
           !subscription.pause_collection &&
           !subscriptionLifecycle.shouldDisableFromStripeSubscription(subscription)

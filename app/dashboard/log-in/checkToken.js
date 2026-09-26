@@ -43,8 +43,11 @@ module.exports = function checkToken(req, res, next) {
 
       User.extend(user);
 
+      // Also require the subscription to still actually read
+      // past_due/unpaid - see dashboard/util/load-user.js.
       var canPayToReactivate =
         disabledForNonpayment &&
+        user.needsToPay &&
         !(user.subscription && user.subscription.pause_collection);
 
       // A disabled account can still log in via a token and pay if that's

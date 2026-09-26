@@ -22,6 +22,7 @@ describe("user validate", function () {
       email: email,
       blogs: [],
       isDisabled: false,
+      disabledForNonpayment: false,
       lastSession: "",
       passwordHash: "hash123",
       created: Date.now(),

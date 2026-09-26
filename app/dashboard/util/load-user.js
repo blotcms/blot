@@ -33,8 +33,12 @@ module.exports = function (req, res, next) {
 
     User.extend(user);
 
+    // Also require the subscription to still actually read past_due/unpaid:
+    // the flag can go stale (e.g. Stripe later reports the subscription
+    // canceled outright) without anything having cleared it.
     var canPayToReactivate =
       disabledForNonpayment &&
+      user.needsToPay &&
       !(user.subscription && user.subscription.pause_collection);
 
     // A disabled account can still log in and pay if that's why it was
