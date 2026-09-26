@@ -22,17 +22,11 @@
       "font_size": 14,
       "line_height": 1.5
     },
-    "body_font": {
+    "font": {
       "id": "system-sans",
       "font_size": 16,
       "line_height": 1.4
     },
-    "heading_font": {
-      "id": "system-sans",
-      "font_size": 18,
-      "line_height": 1.6
-    },
-    "logo_url": "",
     "profile_image": {},
     "sticky_navigation": true,
     "collapse_navigation_by_default": true,

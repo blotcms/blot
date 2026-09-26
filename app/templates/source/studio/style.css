@@ -1,11 +1,10 @@
 {{{app_css}}}
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
 body {
-  {{#body_font}}
+  {{#font}}
   font-family: {{{stack}}};
   font-size: {{{font_size}}}px;
   line-height: {{{line_height}}};
@@ -15,7 +14,7 @@ body {
   {{#style}}
   font-style: {{{.}}};
   {{/style}}
-  {{/body_font}}
+  {{/font}}
   -webkit-font-smoothing: antialiased;
   background: {{background_color}};
   color: {{text_color}};
@@ -41,31 +40,29 @@ figcaption {
 
 h1, h2, h3, h4, h5, h6 {
   font-weight: 400;
-  {{#heading_font}}
+  {{#font}}
   font-family: {{{stack}}};
-  line-height: {{{line_height}}};
   {{#weight}}
   font-weight: {{{.}}};
   {{/weight}}
   {{#style}}
   font-style: {{{.}}};
   {{/style}}
-  {{/heading_font}}
+  {{/font}}
+  line-height: 1.4;
 }
 
 h2, h3 {margin-top: 2em}
 
 h1 {
-  {{#heading_font}}
-  font-size: {{{font_size}}}px;
-  {{/heading_font}}
+  font-size: {{font.font_size}}px;
 }
 
-h2 { font-size: calc({{{heading_font.font_size}}}px * 0.83); }
-h3 { font-size: calc({{{heading_font.font_size}}}px * 0.67); }
-h4 { font-size: calc({{{heading_font.font_size}}}px * 0.56); }
-h5 { font-size: calc({{{heading_font.font_size}}}px * 0.46); }
-h6 { font-size: calc({{{heading_font.font_size}}}px * 0.38); }
+h2 { font-size: calc({{font.font_size}}px * 0.83); }
+h3 { font-size: calc({{font.font_size}}px * 0.67); }
+h4 { font-size: calc({{font.font_size}}px * 0.56); }
+h5 { font-size: calc({{font.font_size}}px * 0.46); }
+h6 { font-size: calc({{font.font_size}}px * 0.38); }
 
 a {color: {{link_color}};text-decoration: none;}
 
@@ -82,6 +79,7 @@ a {color: {{link_color}};text-decoration: none;}
   max-height: 1.2em;
   width: auto;
   vertical-align: middle;
+  margin-right: 0.4em;
 }
 
 .terminal-header {
@@ -122,9 +120,9 @@ a {color: {{link_color}};text-decoration: none;}
 
 .terminal-header__title {
   white-space: nowrap;
-  {{#heading_font}}
+  {{#font}}
   font-family: {{{stack}}};
-  {{/heading_font}}
+  {{/font}}
 }
 
 .terminal-nav-toggle {

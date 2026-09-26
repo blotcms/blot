@@ -1,6 +1,6 @@
 /* FOOTNOTES */
 .footnote-ref {
-  font-size: calc({{{body_font.font_size}}}px * 0.5);
+  font-size: calc({{{font.font_size}}}px * 0.5);
   line-height: 0.5em;
   vertical-align: baseline;
   position: relative;

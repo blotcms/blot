@@ -26,7 +26,7 @@
   box-sizing: border-box;
   width: 100%;
   gap: 0.6em;
-  padding: var(--select-control-padding);
+  padding: 8px;
   font-size: var(--select-control-font-size);
   border-bottom: 1px solid var(--light-border-color);
 }

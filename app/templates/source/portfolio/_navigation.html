@@ -4,7 +4,7 @@
 
   <div class="navigation">
 
-    <a href="/" class="index-link">{{#logo_url}}<img src="{{{logo_url}}}" alt="{{title}}" class="site-logo">{{/logo_url}}{{^logo_url}}{{title}}{{/logo_url}}</a>
+    <a href="/" class="index-link">{{#profile_image.thumbnails.square}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" alt="{{title}}" class="site-logo">{{/profile_image.thumbnails.square}}{{^profile_image.thumbnails.square.url}}{{title}}{{/profile_image.thumbnails.square.url}}</a>
 
     <div class="shrink">
       {{#is.in_navigation.recent_posts}}

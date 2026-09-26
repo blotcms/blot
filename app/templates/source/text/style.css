@@ -3,8 +3,6 @@
 
 /* Inserts the @font-face rules required to load whichever fonts are selected. */
 {{{font.styles}}}
-{{{heading_font.styles}}}
-{{{navigation_font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
@@ -16,6 +14,7 @@
   {{#is.navigation_location.right}}
   --sidebar-width: {{navigation_width}}px;
   {{/is.navigation_location.right}}
+  --navigation-background-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.031);
 }
 
 html {
@@ -47,7 +46,7 @@ header > a {
 .header-wrapper {
   position: relative;
   padding: 2em 0;
-  background: {{navigation_background_color}};
+  background: linear-gradient(var(--navigation-background-color), var(--navigation-background-color)), {{background_color}};
   {{^sticky_navigation}}
   position: relative;
   z-index: 1;
@@ -68,15 +67,12 @@ header > a {
 }
 
 header {
-  {{#navigation_font}}
+  {{#font}}
   font-family: {{{stack}}};
   font-size: {{{font_size}}}px;
   line-height: {{{line_height}}};
   height: {{{line_height}}}em;
-  {{/navigation_font}}
-  {{^navigation_font}}
-  height: {{font.line_height}}em;
-  {{/navigation_font}}
+  {{/font}}
   overflow: hidden;
   display: flex;
   flex-wrap: wrap;
@@ -98,9 +94,9 @@ header {
   display: inline-flex;
   align-items: center;
   gap: 0.4em;
-  {{#heading_font}}
+  {{#font}}
   font-family: {{{stack}}};
-  {{/heading_font}}
+  {{/font}}
 }
 
 .site-logo {
@@ -139,7 +135,7 @@ header a:active {
 
 
 nav {
-  background: {{navigation_background_color}};
+  background: linear-gradient(var(--navigation-background-color), var(--navigation-background-color)), {{background_color}};
   position: relative;
   {{#collapse_navigation_by_default}}
   width: 100%;
@@ -214,7 +210,7 @@ nav a:not([href]) {
   padding: 2em;
   box-sizing: border-box;
   display: flex;
-  background: {{navigation_background_color}};
+  background: linear-gradient(var(--navigation-background-color), var(--navigation-background-color)), {{background_color}};
   overflow-y: auto;
   z-index: 2;
 }
@@ -354,14 +350,11 @@ nav a:not([href]) {
   .navigation-location-right header {
     flex-direction: row;
     align-items: center;
-    {{#navigation_font}}
+    {{#font}}
     font-size: {{{font_size}}}px;
     line-height: {{{line_height}}};
     height: {{{line_height}}}em;
-    {{/navigation_font}}
-    {{^navigation_font}}
-    height: {{font.line_height}}em;
-    {{/navigation_font}}
+    {{/font}}
     justify-content: space-between;
     padding: calc({{spacing}}rem/2) calc({{spacing}}rem);
   }
@@ -381,7 +374,7 @@ nav a:not([href]) {
   .navigation-location-right nav {
     flex-direction: column;
     align-items: flex-start;
-    background: {{navigation_background_color}};
+    background: linear-gradient(var(--navigation-background-color), var(--navigation-background-color)), {{background_color}};
     padding: 0;
   }
 
@@ -415,7 +408,7 @@ nav a:not([href]) {
   position: absolute;
   top: calc({{spacing}}rem/2);
   right:  {{spacing}}rem;
-  background: {{navigation_background_color}};
+  background: linear-gradient(var(--navigation-background-color), var(--navigation-background-color)), {{background_color}};
   cursor: pointer;
   padding-left:.7em;
   width: 1.4em;
@@ -542,10 +535,10 @@ font-feature-settings: 'tnum';
   text-decoration: none;color:inherit;display: block;padding-bottom: 1rem;
 border-radius: 4px;padding:0.75em 1.25em;font-size:0.9em}
 .rounded-link + .rounded-link {margin-top: 1em}
-.rounded-link .title {display: block;color:{{accent_color}};text-decoration:underline}
+.rounded-link .title {display: block;color:{{link_color}};text-decoration:underline}
 .rounded-link .summary {opacity: 0.8;max-height: 2.8em;overflow: hidden;display: block;margin-top: 0.5em;}
 .rounded-link .summary:empty {display: none}
-.rounded-link:hover {border-color: {{accent_color}};opacity: 1}
+.rounded-link:hover {border-color: {{link_color}};opacity: 1}
 
 
 .clear {width: 100%;clear: both;float: none;display: block;height: 0}
@@ -640,15 +633,15 @@ p, li {
 }
 
 h1, h2, h3, h4, h5, h6 {
-  {{#heading_font}}
+  {{#font}}
   font-family: {{{stack}}};
-  line-height: {{{line_height}}};
-  {{/heading_font}}
+  {{/font}}
+  line-height: 1.2;
 }
 
-h1 {font-size: 1.5625em;line-height: 36px;font-weight: bold;margin-bottom: 24px;text-wrap:balance;{{#heading_font}}font-size: {{{font_size}}}px;line-height: {{{line_height}}};{{/heading_font}}}
+h1 {font-size: 1.5625em;line-height: 36px;font-weight: bold;margin-bottom: 24px;text-wrap:balance;font-size: 30px;line-height: 1.2;}
 
-h2, h3, h4, h5, h6 {font-size: 1.0625em;font-weight: bold;line-height: 24px;margin: 48px 0 24px;text-wrap:balance;{{#heading_font}}line-height: {{{line_height}}};{{/heading_font}}}
+h2, h3, h4, h5, h6 {font-size: 1.0625em;font-weight: bold;line-height: 24px;margin: 48px 0 24px;text-wrap:balance;line-height: 1.2;}
 
 blockquote {
   padding: 0 0 0 12px;
@@ -670,7 +663,7 @@ big {color: {{text_color}};font-size: 2em;line-height: 48px;display: block;}
 /* LINKS */
 
 a {
-  color: {{accent_color}}; /* 02569B */
+  color: {{link_color}}; /* 02569B */
   text-decoration: underline;
 }
 
@@ -691,7 +684,7 @@ a:active {
 }
 
 a:focus {
-  background: rgba({{#rgb}}{{accent_color}}{{/rgb}}, 0.1);
+  background: rgba({{#rgb}}{{link_color}}{{/rgb}}, 0.1);
   text-decoration: none
 }
 
@@ -882,14 +875,14 @@ hr.minimal, .footnotes hr {border-bottom:1px solid;margin-top: 0;}
 /* :: Search */
 
 form[action="/search"] input {
-  {{#navigation_font}}
+  {{#font}}
   font-size: {{{font_size}}}px;
   font-family: {{{stack}}};
-  {{/navigation_font}}
+  {{/font}}
   padding: .5em 1em;
   border-radius: 0.5em;
   width: {{max_width}}px;
-  color: {{accent_color}};
+  color: {{link_color}};
   box-sizing: border-box;
   background: {{background_color}};
   margin: 0;
@@ -898,7 +891,7 @@ form[action="/search"] input {
 
 form[action="/search"] input:focus {
   outline: none;
-  border-color: {{accent_color}};  
+  border-color: {{link_color}};
 }
 
 ::-webkit-input-placeholder {
@@ -926,7 +919,7 @@ a.full-line {
 }
 
 a.full-line em {
-  color: {{accent_color}};
+  color: {{link_color}};
   font-style: normal;
   text-decoration: underline;
 }

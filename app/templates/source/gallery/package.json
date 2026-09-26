@@ -6,18 +6,13 @@
     "page_size_range": [12, 192],
     "hide_dates": false,
     "date_display": "MMMM D, Y",
-    "text_color": "#000000",
     "background_color": "#FFFFFF",
-    "accent_color": "#0000FF",
-    "body_font": {
+    "text_color": "#000000",
+    "link_color": "#0000FF",
+    "font": {
       "id": "system-sans",
       "font_size": 14,
       "line_height": 1.4
-    },
-    "heading_font": {
-      "id": "system-sans",
-      "font_size": 28,
-      "line_height": 1.2
     },
     "syntax_highlighter": {
       "id": "stackoverflow-light"
@@ -26,7 +21,6 @@
       "id": "system-mono",
       "font_size": 13
     },
-    "logo_url": "",
     "profile_image": {},
     "sticky_navigation": false,
     "navigation_alignment": "justified",

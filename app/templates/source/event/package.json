@@ -7,29 +7,19 @@
     "page_size": 18,
     "spacing": 1,
     "spacing_range": [0, 4],
-    "dark_slides_background": true,
     "background_color": "#fff",
     "text_color": "#000",
     "link_color": "#000",
-    "dark_background_color": "#111",
-    "dark_text_color": "#eee",
-    "dark_link_color": "#eee",
     "hide_dates": false,
     "date_display": "MMM D",
     "syntax_highlighter": {
       "id": "arduino-light"
     },
-    "body_font": {
+    "font": {
       "id": "system-sans",
       "line_height": 1.6,
       "font_size": 15
     },
-    "heading_font": {
-      "id": "system-sans",
-      "font_size": 45,
-      "line_height": 1.2
-    },
-    "logo_url": "",
     "profile_image": {},
     "sticky_navigation": true,
     "navigation_alignment": "left",

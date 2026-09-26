@@ -2,9 +2,9 @@
   "name": "Magazine",
   "popularity": 50,
   "locals": {
-    "accent_color": "#0078D9",
     "background_color": "#fff",
     "text_color": "#000",
+    "link_color": "#0078D9",
     "page_size": 20,
     "hide_dates": false,
     "date_display": "MMMM D, Y",
@@ -19,14 +19,9 @@
       "id": "system-mono",
       "font_size": 15
     },
-    "body_font": {
+    "font": {
       "font_size": 16,
       "line_height": 1.5
-    },
-    "heading_font": {
-      "id": "system-sans",
-      "font_size": 36,
-      "line_height": 1.15
     },
     "profile_image": {},
     "demo_folder": "bjorn",

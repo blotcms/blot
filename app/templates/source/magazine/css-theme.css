@@ -1,6 +1,5 @@
 {{{syntax_highlighter_font.styles}}}
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter.styles}}}
 
 /* This template tag is replaced by CSS when this file is rendered */
@@ -20,11 +19,11 @@
 html {
   margin: 0;
   padding: 0;
-  {{#body_font}}
+  {{#font}}
   font-size: {{font_size}}px;
   line-height: {{line_height}};
   font-family: {{{stack}}};
-  {{/body_font}}
+  {{/font}}
   width: 100%;
   height: 100%;
 }
@@ -33,9 +32,9 @@ html {
 .bg-sidebar {background:{{background_color}}}
 
 html,body {
-  {{#body_font}}
+  {{#font}}
   font-family: {{{stack}}};
-  {{/body_font}}
+  {{/font}}
 }
 
 body {
@@ -222,9 +221,9 @@ a {
   text-decoration:none
 }
 
-a:not(.no-underline) {color:{{accent_color}};border-bottom:1px solid rgba({{#rgb}}{{accent_color}}{{/rgb}},0.25)}
-a:not(.no-underline):hover {border-color: rgba({{#rgb}}{{accent_color}}{{/rgb}},1)}
-a:hover {color:{{accent_color}}}
+a:not(.no-underline) {color:{{link_color}};border-bottom:1px solid rgba({{#rgb}}{{link_color}}{{/rgb}},0.25)}
+a:not(.no-underline):hover {border-color: rgba({{#rgb}}{{link_color}}{{/rgb}},1)}
+a:hover {color:{{link_color}}}
 
 a.dim {transition: opacity .2s linear;opacity:1}
 a.dim:hover {opacity:0.8}
@@ -326,19 +325,17 @@ h1, h2, h3 {margin: 3rem 0 2rem}
 h4, h5, h6, p, blockquote, ul, ol, table {margin:2rem 0}
   
 h1, h2, h3, h4, h5, h6, .fw9 {
-  {{#heading_font}}
+  {{#font}}
   font-family: {{{stack}}};
-  line-height: {{line_height}};
-  {{/heading_font}}
+  {{/font}}
+  line-height: 1.15;
 }
 
 h1 {
   font-weight:900;
   margin:0;
   padding:0;
-  {{#heading_font}}
-  font-size: {{font_size}}px;
-  {{/heading_font}}
+  font-size: 36px;
 }
 
 /* Italic style sucks in font-weight: 900 */ 
@@ -380,18 +377,14 @@ figure cite, figure cite a {font-size:0.8rem;color:rgba({{#rgb}}{{text_color}}{{
 
 /* Tachyons customizations */
 .lh-title.tracked-tight {
-  {{#heading_font}}
-  line-height: {{line_height}};
-  {{/heading_font}}
+  line-height: 1.15;
 }
 
 /* Homepage hero titles should follow the heading size control.
    They are spans (not h1), so they otherwise stay at Tachyons .f3. */
 .featured-entry .lh-title {
-  {{#heading_font}}
-  font-size: {{font_size}}px;
-  line-height: {{line_height}};
-  {{/heading_font}}
+  font-size: 36px;
+  line-height: 1.15;
 }
 
 /* Index rows used floats inside an inline flex wrapper, so percentage
@@ -430,9 +423,9 @@ figure cite, figure cite a {font-size:0.8rem;color:rgba({{#rgb}}{{text_color}}{{
 /* Let the configured body line height reach the article body, which
    Tachyons' .lh-copy would otherwise pin to 1.5 */
 .entry .lh-copy {
-  {{#body_font}}
+  {{#font}}
   line-height: {{line_height}};
-  {{/body_font}}
+  {{/font}}
 }
 
 .pv2-5 {padding-top:0.75rem;padding-bottom:0.75rem}

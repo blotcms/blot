@@ -1,15 +1,14 @@
 {{{app_css}}}
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
 html {
-  {{#body_font}}
+  {{#font}}
   font-family: {{{stack}}};
   font-size: {{{font_size}}}px;
   line-height: {{{line_height}}};
-  {{/body_font}}
+  {{/font}}
   text-rendering: optimizeLegibility;
 }
 
@@ -35,7 +34,7 @@ body {
 }
 
 .entries {
-  font-size: calc({{{body_font.font_size}}}px * 1.25);
+  font-size: calc({{{font.font_size}}}px * 1.25);
 }
 
 .entries .entry {
@@ -64,18 +63,18 @@ body {
 }
 
 h1, h2, h3, h4, h5, h6 {
-  {{#heading_font}}
+  {{#font}}
   font-family: {{{stack}}};
-  line-height: {{{line_height}}};
-  {{/heading_font}}
+  {{/font}}
+  line-height: 1.2;
 }
 
-h1 { font-size: {{{heading_font.font_size}}}px; }
-h2 { font-size: calc({{{heading_font.font_size}}}px * 0.83); }
-h3 { font-size: calc({{{heading_font.font_size}}}px * 0.67); }
-h4 { font-size: calc({{{heading_font.font_size}}}px * 0.56); }
-h5 { font-size: calc({{{heading_font.font_size}}}px * 0.46); }
-h6 { font-size: calc({{{heading_font.font_size}}}px * 0.38); }
+h1 { font-size: 16px; }
+h2 { font-size: calc(16px * 0.83); }
+h3 { font-size: calc(16px * 0.67); }
+h4 { font-size: calc(16px * 0.56); }
+h5 { font-size: calc(16px * 0.46); }
+h6 { font-size: calc(16px * 0.38); }
 
 h2, h3 {margin-top: 2em}
 
@@ -147,11 +146,11 @@ h1 a {
 }
 
 .site-title {
-  {{#heading_font}}
+  {{#font}}
   font-family: {{{stack}}};
-  font-size: {{{font_size}}}px;
-  line-height: {{{line_height}}};
-  {{/heading_font}}
+  {{/font}}
+  font-size: 16px;
+  line-height: 1.2;
   font-weight: 400;
   margin: 0;
 }
@@ -160,13 +159,14 @@ h1 a {
   max-height: 1.5em;
   width: auto;
   vertical-align: middle;
+  margin-right: 0.4em;
 }
 
 .site-menu-toggle {
-  {{#heading_font}}
+  {{#font}}
   font-family: {{{stack}}};
-  font-size: {{{font_size}}}px;
-  {{/heading_font}}
+  {{/font}}
+  font-size: 16px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
@@ -178,11 +178,11 @@ h1 a {
 
 .site-menu-toggle:hover,
 .site-menu-toggle:focus {
-  color: {{accent_color}};
+  color: {{link_color}};
 }
 
 #site-nav-toggle:focus-visible ~ .site-header-bar .site-menu-toggle {
-  outline: 2px solid {{accent_color}};
+  outline: 2px solid {{link_color}};
   outline-offset: 2px;
 }
 
@@ -219,10 +219,10 @@ h1 a {
 .site-nav a {
   text-decoration: none;
   color: inherit;
-  {{#heading_font}}
+  {{#font}}
   font-family: {{{stack}}};
-  font-size: {{{font_size}}}px;
-  {{/heading_font}}
+  {{/font}}
+  font-size: 16px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -230,24 +230,20 @@ h1 a {
 .site-nav-spacer {
   display: none;
   margin:0 6px;
-  {{#heading_font}}
-  font-size: {{{font_size}}}px;
-  {{/heading_font}}
+  font-size: 16px;
 }
 
 #site-nav-toggle:checked ~ .site-header-bar .site-menu-toggle {
-  color: {{accent_color}};
+  color: {{link_color}};
 }
 
 .small {
-  font-size: calc({{{body_font.font_size}}}px * 0.6667);
+  font-size: calc({{{font.font_size}}}px * 0.6667);
 }
 
 h1 {
-  {{#heading_font}}
-  font-size: {{{font_size}}}px;
-  line-height: {{{line_height}}};
-  {{/heading_font}}
+  font-size: 16px;
+  line-height: 1.2;
 }
 
 .small a {color: inherit;}
@@ -281,7 +277,7 @@ table {
   border-collapse: collapse;
   border-spacing: 0;
   box-sizing: border-box;
-  font-size: calc({{{body_font.font_size}}}px * 0.6667);
+  font-size: calc({{{font.font_size}}}px * 0.6667);
 }
 
 tr {box-sizing: border-box;border-top: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1);padding: 0}
@@ -294,7 +290,7 @@ th, td {
 input[type="text"],
 input[type="submit"] {
   font:inherit;
-  font-size: calc({{{body_font.font_size}}}px * 0.8333);
+  font-size: calc({{{font.font_size}}}px * 0.8333);
   padding: 3px 6px;
   margin: 1em 0;
   border: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.3);
@@ -309,9 +305,9 @@ input[type="text"] {
 
 input[type="submit"] {
   padding: 3px 12px;
-  color: {{accent_color}};
+  color: {{link_color}};
   background: none;
-  border: 1px solid {{accent_color}};
+  border: 1px solid {{link_color}};
   cursor: pointer;
 }
 
@@ -321,7 +317,7 @@ input[type="submit"] {
 
 .site-nav a:hover,
 .site-nav a:focus {
-  color: {{accent_color}};
+  color: {{link_color}};
 }
 
 

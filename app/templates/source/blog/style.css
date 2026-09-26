@@ -234,8 +234,7 @@ h2, h3, h4, h5, h6 {
 
 .sidebar .logo {margin: 0 0 0.85em; display: block;}
 
-.sidebar .logo.hasAvatar,
-.sidebar .logo.hasLogo {word-spacing: 0}
+.sidebar .logo.hasAvatar {word-spacing: 0}
 
 {{/is.navigation_location.top}}
 
@@ -260,23 +259,7 @@ hr {
 .site-title {display:block}
 
 /* With an image, keep each title word on its own line. */
-.logo.hasAvatar,
-.logo.hasLogo {word-spacing:160px}
-
-.logo-image {
-  max-width: 100%;
-  max-height: calc(var(--base-font-size) * 4);
-  height: auto;
-  display: block;
-  margin-bottom: 0.5em;
-}
-
-{{#is.navigation_alignment.right}}
-.logo-image {margin-left: auto;}
-{{/is.navigation_alignment.right}}
-{{#is.navigation_alignment.center}}
-.logo-image {margin-left: auto; margin-right: auto;}
-{{/is.navigation_alignment.center}}
+.logo.hasAvatar {word-spacing:160px}
 
 .avatar {margin: -0.1em 0.1em 0 0}
 

@@ -8,10 +8,6 @@
     <div id="top"></div>
       	
 		<div id="open-nav-container" class="no-underline db cf bb b--black-10  nl3 nr3 ">
-          {{#logo_url}}
-          <a href="/" class="dib fl pa3 no-underline"><img class="fl w2" src="{{{logo_url}}}"></a>
-          {{/logo_url}}
-          {{^logo_url}}
           {{#profile_image.thumbnails.square}}
           <a href="/" class="dib fl pa3 no-underline"><img class="fl w2" width="{{width}}" height="{{height}}" src="{{{url}}}"></a>
           {{/profile_image.thumbnails.square}}
@@ -20,7 +16,6 @@
           <a href="/" class="dib fl pa3 no-underline"><img class="fl w2" src="{{avatar}}"></a>
           {{/avatar}}
           {{/profile_image.thumbnails.square.url}}
-          {{/logo_url}}
           {{^avatar}}
 <a href="/" class="lh-copy fl no-underline pa3 dim dib f3 fw3 black-80" title="The homepage of {{title}}">
         {{#avatar}}<img class="avatar v-btm" src="{{{avatar}}}">{{/avatar}}

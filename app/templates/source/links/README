@@ -101,11 +101,11 @@ Here's how you might use local variables in CSS:
   --border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1);
   
   /* Conditional variables */
-  {{#body_font}}
+  {{#font}}
   --font-family: {{{stack}}};
   --font-size: {{{font_size}}}px;
   --line-height: {{{line_height}}};
-  {{/body_font}}
+  {{/font}}
 }
 
 body {

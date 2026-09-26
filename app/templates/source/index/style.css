@@ -1,8 +1,6 @@
 /* This template tag is replaced by CSS when this file is rendered */
 {{{app_css}}}
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
-{{{navigation_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
@@ -14,8 +12,10 @@
   --border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.12);
   --max-width: {{max_width}}em;
   --spacing: {{spacing}}em;
-  --heading-font-size: {{#heading_font}}{{{font_size}}}{{/heading_font}}px;
-  --heading-line-height: {{#heading_font}}{{{line_height}}}{{/heading_font}};
+  --heading-font-size: 18px;
+  --heading-line-height: 1.75;
+  --navigation-font-size: 18px;
+  --navigation-line-height: 1.75;
 }
 
 /* Root background fills the canvas (body is only --max-width wide). Needed for
@@ -26,11 +26,11 @@ html {
 }
 
 body {
-  {{#body_font}}
+  {{#font}}
   font-family: {{{stack}}};
   font-size: {{{font_size}}}px;
   line-height: {{{line_height}}};
-  {{/body_font}}
+  {{/font}}
   word-wrap: break-word;
   max-width: var(--max-width);
   margin: 0 auto;
@@ -46,9 +46,6 @@ a:hover {background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.02);color: var(--lin
 a:active {opacity: 0.9}
 
 h1, h2, h3, h4, h5, h6 {
-  {{#heading_font}}
-  font-family: {{{stack}}};
-  {{/heading_font}}
   line-height: var(--heading-line-height);
 }
 
@@ -82,11 +79,8 @@ sup {font-size: 0.83em;line-height: 0;vertical-align: super;}
 #logo {
   font-weight: bold;
   display: inline-block;
-  {{#heading_font}}
-  font-family: {{{stack}}};
-  font-size: {{{font_size}}}px;
-  line-height: {{{line_height}}};
-  {{/heading_font}}
+  font-size: var(--heading-font-size);
+  line-height: var(--heading-line-height);
 }
 #logo img {max-width: 8em;max-height:8em;margin-bottom: 0.25em}
 #logo img.rounded {border-radius: 50%;margin-left: -1em}
@@ -129,11 +123,8 @@ sup {font-size: 0.83em;line-height: 0;vertical-align: super;}
 {{/sticky_navigation}}
 
 .site-nav {
-  {{#navigation_font}}
-  font-family: {{{stack}}};
-  font-size: {{{font_size}}}px;
-  line-height: {{{line_height}}};
-  {{/navigation_font}}
+  font-size: var(--navigation-font-size);
+  line-height: var(--navigation-line-height);
 }
 
 .site-footer {
@@ -141,11 +132,8 @@ sup {font-size: 0.83em;line-height: 0;vertical-align: super;}
 }
 
 .site-footer .menu {
-  {{#navigation_font}}
-  font-family: {{{stack}}};
-  font-size: {{{font_size}}}px;
-  line-height: {{{line_height}}};
-  {{/navigation_font}}
+  font-size: var(--navigation-font-size);
+  line-height: var(--navigation-line-height);
 }
 
 a.menu {margin-right: 0em;line-height: 1.75}
@@ -155,9 +143,7 @@ a.menu {margin-right: 0em;line-height: 1.75}
    .site-nav / .site-footer .menu). */
 .site-nav a.menu,
 .site-footer a.menu {
-  {{#navigation_font}}
-  line-height: {{{line_height}}};
-  {{/navigation_font}}
+  line-height: var(--navigation-line-height);
 }
 
 {{#uppercase_navigation}}

@@ -11,8 +11,7 @@
     "background_color": "#ffffff",
     "text_color": "#333333",
     "link_color": "#44c2b2",
-    "header_background_color": "#efefef",
-    "body_font": {
+    "font": {
       "id": "source-sans",
       "font_size": 16,
       "line_height": 1.625

@@ -1,7 +1,7 @@
 {{> head}}
 <div class="site-header">
     <div style="width:50%;" class="main">
-        <a href="/" class="site-title">{{#logo_url}}<img src="{{{logo_url}}}" alt="" class="site-logo">{{/logo_url}}{{^logo_url}}{{#profile_image.thumbnails.square}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" alt="" class="site-logo">{{/profile_image.thumbnails.square}}{{/logo_url}}{{title}}</a>
+        <a href="/" class="site-title">{{#profile_image.thumbnails.square}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" alt="" class="site-logo">{{/profile_image.thumbnails.square}}{{title}}</a>
      </div>
     <div style="width:50%;" class="main">
         {{> navigation}}

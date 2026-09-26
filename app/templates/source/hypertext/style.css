@@ -2,8 +2,7 @@
 
 /* Injected styles from templates and external sources */
 {{{app_css}}}
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 {{> navigation-css.css}}
@@ -12,17 +11,14 @@
 
 /* Root variables for theme customization */
 :root {
-  {{#body_font}}
+  {{#font}}
   --font-family: {{{stack}}};
   --font-size: {{{font_size}}}px;
   --small-font-size: calc({{{font_size}}}px * 0.875);
   --line-height: {{{line_height}}};
-  {{/body_font}}
-  {{#heading_font}}
-  --heading-font-family: {{{stack}}};
-  --heading-font-size: {{{font_size}}}px;
-  --heading-line-height: {{{line_height}}};
-  {{/heading_font}}
+  {{/font}}
+  --heading-font-size: 18px;
+  --heading-line-height: 1.6;
   {{#syntax_highlighter_font}}
   --code-font-family: {{{stack}}};
   --code-font-size: {{{font_size}}}px;
@@ -315,7 +311,7 @@ p, h1, h2, h3, h4, h5, h6, ol, ul, pre, hr, .videoContainer, table, details {
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--heading-font-family, var(--font-family));
+  font-family: var(--font-family);
 }
 
 pre code {

@@ -14,15 +14,10 @@
     "link_color": "#000000",
     "accent_color": "#ee4792",
     "highlight_color": "#fcdae9",
-    "body_font": {
+    "font": {
       "id": "system-sans",
       "font_size": 17,
       "line_height": 1.7
-    },
-    "heading_font": {
-      "id": "system-sans",
-      "font_size": 30,
-      "line_height": 1.35
     },
     "syntax_highlighter": {
       "id": "ir-black"
