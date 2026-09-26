@@ -345,7 +345,7 @@ jobs:
           # include/exclude formerly lived in .nycrc.json; pass them as CLI
           # args so we don't need a config file. node_modules is excluded by
           # nyc's default --exclude-node-modules.
-          NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/views-built/** --exclude=app/templates/source/**"
+          NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/views-built/** --exclude=app/templates/source/** --exclude=app/helper/pane/qa/**"
           docker run --rm \
             --network host \
             -e BLOT_REDIS_HOST=localhost \
@@ -434,7 +434,7 @@ jobs:
           # Capture stdout via command substitution (not a pipe) so the
           # docker run exit code - and therefore this step's - is nyc's own,
           # not tee's.
-          NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/views-built/** --exclude=app/templates/source/**"
+          NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/views-built/** --exclude=app/templates/source/** --exclude=app/helper/pane/qa/**"
           REPORT_OUTPUT=$(docker run --rm \
             -v ${{ github.workspace }}/app:/usr/src/app/app \
             -v ${{ github.workspace }}/.nyc_output:/usr/src/app/.nyc_output \
