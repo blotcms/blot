@@ -84,14 +84,21 @@ dashboard.get("/", function (req, res) {
 
   if (res.locals.account.folder !== undefined) {
     if (res.locals.account.full_access) {
-      folder = join("Dropbox", res.locals.account.folder);
+      folder = res.locals.account.folder;
     } else {
-      folder = join("Dropbox", "Apps", "Blot", res.locals.account.folder);
+      folder = join("Apps", "Blot", res.locals.account.folder);
     }
 
-    dropboxBreadcrumbs = folder.split("/").map(function (name) {
+    dropboxBreadcrumbs = folder.split("/").filter(Boolean).map(function (name) {
       return { name: name };
     });
+
+    // Full access to the root of Dropbox has no path segments after
+    // stripping the "Dropbox" crumb - fall back to naming it so the
+    // folder line still has something to show next to the icon.
+    if (!dropboxBreadcrumbs.length) {
+      dropboxBreadcrumbs = [{ name: "Dropbox" }];
+    }
 
     dropboxBreadcrumbs[dropboxBreadcrumbs.length - 1].last = true;
   }
