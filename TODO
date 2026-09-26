@@ -1182,6 +1182,7 @@ Write new clients to sync blog folders
 - [Github](https://github.com)
   - Tell [John](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmvBnVvqHdJXLgDhrtChCqdMQX) 
   - Make it possible to connect github repo via their API and tell [reg](https://mail.google.com/mail/u/0/#inbox/FMfcgzQXKhPKRfSsfGpXCdcxtFBhdKDt)
+  - Planning document: `app/clients/github/PLAN.md`
 - [Jumpshare](https://jumpshare.com)
   - Tell [Ömer](https://mail.google.com/mail/u/0/#search/omer/FMfcgzGxRnkSFxdSmGLmNQpXjXfBSChT)
 - pCloud 

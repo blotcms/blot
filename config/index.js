@@ -228,6 +228,22 @@ module.exports = {
     password: process.env.BLOT_BACKUP_SECRET,
   },
 
+  // GitHub App used for the GitHub folder-sync client (app/clients/github).
+  // app/clients/index.js only registers the client once every value here is
+  // present, so leaving these unset in an environment just hides GitHub as
+  // a client option. private_key is the app's PEM private key, base64
+  // encoded (same convention as google_drive's service account JSON).
+  github: {
+    app_id: process.env.BLOT_GITHUB_APP_ID,
+    app_slug: process.env.BLOT_GITHUB_APP_SLUG,
+    client_id: process.env.BLOT_GITHUB_CLIENT_ID,
+    client_secret: process.env.BLOT_GITHUB_CLIENT_SECRET,
+    private_key: process.env.BLOT_GITHUB_PRIVATE_KEY
+      ? Buffer.from(process.env.BLOT_GITHUB_PRIVATE_KEY, "base64").toString()
+      : null,
+    webhook_secret: process.env.BLOT_GITHUB_WEBHOOK_SECRET,
+  },
+
   google_drive: {
     service_accounts: (() => {
       try {
