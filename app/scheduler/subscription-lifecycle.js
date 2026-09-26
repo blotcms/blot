@@ -80,6 +80,8 @@ module.exports = function processSubscriptionLifecycle(callback) {
             subscriptionOverdueOn: overdueStartedAtISO,
           });
 
+          email.OVERDUE_CLOSURE(user.uid);
+
           next();
         });
       }
