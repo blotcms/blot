@@ -231,6 +231,21 @@ function loadFolder(callback) {
         } catch (e) {
           console.error(e);
         }
+
+        // The folder header's health badge lives outside .live-updates too
+        // (it's above the file table), so it needs the same treatment: swap
+        // its contents in from the fetched doc whenever they differ, rather
+        // than relying on the .live-updates diff above.
+        try {
+          var currentBadge = q(".header-health-badge");
+          var newBadge = xml.querySelector(".header-health-badge");
+
+          if (currentBadge && newBadge && currentBadge.innerHTML !== newBadge.innerHTML) {
+            currentBadge.innerHTML = newBadge.innerHTML;
+          }
+        } catch (e) {
+          console.error(e);
+        }
       } else {
         console.error("Failed to load folder:", xhr.status);
       }
