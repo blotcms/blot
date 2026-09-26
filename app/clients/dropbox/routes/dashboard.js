@@ -89,7 +89,19 @@ dashboard.get("/", function (req, res) {
       folder = join("Apps", "Blot", res.locals.account.folder);
     }
 
-    dropboxBreadcrumbs = folder.split("/").filter(Boolean).map(function (name) {
+    var folderSegments = folder.split("/").filter(Boolean);
+
+    // https://www.dropbox.com/home/<path> opens a folder in the Dropbox web
+    // app; the path mirrors the same folder path within the user's Dropbox
+    // used above, so it's built from the same segments (percent-encoded,
+    // since a blog's folder name is user-chosen).
+    res.locals.dropboxUrl =
+      "https://www.dropbox.com/home" +
+      (folderSegments.length
+        ? "/" + folderSegments.map(encodeURIComponent).join("/")
+        : "");
+
+    dropboxBreadcrumbs = folderSegments.map(function (name) {
       return { name: name };
     });
 
