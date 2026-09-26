@@ -122,14 +122,35 @@ dashboard.get("/edit", function (req, res) {
 
 // Redirects the user to the OAuth page on Dropbox.com
 dashboard.get("/redirect", function (req, res) {
-  // Clear the durable error now, before the user ever leaves for Dropbox,
-  // instead of waiting for setup() to get through getAccount()/createFolder()
-  // (real network round trips) after they come back. That gap is exactly what
-  // showed the old REAUTH_REQUIRED error for a few seconds after a successful
-  // reconnect - clearing it here removes the race instead of papering over it
-  // downstream. error_source/error_since clear too - see database.js.
-  Database.set(req.blog.id, { error_code: 0 }, function () {
-    redirectToDropbox(req, res);
+  Database.get(req.blog.id, function (err, account) {
+    // Remember whatever durable error is on the account right now, before
+    // we optimistically clear it below. If the user cancels on Dropbox's
+    // page (or the token exchange otherwise fails) /authenticate restores
+    // this instead of leaving the blog looking healthy with a half-done
+    // reconnect. Only a successful new token should actually clear it for
+    // real - see the comment on /authenticate.
+    req.session.dropboxPriorError =
+      !err && account
+        ? {
+            error_code: account.error_code,
+            error_source: account.error_source,
+            error_since: account.error_since,
+          }
+        : null;
+
+    req.session.save(function () {
+      // Clear the durable error now, before the user ever leaves for
+      // Dropbox, instead of waiting for setup() to get through
+      // getAccount()/createFolder() (real network round trips) after they
+      // come back. That gap is exactly what showed the old REAUTH_REQUIRED
+      // error for a few seconds after a successful reconnect - clearing it
+      // here removes the race instead of papering over it downstream.
+      // error_source/error_since clear too - see database.js. dropboxPriorError
+      // above is how we undo this if the round trip doesn't end up succeeding.
+      Database.set(req.blog.id, { error_code: 0 }, function () {
+        redirectToDropbox(req, res);
+      });
+    });
   });
 });
 
@@ -209,7 +230,59 @@ dashboard.get("/authenticate", function (req, res, next) {
   //   return res.redirect(req.baseUrl);
   // }
 
-  const { code, full_access } = req.query;
+  const { code, full_access, error } = req.query;
+
+  // /redirect stashed whatever durable error was on the account before it
+  // optimistically cleared error_code to 0 (see the comment there). Unless
+  // the token exchange below actually succeeds, we put it back - otherwise
+  // a cancelled or failed reconnect would leave the blog reporting healthy.
+  const priorError = req.session.dropboxPriorError;
+  delete req.session.dropboxPriorError;
+
+  const restorePriorError = function (cb) {
+    if (!priorError) return cb();
+
+    // Only restore onto an account that actually exists - a first-time
+    // connect that gets cancelled/fails should not create one.
+    Database.get(req.blog.id, function (err, account) {
+      if (err || !account) return cb();
+      Database.set(
+        req.blog.id,
+        {
+          error_code: priorError.error_code,
+          error_source: priorError.error_source,
+          error_since: priorError.error_since,
+        },
+        cb
+      );
+    });
+  };
+
+  // The user pressed "Cancel" on Dropbox's authorization page (error is
+  // usually access_denied), or Dropbox otherwise sent us back without a
+  // code. Either way there's no token to exchange, so don't call setup()
+  // at all - that would just fail deep inside getAccount() with nothing
+  // shown to the user.
+  if (error || !code) {
+    console.log(
+      "Dropbox OAuth callback did not return a code",
+      req.blog.id,
+      error
+    );
+
+    delete req.session.dropbox;
+
+    return req.session.save(function () {
+      restorePriorError(function () {
+        res.locals.error =
+          error === "access_denied"
+            ? "You cancelled Dropbox authorization, so Blot can't access your folder. Try again to connect."
+            : "Something went wrong connecting to Dropbox. Try again to connect.";
+
+        res.render(views + "authenticate");
+      });
+    });
+  }
 
   const redirectHost =
     config.environment === "development"
@@ -238,7 +311,14 @@ dashboard.get("/authenticate", function (req, res, next) {
     if (err) return next(err);
 
     setup(account, req.session, function (err) {
-      console.log("err setting up", err);
+      if (err) {
+        console.log("err setting up", err);
+        // The code Dropbox gave us didn't actually lead to a working
+        // account (expired/reused code, a Dropbox API error, etc). Put
+        // back whatever durable error was there before /redirect cleared
+        // it, for the same reason a cancelled authorization does above.
+        return restorePriorError(function () {});
+      }
     });
 
     // req.session.dropbox above must actually reach the session store

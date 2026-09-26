@@ -113,6 +113,59 @@ describe("dropbox getHealth", function () {
     });
   });
 
+  // routes/dashboard.js's /redirect clears error_code to 0 before sending
+  // the user to Dropbox (to avoid a stale-error race for a successful
+  // reconnect), then /authenticate restores the pre-redirect error_code/
+  // error_source/error_since if the user cancels or the token exchange
+  // fails - see the dropboxPriorError comments there. This mirrors that
+  // restore and confirms getHealth reports the issue again afterwards
+  // rather than the blog looking healthy after a cancelled reconnect.
+  it("reports the prior issue again once it's restored after a cancelled reconnect", function (done) {
+    const blogID = this.blog.id;
+    save.call(
+      this,
+      { error_code: 401, error_source: SOURCES.AUTH, error_since: 123 },
+      function (err) {
+        if (err) return done.fail(err);
+
+        // /redirect's optimistic clear.
+        database.set(blogID, { error_code: 0 }, function (err) {
+          if (err) return done.fail(err);
+
+          getHealth(blogID).then(function (result) {
+            expect(result).toEqual(health.ok());
+
+            // /authenticate's restore, using the values captured before
+            // the clear above (as dropboxPriorError does in the session).
+            database.set(
+              blogID,
+              {
+                error_code: 401,
+                error_source: SOURCES.AUTH,
+                error_since: 123,
+              },
+              async function (err) {
+                if (err) return done.fail(err);
+                try {
+                  const restored = await getHealth(blogID);
+                  expect(restored.state).toBe(health.STATES.ERROR);
+                  expect(restored.issues[0]).toEqual({
+                    code: health.CODES.REAUTH_REQUIRED,
+                    message: health.ISSUES.REAUTH_REQUIRED.message,
+                    since: 123,
+                  });
+                  done();
+                } catch (e) {
+                  done.fail(e);
+                }
+              }
+            );
+          }, done.fail);
+        });
+      }
+    );
+  });
+
   it("reports REAUTH_REQUIRED after persistError records a 401", function (done) {
     const blogID = this.blog.id;
     const persistError = require("../util/persistError");
