@@ -1,26 +1,11 @@
 {{#account}}
 <div class="live-updates">
 
-{{#error}}
-
-<form class="mess error" action="{{{base}}}/set-up-folder" method="post">
-    <input type="hidden" name="_csrf" value="{{csrftoken}}">
-    <input type="hidden" name="email" value="{{email}}">
-    {{error}}
-</form>
-
-
-<a class="line" href="{{{base}}}/setup">
-    <span class="label">Reconnect</span>
-    <span class="center"><span class="link">Reconnect to Google Drive</span>
-</a>
-
-
-{{/error}}
-
-  {{^error}}
-
 {{> status-line}}
+
+{{#account.setupFailed}}
+<p class="error">{{account.error}}</p>
+{{/account.setupFailed}}
 
 
   {{#folderId}}
@@ -129,26 +114,29 @@
     <span class="center"><span>{{email}}</span><span class="link">Edit</span>
 </span>
    </a>
-
-   {{> disconnect-line}}
   {{/folderId}}
 
   {{^folderId}}
+  {{#preparing}}
   <div class="line">
     <span class="label">Status</span>
-    <span class="center">  
+    <span class="center">
       {{> sync-status}}
     </span>
   </div>
-  
+
   <form action="{{{base}}}/disconnect" method="POST">
     <input type="hidden" name="_csrf" value="{{csrftoken}}">
     <div class="buttons">
-        <button type="submit">Cancel</button> 
-    </div>  
+        <button type="submit">Cancel</button>
+    </div>
 </form>
+  {{/preparing}}
   {{/folderId}}
-  {{/error}}
+
+  {{^preparing}}
+  {{> disconnect-line}}
+  {{/preparing}}
 
 </div>
 <br><br>
