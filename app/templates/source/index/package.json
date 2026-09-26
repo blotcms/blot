@@ -1,5 +1,6 @@
 {
   "name": "Index",
+  "popularity": 30,
   "locals": {
     "page_size": 20,
     "page_size_range": [5, 40],
@@ -8,20 +9,10 @@
     "background_color": "#ffffff",
     "text_color": "#333333",
     "link_color": "#468CC7",
-    "body_font": {
+    "font": {
       "id": "system-sans",
       "font_size": 18,
       "line_height": 1.4
-    },
-    "heading_font": {
-      "id": "system-sans",
-      "font_size": 18,
-      "line_height": 1.75
-    },
-    "navigation_font": {
-      "id": "system-sans",
-      "font_size": 18,
-      "line_height": 1.75
     },
     "syntax_highlighter": {
       "id": "vs"
@@ -30,7 +21,7 @@
       "id": "system-mono",
       "font_size": 16
     },
-    "logo_url": "",
+    "profile_image": {},
     "navigation_alignment": "left",
     "navigation_alignment_options": [
       "left",
@@ -55,7 +46,6 @@
     "spacing": 3,
     "spacing_range": [1, 8]
   },
-  "isPublic": false,
   "views": {
     "archives.html": {
       "url": "/archives",

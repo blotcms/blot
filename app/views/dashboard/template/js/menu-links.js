@@ -11,8 +11,8 @@ const Sortable = require('../../../js/sortable.js');
   const linkTemplate = document.getElementById("link_");
 
   function updateEmptyMenuVisibility() {
+    if (!menuEl || !emptyMenuEl) return;
     const hasSections = !!menuEl.querySelector("section");
-    if (!emptyMenuEl) return;
     emptyMenuEl.style.display = hasSections ? "none" : "";
   }
 
@@ -37,10 +37,7 @@ const Sortable = require('../../../js/sortable.js');
           name.slice(0, firstDot + 1) + index + name.slice(lastDot);
 
         input.setAttribute("name", newName);
-        console.log(name + " > " + newName);
       });
-
-      console.log("");
     });
   }
 

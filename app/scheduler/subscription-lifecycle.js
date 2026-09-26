@@ -80,6 +80,8 @@ module.exports = function processSubscriptionLifecycle(callback) {
             subscriptionOverdueOn: overdueStartedAtISO,
           });
 
+          email.OVERDUE_CLOSURE(user.uid);
+
           next();
         });
       }
@@ -95,6 +97,10 @@ module.exports = function processSubscriptionLifecycle(callback) {
         return User.disable(user, function (disableErr) {
           if (disableErr) return next(disableErr);
           disabled += 1;
+          // This user skipped disabled_grace (e.g. the job failed to reach
+          // them during that window), so this is the first time they're
+          // actually disabled - tell them here instead.
+          email.OVERDUE_CLOSURE(user.uid);
           queueRemoval(user, overdue, next);
         });
       }
@@ -110,6 +116,15 @@ module.exports = function processSubscriptionLifecycle(callback) {
       return User.disable(user, function (disableErr) {
         if (disableErr) return next(disableErr);
         disabled += 1;
+        // PayPal stays CANCELLED through the end of the paid period, so the
+        // cancellation webhook does not close the account. Email when this
+        // job is what disables it. Stripe already emails from its webhook.
+        if (
+          details.provider === "paypal" &&
+          user.paypal &&
+          String(user.paypal.status).toUpperCase() === "CANCELLED"
+        )
+          email.CLOSED(user.uid);
         queueRemoval(user, overdue, next);
       });
     }

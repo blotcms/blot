@@ -5,8 +5,15 @@ var _require = require("../util/constants");
 var MAX_FILE_SIZE = _require.MAX_FILE_SIZE;
 var hasUnsupportedExtension = _require.hasUnsupportedExtension;
 var isDotfileOrDotfolder = _require.isDotfileOrDotfolder;
+var transferIncomplete = _require.transferIncomplete;
 var hashFile = require("helper/hashFile");
 var Database = require("../database");
+var persistError = require("../util/persistError");
+var {
+  SOURCES,
+  classify,
+  keepsErrorAfterDownload,
+} = require("../util/classifyError");
 var Path = require("path");
 var join = Path.join;
 var Delta = require("../delta");
@@ -43,13 +50,23 @@ module.exports = function main(blog, callback) {
     createClient(blog.id, function (err, client, account) {
       if (err) {
         folder.log("Error creating client", err);
-        return Database.set(
-          blog.id,
-          { error_code: err.status || 400 },
-          function (err) {
-            done(err, callback);
-          }
+        return persistError(blog.id, err, SOURCES.AUTH, function (setErr) {
+          done(setErr, callback);
+        });
+      }
+
+      // The initial transfer to Dropbox hasn't finished (or never started
+      // cleanly - e.g. it was interrupted by a deploy). Dropbox doesn't yet
+      // have every file Blot has, so running delta/apply here - which
+      // deletes any local file with no Dropbox counterpart - would delete
+      // exactly the files still waiting to be uploaded. Skip this sync
+      // entirely and leave error_code/cursor untouched; the next webhook
+      // (or retry of the transfer) will pick things up once it's safe.
+      if (transferIncomplete(account)) {
+        folder.log(
+          "Skipping sync: Dropbox initial transfer has not finished for this blog"
         );
+        return done(null, callback);
       }
 
       folder.log("Constructing methods to sync changes");
@@ -68,13 +85,9 @@ module.exports = function main(blog, callback) {
       delta(account.cursor, function handle(err, result) {
         if (err) {
           folder.log("Error fetching changes from Dropbox", err);
-          return Database.set(
-            blog.id,
-            { error_code: err.status || 400 },
-            function (err) {
-              done(err, callback);
-            }
-          );
+          return persistError(blog.id, err, SOURCES.DELTA, function (setErr) {
+            done(setErr, callback);
+          });
         }
 
         folder.log(`Fetched ${result.entries.length} changes from Dropbox`);
@@ -86,20 +99,20 @@ module.exports = function main(blog, callback) {
         apply(result.entries, function (err) {
           if (err) {
             console.log("Blog", blog.id, "Dropbox Error:", err);
-            return Database.set(
-              blog.id,
-              { error_code: err.status || 400 },
-              function (err) {
-                done(err, callback);
-              }
-            );
+            return persistError(blog.id, err, SOURCES.APPLY, function (setErr) {
+              done(setErr, callback);
+            });
           }
           // we have successfully applied this batch of changes
           // to the user's Dropbox folder. Now we save the new
           // cursor and folderID and folder path to the database.
           // This means that future webhooks will invoke calls to
           // delta which return changes made after this point in time.
-          account.error_code = 0;
+          if (!keepsErrorAfterDownload(account)) {
+            account.error_code = 0;
+            account.error_source = "";
+            account.error_since = 0;
+          }
           account.last_sync = Date.now();
           account.cursor = result.cursor;
           // we store account folder for use on the dashboard
@@ -412,6 +425,12 @@ function Apply(client, blogFolder, log, status) {
                 return callback();
               }
 
+              // Revoked access will fail every remaining file and must not
+              // advance the cursor past changes we never downloaded.
+              if (err && classify(err, SOURCES.APPLY).persist) {
+                return callback(err);
+              }
+
               // Swallow errors generally so we can proceed to next file
               // we might want to mark an error somehow
               callback();
@@ -437,29 +456,13 @@ function Apply(client, blogFolder, log, status) {
 }
 
 function determinePathOnDisk(blogFolder, item, callback) {
-  console.log('[determinePathOnDisk] START', {
-    blogFolder,
-    relative_path: item.relative_path,
-    path_display: item.path_display,
-    tag: item[".tag"]
-  });
-
   const normalizedRelativePath = (item.relative_path || "").replace(/^\/+/, "");
   if (normalizedRelativePath !== item.relative_path) {
-    console.log('[determinePathOnDisk] Normalized relative_path', {
-      from: item.relative_path,
-      to: normalizedRelativePath
-    });
     item.relative_path = normalizedRelativePath;
   }
 
   const parentDir = Path.dirname(item.relative_path);
   const filename = Path.basename(item.relative_path);
-  
-  console.log('[determinePathOnDisk] Parsed path', {
-    parentDir,
-    filename
-  });
 
   caseSensitivePath(blogFolder, parentDir, function (err, resolvedParent) {
 
@@ -474,17 +477,8 @@ function determinePathOnDisk(blogFolder, item, callback) {
       });
       item.resolved_relative_path = item.relative_path;
       item.path_on_disk = join(blogFolder, item.relative_path);
-      console.log('[determinePathOnDisk] Using fallback paths', {
-        resolved_relative_path: item.resolved_relative_path,
-        path_on_disk: item.path_on_disk
-      });
       return callback(null); // resolvedParent will be undefined, fallback logic will handle it
     }
-
-    console.log('[determinePathOnDisk] caseSensitivePath resolved', {
-      parentDir,
-      resolvedParent
-    });
 
     // Use resolved parent directory if available and not root
     // parentDir === '.' means the file is at the root level
@@ -494,46 +488,18 @@ function determinePathOnDisk(blogFolder, item, callback) {
     if (parentDir !== '.' && resolvedParent) {
       // Convert absolute path to relative path using Path.relative for robustness
       const resolvedRelativeParent = Path.relative(blogFolder, resolvedParent);
-      
-      console.log('[determinePathOnDisk] Computed relative parent', {
-        blogFolder,
-        resolvedParent,
-        resolvedRelativeParent
-      });
-      
+
       // Safety check: ensure resolvedParent is actually inside blogFolder
       // Path.relative returns paths with '../' if the target is outside the base
       // Also handle empty string case (when paths are the same)
       if (resolvedRelativeParent && resolvedRelativeParent !== '' && !resolvedRelativeParent.startsWith('..')) {
         resolvedRelativePath = join(resolvedRelativeParent, filename);
-        console.log('[determinePathOnDisk] Using resolved parent path', {
-          resolvedRelativeParent,
-          filename,
-          resolvedRelativePath
-        });
-      } else {
-        console.log('[determinePathOnDisk] Skipping resolved parent (outside blogFolder or empty)', {
-          resolvedRelativeParent,
-          using_fallback: item.relative_path
-        });
       }
       // If resolvedParent is outside blogFolder or empty, fall back to item.relative_path
-    } else {
-      console.log('[determinePathOnDisk] Root level or no resolvedParent', {
-        parentDir,
-        resolvedParent,
-        using_fallback: item.relative_path
-      });
     }
 
     item.resolved_relative_path = resolvedRelativePath;
     item.path_on_disk = join(blogFolder, resolvedRelativePath);
-
-    console.log('[determinePathOnDisk] FINAL RESULT', {
-      relative_path: item.relative_path,
-      resolved_relative_path: item.resolved_relative_path,
-      path_on_disk: item.path_on_disk
-    });
 
     callback(null);
   });

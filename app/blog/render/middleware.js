@@ -20,6 +20,7 @@ const CACHE_CONTROL = "Cache-Control";
 const replaceFolderLinks = require("./replaceFolderLinks/html");
 const replaceFolderLinksCSS = require("./replaceFolderLinks/css");
 const BLOT_CDN_TOKEN = require("./replaceFolderLinks/cdnToken");
+const renderTimeMetric = require("./renderTimeMetric");
 
 const cacheDuration = "public, max-age=31536000";
 const JS = "text/javascript";
@@ -33,6 +34,12 @@ module.exports = function attachRenderView(req, res, _next) {
     ensure(name, "string").and(next, "function");
 
     if (!req.template) return next();
+
+    // Timed from here to the actual res.send(output) below, which is the
+    // one point every real page request converges on - not the debug/json
+    // inspection branch or the callback path used by non-HTTP callers (e.g.
+    // CDN manifest generation).
+    const renderStartedAt = process.hrtime.bigint();
 
     const blog = req.blog;
     const templateID = req.template.id;
@@ -198,10 +205,9 @@ module.exports = function attachRenderView(req, res, _next) {
             "<script>window.onload = function() {window.top.postMessage('iframe:' +  window.location.pathname, '*');};</script></body>"
           );
 
-        // Reload the preview whenever the blog's folder finishes syncing
-        // and its rendered output actually changed. See the "reload" event
-        // published in sync/index.js and streamed by
-        // blog/routes/preview-reload.js.
+        // Reload the preview when rendered output changes: folder sync, or a
+        // template editor save of package.json locals. See
+        // helper/publishPreviewReload.js and blog/routes/preview-reload.js.
         output = output
           .split("</body>")
           .join(
@@ -221,6 +227,15 @@ module.exports = function attachRenderView(req, res, _next) {
         // This lets browsers send 'If-Modified-Since' requests
         // to check if the page has changed since the last time
         res.header("Last-Modified", new Date(blog.cacheID).toUTCString());
+        // Templates can expose CSS/JS through this same path (view.js routes
+        // any URL to whatever view matches, not just pages) - only count
+        // actual HTML page renders, not asset requests with very different
+        // latency and cache behavior.
+        if (viewType === "text/html") {
+          renderTimeMetric.record(
+            Number(process.hrtime.bigint() - renderStartedAt) / 1e6
+          );
+        }
         res.send(output);
       } catch (e) {
         next(e);

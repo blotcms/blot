@@ -1,6 +1,6 @@
 :root {
   --row-action-menu-trigger-padding: 0.125em 0.1875em;
-  --row-action-menu-trigger-margin: 0 0.25em;
+  --row-action-menu-trigger-margin: 0 0.25em 0 0;
   --row-action-menu-trigger-border-radius: 4px;
   --row-action-menu-trigger-color: #7f8799;
   --row-action-menu-trigger-font-size: 16px;
@@ -70,6 +70,10 @@
 
 .row-action-menu li {
   margin: 0;
+}
+
+.row-action-menu li[hidden] {
+  display: none;
 }
 
 .row-action-menu a {

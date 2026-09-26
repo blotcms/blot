@@ -159,7 +159,7 @@ function adaptInitConf(content) {
     "init.conf hook listen reuseport"
   );
 
-  // ca: Let's Encrypt in production, Pebble in CI (ACME_CA / build.sh).
+  // ca: Let's Encrypt in production, Pebble in CI (PROXY_ACME_CA).
   // dir: matches the volume + chown in proxy/Dockerfile; lua-resty-auto-ssl
   // defaults here anyway, but being explicit keeps dehydrated state on the
   // persistent volume.
@@ -168,8 +168,9 @@ function adaptInitConf(content) {
     '    auto_ssl = (require "resty.auto-ssl").new()\n',
     '    auto_ssl = (require "resty.auto-ssl").new()\n' +
       "\n" +
-      "    -- ACME directory URL. Baked at generate time: Let's Encrypt in\n" +
-      "    -- production, a Pebble test server in CI (see ACME_CA / build.sh).\n" +
+      "    -- ACME directory URL, filled in when the container starts\n" +
+      "    -- (PROXY_ACME_CA): Let's Encrypt in production, a Pebble test server\n" +
+      "    -- in CI, Let's Encrypt staging to try issuance.\n" +
       '    auto_ssl:set("ca", "{{{acme_ca}}}")\n' +
       "\n" +
       "    -- Root for the dehydrated hook scripts and their working files. The\n" +
@@ -217,28 +218,10 @@ function adaptServerConf(content) {
     "server.conf webhooks upstream"
   );
 
-  // The pinned openresty/openresty:1.25.3.1-alpine-fat image is not
-  // guaranteed to have --with-http_v3_module (docker-openresty added it in
-  // 1.25.3.1-1). Bare-metal has HTTP/3; drop it in the container copy so
-  // `openresty -t` stays green. Fold back in once the image is rebuilt with
-  // v3, or once proxy/ is canon on an image that has it.
-  content = replaceAllCounted(
-    content,
-    "        listen 443 quic;\n        add_header Alt-Svc 'h3=\":443\"; ma=86400' always;\n",
-    "",
-    5,
-    "server.conf strip http3"
-  );
-  content = replaceExactly(
-    content,
-    "        listen 443 quic reuseport default_server;\n        add_header Alt-Svc 'h3=\":443\"; ma=86400' always;\n",
-    "",
-    "server.conf strip http3 default_server"
-  );
-
   // reuseport may appear only once per address:port; putting it on the
   // default server is enough for the shared :80 / :443 ssl sockets. A
-  // second container can then bind the same ports during blue/green.
+  // second container can then bind the same ports during blue/green. (The
+  // UDP :443 quic socket already carries reuseport in the canonical config.)
   content = replaceExactly(
     content,
     "        listen 80 default_server;\n        listen 443 ssl default_server;\n",

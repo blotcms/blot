@@ -1,8 +1,7 @@
 /* Inserts the styles required by various options
 on the services page of the dashboard */
 {{{app_css}}}
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
@@ -40,8 +39,8 @@ hr {
 /* Proportions */
 
 body{
-  font-size: {{body_font.font_size}}px;
-  line-height: {{body_font.line_height}};
+  font-size: {{font.font_size}}px;
+  line-height: {{font.line_height}};
 }
 
 .index a {
@@ -61,7 +60,7 @@ body{
   padding-left:{{spacing}}rem;
 }
 
-.caption {display:block;font-size: {{body_font.font_size}}px;margin: 0.5em 0 0.5em 0}
+.caption {display:block;font-size: {{font.font_size}}px;margin: 0.5em 0 0.5em 0}
 /* Styles */
 
 html,
@@ -81,7 +80,7 @@ body {
 
 body {
   font-weight: 400;
-  font-family: {{{body_font.stack}}};
+  font-family: {{{font.stack}}};
   -moz-osx-font-smoothing: grayscale;
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: none;
@@ -94,13 +93,8 @@ body {
 
 .archives a {
   text-decoration: none;
-  {{#heading_font}}
-  font-family: {{{stack}}};
-  font-size: {{{font_size}}}px;
-  {{/heading_font}}
-  {{^heading_font}}
-  font-size: 28px
-  {{/heading_font}}
+  font-family: {{{font.stack}}};
+  font-size: 23px;
 }
 
 .archives a .thumbnail {
@@ -129,7 +123,7 @@ header > a {
 }
 
 header {
-  height: {{body_font.line_height}}em;
+  height: {{font.line_height}}em;
   overflow: hidden;
   display: flex;
   background: {{background_color}};
@@ -198,9 +192,7 @@ header {
   display: inline-flex;
   align-items: center;
   gap: 0.4em;
-  {{#heading_font}}
-  font-family: {{{stack}}};
-  {{/heading_font}}
+  font-family: {{{font.stack}}};
 }
 
 .site-logo {
@@ -409,7 +401,7 @@ a.next-page {
   display: flex;
   max-height: 100vh;
   flex-direction: column;
-  font-size: {{body_font.font_size}}px
+  font-size: {{font.font_size}}px
 }
 
 .edge.left {
@@ -497,10 +489,8 @@ a.next-page {
 .body h2 {margin: 2.8em 0 1.4em; font-size: inherit;font-weight: 600}
 
 h1, h2, h3, h4, h5, h6 {
-  {{#heading_font}}
-  font-family: {{{stack}}};
-  line-height: {{{line_height}}};
-  {{/heading_font}}
+  font-family: {{{font.stack}}};
+  line-height: 1.3;
 }
 
 pre, code {
@@ -535,13 +525,8 @@ hr {
 }
 
 .entry .title h1 {
-  {{#heading_font}}
-  font-size: {{{font_size}}}px;
-  line-height: {{{line_height}}};
-  {{/heading_font}}
-  {{^heading_font}}
   font-size: 23px;
-  {{/heading_font}}
+  line-height: 1.3;
   font-weight: normal;
 }
 
@@ -594,7 +579,7 @@ the absolutely positioned stuff is off the viewport.
 .margin,
 .inside {
   width: 33%;
-  font-size: {{body_font.font_size}}px;
+  font-size: {{font.font_size}}px;
   box-sizing: border-box;
 }
 

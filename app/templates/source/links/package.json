@@ -1,5 +1,6 @@
 {
   "name": "Links",
+  "popularity": 22,
   "locals": {
     "page_size": 24,
     "background_color": "#fff",
@@ -26,15 +27,10 @@
       1,
       6
     ],
-    "body_font": {
+    "font": {
       "id": "system-sans",
       "font_size": 16,
       "line_height": 1.4
-    },
-    "heading_font": {
-      "id": "system-sans",
-      "font_size": 16,
-      "line_height": 1.2
     },
     "syntax_highlighter": {
       "id": "stackoverflow-light"
@@ -44,10 +40,9 @@
       "font_size": 16,
       "line_height": 1.6
     },
-    "logo_url": "",
+    "profile_image": {},
     "demo_folder": "bjorn"
   },
-  "isPublic": true,
   "views": {
     "archives.html": {
       "url": "/archives",

@@ -1,0 +1,115 @@
+name: proxy-fail2ban
+
+# Proves that host fail2ban (config/openresty/fail2ban/jail.local, which
+# reads /var/instance-ssd/logs/access.log - the container's log dir bind
+# mount, see proxy/deploy/common.sh) still bans on the container's access
+# log the way it did on bare metal.
+#
+# Builds the proxy image exactly as .github/workflows/proxy-image.yml does
+# (file logging, LOG_TO_STDOUT=false) with the log dir bind-mounted from the
+# runner, sends requests through a stub upstream that should each produce a
+# 403 / 404 / 429 / 444, and runs the real `fail2ban-regex` against the
+# resulting access.log with every filter in
+# config/openresty/fail2ban/filter.d/ - asserting each one matches exactly
+# the requests meant to trigger it, AND that the <HOST> it extracts is the
+# real client IP (not an attacker-supplied X-Forwarded-For), since that's
+# what fail2ban actually bans.
+#
+# Runs the proxy with --network host, like production (proxy/deploy/
+# common.sh run_args) - not -p-published ports - so $remote_addr is the real
+# peer address rather than a docker bridge gateway, and targets the runner's
+# routable IP rather than 127.0.0.1: the internal cache-purge server also
+# binds 127.0.0.1:80 (config/openresty/conf/server.conf) and would shadow
+# the custom-domain default_server for anything sent to loopback. Same
+# pattern integration.yml's zero-downtime job uses and for the same reason.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/proxy-fail2ban.yml"
+      - "proxy/**"
+      - "config/openresty/**"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/proxy-fail2ban.yml"
+      - "proxy/**"
+      - "config/openresty/**"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
+
+env:
+  BLOT_HOST: localhost
+  BLOT_REPO: ${{ github.workspace }}
+  FETCH_CDN_IPS: "false"
+
+jobs:
+  fail2ban-regex:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 21.7.3
+
+      - name: Install fail2ban (for fail2ban-regex)
+        run: sudo apt-get update && sudo apt-get install -y fail2ban
+
+      - name: Install config generator dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/gendeps"
+          cd "$RUNNER_TEMP/gendeps"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+
+      # Same as proxy-image.yml: production-shaped logging, so this exercises
+      # the log path host fail2ban actually reads.
+      - name: Generate proxy config (file logging, as production)
+        run: bash proxy/build/build.sh
+        env:
+          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+          LOG_TO_STDOUT: "false"
+
+      - name: Build proxy image
+        run: docker build -f proxy/Dockerfile -t blot-proxy:f2b proxy/
+
+      - name: Start proxy (host networking, as production) + stub upstream
+        run: |
+          set -eux
+          mkdir -p "$RUNNER_TEMP/proxylogs"
+          echo "ACCESS_LOG=$RUNNER_TEMP/proxylogs/access.log" >> "$GITHUB_ENV"
+
+          HOSTIP=$(hostname -I | awk '{print $1}')
+          echo "HOSTIP=$HOSTIP" >> "$GITHUB_ENV"
+
+          docker run -d --name proxy --network host --cap-add SYS_NICE \
+            -e BLOT_HOST=localhost -e PROXY_FETCH_CDN_IPS=false \
+            -v "$RUNNER_TEMP/proxylogs:/var/log/openresty" \
+            blot-proxy:f2b
+          docker run -d --name stub --network host \
+            -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" \
+            node:22-alpine node /s.js
+          for i in $(seq 1 30); do
+            docker exec proxy sh -c 'wget -qO- -T1 http://127.0.0.1:8090/ >/dev/null 2>&1' && break
+            sleep 1
+          done
+
+      - name: Traffic + fail2ban-regex checks
+        env:
+          PROXY_HTTP: http://${{ env.HOSTIP }}
+          HOSTIP: ${{ env.HOSTIP }}
+        run: bash proxy/e2e/fail2ban-check.sh
+
+      - name: access.log (for debugging)
+        if: always()
+        run: tail -n 200 "$ACCESS_LOG" || true
+
+      - name: Proxy logs
+        if: always()
+        run: docker logs proxy || true

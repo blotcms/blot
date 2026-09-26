@@ -27,6 +27,7 @@ blockquote.twitter-tweet p {margin: 0}
 
 /* IMAGE SIZE */
 img {max-width: 100%;height: auto;}
+video {max-width: 100%;height: auto;}
 
 /* CODE HIGHLIGHTING */
 
@@ -129,18 +130,36 @@ p, div, section {position: relative;overflow: visible;}
 
 @media screen and (max-width: 933px) {
 
-  body {padding: 0 2em;margin: 2em auto;width: auto;}
+  {{#sticky_navigation}}
+  {{^is.navigation_location.top}}
+  .page-layout {display: block;width: auto;margin: 0;padding: 0;}
+  .content-column {margin: 0;}
+  {{/is.navigation_location.top}}
+  {{/sticky_navigation}}
 
-  .sidebar {position: relative;width: 100%;text-align: center;margin: 0 0 2.5em;left: auto;right: auto;top: auto;background: none;}
+  {{^is.navigation_location.top}}
+  body {padding: 0 2em;margin: 2em auto;width: auto;}
+  {{/is.navigation_location.top}}
+  {{#is.navigation_location.top}}
+  body {padding: 0 2em;margin: 2.5em auto;width: auto;}
+  {{/is.navigation_location.top}}
+
+  {{^is.navigation_location.top}}
+  .sidebar {position: relative;width: 100%;margin: 0 0 2.5em;left: auto;right: auto;top: auto;background: none;text-align: center;}
+  {{#sticky_navigation}}
+  .sidebar {position: sticky;top: 2em;z-index: 2;background: var(--background-color);max-height: calc(100vh - 2em);overflow-y: auto;}
+  {{/sticky_navigation}}
+  {{/is.navigation_location.top}}
 
   .sidebar a {display: inline-block; margin: 0 0.45em;}
 
-  .sidebar .logo {margin: 0 0 0.85em;display: block;text-align: center;}
+  .sidebar .logo {margin: 0 0 0.85em;display: block;}
 
-  .logo.hasAvatar,
-  .logo.hasLogo {word-spacing: 0}
+  {{^is.navigation_location.top}}
+  .sidebar .logo {text-align: center;}
+  {{/is.navigation_location.top}}
 
-  .logo-image {margin-left: auto; margin-right: auto;}
+  .logo.hasAvatar {word-spacing: 0}
 
   .margin,
   .margin.right,

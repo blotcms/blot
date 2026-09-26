@@ -1,4 +1,12 @@
 <h1>Examples</h1>
+
+<ul class="pill-navigation">
+  <li><a href="/examples" class="{{#allCategoriesActive}}selected{{/allCategoriesActive}}">All</a></li>
+  {{#categories}}
+  <li><a href="{{href}}" class="{{#active}}selected{{/active}}">{{label}}</a></li>
+  {{/categories}}
+</ul>
+
 {{#featured}}
 <ul id="featured" class="clients">
   {{#sites}}

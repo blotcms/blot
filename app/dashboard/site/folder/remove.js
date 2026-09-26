@@ -89,7 +89,22 @@ module.exports = async (req, res) => {
     });
   }
 
-  const { folder, done } = await establishSyncLock(req.blog.id);
+  let folder, done;
+
+  try {
+    ({ folder, done } = await establishSyncLock(req.blog.id));
+  } catch (err) {
+    if (err && err.message === "Failed to acquire folder lock") {
+      res.set("Retry-After", "10");
+      return res.status(423).json({
+        ok: false,
+        removed: null,
+        error: "Folder is locked by another sync; retry later",
+      });
+    }
+
+    throw err;
+  }
 
   // done() bumps blog.cacheID, which is what invalidates the folder cache on
   // the container that renders the listing (blue). Release before responding

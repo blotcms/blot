@@ -1,20 +1,20 @@
 {{{app_css}}}
 
-{{{body_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 
 :root {
 	--background-color: {{background_color}};
 	--text-color: {{text_color}};
 	--link-color: {{link_color}};
-	--header-background-color: {{header_background_color}};
+	--header-background-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.078);
 	--muted-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55);
 	--divider-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1);
-	{{#body_font}}
+	{{#font}}
 	--body-font-family: {{{stack}}};
 	--body-font-size: {{{font_size}}}px;
 	--body-line-height: {{{line_height}}};
-	{{/body_font}}
+	{{/font}}
 }
 
 /* START wp emoji */
@@ -3100,7 +3100,10 @@ a:active {
 }
 
 #toggle-sidebar {
-	background-color: var(--header-background-color);
+	/* position: fixed on wider viewports (see media query above), sliding
+	   over page content, so the tint must be layered over an opaque
+	   background rather than left translucent. */
+	background: linear-gradient(var(--header-background-color), var(--header-background-color)), var(--background-color);
 }
 
 hr {

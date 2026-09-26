@@ -20,14 +20,6 @@ function fetchCDNIPs() {
   }
 }
 
-const cdnIPs = fetchCDNIPs();
-
-if (!cdnIPs.length) {
-  throw new Error("No CDN IPs fetched");
-}
-
-console.log(`Fetched ${cdnIPs.length} CDN IPs`);
-
 function loadEnvFile() {
   const envPath = require('path').join(__dirname, "..", "..", ".env");
   try {
@@ -50,7 +42,21 @@ function loadEnvFile() {
   }
 }
 
+// Must run before FETCH_CDN_IPS (and anything else in env.js/locals.js) is
+// read below - otherwise setting it in .env has no effect, since
+// process.env wouldn't be populated from the file yet.
 loadEnvFile();
+
+// Matches proxy/build/index.js's loadCDNIPs: FETCH_CDN_IPS=false skips the
+// Bunny lookup so a config generate (e.g. proxy/differential's bare-metal
+// side) doesn't depend on an external service.
+const cdnIPs = process.env.FETCH_CDN_IPS === "false" ? [] : fetchCDNIPs();
+
+if (process.env.FETCH_CDN_IPS !== "false" && !cdnIPs.length) {
+  throw new Error("No CDN IPs fetched");
+}
+
+console.log(`Using ${cdnIPs.length} CDN IPs`);
 
 const OUTPUT = __dirname + "/data/latest";
 const PREVIOUS = OUTPUT + "-previous-" + Date.now();

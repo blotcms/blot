@@ -1,5 +1,6 @@
 {
 	"name": "Documentation",
+	"popularity": 32,
 	"locals": {
 		"page_size": 100,
 		"page_size_range": [1, 100],
@@ -12,27 +13,18 @@
 		"green_color": "rgb(22, 140, 64)",
 		"red_color": "#ff3e00",
 		"yellow_color": "#ffbb26",
-		"dark_background_color": "#111",
-		"dark_text_color": "#eee",
-		"dark_link_color": "#eee",
 		"hide_dates": false,
 		"date_display": "DD MMMM, YYYY",
 		"syntax_highlighter": {
 			"id": "solarized-light"
 		},
-		"dark_syntax_highlighter": {
-			"id": "solarized-dark"
-		},
 		"syntax_highlighter_font": {
 			"id": "plex-mono"
 		},
-		"body_font": {
+		"font": {
 			"id": "system-sans"
 		},
-		"heading_font": {
-			"id": "system-sans"
-		},
-		"logo_url": "",
+		"profile_image": {},
 		"sticky_navigation": false,
 		"navigation_alignment": "justified",
 		"navigation_alignment_options": [

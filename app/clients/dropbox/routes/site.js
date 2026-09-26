@@ -103,7 +103,6 @@ site.post("/webhook", function (req, res) {
   req.on("end", function () {
     if (signature !== verification.digest("hex")) {
       return res.sendStatus(403);
-      console.log("invalid signature");
     }
 
     try {

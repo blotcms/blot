@@ -2,23 +2,19 @@
 
 /* Injected styles from templates and external sources */
 {{{app_css}}}
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter.styles}}}
 {{> flickity.css}}
 
 /* Root variables for theme customization */
 :root {
-  {{#body_font}}
+  {{#font}}
   --font-family: {{{stack}}};
   --font-size: {{{font_size}}}px;
   --line-height: {{{line_height}}};
-  {{/body_font}}
-  {{#heading_font}}
-  --heading-font-family: {{{stack}}};
-  --heading-font-size: {{{font_size}}}px;
-  --heading-line-height: {{{line_height}}};
-  {{/heading_font}}
+  {{/font}}
+  --heading-font-size: 45px;
+  --heading-line-height: 1.2;
   --background-color: {{background_color}};
   --text-color: {{text_color}};
   --off-background-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.02);
@@ -31,19 +27,6 @@
   --slides-width: 50vw;
   --slides-height: 100vh;
   --padding: calc({{spacing}} * 1.4rem);
-}
-
-/* Dark mode variables */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background-color: {{dark_background_color}};
-    --off-background-color: rgba({{#rgb}}{{dark_text_color}}{{/rgb}}, 0.04);
-    --text-color: {{dark_text_color}};
-    --border-color: rgba({{#rgb}}{{dark_text_color}}{{/rgb}}, 0.08);
-    --light-text-color: rgba({{#rgb}}{{dark_text_color}}{{/rgb}}, 0.3333);
-    --medium-text-color: rgba({{#rgb}}{{dark_text_color}}{{/rgb}}, 0.6666);
-    --link-color: {{dark_link_color}};
-  }
 }
 
 /* General resets */
@@ -69,7 +52,7 @@ small { color: var(--light-text-color); }
 
 /* TYPOGRAPHY */
 h1, h2 {
-  font-family: var(--heading-font-family);
+  font-family: var(--font-family);
   font-size: clamp(9px, 3.5vw, var(--heading-font-size));
   line-height: var(--heading-line-height);
 }
@@ -84,7 +67,7 @@ h2 {
 }
 
 h3 {
-  color: var(--light-text-color); font-size: {{{body_font.font_size}}}px; font-weight: normal;
+  color: var(--light-text-color); font-size: {{font.font_size}}px; font-weight: normal;
   margin-top: 3em;
 }
 
@@ -112,7 +95,7 @@ hr { border: none; border-bottom: 1px solid var(--border-color); clear: both; }
   display: flex;
   align-items: center;
   gap: 0.5em;
-  font-family: var(--heading-font-family);
+  font-family: var(--font-family);
 }
 .site-logo {
   height: 1.4em;
@@ -309,9 +292,6 @@ kbd {
   position: sticky; top: 0; background: var(--off-background-color);
   box-sizing: border-box;
   border-right: 1px solid var(--border-color);
-  {{#dark_slides_background}}
-  background: {{dark_background_color}};
-  {{/dark_slides_background}}
 }
 
 .main-carousel {
@@ -332,9 +312,6 @@ kbd {
   bottom: 0; left: 0; font-size: 0.85em; right: 0; text-align: center; cursor: auto;
   margin: 0 2rem; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 0.15em; line-height: 1.25; box-sizing: border-box;
-  {{#dark_slides_background}}
-  color: {{dark_text_color}};
-  {{/dark_slides_background}}
 }
 .slide-caption-text {
   display: block; max-width: 100%;
@@ -343,9 +320,6 @@ kbd {
 .slide-caption-credit {
   display: block; color: var(--text-color); font-size: 0.75em;
   text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.5;
-  {{#dark_slides_background}}
-  color: {{dark_text_color}};
-  {{/dark_slides_background}}
 }
 
 .flickity-page-dots {
@@ -364,25 +338,13 @@ kbd {
   background-color: var(--border-color);
   border-radius: 50%;
   transition: background-color 0.2s;
-  {{#dark_slides_background}}
-  background-color: rgba({{#rgb}}{{dark_text_color}}{{/rgb}}, 0.25);
-  {{/dark_slides_background}}
 }
 
 .flickity-page-dots .dot:hover:after { background-color: var(--light-text-color); }
 
 .flickity-page-dots .dot.is-selected:after {
   background-color: var(--light-text-color);
-  {{#dark_slides_background}}
-  background-color: {{dark_text_color}};
-  {{/dark_slides_background}}
 }
-
-{{#dark_slides_background}}
-.flickity-page-dots .dot:hover:after {
-  background-color: {{dark_text_color}};
-}
-{{/dark_slides_background}}
 
 .flickity-prev-next-button.previous, .flickity-prev-next-button.next {
   top: 0; width: auto; height: auto; bottom: calc(var(--dots-height) + var(--caption-height)); background: transparent;

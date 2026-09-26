@@ -1,8 +1,7 @@
 /* Inserts the styles required by various options
 on the services page of the dashboard */
 {{{app_css}}}
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
@@ -18,16 +17,12 @@ on the services page of the dashboard */
   --text-color-05: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.05);
   --text-color-07: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.07);
   --text-color-08: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.08);
-  {{#body_font}}
+  {{#font}}
   --font-stack: {{{stack}}};
   --font-size: {{font_size}}px;
   --line-height: {{line_height}};
-  {{/body_font}}
-  {{#heading_font}}
-  --heading-font-stack: {{{stack}}};
-  --heading-font-size: {{font_size}}px;
-  --heading-line-height: {{line_height}};
-  {{/heading_font}}
+  {{/font}}
+  --heading-line-height: 1.2;
   {{#syntax_highlighter_font}}
   --code-font-stack: {{{stack}}};
   --code-font-size: {{font_size}}px;
@@ -113,9 +108,9 @@ body.entry-container {
   padding: var(--space-065) var(--space-13);
   white-space: nowrap;
   text-rendering: optimizeLegibility;
-  font-family: var(--heading-font-stack, var(--font-stack));
-  font-size: var(--heading-font-size, 1em);
-  line-height: var(--heading-line-height, var(--line-height));
+  font-family: var(--font-stack);
+  font-size: var(--font-size);
+  line-height: var(--heading-line-height);
   font-weight: 600
 }
 
@@ -426,8 +421,8 @@ form input:focus,
 .tags h3,
 .search-results h1,
 .error-page h1 {
-  font-family: var(--heading-font-stack, var(--font-stack));
-  line-height: var(--heading-line-height, 1.2);
+  font-family: var(--font-stack);
+  line-height: var(--heading-line-height);
 }
 
 /* Heading scale, expressed as multiples of the configurable heading
@@ -438,24 +433,24 @@ form input:focus,
 .tags h1,
 .search-results h1,
 .error-page h1 {
-  font-size: calc(2 * var(--heading-font-size, 1em));
+  font-size: calc(2 * var(--font-size));
 }
 
 .entry h3,
 .tags h3 {
-  font-size: calc(1.17 * var(--heading-font-size, 1em));
+  font-size: calc(1.17 * var(--font-size));
 }
 
 .entry h4 {
-  font-size: var(--heading-font-size, 1em);
+  font-size: var(--font-size);
 }
 
 .entry h5 {
-  font-size: calc(0.83 * var(--heading-font-size, 1em));
+  font-size: calc(0.83 * var(--font-size));
 }
 
 .entry h6 {
-  font-size: calc(0.67 * var(--heading-font-size, 1em));
+  font-size: calc(0.67 * var(--font-size));
 }
 
 .entry h1 {
@@ -521,7 +516,7 @@ form input:focus,
 }
 
 .entry h2 {
-  font-size: calc(1.5 * var(--heading-font-size, 1em));
+  font-size: calc(1.5 * var(--font-size));
   text-rendering: optimizelegibility;
   font-weight: bold;
   margin: .75em 0;

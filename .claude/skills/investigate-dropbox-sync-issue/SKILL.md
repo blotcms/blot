@@ -151,3 +151,61 @@ Entry template:
   alert if the diff persists on the next hourly run. Unrelated 401/409
   `Error validating` lines for other blogs appeared in the same run
   (revoked/moved Dropbox accounts).
+
+### 2026-09-21 15:00:00 UTC validation run — race with a live edit (benign)
+
+- Alert: 1 change for 1 blog, sent after the run completed at 15:08:49 UTC
+  (green container; run started 15:00:00).
+- Key events (UTC): 15:01:18 and 15:01:27 a normal sync (`sync_61eeebe`)
+  applied two draft-toggle renames (file renamed with a leading underscore).
+  15:01:41.629 validation (`sync_e6eb1b0`) took the folder lock; its running
+  total grew 1614→1615→1616 mid-walk as the user kept editing. It removed one
+  file and re-downloaded/saved another (the 1 "change"), finishing 15:03:11.617.
+- The user's webhook sync (`sync_76144f8`, 15:02:12) logged `Failed to acquire
+  lock on folder` (by design). Catch-up sync (`sync_d28563b`, 15:03:13) re-applied
+  the same two changes (hash matched, no re-download); in sync by 15:03:17.
+  Further edits synced normally (15:04:12, 15:04:36). Later hourly runs
+  completed with `issues=0` (16:00, 17:00, 19:00).
+- Cause: not a missed webhook; user editing during the validation walk.
+- Follow-up: same as the 2026-09-19 entry (defer/skip recently-synced blogs).
+  Separately, the 18:00 and 20:00 runs never logged `complete`: the process
+  restarted (`Scheduling hourly sync validation` at 18:03:16 and 20:01:50), so
+  those runs were cut short — worth checking with the restart skill.
+
+### 2026-09-24 15:00:00 and 16:00:00 UTC validation runs — container crash (green), root-caused
+
+- Trigger: the restart skill was asked to investigate why green's
+  `RestartCount` had gone from 0 to 2; both restarts turned out to be
+  `[LOCK COMPROMISED]` process crashes (by design, per `app/sync/README`)
+  during the hourly validation run, not deploy activity.
+- Key events (UTC): 15:00:00 run - a blog's folder lock (held by an
+  unrelated, real-time webhook-triggered sync, not by validation itself)
+  went compromised at 15:04:34, ~8s after validation's own walk finished for
+  a *different* blog and moved into that blog's `fixBlog`/`Fix()` stage.
+  16:00:00 run - same shape: a lock (held by a different unrelated live
+  sync) went compromised at 16:01:08, ~13s into validation's `Fix()` stage
+  for the blog with by far the longest walk of the run (repeated across
+  both runs). Both crashes aborted their validation run mid-way (no
+  `Sync validation complete` line either hour).
+- Cause: `[LOCK] slow heartbeat` logging (added for exactly this
+  investigation) showed `tickDelay≈0ms` with `roundTrip` up to 11s at crash
+  time - ruling out event-loop blocking and matching Redis's own SLOWLOG
+  staying clean (no single slow command). `Fix()`'s `entry-ghosts` check
+  (and its four siblings) reads every entry of a blog with one sequential
+  Redis round trip each, over the single shared connection
+  (`app/models/client.js`) that the lock heartbeat also uses - a blog with
+  several hundred posts going through `Fix()` is enough to starve an
+  unrelated blog's heartbeat past its 10s TTL. The crashed blogs were not
+  themselves unusually large; they were just live syncs unlucky enough to
+  have a heartbeat due while `Fix()` was busy on someone else's Redis
+  traffic.
+- Follow-up: added `[LOCK] slow heartbeat`/`heartbeat error` roundTrip vs
+  tickDelay logging (`app/sync/lock.js`), per-check timing in `Fix()`, an
+  `entries=N` field on the `validation lag` log line, and a `runningFixCheck`
+  field on `[LOCK COMPROMISED]` diagnostics (previously invisible there,
+  since `Fix()` doesn't hold the folder lock) - see the PR for this entry.
+  Also fixed `[LOCK COMPROMISED]`'s diagnostics logging, which was silently
+  truncating `pendingSyncs`/`pendingUpdates` to `[Object]` via
+  `console.error`'s default inspection depth. Not yet fixed: giving the lock
+  heartbeat its own dedicated Redis connection so `Fix()` traffic can't
+  queue ahead of it, or batching `Fix()`'s per-entry reads.

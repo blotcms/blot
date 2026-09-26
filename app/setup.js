@@ -11,6 +11,7 @@ const clfdate = require("helper/clfdate");
 const scheduler = require("./scheduler");
 const logRedisCacheStats = require("./scheduler/redis-cache-stats");
 const logRenderCacheStats = require("./scheduler/render-cache-stats");
+const renderTimeMetric = require("./blog/render/renderTimeMetric");
 const flush = require("documentation/tools/flush-cache");
 const configureLocalBlogs = require("./configure-local-blogs");
 const purgeCdnUrls = require("helper/purgeCdnUrls");
@@ -61,6 +62,24 @@ async function runPostListenTasks() {
     setInterval(logRenderCacheStats, 60 * 1000);
   } catch (err) {
     logError("Failed to start render cache stats logging", err);
+  }
+
+  try {
+    if (config.master || process.env.BLOT_EVENT_LOOP_MONITOR === "true") {
+      log("Starting event loop monitor");
+      require("helper/eventLoopMonitor").start();
+    }
+  } catch (err) {
+    logError("Failed to start event loop monitor", err);
+  }
+
+  try {
+    // Every container renders customer pages, so every container flushes
+    // its own p95 window to Redis for the daily update email to read back.
+    log("Starting render time metric flushing asynchronously");
+    renderTimeMetric.start();
+  } catch (err) {
+    logError("Failed to start render time metric flushing", err);
   }
 
   try {

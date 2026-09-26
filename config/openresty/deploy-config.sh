@@ -45,6 +45,20 @@ ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "rm -rf /home/ec2-user/script
 scp -P "$SSH_PORT" -i $SSH_KEY -r $SCRIPTS_DIRECTORY ec2-user@$PUBLIC_IP:/home/ec2-user/scripts
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "chmod +x /home/ec2-user/scripts/*"
 
+# Install (or update) the mount-instance-store unit and the docker.service /
+# openresty.service drop-ins that gate on it, so neither can (re)start at
+# boot against the not-yet-mounted, empty /var/instance-ssd. Only installs
+# files + daemon-reload: it must NOT restart docker.service, openresty.service
+# or mount-instance-store.service here, since all are live on a running host
+# (restarting docker would kill the running containers, restarting the mount
+# unit would unmount the cache under them) and daemon-reload alone is safe
+# against a running unit. The new ordering takes effect at the next reboot.
+echo "Installing mount-instance-store.service and its docker.service.d/openresty.service.d drop-ins on $PUBLIC_IP"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo cp /home/ec2-user/scripts/mount-instance-store.service /etc/systemd/system/mount-instance-store.service"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo mkdir -p /etc/systemd/system/docker.service.d /etc/systemd/system/openresty.service.d && sudo cp /home/ec2-user/scripts/docker.service.d/10-instance-store.conf /etc/systemd/system/docker.service.d/10-instance-store.conf && sudo cp /home/ec2-user/scripts/openresty.service.d/10-instance-store.conf /etc/systemd/system/openresty.service.d/10-instance-store.conf"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo systemctl daemon-reload"
+echo "mount-instance-store / docker.service / openresty.service ordering installed (takes effect on next boot)."
+
 # Once the proxy runs as a container (proxy/deploy) the bare-metal openresty is
 # stopped, and its config is no longer what serves traffic: reloading it would
 # fail (and, with set -e, skip everything below). Config for the container ships

@@ -125,7 +125,6 @@ describe("template", () => {
 
 		await setMetadata(templateID, {
 			localEditing: true,
-			isPublic: false,
 			locals: {
 				featureFlags: {
 					livePreview: true,

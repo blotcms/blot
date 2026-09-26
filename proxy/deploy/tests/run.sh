@@ -44,12 +44,31 @@ case "$1" in
   rm) n="${!#}"; rm -f "$R/$n" "$FAKE/all/$n"
     [ -n "$(ls "$R" | grep '^blot-proxy-[bg]')" ] || { [ "$(cat "$FAKE/serving")" != container ] || echo none > "$FAKE/serving"; } ;;
   update) [ -z "${FAKE_UPDATE_FAILS:-}" ] || exit 1 ;;
-  logs) ;;
+  logs)
+    # wait_rehydrated also reads `docker logs`, for ALLOW_STDOUT_LOGS=1 images
+    # whose error_log goes to stderr instead of the file (FAKE_REHYDRATE_VIA_LOGS_ONLY).
+    [ -z "${FAKE_REHYDRATE_VIA_LOGS_ONLY:-}" ] \
+      || echo "2024/01/01 00:00:00 [notice] 1#1: *1 rehydrate: complete files=200000 hosts=5000 unparsed=0 seconds=20"
+    ;;
   exec)
     n="$2"
     if [[ "$*" == *"--unix-socket"* ]]; then [ -e "$R/$n" ] && [ "$n" != "${FAKE_UNHEALTHY:-}" ]; exit; fi
     if [[ "$3" == printenv ]]; then [ -z "${FAKE_NO_PURGE_ENV:-}" ] && echo http://10.0.0.9:8077; exit 0; fi
-    if [[ "$3" == node ]]; then [ -z "${FAKE_PURGE_FAIL:-}" ]; exit; fi ;;
+    if [[ "$3" == node ]]; then [ -z "${FAKE_PURGE_FAIL:-}" ]; exit; fi
+    if [[ "$3" == cat || "$3" == tail ]]; then
+      # wait_rehydrated's view of the rehearsal's error.log (no log mount, so
+      # it is read with `docker exec`, not from the host). Empty when
+      # FAKE_REHYDRATE_VIA_LOGS_ONLY simulates error_log going to stderr
+      # instead - only `docker logs` above has the line then.
+      if [ -z "${FAKE_REHYDRATE_VIA_LOGS_ONLY:-}" ]; then
+        if [ -n "${FAKE_REHYDRATE_ERROR:-}" ]; then
+          echo "2024/01/01 00:00:00 [error] 1#1: *1 rehydrate: could not add to index, increase lua_shared_dict cacher_dictionary"
+        elif [ -z "${FAKE_NO_REHYDRATE:-}" ]; then
+          echo "2024/01/01 00:00:00 [notice] 1#1: *1 rehydrate: complete files=200000 hosts=5000 unparsed=0 seconds=20"
+        fi
+      fi
+      exit 0
+    fi ;;
 esac
 exit 0
 F
@@ -92,7 +111,12 @@ exec "$@"
 F
 cat > "$T/bin/redis-cli" <<'F'
 #!/usr/bin/env bash
-for d in ${FAKE_CUSTOM_DOMAINS-a.custom.test b.custom.test}; do echo "ssl:$d:latest"; done
+if [[ "$*" == *--scan* ]]; then
+  for d in ${FAKE_CUSTOM_DOMAINS-a.custom.test b.custom.test}; do echo "ssl:$d:latest"; done
+  exit
+fi
+echo "redis-cli $*" >> "$FAKE/calls"
+if [[ "$*" == *" exists "* ]]; then echo "${FAKE_KEY_EXISTS:-0}"; fi
 F
 cat > "$T/bin/flock" <<'F'
 #!/usr/bin/env bash
@@ -106,6 +130,7 @@ cat > "$T/bin/openssl" <<'F'
 #!/usr/bin/env bash
 case "$1" in
   x509)
+    if [[ "$*" == *-issuer* ]]; then [ -z "${FAKE_NO_ISSUE:-}" ] && echo "issuer=O = (STAGING) Let's Encrypt"; exit 0; fi
     if [[ "$*" == *-checkend* ]]; then [ -z "${FAKE_CERT_EXPIRING:-}" ]; exit; fi
     if [[ "$*" == *-pubkey* ]]; then echo pub; exit; fi
     if [[ "$*" == *-fingerprint* ]]; then
@@ -131,7 +156,8 @@ export PATH="$T/bin:$PATH"
 
 export PROXY_ENV_FILE="$T/proxy.env" PROXY_CACHE_DIR="$T/cache" PROXY_LOG_DIR="$T/logs" \
   PROXY_CERT_DIR="$T/certs" PROXY_DEPLOY_LOCK="$T/lock" PROXY_RENEW_SCRIPT="$T/renew.sh" \
-  PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 TMUX=fake
+  PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 TMUX=fake \
+  PROXY_REHYDRATE_TIMEOUT=1 # nap() is a no-op above, so a refusal still busy-waits out this many real seconds
 
 pass=0; failed=0
 ok() { pass=$((pass + 1)); echo "  ok   $*"; }
@@ -165,6 +191,23 @@ reset baremetal; cutover
 check "success: bare-metal stops before the container starts" '[ $RC = 0 ] && before "systemctl stop openresty" "docker start blot-proxy-blue"'
 check "success: the container is made permanent, then bare-metal disabled, only at the end" 'before "docker start blot-proxy-blue" "docker update --restart unless-stopped" && before "docker update --restart" "systemctl disable openresty" && serving container'
 check "success: the container is created with restart policy no" 'called "docker create --restart no"'
+check "success: the container gets the CDN static mounts and the fd ulimit" \
+  'called "docker create --restart no --name blot-proxy-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536" \
+   && called "-v /var/www/blot/data/static:/var/www/blot/data/static:ro" \
+   && called "-v /var/www/blot/app/blog/static:/var/www/blot/app/blog/static:ro"'
+check "success: the rehearsal gets the static mounts and the fd ulimit, but not the cache" \
+  'called "run -d --name blot-proxy-rehearsal --cap-add SYS_NICE --ulimit nofile=65536:65536" \
+   && called "-v /var/www/blot/data/static:/var/www/blot/data/static:ro" \
+   && called "-v /var/www/blot/app/blog/static:/var/www/blot/app/blog/static:ro" \
+   && ! called "run -d --name blot-proxy-rehearsal.*/var/cache/openresty"'
+check "success: the rehydrate probe gets the real cache read-only, takes no traffic, and is cleaned up" \
+  'called "run -d --name blot-proxy-rehydrate-probe --cap-add SYS_NICE" \
+   && called "-v $T/cache:/var/cache/openresty:ro" \
+   && ! called "run -d --name blot-proxy-rehydrate-probe.*-p " \
+   && ! [ -e "$FAKE/running/blot-proxy-rehydrate-probe" ]'
+
+reset baremetal; PROXY_BLOG_STATIC_DIR="$T/blog-static" PROXY_GLOBAL_STATIC_DIR="$T/global-static" cutover
+check "static mount paths are overridable" 'called "-v $T/blog-static:/var/www/blot/data/static:ro" && called "-v $T/global-static:/var/www/blot/app/blog/static:ro"'
 
 reset baremetal; FAKE_CONTAINER_CODE=502 cutover
 check "failed live check: rolls back to bare-metal, never disables it" '[ $RC != 0 ] && serving baremetal && after_last "systemctl start openresty" "systemctl stop openresty" && ! called "systemctl disable" && ! called "docker update"'
@@ -184,7 +227,24 @@ check "purge endpoint unreachable: refused before anything changes" '[ $RC != 0 
 
 reset baremetal; FAKE_REHEARSAL_CODE=502 cutover
 check "rehearsal differs from bare-metal: refused before the stop" '[ $RC != 0 ] && ! called "systemctl stop" && ! called "docker create" && mentions "rehearsal answers differ"'
-check "rehearsal container is cleaned up on refusal" '! [ -e "$FAKE/running/blot-proxy-rehearsal" ]'
+check "rehearsal container is cleaned up on refusal" '! [ -e "$FAKE/running/blot-proxy-rehearsal" ] && ! [ -e "$FAKE/running/blot-proxy-rehydrate-probe" ]'
+
+reset baremetal; cutover --dry-run
+check "rehydrate probe against the real cache: passes when the log shows rehydrate: complete" '[ $RC = 0 ]'
+
+reset baremetal; FAKE_UNHEALTHY=blot-proxy-rehydrate-probe cutover --dry-run
+check "rehydrate probe never healthy: refused, mentions cache ownership" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "never became healthy" && mentions "owned by uid 1000"'
+check "rehydrate probe never healthy: both containers cleaned up" '! [ -e "$FAKE/running/blot-proxy-rehearsal" ] && ! [ -e "$FAKE/running/blot-proxy-rehydrate-probe" ]'
+
+reset baremetal; FAKE_NO_REHYDRATE=1 cutover --dry-run
+check "rehydrate probe: refused when the cache never finishes rehydrating" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "rehydrate: complete" && mentions "cacher_dictionary"'
+check "rehydrate probe: cleaned up on refusal too" '! [ -e "$FAKE/running/blot-proxy-rehearsal" ] && ! [ -e "$FAKE/running/blot-proxy-rehydrate-probe" ]'
+
+reset baremetal; FAKE_REHYDRATE_ERROR=1 cutover --dry-run
+check "rehydrate probe: refused when the cache logs a rehydrate error" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "rehydrate: complete"'
+
+reset baremetal; ALLOW_STDOUT_LOGS=1 FAKE_STDOUT_LOGS=1 FAKE_REHYDRATE_VIA_LOGS_ONLY=1 cutover --dry-run
+check "rehydrate probe: passes when the line is only in docker logs (ALLOW_STDOUT_LOGS=1 image)" '[ $RC = 0 ]'
 
 reset baremetal; FAKE_STDOUT_LOGS=1 cutover
 check "image that logs to stdout: refused (fail2ban would go blind)" '[ $RC != 0 ] && ! called "systemctl stop" && mentions "LOG_TO_STDOUT"'
@@ -275,11 +335,54 @@ check "PROXY_SKIP_CERT_SWEEP=1 skips the comparison" '[ $RC = 0 ] && mentions "n
 reset container; FAKE_CUSTOM_FP_AFTER_STOP=B bluegreen
 check "blue-green: a custom-domain certificate differs after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm blot-proxy-blue" && mentions "custom-domain certificates"'
 
+echo "try-issuance.sh"
+
+issue() { bash "$DEPLOY/try-issuance.sh" img:3 "$@" >"$T/out" 2>&1; RC=$?; }
+
+reset baremetal; issue throwaway.example.org
+check "issues from staging in its own container, then removes the keys and the container" '[ $RC = 0 ] && called "PROXY_ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory" && called "redis-cli -h 10.0.0.5 set domain:throwaway.example.org" && called "redis-cli -h 10.0.0.5 del domain:throwaway.example.org ssl:throwaway.example.org:latest" && called "docker rm -f blot-proxy-issuance" && ! [ -e "$FAKE/running/blot-proxy-issuance" ]'
+check "the throwaway container uses no cache, log or auto-ssl volume and is not published beyond loopback" '! called "run -d.*/var/cache/openresty" && ! called "run -d.*/etc/resty-auto-ssl" && called "127.0.0.1:18444:443"'
+
+reset baremetal; FAKE_NO_ISSUE=1 PROXY_ISSUANCE_ATTEMPTS=2 issue throwaway.example.org
+check "no staging certificate: fails, and still cleans up" '[ $RC != 0 ] && mentions "no staging certificate" && called "redis-cli -h 10.0.0.5 del" && ! [ -e "$FAKE/running/blot-proxy-issuance" ]'
+
+reset baremetal; FAKE_KEY_EXISTS=1 issue real-customer.example.org
+check "a domain Redis already knows: refused, and its keys are never deleted" '[ $RC != 0 ] && ! called "docker run" && ! called "redis-cli.* del" && ! called "redis-cli.* set" && mentions "not a throwaway"'
+
+reset baremetal; issue staging.blot.test
+check "a domain under the site's own: refused" '[ $RC != 0 ] && ! called "docker run" && mentions "separate throwaway"'
+
+echo "PROXY_ACME_CA"
+
+reset baremetal; echo "PROXY_ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory" >> "$T/proxy.env"; cutover --dry-run
+check "a staging ACME directory in proxy.env: refused before anything runs" '[ $RC != 0 ] && ! called "docker run" && mentions "PROXY_ACME_CA"'
+reset container; bluegreen
+check "a staging ACME directory in proxy.env: blue-green refuses too" '[ $RC != 0 ] && ! called "docker create" && mentions "PROXY_ACME_CA"'
+reset baremetal; PROXY_ALLOW_ACME_CA=1 cutover --dry-run
+check "PROXY_ALLOW_ACME_CA=1 overrides it" '[ $RC = 0 ]'
+sed -i.bak '/^PROXY_ACME_CA=/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+echo "PROXY_ACME_CA=https://acme-v02.api.letsencrypt.org/directory" >> "$T/proxy.env"
+reset baremetal; cutover --dry-run
+check "the production ACME directory is accepted" '[ $RC = 0 ]'
+sed -i.bak '/^PROXY_ACME_CA=/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+
+reset baremetal; echo "PROXY_ACME_CA=" >> "$T/proxy.env"; cutover --dry-run
+check "an empty PROXY_ACME_CA in proxy.env: refused (it would override the default with nothing)" '[ $RC != 0 ] && ! called "docker run" && mentions "PROXY_ACME_CA"'
+reset container; bluegreen
+check "an empty PROXY_ACME_CA in proxy.env: blue-green refuses too" '[ $RC != 0 ] && ! called "docker create" && mentions "PROXY_ACME_CA"'
+sed -i.bak '/^PROXY_ACME_CA=$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+reset baremetal; echo "PROXY_RESOLVER=''" >> "$T/proxy.env"; cutover --dry-run
+check "any other empty PROXY_* setting is refused too" '[ $RC != 0 ] && ! called "docker run" && mentions "PROXY_RESOLVER"'
+sed -i.bak '/^PROXY_RESOLVER=/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+
 echo "blue-green.sh"
 
 reset container; bluegreen
 check "success: green starts, blue drains and is only removed afterwards" '[ $RC = 0 ] && before "docker start blot-proxy-green" "docker stop --time 30 blot-proxy-blue" && before "docker stop --time 30" "docker rm blot-proxy-blue"'
 check "success: green gets its restart policy before blue is removed" 'before "docker update --restart unless-stopped blot-proxy-green" "docker rm blot-proxy-blue" && serving container'
+check "success: green also gets the CDN static mounts and the fd ulimit" \
+  'called "docker create --restart no --name blot-proxy-green --network host --cap-add SYS_NICE --ulimit nofile=65536:65536" \
+   && called "-v /var/www/blot/data/static:/var/www/blot/data/static:ro"'
 
 reset container; FAKE_UNHEALTHY=blot-proxy-green bluegreen
 check "new colour never healthy: old one is never stopped" '[ $RC != 0 ] && ! called "docker stop" && called "docker rm -f blot-proxy-green" && serving container'

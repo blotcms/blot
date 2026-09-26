@@ -35,9 +35,6 @@ function trimLeading(str) {
 }
 
 function layout(text) {
-  // console.log('>>>>>>>>>');
-  // console.log(text);
-  // console.log('>>>>>>>>>');
   // {<>} Foo
   //      Bar
 

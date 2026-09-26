@@ -1,3 +1,4 @@
+const { inspect } = require("util");
 const buildFromFolder = require("models/template").buildFromFolder;
 const Blog = require("models/blog");
 const Update = require("./update");
@@ -7,7 +8,7 @@ const folderLock = require("./lock");
 const messenger = require("./messenger");
 const gatherLockDiagnostics = require("./lock-diagnostics");
 const clfdate = require("helper/clfdate");
-const client = require("models/client");
+const previewReload = require("helper/publishPreviewReload");
 const {
   addPendingSync,
   removePendingSync,
@@ -63,15 +64,27 @@ function sync(blogID, callback) {
           gatherLockDiagnostics({ blogID, lockAcquiredAt, syncContext: { syncID } })
             .catch((diagErr) => ({ diagnosticsError: String(diagErr) }))
             .then((diagnostics) => {
-              console.error(clfdate(), "[LOCK COMPROMISED]", {
-                blogID,
-                error: { message: err.message, code: err.code },
-                lockConfig: {
-                  ttl: LOCK_STALE_TIMEOUT_MS,
-                  heartbeat: LOCK_UPDATE_INTERVAL_MS
-                },
-                diagnostics
-              });
+              // console.error's default util.inspect depth (2) was silently
+              // flattening diagnostics.pendingSyncs/pendingUpdates to
+              // "[Object]" - exactly the detail needed to tell whether some
+              // other blog's sync was starving this heartbeat. depth: null
+              // prints it in full.
+              console.error(
+                clfdate(),
+                "[LOCK COMPROMISED]",
+                inspect(
+                  {
+                    blogID,
+                    error: { message: err.message, code: err.code },
+                    lockConfig: {
+                      ttl: LOCK_STALE_TIMEOUT_MS,
+                      heartbeat: LOCK_UPDATE_INTERVAL_MS
+                    },
+                    diagnostics
+                  },
+                  { depth: null, maxArrayLength: null }
+                )
+              );
             })
             .finally(() => {
               setImmediate(() => {
@@ -183,11 +196,7 @@ function sync(blogID, callback) {
               log("Error updating cacheID of blog");
             }
 
-            client
-              .publish("blog:" + blogID + ":preview:reload", "reload")
-              .catch((err) =>
-                log("Failed to publish preview reload event", err.message)
-              );
+            previewReload.publish(blogID);
 
             callback(syncError);
           });

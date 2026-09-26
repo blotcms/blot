@@ -1,15 +1,14 @@
 {{{app_css}}}
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
 body {
-  {{#body_font}}
+  {{#font}}
   font-family: {{{stack}}};
   font-size: {{{font_size}}}px;
   line-height: {{{line_height}}};
-  {{/body_font}}
+  {{/font}}
   color: {{text_color}};
   background: {{background_color}};
   margin: 0;
@@ -25,24 +24,22 @@ a {
 }
 
 h1, h2, h3, h4, h5, h6 {
-  {{#heading_font}}
+  {{#font}}
   font-family: {{{stack}}};
-  line-height: {{{line_height}}};
-  {{/heading_font}}
+  {{/font}}
+  line-height: 1.3;
 }
 
 h1 {
-  {{#heading_font}}
-  font-size: {{{font_size}}}px;
-  line-height: {{{line_height}}};
-  {{/heading_font}}
+  font-size: {{font.font_size}}px;
+  line-height: 1.3;
 }
 
-h2 { font-size: calc({{{heading_font.font_size}}}px * 0.83); }
-h3 { font-size: calc({{{heading_font.font_size}}}px * 0.67); }
-h4 { font-size: calc({{{heading_font.font_size}}}px * 0.56); }
-h5 { font-size: calc({{{heading_font.font_size}}}px * 0.46); }
-h6 { font-size: calc({{{heading_font.font_size}}}px * 0.38); }
+h2 { font-size: calc({{font.font_size}}px * 0.83); }
+h3 { font-size: calc({{font.font_size}}px * 0.67); }
+h4 { font-size: calc({{font.font_size}}px * 0.56); }
+h5 { font-size: calc({{font.font_size}}px * 0.46); }
+h6 { font-size: calc({{font.font_size}}px * 0.38); }
 
 .site-header {
   display: flex;
@@ -87,6 +84,7 @@ h6 { font-size: calc({{{heading_font.font_size}}}px * 0.38); }
   max-height: 1.4em;
   width: auto;
   vertical-align: middle;
+  margin-right: 0.4em;
 }
 
 .site-nav a,

@@ -1,6 +1,5 @@
 {{{app_css}}}
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
@@ -9,7 +8,7 @@ body {
   text-rendering: optimizelegibility;
   background: {{background_color}};
   color: {{text_color}};
-  {{#body_font}}
+  {{#font}}
   font-family: {{{stack}}};
   font-size: {{{font_size}}}px;
   line-height: {{{line_height}}};
@@ -19,7 +18,7 @@ body {
   {{#style}}
   font-style: {{{.}}};
   {{/style}}
-  {{/body_font}}
+  {{/font}}
 }
 
 p,
@@ -30,7 +29,7 @@ figcaption {
   widows: 2;
 }
 
-{{#heading_font}}
+{{#font}}
 h1, h2, h3, .site-title {
   font-family: {{{stack}}};
   {{#weight}}
@@ -40,15 +39,15 @@ h1, h2, h3, .site-title {
   font-style: {{{.}}};
   {{/style}}
 }
+{{/font}}
 
 h1, h2, h3 {
-  line-height: {{{line_height}}};
+  line-height: 1.2;
 }
 
-h1 { font-size: {{{font_size}}}px; }
-h2 { font-size: calc({{{font_size}}}px * 0.83); }
-h3 { font-size: calc({{{font_size}}}px * 0.67); }
-{{/heading_font}}
+h1 { font-size: calc({{font.font_size}}px * 2); }
+h2 { font-size: calc({{font.font_size}}px * 1.66); }
+h3 { font-size: calc({{font.font_size}}px * 1.34); }
 
 header {
   margin: {{spacing}}em 0;
@@ -111,7 +110,7 @@ header .tags {
 .pagination {text-align: center;margin: {{spacing}}em 0}
 .pagination a {margin: 0 1em;display: inline-block;}
 
-a {color: {{accent_color}};}
+a {color: {{link_color}};}
 
 a.active {color: inherit;text-decoration: none;}
 
@@ -181,8 +180,8 @@ pre, code {
 }
 
 .entry .teaser * {
-  font-size: calc({{body_font.font_size}}px * 0.8571428571);
-  line-height: calc({{body_font.font_size}}px * 1.0714285714);
+  font-size: calc({{font.font_size}}px * 0.8571428571);
+  line-height: calc({{font.font_size}}px * 1.0714285714);
   text-align: center;
   color: {{text_color}};
 }
