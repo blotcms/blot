@@ -1,1407 +1,274 @@
-# Abstract storage layer: feasibility research
+# Abstract storage layer: design doc
 
-Goal being evaluated: introduce a storage abstraction that lets Blot (a) move
-blog folder + generated-asset storage off EBS onto S3, for cost/scalability/
-deployment reasons, and (b) enforce per-blog storage quotas — ideally with no
-read-path performance penalty, paying any cost at sync/build time instead.
+## 1. Goal
 
-**Scope note:** git-backed sync is explicitly out of scope for this effort.
-The storage layer doesn't need to know git exists; if/when git sync is
-revisited separately, its data can live in the same bucket under a prefix
-like `folder/{blogID}/gitClient/...` without the storage layer having any
-special knowledge of it.
+Move blog folder storage (`.folder`) and generated-asset storage (`.assets`)
+off EBS onto S3, for cost/scalability/deployment reasons, and enforce
+per-blog storage quotas — with no added read-path latency, paying any cost
+at sync/build time instead. Git-backed sync is out of scope; if it's
+revisited later its data can live under `folder/{blogID}/gitClient/...`
+without the storage layer needing to know git exists.
 
-**Sequencing dependency: don't start building this until `replaceFolderLinks`
-is out of the render pipeline.** [PR #1896](https://github.com/davidmerfield/blot/pull/1896)
-("Bake CDN links at build time for entries and cache template CSS/JS") is
-open and moves folder-link resolution for entries off the per-request render
-path, baking resolved CDN URLs in at build time instead of resolving them
-live on every request. This is exactly the request-time disk-read risk
-flagged in §1.2 (`lookupFile.js`'s live case-insensitive path lookups) —
-it needs to be considered solved (that PR merged, and its approach extended
-to any render-time call sites it doesn't yet cover) *before* Phase 0 below
-starts, not in parallel with it. Building the storage abstraction while
-`replaceFolderLinks` is still mid-migration would mean designing around a
-moving target for exactly the read path most sensitive to S3's added
-latency.
+## 2. Current state
 
-**Verdict up front: feasible, and the codebase is already unusually well-prepared
-for it.** The riskiest-sounding pieces — no request-time disk penalty and a
-caching layer to soften S3 latency — already exist in some form. The main
-net-new work is the abstraction itself, an SSD cache, and quota accounting
-(which doesn't exist at all today).
+- `config/index.js:87-93` derives everything off `BLOT_DATA_DIRECTORY`:
+  `blog_static_files_dir` (`/static`) and `blog_folder_dir` (`/blogs`). No
+  `app/storage` module exists yet.
+- [`app/helper/localPath.js`](app/helper/localPath.js) resolves
+  `(blogID, relativePath)` to an absolute path but does no IO — every caller
+  does its own raw `fs`/`fs-extra` call. ~60 files call `localPath`, including
+  23 in sync clients (`app/clients/*`) and 14 more that read
+  `blog_folder_dir` directly (e.g. `app/blog/routes/assets.js`,
+  `app/cdn/index.js`, `app/models/template/*`, `app/models/blog/remove.js`,
+  `app/dashboard/site/export.js`).
+- `blog_static_files_dir` has 21 non-test call sites; ~16 of them build
+  `path.join(config.blog_static_files_dir, blogID, ...)` inline with no
+  shared helper (thumbnail creation, document converters, image
+  optimization, link screenshots, dashboard uploads, blog removal/export,
+  the CDN static route). Subdirectories in use: `_thumbnails`,
+  `_image_cache`, `_assets`, `_bookmark_screenshots`, `_avatars`,
+  `_template_assets` (see §3's table for which are regenerable).
+- Both directories map to the public CDN URL as bare `{blogID}/{path}`
+  today, no scope prefix — relevant to the object-key plan in §3.
+- No exotic IO patterns — overwhelmingly `fs-extra` (`readFile`,
+  `outputFile`, `remove`, `ensureDir`, `copy`) plus `express.static()` for
+  serving. Refactor, not a rewrite.
+- Rendered HTML/CSS/JS is Redis-cached by content hash
+  (`app/blog/render/full-view-cache.js`, `app/cdn/index.js:70-113`), not
+  read from disk per request.
+- Generated assets (thumbnails, doc conversions, image optimization) are
+  built asynchronously at sync/build time and written before any visitor
+  requests them — the "pay the cost at build time" model already works for
+  this half of storage.
+- Two known uncached per-request disk reads: `lookupFile.js`'s
+  case-insensitive lookups, and `app/blog/render/retrieve/folder.js`'s live
+  `fs.readdir` + `fs.stat` per request. [PR #1896](https://github.com/davidmerfield/blot/pull/1896)
+  (baking CDN links at build time) has merged and removes most of the
+  `lookupFile.js` exposure; `retrieve/folder.js` is still live (§4c).
+- The per-blog sync lock is **not** a local-disk lockfile — it's already a
+  Redis mutex (`app/sync/lock.js`: token-checked `SET NX PX` with a
+  heartbeat), so it already works across multiple app hosts. No migration
+  needed there.
+- No per-blog storage-size accounting or quota enforcement exists, except a
+  manual audit script (`scripts/user/identify-overdue-users.js`, `du -sb`
+  against both directories for disabled accounts).
+- No AWS SDK dependency anywhere in the repo — greenfield integration.
+- Don't store bulk file content in Redis (see reverted PR #1831); Redis is
+  fine for small bounded metadata (locks, directory listings, cache
+  entries).
 
----
+## 3. Decisions
 
-## 1. Current architecture (as it stands today)
+- **Location: `app/storage`**, not `app/models/storage`. `app/models` is for
+  structured domain entities with identity; a blob store is bytes-in/out
+  keyed by path. `app/storage` sits alongside `app/models`, `app/helper`,
+  `app/clients`, `app/build` as its own top-level concern.
+- **Interface: plain functions per scope** (`storage/assets`, later
+  `storage/folder`) taking `blogID` first, e.g.
+  `assets.path(blogID, "_thumbnails", name)`. No classes — matches the rest
+  of `app/`. The API grows only as call sites need it.
+- **Naming: a small custom vocabulary** — `read`/`write`/`delete`/`list`/
+  `exists`/`size`, not `fs-extra`'s names. `fs-extra` supports operations
+  that don't map onto S3 (symlinks, `chmod`, atomic rename); reusing its
+  names would invite callers to assume that surface exists.
+- **One bucket**, not two. `.folder` under `folder/{blogID}/{path}`;
+  `.assets` at the bucket root as `{blogID}/{path}` so its keys are
+  identical to its public CDN paths (blog IDs are always `blog_<uuid>`,
+  never `folder`, so the two can't collide). Storage class is set per
+  object at write time rather than via prefix-filtered lifecycle rules.
+  Two buckets are only needed if versioning/cross-region replication is
+  wanted later (e.g. for a "restore deleted file" feature).
+- **Versioning: off**, bucket-wide.
+- **Backup: hourly `aws s3 sync` (whole bucket, no `--delete`) to
+  Backblaze B2**, US West region (closest to the app's `us-west-2`; B2's
+  region is a permanent per-account choice). No-`--delete` plus B2's
+  always-on versioning gives grow-and-expire semantics: a
+  `NoncurrentVersionExpiration` lifecycle rule (retention window TBD, see
+  §6) cleans up superseded versions without ever expiring unchanged current
+  objects. Decided over a second AWS account or Bunny Storage, for genuine
+  vendor independence (a second cloud problem shouldn't be able to take out
+  both the primary and the backup). Projected ~80% reduction in combined
+  storage + backup spend versus current EBS; figures deliberately kept out
+  of this doc.
+- **No S3 Express One Zone** — single-AZ durability is a bad trade for data
+  that already has a reduced backup posture, and its latency benefit
+  targets the same problem an SSD cache (if built, §5) would solve.
+- **Single region.** Future multi-region compute reads across the network
+  from one bucket; live multi-region storage replication would add
+  cross-region conflict-resolution risk the current single-writer-per-blog
+  lock isn't built to handle.
+- **One IAM role**, not scoped per prefix — revisit only if a concrete need
+  for narrower blast radius shows up.
+- **Separate bucket per environment** (dev/staging/prod).
+- **Dev/test: MinIO + toxiproxy** in the dev docker-compose stack, the same
+  way Redis latency is already simulated.
+- **Bunny unchanged.** The app server stays Bunny's origin in every planned
+  phase — `app/cdn/index.js` and `app/blog/routes/assets.js` keep serving
+  the same routes, just backed by S3 instead of local disk. After writing a
+  new asset, issue one GET to its public CDN URL to warm Bunny's
+  Perma-Cache (the only documented way to populate it — there's no
+  supported direct-write path). Direct-to-S3 serving is a possible later
+  step, not part of this plan.
+- **`.assets` holds non-regenerable dashboard uploads**, not just
+  generated files:
 
-### 1.1 Two directories, no IO abstraction
+  | Subdir | Written by | Regenerable? |
+  |---|---|---|
+  | `_thumbnails` | `app/build/thumbnail/create.js` | Yes, from `.folder` |
+  | `_image_cache` | `app/build/plugins/image/optimize.js` | Yes, from `.folder` |
+  | `_assets` | document converters | Yes, from `.folder` |
+  | `_bookmark_screenshots` | `app/build/plugins/linkScreenshot` | Not faithfully — source page may have changed |
+  | `_avatars` | `app/dashboard/site/save/avatar.js` | No — exists only in Blot |
+  | `_template_assets` | template editor uploads | No — exists only in Blot |
 
-`config/index.js:83-89` defines everything storage-related off one env var:
+  Nothing may wipe the whole `.assets` scope except blog deletion (today
+  `app/sync/rebuild.js` only `fs.emptyDir`s `_thumbnails`/`_image_cache`,
+  and the storage layer shouldn't expose a scope-wide delete). Quota is
+  enforced on `.folder` writes only; `.assets` bytes are tracked but not
+  capped.
+- **Bucket stays private for now.** The app is the origin in every planned
+  phase, so there's no current need for public reads. Public-read
+  `GetObject` (never `ListBucket`, never write) would be acceptable later
+  if direct-to-S3 serving is wanted — blog folders are already served
+  unauthenticated via `/folder/v-:version`, and blog IDs are UUIDs, so this
+  wouldn't be a new exposure.
 
-```
-data_directory: BLOT_DATA_DIRECTORY
-blog_static_files_dir: BLOT_DATA_DIRECTORY + "/static"
-blog_folder_dir: BLOT_DATA_DIRECTORY + "/blogs"
-```
+## 4. Caveats for moving `.folder` to S3
 
-There is no `app/storage` module today (it's a TODO item, not yet built —
-confirmed, no such directory exists). The closest thing to an abstraction is
-[`app/helper/localPath.js`](app/helper/localPath.js), which every blog-folder
-consumer calls to turn `(blogID, relativePath)` into an absolute path:
+**a. mtime is used as data — the biggest risk.** Several places treat
+filesystem mtime/ctime as meaningful, not incidental:
+- Google Drive (`app/clients/google-drive/util/download.js:44,194,411-414`)
+  and iCloud (`app/clients/icloud/sync/util/download.js:31`) set local
+  mtimes with `fs.utimes` to mirror the remote provider; iCloud's upload
+  route compares `stat.mtime` to a stored modified time for change
+  detection (`app/clients/icloud/routes/site/upload.js:47`).
+- `app/blog/render/retrieve/folder.js:71` exposes `stat.mtime` to templates
+  as `updated`.
+- `app/build/index.js:166` and `app/build/multiple.js:105-129` feed mtime
+  into entry metadata.
+- `app/build/plugins/folderAssets/index.js:317,329` and
+  `app/blog/render/replaceFolderLinks/lookupFile.js:96` hash
+  mtime+ctime+size into CDN version tokens.
+- `app/dashboard/site/folder/stat.js` shows mtime to users.
+
+S3 can't set arbitrary `Last-Modified`, and ctime doesn't exist there.
+Implication: store mtime as object metadata (e.g. `x-amz-meta-mtime`) at
+write time, have the storage layer's `stat()` return it, and migrate every
+reader above to the storage layer's `stat()` before cutover. Version tokens
+that currently hash mtime+ctime should move to a content hash / ETag
+instead.
+
+**b. Sync clients need a staging pattern, not direct S3 calls.** Google
+Drive streams to a temp file then moves it into place; Dropbox's
+`delta.js` does recursive `readdir` diffs; iCloud's `resolveCaseConflicts.js`
+resolves case conflicts via rename. These all assume a real local
+filesystem underneath and need a stage-locally-then-commit pattern against
+the storage layer, not raw S3 calls threaded through each client.
+
+**c. Request-time folder reads still exist, even after PR #1896.**
+`app/blog/routes/assets.js` serves from the blog folder with case-folding
+and index.html/.html fallbacks; `app/cdn/index.js`'s `/folder/v-:version`
+route uses `express.static()` plus `assertNoSymlinks`; `lookupFile.js`
+remains live for templates; `retrieve/folder.js` still does an uncached
+`readdir`+`stat` per request. All of these need to move onto the storage
+layer (with either a local cache or measured-acceptable S3 latency) before
+`.folder` moves. Recommendation: measure real S3 latency/throughput first
+(a sampled shadow-read alongside real reads during the dual-write phase)
+before building a caching layer — much of what would hit S3 directly is
+already narrowed by Redis-cached render output, Bunny Perma-Cache on
+generated assets, and Origin Shield deduplicating concurrent misses. Build
+an SSD-LRU cache (there's a working precedent for this pattern in
+`app/clients/icloud/macserver/watcher/monitorDiskUsage.js`) only if the
+measurement shows it's needed.
+
+**d. `app/sync/rebuild.js:113-124` processes files serially**
+(`async.eachSeries`) — a full rebuild of a large blog would turn into
+thousands of serial S3 round trips. Needs bounded concurrency (e.g.
+`async.eachLimit`) before `.folder` goes to S3.
+
+**e. ~66 `err.code === "ENOENT"` checks exist in `app/`.** The storage
+layer needs one backend-agnostic not-found signal (e.g. a `NotFoundError`
+class) that means the same thing on local disk (`ENOENT`) and S3
+(`404`/`NoSuchKey`).
+
+**f. Symlink checks become moot on S3** — `assertNoSymlinks` has nothing to
+check once the backend has no filesystem.
+
+**g. Case sensitivity.** S3 keys are case-sensitive, which removes a
+filesystem quirk rather than adding one. Case-insensitive resolution
+(today duplicated between `lookupFile.js` and `helper/caseSensitivePath.js`)
+should consolidate into one storage-layer method, exposed explicitly
+(`store.folder.resolveCaseInsensitive(path)`) rather than built into
+`.read()`'s hot path — it's specifically a user-authored-link problem
+(`![](image.JPG)` vs. `image.jpg`), not a general storage concern, and
+`.assets` paths are always Blot-generated so it doesn't apply there.
+
+## 5. Phases
+
+- **Phase 0 (in progress):** `app/storage/assets.js` centralizes
+  generated-asset paths — `path(blogID, ...segments)` and
+  `removeAll(blogID)` — over today's local disk, no behavior change. Migrate the 21 `blog_static_files_dir` call
+  sites onto it. Note: 7 of those sites hand a path to a tool that writes
+  itself (sharp's `.toFile`, pandoc `--extract-media`, puppeteer
+  screenshots, thumbnail/favicon generators), so the API shape is
+  "write locally, then commit," not `write(buffer)`. `removeAll(blogID)`
+  is the only whole-scope delete, used solely by blog deletion.
+- **Phase 1 — `.assets` first.** These files are written asynchronously,
+  content-addressed or UUID-keyed, and never change once written — the
+  simplest shape to move. Add a `commit()` hook at write sites: dual-write
+  local + S3, read-through with local as cache. The B2 backup must already
+  be running before local disk stops holding a copy — dashboard uploads in
+  this scope can't be regenerated. Warm Bunny's Perma-Cache with a GET in
+  the same async step. Add sampled shadow-read timing instrumentation here
+  to start gathering real S3-vs-local numbers.
+- **Phase 2 — `.folder`.** Grow the storage-layer API as call sites need it
+  (read/write/remove/list/stat, with mtime as metadata per §4a), migrate
+  sync clients onto a staging pattern, resolve the caveats in §4, parallelize
+  `rebuild.js`, then cut over. Add a paginated `list()` when a caller
+  actually needs pagination — `retrieve/folder.js` is the motivating case.
+  Build an SSD cache (Phase 2b) only if the Phase 1 measurements show pure
+  S3 latency is a real problem; if built, invalidate per-object using the
+  existing sync-completion pub/sub (`app/sync/index.js`'s
+  `blog:{blogID}:preview:reload` broadcast), extended to carry which paths
+  changed.
+- **Quotas** — decouple from the storage-layer build-out. Maintain a
+  per-blog byte counter in `app/sync/update` (which already sees every
+  changed path), backed by periodic `du`/`ListObjects` reconciliation to
+  catch drift. Can ship independently of, and before, the S3 work.
+
+## 6. Directory listing
+
+When `.folder` gets a listing primitive (Phase 2), make it a paginated
+`.list()` from the start — an unpaginated `readdir()`-equivalent would only
+mean migrating every call site off it again later.
 
 ```js
-module.exports = function (blogID, path) {
-  path = pathNormalizer(path);
-  const root = join(blog_folder_dir, blogID);
-  path = resolve(root, path);   // prevents escaping the blog root
-  path = join(root, path);
-  return path;
-};
-```
-
-Critically, `localPath` only resolves a **path string** — it does no IO. Every
-caller then does its own raw `fs`/`fs-extra` call against that path. That
-means:
-
-- **Blog folder** (`blog_folder_dir`): 15+ files call `localPath(...)` directly
-  and then `fs.readFile`/`fs.outputFile`/`fs.remove`/etc themselves —
-  `app/models/template/writeToFolder.js`, `removeFromFolder.js`,
-  `buildFromFolder.js`, `determineTemplateFolder.js`,
-  `app/blog/render/replaceFolderLinks/lookupFile.js`,
-  `app/blog/routes/assets.js`, `app/cdn/index.js`, `app/dashboard/site/export.js`,
-  `app/models/blog/remove.js`, plus test files and scripts.
-- **Static/generated assets** (`blog_static_files_dir`): ~19 files construct
-  paths into it directly with `path.join(config.blog_static_files_dir, blogID, ...)`
-  — thumbnail creation (`app/build/thumbnail/create.js:21`), every document
-  converter (`app/build/converters/{docx,odt,gdoc,img}/index.js`), image
-  optimization (`app/build/plugins/image/optimize.js`), link screenshots
-  (`app/build/plugins/linkScreenshot/index.js`), dashboard uploads (favicon,
-  avatar, template assets), blog removal/export, and the CDN's static file
-  route (`app/cdn/index.js:119`, `app/blog/routes/assets.js`). The per-blog
-  subdirectories in use are `_thumbnails`, `_image_cache`, `_assets`
-  (document-converter output), `_bookmark_screenshots`, `_avatars` and
-  `_template_assets` (template editor uploads) — see §2.2.2 for why the last
-  two differ from the rest.
-
-So: **no single choke point today**, but also **no exotic IO patterns** — it's
-overwhelmingly `fs-extra` calls (`readFile`, `outputFile`, `remove`,
-`ensureDir`, `copy`) plus `express.static()` for serving. That's good news: an
-abstraction layer is a mechanical (if wide) refactor, not a rewrite of business
-logic. This matches almost exactly what your own `TODO` entry proposes
-(`app/storage/index.js` exposing `storage.blogs.resolve/readFile`,
-`storage.static.writeFile`, etc., wrapping `fs-extra` initially).
-
-**Important for the object-key plan (§4.4):** both `blog_folder_dir` and
-`blog_static_files_dir` map to the public CDN URL as a bare `{blogID}/{path}`
-today, with no extra prefix. `app/cdn/index.js`'s `/folder/v-:version/...`
-route strips the `v-:version` segment (a pure cache-busting token, not part
-of any stored path) before resolving the rest of the URL against
-`blog_folder_dir` — and its static-assets route mounts `blog_static_files_dir`
-at the CDN root, so `/{blogID}/_thumbnails/...` maps directly, no prefix at
-all. Neither scope's *stored* path includes a scope-identifying prefix today —
-that only gets introduced if a bucket layout adds one (see §2.2).
-
-### 1.2 The read path already avoids per-request disk hits for the expensive stuff
-
-This directly bears on your "no penalty, or pay it at build time" requirement:
-
-- **Rendered output is cached in Redis, not read from disk per request.**
-  `app/blog/render/full-view-cache.js` wraps every render in an in-process LRU
-  (`lru-cache`, 1000 entries / 20MB, keyed by `blogID + cacheID + templateID +
-  viewName`). Underneath that, `app/cdn/index.js:70-113` shows rendered
-  template output is fetched by content hash from Redis
-  (`client.get(key.renderedOutput(hash))`), with a fallback to a legacy
-  disk-backed route (`config.data_directory + "/cdn/template"`, which `TODO`
-  already flags for removal). So the single most performance-sensitive read
-  path — serving rendered HTML/CSS/JS — has already been moved off cold disk
-  reads once, using exactly the "content-addressed, immutable" pattern that's
-  ideal for S3 + long-lived CDN caching.
-- **Generated assets are built asynchronously, not on request.** Thumbnails
-  (`app/build/thumbnail/create.js`), document conversions
-  (`app/build/converters/*`), and image optimization all run during
-  sync/build — triggered from `app/sync/index.js` → `folder.update()` — and
-  write finished files to `blog_static_files_dir` with content-addressed or
-  UUID'd paths *before* any visitor requests them. A page load never waits on
-  thumbnail generation. This is exactly the "pay the penalty at entry
-  build-time" model you want, and it's already how the system works — S3
-  upload (and, per §4.4, a Bunny cache-warm ping) would slot into the same
-  async step.
-- **The known expensive disk operations are folder-link resolution and the
-  `folder` template local — both already hit live disk per request, uncached
-  or only partially cached.**
-  `app/blog/render/replaceFolderLinks/lookupFile.js` does case-insensitive
-  path lookups against the live blog folder (with its own 5000-entry
-  in-process cache), and `TODO` explicitly flags this ("Resolve bad links...
-  at build-time rather than run-time so we can avoid the expensive disk
-  lookups"). More significantly, `app/blog/render/retrieve/folder.js` runs a
-  live `fs.readdir` + `fs.stat` per file **with no caching at all** every
-  time a template uses the `folder` local. These are the two places where
-  request-time disk I/O is a known, uncached cost today — worth resolving
-  *before* or *alongside* an S3 migration. This gets more important, not
-  less, once the blog folder moves to S3: S3 has no real directories, so
-  "readdir" becomes a paginated `ListObjectsV2` prefix scan with materially
-  different performance characteristics than a local syscall.
-- **There's already a second, independent content-cache implementation
-  worth consolidating into the same abstraction.**
-  `app/helper/transformer/index.js` is a generic content-hash cache used by
-  image-cache/optimize and other transforms: it stores result *metadata* in
-  Redis but writes/reads the actual files by re-deriving paths into
-  `blog_static_files_dir` (and, on fallback, the blog folder) independently
-  of `helper/localPath` — i.e. it duplicates path-resolution and
-  case-insensitive-fallback logic rather than sharing it. This is a second
-  candidate consumer for the new `app/storage` abstraction, and a good
-  argument for building the abstraction before adding S3, since two
-  independent ad-hoc path-resolution implementations already exist and a
-  third (S3 key construction) would only compound the drift.
-
-### 1.3 Blog-folder writes are already serialized per-blog, but the lock is local-disk-based
-
-`app/sync/index.js:64` acquires a `proper-lockfile` lock **on the blog's own
-directory on local disk** (`lockPath = localPath(blogID, "/")`) before any
-sync writes happen, with a 10s stale timeout and 3s heartbeat. This is what
-currently prevents concurrent Dropbox/Google Drive/git syncs from racing on
-the same blog folder.
-
-This matters for the "horizontal scalability" goal independently of S3: a
-local-filesystem lock only works because sync for a given blog always runs on
-one box today. Confirmed via `scripts/deploy/constants.js:44-101`: production
-is currently **one EC2 host** running three containers (BLUE/GREEN/YELLOW,
-plus a separate AIRLOCK sidecar), all bind-mounting the *same*
-`DATA_DIRECTORY_ON_SERVER` (`/var/www/blot/data`) — i.e. one EBS volume
-shared by same-host containers, not multiple hosts sharing a bucket yet. So
-"multiple node servers interacting with the same S3 bucket" is a real future
-goal — the TODO's own framing is that S3 is the *prerequisite* for going
-multi-host/multi-region ("Once this is done, the nginx + node server is
-'stateless' and could be replicated easily across aws regions"), not a fix
-for an existing multi-host bottleneck. But moving to S3 without also moving
-this lock to something shared (Redis-based distributed lock — you already run
-Redis, e.g. via Redlock) would silently reintroduce race conditions the
-moment a second app box exists. **S3 alone doesn't solve concurrency; the
-lock has to move too.**
-
-Worth noting separately: production already has an instance-store-backed
-path mounted at `/var/instance-ssd` (used today for openresty/nginx logs, per
-prior investigation of this box) — so the "huge ephemeral SSD" you want to
-use as a cache layer is likely already provisioned on the host and just
-needs a data directory carved out on it, not new infrastructure. By contrast,
-nothing in `scripts/` or the app today uses instance-store for blog data —
-even `tmp_directory` (`config/index.js:85`, used for Pandoc's intermediate
-output and downloaded transformer sources) currently sits on the *same*
-disk as persistent blog data, so there isn't yet any fast/slow tiering
-in the app layer at all, on any disk.
-
-### 1.4 A near-identical SSD-LRU-cache pattern already exists in production code
-
-`app/clients/icloud/macserver/watcher/monitorDiskUsage.js` implements exactly
-the pattern you're describing for the S3 caching layer, just for a different
-subsystem (the Mac-mini iCloud watcher, which has a fixed local disk budget
-for a shared iCloud Drive folder representing many blogs):
-
-- Polls total disk usage via `du -sk` every 15s against a 10GB cap
-  (`MAX_DISK_USAGE_BYTES`).
-- Tracks last-touched time per blog in an in-memory `Map`.
-- Evicts least-recently-updated blogs first when over budget, re-checking
-  usage after each eviction.
-
-This is a working, tested precedent for "local SSD as an LRU cache over
-a larger backing store" in this exact codebase — worth reusing/generalizing
-rather than designing from scratch. The blog-folder SSD cache you're
-describing is structurally the same problem (bound local disk, evict
-least-recently-used blog, re-fetch from source of truth on next access).
-
-### 1.5 Nothing computes per-blog storage size today, except one offline audit script
-
-Confirmed by searching: there is no per-blog folder size calculation wired
-into any request, sync, or enforcement path, and no quota enforcement. This
-matches `TODO`'s own list of unimplemented items ("Handle storage quota
-errors", "Bug: add a check for folder storage before doing mass upload",
-"Bug: handle folder full error appropriately"). The one exception is a manual
-audit tool, `scripts/user/identify-overdue-users.js`, which shells out to
-`du -sb` against both `blog_static_files_dir/{blogID}` and
-`blog_folder_dir/{blogID}` for disabled/unpaid accounts to report reclaimable
-space — not automated, not per-blog-quota, but a useful precedent for a
-reconciliation script (see the Phase list below). Quotas are otherwise net-new
-work, not a refactor — good place to build them directly into the
-abstraction layer's write path (increment a per-blog byte counter on every
-write through the layer, rather than re-`du`-ing the whole folder), with the
-`du`-based script's approach reused periodically to catch counter drift.
-
-### 1.6 No AWS SDK dependency exists yet
-
-`package.json` has no `aws-sdk`/`@aws-sdk/*`. There's no S3 usage anywhere in
-`app/`, `config/`, or `scripts/` currently — this is a greenfield integration,
-not touching/replacing an existing AWS client. Redis (`redis` 6.1.0,
-`ioredis`-free — plain `redis` client) and `fs-extra` are the only
-storage-adjacent dependencies in place.
-
-### 1.7 CDN static serving reads straight off local disk today — this is the actual latency risk
-
-`app/cdn/index.js` and `app/blog/routes/assets.js` both use `express.static()`
-directly against `blog_folder_dir` / `blog_static_files_dir` /
-`GLOBAL_STATIC_FILES`. Bunny sits in front of this as the CDN edge, and
-**Bunny's pull zone origin is the Blot app server itself** (confirmed by
-`app/cdn/index.js` acting as a full origin-serving router) — not S3 or Bunny
-Storage directly. That means the S3 migration itself can be entirely
-invisible to Bunny (§4.4), and only the *later*, optional "point Bunny
-straight at S3" optimization needs Bunny-side changes.
-
-This is the one place where "no performance penalty" is genuinely at stake:
-today, a CDN (Bunny) cache miss means one local disk read on the origin.
-Under S3, the same miss means a network round-trip to S3 unless mediated by
-the SSD cache layer. The SSD LRU cache in front of these routes (per §1.4)
-keeps this invisible for warm assets; only cold/evicted ones touch S3, and
-those are rare by definition (Bunny already permacaches most of this traffic
-per your own note — confirmed as a real, named Bunny feature, Perma-Cache,
-see §4.4).
-
-### 1.8 Prior art / caution: don't reach for Redis as bulk storage again
-
-[Redis hash entry storage rollout] — a related-but-different effort (moving
-entry storage into Redis hashes) was fully reverted in PR #1831 after causing
-a production performance regression and not solving the problem it targeted
-(nashp/anchor slowness). That's not a reason to avoid Redis for *metadata*
-(directory listings, file sizes, lock state — small, bounded, already how
-rendered-output caching works per §1.2) — but it's a concrete reason to keep
-Redis out of the *bulk file content* path, and to benchmark under realistic
-concurrent load (you already have `toxiproxy` wired up for exactly this) before
-trusting a new Redis-based scheme in production.
-
----
-
-## 2. Decisions made so far
-
-Captured here as they're made, so this doc stays the single source of truth
-rather than scattered across chat.
-
-### 2.1 Abstraction shape
-
-- **Location: `app/storage`, not `app/models/storage`.** `app/models` is
-  scoped to *structured domain entities with identity* — records with a
-  `scheme.js`/`key.js`/fields, currently Redis-backed but not
-  Redis-exclusive by design (SQL is plausible for some models later, e.g.
-  for full-text search). A blob-storage layer doesn't have that shape at
-  all — it's bytes in/out keyed by path, with no scheme or fields. The
-  axis that decides placement is "structured entity vs. opaque blob," not
-  "Redis vs. other backing store," and those are orthogonal — so
-  broadening what `models` can be backed by doesn't pull storage in with
-  it. Practically, `models/blog`, `models/template`, etc. will *depend on*
-  the storage layer (the same relationship they already have with
-  `models/client` for Redis), not contain it — `app/storage` sits
-  alongside `app/models`, `app/helper`, `app/clients`, `app/build` as its
-  own top-level concern, matching how the repo already separates
-  cross-cutting subsystems.
-
-- **Interface shape: a scoped handle per blog (`storage.for(blogID)`),
-  not a class, not flat functions only.** `storage.for(blogID)` returns
-  a cheap, stateless object (no connection/lifecycle to manage — nothing
-  here is a real resource) exposing one property per named scope, e.g.
-  `.folder` and `.assets`:
-
-  ```js
-  const store = storage.for(blogID);
-  await store.assets.write(path, buffer);
-  await store.folder.read(path);
-  ```
-
-  A plain factory function rather than `new Storage(...)` — the rest of
-  `app/` is written as exported functions/modules, not classes, so a
-  constructor would be the only one in the codebase. Flat functions
-  (`storage.folder.read(blogID, path)`) can still exist as a thin wrapper
-  calling `for` internally, for call sites that only ever do one
-  operation.
-
-- **Naming: a deliberately small, custom vocabulary — not `fs-extra`'s
-  method names.** `read`/`write`/`delete`/`list`/`exists`/`size`, not
-  `readFile`/`outputFile`/`remove`/`readdir`. `fs-extra` supports
-  operations that don't map onto S3 at all (symlinks, `chmod`, `watch`,
-  atomic rename), and reusing its names would invite callers to assume
-  that whole surface is available. A smaller custom vocabulary is also
-  easier to `grep`-distinguish from raw `fs` calls during the incremental
-  migration, and is a smaller contract to keep behaviorally identical
-  across local disk, the SSD cache, and S3.
-
-- **Each named scope (`.folder`, `.assets`, and any added later) is
-  configured independently** — its own key prefix, storage class, and
-  lifecycle rules are set once per scope in the storage layer's config,
-  not passed by callers on every call (this holds even though both scopes
-  now live in one bucket — see §2.2). Callers just say *what* and *where
-  within their blog*; the layer owns *which prefix/class/lifecycle* a
-  given scope maps to.
-
-- **Streaming is a first-class part of the interface, not an afterthought.**
-  Confirmed this is workable with S3: uploads of arbitrary size stream via
-  `@aws-sdk/lib-storage`'s `Upload` class (handles multipart automatically,
-  accepts a Node `Readable` as `Body`, no need to know the total size or
-  buffer it all in memory first); downloads stream via
-  `GetObjectCommand`'s response, whose `Body` is a Node `Readable` that can
-  be piped directly to a response or another destination. So alongside
-  whichever buffer-based methods exist (`read`/`write`), the interface
-  should also expose stream-shaped equivalents (e.g.
-  `store.folder.createReadStream(path)` / `createWriteStream(path)`) backed
-  by the same machinery, for large files (folder exports, big media) that
-  shouldn't be forced through memory.
-
-- **Quota accounting is generic across scopes, but only enforced for
-  `.folder`.** The byte-counter machinery lives in the storage layer for
-  both `.folder` and `.assets` (useful for ops/debugging either way), but
-  the user-facing quota cap only checks and rejects on `.folder` writes —
-  nothing in `.assets` (generated files or dashboard uploads, §2.2.2) is
-  counted against the user's limit.
-
-A **cross-cutting requirement that falls out of the above, still needing an
-explicit answer**: 64 call sites today branch on `err.code === "ENOENT"`
-from raw `fs` calls (confirmed via search). Whatever error type the
-interface throws needs one clear, backend-agnostic "not found" signal (e.g.
-a `NotFoundError` class) that means the same thing whether the backend is
-local disk (`ENOENT`) or S3 (`404`/`NoSuchKey`) — this hasn't been decided
-yet, just flagged as necessary.
-
-### 2.2 Bucket topology — revised: one bucket, not two
-
-Earlier in this research a two-bucket split (`.folder` versioned + CRR'd,
-`.assets` unversioned) was proposed to resolve a tension between "versioning
-off" and "S3 replication needs versioning." That's now superseded by a
-simpler framing that changes the risk calculus:
-
-**Key reframe: losing `.folder` data, while bad, is not catastrophic for
-most blogs.** Blot's copy of a blog folder is, for most blogs, a replica —
-the user's Dropbox/Google Drive/iCloud/git client holds its own copy
-independently, so a full resync can recover from most data loss scenarios.
-That changes S3-native versioning/replication from "the only thing standing
-between you and permanent loss" to "a nice-to-have," and periodic
-cross-account backup becomes an acceptable safety net rather than a
-compromise.
-
-**The one caveat raised earlier is now resolved, not just noted.**
-`app/clients/local` was flagged as a possible exception — a blog with no
-external synced copy, where Blot's own copy would be the only one. Confirmed
-this doesn't apply to any real, production blog: the local client is
-registered only when `config.environment === "development"`
-(`app/clients/index.js`), so it's not just discouraged for production use,
-it's structurally absent from the client registry in production — there is
-no dashboard flow or configuration path by which a real, user-facing blog
-could ever end up on it. (Documented explicitly now in
-[`app/clients/local/README`](app/clients/local/README), including a note
-that changes to this module should preserve that property.) So the "real
-users have their own copy" framing holds unconditionally for every
-production blog — every client available to a real user (Dropbox, Google
-Drive, iCloud, git, SFTP-style clients) syncs from an external source Blot
-doesn't own.
-
-**This reframe covers `.folder` only, not `.assets`.** Dashboard uploads —
-template editor uploads (`_template_assets`) and avatars (`_avatars`) — are
-stored in `.assets` (§2.2.2) and exist *only* in Blot: no sync client holds
-a copy, and nothing can regenerate them. So `.assets` can't be treated as
-disposable, and the backup below covers it too.
-
-Given that, the decided shape is:
-
-- **One bucket**, with `.folder` under a `folder/{blogID}/{path}` prefix
-  and `.assets` at the bucket root as `{blogID}/{path}` — not two buckets.
-  `.assets` gets no scope prefix so its keys are identical to its public
-  CDN paths (§2.3, §4.4). The two can't collide: blog IDs are always
-  `blog_<uuid>`, never `folder`. `.folder` and `.assets` still get
-  different storage classes without separate buckets — set per object at
-  write time (§4.1), not via prefix-filtered lifecycle rules, which can't
-  express "everything except `folder/`". The only thing that *forces* a
-  bucket split is differing versioning, and versioning is now off for
-  both, so there's no forcing function left. One bucket is simpler to
-  operate (one policy, one set of credentials, one place to look).
-- **Versioning: off**, bucket-wide. No longer in tension with anything,
-  since backup is handled by scheduled sync rather than S3-native version
-  history.
-- **Backup: scheduled, periodic sync to Backblaze B2**, covering the whole
-  bucket — both `.folder` and `.assets`. `.assets` is *not* fully
-  regenerable from `.folder` (dashboard uploads exist only in Blot, see
-  §2.2.2), so it needs the same protection. Backing up the whole bucket is
-  simpler and less error-prone than enumerating which `.assets` subdirs are
-  irreplaceable, at the cost of also copying regenerable thumbnails and
-  image-cache files. **Decided over a
-  same-provider (separate AWS account) destination**, specifically for true
-  vendor independence: a separate AWS account still means "AWS" is the
-  single company whose failure modes (account compromise, billing lockout,
-  a bug in how you've configured cross-account access) could affect both
-  copies at once. B2 is a fully separate company and infrastructure. Also
-  decided over Bunny Storage (which, as of a 2026 update, is now genuinely
-  S3-compatible too) for a related reason: Bunny is already your CDN
-  vendor, so using it for backup too would mean a single Bunny-side problem
-  could take out your CDN *and* your offsite copy simultaneously — the
-  opposite of what "genuinely offsite" is meant to protect against. B2 is
-  also the more S3-feature-complete option for this specific job (it
-  supports lifecycle rules; Bunny's S3-compatible API currently doesn't),
-  which matters for the retention-window approach below. This is close to
-  what today's rolling EBS backups already provide, and matches the relaxed
-  risk tolerance above. **Frequency: hourly, at worst** (your ceiling) —
-  see §4.6 for exactly how this runs, what it costs, and §4.8 for a full
-  current-vs-future cost comparison against today's EBS spend.
-- **A dashboard "restore this deleted file" feature (next to entries in the
-  sync history log), using S3 version history, was considered and
-  shelved** — plausible if versioning were on, but you weren't confident
-  it'd see enough use to justify the versioning cost/complexity it would
-  require. Worth revisiting only if it comes up again as a real ask; it
-  would mean turning versioning back on for at least the `folder/` prefix,
-  which — now that `.folder` and `.assets` share a bucket — would mean
-  either turning it on bucket-wide (paying the versioning cost on
-  `.assets` too, for little benefit — its files are written once and never
-  overwritten) or splitting back into two buckets after all. Worth
-  remembering as the reason a future "let's add restore" ask isn't free.
-- **No S3 Express One Zone.** Still applies for the same reasons as before
-  (§4.2): single-AZ durability is a bad trade for the one copy of
-  irreplaceable-ish data you have, and the SSD cache already targets the
-  latency problem Express One Zone solves.
-- **Cross-region for future multi-region compute: not needed at the storage
-  layer.** Confirmed — app servers in any region should just read across
-  the network from the single bucket's region, leaning on the SSD cache the
-  same way same-region servers do. Live multi-region storage replication
-  would add real consistency risk (async replication, no cross-region
-  conflict resolution) that the current single-writer-per-blog lock model
-  isn't built to handle, for a benefit you don't need yet.
-
-### 2.2.1 The bucket can be public-read — worked through, and it holds up
-
-You raised this because Blot's own user docs already state there's no
-expectation of privacy for folder contents, and asked whether that
-simplifies the Bunny question. It does, and the reasoning holds up under
-scrutiny:
-
-- **This isn't a new exposure, it's the same exposure Blot already has.**
-  `app/cdn/index.js`'s `/folder/v-:version/...` route already serves any
-  file in a blog's folder to anyone who requests it, unauthenticated, with
-  no publish-status check — the only thing standing between "the internet"
-  and a given file today is knowing the exact `blogID` + path. A public S3
-  bucket with plain `GetObject` access doesn't remove or weaken that
-  barrier; it's the same barrier.
-- **That barrier is real, not security-by-obscurity theater, because
-  `blogID` isn't guessable.** Confirmed in `app/models/blog/generateID.js`:
-  a blog ID is `blog_` + a full UUIDv4 (128 bits of randomness), not a
-  sequential or predictable value. So "must know the blogID" is a
-  meaningful barrier against a stranger stumbling onto content, even though
-  it's not a barrier against someone who already has a specific blog's ID
-  and a path within it (which, again, is already true today).
-- **The one guardrail worth keeping regardless: no `s3:ListBucket`.** Public
-  `GetObject` on a known key is equivalent to today's exposure; public
-  `ListBucket` would not be — it would let anyone enumerate every blogID and
-  every file path in the bucket, which is a strictly new capability nobody
-  has today (there's no equivalent "list all blogs" endpoint). This costs
-  nothing to withhold and should be an explicit, deliberate part of the
-  bucket policy, not an oversight either way.
-- **"Public" must mean public-*read* only.** Write access stays exclusively
-  through the app's IAM role (§2.3) — the bucket policy grants anonymous
-  `GetObject`, never `PutObject`/`DeleteObject`. Worth stating plainly since
-  "public bucket" could otherwise be misread as public read-write, which
-  would let anyone overwrite or delete any blog's files.
-- **One real exception, not a reason to reconsider, just a boundary to
-  respect:** this reasoning applies to *blog folder content* — what a
-  synced client actually writes, which is what "no expectation of privacy"
-  in the user docs is about. It would not apply to Blot-internal bookkeeping
-  data that happens to end up in the same bucket but isn't blog content in
-  that sense. The clearest example: if git-backed sync is ever revisited
-  (out of scope here, but §1's scope note left the door open to storing its
-  data under `folder/{blogID}/gitClient/...`), a bare git repo's internals
-  are Blot's own sync machinery, not "the folder contents" — they're a
-  different thing than what the privacy statement covers, and shouldn't
-  inherit this bucket's public-read policy by default. If/when that's
-  revisited, it should get a genuinely private prefix or bucket, not just
-  land under the public `folder/` prefix because it's convenient. Worth
-  keeping in mind for the Phase 0/1 migration too: don't let any
-  Blot-internal bookkeeping (lock files, partial-write temp files, etc.)
-  leak into the public `folder/{blogID}/` key space — it should only ever
-  contain what the sync clients actually wrote.
-
-**How this simplifies Bunny (§4.4):** the previously-open question — does
-Bunny support authenticated/signed origin requests to a private S3 bucket —
-no longer needs an answer. A public bucket works with Bunny's plain,
-documented Origin-URL-as-HTTPS-endpoint mechanism (exactly what their own S3
-integration guide shows), so the direct-to-S3 optimization no longer has an
-unresolved dependency on an unconfirmed Bunny feature.
-
-### 2.2.2 `.assets` holds dashboard uploads too — not everything in it is regenerable
-
-Template editor uploads and avatars reuse the `.assets` mechanism rather
-than getting a scope of their own. Like the other files in `.assets`, they
-never change once written (a replacement upload gets a new UUID filename),
-are public, can be cached forever, and are fine on cheaper storage classes.
-What makes them different is where they come from, not how they're stored:
-
-| Subdir | Written by | Regenerable? |
-|---|---|---|
-| `_thumbnails` | `app/build/thumbnail/create.js` | Yes, from `.folder` |
-| `_image_cache` | `app/build/plugins/image/optimize.js` | Yes, from `.folder` |
-| `_assets` | document converters (`app/build/converters/*`) | Yes, from `.folder` |
-| `_bookmark_screenshots` | `app/build/plugins/linkScreenshot` | Not faithfully — the linked page may have changed |
-| `_avatars` | `app/dashboard/site/save/avatar.js` | **No** — exists only in Blot |
-| `_template_assets` | template editor uploads (`app/dashboard/site/template/save/upload-{image,favicon,local}.js`) | **No** — exists only in Blot |
-
-What follows from this:
-
-- **Backed up with the rest of the bucket** (§2.2, §4.6), and the backup
-  must be running before any `.assets` data is S3-only (§3, Phase 1).
-- **Not counted against the user's quota** (§2.1) — unchanged.
-- **Nothing may wipe the whole `.assets` scope** except blog deletion.
-  Regeneration today empties named subdirs only (`app/sync/rebuild.js`
-  runs `fs.emptyDir` on `_thumbnails` and `_image_cache`), and it must stay
-  that way. The storage layer shouldn't expose a scope-wide delete for
-  `.assets`, so a "clear and regenerate everything" operation can't be
-  written by accident.
-- **Template locals keep storing full CDN URLs** (e.g.
-  `{config.cdn.origin}/{blogID}/_template_assets/{uuid}.webp`). Because
-  `.assets` keys match these paths exactly (§2.3), nothing stored in Redis
-  needs rewriting at migration time.
-- **Deleting old files is uneven today.** `upload-image.js` and
-  `upload-favicon.js` check every template of the blog before deleting a
-  replaced file (duplicated templates share files); `upload-local.js` and
-  `avatar.js` never delete the old file, so replaced uploads are orphaned.
-  A future template-editor asset library (root `TODO`) would build on
-  `_template_assets` in this scope rather than adding a new one.
-
-### 2.3 Operational decisions
-
-- **IAM: one role**, not scoped separately per prefix/scope. Simplest
-  option; revisit only if a concrete need for narrower blast radius shows up.
-- **Dev/test: a local S3-compatible mock (leaning MinIO) in the dev
-  docker-compose stack, paired with `toxiproxy`** the same way Redis
-  latency is already simulated today — mild preference, mainly to keep
-  iterative work on PRs fast and dedupe hitting real AWS from CI/dev. MinIO
-  is the default suggestion (widely adopted, actively maintained, easy
-  Docker image) over alternatives like LocalStack (broader multi-service
-  scope than needed here) or `s3rver` (lighter, but less actively
-  maintained) — not a strongly-researched pick, just a reasonable default
-  worth revisiting if it causes friction.
-- **Separate buckets per environment** (dev/staging/prod), rather than one
-  bucket with an environment-prefixed key space.
-- **Object key layout: preserve existing per-blog relative paths 1:1**,
-  rather than restructuring during migration. `.assets` keys are exactly
-  today's public CDN paths — `{blogID}/_thumbnails/...`,
-  `{blogID}/_template_assets/...` etc., no scope prefix — so no path
-  rewriting is ever needed to serve them straight from the bucket (§4.4). `.folder` keys are `folder/{blogID}/{path}`.
-
-### 2.4 Directory listing: paginated from day 1, no separate `.readdir()`
-
-You asked whether the first pass should ship an unpaginated `.readdir()` to
-be deprecated later in favor of a paginated `.list()`. Recommend skipping
-that step entirely — go straight to a paginated `.list()` as the only
-directory-listing primitive, even in Phase 0 before S3 exists. Building an
-unpaginated method now, only to migrate every call site off it again later,
-means paying the "visit every call site" cost twice for no benefit; better
-to pay it once, now, while the abstraction is new and call sites are already
-being touched.
-
-**S3 side (confirmed this maps cleanly):** `ListObjectsV2` is natively
-paginated — up to 1,000 keys per call, with an opaque
-`NextContinuationToken` for the next page. Passing `Delimiter: "/"` groups
-one-level-deep "subdirectories" into `CommonPrefixes` rather than flattening
-every nested file, which is what gives filesystem-`readdir`-like semantics
-(one level, not fully recursive) instead of a flat key dump. `.list()`'s
-cursor can just be S3's own continuation token for that backend — no
-reimplementation needed.
-
-**Local-disk side, before S3 exists — also worth fixing now, not just
-matching S3's shape:** today's crash risk (`app/blog/render/retrieve/folder.js`'s
-live `fs.readdir`, per §1.2) comes specifically from `fs.readdir` buffering
-an entire directory's entries into memory at once. Node's
-`fs.promises.opendir()` gives an async-iterable directory handle that yields
-entries one at a time without buffering the whole listing — implementing
-the local backend's `.list()` on top of `opendir` (page-sized batches off
-the iterator, cursor = how many entries consumed so far) actually starts
-fixing the memory-crash risk immediately, in Phase 0, independent of
-whether S3 has landed yet — not just a shape to match later.
-
-**Proposed interface:**
-
-```js
-// Paginated primitive — the only listing method, safe for huge directories
 const { entries, cursor } = await store.folder.list(path, { cursor, limit });
-// cursor is opaque and backend-specific (S3's continuation token, or an
-// opendir-position marker for local disk) — callers just pass it back
-
-// Convenience wrapper for callers that genuinely need everything at once
-// and can tolerate buffering it — implemented in terms of .list() above,
-// looping until cursor is null
-const allEntries = await store.folder.listAll(path);
+const allEntries = await store.folder.listAll(path); // buffers everything; for callers that can afford it
 ```
 
-`.listAll()` exists for callers like `buildFromFolder`'s directory scan or
-the quota-reconciliation script, which really do need a full listing and can
-afford to buffer it. The render-facing `folder` template local — the one
-place a huge directory has actually caused problems — should be migrated to
-call `.list()` directly with real pagination surfaced (or a hard cap),
-never `.listAll()`, since buffering the whole thing there is the exact
-failure mode being fixed.
-
-**One open tradeoff, not yet resolved:** `opendir`'s streaming iteration
-doesn't guarantee a stable sort order the way a pre-sorted array would, and
-a meaningful opaque cursor generally wants a stable order to paginate
-against safely. If the `folder` template local (or any other consumer)
-needs deterministic (e.g. alphabetical) ordering, that's a real design
-constraint that may require the local backend to still do more work than
-pure unbuffered streaming — worth deciding explicitly rather than assuming
-either "insertion order is fine" or "must be sorted" by default.
-
-### 2.5 Case-insensitive path resolution: a separate, explicit method, not seamless
-
-Today this logic exists at least twice, duplicated: `lookupFile.js`'s
-case-insensitive fallback (its own 5,000-entry in-process cache, per §1.2)
-and `helper/caseSensitivePath.js` (used by `app/blog/routes/assets.js` and
-elsewhere). Recommend consolidating both into one storage-layer method,
-exposed explicitly rather than built silently into `.read()`:
-
-```js
-// Explicit, opt-in — callers invoke this themselves on a miss
-const resolvedPath = await store.folder.resolveCaseInsensitive(path);
-```
-
-**Why opt-in rather than seamless:** the vast majority of `.read()` calls
-are for paths Blot itself generated and will always read back with identical
-casing (template files, thumbnail keys, anything round-tripped internally) —
-case mismatches are specifically a *user-authored-link* problem (someone
-writing `![](image.JPG)` in a post when the real file is `image.jpg`), not a
-general storage concern. Building the fallback into `.read()`'s hot path
-would mean every internal caller silently carries the cost/complexity of a
-capability only one class of caller (folder-link resolution, i.e. whatever
-succeeds `replaceFolderLinks`/PR #1896's baking mechanism) actually needs —
-against the "small, deliberate vocabulary" principle from §2.1. An explicit
-method also makes it obvious at the call site that "this is specifically
-working around user sloppiness," which is worth being visible in code
-review.
-
-**How it should work**, reusing pieces already decided elsewhere in this
-plan:
-1. Try the exact path first (equivalent to a plain `.exists()`/`.read()`).
-2. On a miss, list the containing directory via `.list()` (§2.4) and find a
-   case-insensitive match among the entries.
-3. Cache the *resolved mapping* (requested path → actual path, or "no
-   match") aggressively, keyed by `(blogID, blog.cacheID, requestedPath)` —
-   reusing the exact invalidation trigger (`cacheID` bump on any blog
-   change) the render pipeline already relies on elsewhere
-   (`full-view-cache.js`, `lookupFile.js`'s own cache), so this doesn't
-   invent a new invalidation convention.
-4. **Back that cache with Redis, not just an in-process `Map`.** An
-   in-process cache only helps whichever single app instance happened to
-   resolve a given path first; once multiple app boxes exist (§1.3, §4.3),
-   every other instance would redundantly redo the same directory listing.
-   Redis is already the established place for small, bounded metadata like
-   this (§1.8) — the resolved-path cache fits that description exactly.
-5. Scope this to `.folder` only — `.assets` paths are always
-   Blot-generated and read back by Blot itself, so case mismatches can't
-   structurally occur there; there's nothing to resolve.
-
-### 2.6 SSD cache invalidation: per-object, not per-blog — and why `cacheID` is the wrong trigger for this specific cache
-
-You raised this as needing "some kind of content hash tracking" — the
-diagnosis is right, and it's worth separating two different problems that
-"cacheID" conflates elsewhere in this codebase:
-
-- The render caches (`full-view-cache.js`, `lookupFile.js`) invalidate
-  everything for a blog on any `cacheID` bump because a single file change
-  *could*, in principle, affect any rendered page (via includes, archives,
-  menus, etc.) — a full dependency graph would be needed to invalidate more
-  precisely, so blanket invalidation is a reasonable, deliberate tradeoff
-  there.
-- The SSD cache is different: it holds raw file *bytes*, and one file's
-  bytes have zero bearing on whether another file's cached bytes are still
-  valid. Tying SSD cache invalidation to `cacheID` would mean a sync that
-  touches a single file forces eviction of the *entire* blog's cached
-  working set on next access — exactly the problem you're flagging, and
-  strictly unnecessary given the cache is keyed per-file already.
-
-**The fix falls out of the abstraction itself: since every write already
-goes through the storage layer, the write path knows exactly which single
-object just changed — invalidation can be precise for free, not detected
-after the fact.** Two mechanisms working together, for the two different
-staleness sources:
-
-1. **Same-instance writes — direct, immediate, no cache-check needed.**
-   When `storage.for(blogID).folder.write(path, data)` runs on a given
-   box, that box's own local SSD cache entry for `(blogID, path)` gets
-   updated (or evicted) directly, right there, since the new content is
-   already in hand. Zero extra I/O, zero reliance on a hash or timestamp.
-2. **Cross-instance writes — the real reason "content hash tracking" is
-   needed.** Once multiple app boxes exist (§1.3, §4.3), each with its own
-   local SSD cache, a write on box A doesn't automatically inform box B's
-   cache. Recommend extending the pub/sub broadcast that already happens at
-   the end of every sync — `app/sync/index.js` already does
-   `client.publish("blog:" + blogID + ":preview:reload", "reload")` when a
-   sync changes something — to also carry *which specific paths* changed,
-   not just "this blog changed." Every app instance subscribes and evicts
-   (or refreshes) exactly those SSD cache entries. This reuses
-   infrastructure and a pattern that already exists at exactly the right
-   point in the code, rather than inventing a new one, and gives per-object
-   granularity, not per-blog.
-3. **A content-hash safety net, for the case pub/sub misses** (an instance
-   was down during the publish, a message was dropped, etc.): store each
-   object's S3 ETag (a content hash, given to you for free on every S3
-   PUT/GET/HEAD response) alongside its SSD-cached copy. A periodic
-   reconciliation sweep — similar in spirit to the quota reconciliation
-   already planned in §3 — can spot-check cached entries' ETags against S3
-   and evict mismatches, catching the rare missed-invalidation case without
-   making every read pay a validation cost.
-
-This means "content hash tracking" ends up as a background safety net, not
-the primary invalidation mechanism — the primary mechanism is the pub/sub
-broadcast, which is cheaper (no per-read S3 HEAD check) and more immediate.
-
----
-
-## 3. What a storage abstraction should look like, given the above
-
-This tracks your own `TODO` sketch closely, refined by the decisions above:
-
-```
-app/storage/
-  index.js   # storage.for(blogID) -> { folder: {...}, assets: {...} }
-             # storage.folder.*(blogID, ...) / storage.assets.*(blogID, ...) as flat wrappers
-```
-
-- **Phase −1, a hard prerequisite, not part of this abstraction's own
-  work:** land PR #1896 (or its approach extended to any remaining
-  live-render-time folder-link lookups) — see the sequencing note at the
-  top of this doc. Don't start Phase 0 while this is still in flight.
-- **Phase 0 (do this regardless of S3):** implement the abstraction as a thin
-  wrapper over today's `fs-extra` calls against local disk, with *no behavior
-  change*, and migrate the ~30+ direct call sites onto it. This alone pays for
-  itself: it's the only way to add per-blog size accounting (§1.5) without a
-  disk scan, and it's the prerequisite for everything else. Low risk, pure
-  refactor, testable file-by-file. Includes building `.list()` paginated
-  from day 1 (§2.4) — the local-disk `opendir`-backed implementation starts
-  fixing today's huge-directory crash risk immediately, before S3 is even
-  in the picture — and a small, short-TTL, in-process write-through
-  memoization scoped to a single sync operation (§4.9), so a `write()`
-  followed shortly by a `read()` of the same path within one
-  `folder.update()` doesn't pay a redundant round trip. This is
-  independent of, and much cheaper than, the Phase 2b decision below.
-- **Phase 1 — `.assets` first**, not blog folders. These files are
-  mostly written asynchronously at build time (§1.2), all content-addressed
-  or UUID-keyed, and never change once written — the simplest shape to move.
-  Unlike thumbnails, though, the dashboard uploads in this scope
-  (`_template_assets`, `_avatars`, §2.2.2) can't be regenerated, so **the B2
-  backup (§4.6) must be running before local disk stops holding a copy of
-  `.assets`**, not added afterwards. Dual-write to
-  S3 + local disk, read-through with the local copy as cache, and (per
-  §4.4) issue a Bunny cache-warm request in the same async step so the
-  first real visitor doesn't pay a cold miss. Confirms your own instinct in
-  `TODO` ("we probably don't need a caching layer for static files since
-  static files will end up in CDN storage after first request").
-- **Phase 2a — blog folder source files, S3-direct, deliberately *without*
-  the SSD cache at first.** Move `.folder` to S3 as the source of truth,
-  with no local caching layer yet, and measure real latency/throughput in
-  production against actual traffic before building anything more. See
-  §4.9 for why this has a real chance of being sufficient on its own — if
-  it holds up, Phase 2b (the cache) may not be needed at all, which is a
-  meaningfully simpler system (no eviction policy, no cross-instance
-  invalidation problem in §2.6, nothing to keep consistent). This phase
-  must also replace `folder.js`'s live per-request `readdir`/`stat` (§1.2)
-  with `.list()` (§2.4), land the consolidated case-insensitive resolution
-  method (§2.5), **and parallelize `rebuild.js`'s serial
-  `async.eachSeries` file-processing loop (§4.9)** — this last one is a
-  real, confirmed-in-code risk independent of the caching decision, and
-  needs fixing before `.folder` moves to S3, not after. Also the natural
-  place to add the sampled shadow-read instrumentation (§4.9) that turns
-  the Phase 2b decision into a measurement rather than a guess.
-- **Phase 2b — the SSD-LRU-cache pattern from §1.4, generalized from the
-  macserver watcher, only if Phase 2a's measurements show it's actually
-  needed.** If built: source of truth stays S3; local SSD holds a working
-  set, evicted least-recently-used. Read path never blocks on S3 for a warm
-  blog; a cold blog pays a one-time fetch before its next sync/render, not
-  per-request. This is where the per-object cache invalidation design
-  (§2.6) would land, if this phase happens at all.
-- **Alongside all of this:** replace the local-disk `proper-lockfile` lock
-  (§1.3) with a Redis-based distributed lock before ever running multiple app
-  boxes against the same S3 bucket — otherwise two boxes syncing the same blog
-  concurrently will corrupt state exactly as the current lock is designed to
-  prevent.
-- **Quotas** become nearly free once the abstraction is the sole write path:
-  track cumulative bytes per blog as a counter (Redis or the blog's DB
-  record), check against a cap before accepting a `.folder` write (§2.1),
-  reject with a clear "storage quota exceeded" error surfaced to the sync
-  client (this is exactly the still-open `TODO` items in §1.5). Periodic
-  reconciliation (recompute from S3 `ListObjects`/local `du` occasionally)
-  guards against counter drift from partial failures.
-
----
-
-## 4. S3-specific plan
-
-### 4.1 Bucket-type and object-settings summary (as requested)
-
-**Monobucket — the recommended, decided shape (§2.2):**
-
-| | `.folder`: `folder/{blogID}/...` | `.assets`: `{blogID}/...` (bucket root) |
-|---|---|---|
-| Bucket type | One general-purpose (regional) S3 bucket — not a Directory Bucket / Express One Zone | same bucket |
-| Versioning | Off | Off |
-| Storage class at write | Standard | Intelligent-Tiering, set on each `PutObject` (Bunny permacaches almost immediately, so repeat direct reads become rare) |
-| Lifecycle rules | None | None — the storage class is set at write time instead, since `.assets` has no key prefix to filter on |
-| Backup | Hourly sync to Backblaze B2 (§4.6) | Same sync — whole bucket. Dashboard uploads can't be regenerated (§2.2.2) |
-| Quota enforcement | Yes, user-facing cap | Tracked, not enforced against the user |
-
-**Why Intelligent-Tiering and not Standard-IA for `.assets`:** Standard-IA
-bills every object as at least 128KB and at least 30 days of storage. Many
-thumbnails and template uploads are smaller than 128KB, so IA could cost
-*more* than Standard for them. Intelligent-Tiering has no minimum object
-size or retrieval fees; objects under 128KB are never monitored or moved
-(they're billed at the Standard rate, with no per-object monitoring fee),
-and larger ones move to cheaper tiers automatically once they stop being
-read.
-
-**Dual-bucket — the earlier alternative, now not the default, kept here for
-reference in case requirements change (e.g. the "local"-client caveat in
-§2.2 turns out to matter, or the restore-from-version feature becomes a
-real ask):**
-
-| | `.folder` bucket | `.assets` bucket |
-|---|---|---|
-| Bucket type | General-purpose S3 | General-purpose S3 |
-| Versioning | On, with a lifecycle rule expiring noncurrent versions after a retention window | Off |
-| Cross-Region Replication | On, to a cross-account/cross-region replica (requires versioning, which is why this shape needs two buckets) | Off |
-| Storage class | Standard | Intelligent-Tiering |
-
-The dual-bucket shape is strictly more protective (near-real-time offsite
-copy instead of periodic sync, plus point-in-time version recovery) but
-costs more in complexity and, per your steer, isn't needed given the
-"users have their own copy" reframe. Switching from monobucket to
-dual-bucket later is possible but not trivial — it's a real migration, not
-a config flag — so worth being reasonably confident in the monobucket
-choice before building on it.
-
-### 4.2 Why not S3 Express One Zone
-
-Yes — it's a bucket-level choice (technically a distinct "directory bucket"
-type you create up front, not a per-object storage class within a normal
-bucket). Recommend against it:
-
-- It's **single-AZ** — lower durability than Standard's multi-AZ
-  replication. Even with the relaxed "acceptable to lose" framing in §2.2,
-  there's no reason to add unnecessary durability risk on top of an
-  already-reduced backup posture.
-- Its main benefit — single-digit-millisecond per-request latency — targets
-  exactly the problem the SSD LRU cache (§1.4, §3 Phase 2) is already
-  designed to solve. If the cache is doing its job, most reads never reach
-  S3 at all.
-- For `.assets`, the case is weaker still: Bunny permacaches this content
-  after first fetch, so origin request latency for it is close to
-  irrelevant already.
-- It adds real complexity (directory-bucket API differences, single-AZ
-  pinning, VPC endpoint requirements) for a benefit that's largely
-  redundant with a design choice already made for other reasons.
-
-Worth revisiting only if a real benchmark (§4.5) shows Standard's latency is
-a genuine bottleneck even with the SSD cache warm — unlikely given the
-design.
-
-### 4.3 Multi-region compute, separately from multi-region storage
-
-Confirmed: no live storage replication needed to support future
-multi-region app servers. Keep the bucket single-region as the source of
-truth; app servers in any region read across the network from that one
-region, with the SSD LRU cache absorbing the extra latency the same way it
-already absorbs S3 latency for same-region servers. This avoids a real
-correctness risk active-active multi-region storage would introduce: S3
-replication is asynchronous with no cross-region conflict resolution, so
-two regions writing to the same blog around the same time could see stale
-reads during the replication lag window — and the current
-single-writer-per-blog lock model (even once moved to Redis, per §1.3)
-isn't designed to reason about that across regions. If genuine multi-region
-*active* storage is ever needed later, AWS's Multi-Region Access Points
-(built for exactly this) is the mechanism to reach for rather than
-hand-rolling it — a future problem, not one to solve now.
-
-### 4.4 Bunny CDN — plan, Perma-Cache warming, and the direct-to-S3 path
-
-**Confirmed against your actual setup:** origin is the Blot app server,
-no significant Edge Rules today, Origin Shield is enabled.
-
-**Recommendation, unchanged: don't reconfigure Bunny for the initial
-migration.** `app/cdn/index.js` and `app/blog/routes/assets.js` keep serving
-the same routes at the same paths; the storage layer just swaps what backs
-them (S3 + SSD cache instead of `express.static()` on local disk). Origin
-Shield keeps working exactly as it does today regardless of what's behind
-the app server. Zero Bunny-side changes required for the core migration.
-
-**Perma-Cache researched in detail, since you asked about seeding it
-directly from the storage layer:**
-
-- Perma-Cache is a real, named Bunny feature: a storage-zone-backed layer
-  that sits between the edge cache and your origin. On a cache miss, Bunny
-  checks Perma-Cache first; if absent there too, it fetches from your
-  origin and populates Perma-Cache *in the background*. Once cached, an
-  entry never evicts on TTL/LRU — only an explicit purge removes it.
-- Bunny stores Perma-Cache entries internally at a synthetic,
-  Bunny-managed path inside the linked storage zone:
-  `/__bcdn_perma_cache__/pullzone__<name>__<unique_id>/<request-path>/___filename___/___file___`
-  — not a plain mirror of your object keys. Critically, the `<unique_id>`
-  segment **rotates on a full-zone purge**, silently orphaning anything
-  placed under the old id.
-- **Bunny's own docs don't document a supported way to directly upload
-  into Perma-Cache to pre-seed it** — the only documented population path
-  is the miss → origin-fetch → background-populate flow. Given the opaque,
-  purge-mutable internal path scheme above, writing into it directly would
-  mean reverse-engineering an undocumented, mutable internal format —
-  fragile, and liable to silently break on a Bunny-side change.
-- **Recommendation instead of a direct dual-write:** after writing a newly
-  generated asset to S3, have the same async build-time step issue one
-  deliberate HTTP GET to the asset's public CDN URL. This triggers exactly
-  the same miss → fetch → Perma-Cache-populate flow Bunny already
-  documents and supports — the *first real visitor* then already hits a
-  warm Perma-Cache entry instead of a cold miss. This is the officially
-  supported mechanism, costs one extra request in a context that's already
-  async and already paying the "cost at build time, not request time"
-  price (§1.2), and requires no knowledge of Bunny's internal storage
-  format at all. This is the answer to "can the storage layer dual-write
-  directly to Perma-Cache" — not directly, but a one-line HTTP warm-up call
-  achieves the same outcome through the supported path.
-
-**Object path structure, and serving straight from S3 later:**
-
-Today's CDN-facing URLs map to a bare `{blogID}/{relativePath}` for both
-scopes, with no scope-identifying prefix (§1.1) — the `/folder/v-X/`
-segment is stripped by Express before touching disk, and the assets route
-is mounted at the CDN root.
-
-**`.assets` keys are identical to its public URL paths — no Edge Rules or
-path rewriting needed.** The S3 key for
-`https://{cdn}/{blogID}/_template_assets/{uuid}.webp` is exactly
-`{blogID}/_template_assets/{uuid}.webp` (§2.2, §2.3). The URLs already
-stored in template locals and entry HTML stay valid as they are, and S3
-can answer for them without any rewriting.
-
-**The catch: `.assets` shares a Bunny pull zone (hostname) with routes that
-S3 can't answer.** `/folder/v-{version}/{blogID}/...` carries a
-cache-busting segment that isn't part of any key, and `/template/...`
-(rendered CSS/JS, §1.2) isn't in the bucket at all. So Bunny's origin can't
-simply be swapped to the bucket for the whole zone. For now the plan is:
-
-- **The app server stays the origin for everything.** The core migration
-  needs no Bunny changes at all: `app/cdn/index.js` and
-  `app/blog/routes/assets.js` serve the same URLs, reading from S3 (plus
-  cache) instead of local disk.
-- **If direct-to-S3 serving is ever wanted**, it needs either a
-  path-*routing* rule (send `/folder/*` and `/template/*` to the app,
-  everything else to the bucket — no rewriting) or a separate hostname for
-  `.assets`. Either way, the key layout means no rewriting is ever needed
-  for `.assets`. `.folder` would need its `v-{version}` segment dropped
-  (a real rewrite), so it stays served through the app — see §5.
-
-Origin Shield stays valuable and needs no change either way — it reduces
-origin requests the same way whether the origin is the app or S3.
-
-**The one open dependency this had — whether Bunny supports signed/
-authenticated requests to a private bucket — is now moot.** Per §2.2.1 the
-bucket is public-read by decision, which is exactly the shape Bunny's own
-documented S3 integration already expects (a plain HTTPS Origin URL against
-a public bucket, no signing).
-
-### 4.6 Backup mechanics and cost, for the hourly whole-bucket sync to Backblaze B2
-
-**Decided: Backblaze B2, via its S3-compatible API**, not a second AWS
-bucket — see §2.2's reasoning (genuine vendor independence from both AWS and
-Bunny). Confirmed this works exactly as hoped: the AWS CLI's `aws s3 sync`
-accepts `--endpoint-url` to target *any* S3-compatible service, using that
-provider's own credentials instead of AWS IAM. Concretely:
-
-```
-aws s3 sync s3://blot-primary-bucket/ s3://blot-backup/ \
-  --endpoint-url https://s3.<region>.backblazeb2.com \
-  --profile backblaze
-```
-
-where the `backblaze` profile holds a B2 Application Key ID/Key (created in
-the B2 console, scoped to a single bucket if you want to limit blast
-radius), not AWS credentials — the source side of the command still reads
-from the primary AWS bucket using your normal AWS credentials, so this is a
-cross-provider copy, not a same-provider one.
-
-This covers the whole bucket, not just `folder/`: `.assets` sits at the
-bucket root and includes dashboard uploads that can't be regenerated
-(§2.2.2).
-
-**How this runs, entirely outside the application codebase** — same two
-options as before, unaffected by the destination change:
-- **A cron entry** (existing EC2 host, or a small dedicated instance)
-  running the command above hourly. Blot already has cron usage in its ops
-  patterns (per `TODO`'s "copy the cron tab into the new server setup
-  script" item), so this fits an existing pattern.
-- **A scheduled AWS Lambda** (hourly via EventBridge Scheduler), reimplementing
-  the sync/diff logic via the AWS SDK rather than relying on the CLI (Lambda
-  doesn't ship the `aws` binary) — genuinely serverless, no host to
-  maintain, worth it mainly if "no dependency on any specific host" matters
-  more than simplicity.
-
-**Delete semantics — decided: grow-and-expire, and it's fully achievable on
-B2, not just a fallback if versioning happened to be available.** Confirmed
-directly: **B2 buckets are always versioned by default** ("The buckets that
-are in Backblaze B2 Cloud Storage are always versioned by default" — this
-isn't a toggle, every bucket works this way, on any API). B2's
-S3-compatible API also supports S3-style Lifecycle Rules, including
-`NoncurrentVersionExpiration` (delete old, superseded versions after N
-days) and plain `Expiration` (delete current objects after N days),
-filterable by key prefix. Put together, this gives real grow-and-expire
-semantics, not just "don't delete":
-
-- Run `aws s3 sync` **without `--delete`**. When a file's content changes,
-  the sync uploads new content to the same key — because the bucket is
-  always versioned, the old content becomes a *noncurrent* version rather
-  than being destroyed, and the current version always reflects the latest
-  sync. When a file is removed from the primary, sync simply leaves the
-  corresponding key untouched in the backup (protects against accidental
-  deletion).
-- Add a `NoncurrentVersionExpiration` lifecycle rule (e.g. `NoncurrentDays:
-  60–90`, bucket-wide) so superseded versions — the
-  actual protection against an accidental *overwrite* or corruption, not
-  just a delete — get cleaned up automatically after the retention window,
-  rather than accumulating forever.
-- **Note the important distinction this reveals**: plain `Expiration`
-  (deleting *current* objects after N days) would be the wrong rule to
-  apply broadly here — a blog post's image that simply hasn't changed in
-  years is still current, valid content, and shouldn't expire just because
-  it's old. Only `NoncurrentVersionExpiration` (which only ever touches
-  *superseded* versions, never the current one) is the right mechanism for
-  this use case.
-
-**Switching between grow-and-expire and a pure `--delete` mirror later, on
-the same existing bucket, is easy — confirmed no bucket recreation is
-needed either direction.** Versioning is inherent to every B2 bucket
-regardless of which sync mode you use, and lifecycle rules are ordinary
-bucket configuration, addable/changeable/removable at any time via the
-standard S3 `PutBucketLifecycleConfiguration`/`DeleteBucketLifecycleConfiguration`
-calls. Switching is really just: change the `--delete` flag on your sync
-command, and add or remove the lifecycle rule — no migration, no
-downtime, nothing structural. The only practical thing to be aware of:
-switching *into* `--delete` mode after running grow-and-expire for a while
-means the very next sync run will remove every backup object that's no
-longer present in the primary, which could be a meaningful one-time cleanup
-if a lot has been deleted from the primary over time — not a technical
-blocker, just worth expecting.
-
-**Cost drivers** (worked through against your actual data volume in a
-private calculation, not reproduced here — see the note at the end of §4.8):
-- **B2 storage**: $6/TB-month ($0.006/GB-month) — roughly a quarter of S3
-  Standard's per-GB price, growing slowly as the backup accumulates changed
-  objects (bounded by the retention window above, not unbounded).
-- **B2 ingress (receiving the synced data)**: **free** — B2 does not charge
-  for data uploaded into it, regardless of source.
-- **AWS side — this is the cost that's easy to miss**: getting data *out*
-  of S3 to a non-AWS destination is billed as standard internet egress from
-  S3, since Backblaze isn't part of any AWS-side free-transfer arrangement.
-  AWS's standard tier: first 100GB/month of internet egress free
-  (account-wide, shared with anything else leaving via the internet), then
-  ~$0.09/GB up to 10TB/month. This is the one line item that exists
-  specifically *because* the backup destination is a different cloud
-  provider — the same copy to a second AWS account would have been a free
-  server-side `CopyObject` instead. It's the real, small price of the
-  vendor-independence decision, not a mistake to optimize away.
-- **One-time cost, not recurring**: the initial full sync has to push
-  the whole bucket out of S3 once, at the same per-GB egress rate
-  above (minus whatever the free monthly tier absorbs).
-- **Compute**: negligible either way (cron invocation or Lambda), same as
-  before.
-
-See §4.8 for how this fits into the full current-vs-future picture (kept
-directional/percentage-only there, by design — see the note at the end of
-that section).
-
-### 4.7 Still to verify (not answerable from this codebase)
-
-- **Latency and throughput under real conditions** — see the how-to below;
-  needed to size the SSD cache's hit-rate target realistically before
-  writing storage-layer code.
-- **Exact retention window** for the B2 backup's grow-and-expire
-  `NoncurrentVersionExpiration` rule (§4.6) — a number (60? 90?), not
-  otherwise decided.
-
-**B2 region: decided.** Your AWS instance is in `us-west-2` (Oregon).
-Backblaze's regions are US West (Sacramento + Phoenix data centers), US
-East (Reston, VA), EU Central (Amsterdam), and Canada East. **US West** is
-both the closest to Oregon and satisfies "US-located at minimum." One thing
-worth knowing before creating the B2 account: **the region is a permanent,
-account-level choice — it cannot be changed after account creation**, so
-this is a one-way door, not a per-bucket setting you can revisit later
-without opening a new B2 account.
-
-**How to gather the two data points still needed, both from the AWS Console
-dashboard — no CLI setup required for either:**
-
-- **Actual `.folder`/`.assets` data volume**: you already have this (the
-  `du -sh` figures you gave me) — nothing further needed here.
-- **Daily write rate** (for the B2 sync cost estimate) and **EBS
-  read/write latency and throughput** (for sizing the SSD cache): both come
-  from the same place — **EC2 Console → Elastic Block Store → Volumes →
-  select your volume → Monitoring tab**, which graphs CloudWatch's native
-  per-volume EBS metrics with no setup required (they're collected
-  automatically for every EBS volume, no agent to install):
-  - `VolumeWriteBytes` summed over a day ≈ your daily write rate (this
-    measures bytes written to the block device, which is a reasonable
-    upper-bound proxy for "new data" — it'll run a bit high vs. actual
-    unique changed file bytes, since filesystem metadata/journaling writes
-    count too, which is fine for a worst-case estimate).
-  - `VolumeReadBytes`/`VolumeWriteBytes` per period ÷ period length =
-    throughput (bytes/sec).
-  - `VolumeReadOps`/`VolumeWriteOps` per period ÷ period length = IOPS.
-  - **Average per-operation latency isn't a metric by itself** — AWS's
-    documented way to derive it is `VolumeTotalReadTime ÷ VolumeReadOps`
-    (and the write equivalent), giving average seconds-per-operation over
-    the period. The Monitoring tab's console graphs typically show the raw
-    components; you may need CloudWatch's metrics explorer directly
-    (CloudWatch Console → Metrics → EBS → Per-Volume Metrics) to plot the
-    derived ratio, or just read off the two raw numbers for a given period
-    and divide by hand.
-  - **One real gap: there's no "list" (directory listing) latency metric.**
-    EBS/CloudWatch only sees block-device I/O, not filesystem-level
-    operations — a directory listing is invisible to it as a distinct
-    thing, it's just more read I/O. Isolating "how long does `readdir` on
-    our biggest directories actually take" needs to be measured at the
-    application/OS level directly (e.g., timing `fs.readdir` calls in the
-    app, or `strace -T`/`iostat` on the host) rather than pulled from a
-    dashboard — worth doing as a quick one-off script/log rather than
-    expecting AWS to have already collected it.
-  - All of this is 15 months of retained history by default, so you can
-    pull a representative recent week or month without setting anything up
-    in advance. CLI equivalents exist (`aws cloudwatch get-metric-statistics
-    --namespace AWS/EBS ...`) if you'd rather export the raw numbers for me
-    to work with directly later, but the console graphs should answer both
-    questions without needing that.
-
-### 4.8 Cost estimate: current EBS spend vs. after migration
-
-A full line-item cost comparison (current EBS volume + snapshot spend vs.
-S3 + reduced-EBS + B2 backup spend after migration) was worked through
-directly with you, using your actual data volume and current AWS spend.
-That comparison, and the underlying size/dollar figures, is deliberately
-**not reproduced in this doc** — those numbers indirectly reveal userbase
-scale, which is treated as private information, separately from everything
-else in this research (which is about architecture, not business metrics).
-
-**Directional result, safe to state:** the migration is projected to reduce
-combined storage + backup spend by **roughly 80%**. The main structural
-reasons behind that number (which don't depend on the specific figures) are
-worth keeping in the plan:
-- EBS gp2 bills for the full *provisioned* volume size regardless of how
-  much is actually used — exactly the "no more charges for unused GB disk
-  space" problem your own `TODO` note names as a goal here. S3 bills for
-  actual data stored.
-- EBS snapshot storage bills for blocks that have *ever* been written to
-  the volume (unless TRIM/discard reclaims them), not just what's currently
-  live on the filesystem — so snapshot cost today likely reflects
-  historical churn (deleted files, regenerated assets, old builds) that
-  isn't providing any value now. B2's backup cost is based on what's
-  actually being mirrored today, so this "paying to back up data you no
-  longer have" effect goes away structurally, not just because B2's
-  per-GB rate happens to be cheaper.
-- The one cost that exists specifically *because* the backup destination is
-  a different cloud provider (AWS→B2 egress, §4.6) is real but small
-  relative to the storage-cost savings — the vendor-independence decision
-  isn't free, but it isn't what determines the overall number either way.
-
-If a fuller cost breakdown is useful again later, it's best treated as a
-private calculation between us rather than something that lives in this
-document.
-
-### 4.9 Can `.folder` skip the SSD cache entirely? Worth measuring before building it
-
-You asked whether it's worth sizing up pure S3-backed latency/throughput
-*before* building the caching layer, on the chance it turns out unnecessary.
-Strongly agree this is worth doing first, not as an afterthought — and there
-are concrete reasons to think it has a real chance of working, not just
-optimism:
-
-**The read paths that would actually hit S3 directly are narrower than
-"every file read" once everything else in this plan lands:**
-- Rendered HTML/CSS/JS never touches raw file storage at all — it's
-  Redis-cached (§1.2).
-- Generated assets are permacached by Bunny after first fetch (§1.7, §4.4),
-  and the plan already has the storage layer actively warming that cache at
-  build time (§4.4) rather than waiting for a real visitor to trigger the
-  first fetch.
-- Origin Shield (confirmed enabled, §4.4) already deduplicates concurrent
-  cache misses across edge nodes into a single origin request, rather than
-  every miss independently hitting the origin.
-- Folder-link resolution and the `folder` template local are being
-  restructured anyway (build-time baking via PR #1896, paginated `.list()`
-  via §2.4) — independent of whether a cache exists underneath them.
-- Sync/build-time file reads (converting a doc, generating a thumbnail) are
-  async and already off any visitor's critical path (§1.2) — S3 latency
-  there is close to irrelevant no matter what it is.
-
-What's left, once all of that is accounted for, is genuinely just: **a
-Bunny cache-miss that needs a fresh fetch from your origin for a
-`.folder`/`.assets` file.** That's a real request, but it's a *cache-fill*
-event, not a per-visitor request — Bunny's own tolerance for how long an
-origin fetch takes is generous (it's filling its own cache once, not
-serving a page load directly), so the bar "pure S3 needs to clear" is lower
-than "must feel instant to a visitor."
-
-**Rough scale of what that bar actually is, from published S3 figures (not
-derived from your setup — treat as ballpark, to be replaced by your own
-measurement):** same-region S3 GET latency is typically single-to-low-double-digit
-milliseconds at p50 (roughly 10-20ms), with a heavier tail at p99 depending
-on object size and request patterns — meaningfully higher than gp2 EBS's
-typical ~1-2ms per operation (worth remembering gp2 is *also*
-network-attached block storage over AWS's Nitro fabric, not physically
-local disk, so this isn't a "network vs. local" comparison, just a "how much
-protocol/routing overhead per request" one). For a single cache-fill fetch,
-an extra ~10-20ms is very likely imperceptible; the real question is
-whether *any* request pattern in this system is latency-sensitive enough,
-or frequent enough at volume, for that difference to matter in aggregate —
-which is exactly what needs measuring, not assumed either way.
-
-**One case pure S3 could genuinely struggle with — confirmed in code, not
-speculative, and worth flagging as a real risk to design around:** a full
-rebuild of a many-thousand-file blog processes files strictly one at a
-time. `app/sync/rebuild.js:113-124` walks the entire blog folder, then runs
-`async.eachSeries(updatePaths, ...)` — every changed path's `update(path,
-...)` call runs to completion before the next one starts, for the whole
-blog. Each `update()` call very likely does at least one file read
-internally (hashing, content parsing, thumbnail/build triggers). Under S3,
-that's thousands of files × a per-request latency serially, with zero
-overlap — a rebuild that takes seconds today could plausibly take minutes.
-**A local SSD cache wouldn't fix this either** — a full rebuild touches
-every file for the first time, so the cache starts stone cold regardless of
-whether Phase 2b exists. The actual lever is **parallelizing this loop**
-(S3 comfortably handles high concurrent request rates — official guidance
-is 5,500 GET/HEAD requests/sec *per prefix*, and `blogID`-prefixed keys
-already spread load across many prefixes), not caching. This needs to be
-addressed as part of the S3 migration itself, independent of the Phase 2a/2b
-caching decision — worth auditing `rebuild.js` and `buildFromFolder.js` for
-this specifically before cutting `.folder` over to S3, not discovering it
-after.
-
-**A related, but genuinely different problem, worth pulling apart
-explicitly: the ordinary sync → build flow, not just full rebuilds.** A
-regular file-change-via-client-sync-then-build flow can plausibly read the
-*same* just-written file's content more than once in quick succession
-within one `folder.update(path)` call — computing a hash/fingerprint,
-parsing content, triggering a thumbnail/build step, etc., potentially each
-independently calling `.read()` on data the same process just handled
-moments ago. This is a different shape of problem than Phase 2b's design
-target (a long-lived, cross-instance, multi-blog cache serving *unrelated*
-future requests) — it's narrow, single-operation, single-process, and
-short-lived. Recommend **not** conflating the two: rather than concluding
-"therefore Phase 2b must exist," a much cheaper mechanism handles this
-specific case — a small, short-TTL, in-process write-through memoization
-inside the storage layer itself, scoped to a single sync operation (e.g.
-cleared at the end of `folder.update`, or just a few seconds' TTL keyed by
-`(blogID, path)`). When `store.folder.write(path, data)` runs, the content
-is already in hand — an immediately-following `.read()` for that same path,
-within the same operation, can be served from that short-lived memoization
-instead of a fresh S3 round trip, with none of Phase 2b's complexity
-(no eviction policy, no cross-instance consistency problem, since it's
-deliberately not meant to outlive one sync operation). This is cheap enough
-to build in Phase 0/1 regardless of what Phase 2a's measurements eventually
-say about the bigger cache — it solves a structurally different problem
-(redundant round trips *within* one logical operation) than Phase 2b solves
-(serving *unrelated* future requests from a warm cache). Worth pairing this
-with an actual audit of the sync/build pipeline for how many independent
-`.read()` calls a single file change triggers today — the cheapest fix of
-all might just be threading the content already read once through the rest
-of the pipeline in memory, rather than re-reading it via the storage layer
-at each step, which the memoization above is a safety net for, not a
-replacement for fixing at the source where practical.
-
-**Recommended approach for the *actual* Phase 2b question, now with a
-better source of data than a synthetic benchmark:** you suggested
-instrumenting real read operations during the dual-write phase (Phase 1)
-to get concrete X→Y timing numbers rather than synthetic ones — this is a
-stronger version of the `toxiproxy` benchmark idea from §4.7, not just a
-supplement to it, since it measures actual production access patterns
-rather than an approximation. Concretely: during Phase 1/2a, have a
-*sampled* fraction of reads (e.g. 1-5%, not every read — keeping the
-measurement's own S3 request-cost overhead negligible) perform a shadow S3
-read alongside the real (local-disk, in Phase 1; or the only read, once
-cut over in 2a) read, timing both, and log
-`{operation, scope, byteSize, localMs, s3Ms}` — either to existing app logs
-(queryable via the existing SSH log tooling) or a small Redis-backed
-rolling histogram, whichever is cheaper to query later. Since every read
-already funnels through the storage abstraction (that's the whole point of
-building it first), this is a natural, single-choke-point place to add the
-instrumentation — no need to touch call sites individually. This gives real
-X-was-N-ms/Y-would-have-been-M-ms numbers for your actual traffic and file-size
-distribution, which is a strictly better input to the Phase 2b decision
-than a synthetic `toxiproxy` benchmark — recommend leaning on this over the
-synthetic version once Phase 1 is running, and using `toxiproxy` mainly for
-earlier, pre-Phase-1 sanity-checking before any real traffic exists to
-measure.
-
-## 5. Other open decisions worth resolving before/while building
-
-- **Whether Phase 2b (the SSD cache) needs to be built at all** (§4.9) —
-  the single biggest open question left in this plan, and the best kind to
-  have: resolvable by measurement (the shadow-read instrumentation below)
-  rather than judgment call. Everything else in §2.6 (cross-instance
-  invalidation, ETag reconciliation) is moot if the answer turns out to be
-  "no."
-- **`rebuild.js`'s serial file-processing loop** (§4.9) — confirmed real,
-  not speculative (`async.eachSeries` at `app/sync/rebuild.js:113`). Needs
-  a concrete parallelization approach decided (bounded concurrency via
-  `async.eachLimit` or similar, sized to avoid overwhelming S3's per-prefix
-  request-rate guidance) before `.folder` moves to S3.
-- **Shadow-read instrumentation sampling rate** (§4.9) — what fraction of
-  reads to double up during Phase 1/2a (1%? 5%?) to gather real S3-vs-local
-  timing data without adding meaningful S3 request-cost overhead from the
-  measurement itself.
-- **B2 retention window** (§4.7) — a number for the
-  `NoncurrentVersionExpiration` rule, not otherwise decided.
-- **Daily write rate and EBS latency/throughput** (§4.7) — data-gathering
-  steps given, not yet pulled.
-- **Object key layout — one thing still worth a check**: S3 keys are always
-  case-sensitive (unlike some filesystem configurations Blot has had to
-  work around historically) — this *removes* a storage-backend quirk rather
-  than adding one, and it's now clear the case-insensitive resolution
-  method (§2.5) exists specifically for ambiguous user-facing links, not as
-  a storage-layer workaround. Still worth a one-time scan of existing
-  filenames for anything that's safe on POSIX but could behave oddly as a
-  raw S3 key (leading/trailing whitespace, control characters) before
-  migration, as a sanity check rather than a redesign.
-- **Direct-to-S3 serving for `.folder`, if ever** (§4.4) — `.assets` keys
-  match its public URLs, but `.folder` URLs carry a `/folder/v-{version}/`
-  cache-buster that isn't part of any key, so serving `.folder` straight
-  from S3 would need a Bunny rewrite rule. Current assumption: `.folder`
-  stays served through the app. Revisit only if origin load makes it worth
-  it — dropping the cache-buster from URLs would be the rule-free option,
-  at the cost of CDN purges on every file change.
-- **Keep Blot-internal bookkeeping out of the public `folder/{blogID}/`
-  key space** (§2.2.1) — worth an explicit check during Phase 0/1 that
-  nothing beyond actual sync-client-written content ends up there.
-- **`.list()`'s ordering guarantee** (§2.4) — sorted/deterministic vs.
-  whatever order unbuffered iteration gives you is a real tradeoff between
-  memory safety and predictable output; needs a decision once it's clear
-  whether any consumer (the `folder` template local, in particular) depends
-  on ordering.
-- **Cross-instance SSD cache invalidation message schema** (§2.6) — extending
-  the existing sync-completion pub/sub broadcast to carry specific changed
-  paths (not just "this blog changed") is new wire-format surface between
-  app instances; worth designing deliberately rather than bolting on ad hoc.
-- **Reconciliation sweep frequency** for the SSD cache's ETag safety net
-  (§2.6) — how often to spot-check cached entries against S3, analogous to
-  the quota-reconciliation cadence question in §3.
-
----
-
-## 6. Bottom line
-
-Nothing in the current codebase blocks this. The two things that made me
-initially skeptical about the "no performance penalty" goal — request-time
-disk reads and cache-ability — are already solved or half-solved in the
-existing code (Redis-cached rendered output, async build-time asset
-generation, an existing SSD-LRU eviction pattern in the macserver client).
-The abstraction layer itself is a big but mechanical refactor (~30-40 call
-sites, no exotic IO patterns). The Bunny piece needs no changes at all for
-the core migration, since Bunny already talks only to the Blot app server —
-serving `.assets` straight from S3 is an optional later step (its keys
-already match its public URLs, so no rewriting — §4.4), not a blocker. The remaining real design work,
-beyond the refactor, is: (1) moving the per-blog sync lock off local disk
-before multi-instance ever becomes real, and (2) rewriting `folder.js`'s
-live directory listing to use paginated `.list()` calls rather than a
-buffering `fs.readdir`. Best-case scenario worth actually pursuing, per
-§4.9: the SSD caching layer itself — the single largest remaining piece of
-new operational complexity in this whole plan (eviction, cross-instance
-invalidation, reconciliation) — may turn out to be unnecessary, and that's
-answerable by measurement before committing to build it, not something to
-guess at upfront.
-
-Suggested first concrete step, **once PR #1896 has landed** (the one hard
-sequencing dependency, per the scope note at the top): build
-`app/storage/index.js` as a pure same-behavior wrapper over local disk
-(Phase 0 above) and migrate the generated-assets call sites onto it. That's
-useful on its own, de-risks everything downstream, and gives you a real
-place to hang quota accounting
-and S3 dual-writes incrementally.
+S3's `ListObjectsV2` is natively paginated (1,000 keys/call,
+`NextContinuationToken`); `.list()`'s cursor can just be that token. On
+local disk, `fs.promises.opendir()` gives an unbuffered async-iterable
+directory handle — implementing `.list()` on top of it starts fixing
+`retrieve/folder.js`'s existing memory-crash risk immediately, independent
+of S3. `.listAll()` is for callers like `buildFromFolder`'s directory scan
+or the quota-reconciliation script that genuinely need everything; the
+`folder` template local — the one place a huge directory has actually
+caused problems — should call `.list()` directly, never `.listAll()`.
+
+One open tradeoff: `opendir`'s streaming iteration doesn't guarantee a
+stable sort order, and a meaningful opaque cursor generally wants one. If
+the `folder` template local needs deterministic ordering, the local backend
+may need to do more than pure unbuffered streaming — not yet decided.
+
+## 7. Open questions
+
+- B2 `NoncurrentVersionExpiration` retention window (60? 90 days?).
+- Shadow-read instrumentation sample rate for Phase 1 (1%? 5%?).
+- `.list()`'s ordering guarantee (§6).
+- Whether an SSD cache (Phase 2b) ends up being needed at all — resolvable
+  by the Phase 1 shadow-read measurements rather than by judgment call.
+- A one-time scan of existing filenames for anything that's safe on POSIX
+  but odd as a raw S3 key (leading/trailing whitespace, control
+  characters), before `.folder` migrates.
