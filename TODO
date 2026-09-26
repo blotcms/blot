@@ -417,6 +417,7 @@ Improvements to template editor:
 - Introduce collapsible sections or a separately scrollable div on the template dashboard settings, and tell Omar
 - Build image upload feature into template editor. Support default banner images and image avatars, with default images set, maybe some kind of global library feature across templates...
 - Build favicon generator into template editor. Make it distinct from avatar. Generate proper favicons from uploaded avatars (to prevent streched favicons when non-square avatars are uploaded)
+- I wonder if we can Can we avoid storing font styles in package.json, just the ID? then inject these at render time?
 
 Improvements to templates:
 - Improve hypertext template to support listing pages as well as posts in the sidebar
