@@ -28,7 +28,7 @@ services:
       - ../../.env
     environment:
       - BLOT_HOST=${BLOT_HOST}
-      - BLOT_REDIS_HOST=${BLOT_REDIS_HOST:-toxiproxy}
+      - BLOT_REDIS_HOST=${BLOT_REDIS_HOST:-redis}
       - CONTAINER_NAME=blot-container-green
       - DEBUG=${DEBUG:-}
       # Route bookmark screenshots and remote-image downloads through the

@@ -13,8 +13,7 @@ COMPOSE_FILE="scripts/development/docker-compose.yml"
 bash "$DIR/start-docker.sh"
 
 export BLOT_HOST=local.blot
-export BLOT_REDIS_HOST=redis      # talk to Redis directly
-export BLOT_USE_TOXIPROXY=false   # skip toxiproxy latency simulation
+export BLOT_USE_TOXIPROXY=false   # skip toxiproxy latency simulation; node-app talks to redis directly by default
 
 touch "$REPO_DIR/.env"
 
