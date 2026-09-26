@@ -33,6 +33,11 @@ dashboard.use(function loadDropboxAccount (req, res, next) {
 
 // The settings page for a Dropbox account
 dashboard.get("/", function (req, res) {
+  console.log("[DEBUG dropbox /]", {
+    hasSessionDropbox: !!req.session.dropbox,
+    accountErrorCode: req.account && req.account.error_code,
+    blogHealthIssueBefore: res.locals.blog && res.locals.blog.healthIssue,
+  });
   // Ask to user to authenticate with Dropbox if they have not yet
   if (!req.account && !req.session.dropbox) {
     var query = "";
