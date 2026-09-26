@@ -33,11 +33,6 @@ dashboard.use(function loadDropboxAccount (req, res, next) {
 
 // The settings page for a Dropbox account
 dashboard.get("/", function (req, res) {
-  console.log("[DEBUG dropbox /]", {
-    hasSessionDropbox: !!req.session.dropbox,
-    accountErrorCode: req.account && req.account.error_code,
-    blogHealthIssueBefore: res.locals.blog && res.locals.blog.healthIssue,
-  });
   // Ask to user to authenticate with Dropbox if they have not yet
   if (!req.account && !req.session.dropbox) {
     var query = "";
@@ -234,7 +229,15 @@ dashboard.get("/authenticate", function (req, res, next) {
       console.log("err setting up", err);
     });
 
-    res.redirect(req.baseUrl);
+    // req.session.dropbox above must actually reach the session store
+    // before the browser's next request (the redirect target below) can
+    // see it - otherwise that request's own session read can race the
+    // save from this one and come back without it, showing the stale
+    // pre-reconnect error for a render or two until a later request
+    // catches up. res.redirect() doesn't wait for that on its own.
+    req.session.save(function () {
+      res.redirect(req.baseUrl);
+    });
   });
 });
 
