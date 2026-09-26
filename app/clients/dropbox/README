@@ -25,7 +25,7 @@ The Dropbox client operates using a webhook-based event notification system comb
 
 - **`index.js`**: Main export file. Defines the public interface of the Dropbox client, exporting `init`, `disconnect`, `resync`, `remove`, `write`, and route handlers.
 - **`init.js`**: Initialization logic run at server startup. Schedules hourly sync validation for all Dropbox-connected blogs and triggers resyncs for recently synced blogs on restart.
-- **`database.js`**: Manages Redis-backed persistence of Dropbox account information (tokens, folder paths, sync cursors, etc.). Uses the model defined within this file to enforce type safety.
+- **`database.js`**: Manages Redis-backed persistence of Dropbox account information (tokens, folder paths, sync cursors, `transfer_pending`, etc.). Uses the model defined within this file to enforce type safety.
 - **`delta.js`**: Constructs a delta (change set) by querying Dropbox's `filesListFolder` and `filesListFolderContinue` APIs. Computes relative paths for each change and handles case-only renames (e.g., `foo.txt` → `FOO.txt`).
 - **`disconnect.js`**: Handles disconnecting a blog from Dropbox by removing credentials, clearing the OAuth token, and revoking it if no other blogs use the same account.
 - **`write.js`**: Writes a file to both the local Blot folder and uploads it to Dropbox. Uses the retry wrapper for resilience.
@@ -61,7 +61,7 @@ The Dropbox client operates using a webhook-based event notification system comb
   - Saves the new cursor and folder metadata to the database after successful sync.
   - Handles pagination (more changes) and recursive checks for additional changes.
 - **`sync/reset-to-blot.js`**: Performs a full recursive walk of the Dropbox folder and compares it with the local Blot folder, downloading all files that are missing or have different content hashes. Used during setup and periodic validation.
-- **`sync/reset-from-blot.js`**: (Reference only in this file structure; not yet fully implemented.) Intended to upload all local Blot files to Dropbox. Currently called during setup.
+- **`sync/reset-from-blot.js`**: Uploads all local Blot files to Dropbox during setup. Runs a best-effort pre-flight quota check (`usersGetSpaceUsage`) before uploading anything, and aborts immediately - without setting `error_code: 0` or advancing the cursor - if an upload fails because Dropbox is out of space, or if any upload fails for any other reason. See "Handling insufficient Dropbox space" below.
 
 ### Utilities
 
@@ -70,6 +70,8 @@ The Dropbox client operates using a webhook-based event notification system comb
   - `UNSUPPORTED_FILE_EXTENSIONS`: Array of unsupported extensions (currently `[".paper"]`).
   - `hasUnsupportedExtension()`: Checks if a file path has an unsupported extension.
   - `isDotfileOrDotfolder`: Alias for `shouldIgnoreFile()`, filters out dotfiles and dotfolders.
+  - `INSUFFICIENT_SPACE_ERROR_CODE` / `isInsufficientSpaceError()`: The `507` account `error_code` sentinel for "ran out of Dropbox space", and a check for that error shape from the Dropbox SDK.
+  - `transferIncomplete(account)`: True while the initial transfer to Dropbox hasn't finished - see "Handling an incomplete initial transfer" below.
 - **`util/createClient.js`**: Factory function that retrieves the Dropbox account from the database and instantiates a Dropbox SDK client. Handles token refresh if a refresh token is present.
 - **`util/download.js`**: Downloads a file from Dropbox and writes it to disk.
 - **`util/upload.js`**: Uploads a file from disk to Dropbox, preserving modification time metadata.
@@ -103,6 +105,11 @@ HTML templates rendered by dashboard routes:
 - **`tests/delta.js`**: Tests for delta calculation.
 - **`tests/paths.js`**: Tests for path handling.
 - **`tests/database.js`**: Tests for database operations.
+- **`tests/reset-to-blot.js`**: Tests for the download/apply walk, including that it refuses outright (before touching anything) for a blog with an incomplete transfer.
+- **`tests/reset-from-blot.js`**: Tests for the initial transfer's quota pre-flight check (including that it nets out bytes already on Dropbox and doesn't get blocked by a negative free-space figure on a zero-growth retry), its mid-transfer/end-of-transfer handling of failed uploads, and that a full success clears `transfer_pending`.
+- **`tests/init.js`**: Tests `transferIncomplete()` and that the hourly validation and startup resync skip a blog with an incomplete transfer (both the `transfer_pending` and legacy `error_code: 507` cases).
+- **`tests/sync-transfer-incomplete.js`**: Tests that the webhook-driven sync in `sync/index.js` skips a blog with an incomplete transfer before running delta/apply, without touching `error_code`/`cursor`.
+- **`tests/setup/createFolder-reuse.js`**: Tests the retry-reuses-the-partial-folder behavior in `routes/setup/createFolder.js` (reuse, not_found-falls-through vs. transient-error-propagates, account_id/full_access mismatch, already-completed).
 - **`tests/waitForErrorTimeout.js`**: Tests for rate limit handling.
 - **`tests/files/will_flag_restricted_content.png`**: Test file for restricted content detection.
 
@@ -172,13 +179,25 @@ Disconnects a blog from Dropbox.
   - Removes Dropbox account credentials from the database.
   - Revokes the OAuth token if no other blogs use the same account.
 
-### `resync(blogID, publish)`
+### `resync(blogID, publish, update)`
 
-Performs a full folder resync from Dropbox to Blot (used for validation and recovery).
+Points straight at `sync/reset-to-blot.js`'s `resetToBlot()` (used by the
+generic "Resync from Dropbox" manual dashboard action, among other callers).
+`resetToBlot()` itself refuses - throwing a `DROPBOX_TRANSFER_INCOMPLETE`-coded
+error whose message is also sent through `publish` - if `transferIncomplete(account)`
+is true for this blog, right after loading the account and before touching
+anything else; see "Handling an incomplete initial transfer" below for why.
+There used to be a separate `resync.js` wrapper doing this same check before
+calling in, but the guard was moved into `resetToBlot()` itself so every
+caller is covered (not just the ones that remember to check first - see that
+section for the full list), which made the wrapper redundant. Otherwise,
+`resetToBlot()` performs a full folder resync from Dropbox to Blot (used for
+validation and recovery):
 
 - **Parameters**:
   - `blogID`: String identifier for the blog.
   - `publish(args...)`: Callback to report progress (typically logs to console or updates UI).
+  - `update(path, callback)`: Notifies Blot's Entry model about each changed path.
 - **Returns**: Promise resolving to a summary object with `{ downloaded, removed, createdDirs, skipped }`.
 - **Behavior**:
   - Walks the entire Dropbox folder recursively.
@@ -235,7 +254,9 @@ The client uses the official Dropbox JavaScript SDK (`dropbox` npm package) to i
    - `getAccount()`: Exchanges code for access/refresh tokens and retrieves account info.
    - `createFolder()`: Creates or designates the blog folder in Dropbox (handles migration for multiple blogs).
    - Saves account info to Redis database.
-   - `resetFromBlot()`: Uploads all local blog files to Dropbox.
+   - `resetFromBlot()`: Uploads all local blog files to Dropbox. Stops the whole
+     transfer if Dropbox runs out of space (see "Handling insufficient Dropbox
+     space" below) or if any file fails to upload.
 
 ### Ongoing Sync (Webhook-Triggered)
 
@@ -257,6 +278,123 @@ The client uses the official Dropbox JavaScript SDK (`dropbox` npm package) to i
 - Every hour, `init.js` checks all Dropbox-connected blogs that synced recently.
 - For each blog, calls `resetToBlot()` (a full recursive walk) to validate consistency.
 - If changes are detected, sends a report email to the admin.
+
+### Handling an incomplete initial transfer (including running out of Dropbox space)
+
+`resetToBlot()` treats Dropbox as the source of truth: any local file with no
+counterpart on Dropbox is deleted from Blot. The webhook-driven sync in
+`sync/index.js` has a related risk - it applies whatever a Dropbox delta
+reports, including deletions, starting from a cursor. Both are safe *once the
+initial transfer has actually finished*, but dangerous while it hasn't:
+running either against a folder Dropbox doesn't fully have yet would delete
+the local files that were never uploaded, permanently losing content that
+only ever existed on Blot. This previously happened silently whenever Dropbox
+ran out of storage space mid-transfer, and more generally whenever the
+initial transfer (`resetFromBlot()`, run once during setup) was interrupted
+for *any* reason - a non-quota upload failure, an API error, or the server
+process restarting mid-transfer during a deploy - since nothing recorded that
+the transfer hadn't finished.
+
+**`transfer_pending`** (`database.js`) is a boolean on the Dropbox account
+that makes "the initial transfer hasn't finished" an explicit, persisted
+state instead of an assumption:
+
+- `routes/setup/index.js` sets it to `true` in the same `set()` call that
+  seeds a new/reconnected account, right before calling `resetFromBlot()`.
+- Only a fully successful `resetFromBlot()` - every file uploaded - clears it
+  back to `false`, in the same final `set()` call as `error_code: 0` and the
+  new cursor. Any early return (an upload failure, quota or otherwise, a
+  `filesGetMetadata` error, an abort, or the process dying mid-transfer)
+  leaves it `true`.
+- A pre-existing account's Redis hash predates this field. `database.js`'s
+  `getAccount()` defaults any missing boolean field to `false`, so old,
+  already-completed accounts are unaffected.
+
+`util/constants.js`'s **`transferIncomplete(account)`** is `true` when
+`transfer_pending` is `true`, or (for accounts written before this field
+existed) `error_code === INSUFFICIENT_SPACE_ERROR_CODE` (`507` - see below).
+
+The authoritative guard lives inside **`sync/reset-to-blot.js`** itself:
+right after `resetToBlot()` loads the account (and before touching anything
+else, fs or Dropbox), it throws a `DROPBOX_TRANSFER_INCOMPLETE`-coded error
+if `transferIncomplete(account)` is true. Checking once at the source, rather
+than relying on every caller to check first, means it can't be bypassed by a
+caller that forgets to - which matters because there are several:
+`init.js`'s `resetToBlotWithLock()` (used by both `resyncRecentSyncsOnStartup()`
+and `validateAllBlogs()`), the generic "Resync from Dropbox" manual dashboard
+action (`app/dashboard/site/client.js`'s `POST /reset/resync`, via `index.js`'s
+`resync` export, which points straight at `resetToBlot()`), and the
+`scripts/dropbox/{reset,sync,resync}.js` CLI tools. Each of those catches the
+error per-blog and continues rather than aborting an entire run:
+`init.js`'s `resetToBlotWithLock()` catches the specific error code and
+returns a `TRANSFER_INCOMPLETE` sentinel its callers treat as "nothing to do"
+(publishing the message rather than treating it as a failure); the dashboard
+route surfaces it via `folder.status` instead of reporting "Finished site
+rebuild"; the CLI scripts' per-blog loops already wrap each blog's work in
+its own try/catch.
+
+`init.js`'s `resyncRecentSyncsOnStartup()` and `validateAllBlogs()` also keep
+a cheap `transferIncomplete()` pre-check *before* queuing for the blog's
+folder lock (`establishSyncLock()`, which can retry for several seconds), so
+a blog already known to be mid-transfer never even queues for the lock - but
+this is just an optimization, not the source of safety: even if that account
+state changes in the window between the pre-check and the lock actually being
+acquired, `resetToBlot()`'s own guard (checked fresh, right after the account
+load that happens once the lock is held) still catches it.
+`sync/index.js`'s webhook-driven sync has the same kind of cheap pre-check,
+after acquiring its own lock and before constructing `Delta`/`Apply`, leaving
+`error_code`/`cursor` untouched when it skips.
+
+Specifically for running out of space, `resetFromBlot()` also:
+
+1. Runs a best-effort pre-flight check (`client.usersGetSpaceUsage()`)
+   comparing how much this transfer would actually grow Dropbox's usage by
+   against free space, and aborts before uploading anything if there's
+   clearly not enough room. The amount needed is the sum, over local files,
+   of how much bigger each is than whatever already sits at the same path
+   in the target Dropbox folder - so a retry of a partially-completed
+   transfer only needs room for what's left. Stale remote files that the
+   transfer will delete are not credited, since uploads can happen before
+   the walk reaches and removes them. If free space can't be determined (an
+   unrecognized allocation shape, or the request failing) the check is
+   skipped; if the remote listing fails, nothing is credited. The check only
+   rejects when the bytes needed are positive and exceed free space clamped
+   to `0`, so an account already over quota can still complete a
+   zero-growth retry. For a team account, the per-member allocation
+   (`user_within_team_space_allocated`) only applies when
+   `user_within_team_space_limit_type` is `stop_sync`, and then alongside
+   the shared team pool (whichever is smaller); `off` and `alert_only` use
+   the shared pool alone.
+2. Detects a Dropbox "insufficient_space" error from an individual upload
+   (`util/constants.js`'s `isInsufficientSpaceError`) and stops the transfer
+   immediately instead of logging and continuing - `util/retry.js` also
+   never retries this error, since retrying can't succeed until the user
+   frees up space.
+3. On either of the above, persists `error_code: 507`
+   (`util/constants.js`'s `INSUFFICIENT_SPACE_ERROR_CODE`) in addition to
+   leaving `transfer_pending: true`, so the dashboard can show the more
+   specific "Dropbox ran out of space" message rather than the generic
+   "transfer incomplete" one.
+4. More generally, never reports success (never clears `transfer_pending` /
+   sets `error_code: 0` / advances the cursor) if *any* file failed to
+   upload, quota-related or not.
+
+The dashboard (`routes/dashboard.js` / `views/index.html`) shows one of two
+dedicated messages, both offering a retry (which re-runs the OAuth flow and
+therefore `resetFromBlot()`) or a disconnect link:
+
+- `error_code === 507`: "Dropbox ran out of space" - out-of-space-specific
+  wording.
+- `transfer_pending === true` with any other `error_code`: a generic
+  "Blot couldn't finish transferring your folder to Dropbox" message.
+
+Both flags are computed from the persisted account, but while a setup is
+actually running, `dashboard.get("/")` replaces `res.locals.account` with the
+in-session `req.session.dropbox` object (which has neither flag) before
+rendering - so neither message flashes during a normal, still-in-progress
+transfer, only once one is genuinely stuck. Once a retry succeeds,
+`resetFromBlot()` clears `transfer_pending` and sets `error_code: 0` again,
+and the blog becomes eligible for validation/resync/webhook syncs as normal.
 
 ### Write from Blot (User Edits in Blot)
 

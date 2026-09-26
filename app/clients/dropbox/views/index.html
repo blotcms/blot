@@ -2,6 +2,35 @@
 
 {{#account}}
 
+      {{#insufficient_space}}
+
+      <div class="mess error">
+
+        <b>Dropbox ran out of space</b><br><br>
+
+        Dropbox ran out of storage space while Blot was transferring the folder for <b>{{blog.title}}</b> to it. No files on Blot were removed. To fix this, free up space in your Dropbox account, then retry the transfer below. If you'd rather not free up space, you can disconnect from Dropbox instead. <br><br>
+
+        <a href="{{{base}}}/redirect{{#full_access}}?full_access=true{{/full_access}}" class="button">Retry transfer</a>
+      </div>
+
+      {{/insufficient_space}}
+
+      {{^insufficient_space}}
+
+      {{#transfer_incomplete}}
+
+      <div class="mess error">
+
+        <b>Dropbox transfer incomplete</b><br><br>
+
+        Blot couldn't finish transferring the folder for <b>{{blog.title}}</b> to Dropbox. No files on Blot were removed. Retry the transfer below, or disconnect from Dropbox instead. <br><br>
+
+        <a href="{{{base}}}/redirect{{#full_access}}?full_access=true{{/full_access}}" class="button">Retry transfer</a>
+      </div>
+
+      {{/transfer_incomplete}}
+
+      {{^transfer_incomplete}}
       {{#error_code}}
 
       <a href="{{{base}}}/redirect{{#full_access}}?full_access=true{{/full_access}}" class="mess error">
@@ -14,6 +43,9 @@
       </a>
 
       {{/error_code}}
+      {{/transfer_incomplete}}
+
+      {{/insufficient_space}}
 
 <div class="live-updates">
 

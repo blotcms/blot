@@ -100,4 +100,79 @@ describe("dropbox resetToBlot", function () {
     expect(update).toHaveBeenCalledWith("/a.txt");
     expect(saved.some((values) => "cursor" in values)).toEqual(false);
   });
+
+  // resetToBlot treats Dropbox as the source of truth and deletes any local
+  // file with no Dropbox counterpart, so it must refuse outright - before
+  // touching anything - for a blog whose initial transfer to Dropbox hasn't
+  // finished (transfer_pending, or the legacy error_code: 507). This is the
+  // one guard every caller (init.js's resetToBlotWithLock, the manual
+  // "Resync from Dropbox" dashboard action, scripts/dropbox/*.js) relies on.
+  describe("refuses when the account's initial transfer hasn't finished", function () {
+    function loadWithAccount(account) {
+      require.cache[createClientPath] = {
+        exports: function (_blogID, callback) {
+          const explode = () => {
+            throw new Error("should not be called - the guard must run first");
+          };
+          callback(
+            null,
+            {
+              filesGetMetadata: explode,
+              filesListFolderGetLatestCursor: explode,
+              filesListFolder: explode,
+            },
+            account
+          );
+        },
+      };
+      require.cache[databasePath] = {
+        exports: {
+          set: function (_blogID, values, callback) {
+            saved.push(values);
+            callback(null);
+          },
+        },
+      };
+      delete require.cache[resetPath];
+      return require("../sync/reset-to-blot");
+    }
+
+    it("refuses for transfer_pending", async function () {
+      const resetToBlot = loadWithAccount({
+        transfer_pending: true,
+        error_code: 0,
+        folder_id: "",
+      });
+
+      let error;
+      try {
+        await resetToBlot(blogID, () => {}, () => {});
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error).toBeDefined();
+      expect(error.code).toEqual("DROPBOX_TRANSFER_INCOMPLETE");
+      expect(saved.length).toEqual(0);
+    });
+
+    it("refuses for the legacy out-of-space error code", async function () {
+      const resetToBlot = loadWithAccount({
+        transfer_pending: false,
+        error_code: 507,
+        folder_id: "",
+      });
+
+      let error;
+      try {
+        await resetToBlot(blogID, () => {}, () => {});
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error).toBeDefined();
+      expect(error.code).toEqual("DROPBOX_TRANSFER_INCOMPLETE");
+      expect(saved.length).toEqual(0);
+    });
+  });
 });

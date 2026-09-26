@@ -98,6 +98,16 @@ async function setAccount(blogID, changes) {
   // Overwrite existing properties with any changes
   for (var i in changes) account[i] = changes[i];
 
+  // transfer_pending was added to the model after this file already had
+  // callers (including plenty of existing tests) that write a brand new
+  // account without mentioning it. ensure()'s strict check below requires
+  // every model field to already be present with the right type, so default
+  // it here rather than requiring every caller to pass it explicitly. Any
+  // caller that actually wants it true still overrides it via `changes`.
+  if (typeof account.transfer_pending !== "boolean") {
+    account.transfer_pending = false;
+  }
+
   // Verify that the type of new account state
   // matches the expected types declared in Model below.
   ensure(account, Model, true);
@@ -211,6 +221,21 @@ Model = {
   // in time. When the user sets up Dropbox,
   // this is an empty string.
   cursor: "string",
+
+  // True from the moment setup (routes/setup/index.js) starts the initial
+  // transfer of the blog's existing folder to Dropbox, until reset-from-blot.js
+  // finishes uploading every file and clears it back to false in the same
+  // write that sets error_code: 0 and the cursor. While true, Dropbox cannot
+  // be trusted as the source of truth for this blog: resetToBlot (and the
+  // webhook-driven sync in sync/index.js) delete any local file with no
+  // Dropbox counterpart, which is exactly the files that haven't been
+  // uploaded yet. See util/constants.js's transferIncomplete() - every
+  // automatic path that could run one of those destructive syncs (startup
+  // resync, hourly validation, webhook sync) checks it first and skips the
+  // blog while this is true. A pre-existing account's hash predates this
+  // field; getAccount() below defaults a missing boolean field to false, so
+  // old accounts are unaffected.
+  transfer_pending: "boolean",
 };
 
 module.exports = {

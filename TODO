@@ -22,9 +22,6 @@ Fix Google Drive sync outage caused by Google account suspesion
 - Future fix to Google Drive client needs to never use the service account to create files (ask the user to handle the initial transfer)
 - Revert 1958
 
-Dropbox initial transfer of existing site folder needs to handle the user running out of Dropbox space properly. Basically we could check quota before beginning the transfer. And if we run into quota mid-transfer, we should stop, display an error, ask the user to either free up space or disconnect from Dropbox.
-- This triggered DATA LOSS
-
 Make Google Drive incremental sync efficient
 - Store hash of their api responses
 - Don’t touch disk

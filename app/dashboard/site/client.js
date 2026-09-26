@@ -198,6 +198,22 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
       );
     } catch (err) {
       console.log("ERROR:", err);
+
+      // A client can refuse to resync when it isn't safe to (currently just
+      // the Dropbox client, via clients/dropbox/resync.js, while its initial
+      // transfer to Dropbox hasn't finished). Surface that refusal instead of
+      // falling through to Fix() and "Finished site rebuild" below, which
+      // would make the refusal look like a successful resync.
+      if (err && err.code === "DROPBOX_TRANSFER_INCOMPLETE") {
+        // done() publishes "Synced" before calling back, so re-publish the
+        // refusal afterwards to make it the final status the user sees.
+        const refusal = err.message;
+        folder.status(refusal);
+        return done(null, function (err) {
+          if (err) console.log("Error releasing sync: ", err);
+          folder.status(refusal);
+        });
+      }
     }
 
     folder.status("Checking your site for issues");

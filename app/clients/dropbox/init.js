@@ -5,6 +5,7 @@ const Entries = require("models/entries");
 const clfdate = require("helper/clfdate");
 const email = require("helper/email");
 const resetToBlot = require("./sync/reset-to-blot");
+const { transferIncomplete } = require("./util/constants");
 const { get: getAccount, set: setAccount } = require("./database");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
@@ -24,6 +25,12 @@ const getEntryTotal = promisify(Entries.getAllTotal);
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_IN_MS = 15 * 60 * 1000;
 
+// Returned by resetToBlotWithLock instead of a summary when it finds the
+// transfer incomplete after acquiring the lock. Callers must treat this as
+// "nothing happened" - not a change to count, and not something to follow up
+// with fixBlog/catchUpSync.
+const TRANSFER_INCOMPLETE = Symbol("dropbox-transfer-incomplete");
+
 // Runs resetToBlot while holding the blog's folder lock, so it can't race a
 // webhook sync. resetToBlot updates the database as it changes files, since it
 // advances the Dropbox cursor and later syncs would never revisit them.
@@ -34,6 +41,16 @@ const resetToBlotWithLock = async (blogID, publish) => {
   try {
     return await resetToBlot(blogID, publish, folder.update);
   } catch (err) {
+    // resetToBlot itself refuses (see sync/reset-to-blot.js) if the account's
+    // initial transfer to Dropbox hasn't finished - that guard runs right
+    // after acquiring the lock's account read, so it's not vulnerable to the
+    // caller's own (cheap, pre-lock) transferIncomplete check having gone
+    // stale while establishSyncLock's retry loop waited to acquire this
+    // lock. Treat that refusal as "nothing happened", not a failure.
+    if (err && err.code === "DROPBOX_TRANSFER_INCOMPLETE") {
+      publish(err.message);
+      return TRANSFER_INCOMPLETE;
+    }
     error = err;
     throw err;
   } finally {
@@ -103,6 +120,7 @@ const hasRecentSync = (account) => {
   return Date.now() - account.last_sync <= ONE_HOUR_IN_MS;
 };
 
+
 let validationRunning = false;
 
 const runValidation = async () => {
@@ -142,6 +160,10 @@ const validateAllBlogs = async () => {
 
       const account = await getDropboxAccount(blogID);
       if (!hasRecentSync(account)) continue;
+      if (transferIncomplete(account)) {
+        console.log(clfdate(), "Dropbox: Skipping blog with incomplete transfer", blogID);
+        continue;
+      }
 
       checkedBlogs += 1;
 
@@ -167,6 +189,14 @@ const validateAllBlogs = async () => {
           continue;
         }
         throw err;
+      }
+
+      // The transfer became (or still was) incomplete by the time the lock
+      // was acquired, even though the cheap pre-check above passed. Treat it
+      // the same as never having attempted this blog.
+      if (summary === TRANSFER_INCOMPLETE) {
+        checkedBlogs -= 1;
+        continue;
       }
 
       const changeCount = countChanges(summary);
@@ -239,6 +269,10 @@ const resyncRecentSyncsOnStartup = async () => {
       if (!account || typeof account.last_sync !== "number") continue;
 
       if (Date.now() - account.last_sync >= FIFTEEN_MINUTES_IN_MS) continue;
+      if (transferIncomplete(account)) {
+        console.log(clfdate(), "Dropbox: Skipping blog with incomplete transfer", blogID);
+        continue;
+      }
 
       blogsToResync.push({ blog, blogID });
     } catch (err) {
@@ -261,7 +295,15 @@ const resyncRecentSyncsOnStartup = async () => {
 
       try {
         console.log(clfdate(), "Dropbox: Resyncing recent blog", blogID);
-        await resetToBlotWithLock(blogID, publish);
+        const summary = await resetToBlotWithLock(blogID, publish);
+        if (summary === TRANSFER_INCOMPLETE) {
+          console.log(
+            clfdate(),
+            "Dropbox: Skipping blog with incomplete transfer",
+            blogID
+          );
+          continue;
+        }
         await fixBlog(blog);
         await catchUpSync(blog);
         console.log(clfdate(), "Dropbox: Resync complete for blog", blogID);
@@ -288,3 +330,12 @@ module.exports = async function init() {
     console.error(clfdate(), "Dropbox: Startup resync failed", err);
   });
 };
+
+// Exposed for tests: both resyncRecentSyncsOnStartup and validateAllBlogs
+// gate on transferIncomplete() (util/constants.js) before ever calling
+// resetToBlotWithLock for a blog, and resetToBlotWithLock itself rechecks it
+// again once the lock is actually held (see its comment above).
+module.exports.resyncRecentSyncsOnStartup = resyncRecentSyncsOnStartup;
+module.exports.validateAllBlogs = validateAllBlogs;
+module.exports.resetToBlotWithLock = resetToBlotWithLock;
+module.exports.TRANSFER_INCOMPLETE = TRANSFER_INCOMPLETE;

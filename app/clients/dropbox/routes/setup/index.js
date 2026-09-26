@@ -87,6 +87,12 @@ function setup(account, session, callback) {
         error_code: 0,
         last_sync: Date.now(),
         cursor: "",
+        // Set before the initial transfer starts, and only cleared once
+        // resetFromBlot finishes uploading every file. Until then, Dropbox
+        // cannot be trusted as this blog's source of truth - see
+        // transfer_pending's comment in database.js and transferIncomplete()
+        // in util/constants.js.
+        transfer_pending: true,
       });
 
       folder.status("Syncing your folder to Dropbox");

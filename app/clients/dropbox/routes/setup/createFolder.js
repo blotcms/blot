@@ -3,6 +3,7 @@ const promisify = require("util").promisify;
 
 const sync = require("sync");
 const database = require("clients/dropbox/database");
+const { transferIncomplete } = require("clients/dropbox/util/constants");
 
 const listBlogs = promisify(database.listBlogs);
 const get = promisify(database.get);
@@ -25,7 +26,16 @@ const set = promisify(database.set);
 // 2. then remove one
 // 3. then re-connect another
 async function createFolder(account) {
-  const { client, full_access } = account;  
+  const { client, full_access } = account;
+
+  const reused = await tryReuseIncompleteTransferFolder(account);
+
+  if (reused) {
+    account.folder = reused.folder;
+    account.folder_id = reused.folder_id;
+    return account;
+  }
+
   const { blogToMove, blogsInAppFolder } = await checkAppFolder(account);
   const shouldCreateFolder = full_access || blogToMove || blogsInAppFolder;
 
@@ -39,6 +49,66 @@ async function createFolder(account) {
   account.folder_id = folder_id;
 
   return account;
+}
+
+// If this blog is retrying a previously-interrupted initial transfer (see
+// transferIncomplete() in util/constants.js) to the same Dropbox account
+// under the same permission mode, reuse the folder that transfer was already
+// using instead of creating a new one. Without this, every "Retry transfer"
+// click would call mkdir(..., autorename: true) below, which Dropbox
+// auto-renames to something like "My Blog (1)" since the original folder
+// still exists (with whatever files did make it across) - abandoning that
+// partial upload and doubling the pre-flight quota check's space
+// requirement, since it would then need room for a second, near-complete
+// copy of the folder on top of the first.
+//
+// Returns null (falling through to the normal folder-creation logic) for the
+// app-folder-root case (folder_id === "" and not full_access): createFolder
+// already leaves folder/folder_id as "" without ever calling mkdir when
+// shouldCreateFolder is false, so there's nothing to recreate or abandon
+// there, and no reuse logic is needed.
+async function tryReuseIncompleteTransferFolder(account) {
+  const { client, full_access, account_id, blog } = account;
+
+  // Not wrapped in try/catch: a failure to read our own database here is a
+  // transient infrastructure problem (e.g. Redis blip), not a confirmed "no
+  // existing account" - swallowing it and falling through to mkdir would
+  // risk the same abandoned-partial-folder problem this function exists to
+  // prevent. Let it propagate and fail this setup attempt instead.
+  const existing = await get(blog.id);
+
+  if (!existing) return null;
+  if (!transferIncomplete(existing)) return null;
+  if (existing.account_id !== account_id) return null;
+  if (existing.full_access !== full_access) return null;
+  if (!existing.folder_id) return null;
+
+  try {
+    const { result } = await client.filesGetMetadata({
+      path: existing.folder_id,
+    });
+
+    if (result[".tag"] !== "folder") return null;
+
+    return { folder: result.path_display, folder_id: existing.folder_id };
+  } catch (e) {
+    // Only a confirmed "the folder is gone" (Dropbox's 409
+    // path/not_found) should fall through to creating a brand new folder
+    // and abandoning the partial transfer - that's a real, permanent state
+    // change we need to react to. Anything else (a timeout, a rate limit, an
+    // outage) is transient: rethrowing makes this setup attempt fail
+    // (surfaced to the user as an error, same as any other setup failure)
+    // instead of quietly abandoning a folder that's actually still there and
+    // still has the partially-transferred files in it.
+    if (isNotFoundError(e)) return null;
+    throw e;
+  }
+}
+
+function isNotFoundError(err) {
+  if (!err || err.status !== 409) return false;
+  const summary = err.error && err.error.error_summary;
+  return typeof summary === "string" && summary.startsWith("path/not_found");
 }
 
 async function checkAppFolder(account) {
