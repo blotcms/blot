@@ -1,0 +1,16 @@
+/* macOS TextEdit (Tahoe), plain text and code. No toolbar and no ruler: a 32px title bar (traffic lights, the
+   document's proxy icon, its name and a chevron), then the text. TextEdit does not highlight, so the token
+   colours are the text colour; the palette is here to switch on (see DESIGN.md, Editor windows). */
+@light{--ed-fg:#000;--ed-title:#595959;--ed-line:#e6e6e6;--ed-chev:#b3b3b3;--tok-k:currentColor;--tok-s:currentColor;--tok-c:currentColor;--tok-n:currentColor;--tok-f:currentColor;--tok-a:currentColor;--tok-t:currentColor;--tok-m:currentColor;--tok-y:currentColor;--tok-v:currentColor}
+@dark{--ed-fg:#fff;--ed-title:#9a9a9a;--ed-line:#232323;--ed-chev:#5f5f5f;.pane.pane-ed .pane-bar::before{background-image:url(icon:mac/text-d)}.pane.pane-ed{box-shadow:inset 0 1px 0 #666,var(--sh)}.pane.pane-hl{--tok-k:#fc5fa3;--tok-s:#fc6a5d;--tok-c:#6c7986;--tok-n:#d0bf69;--tok-f:#a167e6;--tok-a:#cda1a1;--tok-t:#fc5fa3;--tok-m:#fd8f3f;--tok-y:#5dd8ff;--tok-v:#a167e6}}
+.pane.pane-ed{border-radius:16px}
+.pane.pane-ed::before{height:32px;background-position:9px 9px}
+.pane.pane-bare::before{display:none}
+.pane.pane-ed .pane-head{display:none}
+.pane.pane-ed .pane-bar{height:32px;box-sizing:border-box;padding-left:102px;font:600 13.5px/34px -apple-system,"SF Pro Text",system-ui,sans-serif;color:var(--ed-title);border-bottom:1px solid var(--ed-line)}
+.pane.pane-ed .pane-bar::before{left:84px;top:7.5px;width:14px;height:16px;border-radius:0;box-shadow:none;background:url(icon:mac/text) center/contain no-repeat}
+.pane.pane-ed .pane-bar::after{position:static;display:inline-block;width:9px;height:8px;margin-left:5px;vertical-align:-1px;background:var(--ed-chev);-webkit-mask:var(--g-chev) center/9px 8px no-repeat;mask:var(--g-chev) center/9px 8px no-repeat}
+.pane.pane-ed .pane-bar:empty::before,.pane.pane-ed .pane-bar:empty::after{display:none}
+.pane.pane-ed .pane-body{padding:0 10px;color:var(--ed-fg);font:11px/13px Menlo,"SF Mono",ui-monospace,Monaco,Consolas,"DejaVu Sans Mono",monospace}
+.pane.pane-bare .pane-body{padding:10px}
+.pane.pane-hl{--tok-k:#ad3da4;--tok-s:#d12f1b;--tok-c:#5d6c79;--tok-n:#272ad8;--tok-f:#4b21b0;--tok-a:#836c28;--tok-t:#ad3da4;--tok-m:#78492a;--tok-y:#3e8087;--tok-v:#4b21b0}

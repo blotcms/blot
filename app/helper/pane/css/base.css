@@ -1,0 +1,40 @@
+/* Structure shared by every skin: no colours, fonts or OS names (see DESIGN.md). */
+.pane{margin:0;position:relative;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;
+width:var(--pane-w,490px);max-width:100%;height:var(--pane-h,auto);max-height:var(--pane-h,var(--pane-max,360px));
+container-type:inline-size;-webkit-text-size-adjust:none}
+.pane-bar,.pane-head,.pane-icon,.pane-cell,.pane-head i{user-select:none;-webkit-user-select:none}
+.pane-bar,.pane-head{flex:none;position:relative}
+.pane-head{display:flex}
+.pane-head i{display:block;position:relative;font-style:normal;white-space:nowrap}
+.pane-tree,.pane-tree ul{list-style:none;margin:0;padding:0}
+.pane-tree{flex:1;min-height:0;overflow:auto}
+.pane-row{display:flex;align-items:center;position:relative}
+.pane-label{box-sizing:border-box;flex:none;min-width:0;position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pane-icon{position:absolute;top:50%;background:no-repeat center/contain}
+.pane-cell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pane-t{display:none}
+.pane [data-os]{display:none}
+.pane-name>[data-os]{display:none}
+.pane-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.pane-tree ul .pane-label{--x:var(--step)}
+.pane-tree ul ul .pane-label{--x:calc(var(--step)*2)}
+.pane-tree ul ul ul .pane-label{--x:calc(var(--step)*3)}
+.pane-tree ul ul ul ul .pane-label{--x:calc(var(--step)*4)}
+.pane-tree ul ul ul ul ul .pane-label{--x:calc(var(--step)*5)}
+/* editor windows (text, code): the body is a real pre; a skin sets fonts, padding and colours */
+.pane-ed .pane-bar{overflow:hidden;text-overflow:ellipsis}
+.pane-body{flex:1;min-height:0;margin:0;overflow:auto;box-sizing:border-box;white-space:pre-wrap;overflow-wrap:break-word;tab-size:4;counter-reset:pane-line;font:inherit}
+.pane-body code{font:inherit}
+[data-view=code] .pane-body{white-space:pre;overflow-wrap:normal}
+.pane-body:focus-visible{outline-offset:-3px}
+.pane-t-k{color:var(--tok-k,inherit)}.pane-t-s{color:var(--tok-s,inherit)}.pane-t-c{color:var(--tok-c,inherit)}.pane-t-n{color:var(--tok-n,inherit)}.pane-t-f{color:var(--tok-f,inherit)}
+.pane-t-a{color:var(--tok-a,inherit)}.pane-t-t{color:var(--tok-t,inherit)}.pane-t-m{color:var(--tok-m,inherit)}.pane-t-y{color:var(--tok-y,inherit)}.pane-t-v{color:var(--tok-v,inherit)}
+.pane-l{counter-increment:pane-line}
+.pane-l::before{content:counter(pane-line);display:none;position:sticky;left:0;box-sizing:border-box;width:var(--gut-w,3ch);margin-right:var(--gut-gap,1ch);text-align:right;user-select:none;-webkit-user-select:none;color:var(--gut-fg,inherit);background:var(--gut-bg,var(--bg))}
+@media (forced-colors:active){
+.pane{box-shadow:none;border:1px solid CanvasText;background:Canvas;color:CanvasText}
+.pane::before,.pane-bar::before,.pane-bar::after,.pane-head{background:none}
+.pane-row{background:none}
+.pane-body{color:CanvasText}
+.pane-icon{forced-color-adjust:none}
+}

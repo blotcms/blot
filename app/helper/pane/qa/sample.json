@@ -1,0 +1,21 @@
+{
+  "_comment": "The sample folder ('Your site') from screenshots/make-fixture.sh: true byte sizes, and modified times frozen to constants (the references show dates relative to the capture day, which is why the date columns are masked). 'now' is the frozen 'today'. Folders have no size.",
+  "title": "Your site",
+  "now": "2026-09-20T15:38:00",
+  "files": {
+    "About.txt": { "bytes": 6, "modified": "2026-09-20T15:38:00" },
+    "Animation.gif": { "bytes": 2734, "modified": "2026-09-19T11:35:00" },
+    "Blot.webloc": { "bytes": 128, "modified": "2026-09-15T15:12:00" },
+    "Draft.md": { "bytes": 109, "modified": "2025-10-22T14:59:00" },
+    "Fruits": { "folder": true, "modified": "2025-02-05T14:46:00" },
+    "Apple.md": { "bytes": 6, "modified": "2026-09-20T00:00:00" },
+    "index.html": { "bytes": 500, "modified": "2024-03-09T14:33:00" },
+    "Logo.png": { "bytes": 328, "modified": "2023-01-27T14:20:00" },
+    "Notes.md": { "bytes": 494, "modified": "2021-10-03T14:07:00" },
+    "Old report.doc": { "bytes": 4, "modified": "2020-03-27T13:54:00" },
+    "Photo.jpg": { "bytes": 3947, "modified": "2018-07-07T13:41:00" },
+    "Plan.gdoc": { "bytes": 48, "modified": "2016-08-03T13:28:00" },
+    "Report.docx": { "bytes": 1786, "modified": "2014-06-18T13:15:00" },
+    "Tasks.org": { "bytes": 10, "modified": "2024-06-14T13:02:00" }
+  }
+}

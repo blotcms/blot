@@ -1,0 +1,310 @@
+{
+  "_comment": "Limits for diff.js. diffPercent is % of compared (unmasked) pixels that differ, per region name or kind (chrome is stricter than text). inkPercent is differing pixels / pixels that are ink in either image, per region. flatDeltaE is the CIE76 colour difference between a region's dominant colours (wrong greys). blurMae is the mean absolute error of blurred images, % of full scale. shadowError is RMSE in luminance levels. sizeDelta is the window size difference in CSS px. rowYOffset is the mean vertical offset of text rows in CSS px. Per-case entries in \"cases\" override the defaults key by key. These start loose so crude fixtures pass or fail meaningfully; tighten as the module improves. macos-light, macos-dark, linux-light and linux-dark (built skins) are held to the tightened limits, and so are windows-light and windows-dark (measured on the Windows runner, where the reference has ClearType text and the rendering has grayscale, so the text ink limits are looser than macOS's). windows-dark's toolbars have two surfaces of almost the same area (the Mica navigation row and the command bar), so its flat colour is a near tie: a change that flips it shows as a large flatDeltaE without a real colour error. macos-{light,dark}-{text,code} (TextEdit, built) are held to tightened limits too, measured on the macOS runner (text ink is looser there than on a developer machine: glyph antialiasing differs a little). The two code captures have a deeper window shadow than the text captures and the folder captures (a capture-state difference of macOS, not something the CSS can match for both): their shadowError limits are looser (about 9) than the text cases' (under 3); every other metric is as tight as the text cases. windows-light-list and windows-dark-list are hand-written fixtures of a view authors cannot pick from the editor (the QA harness has no way to author a real list-view capture yet); they are marked informational: reported in the table but excluded from the pass/fail exit code.",
+  "default": {
+    "diffPercent": {
+      "overall": 8,
+      "chrome": 5,
+      "text": 15
+    },
+    "inkPercent": {
+      "chrome": 40,
+      "text": 70
+    },
+    "flatDeltaE": {
+      "chrome": 4,
+      "text": 4
+    },
+    "blurMae": {
+      "overall": 3,
+      "chrome": 4,
+      "text": 4
+    },
+    "shadowError": 10,
+    "sizeDelta": 4,
+    "rowYOffset": 4
+  },
+  "cases": {
+    "macos-light": {
+      "diffPercent": {
+        "overall": 1.4,
+        "chrome": 0.4,
+        "text": 1.7
+      },
+      "inkPercent": {
+        "chrome": 6,
+        "text": 20
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.7,
+        "chrome": 0.5,
+        "text": 0.7
+      },
+      "shadowError": 3,
+      "sizeDelta": 1,
+      "rowYOffset": 1.5
+    },
+    "macos-dark": {
+      "diffPercent": {
+        "overall": 1.6,
+        "chrome": 1,
+        "text": 1.8
+      },
+      "inkPercent": {
+        "chrome": 14,
+        "text": 18
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.8,
+        "chrome": 0.55,
+        "text": 0.85
+      },
+      "shadowError": 1,
+      "sizeDelta": 1,
+      "rowYOffset": 1.5
+    },
+    "linux-light": {
+      "diffPercent": {
+        "overall": 0.9,
+        "chrome": 0.5,
+        "text": 1.1
+      },
+      "inkPercent": {
+        "chrome": 6,
+        "text": 18
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.45,
+        "chrome": 0.55,
+        "text": 0.5
+      },
+      "shadowError": 1,
+      "sizeDelta": 1,
+      "rowYOffset": 0.5
+    },
+    "linux-dark": {
+      "diffPercent": {
+        "overall": 0.9,
+        "chrome": 0.5,
+        "text": 1.1
+      },
+      "inkPercent": {
+        "chrome": 6,
+        "text": 18
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.45,
+        "chrome": 0.55,
+        "text": 0.5
+      },
+      "shadowError": 1,
+      "sizeDelta": 1,
+      "rowYOffset": 0.5
+    },
+    "windows-light": {
+      "diffPercent": {
+        "overall": 2.0,
+        "chrome": 2.1,
+        "text": 2.7
+      },
+      "inkPercent": {
+        "chrome": 35,
+        "text": 48
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.6,
+        "chrome": 0.8,
+        "text": 0.8
+      },
+      "shadowError": 1,
+      "sizeDelta": 1,
+      "rowYOffset": 1
+    },
+    "windows-dark": {
+      "diffPercent": {
+        "overall": 1.8,
+        "chrome": 2.0,
+        "text": 2.5
+      },
+      "inkPercent": {
+        "chrome": 33,
+        "text": 38
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.7,
+        "chrome": 0.7,
+        "text": 1.0
+      },
+      "shadowError": 1,
+      "sizeDelta": 1,
+      "rowYOffset": 1
+    },
+    "macos-light-icons": {
+      "diffPercent": {
+        "overall": 1.4,
+        "chrome": 0.4,
+        "text": 1.6
+      },
+      "inkPercent": {
+        "chrome": 5,
+        "text": 23
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.7,
+        "chrome": 0.5,
+        "text": 0.8
+      },
+      "shadowError": 3,
+      "sizeDelta": 1,
+      "rowYOffset": 1
+    },
+    "macos-dark-icons": {
+      "diffPercent": {
+        "overall": 1.6,
+        "chrome": 1.2,
+        "text": 1.6
+      },
+      "inkPercent": {
+        "chrome": 16,
+        "text": 13
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.8,
+        "chrome": 0.6,
+        "text": 0.8
+      },
+      "shadowError": 1,
+      "sizeDelta": 1,
+      "rowYOffset": 1
+    },
+    "macos-light-text": {
+      "diffPercent": {
+        "overall": 1.35,
+        "chrome": 1.15,
+        "text": 1.35
+      },
+      "inkPercent": {
+        "chrome": 11.0,
+        "text": 16.5
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.75,
+        "chrome": 0.7,
+        "text": 0.75
+      },
+      "shadowError": 2.6,
+      "sizeDelta": 1,
+      "rowYOffset": 0.4
+    },
+    "macos-dark-text": {
+      "diffPercent": {
+        "overall": 1.0,
+        "chrome": 1.3,
+        "text": 0.95
+      },
+      "inkPercent": {
+        "chrome": 11.5,
+        "text": 10.5
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.8,
+        "chrome": 0.7,
+        "text": 0.8
+      },
+      "shadowError": 0.5,
+      "sizeDelta": 1,
+      "rowYOffset": 0.6
+    },
+    "macos-light-code": {
+      "diffPercent": {
+        "overall": 0.6,
+        "chrome": 1.1,
+        "text": 0.55
+      },
+      "inkPercent": {
+        "chrome": 10.0,
+        "text": 13.5
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.4,
+        "chrome": 0.9,
+        "text": 0.35
+      },
+      "shadowError": 9.5,
+      "sizeDelta": 1,
+      "rowYOffset": 0.4
+    },
+    "macos-dark-code": {
+      "diffPercent": {
+        "overall": 0.45,
+        "chrome": 1.25,
+        "text": 0.4
+      },
+      "inkPercent": {
+        "chrome": 9.5,
+        "text": 8.0
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.45,
+        "chrome": 0.9,
+        "text": 0.4
+      },
+      "shadowError": 10.3,
+      "sizeDelta": 1,
+      "rowYOffset": 0.9
+    },
+    "windows-light-list": {
+      "informational": true
+    },
+    "windows-dark-list": {
+      "informational": true
+    }
+  }
+}

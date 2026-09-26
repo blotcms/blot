@@ -33,6 +33,8 @@ config/nginx/server.conf
 package-lock.json
 node_modules/*
 app/clients/icloud/macserver/node_modules
+# pane QA output (diff images, reports)
+app/helper/pane/qa/out/
 
 # Generated from config/openresty by proxy/build/sync-config.js. Edit the
 # canonical files (or the adapter), not these copies.

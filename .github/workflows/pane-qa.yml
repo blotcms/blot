@@ -1,0 +1,189 @@
+# Renders the pane QA cases (app/helper/pane/qa) on the runner of the matching
+# OS, so the system fonts line up with the real screenshots (SF on macOS, Segoe
+# UI Variable on Windows, Cantarell on Ubuntu), and commits the images to
+# app/helper/pane/rendered/, like pane-screenshots does for reference/.
+# See app/helper/pane/qa/README.md.
+name: pane-qa
+
+on:
+  push:
+    # the module will span many files under app/helper/pane; the images and
+    # capture scripts have their own workflow (pane-screenshots)
+    paths:
+      - "app/helper/pane/**"
+      - "!app/helper/pane/reference/**"
+      - "!app/helper/pane/rendered/**"
+      - "!app/helper/pane/screenshots/**"
+      - "package.json"
+      - ".github/workflows/pane-qa.yml"
+  workflow_dispatch:
+  # pane-screenshots calls this after committing new references (pushes made
+  # with GITHUB_TOKEN don't start workflows), so rendered/ doesn't go stale
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pane-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # always the branch tip, also when called after the screenshots bot pushed
+  REF: ${{ github.ref_name }}
+
+jobs:
+  render:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # pinned to the OS the references were captured on (screenshots/os-versions.json,
+          # checked below); to move to a new OS see screenshots/UPDATING-OS.md
+          - { os: macos, runner: macos-26 }
+          - { os: windows, runner: windows-2025 }
+          - { os: linux, runner: ubuntu-24.04 }
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Windows can't check out this repo (a filename contains `|`), so
+      # download the tarball and unpack only app/helper/pane.
+      - name: Fetch pane (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Headers @{ Authorization = "Bearer ${{ github.token }}" } "https://api.github.com/repos/${{ github.repository }}/tarball/$env:REF" -OutFile repo.tgz
+          New-Item -ItemType Directory -Force repo | Out-Null
+          # bsdtar (the Windows tar) uses --include; fall back to GNU tar's --wildcards
+          tar -xzf repo.tgz -C repo --strip-components=1 --include "*/app/helper/pane/*"
+          if ($LASTEXITCODE -ne 0) { tar -xzf repo.tgz -C repo --strip-components=1 --wildcards "*/app/helper/pane/*" }
+          Invoke-WebRequest -Headers @{ Authorization = "Bearer ${{ github.token }}" } "https://raw.githubusercontent.com/${{ github.repository }}/$env:REF/package.json" -OutFile repo/package.json
+          Get-ChildItem repo/app/helper/pane
+      - uses: actions/checkout@v4
+        if: matrix.os != 'windows'
+        with:
+          path: repo
+          ref: ${{ github.ref_name }}
+          # the QA scripts only need the pane directory (root files, package.json, come with it)
+          sparse-checkout: app/helper/pane
+
+      - name: Check the runner's OS version
+        shell: bash
+        run: node repo/app/helper/pane/screenshots/check-os.js --basic
+
+      - name: Install fonts (Linux)
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-cantarell fonts-dejavu-core
+
+      # only what the qa scripts need, at the versions package.json pins. node_modules and
+      # Puppeteer's downloaded Chrome are cached on that list, so most runs skip the install.
+      - name: Work out dependencies
+        id: deps
+        shell: bash
+        run: |
+          # single-quoted script, no nested quotes: macOS's Bash 3.2 mis-parses those
+          PKGS=$(node -e 'const p=require("./repo/package.json");const d={...p.dependencies,...p.devDependencies};console.log(["puppeteer","sharp","pixelmatch","express","highlight.js"].map(n=>n+"@"+d[n]).join(" "))')
+          echo "pkgs=$PKGS" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            tools/node_modules
+            ~/.cache/puppeteer
+          key: qa-deps-${{ runner.os }}-${{ runner.arch }}-${{ steps.deps.outputs.pkgs }}
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          mkdir -p tools && cd tools
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund ${{ steps.deps.outputs.pkgs }}
+
+      - name: Render
+        shell: bash
+        working-directory: repo
+        env:
+          NODE_PATH: ${{ github.workspace }}/tools/node_modules
+        run: node app/helper/pane/qa/render.js --os ${{ matrix.os }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pane-qa-${{ matrix.os }}
+          path: repo/app/helper/pane/rendered/${{ matrix.os }}
+          if-no-files-found: warn
+
+  # Commits the renders next to the references so the local viewer works
+  # without Chrome. Pushes made with GITHUB_TOKEN don't trigger new runs.
+  commit:
+    needs: render
+    if: ${{ !cancelled() && github.ref_type == 'branch' && github.ref != 'refs/heads/master' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          sparse-checkout: app/helper/pane
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          path: rendered-artifacts
+      - name: Commit images
+        run: |
+          OUT=app/helper/pane/rendered
+          for os in macos windows linux; do
+            [ -d "rendered-artifacts/pane-qa-$os" ] || continue   # keep the old images if a job failed
+            rm -rf "$OUT/$os"
+            mkdir -p "$OUT/$os"
+            cp rendered-artifacts/pane-qa-$os/*.png "$OUT/$os/" 2>/dev/null || true
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f "$OUT"
+          git diff --cached --quiet && exit 0
+          git commit -m "Update pane rendered images"
+          # other pushes (people, the screenshots bot) can land in between
+          for attempt in 1 2 3 4; do
+            git pull --rebase origin "${{ github.ref_name }}" && git push origin "HEAD:${{ github.ref_name }}" && break
+            sleep $((attempt * 5))
+          done
+      # Informational: the thresholds don't gate CI until the module exists.
+      - name: Work out dependencies
+        id: deps
+        run: |
+          # single-quoted script, no nested quotes: macOS's Bash 3.2 mis-parses those
+          PKGS=$(node -e 'const p=require("./package.json");const d={...p.dependencies,...p.devDependencies};console.log(["puppeteer","sharp","pixelmatch","express","jasmine","cheerio","highlight.js"].map(n=>n+"@"+d[n]).join(" "))')
+          echo "pkgs=$PKGS" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            tools/node_modules
+            ~/.cache/puppeteer
+          key: qa-deps-${{ runner.os }}-${{ runner.arch }}-${{ steps.deps.outputs.pkgs }}
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p tools && cd tools && npm init -y >/dev/null
+          npm install --no-audit --no-fund ${{ steps.deps.outputs.pkgs }}
+      # the module's and the QA harness's unit tests (nothing else in this branch runs them)
+      - name: Unit tests
+        run: |
+          NODE_PATH="$PWD/tools/node_modules" node tools/node_modules/jasmine/bin/jasmine.js "app/helper/pane/tests/*.js" "app/helper/pane/qa/tests/*.js"
+      - name: Summarise differences
+        run: |
+          NODE_PATH="$PWD/tools/node_modules" node app/helper/pane/qa/smoke.js
+          {
+            echo '### pane QA'
+            echo '```'
+            NODE_PATH="$PWD/tools/node_modules" node app/helper/pane/qa/diff.js || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
