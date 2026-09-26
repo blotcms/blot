@@ -476,6 +476,36 @@ of its own file (files of one skin are joined; each `@light`/`@dark` body now ge
 Also extend `qa/pane-adapter.js` (drop the `c.os !== "macos"` line in the icons branch and give the
 OS its tree) and `qa/thresholds.json`, and `qa/backdrop.js`'s icons filter. Windows' Explorer hides
 extensions of known types (already in the label markup) and has no Type/Size text in this view.
+
+### Desktop view (`view:"desktop"`), macOS built; the contract for the other skins
+
+Icons loose on the page, no window at all: an author asks for this over a `<background>` (or any
+other page background) instead of the Finder card the icons view draws. Built as `css/mac-desktop.css`
+on the same flat item list `lib/markup.js`'s `items()` already builds for the icons view; Windows and
+Linux would add `css/win-desktop.css` / `css/linux-desktop.css` and change nothing else, exactly as
+the icons view's other skins would.
+
+**DOM**: identical to the icons view's `<figure class="pane" data-view="desktop" …>`, except the two
+chrome nodes (`.pane-bar`, `.pane-head`) are never emitted — there is no bar or traffic lights to hide,
+so `lib/markup.js`'s `folder()` skips them outright for this view rather than hiding them with CSS
+(DESIGN.md's usual `pane-bare`/`chrome:false` pattern hides chrome the visitor could otherwise see;
+here there is truly nothing there). The body is `items()`, unchanged from the icons view.
+
+**Positioning is the caller's job, not pane's.** `.pane[data-view=desktop]` resets the window box
+(`position:static`, `width/height:auto`, no shadow/border/background, `overflow:visible`) so the
+element carries no leftover Finder-card geometry, but it does not lay itself over anything — a docs
+page composing icons behind another window (as `/how` does) must position a *wrapper* around the
+`<pre>`, never the `.pane[data-view=desktop]` element itself: pane's own skin rules for that selector
+(position, display, sizing) are scoped through `css.js`'s `.pane`-rooted, per-OS `:is(...)` wrapper and
+so outrank a plain page-level selector targeting `[data-view=desktop]` directly (`app/views/css/blot.css`'s
+`.pane-desktop-layer` is the example: an ancestor `<div>` gets `position:absolute`, the pane inside it
+stays untouched).
+
+**Legibility.** There is no card behind the labels, so `.pane-label` is white with a text-shadow and
+`.pane-icon` gets a drop-shadow, instead of the icons view's plain dark-on-white. This is a flat stand-in,
+not a capture-matched value (PLAN.md, "Wallpapers", "Desktop icon labels"): the real alpha text shadow
+measured off a wallpaper is later work, gated on the two-backdrop capture plan in the same section.
+
 - **Editor windows** (`pane.text`, `pane.code`; `lib/editor.js`, `lib/highlight.js`; macOS skin `css/mac-editor.css`;
   structure in `css/base.css`). One contract for all three OSes, so the Windows and Linux skins are CSS only.
 

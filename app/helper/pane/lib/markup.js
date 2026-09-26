@@ -24,7 +24,7 @@ const ICON_SCROLLS_AFTER = 4;
 function folder(tree, options = {}) {
   // A pin only holds for an OS whose skin is built; otherwise the window is unpinned and
   // follows the visitor (or the default skin), as if the author had not pinned it.
-  const view = options.view === "icons" ? "icons" : "list";
+  const view = options.view === "icons" ? "icons" : options.view === "desktop" ? "desktop" : "list";
   const pin = OS_KEYS.includes(options.os) && css.SKINS.includes(options.os) && css.viewsOf(options.os).includes(view) ? options.os : null;
   if (options.os && !pin) console.warn(`pane: ignoring os pin "${String(options.os)}" (no ${view} view built for it); the window follows the visitor`);
   const theme = ["light", "dark"].includes(options.theme) ? options.theme : null;
@@ -107,11 +107,14 @@ function folder(tree, options = {}) {
   // apply to is a scroller too. (Costs macOS and Linux visitors one extra tab stop.)
   const winList = (pin === null || pin === "win") && css.SKINS.includes("win");
   const scrolls = options.height || winList || total(nodes) > SCROLLS_AFTER;
-  const body = view === "icons" ? items() : list(nodes, ` class="pane-tree"${scrolls ? ` tabindex="0" aria-label="${escape(title)}"` : ""}`);
+  const body = view === "list" ? list(nodes, ` class="pane-tree"${scrolls ? ` tabindex="0" aria-label="${escape(title)}"` : ""}`) : items();
   const size = [options.width && `--pane-w:${escape(options.width)}`, options.height && `--pane-h:${escape(options.height)}`].filter(Boolean).join(";");
+  // Desktop icons sit loose on the wallpaper (DESIGN.md, "Desktop view"): no title bar, no
+  // traffic lights, no window box at all, just the icon grid.
+  const chrome = view !== "desktop" ? `<div class="pane-bar" aria-hidden="true">${escape(title)}</div><div class="pane-head" aria-hidden="true"><i></i><i></i><i></i></div>` : "";
   return (
     `<figure class="pane${widerDates ? " pane-yd" : ""}" data-view="${view}"${pin ? ` data-pin="${pin}"` : ""}${theme ? ` data-theme="${theme}"` : ""}${size ? ` style="${size}"` : ""} aria-label="${escape(title)}">` +
-    `<div class="pane-bar" aria-hidden="true">${escape(title)}</div><div class="pane-head" aria-hidden="true"><i></i><i></i><i></i></div>` +
+    chrome +
     body +
     "</figure>"
   );

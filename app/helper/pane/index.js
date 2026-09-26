@@ -1,6 +1,7 @@
 // pane: renders docs blocks as mock OS windows (macOS, Windows 11, GNOME Files).
 // Built: folder windows in list view (macOS, Windows, GNOME), the icons view (macOS; the other skins fall
-// back to it, DESIGN.md) and the editor windows (macOS; the other skins fall back to it). Skins are switched by <html data-os>, light/dark by
+// back to it, DESIGN.md), the desktop view (macOS; the other skins fall back to it) and the editor windows
+// (macOS; the other skins fall back to it). Skins are switched by <html data-os>, light/dark by
 // prefers-color-scheme. See DESIGN.md (how) and PLAN.md (what).
 //
 // API
@@ -19,9 +20,10 @@
 // "/", has children, or has no "." in its name (the docs' existing convention, so an
 // empty folder like "Posts" works). Options:
 //   title    accessible name and title bar text
-//   view     "list" (default) or "icons" (the top-level items only, as a grid): the two views every OS has. The captured
-//            references have more (columns, gallery, tiles, content, sidebar); they are
-//            OS-specific studies, not something an author can ask for.
+//   view     "list" (default), "icons" (the top-level items only, as a grid) or "desktop" (the
+//            same grid with no window at all: icons and labels loose on the page, for laying
+//            over a wallpaper background). The captured references have more (columns, gallery,
+//            tiles, content, sidebar); they are OS-specific studies, not something an author can ask for.
 //   files    name -> { bytes, modified: "YYYY-MM-DDTHH:MM:SS", folder? } for the columns
 //   now      "today" as "YYYY-MM-DDTHH:MM:SS" (UTC). Rows without a date get recent ones (a couple
 //            today and yesterday, a few this week, the rest up to about 18 months back, never
@@ -56,8 +58,8 @@ const { editor } = require("./lib/editor");
 const { resolve: resolveLanguage } = require("./lib/highlight");
 
 // what an author can ask for; the QA harness has more views (see the header)
-const VIEWS = ["list", "icons"];
-const SUPPORTED_VIEWS = ["list", "icons"];
+const VIEWS = ["list", "icons", "desktop"];
+const SUPPORTED_VIEWS = ["list", "icons", "desktop"];
 
 function folder(tree, options = {}) {
   const view = options.view === "tree" ? "list" : options.view || "list"; // the list view is a tree

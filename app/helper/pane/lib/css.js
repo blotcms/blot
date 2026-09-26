@@ -59,7 +59,7 @@ const unbuilt = (skins) => `html:not(:is(${skins.map((s) => `[data-os=${s}]`).jo
 // The views a skin has (the folder views an author can ask for, see index.js VIEWS): list is
 // the skin's own file, another view is css/<os>-<view>.css. A window in a view its skin lacks
 // is styled by the default skin instead (which has them all), so it is never half-styled.
-const VIEWS = ["list", "icons"];
+const VIEWS = ["list", "icons", "desktop"];
 const lacks = (os) => VIEWS.filter((v) => v !== "list" && !fs.existsSync(path.join(ROOT, "css", `${os}-${v}.css`)));
 const viewsOf = (os) => VIEWS.filter((v) => !lacks(os).includes(v));
 

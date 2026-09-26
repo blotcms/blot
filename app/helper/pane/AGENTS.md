@@ -34,7 +34,7 @@ first. Details per OS: `screenshots/README.md` (principle) and `reference/resour
 
 ## Who owns what
 - Skins are per-OS files: `css/<os>.css` + `icons/<os>/`, and a skin may span
-  `css/<os>-<part>.css` files (icons view, editors) that the build reads as one source, so
+  `css/<os>-<part>.css` files (icons view, desktop view, editors) that the build reads as one source, so
   parallel agents own separate files. `css/base.css` is structure only. `lib/` is shared and small; edit it surgically, because other agents work there
   in parallel.
 - `reference/` and `rendered/` PNGs are written by bots (pane-screenshots, pane-qa). Never

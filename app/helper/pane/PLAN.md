@@ -263,12 +263,13 @@ time without any runtime work: every visitor sees the same static HTML until the
 
 Built and passing: reference screenshots for all three OSes (folder views, text and code editor windows,
 desktop icons), pinned runner OS versions with a CI guard, the QA harness (pixel diff, backdrop matte
-check, accessibility and mobile audit), the folder list view and icons view for macOS in light and dark,
-the folder list view for Windows 11 and GNOME Files in light and dark, editor windows (macOS skin;
-Windows and Linux get the macOS look), fresh build-time dates, and the docs build rendering `pre.folder`,
-`pre.text` and `pre.code` with pane.
-Not built: Windows/Linux skins for the icons view and editor windows (visitors on those OSes see the
-macOS look, by design); retiring `tools/finder`. Open decisions: whether docs code blocks should be coloured (GNOME highlights;
+check, accessibility and mobile audit), the folder list view, icons view and desktop view for macOS in
+light and dark, the folder list view for Windows 11 and GNOME Files in light and dark, editor windows
+(macOS skin; Windows and Linux get the macOS look), fresh build-time dates, and the docs build rendering
+`pre.folder`, `pre.text` and `pre.code` with pane (`data-view="desktop"` on `pre.folder` for loose icons,
+no window).
+Not built: Windows/Linux skins for the icons view, desktop view and editor windows (visitors on those
+OSes see the macOS look, by design); retiring `tools/finder`. Open decisions: whether docs code blocks should be coloured (GNOME highlights;
 TextEdit/Notepad are plain), whether to keep `pane-name` (nothing in the docs uses it yet). Later items: the
 viewer backdrop switcher, two-backdrop real captures for translucency, per-OS stylesheets, and the
 first real OS update (Ubuntu 26.04 is available; follow `screenshots/UPDATING-OS.md`).
@@ -316,8 +317,10 @@ backdrop independent (DESIGN.md §10), guarded by `qa/backdrop.js`.
   the macOS material blurs our desktop-level grey window; capture time is +2 shots per job (small).
   Name the new captures with the existing suffix convention (`-onblack`), which makes them
   cases automatically, so the adapter must return null or a fixture for them.
-- **Desktop icon labels** (the `-desktop` captures) are text on plain grey; on a wallpaper they
-  need alpha text shadows. Only relevant if the icon-grid rendering is built.
+- **Desktop icon labels.** The icon-grid rendering is built (`view:"desktop"`, macOS, DESIGN.md
+  "Desktop view"): a flat drop-shadow + text-shadow stand in for legibility on any background today.
+  The `-desktop` captures are text on plain grey; matching them for real (alpha text shadow measured
+  off a wallpaper, not guessed) is still open, and depends on this section's wallpaper work landing.
 
 ## Later
 
