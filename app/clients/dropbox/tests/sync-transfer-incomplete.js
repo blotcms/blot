@@ -45,13 +45,22 @@ describe("dropbox sync/index skips a blog with an incomplete transfer", function
     };
     require.cache[createClientPath] = {
       exports: function (_blogID, callback) {
-        // A client whose only method delta.js needs immediately rejects -
-        // if the skip check didn't fire, this is how we'd know delta/apply
-        // actually ran (via the error_code it would then persist).
+        // A client whose methods all immediately reject - if the skip check
+        // didn't fire, this is how we'd know delta/apply actually ran (via
+        // the error_code it would then persist). delta.js (delta.js:278-300)
+        // calls filesListFolderContinue when the account has a cursor (as
+        // all these test accounts do) rather than filesListFolder, and
+        // filesGetMetadata too when folder_id is set - stub all three so the
+        // "does not skip" positive control fails the same way regardless of
+        // which one delta.js happens to call first.
+        // Status 409 so util/retry.js (which wraps delta.js's get()) fails
+        // fast instead of retrying up to 6 times with backoff.
+        const reject = () =>
+          Promise.reject(Object.assign(new Error("boom"), { status: 409 }));
         const client = {
-          filesListFolder: function () {
-            return Promise.reject(Object.assign(new Error("boom"), { status: 500 }));
-          },
+          filesListFolder: reject,
+          filesListFolderContinue: reject,
+          filesGetMetadata: reject,
         };
         callback(null, client, account);
       },

@@ -92,10 +92,23 @@ async function tryReuseIncompleteTransferFolder(account) {
 
     return { folder: result.path_display, folder_id: existing.folder_id };
   } catch (e) {
-    // The folder was deleted (or otherwise can't be confirmed to still
-    // exist) - fall through to the normal folder-creation logic below.
-    return null;
+    // Only a confirmed "the folder is gone" (Dropbox's 409
+    // path/not_found) should fall through to creating a brand new folder
+    // and abandoning the partial transfer - that's a real, permanent state
+    // change we need to react to. Anything else (a timeout, a rate limit, an
+    // outage) is transient: rethrowing makes this setup attempt fail
+    // (surfaced to the user as an error, same as any other setup failure)
+    // instead of quietly abandoning a folder that's actually still there and
+    // still has the partially-transferred files in it.
+    if (isNotFoundError(e)) return null;
+    throw e;
   }
+}
+
+function isNotFoundError(err) {
+  if (!err || err.status !== 409) return false;
+  const summary = err.error && err.error.error_summary;
+  return typeof summary === "string" && summary.startsWith("path/not_found");
 }
 
 async function checkAppFolder(account) {

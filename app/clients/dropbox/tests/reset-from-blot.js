@@ -228,4 +228,67 @@ describe("dropbox resetFromBlot", function () {
       saved.some((values) => values.cursor === "new-cursor")
     ).toEqual(true);
   });
+
+  it("falls back to the shared team pool when the per-user limit is alert_only (not a hard cap)", async function () {
+    // Only 1 byte allocated to this member specifically, which would block
+    // a 1000-byte transfer if treated as a hard cap - but alert_only is a
+    // notification-only limit (Dropbox's own docs: sync isn't stopped by
+    // it), so the real constraint is the shared team pool, which has room.
+    await fs.outputFile(join(blogDirectory, "a.txt"), Buffer.alloc(1000));
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: {
+          ".tag": "team",
+          allocated: 1000000,
+          used: 0,
+          user_within_team_space_allocated: 1,
+          user_within_team_space_limit_type: { ".tag": "alert_only" },
+        },
+      },
+      remote: {},
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    let error;
+    try {
+      await resetFromBlot(blogID, () => {}, { aborted: false });
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).toBeUndefined();
+    expect(uploadCalls.length).toEqual(1);
+  });
+
+  it("treats the per-user limit as a hard cap when it is stop_sync", async function () {
+    await fs.outputFile(join(blogDirectory, "a.txt"), Buffer.alloc(1000));
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: {
+          ".tag": "team",
+          allocated: 1000000,
+          used: 0,
+          user_within_team_space_allocated: 1,
+          user_within_team_space_limit_type: { ".tag": "stop_sync" },
+        },
+      },
+      remote: {},
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    let error;
+    try {
+      await resetFromBlot(blogID, () => {}, { aborted: false });
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).toBeDefined();
+    expect(error.code).toEqual("DROPBOX_INSUFFICIENT_SPACE");
+    expect(uploadCalls.length).toEqual(0);
+  });
 });

@@ -83,7 +83,19 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
     expect(result.folder_id).toEqual("id:existingfolder");
   });
 
-  it("falls through to creating a new folder when the existing one can't be confirmed", async function () {
+  // Mirrors the shape of an error the Dropbox SDK throws for a
+  // filesGetMetadata call on a path that's genuinely gone: an HTTP 409 whose
+  // JSON body has an error_summary starting "path/not_found/..." (see
+  // GetMetadataErrorPath / LookupErrorNotFound in the SDK's type
+  // definitions).
+  function notFoundSdkError() {
+    const error = new Error("not_found");
+    error.status = 409;
+    error.error = { error_summary: "path/not_found/.." };
+    return error;
+  }
+
+  it("falls through to creating a new folder when the existing one is confirmed gone (404/not_found)", async function () {
     const existing = {
       account_id: "abc123",
       full_access: true,
@@ -101,7 +113,7 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
       full_access: true,
       client: {
         filesGetMetadata: async () => {
-          throw new Error("path/not_found/..");
+          throw notFoundSdkError();
         },
         filesCreateFolder: async ({ path }) => {
           filesCreateFolderCalled = true;
@@ -114,6 +126,46 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
 
     expect(filesCreateFolderCalled).toEqual(true);
     expect(result.folder_id).toEqual("id:newfolder");
+  });
+
+  it("propagates a transient filesGetMetadata error instead of abandoning the folder", async function () {
+    const existing = {
+      account_id: "abc123",
+      full_access: true,
+      folder_id: "id:existingfolder",
+      transfer_pending: true,
+      error_code: 0,
+    };
+
+    let filesCreateFolderCalled = false;
+
+    const createFolder = load(existing);
+    const account = {
+      blog: { id: blogID, title: "My Blog" },
+      account_id: "abc123",
+      full_access: true,
+      client: {
+        filesGetMetadata: async () => {
+          // A timeout, rate limit, or outage - not a confirmed "it's gone".
+          throw Object.assign(new Error("rate limited"), { status: 429 });
+        },
+        filesCreateFolder: async ({ path }) => {
+          filesCreateFolderCalled = true;
+          return { result: { id: "id:newfolder", path_display: path } };
+        },
+      },
+    };
+
+    let error;
+    try {
+      await createFolder(account);
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).toBeDefined();
+    expect(error.status).toEqual(429);
+    expect(filesCreateFolderCalled).toEqual(false);
   });
 
   it("does not reuse a folder from a different Dropbox account_id", async function () {

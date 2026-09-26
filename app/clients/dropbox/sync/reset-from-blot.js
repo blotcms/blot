@@ -114,9 +114,21 @@ async function getFreeSpaceBytes(client) {
   }
 
   if (allocation[".tag"] === "team") {
-    // A team admin can cap how much of the shared pool each member may use.
-    // 0 means "no cap for this member" - fall back to the shared team pool.
+    // A team admin can cap how much of the shared pool each member may use,
+    // but user_within_team_space_allocated is only a real ceiling when
+    // user_within_team_space_limit_type is "stop_sync" - Dropbox's own docs
+    // say that's the only one of the three where "Dropbox file sync will
+    // stop after the limit is reached" (see MemberSpaceLimitType in the
+    // SDK's type definitions). "off" (no limit) and "alert_only" (a
+    // notification-only soft limit - sync keeps working past it) both mean
+    // the real constraint is the shared team pool, same as when no per-user
+    // allocation is set at all.
+    const limitType =
+      allocation.user_within_team_space_limit_type &&
+      allocation.user_within_team_space_limit_type[".tag"];
+
     if (
+      limitType === "stop_sync" &&
       typeof allocation.user_within_team_space_allocated === "number" &&
       allocation.user_within_team_space_allocated > 0
     ) {
