@@ -7,6 +7,15 @@
 // of files that would get wrongly deleted. See transferIncomplete() in
 // util/constants.js and its callers (init.js, sync/index.js) for the other
 // places this same check gates automatic syncs; this is the one manual path.
+//
+// Unlike init.js's resetToBlotWithLock, this check doesn't need its own
+// re-read-after-acquiring-the-lock dance: app/dashboard/site/client.js's
+// POST /reset/resync already acquires this blog's folder lock (via
+// `Sync(req.blog.id, ...)`) before ever calling this function, and every
+// other Dropbox code path that could change transfer_pending/error_code for
+// this blog (reset-from-blot.js via setup, reset-to-blot.js via
+// resetToBlotWithLock, the webhook sync in sync/index.js) needs that same
+// lock. So by the time we get here the account can't change underneath us.
 const { promisify } = require("util");
 const database = require("./database");
 const resetToBlot = require("./sync/reset-to-blot");

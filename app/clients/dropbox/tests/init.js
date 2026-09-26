@@ -129,4 +129,182 @@ describe("dropbox init", function () {
       );
     });
   });
+
+  // establishSyncLock's retry loop can take several seconds, so the account
+  // state a caller saw before queuing for the lock can be stale by the time
+  // it's actually held - e.g. a "Retry transfer" reconnect could start (or a
+  // transfer could fail) in that window. resetToBlotWithLock must re-read the
+  // account after acquiring the lock and refuse to run resetToBlot if it's
+  // now (or still) incomplete, rather than trusting the caller's earlier check.
+  describe("resetToBlotWithLock rechecks transferIncomplete once the lock is held", function () {
+    const databasePath = require.resolve("../database");
+    const resetToBlotPath = require.resolve("../sync/reset-to-blot");
+    const lockPath = require.resolve("sync/establishSyncLock");
+    const initPath = require.resolve("../init");
+
+    const blogID = "blog_lockrecheck" + Date.now();
+    const originals = {};
+
+    beforeEach(function () {
+      [databasePath, resetToBlotPath, lockPath, initPath].forEach(
+        (path) => (originals[path] = require.cache[path])
+      );
+    });
+
+    afterEach(function () {
+      [databasePath, resetToBlotPath, lockPath].forEach((path) => {
+        if (originals[path]) require.cache[path] = originals[path];
+        else delete require.cache[path];
+      });
+      delete require.cache[initPath];
+      if (originals[initPath]) require.cache[initPath] = originals[initPath];
+    });
+
+    function load(accountUnderLock, resetToBlotBehavior) {
+      require.cache[databasePath] = {
+        exports: {
+          get: function (_blogID, callback) {
+            callback(null, accountUnderLock);
+          },
+          set: function (_blogID, _values, callback) {
+            callback(null);
+          },
+        },
+      };
+      require.cache[resetToBlotPath] = {
+        exports: resetToBlotBehavior,
+      };
+      require.cache[lockPath] = {
+        exports: function () {
+          return Promise.resolve({
+            folder: {
+              update: function (path, cb) {
+                cb(null);
+              },
+            },
+            done: async function () {},
+          });
+        },
+      };
+      delete require.cache[initPath];
+      return require("../init");
+    }
+
+    it("returns the TRANSFER_INCOMPLETE sentinel and never calls resetToBlot when the account is incomplete under the lock", async function () {
+      let resetToBlotCalled = false;
+      const init = load(
+        { error_code: 0, transfer_pending: true },
+        function () {
+          resetToBlotCalled = true;
+          return Promise.resolve({ downloaded: 1 });
+        }
+      );
+
+      const result = await init.resetToBlotWithLock(blogID, () => {});
+
+      expect(result).toEqual(init.TRANSFER_INCOMPLETE);
+      expect(resetToBlotCalled).toEqual(false);
+    });
+
+    it("runs resetToBlot and returns its summary when the account is still complete under the lock", async function () {
+      const init = load({ error_code: 0, transfer_pending: false }, function () {
+        return Promise.resolve({ downloaded: 1 });
+      });
+
+      const result = await init.resetToBlotWithLock(blogID, () => {});
+
+      expect(result).toEqual({ downloaded: 1 });
+    });
+  });
+
+  // End-to-end version of the same race, through validateAllBlogs: its own
+  // cheap pre-check (before queuing for the lock) sees a complete transfer,
+  // but the account has become incomplete by the time resetToBlotWithLock
+  // actually acquires the lock and re-reads it.
+  describe("validateAllBlogs does not run resetToBlot when the account becomes incomplete while queued for the lock", function () {
+    const blogPath = require.resolve("models/blog");
+    const databasePath = require.resolve("../database");
+    const resetToBlotPath = require.resolve("../sync/reset-to-blot");
+    const lockPath = require.resolve("sync/establishSyncLock");
+    const initPath = require.resolve("../init");
+
+    const blogID = "blog_lockracetest" + Date.now();
+    const originals = {};
+
+    beforeEach(function () {
+      [blogPath, databasePath, resetToBlotPath, lockPath, initPath].forEach(
+        (path) => (originals[path] = require.cache[path])
+      );
+    });
+
+    afterEach(function () {
+      [blogPath, databasePath, resetToBlotPath, lockPath].forEach((path) => {
+        if (originals[path]) require.cache[path] = originals[path];
+        else delete require.cache[path];
+      });
+      delete require.cache[initPath];
+      if (originals[initPath]) require.cache[initPath] = originals[initPath];
+    });
+
+    it("skips it", async function () {
+      let resetToBlotCalled = false;
+      let call = 0;
+
+      require.cache[blogPath] = {
+        exports: {
+          getAllIDs: function (callback) {
+            callback(null, [blogID]);
+          },
+          get: function (query, callback) {
+            callback(null, { id: blogID, handle: "race-blog", client: "dropbox" });
+          },
+        },
+      };
+      require.cache[databasePath] = {
+        exports: {
+          // Call 1: validateAllBlogs' own pre-check, before queuing for the
+          // lock - reports the transfer as complete.
+          // Call 2: resetToBlotWithLock's re-check, once the lock is held -
+          // reports it as incomplete (a retry started, or it failed, in the
+          // meantime).
+          get: function (_blogID, callback) {
+            call += 1;
+            callback(
+              null,
+              call === 1
+                ? { error_code: 0, transfer_pending: false, last_sync: Date.now() }
+                : { error_code: 0, transfer_pending: true, last_sync: Date.now() }
+            );
+          },
+          set: function (_blogID, _values, callback) {
+            callback(null);
+          },
+        },
+      };
+      require.cache[resetToBlotPath] = {
+        exports: function () {
+          resetToBlotCalled = true;
+          return Promise.resolve({ downloaded: 1 });
+        },
+      };
+      require.cache[lockPath] = {
+        exports: function () {
+          return Promise.resolve({
+            folder: {
+              update: function (path, cb) {
+                cb(null);
+              },
+            },
+            done: async function () {},
+          });
+        },
+      };
+      delete require.cache[initPath];
+      const init = require("../init");
+
+      await init.validateAllBlogs();
+
+      expect(resetToBlotCalled).toEqual(false);
+    });
+  });
 });

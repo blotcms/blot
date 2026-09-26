@@ -98,6 +98,16 @@ async function setAccount(blogID, changes) {
   // Overwrite existing properties with any changes
   for (var i in changes) account[i] = changes[i];
 
+  // transfer_pending was added to the model after this file already had
+  // callers (including plenty of existing tests) that write a brand new
+  // account without mentioning it. ensure()'s strict check below requires
+  // every model field to already be present with the right type, so default
+  // it here rather than requiring every caller to pass it explicitly. Any
+  // caller that actually wants it true still overrides it via `changes`.
+  if (typeof account.transfer_pending !== "boolean") {
+    account.transfer_pending = false;
+  }
+
   // Verify that the type of new account state
   // matches the expected types declared in Model below.
   ensure(account, Model, true);

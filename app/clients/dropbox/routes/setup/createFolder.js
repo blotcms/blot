@@ -3,6 +3,7 @@ const promisify = require("util").promisify;
 
 const sync = require("sync");
 const database = require("clients/dropbox/database");
+const { transferIncomplete } = require("clients/dropbox/util/constants");
 
 const listBlogs = promisify(database.listBlogs);
 const get = promisify(database.get);
@@ -25,7 +26,16 @@ const set = promisify(database.set);
 // 2. then remove one
 // 3. then re-connect another
 async function createFolder(account) {
-  const { client, full_access } = account;  
+  const { client, full_access } = account;
+
+  const reused = await tryReuseIncompleteTransferFolder(account);
+
+  if (reused) {
+    account.folder = reused.folder;
+    account.folder_id = reused.folder_id;
+    return account;
+  }
+
   const { blogToMove, blogsInAppFolder } = await checkAppFolder(account);
   const shouldCreateFolder = full_access || blogToMove || blogsInAppFolder;
 
@@ -39,6 +49,53 @@ async function createFolder(account) {
   account.folder_id = folder_id;
 
   return account;
+}
+
+// If this blog is retrying a previously-interrupted initial transfer (see
+// transferIncomplete() in util/constants.js) to the same Dropbox account
+// under the same permission mode, reuse the folder that transfer was already
+// using instead of creating a new one. Without this, every "Retry transfer"
+// click would call mkdir(..., autorename: true) below, which Dropbox
+// auto-renames to something like "My Blog (1)" since the original folder
+// still exists (with whatever files did make it across) - abandoning that
+// partial upload and doubling the pre-flight quota check's space
+// requirement, since it would then need room for a second, near-complete
+// copy of the folder on top of the first.
+//
+// Returns null (falling through to the normal folder-creation logic) for the
+// app-folder-root case (folder_id === "" and not full_access): createFolder
+// already leaves folder/folder_id as "" without ever calling mkdir when
+// shouldCreateFolder is false, so there's nothing to recreate or abandon
+// there, and no reuse logic is needed.
+async function tryReuseIncompleteTransferFolder(account) {
+  const { client, full_access, account_id, blog } = account;
+
+  let existing;
+  try {
+    existing = await get(blog.id);
+  } catch (e) {
+    return null;
+  }
+
+  if (!existing) return null;
+  if (!transferIncomplete(existing)) return null;
+  if (existing.account_id !== account_id) return null;
+  if (existing.full_access !== full_access) return null;
+  if (!existing.folder_id) return null;
+
+  try {
+    const { result } = await client.filesGetMetadata({
+      path: existing.folder_id,
+    });
+
+    if (result[".tag"] !== "folder") return null;
+
+    return { folder: result.path_display, folder_id: existing.folder_id };
+  } catch (e) {
+    // The folder was deleted (or otherwise can't be confirmed to still
+    // exist) - fall through to the normal folder-creation logic below.
+    return null;
+  }
 }
 
 async function checkAppFolder(account) {
