@@ -1,3 +1,9 @@
+Run scripts/dropbox/backfill-error-source.js --write
+
+Add dropbox kill switch (when platform goes down, etc.)
+
+Add icloud kill switch (when platform goes down, etc.)
+
 How do we think about a shared asset library across templates? 
 - e.g. shared favicons
 - can we unwind some of the complete delete favion on template delete, etc. code?
