@@ -10,7 +10,9 @@ const createFolder = require("./createFolder");
 const resetFromBlot = require("../../sync/reset-from-blot");
 
 function setup(account, session, callback) {
+  console.log("[DEBUG dropbox setup] calling sync()", Date.now(), account.blog.id);
   sync(account.blog.id, async function (err, folder, done) {
+    console.log("[DEBUG dropbox setup] sync() callback invoked", Date.now(), err);
     if (err) return callback(err);
 
     const signal = { aborted: false };
@@ -64,17 +66,20 @@ function setup(account, session, callback) {
     };
 
     try {
+      console.log("[DEBUG dropbox setup] entered", Date.now(), account.blog.id);
       await subscription.setupPromise;
 
       folder.status("Loading Dropbox account");
       account = await getAccount(account);
       if (handleAbort()) return;
       session.save();
+      console.log("[DEBUG dropbox setup] getAccount done", Date.now());
 
       folder.status("Creating folder in Dropbox");
       account = await createFolder(account, signal);
       if (handleAbort()) return;
       session.save();
+      console.log("[DEBUG dropbox setup] createFolder done", Date.now());
 
       await set(account.blog.id, {
         account_id: account.account_id,
@@ -94,6 +99,7 @@ function setup(account, session, callback) {
         // in util/constants.js.
         transfer_pending: true,
       });
+      console.log("[DEBUG dropbox setup] error_code cleared, transfer_pending set", Date.now());
 
       folder.status("Syncing your folder to Dropbox");
       if (handleAbort()) return;

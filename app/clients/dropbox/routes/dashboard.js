@@ -67,6 +67,12 @@ dashboard.get("/", function (req, res) {
     res.locals.blog.health = health.syncing();
   }
 
+  console.log("[DEBUG dropbox GET /]", Date.now(), {
+    hasSessionDropbox: !!req.session.dropbox,
+    accountErrorCode: req.account && req.account.error_code,
+    blogHealthIssueFinal: res.locals.blog && res.locals.blog.healthIssue,
+  });
+
   var dropboxBreadcrumbs = [];
   var folder;
 
@@ -221,6 +227,7 @@ dashboard.get("/authenticate", function (req, res, next) {
 
   // this the first time the user has visited this page
   req.session.dropbox = account;
+  console.log("[DEBUG dropbox GET /authenticate] set session.dropbox", Date.now(), req.blog.id);
 
   Blog.set(req.blog.id, { client: "dropbox" }, function (err) {
     if (err) return next(err);
@@ -236,6 +243,7 @@ dashboard.get("/authenticate", function (req, res, next) {
     // pre-reconnect error for a render or two until a later request
     // catches up. res.redirect() doesn't wait for that on its own.
     req.session.save(function () {
+      console.log("[DEBUG dropbox GET /authenticate] session saved, redirecting", Date.now());
       res.redirect(req.baseUrl);
     });
   });

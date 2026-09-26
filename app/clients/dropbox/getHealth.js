@@ -9,6 +9,12 @@ const get = promisify(database.get);
 module.exports = async function getHealth(blogID) {
   const account = await get(blogID);
   const issue = issueFromAccount(account);
+  console.log("[DEBUG dropbox getHealth]", Date.now(), blogID, {
+    error_code: account && account.error_code,
+    error_source: account && account.error_source,
+    transfer_pending: account && account.transfer_pending,
+    issue: issue,
+  });
   if (issue) return health.error([issue]);
 
   // A durable error_code (handled above) already covers the out-of-space
