@@ -78,7 +78,11 @@ means:
   optimization (`app/build/plugins/image/optimize.js`), link screenshots
   (`app/build/plugins/linkScreenshot/index.js`), dashboard uploads (favicon,
   avatar, template assets), blog removal/export, and the CDN's static file
-  route (`app/cdn/index.js:119`, `app/blog/routes/assets.js`).
+  route (`app/cdn/index.js:119`, `app/blog/routes/assets.js`). The per-blog
+  subdirectories in use are `_thumbnails`, `_image_cache`, `_assets`
+  (document-converter output), `_bookmark_screenshots`, `_avatars` and
+  `_template_assets` (template editor uploads) — see §2.2.2 for why the last
+  two differ from the rest.
 
 So: **no single choke point today**, but also **no exotic IO patterns** — it's
 overwhelmingly `fs-extra` calls (`readFile`, `outputFile`, `remove`,
@@ -288,14 +292,14 @@ rather than scattered across chat.
   own top-level concern, matching how the repo already separates
   cross-cutting subsystems.
 
-- **Interface shape: a scoped handle per blog (`storage.forBlog(blogID)`),
-  not a class, not flat functions only.** `storage.forBlog(blogID)` returns
+- **Interface shape: a scoped handle per blog (`storage.for(blogID)`),
+  not a class, not flat functions only.** `storage.for(blogID)` returns
   a cheap, stateless object (no connection/lifecycle to manage — nothing
   here is a real resource) exposing one property per named scope, e.g.
   `.folder` and `.assets`:
 
   ```js
-  const store = storage.forBlog(blogID);
+  const store = storage.for(blogID);
   await store.assets.write(path, buffer);
   await store.folder.read(path);
   ```
@@ -304,7 +308,7 @@ rather than scattered across chat.
   `app/` is written as exported functions/modules, not classes, so a
   constructor would be the only one in the codebase. Flat functions
   (`storage.folder.read(blogID, path)`) can still exist as a thin wrapper
-  calling `forBlog` internally, for call sites that only ever do one
+  calling `for` internally, for call sites that only ever do one
   operation.
 
 - **Naming: a deliberately small, custom vocabulary — not `fs-extra`'s
@@ -342,7 +346,8 @@ rather than scattered across chat.
   `.folder`.** The byte-counter machinery lives in the storage layer for
   both `.folder` and `.assets` (useful for ops/debugging either way), but
   the user-facing quota cap only checks and rejects on `.folder` writes —
-  generated assets aren't counted against the user's limit.
+  nothing in `.assets` (generated files or dashboard uploads, §2.2.2) is
+  counted against the user's limit.
 
 A **cross-cutting requirement that falls out of the above, still needing an
 explicit answer**: 64 call sites today branch on `err.code === "ENOENT"`
@@ -384,23 +389,35 @@ production blog — every client available to a real user (Dropbox, Google
 Drive, iCloud, git, SFTP-style clients) syncs from an external source Blot
 doesn't own.
 
+**This reframe covers `.folder` only, not `.assets`.** Dashboard uploads —
+template editor uploads (`_template_assets`) and avatars (`_avatars`) — are
+stored in `.assets` (§2.2.2) and exist *only* in Blot: no sync client holds
+a copy, and nothing can regenerate them. So `.assets` can't be treated as
+disposable, and the backup below covers it too.
+
 Given that, the decided shape is:
 
-- **One bucket**, with `folder/{blogID}/{path}` and `assets/{blogID}/{path}`
-  as top-level key prefixes — not two buckets. S3 lifecycle rules support
-  prefix filters within a single bucket, so `.folder` and `.assets` can
-  still get different storage-class/lifecycle treatment without needing
-  separate buckets for that; the only thing that *forces* a bucket split is
-  differing versioning, and versioning is now off for both, so there's no
-  forcing function left. One bucket is simpler to operate (one policy, one
-  set of credentials, one place to look).
+- **One bucket**, with `.folder` under a `folder/{blogID}/{path}` prefix
+  and `.assets` at the bucket root as `{blogID}/{path}` — not two buckets.
+  `.assets` gets no scope prefix so its keys are identical to its public
+  CDN paths (§2.3, §4.4). The two can't collide: blog IDs are always
+  `blog_<uuid>`, never `folder`. `.folder` and `.assets` still get
+  different storage classes without separate buckets — set per object at
+  write time (§4.1), not via prefix-filtered lifecycle rules, which can't
+  express "everything except `folder/`". The only thing that *forces* a
+  bucket split is differing versioning, and versioning is now off for
+  both, so there's no forcing function left. One bucket is simpler to
+  operate (one policy, one set of credentials, one place to look).
 - **Versioning: off**, bucket-wide. No longer in tension with anything,
   since backup is handled by scheduled sync rather than S3-native version
   history.
-- **Backup: scheduled, periodic sync to Backblaze B2**, scoped to the
-  `folder/` prefix only (`.assets` is fully regenerable from `.folder`, so
-  it doesn't need protecting the same way — at most an occasional sync for
-  faster disaster recovery, never a data-loss concern). **Decided over a
+- **Backup: scheduled, periodic sync to Backblaze B2**, covering the whole
+  bucket — both `.folder` and `.assets`. `.assets` is *not* fully
+  regenerable from `.folder` (dashboard uploads exist only in Blot, see
+  §2.2.2), so it needs the same protection. Backing up the whole bucket is
+  simpler and less error-prone than enumerating which `.assets` subdirs are
+  irreplaceable, at the cost of also copying regenerable thumbnails and
+  image-cache files. **Decided over a
   same-provider (separate AWS account) destination**, specifically for true
   vendor independence: a separate AWS account still means "AWS" is the
   single company whose failure modes (account compromise, billing lockout,
@@ -425,8 +442,9 @@ Given that, the decided shape is:
   require. Worth revisiting only if it comes up again as a real ask; it
   would mean turning versioning back on for at least the `folder/` prefix,
   which — now that `.folder` and `.assets` share a bucket — would mean
-  either turning it on bucket-wide (paying the versioning cost on `assets/`
-  too, for no benefit) or splitting back into two buckets after all. Worth
+  either turning it on bucket-wide (paying the versioning cost on
+  `.assets` too, for little benefit — its files are written once and never
+  overwritten) or splitting back into two buckets after all. Worth
   remembering as the reason a future "let's add restore" ask isn't free.
 - **No S3 Express One Zone.** Still applies for the same reasons as before
   (§4.2): single-AZ durability is a bad trade for the one copy of
@@ -498,6 +516,45 @@ documented Origin-URL-as-HTTPS-endpoint mechanism (exactly what their own S3
 integration guide shows), so the direct-to-S3 optimization no longer has an
 unresolved dependency on an unconfirmed Bunny feature.
 
+### 2.2.2 `.assets` holds dashboard uploads too — not everything in it is regenerable
+
+Template editor uploads and avatars reuse the `.assets` mechanism rather
+than getting a scope of their own. Like the other files in `.assets`, they
+never change once written (a replacement upload gets a new UUID filename),
+are public, can be cached forever, and are fine on cheaper storage classes.
+What makes them different is where they come from, not how they're stored:
+
+| Subdir | Written by | Regenerable? |
+|---|---|---|
+| `_thumbnails` | `app/build/thumbnail/create.js` | Yes, from `.folder` |
+| `_image_cache` | `app/build/plugins/image/optimize.js` | Yes, from `.folder` |
+| `_assets` | document converters (`app/build/converters/*`) | Yes, from `.folder` |
+| `_bookmark_screenshots` | `app/build/plugins/linkScreenshot` | Not faithfully — the linked page may have changed |
+| `_avatars` | `app/dashboard/site/save/avatar.js` | **No** — exists only in Blot |
+| `_template_assets` | template editor uploads (`app/dashboard/site/template/save/upload-{image,favicon,local}.js`) | **No** — exists only in Blot |
+
+What follows from this:
+
+- **Backed up with the rest of the bucket** (§2.2, §4.6), and the backup
+  must be running before any `.assets` data is S3-only (§3, Phase 1).
+- **Not counted against the user's quota** (§2.1) — unchanged.
+- **Nothing may wipe the whole `.assets` scope** except blog deletion.
+  Regeneration today empties named subdirs only (`app/sync/rebuild.js`
+  runs `fs.emptyDir` on `_thumbnails` and `_image_cache`), and it must stay
+  that way. The storage layer shouldn't expose a scope-wide delete for
+  `.assets`, so a "clear and regenerate everything" operation can't be
+  written by accident.
+- **Template locals keep storing full CDN URLs** (e.g.
+  `{config.cdn.origin}/{blogID}/_template_assets/{uuid}.webp`). Because
+  `.assets` keys match these paths exactly (§2.3), nothing stored in Redis
+  needs rewriting at migration time.
+- **Deleting old files is uneven today.** `upload-image.js` and
+  `upload-favicon.js` check every template of the blog before deleting a
+  replaced file (duplicated templates share files); `upload-local.js` and
+  `avatar.js` never delete the old file, so replaced uploads are orphaned.
+  A future template-editor asset library (root `TODO`) would build on
+  `_template_assets` in this scope rather than adding a new one.
+
 ### 2.3 Operational decisions
 
 - **IAM: one role**, not scoped separately per prefix/scope. Simplest
@@ -513,12 +570,11 @@ unresolved dependency on an unconfirmed Bunny feature.
   worth revisiting if it causes friction.
 - **Separate buckets per environment** (dev/staging/prod), rather than one
   bucket with an environment-prefixed key space.
-- **Object key layout: preserve existing per-blog relative paths 1:1**
-  under the new `folder/`/`assets/` top-level prefixes (`_thumbnails`,
-  `_avatars`, `_bookmark_screenshots`, `_image_cache`, `_assets` keep their
-  names as sub-paths), rather than restructuring during migration. This
-  choice is also what keeps a future direct-Bunny-to-S3 origin (§4.4) to a
-  single, mechanical Edge Rule per scope rather than a redesign.
+- **Object key layout: preserve existing per-blog relative paths 1:1**,
+  rather than restructuring during migration. `.assets` keys are exactly
+  today's public CDN paths — `{blogID}/_thumbnails/...`,
+  `{blogID}/_template_assets/...` etc., no scope prefix — so no path
+  rewriting is ever needed to serve them straight from the bucket (§4.4). `.folder` keys are `folder/{blogID}/{path}`.
 
 ### 2.4 Directory listing: paginated from day 1, no separate `.readdir()`
 
@@ -656,7 +712,7 @@ after the fact.** Two mechanisms working together, for the two different
 staleness sources:
 
 1. **Same-instance writes — direct, immediate, no cache-check needed.**
-   When `storage.forBlog(blogID).folder.write(path, data)` runs on a given
+   When `storage.for(blogID).folder.write(path, data)` runs on a given
    box, that box's own local SSD cache entry for `(blogID, path)` gets
    updated (or evicted) directly, right there, since the new content is
    already in hand. Zero extra I/O, zero reliance on a hash or timestamp.
@@ -693,7 +749,7 @@ This tracks your own `TODO` sketch closely, refined by the decisions above:
 
 ```
 app/storage/
-  index.js   # storage.forBlog(blogID) -> { folder: {...}, assets: {...} }
+  index.js   # storage.for(blogID) -> { folder: {...}, assets: {...} }
              # storage.folder.*(blogID, ...) / storage.assets.*(blogID, ...) as flat wrappers
 ```
 
@@ -714,10 +770,13 @@ app/storage/
   followed shortly by a `read()` of the same path within one
   `folder.update()` doesn't pay a redundant round trip. This is
   independent of, and much cheaper than, the Phase 2b decision below.
-- **Phase 1 — generated assets first**, not blog folders. These are
-  already written asynchronously at build time (§1.2), already
-  content-addressed or UUID-keyed, and losing/regenerating one costs nothing
-  semantically (it's a thumbnail, not the user's source file). Dual-write to
+- **Phase 1 — `.assets` first**, not blog folders. These files are
+  mostly written asynchronously at build time (§1.2), all content-addressed
+  or UUID-keyed, and never change once written — the simplest shape to move.
+  Unlike thumbnails, though, the dashboard uploads in this scope
+  (`_template_assets`, `_avatars`, §2.2.2) can't be regenerated, so **the B2
+  backup (§4.6) must be running before local disk stops holding a copy of
+  `.assets`**, not added afterwards. Dual-write to
   S3 + local disk, read-through with the local copy as cache, and (per
   §4.4) issue a Bunny cache-warm request in the same async step so the
   first real visitor doesn't pay a cold miss. Confirms your own instinct in
@@ -767,14 +826,23 @@ app/storage/
 
 **Monobucket — the recommended, decided shape (§2.2):**
 
-| | `folder/{blogID}/...` | `assets/{blogID}/...` |
+| | `.folder`: `folder/{blogID}/...` | `.assets`: `{blogID}/...` (bucket root) |
 |---|---|---|
 | Bucket type | One general-purpose (regional) S3 bucket — not a Directory Bucket / Express One Zone | same bucket |
 | Versioning | Off | Off |
-| Storage class at write | Standard | Standard |
-| Lifecycle | None — stays hot, actively read/written | Transition to Standard-IA or Intelligent-Tiering after N days (Bunny permacaches almost immediately, so repeat direct reads become rare) |
-| Backup | Scheduled sync to a separate-AWS-account bucket, `folder/` prefix only | None required (regenerable from `folder/`); optional occasional sync purely for faster disaster recovery |
+| Storage class at write | Standard | Intelligent-Tiering, set on each `PutObject` (Bunny permacaches almost immediately, so repeat direct reads become rare) |
+| Lifecycle rules | None | None — the storage class is set at write time instead, since `.assets` has no key prefix to filter on |
+| Backup | Hourly sync to Backblaze B2 (§4.6) | Same sync — whole bucket. Dashboard uploads can't be regenerated (§2.2.2) |
 | Quota enforcement | Yes, user-facing cap | Tracked, not enforced against the user |
+
+**Why Intelligent-Tiering and not Standard-IA for `.assets`:** Standard-IA
+bills every object as at least 128KB and at least 30 days of storage. Many
+thumbnails and template uploads are smaller than 128KB, so IA could cost
+*more* than Standard for them. Intelligent-Tiering has no minimum object
+size or retrieval fees; objects under 128KB are never monitored or moved
+(they're billed at the Standard rate, with no per-object monitoring fee),
+and larger ones move to cheaper tiers automatically once they stop being
+read.
 
 **Dual-bucket — the earlier alternative, now not the default, kept here for
 reference in case requirements change (e.g. the "local"-client caveat in
@@ -786,7 +854,7 @@ real ask):**
 | Bucket type | General-purpose S3 | General-purpose S3 |
 | Versioning | On, with a lifecycle rule expiring noncurrent versions after a retention window | Off |
 | Cross-Region Replication | On, to a cross-account/cross-region replica (requires versioning, which is why this shape needs two buckets) | Off |
-| Storage class | Standard | Standard → IA/Intelligent-Tiering lifecycle |
+| Storage class | Standard | Intelligent-Tiering |
 
 The dual-bucket shape is strictly more protective (near-real-time offsite
 copy instead of periodic sync, plus point-in-time version recovery) but
@@ -810,7 +878,7 @@ bucket). Recommend against it:
   exactly the problem the SSD LRU cache (§1.4, §3 Phase 2) is already
   designed to solve. If the cache is doing its job, most reads never reach
   S3 at all.
-- For `assets/`, the case is weaker still: Bunny permacaches this content
+- For `.assets`, the case is weaker still: Bunny permacaches this content
   after first fetch, so origin request latency for it is close to
   irrelevant already.
 - It adds real complexity (directory-bucket API differences, single-AZ
@@ -883,50 +951,47 @@ directly from the storage layer:**
   directly to Perma-Cache" — not directly, but a one-line HTTP warm-up call
   achieves the same outcome through the supported path.
 
-**Digging into object path structure for a future direct-to-S3 origin, as
-requested:**
+**Object path structure, and serving straight from S3 later:**
 
-Today's CDN-facing URLs already map to a bare `{blogID}/{relativePath}` for
-both scopes, with no scope-identifying prefix (§1.1) — the `/folder/v-X/`
+Today's CDN-facing URLs map to a bare `{blogID}/{relativePath}` for both
+scopes, with no scope-identifying prefix (§1.1) — the `/folder/v-X/`
 segment is stripped by Express before touching disk, and the assets route
-is mounted at the CDN root. The new S3 layout, by contrast, does add a
-prefix (`folder/` or `assets/`) ahead of `{blogID}/...`, for the lifecycle/
-backup-scoping reasons in §2.2. That's a deliberate mismatch between the
-public URL shape and the internal storage key shape — which is exactly
-what a Bunny Edge Rule is for.
+is mounted at the CDN root.
 
-Confirmed via Bunny's docs: their "Change Origin URL" Edge Rule action
-supports path-segment variables (e.g. `%{Path.0}`, `%{Path.1-}`) for
-constructing a rewritten origin URL from parts of the incoming request
-path — this is precisely path-segment rewriting, not just static
-redirection. So the future "point Bunny straight at the S3 bucket, skip the
-app server" step is a **mechanical, single Edge Rule per scope**, not a
-redesign:
-- Requests under the assets path (bare `{blogID}/_thumbnails/...` etc.) →
-  rewrite origin URL to prepend `assets/` → `assets/{blogID}/_thumbnails/...`.
-- Requests under `/folder/v-{version}/{blogID}/...` → rewrite to drop the
-  `v-{version}` segment (pure cache-buster, already discarded by Express
-  today, so dropping it is behavior-preserving) and prepend `folder/` →
-  `folder/{blogID}/...`.
+**`.assets` keys are identical to its public URL paths — no Edge Rules or
+path rewriting needed.** The S3 key for
+`https://{cdn}/{blogID}/_template_assets/{uuid}.webp` is exactly
+`{blogID}/_template_assets/{uuid}.webp` (§2.2, §2.3). The URLs already
+stored in template locals and entry HTML stay valid as they are, and S3
+can answer for them without any rewriting.
 
-This confirms the key-layout choice in §2.2 (preserve per-blog relative
-paths 1:1 under the new prefixes) was the right call for this future step —
-it keeps the eventual Edge Rule to "prepend a static string, optionally
-drop one path segment" rather than anything more elaborate. Origin Shield
-stays valuable and needs no change when the origin switches to S3 — it
-still reduces the number of direct-to-S3 requests the same way it reduces
-direct-to-app-server requests today.
+**The catch: `.assets` shares a Bunny pull zone (hostname) with routes that
+S3 can't answer.** `/folder/v-{version}/{blogID}/...` carries a
+cache-busting segment that isn't part of any key, and `/template/...`
+(rendered CSS/JS, §1.2) isn't in the bucket at all. So Bunny's origin can't
+simply be swapped to the bucket for the whole zone. For now the plan is:
+
+- **The app server stays the origin for everything.** The core migration
+  needs no Bunny changes at all: `app/cdn/index.js` and
+  `app/blog/routes/assets.js` serve the same URLs, reading from S3 (plus
+  cache) instead of local disk.
+- **If direct-to-S3 serving is ever wanted**, it needs either a
+  path-*routing* rule (send `/folder/*` and `/template/*` to the app,
+  everything else to the bucket — no rewriting) or a separate hostname for
+  `.assets`. Either way, the key layout means no rewriting is ever needed
+  for `.assets`. `.folder` would need its `v-{version}` segment dropped
+  (a real rewrite), so it stays served through the app — see §5.
+
+Origin Shield stays valuable and needs no change either way — it reduces
+origin requests the same way whether the origin is the app or S3.
 
 **The one open dependency this had — whether Bunny supports signed/
 authenticated requests to a private bucket — is now moot.** Per §2.2.1 the
 bucket is public-read by decision, which is exactly the shape Bunny's own
 documented S3 integration already expects (a plain HTTPS Origin URL against
-a public bucket, no signing). So the direct-to-S3 optimization no longer
-has an unconfirmed dependency blocking it — it's a matter of writing and
-testing the Edge Rule when the time comes, not researching whether it's
-possible.
+a public bucket, no signing).
 
-### 4.6 Backup mechanics and cost, for the hourly `folder/` sync to Backblaze B2
+### 4.6 Backup mechanics and cost, for the hourly whole-bucket sync to Backblaze B2
 
 **Decided: Backblaze B2, via its S3-compatible API**, not a second AWS
 bucket — see §2.2's reasoning (genuine vendor independence from both AWS and
@@ -935,7 +1000,7 @@ accepts `--endpoint-url` to target *any* S3-compatible service, using that
 provider's own credentials instead of AWS IAM. Concretely:
 
 ```
-aws s3 sync s3://blot-primary-bucket/folder/ s3://blot-backup/folder/ \
+aws s3 sync s3://blot-primary-bucket/ s3://blot-backup/ \
   --endpoint-url https://s3.<region>.backblazeb2.com \
   --profile backblaze
 ```
@@ -945,6 +1010,10 @@ the B2 console, scoped to a single bucket if you want to limit blast
 radius), not AWS credentials — the source side of the command still reads
 from the primary AWS bucket using your normal AWS credentials, so this is a
 cross-provider copy, not a same-provider one.
+
+This covers the whole bucket, not just `folder/`: `.assets` sits at the
+bucket root and includes dashboard uploads that can't be regenerated
+(§2.2.2).
 
 **How this runs, entirely outside the application codebase** — same two
 options as before, unaffected by the destination change:
@@ -977,7 +1046,7 @@ semantics, not just "don't delete":
   corresponding key untouched in the backup (protects against accidental
   deletion).
 - Add a `NoncurrentVersionExpiration` lifecycle rule (e.g. `NoncurrentDays:
-  60–90`, filtered to the `folder/` prefix) so superseded versions — the
+  60–90`, bucket-wide) so superseded versions — the
   actual protection against an accidental *overwrite* or corruption, not
   just a delete — get cleaned up automatically after the retention window,
   rather than accumulating forever.
@@ -1022,7 +1091,7 @@ private calculation, not reproduced here — see the note at the end of §4.8):
   server-side `CopyObject` instead. It's the real, small price of the
   vendor-independence decision, not a mistake to optimize away.
 - **One-time cost, not recurring**: the initial full sync has to push
-  everything under `folder/` out of S3 once, at the same per-GB egress rate
+  the whole bucket out of S3 once, at the same per-GB egress rate
   above (minus whatever the free monthly tier absorbs).
 - **Compute**: negligible either way (cron invocation or Lambda), same as
   before.
@@ -1052,7 +1121,7 @@ without opening a new B2 account.
 **How to gather the two data points still needed, both from the AWS Console
 dashboard — no CLI setup required for either:**
 
-- **Actual `folder/`/`assets/` data volume**: you already have this (the
+- **Actual `.folder`/`.assets` data volume**: you already have this (the
   `du -sh` figures you gave me) — nothing further needed here.
 - **Daily write rate** (for the B2 sync cost estimate) and **EBS
   read/write latency and throughput** (for sizing the SSD cache): both come
@@ -1282,6 +1351,13 @@ measure.
   filenames for anything that's safe on POSIX but could behave oddly as a
   raw S3 key (leading/trailing whitespace, control characters) before
   migration, as a sanity check rather than a redesign.
+- **Direct-to-S3 serving for `.folder`, if ever** (§4.4) — `.assets` keys
+  match its public URLs, but `.folder` URLs carry a `/folder/v-{version}/`
+  cache-buster that isn't part of any key, so serving `.folder` straight
+  from S3 would need a Bunny rewrite rule. Current assumption: `.folder`
+  stays served through the app. Revisit only if origin load makes it worth
+  it — dropping the cache-buster from URLs would be the rule-free option,
+  at the cost of CDN purges on every file change.
 - **Keep Blot-internal bookkeeping out of the public `folder/{blogID}/`
   key space** (§2.2.1) — worth an explicit check during Phase 0/1 that
   nothing beyond actual sync-client-written content ends up there.
@@ -1310,8 +1386,8 @@ generation, an existing SSD-LRU eviction pattern in the macserver client).
 The abstraction layer itself is a big but mechanical refactor (~30-40 call
 sites, no exotic IO patterns). The Bunny piece needs no changes at all for
 the core migration, since Bunny already talks only to the Blot app server —
-the direct-to-S3 optimization is a deliberate, well-understood later step
-(one Edge Rule per scope), not a blocker. The remaining real design work,
+serving `.assets` straight from S3 is an optional later step (its keys
+already match its public URLs, so no rewriting — §4.4), not a blocker. The remaining real design work,
 beyond the refactor, is: (1) moving the per-blog sync lock off local disk
 before multi-instance ever becomes real, and (2) rewriting `folder.js`'s
 live directory listing to use paginated `.list()` calls rather than a
