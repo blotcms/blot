@@ -1,6 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
 {{> head}}
+<script>
+(function () {
+  var root = document.documentElement;
+  var sidebarCollapsed = false;
+  var templatesCollapsed = false;
+  var sidebarWidth = NaN;
+
+  try {
+    sidebarCollapsed =
+      localStorage.getItem("template-editor-sidebar-collapsed") === "true";
+    templatesCollapsed =
+      localStorage.getItem("template-list-section:base-templates") ===
+      "collapsed";
+    sidebarWidth = parseFloat(
+      localStorage.getItem("template-editor-sidebar-width")
+    );
+  } catch (err) {}
+
+  if (isFinite(sidebarWidth)) {
+    var minWidth =
+      parseFloat(getComputedStyle(root).getPropertyValue("--sidebar-min-width")) ||
+      140;
+    var maxWidth =
+      parseFloat(getComputedStyle(root).getPropertyValue("--sidebar-max-width")) ||
+      480;
+    sidebarWidth = Math.max(minWidth, Math.min(maxWidth, sidebarWidth));
+    root.style.setProperty("--sidebar-width", sidebarWidth + "px");
+  }
+
+  var stateClasses = [
+    ["template-editor-sidebar-collapsed", sidebarCollapsed],
+    ["template-list-base-templates-collapsed", templatesCollapsed],
+  ];
+
+  stateClasses.forEach(function (state) {
+    root.classList.toggle(state[0], state[1]);
+  });
+
+  var applyBodyState = function () {
+    if (!document.body) return false;
+
+    stateClasses.forEach(function (state) {
+      document.body.classList.toggle(state[0], state[1]);
+    });
+    return true;
+  };
+
+  if (!applyBodyState()) {
+    var observer = new MutationObserver(function () {
+      if (applyBodyState()) observer.disconnect();
+    });
+    observer.observe(root, { childList: true });
+  }
+})();
+</script>
 <body>
     <a href="/sites/{{blog.handle}}" class="close-button template-editor-close-button">
                             <span>
@@ -9,20 +64,35 @@
                         </a>
     <div class="template-layout">        
         <div class="template-sidebar">
-            <div class="scroll-container">
-                {{> template-navbar-list}}
-            </div>			
+            <div id="template-sidebar-content" class="template-sidebar-content">
+                <div class="scroll-container">
+                    {{> template-navbar-list}}
+                </div>
 
-<div id="template-action-menu" class="template-action-menu row-action-menu" aria-hidden="true">
-  <ul>
-    <li><a data-menu-link="use" href="#">Install</a></li>
-    <li><a data-menu-link="source" href="#">Edit code</a></li>
-    <li><a data-menu-link="rename" href="#">Rename</a></li>
-    <li><a data-menu-link="delete" href="#">Delete</a></li>
-    <li><a data-menu-link="reset" href="#">Reset changes</a></li>
-    <li><a data-menu-link="duplicate" href="#">Make a copy</a></li>
-  </ul>
-</div>
+                <div id="template-action-menu" class="template-action-menu row-action-menu" aria-hidden="true">
+                    <ul>
+                        <li><a data-menu-link="use" href="#">Install</a></li>
+                        <li><a data-menu-link="source" href="#">Edit code</a></li>
+                        <li><a data-menu-link="rename" href="#">Rename</a></li>
+                        <li><a data-menu-link="delete" href="#">Delete</a></li>
+                        <li><a data-menu-link="reset" href="#">Reset changes</a></li>
+                        <li><a data-menu-link="duplicate" href="#">Make a copy</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div
+                class="template-sidebar-resize-handle"
+                data-template-sidebar-resize-handle
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize template list sidebar"
+                aria-controls="template-sidebar-content"
+                aria-valuemin="32"
+                aria-valuemax="480"
+                aria-valuenow="200"
+                aria-valuetext="200 pixels"
+                tabindex="0"
+            ></div>
         </div>
         <div class="template-main">
                 {{#template.name}}

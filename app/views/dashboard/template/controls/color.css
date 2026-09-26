@@ -110,13 +110,15 @@
   right: 1em;
   width: 16px;
   height: 16px;
-  transform: translateY(-50%);
+  transform: translateY(-50%) rotate(0deg);
+  transform-origin: center;
+  transition: transform 0.15s ease;
   color: var(--light-text-color);
   pointer-events: none;
 }
 
 .color-picker.is-open .color-picker-chevron {
-  transform: translateY(-50%) rotate(180deg);
+  transform: translateY(-50%) rotate(-180deg);
 }
 
 .color-label {

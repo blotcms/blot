@@ -6,7 +6,7 @@
   --template-row-hover-background-color: #f3f3f3;
   --template-row-selected-background-color: #ebebeb;
   --template-row-selected-text-color: #6f7278;
-  --template-row-link-font-size: 14px;
+  --template-row-link-font-size: 13px;
   --template-row-link-padding: 0.219em 0 0.219em 0.5em;
   --template-preview-height: 16px;
   --template-preview-width: 20px;
@@ -16,12 +16,17 @@
   --template-grid-gap: 20px;
   --template-grid-columns: repeat(auto-fill, minmax(140px, 1fr));
   --settings-group-margin-bottom: 1.5rem;
-  --sidebar-width: 220px;
+  --sidebar-default-width: 200px;
+  --sidebar-width: var(--sidebar-default-width);
+  --sidebar-min-width: 140px;
+  --sidebar-max-width: 480px;
+  --sidebar-collapse-threshold: 140px;
+  --sidebar-collapsed-width: 32px;
   --sidebar-padding: 0 3px 0 20px;
   --sidebar-height: 100vh;
   --main-min-height: 101vh;
   --scroll-container-width: 100%;
-  --scroll-container-max-width: 400px;
+  --scroll-container-max-width: var(--sidebar-max-width);
   --scroll-container-height: 100vh;
   --template-list-padding-right: 17px;
   --template-list-padding-bottom: 4rem;
@@ -29,7 +34,7 @@
   --segmented-control-gap: 2px;
   --segmented-control-border-radius: 7px;
   --segmented-control-margin-bottom: 24px;
-  --sidebar-background-color: #f9f9f9;
+  --sidebar-background-color: #f0f0f0;
   --segmented-control-button-basis: 50%;
   --segmented-control-button-padding: 0.375em 0;
   --iframe-container-height: calc(100vh - 148px);
@@ -94,10 +99,26 @@ h2 {
 
 .template-list-section__chevron {
   transform: rotate(0deg);
+  transition: transform 0.15s ease;
 }
 
 .template-list-section__toggle[aria-expanded="true"] .template-list-section__chevron {
-  transform: rotate(90deg);
+  transform: rotate(-270deg);
+}
+
+.template-list-base-templates-collapsed #template-list-base-templates {
+  display: none;
+}
+
+.template-list-base-templates-collapsed
+.template-list-section__toggle[data-section-key="base-templates"]
+  .template-list-section__chevron {
+  transform: rotate(-90deg);
+}
+
+.template-list-section__toggle[aria-expanded="false"]
+  .template-list-section__chevron {
+  transform: rotate(-90deg);
 }
 
 .inputs form label {
@@ -136,6 +157,96 @@ h2 {
   box-sizing: border-box;
   flex-grow: 0;
   flex-shrink: 0;
+  transition: width 0.2s ease;
+}
+
+.template-sidebar-content {
+  width: 100%;
+  min-width: 0;
+}
+
+.template-sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--border-radius);
+  background: transparent;
+  color: #9b9b9b;
+  cursor: pointer;
+}
+
+.template-sidebar-toggle:hover {
+  background: var(--template-row-hover-background-color);
+  color: var(--text-color);
+}
+
+.template-sidebar-toggle svg {
+  display: block;
+  fill: currentColor;
+}
+
+.template-sidebar.is-collapsed,
+.template-editor-sidebar-collapsed .template-sidebar {
+  width: var(--sidebar-collapsed-width);
+  padding: 0;
+}
+
+.template-sidebar.is-collapsed .scroll-container,
+.template-editor-sidebar-collapsed .template-sidebar .scroll-container {
+  visibility: hidden;
+}
+
+.template-sidebar.is-collapsed .template-sidebar-toggle,
+.template-editor-sidebar-collapsed .template-sidebar .template-sidebar-toggle {
+  position: absolute;
+  top: 8px;
+  right: 2px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  visibility: visible;
+}
+
+.template-sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 4;
+  width: 6px;
+  height: 100%;
+  outline: none;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.template-sidebar-resize-handle::after {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  width: 1px;
+  height: 100%;
+  background: transparent;
+  content: "";
+  transition: background-color 0.15s ease;
+}
+
+.template-sidebar-resize-handle:hover::after,
+.template-sidebar-resize-handle:focus-visible::after {
+  background: var(--border-color);
+}
+
+body.is-resizing-template-sidebar,
+body.is-resizing-template-sidebar * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body.is-resizing-template-sidebar .template-sidebar {
+  transition: none;
 }
 
 .template-main {
@@ -521,10 +632,15 @@ p.template-heading-note {
   padding-bottom: 0;
   margin-right: 1em;
   line-height: 1.3;
+  font-size: 18px;
 }
 
 .template-heading-row h1 a {
   color: var(--text-color);
+}
+
+.template-heading-row .template-button {
+  font-size: 13px;
 }
 
 .template-in-use {
