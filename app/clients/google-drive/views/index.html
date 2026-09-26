@@ -57,6 +57,7 @@
   {{/folderId}}
 
   {{^folderId}}
+  {{#preparing}}
   {{#serviceAccount.user}}
   <div class="line">
     <div class="label">Set up folder</div>
@@ -114,6 +115,7 @@
     </div>
   </div>
   {{/serviceAccount.user}}
+  {{/preparing}}
   {{/folderId}}
 
 
