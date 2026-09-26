@@ -25,7 +25,6 @@ module.exports = function create (
       var user = {
         uid: uid,
         isDisabled: false,
-        disabledForNonpayment: false,
         blogs: [],
         lastSession: "",
         created: Date.now(),

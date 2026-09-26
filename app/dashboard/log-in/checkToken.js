@@ -36,17 +36,17 @@ module.exports = function checkToken(req, res, next) {
       if (isRedisUnavailableError(err)) return next(err);
       if (err || !user) return next(new LogInError("NOUSER"));
 
-      // Read the persisted flags before extend() overwrites isDisabled with
-      // a forward-looking prediction - see dashboard/util/load-user.js.
+      // Read the persisted flag before extend() overwrites it with a
+      // forward-looking prediction of whether Stripe/PayPal state means the
+      // account *should* be disabled - see dashboard/util/load-user.js.
       var isDisabled = user.isDisabled;
-      var disabledForNonpayment = user.disabledForNonpayment;
 
       User.extend(user);
 
-      // Also require the subscription to still actually read
-      // past_due/unpaid - see dashboard/util/load-user.js.
+      // A subscription an admin has paused (scripts/user/pause-account.js)
+      // stays disabled without billing even if its Stripe status still
+      // reads past_due/unpaid - don't treat that as payable.
       var canPayToReactivate =
-        disabledForNonpayment &&
         user.needsToPay &&
         !(user.subscription && user.subscription.pause_collection);
 

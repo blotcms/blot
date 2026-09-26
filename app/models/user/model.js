@@ -3,7 +3,6 @@ var MODEL = {
   email: "string",
   blogs: "array",
   isDisabled: "boolean",
-  disabledForNonpayment: "boolean",
   lastSession: "string",
   created: "number",
   welcomeEmailSent: "boolean",

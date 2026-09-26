@@ -4,7 +4,6 @@ var stripe = require("stripe")(config.stripe.secret);
 var User = require("models/user");
 var prettyPrice = require("helper/prettyPrice");
 var email = require("helper/email");
-var subscriptionLifecycle = require("models/user/subscriptionLifecycle");
 var Express = require("express");
 var PaySubscription = new Express.Router();
 
@@ -216,26 +215,6 @@ function updateSubscription(req, res, next) {
           (previousStatus === "past_due" || previousStatus === "unpaid")
         ) {
           email.RECOVERED(req.user.uid);
-        }
-
-        // A disabled-for-non-payment user reaching this route just paid
-        // (see dashboard/util/load-user.js) - re-enable them here instead
-        // of waiting on the Stripe webhook, which could otherwise lose the
-        // race with the redirect below and bounce them to /sites/disabled.
-        // Gate on the persisted reason, not req.user.isDisabled - that's
-        // been through User.extend, which can predict isDisabled from
-        // stale/cached subscription state.
-        if (
-          req.user.disabledForNonpayment &&
-          subscription.status === "active" &&
-          !subscription.pause_collection &&
-          !subscriptionLifecycle.shouldDisableFromStripeSubscription(subscription)
-        ) {
-          return User.enable(
-            req.user,
-            { disabledForNonpayment: false },
-            next
-          );
         }
 
         next();

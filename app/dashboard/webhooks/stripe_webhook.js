@@ -290,11 +290,7 @@ function update_subscription(customer_id, subscription, callback) {
       user.isDisabled
     ) {
       handler = function (next) {
-        User.enable(
-          user,
-          Object.assign({ disabledForNonpayment: false }, updates),
-          next
-        );
+        User.enable(user, updates, next);
       };
     }
 
