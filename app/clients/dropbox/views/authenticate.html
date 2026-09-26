@@ -10,7 +10,7 @@
 <form class="dashboard-form" action="{{{base}}}/disconnect" method="post">
   <input type="hidden" name="_csrf" value="{{csrftoken}}">
   <div class="buttons">
-    <a href="{{{base}}}/redirect">Sync with Dropbox</a>
+    <a href="{{{base}}}/redirect{{#account.full_access}}?full_access=true{{/account.full_access}}">Sync with Dropbox</a>
     {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
     {{#blog.client}}<button type="submit">Cancel</button>{{/blog.client}}
   </div>

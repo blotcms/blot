@@ -45,6 +45,7 @@ module.exports = async function getBlogHealth(blog) {
       label: health.label(issue.code),
       message: issue.message,
       since: issue.since,
+      action: health.action(issue.code),
     };
   }
 

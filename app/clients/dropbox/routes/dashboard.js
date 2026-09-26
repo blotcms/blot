@@ -5,7 +5,6 @@ const setup = require("./setup");
 const config = require("config");
 const fetch = require("node-fetch");
 const Database = require("clients/dropbox/database");
-const { flagsFromAccount } = require("clients/dropbox/util/classifyError");
 const join = require("path").join;
 const moment = require("moment");
 const { Dropbox } = require("dropbox");
@@ -20,34 +19,12 @@ dashboard.use(function loadDropboxAccount (req, res, next) {
     if (!account) return next();
 
     var last_sync = account.last_sync;
-    var flags = flagsFromAccount(account);
 
     res.locals.account = req.account = account;
 
     if (last_sync) {
       res.locals.account.last_sync = moment.utc(last_sync).fromNow();
     }
-
-    res.locals.account.folder_missing = flags.folder_missing;
-    res.locals.account.revoked = flags.revoked;
-
-    // A quota error while the initial transfer is still pending gets the
-    // more specific "ran out of space while transferring" message below;
-    // the same error_code once the transfer has completed is the generic
-    // "storage full" message instead.
-    res.locals.account.insufficient_space =
-      flags.quota_exceeded && account.transfer_pending === true;
-    res.locals.account.quota_exceeded =
-      flags.quota_exceeded && account.transfer_pending !== true;
-
-    // A stuck/interrupted initial transfer for any reason other than the
-    // out-of-space case above, which gets its own more specific message.
-    // While a setup is actually in progress, the "/" route below replaces
-    // res.locals.account with req.session.dropbox before rendering, so this
-    // flag (computed from the persisted account) never reaches the view for
-    // a normal, still-running transfer - only a genuinely stuck one.
-    res.locals.account.transfer_incomplete =
-      account.transfer_pending === true && !flags.quota_exceeded;
 
     return next();
   });
