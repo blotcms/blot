@@ -8,6 +8,12 @@ var isDotfileOrDotfolder = _require.isDotfileOrDotfolder;
 var transferIncomplete = _require.transferIncomplete;
 var hashFile = require("helper/hashFile");
 var Database = require("../database");
+var persistError = require("../util/persistError");
+var {
+  SOURCES,
+  classify,
+  keepsErrorAfterDownload,
+} = require("../util/classifyError");
 var Path = require("path");
 var join = Path.join;
 var Delta = require("../delta");
@@ -44,13 +50,9 @@ module.exports = function main(blog, callback) {
     createClient(blog.id, function (err, client, account) {
       if (err) {
         folder.log("Error creating client", err);
-        return Database.set(
-          blog.id,
-          { error_code: err.status || 400 },
-          function (err) {
-            done(err, callback);
-          }
-        );
+        return persistError(blog.id, err, SOURCES.AUTH, function (setErr) {
+          done(setErr, callback);
+        });
       }
 
       // The initial transfer to Dropbox hasn't finished (or never started
@@ -83,13 +85,9 @@ module.exports = function main(blog, callback) {
       delta(account.cursor, function handle(err, result) {
         if (err) {
           folder.log("Error fetching changes from Dropbox", err);
-          return Database.set(
-            blog.id,
-            { error_code: err.status || 400 },
-            function (err) {
-              done(err, callback);
-            }
-          );
+          return persistError(blog.id, err, SOURCES.DELTA, function (setErr) {
+            done(setErr, callback);
+          });
         }
 
         folder.log(`Fetched ${result.entries.length} changes from Dropbox`);
@@ -101,20 +99,20 @@ module.exports = function main(blog, callback) {
         apply(result.entries, function (err) {
           if (err) {
             console.log("Blog", blog.id, "Dropbox Error:", err);
-            return Database.set(
-              blog.id,
-              { error_code: err.status || 400 },
-              function (err) {
-                done(err, callback);
-              }
-            );
+            return persistError(blog.id, err, SOURCES.APPLY, function (setErr) {
+              done(setErr, callback);
+            });
           }
           // we have successfully applied this batch of changes
           // to the user's Dropbox folder. Now we save the new
           // cursor and folderID and folder path to the database.
           // This means that future webhooks will invoke calls to
           // delta which return changes made after this point in time.
-          account.error_code = 0;
+          if (!keepsErrorAfterDownload(account)) {
+            account.error_code = 0;
+            account.error_source = "";
+            account.error_since = 0;
+          }
           account.last_sync = Date.now();
           account.cursor = result.cursor;
           // we store account folder for use on the dashboard
@@ -425,6 +423,12 @@ function Apply(client, blogFolder, log, status) {
                 err.statusMessage === "Conflict"
               ) {
                 return callback();
+              }
+
+              // Revoked access will fail every remaining file and must not
+              // advance the cursor past changes we never downloaded.
+              if (err && classify(err, SOURCES.APPLY).persist) {
+                return callback(err);
               }
 
               // Swallow errors generally so we can proceed to next file

@@ -23,6 +23,13 @@ const {
 } = require("clients/util/resyncProgress");
 
 const set = promisify(require("../database").set);
+const persistError = promisify(require("../util/persistError"));
+const {
+  SOURCES,
+  classify,
+  keepsErrorAfterDownload,
+} = require("../util/classifyError");
+const tagSource = require("../util/tagSource");
 const createClient = promisify((blogID, cb) =>
   require("../util/createClient")(blogID, (err, ...results) => cb(err, results))
 );
@@ -81,14 +88,37 @@ async function resetToBlot(blogID, publish, update) {
 
   publish("Syncing folder from Dropbox to Blot");
 
-  // if (signal.aborted) return;
-  // // this could become verify.fromBlot
-  // await uploadAllFiles(account, folder, signal);
+  let client, account;
+  try {
+    [client, account] = await createClient(blogID);
+  } catch (err) {
+    await persistError(blogID, err, SOURCES.AUTH);
+    throw err;
+  }
 
-  // if (signal.aborted) return;
-  // const account = await get(blogID);
-  const [client, account] = await createClient(blogID);
+  try {
+    return await resetToBlotWithClient(
+      blogID,
+      publish,
+      client,
+      account,
+      updatePath,
+      startedAt
+    );
+  } catch (err) {
+    await persistError(blogID, err, SOURCES.APPLY);
+    throw err;
+  }
+}
 
+async function resetToBlotWithClient(
+  blogID,
+  publish,
+  client,
+  account,
+  updatePath,
+  startedAt
+) {
   // Guard this at the source rather than only in each caller: resetToBlot
   // treats Dropbox as the source of truth and deletes any local file with no
   // Dropbox counterpart (see the walk below), which is exactly wrong while
@@ -110,9 +140,10 @@ async function resetToBlot(blogID, publish, update) {
 
   // Load the path to the blog folder root position in Dropbox
   if (account.folder_id) {
-    const { result } = await client.filesGetMetadata({
-      path: account.folder_id,
-    });
+    const { result } = await tagSource(
+      SOURCES.DELTA,
+      client.filesGetMetadata({ path: account.folder_id })
+    );
     const { path_display } = result;
     if (path_display) {
       dropboxRoot = path_display;
@@ -132,11 +163,14 @@ async function resetToBlot(blogID, publish, update) {
 
   const {
     result: { cursor },
-  } = await client.filesListFolderGetLatestCursor({
-    path: account.folder_id || "",
-    include_deleted: true,
-    recursive: true,
-  });
+  } = await tagSource(
+    SOURCES.DELTA,
+    client.filesListFolderGetLatestCursor({
+      path: account.folder_id || "",
+      include_deleted: true,
+      recursive: true,
+    })
+  );
 
   // The cursor is fetched before the walk, so edits made during it are still
   // seen by the next sync, but only saved once the walk succeeds. If the walk
@@ -167,10 +201,12 @@ async function resetToBlot(blogID, publish, update) {
   );
 
   // This means that future syncs will be fast
-  await set(blogID, {
-    cursor,
-    error_code: 0,
-  });
+  // A download-only pass can't show that Dropbox has room for uploads,
+  // so it leaves a quota error in place.
+  await set(
+    blogID,
+    keepsErrorAfterDownload(account) ? { cursor } : { cursor, error_code: 0 }
+  );
 
   progress.finish("Finished processing folder");
 
@@ -364,6 +400,8 @@ const walk = async (
           // either way; recording it as "skipped" here is just for
           // visibility in logs/summaries, not to affect the hourly email.
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
+          // Revoked access fails every remaining file: fail the resync.
+          if (classify(e, SOURCES.APPLY).persist) throw e;
           continue;
         }
       } else if (!localCounterpart) {
@@ -377,6 +415,8 @@ const walk = async (
             summary.modifiedDuringWalk += 1;
         } catch (e) {
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
+          // Revoked access fails every remaining file: fail the resync.
+          if (classify(e, SOURCES.APPLY).persist) throw e;
           continue;
         }
       } else {

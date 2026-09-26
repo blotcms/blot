@@ -1,5 +1,5 @@
 var async = require("async");
-var { isInsufficientSpaceError } = require("./constants");
+var isRetryable = require("./classifyError").isRetryable;
 
 function retry(fn, options) {
   options = options || {};
@@ -11,9 +11,11 @@ function retry(fn, options) {
   // 100, 200, 400, 800, 1600, 3200
   options.interval = options.interval || exponential;
 
-  // 401 = token revoked
-  // 409 = folder no longer exists
-  // in these cases, do not retry, there is no point
+  // Do not retry user-actionable failures (401 / invalid grant,
+  // delta 409 folder missing, 507 quota) or ENAMETOOLONG. A 409
+  // from a per-file op is also hopeless — restricted content and
+  // path-not-found do not recover by waiting. Transient 429 / 5xx
+  // / network errors still back off.
   //
   // ENAMETOOLONG = the destination path exceeds the filesystem's
   // max name/path length. Retrying can never succeed here since the
@@ -26,12 +28,7 @@ function retry(fn, options) {
     options.errorFilter ||
     function (err) {
       console.log("dropbox:retry invoked with err", err);
-      if (err.code === "ENAMETOOLONG") return false;
-      // Retrying an out-of-space upload can never succeed until the user
-      // frees up room in Dropbox, which won't happen mid-retry-loop. Fail
-      // fast instead of burning through all 6 attempts.
-      if (isInsufficientSpaceError(err)) return false;
-      return [401, 409].indexOf(err.status) === -1;
+      return isRetryable(err);
     };
 
   return function () {

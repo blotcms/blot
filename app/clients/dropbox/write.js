@@ -4,6 +4,9 @@ var createClient = require("./util/createClient");
 var fs = require("fs-extra");
 var localPath = require("helper/localPath");
 var retry = require("./util/retry");
+var persistError = require("./util/persistError");
+var database = require("./database");
+var { SOURCES } = require("./util/classifyError");
 const { promisify } = require("util");
 const upload = promisify(require("clients/dropbox/util/upload"));
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
@@ -20,7 +23,12 @@ function write(blogID, path, contents, callback) {
   }
 
   createClient(blogID, async function (err, client, account) {
-    if (err || !account) return callback(err || new Error("No account"));
+    if (err || !account) {
+      err = err || new Error("No account");
+      return persistError(blogID, err, SOURCES.AUTH, function () {
+        callback(err);
+      });
+    }
 
     // We assume that the account's folder has not changed
     // to be perfectly correct, we could check this before
@@ -33,10 +41,18 @@ function write(blogID, path, contents, callback) {
       await fs.outputFile(pathOnBlot, contents);
       await upload(client, pathOnBlot, pathInDropbox);
     } catch (e) {
-      return callback(e);
+      return persistError(blogID, e, SOURCES.APPLY, function () {
+        callback(e);
+      });
     }
 
-    callback();
+    // A successful upload shows access, the folder and storage are all
+    // fine, so it is the recovery path for a persisted quota error.
+    if (!account.error_code) return callback();
+
+    database.set(blogID, { error_code: 0 }, function () {
+      callback();
+    });
   });
 }
 

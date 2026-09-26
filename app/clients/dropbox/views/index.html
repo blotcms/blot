@@ -31,18 +31,47 @@
       {{/transfer_incomplete}}
 
       {{^transfer_incomplete}}
-      {{#error_code}}
+      {{#revoked}}
 
       <a href="{{{base}}}/redirect{{#full_access}}?full_access=true{{/full_access}}" class="mess error">
 
-        <b>Error</b><br><br>
+        <b>Reconnect required</b><br><br>
 
-        Blot cannot sync the folder for <b>{{blog.title}}</b>. You can probably fix this by reconnecting to Dropbox. If you can't fix this, please contact support. <br><br>
+        Access to your folder was revoked. Reconnect to resume syncing.<br><br>
 
         <span class="button">Re-connect to Dropbox</span>
       </a>
 
-      {{/error_code}}
+      {{/revoked}}
+
+      {{^revoked}}
+      {{#folder_missing}}
+
+      <a href="{{{base}}}/redirect{{#full_access}}?full_access=true{{/full_access}}" class="mess error">
+
+        <b>Folder missing</b><br><br>
+
+        The folder used to sync this site no longer exists. Choose a new folder to resume syncing.<br><br>
+
+        <span class="button">Re-connect to Dropbox</span>
+      </a>
+
+      {{/folder_missing}}
+
+      {{^folder_missing}}
+      {{#quota_exceeded}}
+
+      <div class="mess error">
+
+        <b>Storage full</b><br><br>
+
+        Your storage is full, so changes can't sync. Free some space in Dropbox to resume.
+
+      </div>
+
+      {{/quota_exceeded}}
+      {{/folder_missing}}
+      {{/revoked}}
       {{/transfer_incomplete}}
 
       {{/insufficient_space}}

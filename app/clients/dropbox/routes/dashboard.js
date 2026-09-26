@@ -5,13 +5,13 @@ const setup = require("./setup");
 const config = require("config");
 const fetch = require("node-fetch");
 const Database = require("clients/dropbox/database");
+const { flagsFromAccount } = require("clients/dropbox/util/classifyError");
 const join = require("path").join;
 const moment = require("moment");
 const { Dropbox } = require("dropbox");
 const views = __dirname + "/../views/";
 const client = require("models/client");
 const Blog = require("models/blog");
-const { INSUFFICIENT_SPACE_ERROR_CODE } = require("clients/dropbox/util/constants");
 
 dashboard.use(function loadDropboxAccount (req, res, next) {
   Database.get(req.blog.id, function (err, account) {
@@ -20,7 +20,7 @@ dashboard.use(function loadDropboxAccount (req, res, next) {
     if (!account) return next();
 
     var last_sync = account.last_sync;
-    var error_code = account.error_code;
+    var flags = flagsFromAccount(account);
 
     res.locals.account = req.account = account;
 
@@ -28,12 +28,17 @@ dashboard.use(function loadDropboxAccount (req, res, next) {
       res.locals.account.last_sync = moment.utc(last_sync).fromNow();
     }
 
-    if (error_code) {
-      res.locals.account.folder_missing = error_code === 409;
-      res.locals.account.revoked = error_code === 401;
-      res.locals.account.insufficient_space =
-        error_code === INSUFFICIENT_SPACE_ERROR_CODE;
-    }
+    res.locals.account.folder_missing = flags.folder_missing;
+    res.locals.account.revoked = flags.revoked;
+
+    // A quota error while the initial transfer is still pending gets the
+    // more specific "ran out of space while transferring" message below;
+    // the same error_code once the transfer has completed is the generic
+    // "storage full" message instead.
+    res.locals.account.insufficient_space =
+      flags.quota_exceeded && account.transfer_pending === true;
+    res.locals.account.quota_exceeded =
+      flags.quota_exceeded && account.transfer_pending !== true;
 
     // A stuck/interrupted initial transfer for any reason other than the
     // out-of-space case above, which gets its own more specific message.
@@ -42,8 +47,7 @@ dashboard.use(function loadDropboxAccount (req, res, next) {
     // flag (computed from the persisted account) never reaches the view for
     // a normal, still-running transfer - only a genuinely stuck one.
     res.locals.account.transfer_incomplete =
-      account.transfer_pending === true &&
-      error_code !== INSUFFICIENT_SPACE_ERROR_CODE;
+      account.transfer_pending === true && !flags.quota_exceeded;
 
     return next();
   });
