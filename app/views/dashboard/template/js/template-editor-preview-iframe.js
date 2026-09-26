@@ -7,18 +7,22 @@ if (previewIframeContainer) {
   var viewButtons = viewToggle ? viewToggle.querySelectorAll("button") : null;
   var previewLink = document.querySelector("a[data-preview-link]");
 
-  var iframeContainerWidth = previewIframeContainer.offsetWidth;
-  document.documentElement.style.setProperty(
-    "--iframe-container-width",
-    iframeContainerWidth
-  );
-  window.addEventListener("resize", function () {
-    var iframeContainerWidth = previewIframeContainer.offsetWidth;
+  var updateIframeContainerWidth = function () {
     document.documentElement.style.setProperty(
       "--iframe-container-width",
-      iframeContainerWidth
+      previewIframeContainer.offsetWidth
     );
-  });
+  };
+
+  updateIframeContainerWidth();
+  if (typeof window.ResizeObserver === "function") {
+    var previewIframeResizeObserver = new window.ResizeObserver(
+      updateIframeContainerWidth
+    );
+    previewIframeResizeObserver.observe(previewIframeContainer);
+  } else {
+    window.addEventListener("resize", updateIframeContainerWidth);
+  }
 
   if (!iframe || !previewOrigin) {
     return;
@@ -167,11 +171,7 @@ if (previewIframeContainer) {
         previewIframeContainer.classList.remove("is-mobile");
       }
       // Update --iframe-container-width after class change to reflect new container width
-      var iframeContainerWidth = previewIframeContainer.offsetWidth;
-      document.documentElement.style.setProperty(
-        "--iframe-container-width",
-        iframeContainerWidth
-      );
+      updateIframeContainerWidth();
     }
     if (viewButtons) {
       for (var i = 0; i < viewButtons.length; i++) {

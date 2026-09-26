@@ -1,30 +1,31 @@
-<div id="template-list" style="padding-top: 2rem">
-  <section class="template-list-section" data-template-list-section>
+<div id="template-list" style="padding-top: 1rem">
+  <section class="template-list-section">
     <div class="template-list-section__heading">
       <h2>
-        <button
-          type="button"
-          class="template-list-section__toggle template-list-section__toggle--heading"
-          data-template-list-toggle
-          data-section-key="your-templates"
-          data-section-label="Your templates"
-          aria-expanded="true"
-          aria-controls="template-list-your-templates"
-          aria-label="Collapse Your templates"
-        >
-          <span>Your templates</span>
-          <span class="icon-small-chevron-right template-list-section__chevron" aria-hidden="true"></span>
-        </button>
+        Your templates
       </h2>
+      <button
+        type="button"
+        class="template-sidebar-toggle"
+        data-template-sidebar-toggle
+        aria-expanded="true"
+        aria-controls="template-sidebar-content"
+        aria-label="Collapse template list sidebar"
+      >
+        <svg data-no-autosize="true" aria-hidden="true" focusable="false" height="14" viewBox="0 0 20 20" width="14" xmlns="http://www.w3.org/2000/svg">
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M14.5 2.87695C16.5241 2.87695 18.165 4.51787 18.165 6.54199V13.459C18.1649 15.483 16.524 17.124 14.5 17.124H5.5C3.47598 17.124 1.83514 15.483 1.83496 13.459V6.54199C1.83496 4.51787 3.47588 2.87695 5.5 2.87695H14.5ZM8.16504 15.7939H14.5C15.7895 15.7939 16.8348 14.7484 16.835 13.459V6.54199C16.835 5.25241 15.7896 4.20703 14.5 4.20703H8.16504V15.7939ZM5.5 4.20703C4.21042 4.20703 3.16504 5.25241 3.16504 6.54199V13.459C3.16521 14.7484 4.21052 15.7939 5.5 15.7939H6.83496V4.20703H5.5Z" fill="currentColor"></path>
+        </svg>
+      </button>
     </div>
-    <div id="template-list-your-templates">
+    <div>
       <div class="template-row {{newSelected}}">
         <a href="{{{dashboardBase}}}/template/new">
           <span
             class="preview"
             style="border:1px dashed #ccc;{{#newSelected}}border-color:var(--accent-color);{{/newSelected}}border-radius:3px;box-shadow: none;"
           >
-          </span>Create template
+          </span>
+          <span class="template-row__name">Create template</span>
         </a>
       </div>
 
