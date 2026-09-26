@@ -205,9 +205,13 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
       // falling through to Fix() and "Finished site rebuild" below, which
       // would make the refusal look like a successful resync.
       if (err && err.code === "DROPBOX_TRANSFER_INCOMPLETE") {
-        folder.status(err.message);
+        // done() publishes "Synced" before calling back, so re-publish the
+        // refusal afterwards to make it the final status the user sees.
+        const refusal = err.message;
+        folder.status(refusal);
         return done(null, function (err) {
           if (err) console.log("Error releasing sync: ", err);
+          folder.status(refusal);
         });
       }
     }
