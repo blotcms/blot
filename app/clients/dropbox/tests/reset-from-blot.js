@@ -7,6 +7,12 @@ describe("dropbox resetFromBlot", function () {
   const createClientPath = require.resolve("../util/createClient");
   const databasePath = require.resolve("../database");
   const uploadPath = require.resolve("../util/upload");
+  // persistError.js does `const database = require("../database")` once,
+  // at module load. Its cache entry has to be cleared alongside
+  // databasePath's or a persistError already loaded (with the real,
+  // Redis-backed database module bound in its closure) from an earlier
+  // spec file keeps using that instead of the mock below.
+  const persistErrorPath = require.resolve("../util/persistError");
 
   const blogID = "blog_resetfromblottest" + Date.now();
   const blogDirectory = join(blog_folder_dir, blogID);
@@ -17,7 +23,7 @@ describe("dropbox resetFromBlot", function () {
   beforeEach(async function () {
     saved = [];
     uploadCalls = [];
-    [resetPath, createClientPath, databasePath, uploadPath].forEach(
+    [resetPath, createClientPath, databasePath, uploadPath, persistErrorPath].forEach(
       (path) => (originals[path] = require.cache[path])
     );
     await fs.ensureDir(blogDirectory);
@@ -29,6 +35,10 @@ describe("dropbox resetFromBlot", function () {
       if (originals[path]) require.cache[path] = originals[path];
       else delete require.cache[path];
     });
+    delete require.cache[persistErrorPath];
+    if (originals[persistErrorPath]) {
+      require.cache[persistErrorPath] = originals[persistErrorPath];
+    }
     if (originals[resetPath]) require.cache[resetPath] = originals[resetPath];
     await fs.remove(blogDirectory);
   });
@@ -68,6 +78,19 @@ describe("dropbox resetFromBlot", function () {
           saved.push(values);
           callback(null);
         },
+        // Mirrors database.js's real setError closely enough for these
+        // specs: only a persistable classification writes anything, and
+        // what it writes is the same error_code/error_source/error_since
+        // shape so `saved` reflects it the same way a direct set() would.
+        setError: function (_blogID, classification, callback) {
+          if (!classification || !classification.persist) return callback(null);
+          saved.push({
+            error_code: classification.status || 0,
+            error_source: classification.source || "",
+            error_since: Date.now(),
+          });
+          callback(null);
+        },
       },
     };
     require.cache[uploadPath] = {
@@ -76,6 +99,10 @@ describe("dropbox resetFromBlot", function () {
         uploadBehavior(callback);
       },
     };
+    // Force persistError.js to reload so its own `require("../database")`
+    // picks up the mock above instead of a stale reference cached from an
+    // earlier spec file.
+    delete require.cache[persistErrorPath];
     delete require.cache[resetPath];
     return require("../sync/reset-from-blot");
   }

@@ -249,7 +249,23 @@ async function resetFromBlot(blogID, publish, signal) {
 // help (revoked access, full storage): that must fail the resync.
 function rethrowIfDurable(err) {
   if (err && err.name === "AbortError") throw err;
-  if (classify(err, SOURCES.APPLY).persist) throw err;
+
+  const classified = classify(err, SOURCES.APPLY);
+  if (!classified.persist) return;
+
+  // Running out of space mid-transfer is the same durable condition the
+  // pre-flight check guards against (classify normalizes both the
+  // pre-flight 409 and an upload's insufficient_space failure to status
+  // 507) - tag it the same way so callers checking error.code see one
+  // consistent shape instead of only the pre-flight check's synthesized
+  // error carrying it. Mutate rather than replace: the outer catch in
+  // resetFromBlot still needs the original status/tag intact to classify
+  // and persist this error via persistError.
+  if (classified.status === 507 && !err.code) {
+    err.code = "DROPBOX_INSUFFICIENT_SPACE";
+  }
+
+  throw err;
 }
 
 async function resetFromBlotWithClient(
