@@ -19,17 +19,6 @@
 </div>
 {{/blog.healthIssue}}
 
-{{#isDevelopment}}
-<a class="line" href="{{{dashboardBase}}}/client/open">
-  <span class="label">{{client.display_name}} folder</span>
-  <span class="center"><span class="link">Open folder in {{client.display_name}}</span></span>
-</a>
-<a class="line" href="{{{dashboardBase}}}/client/open?local=true">
-  <span class="label">Blot folder</span>
-  <span class="center"><span class="link">Open folder on Blot</span></span>
-</a>
-{{/isDevelopment}}
-
 <a class="line" href="{{{dashboardBase}}}/client/reset">
     <span class="label">Reset</span>
     <span class="link">Resync from {{client.display_name}}</span>
@@ -43,3 +32,12 @@
 <div class="buttons">
   <a href="{{{dashboardBase}}}" class="button"><span class="icon-small-chevron-right"></span> Back to dashboard</a>
 </div>
+
+{{#isDevelopment}}
+<div style="margin-top:16px;padding:10px 13px;border:1px solid var(--border-color);border-radius:5px;font-size:12px;color:var(--light-text-color);">
+  <div style="margin-bottom:6px;">Development server only:</div>
+  <a href="{{{dashboardBase}}}/client/open" style="color:var(--light-text-color);">Open folder in {{client.display_name}}</a>
+  &nbsp;&middot;&nbsp;
+  <a href="{{{dashboardBase}}}/client/open?local=true" style="color:var(--light-text-color);">Open folder on Blot</a>
+</div>
+{{/isDevelopment}}
