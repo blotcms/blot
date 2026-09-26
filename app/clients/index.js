@@ -24,6 +24,15 @@ if (config.google_drive.service_accounts.length) {
   clients['google-drive'] = require("./google-drive");
 }
 
+// If we have the required Microsoft Entra app credentials
+if (
+  config.onedrive.client_id &&
+  config.onedrive.client_secret &&
+  config.onedrive.webhook_secret
+) {
+  clients.onedrive = require("./onedrive");
+}
+
 // If we have the required creds to run the iCloud integration
 if (config.icloud.server_address) {
   clients['icloud'] = require("./icloud");
