@@ -70,20 +70,24 @@ module.exports = function processSubscriptionLifecycle(callback) {
 
         if (user.isDisabled) return next();
 
-        return User.disable(user, function (disableErr) {
-          if (disableErr) return next(disableErr);
+        return User.disable(
+          user,
+          { disabledForNonpayment: true },
+          function (disableErr) {
+            if (disableErr) return next(disableErr);
 
-          disabled += 1;
+            disabled += 1;
 
-          email.OVERDUE_SUBSCRIPTION_DISABLED_GRACE("", {
-            email: user.email,
-            subscriptionOverdueOn: overdueStartedAtISO,
-          });
+            email.OVERDUE_SUBSCRIPTION_DISABLED_GRACE("", {
+              email: user.email,
+              subscriptionOverdueOn: overdueStartedAtISO,
+            });
 
-          email.OVERDUE_CLOSURE(user.uid);
+            email.OVERDUE_CLOSURE(user.uid);
 
-          next();
-        });
+            next();
+          }
+        );
       }
 
       console.log(
@@ -94,15 +98,19 @@ module.exports = function processSubscriptionLifecycle(callback) {
       );
 
       if (!user.isDisabled) {
-        return User.disable(user, function (disableErr) {
-          if (disableErr) return next(disableErr);
-          disabled += 1;
-          // This user skipped disabled_grace (e.g. the job failed to reach
-          // them during that window), so this is the first time they're
-          // actually disabled - tell them here instead.
-          email.OVERDUE_CLOSURE(user.uid);
-          queueRemoval(user, overdue, next);
-        });
+        return User.disable(
+          user,
+          { disabledForNonpayment: true },
+          function (disableErr) {
+            if (disableErr) return next(disableErr);
+            disabled += 1;
+            // This user skipped disabled_grace (e.g. the job failed to reach
+            // them during that window), so this is the first time they're
+            // actually disabled - tell them here instead.
+            email.OVERDUE_CLOSURE(user.uid);
+            queueRemoval(user, overdue, next);
+          }
+        );
       }
 
       return queueRemoval(user, overdue, next);

@@ -20,26 +20,27 @@ module.exports = function (req, res, next) {
       return next();
     }
 
-    // Read the persisted flag before extend() overwrites it with a
+    // Read the persisted flags before extend() overwrites isDisabled with a
     // forward-looking prediction of whether Stripe/PayPal state means the
     // account *should* be disabled - we only want to let someone through
-    // here if they're actually disabled right now.
+    // here if they're actually disabled right now, and specifically because
+    // subscription-lifecycle.js disabled them for non-payment (not because
+    // an admin disabled or paused them directly - see disable.js/
+    // pause-account.js - even if their subscription also happens to read
+    // past_due/unpaid).
     var isDisabled = user.isDisabled;
+    var disabledForNonpayment = user.disabledForNonpayment;
 
     User.extend(user);
 
-    // A subscription an admin has paused (scripts/user/pause-account.js)
-    // is deliberately kept disabled without billing, even if its Stripe
-    // status still reads past_due/unpaid - don't treat that as payable.
     var canPayToReactivate =
-      user.needsToPay &&
+      disabledForNonpayment &&
       !(user.subscription && user.subscription.pause_collection);
 
     // A disabled account can still log in and pay if that's why it was
-    // disabled - completing payment re-enables it automatically via the
-    // subscription webhook. Any other disabled account (a cancelled
-    // subscription, a paused subscription, or one an admin disabled
-    // directly) still gets sent away.
+    // disabled - completing payment re-enables it automatically. Any other
+    // disabled account (a cancelled subscription, a paused subscription, or
+    // one an admin disabled directly) still gets sent away.
     if (isDisabled && !canPayToReactivate) {
       return res.redirect("/sites/disabled");
     }

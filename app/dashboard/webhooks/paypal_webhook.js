@@ -167,7 +167,12 @@ const updateSubscription = async subscriptionID => {
     };
 
     if (shouldDisable && !user.isDisabled) return User.disable(user, updates, done);
-    if (shouldEnable) return User.enable(user, updates, done);
+    if (shouldEnable)
+      return User.enable(
+        user,
+        Object.assign({ disabledForNonpayment: false }, updates),
+        done
+      );
     User.set(user.uid, updates, done);
   });
 };
