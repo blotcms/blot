@@ -1,0 +1,169 @@
+.link-card {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  background: var(--link-card-background, #fff);
+  color: inherit;
+  overflow: hidden;
+  margin: 1.5rem 0;
+  box-shadow: var(--link-card-shadow, none);
+}
+
+.link-card__anchor {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  color: inherit;
+  text-decoration: none;
+  align-items: stretch;
+}
+
+.link-card__anchor:hover .link-card__title,
+.link-card__anchor:focus .link-card__title {
+  text-decoration: underline;
+}
+
+.link-card__thumbnail {
+  flex: 0 0 96px;
+  width: 96px;
+  height: 96px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.link-card__thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.link-card__content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.link-card__title {
+  font-size: 1rem;
+  line-height: 1.3;
+  margin: 0;
+  font-weight: 600;
+}
+
+.link-card__description {
+  margin: 0;
+  color: inherit;
+  opacity: 0.5;
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.link-card__url {
+  font-size: 0.7em;
+  color: inherit;
+  opacity: 0.7;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.link-card__url-text {
+  word-break: break-word;
+  min-width: 0;
+}
+
+.link-card__icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  flex: 0 0 auto;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.link-card--compact .link-card__anchor {
+  align-items: stretch;
+  flex-direction: row-reverse;
+  padding: 0;
+}
+
+.link-card--compact .link-card__thumbnail {
+  flex: 0 0 30%;
+  width: 30%;
+  height: auto;
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 0;
+}
+
+.link-card--compact .link-card__content {
+  padding: 1rem;
+}
+
+.link-card--large .link-card__anchor {
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+}
+
+.link-card--large .link-card__thumbnail {
+  width: 100%;
+  height: auto;
+  max-height: 500px;
+  border-radius: 12px 12px 0 0;
+  flex: auto;
+}
+
+.link-card--large .link-card__thumbnail img {
+  width: 100%;
+  height: auto;
+  max-height: 500px;
+}
+
+.link-card--large .link-card__content {
+  padding: 1rem;
+}
+
+.link-card--large .link-card__description {
+  margin-bottom: 0.25rem;
+}
+
+.link-card--large .link-card__url {
+  margin-top: auto;
+}
+
+@media (max-width: 600px) {
+  /* Default layout. */
+  .link-card__anchor {
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .link-card__thumbnail {
+    width: 100%;
+    height: auto;
+  }
+
+  /* Compact needs selectors at least as specific as the .link-card--compact
+     rules above, or it stays a row with a 30%-wide thumbnail on mobile. */
+  .link-card--compact .link-card__anchor {
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+  }
+
+  .link-card--compact .link-card__thumbnail {
+    width: 100%;
+    height: auto;
+    flex: auto;
+    border-left: 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+}

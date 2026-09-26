@@ -36,6 +36,7 @@ var loaded = loadPlugins({
   mediaPreload: require("./mediaPreload"),
   callouts: require("./callouts"),
   linkScreenshot: require("./linkScreenshot"),
+  linkCards: require("./linkCards"),
   titlecase: require("./titlecase"),
   twitter: require("./twitter"),
   typeset: require("./typeset"),

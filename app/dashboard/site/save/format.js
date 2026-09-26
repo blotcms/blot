@@ -34,6 +34,42 @@ function normalizeBooleanOption(value) {
   return Boolean(value);
 }
 
+const VALID_LINK_CARD_LAYOUTS = ["compact", "large"];
+
+function normalizeLinkCardLayout(value) {
+  if (typeof value === "string") {
+    const normalized = value.toLowerCase();
+    if (VALID_LINK_CARD_LAYOUTS.indexOf(normalized) > -1) {
+      return normalized;
+    }
+  }
+
+  return "compact";
+}
+
+function normalizeLinkCardOptions(linkCards, options) {
+  if (!linkCards) return;
+
+  if (!linkCards.options) linkCards.options = {};
+
+  const shouldDefaultToCompact = Boolean(
+    options &&
+      options.defaultLayout &&
+      linkCards.enabled &&
+      !linkCards.options.layout
+  );
+
+  if (shouldDefaultToCompact) {
+    linkCards.options.layout = "compact";
+  }
+
+  const layout = normalizeLinkCardLayout(linkCards.options.layout);
+
+  linkCards.options.layout = layout;
+  linkCards.options.layoutCompact = layout === "compact";
+  linkCards.options.layoutLarge = layout === "large";
+}
+
 module.exports = function (req, res, next) {
   try {
     req.updates = formJSON(req.body, WRITEABLE_SCHEME);
@@ -110,6 +146,12 @@ module.exports = function (req, res, next) {
     }
 
     extend(req.updates.plugins).and(req.blog.plugins);
+
+    if (req.updates.plugins.linkCards) {
+      normalizeLinkCardOptions(req.updates.plugins.linkCards, {
+        defaultLayout: true,
+      });
+    }
 
     // We mpdify the analytics settings after the extend function because
     // the extend function will not overwrite existing conflicting providers
