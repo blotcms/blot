@@ -199,6 +199,38 @@ function loadFolder(callback) {
             }
           }
         }
+
+        // On pages like the folder footer, the .sync-status line lives
+        // outside .live-updates so the syncing/synced animation (driven by
+        // classes toggled in place by renderSyncStatusMessage) isn't wiped
+        // out by an innerHTML swap on every load. But that also means a
+        // health issue appearing/clearing on the server (data-health added,
+        // removed or changed) never reaches this element via the diff
+        // above. Swap it in on its own, only when the health state itself
+        // differs, so the animated classes are left alone the rest of the
+        // time.
+        try {
+          var currentStatus = q(".sync-status");
+          var newStatus = xml.querySelector(".sync-status");
+          var statusIsLive = currentNode && currentStatus && currentNode.contains(currentStatus);
+
+          if (currentStatus && newStatus && !statusIsLive) {
+            var oldHealth = currentStatus.hasAttribute("data-health")
+              ? currentStatus.getAttribute("data-health")
+              : null;
+            var newHealth = newStatus.hasAttribute("data-health")
+              ? newStatus.getAttribute("data-health")
+              : null;
+
+            if (oldHealth !== newHealth) {
+              var importedStatus = document.importNode(newStatus, true);
+              currentStatus.replaceWith(importedStatus);
+              renderSyncStatusMessage();
+            }
+          }
+        } catch (e) {
+          console.error(e);
+        }
       } else {
         console.error("Failed to load folder:", xhr.status);
       }
