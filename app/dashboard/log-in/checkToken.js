@@ -36,11 +36,11 @@ module.exports = function checkToken(req, res, next) {
       if (isRedisUnavailableError(err)) return next(err);
       if (err || !user) return next(new LogInError("NOUSER"));
 
-      // You used to be able to disable your account
-      // but this is no longer possible. Once all
-      // users with isDisabled:true are removed you
-      // can delete this check safely.
-      if (user.isDisabled) return res.redirect("/disabled");
+      User.extend(user);
+
+      // A disabled account can still log in via a token and pay if that's
+      // why it was disabled - see dashboard/util/load-user.js.
+      if (user.isDisabled && !user.needsToPay) return res.redirect("/disabled");
 
       // Store the valid user'd ID in the session.
       authenticate(req, res, user);

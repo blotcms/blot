@@ -1,5 +1,5 @@
 Blot has closed your account
 
-Blot has closed your account because you failed to pay your subscription fee. If you’d like to restart your subscription and re-open your account, please reply to this email and we’ll help you get set back up.
+Blot has closed your account because you failed to pay your subscription fee. If you’d like to restart your subscription and re-open your account, please [log in]({{{site}}}/log-in) to Blot and make the payment.
 
 Please reply to this email if have any questions, thoughts or feedback about Blot.

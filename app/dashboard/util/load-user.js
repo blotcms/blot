@@ -19,17 +19,19 @@ module.exports = function (req, res, next) {
       return next();
     }
 
-    // You used to be able to disable your account
-    // but this is no longer possible. Once all
-    // users with isDisabled:true are removed you
-    // can delete this check safely.
-    if (user.isDisabled) {
+    User.extend(user);
+
+    // A disabled account can still log in and pay if that's why it was
+    // disabled - completing payment re-enables it automatically via the
+    // subscription webhook. Any other disabled account (a cancelled
+    // subscription, or one an admin disabled directly) still gets sent away.
+    if (user.isDisabled && !user.needsToPay) {
       return res.redirect("/sites/disabled");
     }
 
     // Lets append the user and
     // set the partials to 'logged in mode'
-    req.user = User.extend(user);
+    req.user = user;
     res.locals.user = user;
 
     if (user.needsToPay && req.originalUrl !== PAY && req.originalUrl !== DELETE && req.originalUrl !== LOGOUT) {
