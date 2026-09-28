@@ -2,6 +2,7 @@ var Tags = require("models/tags");
 var Entry = require("models/entry");
 var async = require("async");
 var client = require("models/client");
+var createEntryCache = require("./entry-cache");
 
 function execTransaction(multi, callback) {
   var done = false;
@@ -28,7 +29,12 @@ function execTransaction(multi, callback) {
   }
 }
 
-module.exports = function main(blog, callback) {
+module.exports = function main(blog, cache, callback) {
+  if (typeof cache === "function") {
+    callback = cache;
+    cache = createEntryCache(blog.id);
+  }
+
   const report = [];
   Tags.list(blog.id, function (err, tags) {
     if (err) return callback(err);
@@ -49,44 +55,68 @@ module.exports = function main(blog, callback) {
             return execTransaction(multi, next);
           }
 
-          // entryIDs can run into the thousands for a popular tag, and each
-          // fetch reads the entry in full (content included) - async.each
-          // would fire all of those concurrently and hold them all in
-          // memory at once, so cap how many are in flight together.
-          async.eachLimit(
-            entryIDs,
-            20,
-            function (entryID, next) {
-              Entry.get(blog.id, entryID, function (entry) {
-                if (!entry) {
+          // Every entryID this tag references is resolved through the
+          // shared cache, so an entry that appears in several tags (or was
+          // already read by an earlier check this Fix() run) is fetched
+          // from Redis at most once total, not once per tag it's in.
+          cache.getMany(entryIDs, function (err, resolved) {
+            if (err) return next(err);
+
+            async.eachLimit(
+              entryIDs,
+              20,
+              function (entryID, next) {
+                const meta = resolved.get(entryID);
+
+                if (!meta) {
                   report.push(["MISSING", entryID]);
                   const multi = client.multi();
                   multi.zRem(tagKey, entryID);
                   return execTransaction(multi, next);
                 }
 
-                if (entry.id === entryID) return next();
+                if (meta.id === entryID) return next();
 
-                report.push(["MISMATCH", entryID, entry.id]);
-                var multi = client.multi();
-                var entryKeyForIncorrectID = Tags.key.entry(blog.id, entryID);
-                var entryKeyForCorrectID = Tags.key.entry(blog.id, entry.id);
-                var score = entry.dateStamp;
-                if (typeof score !== "number" || isNaN(score)) {
-                  score = Date.now();
-                }
+                // Rare - re-fetch the full entry (content included) only
+                // for this mismatched id, so it can be re-saved as-is
+                // under the correct key.
+                Entry.get(blog.id, entryID, function (entry) {
+                  if (!entry) {
+                    // Vanished between the cached read and now - treat as
+                    // MISSING rather than act on stale cached data.
+                    cache.invalidate(entryID);
+                    report.push(["MISSING", entryID]);
+                    const multi = client.multi();
+                    multi.zRem(tagKey, entryID);
+                    return execTransaction(multi, next);
+                  }
 
-                multi.rename(entryKeyForIncorrectID, entryKeyForCorrectID);
-                multi.zRem(tagKey, entryID);
-                multi.zAdd(tagKey, { score: score, value: entry.id });
-                execTransaction(multi, function (err) {
-                  if (err) return next(err);
-                  Entry.set(blog.id, entry.id, entry, next);
+                  report.push(["MISMATCH", entryID, entry.id]);
+                  var multi = client.multi();
+                  var entryKeyForIncorrectID = Tags.key.entry(blog.id, entryID);
+                  var entryKeyForCorrectID = Tags.key.entry(blog.id, entry.id);
+                  var score = entry.dateStamp;
+                  if (typeof score !== "number" || isNaN(score)) {
+                    score = Date.now();
+                  }
+
+                  multi.rename(entryKeyForIncorrectID, entryKeyForCorrectID);
+                  multi.zRem(tagKey, entryID);
+                  multi.zAdd(tagKey, { score: score, value: entry.id });
+                  execTransaction(multi, function (err) {
+                    if (err) return next(err);
+                    Entry.set(blog.id, entry.id, entry, function (err) {
+                      if (err) return next(err);
+                      cache.invalidate(entryID);
+                      cache.invalidate(entry.id);
+                      next();
+                    });
+                  });
                 });
-              });
-            },
-            next
-          );
+              },
+              next
+            );
+          });
         });
       },
       function (err) {

@@ -4,6 +4,7 @@ const listGhosts = require("./list-ghosts");
 const menuGhosts = require("./menu-ghosts");
 const tagGhosts = require("./tag-ghosts");
 const entriesPathIndex = require("./entries-path-index");
+const createEntryCache = require("./entry-cache");
 const async = require("async");
 const callOnce = require("helper/callOnce");
 const clfdate = require("helper/clfdate");
@@ -47,10 +48,14 @@ module.exports = function (blog, options, callback) {
   // terminal follow-up would otherwise leave the dashboard showing that
   // blog as syncing forever.
   const status = options.status || function () {};
+  // Shared across entry-ghosts/tag-ghosts/list-ghosts for this run only, so
+  // an entry read by one check doesn't have to be re-read from Redis in
+  // full by another - see entry-cache.js for why.
+  const entryCache = createEntryCache(blog.id);
   const checks = [
-    { name: "entry-ghosts", fn: entryGhosts },
-    { name: "tag-ghosts", fn: tagGhosts },
-    { name: "list-ghosts", fn: listGhosts },
+    { name: "entry-ghosts", fn: (blog, cb) => entryGhosts(blog, entryCache, cb) },
+    { name: "tag-ghosts", fn: (blog, cb) => tagGhosts(blog, entryCache, cb) },
+    { name: "list-ghosts", fn: (blog, cb) => listGhosts(blog, entryCache, cb) },
     { name: "menu-ghosts", fn: menuGhosts },
     { name: "entries-path-index", fn: entriesPathIndex },
   ];

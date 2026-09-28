@@ -2,6 +2,8 @@ describe("sync/fix/tag-ghosts", function () {
   var Tags = require("models/tags");
   var Entry = require("models/entry");
   var client = require("models/client");
+  var entryKey = require("models/entry/key").entry;
+  var createEntryCache = require("../entry-cache");
   var fixTagGhosts = require("../tag-ghosts");
 
   function fakeMulti() {
@@ -15,6 +17,23 @@ describe("sync/fix/tag-ghosts", function () {
         callback(null);
       }),
     };
+  }
+
+  // Stubs client.mGet the way entry-cache.js calls it: one batched MGET
+  // over the requested ids' Redis keys, resolved from a map of
+  // id -> stored entry (or omitted/undefined for a missing entry).
+  function stubMGet(blogID, entriesByID) {
+    spyOn(client, "mGet").and.callFake(function (keys) {
+      return Promise.resolve(
+        keys.map(function (key) {
+          var id = Object.keys(entriesByID).find(function (candidateID) {
+            return entryKey(blogID, candidateID) === key;
+          });
+          var entry = id && entriesByID[id];
+          return entry ? JSON.stringify(entry) : null;
+        })
+      );
+    });
   }
 
   it("propagates an error from Tags.list instead of silently reporting nothing", function (done) {
@@ -41,9 +60,7 @@ describe("sync/fix/tag-ghosts", function () {
     spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
       callback(null, ["/chair"]);
     });
-    spyOn(Entry, "get").and.callFake(function (_blogID, entryID, callback) {
-      callback({ id: entryID });
-    });
+    stubMGet("blog-id", { "/chair": { id: "/chair" } });
     spyOn(client, "multi");
 
     fixTagGhosts({ id: "blog-id" }, function (err, report) {
@@ -61,7 +78,7 @@ describe("sync/fix/tag-ghosts", function () {
     spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
       callback(null, []);
     });
-    spyOn(Entry, "get");
+    spyOn(client, "mGet");
 
     var multi = fakeMulti();
     spyOn(client, "multi").and.returnValue(multi);
@@ -69,6 +86,7 @@ describe("sync/fix/tag-ghosts", function () {
     fixTagGhosts({ id: "blog-id" }, function (err, report) {
       expect(err).toBeNull();
       expect(report).toEqual([["EMPTY TAG", { slug: "ghost-tag" }]]);
+      expect(client.mGet).not.toHaveBeenCalled();
       expect(multi.sRem).toHaveBeenCalledWith(
         Tags.key.all("blog-id"),
         "ghost-tag"
@@ -87,8 +105,9 @@ describe("sync/fix/tag-ghosts", function () {
     spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
       callback(null, ["/missing-entry"]);
     });
-    spyOn(Entry, "get").and.callFake(function (_blogID, entryID, callback) {
-      callback(undefined);
+    stubMGet("blog-id", {});
+    spyOn(Entry, "get").and.callFake(function () {
+      throw new Error("Entry.get should not be called for a MISSING id");
     });
 
     var multi = fakeMulti();
@@ -114,7 +133,12 @@ describe("sync/fix/tag-ghosts", function () {
     spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
       callback(null, ["/old-path"]);
     });
+    // The cache's batched read sees the mismatch (stored id != requested
+    // id) first; the check then re-fetches the full entry via Entry.get
+    // only for this one mismatched id.
+    stubMGet("blog-id", { "/old-path": entry });
     spyOn(Entry, "get").and.callFake(function (_blogID, entryID, callback) {
+      expect(entryID).toBe("/old-path");
       callback(entry);
     });
     spyOn(Entry, "set").and.callFake(function (blogID, id, updatedEntry, callback) {
@@ -155,7 +179,7 @@ describe("sync/fix/tag-ghosts", function () {
     spyOn(Tags, "get").and.callFake(function (_blogID, _slug, callback) {
       callback(null, []);
     });
-    spyOn(Entry, "get");
+    spyOn(client, "mGet");
 
     var multi = {
       sRem: jasmine.createSpy("sRem"),
@@ -173,6 +197,50 @@ describe("sync/fix/tag-ghosts", function () {
       expect(client.multi).toHaveBeenCalled();
       expect(multi.sRem).toHaveBeenCalled();
       expect(multi.del).toHaveBeenCalled();
+      done();
+    });
+  });
+
+  it("fetches an entry referenced by several tags from Redis only once", function (done) {
+    spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
+      callback(null, [{ slug: "chairs" }, { slug: "furniture" }, { slug: "sale" }]);
+    });
+    spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
+      // The same entry, "/chair", is a member of all three tags.
+      callback(null, ["/chair"]);
+    });
+    stubMGet("blog-id", { "/chair": { id: "/chair" } });
+    spyOn(client, "multi");
+
+    fixTagGhosts({ id: "blog-id" }, function (err, report) {
+      expect(err).toBeNull();
+      expect(report).toEqual([]);
+      // One MGET batch call total for the whole run, not one per tag.
+      expect(client.mGet.calls.count()).toBe(1);
+      expect(client.mGet.calls.argsFor(0)[0]).toEqual([
+        entryKey("blog-id", "/chair"),
+      ]);
+      done();
+    });
+  });
+
+  it("never touches Redis for an id already resolved by an earlier check this run", function (done) {
+    var cache = createEntryCache("blog-id");
+    cache.set("/chair", { id: "/chair", path: "/chair" });
+
+    spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
+      callback(null, [{ slug: "chairs" }]);
+    });
+    spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
+      callback(null, ["/chair"]);
+    });
+    spyOn(client, "mGet");
+    spyOn(client, "multi");
+
+    fixTagGhosts({ id: "blog-id" }, cache, function (err, report) {
+      expect(err).toBeNull();
+      expect(report).toEqual([]);
+      expect(client.mGet).not.toHaveBeenCalled();
       done();
     });
   });
