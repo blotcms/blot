@@ -3,6 +3,7 @@ const vm = require("vm");
 
 function harness(count = 1) {
   const records = new Map();
+  const metadata = new Map();
   const files = Array.from({
     length: count
   }, (_, i) => ({
@@ -22,6 +23,7 @@ function harness(count = 1) {
     files,
     local,
     records,
+    metadata,
     downloads: [],
     batches: [],
     updates: [],
@@ -42,7 +44,10 @@ function harness(count = 1) {
       },
       folder: () => ({
         getByPath: async () => null,
-        set: async () => {},
+        getMetadata: async id => metadata.get(id) || null,
+        set: async (id, path, meta) => {
+          metadata.set(id, meta);
+        },
         remove: async () => {},
         getMigrationCursor: async () => cursor,
         setMigrationCursor: async value => {
@@ -204,5 +209,30 @@ describe("Drive verified content cache", function() {
     h.files[0].modifiedTime = "2026-01-02T00:00:00Z";
     expect(await h.run()).toBe(true);
     expect(h.downloads).toEqual(["0"]);
+  });
+  it("treats a Google-app file as identical when the stored modifiedTime matches, even if the local mtime differs", async function() {
+    const h = harness();
+    h.files[0].mimeType = "application/vnd.google-apps.spreadsheet";
+    delete h.files[0].md5Checksum;
+    h.metadata.set("0", {
+      isDirectory: false,
+      modifiedTime: h.files[0].modifiedTime
+    });
+    h.local[0].modifiedTime = "2020-01-01T00:00:00Z";
+    expect(await h.run()).toBe(true);
+    expect(h.downloads).toEqual([]);
+  });
+  it("downloads a Google-app file when the stored modifiedTime is older than the remote one", async function() {
+    const h = harness();
+    h.files[0].mimeType = "application/vnd.google-apps.spreadsheet";
+    delete h.files[0].md5Checksum;
+    h.metadata.set("0", {
+      isDirectory: false,
+      modifiedTime: "2026-01-01T00:00:00Z"
+    });
+    h.files[0].modifiedTime = "2026-01-02T00:00:00Z";
+    expect(await h.run()).toBe(true);
+    expect(h.downloads).toEqual(["0"]);
+    expect(h.metadata.get("0").modifiedTime).toBe("2026-01-02T00:00:00Z");
   });
 });

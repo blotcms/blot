@@ -11,6 +11,21 @@ const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
 const truncateToSecond = require("./util/truncateToSecond");
 
+// A remote id with a trustworthy stored modifiedTime is compared against
+// that; an id we've never recorded (or don't yet know about) falls back to
+// comparing the local file's mtime, matching the previous behaviour.
+const isRemoteModifiedTimeCurrent = (
+  priorModifiedTimeById,
+  id,
+  remoteModifiedTime,
+  localModifiedTime
+) => {
+  const storedModifiedTime = priorModifiedTimeById.get(id);
+  return storedModifiedTime
+    ? truncateToSecond(storedModifiedTime) === truncateToSecond(remoteModifiedTime)
+    : truncateToSecond(localModifiedTime) === truncateToSecond(remoteModifiedTime);
+};
+
 module.exports = async (blogID, publish, options = {}) => {
   if (!publish)
     publish = (...args) => {
@@ -21,11 +36,27 @@ module.exports = async (blogID, publish, options = {}) => {
   const { folderId, serviceAccountId } = account;
   const drive = await createDriveClient(serviceAccountId);
   const checkWeCanContinue = CheckWeCanContinue(blogID, account);
-  const { reset, set } = database.folder(folderId, blogID);
+  const { reset, set, listAll } = database.folder(folderId, blogID);
+
+  // .gdoc files have no md5Checksum, so we fall back to comparing
+  // modifiedTime. Read whatever modifiedTime we last recorded for each id
+  // before reset() below wipes it, so the comparison isn't forced onto the
+  // local mtime fallback (today's behaviour, kept for ids we've never seen)
+  // on every resetToDrive call.
+  const priorModifiedTimeById = new Map(
+    (await listAll()).map(({ id, metadata }) => [id, metadata?.modifiedTime])
+  );
+
   const progress = options.publishSyncProgress
     ? {
         current: 0,
-        total: await countTransferItems(drive, blogID, "/", folderId),
+        total: await countTransferItems(
+          drive,
+          blogID,
+          "/",
+          folderId,
+          priorModifiedTimeById
+        ),
       }
     : null;
 
@@ -91,8 +122,12 @@ module.exports = async (blogID, publish, options = {}) => {
         const identicalOnRemote =
           existsOnRemote &&
           (isGoogleAppFile
-            ? truncateToSecond(existsOnRemote.modifiedTime) ===
-              truncateToSecond(modifiedTime)
+            ? isRemoteModifiedTimeCurrent(
+                priorModifiedTimeById,
+                existsOnRemote.id,
+                existsOnRemote.modifiedTime,
+                modifiedTime
+              )
             : existsOnRemote.size === size);
 
         if (existsOnRemote && !identicalOnRemote) {
@@ -146,7 +181,7 @@ const mkdir = async (drive, parentId, name) => {
   return res.data.id;
 };
 
-const countTransferItems = async (drive, blogID, dir, dirId) => {
+const countTransferItems = async (drive, blogID, dir, dirId, priorModifiedTimeById) => {
   let count = 0;
 
   const [remoteContents, localContents] = await Promise.all([
@@ -171,7 +206,8 @@ const countTransferItems = async (drive, blogID, dir, dirId) => {
           drive,
           blogID,
           path,
-          existsOnRemote.id
+          existsOnRemote.id,
+          priorModifiedTimeById
         );
       } else {
         count += 1;
@@ -185,8 +221,12 @@ const countTransferItems = async (drive, blogID, dir, dirId) => {
     const identicalOnRemote =
       existsOnRemote &&
       (isGoogleAppFile
-        ? truncateToSecond(existsOnRemote.modifiedTime) ===
-          truncateToSecond(modifiedTime)
+        ? isRemoteModifiedTimeCurrent(
+            priorModifiedTimeById,
+            existsOnRemote.id,
+            existsOnRemote.modifiedTime,
+            modifiedTime
+          )
         : existsOnRemote.size === size);
 
     if (!existsOnRemote || !identicalOnRemote) count += 1;

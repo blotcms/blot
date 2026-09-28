@@ -46,7 +46,7 @@ The `write`, `remove`, and `disconnect` operations are explicit Blot-to-Drive sy
 The client uses Redis for persistence. All model state is stored under the prefix defined in `database/prefix.js`:
 
 - **Blog Records** (`database/blog.js`): Stores per-blog configuration including `folderId`, `folderName`, `serviceAccountId`, error state, and sync metadata. Redis hash keys are prefixed with `google-drive:blogs:${blogID}`. Blogs are tracked in sets by service account ID for efficient iteration.
-- **Folder Mappings** (`database/folder.js`): Maintains bidirectional mappings between Google Drive file IDs and local paths for each folder, plus metadata (modification time, directory flag). Stored as Redis hashes with keys like `google-drive:${folderId}:folder` and `google-drive:${folderId}:path`.
+- **Folder Mappings** (`database/folder.js`): Maintains bidirectional mappings between Google Drive file IDs and local paths for each folder, plus metadata (the `modifiedTime` Drive last reported for that file, and a directory flag). Stored as Redis hashes with keys like `google-drive:${folderId}:folder` and `google-drive:${folderId}:path`.
 - **Channels** (`database/channel.js`): Records active webhook channels, including their expiration times and resource IDs. Used to avoid duplicate channels and track channel lifecycle.
 - **Service Account Info** (`database/serviceAccount.js`): Caches service account metadata, especially storage quota usage, for load balancing.
 
@@ -135,7 +135,7 @@ Google Drive API client management and monitoring:
 
 Helper functions:
 
-- `download.js` — Downloads files from Google Drive; handles Google Docs by exporting to `.gdoc` format or HTML; tracks MD5 checksums.
+- `download.js` — Downloads files from Google Drive; handles Google Docs by exporting to `.gdoc` format or HTML; tracks MD5 checksums. Does not set the local file's mtime — `sync/sync.js` records Drive's `modifiedTime` in the client database only after a call here succeeds.
 - `md5Checksum.js` — Computes MD5 hash of a local file.
 - `checkWeCanContinue.js` — Checks if a sync should proceed (used during setup to detect user cancellation or email changes).
 
@@ -185,10 +185,10 @@ HTML templates for user-facing pages:
 - For each remote file/folder:
   - If missing locally, downloads it or creates a directory.
   - If present but out-of-date, verifies local content and downloads only when needed.
-  - For Google Docs, uses modification time for comparison (no MD5).
-  - For regular files with a remote MD5, compares a previously verified checksum and local stat fingerprint. The fingerprint includes device, inode, size, and nanosecond modification/change times; replacements and same-size writes invalidate it even when modification time is restored.
+  - For Google Docs and other Google-app files (no MD5), change detection compares Drive's `modifiedTime` against the `modifiedTime` the client itself last recorded for that file's ID in `database/folder.js`, not the local file's mtime. This is what lets the client work the same way once blog storage stops offering a settable mtime (e.g. S3, where `Last-Modified` is only set by the server at upload time). A stored `modifiedTime` is only written once the corresponding local write has actually succeeded — never before, and never on a failed download — so a crash mid-download can't be mistaken for "already up to date". Records written before this change (or any file the client has never finished downloading) have no stored `modifiedTime` yet; those fall back to comparing the local file's mtime, exactly as before, and converge onto the new stored value the next time the file is confirmed unchanged or re-downloaded. `sync/resetToDrive.js` applies the same rule in the push direction for `.gdoc` files, reading a snapshot of the previously stored `modifiedTime`s before it resets the folder database.
+  - For regular files with a remote MD5, compares a previously verified checksum and local stat fingerprint. The fingerprint includes device, inode, size, and nanosecond modification/change times; replacements and same-size writes invalidate it even when modification time is restored. This fingerprint only needs to detect local changes since the last verified checksum, not mirror a remote timestamp, so it keeps using local stat fields; on S3 it would be replaced by the object's ETag.
   - Verification metadata is fetched with one Redis HMGET per directory and stored separately from path metadata, scoped to the blog as well as the Drive folder. An unchanged warm file causes no content reads. Directory listing and stat work still scale with total file count.
-  - Regular files without a remote MD5 use size and modification time as a metadata fallback. Google-app behavior is unchanged.
+  - Regular files without a remote MD5 use size plus the same stored-`modifiedTime`-with-local-mtime-fallback rule as Google-app files.
   - Checksums are recorded only after stable before/after stat checks around hashing and a successful rebuild. Downloaded temporary files are verified before publication; failed post-publication verification still triggers a rebuild but does not populate the cache.
   - Stream downloads are published only after the destination writer finishes; failed partial downloads are removed.
 - For each local file/folder not present remotely, deletes it (unless it matches an ignore pattern).
@@ -225,7 +225,7 @@ When a new blog is set up, `fetchStorageInfo.js` selects a service account based
 5. **Service Account Storage Quota**: Accounts created after April 15, 2025, do not receive the automatic 15 GB allocation; existing accounts retain theirs.
 6. **Setup Timeout**: If a user does not complete setup (share the folder) within 2 hours, the setup process aborts.
 7. **Webhook Expiration**: Webhook channels expire after 24 hours and must be renewed. The client renews them every 10 minutes during `init()`.
-8. **Modtime Truncation**: Google Docs do not provide MD5 checksums, so only modification time (truncated to the second) is used for comparison.
+8. **Modtime Truncation**: Google Docs do not provide MD5 checksums, so only modification time (truncated to the second) is used for comparison — the client's own stored record of Drive's last-known `modifiedTime` when available, otherwise the local file's mtime.
 
 ## Testing
 
