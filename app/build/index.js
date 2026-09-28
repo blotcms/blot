@@ -4,6 +4,7 @@ var crypto = require("crypto");
 var async = require("async");
 var basename = require("path").basename;
 var localPath = require("helper/localPath");
+var hashFile = require("helper/transformer/hash");
 var isDraft = require("../sync/update/drafts").isDraft;
 var BuildSingle = require("./single");
 var BuildMultiple = require("./multiple");
@@ -81,8 +82,8 @@ function hashEntrySource(blog, sourcePaths, callback) {
   async.map(
     sourcePaths,
     function (sourcePath, next) {
-      fs.readFile(localPath(blog.id, sourcePath), function (err, buffer) {
-        next(null, buffer ? crypto.createHash("sha1").update(buffer).digest("hex") : "");
+      hashFile(localPath(blog.id, sourcePath), function (err, hash) {
+        next(null, hash || "");
       });
     },
     function (err, hashes) {
