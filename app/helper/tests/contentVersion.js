@@ -83,4 +83,33 @@ describe("contentVersion", function () {
     expect(version).toMatch(/^[a-f0-9]{8}$/);
     expect(version2).toEqual(version);
   });
+
+  describe("fromStat", function () {
+    it("returns a size+mtime token synchronously, no file access", function () {
+      const stat = { size: 123, mtimeMs: 1700000000000 };
+
+      const version = contentVersion.fromStat(stat);
+
+      expect(version).toMatch(/^[a-f0-9]{8}$/);
+      expect(contentVersion.fromStat(stat)).toEqual(version);
+    });
+
+    it("changes when size or mtime changes, independent of ctime", function () {
+      const base = { size: 123, mtimeMs: 1700000000000, ctime: new Date() };
+
+      const bySize = contentVersion.fromStat({ ...base, size: 124 });
+      const byMtime = contentVersion.fromStat({
+        ...base,
+        mtimeMs: base.mtimeMs + 1,
+      });
+      const byCtimeOnly = contentVersion.fromStat({
+        ...base,
+        ctime: new Date(0),
+      });
+
+      expect(bySize).not.toEqual(contentVersion.fromStat(base));
+      expect(byMtime).not.toEqual(contentVersion.fromStat(base));
+      expect(byCtimeOnly).toEqual(contentVersion.fromStat(base));
+    });
+  });
 });
