@@ -209,3 +209,23 @@ Entry template:
   `console.error`'s default inspection depth. Not yet fixed: giving the lock
   heartbeat its own dedicated Redis connection so `Fix()` traffic can't
   queue ahead of it, or batching `Fix()`'s per-entry reads.
+
+### 2026-09-27 11:00:00 UTC validation run — dropped webhook (real bug)
+
+- Alert: 1 change for 1 blog; run complete at 11:01:46 UTC (green).
+- Key events (UTC): the user was writing many small files into a template
+  folder (one sync every ~10-60s). `sync_f20972f` did its last delta check at
+  10:49:28.98, then spent until 10:49:34.64 building templates while it held
+  the lock. A new file landed in Dropbox ~10:49:31; its webhook arrived
+  10:49:33.49 (200 ack) but no sync started and no `Failed to acquire lock`
+  was logged. No further edits, so nothing else triggered a sync until
+  validation (`sync_634d20c`, 11:00:25) downloaded the file. Catch-up
+  `sync_68fdba5` was a no-op.
+- Cause: the webhook route skips blogs in its in-process `ongoingSyncs` set
+  without logging or queueing a re-run. A change that arrives after a sync's
+  final delta check but before it finishes is lost until the next webhook.
+  Unlike the earlier race entries, it would not have converged on its own.
+- Follow-up: fixed in the PR for this entry — the webhook route now logs
+  `Webhook received mid-sync, queueing follow-up sync` and re-runs the sync
+  once the current one finishes (`Running follow-up sync …`). Tip: grep `clients/dropbox/webhook` around
+  the missed file's time to see webhooks that got no `Starting sync`.
