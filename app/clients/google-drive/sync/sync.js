@@ -39,7 +39,7 @@ module.exports = async function sync(blogID, publish, update) {
   }
 
   const drive = await createDriveClient(serviceAccountId);
-  const { getByPath, getMetadata, set, remove, getVerifiedContents, setVerifiedContent,
+  const { getByPath, getAppliedModifiedTime, setAppliedModifiedTime, set, remove, getVerifiedContents, setVerifiedContent,
     getMigrationCursor, setMigrationCursor } = database.folder(folderId, blogID);
   const migrationCursor = await getMigrationCursor();
   const canMigrate = migrationBudget();
@@ -164,19 +164,17 @@ module.exports = async function sync(blogID, publish, update) {
       const existsLocally = localContents.find((item) => item.name === name);
 
       if (!isDirectory) {
-        // We compare against the modifiedTime Drive reported the last time we
-        // successfully wrote this file, not the local file's mtime: storage
-        // backends other than local disk won't offer a settable mtime. Older
-        // records predate this and lack a trustworthy value, so we fall back
-        // to the local mtime for those until they converge below.
-        const storedMetadata = await getMetadata(id);
-        const storedModifiedTime = storedMetadata?.modifiedTime;
+        // Compare against the Drive modifiedTime of the version we last
+        // wrote locally, not the local file's mtime: storage backends other
+        // than local disk won't offer a settable mtime. Files synced before
+        // this change have no applied time yet; their local mtime was set
+        // from Drive after each successful download, so fall back to it
+        // until they converge below.
+        const storedModifiedTime = await getAppliedModifiedTime(id);
 
         // Ensure the file is stored in the database (id <-> path mapping);
-        // any folders will be stored as they are walked. Keep whatever
-        // modifiedTime we already trust rather than overwriting it with the
-        // remote value before we know the local copy actually matches it.
-        await set(id, path, { isDirectory, modifiedTime: storedModifiedTime });
+        // any folders will be stored as they are walked.
+        await set(id, path, { isDirectory, modifiedTime });
 
         // These do not have a md5Checksum so we fall
         // back to using the modifiedTime
@@ -265,11 +263,10 @@ module.exports = async function sync(blogID, publish, update) {
             }
 
             // Only trust the remote modifiedTime once download() has
-            // returned without throwing: it means pathOnBlot now reflects
-            // that remote state (real content, an empty placeholder, or an
-            // export-size-limit placeholder). A failed download must not be
-            // treated as up to date, so this must not run in the catch below.
-            await set(id, path, { isDirectory, modifiedTime });
+            // returned without throwing: pathOnBlot now reflects that remote
+            // state. A failed download must not be treated as up to date, so
+            // this must not run in the catch below.
+            await setAppliedModifiedTime(id, modifiedTime);
           } catch (err) {
             publish("Download failed", path);
             console.error("Download failed for", path, err);
@@ -280,7 +277,7 @@ module.exports = async function sync(blogID, publish, update) {
           // we only know that via the local-mtime fallback. Store the
           // remote modifiedTime now so future syncs no longer need it.
           if (!storedModifiedTime) {
-            await set(id, path, { isDirectory, modifiedTime });
+            await setAppliedModifiedTime(id, modifiedTime);
           }
         }
       } else {

@@ -504,6 +504,13 @@ class HotDocPoller {
           });
         }
 
+        // Record what we just wrote so the follow-up sync doesn't export
+        // and rebuild the same document again.
+        await folderDb.setAppliedModifiedTime(
+          file.data.id,
+          file.data.modifiedTime
+        );
+
         if (result?.updated !== true) {
           this.log("download-no-update", {
             blogID: item.blogID,

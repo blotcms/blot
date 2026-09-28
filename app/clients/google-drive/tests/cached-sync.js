@@ -44,10 +44,11 @@ function harness(count = 1) {
       },
       folder: () => ({
         getByPath: async () => null,
-        getMetadata: async id => metadata.get(id) || null,
-        set: async (id, path, meta) => {
-          metadata.set(id, meta);
+        getAppliedModifiedTime: async id => metadata.get(id),
+        setAppliedModifiedTime: async (id, modifiedTime) => {
+          metadata.set(id, modifiedTime);
         },
+        set: async () => {},
         remove: async () => {},
         getMigrationCursor: async () => cursor,
         setMigrationCursor: async value => {
@@ -214,10 +215,7 @@ describe("Drive verified content cache", function() {
     const h = harness();
     h.files[0].mimeType = "application/vnd.google-apps.spreadsheet";
     delete h.files[0].md5Checksum;
-    h.metadata.set("0", {
-      isDirectory: false,
-      modifiedTime: h.files[0].modifiedTime
-    });
+    h.metadata.set("0", h.files[0].modifiedTime);
     h.local[0].modifiedTime = "2020-01-01T00:00:00Z";
     expect(await h.run()).toBe(true);
     expect(h.downloads).toEqual([]);
@@ -226,13 +224,10 @@ describe("Drive verified content cache", function() {
     const h = harness();
     h.files[0].mimeType = "application/vnd.google-apps.spreadsheet";
     delete h.files[0].md5Checksum;
-    h.metadata.set("0", {
-      isDirectory: false,
-      modifiedTime: "2026-01-01T00:00:00Z"
-    });
+    h.metadata.set("0", "2026-01-01T00:00:00Z");
     h.files[0].modifiedTime = "2026-01-02T00:00:00Z";
     expect(await h.run()).toBe(true);
     expect(h.downloads).toEqual(["0"]);
-    expect(h.metadata.get("0").modifiedTime).toBe("2026-01-02T00:00:00Z");
+    expect(h.metadata.get("0")).toBe("2026-01-02T00:00:00Z");
   });
 });

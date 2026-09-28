@@ -36,15 +36,13 @@ module.exports = async (blogID, publish, options = {}) => {
   const { folderId, serviceAccountId } = account;
   const drive = await createDriveClient(serviceAccountId);
   const checkWeCanContinue = CheckWeCanContinue(blogID, account);
-  const { reset, set, listAll } = database.folder(folderId, blogID);
+  const { reset, set, getAppliedModifiedTimes } = database.folder(folderId, blogID);
 
   // .gdoc files have no md5Checksum, so we fall back to comparing
-  // modifiedTime. Read whatever modifiedTime we last recorded for each id
-  // before reset() below wipes it, so the comparison isn't forced onto the
-  // local mtime fallback (today's behaviour, kept for ids we've never seen)
-  // on every resetToDrive call.
+  // modifiedTime. Snapshot the applied modifiedTimes before reset() below
+  // wipes them; ids without one fall back to the local mtime.
   const priorModifiedTimeById = new Map(
-    (await listAll()).map(({ id, metadata }) => [id, metadata?.modifiedTime])
+    Object.entries((await getAppliedModifiedTimes()) || {})
   );
 
   const progress = options.publishSyncProgress

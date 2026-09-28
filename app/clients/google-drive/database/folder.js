@@ -17,6 +17,11 @@ function folder(folderId, blogID) {
   this.reverseKey = `${PREFIX}${folderId}:path`; // Path ↔ ID mapping
   this.contentKey = `${PREFIX}${folderId}:verified-content${blogID ? ":" + blogID : ""}`;
   this.metadataKey = `${PREFIX}${folderId}:metadata`; // File metadata
+  // Drive modifiedTime of the version last written locally, per file ID.
+  // Only written after a successful download, and kept across mapping
+  // resets like verified content, so change detection never depends on
+  // the local file's mtime.
+  this.appliedKey = `${PREFIX}${folderId}:applied-modified-time${blogID ? ":" + blogID : ""}`;
 
   this.migrationCursorKey = `${this.contentKey}:cursor`;
   this.getMigrationCursor = async () => (await client.get(this.migrationCursorKey)) || "";
@@ -39,19 +44,27 @@ function folder(folderId, blogID) {
     await client.hSet(this.contentKey, id, JSON.stringify(value));
   };
 
+  this.getAppliedModifiedTime = async (id) => client.hGet(this.appliedKey, id);
+  this.getAppliedModifiedTimes = async () => client.hGetAll(this.appliedKey);
+  this.setAppliedModifiedTime = async (id, modifiedTime) => {
+    if (modifiedTime) await client.hSet(this.appliedKey, id, modifiedTime);
+  };
+
   // Only manual mapping resets need this cleanup. Scan in batches so old
   // verified IDs removed while mappings were absent do not accumulate forever.
   this.pruneVerifiedContents = async () => {
-    let cursor = "0";
-    do {
-      const page = await client.hScan(this.contentKey, cursor, { COUNT: 256 });
-      cursor = page.cursor;
-      const ids = page.entries.map(entry => entry.field);
-      if (!ids.length) continue;
-      const paths = await client.hmGet(this.key, ids);
-      const removed = ids.filter((id, i) => !paths[i]);
-      if (removed.length) await client.hDel(this.contentKey, removed);
-    } while (cursor !== "0");
+    for (const key of [this.contentKey, this.appliedKey]) {
+      let cursor = "0";
+      do {
+        const page = await client.hScan(key, cursor, { COUNT: 256 });
+        cursor = page.cursor;
+        const ids = page.entries.map(entry => entry.field);
+        if (!ids.length) continue;
+        const paths = await client.hmGet(this.key, ids);
+        const removed = ids.filter((id, i) => !paths[i]);
+        if (removed.length) await client.hDel(key, removed);
+      } while (cursor !== "0");
+    }
   };
 
   // Set a mapping (ID → Path) and store metadata
@@ -77,6 +90,7 @@ function folder(folderId, blogID) {
       // Remove the old mapping for the previous ID
       multi.hDel(this.key, previousId);
       multi.hDel(this.contentKey, previousId);
+      multi.hDel(this.appliedKey, previousId);
     }
 
     // Add the new ID ↔ Path mapping
@@ -217,6 +231,7 @@ function folder(folderId, blogID) {
           multi.hDel(this.key, currentId); // Delete ID ↔ Path mapping
           multi.hDel(this.reverseKey, currentPath); // Delete Path ↔ ID mapping
           multi.hDel(this.contentKey, currentId);
+          multi.hDel(this.appliedKey, currentId);
           multi.hDel(this.metadataKey, currentId); // Delete metadata
           removedPaths.push(currentPath);
         }
@@ -237,6 +252,7 @@ function folder(folderId, blogID) {
     multi.del(this.metadataKey);
     if (!preserveVerifiedContent) {
       multi.del(this.contentKey);
+      multi.del(this.appliedKey);
       multi.del(this.migrationCursorKey);
     }
     await multi.exec();
