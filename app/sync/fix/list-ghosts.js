@@ -15,8 +15,9 @@ var lists = ["all", "created", "entries", "drafts", "scheduled", "pages"];
 // entries) rather than one GET per id, and yielding to the event loop
 // between batches so V8 can reclaim the large strings already checked,
 // keeps peak memory proportional to BATCH_SIZE rather than to the whole
-// blog.
-var BATCH_SIZE = 100;
+// blog. Each MGET reply holds whole entries and shares a connection with the
+// lock heartbeat, so batches stay small.
+var BATCH_SIZE = 20;
 
 function pruneMissing(blogID) {
   return promisify(Entries.pruneMissing.bind(Entries))(blogID);

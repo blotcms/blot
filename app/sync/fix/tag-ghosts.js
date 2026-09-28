@@ -35,8 +35,12 @@ function execTransaction(multi, callback) {
 // small fields needed to detect a ghost (id) per entryID for the lifetime
 // of a single tag-ghosts call, and fetches unresolved ids in batched MGETs
 // (preserving index alignment, unlike Entry.get which filters out missing
-// entries) rather than one GET per id.
-var BATCH_SIZE = 100;
+// entries) rather than one GET per id. Only hits are memoised: a miss is
+// re-read for each tag, so an entry a concurrent sync restores mid-run isn't
+// pruned from later tags. Each MGET reply holds whole entries and shares a
+// connection with the lock heartbeat, so a batch is kept to the 20 full
+// reads the previous version had in flight at once.
+var BATCH_SIZE = 20;
 
 function resolveEntryIDs(blogID, entryIDs, resolved, callback) {
   var unresolved = entryIDs.filter(function (id) {
@@ -61,15 +65,12 @@ function resolveEntryIDs(blogID, entryIDs, resolved, callback) {
           (values || []).forEach(function (value, index) {
             var id = batch[index];
 
-            if (!value) {
-              resolved.set(id, null);
-              return;
-            }
+            if (!value) return;
 
             try {
               resolved.set(id, { id: JSON.parse(value).id });
             } catch (e) {
-              resolved.set(id, null);
+              // Unparseable - treated as missing, like a nil reply.
             }
           });
 
@@ -85,7 +86,7 @@ function resolveEntryIDs(blogID, entryIDs, resolved, callback) {
 
 module.exports = function main(blog, callback) {
   const report = [];
-  // id -> {id} | null, shared across every tag processed by this call.
+  // id -> {id} for entries found, shared across every tag in this call.
   const resolved = new Map();
 
   Tags.list(blog.id, function (err, tags) {
@@ -130,7 +131,7 @@ module.exports = function main(blog, callback) {
                 // under the correct key.
                 Entry.get(blog.id, entryID, function (entry) {
                   if (!entry) {
-                    resolved.set(entryID, null);
+                    resolved.delete(entryID);
                     report.push(["MISSING", entryID]);
                     const multi = client.multi();
                     multi.zRem(tagKey, entryID);

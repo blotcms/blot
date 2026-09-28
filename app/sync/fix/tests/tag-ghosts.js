@@ -123,6 +123,38 @@ describe("sync/fix/tag-ghosts", function () {
     });
   });
 
+  it("re-reads a missing entry for each tag, so one restored mid-run is kept", function (done) {
+    var stored = {};
+
+    spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
+      callback(null, [{ slug: "first" }, { slug: "second" }]);
+    });
+    spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
+      callback(null, ["/restored"]);
+    });
+    stubMGet("blog-id", stored);
+
+    var multi = fakeMulti();
+    // A concurrent sync restores the entry right after the first tag's prune.
+    multi.exec.and.callFake(function (callback) {
+      stored["/restored"] = { id: "/restored" };
+      callback(null);
+    });
+    spyOn(client, "multi").and.returnValue(multi);
+
+    fixTagGhosts({ id: "blog-id" }, function (err, report) {
+      expect(err).toBeNull();
+      expect(report).toEqual([["MISSING", "/restored"]]);
+      expect(client.mGet.calls.count()).toBe(2);
+      expect(multi.zRem.calls.count()).toBe(1);
+      expect(multi.zRem).toHaveBeenCalledWith(
+        Tags.key.sortedTag("blog-id", "first"),
+        "/restored"
+      );
+      done();
+    });
+  });
+
   it("re-keys an entry stored under a stale id within a tag", function (done) {
     var entry = { id: "/new-path", dateStamp: 1234 };
 
