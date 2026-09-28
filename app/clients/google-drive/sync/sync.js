@@ -5,6 +5,7 @@ const { join } = require("path");
 const localPath = require("helper/localPath");
 const database = require("../database");
 const download = require("../util/download");
+const localFingerprint = require("../util/localFingerprint");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
@@ -39,7 +40,7 @@ module.exports = async function sync(blogID, publish, update) {
   }
 
   const drive = await createDriveClient(serviceAccountId);
-  const { getByPath, getAppliedModifiedTime, setAppliedModifiedTime, set, remove, getVerifiedContents, setVerifiedContent,
+  const { getByPath, getApplied, setApplied, set, remove, getVerifiedContents, setVerifiedContent,
     getMigrationCursor, setMigrationCursor } = database.folder(folderId, blogID);
   const migrationCursor = await getMigrationCursor();
   const canMigrate = migrationBudget();
@@ -166,11 +167,12 @@ module.exports = async function sync(blogID, publish, update) {
       if (!isDirectory) {
         // Compare against the Drive modifiedTime of the version we last
         // wrote locally, not the local file's mtime: storage backends other
-        // than local disk won't offer a settable mtime. Files synced before
-        // this change have no applied time yet; their local mtime was set
-        // from Drive after each successful download, so fall back to it
-        // until they converge below.
-        const storedModifiedTime = await getAppliedModifiedTime(id);
+        // than local disk won't offer a settable mtime. The record is only
+        // trusted while the local file is unchanged since that write. Files
+        // synced before this change have no record yet; their local mtime
+        // was set from Drive after each successful download, so fall back
+        // to it until they converge below.
+        const applied = await getApplied(id);
 
         // Ensure the file is stored in the database (id <-> path mapping);
         // any folders will be stored as they are walked.
@@ -182,8 +184,9 @@ module.exports = async function sync(blogID, publish, update) {
           "application/vnd.google-apps."
         );
 
-        const isModifiedTimeCurrent = storedModifiedTime
-          ? truncateToSecond(storedModifiedTime) === truncateToSecond(modifiedTime)
+        const isModifiedTimeCurrent = applied
+          ? truncateToSecond(applied.modifiedTime) === truncateToSecond(modifiedTime) &&
+            Boolean(applied.fingerprint) && applied.fingerprint === existsLocally?.fingerprint
           : truncateToSecond(existsLocally?.modifiedTime) === truncateToSecond(modifiedTime);
 
         const cached = verifiedById.get(id);
@@ -266,7 +269,10 @@ module.exports = async function sync(blogID, publish, update) {
             // returned without throwing: pathOnBlot now reflects that remote
             // state. A failed download must not be treated as up to date, so
             // this must not run in the catch below.
-            await setAppliedModifiedTime(id, modifiedTime);
+            await setApplied(id, {
+              modifiedTime,
+              fingerprint: await localFingerprint(localPath(blogID, path)),
+            });
           } catch (err) {
             publish("Download failed", path);
             console.error("Download failed for", path, err);
@@ -276,8 +282,8 @@ module.exports = async function sync(blogID, publish, update) {
           // Converge: the local file already matches remotely, even though
           // we only know that via the local-mtime fallback. Store the
           // remote modifiedTime now so future syncs no longer need it.
-          if (!storedModifiedTime) {
-            await setAppliedModifiedTime(id, modifiedTime);
+          if (!applied) {
+            await setApplied(id, { modifiedTime, fingerprint: existsLocally?.fingerprint });
           }
         }
       } else {

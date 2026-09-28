@@ -17,10 +17,10 @@ function folder(folderId, blogID) {
   this.reverseKey = `${PREFIX}${folderId}:path`; // Path ↔ ID mapping
   this.contentKey = `${PREFIX}${folderId}:verified-content${blogID ? ":" + blogID : ""}`;
   this.metadataKey = `${PREFIX}${folderId}:metadata`; // File metadata
-  // Drive modifiedTime of the version last written locally, per file ID.
-  // Only written after a successful download, and kept across mapping
-  // resets like verified content, so change detection never depends on
-  // the local file's mtime.
+  // Per file ID, the Drive modifiedTime of the version last written locally
+  // plus the local fingerprint right after that write. Only written after a
+  // successful download, and kept across mapping resets like verified
+  // content, so change detection never depends on the local file's mtime.
   this.appliedKey = `${PREFIX}${folderId}:applied-modified-time${blogID ? ":" + blogID : ""}`;
 
   this.migrationCursorKey = `${this.contentKey}:cursor`;
@@ -44,10 +44,21 @@ function folder(folderId, blogID) {
     await client.hSet(this.contentKey, id, JSON.stringify(value));
   };
 
-  this.getAppliedModifiedTime = async (id) => client.hGet(this.appliedKey, id);
-  this.getAppliedModifiedTimes = async () => client.hGetAll(this.appliedKey);
-  this.setAppliedModifiedTime = async (id, modifiedTime) => {
-    if (modifiedTime) await client.hSet(this.appliedKey, id, modifiedTime);
+  const parseApplied = (value) => {
+    try {
+      const record = value && JSON.parse(value);
+      return record && typeof record.modifiedTime === "string" ? record : null;
+    } catch (_) { return null; }
+  };
+
+  this.getApplied = async (id) => parseApplied(await client.hGet(this.appliedKey, id));
+  this.getAllApplied = async () => {
+    const all = (await client.hGetAll(this.appliedKey)) || {};
+    return new Map(Object.entries(all).map(([id, value]) => [id, parseApplied(value)]));
+  };
+  this.setApplied = async (id, { modifiedTime, fingerprint }) => {
+    if (!modifiedTime) return;
+    await client.hSet(this.appliedKey, id, JSON.stringify({ modifiedTime, fingerprint: fingerprint || null }));
   };
 
   // Only manual mapping resets need this cleanup. Scan in batches so old

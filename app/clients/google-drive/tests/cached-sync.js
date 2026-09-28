@@ -44,9 +44,9 @@ function harness(count = 1) {
       },
       folder: () => ({
         getByPath: async () => null,
-        getAppliedModifiedTime: async id => metadata.get(id),
-        setAppliedModifiedTime: async (id, modifiedTime) => {
-          metadata.set(id, modifiedTime);
+        getApplied: async id => metadata.get(id) || null,
+        setApplied: async (id, value) => {
+          metadata.set(id, value);
         },
         set: async () => {},
         remove: async () => {},
@@ -78,6 +78,8 @@ function harness(count = 1) {
         }
       };
     },
+    "../util/localFingerprint": async path =>
+      local.find(file => "/" + file.name === path)?.fingerprint || null,
     "../serviceAccount/createDriveClient": async () => ({
       files: {
         get: async () => ({
@@ -215,7 +217,10 @@ describe("Drive verified content cache", function() {
     const h = harness();
     h.files[0].mimeType = "application/vnd.google-apps.spreadsheet";
     delete h.files[0].md5Checksum;
-    h.metadata.set("0", h.files[0].modifiedTime);
+    h.metadata.set("0", {
+      modifiedTime: h.files[0].modifiedTime,
+      fingerprint: "local-0"
+    });
     h.local[0].modifiedTime = "2020-01-01T00:00:00Z";
     expect(await h.run()).toBe(true);
     expect(h.downloads).toEqual([]);
@@ -224,10 +229,27 @@ describe("Drive verified content cache", function() {
     const h = harness();
     h.files[0].mimeType = "application/vnd.google-apps.spreadsheet";
     delete h.files[0].md5Checksum;
-    h.metadata.set("0", "2026-01-01T00:00:00Z");
+    h.metadata.set("0", {
+      modifiedTime: "2026-01-01T00:00:00Z",
+      fingerprint: "local-0"
+    });
     h.files[0].modifiedTime = "2026-01-02T00:00:00Z";
     expect(await h.run()).toBe(true);
     expect(h.downloads).toEqual(["0"]);
-    expect(h.metadata.get("0")).toBe("2026-01-02T00:00:00Z");
+    expect(h.metadata.get("0")).toEqual({
+      modifiedTime: "2026-01-02T00:00:00Z",
+      fingerprint: "local-0"
+    });
+  });
+  it("downloads a Google-app file changed locally since Blot wrote it, even if Drive's time is unchanged", async function() {
+    const h = harness();
+    h.files[0].mimeType = "application/vnd.google-apps.spreadsheet";
+    delete h.files[0].md5Checksum;
+    h.metadata.set("0", {
+      modifiedTime: h.files[0].modifiedTime,
+      fingerprint: "written-by-blot"
+    });
+    expect(await h.run()).toBe(true);
+    expect(h.downloads).toEqual(["0"]);
   });
 });
