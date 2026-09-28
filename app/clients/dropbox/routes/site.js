@@ -7,6 +7,7 @@ const async = require("async");
 const config = require("config");
 const crypto = require("crypto");
 const cookieParser = require("cookie-parser");
+const clfdate = require("helper/clfdate");
 
 // This is called by Dropbox when the user
 // authorizes Blot's access to their folder
@@ -77,6 +78,32 @@ site.get("/webhook", function (req, res, next) {
 // Track ongoing syncs with a Set of blog IDs
 const ongoingSyncs = new Set();
 
+// Blogs which received a webhook while a sync was already running, keyed
+// by blog ID. The running sync may have already done its final delta check
+// (e.g. it is building templates) so it could miss the change which
+// triggered the webhook. We re-run the sync once the current one finishes.
+// Multiple webhooks during one sync collapse into a single follow-up.
+const pendingResyncs = new Map();
+
+function runSync(blog, callback) {
+  sync(blog, function (err) {
+    if (err) {
+      console.error(clfdate(), "Dropbox: Webhook sync error", blog.id, err);
+    }
+
+    if (!pendingResyncs.has(blog.id)) return callback();
+
+    const nextBlog = pendingResyncs.get(blog.id);
+    pendingResyncs.delete(blog.id);
+    console.log(
+      clfdate(),
+      "Dropbox: Running follow-up sync for webhook received mid-sync",
+      blog.id
+    );
+    runSync(nextBlog, callback);
+  });
+}
+
 site.post("/webhook", function (req, res) {
   if (config.maintenance) return res.sendStatus(503);
 
@@ -127,9 +154,21 @@ site.post("/webhook", function (req, res) {
 
           debug("Syncing", blogs.length, "blogs");
 
-          // Filter out blogs that are currently syncing
-          const blogsToSync = blogs.filter(blog => !ongoingSyncs.has(blog.id));
-          
+          // Blogs which are currently syncing get a follow-up sync queued
+          // instead of a second concurrent sync
+          const blogsToSync = blogs.filter(function (blog) {
+            if (!ongoingSyncs.has(blog.id)) return true;
+            if (!pendingResyncs.has(blog.id)) {
+              console.log(
+                clfdate(),
+                "Dropbox: Webhook received mid-sync, queueing follow-up sync",
+                blog.id
+              );
+            }
+            pendingResyncs.set(blog.id, blog);
+            return false;
+          });
+
           blogsToSync.forEach(function (blog) {
             // Used for testing purposes only
             started(blog.id);
@@ -141,7 +180,7 @@ site.post("/webhook", function (req, res) {
           async.each(
             blogsToSync,
             function (blog, next) {
-              sync(blog, function () {
+              runSync(blog, function () {
                 // Remove from ongoing syncs when complete
                 ongoingSyncs.delete(blog.id);
                 next();
