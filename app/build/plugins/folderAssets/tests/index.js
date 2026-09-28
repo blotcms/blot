@@ -70,7 +70,7 @@ describe("folderAssets plugin", function () {
 
       fs.outputFileSync(this.blogDirectory + "/photo.jpg", "version two");
 
-      build(this.blog, path, function (err, entry2) {
+      build(blog, path, function (err, entry2) {
         if (err) return done.fail(err);
 
         var secondVersion = entry2.html.match(/v-([a-f0-9]{8})/)[1];
@@ -95,7 +95,7 @@ describe("folderAssets plugin", function () {
 
       fs.outputFileSync(this.blogDirectory + "/photo.jpg", "same content");
 
-      build(this.blog, path, function (err, entry2) {
+      build(blog, path, function (err, entry2) {
         if (err) return done.fail(err);
 
         var secondVersion = entry2.html.match(/v-([a-f0-9]{8})/)[1];
@@ -110,18 +110,19 @@ describe("folderAssets plugin", function () {
     var path = "/Hello.txt";
     var contents = "![Image](photo.jpg)";
     var photoPath = this.blogDirectory + "/photo.jpg";
+    var blog = this.blog;
 
     fs.outputFileSync(this.blogDirectory + path, contents);
     fs.outputFileSync(photoPath, "unchanged content");
 
-    build(this.blog, path, function (err, entry) {
+    build(blog, path, function (err, entry) {
       if (err) return done.fail(err);
 
       var firstVersion = entry.html.match(/v-([a-f0-9]{8})/)[1];
 
       fs.utimesSync(photoPath, new Date("2030-01-01"), new Date("2030-01-01"));
 
-      build(this.blog, path, function (err, entry2) {
+      build(blog, path, function (err, entry2) {
         if (err) return done.fail(err);
 
         var secondVersion = entry2.html.match(/v-([a-f0-9]{8})/)[1];

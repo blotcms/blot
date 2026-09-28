@@ -94,10 +94,10 @@ async function lookupFile(blogID, cacheID, value) {
         resolve("/", pathFromValue)
       );
 
-      // Content-derived, not mtime/ctime-derived - see helper/contentVersion.
-      // pathCache (above) already keeps this off the hot path for a file
-      // that's been looked up before.
-      const version = await contentVersion(join(blogFolder, path), stat);
+      // This runs during a page render, so never read the file here: use
+      // the cheap size+mtime token. Build-time links (folderAssets) get a
+      // content hash instead.
+      const version = contentVersion.fromStat(stat);
 
       // we need to include the path in the result since if there is a case-sensitive
       // issue, the path will be different after resolution

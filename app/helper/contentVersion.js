@@ -11,8 +11,8 @@ const hashFileAsync = promisify(require("./transformer/hash"));
 const SMALL_FILE_HASH_SIZE = 256 * 1024;
 
 // Above this, skip content hashing and fall back to a token derived from
-// size+mtime, so a build - or, for lookupFile.js, a page's first render -
-// doesn't have to read a huge video/audio file just to version its URL.
+// size+mtime, so a build doesn't have to read a huge video/audio file just
+// to version its URL.
 // This still leans on a settable local mtime, but only as a cheap nudge for
 // large files: a local mtime always changes when a file's content does, so
 // it's a safe enough fingerprint here (unlike ctime, which this module
@@ -43,6 +43,10 @@ module.exports = async function contentVersion(filePath, stat) {
     return statToken(stat);
   }
 };
+
+// Cheap size+mtime token, for callers that can't afford to read the file
+// (lookupFile.js runs during a page render).
+module.exports.fromStat = statToken;
 
 function statToken(stat) {
   return crypto
