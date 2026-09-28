@@ -74,26 +74,28 @@ function stripTrailingPlus(segment) {
 // actually changed, independent of the file's mtime (which providers reset
 // on every reconnect/resync/upload). `sourcePaths` is one path for a plain
 // entry, or the sorted list of files that make up a multi-file/folder post
-// (see multiple.js, which stores this on metadata._sourcePaths). A file that
-// can't be read (e.g. deleted mid-build) contributes an empty hash rather
-// than failing the whole build - the combined hash then simply won't match
-// the stored one, so `updated` falls back to the mtime as before.
+// (see multiple.js, which stores this on metadata._sourcePaths). Calls back
+// with (null, hash) on success. If any source can't be hashed (deleted
+// mid-build, EMFILE, a provider swapping the file out underneath us, ...)
+// calls back with (err) - the caller must not derive a contentHash from a
+// partial result, since a consistent failure would otherwise produce the
+// same placeholder digest on every build and permanently mask real changes.
 function hashEntrySource(blog, sourcePaths, callback) {
   async.map(
     sourcePaths,
     function (sourcePath, next) {
-      hashFile(localPath(blog.id, sourcePath), function (err, hash) {
-        next(null, hash || "");
-      });
+      hashFile(localPath(blog.id, sourcePath), next);
     },
     function (err, hashes) {
+      if (err) return callback(err);
+
       var combined = sourcePaths
         .map(function (sourcePath, i) {
           return sourcePath + ":" + hashes[i];
         })
         .join("|");
 
-      callback(crypto.createHash("sha1").update(combined).digest("hex"));
+      callback(null, crypto.createHash("sha1").update(combined).digest("hex"));
     }
   );
 }
@@ -175,18 +177,46 @@ function buildWith(blog, path, multiInfo, callback) {
               : Date.now();
 
           // A multi-file/folder post is built from several source files
-          // (see multiple.js); everything else is built from the one file
-          // at entryPath.
+          // (see multiple.js, which sets metadata._sourcePaths); everything
+          // else is built from the one file at entryPath. Only trust
+          // _sourcePaths when this really is a BuildMultiple build - for a
+          // plain post, metadata comes straight from user-controlled front
+          // matter, so a hand-written `_sourcePaths:` key must not be able
+          // to redirect what gets hashed.
           var sourcePaths =
+            multiInfo &&
             metadata &&
             Array.isArray(metadata._sourcePaths) &&
             metadata._sourcePaths.length
               ? metadata._sourcePaths
               : [entryPath];
 
-          hashEntrySource(blog, sourcePaths, function (contentHash) {
+          hashEntrySource(blog, sourcePaths, function (hashErr, contentHash) {
             var mtimeUpdated =
               stat && stat.mtime ? moment.utc(stat.mtime).valueOf() : Date.now();
+
+            // If any source couldn't be hashed, fall back to the pre-hash
+            // behaviour entirely for this build: treat 'updated' as changed
+            // (safe default) and keep whatever contentHash was already
+            // stored rather than persisting a partial/placeholder digest -
+            // storing one could make a later, genuinely unchanged build look
+            // different, or worse, make repeated failures look identical to
+            // each other and mask a real content change.
+            var storedContentHash =
+              existingEntry && typeof existingEntry.contentHash === "string"
+                ? existingEntry.contentHash
+                : "";
+
+            if (hashErr) {
+              debug(
+                "Blog:",
+                blog.id,
+                entryPath,
+                " failed to hash source, treating as changed:",
+                hashErr
+              );
+              contentHash = storedContentHash;
+            }
 
             // Only move 'updated' when the source content itself has
             // changed. A provider reconnect/resync (or the eventual S3
@@ -196,10 +226,10 @@ function buildWith(blog, path, multiInfo, callback) {
             // built before this change have no stored contentHash, so they
             // take the mtime this once and get a hash stored for next time.
             var contentUnchanged =
+              !hashErr &&
               existingEntry &&
-              typeof existingEntry.contentHash === "string" &&
-              existingEntry.contentHash &&
-              existingEntry.contentHash === contentHash &&
+              storedContentHash &&
+              storedContentHash === contentHash &&
               typeof existingEntry.updated === "number";
 
             var entry;
