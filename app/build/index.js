@@ -1,5 +1,7 @@
 var debug = require("debug")("blot:build");
 var fs = require("fs");
+var crypto = require("crypto");
+var async = require("async");
 var basename = require("path").basename;
 var localPath = require("helper/localPath");
 var isDraft = require("../sync/update/drafts").isDraft;
@@ -65,6 +67,34 @@ function findMultiFolder(path) {
 function stripTrailingPlus(segment) {
   if (!segment) return segment;
   return segment.replace(/\+$/, "");
+}
+
+// Hashes an entry's source bytes so we can tell whether its content has
+// actually changed, independent of the file's mtime (which providers reset
+// on every reconnect/resync/upload). `sourcePaths` is one path for a plain
+// entry, or the sorted list of files that make up a multi-file/folder post
+// (see multiple.js, which stores this on metadata._sourcePaths). A file that
+// can't be read (e.g. deleted mid-build) contributes an empty hash rather
+// than failing the whole build - the combined hash then simply won't match
+// the stored one, so `updated` falls back to the mtime as before.
+function hashEntrySource(blog, sourcePaths, callback) {
+  async.map(
+    sourcePaths,
+    function (sourcePath, next) {
+      fs.readFile(localPath(blog.id, sourcePath), function (err, buffer) {
+        next(null, buffer ? crypto.createHash("sha1").update(buffer).digest("hex") : "");
+      });
+    },
+    function (err, hashes) {
+      var combined = sourcePaths
+        .map(function (sourcePath, i) {
+          return sourcePath + ":" + hashes[i];
+        })
+        .join("|");
+
+      callback(crypto.createHash("sha1").update(combined).digest("hex"));
+    }
+  );
 }
 
 module.exports = function build(blog, path, callback) {
@@ -143,51 +173,81 @@ function buildWith(blog, path, multiInfo, callback) {
               ? existingEntry.created
               : Date.now();
 
-          var entry;
+          // A multi-file/folder post is built from several source files
+          // (see multiple.js); everything else is built from the one file
+          // at entryPath.
+          var sourcePaths =
+            metadata &&
+            Array.isArray(metadata._sourcePaths) &&
+            metadata._sourcePaths.length
+              ? metadata._sourcePaths
+              : [entryPath];
 
-          // Given the properties above
-          // that we've extracted from the
-          // local file, compute stuff like
-          // the teaser, isDraft etc..
+          hashEntrySource(blog, sourcePaths, function (contentHash) {
+            var mtimeUpdated =
+              stat && stat.mtime ? moment.utc(stat.mtime).valueOf() : Date.now();
 
-          try {
-            entry = {
-              html: html,
-              name: basename(entryPath),
-              path: entryPath,
-              id: entryPath,
-              thumbnail: thumbnail,
-              draft: is_draft,
-              metadata: metadata,
-              size: typeof stat.size === "number" ? stat.size : 0,
-              dependencies: dependencies,
-              exif: (extras && extras.exif) || {},
-              dateStamp: DateStamp(blog, entryPath, metadata, previousCreated),
-              updated: stat && stat.mtime ? moment.utc(stat.mtime).valueOf() : Date.now(),
-            };
+            // Only move 'updated' when the source content itself has
+            // changed. A provider reconnect/resync (or the eventual S3
+            // migration, where Last-Modified is the upload time) rewrites
+            // every file's mtime without changing its bytes, and that alone
+            // shouldn't bump 'updated' or the sitemap's <lastmod>. Entries
+            // built before this change have no stored contentHash, so they
+            // take the mtime this once and get a hash stored for next time.
+            var contentUnchanged =
+              existingEntry &&
+              typeof existingEntry.contentHash === "string" &&
+              existingEntry.contentHash &&
+              existingEntry.contentHash === contentHash &&
+              typeof existingEntry.updated === "number";
 
-            if (entry.dateStamp === undefined) {
-              entry.dateStampWasRemoved = true;
-              delete entry.dateStamp;
+            var entry;
+
+            // Given the properties above
+            // that we've extracted from the
+            // local file, compute stuff like
+            // the teaser, isDraft etc..
+
+            try {
+              entry = {
+                html: html,
+                name: basename(entryPath),
+                path: entryPath,
+                id: entryPath,
+                thumbnail: thumbnail,
+                draft: is_draft,
+                metadata: metadata,
+                size: typeof stat.size === "number" ? stat.size : 0,
+                dependencies: dependencies,
+                exif: (extras && extras.exif) || {},
+                dateStamp: DateStamp(blog, entryPath, metadata, previousCreated),
+                contentHash: contentHash,
+                updated: contentUnchanged ? existingEntry.updated : mtimeUpdated,
+              };
+
+              if (entry.dateStamp === undefined) {
+                entry.dateStampWasRemoved = true;
+                delete entry.dateStamp;
+              }
+
+              debug(
+                "Blog:",
+                blog.id,
+                entryPath,
+                " preparing additional properties for",
+                entry.name
+              );
+              entry = Prepare(entry, {
+                titlecase: blog.plugins.titlecase.enabled,
+                blogID: blog.id,
+              });
+              debug("Blog:", blog.id, path, " additional properties computed.");
+            } catch (e) {
+              return callback(e);
             }
 
-            debug(
-              "Blog:",
-              blog.id,
-              entryPath,
-              " preparing additional properties for",
-              entry.name
-            );
-            entry = Prepare(entry, {
-              titlecase: blog.plugins.titlecase.enabled,
-              blogID: blog.id,
-            });
-            debug("Blog:", blog.id, path, " additional properties computed.");
-          } catch (e) {
-            return callback(e);
-          }
-
-          callback(null, entry);
+            callback(null, entry);
+          });
         });
       });
     });
