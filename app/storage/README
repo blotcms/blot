@@ -5,9 +5,14 @@
 Move blog folder storage (`.folder`) and generated-asset storage (`.assets`)
 off EBS onto S3, for cost/scalability/deployment reasons, and enforce
 per-blog storage quotas — with no added read-path latency, paying any cost
-at sync/build time instead. Git-backed sync is out of scope; if it's
-revisited later its data can live under `folder/{blogID}/gitClient/...`
-without the storage layer needing to know git exists.
+at sync/build time instead.
+
+- **Short term:** move `.assets` to S3 so the EBS volume can shrink to
+  roughly the size of blog folders plus git repos.
+- **Long term:** node containers scale horizontally with no EBS mount
+  (one EBS volume can't be attached to several containers). Blog folders
+  and git client repos both live in object storage; each host's ephemeral
+  SSD is a cache, never the source of truth.
 
 ## 2. Current state
 
@@ -82,14 +87,31 @@ without the storage layer needing to know git exists.
 - **Backup: hourly `aws s3 sync` (whole bucket, no `--delete`) to
   Backblaze B2**, US West region (closest to the app's `us-west-2`; B2's
   region is a permanent per-account choice). No-`--delete` plus B2's
-  always-on versioning gives grow-and-expire semantics: a
-  `NoncurrentVersionExpiration` lifecycle rule (retention window TBD, see
-  §6) cleans up superseded versions without ever expiring unchanged current
-  objects. Decided over a second AWS account or Bunny Storage, for genuine
+  always-on versioning gives grow-and-expire semantics: a B2-native
+  lifecycle rule (`daysFromHidingToDeleting`, retention window TBD, see §7)
+  cleans up superseded versions without ever expiring unchanged current
+  objects. B2 doesn't take S3's `NoncurrentVersionExpiration`; configure
+  the rule through the B2 native API or console. Decided over a second AWS account or Bunny Storage, for genuine
   vendor independence (a second cloud problem shouldn't be able to take out
   both the primary and the backup). Projected ~80% reduction in combined
   storage + backup spend versus current EBS; figures deliberately kept out
   of this doc.
+- **Code against the S3 API subset B2 also supports**, so B2 can become
+  the primary store later. What that rules out, and other B2 differences:
+  - No object tagging, storage classes or IAM roles (EC2 hosts would
+    hold a static B2 application key).
+  - Versioning is always on: a delete only hides the object, so a
+    lifecycle rule is needed for deletes to free space.
+  - Lifecycle rules are B2-native (`daysFromHidingToDeleting`), not S3's.
+  - Conditional writes (`If-Match`/`If-None-Match`) aren't documented;
+    don't depend on them. The per-blog Redis lock already gives a single
+    writer per blog.
+  - B2 is outside AWS, so reads from `us-west-2` cross the public
+    internet; Backblaze's own benchmarks put S3 ahead on time to first
+    byte. Measure from EC2 before making B2 primary.
+  - In B2's favour: egress is free up to 3x stored bytes and free to Bunny
+    without limit, and its native listing call returns per-file
+    `fileInfo`, which S3's `ListObjectsV2` doesn't.
 - **No S3 Express One Zone** — single-AZ durability is a bad trade for data
   that already has a reduced backup posture, and its latency benefit
   targets the same problem an SSD cache (if built, §5) would solve.
@@ -135,28 +157,55 @@ without the storage layer needing to know git exists.
 
 ## 4. Caveats for moving `.folder` to S3
 
-**a. mtime is used as data — the biggest risk.** Several places treat
-filesystem mtime/ctime as meaningful, not incidental:
-- Google Drive (`app/clients/google-drive/util/download.js:44,194,411-414`)
-  and iCloud (`app/clients/icloud/sync/util/download.js:31`) set local
-  mtimes with `fs.utimes` to mirror the remote provider; iCloud's upload
-  route compares `stat.mtime` to a stored modified time for change
-  detection (`app/clients/icloud/routes/site/upload.js:47`).
-- `app/blog/render/retrieve/folder.js:71` exposes `stat.mtime` to templates
-  as `updated`.
-- `app/build/index.js:166` and `app/build/multiple.js:105-129` feed mtime
-  into entry metadata.
-- `app/build/plugins/folderAssets/index.js:317,329` and
-  `app/blog/render/replaceFolderLinks/lookupFile.js:96` hash
-  mtime+ctime+size into CDN version tokens.
-- `app/dashboard/site/folder/stat.js` shows mtime to users.
+**a. File timestamps: stop needing a settable mtime.** S3 and B2 both set
+`Last-Modified` themselves at upload time and can't be told otherwise, and
+neither has ctime or atime. Custom metadata (`x-amz-meta-mtime`) can hold a
+chosen mtime, but it can only be changed by rewriting the object, and S3's
+`ListObjectsV2` doesn't return it. Keeping it would mean a HEAD per file or
+a separate index for every folder listing. Instead, Blot core stops
+depending on a settable mtime, and `Last-Modified` is enough.
 
-S3 can't set arbitrary `Last-Modified`, and ctime doesn't exist there.
-Implication: store mtime as object metadata (e.g. `x-amz-meta-mtime`) at
-write time, have the storage layer's `stat()` return it, and migrate every
-reader above to the storage layer's `stat()` before cutover. Version tokens
-that currently hash mtime+ctime should move to a content hash / ETag
-instead.
+What the timestamps are used for today:
+
+- **Post dates don't use them.** `app/build/prepare/dateStamp` takes the
+  metadata `Date:`, then a date in the path, then `entry.created`
+  (`Date.now()` at first build, persisted in Redis).
+- **atime** is never read. The importer sets it only because `fs.utimes`
+  needs both values.
+- **ctime** is read for CDN version tokens, Google Drive's local content
+  fingerprint, and the dashboard's "created" label (wrong: ctime is
+  inode-change time). `app/build/multiple.js` merges it, but nothing reads
+  the result.
+- **mtime** feeds three kinds of use:
+  - Change detection: CDN version tokens (`folderAssets/index.js`,
+    `replaceFolderLinks/lookupFile.js` hash mtime+ctime+size), Google
+    Drive's Google-app-file check, iCloud's "already current" check.
+  - Sync bookkeeping: Dropbox, Google Drive and iCloud set local mtimes
+    with `fs.utimes` to mirror the provider.
+  - User-visible dates: `entry.updated` (`{{formatUpdated}}`,
+    `article:modified_time`, sitemap `<lastmod>`), the folder listing's
+    `updated`, and dashboard file details.
+
+The fix, one PR per item, each landing on local disk before the S3 move:
+
+1. **`entry.updated` changes only when the source content hash changes.**
+   Otherwise a reconnect, a full resync or the one-time copy to S3 would
+   reset every post's "updated" date to that day. This PR should merge
+   before 3 and 4.
+2. **CDN version tokens use a content hash** (the ETag on S3). Core stops
+   reading ctime, and the dashboard drops "created".
+3. **Google Drive** compares Drive's `modifiedTime` with the value stored
+   in its own client DB, not the local mtime, and stops calling `utimes`.
+4. **iCloud and Dropbox** stop calling `utimes` and stop comparing local
+   mtimes (content equality or provider hashes instead).
+
+The storage layer's `stat()` then returns `size`, `modified` (local mtime
+now, `Last-Modified` on S3) and `hash` (content hash now, ETag on S3), with
+no ctime, no atime and no way to set `modified`. Accepted trade-offs:
+
+- `updated` means when Blot received a change, not when the user saved it.
+- Non-post files in folder listings show the migration date, once.
+- Imported posts need their "updated" date in metadata, not the mtime.
 
 **b. Sync clients need a staging pattern, not direct S3 calls.** Google
 Drive streams to a temp file then moves it into place; Dropbox's
@@ -176,10 +225,11 @@ layer (with either a local cache or measured-acceptable S3 latency) before
 (a sampled shadow-read alongside real reads during the dual-write phase)
 before building a caching layer — much of what would hit S3 directly is
 already narrowed by Redis-cached render output, Bunny Perma-Cache on
-generated assets, and Origin Shield deduplicating concurrent misses. Build
-an SSD-LRU cache (there's a working precedent for this pattern in
-`app/clients/icloud/macserver/watcher/monitorDiskUsage.js`) only if the
-measurement shows it's needed.
+generated assets, and Origin Shield deduplicating concurrent misses. Hosts
+will have large ephemeral SSDs, so the long-term design assumes an SSD-LRU
+read cache there (working precedent:
+`app/clients/icloud/macserver/watcher/monitorDiskUsage.js`); the
+measurements size it rather than decide whether it exists.
 
 **d. `app/sync/rebuild.js:113-124` processes files serially**
 (`async.eachSeries`) — a full rebuild of a large blog would turn into
@@ -214,23 +264,39 @@ should consolidate into one storage-layer method, exposed explicitly
   "write locally, then commit," not `write(buffer)`. `removeAll(blogID)`
   is the only whole-scope delete, used solely by blog deletion.
 - **Phase 1 — `.assets` first.** These files are written asynchronously,
-  content-addressed or UUID-keyed, and never change once written — the
-  simplest shape to move. Add a `commit()` hook at write sites: dual-write
-  local + S3, read-through with local as cache. The B2 backup must already
-  be running before local disk stops holding a copy — dashboard uploads in
-  this scope can't be regenerated. Warm Bunny's Perma-Cache with a GET in
-  the same async step. Add sampled shadow-read timing instrumentation here
-  to start gathering real S3-vs-local numbers.
-- **Phase 2 — `.folder`.** Grow the storage-layer API as call sites need it
-  (read/write/remove/list/stat, with mtime as metadata per §4a), migrate
+  UUID- or content-hash-named, and never change once written — the
+  simplest shape to move. No production code reads their mtime or ctime,
+  and both serving routes send `immutable` one-year cache headers, so
+  plain `PutObject` with no custom metadata is enough.
+  - Add a `commit()` hook at write sites: write to a temp path on local
+    disk, upload, then **delete the local copy**. Keeping a local copy on
+    EBS as a read-through cache would defeat the point of shrinking the
+    volume; any read cache goes on ephemeral SSD, bounded in size.
+  - Reads go to S3 on a miss; Bunny's Perma-Cache absorbs most of them.
+    Warm it with a GET in the same async step as the upload.
+  - `rebuild.js`'s `_thumbnails`/`_image_cache` wipe becomes a prefix
+    delete (list + `DeleteObjects`).
+  - The B2 backup must already be running before local disk stops holding
+    a copy — dashboard uploads in this scope can't be regenerated.
+  - Add sampled shadow-read timing instrumentation here to start gathering
+    real S3-vs-local numbers.
+- **Phase 2 — `.folder`.** Needs the four timestamp PRs in §4a merged
+  first. Grow the storage-layer API as call sites need it
+  (read/write/remove/list/stat, with `stat()` as described in §4a), migrate
   sync clients onto a staging pattern, resolve the caveats in §4, parallelize
   `rebuild.js`, then cut over. Add a paginated `list()` when a caller
   actually needs pagination — `retrieve/folder.js` is the motivating case.
-  Build an SSD cache (Phase 2b) only if the Phase 1 measurements show pure
-  S3 latency is a real problem; if built, invalidate per-object using the
-  existing sync-completion pub/sub (`app/sync/index.js`'s
+  S3's listing already carries size, `Last-Modified` and ETag, so listings
+  need no per-file HEAD. The ephemeral SSD cache (§4c) invalidates
+  per-object using the existing sync-completion pub/sub (`app/sync/index.js`'s
   `blog:{blogID}:preview:reload` broadcast), extended to carry which paths
   changed.
+- **Phase 3 — git client repos.** Bare repos live in
+  `{blot_directory}/data/git/{handle}.git` (`app/clients/git/dataDir.js`),
+  separate from blog folders. Git needs a real filesystem, so store each
+  repo in object storage as one bundle or packed archive. Restore it onto
+  the SSD when a push arrives, then upload it again, all under the
+  existing per-blog lock. mtime doesn't matter to git.
 - **Quotas** — decouple from the storage-layer build-out. Maintain a
   per-blog byte counter in `app/sync/update` (which already sees every
   changed path), backed by periodic `du`/`ListObjects` reconciliation to
@@ -264,11 +330,13 @@ may need to do more than pure unbuffered streaming — not yet decided.
 
 ## 7. Open questions
 
-- B2 `NoncurrentVersionExpiration` retention window (60? 90 days?).
+- B2 `daysFromHidingToDeleting` retention window (60? 90 days?).
 - Shadow-read instrumentation sample rate for Phase 1 (1%? 5%?).
 - `.list()`'s ordering guarantee (§6).
-- Whether an SSD cache (Phase 2b) ends up being needed at all — resolvable
-  by the Phase 1 shadow-read measurements rather than by judgment call.
+- SSD cache size per host — sized from the Phase 1 shadow-read
+  measurements.
+- Whether B2 becomes the primary store rather than only the backup —
+  decide after measuring time to first byte from `us-west-2`.
 - A one-time scan of existing filenames for anything that's safe on POSIX
   but odd as a raw S3 key (leading/trailing whitespace, control
   characters), before `.folder` migrates.
