@@ -17,8 +17,7 @@ at sync/build time instead.
 ## 2. Current state
 
 - `config/index.js:87-93` derives everything off `BLOT_DATA_DIRECTORY`:
-  `blog_static_files_dir` (`/static`) and `blog_folder_dir` (`/blogs`). No
-  `app/storage` module exists yet.
+  `blog_static_files_dir` (`/static`) and `blog_folder_dir` (`/blogs`).
 - [`app/helper/localPath.js`](app/helper/localPath.js) resolves
   `(blogID, relativePath)` to an absolute path but does no IO — every caller
   does its own raw `fs`/`fs-extra` call. ~60 files call `localPath`, including
@@ -26,11 +25,11 @@ at sync/build time instead.
   `blog_folder_dir` directly (e.g. `app/blog/routes/assets.js`,
   `app/cdn/index.js`, `app/models/template/*`, `app/models/blog/remove.js`,
   `app/dashboard/site/export.js`).
-- `blog_static_files_dir` has 21 non-test call sites; ~16 of them build
-  `path.join(config.blog_static_files_dir, blogID, ...)` inline with no
-  shared helper (thumbnail creation, document converters, image
-  optimization, link screenshots, dashboard uploads, blog removal/export,
-  the CDN static route). Subdirectories in use: `_thumbnails`,
+- Per-blog asset paths all go through `app/storage/assets.js` (Phase 0):
+  `path(blogID, ...segments)` and `removeAll(blogID)`. The only direct
+  `blog_static_files_dir` references left are whole-tree ones:
+  `app/setup.js`, the `express.static` mount in `app/cdn/index.js`, and
+  admin scripts under `scripts/`. Subdirectories in use: `_thumbnails`,
   `_image_cache`, `_assets`, `_bookmark_screenshots`, `_avatars`,
   `_template_assets` (see §3's table for which are regenerable).
 - Both directories map to the public CDN URL as bare `{blogID}/{path}`
