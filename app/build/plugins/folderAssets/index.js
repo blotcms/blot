@@ -4,8 +4,7 @@ const crypto = require("crypto");
 const async = require("async");
 const { join, resolve, posix } = require("path");
 const { promisify } = require("util");
-const hash = require("helper/hash");
-const HashFile = require("helper/transformer/hash");
+const contentVersion = require("helper/contentVersion");
 const caseSensitivePath = promisify(require("helper/caseSensitivePath"));
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 const unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
@@ -16,21 +15,6 @@ const {
   fileExtRegex,
   parseSrcset,
 } = require("blog/render/replaceFolderLinks/shared");
-
-const hashFileAsync = promisify(HashFile);
-
-// Files bigger than this fall back to the cheap stat-based fingerprint
-// (mtime+ctime+size) instead of a full content hash, so a rebuild
-// triggered by an unrelated dependency change doesn't force reading a
-// huge video/audio file just to version its URL.
-const MAX_CONTENT_HASH_SIZE = 5 * 1024 * 1024;
-
-// Below this, read the whole file into memory and hash it synchronously
-// instead of going through helper/transformer/hash's readable-stream
-// pipeline. Most folder-relative links point at small images/fonts, and
-// a stream's setup/event overhead measurably dominates the hash itself at
-// this size - a single buffered read+digest is faster in practice.
-const SMALL_FILE_HASH_SIZE = 256 * 1024;
 
 const ATTRS = ["href", "src", "poster"];
 
@@ -297,6 +281,13 @@ async function resolveBuildFile(ctx, value, alreadyDecoded) {
 
 // Returns { path, version } for a file in the blog folder, or null if it
 // doesn't exist. path is the case-corrected path.
+//
+// The version token is a hash of the file's content (helper/contentVersion),
+// not its mtime/ctime: blog folders are moving from local disk to S3, which
+// can't set a file's Last-Modified and has no ctime, but does hand back a
+// content-derived ETag for free on every PUT. Until storage reads switch
+// over, local disk pays the cost of hashing on each build; contentVersion's
+// path+size+mtimeMs cache avoids re-hashing a file that hasn't changed.
 async function hashFolderFile(blogFolder, path) {
   let stat, resolvedPath;
 
@@ -306,28 +297,20 @@ async function hashFolderFile(blogFolder, path) {
     return null;
   }
 
-  return {
-    path: resolvedPath,
-    version: await computeVersion(join(blogFolder, resolvedPath), stat),
-  };
-}
-
-async function computeVersion(filePath, stat) {
-  if (stat.size > MAX_CONTENT_HASH_SIZE) {
-    return hash(`${stat.mtime}${stat.ctime}${stat.size}`).slice(0, 8);
-  }
+  const filePath = join(blogFolder, resolvedPath);
+  let version;
 
   try {
-    if (stat.size <= SMALL_FILE_HASH_SIZE) {
-      const buffer = await fs.readFile(filePath);
-      return crypto.createHash("sha1").update(buffer).digest("hex").slice(0, 8);
-    }
-
-    const contentHash = await hashFileAsync(filePath);
-    return contentHash.slice(0, 8);
+    version = await contentVersion(filePath, stat);
   } catch (err) {
-    return hash(`${stat.mtime}${stat.ctime}${stat.size}`).slice(0, 8);
+    // The file existed a moment ago (getStat succeeded) but became
+    // unreadable before we could hash it - a rare local race, not worth
+    // failing the whole build over. Any string is fine here since there's
+    // nothing stable left to derive a version from.
+    version = crypto.randomBytes(4).toString("hex");
   }
+
+  return { path: resolvedPath, version };
 }
 
 async function getStat(blogFolder, path) {
