@@ -70,7 +70,7 @@ describe("folderAssets plugin", function () {
 
       fs.outputFileSync(this.blogDirectory + "/photo.jpg", "version two");
 
-      build(blog, path, function (err, entry2) {
+      build(this.blog, path, function (err, entry2) {
         if (err) return done.fail(err);
 
         var secondVersion = entry2.html.match(/v-([a-f0-9]{8})/)[1];
@@ -95,7 +95,7 @@ describe("folderAssets plugin", function () {
 
       fs.outputFileSync(this.blogDirectory + "/photo.jpg", "same content");
 
-      build(blog, path, function (err, entry2) {
+      build(this.blog, path, function (err, entry2) {
         if (err) return done.fail(err);
 
         var secondVersion = entry2.html.match(/v-([a-f0-9]{8})/)[1];
