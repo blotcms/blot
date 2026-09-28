@@ -2,7 +2,7 @@ var Tags = require("models/tags");
 var Entry = require("models/entry");
 var async = require("async");
 var client = require("models/client");
-var createEntryCache = require("./entry-cache");
+var entryKey = require("models/entry/key").entry;
 
 function execTransaction(multi, callback) {
   var done = false;
@@ -29,13 +29,65 @@ function execTransaction(multi, callback) {
   }
 }
 
-module.exports = function main(blog, cache, callback) {
-  if (typeof cache === "function") {
-    callback = cache;
-    cache = createEntryCache(blog.id);
+// entryIDs can run into the thousands across a blog's tags, and the same
+// entry is frequently a member of several tags - an entry with 8 tags used
+// to be read from Redis in full 8 times in one run. This memoises only the
+// small fields needed to detect a ghost (id) per entryID for the lifetime
+// of a single tag-ghosts call, and fetches unresolved ids in batched MGETs
+// (preserving index alignment, unlike Entry.get which filters out missing
+// entries) rather than one GET per id.
+var BATCH_SIZE = 100;
+
+function resolveEntryIDs(blogID, entryIDs, resolved, callback) {
+  var unresolved = entryIDs.filter(function (id) {
+    return !resolved.has(id);
+  });
+
+  var batches = [];
+  for (var i = 0; i < unresolved.length; i += BATCH_SIZE) {
+    batches.push(unresolved.slice(i, i + BATCH_SIZE));
   }
 
+  async.eachSeries(
+    batches,
+    function (batch, next) {
+      var keys = batch.map(function (id) {
+        return entryKey(blogID, id);
+      });
+
+      client
+        .mGet(keys)
+        .then(function (values) {
+          (values || []).forEach(function (value, index) {
+            var id = batch[index];
+
+            if (!value) {
+              resolved.set(id, null);
+              return;
+            }
+
+            try {
+              resolved.set(id, { id: JSON.parse(value).id });
+            } catch (e) {
+              resolved.set(id, null);
+            }
+          });
+
+          // Yield so V8 can reclaim this batch's parsed JSON before the
+          // next batch is fetched.
+          setImmediate(next);
+        })
+        .catch(next);
+    },
+    callback
+  );
+}
+
+module.exports = function main(blog, callback) {
   const report = [];
+  // id -> {id} | null, shared across every tag processed by this call.
+  const resolved = new Map();
+
   Tags.list(blog.id, function (err, tags) {
     if (err) return callback(err);
 
@@ -55,11 +107,7 @@ module.exports = function main(blog, cache, callback) {
             return execTransaction(multi, next);
           }
 
-          // Every entryID this tag references is resolved through the
-          // shared cache, so an entry that appears in several tags (or was
-          // already read by an earlier check this Fix() run) is fetched
-          // from Redis at most once total, not once per tag it's in.
-          cache.getMany(entryIDs, function (err, resolved) {
+          resolveEntryIDs(blog.id, entryIDs, resolved, function (err) {
             if (err) return next(err);
 
             async.eachLimit(
@@ -82,9 +130,7 @@ module.exports = function main(blog, cache, callback) {
                 // under the correct key.
                 Entry.get(blog.id, entryID, function (entry) {
                   if (!entry) {
-                    // Vanished between the cached read and now - treat as
-                    // MISSING rather than act on stale cached data.
-                    cache.invalidate(entryID);
+                    resolved.set(entryID, null);
                     report.push(["MISSING", entryID]);
                     const multi = client.multi();
                     multi.zRem(tagKey, entryID);
@@ -107,8 +153,8 @@ module.exports = function main(blog, cache, callback) {
                     if (err) return next(err);
                     Entry.set(blog.id, entry.id, entry, function (err) {
                       if (err) return next(err);
-                      cache.invalidate(entryID);
-                      cache.invalidate(entry.id);
+                      resolved.set(entryID, null);
+                      resolved.set(entry.id, { id: entry.id });
                       next();
                     });
                   });

@@ -3,7 +3,6 @@ const Entries = require("models/entries");
 const Entry = require("models/entry");
 const localPath = require("helper/localPath");
 const async = require("async");
-const createEntryCache = require("./entry-cache");
 
 // A folder post is synthesized at a "+"-stripped path with no file behind it
 // (the aggregate for "/Album +" is stored at "/album"). resolvePath would
@@ -59,22 +58,11 @@ function resolvePath (blogID, path, callback) {
 // peak memory instead of letting it climb for the length of the walk.
 var YIELD_EVERY = 50;
 
-function main (blog, cache, callback) {
-  if (typeof cache === "function") {
-    callback = cache;
-    cache = createEntryCache(blog.id);
-  }
-
+function main (blog, callback) {
   var missing = [];
   var edit = [];
   var report = [];
   var count = 0;
-  // Ids that entry-ghosts mutates (via Entry.set/Entry.drop below) - their
-  // shared-cache entries are stale as soon as that happens, so they're
-  // invalidated once the mutations are applied, letting a later check this
-  // Fix() run (tag-ghosts, list-ghosts) re-read the corrected state instead
-  // of what entry-ghosts saw during its scan.
-  var mutatedIDs = new Set();
 
   function done (next) {
     count++;
@@ -88,6 +76,8 @@ function main (blog, cache, callback) {
 
       if (!_entry) return done(next);
 
+      if (_entry.deleted) return done(next);
+
       // Folder posts have no file at their own path; they are ghosts only if
       // the "+" folder they were built from is gone - or has been replaced by
       // a plain file, which can no longer aggregate anything.
@@ -96,26 +86,10 @@ function main (blog, cache, callback) {
       // with the aggregate content size of the corrupted blog this check is
       // meant to repair.
       var multiFolder = folderPostFolder(_entry);
-
-      // This check already has the full entry in hand - share its small
-      // fields with the other checks this Fix() run so they don't have to
-      // re-read it from Redis at all.
-      cache.set(_entry.id, {
-        id: _entry.id,
-        path: _entry.path,
-        deleted: !!_entry.deleted,
-        dateStamp: _entry.dateStamp,
-        multiFolder: multiFolder,
-      });
-
-      if (_entry.deleted) return done(next);
-
       if (multiFolder) {
         return fs.stat(localPath(blog.id, multiFolder), function (err, stat) {
           if (err || !stat.isDirectory()) {
             missing.push({ id: _entry.id, path: _entry.path });
-            mutatedIDs.add(_entry.id);
-            mutatedIDs.add(_entry.path);
           }
           done(next);
         });
@@ -124,13 +98,8 @@ function main (blog, cache, callback) {
       resolvePath(blog.id, _entry.path, function (err, path) {
         if (path && path !== _entry.path) {
           edit.push({ oldPath: _entry.path, path: path });
-          mutatedIDs.add(_entry.id);
-          mutatedIDs.add(_entry.path);
-          mutatedIDs.add(path);
         } else if (err) {
           missing.push({ id: _entry.id, path: _entry.path });
-          mutatedIDs.add(_entry.id);
-          mutatedIDs.add(_entry.path);
         }
         done(next);
       });
@@ -174,9 +143,6 @@ function main (blog, cache, callback) {
             },
             function (err) {
               if (err) return callback(err);
-              mutatedIDs.forEach(function (id) {
-                cache.invalidate(id);
-              });
               callback(null, report);
             }
           );

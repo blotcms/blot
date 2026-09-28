@@ -1,17 +1,25 @@
 const Entry = require("models/entry");
 const Entries = require("models/entries");
 const client = require("models/client");
+const entryKey = require("models/entry/key").entry;
 const { promisify } = require("util");
-const createEntryCache = require("./entry-cache");
 
 var lists = ["all", "created", "entries", "drafts", "scheduled", "pages"];
 
+// Entries are read in full (content included) - for a blog with large
+// posts that can be many MB per entry. The same id often appears in
+// several of the lists above (eg. "all" and "pages"), so checking each
+// list independently used to re-fetch that same full entry once per list
+// it belonged to. Fetching each unique id once, in batched MGETs (index
+// aligned with the batch - unlike Entry.get, which filters out missing
+// entries) rather than one GET per id, and yielding to the event loop
+// between batches so V8 can reclaim the large strings already checked,
+// keeps peak memory proportional to BATCH_SIZE rather than to the whole
+// blog.
+var BATCH_SIZE = 100;
+
 function pruneMissing(blogID) {
   return promisify(Entries.pruneMissing.bind(Entries))(blogID);
-}
-
-function getManyFromCache(cache, ids) {
-  return promisify(cache.getMany.bind(cache))(ids);
 }
 
 function getEntry(blogID, id) {
@@ -22,12 +30,40 @@ function setEntry(blogID, id, entry) {
   return promisify(Entry.set.bind(Entry))(blogID, id, entry);
 }
 
-function main(blog, cache, callback) {
-  if (typeof cache === "function") {
-    callback = cache;
-    cache = createEntryCache(blog.id);
+function yieldToEventLoop() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+async function resolveIDs(blogID, ids) {
+  const resolved = new Map();
+
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const batch = ids.slice(i, i + BATCH_SIZE);
+    const keys = batch.map((id) => entryKey(blogID, id));
+    const values = await client.mGet(keys);
+
+    (values || []).forEach((value, index) => {
+      const id = batch[index];
+
+      if (!value) {
+        resolved.set(id, null);
+        return;
+      }
+
+      try {
+        resolved.set(id, { id: JSON.parse(value).id });
+      } catch (e) {
+        resolved.set(id, null);
+      }
+    });
+
+    await yieldToEventLoop();
   }
 
+  return resolved;
+}
+
+function main(blog, callback) {
   const report = [];
 
   (async function () {
@@ -46,12 +82,7 @@ function main(blog, cache, callback) {
     const allIds = [...uniqueIds];
     const ghostIds = new Set();
 
-    // The same id is often a member of several of the lists above (eg.
-    // "all" and "pages"), and may already have been resolved by an earlier
-    // check this Fix() run. Going through the shared cache means each id is
-    // fetched from Redis at most once here, in bounded batches, rather than
-    // once per list it belongs to.
-    const resolved = await getManyFromCache(cache, allIds);
+    const resolved = await resolveIDs(blog.id, allIds);
 
     for (const id of allIds) {
       const meta = resolved.get(id);
@@ -65,11 +96,7 @@ function main(blog, cache, callback) {
       // Mismatch - re-fetch the full entry (content included) only for
       // this id so it can be re-saved under the corrected key.
       const entry = await getEntry(blog.id, id);
-      if (entry) {
-        await setEntry(blog.id, entry.id, entry);
-        cache.invalidate(id);
-        cache.invalidate(entry.id);
-      }
+      if (entry) await setEntry(blog.id, entry.id, entry);
     }
 
     for (const list of lists) {

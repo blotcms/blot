@@ -3,7 +3,6 @@ describe("sync/fix/tag-ghosts", function () {
   var Entry = require("models/entry");
   var client = require("models/client");
   var entryKey = require("models/entry/key").entry;
-  var createEntryCache = require("../entry-cache");
   var fixTagGhosts = require("../tag-ghosts");
 
   function fakeMulti() {
@@ -19,7 +18,7 @@ describe("sync/fix/tag-ghosts", function () {
     };
   }
 
-  // Stubs client.mGet the way entry-cache.js calls it: one batched MGET
+  // Stubs client.mGet the way tag-ghosts' batched read calls it: one MGET
   // over the requested ids' Redis keys, resolved from a map of
   // id -> stored entry (or omitted/undefined for a missing entry).
   function stubMGet(blogID, entriesByID) {
@@ -133,9 +132,9 @@ describe("sync/fix/tag-ghosts", function () {
     spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
       callback(null, ["/old-path"]);
     });
-    // The cache's batched read sees the mismatch (stored id != requested
-    // id) first; the check then re-fetches the full entry via Entry.get
-    // only for this one mismatched id.
+    // The batched read sees the mismatch (stored id != requested id)
+    // first; the check then re-fetches the full entry via Entry.get only
+    // for this one mismatched id.
     stubMGet("blog-id", { "/old-path": entry });
     spyOn(Entry, "get").and.callFake(function (_blogID, entryID, callback) {
       expect(entryID).toBe("/old-path");
@@ -220,27 +219,6 @@ describe("sync/fix/tag-ghosts", function () {
       expect(client.mGet.calls.argsFor(0)[0]).toEqual([
         entryKey("blog-id", "/chair"),
       ]);
-      done();
-    });
-  });
-
-  it("never touches Redis for an id already resolved by an earlier check this run", function (done) {
-    var cache = createEntryCache("blog-id");
-    cache.set("/chair", { id: "/chair", path: "/chair" });
-
-    spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
-      callback(null, [{ slug: "chairs" }]);
-    });
-    spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
-      callback(null, ["/chair"]);
-    });
-    spyOn(client, "mGet");
-    spyOn(client, "multi");
-
-    fixTagGhosts({ id: "blog-id" }, cache, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([]);
-      expect(client.mGet).not.toHaveBeenCalled();
       done();
     });
   });

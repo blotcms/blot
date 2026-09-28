@@ -3,10 +3,9 @@ describe("sync/fix/list-ghosts", function () {
   var Entries = require("models/entries");
   var client = require("models/client");
   var entryKey = require("models/entry/key").entry;
-  var createEntryCache = require("../entry-cache");
   var fixListGhosts = require("../list-ghosts");
 
-  // Stubs client.mGet the way entry-cache.js calls it: one batched MGET
+  // Stubs client.mGet the way list-ghosts' batched read calls it: one MGET
   // over the requested ids' Redis keys, resolved from a map of
   // id -> stored entry (or omitted/undefined for a missing entry).
   function stubMGet(blogID, entriesByID) {
@@ -38,8 +37,8 @@ describe("sync/fix/list-ghosts", function () {
 
     spyOn(client, "zRem").and.returnValue(Promise.resolve(1));
 
-    // The cache's batched read finds "existing-id" stored under the wrong
-    // key (a mismatch) and finds nothing at all for "missing-id".
+    // The batched read finds "existing-id" stored under the wrong key (a
+    // mismatch) and finds nothing at all for "missing-id".
     stubMGet("blog-id", {
       "existing-id": { id: "moved-id", title: "Moved" },
     });
@@ -62,7 +61,7 @@ describe("sync/fix/list-ghosts", function () {
       expect(err).toBeNull();
 
       // Only the mismatched id needs a full re-fetch; the missing one is
-      // already known to be a ghost from the cached batch read.
+      // already known to be a ghost from the batched read.
       expect(Entry.get.calls.allArgs()).toEqual([
         ["blog-id", "existing-id", jasmine.any(Function)],
       ]);
@@ -105,32 +104,6 @@ describe("sync/fix/list-ghosts", function () {
       expect(client.mGet.calls.argsFor(0)[0]).toEqual([
         entryKey("blog-id", "/chair"),
       ]);
-      done();
-    });
-  });
-
-  it("never touches Redis for an id already resolved by an earlier check this run", function (done) {
-    var cache = createEntryCache("blog-id");
-    cache.set("/chair", { id: "/chair", path: "/chair" });
-
-    spyOn(Entries, "pruneMissing").and.callFake(function (_blogID, callback) {
-      callback(null);
-    });
-
-    spyOn(client, "zRange").and.callFake(function (key) {
-      if (key === "blog:blog-id:entries") {
-        return Promise.resolve(["/chair"]);
-      }
-
-      return Promise.resolve([]);
-    });
-
-    spyOn(client, "mGet");
-
-    fixListGhosts({ id: "blog-id" }, cache, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([]);
-      expect(client.mGet).not.toHaveBeenCalled();
       done();
     });
   });

@@ -44,7 +44,7 @@ Investigate green crashes (`Lock was lost` / ECOMPROMISED at 2026-09-21 18:02 an
 - Next: check green logs for `[LOCK] slow heartbeat` / `[LOCK] heartbeat error` after the heartbeat round-trip logging ships (PR #1952) — it separates event-loop-side delay (tickDelay) from Redis-side delay (roundTrip) for the first time
 - 2026-09-24 crashes at 15:04:34 and 16:01:08 UTC (green): `[LOCK] slow heartbeat` showed tickDelay~0ms with roundTrip 1.6-11.3s, so it's neither event-loop block nor a single slow Redis command (SLOWLOG still clean) — it's queueing on the shared singleton Redis connection (app/models/client.js, one TCP connection per process, no pooling). Both crashes landed right as validation's `Fix()` stage (app/sync/fix) started on some other blog with several hundred posts - `entry-ghosts` does one sequential Redis round trip per entry, over that same shared connection, which is enough to starve an unrelated blog's heartbeat. Full timeline (no customer-identifying details) in the investigate-dropbox-sync-issue skill's incident log
 - Added diagnostics for next time: per-check timing in Fix() (app/sync/fix/index.js), an `entries=N` field on the `validation lag` log line (app/clients/dropbox/init.js), a `runningFixCheck` field on `[LOCK COMPROMISED]` diagnostics (app/sync/lock-diagnostics.js) since Fix() doesn't hold the folder lock and was invisible to pendingSyncs, and fixed `[LOCK COMPROMISED]`'s console.error silently truncating pendingSyncs/pendingUpdates to `[Object]` (app/sync/index.js)
-- Fixed: Fix()'s per-entry reads are now batched and memoised across entry-ghosts/tag-ghosts/list-ghosts for a single run (see app/sync/fix/entry-cache.js), instead of each check re-reading every entry in full independently
+- Not yet fixed: give the lock heartbeat its own dedicated Redis connection so Fix()'s traffic can't queue ahead of it, or batch Fix()'s per-entry reads
 - Remove the event loop monitor (app/helper/eventLoopMonitor*.js, its setup.js hook, and `logLag`/`measureEventLoop` in app/clients/dropbox/init.js) and the lock heartbeat logging (app/sync/lock.js) once the cause is fixed
 
 Surface template choices on the templates subpages: switch from png to iframe after hovering a selection
@@ -1256,7 +1256,3 @@ Self-hosting:
 - Tell Nick when it's possible to deploy a self-hosted [Blot on Vercel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKjxHWSvgjKtCWrbhccKFPlkdD) and [Zia](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsSXWPRNNxDNcdhGHQXBkTtsx)
 
 Add preflight checks in proxy/deploy/{cutover-from-baremetal,blue-green}.sh for PROXY_BLOG_STATIC_DIR/PROXY_GLOBAL_STATIC_DIR existing and readable - docker -v silently creates an empty dir for a missing host path, so a typo or host-layout change would 404 cdn.* static assets with no check catching it
-
-Find and replace the KEYS calls blocking prod Redis (from SLOWLOG, source 172.30.0.122 = the blot host, not repo code — likely a host cron or manual `client` session)
-- `keys ssl:*:latest` ~750ms, roughly daily (21, 23, 24 Sep) — switch to `--scan --pattern`
-- `KEYS *blog_<id>*` 2.4s on 22 Sep

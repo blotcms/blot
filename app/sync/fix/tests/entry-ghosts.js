@@ -2,7 +2,6 @@ describe("sync/fix/entry-ghosts", function () {
   var fs = require("fs");
   var Entry = require("models/entry");
   var Entries = require("models/entries");
-  var createEntryCache = require("../entry-cache");
   var fixEntryGhosts = require("../entry-ghosts");
 
   function folderPostHTML(folder) {
@@ -255,60 +254,6 @@ describe("sync/fix/entry-ghosts", function () {
     fixEntryGhosts({ id: "blog-id" }, function (err) {
       expect(err).toBe(dropError);
       expect(dropCalls).toBe(1);
-      done();
-    });
-  });
-
-  it("shares each entry it scans with the rest of this Fix() run via the cache", function (done) {
-    var entry = { id: "/foo.txt", path: "/foo.txt", dateStamp: 42 };
-
-    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      iterator(entry, function () {
-        callback();
-      });
-    });
-    spyOn(fs, "access").and.callFake(function (path, callback) {
-      callback(null);
-    });
-
-    var cache = createEntryCache("blog-id");
-
-    fixEntryGhosts({ id: "blog-id" }, cache, function (err) {
-      expect(err).toBeNull();
-      expect(cache.get("/foo.txt")).toEqual({
-        id: "/foo.txt",
-        path: "/foo.txt",
-        deleted: false,
-        dateStamp: 42,
-        multiFolder: null,
-      });
-      done();
-    });
-  });
-
-  it("invalidates the shared cache entry for an id it drops, so a later check re-reads it", function (done) {
-    var entry = { id: "/missing.txt", path: "/missing.txt" };
-
-    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      iterator(entry, function () {
-        callback();
-      });
-    });
-    spyOn(fs, "access").and.callFake(function (path, callback) {
-      callback(new Error("ENOENT"));
-    });
-    spyOn(Entry, "drop").and.callFake(function (blogID, id, callback) {
-      callback();
-    });
-
-    var cache = createEntryCache("blog-id");
-    // Simulate stale data another check might have primed the cache with,
-    // to prove the drop below clears it rather than leaving it behind.
-    cache.set("/missing.txt", { id: "/missing.txt", path: "/missing.txt" });
-
-    fixEntryGhosts({ id: "blog-id" }, cache, function (err) {
-      expect(err).toBeNull();
-      expect(cache.has("/missing.txt")).toBe(false);
       done();
     });
   });
