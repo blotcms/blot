@@ -1,6 +1,5 @@
 const config = require("config");
 const fs = require("fs-extra");
-const crypto = require("crypto");
 const async = require("async");
 const { join, resolve, posix } = require("path");
 const { promisify } = require("util");
@@ -286,8 +285,8 @@ async function resolveBuildFile(ctx, value, alreadyDecoded) {
 // not its mtime/ctime: blog folders are moving from local disk to S3, which
 // can't set a file's Last-Modified and has no ctime, but does hand back a
 // content-derived ETag for free on every PUT. Until storage reads switch
-// over, local disk pays the cost of hashing on each build; contentVersion's
-// path+size+mtimeMs cache avoids re-hashing a file that hasn't changed.
+// over, local disk pays the cost of hashing on each build (contentVersion
+// falls back to a size+mtime token above its size cap instead).
 async function hashFolderFile(blogFolder, path) {
   let stat, resolvedPath;
 
@@ -297,20 +296,10 @@ async function hashFolderFile(blogFolder, path) {
     return null;
   }
 
-  const filePath = join(blogFolder, resolvedPath);
-  let version;
-
-  try {
-    version = await contentVersion(filePath, stat);
-  } catch (err) {
-    // The file existed a moment ago (getStat succeeded) but became
-    // unreadable before we could hash it - a rare local race, not worth
-    // failing the whole build over. Any string is fine here since there's
-    // nothing stable left to derive a version from.
-    version = crypto.randomBytes(4).toString("hex");
-  }
-
-  return { path: resolvedPath, version };
+  return {
+    path: resolvedPath,
+    version: await contentVersion(join(blogFolder, resolvedPath), stat),
+  };
 }
 
 async function getStat(blogFolder, path) {

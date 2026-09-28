@@ -10,45 +10,44 @@ const hashFileAsync = promisify(require("./transformer/hash"));
 // a single buffered read+digest is faster in practice.
 const SMALL_FILE_HASH_SIZE = 256 * 1024;
 
-// Caches a file's content hash by path+size+mtimeMs, so a rebuild that
-// re-checks a large, unchanged file doesn't have to re-read and re-hash it.
-// Bounded (simple insertion-order eviction) so it can't grow without limit;
-// entries just fall out and get recomputed, they're never invalidated.
-const MAX_CACHE_ENTRIES = 5000;
-const cache = new Map();
+// Above this, skip content hashing and fall back to a token derived from
+// size+mtime, so a build - or, for lookupFile.js, a page's first render -
+// doesn't have to read a huge video/audio file just to version its URL.
+// This still leans on a settable local mtime, but only as a cheap nudge for
+// large files: a local mtime always changes when a file's content does, so
+// it's a safe enough fingerprint here (unlike ctime, which this module
+// never reads). Once blog folders live on S3, this branch is replaced by
+// the object's own ETag, which S3 provides for free.
+const MAX_CONTENT_HASH_SIZE = 5 * 1024 * 1024;
 
-function cacheGet(key) {
-  return cache.get(key);
-}
-
-function cacheSet(key, value) {
-  if (cache.size >= MAX_CACHE_ENTRIES) {
-    cache.delete(cache.keys().next().value);
-  }
-  cache.set(key, value);
-}
-
-// Returns an 8-character hex digest of a file's contents, given its path
-// and an already-fetched fs.Stats. Used to build CDN version tokens that
-// only change when a file's content changes (not its mtime/ctime, which
-// aren't meaningful once blog folders can live on S3).
+// Returns an 8-character hex digest identifying a file's contents, given
+// its path and an already-fetched fs.Stats. Used to build CDN version
+// tokens that only change when a file's content changes.
 module.exports = async function contentVersion(filePath, stat) {
-  const cacheKey = `${filePath}:${stat.size}:${stat.mtimeMs}`;
-  const cached = cacheGet(cacheKey);
-
-  if (cached) return cached;
-
-  let version;
-
-  if (stat.size <= SMALL_FILE_HASH_SIZE) {
-    const buffer = await fs.readFile(filePath);
-    version = crypto.createHash("sha1").update(buffer).digest("hex").slice(0, 8);
-  } else {
-    const digest = await hashFileAsync(filePath);
-    version = digest.slice(0, 8);
+  if (stat.size > MAX_CONTENT_HASH_SIZE) {
+    return statToken(stat);
   }
 
-  cacheSet(cacheKey, version);
+  try {
+    if (stat.size <= SMALL_FILE_HASH_SIZE) {
+      const buffer = await fs.readFile(filePath);
+      return crypto.createHash("sha1").update(buffer).digest("hex").slice(0, 8);
+    }
 
-  return version;
+    const digest = await hashFileAsync(filePath);
+    return digest.slice(0, 8);
+  } catch (err) {
+    // The file existed a moment ago (the caller already stat'd it) but
+    // became unreadable before we could hash it - a rare local race, not
+    // worth failing the whole build/render over.
+    return statToken(stat);
+  }
 };
+
+function statToken(stat) {
+  return crypto
+    .createHash("sha1")
+    .update(`${stat.size}:${stat.mtimeMs}`)
+    .digest("hex")
+    .slice(0, 8);
+}

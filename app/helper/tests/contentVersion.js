@@ -70,4 +70,17 @@ describe("contentVersion", function () {
 
     expect(version).toMatch(/^[a-f0-9]{8}$/);
   });
+
+  it("falls back to a size+mtime token above the size cap, without reading the file", async function () {
+    // A path that doesn't exist proves the file is never opened: reading it
+    // would throw ENOENT and this would fail.
+    const filePath = path.join(dir, "does-not-exist.bin");
+    const stat = { size: 6 * 1024 * 1024, mtimeMs: 1700000000000 };
+
+    const version = await contentVersion(filePath, stat);
+    const version2 = await contentVersion(filePath, stat);
+
+    expect(version).toMatch(/^[a-f0-9]{8}$/);
+    expect(version2).toEqual(version);
+  });
 });
