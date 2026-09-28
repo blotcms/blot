@@ -153,7 +153,8 @@ module.exports = function main(blog, callback) {
                     if (err) return next(err);
                     Entry.set(blog.id, entry.id, entry, function (err) {
                       if (err) return next(err);
-                      resolved.set(entryID, null);
+                      // Leave entryID resolved as a mismatch so another tag
+                      // holding the same stale id is re-keyed too, as before.
                       resolved.set(entry.id, { id: entry.id });
                       next();
                     });
