@@ -5,7 +5,11 @@ const moment = require("moment");
 const debug = require("debug")("blog:render:augment");
 require("moment-timezone");
 
-module.exports = async function augment(req, res, entry) {
+// stats (optional): tallies backlink lookups so a caller caching the
+// augmented result can tell a Redis failure (every lookup came back empty)
+// from a blog whose backlinks all legitimately resolved - see
+// render/load/augmentedEntries.js.
+module.exports = async function augment(req, res, entry, stats) {
   // augment() rewrites several entry fields in place (tags, backlinks, ...)
   // in ways that aren't safe to re-run: a second pass sees the already
   // -converted values and discards them as invalid. Callers are expected to
@@ -28,9 +32,7 @@ module.exports = async function augment(req, res, entry) {
   entry.formatUpdated = FormatDate(entry.updated, req.blog.timeZone);
   entry.formatCreated = FormatDate(entry.created, req.blog.timeZone);
 
-  entry.absoluteURL =
-    req.blog.locals.blogURL +
-    entry.url.split("/").map(encodeURIComponent).join("/");
+  entry.absoluteURL = absoluteURL(req.blog.locals.blogURL, entry.url);
 
   // if the entry exif object is empty, delete it
   if (
@@ -121,6 +123,10 @@ module.exports = async function augment(req, res, entry) {
         return null;
       }
       const linked = await getEntryByUrl(req.blog.id, linkUrl);
+      if (stats) {
+        stats.backlinkLookups++;
+        if (linked) stats.backlinkHits++;
+      }
       if (linked) {
         debug("Found", linked.path, "for", linkUrl);
       } else {
@@ -150,6 +156,14 @@ module.exports = async function augment(req, res, entry) {
 
   debug(entry.path, "final backlinks", entry.backlinks);
 };
+
+// blogURL is per request (protocol + the host it arrived on - see
+// blog/middleware/vhosts.js), so shared augmented entries recompute this.
+function absoluteURL(blogURL, url) {
+  return blogURL + url.split("/").map(encodeURIComponent).join("/");
+}
+
+module.exports.absoluteURL = absoluteURL;
 
 function createRenderMetadata(sourceMetadata) {
   if (!sourceMetadata || !type(sourceMetadata, "object")) {
