@@ -44,7 +44,8 @@ describe("dropbox resetToBlot", function () {
             result: { cursor: "new-cursor" },
           }),
           filesListFolder: async ({ path }) => {
-            const entries = remote[path || "/"];
+            // The walk asks for the blog folder root as "/Blog Folder/"
+            const entries = remote[(path || "/").replace(/(.)\/$/, "$1")];
             if (!entries) throw new Error("Dropbox unavailable");
             return { result: { entries, has_more: false, cursor: "c" } };
           },
