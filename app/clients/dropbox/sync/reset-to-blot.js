@@ -183,6 +183,13 @@ async function resetToBlotWithClient(
     skipped: 0,
     // Subset of downloaded: files Dropbox modified after we started.
     modifiedDuringWalk: 0,
+    // Changes (of any kind) to paths Dropbox reports changing since the
+    // pre-walk cursor, i.e. edits that landed mid-walk. Not counted by
+    // countChanges, like modifiedDuringWalk. See changedSinceCursor below.
+    changedDuringWalk: 0,
+    // Paths behind downloaded/removed/createdDirs not already excused by
+    // modifiedDuringWalk, checked against the cursor once the walk is done.
+    changedPaths: [],
     startedAt,
   };
 
@@ -199,6 +206,19 @@ async function resetToBlotWithClient(
     summary,
     progress
   );
+
+  if (summary.changedPaths.length) {
+    const changed = await changedSinceCursor(client, cursor, dropboxRoot);
+    if (changed) {
+      summary.changedDuringWalk = summary.changedPaths.filter((path) =>
+        overlapsAny(path, changed)
+      ).length;
+      if (summary.changedDuringWalk)
+        publish(
+          `${summary.changedDuringWalk} change(s) were made in Dropbox during the walk`
+        );
+    }
+  }
 
   // This means that future syncs will be fast
   // A download-only pass can't show that Dropbox has room for uploads,
@@ -260,6 +280,7 @@ const walk = async (
       try {
         await fs.remove(pathOnDisk);
         summary.removed += 1;
+        summary.changedPaths.push(pathOnBlot);
         await updatePath(pathOnBlot);
       } catch (e) {
         publish("Failed to remove", path_display, e.message);
@@ -299,11 +320,13 @@ const walk = async (
         progress.publish("Removing", pathOnBlot);
         await fs.remove(pathOnDisk);
         summary.removed += 1;
+        summary.changedPaths.push(pathOnBlot);
         await updatePath(pathOnBlot);
         publish("Creating directory", pathOnDisk);
         try {
           await fs.mkdir(pathOnDisk);
           summary.createdDirs += 1;
+          summary.changedPaths.push(pathOnBlot);
         } catch (e) {
           if (e.code !== "ENAMETOOLONG") throw e;
           summary.skipped += 1;
@@ -314,6 +337,7 @@ const walk = async (
         try {
           await fs.mkdir(pathOnDisk);
           summary.createdDirs += 1;
+          summary.changedPaths.push(pathOnBlot);
           await updatePath(pathOnBlot);
         } catch (e) {
           if (e.code !== "ENAMETOOLONG") throw e;
@@ -390,6 +414,7 @@ const walk = async (
           await updatePath(pathOnBlot);
           if (modifiedSince(remoteItem, summary.startedAt))
             summary.modifiedDuringWalk += 1;
+          else summary.changedPaths.push(pathOnBlot);
         } catch (e) {
           // A file can end up with a destination path longer than the
           // filesystem allows – seen in production when a Dropbox account
@@ -413,6 +438,7 @@ const walk = async (
           await updatePath(pathOnBlot);
           if (modifiedSince(remoteItem, summary.startedAt))
             summary.modifiedDuringWalk += 1;
+          else summary.changedPaths.push(pathOnBlot);
         } catch (e) {
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
           // Revoked access fails every remaining file: fail the resync.
@@ -424,6 +450,47 @@ const walk = async (
       }
     }
   }
+};
+
+// Lowercased paths, relative to the blog folder, that Dropbox reports as
+// changed since cursor. Removals and new directories have no timestamp for
+// modifiedSince to check, so this is how a file deleted in Dropbox mid-walk
+// is told apart from one a sync failed to remove. Returns null if Dropbox
+// can't be asked, so nothing is excused.
+const changedSinceCursor = async (client, cursor, dropboxRoot) => {
+  const root = dropboxRoot === "/" ? "" : dropboxRoot.toLowerCase();
+  const changed = [];
+
+  try {
+    let has_more;
+    do {
+      const { result } = await client.filesListFolderContinue({ cursor });
+      has_more = result.has_more;
+      cursor = result.cursor;
+      for (const { path_lower } of result.entries) {
+        if (!path_lower) continue;
+        if (!root) changed.push(path_lower);
+        else if (path_lower.startsWith(root + "/"))
+          changed.push(path_lower.slice(root.length));
+      }
+    } while (has_more);
+  } catch (err) {
+    return null;
+  }
+
+  return changed;
+};
+
+// Deleting or adding a folder in Dropbox may be reported as just the folder
+// or as the files inside it, so match ancestors and descendants too.
+const overlapsAny = (path, changed) => {
+  path = path.toLowerCase();
+  return changed.some(
+    (other) =>
+      other === path ||
+      path.startsWith(other + "/") ||
+      other.startsWith(path + "/")
+  );
 };
 
 const localReaddir = async (blogID, localRoot, dir) => {

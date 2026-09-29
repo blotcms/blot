@@ -31,19 +31,32 @@ describe("dropbox resetToBlot", function () {
     await fs.remove(blogDirectory);
   });
 
-  function load(remote) {
+  // delta: entries Dropbox reports since the pre-walk cursor, i.e. edits
+  // made during the walk. Omit it to make that call fail.
+  function load(remote, { delta, account = {} } = {}) {
     require.cache[createClientPath] = {
       exports: function (_blogID, callback) {
         callback(null, {
+          filesGetMetadata: async () => ({
+            result: { path_display: "/Blog Folder" },
+          }),
           filesListFolderGetLatestCursor: async () => ({
             result: { cursor: "new-cursor" },
           }),
           filesListFolder: async ({ path }) => {
-            const entries = remote[path || "/"];
+            // The walk asks for the blog folder root as "/Blog Folder/"
+            const entries = remote[(path || "/").replace(/(.)\/$/, "$1")];
             if (!entries) throw new Error("Dropbox unavailable");
             return { result: { entries, has_more: false, cursor: "c" } };
           },
-        }, {});
+          filesListFolderContinue: async ({ cursor }) => {
+            if (cursor !== "new-cursor" || !delta)
+              throw new Error("Dropbox unavailable");
+            return {
+              result: { entries: delta, has_more: false, cursor: "later" },
+            };
+          },
+        }, account);
       },
     };
     require.cache[databasePath] = {
@@ -99,6 +112,68 @@ describe("dropbox resetToBlot", function () {
     expect(error).toBeDefined();
     expect(update).toHaveBeenCalledWith("/a.txt");
     expect(saved.some((values) => "cursor" in values)).toEqual(false);
+  });
+
+  describe("changes made in Dropbox during the walk", function () {
+    const countChanges = require("../sync/count-changes");
+    const deleted = (path_lower) => ({ ".tag": "deleted", path_lower });
+
+    it("excuses a removal Dropbox reports since the pre-walk cursor", async function () {
+      await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+      const resetToBlot = load({ "/": [] }, { delta: [deleted("/gone.txt")] });
+
+      const summary = await resetToBlot(blogID, () => {});
+
+      expect(summary.removed).toEqual(1);
+      expect(summary.changedDuringWalk).toEqual(1);
+      expect(countChanges(summary)).toEqual(0);
+    });
+
+    it("excuses files removed along with a folder deleted mid-walk", async function () {
+      await fs.outputFile(join(blogDirectory, "Sub", "a.log"), "x");
+      await fs.outputFile(join(blogDirectory, "Sub", "b.log"), "x");
+      const resetToBlot = load(
+        {
+          "/Blog Folder": [
+            { ".tag": "folder", name: "Sub", path_display: "/Blog Folder/Sub" },
+          ],
+          "/Blog Folder/Sub": [],
+        },
+        {
+          account: { folder_id: "id:folder" },
+          delta: [
+            deleted("/blog folder/sub/a.log"),
+            deleted("/blog folder/sub/b.log"),
+          ],
+        }
+      );
+
+      const summary = await resetToBlot(blogID, () => {});
+
+      expect(summary.removed).toEqual(2);
+      expect(countChanges(summary)).toEqual(0);
+    });
+
+    it("still counts removals Dropbox doesn't report as recent", async function () {
+      await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+      await fs.outputFile(join(blogDirectory, "missed.txt"), "x");
+      const resetToBlot = load({ "/": [] }, { delta: [deleted("/gone.txt")] });
+
+      const summary = await resetToBlot(blogID, () => {});
+
+      expect(summary.removed).toEqual(2);
+      expect(countChanges(summary)).toEqual(1);
+    });
+
+    it("counts every change if Dropbox can't list what changed", async function () {
+      await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+      const resetToBlot = load({ "/": [] });
+
+      const summary = await resetToBlot(blogID, () => {});
+
+      expect(summary.changedDuringWalk).toEqual(0);
+      expect(countChanges(summary)).toEqual(1);
+    });
   });
 
   // resetToBlot treats Dropbox as the source of truth and deletes any local
