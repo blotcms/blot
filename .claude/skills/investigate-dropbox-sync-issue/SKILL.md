@@ -229,3 +229,26 @@ Entry template:
   `Webhook received mid-sync, queueing follow-up sync` and re-runs the sync
   once the current one finishes (`Running follow-up sync …`). Tip: grep `clients/dropbox/webhook` around
   the missed file's time to see webhooks that got no `Starting sync`.
+
+### 2026-09-28 14:00:00 UTC validation run — race with a live edit (benign)
+
+- Alert: 3 changes for 1 blog; run complete at 14:04:13 UTC (green).
+- Key events (UTC): the user (apparently an automated browser tool writing
+  scratch files into a hidden subfolder of a template folder) was syncing
+  every ~15-60s. Normal syncs downloaded three such scratch files at
+  13:57:50, 13:57:51 and 14:00:09 (`sync_46e5232`, `sync_78b1f38`).
+  Validation (`sync_ea6b9ea`) took the lock at 14:00:58.715; the files were
+  deleted in Dropbox right after, and the 14:01:06 webhook's sync
+  (`sync_42cc4ca`) logged `Failed to acquire lock on folder` (by design).
+  Validation reached them at 14:01:25 and removed all three (the 3
+  "changes"). The walk total stayed fixed (895) because deletions don't grow it.
+- Catch-up `sync_e2a148e` (14:01:39) fetched the same 3 deletions as a
+  no-op, and it was in sync by 14:01:43. Every later hourly run had `issues=0`.
+- Cause: not a missed webhook. The deletions landed during the validation walk.
+- Follow-up: this is the third race of this kind. A lock can't prevent it
+  (validation already holds it, and it can't freeze Dropbox), and downloads
+  were already excused by `server_modified` plus a 30s grace, but removals and
+  new folders have no timestamp. Fixed in the PR for this entry: after the walk,
+  `resetToBlot` lists what Dropbox changed since its pre-walk cursor and
+  doesn't count those changes (`changedDuringWalk`; it logs `N change(s) were
+  made in Dropbox during the walk`).
