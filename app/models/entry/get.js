@@ -62,8 +62,11 @@ module.exports = function (blogID, entryIDs, fields, callback) {
     .catch(function (err) {
       console.error(err);
 
-      if (single) return callback();
+      // The error rides along as a second argument so a caller that caches
+      // the result can tell this apart from entries that don't exist - see
+      // getByUrl.js. Existing callers only read the first.
+      if (single) return callback(undefined, err);
 
-      return callback([]);
+      return callback([], err);
     });
 };
