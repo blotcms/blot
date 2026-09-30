@@ -228,6 +228,17 @@ module.exports = {
     password: process.env.BLOT_BACKUP_SECRET,
   },
 
+  // Microsoft Entra app used for the OneDrive folder-sync client
+  // (app/clients/onedrive). app/clients/index.js only registers the
+  // client once these are all set. webhook_secret is any long random
+  // string; it is sent to Microsoft Graph as the subscription's
+  // clientState and echoed back on every change notification.
+  onedrive: {
+    client_id: process.env.BLOT_ONEDRIVE_CLIENT_ID,
+    client_secret: process.env.BLOT_ONEDRIVE_CLIENT_SECRET,
+    webhook_secret: process.env.BLOT_ONEDRIVE_WEBHOOK_SECRET,
+  },
+
   google_drive: {
     service_accounts: (() => {
       try {
