@@ -1,14 +1,13 @@
 const normalize = require("models/tags").normalize;
 const type = require("helper/type");
-const { getEntryByUrl } = require("../../lib/models");
+const { lookupEntryByUrl } = require("../../lib/models");
 const moment = require("moment");
 const debug = require("debug")("blog:render:augment");
 require("moment-timezone");
 
-// stats (optional): tallies backlink lookups so a caller caching the
-// augmented result can tell a Redis failure (every lookup came back empty)
-// from a blog whose backlinks all legitimately resolved - see
-// render/load/augmentedEntries.js.
+// stats (optional): counts backlink lookups that failed (a Redis error, as
+// opposed to a URL with no entry) so a caller caching the augmented result
+// can decline to - see render/load/augmentedEntries.js.
 module.exports = async function augment(req, res, entry, stats) {
   // augment() rewrites several entry fields in place (tags, backlinks, ...)
   // in ways that aren't safe to re-run: a second pass sees the already
@@ -122,11 +121,11 @@ module.exports = async function augment(req, res, entry, stats) {
       if (typeof linkUrl !== "string") {
         return null;
       }
-      const linked = await getEntryByUrl(req.blog.id, linkUrl);
-      if (stats) {
-        stats.backlinkLookups++;
-        if (linked) stats.backlinkHits++;
-      }
+      const { entry: linked, error } = await lookupEntryByUrl(
+        req.blog.id,
+        linkUrl
+      );
+      if (error && stats) stats.backlinkErrors++;
       if (linked) {
         debug("Found", linked.path, "for", linkUrl);
       } else {

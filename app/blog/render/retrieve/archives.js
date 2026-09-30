@@ -11,7 +11,7 @@ const { Uncacheable } = require("../../lib/uncacheableFetch");
 const {
   augmentContext,
   augmentEntries,
-  backlinksLookLost,
+  backlinksIncomplete,
   shareEntries,
 } = require("../load/augmentedEntries");
 
@@ -42,7 +42,7 @@ const archivesCache = new LRUCache({
     // failure, not just for a genuinely empty blog), but a non-empty catalog
     // could still group into zero years if every entry lacked a dateStamp -
     // guard here too so archivesCache can't end up caching that either.
-    if (years.length === 0 || backlinksLookLost(stats)) {
+    if (years.length === 0 || backlinksIncomplete(stats)) {
       throw new Uncacheable(prepared);
     }
 

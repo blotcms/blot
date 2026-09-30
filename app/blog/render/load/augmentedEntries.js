@@ -21,6 +21,8 @@
 const EntryInstance = require("models/entry/instance");
 const augment = require("./augment");
 const eachEntry = require("./eachEntry");
+const ERROR = require("../error");
+const { isRedisUnavailableError } = require("helper/redisUnavailable");
 
 // augment() reads these besides the entry itself. blogURL is deliberately
 // absent - it varies with the host/protocol a request arrived on, so keying
@@ -34,20 +36,27 @@ function augmentContext(req, res) {
   };
 }
 
+// Called from a retriever, where a thrown error would be logged and the
+// local silently dropped from an otherwise successful (and proxy-cacheable)
+// page. Convert failures the same way loadView's caller does, so a malformed
+// entry still renders the template error page - retrieve() rethrows these.
 async function augmentEntries(req, res, value) {
-  const stats = { backlinkLookups: 0, backlinkHits: 0 };
+  const stats = { backlinkErrors: 0 };
 
-  await eachEntry({ value }, (entry) => augment(req, res, entry, stats));
+  try {
+    await eachEntry({ value }, (entry) => augment(req, res, entry, stats));
+  } catch (e) {
+    throw isRedisUnavailableError(e) ? e : ERROR.BAD_LOCALS();
+  }
 
   return stats;
 }
 
-// Backlink lookups resolve to nothing on a Redis error as well as for a
-// missing target (models/entry/getByUrl.js swallows the error). If every
-// lookup came back empty the fill most likely ran during an outage, so the
-// result must not be cached until the next cacheID change.
-function backlinksLookLost(stats) {
-  return stats.backlinkLookups > 0 && stats.backlinkHits === 0;
+// A backlink lookup that hit a Redis error resolved to nothing, same as a
+// link to a missing entry. Render with what we have, but don't cache it -
+// the gap would otherwise persist until the next cacheID change.
+function backlinksIncomplete(stats) {
+  return stats.backlinkErrors > 0;
 }
 
 function shareEntries(value, blogURL) {
@@ -79,6 +88,6 @@ function shareEntries(value, blogURL) {
 module.exports = {
   augmentContext,
   augmentEntries,
-  backlinksLookLost,
+  backlinksIncomplete,
   shareEntries,
 };

@@ -390,12 +390,12 @@ describe("all_entries shared augmentation", function () {
     expect(EntryModel.getByUrl).toHaveBeenCalledTimes(1);
   });
 
-  it("does not cache a fill whose backlink lookups all came back empty, since that's what a Redis failure looks like", async function () {
+  it("does not cache a fill in which a backlink lookup hit a Redis error", async function () {
     const allEntries = loadAllEntries();
     stubCatalog(["/b"]);
 
     spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url, callback) {
-      callback();
+      callback(undefined, new Error("mGet failed"));
     });
 
     const first = await allEntries(makeReq(), { locals: {} });
@@ -403,5 +403,44 @@ describe("all_entries shared augmentation", function () {
 
     expect(first[0].backlinks).toEqual([]);
     expect(EntryModel.getByUrl).toHaveBeenCalledTimes(2);
+  });
+
+  it("still caches a fill whose backlinks point at entries that no longer exist", async function () {
+    const allEntries = loadAllEntries();
+    stubCatalog(["/deleted"]);
+
+    spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url, callback) {
+      callback();
+    });
+
+    await allEntries(makeReq(), { locals: {} });
+    await allEntries(makeReq(), { locals: {} });
+
+    expect(EntryModel.getByUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces an augmentation failure as a template error through retrieve(), not a page missing allEntries", async function () {
+    loadAllEntries();
+    const retrievePath = require.resolve("../index");
+    delete require.cache[retrievePath];
+    const retrieve = require("../index");
+
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
+      // tags must be an array - augment() reads tags.length
+      callback([new Entry({ id: "/a.txt", path: "/a.txt", url: "/a" })]);
+    });
+
+    let error;
+    try {
+      await retrieve(makeReq(), { locals: {} }, { allEntries: {} });
+    } catch (e) {
+      error = e;
+    }
+
+    delete require.cache[retrievePath];
+    expect(error && error.code).toBe("BADTEMPLATE");
+    expect(error && error.message).toBe(
+      "Your template variables were badly called"
+    );
   });
 });

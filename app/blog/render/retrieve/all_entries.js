@@ -8,7 +8,7 @@ const { Uncacheable } = require("../../lib/uncacheableFetch");
 const {
   augmentContext,
   augmentEntries,
-  backlinksLookLost,
+  backlinksIncomplete,
   shareEntries,
 } = require("../load/augmentedEntries");
 
@@ -43,7 +43,7 @@ const allEntriesCache = new LRUCache({
     // a [] catalog, since Entries.getAll also returns [] on a transient Redis
     // failure rather than rejecting - caching that here would look identical
     // to a genuinely empty blog and hide every post until cacheID changes.
-    if (allEntriesList.length === 0 || backlinksLookLost(stats)) {
+    if (allEntriesList.length === 0 || backlinksIncomplete(stats)) {
       throw new Uncacheable(prepared);
     }
 
