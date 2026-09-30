@@ -97,3 +97,11 @@ export BLOT_MAILGUN_KEY=
 # Google Drive client for folder syncing
 export BLOT_GOOGLEDRIVE_ID=
 export BLOT_GOOGLEDRIVE_SECRET=
+
+# GitHub App for folder syncing (see app/clients/github/PLAN.md)
+export BLOT_GITHUB_APP_ID=
+export BLOT_GITHUB_APP_SLUG=
+export BLOT_GITHUB_CLIENT_ID=
+export BLOT_GITHUB_CLIENT_SECRET=
+export BLOT_GITHUB_PRIVATE_KEY=
+export BLOT_GITHUB_WEBHOOK_SECRET=
