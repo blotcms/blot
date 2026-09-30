@@ -10,6 +10,8 @@ const express = require("express");
 const dashboard = new express.Router();
 
 const finishSetup = require("./setup");
+const health = require("clients/health");
+const { clearAllErrorFields, isSetupError } = require("../database/error");
 
 const VIEWS = require("path").resolve(__dirname + "/../views") + "/";
 
@@ -33,6 +35,24 @@ dashboard.get("/", function (req, res) {
   if (!res.locals.account) {
     return res.redirect(req.baseUrl + "/connect");
   }
+
+  // getHealth (../getHealth.js) already treats a fresh setup attempt as
+  // syncing rather than error, because /set-up-folder below clears the
+  // durable error fields in the same write that sets preparing: true. Stay
+  // in sync with that here too, so a future change to that ordering can't
+  // reopen the stale-error-during-setup gap Dropbox's dashboard route
+  // guards against.
+  if (res.locals.account.preparing) {
+    res.locals.blog.healthIssue = undefined;
+    res.locals.blog.health = health.syncing();
+  }
+
+  // Setup failures are deliberately kept out of health (see getHealth.js
+  // and database/error.js: isSetupError) because they aren't one of the
+  // small set of known, actionable codes - just an opaque failure. Surface
+  // the prose here instead so the user isn't left looking at a "syncing"
+  // badge with no explanation of what's stuck.
+  res.locals.account.setupFailed = isSetupError(res.locals.account.error);
 
   res.render(VIEWS + "index");
 });
@@ -130,13 +150,13 @@ dashboard
       await database.blog.store(req.blog.id, {
         email,
         serviceAccountId,
-        error: null,
         preparing: true,
         startedSetup: Date.now(),
         nonEmptyFolderShared: false,
         nonEditorPermissions: false,
         folderId: null,
         folderName: null,
+        ...clearAllErrorFields(),
       });
 
       let drive;

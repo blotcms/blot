@@ -1,27 +1,21 @@
 {{#account}}
 <div class="live-updates">
 
-{{#error}}
-
-<form class="mess error" action="{{{base}}}/set-up-folder" method="post">
-    <input type="hidden" name="_csrf" value="{{csrftoken}}">
-    <input type="hidden" name="email" value="{{email}}">
-    {{error}}
-</form>
-
-
-<a class="line" href="{{{base}}}/setup">
-    <span class="label">Reconnect</span>
-    <span class="center"><span class="link">Reconnect to Google Drive</span>
-</a>
-
-
-{{/error}}
-
-  {{^error}}
-
 {{> status-line}}
 
+{{#account.setupFailed}}
+<p class="error">{{account.error}}</p>
+
+<form action="{{{base}}}/disconnect" method="POST">
+  <input type="hidden" name="_csrf" value="{{csrftoken}}">
+  <div class="buttons">
+    <a href="{{{base}}}/setup">Retry setup</a>
+    <button type="submit">Cancel</button>
+  </div>
+</form>
+{{/account.setupFailed}}
+
+{{^account.setupFailed}}
 
   {{#folderId}}
   <a class="line" href="https://drive.google.com/drive/folders/{{folderId}}" target="_blank">
@@ -63,6 +57,7 @@
   {{/folderId}}
 
   {{^folderId}}
+  {{#preparing}}
   {{#serviceAccount.user}}
   <div class="line">
     <div class="label">Set up folder</div>
@@ -120,6 +115,7 @@
     </div>
   </div>
   {{/serviceAccount.user}}
+  {{/preparing}}
   {{/folderId}}
 
 
@@ -129,26 +125,37 @@
     <span class="center"><span>{{email}}</span><span class="link">Edit</span>
 </span>
    </a>
-
-   {{> disconnect-line}}
   {{/folderId}}
 
   {{^folderId}}
+  {{#preparing}}
   <div class="line">
     <span class="label">Status</span>
-    <span class="center">  
+    <span class="center">
       {{> sync-status}}
     </span>
   </div>
-  
+
   <form action="{{{base}}}/disconnect" method="POST">
     <input type="hidden" name="_csrf" value="{{csrftoken}}">
     <div class="buttons">
-        <button type="submit">Cancel</button> 
-    </div>  
+        <button type="submit">Cancel</button>
+    </div>
 </form>
+  {{/preparing}}
   {{/folderId}}
-  {{/error}}
+
+  {{#folderId}}
+  {{> disconnect-line}}
+  {{/folderId}}
+
+  {{^folderId}}
+  {{^preparing}}
+  {{> disconnect-line}}
+  {{/preparing}}
+  {{/folderId}}
+
+{{/account.setupFailed}}
 
 </div>
 <br><br>

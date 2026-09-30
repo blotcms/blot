@@ -6,10 +6,11 @@ module.exports = async (blogID, publish, update) => {
   update = update || function () {};
 
   const account = await database.blog.get(blogID);
-  const { reset, pruneVerifiedContents } = database.folder(account.folderId, blogID);
+  const { pruneVerifiedContents } = database.folder(account.folderId, blogID);
 
-  // reset the database state of the folder
-  await reset({ preserveVerifiedContent: true });
-
-  if (await sync(blogID, publish, update)) await pruneVerifiedContents();
+  // sync resets the database state of the folder once it has confirmed
+  // the folder is still reachable
+  if (await sync(blogID, publish, update, { reset: true })) {
+    await pruneVerifiedContents();
+  }
 };

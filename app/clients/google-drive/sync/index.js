@@ -18,15 +18,18 @@ module.exports = async function (blogID) {
     const blog = await getBlog({ id: blogID });
     const { done, folder } = await establishSyncLock(blogID);
     try {
-      await sync(blogID, folder.status, folder.update);
+      const succeeded = await sync(blogID, folder.status, folder.update);
       await fix(blog);
+      return succeeded;
     } catch (err) {
       console.log(clfdate(), "Google Drive Sync:", "Sync failed", err);
+      return false;
     } finally {
       // It's important to always release the lock
       await done();
     }
   } catch (err) {
     console.log(clfdate(), "Google Drive Sync:", "Sync init failed", err);
+    return false;
   }
 };
