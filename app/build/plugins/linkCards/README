@@ -1,0 +1,72 @@
+# Link cards
+
+Turns a bare external link that sits on its own line into a "link card" - a
+box showing the target page's title, description, favicon and (when it has
+one) a thumbnail image, in the style of the preview cards you see when you
+paste a URL into a chat app.
+
+## What gets transformed
+
+A link is only converted when all of these hold:
+
+- the visible link text is exactly the URL (a bare link, not `[some words](url)`)
+- the URL is `http:` or `https:` with no embedded credentials
+- the host is not the blog's own domain
+- if the link is inside a paragraph, that paragraph contains nothing else
+
+So in a Markdown post:
+
+```
+# Title of post
+
+https://www.nngroup.com/articles/cards-component/
+
+Some text here
+```
+
+the middle line renders as a card while everything else is untouched. A link
+in the middle of a sentence, a link with custom text, and an internal link
+are all left alone.
+
+At most 25 links per entry are turned into cards, fetched a few at a time, so
+a page full of dead links can't stall the build.
+
+## Options
+
+- `layout` - `compact` (default: thumbnail beside the text) or `large`
+  (thumbnail stacked above the text). The dashboard form writes the matching
+  `layoutCompact` / `layoutLarge` booleans for the template to read.
+
+The plugin is on by default for new blogs.
+
+## Fetching and caching
+
+Metadata is scraped from the target page's Open Graph / Twitter Card / `<meta>`
+tags. The favicon and the OG image are downloaded into the blog's static
+folder (`_link_cards/` for the metadata JSON, `link_cards/` for images and
+`link_cards/icons/` for favicons) and the image is resized into a
+`srcset` (240 / 480 / 960 px) with `sharp`.
+
+Results are cached per URL by content hash via `helper/transformer`. A lookup
+that fails (site down, non-2xx, blocked) is cached as a negative result for
+six hours and served as a hostname-only card, so a broken link isn't
+re-fetched on every rebuild.
+
+## Security
+
+The target URL and every asset URL derived from the fetched page are
+user-controlled, so all outbound requests go through the airlock proxy
+(`helper/airlock`) - the same egress boundary used by the screenshot and
+transformer download paths. In production a missing airlock config makes the
+fetch fail (and the card falls back to hostname-only) rather than connecting
+directly. URLs carrying credentials and non-`http(s)` asset URLs are rejected
+before any request is made.
+
+## Google Docs
+
+`docs.google.com` / `drive.google.com` links don't expose Open Graph tags,
+and a doc that isn't world-readable redirects to a localised sign-in page.
+Rather than scrape that, these links are recognised by URL and rendered as a
+plain branded card ("Google Docs" / "Google Sheets" / ...). A public doc's
+name is used as the title when the page still reports it
+(`<Doc name> - Google Docs`, or a published `/pub` link).
