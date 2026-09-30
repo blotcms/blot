@@ -48,6 +48,7 @@
     "templates": ["app/templates"],
     "templates/*": ["app/templates/*"],
     "cdn/*": ["app/cdn/*"],
-    "stats/*": ["app/stats/*"]
+    "stats/*": ["app/stats/*"],
+    "storage/*": ["app/storage/*"]
   }
 }

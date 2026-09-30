@@ -1,5 +1,6 @@
 const assertNoSymlinks = require("helper/assertNoSymlinks");
 const config = require("config");
+const assetsPath = require("storage/assets").path;
 const express = require("express");
 const mime = require("mime-types");
 const { join, basename, dirname } = require("path");
@@ -81,8 +82,10 @@ assets.get("/layout.css", async (req, res, next) => {
 // Blog-specific static assets
 assets.use(BLOG_STATIC_PATHS, async (req, res, next) => {
   try {
-    const filePath =
-      config.blog_static_files_dir + "/" + req.blog.id + req.baseUrl + decodeURIComponent(req.path);
+    const filePath = assetsPath(
+      req.blog.id,
+      req.baseUrl + decodeURIComponent(req.path)
+    );
     await sendFile(filePath, {
       req,
       res,

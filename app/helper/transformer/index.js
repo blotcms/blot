@@ -11,6 +11,7 @@ var ensure = require("../ensure");
 var fs = require("fs-extra");
 var localPath = require("../localPath");
 var config = require("config");
+var assets = require("storage/assets");
 var join = require("path").join;
 var resolve = require("path").resolve;
 var async = require("async");
@@ -164,8 +165,7 @@ function Transformer(blogID, name) {
     // and yields an absolute path, which join() then re-roots under the
     // blog's folder - the same containment trick helper/localPath uses.
     tasks.push(function (next) {
-      var staticRoot = join(config.blog_static_files_dir, blogID);
-      fullLocalPath = join(staticRoot, resolve("/", src));
+      fullLocalPath = assets.path(blogID, resolve("/", src));
       fromPath(fullLocalPath, transform, next);
     });
 

@@ -4,6 +4,7 @@ const Export = express.Router();
 const archiver = require('archiver');
 const path = require("path");
 const fs = require('fs-extra');
+const assets = require("storage/assets");
 const Template = require("models/template");
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 
@@ -42,7 +43,7 @@ Export.get("/download", async function (req, res, next) {
 
       // walk the static folder and add all the files to the archive
       // inside a subfolder called 'static' in a recursive, async way
-      const staticFolder = path.join(config.blog_static_files_dir, req.blog.id);
+      const staticFolder = assets.path(req.blog.id);
 
       // walk the blog folder and add all the files to the archive
       // inside a subfolder called 'folder' in a recursive, async way

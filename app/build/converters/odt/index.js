@@ -7,8 +7,8 @@ var execFile = require("child_process").execFile;
 var cheerio = require("cheerio");
 var Metadata = require("build/metadata");
 var extend = require("helper/extend");
-var join = require("path").join;
 var config = require("config");
+var assets = require("storage/assets");
 var Pandoc = config.pandoc.bin;
 var tempDir = require("helper/tempDir");
 
@@ -30,8 +30,8 @@ function read (blog, path, callback) {
   var outDir = TempDir();
   var outPath = outDir + "/out.html";
 
-  var blogDir = join(config.blog_static_files_dir, blog.id);
-  var assetDir = join(blogDir, "_assets");
+  var blogDir = assets.path(blog.id);
+  var assetDir = assets.path(blog.id, "_assets");
 
   fs.ensureDir(outDir, function (err) {
     if (err) return callback(err);

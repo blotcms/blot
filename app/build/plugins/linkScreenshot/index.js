@@ -2,6 +2,7 @@ const { callbackify } = require("util");
 const screenshot = callbackify(require("helper/screenshot"));
 const { join } = require("path");
 const config = require("config");
+const assets = require("storage/assets");
 const { v4: uuid } = require("uuid");
 const { is } = require("build/converters/webloc");
 const SCREENSHOT_DIR = "_bookmark_screenshots";
@@ -14,13 +15,11 @@ function render($, callback, { blogID, path }) {
   const link = $("p a.bookmark").first();
   const href = link.attr("href");
   const caption = link.html();
-  const pathToScreenshot = join(blogID, SCREENSHOT_DIR, uuid() + ".png");
-  const localPathToScreenshot = join(
-    config.blog_static_files_dir,
-    pathToScreenshot
-  );
+  const filename = uuid() + ".png";
+  const localPathToScreenshot = assets.path(blogID, SCREENSHOT_DIR, filename);
 
-  const src = config.cdn.origin + "/" + pathToScreenshot;
+  const src =
+    config.cdn.origin + "/" + join(blogID, SCREENSHOT_DIR, filename);
 
   if (!href) {
     return callback();
