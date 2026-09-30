@@ -1,0 +1,4 @@
+{
+  "_comment": "Backdrop check (qa/backdrop.js): every window must be fully opaque inside, so it looks the same on any desktop. Surfaces that are meant to be translucent (a Mica-like title strip, once a skin does that) are listed here per case as rectangles in CSS px from the window's top-left: { \"name\": \"...\", \"x\": 0, \"y\": 0, \"w\": 490, \"h\": 52 }. None yet.",
+  "allow": {}
+}
