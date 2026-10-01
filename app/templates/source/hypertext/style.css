@@ -335,8 +335,9 @@ pre code {
 
 
 .entry img {
+  width: auto;
   max-width: 100%;
-  max-height: calc(100vh - 5.75rem);
+  max-height: calc(100vh - 1rem);
   height: auto;
   outline: none;
 }
