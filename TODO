@@ -1269,8 +1269,3 @@ Explore a redesign of Fix() (app/sync/fix) to cut Redis load further, e.g. one c
 - report shape keyed by check name must be kept for the dashboard/validators
 - Fix() runs outside the folder lock, so the id snapshot can go stale (same as today)
 - lean on the Fix() regression tests (app/sync/fix/tests/regression*) before attempting it
-
-Fix() bugs pinned by app/sync/fix/tests/regression.js (update the tests when fixing):
-- tag-ghosts: an entry with a stale id in 2+ tags makes Fix() fail - every tag after the first renames the already-renamed Tags.key.entry key ("no such key")
-- list-ghosts: repairing a stale-id page/menu entry can add a second menu item that menu-ghosts then deletes as a duplicate, leaving the menu on the orphaned entry
-- list-ghosts: pruneMissing removes list members silently (no report, no cacheID bump), and a stale-id repair leaves the old entry key orphaned
