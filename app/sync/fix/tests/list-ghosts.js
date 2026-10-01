@@ -36,6 +36,7 @@ describe("sync/fix/list-ghosts", function () {
     });
 
     spyOn(client, "zRem").and.returnValue(Promise.resolve(1));
+    spyOn(client, "del").and.returnValue(Promise.resolve(1));
 
     // The batched read finds "existing-id" stored under the wrong key (a
     // mismatch) and finds nothing at all for "missing-id".
@@ -76,6 +77,10 @@ describe("sync/fix/list-ghosts", function () {
         ["entries", "MISMATCH", "existing-id"],
         ["entries", "MISMATCH", "missing-id"],
       ]);
+
+      // The orphaned raw key at the stale id ("existing-id") is deleted
+      // before the entry is re-saved under its real id.
+      expect(client.del).toHaveBeenCalledWith(entryKey("blog-id", "existing-id"));
 
       done();
     });

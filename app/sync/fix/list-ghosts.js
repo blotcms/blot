@@ -19,8 +19,13 @@ var lists = ["all", "created", "entries", "drafts", "scheduled", "pages"];
 // lock heartbeat, so batches stay small.
 var BATCH_SIZE = 20;
 
-function pruneMissing(blogID) {
-  return promisify(Entries.pruneMissing.bind(Entries))(blogID);
+async function pruneMissing(blogID) {
+  var removed = await promisify(Entries.pruneMissing.bind(Entries))(blogID);
+  return removed || {};
+}
+
+function deleteEntryKey(blogID, id) {
+  return client.del(entryKey(blogID, id));
 }
 
 function getEntry(blogID, id) {
@@ -68,7 +73,17 @@ function main(blog, callback) {
   const report = [];
 
   (async function () {
-    await pruneMissing(blog.id);
+    const prunedByList = await pruneMissing(blog.id);
+
+    // pruneMissing (models/entries) removes list members that have no
+    // backing entry key at all, before the mismatch-detection loop below
+    // ever sees them - report them here (matching the [list, reason, id]
+    // shape the mismatch loop uses) so Fix() bumps cacheID for this too.
+    for (const listName in prunedByList) {
+      for (const id of prunedByList[listName]) {
+        report.push([listName, "MISSING", id]);
+      }
+    }
 
     const idsByList = {};
     const uniqueIds = new Set();
@@ -97,7 +112,23 @@ function main(blog, callback) {
       // Mismatch - re-fetch the full entry (content included) only for
       // this id so it can be re-saved under the corrected key.
       const entry = await getEntry(blog.id, id);
-      if (entry) await setEntry(blog.id, entry.id, entry);
+      if (entry) {
+        // The raw key at the stale id is about to become an orphan (the
+        // entry is re-saved below under its real id, entry.id). Delete it
+        // first rather than after: models/entry/_setUrl.js's url-claim
+        // check (models/entry/key.js's url index) would otherwise still
+        // find this orphan, see it as a live entry still using the
+        // original url, and force the real entry onto a different
+        // (deduped) url - which then stops menu-ghosts/_assign.js's
+        // addToMenu from matching it to the existing menu item by url, so
+        // a second menu item gets added instead of the stale one being
+        // updated in place. Deleting it first lets the real entry reclaim
+        // its original url and the menu item update cleanly. Only the raw
+        // entry key is removed here - never Entry.drop, which would also
+        // touch lists/tags/menu for the *real* entry we're about to save.
+        await deleteEntryKey(blog.id, id);
+        await setEntry(blog.id, entry.id, entry);
+      }
     }
 
     for (const list of lists) {

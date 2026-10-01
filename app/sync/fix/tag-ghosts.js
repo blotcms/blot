@@ -88,6 +88,9 @@ module.exports = function main(blog, callback) {
   const report = [];
   // id -> {id} for entries found, shared across every tag in this call.
   const resolved = new Map();
+  // Stale ids whose full repair (rename + Entry.set) has already run this
+  // call - see the mismatch branch below.
+  const repaired = new Set();
 
   Tags.list(blog.id, function (err, tags) {
     if (err) return callback(err);
@@ -126,6 +129,21 @@ module.exports = function main(blog, callback) {
 
                 if (meta.id === entryID) return next();
 
+                if (repaired.has(entryID)) {
+                  // Already fully repaired via an earlier tag this run -
+                  // Entry.set's Tags.set call (triggered by that repair)
+                  // already re-added the real id to every tag in
+                  // entry.tags, including this one if it's still tagged
+                  // here. The reverse key (Tags.key.entry) was already
+                  // renamed away as part of that repair, so renaming it
+                  // again would fail with "no such key" - just drop the
+                  // stale id from this tag instead.
+                  report.push(["MISMATCH", entryID, meta.id]);
+                  const multi = client.multi();
+                  multi.zRem(tagKey, entryID);
+                  return execTransaction(multi, next);
+                }
+
                 // Rare - re-fetch the full entry (content included) only
                 // for this mismatched id, so it can be re-saved as-is
                 // under the correct key.
@@ -154,9 +172,12 @@ module.exports = function main(blog, callback) {
                     if (err) return next(err);
                     Entry.set(blog.id, entry.id, entry, function (err) {
                       if (err) return next(err);
-                      // Leave entryID resolved as a mismatch so another tag
-                      // holding the same stale id is re-keyed too, as before.
+                      // Leave entryID resolved as a mismatch, and remember
+                      // it's been fully repaired, so another tag holding
+                      // the same stale id just drops it instead of
+                      // repeating the now-impossible rename.
                       resolved.set(entry.id, { id: entry.id });
+                      repaired.add(entryID);
                       next();
                     });
                   });
