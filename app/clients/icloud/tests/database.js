@@ -48,4 +48,47 @@ describe("icloud database", function () {
     const globalMembersAfterDelete = await client.sMembers(database._globalSetKey());
     expect(globalMembersAfterDelete).not.toContain(this.blog.id);
   });
+
+  it("classifies and stamps a stored error", async function () {
+    await database.store(this.blog.id, {
+      setupComplete: true,
+      error: "Blog directory deleted",
+    });
+
+    const stored = await database.get(this.blog.id);
+
+    expect(stored.error).toBe("Blog directory deleted");
+    expect(stored.errorCode).toBe("SOURCE_MISSING");
+    expect(typeof stored.errorSince).toBe("number");
+  });
+
+  it("clears errorCode and errorSince when error is null", async function () {
+    await database.store(this.blog.id, {
+      setupComplete: true,
+      error: "Transfer failed",
+    });
+
+    await database.store(this.blog.id, { error: null });
+
+    const stored = await database.get(this.blog.id);
+
+    expect(stored.error).toBeNull();
+    expect(stored.errorCode).toBeNull();
+    expect(stored.errorSince).toBeNull();
+  });
+
+  it("preserves errorSince when rewriting the same issue", async function () {
+    await database.store(this.blog.id, {
+      setupComplete: true,
+      error: "Transfer failed",
+    });
+    const first = await database.get(this.blog.id);
+
+    await database.store(this.blog.id, { error: "Transfer failed again" });
+    const second = await database.get(this.blog.id);
+
+    expect(second.errorCode).toBe("SYNC_ERROR");
+    expect(second.errorSince).toBe(first.errorSince);
+    expect(second.error).toBe("Transfer failed again");
+  });
 });

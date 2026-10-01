@@ -53,6 +53,10 @@ describe("icloud fromiCloud sync", function () {
   beforeEach(async () => {
     blogID = `icloud-test-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     await fs.ensureDir(localPath(blogID, "/"));
+    // Other icloud specs (e.g. getHealth) require the client module, which
+    // caches fromiCloud with its real dependencies. Drop that so each test
+    // can inject mocks before loading fromiCloud.
+    delete require.cache[fromiCloudPath];
   });
 
   afterEach(async () => {
@@ -73,7 +77,10 @@ describe("icloud fromiCloud sync", function () {
       throw new Error("download should not be called for oversized files");
     });
     mockModule(checkWeCanContinuePath, () => async () => {});
-    mockModule(databasePath, { store: async () => {} });
+    mockModule(databasePath, {
+      store: async () => {},
+      get: async () => ({ setupComplete: true }),
+    });
 
     const fromiCloud = require(fromiCloudPath);
     const published = [];
@@ -116,7 +123,10 @@ describe("icloud fromiCloud sync", function () {
       throw new Error("download should not be called for oversized files");
     });
     mockModule(checkWeCanContinuePath, () => async () => {});
-    mockModule(databasePath, { store: async () => {} });
+    mockModule(databasePath, {
+      store: async () => {},
+      get: async () => ({ setupComplete: true }),
+    });
 
     const fromiCloud = require(fromiCloudPath);
     const summary = await fromiCloud(
@@ -141,7 +151,10 @@ describe("icloud fromiCloud sync", function () {
       throw new Error("Directory listing unavailable: iCloud has not synced it yet");
     });
     mockModule(checkWeCanContinuePath, () => async () => {});
-    mockModule(databasePath, { store: async () => {} });
+    mockModule(databasePath, {
+      store: async () => {},
+      get: async () => ({ setupComplete: true }),
+    });
 
     const fromiCloud = require(fromiCloudPath);
     const published = [];
@@ -156,5 +169,70 @@ describe("icloud fromiCloud sync", function () {
     expect(stat.isFile()).toBe(true);
     expect(summary.removed).toBe(0);
     expect(published.some((line) => line.includes("Sync failed"))).toBe(true);
+  });
+
+  it("clears a stored error after a successful sync of a set-up blog", async () => {
+    const store = jasmine.createSpy("store").and.returnValue(Promise.resolve());
+
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => []);
+    mockModule(downloadPath, async () => {});
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, {
+      store,
+      get: async () => ({
+        setupComplete: true,
+        error: "Blog directory deleted",
+      }),
+    });
+
+    const fromiCloud = require(fromiCloudPath);
+    await fromiCloud(blogID, () => {}, async () => {});
+
+    expect(store).toHaveBeenCalledWith(blogID, { error: null });
+  });
+
+  it("does not clear a stored error when setup is incomplete", async () => {
+    const store = jasmine.createSpy("store").and.returnValue(Promise.resolve());
+
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => []);
+    mockModule(downloadPath, async () => {});
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, {
+      store,
+      get: async () => ({
+        setupComplete: false,
+        error: "Transfer failed",
+      }),
+    });
+
+    const fromiCloud = require(fromiCloudPath);
+    await fromiCloud(blogID, () => {}, async () => {});
+
+    expect(store).not.toHaveBeenCalled();
+  });
+
+  it("does not clear a stored error when sync fails", async () => {
+    const store = jasmine.createSpy("store").and.returnValue(Promise.resolve());
+
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => {
+      throw new Error("Folder does not exist");
+    });
+    mockModule(downloadPath, async () => {});
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, {
+      store,
+      get: async () => ({
+        setupComplete: true,
+        error: "Blog directory deleted",
+      }),
+    });
+
+    const fromiCloud = require(fromiCloudPath);
+    await fromiCloud(blogID, () => {}, async () => {});
+
+    expect(store).not.toHaveBeenCalled();
   });
 });
