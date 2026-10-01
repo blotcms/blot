@@ -136,7 +136,23 @@ module.exports = function create(blog, callback) {
       await createRepository(blog, folder);
       done(null, callback);
     } catch (err) {
-      await cleanupFailedRepository(blog, liveDirectory, bareDirectory);
+      // mkdir of the bare repo throws EEXIST if Git is already connected.
+      // Do not wipe that repo: cleanup is only for a partial create.
+      if (err && err.code === "EEXIST") {
+        try {
+          await setStatus(blog.id, "createComplete");
+        } catch (statusErr) {
+          console.log(
+            clfdate() +
+              " Git: create: failed to restore status after EEXIST: " +
+              (statusErr && statusErr.message
+                ? statusErr.message
+                : statusErr)
+          );
+        }
+      } else {
+        await cleanupFailedRepository(blog, liveDirectory, bareDirectory);
+      }
       done(err, callback);
     }
   });
@@ -184,7 +200,7 @@ async function createRepository(blog, folder) {
     ]);
   }
 
-  await setStatus(blog.owner, "createComplete");
+  await setStatus(blog.id, "createComplete");
 
   console.log(clfdate() + " Git: create: done");
   // The delay ensures the page reloads – for empty folders this function returns
@@ -197,7 +213,7 @@ async function createRepository(blog, folder) {
 async function prepareDirectoriesAndMetadata(blog, liveDirectory, bareDirectory) {
   await Promise.all([
     fs.mkdir(bareDirectory),
-    setStatus(blog.owner, "createInProgress"),
+    setStatus(blog.id, "createInProgress"),
     createToken(blog.owner),
     assertDirectoryOwnership(liveDirectory),
   ]);
@@ -226,7 +242,7 @@ async function cleanupFailedRepository(blog, liveDirectory, bareDirectory) {
   await Promise.allSettled([
     fs.remove(bareDirectory),
     fs.remove(`${liveDirectory}/.git`),
-    setStatus(blog.owner, "createFailed"),
+    setStatus(blog.id, "createFailed"),
   ]);
 }
 

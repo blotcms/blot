@@ -6,4 +6,5 @@ module.exports = {
   disconnect: require("./disconnect"),
   dashboard_routes: require("./routes").dashboard,
   site_routes: require("./routes").site,
+  getHealth: require("./getHealth"),
 };

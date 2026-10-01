@@ -4,6 +4,8 @@ var Git = require("simple-git");
 var debug = require("debug")("blot:clients:git:write");
 var checkGitRepoExists = require("./checkGitRepoExists");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+var database = require("./database");
+var { issueFromSyncError } = require("./error");
 
 // Used to write a file to the user's blog folder
 // contents can be anything supported by fs-extra.outputFile
@@ -26,7 +28,11 @@ module.exports = function write(blogID, path, contents, callback) {
     blogDirectory = blogDirectory.slice(0, -1);
 
   checkGitRepoExists(blogDirectory, function (err) {
-    if (err) return callback(err);
+    if (err) {
+      return database.setIssue(blogID, issueFromSyncError(err), function () {
+        callback(err);
+      });
+    }
 
     fs.outputFile(localPath(blogID, path), contents, function (err) {
       if (err) return callback(err);
@@ -54,7 +60,9 @@ module.exports = function write(blogID, path, contents, callback) {
             if (err) return callback(new Error(err));
 
             debug("Blog:", blogID, "Wrote", path);
-            callback(null);
+            database.clearIssue(blogID, function () {
+              callback(null);
+            });
           });
         });
       });

@@ -6,6 +6,8 @@ var checkGitRepoExists = require("./checkGitRepoExists");
 var dataDir = require("./dataDir");
 var Blog = require("models/blog");
 var validateTree = require("./validateTree");
+var database = require("./database");
+var { issueFromSyncError } = require("./error");
 
 module.exports = function sync (blogID, gitHandle, callback) {
 
@@ -22,12 +24,24 @@ module.exports = function sync (blogID, gitHandle, callback) {
     // on the folder, perhaps another process is syncing it...
     if (err) return callback(err);
 
+    function finish(syncErr) {
+      if (!syncErr) {
+        return database.clearIssue(blogID, function (clearErr) {
+          done(clearErr || null, callback);
+        });
+      }
+
+      database.setIssue(blogID, issueFromSyncError(syncErr), function () {
+        done(syncErr, callback);
+      });
+    }
+
     debug("beginning sync");
     folder.log("Checking git repo exists: " + folder.path);
     checkGitRepoExists(folder.path, function (err) {
       if (err) {
         folder.log("Git repo does not exist");
-        return done(err, callback);
+        return finish(err);
       } else {
         folder.log("Git repo exists");
       }
@@ -38,18 +52,18 @@ module.exports = function sync (blogID, gitHandle, callback) {
       try {
         git = Git(folder.path).silent(true);
       } catch (err) {
-        return done(err, callback);
+        return finish(err);
       }
 
       folder.log("Fetching current git commit hash");
       git.raw(["rev-parse", "HEAD"], function (err, headBeforePull) {
         if (err) {
           debug(err);
-          return done(new Error(err), callback);
+          return finish(new Error(err));
         }
 
         if (!headBeforePull)
-          return done(new Error("No commit on repository"), callback);
+          return finish(new Error("No commit on repository"));
 
         // Remove whitespace from stdout
         headBeforePull = headBeforePull.trim();
@@ -61,7 +75,7 @@ module.exports = function sync (blogID, gitHandle, callback) {
           if (err) {
             folder.log("Error adding remote: " + err.message);
             debug(err);
-            return done(new Error(err), callback);
+            return finish(new Error(err));
           }
 
           // My goal is to update the working tree in the blog folder
@@ -74,7 +88,7 @@ module.exports = function sync (blogID, gitHandle, callback) {
             if (err) {
               folder.log("Error fetching git repo: " + err.message);
               debug(err);
-              return done(new Error(err), callback);
+              return finish(new Error(err));
             }
 
             validateTree(git, "origin/master").then(function (commit) {
@@ -82,18 +96,18 @@ module.exports = function sync (blogID, gitHandle, callback) {
                 if (err) {
                   folder.log("Error resetting git repo: " + err.message);
                   debug(err);
-                  return done(new Error(err), callback);
+                  return finish(err);
                 }
 
                 git.raw(["rev-parse", "HEAD"], function (err, headAfterPull) {
                   if (err) {
                     folder.log("Error getting git commit hash: " + err.message);
-                    return done(new Error(err), callback);
+                    return finish(new Error(err));
                   }
 
                   if (!headAfterPull) {
                     folder.log("No commits on repository");
-                    return done(new Error("No commits on repository"), callback);
+                    return finish(new Error("No commits on repository"));
                   }
 
                   // Remove whitespace from stdout
@@ -101,7 +115,7 @@ module.exports = function sync (blogID, gitHandle, callback) {
 
                   if (headAfterPull === headBeforePull) {
                     folder.log("No changes to repo");
-                    return done(null, callback);
+                    return finish(null);
                   } else {
                     folder.log(`Comparing ${headBeforePull} with ${headAfterPull}`);
                   }
@@ -119,14 +133,14 @@ module.exports = function sync (blogID, gitHandle, callback) {
                       headBeforePull + ".." + headAfterPull
                     ],
                     function (err, res) {
-                      if (err) return done(new Error(err), callback);
+                      if (err) return finish(new Error(err));
 
                       // If you push an empty commit then res
                       // will be null, or perhaps a commit and
                       // then a subsequent commit which reverts
                       // the previous commit.
                       if (res === null) {
-                        return done(null, callback);
+                        return finish(null);
                       }
 
                       // The output for diff with -z and the other flags looks like:
@@ -157,7 +171,7 @@ module.exports = function sync (blogID, gitHandle, callback) {
                         },
                         function (err) {
                           folder.log(`Processed ${modified.length} changes`);
-                          done(null, callback);
+                          finish(null);
                         }
                       );
                     }
@@ -166,7 +180,7 @@ module.exports = function sync (blogID, gitHandle, callback) {
               });
             }, function (err) {
               folder.log("Git tree rejected: " + err.message);
-              done(err, callback);
+              finish(err);
             });
           });
         });

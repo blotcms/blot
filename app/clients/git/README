@@ -16,7 +16,11 @@ When a user pushes changes from their local repository to the bare repository, B
 
 ### Core Modules
 
-- **`index.js`**: Exports the Git client interface, including `display_name`, `description`, and the required interface functions (`remove`, `write`, `disconnect`, `dashboard_routes`, `site_routes`).
+- **`index.js`**: Exports the Git client interface, including `display_name`, `description`, and the required interface functions (`remove`, `write`, `disconnect`, `dashboard_routes`, `site_routes`, `getHealth`).
+
+- **`getHealth.js`**: Reports structured sync health for the dashboard. Maps create-in-progress to `syncing`, a failed create or persisted hook failure to `SYNC_ERROR`, a missing token to `REAUTH_REQUIRED`, and a missing bare or live repository to `SOURCE_MISSING`.
+
+- **`error.js`**: User-facing copy and classification for durable Git failures (missing repo vs. other sync errors).
 
 - **`routes.js`**: Defines Express routes for both the dashboard UI and the Git push endpoint. Includes:
   - Dashboard routes for create, index, disconnect, and token reset
@@ -36,7 +40,7 @@ When a user pushes changes from their local repository to the bare repository, B
 
 - **`disconnect.js`**: Cleans up when a user disconnects the Git client. Removes tokens, status records, bare repository directory, and the `.git` directory from the blog folder.
 
-- **`database.js`**: Redis-based token and status storage. Handles token creation, validation, refresh, and deletion. Also manages creation status tracking (e.g., `createInProgress`, `createFailed`, `createComplete`).
+- **`database.js`**: Redis-based token and status storage. Handles token creation, validation, refresh, and deletion. Create status is stored per blog (`blog:<blogID>:git:status`) as JSON (`createInProgress` / `createFailed` / `createComplete`, plus an optional durable `issue` for `getHealth`). A user-keyed `user:<uid>:git:status` string is still read as a fallback until `scripts/git/backfill-status-keys.js` has run.
 
 - **`dataDir.js`**: Centralized reference to the bare repository data directory (`<blot_directory>/data/git`). Ensures the directory exists on require.
 
@@ -89,6 +93,7 @@ module.exports = {
   disconnect: require("./disconnect"), // (blogID, callback) => void
   dashboard_routes: require("./routes").dashboard,
   site_routes: require("./routes").site,
+  getHealth: require("./getHealth"),   // (blogID) => Promise<health>
 };
 ```
 
@@ -211,7 +216,23 @@ Symbolic links (including links within the blog) and submodules are not supporte
 ### Redis
 
 - Stores authentication tokens (key: `user:<uid>:git:token`)
-- Stores creation status (key: `user:<uid>:git:status`)
+- Stores create status and durable health issues (key: `blog:<blogID>:git:status`). Legacy `user:<uid>:git:status` strings are still read until the backfill script copies them.
+
+## Health
+
+`getHealth(blogID)` returns a Promise of `{ state, issues }` using `app/clients/health.js`.
+
+| Condition | State / code |
+| --- | --- |
+| `createInProgress` | `syncing` |
+| `createFailed` | `SYNC_ERROR` |
+| Git token missing from Redis | `REAUTH_REQUIRED` |
+| Bare repo or live `.git` missing (after a successful create) | `SOURCE_MISSING` |
+| Rejected push (symlinks/submodules) or other hook failure | `SYNC_ERROR` (persisted until the next successful sync) |
+
+Lock failures and wrong-password attempts are not persisted. A client without `getHealth` is treated as healthy; the local client has none.
+
+The dashboard Git page still uses `createInProgress` for the setup progress line. `createFailed` is also passed through; after a failed create the bare repo is removed so `/git` redirects to `/create`.
 
 ## Configuration
 
@@ -264,6 +285,7 @@ The test suite covers:
 - Branch restriction enforcement
 - Blog handle renaming
 - Error handling and cleanup
+- Per-blog create status, durable sync issues, and `getHealth`
 
 ## Integration Points
 

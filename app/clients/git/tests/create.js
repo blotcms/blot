@@ -10,19 +10,25 @@ describe("git client create", function () {
 
   var create = require("clients/git/create");
   var disconnect = require("clients/git/disconnect");
+  var database = require("clients/git/database");
   var Git = require("simple-git");
   var localPath = require("helper/localPath");
   var setClientToGit = require("./setup/setClientToGit");
+  var dataDir = require("clients/git/dataDir");
+  var fs = require("fs-extra");
 
   // this prevents an existing bare repo from being clobbered
   it("should fail when the client has already been initialized", function (done) {
     var blog = this.blog;
+    var bare = dataDir + "/" + blog.handle + ".git";
 
     create(blog, function (err) {
       if (err) return done.fail(err);
+      expect(fs.existsSync(bare)).toBe(true);
 
       create(blog, function (err) {
         expect(err.code).toEqual("EEXIST");
+        expect(fs.existsSync(bare)).toBe(true);
         done();
       });
     });
@@ -64,7 +70,18 @@ describe("git client create", function () {
           expect(err).not.toEqual(null);
           expect(err).toEqual(jasmine.any(Error));
 
-          done();
+          database.getStatus(blog.id, function (statusErr, status) {
+            if (statusErr) return done.fail(statusErr);
+            expect(status).toEqual("createFailed");
+
+            require("models/client")
+              .get(database.legacyStatusKey(blog.owner))
+              .then(function (legacy) {
+                expect(legacy).toEqual(null);
+                done();
+              })
+              .catch(done.fail);
+          });
         });
       });
     });
