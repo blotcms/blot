@@ -115,6 +115,16 @@ function getEntryByUrl(blogID, entryUrl) {
   });
 }
 
+// Like getEntryByUrl, but also reports the Redis error Entry.getByUrl
+// otherwise swallows, for callers that must not cache a failed lookup.
+function lookupEntryByUrl(blogID, entryUrl) {
+  return new Promise((resolve) => {
+    Entry.getByUrl(blogID, entryUrl, (entry, error) =>
+      resolve({ entry, error })
+    );
+  });
+}
+
 function adjacentTo(blogID, entryID) {
   return new Promise((resolve) => {
     Entries.adjacentTo(blogID, entryID, (next, previous, index) => {
@@ -168,6 +178,7 @@ module.exports = {
   getViewByURL,
   getEntry,
   getEntryByUrl,
+  lookupEntryByUrl,
   adjacentTo,
   randomEntry,
   getAll,
