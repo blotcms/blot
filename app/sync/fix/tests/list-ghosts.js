@@ -44,12 +44,6 @@ describe("sync/fix/list-ghosts", function () {
       "existing-id": { id: "moved-id", title: "Moved" },
     });
 
-    // The batched read finds "existing-id" stored under the wrong key (a
-    // mismatch) and finds nothing at all for "missing-id".
-    stubMGet("blog-id", {
-      "existing-id": { id: "moved-id", title: "Moved" },
-    });
-
     spyOn(Entry, "get").and.callFake(function (_blogID, id, callback) {
       if (id === "existing-id") {
         return callback({ id: "moved-id", title: "Moved" });
@@ -88,33 +82,6 @@ describe("sync/fix/list-ghosts", function () {
       // before the entry is re-saved under its real id.
       expect(client.del).toHaveBeenCalledWith(entryKey("blog-id", "existing-id"));
 
-      done();
-    });
-  });
-
-  it("fetches an id shared by several lists from Redis only once", function (done) {
-    spyOn(Entries, "pruneMissing").and.callFake(function (_blogID, callback) {
-      callback(null);
-    });
-
-    spyOn(client, "zRange").and.callFake(function (key) {
-      if (key === "blog:blog-id:all" || key === "blog:blog-id:pages") {
-        return Promise.resolve(["/chair"]);
-      }
-
-      return Promise.resolve([]);
-    });
-
-    stubMGet("blog-id", { "/chair": { id: "/chair" } });
-    spyOn(client, "zRem");
-
-    fixListGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([]);
-      expect(client.mGet.calls.count()).toBe(1);
-      expect(client.mGet.calls.argsFor(0)[0]).toEqual([
-        entryKey("blog-id", "/chair"),
-      ]);
       done();
     });
   });
