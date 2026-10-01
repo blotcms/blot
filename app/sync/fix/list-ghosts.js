@@ -126,8 +126,21 @@ function main(blog, callback) {
         // its original url and the menu item update cleanly. Only the raw
         // entry key is removed here - never Entry.drop, which would also
         // touch lists/tags/menu for the *real* entry we're about to save.
+        //
+        // Keep the raw value around in case setEntry fails (validation,
+        // blog lookup, Redis error, etc.) after the stale key is gone -
+        // without it that failure would leave no stored copy of the entry
+        // at all. Restore it under the stale key before propagating the
+        // error.
+        const staleKey = entryKey(blog.id, id);
+        const staleRaw = await client.get(staleKey);
         await deleteEntryKey(blog.id, id);
-        await setEntry(blog.id, entry.id, entry);
+        try {
+          await setEntry(blog.id, entry.id, entry);
+        } catch (err) {
+          if (staleRaw) await client.set(staleKey, staleRaw);
+          throw err;
+        }
       }
     }
 
