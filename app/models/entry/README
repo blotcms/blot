@@ -62,7 +62,8 @@ Defined in `model.js`. Every field is validated by `helper/ensure` before a writ
 | `thumbnail` | object | Thumbnail image metadata. |
 | `dateStamp` | number | UTC timestamp of the entry's resolved publication date. Defaults to `created` if not specified. |
 | `created` | number | UTC timestamp of when the entry was first added to the system. |
-| `updated` | number | UTC timestamp of the file's last modification time. |
+| `updated` | number | UTC timestamp. Set by `app/build` from the source file's mtime, but only moves when `contentHash` changes from the previously stored entry - an unchanged re-download/re-upload of the same bytes (provider reconnect, resync, storage migration) leaves it untouched. |
+| `contentHash` | string | Hash of the entry's source bytes, set by `app/build`, used to detect whether `updated` should move. Defaults to `""` for entries not built by `app/build`. |
 | `metadata` | object | Arbitrary key-value metadata extracted from the entry file. |
 | `exif` | object | EXIF data extracted from image files. |
 
