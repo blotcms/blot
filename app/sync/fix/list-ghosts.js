@@ -1,6 +1,7 @@
 const Entry = require("models/entry");
 const Entries = require("models/entries");
 const client = require("models/client");
+const entryKey = require("models/entry/key").entry;
 const { promisify } = require("util");
 
 var lists = ["all", "created", "entries", "drafts", "scheduled", "pages"];
@@ -9,11 +10,14 @@ var lists = ["all", "created", "entries", "drafts", "scheduled", "pages"];
 // posts that can be many MB per entry. The same id often appears in
 // several of the lists above (eg. "all" and "pages"), so checking each
 // list independently used to re-fetch that same full entry once per list
-// it belonged to. Fetching each id once and processing ids in bounded
-// batches - yielding to the event loop between batches so V8 can reclaim
-// the large strings already checked - keeps peak memory proportional to
-// BATCH_SIZE rather than to the whole blog.
-var BATCH_SIZE = 100;
+// it belonged to. Fetching each unique id once, in batched MGETs (index
+// aligned with the batch - unlike Entry.get, which filters out missing
+// entries) rather than one GET per id, and yielding to the event loop
+// between batches so V8 can reclaim the large strings already checked,
+// keeps peak memory proportional to BATCH_SIZE rather than to the whole
+// blog. Each MGET reply holds whole entries and shares a connection with the
+// lock heartbeat, so batches stay small.
+var BATCH_SIZE = 20;
 
 function pruneMissing(blogID) {
   return promisify(Entries.pruneMissing.bind(Entries))(blogID);
@@ -29,6 +33,35 @@ function setEntry(blogID, id, entry) {
 
 function yieldToEventLoop() {
   return new Promise((resolve) => setImmediate(resolve));
+}
+
+async function resolveIDs(blogID, ids) {
+  const resolved = new Map();
+
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const batch = ids.slice(i, i + BATCH_SIZE);
+    const keys = batch.map((id) => entryKey(blogID, id));
+    const values = await client.mGet(keys);
+
+    (values || []).forEach((value, index) => {
+      const id = batch[index];
+
+      if (!value) {
+        resolved.set(id, null);
+        return;
+      }
+
+      try {
+        resolved.set(id, { id: JSON.parse(value).id });
+      } catch (e) {
+        resolved.set(id, null);
+      }
+    });
+
+    await yieldToEventLoop();
+  }
+
+  return resolved;
 }
 
 function main(blog, callback) {
@@ -50,19 +83,21 @@ function main(blog, callback) {
     const allIds = [...uniqueIds];
     const ghostIds = new Set();
 
-    for (let i = 0; i < allIds.length; i += BATCH_SIZE) {
-      const batch = allIds.slice(i, i + BATCH_SIZE);
+    const resolved = await resolveIDs(blog.id, allIds);
 
-      for (const id of batch) {
-        const entry = await getEntry(blog.id, id);
+    for (const id of allIds) {
+      const meta = resolved.get(id);
 
-        if (entry && entry.id === id) continue;
+      if (meta && meta.id === id) continue;
 
-        ghostIds.add(id);
-        if (entry) await setEntry(blog.id, entry.id, entry);
-      }
+      ghostIds.add(id);
 
-      await yieldToEventLoop();
+      if (!meta) continue;
+
+      // Mismatch - re-fetch the full entry (content included) only for
+      // this id so it can be re-saved under the corrected key.
+      const entry = await getEntry(blog.id, id);
+      if (entry) await setEntry(blog.id, entry.id, entry);
     }
 
     for (const list of lists) {
