@@ -282,7 +282,7 @@ describe("sync/fix regression (outcome-based)", function () {
   // ---------------------------------------------------------------------
 
   describe("list-ghosts", function () {
-    it("silently prunes a list member whose entry key is entirely missing, without reporting it or bumping cacheID", async function () {
+    it("prunes a list member whose entry key is entirely missing, reporting it and bumping cacheID", async function () {
       const blog = this.blog;
       await blog.write({ path: "/vanish.txt", content: "# Vanish" });
       await blog.rebuild();
@@ -296,19 +296,27 @@ describe("sync/fix regression (outcome-based)", function () {
 
       const report = await fixAsync(blog);
 
-      // current behaviour: list-ghosts' pruneMissing() (Entries.pruneMissing)
-      // removes the id from every list *before* list-ghosts's own
-      // ghost-detection loop ever sees it, and pruneMissing does not feed
-      // anything into the report. So a purely-missing-entry-with-no-tag
-      // corruption is fixed with an entirely empty report, and Fix()
-      // therefore never bumps the blog's cacheID even though state changed.
-      expect(report).toEqual({});
+      // list-ghosts' pruneMissing() (Entries.pruneMissing) removes the id
+      // from every list *before* list-ghosts's own ghost-detection loop
+      // ever sees it - Entries.pruneMissing now returns what it removed
+      // per list, and list-ghosts feeds that into its own report so this
+      // shows up like any other repair and Fix() bumps cacheID for it.
+      expect(report["list-ghosts"]).toEqual(
+        jasmine.arrayContaining([
+          ["all", "MISSING", "/vanish.txt"],
+          ["created", "MISSING", "/vanish.txt"],
+          ["entries", "MISSING", "/vanish.txt"],
+        ])
+      );
       expect(await listIds(blog.id, "entries")).not.toContain("/vanish.txt");
       expect(await listIds(blog.id, "all")).not.toContain("/vanish.txt");
-      expect((await getBlog(blog.id)).cacheID).toBe(before.cacheID);
+      expect((await getBlog(blog.id)).cacheID).not.toBe(before.cacheID);
+
+      const secondReport = await fixAsync(blog);
+      expect(secondReport).toEqual({});
     });
 
-    it("removes a list member stored under a stale id and re-sets the entry under its real id, leaving the orphaned key behind", async function () {
+    it("removes a list member stored under a stale id, re-sets the entry under its real id, and deletes the orphaned stale key", async function () {
       const blog = this.blog;
       await blog.write({ path: "/stale.txt", content: "# Stale" });
       await blog.rebuild();
@@ -333,19 +341,19 @@ describe("sync/fix regression (outcome-based)", function () {
 
       const repaired = await getEntry(blog.id, "/stale-real.txt");
       expect(repaired.id).toBe("/stale-real.txt");
+      expect(repaired.title).toBe(corrupted.title);
 
-      // current behaviour: the original, now-orphaned Redis key is never
-      // deleted - list-ghosts only re-sets the entry under its real id, it
-      // does not clean up the key it found the ghost under.
+      // The original, now-orphaned raw key is deleted as part of the
+      // repair rather than left behind under the stale id - list-ghosts
+      // deletes it before re-setting the entry under its real id (see
+      // list-ghosts.js), so it can't later block that entry from
+      // reclaiming its own url via models/entry/_setUrl.js's url-claim
+      // check.
       const orphan = await getEntry(blog.id, "/stale.txt");
-      expect(orphan).toBeTruthy();
-      expect(orphan.title).toBe(corrupted.title);
+      expect(orphan).toBeUndefined();
 
-      // idempotent: the orphaned key is invisible to every check from here
-      // on (it's not referenced by any list, tag or the menu any more).
       const secondReport = await fixAsync(blog);
       expect(secondReport).toEqual({});
-      expect(await getEntry(blog.id, "/stale.txt")).toBeTruthy();
     });
 
     it("fixes a stale id that appears in several lists at once (a page is in both 'all' and 'pages')", async function () {
@@ -415,33 +423,22 @@ describe("sync/fix regression (outcome-based)", function () {
       expect(members).not.toContain("/chair.txt");
     });
 
-    // current behaviour (bug): a single entry's tags all share ONE reverse
-    // key, Tags.key.entry(blogID, entry.id) - eg. an entry tagged alpha,
-    // beta and gamma has one Redis set at .../tags:entry:<id> containing
-    // all three slugs, not one set per tag. When tag-ghosts finds a stale
-    // id it renames that whole reverse key from the old id to the new id
-    // as part of repairing the FIRST tag it processes. Every subsequent
-    // tag that also references the same stale id then tries to rename the
-    // same reverse key again - but it was already renamed away, so Redis
-    // returns "no such key" and the transaction's exec() rejects. That
-    // error propagates out of Fix() uncaught, so a single entry that is
-    // stale in more than one tag makes the *entire* Fix() run fail with an
-    // error rather than returning a clean report.
-    //
-    // The repair isn't simply "first tag wins, the rest stay broken",
-    // though: Entry.set (called once tag-ghosts successfully repairs the
-    // first tag) runs the entry back through Tags.set, which re-adds the
-    // entry under its real id to *every* tag in entry.tags - not just the
-    // one tag-ghosts was processing - so every tag ends up with the real
-    // id regardless. And a MULTI transaction's other queued commands still
-    // run even when one of them (the rename) errors, so a tag's own
-    // zRem/zAdd of the stale id can still land even on a tag whose rename
-    // failed. Which of the three tags (if any) is left with a lingering
-    // stale id alongside the real one depends on Redis's SMEMBERS
-    // iteration order (Tags.list() reads the tag slugs from a Set) and on
-    // async's eachSeries/eachLimit scheduling, so it isn't asserted here -
-    // only the two outcomes that hold no matter the order.
-    it("errors out while repairing a stale id that is shared by more than one tag", async function () {
+    // A single entry's tags all share ONE reverse key,
+    // Tags.key.entry(blogID, entry.id) - eg. an entry tagged alpha, beta
+    // and gamma has one Redis set at .../tags:entry:<id> containing all
+    // three slugs, not one set per tag. When tag-ghosts finds a stale id
+    // it renames that whole reverse key from the old id to the new id as
+    // part of repairing the FIRST tag it processes. A naive implementation
+    // that re-ran the same rename for every subsequent tag referencing the
+    // same stale id would hit "no such key" on Redis's side (the key was
+    // already renamed away) and reject the whole Fix() run - tag-ghosts
+    // instead tracks which stale ids it has already fully repaired this
+    // run, and for a tag that references an already-repaired stale id just
+    // drops the stale member from that tag's own sorted set rather than
+    // repeating the rename (Entry.set's own Tags.set call, run once from
+    // the first tag's repair, already adds the real id to every tag in
+    // entry.tags).
+    it("repairs a stale id that is shared by more than one tag, instead of erroring out", async function () {
       const blog = this.blog;
       await blog.write({
         path: "/multi-tag.txt",
@@ -453,14 +450,19 @@ describe("sync/fix regression (outcome-based)", function () {
         entry.id = "/multi-tag-real.txt";
       });
 
-      await expectAsync(fixAsync(blog)).toBeRejected();
+      await fixAsync(blog);
 
       for (const tag of ["alpha", "beta", "gamma"]) {
-        expect(await tagMembers(blog.id, tag)).toContain("/multi-tag-real.txt");
+        const members = await tagMembers(blog.id, tag);
+        expect(members).toContain("/multi-tag-real.txt");
+        expect(members).not.toContain("/multi-tag.txt");
       }
 
       const repaired = await getEntry(blog.id, "/multi-tag-real.txt");
       expect(repaired.title).toBe(corrupted.title);
+
+      const secondReport = await fixAsync(blog);
+      expect(secondReport).toEqual({});
     });
   });
 
@@ -636,7 +638,7 @@ describe("sync/fix regression (outcome-based)", function () {
     // soon as it's a page or menu item, so a menu entry is never actually
     // present in any tag's sortedTag in the first place. This test sticks
     // to list membership + the menu itself.
-    it("leaves the menu pointing at an orphaned copy of a stale-id entry after list-ghosts repairs the lists (current behaviour)", async function () {
+    it("fixes the menu to point at the real id (not an orphaned copy) after list-ghosts repairs a stale-id page", async function () {
       const blog = this.blog;
       await blog.write({ path: "/combo.txt", content: "Page: yes\n\n# Combo" });
       await blog.rebuild();
@@ -666,36 +668,26 @@ describe("sync/fix regression (outcome-based)", function () {
       expect(lists.pages).toContain("/combo-real.txt");
       expect(lists.pages).not.toContain("/combo.txt");
 
-      // current behaviour (a second-order oddity, racy across runs so not
-      // pinned exactly here): list-ghosts's own Entry.set call for the
-      // repaired entry routes through the normal menu-assignment code
-      // (_assign.js's addToMenu). The repaired entry's deduped url no
-      // longer matches the stale item already occupying that slot, so
-      // addToMenu can push a *second, correctly real-id* menu item rather
-      // than updating the stale one in place - and menu-ghosts (keying
-      // "already seen" off the fetched entry's id, not the menu item's
-      // own id) then deletes that new, correct item as a "duplicate" of
-      // the untouched stale one. Depending on exactly when that extra
-      // menu item lands relative to the blog snapshot each check is
-      // handed, this can play out within the first Fix() call or only
-      // surface on the next one - so instead of pinning a specific
-      // report shape, run Fix() until it stops reporting anything and
-      // check the state it settles into.
-      let settledReport = report;
-      for (let i = 0; i < 5 && Object.keys(settledReport).length; i++) {
-        settledReport = await fixAsync(blog);
-      }
-      expect(settledReport).toEqual({});
+      // list-ghosts deletes the orphaned raw key (at the stale id) before
+      // re-setting the entry under its real id, so the repaired entry
+      // reclaims its original url instead of being deduped onto a second
+      // url - which lets _assign.js's addToMenu match it to the existing
+      // menu item by url and update that item in place, rather than
+      // pushing a second (correct) item that menu-ghosts would then
+      // mistake the untouched stale item for a duplicate of. The menu
+      // ends up with exactly one item for this entry, pointing at its
+      // real id, without needing a second Fix() pass.
+      const menuAfter = (await getBlog(blog.id)).menu;
+      const matching = menuAfter.filter((i) => i.url === original.url);
+      expect(matching.length).toBe(1);
+      expect(matching[0].id).toBe("/combo-real.txt");
 
-      // Whichever menu item survived, it points at an entry that actually
-      // exists (deleted:false) - the menu never ends up dangling.
-      const menuAfter = (await getBlog(blog.id)).menu.find(
-        (i) => i.url === original.url
-      );
-      expect(menuAfter).toBeTruthy();
-      const survivingEntry = await getEntry(blog.id, menuAfter.id);
+      const survivingEntry = await getEntry(blog.id, matching[0].id);
       expect(survivingEntry).toBeTruthy();
       expect(survivingEntry.deleted).toBe(false);
+
+      const secondReport = await fixAsync(blog);
+      expect(secondReport).toEqual({});
     });
   });
 
