@@ -12,6 +12,7 @@ function harness(files) {
     local,
     downloads: [],
     updates: [],
+    downloadResult: { updated: true },
   };
 
   const stubs = {
@@ -40,7 +41,7 @@ function harness(files) {
     },
     "../util/download": async (blog, drive, path, remote) => {
       state.downloads.push(remote.id);
-      return { updated: true };
+      return state.downloadResult;
     },
     "../serviceAccount/createDriveClient": async () => ({
       files: {
@@ -135,6 +136,19 @@ describe("google-drive sync() resync summary", function () {
 
     expect(summary.downloaded).toBe(1);
     expect(summary.modifiedDuringWalk).toBe(0);
+  });
+
+  it("does not count a download whose bytes already matched", async function () {
+    const h = harness([file({ modifiedTime: "2026-09-19T15:00:00Z" })]);
+    h.downloadResult = {
+      updated: false,
+      verifiedContent: { checksum: "md5", fingerprint: "f" },
+    };
+
+    const { summary } = await h.run({ since: Date.parse("2026-09-19T16:00:00Z") });
+
+    expect(h.updates.length).toBe(1);
+    expect(summary.downloaded).toBe(0);
   });
 
   it("does not exclude anything when no cutoff is passed", async function () {

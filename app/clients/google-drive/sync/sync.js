@@ -257,11 +257,16 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
             // A previous rebuild/cache-store may have failed after publication.
             // Rebuild before recording verification, even if bytes now match.
-            if (result?.updated || (!isGoogleAppFile && result?.verifiedContent)) {
+            // Only count downloads that changed local bytes: a verified
+            // match (e.g. the legacy verification warm-up) isn't a missed
+            // change, even though it still triggers a rebuild below.
+            if (result?.updated) {
               summary.downloaded = (summary.downloaded || 0) + 1;
               if (modifiedSince(modifiedTime, since)) {
                 summary.modifiedDuringWalk = (summary.modifiedDuringWalk || 0) + 1;
               }
+            }
+            if (result?.updated || (!isGoogleAppFile && result?.verifiedContent)) {
               await update(path);
             }
             if (!isGoogleAppFile && result?.verifiedContent) {
