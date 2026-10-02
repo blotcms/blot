@@ -7,6 +7,59 @@ const entriesPathIndex = require("./entries-path-index");
 const async = require("async");
 const callOnce = require("helper/callOnce");
 const clfdate = require("helper/clfdate");
+const email = require("helper/email");
+
+// Cap how many repair items from a single check get quoted in the admin
+// email - a big repair (eg. thousands of stale tag entries) would otherwise
+// produce an email too large to be useful.
+const EMAIL_SAMPLE_SIZE = 10;
+
+// Fire-and-forget: a blog whose Fix() actually repaired something is
+// interesting enough for the admin to hear about, but a failure to send
+// that email should never affect Fix()'s own callback.
+function notifyAdmin(blog, options, finalReport) {
+  const checks = Object.keys(finalReport).map(function (name) {
+    const items = finalReport[name];
+    const sample = items.slice(0, EMAIL_SAMPLE_SIZE).map(function (item) {
+      try {
+        return JSON.stringify(item);
+      } catch (e) {
+        return String(item);
+      }
+    });
+
+    return {
+      name: name,
+      count: items.length,
+      countPlural: items.length !== 1,
+      sample: sample,
+      moreCount: Math.max(0, items.length - sample.length),
+      hasMore: items.length > sample.length,
+    };
+  });
+
+  email.SYNC_FIX_REPAIRED(
+    null,
+    {
+      blogID: blog.id,
+      handle: blog.handle,
+      client: blog.client,
+      truncatedId: blog.id.slice(0, 12),
+      source: (options && options.source) || "unknown",
+      checks: checks,
+    },
+    function (err) {
+      if (err) {
+        console.error(
+          clfdate(),
+          "Fix: Failed to send admin repair email for",
+          blog.id,
+          err
+        );
+      }
+    }
+  );
+}
 
 // Each check below issues many small, sequential Redis round trips (e.g.
 // entry-ghosts reads every entry one at a time) without holding the blog's
@@ -88,6 +141,8 @@ module.exports = function (blog, options, callback) {
       if (!Object.keys(finalReport).length) {
         return callback(err, finalReport);
       }
+
+      notifyAdmin(blog, options, finalReport);
 
       // otherwise set cacheID to force cache invalidation
       const cacheID = Date.now();
