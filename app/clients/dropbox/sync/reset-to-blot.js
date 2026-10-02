@@ -67,7 +67,7 @@ async function mapLimit(items, limit, iterator) {
 // database follows the folder even if the walk fails part way through. It is
 // the same (blogID, publish, update) contract the iCloud and Drive clients
 // use, and callers should hold the folder lock while it runs.
-async function resetToBlot(blogID, publish, update) {
+async function resetToBlot(blogID, publish, update, options = {}) {
   if (!publish)
     publish = (...args) => {
       console.log(clfdate() + " Dropbox:", args.join(" "));
@@ -84,7 +84,10 @@ async function resetToBlot(blogID, publish, update) {
 
   // Files Dropbox modified after this moment may just be edits that
   // landed mid-walk (before their webhook), not changes we failed to sync.
-  const startedAt = Date.now();
+  // Callers that already hold the folder lock (e.g. the dashboard's manual
+  // resync route) can pass options.since to use the moment the lock was
+  // acquired instead, which is marginally earlier and so marginally safer.
+  const startedAt = options.since || Date.now();
 
   publish("Syncing folder from Dropbox to Blot");
 
