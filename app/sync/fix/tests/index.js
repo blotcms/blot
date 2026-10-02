@@ -1,5 +1,6 @@
 describe("sync/fix", function () {
   var Blog = require("models/blog");
+  var email = require("helper/email");
 
   var checkNames = [
     "entry-ghosts",
@@ -219,6 +220,118 @@ describe("sync/fix", function () {
     fix({ id: "blog-id" }, function (err, report) {
       expect(err).toBe(checkError);
       expect(report).toEqual({ "entry-ghosts": ["fixed something"] });
+      done();
+    });
+  });
+
+  it("does not send an admin repair email when nothing is wrong", function (done) {
+    var clean = function (blog, callback) {
+      callback(null, []);
+    };
+
+    var fix = loadFixWithStubs({
+      "entry-ghosts": clean,
+      "tag-ghosts": clean,
+      "list-ghosts": clean,
+      "menu-ghosts": clean,
+      "entries-path-index": clean,
+    });
+
+    spyOn(email, "SYNC_FIX_REPAIRED");
+
+    fix({ id: "blog-id" }, function (err) {
+      expect(err).toBeNull();
+      expect(email.SYNC_FIX_REPAIRED).not.toHaveBeenCalled();
+      done();
+    });
+  });
+
+  it("sends an admin repair email with a per-check sample when a check reports a fix", function (done) {
+    var clean = function (blog, callback) {
+      callback(null, []);
+    };
+    var reported = function (blog, callback) {
+      callback(null, ["fixed thing one", "fixed thing two"]);
+    };
+
+    var fix = loadFixWithStubs({
+      "entry-ghosts": reported,
+      "tag-ghosts": clean,
+      "list-ghosts": clean,
+      "menu-ghosts": clean,
+      "entries-path-index": clean,
+    });
+
+    spyOn(Blog, "set").and.callFake(function (blogID, updates, callback) {
+      callback(null);
+    });
+
+    spyOn(email, "SYNC_FIX_REPAIRED").and.callFake(function (
+      uid,
+      locals,
+      callback
+    ) {
+      expect(uid).toBeNull();
+      expect(locals.blogID).toBe("blog-id");
+      expect(locals.handle).toBe("my-blog");
+      expect(locals.client).toBe("dropbox");
+      expect(locals.source).toBe("dropbox-hourly");
+      expect(locals.checks).toEqual([
+        {
+          name: "entry-ghosts",
+          count: 2,
+          countPlural: true,
+          sample: [JSON.stringify("fixed thing one"), JSON.stringify("fixed thing two")],
+          moreCount: 0,
+          hasMore: false,
+        },
+      ]);
+      callback(null);
+    });
+
+    fix(
+      { id: "blog-id", handle: "my-blog", client: "dropbox" },
+      { source: "dropbox-hourly" },
+      function (err) {
+        expect(err).toBeNull();
+        expect(email.SYNC_FIX_REPAIRED).toHaveBeenCalled();
+        done();
+      }
+    );
+  });
+
+  it("defaults the admin email's source to 'unknown' for callers using the legacy two-argument API", function (done) {
+    var reported = function (blog, callback) {
+      callback(null, ["fixed something"]);
+    };
+    var clean = function (blog, callback) {
+      callback(null, []);
+    };
+
+    var fix = loadFixWithStubs({
+      "entry-ghosts": reported,
+      "tag-ghosts": clean,
+      "list-ghosts": clean,
+      "menu-ghosts": clean,
+      "entries-path-index": clean,
+    });
+
+    spyOn(Blog, "set").and.callFake(function (blogID, updates, callback) {
+      callback(null);
+    });
+
+    spyOn(email, "SYNC_FIX_REPAIRED").and.callFake(function (
+      uid,
+      locals,
+      callback
+    ) {
+      expect(locals.source).toBe("unknown");
+      callback(null);
+    });
+
+    fix({ id: "blog-id" }, function (err) {
+      expect(err).toBeNull();
+      expect(email.SYNC_FIX_REPAIRED).toHaveBeenCalled();
       done();
     });
   });

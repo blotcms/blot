@@ -26,7 +26,7 @@ const hasRecentSync = async (blogID) => {
 
 const fixBlog = (blog) =>
   new Promise((resolve) => {
-    Fix(blog, (err) => {
+    Fix(blog, { source: "google-drive-hourly" }, (err) => {
       if (err) {
         console.error(clfdate(), "Google Drive: Fix error for blog", blog.id, err);
       }
