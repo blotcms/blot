@@ -8,6 +8,7 @@ const localReaddir = require("./util/localReaddir");
 const remoteReaddir = require("./util/remoteReaddir");
 const remoteRecursiveList = require("./util/remoteRecursiveList");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const modifiedSince = require("clients/util/modifiedSince");
 const {
   countLocalFiles,
   createProgress,
@@ -17,13 +18,20 @@ const database = require("../database");
 const config = require("config");
 const maxFileSize = config.icloud.maxFileSize; // Maximum file size for iCloud uploads in bytes
 
-module.exports = async (blogID, publish, update) => {
+module.exports = async (blogID, publish, update, options = {}) => {
   if (!publish)
     publish = (...args) => {
       console.log(clfdate() + " iCloud:", args.join(" "));
     };
 
   if (!update) update = () => {};
+
+  // When set (by the dashboard's manual resync route), downloads for files
+  // the macserver reports as modified around or after this moment are
+  // excluded from downloaded via modifiedDuringWalk - see modifiedSince.
+  // Older callers (the hourly/daily validators in init.js) don't pass this,
+  // so they keep counting every download, same as before.
+  const since = options.since;
 
   const checkWeCanContinue = CheckWeCanContinue(blogID);
   const progress = createProgress(
@@ -36,6 +44,10 @@ module.exports = async (blogID, publish, update) => {
     createdDirs: 0,
     skipped: 0,
     placeholdersCreated: 0,
+    // Subset of downloaded: files the macserver reports modified at/after
+    // the cutoff (minus a grace period). Directories and removals have no
+    // modification time to check here, so only downloads are excluded.
+    modifiedDuringWalk: 0,
   };
 
   try {
@@ -104,7 +116,7 @@ module.exports = async (blogID, publish, update) => {
     ).length;
     progress.discover(newFileCount);
 
-    for (const { name, size, isDirectory } of remoteContents) {
+    for (const { name, size, isDirectory, modifiedTime } of remoteContents) {
       const path = join(dir, name);
       const existsLocally = localContents.find(
         (item) => item.name.normalize("NFC") === name.normalize("NFC")
@@ -166,6 +178,9 @@ module.exports = async (blogID, publish, update) => {
 
             await download(blogID, path);
             summary.downloaded += 1;
+            if (modifiedSince(modifiedTime, since)) {
+              summary.modifiedDuringWalk += 1;
+            }
             await update(path);
           } catch (e) {
             publish("Failed to download", path, e);

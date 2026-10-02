@@ -3,6 +3,7 @@ module.exports = {
   description: "A file storage and synchronization service",
   disconnect: require("./disconnect"),
   resync: require('./sync/resetFromDrive'),
+  countChanges: require('./sync/count-changes'),
   remove: require("./remove"),
   write: require("./write"),
   site_routes: require("./routes/site"),

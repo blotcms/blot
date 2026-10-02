@@ -9,20 +9,13 @@ const initialTransfer = require("./sync/initialTransfer");
 const database = require("./database");
 const syncFromiCloud = require("./sync/fromiCloud");
 const syncToiCloud = require("./sync/toiCloud");
+const countChanges = require("./sync/count-changes");
 const Fix = require("sync/fix");
 
 const getBlog = promisify(Blog.get);
 
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 const RESYNC_WINDOW = 1000 * 60 * 10; // 10 minutes
-
-const countChanges = (summary = {}) => {
-  return (
-    (summary.downloaded || 0) +
-    (summary.removed || 0) +
-    (summary.createdDirs || 0)
-  );
-};
 
 const getLastSyncDateStamp = (blogID) => {
   return new Promise((resolve, reject) => {

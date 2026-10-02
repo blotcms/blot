@@ -8,6 +8,7 @@ const download = require("../util/download");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const modifiedSince = require("clients/util/modifiedSince");
 const {
   countLocalFiles,
   createProgress,
@@ -19,9 +20,19 @@ const localReaddir = require("./util/localReaddir");
 const truncateToSecond = require("./util/truncateToSecond");
 const transformDriveItems = require("./util/transformDriveItems");
 
-module.exports = async function sync(blogID, publish, update) {
+// options.since (set by the dashboard's manual resync route, via
+// resetFromDrive) excludes downloads Drive reports modified around or after
+// that moment from options.summary, in a modifiedDuringWalk field - see
+// modifiedSince. options.summary is an out-parameter: when passed, this
+// mutates it with downloaded/removed/createdDirs/modifiedDuringWalk counts.
+// The boolean return value is the whole contract for every other caller and
+// is unchanged.
+module.exports = async function sync(blogID, publish, update, options = {}) {
   publish = publish || function () {};
   update = update || function () {};
+
+  const since = options.since;
+  const summary = options.summary || {};
 
   const account = await database.blog.get(blogID);
   const { folderId, folderName, serviceAccountId } = account;
@@ -121,6 +132,7 @@ module.exports = async function sync(blogID, publish, update) {
         await checkWeCanContinue();
         progress.publish("Removing ignored", path, false, removedCount);
         await fs.remove(localPath(blogID, path));
+        summary.removed = (summary.removed || 0) + 1;
         await update(path);
         const id = await getByPath(path);
         if (id) await remove(id);
@@ -136,6 +148,7 @@ module.exports = async function sync(blogID, publish, update) {
           "which does not exist remotely"
         );
         await fs.remove(localPath(blogID, path));
+        summary.removed = (summary.removed || 0) + 1;
         await update(path);
         await remove(await getByPath(path));
       }
@@ -244,6 +257,15 @@ module.exports = async function sync(blogID, publish, update) {
 
             // A previous rebuild/cache-store may have failed after publication.
             // Rebuild before recording verification, even if bytes now match.
+            // Only count downloads that changed local bytes: a verified
+            // match (e.g. the legacy verification warm-up) isn't a missed
+            // change, even though it still triggers a rebuild below.
+            if (result?.updated) {
+              summary.downloaded = (summary.downloaded || 0) + 1;
+              if (modifiedSince(modifiedTime, since)) {
+                summary.modifiedDuringWalk = (summary.modifiedDuringWalk || 0) + 1;
+              }
+            }
             if (result?.updated || (!isGoogleAppFile && result?.verifiedContent)) {
               await update(path);
             }
@@ -263,14 +285,17 @@ module.exports = async function sync(blogID, publish, update) {
           progress.publish("Removing file", path);
           console.log("Removing file", path, "which is a directory remotely");
           await fs.remove(localPath(blogID, path));
+          summary.removed = (summary.removed || 0) + 1;
           publish("Creating directory", path);
           await fs.ensureDir(localPath(blogID, path));
+          summary.createdDirs = (summary.createdDirs || 0) + 1;
           await update(path);
         } else if (!existsLocally) {
           await checkWeCanContinue();
           publish("Creating directory", path);
           console.log("Creating directory locally", path);
           await fs.ensureDir(localPath(blogID, path));
+          summary.createdDirs = (summary.createdDirs || 0) + 1;
           await update(path);
         }
 
