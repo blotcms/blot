@@ -5,7 +5,6 @@ module.exports = {
   init: require("./init"),
   disconnect: require("./disconnect"),
   resync: require('./sync/reset-to-blot'),
-  countChanges: require('./sync/count-changes'),
   remove: require("./remove"),
   write: require("./write"),
   site_routes: require("./routes").site,

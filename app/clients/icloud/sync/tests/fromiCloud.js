@@ -158,14 +158,13 @@ describe("icloud fromiCloud sync", function () {
     expect(published.some((line) => line.includes("Sync failed"))).toBe(true);
   });
 
-  it("excludes a download modified at/after the cutoff (minus grace) from modifiedDuringWalk", async () => {
-    const since = Date.parse("2026-09-19T16:00:00Z");
+  it("excludes a download modified around or after the walk started from modifiedDuringWalk", async () => {
     const remoteFile = {
       name: "live-edit.txt",
       size: 5,
       isDirectory: false,
-      // Within the 30s grace period before the cutoff - should be excluded.
-      modifiedTime: "2026-09-19T15:59:57Z",
+      // Within the 30s grace period before the walk started
+      modifiedTime: new Date(Date.now() - 3000).toISOString(),
     };
 
     mockModule(remoteRecursiveListPath, async () => {});
@@ -175,44 +174,18 @@ describe("icloud fromiCloud sync", function () {
     mockModule(databasePath, { store: async () => {} });
 
     const fromiCloud = require(fromiCloudPath);
-    const summary = await fromiCloud(blogID, () => {}, async () => {}, {
-      since,
-    });
+    const summary = await fromiCloud(blogID, () => {}, async () => {});
 
     expect(summary.downloaded).toBe(1);
     expect(summary.modifiedDuringWalk).toBe(1);
   });
 
-  it("counts a download modified well before the cutoff as a missed change", async () => {
-    const since = Date.parse("2026-09-19T16:00:00Z");
+  it("counts a download modified well before the walk started as a missed change", async () => {
     const remoteFile = {
       name: "missed-change.txt",
       size: 5,
       isDirectory: false,
-      modifiedTime: "2026-09-19T15:00:00Z",
-    };
-
-    mockModule(remoteRecursiveListPath, async () => {});
-    mockModule(remoteReaddirPath, async () => [remoteFile]);
-    mockModule(downloadPath, async () => {});
-    mockModule(checkWeCanContinuePath, () => async () => {});
-    mockModule(databasePath, { store: async () => {} });
-
-    const fromiCloud = require(fromiCloudPath);
-    const summary = await fromiCloud(blogID, () => {}, async () => {}, {
-      since,
-    });
-
-    expect(summary.downloaded).toBe(1);
-    expect(summary.modifiedDuringWalk).toBe(0);
-  });
-
-  it("does not exclude anything when no cutoff is passed (hourly/daily validators)", async () => {
-    const remoteFile = {
-      name: "recent.txt",
-      size: 5,
-      isDirectory: false,
-      modifiedTime: new Date().toISOString(),
+      modifiedTime: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
     };
 
     mockModule(remoteRecursiveListPath, async () => {});

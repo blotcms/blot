@@ -18,7 +18,7 @@ const database = require("../database");
 const config = require("config");
 const maxFileSize = config.icloud.maxFileSize; // Maximum file size for iCloud uploads in bytes
 
-module.exports = async (blogID, publish, update, options = {}) => {
+module.exports = async (blogID, publish, update) => {
   if (!publish)
     publish = (...args) => {
       console.log(clfdate() + " iCloud:", args.join(" "));
@@ -26,12 +26,10 @@ module.exports = async (blogID, publish, update, options = {}) => {
 
   if (!update) update = () => {};
 
-  // When set (by the dashboard's manual resync route), downloads for files
-  // the macserver reports as modified around or after this moment are
-  // excluded from downloaded via modifiedDuringWalk - see modifiedSince.
-  // Older callers (the hourly/daily validators in init.js) don't pass this,
-  // so they keep counting every download, same as before.
-  const since = options.since;
+  // Files modified in iCloud after this moment may just be edits that
+  // landed mid-walk, not changes we failed to sync. Callers hold the folder
+  // lock, so this is (just after) when it was acquired.
+  const startedAt = Date.now();
 
   const checkWeCanContinue = CheckWeCanContinue(blogID);
   const progress = createProgress(
@@ -178,7 +176,7 @@ module.exports = async (blogID, publish, update, options = {}) => {
 
             await download(blogID, path);
             summary.downloaded += 1;
-            if (modifiedSince(modifiedTime, since)) {
+            if (modifiedSince(modifiedTime, startedAt)) {
               summary.modifiedDuringWalk += 1;
             }
             await update(path);

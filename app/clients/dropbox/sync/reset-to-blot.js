@@ -67,7 +67,7 @@ async function mapLimit(items, limit, iterator) {
 // database follows the folder even if the walk fails part way through. It is
 // the same (blogID, publish, update) contract the iCloud and Drive clients
 // use, and callers should hold the folder lock while it runs.
-async function resetToBlot(blogID, publish, update, options = {}) {
+async function resetToBlot(blogID, publish, update) {
   if (!publish)
     publish = (...args) => {
       console.log(clfdate() + " Dropbox:", args.join(" "));
@@ -84,10 +84,7 @@ async function resetToBlot(blogID, publish, update, options = {}) {
 
   // Files Dropbox modified after this moment may just be edits that
   // landed mid-walk (before their webhook), not changes we failed to sync.
-  // Callers that already hold the folder lock (e.g. the dashboard's manual
-  // resync route) can pass options.since to use the moment the lock was
-  // acquired instead, which is marginally earlier and so marginally safer.
-  const startedAt = options.since || Date.now();
+  const startedAt = Date.now();
 
   publish("Syncing folder from Dropbox to Blot");
 
@@ -423,7 +420,7 @@ const walk = async (
           // filesystem allows – seen in production when a Dropbox account
           // got stuck wrapping the same file in nested "(Conflict met
           // exemplaar van ...)" copies. That download can never succeed.
-          // countChanges() (sync/count-changes.js) only looks at downloaded/removed/
+          // countChanges() (clients/util/countChanges.js) only looks at downloaded/removed/
           // createdDirs, so this was never counted as an unsynced change
           // either way; recording it as "skipped" here is just for
           // visibility in logs/summaries, not to affect the hourly email.

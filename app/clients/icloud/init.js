@@ -9,7 +9,7 @@ const initialTransfer = require("./sync/initialTransfer");
 const database = require("./database");
 const syncFromiCloud = require("./sync/fromiCloud");
 const syncToiCloud = require("./sync/toiCloud");
-const countChanges = require("./sync/count-changes");
+const countChanges = require("clients/util/countChanges");
 const Fix = require("sync/fix");
 
 const getBlog = promisify(Blog.get);

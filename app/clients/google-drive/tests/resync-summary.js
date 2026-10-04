@@ -79,23 +79,8 @@ function harness(files) {
     }
   );
 
-  state.run = async (options) => {
-    const summary = {
-      downloaded: 0,
-      removed: 0,
-      createdDirs: 0,
-      modifiedDuringWalk: 0,
-    };
-
-    const succeeded = await module.exports(
-      "blog",
-      () => {},
-      async (path) => state.updates.push(path),
-      { ...options, summary }
-    );
-
-    return { succeeded, summary };
-  };
+  state.run = () =>
+    module.exports("blog", () => {}, async (path) => state.updates.push(path));
 
   return state;
 }
@@ -113,50 +98,37 @@ describe("google-drive sync() resync summary", function () {
     };
   }
 
-  it("excludes a download modified at/after the cutoff (minus grace) from modifiedDuringWalk", async function () {
-    const since = Date.parse("2026-09-19T16:00:00Z");
-    const h = harness([
-      file({ modifiedTime: "2026-09-19T15:59:57Z" }), // inside the 30s grace
-    ]);
+  const ago = (ms) => new Date(Date.now() - ms).toISOString();
 
-    const { succeeded, summary } = await h.run({ since });
+  it("excludes a download modified around or after the walk started from modifiedDuringWalk", async function () {
+    // inside the 30s grace period before the walk started
+    const h = harness([file({ modifiedTime: ago(3000) })]);
 
-    expect(succeeded).toBe(true);
+    const summary = await h.run();
+
     expect(summary.downloaded).toBe(1);
     expect(summary.modifiedDuringWalk).toBe(1);
   });
 
-  it("counts a download modified well before the cutoff as a missed change", async function () {
-    const since = Date.parse("2026-09-19T16:00:00Z");
-    const h = harness([
-      file({ modifiedTime: "2026-09-19T15:00:00Z" }),
-    ]);
+  it("counts a download modified well before the walk started as a missed change", async function () {
+    const h = harness([file({ modifiedTime: ago(60 * 60 * 1000) })]);
 
-    const { summary } = await h.run({ since });
+    const summary = await h.run();
 
     expect(summary.downloaded).toBe(1);
     expect(summary.modifiedDuringWalk).toBe(0);
   });
 
   it("does not count a download whose bytes already matched", async function () {
-    const h = harness([file({ modifiedTime: "2026-09-19T15:00:00Z" })]);
+    const h = harness([file({ modifiedTime: ago(60 * 60 * 1000) })]);
     h.downloadResult = {
       updated: false,
       verifiedContent: { checksum: "md5", fingerprint: "f" },
     };
 
-    const { summary } = await h.run({ since: Date.parse("2026-09-19T16:00:00Z") });
+    const summary = await h.run();
 
     expect(h.updates.length).toBe(1);
     expect(summary.downloaded).toBe(0);
-  });
-
-  it("does not exclude anything when no cutoff is passed", async function () {
-    const h = harness([file({ modifiedTime: new Date().toISOString() })]);
-
-    const { summary } = await h.run({});
-
-    expect(summary.downloaded).toBe(1);
-    expect(summary.modifiedDuringWalk).toBe(0);
   });
 });

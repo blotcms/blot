@@ -35,14 +35,9 @@ describe("notifyAdminIfResyncFoundChanges", function () {
   }
 
   const blog = { id: "blogidblogidblogid", handle: "example" };
-  const client = {
-    display_name: "Dropbox",
-    countChanges: function (summary) {
-      return (summary && summary.downloaded) || 0;
-    },
-  };
+  const client = { display_name: "Dropbox" };
 
-  it("sends an email when the client counts more than zero changes", function () {
+  it("sends an email when the summary counts more than zero changes", function () {
     const sentEmails = [];
     const notify = load(sentEmails);
 
@@ -72,15 +67,6 @@ describe("notifyAdminIfResyncFoundChanges", function () {
     const notify = load(sentEmails);
 
     notify(blog, client, { downloaded: 0, removed: 0, createdDirs: 0 });
-
-    expect(sentEmails.length).toEqual(0);
-  });
-
-  it("does not send an email when the client has no countChanges", function () {
-    const sentEmails = [];
-    const notify = load(sentEmails);
-
-    notify(blog, { display_name: "iCloud" }, { downloaded: 5 });
 
     expect(sentEmails.length).toEqual(0);
   });

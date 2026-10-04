@@ -24,9 +24,4 @@ describe("clients/util modifiedSince", function () {
     expect(modifiedSince(undefined, cutoff)).toEqual(false);
     expect(modifiedSince("not a date", cutoff)).toEqual(false);
   });
-
-  it("excludes nothing when no cutoff is given (older callers)", function () {
-    expect(modifiedSince("2026-09-19T16:00:05Z", undefined)).toEqual(false);
-    expect(modifiedSince("2026-09-19T16:00:05Z", 0)).toEqual(false);
-  });
 });

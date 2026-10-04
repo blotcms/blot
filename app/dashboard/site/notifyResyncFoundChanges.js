@@ -1,10 +1,11 @@
 const email = require("helper/email");
+const countChanges = require("clients/util/countChanges");
 
 // Resync is triggered manually from the dashboard (Reset your folder), so
 // any change it finds is evidence this blog's regular webhook/cron sync
-// missed it - email the admin so it can be investigated. Each client
-// excludes changes made at/after the resync's cutoff (see
-// clients/util/modifiedSince.js) so live edits that land during the resync
+// missed it - email the admin so it can be investigated. Each client's
+// summary flags changes made after its walk started (see
+// clients/util/countChanges.js) so live edits that land during the resync
 // itself aren't mistaken for a missed sync. Fire-and-forget: a failure here
 // must never affect the resync flow the user is watching, which is why this
 // takes no callback of its own.
@@ -14,9 +15,9 @@ module.exports = function notifyAdminIfResyncFoundChanges(
   summary
 ) {
   try {
-    if (!client || typeof client.countChanges !== "function") return;
+    if (!summary) return;
 
-    const changeCount = client.countChanges(summary);
+    const changeCount = countChanges(summary);
 
     if (!(changeCount > 0)) return;
 

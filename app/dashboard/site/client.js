@@ -189,12 +189,6 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
       );
     }
 
-    // Changes the remote folder reports from around this moment on are
-    // most likely live edits whose webhook just hasn't arrived yet, not
-    // changes a previous sync missed - passed through to the client as
-    // the cutoff for its modifiedSince exclusion.
-    const lockAcquiredAt = Date.now();
-
     res.message(res.locals.base + "/client/reset", "Begin resync of your site");
 
     let summary;
@@ -203,8 +197,7 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
       summary = await res.locals.client.resync(
         req.blog.id,
         folder.status,
-        promisify(folder.update),
-        { since: lockAcquiredAt }
+        promisify(folder.update)
       );
     } catch (err) {
       console.log("ERROR:", err);

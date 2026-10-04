@@ -4,7 +4,6 @@ module.exports = {
     disconnect: require("./disconnect"),
     remove: require("./remove"),
     resync: require('./sync/fromiCloud'),
-    countChanges: require('./sync/count-changes'),
     write: require("./write"),
     site_routes: require("./routes/site"),
     dashboard_routes: require("./routes/dashboard"),
