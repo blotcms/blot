@@ -17,7 +17,7 @@ const EMAIL_SAMPLE_SIZE = 10;
 // Fire-and-forget: a blog whose Fix() actually repaired something is
 // interesting enough for the admin to hear about, but a failure to send
 // that email should never affect Fix()'s own callback.
-function notifyAdmin(blog, options, finalReport) {
+function notifyAdmin(blog, finalReport) {
   const checks = Object.keys(finalReport).map(function (name) {
     const items = finalReport[name];
     const sample = items.slice(0, EMAIL_SAMPLE_SIZE).map(function (item) {
@@ -45,7 +45,6 @@ function notifyAdmin(blog, options, finalReport) {
       handle: blog.handle,
       client: blog.client,
       truncatedId: blog.id.slice(0, 12),
-      source: (options && options.source) || "unknown",
       checks: checks,
     },
     function (err) {
@@ -142,7 +141,7 @@ module.exports = function (blog, options, callback) {
         return callback(err, finalReport);
       }
 
-      notifyAdmin(blog, options, finalReport);
+      notifyAdmin(blog, finalReport);
 
       // otherwise set cacheID to force cache invalidation
       const cacheID = Date.now();

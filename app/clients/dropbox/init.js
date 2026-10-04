@@ -84,7 +84,7 @@ const logLag = (blogID, phase, entryCount, { durationMs, maxLagMs, p99LagMs }) =
 
 const fixBlog = (blog) =>
   new Promise((resolve) => {
-    Fix(blog, { source: "dropbox-hourly" }, (err) => {
+    Fix(blog, (err) => {
       if (err) {
         console.error(clfdate(), "Dropbox: Fix error for blog", blog.id, err);
       }

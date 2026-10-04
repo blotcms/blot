@@ -1,6 +1,6 @@
 sync/fix repaired {{handle}}
 
-Fix() found and repaired issues for {{blogID}} ({{handle}}, client: {{client}}, triggered by: {{source}}):
+Fix() found and repaired issues for {{blogID}} ({{handle}}, client: {{client}}):
 
 `logs green | grep "{{truncatedId}} sync_"`
 `access {{handle}}`

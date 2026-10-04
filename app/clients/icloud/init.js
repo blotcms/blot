@@ -175,7 +175,7 @@ const runValidation = async ({ notify = true } = {}) => {
         }
 
         await new Promise((resolve) => {
-          Fix(blog, { source: "icloud-hourly" }, (fixError) => {
+          Fix(blog, (fixError) => {
             if (fixError) {
               console.error(
                 clfdate(),
