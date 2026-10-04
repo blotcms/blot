@@ -111,20 +111,15 @@ function main (blog, callback) {
         return callback();
       }
 
-      if (missing.length) {
-        report.push(
-          missing.length +
-            " files are missing from the disk for entries which are not deleted"
-        );
-        report.push(missing);
-      }
+      // One row per repair, like the other checks, so the report's length
+      // is the number of repairs.
+      missing.forEach(function (item) {
+        report.push(["MISSING", item]);
+      });
 
-      if (edit.length) {
-        report.push(
-          edit.length + "files exists on disk with a different case.."
-        );
-        report.push(edit);
-      }
+      edit.forEach(function (item) {
+        report.push(["CASE", item]);
+      });
 
       async.eachSeries(
         edit,
