@@ -168,7 +168,7 @@ describe("sync/fix regression (outcome-based)", function () {
 
       expect(report["entry-ghosts"]).toEqual(
         jasmine.arrayContaining([
-          jasmine.stringMatching(/missing from the disk/),
+          ["MISSING", jasmine.objectContaining({ path: "/ghost.txt" })],
         ])
       );
 
@@ -207,7 +207,7 @@ describe("sync/fix regression (outcome-based)", function () {
 
       expect(report["entry-ghosts"]).toEqual(
         jasmine.arrayContaining([
-          jasmine.stringMatching(/different case/),
+          ["CASE", jasmine.objectContaining({ path: "/case/foo.txt" })],
         ])
       );
 
@@ -242,7 +242,7 @@ describe("sync/fix regression (outcome-based)", function () {
 
       expect(report["entry-ghosts"]).toEqual(
         jasmine.arrayContaining([
-          jasmine.stringMatching(/missing from the disk/),
+          ["MISSING", jasmine.any(Object)],
         ])
       );
 
@@ -268,7 +268,7 @@ describe("sync/fix regression (outcome-based)", function () {
 
       expect(report["entry-ghosts"]).toEqual(
         jasmine.arrayContaining([
-          jasmine.stringMatching(/missing from the disk/),
+          ["MISSING", jasmine.any(Object)],
         ])
       );
 
@@ -735,11 +735,11 @@ describe("sync/fix regression (outcome-based)", function () {
 
       const report = await fixAsync(blog);
 
-      const missingReport = report["entry-ghosts"].find((row) =>
-        Array.isArray(row)
+      const missingReport = report["entry-ghosts"].filter(
+        (row) => row[0] === "MISSING"
       );
       expect(missingReport.length).toBe(2);
-      expect(missingReport.map((r) => r.path).sort()).toEqual([
+      expect(missingReport.map((r) => r[1].path).sort()).toEqual([
         "/bulk-1.txt",
         "/bulk-2.txt",
       ]);

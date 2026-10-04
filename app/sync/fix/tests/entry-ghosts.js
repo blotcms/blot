@@ -79,9 +79,9 @@ describe("sync/fix/entry-ghosts", function () {
       expect(err).toBeNull();
       expect(Entry.set).toHaveBeenCalled();
       expect(Entry.drop).not.toHaveBeenCalled();
-      expect(report).toEqual(
-        jasmine.arrayContaining([jasmine.stringMatching(/different case/)])
-      );
+      expect(report).toEqual([
+        ["CASE", { oldPath: "/Foo.txt", path: "/foo.txt" }],
+      ]);
       done();
     });
   });
@@ -110,11 +110,9 @@ describe("sync/fix/entry-ghosts", function () {
       expect(err).toBeNull();
       expect(Entry.set).not.toHaveBeenCalled();
       expect(Entry.drop).toHaveBeenCalled();
-      expect(report).toEqual(
-        jasmine.arrayContaining([
-          jasmine.stringMatching(/missing from the disk/),
-        ])
-      );
+      expect(report).toEqual([
+        ["MISSING", { id: "/missing.txt", path: "/missing.txt" }],
+      ]);
       done();
     });
   });
@@ -199,11 +197,7 @@ describe("sync/fix/entry-ghosts", function () {
     fixEntryGhosts({ id: "blog-id" }, function (err, report) {
       expect(err).toBeNull();
       expect(Entry.drop).toHaveBeenCalled();
-      expect(report).toEqual(
-        jasmine.arrayContaining([
-          jasmine.stringMatching(/missing from the disk/),
-        ])
-      );
+      expect(report).toEqual([["MISSING", { id: "/album", path: "/album" }]]);
       done();
     });
   });
