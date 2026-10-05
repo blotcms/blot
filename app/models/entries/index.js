@@ -931,6 +931,7 @@ module.exports = (function () {
     resave: resave,
     each: each,
     pruneMissing: pruneMissing,
+    sweepExpiredDeleted: require("./sweepExpiredDeleted"),
     adjacentTo: adjacentTo,
     getPage: getPage,
     getListIDs: getListIDs,

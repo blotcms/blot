@@ -316,6 +316,46 @@ describe("sync/fix regression (outcome-based)", function () {
       expect(secondReport).toEqual({});
     });
 
+    it("silently clears a deleted entry whose key has expired, without reporting it", async function () {
+      const blog = this.blog;
+      await blog.write({ path: "/gone.txt", content: "# Gone" });
+      await blog.rebuild();
+
+      await promisify(Entry.drop)(blog.id, "/gone.txt");
+      expect(await listIds(blog.id, "all")).toContain("/gone.txt");
+
+      // What a day later looks like: the deleted entry's key has expired
+      // but its id is still in "all" and "deleted".
+      await client.del(Entry.key.entry(blog.id, "/gone.txt"));
+      await client.zAdd(listKey(blog.id, "deleted"), {
+        score: Date.now() - 25 * 60 * 60 * 1000,
+        value: "/gone.txt",
+      });
+
+      const before = await getBlog(blog.id);
+      const report = await fixAsync(blog);
+
+      expect(report).toEqual({});
+      expect(await listIds(blog.id, "all")).not.toContain("/gone.txt");
+      expect(await listIds(blog.id, "deleted")).not.toContain("/gone.txt");
+      expect((await getBlog(blog.id)).cacheID).toBe(before.cacheID);
+    });
+
+    it("still reports a deleted entry whose key vanished before it was due to expire", async function () {
+      const blog = this.blog;
+      await blog.write({ path: "/early.txt", content: "# Early" });
+      await blog.rebuild();
+
+      await promisify(Entry.drop)(blog.id, "/early.txt");
+      await client.del(Entry.key.entry(blog.id, "/early.txt"));
+
+      const report = await fixAsync(blog);
+
+      expect(report["list-ghosts"]).toEqual(
+        jasmine.arrayContaining([["all", "MISSING", "/early.txt"]])
+      );
+    });
+
     it("removes a list member stored under a stale id, re-sets the entry under its real id, and deletes the orphaned stale key", async function () {
       const blog = this.blog;
       await blog.write({ path: "/stale.txt", content: "# Stale" });
