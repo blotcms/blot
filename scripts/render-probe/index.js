@@ -11,7 +11,7 @@ const fs = require("fs");
 const {
   runProbe,
   parseArgs,
-  describe,
+  formatOptions,
   WRAPPER_OPTIONS,
   fromWrapperOptions,
 } = require("../probe/run");
@@ -42,10 +42,10 @@ function usage() {
   npm run render-probe -- --replay access.log-20261002.gz --from 2026-10-01T10:00:00 --to 2026-10-01T10:03:30
 
 Probe options:
-${describe({ ...LOCAL_OPTIONS, ...probeOptions })}
+${formatOptions({ ...LOCAL_OPTIONS, ...probeOptions })}
 
 Wrapper options (defaults: --memory ${DEFAULTS.memory}, --max-old-space ${DEFAULTS.oldSpace} as yellow):
-${describe(WRAPPER_OPTIONS)}`);
+${formatOptions(WRAPPER_OPTIONS)}`);
 }
 
 function probeArgsFrom(rest, local) {

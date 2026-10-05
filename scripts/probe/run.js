@@ -25,7 +25,7 @@ const fs = require("fs");
 const sshCommand = require("../deploy/util/sshCommand");
 const askForConfirmation = require("../deploy/util/askForConfirmation");
 const { AIRLOCK_ENV } = require("../deploy/util/generateDockerCommand");
-const { parseArgs, describe } = require("./args");
+const { parseArgs, formatOptions } = require("./args");
 const {
   REGISTRY_URL,
   ENV_FILE_ON_SERVER,
@@ -211,7 +211,10 @@ async function runProbe({
     `-v ${remoteDir}/out:${OUT}`,
     ...files.map((file) => `-v ${shellQuote(`${file.remote}:${file.container}:ro`)}`),
     ...mounts.map((mount) => `-v ${shellQuote(mount)}`),
+    // --memory-swap equal to --memory: no swap, so the probe can't push the
+    // host into swapping; it is OOM-killed at the limit instead.
     `--memory=${memory}`,
+    `--memory-swap=${memory}`,
     `--cpus=${cpus}`,
     image,
     ...node.map(shellQuote),
@@ -317,8 +320,21 @@ async function runProbe({
 // (which holds the production secrets).
 async function chooseImage(release) {
   if (release) {
+    // Images are tagged with the full commit SHA, so expand a short one.
     if (!/^[0-9a-f]{7,40}$/.test(release)) throw new Error(`Invalid --release ${release}`);
-    return `${REGISTRY_URL}:${release}`;
+    let sha;
+    try {
+      ({ stdout: sha } = await execFileAsync(
+        "git",
+        ["rev-parse", "--verify", "--quiet", `${release}^{commit}`],
+        { cwd: REPO_ROOT }
+      ));
+    } catch (err) {
+      throw new Error(`--release ${release} isn't a commit in this checkout (try git fetch)`);
+    }
+    sha = sha.trim();
+    if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error(`Couldn't resolve --release ${release}: ${sha}`);
+    return `${REGISTRY_URL}:${sha}`;
   }
   const image = await sshCommand(
     `docker inspect ${CONTAINERS.YELLOW.name} --format '{{.Config.Image}}'`
@@ -370,7 +386,7 @@ async function cleanUp({ name, remoteDir, localDir }) {
 module.exports = {
   runProbe,
   parseArgs,
-  describe,
+  formatOptions,
   WRAPPER_OPTIONS,
   fromWrapperOptions,
   OUT,

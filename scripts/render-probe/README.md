@@ -32,7 +32,7 @@ container to the launcher shared by the production probes,
   is mounted into the container, is writable by the container's user);
 - runs them in a container of that image with the production env file, the
   data directory mounted **read-only**, the access logs mounted read-only at
-  `/logs`, no published port, no airlock network, its own memory limit and one
+  `/logs`, no published port, no airlock network, its own memory limit (with swap disabled) and one
   CPU, and `--restart no`;
 - prints the container's exit code and whether the kernel OOM-killed it, then
   removes it, copies `out/` to `./data/render-probe/<run>/` and deletes the

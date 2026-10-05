@@ -293,8 +293,8 @@ async function readReplay(file) {
   const upstream = args.upstream || "127.0.0.1:8090";
   const { from, to } = args;
   if (!from || !to) throw new Error("--replay needs --from and --to (YYYY-MM-DDTHH:MM:SS, UTC)");
-  const fromMs = Date.parse(from + "Z");
-  const toMs = Date.parse(to + "Z");
+  const fromMs = Date.parse(from.replace(/Z$/, "") + "Z");
+  const toMs = Date.parse(to.replace(/Z$/, "") + "Z");
   if (isNaN(fromMs) || isNaN(toMs)) throw new Error("--from/--to must look like 2026-10-01T10:03:30");
 
   // Rotated logs are gzipped.
@@ -462,6 +462,7 @@ async function main() {
     process.exitCode = 1;
   }
 
+  sampler.stop();
   const totals = sampler.summary();
   Object.assign(summary, totals, {
     redis: redis.summary(),

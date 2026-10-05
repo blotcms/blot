@@ -8,6 +8,7 @@
 //   const sampler = instrument.startSampler(out, { extra: () => ({ inflight }) });
 //   const phases = instrument.measurePhases(out);
 //   ...
+//   sampler.stop();
 //   out.writeJSON("summary.json", { ...sampler.summary(), ... });
 //
 // Shipped to the host with the probe script by ../probe/run.js and mounted at
@@ -78,8 +79,10 @@ function startSampler(
   });
   observer.observe({ entryTypes: ["gc"] });
 
+  // Also taken once at the start and once in stop(), so even a probe that
+  // finishes within one interval records its peaks.
   let lastPrint = 0;
-  const timer = setInterval(() => {
+  function takeSample() {
     const mem = process.memoryUsage();
     const delayMax = loop.max / 1e6;
     loop.reset();
@@ -112,13 +115,17 @@ function startSampler(
         );
       }
     }
-  }, intervalMs);
+  }
+  takeSample();
+  const timer = setInterval(takeSample, intervalMs);
   timer.unref();
 
   return {
     peaks,
     gc,
+    // Takes a final sample; call it before summary().
     stop() {
+      takeSample();
       clearInterval(timer);
       observer.disconnect();
       loop.disable();
