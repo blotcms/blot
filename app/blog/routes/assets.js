@@ -11,6 +11,10 @@ const {
   GLOBAL_STATIC_SUBDIRECTORIES,
 } = require("../lib/staticPaths");
 const blogHosts = require("../lib/blogHosts");
+const {
+  htmlExtRegex,
+  fileExtRegex,
+} = require("../render/replaceFolderLinks/shared");
 
 // Constants
 const LARGEST_POSSIBLE_MAXAGE = 86400000;
@@ -173,9 +177,14 @@ assets.use((err, req, res, next) => {
 
 // A blog-folder file was fetched from one of the blog's own pages, i.e. a
 // link there points at the origin instead of the CDN. Only logged so we can
-// find out where such links still come from.
+// find out where such links still come from. Pages (the .html fallbacks
+// above, extensionless paths) are skipped: navigating between them is
+// expected, and the folder-link passes never rewrite them either.
 function logSameSiteReferer(req) {
   try {
+    const path = decodeURIComponent(req.path);
+    if (htmlExtRegex.test(path) || !fileExtRegex.test(path)) return;
+
     const referer = req.get("referer");
     if (!referer) return;
 
