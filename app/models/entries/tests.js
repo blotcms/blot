@@ -222,6 +222,113 @@ describe("entries", function () {
     });
   });
 
+  describe("sweepExpiredDeleted", function () {
+    const DAY = 24 * 60 * 60 * 1000;
+
+    function setEntry(blogID, path, updates) {
+      return new Promise((resolve, reject) => {
+        Entry.set(blogID, path, updates, (err) => (err ? reject(err) : resolve()));
+      });
+    }
+
+    function sweep(blogID) {
+      return new Promise((resolve, reject) => {
+        Entries.sweepExpiredDeleted(blogID, (err, removed) =>
+          err ? reject(err) : resolve(removed)
+        );
+      });
+    }
+
+    // What Redis leaves behind once a deleted entry's TTL runs out: the key
+    // is gone and its "deleted" score is more than a day old.
+    async function expire(blogID, path) {
+      await redis.del(entryKey(blogID, path));
+      await redis.zAdd(`blog:${blogID}:deleted`, {
+        score: Date.now() - DAY - 60 * 1000,
+        value: path,
+      });
+    }
+
+    async function members(blogID, list) {
+      return redis.zRange(`blog:${blogID}:${list}`, 0, -1);
+    }
+
+    it("removes expired deleted entries from 'all' and 'deleted' only", async function () {
+      const blogID = this.blog.id;
+
+      await setEntry(blogID, "/live.txt", buildEntry("/live.txt"));
+      await setEntry(blogID, "/expired.txt", buildEntry("/expired.txt"));
+      await setEntry(blogID, "/expired.txt", { deleted: true });
+      await setEntry(blogID, "/recent.txt", buildEntry("/recent.txt"));
+      await setEntry(blogID, "/recent.txt", { deleted: true });
+      await expire(blogID, "/expired.txt");
+
+      expect(await sweep(blogID)).toEqual(["/expired.txt"]);
+
+      expect((await members(blogID, "all")).sort()).toEqual(["/live.txt", "/recent.txt"]);
+      expect(await members(blogID, "deleted")).toEqual(["/recent.txt"]);
+      expect(await sweep(blogID)).toEqual([]);
+    });
+
+    it("keeps an old 'deleted' member whose entry key still exists", async function () {
+      const blogID = this.blog.id;
+
+      await setEntry(blogID, "/kept.txt", buildEntry("/kept.txt"));
+      await setEntry(blogID, "/kept.txt", { deleted: true });
+      await redis.zAdd(`blog:${blogID}:deleted`, {
+        score: Date.now() - 2 * DAY,
+        value: "/kept.txt",
+      });
+
+      expect(await sweep(blogID)).toEqual([]);
+      expect(await members(blogID, "all")).toContain("/kept.txt");
+      expect(await members(blogID, "deleted")).toContain("/kept.txt");
+    });
+
+    it("sweeps past more than one batch of expired entries", async function () {
+      const blogID = this.blog.id;
+      const paths = [];
+
+      for (let i = 0; i < 150; i++) paths.push(`/expired-${i}.txt`);
+
+      // An old member whose key still exists sorts first, so every batch
+      // has to step past it. Saved before the expired ids are added, since
+      // saving an entry runs the sweep itself.
+      await setEntry(blogID, "/kept.txt", buildEntry("/kept.txt"));
+      await setEntry(blogID, "/kept.txt", { deleted: true });
+      await redis.zAdd(`blog:${blogID}:deleted`, {
+        score: Date.now() - 3 * DAY,
+        value: "/kept.txt",
+      });
+
+      await redis.zAdd(
+        `blog:${blogID}:all`,
+        paths.map((value, i) => ({ score: i, value }))
+      );
+      await redis.zAdd(
+        `blog:${blogID}:deleted`,
+        paths.map((value, i) => ({ score: Date.now() - 2 * DAY + i, value }))
+      );
+
+      expect((await sweep(blogID)).length).toBe(150);
+      expect(await members(blogID, "all")).toEqual(["/kept.txt"]);
+      expect(await members(blogID, "deleted")).toEqual(["/kept.txt"]);
+    });
+
+    it("runs whenever another entry on the blog is saved", async function () {
+      const blogID = this.blog.id;
+
+      await setEntry(blogID, "/expired.txt", buildEntry("/expired.txt"));
+      await setEntry(blogID, "/expired.txt", { deleted: true });
+      await expire(blogID, "/expired.txt");
+
+      await setEntry(blogID, "/other.txt", buildEntry("/other.txt"));
+
+      expect(await members(blogID, "all")).toEqual(["/other.txt"]);
+      expect(await members(blogID, "deleted")).toEqual([]);
+    });
+  });
+
   describe("pruneMissing", function () {
     it("removes all orphaned IDs from entry lists", async function () {
       const blogID = this.blog.id;

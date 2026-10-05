@@ -24,6 +24,10 @@ async function pruneMissing(blogID) {
   return removed || {};
 }
 
+function sweepExpiredDeleted(blogID) {
+  return promisify((next) => Entries.sweepExpiredDeleted(blogID, next))();
+}
+
 function deleteEntryKey(blogID, id) {
   return client.del(entryKey(blogID, id));
 }
@@ -73,6 +77,12 @@ function main(blog, callback) {
   const report = [];
 
   (async function () {
+    // Deleted entries' keys expire after a day while their ids stay in
+    // "all"/"deleted" - expected, so clear those first without reporting
+    // them. Whatever pruneMissing finds after this is a key that vanished
+    // unexpectedly.
+    await sweepExpiredDeleted(blog.id);
+
     const prunedByList = await pruneMissing(blog.id);
 
     // pruneMissing (models/entries) removes list members that have no
