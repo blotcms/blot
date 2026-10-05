@@ -1,6 +1,7 @@
 const lookupFile = require("./lookupFile");
 const blogHosts = require("../../lib/blogHosts");
 const BLOT_CDN_TOKEN = require("./cdnToken");
+const { record } = require("./stats");
 
 const { htmlExtRegex, fileExtRegex } = require("./shared");
 // Strict regex that requires matching quotes and parentheses
@@ -9,7 +10,14 @@ const urlRegex = /url\((?:([^'"()]+)|['"]([^'"]+)['"]) *\)/gi;
 // DEPRECATION NOTE: request-time only; template CSS can't be baked at build
 // time (see html.js for the full list of what this pass covers that
 // app/build/plugins/folderAssets also does for entries).
-module.exports = async function replaceCssUrls(blog, css, log = () => {}) {
+//
+// stats is optional instrumentation (see stats.js); it never affects the output.
+module.exports = async function replaceCssUrls(
+  blog,
+  css,
+  log = () => {},
+  stats
+) {
   try {
     const blogID = blog.id;
     const cacheID = blog.cacheID;
@@ -28,6 +36,8 @@ module.exports = async function replaceCssUrls(blog, css, log = () => {}) {
     if (!urlMatches.length) {
       return css;
     }
+
+    if (stats) stats.parsed = true;
 
     // Process all URLs in parallel
     await Promise.all(
@@ -62,8 +72,10 @@ module.exports = async function replaceCssUrls(blog, css, log = () => {}) {
           // Store the original URL (with or without host) as the key
           processedUrls.set(match[1] || match[2], cdnUrl);
           log(`Replacing ${url} with ${cdnUrl}`);
+          if (stats) record(stats, match[1] || match[2], url, false);
         } else {
           log(`No file found in folder: ${url}`);
+          if (stats) record(stats, match[1] || match[2], url, true);
         }
       })
     );

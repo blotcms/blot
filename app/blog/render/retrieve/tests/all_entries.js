@@ -375,6 +375,45 @@ describe("all_entries shared augmentation", function () {
     expect(hidden[0].date).toBeUndefined();
   });
 
+  it("keys the cache on whether the view can use backlinks", function () {
+    const { augmentContext } = require("../../load/augmentedEntries");
+    const allEntries = loadAllEntries();
+    const blog = makeReq().blog;
+    const res = { locals: {} };
+
+    const keyFor = (usesBacklinks) =>
+      allEntries._createCacheKey(
+        blog,
+        {},
+        augmentContext({ blog, usesBacklinks }, res)
+      );
+
+    expect(keyFor(false)).not.toEqual(keyFor(undefined));
+    expect(keyFor(false)).not.toEqual(keyFor(true));
+    expect(keyFor(undefined)).toEqual(keyFor(true));
+  });
+
+  it("does not hand a fill made without backlinks to a view that uses them", async function () {
+    const allEntries = loadAllEntries();
+    stubCatalog(["/b"]);
+
+    spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url, callback) {
+      callback(new Entry({ id: "/b.txt", path: "/b.txt", url: "/b", title: "B" }));
+    });
+
+    const without = makeReq();
+    without.usesBacklinks = false;
+    const withBacklinks = makeReq();
+    withBacklinks.usesBacklinks = true;
+
+    const first = await allEntries(without, { locals: {} });
+    const second = await allEntries(withBacklinks, { locals: {} });
+
+    expect(first[0].backlinks).toEqual([]);
+    expect(second[0].backlinks.map((entry) => entry.title)).toEqual(["B"]);
+    expect(EntryModel.getByUrl).toHaveBeenCalledTimes(1);
+  });
+
   it("resolves backlinks once per fill, not per render", async function () {
     const allEntries = loadAllEntries();
     stubCatalog(["/b"]);

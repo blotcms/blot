@@ -28,7 +28,7 @@ function main (callback) {
       require("./newsletter-subscribers"),
       log("Checking for new customers"),
       require("./new-customers"),
-      log("Checking p95 render time"),
+      log("Checking render time percentiles"),
       require("./render-time"),
       log("Finished daily update")
     ],

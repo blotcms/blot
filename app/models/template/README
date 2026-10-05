@@ -175,7 +175,7 @@ Writes multiple views in parallel. Used internally by `clone`.
 ```js
 getFullView(blogID, templateID, viewName, callback)
 ```
-Returns `(err, [locals, allPartials, retrieve, mimeType, content])` — the complete rendering payload for a view, with all partials resolved and retrieve descriptors merged across the partial tree.
+Returns `(err, [locals, allPartials, retrieve, mimeType, content, usesBacklinks])` — the complete rendering payload for a view, with all partials resolved and retrieve descriptors merged across the partial tree. `usesBacklinks` is whether the view or any of its partials names `backlinks` (see util/referencedIdentifiers.js), so rendering can skip resolving them.
 
 ```js
 getPartials(blogID, templateID, partials, callback)
