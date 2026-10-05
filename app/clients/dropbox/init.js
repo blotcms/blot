@@ -10,7 +10,7 @@ const { get: getAccount, set: setAccount } = require("./database");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
 const sync = promisify(require("./sync"));
-const countChanges = require("./sync/count-changes");
+const countChanges = require("clients/util/countChanges");
 const { measure: measureEventLoop } = require("helper/eventLoopMonitor");
 
 const getAllIDs = promisify(Blog.getAllIDs);

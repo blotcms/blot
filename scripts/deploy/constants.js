@@ -33,8 +33,19 @@ const blogsConfig = {
 module.exports = {
   REGISTRY_URL: "ghcr.io/blotcms/blot",
   PLATFORM_OS: "linux",
+  // A single 512m file only held ~6 hours of yellow's logs, so the output
+  // leading up to a crash-restart was usually gone by the time anyone
+  // looked. Rotated files are gzipped (LOG_COMPRESS), so the extra ones
+  // cost a fraction of their size on disk.
   LOG_MAX_SIZE: "512m",
-  LOG_MAX_FILE: 1,
+  LOG_MAX_FILE: 4,
+  LOG_COMPRESS: true,
+
+  // Where each app container's Node writes a diagnostic report (JS stack,
+  // heap spaces, resource usage) if it dies of a fatal error such as V8
+  // running out of heap - see generateDockerCommand. Under the shared data
+  // directory so reports outlive the container; app/index.js creates it.
+  NODE_REPORT_DIRECTORY: "node-reports",
 
   // This is the port each container listens on internally
   // Externally they listen on the port specified in the container

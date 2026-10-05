@@ -157,4 +157,47 @@ describe("icloud fromiCloud sync", function () {
     expect(summary.removed).toBe(0);
     expect(published.some((line) => line.includes("Sync failed"))).toBe(true);
   });
+
+  it("excludes a download modified around or after the walk started from modifiedDuringWalk", async () => {
+    const remoteFile = {
+      name: "live-edit.txt",
+      size: 5,
+      isDirectory: false,
+      // Within the 30s grace period before the walk started
+      modifiedTime: new Date(Date.now() - 3000).toISOString(),
+    };
+
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => [remoteFile]);
+    mockModule(downloadPath, async () => {});
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, { store: async () => {} });
+
+    const fromiCloud = require(fromiCloudPath);
+    const summary = await fromiCloud(blogID, () => {}, async () => {});
+
+    expect(summary.downloaded).toBe(1);
+    expect(summary.modifiedDuringWalk).toBe(1);
+  });
+
+  it("counts a download modified well before the walk started as a missed change", async () => {
+    const remoteFile = {
+      name: "missed-change.txt",
+      size: 5,
+      isDirectory: false,
+      modifiedTime: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    };
+
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => [remoteFile]);
+    mockModule(downloadPath, async () => {});
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, { store: async () => {} });
+
+    const fromiCloud = require(fromiCloudPath);
+    const summary = await fromiCloud(blogID, () => {}, async () => {});
+
+    expect(summary.downloaded).toBe(1);
+    expect(summary.modifiedDuringWalk).toBe(0);
+  });
 });

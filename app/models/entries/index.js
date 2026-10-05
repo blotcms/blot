@@ -333,6 +333,9 @@ module.exports = (function () {
         if (err) return callback(err);
 
         var existing = results[1];
+        // listName -> ids removed from that list, for callers (list-ghosts)
+        // that want to report/account for what was pruned.
+        var removed = {};
 
         async.eachSeries(
           lists,
@@ -347,11 +350,15 @@ module.exports = (function () {
             redis
               .zRem(key, missing)
               .then(function () {
+                removed[listName] = missing;
                 nextList();
               })
               .catch(nextList);
           },
-          callback
+          function (err) {
+            if (err) return callback(err);
+            callback(null, removed);
+          }
         );
       }
     );
@@ -924,6 +931,7 @@ module.exports = (function () {
     resave: resave,
     each: each,
     pruneMissing: pruneMissing,
+    sweepExpiredDeleted: require("./sweepExpiredDeleted"),
     adjacentTo: adjacentTo,
     getPage: getPage,
     getListIDs: getListIDs,
