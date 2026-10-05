@@ -9,7 +9,6 @@
       <div class="entry-meta">
         {{^hide_dates}}{{#entry.dateStamp}}<span class="entry-date">{{#entry}}{{#formatDate}}{{date_display}}{{/formatDate}}{{/entry}}</span>{{/entry.dateStamp}}{{/hide_dates}}
         {{#entry.tags.length}}
-        {{^hide_dates}}{{#entry.dateStamp}}<span class="entry-meta-separator" aria-hidden="true">&bull;</span>{{/entry.dateStamp}}{{/hide_dates}}
         <span class="entry-tags">{{#entry.tags}}<a href="/tagged/{{slug}}" title="Everything tagged {{name}}">{{name}}</a>{{/entry.tags}}</span>
         {{/entry.tags.length}}
       </div>

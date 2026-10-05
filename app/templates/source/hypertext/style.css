@@ -105,10 +105,6 @@ hr {
   text-decoration: none;
 }
 
-.entry-meta-separator {
-  color: var(--light-text-color);
-}
-
 .entry-tags a:hover {
   color: var(--link-color);
   background-color: var(--dark-border-color);
