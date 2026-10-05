@@ -133,6 +133,8 @@ async function runProbe({
     throw new Error(`--out isn't supported: results always come back to data/${tool}`);
   }
 
+  // The image lookup and host checks below are several ssh round trips.
+  console.log("Checking production: image, free memory and disk...");
   const image = await chooseImage(release);
   const releaseId = image.split(":").pop();
 
@@ -267,6 +269,7 @@ async function runProbe({
 
   let exitCode = null;
   try {
+    console.log(`\nUploading the probe to blot:${remoteDir}...`);
     // The run directory is the ssh user's and closed to everyone else; only
     // out/ is open, because the container (uid 1000, maybe not the ssh user)
     // writes there. Docker bind-mounts out/ directly, so the container never
@@ -279,6 +282,7 @@ async function runProbe({
     }
 
     if (!stopping) {
+      console.log(`Starting ${name}; the app takes a minute or so to load before the probe prints anything...`);
       await new Promise((resolve) => {
         const child = spawn("ssh", ["blot", remoteCommand], { stdio: ["ignore", "inherit", "inherit"] });
         child.on("exit", resolve);
@@ -357,6 +361,7 @@ async function describePull(image) {
 // secrets and customer content, so they shouldn't silently stay on the
 // host, but they shouldn't be lost either.
 async function cleanUp({ name, remoteDir, localDir }) {
+  console.log(`\nRemoving ${name} and fetching its output from the host...`);
   try {
     await sshCommand(`docker rm -f ${name} > /dev/null 2>&1 || true`);
   } catch (err) {
