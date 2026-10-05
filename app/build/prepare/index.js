@@ -36,6 +36,40 @@ function canOverwrite (key) {
   return overwrite.indexOf(key) > -1;
 }
 
+// The overwritable fields which hold HTML, not text. Front matter replaces
+// these with whatever string the author wrote, after the plugins (including
+// folderAssets) have already run, so build/index.js bakes them separately.
+var markup = ["body", "teaser", "teaserBody"];
+
+var modelKeyByLower = Object.keys(Model).reduce((acc, modelKey) => {
+  acc[modelKey.toLowerCase()] = modelKey;
+  return acc;
+}, {});
+
+// Maps each front matter key which overwrites an entry field to that
+// field's name: { Teaser: "teaser" }. Keys are case-insensitive.
+function overrides (metadata) {
+  var result = {};
+
+  for (var key in metadata) {
+    var canonical = modelKeyByLower[key.toLowerCase()];
+
+    if (canOverwrite(canonical) && type(metadata[key], Model[canonical]))
+      result[key] = canonical;
+  }
+
+  return result;
+}
+
+// The markup fields front matter has overwritten, e.g. ["teaser"].
+function overriddenMarkupFields (metadata) {
+  var fields = _.values(overrides(metadata));
+
+  return markup.filter(function (field) {
+    return fields.indexOf(field) > -1;
+  });
+}
+
 // id: 'number', // this is handled by save
 // created: 'number', // this is handled by save
 // url: 'string', // this is handled by set
@@ -216,17 +250,9 @@ function Prepare (entry, options = {}) {
 
   debug(entry.path, "Generating meta-overwrite");
 
-  const modelKeyByLower = Object.keys(Model).reduce((acc, modelKey) => {
-    acc[modelKey.toLowerCase()] = modelKey;
-    return acc;
-  }, {});
+  const overridden = overrides(entry.metadata);
 
-  for (var key in entry.metadata) {
-    const canonical = modelKeyByLower[key.toLowerCase()];
-
-    if (canOverwrite(canonical) && type(entry.metadata[key], Model[canonical]))
-      entry[canonical] = entry.metadata[key];
-  }
+  for (var key in overridden) entry[overridden[key]] = entry.metadata[key];
 
   debug(entry.path, "Generated  meta-overwrite");
 
@@ -251,3 +277,4 @@ function isPage (path) {
 }
 
 module.exports = Prepare;
+module.exports.overriddenMarkupFields = overriddenMarkupFields;
