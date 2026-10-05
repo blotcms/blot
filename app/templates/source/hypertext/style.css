@@ -15,6 +15,7 @@
   --font-family: {{{stack}}};
   --font-size: {{{font_size}}}px;
   --small-font-size: calc({{{font_size}}}px * 0.875);
+  --smallest-font-size: calc({{{font_size}}}px * 0.75);
   --line-height: {{{line_height}}};
   {{/font}}
   --heading-font-size: 18px;
@@ -97,11 +98,11 @@ hr {
 }
 
 .entry-tags a {
-  padding: 0.25rem 0.625rem;
+  padding: 0.2rem 0.5rem;
   border-radius: 0.25rem;
   background-color: var(--border-color);
   color: var(--light-text-color);
-  font-size: var(--small-font-size);
+  font-size: var(--smallest-font-size);
   text-decoration: none;
 }
 
