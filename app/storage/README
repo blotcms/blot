@@ -44,20 +44,18 @@ at sync/build time instead.
   built asynchronously at sync/build time and written before any visitor
   requests them — the "pay the cost at build time" model already works for
   this half of storage.
-- Two known uncached per-request disk reads: `lookupFile.js`'s
-  case-insensitive lookups, and `app/blog/render/retrieve/folder.js`'s live
-  `fs.readdir` + `fs.stat` per request. [PR #1896](https://github.com/davidmerfield/blot/pull/1896)
-  (baking CDN links at build time) has merged and removes most of the
-  `lookupFile.js` exposure; `retrieve/folder.js` is still live (§4c).
-- The per-blog sync lock is **not** a local-disk lockfile — it's already a
-  Redis mutex (`app/sync/lock.js`: token-checked `SET NX PX` with a
-  heartbeat), so it already works across multiple app hosts. No migration
-  needed there.
+- Two uncached per-request disk reads: `lookupFile.js`'s case-insensitive
+  lookups for template links (post links are baked at build time by
+  `build/plugins/folderAssets`), and `app/blog/render/retrieve/folder.js`'s
+  `fs.readdir` + `fs.stat` (§4c).
+- The per-blog sync lock is a Redis mutex (`app/sync/lock.js`:
+  token-checked `SET NX PX` with a heartbeat), so it works across multiple
+  app hosts as is.
 - No per-blog storage-size accounting or quota enforcement exists, except a
   manual audit script (`scripts/user/identify-overdue-users.js`, `du -sb`
   against both directories for disabled accounts).
 - No AWS SDK dependency anywhere in the repo — greenfield integration.
-- Don't store bulk file content in Redis (see reverted PR #1831); Redis is
+- Don't store bulk file content in Redis; Redis is
   fine for small bounded metadata (locks, directory listings, cache
   entries).
 
@@ -156,47 +154,44 @@ at sync/build time instead.
 
 ## 4. Caveats for moving `.folder` to S3
 
-**a. File timestamps: core no longer needs a settable mtime (done).** S3
-and B2 both set `Last-Modified` themselves at upload time and can't be told
-otherwise, and neither has ctime or atime. Custom metadata
-(`x-amz-meta-mtime`) could hold a chosen mtime, but only a rewrite changes
-it and S3's `ListObjectsV2` doesn't return it, so every listing would need
-a HEAD per file. Instead, Blot core stopped depending on a settable mtime,
-and `Last-Modified` is enough. These have merged:
+**a. File timestamps.** S3 and B2 both set `Last-Modified` themselves at
+upload time and can't be told otherwise, and neither has ctime or atime.
+Custom metadata (`x-amz-meta-mtime`) could hold a chosen mtime, but only a
+rewrite changes it and S3's `ListObjectsV2` doesn't return it, so every
+listing would need a HEAD per file. Blot doesn't need one: nothing sets an
+mtime on blog storage or reads ctime or atime, and every mtime read works
+with `Last-Modified`.
 
-1. `entry.updated` moves only when the entry's `contentHash` changes, so a
-   reconnect, a full resync or the copy to S3 doesn't reset it.
-2. CDN version tokens hash content (`helper/contentVersion`; the ETag on
-   S3). Nothing reads ctime, and the dashboard dropped "created".
-3. Google Drive compares Drive's `modifiedTime` with an "applied" record
-   in its client DB, not the local mtime.
-4. iCloud and Dropbox stopped calling `utimes` and comparing local mtimes.
+- `entry.updated` moves only when the entry's `contentHash` changes, so a
+  reconnect, a full resync or the copy to S3 leaves it alone.
+- CDN version tokens hash content (`helper/contentVersion`; the ETag on
+  S3). Large files and render-time `lookupFile.js` use size+mtime, which
+  still changes whenever the file is rewritten.
+- Google Drive compares Drive's `modifiedTime` with an "applied" record in
+  its client DB. iCloud and Dropbox compare content or provider hashes.
+- The other mtime reads are display (`retrieve/folder.js`,
+  `dashboard/site/folder/stat.js`, `build/multiple.js`) and iCloud
+  forwarding the time to the macserver.
+- The remaining `utimes` calls don't touch blog storage: the macserver
+  sets them on the real iCloud Drive file, and the importer on its temp
+  output, which the user downloads as a zip.
 
-No blog-storage code sets an mtime now. The remaining `utimes` calls are
-the macserver (the real iCloud Drive file) and the importer (its temp
-output, which the user downloads as a zip). The remaining mtime reads just
-want "last modified" and work with `Last-Modified`: display
-(`retrieve/folder.js`, `dashboard/site/folder/stat.js`, `build/multiple.js`),
-`entry.updated` when the content hash changed, `contentVersion.fromStat`'s
-size+mtime token for large files and render-time `lookupFile.js`, and
-iCloud forwarding the time to the macserver.
+Two fallbacks still read the local mtime. Clear both on local disk before
+the copy to S3:
 
-Two transitional fallbacks still read the local mtime. Clear both on local
-disk before the copy to S3:
+- An entry with no stored `contentHash` takes the mtime once to set
+  `updated`. If that happens on S3, the post shows the migration date.
+  `scripts/entry/backfill-content-hash.js --apply` stores a hash without
+  touching `updated`.
+- A Drive file with no applied record compares against the local mtime;
+  on S3 it would be re-downloaded once.
+  `scripts/google-drive/backfill-applied-modified-times.js --apply`
+  resyncs the Drive blogs that have them. Old md5 files deferred by sync's
+  verification budget can stay unrecorded; they're compared by checksum.
 
-- Entries built before `contentHash` existed take the mtime once to set
-  `updated`. If that once happens on S3, those posts show the migration
-  date. `scripts/entry/backfill-content-hash.js --apply` stores a hash
-  without touching `updated`.
-- Drive files without an applied record compare against the local mtime;
-  on S3 each would be re-downloaded once. `scripts/google-drive/
-  backfill-applied-modified-times.js --apply` resyncs the Drive blogs that
-  still have them. Old md5 files deferred by sync's verification budget can
-  stay unrecorded; they're compared by checksum, so that's harmless.
-
-The storage layer's `stat()` then returns `size`, `modified` (local mtime
-now, `Last-Modified` on S3) and `hash` (content hash now, ETag on S3), with
-no ctime, no atime and no way to set `modified`. Accepted trade-offs:
+The storage layer's `stat()` returns `size`, `modified` (local mtime now,
+`Last-Modified` on S3) and `hash` (content hash now, ETag on S3), with no
+ctime, no atime and no way to set `modified`. Accepted trade-offs:
 
 - `updated` means when Blot received a change, not when the user saved it.
 - Non-post files in folder listings show the migration date, once.
@@ -208,7 +203,7 @@ resolves case conflicts via rename. These all assume a real local
 filesystem underneath and need a stage-locally-then-commit pattern against
 the storage layer, not raw S3 calls threaded through each client.
 
-**c. Request-time folder reads still exist, even after PR #1896.**
+**c. Request-time folder reads.**
 `app/blog/routes/assets.js` serves from the blog folder with case-folding
 and index.html/.html fallbacks; `app/cdn/index.js`'s `/folder/v-:version`
 route uses `express.static()` plus `assertNoSymlinks`; `lookupFile.js`
@@ -249,10 +244,10 @@ should consolidate into one storage-layer method, exposed explicitly
 
 ## 5. Phases
 
-- **Phase 0 (in progress):** `app/storage/assets.js` centralizes
-  generated-asset paths — `path(blogID, ...segments)` and
-  `removeAll(blogID)` — over today's local disk, no behavior change. Migrate the 21 `blog_static_files_dir` call
-  sites onto it. Note: 7 of those sites hand a path to a tool that writes
+- **Phase 0:** `app/storage/assets.js` centralizes generated-asset paths
+  — `path(blogID, ...segments)` and `removeAll(blogID)` — over local disk,
+  and every per-blog `blog_static_files_dir` call site goes through it.
+  7 of those sites hand a path to a tool that writes
   itself (sharp's `.toFile`, pandoc `--extract-media`, puppeteer
   screenshots, thumbnail/favicon generators), so the API shape is
   "write locally, then commit," not `write(buffer)`. `removeAll(blogID)`
