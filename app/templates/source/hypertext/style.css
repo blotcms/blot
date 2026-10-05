@@ -100,7 +100,7 @@ hr {
 .entry-tags a {
   padding: 0.2rem 0.5rem;
   border-radius: 0.25rem;
-  background-color: var(--border-color);
+  background-color: var(--off-background-color);
   color: var(--light-text-color);
   font-size: var(--smallest-font-size);
   text-decoration: none;
