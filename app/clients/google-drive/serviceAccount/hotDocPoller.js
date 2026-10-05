@@ -11,6 +11,8 @@ const createDriveClient = require("./createDriveClient");
 const createDocsClient = require("./createDocsClient");
 const establishSyncLock = require("sync/establishSyncLock");
 const database = require("../database");
+const localPath = require("helper/localPath");
+const localFingerprint = require("../util/localFingerprint");
 const sync = require("../sync");
 
 const prefix = () => `${clfdate()} Google Drive hotDocPoller:`;
@@ -503,6 +505,13 @@ class HotDocPoller {
             ...result.verifiedContent,
           });
         }
+
+        // Record what we just wrote so the follow-up sync doesn't export
+        // and rebuild the same document again.
+        await folderDb.setApplied(file.data.id, {
+          modifiedTime: file.data.modifiedTime,
+          fingerprint: await localFingerprint(localPath(item.blogID, path)),
+        });
 
         if (result?.updated !== true) {
           this.log("download-no-update", {
