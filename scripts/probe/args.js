@@ -40,7 +40,7 @@ function parseArgs(argv, spec, { strict = true } = {}) {
 }
 
 // One line per option, for --help.
-function describe(spec) {
+function formatOptions(spec) {
   return Object.entries(spec)
     .filter(([, option]) => option.help)
     .map(([name, option]) => {
@@ -50,4 +50,4 @@ function describe(spec) {
     .join("\n");
 }
 
-module.exports = { parseArgs, describe };
+module.exports = { parseArgs, formatOptions };
