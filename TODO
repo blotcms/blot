@@ -1281,3 +1281,5 @@ Explore a redesign of Fix() (app/sync/fix) to cut Redis load further, e.g. one c
 - report shape keyed by check name must be kept for the dashboard/validators
 - Fix() runs outside the folder lock, so the id snapshot can go stale (same as today)
 - lean on the Fix() regression tests (app/sync/fix/tests/regression*) before attempting it
+
+app/build: entry.contentHash is computed by re-reading the source file(s) after conversion, so a source edited between the converter's read and this hash read can produce a hash that matches a later, genuinely-changed build (or vice versa) - closing this needs threading the bytes each converter already reads back through to the hash, or detect-and-retry on mismatch (flagged in Codex review of PR #2002, out of scope there since it touches every converter)
