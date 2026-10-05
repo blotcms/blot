@@ -54,6 +54,38 @@ describe("archives", function () {
     expect(entry.html).toBeUndefined();
   });
 
+  it("keeps html for a view that only renders it from a nested partial, after a view that doesn't", async function () {
+    await this.write({
+      path: "/a.txt",
+      content: "Title: A\nDate: 2020-01-02\n\nA body",
+    });
+
+    await this.template(
+      {
+        "list.html": `{{#archives}}{{#months}}{{#entries}}{{title}} {{/entries}}{{/months}}{{/archives}}`,
+        "full.html": `{{#archives}}{{#months}}{{#entries}}{{> row.html}}{{/entries}}{{/months}}{{/archives}}`,
+        "row.html": `<div>{{> content.html}}</div>`,
+        "content.html": `{{{html}}}`,
+      },
+      {
+        views: {
+          "list.html": { url: "/list" },
+          "full.html": { url: "/full" },
+        },
+      }
+    );
+
+    // Fills the catalog cache without html first.
+    const before = await (await this.get("/list?json=1")).json();
+    expect(before.archives[0].months[0].entries[0].html).toBeUndefined();
+
+    const full = await (await this.get("/full?json=1")).json();
+    expect(full.archives[0].months[0].entries[0].html).toContain("A body");
+
+    const rendered = await (await this.get("/full")).text();
+    expect(rendered).toMatch(/<div>[^]*A body[^]*<\/div>/);
+  });
+
   it("drops unreferenced heavy fields from archives entries", async function () {
     await this.write({
       path: "/a.txt",

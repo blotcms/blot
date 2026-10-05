@@ -41,6 +41,35 @@ describe("all_entries", function () {
     expect(after.allEntries[0].html).toBeUndefined();
   });
 
+  it("keeps html for a view that only renders it from a nested partial, after a view that doesn't", async function () {
+    await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
+
+    await this.template(
+      {
+        "list.html": `{{#allEntries}}{{title}} {{/allEntries}}`,
+        "full.html": `{{#allEntries}}{{> row.html}}{{/allEntries}}`,
+        "row.html": `<div>{{> content.html}}</div>`,
+        "content.html": `{{{html}}}`,
+      },
+      {
+        views: {
+          "list.html": { url: "/list" },
+          "full.html": { url: "/full" },
+        },
+      }
+    );
+
+    // Fills the catalog cache without html first.
+    const before = await (await this.get("/list?json=1")).json();
+    expect(before.allEntries[0].html).toBeUndefined();
+
+    const full = await (await this.get("/full?json=1")).json();
+    expect(full.allEntries[0].html).toContain("A body");
+
+    const rendered = await (await this.get("/full")).text();
+    expect(rendered).toMatch(/<div>[^]*A body[^]*<\/div>/);
+  });
+
   it("drops unreferenced heavy fields from allEntries locals", async function () {
     await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
 
