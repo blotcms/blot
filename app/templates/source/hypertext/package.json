@@ -52,7 +52,10 @@
       "url": "/search"
     },
     "pagination.html": {
-      "url": "/pagination/:page"
+      "url": "/pagination/:page",
+      "locals": {
+        "page_size": 100
+      }
     },
     "entries.html": {
       "partials": {

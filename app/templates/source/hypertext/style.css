@@ -306,7 +306,7 @@ main ul li {
   margin-inline-start: 30.25px
 }
 
-p, h1, h2, h3, h4, h5, h6, ol, ul, pre, hr, .videoContainer, table, details {
+p, h1, h2, h3, h4, h5, h6, ol, ul, pre, hr, .videoContainer, table, details, .summary {
   max-width: calc(var(--main-width) - 96px);
 }
 
