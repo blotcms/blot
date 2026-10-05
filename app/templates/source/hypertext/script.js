@@ -173,6 +173,7 @@ class PageTransitioner {
     const previousHTML = content.innerHTML;
     const { hash, displayUrl, cacheKey, fetchUrl } = this.parsePageUrl(url);
 
+    content.innerHTML = "";
     content.classList.add("loading");
     document.documentElement.classList.add("is-loading");
     
