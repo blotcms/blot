@@ -51,7 +51,8 @@ An entry object with the following fields:
 | `permalink` | string | A custom permalink from metadata (`permalink`, `link`, or `url` keys). |
 | `dateStamp` | number | A UTC millisecond timestamp extracted from the path or metadata, adjusted for the blog's timezone. Absent if no date was found. |
 | `dateStampWasRemoved` | boolean | Set to `true` if a `dateStamp` was present before but is now absent. |
-| `updated` | number | The file's modification time in UTC milliseconds (`stat.mtime`). |
+| `updated` | number | UTC milliseconds. Only moves when the entry's source content actually changes (see below); otherwise it's carried forward from the previously stored entry. |
+| `contentHash` | string | A SHA-1 hash of the entry's source bytes (for a multi-file/folder post, a hash of each source file's path + hash). Used to detect real content changes independent of mtime. |
 | `size` | number | The file size in bytes from `stat.size`. |
 | `thumbnail` | object | Thumbnail variants generated from the first eligible image in the entry (or empty object). |
 | `dependencies` | string[] | Paths to other files in the blog folder that this entry references (e.g. images). |
@@ -160,7 +161,7 @@ A call to `build(blog, path, callback)` executes the following steps in sequence
 
 7. **Thumbnail extraction** (`thumbnail/index.js`): Called in `index.js` after `single.js` completes. Identifies candidate images from the metadata `thumbnail` key, `<img>` tags, and `.videoContainer iframe` elements (YouTube/Vimeo). Calls `create.js` to generate resized variants via sharp (or a dedicated GIF transformer). Results are cached via `helper/transformer`.
 
-8. **Entry assembly** (`index.js`): Constructs the base entry object from the HTML, metadata, stat, thumbnail, EXIF data, and draft status. Computes `dateStamp` by examining metadata and the file path.
+8. **Entry assembly** (`index.js`): Constructs the base entry object from the HTML, metadata, stat, thumbnail, EXIF data, and draft status. Computes `dateStamp` by examining metadata and the file path. Also hashes the entry's source file(s) into `contentHash` and compares it against the previously stored entry (`Entry.get`): if the hash is unchanged, `updated` is carried forward from the stored entry instead of being reset to the current `stat.mtime`. This keeps `updated` (and the sitemap `<lastmod>`) stable across a re-download/re-upload of unchanged files - a provider reconnect, a full resync, or a storage migration that rewrites file timestamps without changing content.
 
 9. **Prepare** (`prepare/index.js`): Synchronously derives all remaining entry properties from the assembled HTML and metadata:
    - Title (from heading, path, or first sentence)

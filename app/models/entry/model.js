@@ -27,7 +27,8 @@ module.exports = {
   thumbnail: "object",
   dateStamp: "number", // UTC timestamp for resolved date
   created: "number", // UTC timestamp for when the entry was added to Blot
-  updated: "number", // UTC timestamp for file mtime
+  updated: "number", // UTC timestamp - only changes when contentHash changes
+  contentHash: "string", // hash of the entry's source bytes, used to detect real content changes
   metadata: "object",
   exif: "object",
 };
