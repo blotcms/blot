@@ -64,6 +64,12 @@ exists on disk (`localPath`), with case-insensitive fallbacks.
   deleted file, so the count is about 2× the number of files. Only the
   first 10 rows are quoted, and `all` is listed first, so `deleted` rows are
   often cut off.
+  **Since `Entries.sweepExpiredDeleted` landed**, every entry save on the
+  blog and the start of list-ghosts silently clear these ids using the
+  `deleted` scores, so expired deleted entries should no longer appear in
+  the email. If `MISSING` rows in `all`/`deleted` turn up after that
+  deploy, a deleted entry's key disappeared before its 24h was up. That
+  needs investigating.
   It becomes suspicious if a `MISSING` id is in `entries`, `drafts`,
   `pages`, `scheduled` or `created`, because live lists should never point
   at an absent key.
@@ -181,7 +187,9 @@ Entry template:
   `pruneMissing` reports each one, which explains the 30 rows (about 15
   files × 2 lists). This was the first email of this kind, sent soon after
   the repair email was introduced (PR adding `SYNC_FIX_REPAIRED`).
-- Follow-up: list-ghosts `MISSING` rows confined to `all`/`deleted` are
+- Follow-up: fixed in the PR adding `Entries.sweepExpiredDeleted` (option
+  "use the `deleted` scores to clean up after the expiry"). Original notes:
+  list-ghosts `MISSING` rows confined to `all`/`deleted` are
   expected. Suggest leaving them out of the email (or out of the report
   count used for `notifyAdmin`), and only alerting when a live list
   (`entries`, `drafts`, `pages`, `scheduled`, `created`) loses its key.
