@@ -4,6 +4,7 @@ const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
+const fetchCached = require("../../lib/fetchCached");
 const { Uncacheable } = require("../../lib/uncacheableFetch");
 
 const ALIASES = ["recentEntries", "recent_entries"];
@@ -54,19 +55,15 @@ async function recentEntries(req, res) {
   const log = typeof req?.log === "function" ? req.log.bind(req) : () => {};
   const key = createCacheKey(req.blog);
 
-  const status = {};
   let prepared;
   try {
-    prepared = await recentEntriesCache.fetch(key, {
-      status,
+    prepared = await fetchCached(recentEntriesCache, "recentEntries", log, key, {
       context: { blogID: req.blog.id },
     });
   } catch (e) {
     if (!(e instanceof Uncacheable)) throw e;
     prepared = e.payload;
   }
-
-  if (status.fetch === "hit") log("Retrieved recent entries from cache");
 
   return projectEntryFields(cloneEntries(prepared.payload), req.retrieve, ALIASES);
 }
