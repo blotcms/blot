@@ -23,7 +23,8 @@
     "folder": "./scripts/development/folder.sh",
     "translate": "./scripts/development/translate/translate.sh",
     "preview-newsletter": "./scripts/development/preview-newsletter.sh",
-    "render-time-chart": "node scripts/render-time-chart"
+    "render-time-chart": "node scripts/render-time-chart",
+    "render-probe": "node scripts/render-probe"
   },
   "version": "0.0.0",
   "dependencies": {

@@ -7,8 +7,9 @@ const { DATA_DIRECTORY_ON_SERVER } = CONSTANTS;
 const { DATA_DIRECTORY_ON_CONTAINER } = CONSTANTS;
 const { ENV_FILE_ON_SERVER } = CONSTANTS;
 const { REGISTRY_URL } = CONSTANTS;
-const { LOG_MAX_SIZE, LOG_MAX_FILE } = CONSTANTS;
+const { LOG_MAX_SIZE, LOG_MAX_FILE, LOG_COMPRESS } = CONSTANTS;
 const { AIRLOCK } = CONSTANTS;
+const { NODE_REPORT_DIRECTORY } = CONSTANTS;
 
 const VALID_PLATFORMS = {
   linux: ["amd64", "arm64"],
@@ -193,6 +194,7 @@ async function generateDockerCommand(container, platform, commitHash) {
     "--log-driver json-file",
     `--log-opt max-size=${LOG_MAX_SIZE}`,
     `--log-opt max-file=${LOG_MAX_FILE}`,
+    `--log-opt compress=${LOG_COMPRESS}`,
 
     // Expose the internal port to the host network
     // Since each container listens on the same internal port
@@ -201,8 +203,17 @@ async function generateDockerCommand(container, platform, commitHash) {
     `--env-file ${ENV_FILE_ON_SERVER}`,
     `-e CONTAINER_NAME=${sanitizedName}`,
     `-e BLOT_RELEASE_ID=${commitHash}`,
-    // Configure the maximum memory usage for the node process
-    `-e NODE_OPTIONS='--max-old-space-size=${oldSpaceSize}'`,
+    // Configure the maximum memory usage for the node process, and have
+    // Node write a report (without env vars, which hold secrets) if it dies
+    // of a fatal error - otherwise a V8 out-of-memory crash only leaves a
+    // few lines in a log that rotates away within hours.
+    `-e NODE_OPTIONS='${[
+      `--max-old-space-size=${oldSpaceSize}`,
+      "--report-on-fatalerror",
+      `--report-directory=${DATA_DIRECTORY_ON_CONTAINER}/${NODE_REPORT_DIRECTORY}/${sanitizedName}`,
+      "--report-exclude-env",
+      "--report-exclude-network",
+    ].join(" ")}'`,
     // Routes bookmark-link screenshots (helper/screenshot) and remote-image
     // downloads (helper/transformer/download) through the airlock - see
     // config/airlock/README.md. This container is connected to
