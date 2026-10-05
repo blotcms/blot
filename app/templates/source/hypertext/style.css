@@ -69,20 +69,32 @@ hr {
   overflow-wrap: break-word;
 }
 
-.entry-date {
+.entry-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.75rem;
+  row-gap: 0.25rem;
   margin: 1.25rem 0 0;
   color: var(--light-text-color);
   font-size: var(--small-font-size);
 }
 
+.entry-meta:not(:has(> span)) {
+  display: none;
+}
+
+.entry-date,
 .entry-tags {
-  margin: 0.5rem 0 0;
-  color: var(--light-text-color);
-  font-size: var(--small-font-size);
+  margin: 0;
 }
 
 .entry-tags a {
   color: inherit;
+}
+
+.entry-meta-separator {
+  color: var(--light-text-color);
 }
 
 .entry-tags a:hover {
@@ -93,7 +105,7 @@ hr {
   padding-bottom: 1rem;
 }
 
-.entry.listing .entry-date {
+.entry.listing .entry-meta {
   margin-top: 0.5rem;
 }
 

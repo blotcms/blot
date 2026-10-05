@@ -4,7 +4,7 @@
 <body>
     {{> navigation}}
     <main>
-        <h1>Tagged: {{tag}}</h1>
+        <h1>{{tag}}</h1>
         <div class="entries">
         {{^entries.length}}
             <p class="entry">Nothing here.</p>
@@ -13,16 +13,13 @@
         <article class="entry listing">
             <h2><a href="{{{url}}}" title="{{title}}">{{title}}</a></h2>
             {{#summary}}<div class="summary">{{{summary}}}</div>{{/summary}}
-            {{^hide_dates}}
-            {{#dateStamp}}
-            <p class="entry-date">{{#formatDate}}{{date_display}}{{/formatDate}}</p>
-            {{/dateStamp}}
-            {{/hide_dates}}
-            {{#tags.length}}
-            <p class="entry-tags">
-                {{#tags}}<a href="/tagged/{{slug}}" title="Everything tagged {{name}}">{{name}}</a>{{^last}}, {{/last}}{{/tags}}
-            </p>
-            {{/tags.length}}
+            <div class="entry-meta">
+                {{^hide_dates}}{{#dateStamp}}<span class="entry-date">{{#formatDate}}{{date_display}}{{/formatDate}}</span>{{/dateStamp}}{{/hide_dates}}
+                {{#tags.length}}
+                {{^hide_dates}}{{#dateStamp}}<span class="entry-meta-separator" aria-hidden="true">&bull;</span>{{/dateStamp}}{{/hide_dates}}
+                <span class="entry-tags">{{#tags}}<a href="/tagged/{{slug}}" title="Everything tagged {{name}}">{{name}}</a>{{^last}}, {{/last}}{{/tags}}</span>
+                {{/tags.length}}
+            </div>
         </article>
         {{/entries}}
 
