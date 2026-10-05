@@ -11,5 +11,9 @@ module.exports = async (blogID, publish, update) => {
   // reset the database state of the folder
   await reset({ preserveVerifiedContent: true });
 
-  if (await sync(blogID, publish, update)) await pruneVerifiedContents();
+  const summary = await sync(blogID, publish, update);
+
+  if (summary) await pruneVerifiedContents();
+
+  return summary;
 };

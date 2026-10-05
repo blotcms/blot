@@ -115,7 +115,7 @@ describe("dropbox resetToBlot", function () {
   });
 
   describe("changes made in Dropbox during the walk", function () {
-    const countChanges = require("../sync/count-changes");
+    const countChanges = require("clients/util/countChanges");
     const deleted = (path_lower) => ({ ".tag": "deleted", path_lower });
 
     it("excuses a removal Dropbox reports since the pre-walk cursor", async function () {

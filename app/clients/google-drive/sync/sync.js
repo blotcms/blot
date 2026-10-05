@@ -8,6 +8,7 @@ const download = require("../util/download");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const modifiedSince = require("clients/util/modifiedSince");
 const {
   countLocalFiles,
   createProgress,
@@ -19,9 +20,22 @@ const localReaddir = require("./util/localReaddir");
 const truncateToSecond = require("./util/truncateToSecond");
 const transformDriveItems = require("./util/transformDriveItems");
 
+// Resolves to a summary of what changed (truthy) when the walk finishes, or
+// false when it fails part way through.
 module.exports = async function sync(blogID, publish, update) {
   publish = publish || function () {};
   update = update || function () {};
+
+  // Files Drive modified after this moment may just be edits that landed
+  // mid-walk, not changes we failed to sync. Callers hold the folder lock,
+  // so this is (just after) when it was acquired.
+  const startedAt = Date.now();
+  const summary = {
+    downloaded: 0,
+    removed: 0,
+    createdDirs: 0,
+    modifiedDuringWalk: 0,
+  };
 
   const account = await database.blog.get(blogID);
   const { folderId, folderName, serviceAccountId } = account;
@@ -121,6 +135,7 @@ module.exports = async function sync(blogID, publish, update) {
         await checkWeCanContinue();
         progress.publish("Removing ignored", path, false, removedCount);
         await fs.remove(localPath(blogID, path));
+        summary.removed += 1;
         await update(path);
         const id = await getByPath(path);
         if (id) await remove(id);
@@ -136,6 +151,7 @@ module.exports = async function sync(blogID, publish, update) {
           "which does not exist remotely"
         );
         await fs.remove(localPath(blogID, path));
+        summary.removed += 1;
         await update(path);
         await remove(await getByPath(path));
       }
@@ -244,6 +260,15 @@ module.exports = async function sync(blogID, publish, update) {
 
             // A previous rebuild/cache-store may have failed after publication.
             // Rebuild before recording verification, even if bytes now match.
+            // Only count downloads that changed local bytes: a verified
+            // match (e.g. the legacy verification warm-up) isn't a missed
+            // change, even though it still triggers a rebuild below.
+            if (result?.updated) {
+              summary.downloaded += 1;
+              if (modifiedSince(modifiedTime, startedAt)) {
+                summary.modifiedDuringWalk += 1;
+              }
+            }
             if (result?.updated || (!isGoogleAppFile && result?.verifiedContent)) {
               await update(path);
             }
@@ -263,14 +288,17 @@ module.exports = async function sync(blogID, publish, update) {
           progress.publish("Removing file", path);
           console.log("Removing file", path, "which is a directory remotely");
           await fs.remove(localPath(blogID, path));
+          summary.removed += 1;
           publish("Creating directory", path);
           await fs.ensureDir(localPath(blogID, path));
+          summary.createdDirs += 1;
           await update(path);
         } else if (!existsLocally) {
           await checkWeCanContinue();
           publish("Creating directory", path);
           console.log("Creating directory locally", path);
           await fs.ensureDir(localPath(blogID, path));
+          summary.createdDirs += 1;
           await update(path);
         }
 
@@ -285,7 +313,7 @@ module.exports = async function sync(blogID, publish, update) {
     progress.finish(deferred
       ? `Finished processing folder (${deferred} content verifications deferred)`
       : "Finished processing folder");
-    return true;
+    return summary;
   } catch (err) {
     if (lastMigrated !== migrationCursor) await setMigrationCursor(lastMigrated);
     publish("Sync failed", err.message);
