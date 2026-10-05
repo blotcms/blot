@@ -37,8 +37,11 @@ function harness(files) {
         setMigrationCursor: async () => {},
         getVerifiedContents: async (ids) => ids.map(() => undefined),
         setVerifiedContent: async () => {},
+        getApplied: async () => null,
+        setApplied: async () => {},
       }),
     },
+    "../util/localFingerprint": async (path) => "local-" + path,
     "../util/download": async (blog, drive, path, remote) => {
       state.downloads.push(remote.id);
       return state.downloadResult;
