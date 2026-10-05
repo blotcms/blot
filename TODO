@@ -1,16 +1,16 @@
-Run To confirm, render the home page first as a baseline, then /archives on its own with a heap snapshot:
+Fix bug with missing items in hypertext template navigation
 
-npm run render-probe -- https://www.jaysjay.com/
-npm run render-probe -- https://www.jaysjay.com/archives --heap-snapshot
+Pagination on hypertext template index page sucks
+
+Fix bug with repeat google drive syncs
 
 Investigate high aws bill cause
 
 Add option to hypertext template to make homepage chrono list of posts and tell [Brendan](https://mail.google.com/mail/u/0/#inbox/FMfcgzQhWfPnbhmcWTtTJxGgMqJtppML)
 
-Add script which issues request locally
-- use to debug nashp concurrent requests in isolation on prod infra
+Work on removing replaceFolderLinks
 
-Add script to triage fix/build issues individually (with appropriate heap flags etc.)
+Excercise the backlinks with big entries / many backlinks in the benchmarks somewhere
 
 Add p50 and p99 to response time stats and daily update
 
