@@ -165,7 +165,9 @@ function heapSpaces() {
 // baseline isn't last phase's garbage) and after it (for heapRetainedMB),
 // outside the profiler so neither is charged to the phase.
 //
-// end() appends the result to `file` straight away and returns it.
+// start() appends a { event: "start", label } record to `file` straight
+// away, before any work runs, so a crash mid-phase still shows which one
+// was active. end() appends its { event: "end", ... } result and returns it.
 function measurePhases(out, { file = "phases.ndjson", intervalMs = 25, onSample } = {}) {
   const loopDelay = monitorEventLoopDelay({ resolution: 10 });
   loopDelay.enable();
@@ -204,6 +206,10 @@ function measurePhases(out, { file = "phases.ndjson", intervalMs = 25, onSample 
         arrayBuffers: usage.arrayBuffers,
       },
     };
+    // Durable record that this phase began, written before any work runs,
+    // so an OOM mid-phase still shows which target was active even though
+    // end() never gets to append this phase's result.
+    out.append(file, { t: now(), event: "start", label });
   }
 
   function end(extra) {
@@ -223,6 +229,7 @@ function measurePhases(out, { file = "phases.ndjson", intervalMs = 25, onSample 
 
     const result = {
       t: now(),
+      event: "end",
       label: phase.label,
       ms: Math.round(performance.now() - phase.started),
       heapBeforeMB: mb(phase.before.heapUsed),
