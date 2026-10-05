@@ -1,4 +1,4 @@
-Link: /
+Link: /home
 
 ![](./_TeintesSaturationCercle.png){width=280px}
 

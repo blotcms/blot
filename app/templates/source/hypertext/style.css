@@ -75,6 +75,14 @@ hr {
   font-size: var(--small-font-size);
 }
 
+.entry.listing {
+  padding-bottom: 1rem;
+}
+
+.entry.listing .entry-date {
+  margin-top: 0.5rem;
+}
+
 main {
   position: relative;
 }
@@ -306,7 +314,7 @@ main ul li {
   margin-inline-start: 30.25px
 }
 
-p, h1, h2, h3, h4, h5, h6, ol, ul, pre, hr, .videoContainer, table, details {
+p, h1, h2, h3, h4, h5, h6, ol, ul, pre, hr, .videoContainer, table, details, .summary {
   max-width: calc(var(--main-width) - 96px);
 }
 
@@ -335,8 +343,9 @@ pre code {
 
 
 .entry img {
+  width: auto;
   max-width: 100%;
-  max-height: calc(100vh - 5.75rem);
+  max-height: calc(100vh - 1rem);
   height: auto;
   outline: none;
 }
