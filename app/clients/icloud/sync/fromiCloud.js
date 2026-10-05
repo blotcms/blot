@@ -8,6 +8,7 @@ const localReaddir = require("./util/localReaddir");
 const remoteReaddir = require("./util/remoteReaddir");
 const remoteRecursiveList = require("./util/remoteRecursiveList");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const modifiedSince = require("clients/util/modifiedSince");
 const {
   countLocalFiles,
   createProgress,
@@ -25,6 +26,11 @@ module.exports = async (blogID, publish, update) => {
 
   if (!update) update = () => {};
 
+  // Files modified in iCloud after this moment may just be edits that
+  // landed mid-walk, not changes we failed to sync. Callers hold the folder
+  // lock, so this is (just after) when it was acquired.
+  const startedAt = Date.now();
+
   const checkWeCanContinue = CheckWeCanContinue(blogID);
   const progress = createProgress(
     await countLocalFiles(localPath(blogID, "/")),
@@ -36,6 +42,10 @@ module.exports = async (blogID, publish, update) => {
     createdDirs: 0,
     skipped: 0,
     placeholdersCreated: 0,
+    // Subset of downloaded: files the macserver reports modified at/after
+    // the cutoff (minus a grace period). Directories and removals have no
+    // modification time to check here, so only downloads are excluded.
+    modifiedDuringWalk: 0,
   };
 
   try {
@@ -104,7 +114,7 @@ module.exports = async (blogID, publish, update) => {
     ).length;
     progress.discover(newFileCount);
 
-    for (const { name, size, isDirectory } of remoteContents) {
+    for (const { name, size, isDirectory, modifiedTime } of remoteContents) {
       const path = join(dir, name);
       const existsLocally = localContents.find(
         (item) => item.name.normalize("NFC") === name.normalize("NFC")
@@ -166,6 +176,9 @@ module.exports = async (blogID, publish, update) => {
 
             await download(blogID, path);
             summary.downloaded += 1;
+            if (modifiedSince(modifiedTime, startedAt)) {
+              summary.modifiedDuringWalk += 1;
+            }
             await update(path);
           } catch (e) {
             publish("Failed to download", path, e);

@@ -420,7 +420,7 @@ const walk = async (
           // filesystem allows – seen in production when a Dropbox account
           // got stuck wrapping the same file in nested "(Conflict met
           // exemplaar van ...)" copies. That download can never succeed.
-          // countChanges() (sync/count-changes.js) only looks at downloaded/removed/
+          // countChanges() (clients/util/countChanges.js) only looks at downloaded/removed/
           // createdDirs, so this was never counted as an unsynced change
           // either way; recording it as "skipped" here is just for
           // visibility in logs/summaries, not to affect the hourly email.

@@ -1,5 +1,5 @@
-describe("dropbox countChanges", function () {
-  const countChanges = require("../sync/count-changes");
+describe("clients/util countChanges", function () {
+  const countChanges = require("../countChanges");
 
   it("counts downloads, removals and created directories", function () {
     expect(

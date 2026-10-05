@@ -971,7 +971,6 @@ Improvements to server
 
 Improvements to sync/reset scripts:
 - [ ] reset should produce a report which I get email
-- [ ] Resync should produce a report which I get via email
 
 ---
 
