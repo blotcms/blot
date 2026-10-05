@@ -62,6 +62,8 @@ Investigate green crashes (`Lock was lost` / ECOMPROMISED at 2026-09-21 18:02 an
 - Not yet fixed: give the lock heartbeat its own dedicated Redis connection so Fix()'s traffic can't queue ahead of it, or batch Fix()'s per-entry reads
 - Remove the event loop monitor (app/helper/eventLoopMonitor*.js, its setup.js hook, and `logLag`/`measureEventLoop` in app/clients/dropbox/init.js) and the lock heartbeat logging (app/sync/lock.js) once the cause is fixed
 
+Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
+
 Surface template choices on the templates subpages: switch from png to iframe after hovering a selection
 
 Perform caching and header audit of site and templates
@@ -984,7 +986,6 @@ Improvements to server
 
 Improvements to sync/reset scripts:
 - [ ] reset should produce a report which I get email
-- [ ] Resync should produce a report which I get via email
 
 ---
 
@@ -1271,3 +1272,14 @@ Self-hosting:
 - Tell Nick when it's possible to deploy a self-hosted [Blot on Vercel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKjxHWSvgjKtCWrbhccKFPlkdD) and [Zia](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsSXWPRNNxDNcdhGHQXBkTtsx)
 
 Add preflight checks in proxy/deploy/{cutover-from-baremetal,blue-green}.sh for PROXY_BLOG_STATIC_DIR/PROXY_GLOBAL_STATIC_DIR existing and readable - docker -v silently creates an empty dir for a missing host path, so a typo or host-layout change would 404 cdn.* static assets with no check catching it
+
+Find and replace the KEYS calls blocking prod Redis (from SLOWLOG, source 172.30.0.122 = the blot host, not repo code — likely a host cron or manual `client` session)
+- `keys ssl:*:latest` ~750ms, roughly daily (21, 23, 24 Sep) — switch to `--scan --pattern`
+- `KEYS *blog_<id>*` 2.4s on 22 Sep
+
+Explore a redesign of Fix() (app/sync/fix) to cut Redis load further, e.g. one chunked walk over every referenced entry id (lists + tag members) that MGETs each entry once and applies every per-entry check, instead of each check re-reading all content. Not an easy win:
+- ghosts include ids with no entry, so the walk must cover the union of list and tag member ids, not just "all"
+- repairs interleave (an entry-ghosts drop changes that entry's lists/tags mid-walk), so the in-memory id picture must be updated as repairs happen
+- report shape keyed by check name must be kept for the dashboard/validators
+- Fix() runs outside the folder lock, so the id snapshot can go stale (same as today)
+- lean on the Fix() regression tests (app/sync/fix/tests/regression*) before attempting it

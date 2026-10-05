@@ -1,11 +1,14 @@
 const normalize = require("models/tags").normalize;
 const type = require("helper/type");
-const { getEntryByUrl } = require("../../lib/models");
+const { lookupEntryByUrl } = require("../../lib/models");
 const moment = require("moment");
 const debug = require("debug")("blog:render:augment");
 require("moment-timezone");
 
-module.exports = async function augment(req, res, entry) {
+// stats (optional): counts backlink lookups that failed (a Redis error, as
+// opposed to a URL with no entry) so a caller caching the augmented result
+// can decline to - see render/load/augmentedEntries.js.
+module.exports = async function augment(req, res, entry, stats) {
   // augment() rewrites several entry fields in place (tags, backlinks, ...)
   // in ways that aren't safe to re-run: a second pass sees the already
   // -converted values and discards them as invalid. Callers are expected to
@@ -28,9 +31,7 @@ module.exports = async function augment(req, res, entry) {
   entry.formatUpdated = FormatDate(entry.updated, req.blog.timeZone);
   entry.formatCreated = FormatDate(entry.created, req.blog.timeZone);
 
-  entry.absoluteURL =
-    req.blog.locals.blogURL +
-    entry.url.split("/").map(encodeURIComponent).join("/");
+  entry.absoluteURL = absoluteURL(req.blog.locals.blogURL, entry.url);
 
   // if the entry exif object is empty, delete it
   if (
@@ -120,7 +121,11 @@ module.exports = async function augment(req, res, entry) {
       if (typeof linkUrl !== "string") {
         return null;
       }
-      const linked = await getEntryByUrl(req.blog.id, linkUrl);
+      const { entry: linked, error } = await lookupEntryByUrl(
+        req.blog.id,
+        linkUrl
+      );
+      if (error && stats) stats.backlinkErrors++;
       if (linked) {
         debug("Found", linked.path, "for", linkUrl);
       } else {
@@ -150,6 +155,14 @@ module.exports = async function augment(req, res, entry) {
 
   debug(entry.path, "final backlinks", entry.backlinks);
 };
+
+// blogURL is per request (protocol + the host it arrived on - see
+// blog/middleware/vhosts.js), so shared augmented entries recompute this.
+function absoluteURL(blogURL, url) {
+  return blogURL + url.split("/").map(encodeURIComponent).join("/");
+}
+
+module.exports.absoluteURL = absoluteURL;
 
 function createRenderMetadata(sourceMetadata) {
   if (!sourceMetadata || !type(sourceMetadata, "object")) {

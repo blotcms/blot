@@ -27,7 +27,7 @@ module.exports = {
       { url: "/speakers", label: "Speakers",  id: "/Speakers.txt" },
       { url: "/faqs", label: "FAQs", id: "/FAQs.txt" },
       { url: "/page/1", label: "Announcements", id: "/Announcements.txt" },
-      { url: "/tickets", label: "Get tickets", id: "/Tickets.txt" },
+      { url: "/tickets", label: "Tickets", id: "/Tickets.txt" },
     ],
   },
   programmer: {
