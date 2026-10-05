@@ -55,48 +55,6 @@ describe("augment", function () {
     });
 
 
-    describe("createBacklinkLookups", function () {
-        const Entry = require("models/entry");
-        const { createBacklinkLookups } = require("../load/augment");
-
-        it("reads each linked URL once and shares the result", async function () {
-            const target = { path: "/target.txt", html: "<p>big</p>" };
-            const getByUrl = spyOn(Entry, "getByUrl").and.callFake(
-                (blogID, url, callback) => callback(target)
-            );
-            const project = jasmine.createSpy("project").and.callFake((entry) => {
-                delete entry.html;
-            });
-            const lookups = createBacklinkLookups(project);
-
-            const [a, b] = await Promise.all([
-                lookups.get("blog", "/target"),
-                lookups.get("blog", "/target"),
-            ]);
-            await lookups.get("blog", "/other");
-
-            expect(getByUrl.calls.count()).toBe(2);
-            expect(a).toBe(b);
-            expect(a.entry).toBe(target);
-            expect(a.entry.html).toBeUndefined();
-            expect(project.calls.count()).toBe(2);
-        });
-
-        it("reports a failed lookup and does not project it", async function () {
-            const error = new Error("redis down");
-            spyOn(Entry, "getByUrl").and.callFake((blogID, url, callback) =>
-                callback(undefined, error)
-            );
-            const project = jasmine.createSpy("project");
-
-            const result = await createBacklinkLookups(project).get("blog", "/x");
-
-            expect(result.entry).toBeUndefined();
-            expect(result.error).toBe(error);
-            expect(project).not.toHaveBeenCalled();
-        });
-    });
-
     it("renders each backlink on a catalog list, with a shared target", async function () {
         await this.write({path: "/target.txt", content: "Title: Target\n\nTarget body"});
         await this.write({path: "/a.txt", content: "Title: A\n\n[[target]]"});

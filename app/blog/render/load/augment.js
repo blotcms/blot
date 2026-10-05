@@ -1,15 +1,18 @@
 const normalize = require("models/tags").normalize;
 const type = require("helper/type");
-const { lookupEntryByUrl } = require("../../lib/models");
+const backlinksFor = require("./backlinks");
 const moment = require("moment");
 const debug = require("debug")("blog:render:augment");
 require("moment-timezone");
 
-// stats (optional): counts backlink lookups that failed (a Redis error, as
-// opposed to a URL with no entry) so a caller caching the augmented result
-// can decline to - see render/load/augmentedEntries.js. It can also carry
-// the lookups of a whole pass (see createBacklinkLookups).
-module.exports = async function augment(req, res, entry, stats) {
+// backlinks (optional): resolves the entry's backlinks. Share one across a walk
+// over many entries (see ./backlinks.js); the default is for this entry alone.
+module.exports = async function augment(
+  req,
+  res,
+  entry,
+  backlinks = backlinksFor(req)
+) {
   // augment() rewrites several entry fields in place (tags, backlinks, ...)
   // in ways that aren't safe to re-run: a second pass sees the already
   // -converted values and discards them as invalid. Callers are expected to
@@ -112,81 +115,8 @@ module.exports = async function augment(req, res, entry, stats) {
     delete entry.date;
   }
 
-  entry.backlinks = entry.backlinks || [];
-
-  debug(entry.path, "fetching backlinks", entry.backlinks);
-
-  const lookups = (stats && stats.backlinkLookups) || createBacklinkLookups();
-
-  const resolved = await Promise.all(
-    entry.backlinks.map(async (linkUrl) => {
-      debug("Looking up backlink for linkUrl", linkUrl);
-      if (typeof linkUrl !== "string") {
-        return null;
-      }
-      const { entry: linked, error } = await lookups.get(req.blog.id, linkUrl);
-      if (error && stats) stats.backlinkErrors++;
-      if (linked) {
-        debug("Found", linked.path, "for", linkUrl);
-      } else {
-        debug("No entry found for", linkUrl);
-      }
-      return linked;
-    })
-  );
-
-  debug(entry.path, "fetched backlinks", resolved);
-  entry.backlinks = resolved.filter(
-    (backlinkedEntry) =>
-      !!backlinkedEntry &&
-      // we don't want to show unpublished entries
-      !backlinkedEntry.scheduled &&
-      // we don't want to show the same entry
-      backlinkedEntry.path !== entry.path
-  );
-
-  // Deduplicate by path without lodash
-  const seen = new Set();
-  entry.backlinks = entry.backlinks.filter((item) => {
-    if (seen.has(item.path)) return false;
-    seen.add(item.path);
-    return true;
-  });
-
-  debug(entry.path, "final backlinks", entry.backlinks);
+  entry.backlinks = await backlinks.resolve(entry);
 };
-
-// One full entry is read from Redis, and held in memory, per backlink. On a
-// blog where many entries link to the same few pages, looking each link up
-// afresh for each entry reads and keeps a copy of the same target again and
-// again - on a catalog-sized list, hundreds of MB. Lookups made through one
-// of these share a single read, and a single (frozen once cached) object, per
-// URL. Callers walking a whole catalog share one across the walk.
-//
-// project (optional) trims each looked-up entry before it is shared, e.g. to
-// drop the html and body a template never reads from the entries it links
-// to (see retrieve/helpers/projectEntryFields.js).
-function createBacklinkLookups(project) {
-  const lookups = new Map();
-
-  return {
-    get(blogID, linkUrl) {
-      if (!lookups.has(linkUrl)) {
-        lookups.set(
-          linkUrl,
-          lookupEntryByUrl(blogID, linkUrl).then((result) => {
-            if (result.entry && project) project(result.entry);
-            return result;
-          })
-        );
-      }
-
-      return lookups.get(linkUrl);
-    },
-  };
-}
-
-module.exports.createBacklinkLookups = createBacklinkLookups;
 
 // blogURL is per request (protocol + the host it arrived on - see
 // blog/middleware/vhosts.js), so shared augmented entries recompute this.

@@ -20,7 +20,7 @@
 // (augmentContext) or recomputed per request in shareEntries (absoluteURL).
 const EntryInstance = require("models/entry/instance");
 const augment = require("./augment");
-const { createBacklinkLookups } = augment;
+const backlinksFor = require("./backlinks");
 const eachEntry = require("./eachEntry");
 const ERROR = require("../error");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
@@ -31,6 +31,7 @@ const { isRedisUnavailableError } = require("helper/redisUnavailable");
 function augmentContext(req, res) {
   const locals = (res && res.locals) || {};
   return {
+    backlinks: backlinksFor.isNeeded(req),
     timeZone: String(req.blog && req.blog.timeZone),
     hideDates: locals.hide_dates || false,
     dateDisplay: locals.date_display || "MMMM D, Y",
@@ -45,29 +46,20 @@ function augmentContext(req, res) {
 // project (optional) trims each backlinked entry the way the list's own
 // entries were trimmed, so a template that never reads html (say) doesn't
 // pay to keep it for every entry a post links to.
+//
+// Resolves to whether any backlink lookup failed (see ./backlinks.js): a
+// caller caching the result should decline to. The augmented entries have
+// rendered, just without the backlinks that couldn't be read.
 async function augmentEntries(req, res, value, project) {
-  const stats = {
-    backlinkErrors: 0,
-    backlinkLookups: createBacklinkLookups(project),
-  };
+  const backlinks = backlinksFor(req, { project });
 
   try {
-    await eachEntry({ value }, (entry) => augment(req, res, entry, stats));
+    await eachEntry({ value }, (entry) => augment(req, res, entry, backlinks));
   } catch (e) {
     throw isRedisUnavailableError(e) ? e : ERROR.BAD_LOCALS();
   }
 
-  // The lookups hold every backlinked entry; the caller only needs the counts.
-  delete stats.backlinkLookups;
-
-  return stats;
-}
-
-// A backlink lookup that hit a Redis error resolved to nothing, same as a
-// link to a missing entry. Render with what we have, but don't cache it -
-// the gap would otherwise persist until the next cacheID change.
-function backlinksIncomplete(stats) {
-  return stats.backlinkErrors > 0;
+  return backlinks.failed;
 }
 
 // An LRU silently refuses to store a value over its byte cap, which looks
@@ -113,7 +105,6 @@ function shareEntries(value, blogURL) {
 module.exports = {
   augmentContext,
   augmentEntries,
-  backlinksIncomplete,
   shareEntries,
   warnIfTooLargeToCache,
 };

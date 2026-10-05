@@ -11,7 +11,6 @@ const { Uncacheable } = require("../../lib/uncacheableFetch");
 const {
   augmentContext,
   augmentEntries,
-  backlinksIncomplete,
   shareEntries,
   warnIfTooLargeToCache,
 } = require("../load/augmentedEntries");
@@ -36,8 +35,11 @@ const archivesCache = new LRUCache({
     const { req, res } = context;
     const years = await buildArchives(req, req.blog);
     // Backlinked entries are trimmed like the list's own.
-    const stats = await augmentEntries(req, res, years, (entry) =>
-      projectEntryFields(entry, req.retrieve, ALIASES)
+    const backlinksFailed = await augmentEntries(
+      req,
+      res,
+      years,
+      (entry) => projectEntryFields(entry, req.retrieve, ALIASES)
     );
     const prepared = prepareCacheValue(years, { preserveEntryInstances: true });
     warnIfTooLargeToCache("archives", req, prepared, archivesCache);
@@ -47,7 +49,7 @@ const archivesCache = new LRUCache({
     // failure, not just for a genuinely empty blog), but a non-empty catalog
     // could still group into zero years if every entry lacked a dateStamp -
     // guard here too so archivesCache can't end up caching that either.
-    if (years.length === 0 || backlinksIncomplete(stats)) {
+    if (years.length === 0 || backlinksFailed) {
       throw new Uncacheable(prepared);
     }
 

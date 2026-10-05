@@ -4,10 +4,11 @@ var getPartials = require("./getPartials");
 var parseTemplate = require("./parseTemplate");
 var mergeRetrieve = require("./util/mergeRetrieve");
 var hardenProjectedRetrieve = require("./util/hardenProjectedRetrieve");
+var referencedIdentifiers = require("./util/referencedIdentifiers");
 var mime = require("mime-types");
 
 // This method is used to retrieve the locals,
-// partials and missing locals for a given view.
+// partials and missing locals for a given view, and whether it uses backlinks.
 module.exports = function getFullView(blogID, templateID, viewName, callback) {
   ensure(blogID, "string")
     .and(templateID, "string")
@@ -43,12 +44,20 @@ module.exports = function getFullView(blogID, templateID, viewName, callback) {
         // referenced anywhere in the assembled view + partials bundle.
         hardenProjectedRetrieve(view.retrieve, view.content, allPartials);
 
+        // Whether anything in the bundle can render entries' backlinks;
+        // when not, rendering skips resolving them (blog/render/load).
+        var usesBacklinks = referencedIdentifiers(
+          view.content,
+          allPartials
+        ).has("backlinks");
+
         var response = [
           view.locals,
           allPartials,
           view.retrieve,
           view.type || mime.lookup(view.name) || "text/html",
           view.content,
+          usesBacklinks,
         ];
 
         return callback(null, response);

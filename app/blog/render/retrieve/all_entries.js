@@ -8,7 +8,6 @@ const { Uncacheable } = require("../../lib/uncacheableFetch");
 const {
   augmentContext,
   augmentEntries,
-  backlinksIncomplete,
   shareEntries,
   warnIfTooLargeToCache,
 } = require("../load/augmentedEntries");
@@ -36,8 +35,11 @@ const allEntriesCache = new LRUCache({
     projectEntryFields(allEntriesList, req.retrieve, ALIASES);
 
     // Backlinked entries are trimmed like the list's own.
-    const stats = await augmentEntries(req, res, allEntriesList, (entry) =>
-      projectEntryFields(entry, req.retrieve, ALIASES)
+    const backlinksFailed = await augmentEntries(
+      req,
+      res,
+      allEntriesList,
+      (entry) => projectEntryFields(entry, req.retrieve, ALIASES)
     );
     const prepared = prepareCacheValue(allEntriesList, {
       preserveEntryInstances: true,
@@ -48,7 +50,7 @@ const allEntriesCache = new LRUCache({
     // a [] catalog, since Entries.getAll also returns [] on a transient Redis
     // failure rather than rejecting - caching that here would look identical
     // to a genuinely empty blog and hide every post until cacheID changes.
-    if (allEntriesList.length === 0 || backlinksIncomplete(stats)) {
+    if (allEntriesList.length === 0 || backlinksFailed) {
       throw new Uncacheable(prepared);
     }
 

@@ -42,6 +42,50 @@ describe("backlinks", function () {
     expect(body).toContain("Linker");
   });
 
+  it("renders backlinks that only a partial mentions", async function () {
+    await this.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
+    await this.write({
+      path: "/linker.txt",
+      content: "Title: Linker\n\n[see target](/target)",
+    });
+    await this.template({
+      "entry.html": "{{#entry}}{{> links.html}}{{/entry}}",
+      "links.html": "Backlinks: {{#backlinks}}{{title}}{{/backlinks}}",
+    });
+
+    const body = await this.text("/target");
+    expect(body).toContain("Backlinks: Linker");
+  });
+
+  it("renders backlinks on a catalog list that only a partial mentions", async function () {
+    await this.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
+    await this.write({
+      path: "/linker.txt",
+      content: "Title: Linker\n\n[see target](/target)",
+    });
+    await this.template({
+      "entries.html": "{{#allEntries}}{{> links.html}}{{/allEntries}}",
+      "links.html": "{{title}}<{{#backlinks}}{{title}}{{/backlinks}}>",
+    });
+
+    const body = await this.text("/");
+    expect(body).toContain("Target<Linker>");
+  });
+
+  it("still includes backlinks in ?json when the view never mentions them", async function () {
+    await this.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
+    await this.write({
+      path: "/linker.txt",
+      content: "Title: Linker\n\n[see target](/target)",
+    });
+    await this.template({ "entry.html": "{{#entry}}{{title}}{{/entry}}" });
+
+    expect(await this.text("/target")).toContain("Target");
+
+    const json = await (await this.get("/target?json=true")).json();
+    expect(json.entry.backlinks.map((entry) => entry.title)).toEqual(["Linker"]);
+  });
+
   it("renders multiple backlinks when several pages link to the same page", async function () {
     await this.write({
       path: "/pages/target.txt",
