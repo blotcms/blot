@@ -1,7 +1,10 @@
 var debug = require("debug")("blot:build");
 var fs = require("fs");
+var crypto = require("crypto");
+var async = require("async");
 var basename = require("path").basename;
 var localPath = require("helper/localPath");
+var hashFile = require("helper/transformer/hash");
 var isDraft = require("../sync/update/drafts").isDraft;
 var BuildSingle = require("./single");
 var BuildMultiple = require("./multiple");
@@ -65,6 +68,36 @@ function findMultiFolder(path) {
 function stripTrailingPlus(segment) {
   if (!segment) return segment;
   return segment.replace(/\+$/, "");
+}
+
+// Hashes an entry's source bytes so we can tell whether its content has
+// actually changed, independent of the file's mtime (which providers reset
+// on every reconnect/resync/upload). `sourcePaths` is one path for a plain
+// entry, or the sorted list of files that make up a multi-file/folder post
+// (see multiple.js, which stores this on metadata._sourcePaths). Calls back
+// with (null, hash) on success. If any source can't be hashed (deleted
+// mid-build, EMFILE, a provider swapping the file out underneath us, ...)
+// calls back with (err) - the caller must not derive a contentHash from a
+// partial result, since a consistent failure would otherwise produce the
+// same placeholder digest on every build and permanently mask real changes.
+function hashEntrySource(blog, sourcePaths, callback) {
+  async.map(
+    sourcePaths,
+    function (sourcePath, next) {
+      hashFile(localPath(blog.id, sourcePath), next);
+    },
+    function (err, hashes) {
+      if (err) return callback(err);
+
+      var combined = sourcePaths
+        .map(function (sourcePath, i) {
+          return sourcePath + ":" + hashes[i];
+        })
+        .join("|");
+
+      callback(null, crypto.createHash("sha1").update(combined).digest("hex"));
+    }
+  );
 }
 
 module.exports = function build(blog, path, callback) {
@@ -143,51 +176,109 @@ function buildWith(blog, path, multiInfo, callback) {
               ? existingEntry.created
               : Date.now();
 
-          var entry;
+          // A multi-file/folder post is built from several source files
+          // (see multiple.js, which sets metadata._sourcePaths); everything
+          // else is built from the one file at entryPath. Only trust
+          // _sourcePaths when this really is a BuildMultiple build - for a
+          // plain post, metadata comes straight from user-controlled front
+          // matter, so a hand-written `_sourcePaths:` key must not be able
+          // to redirect what gets hashed.
+          var sourcePaths =
+            multiInfo &&
+            metadata &&
+            Array.isArray(metadata._sourcePaths) &&
+            metadata._sourcePaths.length
+              ? metadata._sourcePaths
+              : [entryPath];
 
-          // Given the properties above
-          // that we've extracted from the
-          // local file, compute stuff like
-          // the teaser, isDraft etc..
+          hashEntrySource(blog, sourcePaths, function (hashErr, contentHash) {
+            var mtimeUpdated =
+              stat && stat.mtime ? moment.utc(stat.mtime).valueOf() : Date.now();
 
-          try {
-            entry = {
-              html: html,
-              name: basename(entryPath),
-              path: entryPath,
-              id: entryPath,
-              thumbnail: thumbnail,
-              draft: is_draft,
-              metadata: metadata,
-              size: typeof stat.size === "number" ? stat.size : 0,
-              dependencies: dependencies,
-              exif: (extras && extras.exif) || {},
-              dateStamp: DateStamp(blog, entryPath, metadata, previousCreated),
-              updated: stat && stat.mtime ? moment.utc(stat.mtime).valueOf() : Date.now(),
-            };
+            // If any source couldn't be hashed, fall back to the pre-hash
+            // behaviour entirely for this build: treat 'updated' as changed
+            // (safe default) and keep whatever contentHash was already
+            // stored rather than persisting a partial/placeholder digest -
+            // storing one could make a later, genuinely unchanged build look
+            // different, or worse, make repeated failures look identical to
+            // each other and mask a real content change.
+            var storedContentHash =
+              existingEntry && typeof existingEntry.contentHash === "string"
+                ? existingEntry.contentHash
+                : "";
 
-            if (entry.dateStamp === undefined) {
-              entry.dateStampWasRemoved = true;
-              delete entry.dateStamp;
+            if (hashErr) {
+              debug(
+                "Blog:",
+                blog.id,
+                entryPath,
+                " failed to hash source, treating as changed:",
+                hashErr
+              );
+              contentHash = storedContentHash;
             }
 
-            debug(
-              "Blog:",
-              blog.id,
-              entryPath,
-              " preparing additional properties for",
-              entry.name
-            );
-            entry = Prepare(entry, {
-              titlecase: blog.plugins.titlecase.enabled,
-              blogID: blog.id,
-            });
-            debug("Blog:", blog.id, path, " additional properties computed.");
-          } catch (e) {
-            return callback(e);
-          }
+            // Only move 'updated' when the source content itself has
+            // changed. A provider reconnect/resync (or the eventual S3
+            // migration, where Last-Modified is the upload time) rewrites
+            // every file's mtime without changing its bytes, and that alone
+            // shouldn't bump 'updated' or the sitemap's <lastmod>. Entries
+            // built before this change have no stored contentHash, so they
+            // take the mtime this once and get a hash stored for next time.
+            var contentUnchanged =
+              !hashErr &&
+              existingEntry &&
+              storedContentHash &&
+              storedContentHash === contentHash &&
+              typeof existingEntry.updated === "number";
 
-          callback(null, entry);
+            var entry;
+
+            // Given the properties above
+            // that we've extracted from the
+            // local file, compute stuff like
+            // the teaser, isDraft etc..
+
+            try {
+              entry = {
+                html: html,
+                name: basename(entryPath),
+                path: entryPath,
+                id: entryPath,
+                thumbnail: thumbnail,
+                draft: is_draft,
+                metadata: metadata,
+                size: typeof stat.size === "number" ? stat.size : 0,
+                dependencies: dependencies,
+                exif: (extras && extras.exif) || {},
+                dateStamp: DateStamp(blog, entryPath, metadata, previousCreated),
+                contentHash: contentHash,
+                updated: contentUnchanged ? existingEntry.updated : mtimeUpdated,
+              };
+
+              if (entry.dateStamp === undefined) {
+                entry.dateStampWasRemoved = true;
+                delete entry.dateStamp;
+              }
+
+              debug(
+                "Blog:",
+                blog.id,
+                entryPath,
+                " preparing additional properties for",
+                entry.name
+              );
+              entry = Prepare(entry, {
+                titlecase: blog.plugins.titlecase.enabled,
+                blogID: blog.id,
+              });
+              debug("Blog:", blog.id, path, " additional properties computed.");
+            } catch (e) {
+              return callback(e);
+            }
+
+            callback(null, entry);
+          });
         });
       });
     });

@@ -74,9 +74,8 @@ The Dropbox client operates using a webhook-based event notification system comb
   - `INSUFFICIENT_SPACE_ERROR_CODE` / `isInsufficientSpaceError()`: The `507` account `error_code` sentinel for "ran out of Dropbox space", and a check for that error shape from the Dropbox SDK.
   - `transferIncomplete(account)`: True while the initial transfer to Dropbox hasn't finished - see "Handling an incomplete initial transfer" below.
 - **`util/createClient.js`**: Factory function that retrieves the Dropbox account from the database and instantiates a Dropbox SDK client. Handles token refresh if a refresh token is present.
-- **`util/download.js`**: Downloads a file from Dropbox and writes it to disk.
-- **`util/upload.js`**: Uploads a file from disk to Dropbox, preserving modification time metadata.
-- **`util/setMtime.js`**: Sets the modification time on a file in Dropbox (used during uploads to preserve mtimes).
+- **`util/download.js`**: Downloads a file from Dropbox and writes it to disk. Does not set the local file's mtime; change detection elsewhere in the client relies on Dropbox's `content_hash`/size, not local mtimes.
+- **`util/upload.js`**: Uploads a file from disk to Dropbox. Omits `client_modified` so Dropbox stamps the file with its own server time, since Blot no longer keeps a settable local mtime to send.
 - **`util/retry.js`**: Wraps a function to retry on transient errors.
 - **`util/classifyError.js`**: Classifies Dropbox SDK errors and stored account rows into the shared health codes. Used by sync, retry, getHealth, and the dashboard flags.
 - **`util/persistError.js`**: Writes a classified error onto the account row, leaving transients and previous durable errors untouched.

@@ -106,6 +106,33 @@ describe("folderAssets plugin", function () {
     }.bind(this));
   });
 
+  it("produces the same version when only the file's mtime changes", function (done) {
+    var path = "/Hello.txt";
+    var contents = "![Image](photo.jpg)";
+    var photoPath = this.blogDirectory + "/photo.jpg";
+    var blog = this.blog;
+
+    fs.outputFileSync(this.blogDirectory + path, contents);
+    fs.outputFileSync(photoPath, "unchanged content");
+
+    build(blog, path, function (err, entry) {
+      if (err) return done.fail(err);
+
+      var firstVersion = entry.html.match(/v-([a-f0-9]{8})/)[1];
+
+      fs.utimesSync(photoPath, new Date("2030-01-01"), new Date("2030-01-01"));
+
+      build(blog, path, function (err, entry2) {
+        if (err) return done.fail(err);
+
+        var secondVersion = entry2.html.match(/v-([a-f0-9]{8})/)[1];
+
+        expect(secondVersion).toEqual(firstVersion);
+        done();
+      });
+    });
+  });
+
   it("leaves reserved global-static prefixes unbaked even if the blog folder has a same-named file", function (done) {
     var path = "/Hello.txt";
     var contents = "![Font icon](fonts/icon.png) ![Katex](/katex/x.png)";

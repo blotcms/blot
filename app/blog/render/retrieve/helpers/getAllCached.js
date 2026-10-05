@@ -7,6 +7,7 @@ const LRUCache = require("lru-cache").LRUCache;
 const { getAll } = require("../../../lib/models");
 const { cloneDeep, prepareCacheValue } = require("../../../lib/clone");
 const cacheStats = require("../../../lib/cacheStats");
+const yieldToEventLoop = require("./yieldToEventLoop");
 
 const entriesCache = new LRUCache({
   max: 200,
@@ -50,7 +51,11 @@ async function getAllCached(blog, options) {
     return cloneEntries(await inflight.get(key));
   }
 
-  const promise = getAll(blog && blog.id).then((entries) => {
+  const promise = getAll(blog && blog.id).then(async (entries) => {
+    // The last batch of entries was just parsed; don't also clone and size
+    // the whole catalog in the same tick.
+    await yieldToEventLoop();
+
     const prepared = prepareCacheValue(entries, {
       preserveEntryInstances: true,
     });
