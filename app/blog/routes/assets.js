@@ -10,6 +10,7 @@ const {
   GLOBAL_STATIC_DIR,
   GLOBAL_STATIC_SUBDIRECTORIES,
 } = require("../lib/staticPaths");
+const blogHosts = require("../lib/blogHosts");
 
 // Constants
 const LARGEST_POSSIBLE_MAXAGE = 86400000;
@@ -99,13 +100,18 @@ assets.use(async (req, res, next) => {
   const blogFolder = config.blog_folder_dir + "/" + req.blog.id;
   const decodedPath = decodeURIComponent(req.path);
 
+  async function sendFolderFile(path) {
+    await sendFile(path, { req, res });
+    logSameSiteReferer(req);
+  }
+
   try {
-    await sendFile(join(blogFolder, decodedPath), { req, res });
+    await sendFolderFile(join(blogFolder, decodedPath));
     return;
   } catch (e) {}
 
   try {
-    await sendFile(join(blogFolder, decodedPath.toLowerCase()), { req, res });
+    await sendFolderFile(join(blogFolder, decodedPath.toLowerCase()));
     return;
   } catch (e) {}
 
@@ -119,38 +125,34 @@ assets.use(async (req, res, next) => {
 
     if (!stat.isFile()) throw new Error("Not a file");
 
-    await sendFile(pathWithCorrectCase, { req, res });
+    await sendFolderFile(pathWithCorrectCase);
     return;
   } catch (e) {}
 
   try {
-    await sendFile(
-      join(blogFolder, withoutTrailingSlash(decodedPath) + "/index.html"),
-      { req, res }
+    await sendFolderFile(
+      join(blogFolder, withoutTrailingSlash(decodedPath) + "/index.html")
     );
     return;
   } catch (e) {}
 
   try {
-    await sendFile(
-      join(blogFolder, withoutTrailingSlash(decodedPath) + "/_index.html"),
-      { req, res }
+    await sendFolderFile(
+      join(blogFolder, withoutTrailingSlash(decodedPath) + "/_index.html")
     );
     return;
   } catch (e) {}
 
   try {
-    await sendFile(
-      join(blogFolder, withoutTrailingSlash(decodedPath) + ".html"),
-      { req, res }
+    await sendFolderFile(
+      join(blogFolder, withoutTrailingSlash(decodedPath) + ".html")
     );
     return;
   } catch (e) {}
 
   try {
-    await sendFile(
-      join(blogFolder, addLeadingUnderscore(decodedPath) + ".html"),
-      { req, res }
+    await sendFolderFile(
+      join(blogFolder, addLeadingUnderscore(decodedPath) + ".html")
     );
     return;
   } catch (e) {}
@@ -168,6 +170,29 @@ assets.use((err, req, res, next) => {
   }
   next(err);
 });
+
+// A blog-folder file was fetched from one of the blog's own pages, i.e. a
+// link there points at the origin instead of the CDN. Only logged so we can
+// find out where such links still come from.
+function logSameSiteReferer(req) {
+  try {
+    const referer = req.get("referer");
+    if (!referer) return;
+
+    const url = new URL(referer);
+    if (!blogHosts(req.blog).includes(url.hostname.toLowerCase())) return;
+
+    req.log(
+      "[folder-asset-origin]",
+      `blog=${req.blog.id}`,
+      `handle=${req.blog.handle}`,
+      `path=${encodeURI(req.originalUrl.split("?")[0])}`,
+      `referer_path=${encodeURI(url.pathname)}`
+    );
+  } catch (e) {
+    // an unparseable Referer must not affect the response
+  }
+}
 
 function withoutTrailingSlash(path) {
   return path && path.slice(-1) === "/" ? path.slice(0, -1) : path;
