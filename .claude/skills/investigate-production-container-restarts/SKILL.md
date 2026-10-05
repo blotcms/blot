@@ -135,7 +135,7 @@ access log shows the in-flight requests that died with it (502, long
 request time, `up=127.0.0.1:<port>`):
 
 ```bash
-ssh blot "grep -h ':8090' /var/instance-ssd/logs/error.log* | grep -c 'connect() failed'"
+ssh blot "zcat -f /var/instance-ssd/logs/error.log* | grep ':8090' | grep -c 'connect() failed'"
 ```
 
 The crash timestamp is the `Starting server on ...` line that follows the
@@ -226,7 +226,7 @@ runs:
   rendering. Is this blog unusual?
 - `<url> --concurrency N`: does memory scale with concurrent cold renders?
 - `--replay <access log> --from … --to …`: the real traffic leading up to
-  a crash.
+  a crash (rotated `.gz` logs work too).
 - `--release <older commit>`: does an older release render the same page
   fine? That bisects a regression.
 

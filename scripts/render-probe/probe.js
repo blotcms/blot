@@ -1,119 +1,96 @@
 // Renders blog pages in a throwaway process with extra instrumentation, to
 // diagnose renders that stall or crash a production container. Started by
-// scripts/render-probe/index.js inside a one-off `docker run` of the same
-// image the app containers run - see that file and README.md. It mounts the
-// real `blog` router on 127.0.0.1, so lookups, template loading, retrieval
-// and the process-local LRU caches behave exactly as they do in yellow (and
-// start cold, like a freshly restarted container).
+// scripts/render-probe/index.js (through scripts/probe/run.js) inside a
+// one-off container of the same image the app containers run - see
+// README.md. It mounts the real `blog` router on 127.0.0.1, so lookups,
+// template loading, retrieval and the process-local LRU caches behave
+// exactly as they do in yellow (and start cold, like a freshly restarted
+// container).
 //
-//   node probe.js <url...> [--concurrency N] [--repeat N] [--urls file]
-//   node probe.js --replay <access log> --from HH:MM:SS --to HH:MM:SS
+//   node probe.js <url...> [--concurrency N] [--repeat N]
+//   node probe.js --replay <access log> --from <time> --to <time>
 //   node probe.js --stats <url|handle|domain>
 //
 // Writes samples.ndjson, phases.ndjson, requests.ndjson (appended as it goes,
 // so they survive an out-of-memory crash) and summary.json to --out.
 
 const fs = require("fs");
-const path = require("path");
 const http = require("http");
 const readline = require("readline");
-const v8 = require("v8");
+const zlib = require("zlib");
 const { AsyncLocalStorage } = require("async_hooks");
-const {
-  monitorEventLoopDelay,
-  PerformanceObserver,
-  performance,
-} = require("perf_hooks");
+const { performance } = require("perf_hooks");
+const { parseArgs } = require("../probe/args");
+const instrument = require("../probe/instrument");
 
+const { mb, now } = instrument;
+
+// Cold renders of a large blog are heavy on the shared, live Redis.
 const MAX_CONCURRENCY = 8;
-const SAMPLE_INTERVAL_MS = 100;
+const MAX_REPLAY_SPEED = 4;
 
-const args = parseArgs(process.argv.slice(2));
-const OUT = args.out || "/out";
-const verbose = !!args.verbose;
+const OPTIONS = {
+  concurrency: { value: "N", help: `parallel requests (default 1, max ${MAX_CONCURRENCY})` },
+  repeat: { value: "N", help: "send each URL N times" },
+  stats: { value: "URL|HANDLE", help: "catalog size/backlink facts, no rendering" },
+  replay: { value: "FILE", help: "replay yellow's requests from an access log (.gz too)" },
+  from: { value: "TIME", help: "replay window start, UTC (YYYY-MM-DDTHH:MM:SS)" },
+  to: { value: "TIME", help: "replay window end, UTC" },
+  speed: { value: "N", help: `replay speed multiplier (default 1, max ${MAX_REPLAY_SPEED})` },
+  "max-inflight": {
+    value: "N",
+    help: `replay: skip requests while N are in flight (default and max ${MAX_CONCURRENCY})`,
+  },
+  upstream: { value: "HOST:PORT", help: "replay: the container's upstream (default yellow's)" },
+  timeout: { value: "S", help: "per-request timeout (default 120)" },
+  verbose: { help: "print each request's render steps" },
+  out: { value: "DIR" },
+};
+
+let args;
+let verbose;
+let out;
 const als = new AsyncLocalStorage();
-const t0 = performance.now();
-
-fs.mkdirSync(OUT, { recursive: true });
-
-function now() {
-  return Math.round(performance.now() - t0);
-}
-
-function append(file, record) {
-  fs.appendFileSync(path.join(OUT, file), JSON.stringify(record) + "\n");
-}
 
 // ---------------------------------------------------------------------------
-// Instrumentation. Must be installed before require("blog"): the retrievers
-// destructure helpers (augmentEntries, prepareCacheValue...) at load time.
+// Instrumentation. Must be installed before require("blog"), and in order:
+// most render modules destructure helpers from blog/lib/clone and
+// blog/render/load/augmentedEntries when they load (getAllCached included),
+// so those are wrapped first, then the modules that require them.
 
-const redisTotals = { commands: 0, replyBytes: 0, byCommand: {} };
-
-function approxSize(value) {
-  if (value == null) return 0;
-  if (typeof value === "string") return value.length;
-  if (Buffer.isBuffer(value)) return value.length;
-  if (Array.isArray(value)) {
-    let n = 0;
-    for (const item of value) n += approxSize(item);
-    return n;
-  }
-  if (typeof value === "object") {
-    let n = 0;
-    for (const key of Object.keys(value)) n += key.length + approxSize(value[key]);
-    return n;
-  }
-  return 8;
-}
+let redis;
 
 function instrumentRedis() {
-  const client = require("models/client");
-  let proto = client;
-  while (proto && !Object.prototype.hasOwnProperty.call(proto, "sendCommand")) {
-    proto = Object.getPrototypeOf(proto);
-  }
-  if (!proto) return console.warn("probe: could not find sendCommand to wrap");
-
-  const original = proto.sendCommand;
-  proto.sendCommand = async function (redisArgs, options) {
-    const name = String((redisArgs && redisArgs[0]) || "?").toUpperCase();
-    const start = performance.now();
-    const reply = await original.call(this, redisArgs, options);
-    const bytes = approxSize(reply);
-    const ms = performance.now() - start;
-
-    const entry = (redisTotals.byCommand[name] = redisTotals.byCommand[name] || {
-      count: 0,
-      replyBytes: 0,
-      ms: 0,
-    });
-    entry.count++;
-    entry.replyBytes += bytes;
-    entry.ms += ms;
-    redisTotals.commands++;
-    redisTotals.replyBytes += bytes;
-
-    const store = als.getStore();
-    if (store) {
-      store.redisCommands++;
+  redis = instrument.trackRedis({
+    scope: () => als.getStore(),
+    onCommand(store, name, count, bytes) {
+      if (!store) return;
+      store.redisCommands += count;
       store.redisBytes += bytes;
-    }
-    return reply;
-  };
+    },
+  });
 }
 
+let inflight = 0;
+let completed = 0;
+const WRAPPED = Symbol("probe wrapped");
+
 function timed(name, fn) {
-  return function () {
+  const wrapped = function () {
     const store = als.getStore();
     const start = performance.now();
-    const heapBefore = process.memoryUsage().heapUsed;
+    // A heap delta only means something if no other request ran meanwhile.
+    const requestsBefore = requestCounter;
+    const heapBefore = inflight <= 1 ? process.memoryUsage().heapUsed : null;
     const finish = () => {
       const ms = Math.round(performance.now() - start);
-      const heapDeltaMB = mb(process.memoryUsage().heapUsed - heapBefore);
+      const record = { t: now(), req: store ? store.id : null, name, ms };
+      if (heapBefore !== null && inflight <= 1 && requestCounter === requestsBefore) {
+        record.soleRequestHeapDeltaMB = mb(process.memoryUsage().heapUsed - heapBefore);
+      }
       // Most calls are trivial; keep the file to the ones that cost something.
-      if (ms < 1 && Math.abs(heapDeltaMB) < 1) return;
-      append("phases.ndjson", { t: now(), req: store ? store.id : null, name, ms, heapDeltaMB });
+      if (ms < 1 && !(Math.abs(record.soleRequestHeapDeltaMB) >= 1)) return;
+      out.append("phases.ndjson", record);
     };
     let result;
     try {
@@ -128,6 +105,8 @@ function timed(name, fn) {
     finish();
     return result;
   };
+  wrapped[WRAPPED] = true;
+  return wrapped;
 }
 
 // Replace a property of a module's exports, or the export itself when key is
@@ -137,14 +116,15 @@ function tryResolve(moduleName) {
   try {
     return require.resolve(moduleName);
   } catch (err) {
-    console.warn(`probe: ${moduleName} not in this release, not instrumented`);
     return null;
   }
 }
 
+const wrappedExports = [];
+
 function wrapExport(moduleName, key, label) {
   const resolved = tryResolve(moduleName);
-  if (!resolved) return;
+  if (!resolved) return console.warn(`probe: ${moduleName} not in this release, not instrumented`);
   const exported = require(resolved);
   if (key === null) {
     const wrapped = timed(label, exported);
@@ -152,15 +132,23 @@ function wrapExport(moduleName, key, label) {
     require.cache[resolved].exports = wrapped;
   } else if (typeof exported[key] === "function") {
     exported[key] = timed(label, exported[key]);
+  } else {
+    return console.warn(`probe: ${moduleName} has no ${key}, not instrumented`);
   }
+  wrappedExports.push({ moduleName, key });
 }
 
 function instrumentRender() {
-  wrapExport("blog/render/retrieve/helpers/getAllCached", null, "getAllCached");
-  wrapExport("blog/render/load/augmentedEntries", "augmentEntries", "augmentEntries");
-  wrapExport("blog/render/load/augmentedEntries", "shareEntries", "shareEntries");
+  // A blog module loaded before this point may already hold an unwrapped
+  // helper, so its calls would go untimed.
+  const early = Object.keys(require.cache).filter((file) => file.includes("/app/blog/"));
+  if (early.length) console.warn("probe: blog modules loaded before instrumenting:", early);
+
   wrapExport("blog/lib/clone", "prepareCacheValue", "prepareCacheValue");
   wrapExport("blog/lib/clone", "cloneDeep", "cloneDeep");
+  wrapExport("blog/render/load/augmentedEntries", "augmentEntries", "augmentEntries");
+  wrapExport("blog/render/load/augmentedEntries", "shareEntries", "shareEntries");
+  wrapExport("blog/render/retrieve/helpers/getAllCached", null, "getAllCached");
   wrapExport("blog/render/load", null, "loadView");
   wrapExport("blog/render/main", null, "mustache");
 
@@ -171,86 +159,27 @@ function instrumentRender() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Sampling: heap, event loop delay, GC.
-
-const gc = { count: 0, totalMs: 0, maxMs: 0 };
-const peaks = { heapUsedMB: 0, rssMB: 0, eventLoopDelayMaxMs: 0 };
-let inflight = 0;
-let completed = 0;
-
-function mb(bytes) {
-  return Math.round((bytes / 1024 / 1024) * 10) / 10;
-}
-
-function startSampling() {
-  const loop = monitorEventLoopDelay({ resolution: 10 });
-  loop.enable();
-
-  new PerformanceObserver((list) => {
-    for (const entry of list.getEntries()) {
-      gc.count++;
-      gc.totalMs += entry.duration;
-      gc.maxMs = Math.max(gc.maxMs, entry.duration);
-      if (entry.duration > 100) {
-        append("phases.ndjson", {
-          t: now(),
-          name: "gc",
-          ms: Math.round(entry.duration),
-          kind: entry.detail && entry.detail.kind,
-        });
-      }
+// After require("blog"): warn if anything replaced a wrapped export.
+function checkInstrumentation() {
+  for (const { moduleName, key } of wrappedExports) {
+    const exported = require(moduleName);
+    const value = key === null ? exported : exported[key];
+    if (!value || !value[WRAPPED]) {
+      console.warn(`probe: ${moduleName}${key ? "." + key : ""} is no longer instrumented`);
     }
-  }).observe({ entryTypes: ["gc"] });
-
-  let lastPrint = 0;
-  let lastRedis = 0;
-
-  const timer = setInterval(() => {
-    const mem = process.memoryUsage();
-    const heap = v8.getHeapStatistics();
-    const delayMax = loop.max / 1e6;
-    loop.reset();
-
-    peaks.heapUsedMB = Math.max(peaks.heapUsedMB, mb(mem.heapUsed));
-    peaks.rssMB = Math.max(peaks.rssMB, mb(mem.rss));
-    peaks.eventLoopDelayMaxMs = Math.max(peaks.eventLoopDelayMaxMs, delayMax);
-
-    append("samples.ndjson", {
-      t: now(),
-      heapUsedMB: mb(mem.heapUsed),
-      heapTotalMB: mb(mem.heapTotal),
-      heapLimitMB: mb(heap.heap_size_limit),
-      externalMB: mb(mem.external),
-      rssMB: mb(mem.rss),
-      eventLoopDelayMaxMs: Math.round(delayMax),
-      inflight,
-      completed,
-      redisCommands: redisTotals.commands,
-      gcCount: gc.count,
-    });
-
-    if (now() - lastPrint >= 1000) {
-      const redisRate = redisTotals.commands - lastRedis;
-      lastRedis = redisTotals.commands;
-      lastPrint = now();
-      console.log(
-        `[${(now() / 1000).toFixed(1)}s] inflight=${inflight} done=${completed}` +
-          ` heap=${mb(mem.heapUsed)}/${mb(heap.heap_size_limit)}MB rss=${mb(mem.rss)}MB` +
-          ` loopDelayMax=${Math.round(delayMax)}ms redis=${redisRate}/s`
-      );
-    }
-  }, SAMPLE_INTERVAL_MS);
-  timer.unref();
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Server and client.
 
+const stores = new Map();
+
 function startServer() {
   const express = require("express");
   const blog = require("blog");
   const { redisUnavailableHandler } = require("helper/redisUnavailable");
+  checkInstrumentation();
 
   const app = express();
   app.disable("x-powered-by");
@@ -263,6 +192,7 @@ function startServer() {
       redisCommands: 0,
       redisBytes: 0,
     };
+    stores.set(store.id, store);
     req.probe = store;
     req.log = verbose
       ? (...line) => console.log(store.id, (now() / 1000).toFixed(3), ...line)
@@ -284,7 +214,6 @@ function request(port, url) {
   const id = "probe-" + ++requestCounter;
   const start = performance.now();
   const startedAt = now();
-  const heapBefore = process.memoryUsage().heapUsed;
   inflight++;
 
   return new Promise((resolve) => {
@@ -298,7 +227,7 @@ function request(port, url) {
           "x-forwarded-proto": parsed.protocol.replace(":", ""),
           "x-request-id": id,
         },
-        timeout: (args.timeout || 120) * 1000,
+        timeout: (Number(args.timeout) || 120) * 1000,
       },
       (res) => {
         let bytes = 0;
@@ -312,6 +241,8 @@ function request(port, url) {
     function done(status, bytes) {
       inflight--;
       completed++;
+      const store = stores.get(id);
+      stores.delete(id);
       const record = {
         id,
         url,
@@ -319,9 +250,10 @@ function request(port, url) {
         bytes,
         startedAt,
         ms: Math.round(performance.now() - start),
-        heapDeltaMB: mb(process.memoryUsage().heapUsed - heapBefore),
+        redisCommands: store ? store.redisCommands : null,
+        redisReplyMB: store ? mb(store.redisBytes) : null,
       };
-      append("requests.ndjson", record);
+      out.append("requests.ndjson", record);
       console.log(`  ${status} ${record.ms}ms ${bytes}B ${url}`);
       resolve(record);
     }
@@ -332,6 +264,7 @@ function request(port, url) {
 // Modes.
 
 async function runUrls(port, urls) {
+  if (!urls.length) throw new Error("Pass at least one URL (or --replay, or --stats)");
   const concurrency = Math.min(Number(args.concurrency) || 1, MAX_CONCURRENCY);
   const repeat = Number(args.repeat) || 1;
   const queue = [];
@@ -358,14 +291,18 @@ const MONTHS = "JanFebMarAprMayJunJulAugSepOctNovDec";
 
 async function readReplay(file) {
   const upstream = args.upstream || "127.0.0.1:8090";
-  const from = args.from;
-  const to = args.to;
+  const { from, to } = args;
   if (!from || !to) throw new Error("--replay needs --from and --to (YYYY-MM-DDTHH:MM:SS, UTC)");
   const fromMs = Date.parse(from + "Z");
   const toMs = Date.parse(to + "Z");
+  if (isNaN(fromMs) || isNaN(toMs)) throw new Error("--from/--to must look like 2026-10-01T10:03:30");
+
+  // Rotated logs are gzipped.
+  let input = fs.createReadStream(file);
+  if (file.endsWith(".gz")) input = input.pipe(zlib.createGunzip());
 
   const requests = [];
-  const lines = readline.createInterface({ input: fs.createReadStream(file) });
+  const lines = readline.createInterface({ input, crlfDelay: Infinity });
   for await (const line of lines) {
     if (!line.includes("up=" + upstream)) continue;
     const match = ACCESS_LINE.exec(line);
@@ -378,15 +315,26 @@ async function readReplay(file) {
     if (startMs < fromMs || startMs > toMs) continue;
     requests.push({ at: startMs - fromMs, url });
   }
+
+  if (!requests.length) {
+    throw new Error(
+      `No requests to ${upstream} started between ${from} and ${to} in ${file}` +
+        " (times are UTC; does the file cover that window?)"
+    );
+  }
   return requests.sort((a, b) => a.at - b.at);
 }
 
+// Capped like --concurrency: the point is to reproduce yellow's load on
+// this process, but it all lands on the live Redis too.
 async function runReplay(port) {
   const requests = await readReplay(args.replay);
-  const speed = Number(args.speed) || 1;
-  const maxInflight = Number(args["max-inflight"]) || 64;
+  const speed = Math.min(Number(args.speed) || 1, MAX_REPLAY_SPEED);
+  const maxInflight = Math.min(Number(args["max-inflight"]) || MAX_CONCURRENCY, MAX_CONCURRENCY);
   let skipped = 0;
-  console.log(`probe: replaying ${requests.length} request(s) at ${speed}x`);
+  console.log(
+    `probe: replaying ${requests.length} request(s) at ${speed}x, at most ${maxInflight} in flight`
+  );
 
   const start = performance.now();
   const pending = [];
@@ -400,7 +348,7 @@ async function runReplay(port) {
     pending.push(request(port, url));
   }
   const results = await Promise.all(pending);
-  if (skipped) console.log(`probe: skipped ${skipped} request(s) over --max-inflight ${maxInflight}`);
+  if (skipped) console.log(`probe: skipped ${skipped} request(s) while ${maxInflight} were in flight`);
   return results;
 }
 
@@ -470,38 +418,38 @@ async function runStats(identifier) {
 
 // ---------------------------------------------------------------------------
 
-function parseArgs(argv) {
-  const out = { _: [] };
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (!arg.startsWith("--")) {
-      out._.push(arg);
-      continue;
-    }
-    const [key, inline] = arg.slice(2).split("=");
-    if (inline !== undefined) out[key] = inline;
-    else if (argv[i + 1] !== undefined && !argv[i + 1].startsWith("--")) out[key] = argv[++i];
-    else out[key] = true;
-  }
-  return out;
-}
-
 async function main() {
-  let urls = args._.slice();
-  if (args.urls) {
-    urls = urls.concat(
-      fs.readFileSync(args.urls, "utf8").split("\n").map((s) => s.trim()).filter(Boolean)
-    );
-  }
+  const parsed = parseArgs(process.argv.slice(2), OPTIONS);
+  args = parsed.options;
+  verbose = !!args.verbose;
+  out = instrument.output(args.out || "/out");
+  const urls = parsed.rest;
 
   instrumentRedis();
   instrumentRender();
-  startSampling();
+  const sampler = instrument.startSampler(out, {
+    extra: () => ({ inflight, completed, redisCommands: redis.totals.commands }),
+    print: (() => {
+      let lastRedis = 0;
+      return (sample) => {
+        const redisRate = sample.redisCommands - lastRedis;
+        lastRedis = sample.redisCommands;
+        console.log(
+          `[${(sample.t / 1000).toFixed(1)}s] inflight=${inflight} done=${completed}` +
+            ` heap=${sample.heapUsedMB}/${sample.heapLimitMB}MB rss=${sample.rssMB}MB` +
+            ` loopDelayMax=${sample.eventLoopDelayMaxMs}ms redis=${redisRate}/s`
+        );
+      };
+    })(),
+    onGC(ms, kind) {
+      if (ms > 100) out.append("phases.ndjson", { t: now(), name: "gc", ms: Math.round(ms), kind });
+    },
+  });
 
   const summary = { args: process.argv.slice(2), release: process.env.BLOT_RELEASE_ID };
   try {
     if (args.stats) {
-      summary.stats = await runStats(args.stats === true ? urls[0] : args.stats);
+      summary.stats = await runStats(args.stats);
     } else {
       const port = await startServer();
       const results = args.replay ? await runReplay(port) : await runUrls(port, urls);
@@ -514,19 +462,9 @@ async function main() {
     process.exitCode = 1;
   }
 
-  Object.assign(summary, {
-    elapsedMs: now(),
-    peaks,
-    gc: { ...gc, totalMs: Math.round(gc.totalMs), maxMs: Math.round(gc.maxMs) },
-    redis: {
-      ...redisTotals,
-      byCommand: Object.fromEntries(
-        Object.entries(redisTotals.byCommand).map(([name, c]) => [
-          name,
-          { ...c, ms: Math.round(c.ms), replyMB: mb(c.replyBytes) },
-        ])
-      ),
-    },
+  const totals = sampler.summary();
+  Object.assign(summary, totals, {
+    redis: redis.summary(),
     caches: [
       "blog/render/full-view-cache",
       "blog/render/main",
@@ -538,19 +476,18 @@ async function main() {
     ]
       .filter((name) => tryResolve(name) && require(name)._stats)
       .map((name) => require(name)._stats()),
-    heapSpaces: v8.getHeapSpaceStatistics().map((space) => ({
-      name: space.space_name,
-      usedMB: mb(space.space_used_size),
-    })),
   });
 
-  fs.writeFileSync(path.join(OUT, "summary.json"), JSON.stringify(summary, null, 2));
+  out.writeJSON("summary.json", summary);
   console.log(
-    `probe: done in ${(now() / 1000).toFixed(1)}s, peak heap ${peaks.heapUsedMB}MB,` +
-      ` max loop delay ${Math.round(peaks.eventLoopDelayMaxMs)}ms,` +
-      ` ${redisTotals.commands} Redis commands (${mb(redisTotals.replyBytes)}MB replies)`
+    `probe: done in ${(totals.elapsedMs / 1000).toFixed(1)}s, peak heap ${totals.peaks.heapUsedMB}MB,` +
+      ` max loop delay ${totals.peaks.eventLoopDelayMaxMs}ms,` +
+      ` ${redis.totals.commands} Redis commands (${mb(redis.totals.replyBytes)}MB replies)`
   );
   process.exit();
 }
 
-main();
+// The wrapper requires this file for OPTIONS, to check arguments locally.
+if (require.main === module) main();
+
+module.exports = { OPTIONS };
