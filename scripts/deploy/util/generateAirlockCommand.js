@@ -1,7 +1,7 @@
 const CONSTANTS = require("../constants");
 
 const { AIRLOCK } = CONSTANTS;
-const { LOG_MAX_SIZE, LOG_MAX_FILE } = CONSTANTS;
+const { LOG_MAX_SIZE, LOG_MAX_FILE, LOG_COMPRESS } = CONSTANTS;
 
 const VALID_PLATFORMS = {
   linux: ["amd64", "arm64"],
@@ -38,6 +38,7 @@ function generateAirlockCommand(platform, commitHash) {
     "--log-driver json-file",
     `--log-opt max-size=${LOG_MAX_SIZE}`,
     `--log-opt max-file=${LOG_MAX_FILE}`,
+    `--log-opt compress=${LOG_COMPRESS}`,
     `--memory=${AIRLOCK.memory}`,
     `--cpus=${AIRLOCK.cpus}`,
     `${AIRLOCK.registry}:${commitHash}`,
