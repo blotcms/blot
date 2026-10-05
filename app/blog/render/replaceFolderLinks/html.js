@@ -8,6 +8,7 @@ const {
 const lookupFile = require("./lookupFile");
 const blogHosts = require("../../lib/blogHosts");
 const BLOT_CDN_TOKEN = require("./cdnToken");
+const { record } = require("./stats");
 
 // Cheap pre-scan of the raw output string, run before the expensive
 // parse5.parse + tree-walk below. Most rendered pages have no folder-file
@@ -46,7 +47,15 @@ function mayNeedFolderLinkReplacement(html) {
 //     the entry (sync/update/set.js -> rebuildDependents); this pass only
 //     covers the short window before that rebuild finishes
 //   - hosts added after an entry was built (e.g. a custom domain set later)
-module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
+//
+// stats is optional instrumentation (see stats.js): each rewrite, and each
+// lookup that finds no file, is recorded on it. It never affects the output.
+module.exports = async function replaceFolderLinks(
+  blog,
+  html,
+  log = () => {},
+  stats
+) {
   try {
     const blogID = blog.id;
     const cacheID = blog.cacheID;
@@ -62,6 +71,8 @@ module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
     if (!mayNeedFolderLinkReplacement(html)) {
       return html;
     }
+
+    if (stats) stats.parsed = true;
 
     const document = parse5.parse(html);
     const elements = [];
@@ -156,14 +167,17 @@ module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
           if (!htmlExtRegex.test(value) && fileExtRegex.test(value)) {
             promises.push(
               (async () => {
+                const original = attr.value;
                 const result = await lookupFile(blogID, cacheID, value);
 
                 if (result === "ENOENT") {
                   log(`No file found in folder: ${value}`);
+                  if (stats) record(stats, original, value, true);
                   return;
                 }
 
                 log(`Replacing ${attr.value} with ${result}`);
+                if (stats) record(stats, original, value, false);
                 attr.value = result;
                 changes++;
               })()
@@ -217,9 +231,11 @@ module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
 
                     if (result === "ENOENT") {
                       log(`No file found in folder: ${lookupPath}`);
+                      if (stats) record(stats, originalUrl, lookupPath, true);
                       rewrittenUrl = originalUrl;
                     } else {
                       log(`Replacing ${originalUrl} with ${result}`);
+                      if (stats) record(stats, originalUrl, lookupPath, false);
                       rewrittenUrl = result;
                       changes++;
                     }
