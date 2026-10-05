@@ -89,8 +89,20 @@ hr {
   margin: 0;
 }
 
+.entry-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .entry-tags a {
-  color: inherit;
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.25rem;
+  background-color: var(--border-color);
+  color: var(--light-text-color);
+  font-size: var(--small-font-size);
+  text-decoration: none;
 }
 
 .entry-meta-separator {
@@ -99,6 +111,7 @@ hr {
 
 .entry-tags a:hover {
   color: var(--link-color);
+  background-color: var(--dark-border-color);
 }
 
 .entry.listing {
