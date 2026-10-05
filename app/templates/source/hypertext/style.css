@@ -75,6 +75,14 @@ hr {
   font-size: var(--small-font-size);
 }
 
+.entry.listing {
+  padding-bottom: 1rem;
+}
+
+.entry.listing .entry-date {
+  margin-top: 0.5rem;
+}
+
 main {
   position: relative;
 }
