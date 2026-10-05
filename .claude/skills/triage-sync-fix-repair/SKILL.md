@@ -85,6 +85,16 @@ exists on disk (`localPath`), with case-insensitive fallbacks.
 Syncs `blog.menu` page links with their entries. `Delete` = page entry now
 deleted; `Changed …` = page title/URL changed. These are normal side-effects
 of editing pages, unless the same item flips back and forth every run.
+The row holds a reference to the menu item, which is mutated after the push,
+so every row shows the **post-repair** values (a "Changed label of" row
+already carries the new label and metadata). **Known benign cause: demo
+template folders** (`client:` empty, handles from
+`app/templates/folders/config.js`). On every app boot `setupBlogs.js` resets
+the blog's menu to the bare config menu (no metadata, config labels), then
+`folders/index.js` calls Fix(), which copies titles/metadata back from the
+page entries. This sent the email after every deploy until `setupBlogs`
+started keeping the entry-derived label/url/metadata from the existing menu;
+if it recurs, check that merge.
 
 ### `entries-path-index` (`["MISMATCH", {entries, pathIndex}]`, `["BACKFILLED", n]`)
 
@@ -187,3 +197,16 @@ Entry template:
   (`entries`, `drafts`, `pages`, `scheduled`, `created`) loses its key.
   Alternatively, remove deleted ids from `all`/`deleted` when the TTL is
   set, or let a scheduled sweep do the pruning instead of Fix().
+
+### 2026-10-05 Fix() run — expected housekeeping (demo folder rebuild on boot)
+
+- Email: menu-ghosts, 5 rows (4× `Changed metadata of`, 1× `Changed label of`),
+  client: empty. No timestamp checked on prod; the code path fully explains it.
+- Cause: a demo blog from `app/templates/folders`. `app/setup.js` builds the
+  demo folders on every boot; `setupBlogs.js` writes the config `menu`
+  (no `metadata`, one label differs from the page title) and
+  `applyChanges` then runs Fix(), which restores metadata/labels from the
+  page entries. A menu item whose id is a folder (no entry) is left alone.
+- Follow-up: fixed by having `setupBlogs` keep each existing menu item's
+  entry-derived label/url/metadata instead of resetting them from config
+  (the email itself was left on, so real demo-blog repairs still surface).
