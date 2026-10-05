@@ -10,7 +10,7 @@ const path = require("path");
 const {
   runProbe,
   parseArgs,
-  describe,
+  formatOptions,
   WRAPPER_OPTIONS,
   fromWrapperOptions,
   OUT,
@@ -35,10 +35,10 @@ A target is a post URL or <blog>:<path>, where <blog> is a blog ID, handle or do
   npm run build-probe -- https://www.example.com/some-post --mode sync
 
 Probe options:
-${describe(probeOptions)}
+${formatOptions(probeOptions)}
 
 Wrapper options (defaults: --memory ${DEFAULTS.memory}, --max-old-space ${DEFAULTS.oldSpace} as green):
-${describe(WRAPPER_OPTIONS)}`);
+${formatOptions(WRAPPER_OPTIONS)}`);
 }
 
 async function main() {
