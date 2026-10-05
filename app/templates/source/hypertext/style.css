@@ -120,7 +120,7 @@ hr {
 }
 
 .pagination {
-  margin-top: 2rem;
+  margin-top: 3rem;
   color: var(--light-text-color);
   font-size: var(--small-font-size);
 }
