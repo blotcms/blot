@@ -4,7 +4,7 @@ const COLLAPSE_NAVIGATION_BY_DEFAULT = {{#collapse_navigation_by_default}}true{{
 
 function sidebarCacheKey(root) {
   return (
-    "sidebarState:" +
+    "sidebarState:v2:" +
     document.querySelector('meta[name="blot-cache-id"]')?.content +
     ":sort:" +
     (root?.dataset.sortBy || "id") +
@@ -96,23 +96,29 @@ class SidebarNavigation {
       return t.content;
     };
 
+    // The sidebar is server-rendered with the blog's own page_size, but
+    // /pagination/:page is a separate view with its own (larger) page size,
+    // so the inline data-next token doesn't line up with it: following it
+    // skips every entry between the two page sizes. Ignore the inline token
+    // and walk /pagination from page 1, de-duplicating against what's
+    // already in the list.
+    const hasMore = this.root.querySelector(":scope span[data-next]");
+    this.root
+      .querySelectorAll(":scope span[data-next]")
+      .forEach((el) => el.remove());
+
+    const knownPaths = new Set(
+      Array.from(this.root.querySelectorAll(":scope > li[data-path]")).map(
+        (li) => li.getAttribute("data-path")
+      )
+    );
+
     const seen = new Set();
+    let token = hasMore ? "1" : null;
     let guard = 0;
-    while (true) {
+    while (token) {
       if (++guard > this.maxPages) break;
-      const nextEl = this.root.querySelector(":scope span[data-next]");
-      if (!nextEl) break;
-
-      const token = nextEl.getAttribute("data-next");
-      nextEl.remove();
-
-      if (!token) continue;
-
-      this.root.querySelectorAll(":scope span[data-next]").forEach((el) => {
-        if (el.getAttribute("data-next") === token) el.remove();
-      });
-
-      if (seen.has(token)) continue;
+      if (seen.has(token)) break;
       seen.add(token);
 
       try {
@@ -121,14 +127,23 @@ class SidebarNavigation {
         });
         if (!res.ok) {
           console.warn("Pagination fetch failed:", res.status, token);
-          continue;
+          break;
         }
-        const html = await res.text();
-        const frag = parseHTML(html);
+        const frag = parseHTML(await res.text());
+
+        token = frag.querySelector("span[data-next]")?.getAttribute("data-next");
 
         for (const node of Array.from(frag.childNodes)) {
           if (node.nodeType === Node.TEXT_NODE && !node.textContent.trim())
             continue;
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            if (node.matches("span[data-next]")) continue;
+            const path = node.getAttribute("data-path");
+            if (path) {
+              if (knownPaths.has(path)) continue;
+              knownPaths.add(path);
+            }
+          }
           this.root.appendChild(node);
         }
       } catch (err) {
