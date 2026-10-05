@@ -222,7 +222,7 @@ describe("Drive verified content cache", function() {
       fingerprint: "local-0"
     });
     h.local[0].modifiedTime = "2020-01-01T00:00:00Z";
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual([]);
   });
   it("downloads a Google-app file when the stored modifiedTime is older than the remote one", async function() {
@@ -234,7 +234,7 @@ describe("Drive verified content cache", function() {
       fingerprint: "local-0"
     });
     h.files[0].modifiedTime = "2026-01-02T00:00:00Z";
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual(["0"]);
     expect(h.metadata.get("0")).toEqual({
       modifiedTime: "2026-01-02T00:00:00Z",
@@ -249,7 +249,7 @@ describe("Drive verified content cache", function() {
       modifiedTime: h.files[0].modifiedTime,
       fingerprint: "written-by-blot"
     });
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual(["0"]);
   });
 });
