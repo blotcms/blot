@@ -65,6 +65,7 @@ module.exports = function attachRenderView(req, res, _next) {
         blog,
         template: req.template,
         viewName: name,
+        log: req.log,
       });
 
       if (!response) {
