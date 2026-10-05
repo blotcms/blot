@@ -1,4 +1,19 @@
-Run scripts/dropbox/backfill-error-source.js --write
+Run npm run render-probe -- --stats https://www.jaysjay.com (or archives?)
+
+Investigate high aws bill cause
+
+Add option to hypertext template to make homepage chrono list of posts and tell [Brendan](https://mail.google.com/mail/u/0/#inbox/FMfcgzQhWfPnbhmcWTtTJxGgMqJtppML)
+
+Add script which issues request locally
+- use to debug nashp concurrent requests in isolation on prod infra
+
+Add script to triage fix/build issues individually (with appropriate heap flags etc.)
+
+Add p50 and p99 to response time stats and daily update
+
+Add error / getHealth issues to sync log (folder.status) for Dropbox/other client Issues
+
+Make sync logs more useful, surface recent changes on dashboard. Group multiple files together if changed at same time, etc. make it useful!
 
 Add dropbox kill switch (when platform goes down, etc.)
 
