@@ -54,7 +54,7 @@
     "pagination.html": {
       "url": "/pagination/:page",
       "locals": {
-        "page_size": 100
+        "page_size": 20
       }
     },
     "tagged.html": {
