@@ -55,6 +55,55 @@ describe("augment", function () {
     });
 
 
+    it("renders each backlink on a catalog list, with a shared target", async function () {
+        await this.write({path: "/target.txt", content: "Title: Target\n\nTarget body"});
+        await this.write({path: "/a.txt", content: "Title: A\n\n[[target]]"});
+        await this.write({path: "/b.txt", content: "Title: B\n\n[[target]]"});
+        await this.write({path: "/c.txt", content: "Title: C\n\n[[target]] [[a]]"});
+        await this.template({
+            'entries.html': '{{#allEntries}}{{title}}=[{{#backlinks}}{{title}},{{/backlinks}}];{{/allEntries}}'
+        });
+
+        const body = await this.text('/');
+
+        const targetLinks = body.match(/Target=\[([ABC,]*)\];/)[1].split(',').filter(Boolean);
+        expect(targetLinks.sort()).toEqual(['A', 'B', 'C']);
+        expect(body).toContain('A=[C,];');
+        expect(body).toContain('B=[];');
+    });
+
+    it("keeps the html of a backlinked entry when the template reads it", async function () {
+        await this.write({path: "/target.txt", content: "Title: Target\n\nTarget body"});
+        await this.write({path: "/a.txt", content: "Title: A\n\nLinked from A: [[target]]"});
+        await this.template({
+            'entries.html': '{{#allEntries}}{{#backlinks}}{{{html}}}{{/backlinks}}{{/allEntries}}'
+        });
+
+        const body = await this.text('/');
+
+        expect(body).toContain('Linked from A');
+    });
+
+    it("drops the html of a backlinked entry when the template never reads it", async function () {
+        await this.write({path: "/target.txt", content: "Title: Target\n\nTarget body"});
+        await this.write({path: "/a.txt", content: "Title: A\n\nLinked from A: [[target]]"});
+        await this.template({
+            'entries.html': '{{#allEntries}}{{title}}:{{#backlinks}}{{title}} {{{url}}}{{/backlinks}};{{/allEntries}}'
+        });
+
+        const locals = await (await this.get('/?json=1')).json();
+        const target = locals.allEntries.find((entry) => entry.title === 'Target');
+
+        expect(target.backlinks.length).toEqual(1);
+        expect(target.backlinks[0].title).toEqual('A');
+        expect(target.backlinks[0].url).toEqual('/a');
+        expect(target.backlinks[0].html).toBeUndefined();
+        expect(target.backlinks[0].body).toBeUndefined();
+
+        const body = await this.text('/');
+        expect(body).toContain('Target:A /a;');
+    });
+
     it("creates lowercase metadata aliases for rendering", async function () {
 
         await this.write({

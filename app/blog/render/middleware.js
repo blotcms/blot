@@ -82,6 +82,11 @@ module.exports = function attachRenderView(req, res, _next) {
       const missingLocals = response[2];
       const viewType = response[3];
       const view = response[4];
+      // Only an explicit false skips resolving backlinks, and not for
+      // ?debug and ?json, which dump every local, backlinks included.
+      req.usesBacklinks =
+        response[5] !== false ||
+        !!(req.query && (req.query.debug || req.query.json));
       const query = Object.keys(req.query).length ? { query: req.query } : {};
 
       extend(res.locals)

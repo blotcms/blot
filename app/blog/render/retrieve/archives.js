@@ -11,8 +11,8 @@ const { Uncacheable } = require("../../lib/uncacheableFetch");
 const {
   augmentContext,
   augmentEntries,
-  backlinksIncomplete,
   shareEntries,
+  warnIfTooLargeToCache,
 } = require("../load/augmentedEntries");
 
 const ALIASES = ["archives"];
@@ -34,15 +34,17 @@ const archivesCache = new LRUCache({
   fetchMethod: async (key, staleValue, { context }) => {
     const { req, res } = context;
     const years = await buildArchives(req, req.blog);
-    const stats = await augmentEntries(req, res, years);
+    // Backlinked entries are trimmed like the list's own.
+    const backlinksFailed = await augmentEntries(req, res, years, ALIASES);
     const prepared = prepareCacheValue(years, { preserveEntryInstances: true });
+    warnIfTooLargeToCache("archives", req, prepared, archivesCache);
 
     // Don't cache an empty result: getAllCached already declines to persist
     // a [] catalog (which Entries.getAll also returns on a transient Redis
     // failure, not just for a genuinely empty blog), but a non-empty catalog
     // could still group into zero years if every entry lacked a dateStamp -
     // guard here too so archivesCache can't end up caching that either.
-    if (years.length === 0 || backlinksIncomplete(stats)) {
+    if (years.length === 0 || backlinksFailed) {
       throw new Uncacheable(prepared);
     }
 
