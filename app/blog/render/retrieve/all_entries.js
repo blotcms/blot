@@ -1,4 +1,5 @@
 const getAllCached = require("./helpers/getAllCached");
+const yieldToEventLoop = require("./helpers/yieldToEventLoop");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
@@ -31,11 +32,13 @@ const allEntriesCache = new LRUCache({
   fetchMethod: async (key, staleValue, { context }) => {
     const { req, res } = context;
     const allEntriesList = await getAllCached(req.blog);
+    await yieldToEventLoop();
 
     projectEntryFields(allEntriesList, req.retrieve, ALIASES);
 
     // Backlinked entries are trimmed like the list's own.
     const backlinksFailed = await augmentEntries(req, res, allEntriesList, ALIASES);
+    await yieldToEventLoop();
     const prepared = prepareCacheValue(allEntriesList, {
       preserveEntryInstances: true,
     });

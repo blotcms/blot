@@ -34,20 +34,25 @@ describe("entry.get", function () {
   });
 
   it("yields to the event loop between batches", async function () {
-    for (var path of paths) await this.set(path, "Hello from " + path);
-
     get.BATCH_SIZE = 2;
 
-    var ticks = 0;
-    var interval = setInterval(function () {
-      ticks++;
-    }, 0);
+    // Each fake read resolves in a microtask, so without a macrotask hop
+    // between batches every read would finish before the setImmediate
+    // scheduled here ran.
+    var events = [];
+    spyOn(redis, "mGet").and.callFake(function (keys) {
+      events.push("mGet");
+      return Promise.resolve(keys.map(function () {
+        return null;
+      }));
+    });
+    setImmediate(function () {
+      events.push("other work");
+    });
 
-    var result = await getMany(this.blog.id, paths);
-    clearInterval(interval);
+    await getMany(this.blog.id, paths);
 
-    expect(result.entries.length).toEqual(paths.length);
-    expect(ticks).toBeGreaterThan(0);
+    expect(events).toEqual(["mGet", "other work", "mGet", "mGet"]);
   });
 
   it("returns an empty list and the error if any batch fails", async function () {

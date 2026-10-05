@@ -1,4 +1,5 @@
 const getAllCached = require("./helpers/getAllCached");
+const yieldToEventLoop = require("./helpers/yieldToEventLoop");
 const arrayify = require("helper/arrayify");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const moment = require("moment");
@@ -34,8 +35,10 @@ const archivesCache = new LRUCache({
   fetchMethod: async (key, staleValue, { context }) => {
     const { req, res } = context;
     const years = await buildArchives(req, req.blog);
+    await yieldToEventLoop();
     // Backlinked entries are trimmed like the list's own.
     const backlinksFailed = await augmentEntries(req, res, years, ALIASES);
+    await yieldToEventLoop();
     const prepared = prepareCacheValue(years, { preserveEntryInstances: true });
     warnIfTooLargeToCache("archives", req, prepared, archivesCache);
 
