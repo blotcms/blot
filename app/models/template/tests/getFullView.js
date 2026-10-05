@@ -47,6 +47,37 @@ describe("template", function () {
   });
 
 
+  [
+    ["a partial", "{{> links.html}}", "{{#backlinks}}{{title}}{{/backlinks}}", true],
+    ["the view", "{{#entry.backlinks}}{{title}}{{/entry.backlinks}}", "x", true],
+    ["neither", "{{title}}{{> links.html}}", "{{url}}", false],
+  ].forEach(function (example) {
+    it("says whether backlinks are used: " + example[0], function (done) {
+      var test = this;
+
+      async.map(
+        [
+          { name: "entry.html", content: example[1] },
+          { name: "links.html", content: example[2] },
+        ],
+        setView.bind(null, test.template.id),
+        function (err) {
+          if (err) return done.fail(err);
+
+          getFullView(test.blog.id, test.template.id, "entry.html", function (
+            err,
+            fullView
+          ) {
+            if (err) return done.fail(err);
+
+            expect(fullView[5]).toBe(example[3]);
+            done();
+          });
+        }
+      );
+    });
+  });
+
   it("merges projected allEntries fields from view and partials", function (done) {
     var test = this;
 

@@ -32,20 +32,12 @@ const isExportSizeLimitError = (err) => {
   return errorData?.error?.code === 403 && errorData?.error?.message?.includes("too large to be exported");
 };
 
-const ensurePlaceholderWithMtime = async (pathOnBlot, modifiedTime) => {
+const ensurePlaceholder = async (pathOnBlot) => {
+  // The caller (sync.js) records the remote modifiedTime in the client's
+  // own database once this resolves, so Blot knows not to re-fetch this
+  // placeholder every sync. We no longer need the local file's mtime to
+  // carry that information.
   await fs.ensureFile(pathOnBlot);
-  // We update the date-modified time of the file to match the remote file
-  // to prevent Blot re-downloading by ensuring the file is not considered stale
-  try {
-    debug("Setting mtime for file", pathOnBlot, "to", modifiedTime);
-    debug("mtime before:", (await fs.stat(pathOnBlot)).mtime);
-    const mtime = new Date(modifiedTime);
-    debug("mtime to set:", mtime);
-    await fs.utimes(pathOnBlot, mtime, mtime);
-    debug("mtime after:", (await fs.stat(pathOnBlot)).mtime);
-  } catch (e) {
-    debug("Error setting mtime", e);
-  }
 };
 
 const streamToFile = (readStream, filePath) =>
@@ -135,7 +127,6 @@ const downloadGoogleDocAsZip = async ({
   id,
   path,
   blogID,
-  modifiedTime,
   pathOnBlot,
   zipStream,
 }) => {
@@ -188,13 +179,6 @@ const downloadGoogleDocAsZip = async ({
     });
 
     await fs.writeFile(pathOnBlot, $.html().trim(), "utf-8");
-
-    try {
-      const mtime = new Date(modifiedTime);
-      await fs.utimes(pathOnBlot, mtime, mtime);
-    } catch (e) {
-      debug("Error setting mtime", e);
-    }
   } finally {
     await fs.remove(zipPath).catch(() => {});
     await fs.remove(extractDir).catch(() => {});
@@ -205,7 +189,7 @@ module.exports = async (
   blogID,
   drive,
   path,
-  { id, md5Checksum, mimeType, modifiedTime },
+  { id, md5Checksum, mimeType },
   { serviceAccountId, folderId, skipHotEnqueue } = {}
 ) => {
   return new Promise(async function (resolve, reject) {
@@ -253,7 +237,6 @@ module.exports = async (
                 id,
                 path,
                 blogID,
-                modifiedTime,
                 pathOnBlot,
                 zipStream,
               });
@@ -275,7 +258,7 @@ module.exports = async (
         }
       }
       
-      await ensurePlaceholderWithMtime(pathOnBlot, modifiedTime);
+      await ensurePlaceholder(pathOnBlot);
       debug("   created empty file at:", colors.green(pathOnBlot));
       return "placeholder";
     };
@@ -323,7 +306,7 @@ module.exports = async (
         mimeType.startsWith("application/vnd.google-apps.") &&
         mimeType !== "application/vnd.google-apps.document"
       ) {
-        await ensurePlaceholderWithMtime(pathOnBlot, modifiedTime);
+        await ensurePlaceholder(pathOnBlot);
         debug(
           "SKIP download of file because it is a Google App file type",
           mimeType
@@ -353,7 +336,6 @@ module.exports = async (
             id,
             path,
             blogID,
-            modifiedTime,
             pathOnBlot,
           });
           debug("DOWNLOAD file SUCCEEDED");
@@ -409,12 +391,6 @@ module.exports = async (
         throw new Error("Downloaded content does not match the listed Drive checksum");
       }
       await fs.move(tempPath, pathOnBlot, { overwrite: true });
-      try {
-        const mtime = new Date(modifiedTime);
-        await fs.utimes(pathOnBlot, mtime, mtime);
-      } catch (e) {
-        debug("Error setting mtime", e);
-      }
       // Publication has succeeded. A concurrent local write (or stat failure)
       // must not suppress the caller's rebuild; simply decline to cache it.
       const verified = await verifyContent(pathOnBlot, md5Checksum).catch(() => null);

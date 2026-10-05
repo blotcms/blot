@@ -90,7 +90,6 @@ module.exports = function buildMultiple(blog, info, callback) {
         var combinedStat = {
           size: 0,
           mtime: 0,
-          ctime: 0,
         };
 
         results.forEach(function (result) {
@@ -109,12 +108,6 @@ module.exports = function buildMultiple(blog, info, callback) {
             );
           }
 
-          if (result.stat && result.stat.ctime) {
-            combinedStat.ctime = Math.max(
-              combinedStat.ctime,
-              new Date(result.stat.ctime).valueOf()
-            );
-          }
         });
 
         combinedDependencies = Array.from(new Set(combinedDependencies));
@@ -124,7 +117,6 @@ module.exports = function buildMultiple(blog, info, callback) {
         };
 
         if (combinedStat.mtime) stat.mtime = new Date(combinedStat.mtime);
-        if (combinedStat.ctime) stat.ctime = new Date(combinedStat.ctime);
 
         if (!stat.mtime) stat.mtime = new Date();
 

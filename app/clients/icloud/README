@@ -50,8 +50,8 @@ Core bidirectional sync logic. All sync operations acquire and hold a sync lock 
 - `resolveCaseConflicts.js` - Detects and resolves case-sensitivity conflicts before initial transfer. iCloud Drive on macOS is case-preserving but case-insensitive; this prevents collisions.
 
 - `/util` - Helper utilities:
-  - `download.js` - Downloads a file from the macserver, preserves modification time.
-  - `remoteUpload.js` - Uploads a file to the macserver with modification time metadata.
+  - `download.js` - Downloads a file from the macserver and writes it to local Blot storage. Does not set the local file's mtime; local storage doesn't keep a settable modification time.
+  - `remoteUpload.js` - Uploads a file to the macserver, forwarding local storage's current mtime so the macserver can set it on the real file in iCloud Drive (which does need a real modification time).
   - `remoteMkdir.js` - Creates a directory on the remote iCloud folder via the macserver.
   - `remoteDelete.js` - Deletes a file or directory on the remote iCloud folder via the macserver.
   - `remoteReaddir.js` - Lists directory contents from the remote iCloud folder.
@@ -74,7 +74,7 @@ Authenticated endpoints called by the remote macserver to report status, upload/
 
 - `status.js` - Handles macserver status updates. Processes resync requests (with deduplication to avoid duplicate in-flight syncs), acceptedSharingLink notifications (triggering initialTransfer), and general sync notifications. Deduplicates resync requests within a 10-second window.
 
-- `upload.js` - Binary file upload handler. Accepts raw binary data, validates headers, stores files locally, preserves modification times, and supports placeholder uploads for oversized files. Uses sync lock to coordinate with other operations.
+- `upload.js` - Binary file upload handler. Accepts raw binary data, validates headers, stores files locally, and supports placeholder uploads for oversized files. Treats a file as already current when its contents match, regardless of mtime, since local storage doesn't keep a settable modification time. Uses sync lock to coordinate with other operations.
 
 - `delete.js` - File deletion handler. Deletes files from local Blot storage.
 

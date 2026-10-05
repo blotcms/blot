@@ -1,6 +1,7 @@
 const { popularTags: getPopularTags } = require("../../lib/models");
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
+const fetchCached = require("../../lib/fetchCached");
 const { compactTags, expandTags } = require("./helpers/compactTags");
 const LRUCache = require("lru-cache").LRUCache;
 const asRetriever = require("../../lib/asRetriever");
@@ -58,13 +59,9 @@ async function popularTags(req, res) {
   const options = { limit: 100, offset: 0 };
   const key = createCacheKey(req.blog, options);
 
-  const status = {};
-  const prepared = await popularTagsCache.fetch(key, {
-    status,
+  const prepared = await fetchCached(popularTagsCache, "popularTags", req.log, key, {
     context: { blogID: req.blog.id, options, log: req.log },
   });
-
-  if (status.fetch === "hit") req.log("Retrieved popular tags from cache");
 
   return expandTags(cloneDeep(prepared.payload));
 }

@@ -44,7 +44,6 @@ describe("Drive download completion", function() {
         remove: async () => {
           removed = true;
         },
-        utimes: async () => {},
       },
       "helper/localPath": () => "/test-blog/file.txt",
       "colors/safe": {

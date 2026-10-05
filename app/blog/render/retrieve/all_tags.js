@@ -2,6 +2,7 @@ const { listTags } = require("../../lib/models");
 const { normalizePathPrefix } = require("helper/pathPrefix");
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
+const fetchCached = require("../../lib/fetchCached");
 const { compactTags, expandTags } = require("./helpers/compactTags");
 const LRUCache = require("lru-cache").LRUCache;
 const asRetriever = require("../../lib/asRetriever");
@@ -97,13 +98,9 @@ async function allTags(req, res) {
   }
 
   const key = createCacheKey(req.blog, path_prefix);
-  const status = {};
-  const prepared = await allTagsCache.fetch(key, {
-    status,
+  const prepared = await fetchCached(allTagsCache, "allTags", req.log, key, {
     context: { blogID: req.blog.id, pathPrefix: path_prefix, log: req.log },
   });
-
-  if (status.fetch === "hit") req.log("Retrieved all tags from cache");
 
   // toDO maybe rename this? it's ugly
   res.locals.all_tags_total_posts = prepared.payload.totalPosts;

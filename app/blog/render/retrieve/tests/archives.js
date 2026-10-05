@@ -91,6 +91,28 @@ describe("archives cache", function () {
     });
   });
 
+  it("yields to the event loop between the passes of a cold fill, but not on a hit", function (done) {
+    const { archives } = loadArchives();
+
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
+      callback([{ id: "1", title: "A", dateStamp: Date.parse("2020-01-02") }]);
+    });
+    const yields = spyOn(global, "setImmediate").and.callThrough();
+
+    const req = makeReq({ id: "blog-yield", cacheID: 100, timeZone: "UTC" });
+
+    archives(req, { locals: {} }, function () {
+      // catalog clone, then before augmenting, then before sizing the result
+      expect(yields.calls.count()).toBeGreaterThanOrEqual(3);
+      yields.calls.reset();
+
+      archives(req, { locals: {} }, function () {
+        expect(yields).not.toHaveBeenCalled();
+        done();
+      });
+    });
+  });
+
   it("refetches when cacheID changes", function (done) {
     const { archives } = loadArchives();
 

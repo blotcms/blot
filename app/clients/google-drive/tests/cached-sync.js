@@ -3,6 +3,7 @@ const vm = require("vm");
 
 function harness(count = 1) {
   const records = new Map();
+  const metadata = new Map();
   const files = Array.from({
     length: count
   }, (_, i) => ({
@@ -22,6 +23,7 @@ function harness(count = 1) {
     files,
     local,
     records,
+    metadata,
     downloads: [],
     batches: [],
     updates: [],
@@ -42,6 +44,10 @@ function harness(count = 1) {
       },
       folder: () => ({
         getByPath: async () => null,
+        getApplied: async id => metadata.get(id) || null,
+        setApplied: async (id, value) => {
+          metadata.set(id, value);
+        },
         set: async () => {},
         remove: async () => {},
         getMigrationCursor: async () => cursor,
@@ -72,6 +78,8 @@ function harness(count = 1) {
         }
       };
     },
+    "../util/localFingerprint": async path =>
+      local.find(file => "/" + file.name === path)?.fingerprint || null,
     "../serviceAccount/createDriveClient": async () => ({
       files: {
         get: async () => ({
@@ -202,6 +210,45 @@ describe("Drive verified content cache", function() {
     expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual([]);
     h.files[0].modifiedTime = "2026-01-02T00:00:00Z";
+    expect(await h.run()).toBeTruthy();
+    expect(h.downloads).toEqual(["0"]);
+  });
+  it("treats a Google-app file as identical when the stored modifiedTime matches, even if the local mtime differs", async function() {
+    const h = harness();
+    h.files[0].mimeType = "application/vnd.google-apps.spreadsheet";
+    delete h.files[0].md5Checksum;
+    h.metadata.set("0", {
+      modifiedTime: h.files[0].modifiedTime,
+      fingerprint: "local-0"
+    });
+    h.local[0].modifiedTime = "2020-01-01T00:00:00Z";
+    expect(await h.run()).toBeTruthy();
+    expect(h.downloads).toEqual([]);
+  });
+  it("downloads a Google-app file when the stored modifiedTime is older than the remote one", async function() {
+    const h = harness();
+    h.files[0].mimeType = "application/vnd.google-apps.spreadsheet";
+    delete h.files[0].md5Checksum;
+    h.metadata.set("0", {
+      modifiedTime: "2026-01-01T00:00:00Z",
+      fingerprint: "local-0"
+    });
+    h.files[0].modifiedTime = "2026-01-02T00:00:00Z";
+    expect(await h.run()).toBeTruthy();
+    expect(h.downloads).toEqual(["0"]);
+    expect(h.metadata.get("0")).toEqual({
+      modifiedTime: "2026-01-02T00:00:00Z",
+      fingerprint: "local-0"
+    });
+  });
+  it("downloads a Google-app file changed locally since Blot wrote it, even if Drive's time is unchanged", async function() {
+    const h = harness();
+    h.files[0].mimeType = "application/vnd.google-apps.spreadsheet";
+    delete h.files[0].md5Checksum;
+    h.metadata.set("0", {
+      modifiedTime: h.files[0].modifiedTime,
+      fingerprint: "written-by-blot"
+    });
     expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual(["0"]);
   });

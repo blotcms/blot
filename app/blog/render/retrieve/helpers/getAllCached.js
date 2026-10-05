@@ -7,6 +7,7 @@ const LRUCache = require("lru-cache").LRUCache;
 const { getAll } = require("../../../lib/models");
 const { cloneDeep, prepareCacheValue } = require("../../../lib/clone");
 const cacheStats = require("../../../lib/cacheStats");
+const yieldToEventLoop = require("./yieldToEventLoop");
 
 const entriesCache = new LRUCache({
   max: 200,
@@ -38,19 +39,29 @@ function cloneEntries(value) {
 // on every keystroke/save, so caching its output would either serve stale
 // entries or thrash the LRU with one-shot entries no other request will ever
 // read again. Concurrent calls still share one in-flight fetch.
+// options.log: req.log, told how the lookup was served (see lib/fetchCached).
 async function getAllCached(blog, options) {
   const bypassCache = !!(options && options.bypassCache);
+  const log = (options && options.log) || function () {};
   const key = createCacheKey(blog);
 
   if (!bypassCache && entriesCache.has(key)) {
+    log("entries cache hit");
     return cloneEntries(entriesCache.get(key).payload);
   }
 
   if (inflight.has(key)) {
+    log("entries cache inflight");
     return cloneEntries(await inflight.get(key));
   }
 
-  const promise = getAll(blog && blog.id).then((entries) => {
+  log(bypassCache ? "entries cache bypass" : "entries cache miss");
+
+  const promise = getAll(blog && blog.id).then(async (entries) => {
+    // The last batch of entries was just parsed; don't also clone and size
+    // the whole catalog in the same tick.
+    await yieldToEventLoop();
+
     const prepared = prepareCacheValue(entries, {
       preserveEntryInstances: true,
     });

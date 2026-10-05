@@ -505,4 +505,71 @@ describe("build", function () {
     expect(entry.path).toEqual(path);
     done();
   });
+
+  describe("'updated' and contentHash", function () {
+    var Entry = require("models/entry");
+    var moment = require("moment");
+
+    it("keeps 'updated' unchanged when only the file's mtime changes", function (done) {
+      var path = "/updated-mtime-only.txt";
+      var blog = this.blog;
+      var fullPath = this.blogDirectory + path;
+
+      fs.outputFileSync(fullPath, "Same content");
+
+      build(blog, path, function (err, entry) {
+        if (err) return done.fail(err);
+
+        Entry.set(blog.id, path, entry, function (err) {
+          if (err) return done.fail(err);
+
+          // Bump the file's mtime without touching its bytes - this
+          // mirrors a Dropbox/Drive/iCloud reconnect or full resync
+          // re-downloading an unchanged file.
+          var newMtime = new Date(Date.now() + 60 * 60 * 1000);
+          fs.utimesSync(fullPath, newMtime, newMtime);
+
+          build(blog, path, function (err, rebuiltEntry) {
+            if (err) return done.fail(err);
+
+            expect(rebuiltEntry.contentHash).toEqual(entry.contentHash);
+            expect(rebuiltEntry.updated).toEqual(entry.updated);
+
+            done();
+          });
+        });
+      });
+    });
+
+    it("changes 'updated' to the new mtime when the file's content changes", function (done) {
+      var path = "/updated-content-changed.txt";
+      var blog = this.blog;
+      var fullPath = this.blogDirectory + path;
+
+      fs.outputFileSync(fullPath, "Original content");
+
+      build(blog, path, function (err, entry) {
+        if (err) return done.fail(err);
+
+        Entry.set(blog.id, path, entry, function (err) {
+          if (err) return done.fail(err);
+
+          fs.outputFileSync(fullPath, "Changed content");
+
+          var newMtime = new Date(Date.now() + 60 * 60 * 1000);
+          fs.utimesSync(fullPath, newMtime, newMtime);
+
+          build(blog, path, function (err, rebuiltEntry) {
+            if (err) return done.fail(err);
+
+            expect(rebuiltEntry.contentHash).not.toEqual(entry.contentHash);
+            expect(rebuiltEntry.updated).toEqual(moment.utc(newMtime).valueOf());
+            expect(rebuiltEntry.updated).not.toEqual(entry.updated);
+
+            done();
+          });
+        });
+      });
+    });
+  });
 });

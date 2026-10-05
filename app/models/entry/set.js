@@ -78,6 +78,7 @@ module.exports = function set (blogID, path, updates, callback) {
     if (entry.internalLinks === undefined) entry.internalLinks = [];
     if (!entry.metadata || typeof entry.metadata !== "object") entry.metadata = {};
     if (!entry.exif || typeof entry.exif !== "object") entry.exif = {};
+    if (typeof entry.contentHash !== "string") entry.contentHash = "";
 
     entry.scheduled = entry.dateStamp > Date.now();
 

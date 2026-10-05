@@ -1,15 +1,17 @@
 const getAllCached = require("./helpers/getAllCached");
+const yieldToEventLoop = require("./helpers/yieldToEventLoop");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
 const { prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
+const fetchCached = require("../../lib/fetchCached");
 const { Uncacheable } = require("../../lib/uncacheableFetch");
 const {
   augmentContext,
   augmentEntries,
-  backlinksIncomplete,
   shareEntries,
+  warnIfTooLargeToCache,
 } = require("../load/augmentedEntries");
 
 const ALIASES = ["allEntries", "all_entries"];
@@ -30,20 +32,24 @@ const allEntriesCache = new LRUCache({
   // renders after a cacheID change augments the catalog once, not per request.
   fetchMethod: async (key, staleValue, { context }) => {
     const { req, res } = context;
-    const allEntriesList = await getAllCached(req.blog);
+    const allEntriesList = await getAllCached(req.blog, { log: req.log });
+    await yieldToEventLoop();
 
     projectEntryFields(allEntriesList, req.retrieve, ALIASES);
 
-    const stats = await augmentEntries(req, res, allEntriesList);
+    // Backlinked entries are trimmed like the list's own.
+    const backlinksFailed = await augmentEntries(req, res, allEntriesList, ALIASES);
+    await yieldToEventLoop();
     const prepared = prepareCacheValue(allEntriesList, {
       preserveEntryInstances: true,
     });
+    warnIfTooLargeToCache("allEntries", req, prepared, allEntriesCache);
 
     // Don't cache an empty result: getAllCached already declines to persist
     // a [] catalog, since Entries.getAll also returns [] on a transient Redis
     // failure rather than rejecting - caching that here would look identical
     // to a genuinely empty blog and hide every post until cacheID changes.
-    if (allEntriesList.length === 0 || backlinksIncomplete(stats)) {
+    if (allEntriesList.length === 0 || backlinksFailed) {
       throw new Uncacheable(prepared);
     }
 
@@ -79,7 +85,10 @@ async function allEntries(req, res) {
   // them would only thrash the LRU with entries no other request will read.
   // render/load augments these the usual way.
   if (req.preview) {
-    const allEntriesList = await getAllCached(req.blog, { bypassCache: true });
+    const allEntriesList = await getAllCached(req.blog, {
+      bypassCache: true,
+      log: req.log,
+    });
     projectEntryFields(allEntriesList, req.retrieve, ALIASES);
     return allEntriesList;
   }
@@ -88,7 +97,9 @@ async function allEntries(req, res) {
 
   let prepared;
   try {
-    prepared = await allEntriesCache.fetch(key, { context: { req, res } });
+    prepared = await fetchCached(allEntriesCache, "allEntries", req.log, key, {
+      context: { req, res },
+    });
   } catch (e) {
     if (!(e instanceof Uncacheable)) throw e;
     prepared = e.payload;

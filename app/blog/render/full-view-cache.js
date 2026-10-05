@@ -1,6 +1,7 @@
 const { getFullView } = require("../lib/models");
 const { cloneDeep, prepareCacheValue } = require("../lib/clone");
 const cacheStats = require("../lib/cacheStats");
+const fetchCached = require("../lib/fetchCached");
 const LRUCache = require("lru-cache").LRUCache;
 
 // This cache is safe because the key includes blog/template/view identity,
@@ -46,7 +47,7 @@ async function getCachedFullView(options) {
 
   const key = createCacheKey(blog, template, viewName);
 
-  const prepared = await fullViewCache.fetch(key, {
+  const prepared = await fetchCached(fullViewCache, "view", options.log, key, {
     context: { blogID: blog.id, templateID: template.id, viewName },
   });
 

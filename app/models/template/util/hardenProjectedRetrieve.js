@@ -1,6 +1,6 @@
-var mustache = require("mustache");
 var type = require("helper/type");
 var projectableEntryFields = require("./projectableEntryFields");
+var referencedIdentifiers = require("./referencedIdentifiers");
 
 // Field projection (blog/render/retrieve/helpers/projectEntryFields.js) drops
 // the heavy entry fields a view does not reference. Working that out from
@@ -20,7 +20,7 @@ var projectableEntryFields = require("./projectableEntryFields");
 module.exports = function hardenProjectedRetrieve(retrieve, viewContent, allPartials) {
   if (!retrieve || typeof retrieve !== "object") return retrieve;
 
-  var referenced = collectReferencedIdentifiers(viewContent, allPartials);
+  var referenced = referencedIdentifiers(viewContent, allPartials);
 
   Object.keys(retrieve).forEach(function (key) {
     var value = retrieve[key];
@@ -38,7 +38,7 @@ module.exports = function hardenProjectedRetrieve(retrieve, viewContent, allPart
     }
 
     projectableEntryFields.forEach(function (field) {
-      if (!value.fields[field] && referenced[field]) {
+      if (!value.fields[field] && referenced.has(field)) {
         value.fields[field] = true;
       }
     });
@@ -46,61 +46,3 @@ module.exports = function hardenProjectedRetrieve(retrieve, viewContent, allPart
 
   return retrieve;
 };
-
-function collectReferencedIdentifiers(viewContent, allPartials) {
-  var names = {};
-
-  addFrom(viewContent);
-
-  if (allPartials && typeof allPartials === "object") {
-    Object.keys(allPartials).forEach(function (name) {
-      addFrom(allPartials[name]);
-    });
-  }
-
-  return names;
-
-  function addFrom(content) {
-    if (!content || typeof content !== "string") return;
-
-    var tokens;
-
-    try {
-      tokens = mustache.parse(content);
-    } catch (e) {
-      // A fragment that doesn't parse on its own (caller-supplied inline
-      // content, entry HTML with stray braces, ...). Be safe: treat every
-      // heavy field as referenced.
-      projectableEntryFields.forEach(function (field) {
-        names[field] = true;
-      });
-      return;
-    }
-
-    walk(tokens);
-  }
-
-  function walk(tokens) {
-    if (!Array.isArray(tokens)) return;
-
-    for (var i = 0; i < tokens.length; i++) {
-      var token = tokens[i];
-      var tokenType = token && token[0];
-
-      if (
-        tokenType === "name" ||
-        tokenType === "&" ||
-        tokenType === "#" ||
-        tokenType === "^"
-      ) {
-        String(token[1])
-          .split(".")
-          .forEach(function (segment) {
-            if (segment) names[segment] = true;
-          });
-      }
-
-      if (Array.isArray(token[4])) walk(token[4]);
-    }
-  }
-}
