@@ -4,6 +4,7 @@ const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
+const fetchCached = require("../../lib/fetchCached");
 const { Uncacheable } = require("../../lib/uncacheableFetch");
 const LRUCache = require("lru-cache").LRUCache;
 const { normalizePathPrefix } = require("helper/pathPrefix");
@@ -143,19 +144,15 @@ async function tagged(req, res) {
     limit,
   });
 
-  const status = {};
   let prepared;
   try {
-    prepared = await taggedCache.fetch(key, {
-      status,
+    prepared = await fetchCached(taggedCache, "tagged", log, key, {
       context: { blogID, tags, limit, offset, pathPrefix, sortOptions },
     });
   } catch (e) {
     if (!(e instanceof Uncacheable)) throw e;
     prepared = e.payload;
   }
-
-  if (status.fetch === "hit") log("Retrieved tagged entries from cache");
 
   const payload = cloneTagged(prepared.payload);
 

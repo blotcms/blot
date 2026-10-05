@@ -124,8 +124,10 @@ function stripHeavyFields(entries, keep) {
 // on every keystroke/save, so caching its output would either serve stale
 // entries or thrash the LRU with one-shot entries no other request will ever
 // read again. Concurrent calls still share one in-flight fetch.
+// options.log: req.log, told how the lookup was served (see lib/fetchCached).
 async function getAllCached(blog, options) {
   const bypassCache = !!(options && options.bypassCache);
+  const log = (options && options.log) || function () {};
   const keep = heavyFieldsToKeep(options && options.retrieve);
   const key = createCacheKey(blog, keep);
   const wider = relatedFieldSets(keep, true).map((set) =>
@@ -136,6 +138,7 @@ async function getAllCached(blog, options) {
     for (const candidate of wider) {
       const cached = entriesCache.get(candidate);
       if (cached) {
+        log("entries cache hit");
         return stripHeavyFields(cloneEntries(cached.payload), keep);
       }
     }
@@ -143,12 +146,15 @@ async function getAllCached(blog, options) {
 
   for (const candidate of wider) {
     if (inflight.has(candidate)) {
+      log("entries cache inflight");
       return stripHeavyFields(
         cloneEntries(await inflight.get(candidate)),
         keep
       );
     }
   }
+
+  log(bypassCache ? "entries cache bypass" : "entries cache miss");
 
   const promise = getAll(blog && blog.id).then(async (entries) => {
     // The last batch of entries was just parsed; don't also clone and size

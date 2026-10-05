@@ -5,6 +5,7 @@ const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
 const { prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
+const fetchCached = require("../../lib/fetchCached");
 const { Uncacheable } = require("../../lib/uncacheableFetch");
 const {
   augmentContext,
@@ -33,6 +34,7 @@ const allEntriesCache = new LRUCache({
     const { req, res } = context;
     const allEntriesList = await getAllCached(req.blog, {
       retrieve: req.retrieve,
+      log: req.log,
     });
     await yieldToEventLoop();
 
@@ -89,6 +91,7 @@ async function allEntries(req, res) {
     const allEntriesList = await getAllCached(req.blog, {
       bypassCache: true,
       retrieve: req.retrieve,
+      log: req.log,
     });
     projectEntryFields(allEntriesList, req.retrieve, ALIASES);
     return allEntriesList;
@@ -98,7 +101,9 @@ async function allEntries(req, res) {
 
   let prepared;
   try {
-    prepared = await allEntriesCache.fetch(key, { context: { req, res } });
+    prepared = await fetchCached(allEntriesCache, "allEntries", req.log, key, {
+      context: { req, res },
+    });
   } catch (e) {
     if (!(e instanceof Uncacheable)) throw e;
     prepared = e.payload;
