@@ -24,6 +24,13 @@ const MAX_MEMORY_MB = 1024 * 128; // 128GB
 const MIN_OLD_SPACE_SIZE = 512;
 const MAX_OLD_SPACE_SIZE = 32768; // 32GB
 
+// How an app container reaches the airlock's browser and proxy. Also used
+// by the probes in scripts/probe that need the airlock.
+const AIRLOCK_ENV = {
+  BLOT_AIRLOCK_BROWSER_URL: `http://${AIRLOCK.name}:9222`,
+  BLOT_AIRLOCK_PROXY_URL: `http://${AIRLOCK.name}:8888`,
+};
+
 let validatedConstants = false;
 
 async function validateConstants() {
@@ -220,8 +227,7 @@ async function generateDockerCommand(container, platform, commitHash) {
     // AIRLOCK.network between `docker create` and `docker start` (see
     // deployContainer/connectToAirlockNetwork in ../index.js), not via
     // --network here - see the comment on AIRLOCK in ../constants.js for why.
-    `-e BLOT_AIRLOCK_BROWSER_URL=http://${AIRLOCK.name}:9222`,
-    `-e BLOT_AIRLOCK_PROXY_URL=http://${AIRLOCK.name}:8888`,
+    ...Object.entries(AIRLOCK_ENV).map(([key, value]) => `-e ${key}=${value}`),
     // Mount the data directory on the host to the container
     // Every container has access to the same data directory
     `-v ${DATA_DIRECTORY_ON_SERVER}:${DATA_DIRECTORY_ON_CONTAINER}`,
@@ -232,3 +238,4 @@ async function generateDockerCommand(container, platform, commitHash) {
 }
 
 module.exports = generateDockerCommand;
+module.exports.AIRLOCK_ENV = AIRLOCK_ENV;
