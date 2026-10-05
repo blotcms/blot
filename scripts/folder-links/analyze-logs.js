@@ -277,6 +277,4 @@ function main() {
     });
 }
 
-if (require.main === module) main();
-
-module.exports = { parseLine, aggregate, format };
+main();
