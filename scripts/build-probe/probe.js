@@ -86,7 +86,7 @@ let options;
 let out;
 let phases;
 let snapshotTaken = false;
-let Blog, Entry, sync, build, folderPostSourceFolder;
+let Blog, Entry, sync, build, folderPostSourceFolder, config;
 
 function onSample(usage, label) {
   if (!options.snapshotAt || snapshotTaken || usage.heapUsed <= options.snapshotAt * 1024 * 1024) {
@@ -112,6 +112,17 @@ function endPhase(extra) {
       `rss ${result.rssPeakMB}MB loopDelay ${result.maxLoopDelayMs}ms gc ${result.gcCount}/${result.gcMs}ms` +
       (result.error ? ` ERROR ${result.error}` : "")
   );
+  return result;
+}
+
+// Mirrors the live entry route's URL shaping (app/blog/routes/entry.js)
+// before Entry.getByUrl: trailing slash removed, leading slash added,
+// lowercased. getByUrl does its own decoding.
+function normalizeEntryUrlPath(urlPath) {
+  let url = urlPath;
+  if (url.slice(-1) === "/") url = url.slice(0, -1);
+  if (url[0] !== "/") url = "/" + url;
+  return url.toLowerCase();
 }
 
 function errorMessage(err) {
@@ -135,6 +146,7 @@ async function main() {
   sync = require("sync");
   build = require("build");
   folderPostSourceFolder = require("sync/update/folderPostSourceFolder");
+  config = require("config");
 
   const summary = {
     args: process.argv.slice(2),
@@ -181,11 +193,16 @@ function buildOnly(blog, entryPath, tag) {
   return new Promise((resolve) => {
     phases.start(`${tag} build ${entryPath}`);
     build(blog, entryPath, function (err, entry) {
-      endPhase({
-        error: errorMessage(err),
-        htmlKB: entry && entry.html ? instrument.round(entry.html.length / 1024) : undefined,
-        entryJSONKB: entry ? instrument.round(JSON.stringify(entry).length / 1024) : undefined,
-      });
+      // Ended first, so stringifying entry for its JSON size below isn't
+      // charged to the phase's measured heap peak.
+      const result = endPhase({ error: errorMessage(err) });
+      if (entry) {
+        result.htmlKB = entry.html ? instrument.round(entry.html.length / 1024) : undefined;
+        result.entryJSONKB = instrument.round(JSON.stringify(entry).length / 1024);
+        console.log(
+          `[probe] ${result.label}: html ${result.htmlKB ?? "n/a"}KB entry ${result.entryJSONKB}KB`
+        );
+      }
       resolve();
     });
   });
@@ -274,8 +291,9 @@ async function resolveTarget(target) {
   const blog = await getBlog(url.hostname);
   // getByUrl does its own decoding; only the source path fallback needs it.
   const entry =
-    (await new Promise((done) => Entry.getByUrl(blog.id, url.pathname, done))) ||
-    (await new Promise((done) => Entry.get(blog.id, decodeURIComponent(url.pathname), done)));
+    (await new Promise((done) =>
+      Entry.getByUrl(blog.id, normalizeEntryUrlPath(url.pathname), done)
+    )) || (await new Promise((done) => Entry.get(blog.id, decodeURIComponent(url.pathname), done)));
 
   if (!entry) throw new Error("No entry at " + target);
 
@@ -288,7 +306,11 @@ async function resolveTarget(target) {
 // dashboard access link as a side effect.
 async function getBlog(identifier) {
   const lower = identifier.toLowerCase();
-  const handle = lower.endsWith(".blot.im") ? lower.slice(0, -".blot.im".length) : lower;
+  // Mirrors extractHandle in app/blog/middleware/vhosts.js: the handle is
+  // the label immediately before .<config.host>, so www.<handle>.blot.im
+  // resolves to <handle> rather than www.<handle>.
+  const suffix = "." + config.host;
+  const handle = lower.endsWith(suffix) ? lower.slice(0, -suffix.length).split(".").pop() : lower;
 
   for (const by of [{ id: identifier }, { handle }, { domain: lower }]) {
     const blog = await new Promise((done) => Blog.get(by, (err, blog) => done(err ? null : blog)));
@@ -306,4 +328,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { OPTIONS, checkOptions, parseTarget };
+module.exports = { OPTIONS, checkOptions, parseTarget, normalizeEntryUrlPath };

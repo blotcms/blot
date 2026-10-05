@@ -71,12 +71,18 @@ The exit status is the probe's: nonzero if any phase failed.
 
 Results are copied to `./data/build-probe/<run>/` and removed from the host:
 
-- `phases.ndjson`: one line per phase (acquire lock, each update or build,
-  finish sync, settle) as it ends: duration, heap before / peak / retained,
-  RSS, external and ArrayBuffer peaks, worst event loop delay, GC count and
-  time. Peaks come from a `v8.GCProfiler` as well as a 25ms sampler, so a
-  spike inside one long synchronous step still shows. Written as it goes, so
-  it survives the out-of-memory crash being investigated.
+- `phases.ndjson`: one `{ event: "start", label }` line per phase (acquire
+  lock, each update or build, finish sync, settle) as it begins, so a crash
+  mid-phase still shows which one was active, followed by one
+  `{ event: "end", ... }` line as it ends: duration, heap before / peak /
+  retained, RSS, external and ArrayBuffer peaks, worst event loop delay, GC
+  count and time. Peaks come from a `v8.GCProfiler` as well as a 25ms
+  sampler, so a spike inside one long synchronous step still shows. Written
+  as it goes, so it survives the out-of-memory crash being investigated. A
+  build phase's `htmlKB`/`entryJSONKB` are measured after its `end` line is
+  written (so sizing the entry doesn't inflate its heap peak); they're
+  logged to the console and land on that phase's entry in `summary.json`,
+  not in this file.
 - `summary.json`: options, targets, every phase and heap spaces, on a clean
   exit.
 - `threshold-*.heapsnapshot`: from `--snapshot-at`, the first time the heap
