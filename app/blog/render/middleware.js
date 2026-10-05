@@ -121,8 +121,6 @@ module.exports = function attachRenderView(req, res, _next) {
         return next(isRedisUnavailableError(e) ? e : ERROR.BAD_LOCALS());
       }
 
-      req.log("Loaded other locals");
-
       const locals = res.locals;
       const partials = res.locals.partials;
 

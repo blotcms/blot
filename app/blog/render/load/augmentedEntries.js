@@ -58,11 +58,20 @@ async function augmentEntries(req, res, value, aliases) {
     : undefined;
   const backlinks = backlinksFor(req, { project });
 
+  let total = 0;
+
+  req.log("Augmenting entries to cache");
+
   try {
-    await eachEntry({ value }, (entry) => augment(req, res, entry, backlinks));
+    await eachEntry({ value }, (entry) => {
+      total++;
+      return augment(req, res, entry, backlinks);
+    });
   } catch (e) {
     throw isRedisUnavailableError(e) ? e : ERROR.BAD_LOCALS();
   }
+
+  req.log("Augmented", total, "entries to cache");
 
   return backlinks.failed;
 }
