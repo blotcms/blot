@@ -108,7 +108,6 @@ hr {
 
 .entry-tags a:hover {
   color: var(--link-color);
-  background-color: var(--dark-border-color);
 }
 
 .entry.listing {
