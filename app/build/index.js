@@ -286,3 +286,4 @@ function buildWith(blog, path, multiInfo, callback) {
 }
 
 module.exports.findMultiFolder = findMultiFolder;
+module.exports.hashEntrySource = hashEntrySource;
