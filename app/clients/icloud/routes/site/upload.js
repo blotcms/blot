@@ -38,16 +38,7 @@ module.exports = async function (req, res) {
       }
 
       const existingContents = await fs.readFile(pathOnDisk);
-      const contentsMatch = existingContents.equals(incomingContents);
-      let modifiedTimeMatches = true;
-
-      if (modifiedTime) {
-        const stat = await fs.stat(pathOnDisk);
-        modifiedTimeMatches =
-          stat.mtime.getTime() === new Date(modifiedTime).getTime();
-      }
-
-      return contentsMatch && modifiedTimeMatches;
+      return existingContents.equals(incomingContents);
     };
 
     console.log(
@@ -75,11 +66,6 @@ module.exports = async function (req, res) {
 
         await fs.outputFile(pathOnDisk, Buffer.alloc(0));
 
-        if (modifiedTime) {
-          const modifiedTimeDate = new Date(modifiedTime);
-          await fs.utimes(pathOnDisk, modifiedTimeDate, modifiedTimeDate);
-        }
-
         await folder.update(filePath);
         folder.status("Updated placeholder " + filePath);
 
@@ -103,12 +89,6 @@ module.exports = async function (req, res) {
       // Ensure the directory exists and write the binary data to the file
       // Write the binary data (req.body is raw binary)
       await fs.outputFile(pathOnDisk, incomingContents);
-
-      // Use the iso string modifiedTime if provided
-      if (modifiedTime) {
-        const modifiedTimeDate = new Date(modifiedTime);
-        await fs.utimes(pathOnDisk, modifiedTimeDate, modifiedTimeDate);
-      }
 
       // Call the folder's update method to register the file change
       await folder.update(filePath);
