@@ -14,32 +14,12 @@ var DELETED_ENTRY_TTL_SECONDS = 24 * 60 * 60;
 
 var BATCH_SIZE = 100;
 
-// Removes each id from "all" and "deleted" only if it is still scored
-// before the cutoff in "deleted" and its entry key is gone. Both are
-// re-checked inside the script, so a file re-added at the same path between
-// the ZRANGEBYSCORE below and this call is left alone.
-//
-// KEYS[1] = all, KEYS[2] = deleted, KEYS[2 + i] = entry key for ARGV[1 + i]
-// ARGV[1] = cutoff, ARGV[1 + i] = id
-var REMOVE_EXPIRED = `
-local removed = {}
-for i = 2, #ARGV do
-  local score = redis.call('ZSCORE', KEYS[2], ARGV[i])
-  if score and tonumber(score) <= tonumber(ARGV[1]) and redis.call('EXISTS', KEYS[i + 1]) == 0 then
-    redis.call('ZREM', KEYS[1], ARGV[i])
-    redis.call('ZREM', KEYS[2], ARGV[i])
-    table.insert(removed, ARGV[i])
-  end
-end
-return removed
-`;
-
 async function sweep(blogID) {
   var allKey = "blog:" + blogID + ":all";
   var deletedKey = "blog:" + blogID + ":deleted";
   var cutoff = Date.now() - DELETED_ENTRY_TTL_SECONDS * 1000;
   var removed = [];
-  // Ids the script skipped stay at the front of the range, so step past
+  // Ids skipped below stay at the front of the range, so step past
   // them rather than reading the same batch again.
   var offset = 0;
 
@@ -50,14 +30,29 @@ async function sweep(blogID) {
 
     if (!ids.length) break;
 
-    var batch = await redis.eval(REMOVE_EXPIRED, {
-      keys: [allKey, deletedKey].concat(
-        ids.map(function (id) {
-          return entryKey(blogID, id);
-        })
-      ),
-      arguments: [String(cutoff)].concat(ids),
+    var existsMulti = redis.multi();
+    ids.forEach(function (id) {
+      existsMulti.exists(entryKey(blogID, id));
     });
+    var exists = await existsMulti.exec();
+
+    // An old score with the key still present shouldn't happen (re-saving
+    // a deleted entry re-scores it), but leave such ids alone.
+    var batch = ids.filter(function (id, i) {
+      return !exists[i];
+    });
+
+    // Not atomic with the EXISTS above: a file re-added at the same path in
+    // between could lose its "all" membership. That needs a path dead for
+    // over a day to come back within milliseconds, and the entry's next
+    // save re-adds it to "all".
+    if (batch.length) {
+      await redis
+        .multi()
+        .zRem(allKey, batch)
+        .zRem(deletedKey, batch)
+        .exec();
+    }
 
     removed = removed.concat(batch);
     offset += ids.length - batch.length;
