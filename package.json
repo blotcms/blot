@@ -24,7 +24,8 @@
     "translate": "./scripts/development/translate/translate.sh",
     "preview-newsletter": "./scripts/development/preview-newsletter.sh",
     "render-time-chart": "node scripts/render-time-chart",
-    "render-probe": "node scripts/render-probe"
+    "render-probe": "node scripts/render-probe",
+    "build-probe": "node scripts/build-probe"
   },
   "version": "0.0.0",
   "dependencies": {
