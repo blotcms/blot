@@ -7,6 +7,10 @@ Add script which issues request locally
 
 Add script to triage fix/build issues individually (with appropriate heap flags etc.)
 
+Find what runs `KEYS` on prod redis (slowlog: 789ms at 2026-10-05 09:01Z, blocks everything; not found in app/ or scripts/, maybe a manual redis-cli)
+
+Find what sends the recurring 31-key MGET that takes 10-32ms server-side on prod redis (~30 in the slowlog over 12h, probably Entries.getRecent via getRange(0, 30) on blogs with big entries; slowlog shows only command + duration)
+
 Add error / getHealth issues to sync log (folder.status) for Dropbox/other client Issues
 
 Make sync logs more useful, surface recent changes on dashboard. Group multiple files together if changed at same time, etc. make it useful!

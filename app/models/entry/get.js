@@ -11,7 +11,13 @@ var Entry = require("./instance");
 // in a single tick - which blocks the event loop for every other request
 // served by this process. Reading BATCH_SIZE entries at a time and yielding
 // between batches lets those requests run in between.
-var BATCH_SIZE = 100;
+//
+// The size also keeps each reply small enough to arrive without stalling. On
+// production, reading a 938-entry (5.3MB) catalog took 0.8-1.5s at 50-100
+// entries per MGET, because about a third of the batches stalled for 300-500ms
+// each (not in Redis, whose slowlog never saw them), but 130-200ms at 10-25,
+// where none of 264 batches did.
+var BATCH_SIZE = 25;
 
 // get(blogID, entryIDs, [fields], callback)
 //

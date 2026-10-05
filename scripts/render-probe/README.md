@@ -60,6 +60,13 @@ freshly restarted container. Output:
   since otherwise the heap change isn't its own.
 - `requests.ndjson`: status, bytes, duration, Redis commands and reply size
   per request.
+- With `--stats`, `summary.json` also holds the catalog's size by entry field and
+  timings of reading it (round trips, a large reply, each `MGET` batch, parsing,
+  `prepareCacheValue`, `cloneDeep`), to see what a catalog read waits on, and
+  prints Redis' own command timings, persistence state and slow log
+  (`redisDiagnostics`; read-only). `--experiment` repeats the read, tries other
+  batch sizes and pipelined `GET`s; `--sweep` reads the catalog at batch sizes
+  10/25/50/100 and counts the batches that stalled over 100ms.
 - `summary.json`: peaks, GC totals, Redis commands by type with reply sizes,
   LRU cache footprints, heap spaces.
 - On a V8 out-of-memory crash, a Node report (`report.*.json`, without env
