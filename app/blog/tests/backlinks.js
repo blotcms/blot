@@ -86,6 +86,68 @@ describe("backlinks", function () {
     expect(json.entry.backlinks.map((entry) => entry.title)).toEqual(["Linker"]);
   });
 
+  it("still includes backlinks in ?debug when the view never mentions them", async function () {
+    await this.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
+    await this.write({
+      path: "/linker.txt",
+      content: "Title: Linker\n\n[see target](/target)",
+    });
+    await this.template({ "entry.html": "{{#entry}}{{title}}{{/entry}}" });
+
+    expect(await this.text("/target")).toContain("Target");
+
+    const debug = await (await this.get("/target?debug=true")).json();
+    expect(debug.entry.backlinks.map((entry) => entry.title)).toEqual(["Linker"]);
+  });
+
+  describe("lookups", function () {
+    const Entry = require("models/entry");
+
+    // Entry.getByUrl is also how the router finds the entry being requested,
+    // so what matters is whether the linking entry's URL gets looked up.
+    function linkerLookups(getByUrl) {
+      return getByUrl.calls
+        .allArgs()
+        .map((args) => args[1])
+        .filter((url) => /linker/.test(url));
+    }
+
+    async function writeLinkedEntries(test) {
+      await test.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
+      await test.write({
+        path: "/linker.txt",
+        content: "Title: Linker\n\n[see target](/target)",
+      });
+    }
+
+    it("looks nothing up when the view and its partials never mention backlinks", async function () {
+      await writeLinkedEntries(this);
+      await this.template({
+        "entry.html": "{{#entry}}{{> body.html}}{{/entry}}",
+        "body.html": "{{title}}",
+        "entries.html": "{{#allEntries}}{{title}};{{/allEntries}}",
+      });
+
+      const getByUrl = spyOn(Entry, "getByUrl").and.callThrough();
+
+      expect(await this.text("/target")).toContain("Target");
+      expect(await this.text("/")).toContain("Target;");
+
+      expect(getByUrl).toHaveBeenCalled();
+      expect(linkerLookups(getByUrl)).toEqual([]);
+    });
+
+    it("looks the linking entries up when the view mentions backlinks", async function () {
+      await writeLinkedEntries(this);
+      await this.template(backlinksTemplate);
+
+      const getByUrl = spyOn(Entry, "getByUrl").and.callThrough();
+
+      expect(await this.text("/target")).toContain("Linker");
+      expect(linkerLookups(getByUrl).length).toBeGreaterThan(0);
+    });
+  });
+
   it("renders multiple backlinks when several pages link to the same page", async function () {
     await this.write({
       path: "/pages/target.txt",

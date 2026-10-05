@@ -18,16 +18,23 @@ const { lookupEntryByUrl } = require("../../lib/models");
 //   project (optional)  trims each looked-up entry before it is shared, e.g. to
 //                       drop the html and body a template never reads from the
 //                       entries it links to (retrieve/helpers/projectEntryFields)
-//   enabled             false when no template can render backlinks (see
-//                       isNeeded): they resolve to none, with no lookups
-function createBacklinks(blogID, { project, enabled = true } = {}) {
+function createBacklinks(blogID, { project } = {}) {
   const lookups = new Map();
   let failed = false;
 
   function lookup(linkUrl) {
-    if (!lookups.has(linkUrl)) {
+    // Keyed on the decoded URL, as lookupEntryByUrl resolves it, so the
+    // percent-encoded and decoded spellings of a link share one read.
+    let key = linkUrl;
+    try {
+      key = decodeURI(linkUrl);
+    } catch (e) {
+      // leave as-is if decoding fails (malformed %)
+    }
+
+    if (!lookups.has(key)) {
       lookups.set(
-        linkUrl,
+        key,
         lookupEntryByUrl(blogID, linkUrl).then(({ entry, error }) => {
           if (error) failed = true;
           if (entry && project) project(entry);
@@ -36,7 +43,7 @@ function createBacklinks(blogID, { project, enabled = true } = {}) {
       );
     }
 
-    return lookups.get(linkUrl);
+    return lookups.get(key);
   }
 
   return {
@@ -47,7 +54,7 @@ function createBacklinks(blogID, { project, enabled = true } = {}) {
     // The entries linking to `entry`, once each, never itself or an
     // unpublished one.
     async resolve(entry) {
-      const linkUrls = enabled && Array.isArray(entry.backlinks) ? entry.backlinks : [];
+      const linkUrls = Array.isArray(entry.backlinks) ? entry.backlinks : [];
 
       const linked = await Promise.all(
         linkUrls.map((linkUrl) =>
@@ -74,8 +81,12 @@ function isNeeded(req) {
   return req.usesBacklinks !== false;
 }
 
+// When no template can render backlinks (see isNeeded) they resolve to none,
+// with no lookups.
+const NONE = Object.freeze({ failed: false, resolve: async () => [] });
+
 module.exports = function backlinksFor(req, options) {
-  return createBacklinks(req.blog.id, { ...options, enabled: isNeeded(req) });
+  return isNeeded(req) ? createBacklinks(req.blog.id, options) : NONE;
 };
 
 module.exports.isNeeded = isNeeded;

@@ -19,11 +19,13 @@
 // Everything augment() derives from the request must be in the cache key
 // (augmentContext) or recomputed per request in shareEntries (absoluteURL).
 const EntryInstance = require("models/entry/instance");
+const { LRUCache } = require("lru-cache");
 const augment = require("./augment");
 const backlinksFor = require("./backlinks");
 const eachEntry = require("./eachEntry");
 const ERROR = require("../error");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
+const projectEntryFields = require("../retrieve/helpers/projectEntryFields");
 
 // augment() reads these besides the entry itself. blogURL is deliberately
 // absent - it varies with the host/protocol a request arrived on, so keying
@@ -43,14 +45,17 @@ function augmentContext(req, res) {
 // page. Convert failures the same way loadView's caller does, so a malformed
 // entry still renders the template error page - retrieve() rethrows these.
 //
-// project (optional) trims each backlinked entry the way the list's own
-// entries were trimmed, so a template that never reads html (say) doesn't
-// pay to keep it for every entry a post links to.
+// aliases (optional) are the retrieve aliases the list was projected under;
+// each backlinked entry is trimmed the same way, so a template that never
+// reads html (say) doesn't pay to keep it for every entry a post links to.
 //
 // Resolves to whether any backlink lookup failed (see ./backlinks.js): a
 // caller caching the result should decline to. The augmented entries have
 // rendered, just without the backlinks that couldn't be read.
-async function augmentEntries(req, res, value, project) {
+async function augmentEntries(req, res, value, aliases) {
+  const project = aliases
+    ? (entry) => projectEntryFields(entry, req.retrieve, aliases)
+    : undefined;
   const backlinks = backlinksFor(req, { project });
 
   try {
@@ -64,9 +69,20 @@ async function augmentEntries(req, res, value, project) {
 
 // An LRU silently refuses to store a value over its byte cap, which looks
 // identical to a cache that works until every request pays for a full fill
-// (see archives.js and all_entries.js). Say so, once per fill.
+// (see archives.js and all_entries.js). Say so - once per blog and cacheID,
+// since the result is rebuilt on every request until the next change.
+const warned = new LRUCache({ max: 1000 });
+
 function warnIfTooLargeToCache(name, req, prepared, cache) {
   if (prepared.size <= cache.maxSize) return;
+
+  const key = JSON.stringify([
+    name,
+    String(req.blog && req.blog.id),
+    String(req.blog && req.blog.cacheID),
+  ]);
+  if (warned.has(key)) return;
+  warned.set(key, true);
 
   console.warn(
     `${name} cache: result for blog ${req.blog && req.blog.id} is ` +

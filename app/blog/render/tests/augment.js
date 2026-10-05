@@ -84,6 +84,26 @@ describe("augment", function () {
         expect(body).toContain('Linked from A');
     });
 
+    it("drops the html of a backlinked entry when the template never reads it", async function () {
+        await this.write({path: "/target.txt", content: "Title: Target\n\nTarget body"});
+        await this.write({path: "/a.txt", content: "Title: A\n\nLinked from A: [[target]]"});
+        await this.template({
+            'entries.html': '{{#allEntries}}{{title}}:{{#backlinks}}{{title}} {{url}}{{/backlinks}};{{/allEntries}}'
+        });
+
+        const locals = await (await this.get('/?json=1')).json();
+        const target = locals.allEntries.find((entry) => entry.title === 'Target');
+
+        expect(target.backlinks.length).toEqual(1);
+        expect(target.backlinks[0].title).toEqual('A');
+        expect(target.backlinks[0].url).toEqual('/a');
+        expect(target.backlinks[0].html).toBeUndefined();
+        expect(target.backlinks[0].body).toBeUndefined();
+
+        const body = await this.text('/');
+        expect(body).toContain('Target:A /a;');
+    });
+
     it("creates lowercase metadata aliases for rendering", async function () {
 
         await this.write({

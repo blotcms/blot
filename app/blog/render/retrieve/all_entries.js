@@ -35,12 +35,7 @@ const allEntriesCache = new LRUCache({
     projectEntryFields(allEntriesList, req.retrieve, ALIASES);
 
     // Backlinked entries are trimmed like the list's own.
-    const backlinksFailed = await augmentEntries(
-      req,
-      res,
-      allEntriesList,
-      (entry) => projectEntryFields(entry, req.retrieve, ALIASES)
-    );
+    const backlinksFailed = await augmentEntries(req, res, allEntriesList, ALIASES);
     const prepared = prepareCacheValue(allEntriesList, {
       preserveEntryInstances: true,
     });

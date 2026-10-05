@@ -1,6 +1,7 @@
 describe("backlinks", function () {
   const Entry = require("models/entry");
-  const { createBacklinks, isNeeded } = require("../load/backlinks");
+  const backlinksFor = require("../load/backlinks");
+  const { createBacklinks, isNeeded } = backlinksFor;
 
   function entryWith(path, backlinks) {
     return { path, backlinks };
@@ -75,12 +76,55 @@ describe("backlinks", function () {
     expect(backlinks.failed).toBe(false);
   });
 
-  it("looks nothing up when disabled", async function () {
+  it("looks nothing up, and resolves to none, when the view never uses backlinks", async function () {
     const getByUrl = stubLookups({ "/target": { path: "/target.txt" } });
-    const backlinks = createBacklinks("blog", { enabled: false });
+    const backlinks = backlinksFor({ blog: { id: "blog" }, usesBacklinks: false });
 
+    expect(Object.isFrozen(backlinks)).toBe(true);
+    expect(backlinks.failed).toBe(false);
     expect(await backlinks.resolve(entryWith("/a.txt", ["/target"]))).toEqual([]);
     expect(getByUrl).not.toHaveBeenCalled();
+  });
+
+  it("looks links up when the request does not say its view never uses backlinks", async function () {
+    const getByUrl = stubLookups({ "/target": { path: "/target.txt" } });
+    const backlinks = backlinksFor({ blog: { id: "blog" } });
+
+    const resolved = await backlinks.resolve(entryWith("/a.txt", ["/target"]));
+
+    expect(resolved.map((entry) => entry.path)).toEqual(["/target.txt"]);
+    expect(getByUrl.calls.count()).toBe(1);
+  });
+
+  it("shares one lookup between spellings of a URL that decode the same", async function () {
+    const target = { path: "/a b.txt" };
+    const getByUrl = spyOn(Entry, "getByUrl").and.callFake((blogID, url, callback) =>
+      callback(target)
+    );
+    const backlinks = createBacklinks("blog");
+
+    const [encoded, decoded] = await Promise.all([
+      backlinks.resolve(entryWith("/x.txt", ["/a%20b"])),
+      backlinks.resolve(entryWith("/y.txt", ["/a b"])),
+    ]);
+
+    expect(getByUrl.calls.count()).toBe(1);
+    expect(encoded[0]).toBe(target);
+    expect(decoded[0]).toBe(target);
+  });
+
+  it("still looks up a URL that cannot be decoded, under its raw string", async function () {
+    const getByUrl = stubLookups({ "/100%": { path: "/pct.txt" } });
+    const backlinks = createBacklinks("blog");
+
+    const [a, b] = await Promise.all([
+      backlinks.resolve(entryWith("/x.txt", ["/100%"])),
+      backlinks.resolve(entryWith("/y.txt", ["/100%"])),
+    ]);
+
+    expect(getByUrl.calls.count()).toBe(1);
+    expect(a.map((entry) => entry.path)).toEqual(["/pct.txt"]);
+    expect(b.map((entry) => entry.path)).toEqual(["/pct.txt"]);
   });
 
   it("is needed unless the request says its view never uses backlinks", function () {

@@ -35,12 +35,7 @@ const archivesCache = new LRUCache({
     const { req, res } = context;
     const years = await buildArchives(req, req.blog);
     // Backlinked entries are trimmed like the list's own.
-    const backlinksFailed = await augmentEntries(
-      req,
-      res,
-      years,
-      (entry) => projectEntryFields(entry, req.retrieve, ALIASES)
-    );
+    const backlinksFailed = await augmentEntries(req, res, years, ALIASES);
     const prepared = prepareCacheValue(years, { preserveEntryInstances: true });
     warnIfTooLargeToCache("archives", req, prepared, archivesCache);
 
