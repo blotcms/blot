@@ -3,6 +3,7 @@ const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
 const { prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
+const fetchCached = require("../../lib/fetchCached");
 
 const totalPostsCache = new LRUCache({
   max: 10000,
@@ -32,7 +33,7 @@ function createCacheKey(blog) {
 
 async function totalPosts(req, res) {
   const key = createCacheKey(req.blog);
-  const prepared = await totalPostsCache.fetch(key, {
+  const prepared = await fetchCached(totalPostsCache, "totalPosts", req.log, key, {
     context: { blogID: req.blog.id },
   });
   return prepared.payload;

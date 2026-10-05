@@ -5,6 +5,7 @@ const projectEntryFields = require("./helpers/projectEntryFields");
 const getTemplateSortOptions = require("blog/sortOptions");
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
+const fetchCached = require("../../lib/fetchCached");
 const asRetriever = require("../../lib/asRetriever");
 const {
   normalizePageNumber,
@@ -159,13 +160,9 @@ async function posts(req, res) {
   };
 
   const key = createCacheKey(req, res, normalizedOptions);
-  const status = {};
-  const prepared = await postsCache.fetch(key, {
-    status,
+  const prepared = await fetchCached(postsCache, "posts", log, key, {
     context: { blogID, tags, options, offset, pageSize, req, log },
   });
-
-  if (status.fetch === "hit") log("Retrieved posts from cache");
 
   const responsePayload = clonePosts(prepared.payload);
 
