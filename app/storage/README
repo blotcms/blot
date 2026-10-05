@@ -156,47 +156,43 @@ at sync/build time instead.
 
 ## 4. Caveats for moving `.folder` to S3
 
-**a. File timestamps: stop needing a settable mtime.** S3 and B2 both set
-`Last-Modified` themselves at upload time and can't be told otherwise, and
-neither has ctime or atime. Custom metadata (`x-amz-meta-mtime`) can hold a
-chosen mtime, but it can only be changed by rewriting the object, and S3's
-`ListObjectsV2` doesn't return it. Keeping it would mean a HEAD per file or
-a separate index for every folder listing. Instead, Blot core stops
-depending on a settable mtime, and `Last-Modified` is enough.
+**a. File timestamps: core no longer needs a settable mtime (done).** S3
+and B2 both set `Last-Modified` themselves at upload time and can't be told
+otherwise, and neither has ctime or atime. Custom metadata
+(`x-amz-meta-mtime`) could hold a chosen mtime, but only a rewrite changes
+it and S3's `ListObjectsV2` doesn't return it, so every listing would need
+a HEAD per file. Instead, Blot core stopped depending on a settable mtime,
+and `Last-Modified` is enough. These have merged:
 
-What the timestamps are used for today:
+1. `entry.updated` moves only when the entry's `contentHash` changes, so a
+   reconnect, a full resync or the copy to S3 doesn't reset it.
+2. CDN version tokens hash content (`helper/contentVersion`; the ETag on
+   S3). Nothing reads ctime, and the dashboard dropped "created".
+3. Google Drive compares Drive's `modifiedTime` with an "applied" record
+   in its client DB, not the local mtime.
+4. iCloud and Dropbox stopped calling `utimes` and comparing local mtimes.
 
-- **Post dates don't use them.** `app/build/prepare/dateStamp` takes the
-  metadata `Date:`, then a date in the path, then `entry.created`
-  (`Date.now()` at first build, persisted in Redis).
-- **atime** is never read. The importer sets it only because `fs.utimes`
-  needs both values.
-- **ctime** is read for CDN version tokens, Google Drive's local content
-  fingerprint, and the dashboard's "created" label (wrong: ctime is
-  inode-change time). `app/build/multiple.js` merges it, but nothing reads
-  the result.
-- **mtime** feeds three kinds of use:
-  - Change detection: CDN version tokens (`folderAssets/index.js`,
-    `replaceFolderLinks/lookupFile.js` hash mtime+ctime+size), Google
-    Drive's Google-app-file check, iCloud's "already current" check.
-  - Sync bookkeeping: Dropbox, Google Drive and iCloud set local mtimes
-    with `fs.utimes` to mirror the provider.
-  - User-visible dates: `entry.updated` (`{{formatUpdated}}`,
-    `article:modified_time`, sitemap `<lastmod>`), the folder listing's
-    `updated`, and dashboard file details.
+No blog-storage code sets an mtime now. The remaining `utimes` calls are
+the macserver (the real iCloud Drive file) and the importer (its temp
+output, which the user downloads as a zip). The remaining mtime reads just
+want "last modified" and work with `Last-Modified`: display
+(`retrieve/folder.js`, `dashboard/site/folder/stat.js`, `build/multiple.js`),
+`entry.updated` when the content hash changed, `contentVersion.fromStat`'s
+size+mtime token for large files and render-time `lookupFile.js`, and
+iCloud forwarding the time to the macserver.
 
-The fix, one PR per item, each landing on local disk before the S3 move:
+Two transitional fallbacks still read the local mtime. Clear both on local
+disk before the copy to S3:
 
-1. **`entry.updated` changes only when the source content hash changes.**
-   Otherwise a reconnect, a full resync or the one-time copy to S3 would
-   reset every post's "updated" date to that day. This PR should merge
-   before 3 and 4.
-2. **CDN version tokens use a content hash** (the ETag on S3). Core stops
-   reading ctime, and the dashboard drops "created".
-3. **Google Drive** compares Drive's `modifiedTime` with the value stored
-   in its own client DB, not the local mtime, and stops calling `utimes`.
-4. **iCloud and Dropbox** stop calling `utimes` and stop comparing local
-   mtimes (content equality or provider hashes instead).
+- Entries built before `contentHash` existed take the mtime once to set
+  `updated`. If that once happens on S3, those posts show the migration
+  date. `scripts/entry/backfill-content-hash.js --apply` stores a hash
+  without touching `updated`.
+- Drive files without an applied record compare against the local mtime;
+  on S3 each would be re-downloaded once. `scripts/google-drive/
+  backfill-applied-modified-times.js --apply` resyncs the Drive blogs that
+  still have them. Old md5 files deferred by sync's verification budget can
+  stay unrecorded; they're compared by checksum, so that's harmless.
 
 The storage layer's `stat()` then returns `size`, `modified` (local mtime
 now, `Last-Modified` on S3) and `hash` (content hash now, ETag on S3), with
@@ -204,7 +200,6 @@ no ctime, no atime and no way to set `modified`. Accepted trade-offs:
 
 - `updated` means when Blot received a change, not when the user saved it.
 - Non-post files in folder listings show the migration date, once.
-- Imported posts need their "updated" date in metadata, not the mtime.
 
 **b. Sync clients need a staging pattern, not direct S3 calls.** Google
 Drive streams to a temp file then moves it into place; Dropbox's
@@ -279,8 +274,8 @@ should consolidate into one storage-layer method, exposed explicitly
     a copy — dashboard uploads in this scope can't be regenerated.
   - Add sampled shadow-read timing instrumentation here to start gathering
     real S3-vs-local numbers.
-- **Phase 2 — `.folder`.** Needs the four timestamp PRs in §4a merged
-  first. Grow the storage-layer API as call sites need it
+- **Phase 2 — `.folder`.** Run both §4a backfill scripts on local disk
+  before the copy to S3. Grow the storage-layer API as call sites need it
   (read/write/remove/list/stat, with `stat()` as described in §4a), migrate
   sync clients onto a staging pattern, resolve the caveats in §4, parallelize
   `rebuild.js`, then cut over. Add a paginated `list()` when a caller
