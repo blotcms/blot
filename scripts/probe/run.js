@@ -1,5 +1,5 @@
-// Shared launcher for the production probes (scripts/render-probe, and
-// scripts/entry/build-probe). Runs a probe script on the production host in
+// Shared launcher for the production probes (scripts/render-probe and
+// scripts/build-probe). Runs a probe script on the production host in
 // a throwaway container of the live image, with the production env file and
 // data directory, its own memory and CPU caps and no published port, then
 // copies what it wrote to ./data/<tool>/<run>/ and removes it from the host.
