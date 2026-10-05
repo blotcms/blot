@@ -1,4 +1,7 @@
-Run npm run render-probe -- --stats https://www.jaysjay.com (or archives?)
+Run To confirm, render the home page first as a baseline, then /archives on its own with a heap snapshot:
+
+npm run render-probe -- https://www.jaysjay.com/
+npm run render-probe -- https://www.jaysjay.com/archives --heap-snapshot
 
 Investigate high aws bill cause
 
