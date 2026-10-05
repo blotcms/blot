@@ -10,6 +10,7 @@ const {
   augmentEntries,
   backlinksIncomplete,
   shareEntries,
+  warnIfTooLargeToCache,
 } = require("../load/augmentedEntries");
 
 const ALIASES = ["allEntries", "all_entries"];
@@ -34,10 +35,14 @@ const allEntriesCache = new LRUCache({
 
     projectEntryFields(allEntriesList, req.retrieve, ALIASES);
 
-    const stats = await augmentEntries(req, res, allEntriesList);
+    // Backlinked entries are trimmed like the list's own.
+    const stats = await augmentEntries(req, res, allEntriesList, (entry) =>
+      projectEntryFields(entry, req.retrieve, ALIASES)
+    );
     const prepared = prepareCacheValue(allEntriesList, {
       preserveEntryInstances: true,
     });
+    warnIfTooLargeToCache("allEntries", req, prepared, allEntriesCache);
 
     // Don't cache an empty result: getAllCached already declines to persist
     // a [] catalog, since Entries.getAll also returns [] on a transient Redis

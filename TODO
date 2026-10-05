@@ -1,8 +1,3 @@
-Run To confirm, render the home page first as a baseline, then /archives on its own with a heap snapshot:
-
-npm run render-probe -- https://www.jaysjay.com/
-npm run render-probe -- https://www.jaysjay.com/archives --heap-snapshot
-
 Investigate high aws bill cause
 
 Add option to hypertext template to make homepage chrono list of posts and tell [Brendan](https://mail.google.com/mail/u/0/#inbox/FMfcgzQhWfPnbhmcWTtTJxGgMqJtppML)

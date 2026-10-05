@@ -19,6 +19,22 @@ describe("cache value preparation", function () {
     expect(prepared.payload[0].title).toBe("Original");
   });
 
+  it("copies and counts an object reachable from several places once", function () {
+    const shared = { body: "x".repeat(1000) };
+    const once = prepareCacheValue([{ link: shared }]);
+    const many = prepareCacheValue([
+      { link: shared },
+      { link: shared },
+      { link: shared },
+    ]);
+
+    expect(many.payload[0].link).toBe(many.payload[2].link);
+    expect(many.payload[0].link).not.toBe(shared);
+    expect(Object.isFrozen(many.payload[0].link)).toBe(true);
+    // Each extra reference costs its own container, not another 1000 bytes.
+    expect(many.size - once.size).toBeLessThan(200);
+  });
+
   it("uses the envelope estimate to reject a value over the byte cap", function () {
     const cache = new LRUCache({
       maxSize: 64,

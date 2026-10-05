@@ -20,6 +20,7 @@
 // (augmentContext) or recomputed per request in shareEntries (absoluteURL).
 const EntryInstance = require("models/entry/instance");
 const augment = require("./augment");
+const { createBacklinkLookups } = augment;
 const eachEntry = require("./eachEntry");
 const ERROR = require("../error");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
@@ -40,14 +41,24 @@ function augmentContext(req, res) {
 // local silently dropped from an otherwise successful (and proxy-cacheable)
 // page. Convert failures the same way loadView's caller does, so a malformed
 // entry still renders the template error page - retrieve() rethrows these.
-async function augmentEntries(req, res, value) {
-  const stats = { backlinkErrors: 0 };
+//
+// project (optional) trims each backlinked entry the way the list's own
+// entries were trimmed, so a template that never reads html (say) doesn't
+// pay to keep it for every entry a post links to.
+async function augmentEntries(req, res, value, project) {
+  const stats = {
+    backlinkErrors: 0,
+    backlinkLookups: createBacklinkLookups(project),
+  };
 
   try {
     await eachEntry({ value }, (entry) => augment(req, res, entry, stats));
   } catch (e) {
     throw isRedisUnavailableError(e) ? e : ERROR.BAD_LOCALS();
   }
+
+  // The lookups hold every backlinked entry; the caller only needs the counts.
+  delete stats.backlinkLookups;
 
   return stats;
 }
@@ -57,6 +68,20 @@ async function augmentEntries(req, res, value) {
 // the gap would otherwise persist until the next cacheID change.
 function backlinksIncomplete(stats) {
   return stats.backlinkErrors > 0;
+}
+
+// An LRU silently refuses to store a value over its byte cap, which looks
+// identical to a cache that works until every request pays for a full fill
+// (see archives.js and all_entries.js). Say so, once per fill.
+function warnIfTooLargeToCache(name, req, prepared, cache) {
+  if (prepared.size <= cache.maxSize) return;
+
+  console.warn(
+    `${name} cache: result for blog ${req.blog && req.blog.id} is ` +
+      `${Math.round(prepared.size / 1024 / 1024)}MB, over the ` +
+      `${Math.round(cache.maxSize / 1024 / 1024)}MB cap, so it is not cached ` +
+      `and every request rebuilds it`
+  );
 }
 
 function shareEntries(value, blogURL) {
@@ -90,4 +115,5 @@ module.exports = {
   augmentEntries,
   backlinksIncomplete,
   shareEntries,
+  warnIfTooLargeToCache,
 };
