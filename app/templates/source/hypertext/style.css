@@ -109,6 +109,20 @@ hr {
   margin-top: 0.5rem;
 }
 
+.pagination {
+  margin-top: 2rem;
+  color: var(--light-text-color);
+  font-size: var(--small-font-size);
+}
+
+.pagination a {
+  color: inherit;
+}
+
+.pagination a:hover {
+  color: var(--link-color);
+}
+
 main {
   position: relative;
 }
