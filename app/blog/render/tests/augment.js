@@ -88,7 +88,7 @@ describe("augment", function () {
         await this.write({path: "/target.txt", content: "Title: Target\n\nTarget body"});
         await this.write({path: "/a.txt", content: "Title: A\n\nLinked from A: [[target]]"});
         await this.template({
-            'entries.html': '{{#allEntries}}{{title}}:{{#backlinks}}{{title}} {{url}}{{/backlinks}};{{/allEntries}}'
+            'entries.html': '{{#allEntries}}{{title}}:{{#backlinks}}{{title}} {{{url}}}{{/backlinks}};{{/allEntries}}'
         });
 
         const locals = await (await this.get('/?json=1')).json();
