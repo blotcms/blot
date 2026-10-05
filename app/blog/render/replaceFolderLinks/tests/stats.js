@@ -84,6 +84,30 @@ describe("replaceFolderLinks stats", function () {
       ).toEqual("entry");
     });
 
+    it("finds links in entries under any local, including nested archives", function () {
+      for (const locals of [
+        { recent_entries: [{ html: original }] },
+        { latest_entry: { html: original } },
+        { archives: [{ months: [{ entries: [{ html: original }] }] }] },
+      ]) {
+        expect(
+          classifySource(original, { view: "", partials: {}, locals })
+        ).toEqual("entry");
+      }
+    });
+
+    it("finds links in entry markup fields other than html", function () {
+      for (const field of ["body", "teaser", "teaserBody"]) {
+        expect(
+          classifySource(original, {
+            view: "",
+            partials: {},
+            locals: { posts: [{ [field]: `<img src="${original}">` }] },
+          })
+        ).toEqual("entry");
+      }
+    });
+
     it("finds links in entry metadata", function () {
       expect(
         classifySource(original, {

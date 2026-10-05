@@ -49,27 +49,55 @@ function contains(haystack, needle) {
   );
 }
 
-function asArray(value) {
-  if (Array.isArray(value)) return value;
-  if (value && Array.isArray(value.entries)) return value.entries;
-  return [];
+// Entry fields a template can render as markup. Listing retrievers drop
+// fields the view doesn't reference (projectEntryFields), so a page that
+// renders {{{body}}} may carry no html at all.
+const MARKUP_FIELDS = ["html", "body", "teaser", "teaserBody"];
+
+// Bounds the walk below on pathological locals.
+const MAX_DEPTH = 6;
+const MAX_NODES = 5000;
+
+function isEntryLike(value) {
+  return (
+    MARKUP_FIELDS.some((field) => typeof value[field] === "string") ||
+    (value.metadata !== null && typeof value.metadata === "object")
+  );
 }
 
-// The entries a template could have interpolated into its output. Mirrors the
-// names the render pipeline uses for them (see listingViews.js).
+// The entries a template could have interpolated into its output. Walks all
+// render locals rather than naming them, since entries turn up under many
+// (entry, entries, posts, recent_entries, all_entries, latest_entry, tagged,
+// archives[].months[].entries...). Partials are skipped: they're template
+// source, checked separately.
 function candidateEntries(locals) {
   const entries = [];
-  if (locals.entry && typeof locals.entry === "object") entries.push(locals.entry);
-  for (const name of ["entries", "posts", "tagged", "search_results"]) {
-    for (const entry of asArray(locals[name])) {
-      if (entry && typeof entry === "object") entries.push(entry);
+  const seen = new Set();
+  const stack = Object.keys(locals)
+    .filter((name) => name !== "partials")
+    .map((name) => [locals[name], 0]);
+
+  while (stack.length && seen.size < MAX_NODES) {
+    const [value, depth] = stack.pop();
+    if (!value || typeof value !== "object" || seen.has(value)) continue;
+    seen.add(value);
+
+    if (!Array.isArray(value) && isEntryLike(value)) {
+      entries.push(value);
+      continue;
+    }
+
+    if (depth >= MAX_DEPTH) continue;
+    for (const child of Array.isArray(value) ? value : Object.values(value)) {
+      stack.push([child, depth + 1]);
     }
   }
+
   return entries;
 }
 
 // Where did this link come from? Looks for the raw value in the template
-// source (view + partials), then in entry HTML, then in entry metadata.
+// source (view + partials), then in entry markup, then in entry metadata.
 // Only run for links that were rewritten or not found, never for every
 // attribute on the page.
 function classifySource(original, { view, partials, locals }) {
@@ -81,7 +109,9 @@ function classifySource(original, { view, partials, locals }) {
   const entries = candidateEntries(locals || {});
 
   for (const entry of entries) {
-    if (contains(entry.html, original)) return "entry";
+    if (MARKUP_FIELDS.some((field) => contains(entry[field], original))) {
+      return "entry";
+    }
   }
 
   for (const entry of entries) {
