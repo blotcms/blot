@@ -638,27 +638,6 @@ kbd {
 }
 
 /* Archives grid layout */
-.archive-tags {
-  max-width: calc(var(--main-width) - 96px);
-  margin: 2rem 0;
-}
-
-.archive-tags h2 {
-  margin: 0 0 0.75rem;
-  font-size: calc(var(--heading-font-size) * 0.91);
-}
-
-.archive-tag-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-}
-
-.archive-tag-list a {
-  color: var(--link-color);
-  text-decoration: none;
-}
-
 .archives-grid {
   display: grid;
   grid-template-columns: max-content auto;

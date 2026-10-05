@@ -6,16 +6,6 @@
     <main>
        <h1>Archives</h1>
        {{> search-form}}
-       {{#all_tags.length}}
-       <section class="archive-tags" aria-labelledby="archive-tags-title">
-         <h2 id="archive-tags-title">Tags</h2>
-         <div class="archive-tag-list">
-           {{#all_tags}}
-           <a href="/tagged/{{slug}}">{{name}}</a>
-           {{/all_tags}}
-         </div>
-       </section>
-       {{/all_tags.length}}
        <div class="archives-grid">
          {{#all_entries}}
          <div class="archive-item">
