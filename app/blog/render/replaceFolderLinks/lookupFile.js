@@ -1,6 +1,7 @@
 const config = require("config");
 const fs = require("fs-extra");
 const hash = require("helper/hash");
+const contentVersion = require("helper/contentVersion");
 const { resolve, join } = require("path");
 const { promisify } = require("util");
 const caseSensitivePath = promisify(require("helper/caseSensitivePath"));
@@ -93,7 +94,10 @@ async function lookupFile(blogID, cacheID, value) {
         resolve("/", pathFromValue)
       );
 
-      const version = hash(`${stat.mtime}${stat.ctime}${stat.size}`).slice(0, 8);
+      // This runs during a page render, so never read the file here: use
+      // the cheap size+mtime token. Build-time links (folderAssets) get a
+      // content hash instead.
+      const version = contentVersion.fromStat(stat);
 
       // we need to include the path in the result since if there is a case-sensitive
       // issue, the path will be different after resolution
