@@ -12,22 +12,9 @@ module.exports = async (blogID, path) => {
     headers: { Authorization: MACSERVER_AUTH, blogID, pathBase64 },
   });
 
-  // the modifiedTime header is sent by the server
-  const modifiedTime = res.headers.get("modifiedTime");
-  if (!modifiedTime) {
-    throw new Error(`Missing modifiedTime header for ${path}`);
-  }
-
-  // Validate that modifiedTime is a valid date string
-  const modifiedDate = new Date(modifiedTime);
-  if (isNaN(modifiedDate.getTime())) {
-    throw new Error(`Invalid modifiedTime header value for ${path}: ${modifiedTime}`);
-  }
-
   const arrayBuffer = await res.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
   const pathOnDisk = localPath(blogID, path);
   await fs.outputFile(pathOnDisk, buffer);
-  await fs.utimes(pathOnDisk, modifiedDate, modifiedDate);
   return pathOnDisk;
 };

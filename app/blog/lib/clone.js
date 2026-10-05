@@ -44,8 +44,14 @@ function deepFreeze(value) {
 // Container/property overhead is deliberately included so maxSize remains a
 // conservative memory bound. Circular values are unsupported, just as they
 // are by the JSON based size calculation this replaces.
+//
+// An object reachable from several places (e.g. one backlinked entry shared
+// by every entry that links to it, see render/load/augment.js) is copied and
+// counted once, and the copies point at the same frozen payload - copying it
+// per reference would multiply its memory by the number of references.
 function prepareCacheValue(value, { preserveEntryInstances = false } = {}) {
   const seen = new Set();
+  const prepared = new Map();
 
   function visit(input) {
     if (typeof input === "string") {
@@ -56,6 +62,8 @@ function prepareCacheValue(value, { preserveEntryInstances = false } = {}) {
     }
     if (seen.has(input))
       throw new TypeError("Cannot prepare circular cache value");
+    // Already copied (and counted) elsewhere: just a reference to it here.
+    if (prepared.has(input)) return { payload: prepared.get(input), size: 8 };
 
     seen.add(input);
     const payload = Array.isArray(input)
@@ -72,11 +80,11 @@ function prepareCacheValue(value, { preserveEntryInstances = false } = {}) {
       size += Array.isArray(input) ? 8 : 16 + Buffer.byteLength(key);
     }
     seen.delete(input);
+    prepared.set(input, payload);
     return { payload: Object.freeze(payload), size: Math.max(1, size) };
   }
 
-  const prepared = visit(value);
-  return Object.freeze(prepared);
+  return Object.freeze(visit(value));
 }
 
 module.exports = { cloneDeep, deepFreeze, prepareCacheValue };

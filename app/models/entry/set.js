@@ -18,6 +18,7 @@ var updateTagList = require("models/tags").set;
 var addToSchedule = require("./_addToSchedule");
 var notifyDrafts = require("./_notifyDrafts");
 var assignToLists = require("./_assign");
+var { DELETED_ENTRY_TTL_SECONDS } = require("../entries/sweepExpiredDeleted");
 
 // Set is a private method which takes any valid
 // properties in the updates param and then overwrites those.
@@ -77,6 +78,7 @@ module.exports = function set (blogID, path, updates, callback) {
     if (entry.internalLinks === undefined) entry.internalLinks = [];
     if (!entry.metadata || typeof entry.metadata !== "object") entry.metadata = {};
     if (!entry.exif || typeof entry.exif !== "object") entry.exif = {};
+    if (typeof entry.contentHash !== "string") entry.contentHash = "";
 
     entry.scheduled = entry.dateStamp > Date.now();
 
@@ -169,7 +171,7 @@ module.exports = function set (blogID, path, updates, callback) {
           .set(entryKey, JSON.stringify(entry))
           .then(function () {
             if (entry.deleted) {
-              return redis.expire(entryKey, 24 * 60 * 60).then(function (result) {
+              return redis.expire(entryKey, DELETED_ENTRY_TTL_SECONDS).then(function (result) {
                 if (!result)
                   throw new Error("Failed to set expiration for deleted entry");
               });

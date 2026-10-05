@@ -91,6 +91,28 @@ describe("archives cache", function () {
     });
   });
 
+  it("yields to the event loop between the passes of a cold fill, but not on a hit", function (done) {
+    const { archives } = loadArchives();
+
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
+      callback([{ id: "1", title: "A", dateStamp: Date.parse("2020-01-02") }]);
+    });
+    const yields = spyOn(global, "setImmediate").and.callThrough();
+
+    const req = makeReq({ id: "blog-yield", cacheID: 100, timeZone: "UTC" });
+
+    archives(req, { locals: {} }, function () {
+      // catalog clone, then before augmenting, then before sizing the result
+      expect(yields.calls.count()).toBeGreaterThanOrEqual(3);
+      yields.calls.reset();
+
+      archives(req, { locals: {} }, function () {
+        expect(yields).not.toHaveBeenCalled();
+        done();
+      });
+    });
+  });
+
   it("refetches when cacheID changes", function (done) {
     const { archives } = loadArchives();
 
@@ -223,5 +245,68 @@ describe("archives cache", function () {
         done();
       });
     });
+  });
+});
+
+describe("archives shared augmentation", function () {
+  const Entries = require("models/entries");
+  const Entry = require("models/entry/instance");
+  const archivesPath = require.resolve("../archives");
+  const getAllCachedPath = require.resolve("../helpers/getAllCached");
+
+  afterEach(function () {
+    delete require.cache[archivesPath];
+    delete require.cache[getAllCachedPath];
+  });
+
+  function makeReq(blogURL) {
+    return {
+      blog: {
+        id: "blog-1",
+        cacheID: 100,
+        timeZone: "UTC",
+        locals: { blogURL },
+      },
+      retrieve: {},
+      log: function () {},
+    };
+  }
+
+  it("shares augmented entries across hits with a per-request absoluteURL", async function () {
+    delete require.cache[archivesPath];
+    delete require.cache[getAllCachedPath];
+    const archives = require("../archives");
+
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
+      callback([
+        new Entry({
+          id: "/a.txt",
+          path: "/a.txt",
+          url: "/a",
+          title: "A",
+          tags: ["Foo"],
+          dateStamp: Date.UTC(2020, 0, 2),
+          backlinks: [],
+        }),
+      ]);
+    });
+
+    const first = await archives(makeReq("https://example.com"), {
+      locals: {},
+    });
+    const second = await archives(makeReq("http://www.example.com"), {
+      locals: {},
+    });
+
+    const a = first[0].months[0].entries[0];
+    const b = second[0].months[0].entries[0];
+
+    expect(a.__augmented).toBe(true);
+    expect(b).not.toBe(a);
+    expect(b.tags).toBe(a.tags);
+    expect(a.absoluteURL).toBe("https://example.com/a");
+    expect(b.absoluteURL).toBe("http://www.example.com/a");
+    expect(second[0].months).not.toBe(first[0].months);
+    expect(Entries.getAll).toHaveBeenCalledTimes(1);
   });
 });

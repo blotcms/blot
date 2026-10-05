@@ -32,6 +32,105 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // one remaining unmeasured hop to tell the two apart next time.
 const HEARTBEAT_LOG_THRESHOLD_MS = 500;
 
+// The heartbeat timing above showed the stall is neither the event loop
+// (tickDelay=0) nor Redis itself (SLOWLOG empty, other containers fine): the
+// EXTEND sat somewhere on the shared client's connection. So while a
+// heartbeat is still outstanding past the threshold, ask Redis - over a
+// separate connection that can't be queued behind the shared one - what it
+// sees on the shared connection right now. A fast probe PING with the shared
+// connection idle and empty server-side means the commands never left this
+// process (client-side queue); a large omem/oll means replies are backed up
+// on the way back; a slow probe PING too means the network path to Redis.
+const PROBE_TIMEOUT_MS = 5000;
+const PROBE_MIN_INTERVAL_MS = 1000;
+
+let probeClient;
+let sharedClientID;
+let probeInFlight = null;
+let lastProbeAt = 0;
+
+function setupProbe() {
+  if (probeClient) return;
+  probeClient = require("models/redis").createLibraryClient("lock-probe");
+  const fetchID = () =>
+    client
+      .clientId()
+      .then((id) => (sharedClientID = id))
+      .catch(() => {});
+  // The ID changes whenever the shared client reconnects.
+  client.on("ready", fetchID);
+  if (client.isReady) fetchID();
+}
+
+function withTimeout(promise, ms) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("timed out")), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+async function runProbe() {
+  const result = { sharedClientID };
+  const pingStartedAt = Date.now();
+  try {
+    await withTimeout(probeClient.ping(), PROBE_TIMEOUT_MS);
+    result.probePing = `${Date.now() - pingStartedAt}ms`;
+  } catch (e) {
+    result.probePing = `error after ${Date.now() - pingStartedAt}ms: ${e.message}`;
+    return result;
+  }
+  if (!sharedClientID) return result;
+  try {
+    const line = await withTimeout(
+      probeClient.sendCommand(["CLIENT", "LIST", "ID", String(sharedClientID)]),
+      PROBE_TIMEOUT_MS
+    );
+    const fields = {};
+    String(line)
+      .trim()
+      .split(" ")
+      .forEach((pair) => {
+        const i = pair.indexOf("=");
+        if (i > 0) fields[pair.slice(0, i)] = pair.slice(i + 1);
+      });
+    ["age", "idle", "flags", "qbuf", "qbuf-free", "omem", "oll", "obl", "tot-mem", "cmd"].forEach(
+      (k) => {
+        if (k in fields) result[k] = fields[k];
+      }
+    );
+    if (!Object.keys(fields).length) result.clientList = "not found";
+  } catch (e) {
+    result.clientList = `error: ${e.message}`;
+  }
+  return result;
+}
+
+// Many locks stall together, so share one probe between them rather than
+// firing one per held lock.
+function probe(lockKey, pendingForMs) {
+  if (probeInFlight || Date.now() - lastProbeAt < PROBE_MIN_INTERVAL_MS) return;
+  lastProbeAt = Date.now();
+  probeInFlight = runProbe()
+    .then((result) => {
+      console.log(
+        clfdate(),
+        "[LOCK] stall probe",
+        lockKey,
+        `pendingFor=${pendingForMs}ms`,
+        Object.keys(result)
+          .map((k) => `${k}=${result[k]}`)
+          .join(" ")
+      );
+    })
+    .catch(() => {})
+    .finally(() => {
+      probeInFlight = null;
+    });
+}
+
 function key(blogID) {
   return "blog:" + blogID + ":folder-lock";
 }
@@ -50,6 +149,8 @@ async function lock(blogID, options = {}) {
 
   const lockKey = key(blogID);
   const token = randomUUID();
+
+  setupProbe();
 
   let acquired = false;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -83,11 +184,19 @@ async function lock(blogID, options = {}) {
     const tickDelayMs = attemptedAt - lastTickAt - heartbeat;
     lastTickAt = attemptedAt;
 
+    const stallTimer = setTimeout(
+      () => probe(lockKey, Date.now() - attemptedAt),
+      HEARTBEAT_LOG_THRESHOLD_MS
+    );
+    stallTimer.unref();
+
     try {
-      const ok = await client.eval(EXTEND, {
-        keys: [lockKey],
-        arguments: [token, String(ttl)],
-      });
+      const ok = await client
+        .eval(EXTEND, {
+          keys: [lockKey],
+          arguments: [token, String(ttl)],
+        })
+        .finally(() => clearTimeout(stallTimer));
       const roundTripMs = Date.now() - attemptedAt;
       if (
         tickDelayMs >= HEARTBEAT_LOG_THRESHOLD_MS ||

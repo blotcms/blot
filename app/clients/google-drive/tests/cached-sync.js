@@ -3,6 +3,7 @@ const vm = require("vm");
 
 function harness(count = 1) {
   const records = new Map();
+  const metadata = new Map();
   const files = Array.from({
     length: count
   }, (_, i) => ({
@@ -22,6 +23,7 @@ function harness(count = 1) {
     files,
     local,
     records,
+    metadata,
     downloads: [],
     batches: [],
     updates: [],
@@ -42,6 +44,10 @@ function harness(count = 1) {
       },
       folder: () => ({
         getByPath: async () => null,
+        getApplied: async id => metadata.get(id) || null,
+        setApplied: async (id, value) => {
+          metadata.set(id, value);
+        },
         set: async () => {},
         remove: async () => {},
         getMigrationCursor: async () => cursor,
@@ -72,6 +78,8 @@ function harness(count = 1) {
         }
       };
     },
+    "../util/localFingerprint": async path =>
+      local.find(file => "/" + file.name === path)?.fingerprint || null,
     "../serviceAccount/createDriveClient": async () => ({
       files: {
         get: async () => ({
@@ -128,7 +136,7 @@ describe("Drive verified content cache", function() {
   it("skips 1000 unchanged files without content reads and batches the directory lookup", async function() {
     const h = harness(1000);
     h.warm();
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual([]);
     expect(h.updates).toEqual([]);
     expect(h.finished).toBe("Finished processing folder");
@@ -140,29 +148,29 @@ describe("Drive verified content cache", function() {
     h.warm();
     h.files[0].md5Checksum = "new";
     h.local[1].fingerprint = "replaced";
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual(["0", "1"]);
     expect(h.records.get("0").checksum).toBe("new");
   });
   it("bounds legacy migration and advances beyond a repeatedly failing prefix", async function() {
     const h = harness(70);
     h.failDownload = true;
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual(Array.from({
       length: 32
     }, (_, i) => String(i)));
     expect(h.finished).toContain("deferred");
     h.downloads = [];
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual(Array.from({
       length: 32
     }, (_, i) => String(i + 32)));
     h.downloads = [];
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual(["64", "65", "66", "67", "68", "69"]);
     h.failDownload = false;
     h.downloads = [];
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.downloads[0]).toBe("0");
   });
   it("stops at the byte limit and eventually verifies an oversized file alone", async function() {
@@ -171,37 +179,76 @@ describe("Drive verified content cache", function() {
       h.files[i].size = size * 1024 * 1024;
       h.local[i].size = h.files[i].size;
     });
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual(["0"]);
     h.downloads = [];
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual(["1"]);
     h.downloads = [];
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual(["2"]);
   });
   it("rebuilds again after failed update or cache persistence, then warms", async function() {
     const h = harness();
     h.failUpdate = true;
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.records.size).toBe(0);
     h.failUpdate = false;
     h.failStore = true;
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.records.size).toBe(0);
     h.failStore = false;
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.records.size).toBe(1);
     expect(h.updates.length).toBe(3);
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.updates.length).toBe(3);
   });
   it("uses metadata for unchanged files with no remote checksum", async function() {
     const h = harness();
     delete h.files[0].md5Checksum;
-    expect(await h.run()).toBe(true);
+    expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual([]);
     h.files[0].modifiedTime = "2026-01-02T00:00:00Z";
+    expect(await h.run()).toBeTruthy();
+    expect(h.downloads).toEqual(["0"]);
+  });
+  it("treats a Google-app file as identical when the stored modifiedTime matches, even if the local mtime differs", async function() {
+    const h = harness();
+    h.files[0].mimeType = "application/vnd.google-apps.spreadsheet";
+    delete h.files[0].md5Checksum;
+    h.metadata.set("0", {
+      modifiedTime: h.files[0].modifiedTime,
+      fingerprint: "local-0"
+    });
+    h.local[0].modifiedTime = "2020-01-01T00:00:00Z";
+    expect(await h.run()).toBe(true);
+    expect(h.downloads).toEqual([]);
+  });
+  it("downloads a Google-app file when the stored modifiedTime is older than the remote one", async function() {
+    const h = harness();
+    h.files[0].mimeType = "application/vnd.google-apps.spreadsheet";
+    delete h.files[0].md5Checksum;
+    h.metadata.set("0", {
+      modifiedTime: "2026-01-01T00:00:00Z",
+      fingerprint: "local-0"
+    });
+    h.files[0].modifiedTime = "2026-01-02T00:00:00Z";
+    expect(await h.run()).toBe(true);
+    expect(h.downloads).toEqual(["0"]);
+    expect(h.metadata.get("0")).toEqual({
+      modifiedTime: "2026-01-02T00:00:00Z",
+      fingerprint: "local-0"
+    });
+  });
+  it("downloads a Google-app file changed locally since Blot wrote it, even if Drive's time is unchanged", async function() {
+    const h = harness();
+    h.files[0].mimeType = "application/vnd.google-apps.spreadsheet";
+    delete h.files[0].md5Checksum;
+    h.metadata.set("0", {
+      modifiedTime: h.files[0].modifiedTime,
+      fingerprint: "written-by-blot"
+    });
     expect(await h.run()).toBe(true);
     expect(h.downloads).toEqual(["0"]);
   });
