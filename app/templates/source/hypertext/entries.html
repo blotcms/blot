@@ -13,11 +13,12 @@
         {{#is.index_layout.titles}}
         <div class="entry listing">
             <h2><a href="{{{url}}}" title="{{title}}">{{title}}</a></h2>
-            {{^hide_dates}}
-            {{#dateStamp}}
-            <p class="entry-date">{{#formatDate}}{{date_display}}{{/formatDate}}</p>
-            {{/dateStamp}}
-            {{/hide_dates}}
+            <div class="entry-meta">
+                {{^hide_dates}}{{#dateStamp}}<span class="entry-date">{{#formatDate}}{{date_display}}{{/formatDate}}</span>{{/dateStamp}}{{/hide_dates}}
+                {{#tags.length}}
+                <span class="entry-tags">{{#tags}}<a href="/tagged/{{slug}}" title="Everything tagged {{name}}">{{name}}</a>{{/tags}}</span>
+                {{/tags.length}}
+            </div>
         </div>
         {{/is.index_layout.titles}}
 
@@ -25,22 +26,24 @@
         <article class="entry listing">
             <h2><a href="{{{url}}}" title="{{title}}">{{title}}</a></h2>
             {{#summary}}<div class="summary">{{{summary}}}</div>{{/summary}}
-            {{^hide_dates}}
-            {{#dateStamp}}
-            <p class="entry-date">{{#formatDate}}{{date_display}}{{/formatDate}}</p>
-            {{/dateStamp}}
-            {{/hide_dates}}
+            <div class="entry-meta">
+                {{^hide_dates}}{{#dateStamp}}<span class="entry-date">{{#formatDate}}{{date_display}}{{/formatDate}}</span>{{/dateStamp}}{{/hide_dates}}
+                {{#tags.length}}
+                <span class="entry-tags">{{#tags}}<a href="/tagged/{{slug}}" title="Everything tagged {{name}}">{{name}}</a>{{/tags}}</span>
+                {{/tags.length}}
+            </div>
         </article>
         {{/is.index_layout.title_and_summary}}
 
         {{#is.index_layout.post_in_full}}
         <article class="entry">
             {{{html}}}
-            {{^hide_dates}}
-            {{#dateStamp}}
-            <p class="entry-date">{{#formatDate}}{{date_display}}{{/formatDate}}</p>
-            {{/dateStamp}}
-            {{/hide_dates}}
+            <div class="entry-meta">
+                {{^hide_dates}}{{#dateStamp}}<span class="entry-date">{{#formatDate}}{{date_display}}{{/formatDate}}</span>{{/dateStamp}}{{/hide_dates}}
+                {{#tags.length}}
+                <span class="entry-tags">{{#tags}}<a href="/tagged/{{slug}}" title="Everything tagged {{name}}">{{name}}</a>{{/tags}}</span>
+                {{/tags.length}}
+            </div>
         </article>
         {{/is.index_layout.post_in_full}}
 

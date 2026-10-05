@@ -57,6 +57,12 @@
         "page_size": 100
       }
     },
+    "tagged.html": {
+      "partials": {
+        "title": "{{{tag}}} - {{{title}}}",
+        "description": "All entries tagged {{{tag}}} on {{{title}}}"
+      }
+    },
     "entries.html": {
       "partials": {
         "title": "{{{title}}}",
