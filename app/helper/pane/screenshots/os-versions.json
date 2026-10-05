@@ -1,0 +1,6 @@
+{
+  "_comment": "The OS versions the reference screenshots were captured on. check-os.js compares the runner with this at the start of every capture (and, for the release/build only, every pane-qa render) and fails on a difference, so a runner image change can't silently alter reference/. Only what can change the UI is recorded: macOS major.minor, the Windows build number, Ubuntu release + Nautilus major + libadwaita major.minor. \"runner\" is the pinned runs-on label (also set in .github/workflows/pane-screenshots.yml and pane-qa.yml). To change any of it, follow UPDATING-OS.md; do not just edit the number.",
+  "macos": { "runner": "macos-26", "version": "26.6" },
+  "windows": { "runner": "windows-2025", "build": "26100" },
+  "linux": { "runner": "ubuntu-24.04", "release": "24.04", "nautilus": "46", "libadwaita": "1.5" }
+}

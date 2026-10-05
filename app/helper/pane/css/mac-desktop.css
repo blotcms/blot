@@ -1,0 +1,27 @@
+/* macOS desktop view: icons and labels loose on the wallpaper, no window at all (DESIGN.md,
+   "Desktop view"). Reuses the icons view's artwork (icon:mac/big-*); the grid and label are
+   different because there is no Finder card behind them: labels need a text shadow to stay
+   legible over a photo or colour background. Rooted at .pane[data-view=desktop] so icons/list
+   rules never mix. */
+.pane[data-view=desktop]{position:static;display:block;width:auto;max-width:none;height:auto;max-height:none;overflow:visible;box-shadow:none;border:none;background:none;container-type:normal}
+.pane[data-view=desktop]::before{content:none}
+.pane[data-view=desktop] .pane-tree{display:grid;grid-template-columns:repeat(auto-fill,88px);grid-auto-rows:96px;justify-content:start;align-content:start;gap:4px 8px;flex:none;min-height:auto;overflow:visible;padding:0}
+.pane[data-view=desktop] .pane-tree>li{display:flex;flex-direction:column;align-items:center;min-width:0}
+.pane[data-view=desktop] .pane-icon{position:relative;top:auto;left:auto;flex:none;width:56px;height:56px;margin:0;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+.pane[data-view=desktop] .pane-label{flex:none;box-sizing:border-box;width:88px;margin-top:6px;padding:1px 4px;text-align:center;white-space:normal;overflow:hidden;overflow-wrap:anywhere;
+display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;font:12px/15px -apple-system,"SF Pro Text",system-ui,sans-serif;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8),0 0 1px rgba(0,0,0,.6)}
+.pane[data-view=desktop] .pane-icon.pane-k-folder{background-image:url(icon:mac/big-folder)}
+.pane[data-view=desktop] .pane-icon.pane-k-text{background-image:url(icon:mac/big-page)}
+.pane[data-view=desktop] .pane-icon.pane-k-md{background-image:url(icon:mac/big-md)}
+.pane[data-view=desktop] .pane-icon.pane-k-doc{background-image:url(icon:mac/big-doc)}
+.pane[data-view=desktop] .pane-icon.pane-k-html{background-image:url(icon:mac/big-html)}
+.pane[data-view=desktop] .pane-icon.pane-k-generic{background-image:url(icon:mac/big-generic)}
+.pane[data-view=desktop] .pane-icon.pane-k-link{background-image:url(icon:mac/big-link)}
+.pane[data-view=desktop] .pane-icon.pane-k-image{background-image:url(icon:mac/big-image)}
+.pane[data-view=desktop] .pane-k-generic::after,.pane[data-view=desktop] .pane-k-link::after{position:absolute;left:9px;width:38px;top:41px;overflow:hidden;text-align:center;font:500 7.5px/9px -apple-system,"SF Pro Text",system-ui,sans-serif;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.8)}
+.pane[data-view=desktop] .pane-k-generic::after{content:attr(data-ext)}
+.pane[data-view=desktop] .pane-k-link::after{content:"HTTP"}
+@media (forced-colors:active){
+.pane[data-view=desktop] .pane-icon{filter:none}
+.pane[data-view=desktop] .pane-label{text-shadow:none}
+}

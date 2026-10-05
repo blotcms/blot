@@ -368,6 +368,7 @@ td h2 {
 background {
   display: flex;
   margin: 1rem 0 5rem;
+  padding: 4rem;
   border-radius: 6px;
   background: #00186c;
   overflow: hidden;
@@ -409,6 +410,26 @@ background .window {
   max-width: 320px;
   min-width: 256px;
   margin: 2.8rem 1.4rem;
+}
+
+background.combo {
+  position: relative;
+  min-height: 320px;
+}
+
+/* Positioned against the background itself (not a wrapper inside its padding), so the icons
+   sit flush with the background's edges instead of respecting its padding, like a real desktop. */
+background.combo .pane-desktop-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+background.combo .pane:not([data-view="desktop"]) {
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
 }
 
 .clients {

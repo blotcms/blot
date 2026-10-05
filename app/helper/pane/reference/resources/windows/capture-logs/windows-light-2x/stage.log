@@ -1,0 +1,15 @@
+== stage before: editors
+  explorer | 
+  WindowsTerminal | C:\ProgramData\GitHub\HostedComputeAgent\hosted-compute-agent
+== stage before: editor text
+  explorer | 
+  WindowsTerminal | C:\ProgramData\GitHub\HostedComputeAgent\hosted-compute-agent
+== stage before: editor code
+  explorer | 
+  WindowsTerminal | C:\ProgramData\GitHub\HostedComputeAgent\hosted-compute-agent
+== stage before: browser
+  explorer | 
+  WindowsTerminal | C:\ProgramData\GitHub\HostedComputeAgent\hosted-compute-agent
+== stage before: before the desktop icons
+  explorer | 
+  WindowsTerminal | C:\ProgramData\GitHub\HostedComputeAgent\hosted-compute-agent

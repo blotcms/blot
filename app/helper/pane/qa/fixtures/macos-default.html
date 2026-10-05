@@ -1,0 +1,33 @@
+<!-- Crude macOS Finder fixture (list view, tree expanded). Dates are frozen constants. -->
+<style>
+.mac{--bg:#fff;--fg:#262626;--dim:#8a8a8a;--bar:#f6f6f6;--line:#d8d8d8;--stripe:#f4f5f5;
+  width:491px;height:361px;box-sizing:border-box;border-radius:26px;overflow:hidden;background:var(--bg);color:var(--fg);
+  font:13px/20px -apple-system,"SF Pro Text",system-ui,sans-serif;position:relative;
+  box-shadow:0 0 0 .5px rgba(0,0,0,.25),0 18px 40px rgba(0,0,0,.35)}
+@media (prefers-color-scheme:dark){.mac{--bg:#1e1e1e;--fg:#e8e8e8;--dim:#8e8e8e;--bar:#2a2a2a;--line:#3a3a3a;--stripe:#262626}}
+.mac .title{height:52px;display:flex;align-items:center;gap:8px;padding:0 18px;font-weight:600;font-size:15px}
+.mac .dot{width:14px;height:14px;border-radius:50%}
+.mac .head{height:28px;display:flex;align-items:center;border-bottom:1px solid var(--line);color:var(--dim);padding-left:47px}
+.mac .row{height:20px;display:flex;align-items:center;padding-left:47px}
+.mac .row:nth-child(even){background:var(--stripe)}
+.mac .row.child{padding-left:62px}
+.mac .n{width:159px}.mac .d{width:180px;color:var(--dim)}.mac .s{width:70px;text-align:right;color:var(--dim)}
+.mac .ico{display:inline-block;width:12px;height:14px;background:#d8d8d8;border-radius:2px;margin-right:8px;vertical-align:-2px}
+</style>
+<div class="mac">
+  <div class="title"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:40px">Your site</span></div>
+  <div class="head"><span class="n">Name</span><span class="d">Date Modified</span><span class="s">Size</span></div>
+  <div class="row"><span class="n"><i class="ico"></i>About.txt</span><span class="d">Today at 3:38 PM</span><span class="s">6 bytes</span></div>
+  <div class="row"><span class="n"><i class="ico"></i>Animation.gif</span><span class="d">Aug 14, 2026 at 3:25 PM</span><span class="s">3 KB</span></div>
+  <div class="row"><span class="n"><i class="ico"></i>Blot.webloc</span><span class="d">Apr 25, 2026 at 3:12 PM</span><span class="s">128 bytes</span></div>
+  <div class="row"><span class="n"><i class="ico"></i>Draft.md</span><span class="d">Oct 22, 2025 at 2:59 PM</span><span class="s">109 bytes</span></div>
+  <div class="row"><span class="n"><i class="ico"></i>Fruits</span><span class="d">Feb 5, 2025 at 2:46 PM</span><span class="s">--</span></div>
+  <div class="row child"><span class="n"><i class="ico"></i>Apple.md</span><span class="d">Today at 12:00 AM</span><span class="s">6 bytes</span></div>
+  <div class="row"><span class="n"><i class="ico"></i>index.html</span><span class="d">Mar 9, 2024 at 2:33 PM</span><span class="s">500 bytes</span></div>
+  <div class="row"><span class="n"><i class="ico"></i>Logo.png</span><span class="d">Jan 27, 2023 at 2:20 PM</span><span class="s">328 bytes</span></div>
+  <div class="row"><span class="n"><i class="ico"></i>Notes.md</span><span class="d">Oct 3, 2021 at 2:07 PM</span><span class="s">494 bytes</span></div>
+  <div class="row"><span class="n"><i class="ico"></i>Old report.doc</span><span class="d">Mar 27, 2020 at 1:54 PM</span><span class="s">4 bytes</span></div>
+  <div class="row"><span class="n"><i class="ico"></i>Photo.jpg</span><span class="d">Jul 7, 2018 at 1:41 PM</span><span class="s">4 KB</span></div>
+  <div class="row"><span class="n"><i class="ico"></i>Plan.gdoc</span><span class="d">Aug 3, 2016 at 1:28 PM</span><span class="s">48 bytes</span></div>
+  <div class="row"><span class="n"><i class="ico"></i>Report.docx</span><span class="d">Jun 18, 2014 at 1:15 PM</span><span class="s">2 KB</span></div>
+</div>

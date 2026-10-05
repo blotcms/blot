@@ -1,0 +1,82 @@
+# Linux (GNOME Files / Nautilus) capture notes
+
+Runner `ubuntu-24.04` (pinned; see `screenshots/UPDATING-OS.md`; `ubuntu-26.04` exists): Ubuntu 24.04, GNOME Files (Nautilus) 46.4, libadwaita 1.5. That
+is one release behind the newest GNOME; use a newer runner image when one appears.
+Script: `screenshots/linux.sh`.
+
+## Environment
+Xvfb (2560x2400) plus `openbox` (a window manager is needed for keyboard focus) inside
+`dbus-run-session`. Packages that matter: `nautilus`, `librsvg2-common`,
+`adwaita-icon-theme-full`, `shared-mime-info` (without them icons are broken),
+`xdotool`, `imagemagick`, `x11-xserver-utils`.
+
+## Font
+The UI font is set explicitly to `Cantarell 11` (stock GNOME's) in `linux.sh`, through
+`~/.config/gtk-{3,4}.0/settings.ini` (`gtk-font-name`). Setting only the gsettings `font-name`
+is NOT enough: there is no settings daemon under Xvfb, GTK falls back to its default "Sans",
+and fontconfig maps that to DejaVu Sans (wider than anything a GNOME user sees). The captures
+were in DejaVu until this was fixed. `capture-logs/*/fonts.txt` shows what gsettings and
+fontconfig resolve, but only the screenshot shows what GTK actually used: look at the digits
+and the letter shapes (Cantarell is narrower than DejaVu). The
+monospace font of the editor windows (`-code`) is separate (`monospace-font-name`) and has
+not been set yet.
+
+## Themes
+Real libadwaita dark mode needs `ADW_DEBUG_COLOR_SCHEME=prefer-dark` (and the
+`color-scheme` gsetting). `GTK_THEME=Adwaita:dark` gives the old GTK3-style dark theme,
+which is wrong.
+
+## Retina (2x)
+`GDK_SCALE=2` under Xvfb. All coordinates for `xdotool` are physical pixels.
+
+## Window
+- Nautilus 46 has no setting or working shortcut to hide the sidebar (F9 does nothing;
+  the `toggle-sidebar` D-Bus action only affects the collapsed overlay). libadwaita
+  collapses it when the window is narrower than about 500px, so the default 490px
+  window has no sidebar. `-sidebar` captures use an 890px window with the sidebar.
+- Tree view: `org.gnome.nautilus.list-view use-tree-view true`, then click the arrow
+  on the Fruits row (5th row at y=326 logical: folders aren't sorted first, so the row moves when files are added or removed).
+- Views: `default-folder-viewer` `list-view` (tree) or `icon-view` (`-icons`).
+- Several X windows share the `nautilus` class (helpers are 1x1), so the largest is used.
+- Selection cleared with Ctrl-Shift-A. That key press puts GTK in keyboard modality,
+  which draws a focus ring round the focused row, so `~/.config/gtk-4.0/gtk.css` turns
+  outlines off.
+
+## Corners and shadow
+There is no compositor under Xvfb, so windows come out with square corners and no
+shadow. The capture rounds the corners (12px x scale, as GNOME does) and deliberately
+leaves the shadow off rather than faking one.
+
+## Desktop
+`xsetroot -solid '#808080'`; the final image is composited on the same 50% grey.
+
+## Editor windows (`-text`, `-code`)
+GNOME Text Editor (`gnome-text-editor`, package of the same name). The code capture turns on
+line numbers (`org.gnome.TextEditor show-line-numbers`) and it highlights HTML by itself
+(the `-dark` variant follows the libadwaita colour scheme). It restores its last session
+(and shows a tab for each file) unless `~/.local/share/org.gnome.TextEditor` is removed
+between runs; spellcheck is switched off. `pkill -f gnome-text-editor` kills the capture
+script itself (its command line contains the string), use `pkill -x gnome-text-edit`.
+
+## Browser window (`-browser`)
+GNOME Web (Epiphany 46, `epiphany-browser`, a deb: Firefox and Chromium are snaps on this image) on
+`https://example.com/`, 720x400 logical px. It needs software rendering under Xvfb
+(`WEBKIT_DISABLE_COMPOSITING_MODE=1`, `WEBKIT_DISABLE_DMABUF_RENDERER=1`,
+`WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1`, `GSK_RENDERER=cairo`) and its own `--profile` so nothing is
+restored. Traps found: (1) at 600px wide or less Epiphany switches to its phone layout with the toolbar at
+the bottom, so this window is wider than the 600px of macOS and Windows; (2) passing `--new-window` together
+with a URL opened two windows (the one that was resized and captured showed the start page); (3) a "Set as
+Default Browser?" dialog is a window of its own over the browser's corner: `org.gnome.Epiphany
+ask-for-default false`. `capture` takes a `keep` argument to skip its Ctrl-Shift-A (that key means something
+in a browser). `clear_stage` runs before each window; `stage.log` lists what was on screen.
+
+## Desktop icons (`-desktop`)
+Stock GNOME has no desktop icons. Ubuntu's Desktop Icons NG (DING,
+`gnome-shell-extension-desktop-icons-ng`, run with `gjs .../ding.js`) draws GNOME-styled ones for
+`~/Desktop`, and runs without GNOME Shell if `XDG_CURRENT_DESKTOP=ubuntu:GNOME` is set (it crashes
+without it). Home and Trash icons are switched off and the order is by name
+(`org.gnome.shell.extensions.ding`). Under a bare window manager DING is a normal window, so it is
+marked as a desktop window (`_NET_WM_WINDOW_TYPE_DESKTOP`), undecorated (`_MOTIF_WM_HINTS`) and put at
+the origin with a 1280x560 area (three columns of four). Its window background is set to the
+same grey with a GTK 3 user stylesheet: making it transparent needs a real compositor and came out
+black under `xcompmgr`. The capture is cropped to the grid.
