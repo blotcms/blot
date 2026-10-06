@@ -14,6 +14,62 @@ describe("all_entries", function () {
     expect((await res.text()).trim().split(/\s+/).sort()).toEqual(["A", "B"]);
   });
 
+  it("keeps html for a view that needs it after a view that doesn't, and drops it again after", async function () {
+    await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
+
+    await this.template(
+      {
+        "list.html": `{{#allEntries}}{{title}} {{/allEntries}}`,
+        "full.html": `{{#allEntries}}{{{html}}}{{/allEntries}}`,
+      },
+      {
+        views: {
+          "list.html": { url: "/list" },
+          "full.html": { url: "/full" },
+        },
+      }
+    );
+
+    const before = await (await this.get("/list?json=1")).json();
+    expect(before.allEntries[0].html).toBeUndefined();
+
+    const rendered = await (await this.get("/full")).text();
+    expect(rendered).toContain("A body");
+
+    const after = await (await this.get("/list?json=1")).json();
+    expect(after.allEntries[0].title).toEqual("A");
+    expect(after.allEntries[0].html).toBeUndefined();
+  });
+
+  it("keeps html for a view that only renders it from a nested partial, after a view that doesn't", async function () {
+    await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
+
+    await this.template(
+      {
+        "list.html": `{{#allEntries}}{{title}} {{/allEntries}}`,
+        "full.html": `{{#allEntries}}{{> row.html}}{{/allEntries}}`,
+        "row.html": `<div>{{> content.html}}</div>`,
+        "content.html": `{{{html}}}`,
+      },
+      {
+        views: {
+          "list.html": { url: "/list" },
+          "full.html": { url: "/full" },
+        },
+      }
+    );
+
+    // Fills the catalog cache without html first.
+    const before = await (await this.get("/list?json=1")).json();
+    expect(before.allEntries[0].html).toBeUndefined();
+
+    const full = await (await this.get("/full?json=1")).json();
+    expect(full.allEntries[0].html).toContain("A body");
+
+    const rendered = await (await this.get("/full")).text();
+    expect(rendered).toMatch(/<div>[^]*A body[^]*<\/div>/);
+  });
+
   it("drops unreferenced heavy fields from allEntries locals", async function () {
     await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
 
@@ -234,6 +290,36 @@ describe("all_entries cache", function () {
 
       allEntries(withHtmlReq, { locals: {} }, function (err, entries2) {
         expect(entries2[0].html).toBe("<p>A body</p>");
+        // The title-only fill never held html, so this view can't be served
+        // from it and has to refetch.
+        expect(Entries.getAll).toHaveBeenCalledTimes(2);
+        done();
+      });
+    });
+  });
+
+  it("serves a title-only view from a catalog cached with html, without leaking html", function (done) {
+    const allEntries = loadAllEntries();
+
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
+      callback([{ id: "1", title: "A", html: "<p>A body</p>" }]);
+    });
+
+    const blog = { id: "blog-1", cacheID: 100 };
+
+    const titleOnlyReq = makeReq(blog, {
+      allEntries: { fields: { title: true } },
+    });
+    const withHtmlReq = makeReq(blog, {
+      allEntries: { fields: { title: true, html: true } },
+    });
+
+    allEntries(withHtmlReq, { locals: {} }, function (err, entries) {
+      expect(entries[0].html).toBe("<p>A body</p>");
+
+      allEntries(titleOnlyReq, { locals: {} }, function (err, entries2) {
+        expect(entries2[0].title).toBe("A");
+        expect(entries2[0].html).toBeUndefined();
         expect(Entries.getAll).toHaveBeenCalledTimes(1);
         done();
       });

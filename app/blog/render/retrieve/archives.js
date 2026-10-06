@@ -17,7 +17,7 @@ const {
   warnIfTooLargeToCache,
 } = require("../load/augmentedEntries");
 
-const ALIASES = ["archives"];
+const ALIASES = getAllCached.ALIASES.archives;
 
 // Caches the year/month grouping itself (already trimmed to only the fields
 // this template's archives view references, and already augmented), not
@@ -127,7 +127,11 @@ function flattenEntries(years) {
 }
 
 async function buildArchives(req, blog, options) {
-  const allEntries = await getAllCached(blog, { ...options, log: req.log });
+  const allEntries = await getAllCached(blog, {
+    ...options,
+    retrieve: req.retrieve,
+    log: req.log,
+  });
   const years = buildYears(allEntries, blog.timeZone);
 
   // Strip heavy fields the current template doesn't reference before the
