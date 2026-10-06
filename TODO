@@ -195,7 +195,6 @@ Improve Dropbox sync
 - How do we make errors sticky? To make sure users click through to clients page to re-connect to Dropbox, etc...
 
 Improve git sync
-- Investigate a bug with git client credentials triggered when you have two sites using git on one account, and delete one of the sites
 - Work out how to pipe custom error messages down to customer git clients
 - Create tests for large Git repo initialization
 - Make git client setup resumable / handle server restart
