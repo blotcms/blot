@@ -48,11 +48,14 @@ module.exports = async (serviceAccountId, driveactivity) => {
       if (timestamp !== latestDriveActivityTimestamp) {
         if (latestDriveActivityTimestamp) {
           console.log(prefix(), "starting sync");
+          let succeeded = false;
           try {
-            await sync(blogID);
+            succeeded = (await sync(blogID)) !== false;
           } catch (e) {
             console.error(prefix(), "sync failed", e.message);
           }
+          // Leave the stored timestamp alone so the next poll retries.
+          if (!succeeded) return;
         }
         console.log(prefix(), "storing timestamp", timestamp);
         await database.blog.store(blogID, {
