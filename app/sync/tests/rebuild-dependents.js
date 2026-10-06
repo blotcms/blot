@@ -101,24 +101,23 @@ describe("rebuild dependents cleanup", function () {
 
     beforeEach(async function () {
       // Links to a file which doesn't exist yet, in a case it won't have.
+      // A plain link rather than an image: the image cache plugin would
+      // claim an image before folderAssets sees it.
       await this.blog.write({
         path: postPath,
-        content: "Link: /post\n\n![Alt](/Photo.JPG)",
+        content: "Link: /post\n\n[Doc](/Doc.PDF)",
       });
       await this.blog.rebuild();
     });
 
     it("are lowercased, so a file arriving in another case rebuilds the entry", async function () {
-      const key = Entry.key.dependents(this.blog.id, "/Photo.JPG");
+      const key = Entry.key.dependents(this.blog.id, "/Doc.PDF");
 
-      expect(key).toEqual(Entry.key.dependents(this.blog.id, "/photo.jpg"));
+      expect(key).toEqual(Entry.key.dependents(this.blog.id, "/doc.pdf"));
       expect(await client.sMembers(key)).toEqual([postPath]);
 
-      await this.blog.write({
-        path: "/photo.jpg",
-        content: await global.test.fake.pngBuffer(),
-      });
-      await rebuildDependentsOf(this.blog.id, "/photo.jpg");
+      await this.blog.write({ path: "/doc.pdf", content: "PDF" });
+      await rebuildDependentsOf(this.blog.id, "/doc.pdf");
 
       expect((await getEntry(this.blog.id, postPath)).html).toContain(
         BLOT_CDN_TOKEN
@@ -126,8 +125,8 @@ describe("rebuild dependents cleanup", function () {
     });
 
     it("are still read from the exact-case key until the entry is rebuilt", async function () {
-      const key = Entry.key.dependents(this.blog.id, "/Photo.JPG");
-      const legacyKey = Entry.key.dependentsExactCase(this.blog.id, "/Photo.JPG");
+      const key = Entry.key.dependents(this.blog.id, "/Doc.PDF");
+      const legacyKey = Entry.key.dependentsExactCase(this.blog.id, "/Doc.PDF");
 
       expect(legacyKey).not.toEqual(key);
 
@@ -135,11 +134,8 @@ describe("rebuild dependents cleanup", function () {
       await client.sRem(key, postPath);
       await client.sAdd(legacyKey, postPath);
 
-      await this.blog.write({
-        path: "/photo.jpg",
-        content: await global.test.fake.pngBuffer(),
-      });
-      await rebuildDependentsOf(this.blog.id, "/Photo.JPG");
+      await this.blog.write({ path: "/doc.pdf", content: "PDF" });
+      await rebuildDependentsOf(this.blog.id, "/Doc.PDF");
 
       expect((await getEntry(this.blog.id, postPath)).html).toContain(
         BLOT_CDN_TOKEN

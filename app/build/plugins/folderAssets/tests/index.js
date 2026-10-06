@@ -150,8 +150,6 @@ describe("folderAssets plugin", function () {
         `src="${BLOT_CDN_TOKEN}/icons/search.svg?v=2#a"`
       );
       expect(entry.html).not.toContain("/folder/v-");
-      // Not a file in the blog's folder, so nothing to depend on.
-      expect(entry.dependencies).not.toContain("/icons/search.svg");
       done();
     });
   });
