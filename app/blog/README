@@ -158,7 +158,7 @@ After retrievers run, `render/load/index.js` walks all locals to find `Entry` in
 
 After Mustache rendering, asset URLs in HTML and CSS output that point to files in the blog's folder are rewritten to CDN URLs.
 
-This is now a safety net for templates: `models/template/setView` wraps literal links in a blog-owned template's views in `{{#cdn}}` when the view is saved, and the template's CDN manifest resolves them to versioned folder URLs (see `app/models/template/README`), so by the time the output reaches this pass those links are already `%%BLOT_CDN%%` URLs and are skipped. Links it still rewrites are ones that couldn't be wrapped at save time.
+Entry content is already baked at build time (`build/plugins/folderAssets`, plus `bakeHTML` for markup set by front matter), and literal links in a blog-owned template's views are wrapped in `{{#cdn}}` when the view is saved (`models/template/setView`), which the template's CDN manifest resolves to versioned folder URLs (see `app/models/template/README`). By the time output reaches this pass those links are already `%%BLOT_CDN%%` URLs and are skipped, so it is only a safety net for what couldn't be handled earlier: entries built before baking existed, template links that couldn't be wrapped at save time, and values such as menu URLs. See the DEPRECATION NOTE in `html.js` for exactly what is covered where.
 
 - `html.js` — Uses `parse5` to parse the HTML DOM and processes `href`, `src`, `poster`, and `srcset` attributes. Skips data URLs, `.html` files, and external URLs not matching the blog's hosts.
 - `css.js` — Uses a regex to find `url(...)` expressions in CSS and rewrites matching paths.

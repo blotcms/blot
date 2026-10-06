@@ -2,7 +2,7 @@ const config = require("config");
 const generateCdnUrl = require("models/template/util/generateCdnUrl");
 const BLOT_CDN_TOKEN = require("../replaceFolderLinks/cdnToken");
 const { folderUrl } = require("../replaceFolderLinks/folderFile");
-const { pathPartOf } = require("../replaceFolderLinks/shared");
+const { pathPartOf, encodeFolderPath } = require("../replaceFolderLinks/shared");
 const asRetriever = require("../../lib/asRetriever");
 
 module.exports = asRetriever(function (req, res) {
@@ -45,7 +45,7 @@ module.exports = asRetriever(function (req, res) {
               pathPartOf(renderedNormalized).length
             );
 
-            if (!entry.version) return BLOT_CDN_TOKEN + entry.path + suffix;
+            if (!entry.version) return BLOT_CDN_TOKEN + encodeFolderPath(entry.path) + suffix;
 
             return folderUrl(req.blog.id, entry.path, entry.version, suffix);
           }

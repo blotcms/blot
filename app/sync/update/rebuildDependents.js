@@ -2,8 +2,8 @@ var async = require("async");
 var Entry = require("models/entry");
 var client = require("models/client");
 var Blog = require("models/blog");
-var build = require("build");
 var dependentsKey = Entry.key.dependents;
+var dependentsExactCaseKey = Entry.key.dependentsExactCase;
 var templateKey = require("models/template/key");
 var templateDependentsKey = templateKey.templateDependents;
 var templateManifestsPendingKey = templateKey.templateManifestsPending;
@@ -11,7 +11,7 @@ const clfdate = require("helper/clfdate");
 var Preview = require("./preview");
 var isHidden = require("build/prepare/isHidden");
 var isUnsafeFolderPostPreview = require("./isUnsafeFolderPostPreview");
-var folderPostSource = require("./folderPostSourceFolder");
+var rebuildEntry = require("./rebuildEntry");
 
 var NO_LONGER_VALID_ERRORS = [
   "WRONGTYPE",
@@ -42,7 +42,22 @@ module.exports = function (blogID, path, callback) {
     if (err || !blog) return callback(err || new Error("No blog"));
     (async function () {
       try {
-        const dependent_paths = await client.sMembers(dependentsKey(blogID, path));
+        // Dependents are stored under a lowercased key so a file which
+        // arrives with different casing than the link that missed it still
+        // matches. Sets written before that are under the exact-case key
+        // until their entries are rebuilt (scripts/entry/rebuild-all.js), so
+        // check that too and merge.
+        const keys = Array.from(
+          new Set([
+            dependentsKey(blogID, path),
+            dependentsExactCaseKey(blogID, path),
+          ])
+        );
+        const dependent_paths = Array.from(
+          new Set(
+            (await Promise.all(keys.map((key) => client.sMembers(key)))).flat()
+          )
+        );
 
         async.eachSeries(
           dependent_paths,
@@ -53,15 +68,9 @@ module.exports = function (blogID, path, callback) {
                 return next();
               }
 
-              // A folder post lives at a plus-stripped path that does not
-              // exist on disk (e.g. the aggregate for /album+ is stored at
-              // /album). Rebuild it through its source folder so that
-              // changing a referenced asset does not make build() fail with
-              // ENOENT/WRONGTYPE and delete the still-valid aggregate.
-              var folderSource = folderPostSource(entry);
-              var buildPath = folderSource || dependent_path;
-
-              build(blog, buildPath, function (err, updated_dependent) {
+              // Folder posts are rebuilt through their source folder, see
+              // rebuildEntry.
+              rebuildEntry(blog, entry, function (err) {
                 if (err) {
                   log("Error rebuilding dependent_path:", dependent_path, err);
 
@@ -82,25 +91,7 @@ module.exports = function (blogID, path, callback) {
                   return;
                 }
 
-                if (
-                  folderSource &&
-                  updated_dependent.metadata &&
-                  updated_dependent.metadata._sourcePaths
-                ) {
-                  delete updated_dependent.metadata._sourcePaths;
-                }
-
-                Entry.set(
-                  blogID,
-                  updated_dependent.path || dependent_path,
-                  updated_dependent,
-                  function (err) {
-                    if (err) log("Error saving dependent_path entry", err);
-
-                    next();
-                  },
-                  false
-                );
+                next();
               });
             });
           },

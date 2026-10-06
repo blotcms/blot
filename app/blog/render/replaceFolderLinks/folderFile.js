@@ -4,6 +4,7 @@ const { promisify } = require("util");
 const contentVersion = require("helper/contentVersion");
 const caseSensitivePath = promisify(require("helper/caseSensitivePath"));
 const BLOT_CDN_TOKEN = require("./cdnToken");
+const { encodeFolderPath } = require("./shared");
 
 // Build-time helpers for turning a file in a blog's folder into a versioned
 // CDN URL, shared by the entry plugin (app/build/plugins/folderAssets) and
@@ -47,9 +48,11 @@ async function getStat(blogFolder, path) {
   return { stat, path: resolvedRelativePath };
 }
 
-// suffix is any ?query and/or #hash to keep on the end of the URL.
+// path is the decoded path on disk, percent-encoded here (see
+// encodeFolderPath). suffix is any ?query and/or #hash to keep on the end of
+// the URL, as written in the link.
 function folderUrl(blogID, path, version, suffix) {
-  return `${BLOT_CDN_TOKEN}/folder/v-${version}/${blogID}${path}${suffix || ""}`;
+  return `${BLOT_CDN_TOKEN}/folder/v-${version}/${blogID}${encodeFolderPath(path)}${suffix || ""}`;
 }
 
 module.exports = { hashFolderFile, getStat, folderUrl };

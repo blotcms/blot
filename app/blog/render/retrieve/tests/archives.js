@@ -23,6 +23,69 @@ describe("archives", function () {
     expect(text).toContain("2020:January(A )");
   });
 
+  it("keeps html for a view that needs it after a view that doesn't, and drops it again after", async function () {
+    await this.write({
+      path: "/a.txt",
+      content: "Title: A\nDate: 2020-01-02\n\nA body",
+    });
+
+    await this.template(
+      {
+        "list.html": `{{#archives}}{{#months}}{{#entries}}{{title}} {{/entries}}{{/months}}{{/archives}}`,
+        "full.html": `{{#archives}}{{#months}}{{#entries}}{{{html}}}{{/entries}}{{/months}}{{/archives}}`,
+      },
+      {
+        views: {
+          "list.html": { url: "/list" },
+          "full.html": { url: "/full" },
+        },
+      }
+    );
+
+    const before = await (await this.get("/list?json=1")).json();
+    expect(before.archives[0].months[0].entries[0].html).toBeUndefined();
+
+    const rendered = await (await this.get("/full")).text();
+    expect(rendered).toContain("A body");
+
+    const after = await (await this.get("/list?json=1")).json();
+    const entry = after.archives[0].months[0].entries[0];
+    expect(entry.title).toEqual("A");
+    expect(entry.html).toBeUndefined();
+  });
+
+  it("keeps html for a view that only renders it from a nested partial, after a view that doesn't", async function () {
+    await this.write({
+      path: "/a.txt",
+      content: "Title: A\nDate: 2020-01-02\n\nA body",
+    });
+
+    await this.template(
+      {
+        "list.html": `{{#archives}}{{#months}}{{#entries}}{{title}} {{/entries}}{{/months}}{{/archives}}`,
+        "full.html": `{{#archives}}{{#months}}{{#entries}}{{> row.html}}{{/entries}}{{/months}}{{/archives}}`,
+        "row.html": `<div>{{> content.html}}</div>`,
+        "content.html": `{{{html}}}`,
+      },
+      {
+        views: {
+          "list.html": { url: "/list" },
+          "full.html": { url: "/full" },
+        },
+      }
+    );
+
+    // Fills the catalog cache without html first.
+    const before = await (await this.get("/list?json=1")).json();
+    expect(before.archives[0].months[0].entries[0].html).toBeUndefined();
+
+    const full = await (await this.get("/full?json=1")).json();
+    expect(full.archives[0].months[0].entries[0].html).toContain("A body");
+
+    const rendered = await (await this.get("/full")).text();
+    expect(rendered).toMatch(/<div>[^]*A body[^]*<\/div>/);
+  });
+
   it("drops unreferenced heavy fields from archives entries", async function () {
     await this.write({
       path: "/a.txt",
@@ -201,10 +264,84 @@ describe("archives cache", function () {
 
       archives(withHtmlReq, { locals: {} }, function (err, years2) {
         expect(years2[0].months[0].entries[0].html).toBe("<p>A body</p>");
+        // The title-only fill never held html, so this view can't be served
+        // from it and has to refetch.
+        expect(Entries.getAll).toHaveBeenCalledTimes(2);
+        done();
+      });
+    });
+  });
+
+  it("serves a title-only view from a catalog cached with html, without leaking html", function (done) {
+    const { archives } = loadArchives();
+
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
+      callback([
+        {
+          id: "1",
+          title: "A",
+          html: "<p>A body</p>",
+          dateStamp: Date.parse("2020-01-02"),
+        },
+      ]);
+    });
+
+    const blog = { id: "blog-1", cacheID: 100, timeZone: "UTC" };
+
+    const titleOnlyReq = makeReq(blog, {
+      archives: { fields: { title: true } },
+    });
+    const withHtmlReq = makeReq(blog, {
+      archives: { fields: { title: true, html: true } },
+    });
+
+    archives(withHtmlReq, { locals: {} }, function (err, years) {
+      expect(years[0].months[0].entries[0].html).toBe("<p>A body</p>");
+
+      archives(titleOnlyReq, { locals: {} }, function (err, years2) {
+        expect(years2[0].months[0].entries[0].title).toBe("A");
+        expect(years2[0].months[0].entries[0].html).toBeUndefined();
         expect(Entries.getAll).toHaveBeenCalledTimes(1);
         done();
       });
     });
+  });
+
+  it("shares one getAll fetch between allEntries and archives that reference different fields", async function () {
+    const { archives } = loadArchives();
+    const allEntries = require("../all_entries");
+
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
+      callback([
+        {
+          id: "1",
+          title: "A",
+          html: "<p>A body</p>",
+          summary: "A summary",
+          dateStamp: Date.parse("2020-01-02"),
+        },
+      ]);
+    });
+
+    // The catalog is kept with the union of both locals' heavy fields, so
+    // one fill serves both, each projecting down to its own.
+    const req = makeReq(
+      { id: "blog-1", cacheID: 100, timeZone: "UTC" },
+      {
+        allEntries: { fields: { title: true } },
+        archives: { fields: { title: true, html: true } },
+      }
+    );
+
+    const years = await archives(req, { locals: {} });
+    const list = await allEntries(req, { locals: {} });
+
+    expect(Entries.getAll).toHaveBeenCalledTimes(1);
+    expect(years[0].months[0].entries[0].html).toBe("<p>A body</p>");
+    expect(years[0].months[0].entries[0].summary).toBeUndefined();
+    expect(list[0].title).toBe("A");
+    expect(list[0].html).toBeUndefined();
+    expect(list[0].summary).toBeUndefined();
   });
 
   it("bypasses the cache for preview requests", function (done) {
