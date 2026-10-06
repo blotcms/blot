@@ -8,20 +8,34 @@
 // rebuilds a dependent. Deleted entries are skipped, and so are entries whose
 // source file has gone (logged, and not dropped).
 //
-// Blogs are processed one at a time, entries one at a time, each blog under
-// its sync lock. A blog whose lock can't be had (it is syncing) is skipped and
-// listed at the end so the script can be run again. After a blog's entries
-// are rebuilt its cacheID is bumped, as at the end of a sync or rebuild.
+// Blogs are iterated with scripts/each/blog.js, which shows a progress line
+// (blog position, and the entry being rebuilt within it). They are processed
+// one at a time, entries one at a time, each blog under its sync lock. A blog
+// whose lock can't be had (it is syncing) is skipped and listed at the end so
+// the script can be run again. After a blog's entries are rebuilt its cacheID
+// is bumped, as at the end of a sync or rebuild.
 //
 // Usage:
 //   docker exec -it blot-container-green node scripts/entry/rebuild-all.js
-//   node scripts/entry/rebuild-all.js [--blog <id|handle>] [--from <blogID>] [--dry-run]
+//   node scripts/entry/rebuild-all.js [--blog <id|handle>] [--dry-run] [-r] [-s N] [-e N] [-o <blogID>] [-c N]
 //
 //   --blog     rebuild one blog (full or shortened ID, handle or domain)
-//   --from     resume: start at this blog ID. Blogs are processed in ID order,
-//              and the last blog finished is printed, so a run that was
-//              stopped can carry on where it left off
 //   --dry-run  only count the blogs and entries, change nothing
+//
+// The rest are the options of scripts/each/blog.js. Blogs are in ID order, so
+// positions mean the same thing on every run:
+//
+//   -r         reverse the order of the blogs
+//   -s N       start at the Nth blog. The last blog finished is printed with
+//              its position, so a run that was stopped can carry on where it
+//              left off
+//   -e N       end at the Nth blog
+//   -o <id>    rebuild just this blog, by its full ID (repeat for several)
+//   -c N       process N blogs at once
+//   -p         process all blogs at once. Unbounded, so not recommended here
+//
+// With -p or -c the blogs finish out of order, so no position is printed to
+// resume from, and the progress line doesn't show the entry being rebuilt.
 
 const fs = require("fs-extra");
 const Blog = require("models/blog");
@@ -32,6 +46,8 @@ const clfdate = require("helper/clfdate");
 const establishSyncLock = require("sync/establishSyncLock");
 const rebuildEntry = require("sync/update/rebuildEntry");
 const folderPostSourceFolder = require("sync/update/folderPostSourceFolder");
+const eachBlog = require("../each/blog");
+const progress = require("../each/progress");
 
 // Errors from build() meaning the source can no longer become an entry, the
 // same as rebuildDependents' NO_LONGER_VALID_ERRORS. Here the entry is left
@@ -44,30 +60,46 @@ const stats = {
   entriesRebuilt: 0,
   entriesMissing: 0,
   entriesFailed: 0,
-  lastBlogID: null,
+  lastBlog: null,
 };
 
-const args = process.argv.slice(2);
-const options = { dryRun: false };
+const options = require("minimist")(process.argv.slice(2), {
+  boolean: ["dry-run", "r", "p"],
+  string: ["blog", "o"],
+});
 
-// A flag missing its value must fail, not fall back to every blog.
-function valueFor(flag, value) {
-  if (!value || value.startsWith("--")) {
-    console.error(`${flag} needs a value`);
-    process.exit(1);
-  }
-  return value;
+const ALLOWED = ["_", "dry-run", "blog", "r", "s", "e", "o", "p", "c"];
+
+const unknown = Object.keys(options)
+  .filter((key) => ALLOWED.indexOf(key) === -1)
+  .map((key) => (key.length > 1 ? `--${key}` : `-${key}`))
+  .concat(options._);
+
+if (unknown.length) {
+  console.error(`Unknown argument: ${unknown.join(" ")}`);
+  process.exit(1);
 }
 
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === "--dry-run") options.dryRun = true;
-  else if (args[i] === "--blog") options.blog = valueFor(args[i], args[++i]);
-  else if (args[i] === "--from") options.from = valueFor(args[i], args[++i]);
-  else {
-    console.error(`Unknown argument: ${args[i]}`);
-    process.exit(1);
-  }
+// A flag missing its value must fail, not fall back to every blog: a bare -o
+// parses as "", and a bare -s as true (which each/blog's slice ignores).
+const badValue = ["s", "e", "c"]
+  .filter((key) => key in options && !(parseInt(options[key], 10) > 0))
+  .concat([].concat(options.o === undefined ? [] : options.o).some((id) => !id) ? ["o"] : []);
+
+if (badValue.length) {
+  console.error(`-${badValue.join(", -")} needs a value`);
+  process.exit(1);
 }
+
+// Blogs finishing out of order, and sharing one progress frame stack.
+const concurrent = !!options.p || parseInt(options.c, 10) > 1;
+
+// each/blog's blog frame counts from the first blog it is given, which is the
+// Nth blog when -s N is passed.
+const startOffset = options.s ? parseInt(options.s, 10) - 1 : 0;
+
+// Blogs handed to doThis so far, so a finished blog has a position.
+let blogsStarted = 0;
 
 const log = (blog, ...rest) =>
   console.log(clfdate(), blog.id.slice(0, 12), blog.handle || "", ...rest);
@@ -79,27 +111,19 @@ const fromCallback = (fn) =>
     fn((err, result) => (err ? reject(err) : resolve(result)))
   );
 
-async function listBlogIDs() {
-  // Sorted so --from means the same thing on every run.
-  let blogIDs = (await fromCallback((cb) => Blog.getAllIDs(cb))).sort();
+async function resolveBlog(identifier) {
+  const blogIDs = await fromCallback((cb) => Blog.getAllIDs(cb));
 
-  if (options.blog) {
-    // Not scripts/get/blog.js, which also mints an access token.
-    const identifier = options.blog;
-    const found =
-      (await getBlogBy({ id: identifier })) ||
-      (await getBlogBy({ handle: identifier })) ||
-      (await getBlogBy({ domain: identifier })) ||
-      (await getBlogBy({ id: blogIDs.find((id) => id.indexOf(identifier) === 0) }));
+  // Not scripts/get/blog.js, which also mints an access token.
+  const found =
+    (await getBlogBy({ id: identifier })) ||
+    (await getBlogBy({ handle: identifier })) ||
+    (await getBlogBy({ domain: identifier })) ||
+    (await getBlogBy({ id: blogIDs.find((id) => id.indexOf(identifier) === 0) }));
 
-    if (!found) throw new Error(`No blog: ${identifier}`);
+  if (!found) throw new Error(`No blog: ${identifier}`);
 
-    return [found.id];
-  }
-
-  if (options.from) blogIDs = blogIDs.filter((id) => id >= options.from);
-
-  return blogIDs;
+  return found;
 }
 
 // query is { id }, { handle } or { domain } as Blog.get takes it. Resolves to
@@ -132,33 +156,45 @@ function listEntryPaths(blog) {
 async function rebuildEntries(blog, paths) {
   let rebuilt = 0;
 
-  for (const path of paths) {
-    // Read again now the lock is held: a sync may have changed the entry
-    // between listing and here.
-    const entry = await getEntry(blog.id, path);
+  // Skipped when running concurrently: parallel blogs would share one global
+  // frame stack, as in scripts/each/entry.js.
+  const bar = concurrent ? null : progress.push("Entry", paths.length);
 
-    if (!entry || entry.deleted) continue;
+  try {
+    for (const path of paths) {
+      try {
+        // Read again now the lock is held: a sync may have changed the entry
+        // between listing and here.
+        const entry = await getEntry(blog.id, path);
 
-    const source = folderPostSourceFolder(entry) || entry.path;
+        if (!entry || entry.deleted) continue;
 
-    if (!(await fs.pathExists(localPath(blog.id, source)))) {
-      stats.entriesMissing++;
-      log(blog, "Skipping, source file no longer exists:", path);
-      continue;
-    }
+        const source = folderPostSourceFolder(entry) || entry.path;
 
-    try {
-      await fromCallback((cb) => rebuildEntry(blog, entry, cb));
-      rebuilt++;
-    } catch (err) {
-      if (SOURCE_GONE.indexOf(err && err.code) > -1) {
-        stats.entriesMissing++;
-        log(blog, "Skipping, source can no longer be built:", path, messageOf(err));
-      } else {
-        stats.entriesFailed++;
-        log(blog, "Error rebuilding", path, messageOf(err));
+        if (!(await fs.pathExists(localPath(blog.id, source)))) {
+          stats.entriesMissing++;
+          log(blog, "Skipping, source file no longer exists:", path);
+          continue;
+        }
+
+        try {
+          await fromCallback((cb) => rebuildEntry(blog, entry, cb));
+          rebuilt++;
+        } catch (err) {
+          if (SOURCE_GONE.indexOf(err && err.code) > -1) {
+            stats.entriesMissing++;
+            log(blog, "Skipping, source can no longer be built:", path, messageOf(err));
+          } else {
+            stats.entriesFailed++;
+            log(blog, "Error rebuilding", path, messageOf(err));
+          }
+        }
+      } finally {
+        if (bar) bar.tick();
       }
     }
+  } finally {
+    if (bar) bar.pop();
   }
 
   stats.entriesRebuilt += rebuilt;
@@ -166,21 +202,19 @@ async function rebuildEntries(blog, paths) {
   return rebuilt;
 }
 
-async function processBlog(blog, position, total) {
-  const prefix = `[${position}/${total}]`;
-
-  if (options.dryRun) {
+async function processBlog(blog) {
+  if (options["dry-run"]) {
     const count = await fromCallback((cb) => Entries.getAllTotal(blog.id, cb));
 
     stats.blogsDone++;
     stats.entriesRebuilt += count;
-    log(blog, prefix, `Would rebuild up to ${count} entries`);
+    log(blog, `Would rebuild up to ${count} entries`);
     return;
   }
 
   const paths = await listEntryPaths(blog);
 
-  log(blog, prefix, `Rebuilding ${paths.length} entries`);
+  log(blog, `Rebuilding ${paths.length} entries`);
 
   let lock;
 
@@ -188,7 +222,7 @@ async function processBlog(blog, position, total) {
     lock = await establishSyncLock(blog.id);
   } catch (err) {
     stats.blogsSkipped.push({ id: blog.id, handle: blog.handle, reason: messageOf(err) });
-    log(blog, prefix, "Skipped, could not take the sync lock:", messageOf(err));
+    log(blog, "Skipped, could not take the sync lock:", messageOf(err));
     return;
   }
 
@@ -211,19 +245,19 @@ async function processBlog(blog, position, total) {
   }
 
   stats.blogsDone++;
-  log(blog, prefix, `Rebuilt ${rebuilt}/${paths.length} entries`);
+  log(blog, `Rebuilt ${rebuilt}/${paths.length} entries`);
 }
 
 function summarize() {
-  const verb = options.dryRun ? "Would rebuild" : "Rebuilt";
+  const verb = options["dry-run"] ? "Would rebuild" : "Rebuilt";
 
   console.log(`\n${"=".repeat(60)}`);
-  console.log(options.dryRun ? "Dry run summary (nothing changed):" : "Rebuild summary:");
-  console.log(`  Blogs ${options.dryRun ? "counted" : "done"}: ${stats.blogsDone}`);
+  console.log(options["dry-run"] ? "Dry run summary (nothing changed):" : "Rebuild summary:");
+  console.log(`  Blogs ${options["dry-run"] ? "counted" : "done"}: ${stats.blogsDone}`);
   console.log(`  Blogs skipped (sync lock busy, or an error): ${stats.blogsSkipped.length}`);
   console.log(`  Entries: ${verb.toLowerCase()} ${stats.entriesRebuilt}`);
 
-  if (!options.dryRun) {
+  if (!options["dry-run"]) {
     console.log(`  Entries skipped (source file gone): ${stats.entriesMissing}`);
     console.log(`  Entries failed: ${stats.entriesFailed}`);
   } else {
@@ -237,54 +271,65 @@ function summarize() {
     );
   }
 
-  if (stats.lastBlogID) {
-    console.log(`\nLast blog finished: ${stats.lastBlogID}`);
+  // Positions are only in order when blogs are handled one at a time, and
+  // mean nothing for -o (or --blog, which is passed on as -o).
+  if (stats.lastBlog && !concurrent && !options.o) {
+    const { position, id } = stats.lastBlog;
+
+    console.log(`\nLast blog finished: ${position} (${id})`);
     console.log(
-      "To resume an interrupted run, pass --from <blog ID>; that blog is rebuilt again, which is harmless."
+      `To resume an interrupted run, pass -s ${position}${options.r ? " -r" : ""}; that blog is rebuilt again, which is harmless.`
     );
   }
 }
 
-async function main() {
-  const blogIDs = await listBlogIDs();
+// Called by each/blog for every blog with an owner. Never passes an error to
+// next: whatever goes wrong with one blog is logged, and the next carries on.
+function doThis(user, blog, next) {
+  const position = ++blogsStarted + startOffset;
 
-  console.log(
-    `${options.dryRun ? "Counting" : "Rebuilding entries for"} ${blogIDs.length} blog${blogIDs.length === 1 ? "" : "s"}` +
-      (options.from ? ` from ${options.from}` : "")
-  );
-
-  let position = 0;
-
-  for (const blogID of blogIDs) {
-    position++;
-
-    try {
-      const blog = await fromCallback((cb) => Blog.get({ id: blogID }, cb));
-
-      if (!blog) continue;
-
-      if (blog.isDisabled) {
-        console.log(clfdate(), blogID.slice(0, 12), "Skipping disabled blog");
-        continue;
-      }
-
-      await processBlog(blog, position, blogIDs.length);
-    } catch (err) {
-      // Whatever went wrong with this blog, carry on with the next.
-      console.error(clfdate(), blogID.slice(0, 12), "Error processing blog:", messageOf(err));
-      stats.blogsSkipped.push({ id: blogID, handle: "", reason: messageOf(err) });
+  (async () => {
+    if (blog.isDisabled) {
+      console.log(clfdate(), blog.id.slice(0, 12), "Skipping disabled blog");
+      return;
     }
 
-    stats.lastBlogID = blogID;
-  }
+    await processBlog(blog);
+  })()
+    .catch((err) => {
+      console.error(clfdate(), blog.id.slice(0, 12), "Error processing blog:", messageOf(err));
+      stats.blogsSkipped.push({ id: blog.id, handle: blog.handle || "", reason: messageOf(err) });
+    })
+    .then(() => {
+      stats.lastBlog = { position, id: blog.id };
+      next();
+    });
 }
 
-main()
-  .catch((err) => {
+function allDone(err) {
+  if (err) {
     console.error(err);
     process.exitCode = 1;
-  })
-  .then(() => {
-    summarize();
-    process.exit();
-  });
+  }
+
+  summarize();
+  process.exit();
+}
+
+async function main() {
+  if (options.blog !== undefined) {
+    if (!options.blog) throw new Error("--blog needs a value");
+    if (options.o) throw new Error("Pass --blog or -o, not both");
+
+    options.o = (await resolveBlog(options.blog)).id;
+  }
+
+  console.log(options["dry-run"] ? "Counting entries..." : "Rebuilding entries...");
+
+  eachBlog(doThis, allDone, options);
+}
+
+main().catch((err) => {
+  console.error(messageOf(err));
+  process.exit(1);
+});
