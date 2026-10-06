@@ -105,12 +105,12 @@ function harness(options) {
         };
       },
     },
-    "./util/driveReaddir": async function () {
+    "./util/driveReaddir": async function (drive, dirId) {
       walked = true;
-      return options.driveItems || [];
+      return (dirId === "folder" && options.driveItems) || [];
     },
-    "./util/localReaddir": async function () {
-      return options.localItems || [];
+    "./util/localReaddir": async function (path) {
+      return (path === "/" && options.localItems) || [];
     },
     "./util/transformDriveItems": require("../sync/util/transformDriveItems"),
     "./util/truncateToSecond": require("../sync/util/truncateToSecond"),
@@ -221,13 +221,13 @@ describe("google drive sync folder health", function () {
   });
 
   it("removes a local directory where Drive now has a file", async function () {
-    // e.g. a folder replaced by a shortcut: no size, no md5Checksum
+    // e.g. a folder replaced by a Sheet: no size, no md5Checksum
     const h = harness({
       driveItems: [
         {
-          id: "shortcut",
+          id: "sheet",
           name: "Pictures",
-          mimeType: "application/vnd.google-apps.shortcut",
+          mimeType: "application/vnd.google-apps.spreadsheet",
           modifiedTime: "2026-10-06T00:00:00.000Z",
         },
       ],
@@ -238,5 +238,31 @@ describe("google drive sync folder health", function () {
     expect(h.updated).toEqual(["/Pictures"]);
     expect(h.downloaded).toEqual(["/Pictures"]);
     expect(summary.removed).toBe(1);
+  });
+
+  it("skips a shortcut so a folder of the same name keeps it", async function () {
+    // The shortcut's id sorts first, so it used to take 'Pictures' and push
+    // the folder it sits beside to 'Pictures (1)'.
+    const h = harness({
+      driveItems: [
+        {
+          id: "14shortcut",
+          name: "Pictures",
+          mimeType: "application/vnd.google-apps.shortcut",
+          modifiedTime: "2025-05-23T18:14:36.451Z",
+        },
+        {
+          id: "18folder",
+          name: "Pictures",
+          mimeType: "application/vnd.google-apps.folder",
+          modifiedTime: "2025-05-23T18:32:09.752Z",
+        },
+      ],
+      localItems: [{ name: "Pictures", isDirectory: true, size: 4096 }],
+    });
+    const summary = await h.run();
+    expect(h.removed).toEqual([]);
+    expect(h.downloaded).toEqual([]);
+    expect(summary.createdDirs).toBe(0);
   });
 });

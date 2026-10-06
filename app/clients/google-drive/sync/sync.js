@@ -27,6 +27,8 @@ const localReaddir = require("./util/localReaddir");
 const truncateToSecond = require("./util/truncateToSecond");
 const transformDriveItems = require("./util/transformDriveItems");
 
+const SHORTCUT = "application/vnd.google-apps.shortcut";
+
 // Resolves to a summary of what changed (truthy) when the walk finishes, or
 // false when it fails part way through or the folder lookup fails.
 module.exports = async function sync(blogID, publish, update, options = {}) {
@@ -129,8 +131,12 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     ]);
 
     // We handle file name deduplication and the mapping of
-    // google docs to .gdoc files here.
-    const remoteContents = transformDriveItems(driveItems)
+    // google docs to .gdoc files here. Shortcuts are skipped: Blot can't
+    // follow them, and one sharing a name with a real item (e.g. a folder
+    // next to a shortcut to it) would otherwise take that item's name.
+    const remoteContents = transformDriveItems(
+      driveItems.filter((item) => item.mimeType !== SHORTCUT)
+    )
       .sort((a, b) => comparePaths(a.name, b.name));
     const regularFiles = remoteContents.filter(item =>
       !item.isDirectory && !item.mimeType.startsWith("application/vnd.google-apps.") &&
