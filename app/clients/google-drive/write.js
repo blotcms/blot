@@ -10,6 +10,7 @@ const guid = require("helper/guid");
 const { Readable } = require("stream");
 const database = require("./database");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const localName = require("./util/localName");
 
 // We can make this much more efficient by thoughtfully using
 // streams in pipelines rather than wastefully
@@ -153,8 +154,8 @@ const establishParentDirectories = async (drive, pathParent, blogFolderID) => {
     });
 
     let dirID =
-      data.files.filter((i) => i.name === dirToCheck).length &&
-      data.files.filter((i) => i.name === dirToCheck)[0].id;
+      data.files.filter((i) => localName(i.name) === dirToCheck).length &&
+      data.files.filter((i) => localName(i.name) === dirToCheck)[0].id;
 
     if (!dirID) {
       const res = await drive.files.create({
