@@ -117,6 +117,29 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       .reset({ preserveVerifiedContent: true });
   }
 
+  // Every file under a local directory, as blog paths. update() on the
+  // directory only drops an entry at that exact path, so each file inside
+  // must be updated too once the directory is gone.
+  const localFiles = async (path) => {
+    const files = [];
+    const contents = await fs.readdir(localPath(blogID, path), {
+      withFileTypes: true,
+    });
+    for (const item of contents) {
+      const child = join(path, item.name);
+      if (item.isDirectory()) files.push(...(await localFiles(child)));
+      else files.push(child);
+    }
+    return files;
+  };
+
+  const removeLocal = async (path, isLocalDirectory) => {
+    const files = isLocalDirectory ? await localFiles(path) : [];
+    await fs.remove(localPath(blogID, path));
+    for (const file of files) await update(file);
+    await update(path);
+  };
+
   const walk = async (dir, dirId) => {
     if (!dir || !dirId) {
       throw new Error("Missing required arguments for walk");
@@ -171,9 +194,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           join(dir, name),
           "which does not exist remotely"
         );
-        await fs.remove(localPath(blogID, path));
+        await removeLocal(path, isLocalDirectory);
         summary.removed += 1;
-        await update(path);
         await remove(await getByPath(path));
       }
     }
@@ -201,6 +223,18 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       const existsLocally = localContents.find((item) => item.name === name);
 
       if (!isDirectory) {
+        // e.g. a Drive folder replaced by a Sheet of the same name.
+        // download() can't write a file (or placeholder) over a directory,
+        // and the folder's child mappings must not outlive it.
+        if (existsLocally && existsLocally.isDirectory) {
+          await checkWeCanContinue();
+          console.log("Removing directory", path, "which is a file remotely");
+          await removeLocal(path, true);
+          summary.removed += 1;
+          const staleId = await getByPath(path);
+          if (staleId && staleId !== id) await remove(staleId);
+        }
+
         // Compare against the Drive modifiedTime of the version we last
         // wrote locally, not the local file's mtime: storage backends other
         // than local disk won't offer a settable mtime. The record is only
@@ -261,14 +295,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             Boolean(existsLocally && existsLocally.isDirectory)
           );
 
-          if (existsLocally && existsLocally.isDirectory) {
-            // e.g. a Drive folder replaced by a shortcut of the same name.
-            // download() can't write a file (or placeholder) over a directory.
-            console.log("Removing directory", path, "which is a file remotely");
-            await fs.remove(localPath(blogID, path));
-            summary.removed += 1;
-            await update(path);
-          } else if (existsLocally) {
+          if (existsLocally && !existsLocally.isDirectory) {
             console.log("Updating out-of-sync:", path);
             console.log(
               "identical=false localSize=" + existsLocally.size,

@@ -19,11 +19,25 @@ function harness(options) {
   const removed = [];
   const downloaded = [];
   const updated = [];
+  const removedIds = [];
+  // path -> names of the files and directories ("name/") inside it
+  const localTree = options.localTree || {};
+  const mappings = options.mappings || {};
 
   const stubs = {
     "fs-extra": {
       remove: async function (path) {
         removed.push(path);
+      },
+      readdir: async function (path) {
+        return (localTree[path] || []).map(function (name) {
+          return {
+            name: name.replace(/\/$/, ""),
+            isDirectory: function () {
+              return name.endsWith("/");
+            },
+          };
+        });
       },
     },
     "helper/localPath": function (_, path) {
@@ -40,11 +54,13 @@ function harness(options) {
       },
       folder: function () {
         return {
-          getByPath: async function () {
-            return null;
+          getByPath: async function (path) {
+            return mappings[path] || null;
           },
           set: async function () {},
-          remove: async function () {},
+          remove: async function (id) {
+            removedIds.push(id);
+          },
           getMigrationCursor: async function () {
             return "";
           },
@@ -140,6 +156,7 @@ function harness(options) {
     removed: removed,
     downloaded: downloaded,
     updated: updated,
+    removedIds: removedIds,
     run: async function (syncOptions) {
       return module.exports(
         "blog",
@@ -232,12 +249,29 @@ describe("google drive sync folder health", function () {
         },
       ],
       localItems: [{ name: "Pictures", isDirectory: true, size: 4096 }],
+      localTree: { "/Pictures": ["a.jpg", "Old/"], "/Pictures/Old": ["b.md"] },
+      mappings: { "/Pictures": "oldFolder" },
     });
     const summary = await h.run();
     expect(h.removed).toEqual(["/Pictures"]);
-    expect(h.updated).toEqual(["/Pictures"]);
+    // Entries for the files inside are dropped, not just the directory's
+    expect(h.updated).toEqual(["/Pictures/a.jpg", "/Pictures/Old/b.md", "/Pictures"]);
+    // and the old folder's mappings (recursively) go with it
+    expect(h.removedIds).toEqual(["oldFolder"]);
     expect(h.downloaded).toEqual(["/Pictures"]);
     expect(summary.removed).toBe(1);
+  });
+
+  it("updates every file in a local directory gone from Drive", async function () {
+    const h = harness({
+      localItems: [{ name: "Pictures (1)", isDirectory: true, size: 4096 }],
+      localTree: { "/Pictures (1)": ["a.jpg"] },
+      mappings: { "/Pictures (1)": "folder2" },
+    });
+    await h.run();
+    expect(h.removed).toEqual(["/Pictures (1)"]);
+    expect(h.updated).toEqual(["/Pictures (1)/a.jpg", "/Pictures (1)"]);
+    expect(h.removedIds).toEqual(["folder2"]);
   });
 
   it("skips a shortcut so a folder of the same name keeps it", async function () {
