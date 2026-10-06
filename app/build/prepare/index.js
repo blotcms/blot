@@ -39,7 +39,7 @@ function canOverwrite (key) {
 // The overwritable fields which hold HTML, not text. Front matter replaces
 // these with whatever string the author wrote, after the plugins (including
 // folderAssets) have already run, so build/index.js bakes them separately.
-var markup = ["body", "teaser", "teaserBody"];
+var markup = ["titleTag", "body", "teaser", "teaserBody"];
 
 var modelKeyByLower = Object.keys(Model).reduce((acc, modelKey) => {
   acc[modelKey.toLowerCase()] = modelKey;

@@ -123,13 +123,14 @@ describe("prepare", function () {
     expect(
       prepare.overriddenMarkupFields({
         Teaser: "<p>Teaser</p>",
+        TitleTag: "<h1>Title</h1>",
         teaserBody: "<p>Body</p>",
         body: "<p>Whole</p>",
         summary: "Summary",
         title: "Title",
         other: "<p>Unrelated</p>",
       }).sort()
-    ).toEqual(["body", "teaser", "teaserBody"]);
+    ).toEqual(["body", "teaser", "teaserBody", "titleTag"]);
 
     expect(prepare.overriddenMarkupFields({ summary: "Only text" })).toEqual([]);
     // overrides must be strings, like the model's fields

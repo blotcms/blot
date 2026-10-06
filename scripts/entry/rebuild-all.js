@@ -50,10 +50,19 @@ const stats = {
 const args = process.argv.slice(2);
 const options = { dryRun: false };
 
+// A flag missing its value must fail, not fall back to every blog.
+function valueFor(flag, value) {
+  if (!value || value.startsWith("--")) {
+    console.error(`${flag} needs a value`);
+    process.exit(1);
+  }
+  return value;
+}
+
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--dry-run") options.dryRun = true;
-  else if (args[i] === "--blog") options.blog = args[++i];
-  else if (args[i] === "--from") options.from = args[++i];
+  else if (args[i] === "--blog") options.blog = valueFor(args[i], args[++i]);
+  else if (args[i] === "--from") options.from = valueFor(args[i], args[++i]);
   else {
     console.error(`Unknown argument: ${args[i]}`);
     process.exit(1);
