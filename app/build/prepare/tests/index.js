@@ -119,6 +119,24 @@ describe("prepare", function () {
     expect(entry.teaserBody).toEqual("Metadata teaser body");
   });
 
+  it("lists the markup fields front matter overwrites, ignoring text fields and case", function () {
+    expect(
+      prepare.overriddenMarkupFields({
+        Teaser: "<p>Teaser</p>",
+        TitleTag: "<h1>Title</h1>",
+        teaserBody: "<p>Body</p>",
+        body: "<p>Whole</p>",
+        summary: "Summary",
+        title: "Title",
+        other: "<p>Unrelated</p>",
+      }).sort()
+    ).toEqual(["body", "teaser", "teaserBody", "titleTag"]);
+
+    expect(prepare.overriddenMarkupFields({ summary: "Only text" })).toEqual([]);
+    // overrides must be strings, like the model's fields
+    expect(prepare.overriddenMarkupFields({ teaser: 5 })).toEqual([]);
+  });
+
   it("generates an empty title when given an empty file", function () {
     var entry = this.entry;
 

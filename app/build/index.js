@@ -15,6 +15,40 @@ var Entry = require("models/entry");
 var moment = require("moment");
 var enabledConverters = require("./converters/enabled");
 var pathNormalizer = require("helper/pathNormalizer");
+var bakeHTML = require("./plugins/folderAssets").bakeHTML;
+
+// Front matter can replace entry.body, teaser and teaserBody with markup the
+// author wrote, after the plugins ran, so folderAssets never saw it. Bake it
+// the same way and record the files it links to as dependencies, so the
+// entry is rebuilt when they change.
+function bakeOverriddenMarkup(blog, entry, callback) {
+  var fields = Prepare.overriddenMarkupFields(entry.metadata);
+  var dependencies = new Set(entry.dependencies);
+
+  async.eachSeries(
+    fields,
+    function (field, next) {
+      bakeHTML(entry[field], {
+        blogID: blog.id,
+        handle: blog.handle,
+        domain: blog.domain,
+        path: entry.path,
+      }).then(function (result) {
+        entry[field] = result.html;
+        result.dependencies.forEach(function (path) {
+          dependencies.add(path);
+        });
+        next();
+      }, next);
+    },
+    function (err) {
+      if (err) return callback(err);
+
+      entry.dependencies = Array.from(dependencies);
+      callback();
+    }
+  );
+}
 
 // This file cannot become a blog post because it is not
 // a type that Blot can process properly.
@@ -277,7 +311,11 @@ function buildWith(blog, path, multiInfo, callback) {
               return callback(e);
             }
 
-            callback(null, entry);
+            bakeOverriddenMarkup(blog, entry, function (err) {
+              if (err) return callback(err);
+
+              callback(null, entry);
+            });
           });
         });
       });

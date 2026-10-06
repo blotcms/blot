@@ -133,19 +133,55 @@ describe("folderAssets plugin", function () {
     });
   });
 
-  it("leaves reserved global-static prefixes unbaked even if the blog folder has a same-named file", function (done) {
+  it("bakes a reserved global-static file from the global static directory, like lookupFile", function (done) {
     var path = "/Hello.txt";
-    var contents = "![Font icon](fonts/icon.png) ![Katex](/katex/x.png)";
+    var contents =
+      "![Icon](/icons/search.svg) ![Encoded](/ic%6Fns/search.svg?v=2#a)";
 
     fs.outputFileSync(this.blogDirectory + path, contents);
-    fs.outputFileSync(this.blogDirectory + "/fonts/icon.png", "blog file");
-    fs.outputFileSync(this.blogDirectory + "/katex/x.png", "blog file");
+    // A same-named file in the blog folder must not win over the global one.
+    fs.outputFileSync(this.blogDirectory + "/icons/search.svg", "blog file");
 
     build(this.blog, path, function (err, entry) {
       if (err) return done.fail(err);
 
-      expect(entry.html).toContain('src="/fonts/icon.png"');
-      expect(entry.html).toContain('src="/katex/x.png"');
+      expect(entry.html).toContain(`src="${BLOT_CDN_TOKEN}/icons/search.svg"`);
+      expect(entry.html).toContain(
+        `src="${BLOT_CDN_TOKEN}/icons/search.svg?v=2#a"`
+      );
+      expect(entry.html).not.toContain("/folder/v-");
+      done();
+    });
+  });
+
+  it("falls back to the blog folder when a reserved path isn't in the global static directory", function (done) {
+    var path = "/Hello.txt";
+    var contents = "![Font icon](fonts/icon.png) ![Missing](/katex/missing.png)";
+
+    fs.outputFileSync(this.blogDirectory + path, contents);
+    fs.outputFileSync(this.blogDirectory + "/fonts/icon.png", "blog file");
+
+    build(this.blog, path, function (err, entry) {
+      if (err) return done.fail(err);
+
+      expect(entry.html).toMatch(tokenRegex("/fonts/icon\\.png"));
+      expect(entry.html).toContain('src="/katex/missing.png"');
+      expect(entry.dependencies).toContain("/fonts/icon.png");
+      expect(entry.dependencies).toContain("/katex/missing.png");
+      done();
+    });
+  });
+
+  it("doesn't let a reserved-looking path escape the global static directory", function (done) {
+    var path = "/Hello.txt";
+
+    fs.outputFileSync(this.blogDirectory + path, "![Up](/icons/../layout.css)");
+
+    build(this.blog, path, function (err, entry) {
+      if (err) return done.fail(err);
+
+      // layout.css exists in the global static directory, but not under a
+      // reserved prefix, and there is no such file in the blog folder.
       expect(entry.html).not.toContain(BLOT_CDN_TOKEN);
       done();
     });
@@ -257,6 +293,92 @@ describe("folderAssets plugin", function () {
       expect(entry.dependencies).toContain("/posts/small.jpg");
       expect(entry.dependencies).toContain("/big.jpg");
       done();
+    });
+  });
+
+  it("records a missing file's path as authored, for the case-insensitive dependents key", function (done) {
+    var path = "/Hello.txt";
+
+    fs.outputFileSync(this.blogDirectory + path, "![Pic](/Photo.JPG)");
+
+    build(this.blog, path, function (err, entry) {
+      if (err) return done.fail(err);
+
+      expect(entry.html).not.toContain(BLOT_CDN_TOKEN);
+      expect(entry.dependencies).toContain("/Photo.JPG");
+      done();
+    });
+  });
+
+  it("decodes the path of a missing poster and srcset file before recording it as a dependency", function (done) {
+    var path = "/Hello.txt";
+    var contents =
+      '<video poster="/my%20pic.jpg"></video>\n\n' +
+      '<img src="/a.jpg" srcset="/a.jpg 1x, /big%20pic.jpg 2x, /50%zz.jpg 3x">';
+
+    fs.outputFileSync(this.blogDirectory + path, contents);
+
+    build(this.blog, path, function (err, entry) {
+      if (err) return done.fail(err);
+
+      expect(entry.dependencies).toContain("/my pic.jpg");
+      expect(entry.dependencies).toContain("/big pic.jpg");
+      // a value which can't be decoded is recorded unchanged
+      expect(entry.dependencies).toContain("/50%zz.jpg");
+      expect(entry.dependencies).not.toContain("/my%20pic.jpg");
+      done();
+    });
+  });
+
+  describe("bakeHTML (front matter markup overrides)", function () {
+    var bakeHTML = require("../index").bakeHTML;
+
+    it("bakes a string and returns the dependencies, leaving an untouched string as it was", async function () {
+      fs.outputFileSync(this.blogDirectory + "/photo.jpg", "fake image data");
+
+      var options = {
+        blogID: this.blog.id,
+        handle: this.blog.handle,
+        domain: this.blog.domain,
+        path: "/Hello.txt",
+      };
+
+      var baked = await bakeHTML(
+        '<p><img src="/photo.jpg"> <a href="/missing%20one.pdf">x</a></p>',
+        options
+      );
+
+      expect(baked.html).toMatch(tokenRegex("/photo\\.jpg"));
+      expect(baked.dependencies).toContain("/photo.jpg");
+      expect(baked.dependencies).toContain("/missing one.pdf");
+
+      var untouched = "<p>Hello<br>there</p>";
+
+      expect((await bakeHTML(untouched, options)).html).toEqual(untouched);
+    });
+
+    it("bakes teaser and teaserBody set by front matter and records their dependencies", function (done) {
+      var path = "/Hello.md";
+      var contents =
+        "---\n" +
+        "teaser: '<img src=\"/photo.jpg\">'\n" +
+        "teaserBody: '<a href=\"/photo.jpg\">Photo</a> <a href=\"/later.pdf\">Later</a>'\n" +
+        "---\n\n" +
+        "Body text";
+
+      fs.outputFileSync(this.blogDirectory + path, contents);
+      fs.outputFileSync(this.blogDirectory + "/photo.jpg", "fake image data");
+
+      build(this.blog, path, function (err, entry) {
+        if (err) return done.fail(err);
+
+        expect(entry.teaser).toMatch(tokenRegex("/photo\\.jpg"));
+        expect(entry.teaserBody).toMatch(tokenRegex("/photo\\.jpg"));
+        expect(entry.teaserBody).toContain('href="/later.pdf"');
+        expect(entry.dependencies).toContain("/photo.jpg");
+        expect(entry.dependencies).toContain("/later.pdf");
+        done();
+      });
     });
   });
 });

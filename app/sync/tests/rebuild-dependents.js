@@ -1,8 +1,18 @@
 describe("rebuild dependents cleanup", function () {
   var rebuildDependents = require("../update/rebuildDependents");
   var Entry = require("models/entry");
+  var client = require("models/client");
+  var BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 
   global.test.blog();
+
+  const getEntry = (blogID, path) =>
+    new Promise((resolve) => Entry.get(blogID, path, resolve));
+
+  const rebuildDependentsOf = (blogID, path) =>
+    new Promise((resolve, reject) =>
+      rebuildDependents(blogID, path, (err) => (err ? reject(err) : resolve()))
+    );
 
   it("drops dependents when the source file disappears", async function () {
     const imagePath = "/assets/image.png";
@@ -83,6 +93,57 @@ describe("rebuild dependents cleanup", function () {
         expect(entry.html).toContain('class="multi-file-post"');
         resolve();
       });
+    });
+  });
+
+  describe("dependents keys", function () {
+    const postPath = "/post.txt";
+
+    beforeEach(async function () {
+      // Links to a file which doesn't exist yet, in a case it won't have.
+      // A plain link rather than an image: the image cache plugin would
+      // claim an image before folderAssets sees it.
+      await this.blog.write({
+        path: postPath,
+        content: "Link: /post\n\n[Doc](/Doc.PDF)",
+      });
+      await this.blog.rebuild();
+    });
+
+    it("are lowercased, so a file arriving in another case rebuilds the entry", async function () {
+      const key = Entry.key.dependents(this.blog.id, "/Doc.PDF");
+
+      expect(key).toEqual(Entry.key.dependents(this.blog.id, "/doc.pdf"));
+      expect(await client.sMembers(key)).toEqual([postPath]);
+
+      await this.blog.write({ path: "/doc.pdf", content: "PDF" });
+      await rebuildDependentsOf(this.blog.id, "/doc.pdf");
+
+      expect((await getEntry(this.blog.id, postPath)).html).toContain(
+        BLOT_CDN_TOKEN
+      );
+    });
+
+    it("are still read from the exact-case key until the entry is rebuilt", async function () {
+      const key = Entry.key.dependents(this.blog.id, "/Doc.PDF");
+      const legacyKey = Entry.key.dependentsExactCase(this.blog.id, "/Doc.PDF");
+
+      expect(legacyKey).not.toEqual(key);
+
+      // How an entry built before keys were lowercased is recorded.
+      await client.sRem(key, postPath);
+      await client.sAdd(legacyKey, postPath);
+
+      await this.blog.write({ path: "/doc.pdf", content: "PDF" });
+      await rebuildDependentsOf(this.blog.id, "/Doc.PDF");
+
+      expect((await getEntry(this.blog.id, postPath)).html).toContain(
+        BLOT_CDN_TOKEN
+      );
+
+      // Saving the rebuilt entry moved it to the lowercased key.
+      expect(await client.sMembers(legacyKey)).toEqual([]);
+      expect(await client.sMembers(key)).toEqual([postPath]);
     });
   });
 });
