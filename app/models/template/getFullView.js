@@ -5,6 +5,7 @@ var parseTemplate = require("./parseTemplate");
 var mergeRetrieve = require("./util/mergeRetrieve");
 var hardenProjectedRetrieve = require("./util/hardenProjectedRetrieve");
 var referencedIdentifiers = require("./util/referencedIdentifiers");
+var renderSource = require("./util/renderSource");
 var mime = require("mime-types");
 
 // This method is used to retrieve the locals,
@@ -56,7 +57,8 @@ module.exports = function getFullView(blogID, templateID, viewName, callback) {
           allPartials,
           view.retrieve,
           view.type || mime.lookup(view.name) || "text/html",
-          view.content,
+          // the render source; the analysis above reads the raw content
+          renderSource(view, blogID, templateID),
           usesBacklinks,
         ];
 

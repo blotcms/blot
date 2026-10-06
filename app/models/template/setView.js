@@ -17,10 +17,16 @@ var updateCdnManifest = require("./util/updateCdnManifest");
 var serializeRedisHashValues = require("models/redisHashSerializer");
 var clfdate = require("helper/clfdate");
 var applyUserRetrieveOptions = require("./util/applyUserRetrieveOptions");
+var resolveFolderLinks = require("./util/resolveFolderLinks");
+var blogHosts = require("blog/lib/blogHosts");
 const MAX_VIEW_PAYLOAD_SIZE = 2 * 1024 * 1024;
 
 module.exports = function setView(templateID, updates, callback) {
         ensure(templateID, "string").and(updates, "object").and(callback, "function");
+
+        // resolvedContent is derived from content below, never accepted from a
+        // caller: clone and the folder-sync pass whole stored views back in
+        delete updates.resolvedContent;
 
         if (updates.partials !== undefined && type(updates.partials) !== "object") {
 		updates.partials = {};
@@ -130,7 +136,22 @@ module.exports = function setView(templateID, updates, callback) {
 					}
 				}
 
-				redisWriteChain.then(() => {
+				var resolvedContentFor = (content) =>
+					computeResolvedContent(
+						metadata.owner,
+						name,
+						shouldRemoveUrl
+							? undefined
+							: updates.url !== undefined
+								? updates.url
+								: view.url,
+						view.type,
+						content,
+					);
+
+				redisWriteChain.then(() => resolvedContentFor(
+					updates.content !== undefined ? updates.content : view.content,
+				)).then((resolvedContent) => {
 				// SHORT-CIRCUIT: Check if content and other critical fields are unchanged
 				// This avoids expensive operations (parsing, dependency detection, Redis writes, CDN updates)
 				var contentUnchanged =
@@ -191,6 +212,13 @@ module.exports = function setView(templateID, updates, callback) {
 					!updates.retrieve ||
 					JSON.stringify(updates.retrieve || {}) ===
 						JSON.stringify(view.retrieve || {});
+				// Views saved before resolvedContent existed (or whose links
+				// have since changed with the blog's hosts) are not unchanged
+				var resolvedUnchanged =
+					resolvedContent ===
+					(view.resolvedContent !== undefined
+						? view.resolvedContent
+						: view.content);
 
 				if (
 					contentUnchanged &&
@@ -198,7 +226,8 @@ module.exports = function setView(templateID, updates, callback) {
 					urlPatternsUnchanged &&
 					localsUnchanged &&
 					partialsUnchanged &&
-					retrieveUnchanged
+					retrieveUnchanged &&
+					resolvedUnchanged
 				) {
 					// Nothing has changed, skip all expensive operations
 					console.log(
@@ -220,12 +249,14 @@ module.exports = function setView(templateID, updates, callback) {
 						"localsUnchanged=" + localsUnchanged,
 						"partialsUnchanged=" + partialsUnchanged,
 						"retrieveUnchanged=" + retrieveUnchanged,
+						"resolvedUnchanged=" + resolvedUnchanged,
 					);
 				}
 
 				console.log(clfdate(), templateID.slice(0, 12), "setView:", name);
 
 				var existingRetrieve = view.retrieve || {};
+				var previousResolvedContent = view.resolvedContent;
 
 				for (var i in updates) {
 					if (updates[i] !== view[i]) changes = true;
@@ -241,6 +272,16 @@ module.exports = function setView(templateID, updates, callback) {
 					delete view.urlPatterns;
 					changes = true;
 				}
+
+				// Only stored when it differs from content; readers fall back
+				// to content (util/renderSource)
+				if (resolvedContent !== view.content) {
+					view.resolvedContent = resolvedContent;
+				} else {
+					delete view.resolvedContent;
+				}
+
+				if (view.resolvedContent !== previousResolvedContent) changes = true;
 
 				ensure(view, viewModel);
 
@@ -267,6 +308,16 @@ module.exports = function setView(templateID, updates, callback) {
 						view.partials = view.partials || {};
 
 						var parseResult = parseTemplate(view.content);
+
+						// The resolved copy renders through the {{#cdn}} helper, which
+						// is only loaded for views that declare retrieve.cdn. The
+						// folder files it wraps are not listed here: they come from
+						// the resolved content itself (util/updateCdnManifest), so
+						// removing a link also removes its dependency.
+						if (view.resolvedContent !== undefined) {
+							parseResult.retrieve = parseResult.retrieve || {};
+							parseResult.retrieve.cdn = parseResult.retrieve.cdn || [];
+						}
 
 				// TO DO REMOVE THIS
 				if (type(view.partials, "array")) {
@@ -322,6 +373,10 @@ module.exports = function setView(templateID, updates, callback) {
 						var multi = client.multi();
 						multi.hSet(viewKey, view);
 
+						if (view.resolvedContent === undefined) {
+							multi.hDel(viewKey, "resolvedContent");
+						}
+
 						if (shouldRemoveUrl) {
 							multi.hDel(viewKey, "url");
 						}
@@ -372,6 +427,43 @@ module.exports = function setView(templateID, updates, callback) {
 		}).catch(callback);
 	});
 };
+
+// Wraps literal links to files in the owner blog's folder in {{#cdn}} (see
+// util/resolveFolderLinks). Resolves to the content unchanged for SITE
+// templates, which render for many blogs, and for views with nothing to wrap.
+function computeResolvedContent(owner, name, url, viewType, content) {
+	return new Promise(function (resolve, reject) {
+		if (
+			owner === "SITE" ||
+			!resolveFolderLinks.mayContainFolderLinks(content)
+		) {
+			return resolve(content);
+		}
+
+		Blog.get({ id: owner }, function (err, blog) {
+			if (err) return reject(err);
+
+			var resolved;
+
+			try {
+				resolved = resolveFolderLinks(content, {
+					viewName: name,
+					viewUrl: url,
+					viewType: viewType,
+					hosts: blog ? blogHosts(blog) : [],
+				});
+
+				// Never store a copy that doesn't parse
+				if (resolved !== content) Mustache.parse(resolved);
+			} catch (e) {
+				console.log(owner, name, "Could not resolve folder links:", e);
+				resolved = content;
+			}
+
+			resolve(resolved);
+		});
+	});
+}
 
 function detectInfinitePartialDependency(
 	templateID,
