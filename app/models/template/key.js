@@ -1,3 +1,5 @@
+var pathNormalizer = require("helper/pathNormalizer");
+
 module.exports = {
   metadata: function metadata (name) {
     return "template:" + name + ":info";
@@ -38,5 +40,21 @@ module.exports = {
 
   renderedOutput: function renderedOutput(hash) {
     return "cdn:rendered:" + hash;
-  }
+  },
+
+  // Reverse index of the files in a blog's folder that templates link to
+  // through {{#cdn}} (see util/updateCdnManifest): a SET of the IDs of the
+  // blog's templates whose CDN manifest depends on the file, read by
+  // sync/update/rebuildDependents so a changed file regenerates the manifest.
+  // The path is lowercased on write and read because the manifest resolves
+  // links case-insensitively (/Images/A.PNG finds /images/a.png) - unlike
+  // entry dependents, where the folder's own spelling is used.
+  templateDependents: function templateDependents(blogID, path) {
+    return (
+      "blog:" +
+      blogID +
+      ":template_dependents:" +
+      pathNormalizer(path).toLowerCase()
+    );
+  },
 };

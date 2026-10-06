@@ -67,6 +67,18 @@ module.exports = function drop(owner, templateName, callback) {
       );
     }
 
+    // The template no longer depends on any files in its blog's folder
+    // (see util/updateCdnManifest)
+    var fileDependencies =
+      metadata && Array.isArray(metadata.fileDependencies)
+        ? metadata.fileDependencies
+        : [];
+    var dependencyOwner = metadata && metadata.owner ? metadata.owner : owner;
+
+    fileDependencies.forEach(function (file) {
+      multi.sRem(key.templateDependents(dependencyOwner, file), templateID);
+    });
+
     multi.sRem(key.blogTemplates(owner), templateID);
     multi.del(key.metadata(templateID));
     multi.del(key.urlPatterns(templateID));

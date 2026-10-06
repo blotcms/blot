@@ -78,6 +78,10 @@ async function processTemplate(templateID) {
     // Check each file in the manifest
     for (const viewName of manifestEntries) {
       const hash = cdnManifest[viewName];
+
+      // Folder files ({ path, version }) are served from the blog's folder,
+      // not stored by the manifest
+      if (hash && typeof hash === "object") continue;
       
       if (!hash || typeof hash !== "string") {
         console.log(`    ⚠️  Invalid hash for ${viewName}, will regenerate`);

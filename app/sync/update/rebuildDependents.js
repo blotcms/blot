@@ -4,6 +4,8 @@ var client = require("models/client");
 var Blog = require("models/blog");
 var build = require("build");
 var dependentsKey = Entry.key.dependents;
+var templateDependentsKey = require("models/template/key").templateDependents;
+var updateCdnManifest = require("models/template/util/updateCdnManifest");
 const clfdate = require("helper/clfdate");
 var Preview = require("./preview");
 var isHidden = require("build/prepare/isHidden");
@@ -22,7 +24,8 @@ var NO_LONGER_VALID_ERRORS = [
 // The purpose of this module is to rebuild any
 // entries already in the user's folder which depend
 // on the contents of this particular file which was
-// just changed or removed.
+// just changed or removed, and to regenerate the CDN
+// manifest of any template which links to it.
 
 module.exports = function (blogID, path, callback) {
   const log = function () {
@@ -100,7 +103,13 @@ module.exports = function (blogID, path, callback) {
               });
             });
           },
-          callback
+          function (err) {
+            if (err) return callback(err);
+
+            rebuildTemplateDependents(blog.id, path, log).then(function () {
+              callback();
+            });
+          }
         );
       } catch (err) {
         callback(err);
@@ -108,6 +117,55 @@ module.exports = function (blogID, path, callback) {
     })();
   });
 };
+
+// Templates link to files in the blog's folder with {{#cdn}} (wrapped at
+// save time by models/template/util/resolveFolderLinks). Their CDN manifest
+// holds each file's versioned URL, so when the file changes, appears or goes
+// away the manifest is regenerated, and the blog's cache is bumped once so
+// pages (and the views rendered from the manifest) pick up the new URLs.
+// Errors are logged and never fail the sync of the file itself.
+async function rebuildTemplateDependents(blogID, path, log) {
+  let templateIDs;
+
+  try {
+    templateIDs = await client.sMembers(templateDependentsKey(blogID, path));
+  } catch (err) {
+    log("Error reading template dependents", err);
+    return;
+  }
+
+  let updated = false;
+
+  for (const templateID of templateIDs) {
+    try {
+      // bails (and clears the dependency) if the template is no longer
+      // installed on the blog
+      await new Promise(function (resolve, reject) {
+        updateCdnManifest(templateID, function (err) {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+
+      updated = true;
+    } catch (err) {
+      log("Error updating CDN manifest for template:", templateID, err);
+    }
+  }
+
+  if (!updated) return;
+
+  try {
+    await new Promise(function (resolve, reject) {
+      Blog.set(blogID, { cacheID: Date.now() }, function (err) {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+  } catch (err) {
+    log("Error bumping cacheID after template dependents", err);
+  }
+}
 
 function shouldDropDependent(err) {
   if (!err) return false;
