@@ -2,7 +2,11 @@ const config = require("config");
 const generateCdnUrl = require("models/template/util/generateCdnUrl");
 const BLOT_CDN_TOKEN = require("../replaceFolderLinks/cdnToken");
 const { folderUrl } = require("../replaceFolderLinks/folderFile");
-const { pathPartOf, encodeFolderPath } = require("../replaceFolderLinks/shared");
+const {
+  pathPartOf,
+  encodeFolderPath,
+  isSafeCdnTarget,
+} = require("../replaceFolderLinks/shared");
 const asRetriever = require("../../lib/asRetriever");
 
 module.exports = asRetriever(function (req, res) {
@@ -56,12 +60,14 @@ module.exports = asRetriever(function (req, res) {
         // becoming a bare /path: that is what {{blog.url}}/path rendered
         // before it was wrapped, and a bare path would resolve against the
         // CDN origin in CSS served from the CDN. View names (style.css) have
-        // no leading slash and come back as written.
+        // no leading slash and come back as written, as do targets the
+        // manifest builder would reject (whitespace, "..", "//", ...).
         const trimmed = String(rendered).trim();
 
         if (
           trimmed.charAt(0) === "/" &&
           trimmed.charAt(1) !== "/" &&
+          isSafeCdnTarget(trimmed) &&
           req.blog &&
           typeof req.blog.url === "string"
         ) {

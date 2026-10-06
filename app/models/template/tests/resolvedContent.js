@@ -64,7 +64,7 @@ describe("template resolved content", function () {
 
     expect(view.content).toBe("<p>no links</p>");
     expect(view.resolvedContent).toBeUndefined();
-    expect(await client.hExists(key.view(this.template.id, "index.html"), "resolvedContent")).toBe(false);
+    expect(await client.hExists(key.view(this.template.id, "index.html"), "resolvedContent")).toBeFalsy();
   });
 
   it("never accepts a resolved copy from the caller", async function () {

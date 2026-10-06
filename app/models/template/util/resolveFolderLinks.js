@@ -7,6 +7,7 @@ const {
   hostPatterns,
   stripOwnHost,
   pathPartOf,
+  isSafeCdnTarget,
 } = require("blog/render/replaceFolderLinks/shared");
 
 // Template views can't be baked per blog at render time the way entries are
@@ -107,9 +108,7 @@ function cssDirectory(options) {
 // A target ends up as the text of a {{#cdn}} section, which the template
 // parser only accepts as a manifest target if it passes these checks
 // (parseTemplate collectCdnTargets); anything else would be dead weight.
-function isSafeTarget(target) {
-  return target.length <= 255 && !/[\s\\\0{}]|\.\.|\/\//.test(target);
-}
+const isSafeTarget = isSafeCdnTarget;
 
 function normalizeAbsolute(path) {
   if (/(?:^|\/)\.{1,2}(?:\/|$)|\/\//.test(path)) return posix.resolve("/", path);
