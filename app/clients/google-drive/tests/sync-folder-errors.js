@@ -192,7 +192,7 @@ describe("google drive sync folder health", function () {
 
   it("resets folder mappings once the lookup succeeds", async function () {
     const h = harness();
-    expect(await h.run({ reset: true })).toBe(true);
+    expect(await h.run({ reset: true })).toBeTruthy();
     expect(h.resets()).toBe(1);
     const plain = harness();
     await plain.run();
