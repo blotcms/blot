@@ -58,7 +58,7 @@
     "http-auth": "3.2.3",
     "http-proxy-agent": "7.0.2",
     "https-proxy-agent": "7.0.6",
-    "katex": "0.16.21",
+    "katex": "0.18.2",
     "lodash": "4.18.1",
     "lru-cache": "^11.2.6",
     "mailgun.js": "11.0.0",
