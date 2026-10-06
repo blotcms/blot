@@ -20,8 +20,19 @@ const CHUNK_SIZE = 200;
 // Build-time-baked folder links (see build/plugins/folderAssets) look like
 // %%BLOT_CDN%%/folder/v-<hash>/<blogID>/photo.jpg. Drop the token, version
 // and blog ID so queries like "cdn" or "folder" don't match every post
-// while filename searches still hit the remaining /photo.jpg.
-const BAKED_PREFIX_REGEX = /%%BLOT_CDN%%\/folder\/v-[a-f0-9]+\/[^/"'\s]+/g;
+// while filename searches still hit the remaining /photo.jpg. The path is
+// percent-encoded (see encodeFolderPath), so decode it for the same reason.
+const BAKED_LINK_REGEX = /%%BLOT_CDN%%\/folder\/v-[a-f0-9]+\/[^/"'\s]+([^"'\s]*)/g;
+
+function stripBakedPrefix(html) {
+  return html.replace(BAKED_LINK_REGEX, (match, path) => {
+    try {
+      return decodeURIComponent(path);
+    } catch (err) {
+      return path;
+    }
+  });
+}
 
 function buildSearchText(entry) {
   return [
@@ -29,7 +40,7 @@ function buildSearchText(entry) {
     entry.permalink,
     entry.tags.join(" "),
     entry.path,
-    entry.html.replace(BAKED_PREFIX_REGEX, ""),
+    stripBakedPrefix(entry.html),
     Object.values(entry.metadata).join(" ")
   ].join(" ").toLowerCase();
 }

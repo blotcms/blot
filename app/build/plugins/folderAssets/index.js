@@ -13,6 +13,7 @@ const {
   htmlExtRegex,
   fileExtRegex,
   parseSrcset,
+  encodeFolderPath,
 } = require("blog/render/replaceFolderLinks/shared");
 
 const ATTRS = ["href", "src", "poster"];
@@ -195,7 +196,12 @@ async function bakeValue(ctx, value, resolveRelative) {
   // decides instead of keeping a URL for a now-missing versioned file.
   addDependency(ctx, pathPartOf(raw));
 
-  return wasBaked ? raw : null;
+  if (!wasBaked) return null;
+
+  // raw came out of unwrapFolderLink decoded, so re-encode its path: a
+  // literal space would split a srcset candidate. lookupFile decodes it.
+  const pathPart = pathPartOf(raw);
+  return encodeFolderPath(pathPart) + raw.slice(pathPart.length);
 }
 
 // An entry is always rebuilt when its own file changes, and (like
@@ -273,7 +279,7 @@ async function resolveBuildFile(ctx, value, alreadyDecoded) {
   const { path: resolvedPath, version } = file;
 
   return {
-    url: `${BLOT_CDN_TOKEN}/folder/v-${version}/${blogID}${resolvedPath}${query}${hash_}`,
+    url: `${BLOT_CDN_TOKEN}/folder/v-${version}/${blogID}${encodeFolderPath(resolvedPath)}${query}${hash_}`,
     path: resolvedPath,
   };
 }

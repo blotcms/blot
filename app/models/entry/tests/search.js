@@ -42,6 +42,20 @@ describe("entry.search", function () {
     done();
   });
 
+  it("matches the decoded file name of a baked folder link, not its prefix", async function (done) {
+    const fs = require("fs-extra");
+    const path = "/post.txt";
+
+    fs.outputFileSync(this.blogDirectory + "/Café pic.jpg", "image");
+    const entry = await this.set(path, "![](Café%20pic.jpg)");
+
+    expect(entry.html).toContain("Caf%C3%A9%20pic.jpg");
+    expect((await this.search("café pic.jpg")).map((r) => r.id)).toEqual([path]);
+    expect(await this.search("folder")).toEqual([]);
+
+    done();
+  });
+
   it("works with two entries", async function (done) {
     const path1 = "/post.txt";
     const contents1 = `Custom: Metadata hello!

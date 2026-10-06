@@ -32,4 +32,12 @@ const parseSrcset = (value) => {
   return parsed;
 };
 
-module.exports = { htmlExtRegex, fileExtRegex, parseSrcset };
+// Folder URLs (%%BLOT_CDN%%/folder/v-<version>/<blogID><path>) are built
+// from the decoded, case-corrected path on disk, so percent-encode each
+// segment: a literal space would split a srcset candidate (or an unquoted
+// CSS url()) in two, and a literal '%', '#' or '?' would be misread by the
+// browser or the CDN route. unwrapFolderLink.js decodes it again.
+const encodeFolderPath = (path) =>
+  path.split("/").map(encodeURIComponent).join("/");
+
+module.exports = { htmlExtRegex, fileExtRegex, parseSrcset, encodeFolderPath };

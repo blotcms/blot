@@ -10,6 +10,7 @@ const {
   isReservedStaticPath,
 } = require("../../lib/staticPaths");
 const BLOT_CDN_TOKEN = require("./cdnToken");
+const { encodeFolderPath } = require("./shared");
 
 class Cache {
   constructor() {
@@ -101,7 +102,7 @@ async function lookupFile(blogID, cacheID, value) {
 
       // we need to include the path in the result since if there is a case-sensitive
       // issue, the path will be different after resolution
-      result = `v-${version}/${blogID}${path}`;
+      result = `v-${version}/${blogID}${encodeFolderPath(path)}`;
 
       pathCache.set(key, result);
     } catch (err) {
