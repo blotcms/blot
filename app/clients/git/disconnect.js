@@ -1,10 +1,35 @@
 var fs = require("fs-extra");
 var localPath = require("helper/localPath");
 var Blog = require("models/blog");
+var User = require("models/user");
 var Git = require("simple-git");
 var debug = require("debug")("blot:clients:git:disconnect");
 var database = require("./database");
 var dataDir = require("./dataDir");
+
+// The git token is account-wide: every site the owner has connected to
+// git shares it, so it can only be flushed with the owner's last git site.
+function flushTokenIfUnused(blog, callback) {
+  User.getById(blog.owner, function (err, user) {
+    if (err) return callback(err);
+
+    var otherBlogIDs = ((user && user.blogs) || []).filter(function (id) {
+      return id !== blog.id;
+    });
+
+    (function next() {
+      var id = otherBlogIDs.shift();
+
+      if (!id) return database.flush(blog.owner, callback);
+
+      Blog.get({ id: id }, function (err, otherBlog) {
+        if (err) return callback(err);
+        if (otherBlog && otherBlog.client === "git") return callback();
+        next();
+      });
+    })();
+  });
+}
 
 // Called when the user disconnects the client
 // This may occur when the
@@ -31,7 +56,7 @@ module.exports = function disconnect(blogID, callback) {
 
       database.removeStatus(blog.id, function (err) {
         if (err) return callback(err);
-        database.flush(blog.owner, function (err) {
+        flushTokenIfUnused(blog, function (err) {
           if (err) return callback(err);
 
           // Remove the bare git repo in /repos
