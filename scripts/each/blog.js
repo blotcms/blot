@@ -13,6 +13,9 @@ module.exports = function (doThis, allDone, options) {
   Blog.getAllIDs(function (err, blogIDs) {
     if (err || !blogIDs) throw err || "No";
 
+    // SMEMBERS order isn't stable, so sort to make -s/-e mean the same thing on every run.
+    blogIDs.sort();
+
     if (options.r) {
       console.log("Reversing the order of the blogs...");
       blogIDs = blogIDs.reverse();
