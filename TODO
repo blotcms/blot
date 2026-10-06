@@ -121,6 +121,10 @@ Fix performance bugs on various sites:
 - anchor and re-enable site
 - nashp (improve speed)
 - jaysjay (especially archives)
+  - entry pages take ~3.8s on every render, warm or cold: ~1000 Redis commands / 18MB per render while loading entries (render-probe, 2026-10-06)
+- heydingus /search 0.5-0.8s warm (search_results reads ~10MB per query); its template emits `…/null` links that crawlers 404 on
+- blot.im /questions pages 250-750ms, mostly I/O (elu 0.2-0.4), incl. 302s from /questions/:id/edit
+- replaceFolderLinks looks up `mailto:` links as folder files (`No file found in folder: mailto:…`); skip non-path schemes
 - using additional req trace logging and more possible LRU caching
 - do we need a seperate incrementally updated index of skinny entry properties, e.g. title url etc for rendering archives / allEntries?
 
@@ -133,6 +137,7 @@ Fix benchmark build-corpus action issue
 ---
 
 Improve Google Drive sync
+- Ack changes.watch webhooks before syncing: routes/site.js awaits the sync, so every webhook ends 499 at ~8.8s when Google hangs up
 - Fix bug with repeat resyncs of specific sites via Google Drive:
   - To identify, run node scripts/google-drive/resync.js multiple times, some sites continually resync the same files...
   - Mark's site unneccessarily re-downloads some (all?) files on sync rather than using the correct hash and tell [Mark](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTVmrvkvcfPvcJhcLvrwSndWS)
