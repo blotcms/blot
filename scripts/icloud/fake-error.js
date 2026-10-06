@@ -11,6 +11,7 @@
 // restores the row so you can run the next mode. Pass --keep to leave the
 // state in place and look at it on the dashboard.
 
+const config = require("config");
 const client = require("models/client");
 const database = require("clients/icloud/database");
 const { BLOG_DIRECTORY_DELETED } = require("clients/icloud/error");
@@ -70,6 +71,12 @@ const MODES = {
   },
 };
 
+// This overwrites a real blog's iCloud row, so it is for local development
+if (config.environment !== "development") {
+  console.error("scripts/icloud/fake-error.js only runs in development");
+  process.exit(1);
+}
+
 const [command, ...args] = process.argv.slice(2);
 const positional = args.filter((arg) => !arg.startsWith("--"));
 
@@ -112,33 +119,35 @@ async function run(mode, blogID, keep) {
 
   console.log("Mode:", mode, "-", MODES[mode].expect);
 
-  // Start from a clear error so errorSince is stamped fresh
-  await database.store(blogID, { error: null });
-  await database.store(blogID, MODES[mode].fields);
+  try {
+    // Start from a clear error so errorSince is stamped fresh
+    await database.store(blogID, { error: null });
+    await database.store(blogID, MODES[mode].fields);
 
-  if (MODES[mode].dropCode) {
-    await client.hDel(database._key(blogID), ["errorCode", "errorSince"]);
-  }
+    if (MODES[mode].dropCode) {
+      await client.hDel(database._key(blogID), ["errorCode", "errorSince"]);
+    }
 
-  const after = await database.get(blogID);
-  console.log(
-    "row:",
-    JSON.stringify({
-      setupComplete: after.setupComplete,
-      acceptedSharingLink: after.acceptedSharingLink,
-      transferringToiCloud: after.transferringToiCloud,
-      error: after.error,
-      errorCode: after.errorCode,
-      errorSince: after.errorSince,
-    })
-  );
-  await health(blogID);
-
-  if (keep) {
-    console.log("Left the resulting state in place (--keep).");
-  } else {
-    await restore(blogID, before);
-    console.log("Restored the original iCloud row.");
+    const after = await database.get(blogID);
+    console.log(
+      "row:",
+      JSON.stringify({
+        setupComplete: after.setupComplete,
+        acceptedSharingLink: after.acceptedSharingLink,
+        transferringToiCloud: after.transferringToiCloud,
+        error: after.error,
+        errorCode: after.errorCode,
+        errorSince: after.errorSince,
+      })
+    );
+    await health(blogID);
+  } finally {
+    if (keep) {
+      console.log("Left the resulting state in place (--keep).");
+    } else {
+      await restore(blogID, before);
+      console.log("Restored the original iCloud row.");
+    }
   }
 }
 

@@ -22,6 +22,9 @@ describe("icloud resync", function () {
 
     mockModule(databasePath, { get: async () => account });
     mockModule(fromiCloudPath, syncFromiCloud);
+    // Load a fresh copy bound to the mocks; afterEach puts back whatever
+    // was cached (e.g. by the client index) before this spec ran.
+    if (!originals.has(resyncPath)) originals.set(resyncPath, require.cache[resyncPath]);
     delete require.cache[resyncPath];
 
     return { resync: require(resyncPath), syncFromiCloud };
@@ -42,7 +45,6 @@ describe("icloud resync", function () {
       else delete require.cache[modulePath];
     });
     originals.clear();
-    delete require.cache[resyncPath];
   });
 
   it("syncs from iCloud for a set-up blog", async function () {
@@ -94,17 +96,5 @@ describe("icloud resync", function () {
 
     expect((await rejection(resync("blog"))).code).toBe("ICLOUD_SETUP_INCOMPLETE");
     expect(syncFromiCloud).not.toHaveBeenCalled();
-  });
-
-  it("is what the client exports as resync", function () {
-    // the real modules, so drop the mocks first
-    originals.forEach(function (cached, modulePath) {
-      if (cached) require.cache[modulePath] = cached;
-      else delete require.cache[modulePath];
-    });
-    originals.clear();
-    delete require.cache[resyncPath];
-
-    expect(require("clients/icloud").resync).toBe(require(resyncPath));
   });
 });

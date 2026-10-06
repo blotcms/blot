@@ -31,7 +31,7 @@ The architecture separates concerns:
 
 - `error.js` - Typed error state. Codes written at the source: `SOURCE_MISSING` (macserver watcher: shared folder deleted), `TRANSFER_INCOMPLETE` (initial transfer to iCloud failed) and `SETUP_FAILED` (the sharing link was never accepted; the only code that is not a health code). Also infers a code for rows written without one, and holds the backfill patch.
 
-- `getHealth.js` - Returns the shared client health object (`app/clients/health.js`) for a blog. `SOURCE_MISSING` and `TRANSFER_INCOMPLETE` are issues. Setup in progress is `syncing`. Setup failures are not health issues: the dashboard shows them with retry/cancel. The issue clears when the stored error is cleared (setup retry, successful transfer, a successful `fromiCloud` walk of a set-up blog, disconnect).
+- `getHealth.js` - Returns the shared client health object (`app/clients/health.js`) for a blog. `SOURCE_MISSING` and `TRANSFER_INCOMPLETE` are issues. Setup in progress is `syncing`. Setup failures are not health issues: the dashboard shows them with retry/cancel. The issue clears when the stored error is cleared (setup retry, successful transfer, a successful `fromiCloud` walk of a set-up blog other than for `SOURCE_MISSING` or an error recorded mid-walk, disconnect).
 
 - `resync.js` - The client's `resync`. Refuses (with a `code` the dashboard recognises) when the folder was deleted or the initial transfer hasn't finished, since resyncing would remove local files iCloud doesn't have; otherwise runs `sync/fromiCloud.js`.
 
@@ -287,7 +287,7 @@ Calling `await done()` releases the lock. If the lock expires during an operatio
 
 ## Error Handling
 
-Errors are stored in the database as `error` (text), `errorCode` and `errorSince` (see `error.js`). Persistent problems the user must act on appear through `getHealth`; setup failures appear in the client's own dashboard view. Transient failures stay in the sync status log. The error is cleared by retrying setup, a successful initial transfer, and a successful `fromiCloud` walk of a set-up blog.
+Errors are stored in the database as `error` (text), `errorCode` and `errorSince` (see `error.js`). Persistent problems the user must act on appear through `getHealth`; setup failures appear in the client's own dashboard view. Transient failures stay in the sync status log. The error is cleared by retrying setup, a successful initial transfer, and a successful `fromiCloud` walk of a set-up blog (never `SOURCE_MISSING`, nor an error recorded mid-walk).
 
 The macserver failure flow:
 1. If macserver becomes unavailable, file operations fail.

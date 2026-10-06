@@ -52,7 +52,9 @@ function inferCode(account) {
 // The code for the stored error, including SETUP_FAILED, or null when the
 // account has no error.
 function resolveCode(account) {
-  if (!account || (!account.error && !account.errorCode)) return null;
+  // A stray errorCode with no error is left by a writer that cleared only
+  // `error` (an older process during a deploy): there is no error.
+  if (!account || !account.error) return null;
   if (isKnownCode(account.errorCode)) return account.errorCode;
   return inferCode(account);
 }
@@ -128,7 +130,7 @@ function shouldSkipBackgroundSync(account) {
 }
 
 function isSetupInProgress(account) {
-  if (!account || account.error || account.errorCode) return false;
+  if (!account || account.error) return false;
   if (account.transferringToiCloud === true) return true;
   return account.setupComplete !== true && Boolean(account.sharingLink);
 }

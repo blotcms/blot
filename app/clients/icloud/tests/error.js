@@ -91,6 +91,21 @@ describe("icloud error classification", function () {
     expect(isSetupError({ error: null, errorCode: null })).toBe(false);
   });
 
+  it("treats a leftover errorCode with no error as no error", function () {
+    // an older process during a deploy can clear only `error`
+    const account = {
+      setupComplete: true,
+      error: null,
+      errorCode: health.CODES.SOURCE_MISSING,
+      errorSince: 100,
+    };
+
+    expect(resolveCode(account)).toBeNull();
+    expect(classify(account)).toBeNull();
+    expect(resolveIssue(account)).toBeNull();
+    expect(isSetupError({ error: "", errorCode: SETUP_FAILED })).toBe(false);
+  });
+
   it("clears every error field when error is null", function () {
     expect(normalizeErrorFields({ error: null }, { error: "x" })).toEqual({
       error: null,
@@ -204,6 +219,14 @@ describe("icloud error classification", function () {
         error: "Invalid sharing link",
       })
     ).toBe(false);
+    expect(
+      isSetupInProgress({
+        setupComplete: false,
+        sharingLink: "https://www.icloud.com/iclouddrive/abc",
+        error: null,
+        errorCode: health.CODES.SOURCE_MISSING,
+      })
+    ).toBe(true);
     expect(isSetupInProgress({ setupComplete: true })).toBe(false);
     expect(
       isSetupInProgress({ setupComplete: true, transferringToiCloud: true })

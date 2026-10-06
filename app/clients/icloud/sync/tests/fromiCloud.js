@@ -182,7 +182,9 @@ describe("icloud fromiCloud sync", function () {
       store,
       get: async () => ({
         setupComplete: true,
-        error: "Blog directory deleted",
+        error: "Something unexpected",
+        errorCode: "SYNC_ERROR",
+        errorSince: Date.now() - 60 * 1000,
       }),
     });
 
@@ -190,6 +192,43 @@ describe("icloud fromiCloud sync", function () {
     await fromiCloud(blogID, () => {}, async () => {});
 
     expect(store).toHaveBeenCalledWith(blogID, { error: null });
+  });
+
+  async function storeCallsForWalk(account) {
+    const store = jasmine.createSpy("store").and.returnValue(Promise.resolve());
+
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => []);
+    mockModule(downloadPath, async () => {});
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, { store, get: async () => account });
+
+    const fromiCloud = require(fromiCloudPath);
+    await fromiCloud(blogID, () => {}, async () => {});
+
+    return store;
+  }
+
+  it("does not clear SOURCE_MISSING after a successful walk", async () => {
+    const store = await storeCallsForWalk({
+      setupComplete: true,
+      error: "Blog directory deleted",
+      errorCode: "SOURCE_MISSING",
+      errorSince: Date.now() - 60 * 1000,
+    });
+
+    expect(store).not.toHaveBeenCalled();
+  });
+
+  it("does not clear an error recorded after the walk began", async () => {
+    const store = await storeCallsForWalk({
+      setupComplete: true,
+      error: "Something unexpected",
+      errorCode: "SYNC_ERROR",
+      errorSince: Date.now() + 1000,
+    });
+
+    expect(store).not.toHaveBeenCalled();
   });
 
   it("does not clear a stored error when setup is incomplete", async () => {
