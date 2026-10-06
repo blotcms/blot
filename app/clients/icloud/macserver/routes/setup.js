@@ -230,7 +230,8 @@ export default async (req, res) => {
       return reportStatus({
         acceptedSharingLink: false,
         error: error.message,
-        errorCode: "SYNC_ERROR",
+        // Not a health issue: the dashboard shows it with retry/cancel
+        errorCode: "SETUP_FAILED",
       });
     });
 

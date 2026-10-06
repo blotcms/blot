@@ -1,7 +1,19 @@
-// Typed error helpers for the iCloud client. The dashboard historically
-// stored a free-text `error` string; health reporting needs a stable code.
-// Writers should pass `errorCode` when they know it. `store()` also
-// classifies legacy strings so getHealth works before a backfill.
+// Typed error state for the iCloud client. The dashboard historically stored
+// a free-text `error` string; health reporting needs a stable code, so every
+// writer now records `errorCode` beside it (and `errorSince`, kept in step by
+// database.store()). Writers that can't require this file - the macserver is
+// a separate ESM process - post the same string literals.
+//
+//   SOURCE_MISSING        macserver watcher: the shared folder was deleted
+//   TRANSFER_INCOMPLETE   sync/initialTransfer.js: copying Blot's files into
+//                         iCloud failed after the folder was accepted
+//   SETUP_FAILED          macserver/routes/setup.js and routes/dashboard.js:
+//                         the sharing link was never accepted
+//
+// SETUP_FAILED is the one code that is not a health code. As with Google
+// Drive, a failed setup isn't a sync problem the user can be told about by
+// the badge: nothing was connected yet. The dashboard shows it itself, with
+// retry/cancel (views/index.html), so getHealth reports nothing for it.
 
 const health = require("../health");
 
@@ -9,35 +21,61 @@ const health = require("../health");
 // Keep this string stable: existing Redis rows and the watcher still use it.
 const BLOG_DIRECTORY_DELETED = "Blog directory deleted";
 
-function classifyError(message) {
-  if (message === BLOG_DIRECTORY_DELETED) {
+const SETUP_FAILED = "SETUP_FAILED";
+
+function isKnownCode(code) {
+  return (
+    code === SETUP_FAILED ||
+    (typeof code === "string" &&
+      Object.prototype.hasOwnProperty.call(health.CODES, code))
+  );
+}
+
+// The code for an account whose error was written without one: rows from
+// before errorCode existed, and status posts from a macserver that hasn't
+// been redeployed. Only the watcher's sentinel is recognisable by text. For
+// anything else, where the account got to tells us which stage failed: after
+// setup the shared folder exists, and acceptedSharingLink (stored from the
+// macserver's status post) means setup got as far as the transfer.
+function inferCode(account) {
+  if (account.error === BLOG_DIRECTORY_DELETED) {
     return health.CODES.SOURCE_MISSING;
   }
-  return health.CODES.SYNC_ERROR;
+
+  if (account.setupComplete === true) return health.CODES.SYNC_ERROR;
+
+  return account.acceptedSharingLink === true
+    ? health.CODES.TRANSFER_INCOMPLETE
+    : SETUP_FAILED;
 }
 
+// The code for the stored error, including SETUP_FAILED, or null when the
+// account has no error.
 function resolveCode(account) {
-  if (account && account.errorCode && health.CODES[account.errorCode]) {
-    return account.errorCode;
-  }
-  return classifyError(account && account.error);
+  if (!account || (!account.error && !account.errorCode)) return null;
+  if (isKnownCode(account.errorCode)) return account.errorCode;
+  return inferCode(account);
 }
 
-// Turns a stored account record into a health issue, or null if there isn't
-// a persistent user-actionable error. Setup/in-progress flags are not issues.
-function resolveIssue(account) {
-  if (!account || (!account.error && !account.errorCode)) {
-    return null;
-  }
-
+// The health code for the stored error, or null when there is nothing to
+// report: no error, or a setup failure (see above).
+function classify(account) {
   const code = resolveCode(account);
-  const issue = { code };
+  return code === SETUP_FAILED ? null : code;
+}
 
-  // SOURCE_MISSING uses the shared default copy. Other codes keep the
-  // recorded message so setup/transfer failures stay specific.
-  if (code !== health.CODES.SOURCE_MISSING && account.error) {
-    issue.message = String(account.error);
-  }
+function isSetupError(account) {
+  return resolveCode(account) === SETUP_FAILED;
+}
+
+// Turns a stored account record into a health issue, or null. The message is
+// left to the shared copy: the raw error can be an HTTP failure naming the
+// macserver, and it is still in the sync status log.
+function resolveIssue(account) {
+  const code = classify(account);
+  if (!code) return null;
+
+  const issue = { code };
 
   if (typeof account.errorSince === "number" && isFinite(account.errorSince)) {
     issue.since = account.errorSince;
@@ -46,25 +84,28 @@ function resolveIssue(account) {
   return issue;
 }
 
+// The error / errorCode / errorSince fields database.store() writes for
+// `data`. `current` is the stored row, so a repeat write of the same code
+// keeps its errorSince and a different code starts a new one.
 function normalizeErrorFields(data, current) {
   if (!data.error) {
     return { error: null, errorCode: null, errorSince: null };
   }
 
-  const code =
-    data.errorCode && health.CODES[data.errorCode]
-      ? data.errorCode
-      : classifyError(data.error);
+  const code = isKnownCode(data.errorCode)
+    ? data.errorCode
+    : inferCode(Object.assign({}, current, data));
 
-  const sameIssue =
-    current &&
-    (current.error || current.errorCode) &&
-    resolveCode(current) === code;
+  const currentCode = resolveCode(current);
 
   let errorSince;
   if (typeof data.errorSince === "number" && isFinite(data.errorSince)) {
     errorSince = data.errorSince;
-  } else if (sameIssue && typeof current.errorSince === "number") {
+  } else if (
+    currentCode === code &&
+    typeof current.errorSince === "number" &&
+    isFinite(current.errorSince)
+  ) {
     errorSince = current.errorSince;
   } else {
     errorSince = Date.now();
@@ -92,32 +133,23 @@ function isSetupInProgress(account) {
   return account.setupComplete !== true && Boolean(account.sharingLink);
 }
 
-function backfillFields(account) {
+// Returns a patch to write, or null when the row already matches. Only the
+// code: errorSince is when we noticed, which the backfill can't know.
+function backfillPatch(account) {
   if (!account || !account.error) return null;
-  if (
-    account.errorCode &&
-    health.CODES[account.errorCode] &&
-    typeof account.errorSince === "number"
-  ) {
-    return null;
-  }
-  return normalizeErrorFields(
-    {
-      error: account.error,
-      errorCode: account.errorCode,
-      errorSince: account.errorSince,
-    },
-    account
-  );
+  if (isKnownCode(account.errorCode)) return null;
+  return { errorCode: inferCode(account) };
 }
 
 module.exports = {
   BLOG_DIRECTORY_DELETED,
-  classifyError,
+  SETUP_FAILED,
+  classify,
   resolveCode,
   resolveIssue,
+  isSetupError,
   normalizeErrorFields,
   shouldSkipBackgroundSync,
   isSetupInProgress,
-  backfillFields,
+  backfillPatch,
 };

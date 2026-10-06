@@ -65,7 +65,7 @@ describe("icloud database", function () {
   it("clears errorCode and errorSince when error is null", async function () {
     await database.store(this.blog.id, {
       setupComplete: true,
-      error: "Transfer failed",
+      error: "Blog directory deleted",
     });
 
     await database.store(this.blog.id, { error: null });
@@ -77,18 +77,64 @@ describe("icloud database", function () {
     expect(stored.errorSince).toBeNull();
   });
 
-  it("preserves errorSince when rewriting the same issue", async function () {
+  it("stores the code written at the source", async function () {
+    await database.store(this.blog.id, {
+      setupComplete: false,
+      error: "Invalid sharing link",
+      errorCode: "SETUP_FAILED",
+    });
+    expect((await database.get(this.blog.id)).errorCode).toBe("SETUP_FAILED");
+
+    await database.store(this.blog.id, {
+      error: "Request failed",
+      errorCode: "TRANSFER_INCOMPLETE",
+    });
+    expect((await database.get(this.blog.id)).errorCode).toBe(
+      "TRANSFER_INCOMPLETE"
+    );
+  });
+
+  it("classifies an error posted without a code from the stored row", async function () {
+    await database.store(this.blog.id, { setupComplete: false });
+    await database.store(this.blog.id, {
+      acceptedSharingLink: false,
+      error: "Invalid sharing link",
+    });
+
+    expect((await database.get(this.blog.id)).errorCode).toBe("SETUP_FAILED");
+  });
+
+  it("preserves errorSince when rewriting the same code", async function () {
     await database.store(this.blog.id, {
       setupComplete: true,
-      error: "Transfer failed",
+      error: "Blog directory deleted",
     });
     const first = await database.get(this.blog.id);
 
-    await database.store(this.blog.id, { error: "Transfer failed again" });
+    await database.store(this.blog.id, {
+      error: "Blog directory deleted",
+      errorCode: "SOURCE_MISSING",
+    });
     const second = await database.get(this.blog.id);
 
-    expect(second.errorCode).toBe("SYNC_ERROR");
+    expect(second.errorCode).toBe("SOURCE_MISSING");
     expect(second.errorSince).toBe(first.errorSince);
-    expect(second.error).toBe("Transfer failed again");
+  });
+
+  it("resets errorSince when the code changes", async function () {
+    await database.store(this.blog.id, {
+      setupComplete: true,
+      error: "Blog directory deleted",
+      errorSince: 1000,
+    });
+
+    await database.store(this.blog.id, {
+      error: "Transfer failed",
+      errorCode: "TRANSFER_INCOMPLETE",
+    });
+    const stored = await database.get(this.blog.id);
+
+    expect(stored.errorCode).toBe("TRANSFER_INCOMPLETE");
+    expect(stored.errorSince).toBeGreaterThan(1000);
   });
 });

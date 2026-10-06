@@ -7,6 +7,7 @@ const syncFromiCloud = require("./fromiCloud");
 const resolveCaseConflicts = require("./resolveCaseConflicts");
 const establishSyncLock = require("sync/establishSyncLock");
 const fetch = require("../util/rateLimitedFetchWithRetriesAndTimeout");
+const health = require("clients/health");
 
 module.exports = async function initialTransfer(blogID) {
   // establish sync lock
@@ -58,7 +59,7 @@ module.exports = async function initialTransfer(blogID) {
     await database.store(blogID, {
       transferringToiCloud: false,
       error: error?.message || String(error),
-      errorCode: "SYNC_ERROR",
+      errorCode: health.CODES.TRANSFER_INCOMPLETE,
     });
     throw error;
   } finally {

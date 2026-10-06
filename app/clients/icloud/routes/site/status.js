@@ -121,8 +121,9 @@ module.exports = async function (req, res) {
       return handle("Error in initialTransfer", err);
     }
   } else if (status.error) {
-    // The macserver reported a setup failure (e.g. an invalid sharing link, or
-    // the shared folder never appeared). The error is already persisted by the
+    // The macserver reported an error: a setup failure (e.g. an invalid
+    // sharing link, or the shared folder never appeared) or the shared folder
+    // being deleted. The error is already persisted, with its code, by the
     // database.store() call above, which drives the dashboard error UI; here we
     // also push it onto the live status line. Reply before taking the sync lock
     // so we never hold the macserver's status request open while it waits on us.
@@ -133,7 +134,10 @@ module.exports = async function (req, res) {
 
       try {
         folder.status("Error: " + status.error);
-        console.log("Setup failed", { blogID, error: status.error });
+        console.log("Error reported by macserver", {
+          blogID,
+          error: status.error,
+        });
       } finally {
         await done();
       }

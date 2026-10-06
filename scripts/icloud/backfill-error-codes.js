@@ -1,63 +1,99 @@
+// Classify existing iCloud blog rows that only have a prose `error` string,
+// writing a machine-readable `errorCode` so getHealth does not have to infer
+// it from the row. getHealth infers the same code for rows without one, so
+// running this is optional; it just makes the stored state explicit.
+//
+// Usage:
+//   node scripts/icloud/backfill-error-codes.js            # prompts
+//   node scripts/icloud/backfill-error-codes.js --dry-run  # report only
+//   node scripts/icloud/backfill-error-codes.js --yes      # no prompt
+
+const colors = require("colors/safe");
 const database = require("clients/icloud/database");
-const { backfillFields } = require("clients/icloud/error");
+const { backfillPatch } = require("clients/icloud/error");
+const getConfirmation = require("../util/getConfirmation");
 
-const apply = process.argv.includes("--apply");
+async function collectPatches() {
+  const patches = [];
 
-const main = async () => {
-  let examined = 0;
-  let wouldUpdate = 0;
-  let updated = 0;
-  let skipped = 0;
+  await database.iterate(async function (blogID, account) {
+    const patch = backfillPatch(account);
+    if (!patch) return;
+    patches.push({ blogID: blogID, patch: patch, error: account.error });
+  });
 
-  await database.iterate(async (blogID, account) => {
-    examined++;
-    const fields = backfillFields(account);
+  return patches;
+}
 
-    if (!fields) {
-      skipped++;
-      return;
-    }
+async function main() {
+  const args = process.argv.slice(2);
+  const dryRun = args.includes("--dry-run");
+  const skipConfirmation = args.includes("--yes");
 
-    wouldUpdate++;
+  const patches = await collectPatches();
+
+  if (!patches.length) {
+    console.log(colors.green("No iCloud blog rows need an errorCode backfill."));
+    return;
+  }
+
+  patches.forEach(function (item) {
     console.log(
-      apply ? "UPDATE" : "DRY-RUN",
-      blogID,
-      JSON.stringify({
-        error: account.error,
-        errorCode: account.errorCode || null,
-        nextErrorCode: fields.errorCode,
-      })
+      item.blogID,
+      JSON.stringify(item.patch),
+      item.error ? JSON.stringify(item.error) : ""
     );
-
-    if (apply) {
-      await database.store(blogID, fields);
-      updated++;
-    }
   });
 
   console.log(
-    "iCloud error-code backfill",
-    JSON.stringify({
-      examined,
-      skipped,
-      wouldUpdate,
-      updated: apply ? updated : 0,
-      apply,
-    })
+    colors.cyan(
+      `Found ${patches.length} blog${patches.length === 1 ? "" : "s"} to update.`
+    )
   );
 
-  if (!apply && wouldUpdate > 0) {
-    console.log("Re-run with --apply to write errorCode / errorSince.");
+  if (dryRun) {
+    console.log(colors.yellow("Dry run: no rows written."));
+    return;
   }
-};
+
+  if (!skipConfirmation) {
+    const confirmed = await getConfirmation(
+      `Write errorCode onto ${patches.length} iCloud blog row${
+        patches.length === 1 ? "" : "s"
+      }?`
+    );
+
+    if (!confirmed) {
+      console.log(colors.yellow("Aborted without writing any rows."));
+      return;
+    }
+  }
+
+  // Rows can change while the operator reads the report (e.g. a user
+  // reconnects), so recompute each patch against the current row.
+  for (const item of patches) {
+    const patch = backfillPatch(await database.get(item.blogID));
+    if (!patch) {
+      console.log("skipped (changed since scan)", item.blogID);
+      continue;
+    }
+    // No `error` key, so store() writes the patch as is
+    await database.store(item.blogID, patch);
+    console.log("updated", item.blogID);
+  }
+
+  console.log(colors.green("Backfill complete."));
+}
 
 if (require.main === module) {
   main()
-    .then(() => process.exit(0))
-    .catch((error) => {
-      console.error("Failed to backfill iCloud error codes:", error);
+    .then(function () {
+      process.exit(0);
+    })
+    .catch(function (err) {
+      console.error(err);
       process.exit(1);
     });
 }
 
-module.exports = main;
+module.exports = { collectPatches, main };

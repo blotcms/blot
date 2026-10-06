@@ -66,11 +66,12 @@ describe("icloud getHealth", function () {
     expect(result.issues[0].since).toBeUndefined();
   });
 
-  it("reports SYNC_ERROR with the recorded setup or transfer message", async function () {
+  it("reports TRANSFER_INCOMPLETE when the initial transfer failed", async function () {
     await database.store(this.blog.id, {
       setupComplete: false,
       sharingLink: "https://www.icloud.com/iclouddrive/abc",
-      error: "Invalid sharing link",
+      error: "Request failed after 3 retries: http://macserver/upload",
+      errorCode: health.CODES.TRANSFER_INCOMPLETE,
     });
 
     const result = await getHealth(this.blog.id);
@@ -78,10 +79,46 @@ describe("icloud getHealth", function () {
     expect(result.state).toBe(health.STATES.ERROR);
     expect(result.issues[0]).toEqual(
       jasmine.objectContaining({
-        code: health.CODES.SYNC_ERROR,
-        message: "Invalid sharing link",
+        code: health.CODES.TRANSFER_INCOMPLETE,
+        message: health.ISSUES.TRANSFER_INCOMPLETE.message,
       })
     );
+  });
+
+  it("does not report a failed setup as a health issue", async function () {
+    await database.store(this.blog.id, {
+      setupComplete: false,
+      sharingLink: "https://www.icloud.com/iclouddrive/abc",
+      error: "Invalid sharing link",
+      errorCode: "SETUP_FAILED",
+    });
+
+    expect(await getHealth(this.blog.id)).toEqual(health.ok());
+  });
+
+  it("does not report a setup failure from a macserver that sends no code", async function () {
+    await database.store(this.blog.id, {
+      setupComplete: false,
+      sharingLink: "https://www.icloud.com/iclouddrive/abc",
+    });
+    // as posted by routes/site/status.js
+    await database.store(this.blog.id, {
+      acceptedSharingLink: false,
+      error: "Invalid sharing link",
+    });
+
+    expect(await getHealth(this.blog.id)).toEqual(health.ok());
+  });
+
+  it("reports SYNC_ERROR for an unrecognised error on a set-up blog", async function () {
+    await database.store(this.blog.id, {
+      setupComplete: true,
+      error: "Something unexpected",
+    });
+
+    const result = await getHealth(this.blog.id);
+
+    expect(result.issues[0].code).toBe(health.CODES.SYNC_ERROR);
   });
 
   it("clears the issue once the stored error is removed", async function () {
@@ -93,5 +130,21 @@ describe("icloud getHealth", function () {
 
     await database.store(this.blog.id, { error: null });
     expect(await getHealth(this.blog.id)).toEqual(health.ok());
+  });
+
+  it("is syncing, not an error, when setup is retried after the folder went missing", async function () {
+    await database.store(this.blog.id, {
+      setupComplete: true,
+      error: BLOG_DIRECTORY_DELETED,
+    });
+
+    // routes/dashboard.js /set-up-folder
+    await database.store(this.blog.id, {
+      sharingLink: "https://www.icloud.com/iclouddrive/new",
+      error: null,
+      setupComplete: false,
+    });
+
+    expect(await getHealth(this.blog.id)).toEqual(health.syncing());
   });
 });
