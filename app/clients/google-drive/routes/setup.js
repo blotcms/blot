@@ -1,5 +1,10 @@
 const resetFromBlot = require("../sync/resetToDrive");
 const database = require("../database");
+const {
+  SETUP_ERROR,
+  clearAllErrorFields,
+  clearHealthErrorFields,
+} = require("../database/error");
 const clfdate = require("helper/clfdate");
 const config = require("config");
 
@@ -107,6 +112,7 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
       folderName,
       nonEmptyFolderShared: false,
       nonEditorPermissions: false,
+      ...clearAllErrorFields(),
     });
 
     await checkWeCanContinue();
@@ -119,7 +125,7 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
   } catch (e) {
     console.log(clfdate(), "Google Drive Client", e);
 
-    let error = "Failed to set up account";
+    let error = SETUP_ERROR;
 
     if (e.message === "Email changed") {
       // don't store this error, the user is changing their email
@@ -139,6 +145,7 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
         error,
         folderId: null,
         folderName: null,
+        ...clearHealthErrorFields(),
       });
     }
   } finally {

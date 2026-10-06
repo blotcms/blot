@@ -2,14 +2,20 @@
 
 <div class="inset">
 
+{{#folderLost}}
+<p class="error">{{account.error}}</p>
+<p>Confirm your Google Drive account below, then share a new, empty folder with Blot. Blot will copy your site's files into it, so nothing is lost.</p>
+{{/folderLost}}
+{{^folderLost}}
 <p>Enter the email for your Google Drive account to link your folder.</p>
+{{/folderLost}}
 
   <form class="dashboard-form" action="{{{base}}}/set-up-folder" method="post">
     <input type="hidden" name="_csrf" value="{{csrftoken}}">
     <label for="email">Google Drive account:</label>
     <input type="text" name="email" value="{{suggestedEmail}}">
     <div class="buttons">
-      <button type="submit">Add email</button>
+      <button type="submit">{{#folderLost}}Continue{{/folderLost}}{{^folderLost}}Add email{{/folderLost}}</button>
       {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
       {{#blog.client}}<button type="submit" name="cancel" value="true">Cancel</button>{{/blog.client}}
     </div>

@@ -27,6 +27,7 @@ The module exports the following properties via `/Volumes/Blot/blot/app/clients/
 - `site_routes` — Express router for site-level webhooks and endpoints.
 - `dashboard_routes` — Express router for dashboard pages.
 - `init` — Initialization function called on server startup.
+- `getHealth(blogID)` — Returns the shared client health object for this blog. Folder trash/delete/unshare is `SOURCE_MISSING`. Setup-in-progress is `syncing`. Setup failures and transient Drive errors are not health issues.
 
 ## Core Architecture
 
@@ -99,6 +100,7 @@ Persistent state management layer:
 - `index.js` — Exports blog, serviceAccount, channel, and folder modules.
 - `prefix.js` — Defines the Redis key prefix for all Google Drive data.
 - `blog.js` — Blog account records: folder ID, service account ID, sync state, error messages.
+- `error.js` — Typed sync-health error codes (`errorCode` / `errorSince`) stored beside the prose `error` field, plus classifiers for Drive API failures and legacy prose-only rows.
 - `folder.js` — File ID ↔ path mappings for a Google Drive folder.
 - `channel.js` — Webhook channel lifecycle: create, store, list, delete.
 - `serviceAccount.js` — Service account metadata: storage quota, client ID.
@@ -244,3 +246,7 @@ Run tests with your normal test runner; consult individual test files for setup 
 - **Post-Sync Fix**: Calls `sync/fix` after sync completes to validate blog state.
 - **Webhooks**: Registers routes in the main Express app via `site_routes` and `dashboard_routes`.
 - **Service Account Selection**: Consulted by blog setup and write operations to choose where to store new content.
+
+## Testing error states locally
+
+`scripts/google-drive/fake-error.js` answers the folder lookup with a chosen Drive error (trashed, deleted, forbidden, rate limits, quota, ...) via `scripts/development/fake-google-drive-errors.js`, so `sync`, the classifier and `getHealth` run for real. Run `node scripts/google-drive/fake-error.js modes` for the list; `run <mode> <blogID>` syncs a connected blog, prints the resulting health, and restores the row.

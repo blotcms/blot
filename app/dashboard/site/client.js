@@ -14,6 +14,10 @@ const fetch = require("node-fetch");
 const notifyAdminIfResyncFoundChanges = require("./notifyResyncFoundChanges");
 
 const { promisify } = require("util");
+const RESYNC_REFUSALS = [
+  "DROPBOX_TRANSFER_INCOMPLETE",
+  "GOOGLE_DRIVE_FOLDER_MISSING",
+];
 const getStatuses = promisify(Blog.getStatuses);
 
 // So the breadcrumbs look like: Settings > Client
@@ -202,12 +206,14 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
     } catch (err) {
       console.log("ERROR:", err);
 
-      // A client can refuse to resync when it isn't safe to (currently just
-      // the Dropbox client, via clients/dropbox/resync.js, while its initial
-      // transfer to Dropbox hasn't finished). Surface that refusal instead of
-      // falling through to Fix() and "Finished site rebuild" below, which
-      // would make the refusal look like a successful resync.
-      if (err && err.code === "DROPBOX_TRANSFER_INCOMPLETE") {
+      // A client can refuse to resync when it isn't safe or possible to:
+      // Dropbox while its initial transfer to Dropbox hasn't finished
+      // (clients/dropbox/sync/reset-to-blot.js), Google Drive when its
+      // folder was trashed, deleted or unshared
+      // (clients/google-drive/sync/resetFromDrive.js). Surface that refusal
+      // instead of falling through to Fix() and "Finished site rebuild"
+      // below, which would make the refusal look like a successful resync.
+      if (err && RESYNC_REFUSALS.includes(err.code)) {
         // done() publishes "Synced" before calling back, so re-publish the
         // refusal afterwards to make it the final status the user sees.
         const refusal = err.message;
