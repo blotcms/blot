@@ -4,6 +4,9 @@ var client = require("models/client");
 var Blog = require("models/blog");
 var dependentsKey = Entry.key.dependents;
 var dependentsExactCaseKey = Entry.key.dependentsExactCase;
+var templateKey = require("models/template/key");
+var templateDependentsKey = templateKey.templateDependents;
+var templateManifestsPendingKey = templateKey.templateManifestsPending;
 const clfdate = require("helper/clfdate");
 var Preview = require("./preview");
 var isHidden = require("build/prepare/isHidden");
@@ -22,7 +25,8 @@ var NO_LONGER_VALID_ERRORS = [
 // The purpose of this module is to rebuild any
 // entries already in the user's folder which depend
 // on the contents of this particular file which was
-// just changed or removed.
+// just changed or removed, and to mark any template which
+// links to it for a CDN manifest update at the end of the sync.
 
 module.exports = function (blogID, path, callback) {
   const log = function () {
@@ -91,7 +95,13 @@ module.exports = function (blogID, path, callback) {
               });
             });
           },
-          callback
+          function (err) {
+            if (err) return callback(err);
+
+            markTemplateDependents(blog.id, path, log).then(function () {
+              callback();
+            });
+          }
         );
       } catch (err) {
         callback(err);
@@ -99,6 +109,29 @@ module.exports = function (blogID, path, callback) {
     })();
   });
 };
+
+// Templates link to files in the blog's folder with {{#cdn}} (wrapped at
+// save time by models/template/util/resolveFolderLinks). Their CDN manifest
+// holds each file's versioned URL, so when the file changes, appears or goes
+// away the manifest has to be regenerated. That is expensive (every folder
+// target is re-hashed and CSS views are re-rendered), so it is not done per
+// file: the templates are only marked as pending here, and sync/index.js
+// regenerates each once when the sync finishes (see
+// regenerateTemplateManifests), where the blog's cacheID is also bumped.
+// Errors are logged and never fail the sync of the file itself.
+async function markTemplateDependents(blogID, path, log) {
+  try {
+    const templateIDs = await client.sMembers(
+      templateDependentsKey(blogID, path)
+    );
+
+    if (templateIDs && templateIDs.length) {
+      await client.sAdd(templateManifestsPendingKey(blogID), templateIDs);
+    }
+  } catch (err) {
+    log("Error marking template dependents", err);
+  }
+}
 
 function shouldDropDependent(err) {
   if (!err) return false;

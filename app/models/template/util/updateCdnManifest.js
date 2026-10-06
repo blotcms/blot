@@ -12,6 +12,14 @@ const purgeCdnUrls = require("helper/purgeCdnUrls");
 const path = require("path");
 const fs = require("fs-extra");
 const config = require("config");
+const parseTemplate = require("../parseTemplate");
+const resolveFolderLinks = require("./resolveFolderLinks");
+const pathNormalizer = require("helper/pathNormalizer");
+const { hashFolderFile } = require("blog/render/replaceFolderLinks/folderFile");
+const {
+  GLOBAL_STATIC_DIR,
+  isReservedStaticPath,
+} = require("blog/lib/staticPaths");
 
 // Promisify callback-based functions
 const getMetadataAsync = promisify(getMetadata);
@@ -79,6 +87,176 @@ function isValidTarget(target) {
   }
 
   return true;
+}
+
+// A {{#cdn}} target can also be a file in the owner blog's folder, e.g.
+// {{#cdn}}/images/a.png{{/cdn}}, whether the author wrote it or setView wrapped
+// a literal link (util/resolveFolderLinks). Targets that name a view stay
+// views - a template's own rendered output wins over a folder file of the same
+// name. Wrapped links never resolve to a view: the author didn't ask for a
+// snapshot of /feed.rss or /script.js, they just linked to it, so those are
+// only ever looked up in the folder.
+//
+// A folder target's manifest entry is { path, version }: path is the file's
+// real (case-corrected) path, version a hash of its content, from which
+// retrieve/cdn.js builds %%BLOT_CDN%%/folder/v-<version>/<blogID><path> - the
+// URL entries and the request-time pass use. Reserved global paths (/fonts,
+// /katex, ...) are served from Blot's own static directory, have no version,
+// and so no version in the entry. A view's entry stays a plain hash string, so
+// existing manifests are valid as they are.
+//
+// A target whose file doesn't exist has no entry (the helper leaves the link
+// as written) but is still a dependency of the template, so the file being
+// created later regenerates the manifest. See key.templateDependents.
+async function viewExists(templateID, target) {
+  try {
+    return !!(await getViewAsync(templateID, target));
+  } catch (err) {
+    const isNonFatalError =
+      err.code === "ENOENT" ||
+      (err.message && err.message.includes("No view:"));
+
+    if (isNonFatalError) return false;
+
+    throw err;
+  }
+}
+
+function collectTargets(views) {
+  const explicit = new Set();
+  const wrapped = new Set();
+  const fallbacks = {};
+
+  const add = (set, target) => {
+    if (typeof target === "string" && target.trim() && isValidTarget(target.trim())) {
+      set.add(target.trim());
+    }
+  };
+
+  for (const viewName in views) {
+    const view = views[viewName];
+
+    if (view?.retrieve?.cdn && Array.isArray(view.retrieve.cdn)) {
+      view.retrieve.cdn.forEach((target) => add(explicit, target));
+    }
+
+    // Targets setView wrapped around literal folder links live only in the
+    // resolved copy of the view, not in view.retrieve.cdn (which is derived
+    // from what the author wrote).
+    if (typeof view?.resolvedContent === "string") {
+      const parsed = parseTemplate(view.resolvedContent);
+
+      ((parsed.retrieve && parsed.retrieve.cdn) || []).forEach((target) =>
+        add(wrapped, target)
+      );
+
+      Object.assign(fallbacks, resolveFolderLinks.rootFallbacks(view.resolvedContent));
+    }
+  }
+
+  // A target the author also wrote by hand is treated as the author's
+  wrapped.forEach((target) => {
+    if (explicit.has(target)) wrapped.delete(target);
+  });
+
+  return { explicit, wrapped, fallbacks };
+}
+
+function normalizeDependency(filePath) {
+  return pathNormalizer(filePath).toLowerCase();
+}
+
+// Looks up one candidate path ("images/a.png?x=1") for a folder target.
+// Returns { requested, entry }: the path asked for (a dependency whether or
+// not it exists) and its manifest entry, or null if there is no such file.
+async function resolveFolderCandidate(blogFolder, candidate) {
+  const cut = candidate.search(/[?#]/);
+  let filePath = cut === -1 ? candidate : candidate.slice(0, cut);
+
+  if (filePath.includes("%")) {
+    try {
+      filePath = decodeURIComponent(filePath);
+    } catch (err) {
+      // e.g. '100% luck.jpg' is malformed - use it as written
+    }
+  }
+
+  const requested = path.posix.resolve("/", filePath);
+
+  if (isReservedStaticPath(requested)) {
+    try {
+      await fs.stat(path.join(GLOBAL_STATIC_DIR, requested));
+      return { requested, entry: { path: requested } };
+    } catch (err) {
+      // not a global static file - it may still be one in the blog's folder
+    }
+  }
+
+  const file = await hashFolderFile(blogFolder, requested);
+
+  return {
+    requested,
+    entry: file ? { path: file.path, version: file.version } : null,
+  };
+}
+
+async function resolveFolderTargets(blogID, targets, fallbacks) {
+  const blogFolder = path.join(config.blog_folder_dir, blogID);
+  const entries = {};
+  const dependencies = new Set();
+
+  for (const target of targets) {
+    // A CSS view's relative links are recorded with the root-relative path
+    // they used to resolve to; it is only used if the browser-correct one is
+    // missing (see resolveFolderLinks).
+    const candidates = [target];
+
+    if (fallbacks[target] && fallbacks[target] !== target) {
+      candidates.push(fallbacks[target]);
+    }
+
+    for (const candidate of candidates) {
+      try {
+        const { requested, entry } = await resolveFolderCandidate(
+          blogFolder,
+          candidate
+        );
+
+        dependencies.add(normalizeDependency(requested));
+
+        if (entry) {
+          entries[target] = entry;
+          break;
+        }
+      } catch (err) {
+        console.error(`Error resolving folder target ${candidate}:`, err);
+      }
+    }
+  }
+
+  return { entries, dependencies };
+}
+
+// Brings the reverse index (key.templateDependents) in line with the files
+// this template now depends on. Every current dependency is (re)added, not
+// just new ones, so the index repairs itself if it was ever lost.
+async function updateDependencyIndex(templateID, blogID, previous, current) {
+  const next = Array.from(current).sort();
+  const nextSet = new Set(next);
+  const removed = (previous || []).filter((file) => !nextSet.has(file));
+
+  if (!next.length && !removed.length && !(previous || []).length) return;
+
+  const multi = client.multi();
+
+  next.forEach((file) => multi.sAdd(key.templateDependents(blogID, file), templateID));
+  removed.forEach((file) => multi.sRem(key.templateDependents(blogID, file), templateID));
+
+  await multi.exec();
+
+  if (JSON.stringify(next) !== JSON.stringify(previous || [])) {
+    await hsetAsync(key.metadata(templateID), "fileDependencies", JSON.stringify(next));
+  }
 }
 
 /**
@@ -239,28 +417,76 @@ module.exports = function updateCdnManifest(templateID, callback) {
           await cleanupOldHash(target, oldManifest[target]);
         }
 
+        await updateDependencyIndex(
+          templateID,
+          metadata.owner,
+          metadata.fileDependencies,
+          []
+        );
+
         return callback(null, {});
       }
 
-      // Get all views and collect CDN targets from their retrieve.cdn arrays
+      // Get all views and collect their CDN targets
       const views = await getAllViewsAsync(templateID);
-      const allTargets = new Set();
-      
-      for (const viewName in views) {
-        const view = views[viewName];
-        if (view?.retrieve?.cdn && Array.isArray(view.retrieve.cdn)) {
-          view.retrieve.cdn.forEach((target) => {
-            if (typeof target === "string" && target.trim() && isValidTarget(target.trim())) {
-              allTargets.add(target.trim());
-            }
-          });
+      const { explicit, wrapped, fallbacks } = collectTargets(views);
+
+      const sortedTargets = [];
+      const folderTargets = new Set(wrapped);
+
+      for (const target of Array.from(explicit).sort()) {
+        if (await viewExists(templateID, target)) {
+          sortedTargets.push(target);
+        } else {
+          folderTargets.add(target);
         }
       }
 
-      const sortedTargets = Array.from(allTargets).sort();
       const manifest = {};
-      const inProgressManifest = Object.assign({}, oldManifest);
+      const inProgressManifest = {};
+
+      // Rendered views keep their previous hash until they are re-rendered
+      for (const target in oldManifest) {
+        if (typeof oldManifest[target] === "string") {
+          inProgressManifest[target] = oldManifest[target];
+        }
+      }
+
+      // Folder files go first, and are saved before any view is rendered:
+      // renderView reads the manifest back from Redis, so a stylesheet that
+      // links to /images/a.png renders with its new URL and gets a new hash
+      // when the image changes.
+      const folder = await resolveFolderTargets(
+        metadata.owner,
+        Array.from(folderTargets).sort(),
+        fallbacks
+      );
+
+      for (const target of folderTargets) {
+        if (folder.entries[target]) {
+          manifest[target] = folder.entries[target];
+          inProgressManifest[target] = folder.entries[target];
+        } else {
+          delete inProgressManifest[target];
+        }
+      }
+
       metadata.cdn = inProgressManifest;
+
+      if (JSON.stringify(inProgressManifest) !== JSON.stringify(oldManifest)) {
+        await hsetAsync(
+          key.metadata(templateID),
+          "cdn",
+          JSON.stringify(inProgressManifest)
+        );
+      }
+
+      await updateDependencyIndex(
+        templateID,
+        metadata.owner,
+        metadata.fileDependencies,
+        folder.dependencies
+      );
 
       // Process each target sequentially
       for (const target of sortedTargets) {
@@ -307,7 +533,7 @@ module.exports = function updateCdnManifest(templateID, callback) {
 
       // Clean up rendered outputs for targets that were removed entirely
       for (const target in oldManifest) {
-        if (!manifest.hasOwnProperty(target)) {
+        if (typeof manifest[target] !== "string") {
           // Run cleanup in background - don't await
           cleanupOldHash(target, oldManifest[target]).catch(err => {
             // Error already logged in cleanupOldHash, but catch to prevent unhandled rejection

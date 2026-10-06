@@ -31,23 +31,35 @@ describe("cdn template function", function () {
     validate(await this.text("/"));
   });
 
-  it("returns the contents of the block as-is for missing views", async function () {
+  it("returns an absolute URL on the blog's host for a missing rooted target", async function () {
     await this.template({
-      "entries.html": "{{#cdn}}/style.css{{/cdn}}",
+      "entries.html": "{{{blog.url}}}|{{#cdn}}/style.css{{/cdn}}",
     });
 
-    expect(await this.text("/")).toBe("/style.css");
+    const [blogURL, missing] = (await this.text("/")).split("|");
+
+    expect(blogURL).toMatch(/^https?:\/\//);
+    expect(missing).toBe(blogURL + "/style.css");
   });
 
-  it("gracefully handles a single missing view", async function () {
+  it("returns the contents of the block as-is for a missing target without a leading slash", async function () {
     await this.template({
-      "entries.html": "{{#cdn}}/missing.css{{/cdn}}|{{#cdn}}/style.css{{/cdn}}",
+      "entries.html": "{{#cdn}}style.css{{/cdn}}|{{#cdn}}missing.css{{/cdn}}",
+    });
+
+    expect(await this.text("/")).toBe("style.css|missing.css");
+  });
+
+  it("gracefully handles a single missing view (absolute URL on the blog's host)", async function () {
+    await this.template({
+      "entries.html":
+        "{{{blog.url}}}|{{#cdn}}/missing.css{{/cdn}}|{{#cdn}}/style.css{{/cdn}}",
       "style.css": "body{color:#000}",
     });
 
-    const [invalidURL, validURL] = (await this.text("/")).split("|");
+    const [blogURL, invalidURL, validURL] = (await this.text("/")).split("|");
 
-    expect(invalidURL).toBe("/missing.css");
+    expect(invalidURL).toBe(blogURL + "/missing.css");
     validate(validURL);
   });
 

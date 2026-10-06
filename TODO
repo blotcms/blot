@@ -275,7 +275,6 @@ Fix bug with placeholder files when switching clients which will lead to data lo
 
 Fix bug with the paypal next bill dates are not syncing correctly for some users (e.g.slopserve)
 
-Fix bug with CDN replaceFolder not working with relative path to CSS file on wall.blot.im
 
 Fix bug with huge draft crashing the sync server
 - /a327ex/drafts/it_follows.txt

@@ -58,7 +58,9 @@ All state is stored in Redis. There is no relational database or document store 
 | `util/serialize.js` | Converts `object` and `array` typed fields in a model instance to JSON strings before writing to Redis hashes. |
 | `util/deserialize.js` | Converts JSON-stringified and boolean fields back to their native types after reading from Redis hashes, and drops the retired `isPublic` field. Other undeclared fields, including a view's legacy `type`, are kept. |
 | `util/generateCdnUrl.js` | Constructs a CDN URL for a rendered view asset given a view name and content hash. Uses a three-level directory structure derived from the first four characters of the hash. |
-| `util/updateCdnManifest.js` | Recomputes the CDN manifest for a template: renders each view that declares a `retrieve.cdn` target, hashes the output, stores the result on disk and in Redis, cleans up stale hashes, and writes the updated manifest into the template's metadata. Skips SITE-owned templates and templates not currently installed on their owner blog. |
+| `util/updateCdnManifest.js` | Recomputes the CDN manifest for a template: resolves `{{#cdn}}` targets that are files in the owner blog's folder, renders each view that is a `{{#cdn}}` target, hashes the output, stores the result on disk and in Redis, cleans up stale hashes, and writes the updated manifest into the template's metadata. Also maintains the reverse index of the folder files the template depends on. Skips SITE-owned templates and templates not currently installed on their owner blog. |
+| `util/resolveFolderLinks.js` | Pure, Mustache-aware scanner that wraps literal links to the blog's folder files in a view's content in `{{#cdn}}...{{/cdn}}`. Called by `setView` to produce `resolvedContent`. |
+| `util/renderSource.js` | Picks the text a view is rendered from: `resolvedContent` when the rendering blog owns the template, otherwise `content`. Used by `getFullView` and `getPartials`. |
 | `util/forkSiteTemplate.js` | Creates a blog-owned copy of a SITE-owned template. If an existing fork already exists, it returns that fork's ID without duplicating. Handles name deduplication for repeated calls. |
 
 ### `tests/` subdirectory
@@ -87,7 +89,8 @@ Stored as a Redis hash at key `template:{id}:info`.
 | `localEditing` | boolean | Whether this template is managed from a folder on disk. |
 | `thumb` | string | URL or path to a thumbnail image. |
 | `locals` | object | Template-level custom locals injected into every view render. |
-| `cdn` | object | Map of view name to content hash for CDN-cached rendered assets. |
+| `cdn` | object | The CDN manifest: map of `{{#cdn}}` target to either a content hash string (a rendered view) or `{ path, version }` (a file in the owner blog's folder). |
+| `fileDependencies` | array | Lowercased folder paths the manifest depends on, found or not. Mirrors the reverse index, so stale entries can be removed. |
 
 Object and array fields are JSON-serialized before storage.
 
@@ -99,6 +102,7 @@ Stored as a Redis hash at key `template:{id}:view:{viewName}`.
 |-------|------|-------------|
 | `name` | string | File name of the view (e.g. `"index.html"`). Cannot start with `.` or contain `/` or `\`. |
 | `content` | string | Raw Mustache template content. Must be valid Mustache. Maximum serialized payload 2 MB. |
+| `resolvedContent` | string | Derived by `setView`, never accepted from a caller: `content` with literal links to the blog's folder files wrapped in `{{#cdn}}`. Only stored for blog-owned templates, and only when it differs from `content`. Used as the render source; everything else reads `content`. |
 | `partials` | object | Map of partial name to inline partial content or `null` for template-view references. |
 | `locals` | object | View-level locals merged with template-level locals at render time. |
 | `retrieve` | object | Descriptor of data to fetch before rendering, computed by `parseTemplate`. Includes a `cdn` array of static asset targets. |
@@ -279,6 +283,7 @@ Defined in `key.js`:
 | `template:{id}:url:{url}` | string | View name associated with a specific URL |
 | `template:share:{shareID}` | string | Template ID associated with a share token |
 | `template:owned_by:{blogID}` | set | IDs of all templates owned by a blog |
+| `blog:{blogID}:template_dependents:{path}` | set | IDs of the blog's templates whose CDN manifest depends on a file in the blog's folder (`path` is normalized and lowercased). Read by `sync/update/rebuildDependents`. |
 | `cdn:rendered:{hash}` | string | Rendered and optionally minified asset content (Redis, kept for backward compatibility alongside on-disk storage) |
 
 ---
@@ -299,6 +304,18 @@ When a view or metadata is saved, `util/updateCdnManifest` runs:
 8. Writes the updated `{target → hash}` manifest into `metadata.cdn`.
 
 The CDN URL format is `{cdn.origin}/template/{h[0:2]}/{h[2:4]}/{h[4:]}/{basename}`.
+
+### Folder files
+
+A `{{#cdn}}` target that doesn't name a view is looked up as a file in the owner blog's folder (case-insensitively, percent-decoded). Its manifest entry is `{ path, version }` - the file's real path and a hash of its content - and `blog/render/retrieve/cdn.js` renders it as `%%BLOT_CDN%%/folder/v-{version}/{blogID}{path}`, the same URL entries get when they are built (`%%BLOT_CDN%%` becomes the real CDN origin in `blog/render/middleware.js`). Reserved global paths (`/fonts`, `/icons`, ...) have no version and render as `%%BLOT_CDN%%{path}`. A view's entry is still a plain hash string, so older manifests stay valid. Folder files are resolved, and the manifest saved, before any view is rendered, so a stylesheet that links to an image gets a new hash when the image changes.
+
+Authors rarely write these targets: `setView` wraps literal links (`href`, `src`, `poster`, `srcset`, `<meta content>`, and CSS `url()` in CSS views, `<style>` blocks and `style` attributes) for them and stores the result as the view's `resolvedContent`, which is what gets rendered. The wrapped targets are read back from `resolvedContent` each time the manifest is built, so they never go stale in `view.retrieve.cdn`, which only holds what the author wrote (plus an empty `cdn: []` so the `{{#cdn}}` helper loads). On a miss (no manifest entry) a rooted path such as `/a.png` renders as the blog's absolute URL (`blog.url` + path, what `{{blog.url}}` renders), so it can't end up resolving against the CDN origin; view names are returned as written. A wrapped link never resolves to a view - `<link href="/feed.rss">` stays a plain link even though a view has that name - only a target the author wrote by hand does. The request-time pass in `blog/render/replaceFolderLinks` still runs over every page as a safety net for links that cannot be wrapped (inline partials, links assembled from locals, SITE templates).
+
+Relative links: an HTML view has no single URL, so a relative link resolves against `/`. A CSS view resolves relative `url()` values against the directory of its URL, as a browser would, and records the root-relative path in a `{{!root-fallback:...}}` Mustache comment next to the wrapper; the manifest uses it if the browser-correct file is missing, so stylesheets that only worked through the old root-relative behaviour keep working.
+
+### Dependency index
+
+Every folder path a template's manifest looked at - including files that don't exist yet - is stored in `blog:{blogID}:template_dependents:{lowercased path}` (and in `metadata.fileDependencies`, to diff against next time). When a file changes, appears or is deleted, `sync/update/rebuildDependents` adds every template in that set to a per-blog pending set (`blog:{blogID}:template_manifests_pending`); `sync/index.js` regenerates each pending manifest once at the end of the sync, before its usual `cacheID` bump. The index is removed when a link goes away, when the template is no longer installed, and by `drop`.
 
 ---
 
@@ -342,7 +359,7 @@ The CDN URL format is `{cdn.origin}/template/{h[0:2]}/{h[2:4]}/{h[4:]}/{basename
 - Template names are truncated to 100 characters; derived slugs are truncated to 30 characters.
 - `getMultipleViews` fetches views in parallel and silently discards errors for individual missing views.
 - `setMultipleViews` also runs in parallel; if any view fails, the error from the last failure is reported.
-- CDN manifest computation is skipped for SITE-owned templates. SITE templates do not participate in the CDN pipeline.
+- CDN manifest computation is skipped for SITE-owned templates. SITE templates do not participate in the CDN pipeline, and their views have no `resolvedContent` (they render for many blogs, so links can't be resolved against one blog's folder).
 - CDN manifest is also skipped for templates not currently installed on their owner blog, and the existing manifest is cleared in that case.
 - `readFromFolder` skips files larger than 2.5 MB.
 - `injectLocals` mutates the `locals` object in-place and suppresses errors internally.

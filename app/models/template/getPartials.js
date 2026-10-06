@@ -4,6 +4,7 @@ var ensure = require("helper/ensure");
 var promisify = require("util").promisify;
 var parseTemplate = require("./parseTemplate");
 var mergeRetrieve = require("./util/mergeRetrieve");
+var renderSource = require("./util/renderSource");
 
 module.exports = function getPartials(
   blogID,
@@ -164,7 +165,7 @@ module.exports = function getPartials(
         if (partial.charAt(0) !== "/") {
           getView(templateID, partial, function (err, view) {
             if (view) {
-              allPartials[partial] = view.content;
+              allPartials[partial] = renderSource(view, blogID, templateID);
 
               inheritedContexts.forEach(function (contextPath) {
                 if (!contextPath) {

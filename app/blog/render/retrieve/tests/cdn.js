@@ -144,5 +144,125 @@ describe("cdn", function () {
       done();
     });
   });
+
+  describe("folder files", function () {
+    beforeEach(function () {
+      this.request.blog = { id: this.blog.id };
+      this.request.template.id = this.blog.id + ":custom";
+      this.request.template.cdn = {
+        "images/a.png": { path: "/images/A.png", version: "deadbeef" },
+        "images/a.png?v=2#top": { path: "/images/A.png", version: "deadbeef" },
+        "icons/search.svg": { path: "/icons/search.svg" },
+        "style.css": "abc123def456ghi789jkl012mno345pq",
+      };
+    });
+
+    it("returns a versioned folder URL using the file's real path", function (done) {
+      var blogID = this.blog.id;
+
+      cdn(this.request, {}, function (err, lambda) {
+        expect(mustache.render("{{#cdn}}/images/a.png{{/cdn}}", { cdn: lambda })).toBe(
+          "%%BLOT_CDN%%/folder/v-deadbeef/" + blogID + "/images/A.png"
+        );
+        done();
+      });
+    });
+
+    it("keeps the query string and hash of the link", function (done) {
+      var blogID = this.blog.id;
+
+      cdn(this.request, {}, function (err, lambda) {
+        expect(
+          mustache.render("{{#cdn}}/images/a.png?v=2#top{{/cdn}}", { cdn: lambda })
+        ).toBe("%%BLOT_CDN%%/folder/v-deadbeef/" + blogID + "/images/A.png?v=2#top");
+        done();
+      });
+    });
+
+    it("returns an unversioned URL for a reserved global path", function (done) {
+      cdn(this.request, {}, function (err, lambda) {
+        expect(mustache.render("{{#cdn}}/icons/search.svg{{/cdn}}", { cdn: lambda })).toBe(
+          "%%BLOT_CDN%%/icons/search.svg"
+        );
+        done();
+      });
+    });
+
+    it("still returns view URLs", function (done) {
+      cdn(this.request, {}, function (err, lambda) {
+        expect(mustache.render("{{#cdn}}/style.css{{/cdn}}", { cdn: lambda })).toContain(
+          "/template/"
+        );
+        done();
+      });
+    });
+
+    it("leaves a folder file that isn't in the manifest as written", function (done) {
+      cdn(this.request, {}, function (err, lambda) {
+        expect(mustache.render("{{#cdn}}/images/b.png{{/cdn}}", { cdn: lambda })).toBe(
+          "/images/b.png"
+        );
+        done();
+      });
+    });
+
+    it("keeps a missing rooted path on the blog's own host", function (done) {
+      this.request.blog.url = "https://example.blot.im";
+
+      cdn(this.request, {}, function (err, lambda) {
+        expect(mustache.render("{{#cdn}}/images/b.png?v=1{{/cdn}}", { cdn: lambda })).toBe(
+          "https://example.blot.im/images/b.png?v=1"
+        );
+        done();
+      });
+    });
+
+    it("renders the same host as {{blog.url}}", function (done) {
+      var Blog = require("models/blog");
+      var blog = Blog.extend(Object.assign({}, this.blog));
+
+      this.request.blog = blog;
+
+      cdn(this.request, {}, function (err, lambda) {
+        expect(mustache.render("{{#cdn}}/b.png{{/cdn}}", { cdn: lambda })).toBe(
+          mustache.render("{{{blog.url}}}/b.png", { blog: blog })
+        );
+        done();
+      });
+    });
+
+    it("leaves a missing view name and a protocol-relative link as written", function (done) {
+      this.request.blog.url = "https://example.blot.im";
+
+      cdn(this.request, {}, function (err, lambda) {
+        expect(mustache.render("{{#cdn}}missing.css{{/cdn}}", { cdn: lambda })).toBe("missing.css");
+        expect(mustache.render("{{#cdn}}//other.com/a.png{{/cdn}}", { cdn: lambda })).toBe("//other.com/a.png");
+        done();
+      });
+    });
+
+    it("does not make a missing path absolute on preview subdomains", function (done) {
+      this.request.preview = true;
+      this.request.blog.url = "https://example.blot.im";
+
+      cdn(this.request, {}, function (err, lambda) {
+        expect(mustache.render("{{#cdn}}/images/b.png{{/cdn}}", { cdn: lambda })).toBe(
+          "/images/b.png"
+        );
+        done();
+      });
+    });
+
+    it("skips folder URLs for preview subdomains", function (done) {
+      this.request.preview = true;
+
+      cdn(this.request, {}, function (err, lambda) {
+        expect(mustache.render("{{#cdn}}/images/a.png{{/cdn}}", { cdn: lambda })).toBe(
+          "/images/a.png"
+        );
+        done();
+      });
+    });
+  });
 });
 

@@ -161,6 +161,8 @@ Runs in series: `Ignored.drop` → `Entry.drop` → `rebuildDependents`. If the 
 
 Reads the Redis set at `Entry.key.dependents(blogID, path)`. For each dependent path, retrieves the entry, calls `build`, and calls `Entry.set(..., false)` (the `false` suppresses scheduled-post side effects).
 
+It then reads the set at `Template.key.templateDependents(blogID, path)` (the path is lowercased): the blog's templates whose CDN manifest resolves that file. They are only added to the blog's pending set (`Template.key.templateManifestsPending`); regenerating a manifest re-hashes every folder file it uses, so `sync/index.js` drains the set once, after `buildFromFolder` and before the lock is released, via `update/regenerateTemplateManifests` (one `updateCdnManifest` per template, errors logged and skipped). The blog's `cacheID` is bumped by the sync's usual end-of-sync bump. The set lives in Redis so a sync that dies part way leaves its templates for the next one.
+
 ### `update/drafts.js`
 
 An IIFE exposing:

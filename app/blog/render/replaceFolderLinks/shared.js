@@ -32,6 +32,32 @@ const parseSrcset = (value) => {
   return parsed;
 };
 
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Matches an absolute URL on one of the blog's own hosts
+// (https://blog.example.com/photo.jpg, //blog.example.com/photo.jpg), up to
+// the end of the host.
+const hostPatterns = (hosts) =>
+  (hosts || []).map(
+    (host) => new RegExp(`^(?:https?:)?//${escapeRegex(host)}(?=[/?#]|$)`, "i")
+  );
+
+// Strips the blog's own host from an absolute URL, leaving a path that is
+// then treated like any other folder-relative link. Returns the value
+// unchanged if it isn't on one of the blog's hosts.
+const stripOwnHost = (patterns, value) => {
+  for (const pattern of patterns) {
+    if (pattern.test(value)) return value.replace(pattern, "") || "/";
+  }
+  return value;
+};
+
+// The path of a link without its ?query or #hash.
+const pathPartOf = (value) => {
+  const cutIndex = value.search(/[#?]/);
+  return cutIndex === -1 ? value : value.slice(0, cutIndex);
+};
+
 // Folder URLs (%%BLOT_CDN%%/folder/v-<version>/<blogID><path>) are built
 // from the decoded, case-corrected path on disk, so percent-encode each
 // segment: a literal space would split a srcset candidate in two, a literal
@@ -61,10 +87,23 @@ const decodeFolderPath = (path) => {
   }
 };
 
+// A {{#cdn}} target the template parser and the manifest builder will accept
+// (no whitespace, backslash, NUL, braces, ".." segment or "//", and short
+// enough). Shared by util/resolveFolderLinks (which only wraps safe links)
+// and retrieve/cdn.js (which leaves unsafe targets exactly as written).
+const isSafeCdnTarget = (target) =>
+  typeof target === "string" &&
+  target.length <= 255 &&
+  !/[\s\\\0{}]|\.\.|\/\//.test(target);
+
 module.exports = {
+  isSafeCdnTarget,
   htmlExtRegex,
   fileExtRegex,
   parseSrcset,
+  hostPatterns,
+  stripOwnHost,
+  pathPartOf,
   encodeFolderPath,
   decodeFolderPath,
 };
