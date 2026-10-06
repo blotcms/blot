@@ -1,5 +1,6 @@
 var debug = require("debug")("blot:build:prepare:internalLinks");
 var unwrapFolderLink = require("../../blog/render/replaceFolderLinks/unwrapFolderLink");
+var decodeFolderPath = require("../../blog/render/replaceFolderLinks/shared").decodeFolderPath;
 
 // The purpose of this module is to take the HTML for
 // a given blog post and work out if any of the links
@@ -32,12 +33,14 @@ function internalLinks($, blogID) {
 		var unwrapped = unwrapFolderLink(value, blogID);
 
 		if (unwrapped !== null) {
-			normalizedValue = unwrapped;
+			// The baked path is percent-encoded, so drop the ?query/#hash
+			// before decoding it (a file name can contain an encoded '#').
+			normalizedValue = decodeFolderPath(unwrapped.split(/[?#]/)[0]);
 		} else if (value.indexOf("/") !== 0) {
 			return;
+		} else {
+			normalizedValue = normalizedValue.split("#")[0].split("?")[0];
 		}
-
-		normalizedValue = normalizedValue.split("#")[0].split("?")[0];
 
 		if (!normalizedValue || normalizedValue.indexOf("/") !== 0) return;
 		if (result.indexOf(normalizedValue) > -1) return;

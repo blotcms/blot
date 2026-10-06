@@ -17,6 +17,7 @@ var async = require("async");
 var caseSensitivePath = require("../caseSensitivePath");
 var he = require("he");
 var unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
+var decodeFolderPath = require("blog/render/replaceFolderLinks/shared").decodeFolderPath;
 
 // Maps https://cdn.blot.im/blog_xyz/_image_cache/abc.jpg to
 // /_image_cache/abc.jpg to enable us to look up the file quickly
@@ -49,9 +50,9 @@ function resolveFolderCDNPath(src, blogID) {
   if (unwrapped === null) return src;
 
   // unwrapFolderLink keeps any ?query/#hash, which aren't part of the
-  // file's path on disk.
+  // file's path on disk, and leaves the path percent-encoded.
   var cutIndex = unwrapped.search(/[?#]/);
-  return cutIndex === -1 ? unwrapped : unwrapped.slice(0, cutIndex);
+  return decodeFolderPath(cutIndex === -1 ? unwrapped : unwrapped.slice(0, cutIndex));
 }
 
 function Transformer(blogID, name) {

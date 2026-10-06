@@ -17,6 +17,8 @@ const {
   htmlExtRegex,
   fileExtRegex,
   parseSrcset,
+  encodeFolderPath,
+  decodeFolderPath,
 } = require("blog/render/replaceFolderLinks/shared");
 
 const ATTRS = ["href", "src", "poster"];
@@ -213,7 +215,7 @@ async function bakeValue(ctx, value, resolveRelative) {
 
   if (!isEligible(raw)) return null;
 
-  const result = await resolveBuildFile(ctx, raw, wasBaked);
+  const result = await resolveBuildFile(ctx, raw);
 
   if (result) {
     if (result.path) addDependency(ctx, result.path);
@@ -227,13 +229,10 @@ async function bakeValue(ctx, value, resolveRelative) {
   // was baked, drop back to the plain path so request-time resolution
   // decides instead of keeping a URL for a now-missing versioned file.
   //
-  // The path is decoded the way resolveBuildFile decodes it (unless it came
-  // from a baked link, which already holds the real path), because the file
-  // which arrives is "/my pic.jpg" and not "/my%20pic.jpg".
-  addDependency(
-    ctx,
-    wasBaked ? pathPartOf(raw) : decodeIfEncoded(pathPartOf(raw))
-  );
+  // The path is decoded the way resolveBuildFile decodes it (baked links
+  // hold an encoded path too), because the file which arrives is
+  // "/my pic.jpg" and not "/my%20pic.jpg".
+  addDependency(ctx, decodeFolderPath(pathPartOf(raw)));
 
   return wasBaked ? raw : null;
 }
@@ -248,17 +247,6 @@ function addDependency(ctx, path) {
   }
 
   ctx.dependencies.add(path);
-}
-
-// e.g. '100% luck.jpg' throws a URIError - the value is left unchanged then.
-function decodeIfEncoded(value) {
-  if (!value.includes("%")) return value;
-
-  try {
-    return decodeURIComponent(value);
-  } catch (err) {
-    return value;
-  }
 }
 
 async function rewriteSrcset(ctx, value) {
@@ -289,18 +277,19 @@ async function rewriteSrcset(ctx, value) {
 // the case-corrected file path, for recording as a dependency), or null
 // (ENOENT) if there's no matching file - mirroring
 // app/blog/render/replaceFolderLinks/lookupFile.js's "leave untouched"
-// behavior. alreadyDecoded is set for paths recovered from an
-// already-baked link, which hold the real (unencoded) file path.
-async function resolveBuildFile(ctx, value, alreadyDecoded) {
+// behavior.
+async function resolveBuildFile(ctx, value) {
   const { blogID, blogFolder } = ctx;
   const hashIndex = value.indexOf("#");
   const hash_ = hashIndex > -1 ? value.slice(hashIndex) : "";
   value = hashIndex > -1 ? value.slice(0, hashIndex) : value;
 
-  if (!alreadyDecoded) value = decodeIfEncoded(value);
-
-  const [pathFromValue, ...rest] = value.split("?");
+  // Split off the query before decoding, so an encoded '?' (or '#', above)
+  // in a file name stays part of the path. e.g. '100% luck.jpg' isn't valid
+  // percent-encoding, and is left unchanged.
+  const [encodedPath, ...rest] = value.split("?");
   const query = rest.length ? `?${rest.join("?")}` : "";
+  const pathFromValue = decodeFolderPath(encodedPath);
 
   // Checked after percent-decoding (e.g. /f%6Fnts). Mirrors lookupFile.js: a
   // file in the global static directory wins, otherwise the path is looked
@@ -310,7 +299,7 @@ async function resolveBuildFile(ctx, value, alreadyDecoded) {
     (await globalStaticFileExists(ctx, pathFromValue))
   ) {
     return {
-      url: `${BLOT_CDN_TOKEN}${value}${hash_}`,
+      url: `${BLOT_CDN_TOKEN}${encodeFolderPath(pathFromValue)}${query}${hash_}`,
       // Not a file in the blog's folder, so there is nothing to depend on.
       path: null,
     };
@@ -329,7 +318,7 @@ async function resolveBuildFile(ctx, value, alreadyDecoded) {
   const { path: resolvedPath, version } = file;
 
   return {
-    url: `${BLOT_CDN_TOKEN}/folder/v-${version}/${blogID}${resolvedPath}${query}${hash_}`,
+    url: `${BLOT_CDN_TOKEN}/folder/v-${version}/${blogID}${encodeFolderPath(resolvedPath)}${query}${hash_}`,
     path: resolvedPath,
   };
 }

@@ -123,6 +123,27 @@ describe("thumbnail", function () {
     });
   });
 
+  it("decodes a baked %%BLOT_CDN%% URL whose file name contains '#'", function (done) {
+    var thumbnail = require("../index");
+    var BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
+    var { encodeFolderPath } = require("blog/render/replaceFolderLinks/shared");
+    var imagePath = "/hero #1.jpg";
+    var html = `<img src="${BLOT_CDN_TOKEN}/folder/v-deadbeef/${this.blog.id}${encodeFolderPath(imagePath)}">`;
+
+    fs.copyFileSync(
+      __dirname + "/images/portrait.jpg",
+      localPath(this.blog.id, imagePath)
+    );
+
+    thumbnail(this.blog, "/post.txt", {}, html, function (err, result) {
+      expect(err).toBe(null);
+      expect(result).toEqual(jasmine.any(Object));
+      expect(result.small).toEqual(jasmine.any(Object));
+
+      done();
+    });
+  });
+
   it("ignores a query string or fragment on a baked %%BLOT_CDN%% URL", function (done) {
     var thumbnail = require("../index");
     var BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");

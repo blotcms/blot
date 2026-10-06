@@ -60,6 +60,15 @@ describe("internalLinks", function () {
     ).toEqual(["/target"]);
   });
 
+  it("decodes a baked link's path, keeping an encoded '#' in a file name", function () {
+    var blogID = "blog_abc123";
+    var baked = `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}/my%20post%231.txt?x=1#section`;
+
+    expect(
+      this.internalLinks(`<a href="${baked}">Post</a>`, blogID)
+    ).toEqual(["/my post#1.txt"]);
+  });
+
   it("ignores a baked link when no blogID is provided", function () {
     var baked = `${BLOT_CDN_TOKEN}/folder/v-deadbeef/blog_abc123/photo.jpg`;
 

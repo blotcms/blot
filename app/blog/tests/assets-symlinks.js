@@ -51,6 +51,13 @@ describe("blog asset symlink policy", function () {
       expect(await response.text()).toBe("Not Found");
     }
   });
+  it("serves percent-encoded CDN paths, as baked by encodeFolderPath", async function () {
+    const { encodeFolderPath } = require("../render/replaceFolderLinks/shared");
+    const name = "/folder/my pic, 100% #1.txt";
+    await fs.writeFile(path.join(dir, "blogs", "test", name), "encoded");
+    const response = await fetch(url + "/cdn/folder/v-1/test" + encodeFolderPath(name));
+    expect(await response.text()).toEqual("encoded");
+  });
   it("refuses direct and ancestor symlinks through every path fallback", async function () {
     for (const suffix of ["/link.txt", "/ancestor/file.txt", "/ANCESTOR/FILE.txt"]) {
       expect((await fetch(url + suffix)).status).toBe(404);

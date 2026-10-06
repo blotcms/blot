@@ -381,4 +381,67 @@ describe("folderAssets plugin", function () {
       });
     });
   });
+
+  it("percent-encodes the baked path so a space doesn't split a srcset candidate", function (done) {
+    var { parseSrcset } = require("blog/render/replaceFolderLinks/shared");
+    var path = "/Hello.txt";
+    var contents = '<img src="/my pic.jpg" srcset="/my%20pic.jpg 1x, /big%20pic.jpg 2x">';
+
+    fs.outputFileSync(this.blogDirectory + path, contents);
+    fs.outputFileSync(this.blogDirectory + "/my pic.jpg", "small");
+    fs.outputFileSync(this.blogDirectory + "/big pic.jpg", "big");
+
+    build(this.blog, path, function (err, entry) {
+      if (err) return done.fail(err);
+
+      var srcset = entry.html.match(/srcset="([^"]*)"/)[1];
+      var candidates = parseSrcset(srcset);
+
+      expect(candidates.length).toEqual(2);
+      expect(candidates[0].url).toMatch(tokenRegex("/my%20pic\\.jpg$"));
+      expect(candidates[0].descriptor).toEqual("1x");
+      expect(candidates[1].url).toMatch(tokenRegex("/big%20pic\\.jpg$"));
+      expect(candidates[1].descriptor).toEqual("2x");
+      expect(entry.html).toMatch(new RegExp('src="' + tokenRegex("/my%20pic\\.jpg").source + '"'));
+      expect(entry.dependencies).toContain("/my pic.jpg");
+      expect(entry.dependencies).toContain("/big pic.jpg");
+      done();
+    });
+  });
+
+  it("keeps an encoded '#' or '?' in a file name part of the path", function (done) {
+    var path = "/Hello.txt";
+
+    fs.outputFileSync(this.blogDirectory + path, `<img src="/it's%20%231%3F.jpg?w=1#top">`);
+    fs.outputFileSync(this.blogDirectory + "/it's #1?.jpg", "image");
+
+    build(this.blog, path, function (err, entry) {
+      if (err) return done.fail(err);
+
+      expect(entry.html).toMatch(tokenRegex("/it%27s%20%231%3F\\.jpg\\?w=1#top\""));
+      expect(entry.dependencies).toContain("/it's #1?.jpg");
+      done();
+    });
+  });
+
+  it("re-bakes an already-baked encoded srcset, keeping a missing file's path encoded", function (done) {
+    var path = "/Hello.txt";
+    var baked = (file) => `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${this.blog.id}${file}`;
+    var contents = `<img srcset="${baked("/my%20pic.jpg")} 2x, ${baked("/gone%20pic.jpg")} 1x">`;
+
+    fs.outputFileSync(this.blogDirectory + path, contents);
+    fs.outputFileSync(this.blogDirectory + "/my pic.jpg", "small");
+
+    build(this.blog, path, function (err, entry) {
+      if (err) return done.fail(err);
+
+      expect(entry.html).toMatch(
+        new RegExp('srcset="' + tokenRegex("/my%20pic\\.jpg 2x").source + ', /gone%20pic\\.jpg 1x"')
+      );
+      expect(entry.html).not.toContain("v-deadbeef");
+      expect(entry.dependencies).toContain("/my pic.jpg");
+      expect(entry.dependencies).toContain("/gone pic.jpg");
+      done();
+    });
+  });
 });
