@@ -8,6 +8,8 @@ const MESSAGES = {
     "Git credentials are missing. Reset your Git password to resume syncing.",
   TREE_REJECTED:
     "Your last push was rejected: Git blogs support regular files only (no symbolic links or submodules). Remove them and push again.",
+  PUSH_NOT_APPLIED:
+    "Blot couldn't apply your latest push, so your site may be out of date. Push again to retry.",
 };
 
 // validateTree.js tags the error it throws for a rejected tree with this
@@ -29,9 +31,10 @@ function isTreeRejectedError(err) {
   return !!err && typeof err === "object" && err.code === TREE_REJECTED;
 }
 
-// Only the failures a person has to act on are classified specifically.
-// Everything else (git fetch/reset stderr and so on) gets the generic
-// SYNC_ERROR copy: the raw message is for the sync log, not the dashboard.
+// Git never retries a failed sync on its own and the push already reported
+// success to the user's git client, so any other failure (git fetch/reset
+// and so on) leaves the site stale until they push again. Say so rather than
+// showing the raw message, which is for the sync log, not the dashboard.
 function issueFromSyncError(err) {
   if (isMissingRepoError(err)) {
     return {
@@ -49,7 +52,7 @@ function issueFromSyncError(err) {
 
   return {
     code: health.CODES.SYNC_ERROR,
-    message: health.ISSUES.SYNC_ERROR.message,
+    message: MESSAGES.PUSH_NOT_APPLIED,
   };
 }
 

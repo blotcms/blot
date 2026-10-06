@@ -43,7 +43,7 @@ describe("git health error helpers", function () {
 
     expect(isTreeRejectedError(err)).toBe(false);
     expect(issueFromSyncError(err).message).toBe(
-      health.ISSUES.SYNC_ERROR.message
+      MESSAGES.PUSH_NOT_APPLIED
     );
   });
 
@@ -54,14 +54,14 @@ describe("git health error helpers", function () {
 
     expect(issueFromSyncError(err)).toEqual({
       code: health.CODES.SYNC_ERROR,
-      message: health.ISSUES.SYNC_ERROR.message,
+      message: MESSAGES.PUSH_NOT_APPLIED,
     });
     expect(issueFromSyncError(new Error(""))).toEqual({
       code: health.CODES.SYNC_ERROR,
-      message: health.ISSUES.SYNC_ERROR.message,
+      message: MESSAGES.PUSH_NOT_APPLIED,
     });
     expect(issueFromSyncError("No commit on repository").message).toBe(
-      health.ISSUES.SYNC_ERROR.message
+      MESSAGES.PUSH_NOT_APPLIED
     );
   });
 });
