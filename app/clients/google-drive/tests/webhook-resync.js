@@ -3,7 +3,7 @@ const vm = require("vm");
 
 // Loads routes/site.js with its dependencies stubbed and returns the handler
 // for POST /webhook/changes.watch/:serviceAccountId
-function load({ blogIDs, sync }) {
+function load({ blogIDs, sync, lookupError }) {
   let handler;
   const route = {
     post: function (fn) {
@@ -29,6 +29,7 @@ function load({ blogIDs, sync }) {
           return {
             blog: {
               iterateByServiceAccountId: async function (id, fn) {
+                if (lookupError) throw lookupError;
                 for (const blogID of blogIDs) await fn(blogID, {});
               },
             },
@@ -41,8 +42,9 @@ function load({ blogIDs, sync }) {
 
   return function deliver() {
     const res = { sendStatus: jasmine.createSpy("sendStatus") };
-    handler({ params: { serviceAccountId: "account" } }, res);
-    return res;
+    const next = jasmine.createSpy("next");
+    handler({ params: { serviceAccountId: "account" } }, res, next);
+    return { res, next };
   };
 }
 
@@ -53,11 +55,24 @@ describe("google drive changes.watch webhook", function () {
     const sync = jasmine.createSpy("sync").and.returnValue(new Promise(() => {}));
     const deliver = load({ blogIDs: ["blog_a"], sync });
 
-    const res = deliver();
+    const { res } = deliver();
+    await flush();
 
     expect(res.sendStatus).toHaveBeenCalledWith(200);
-    await flush();
     expect(sync).toHaveBeenCalledWith("blog_a");
+  });
+
+  it("passes a blog lookup failure to next instead of replying 200", async function () {
+    const sync = jasmine.createSpy("sync");
+    const lookupError = new Error("redis down");
+    const deliver = load({ blogIDs: ["blog_a"], sync, lookupError });
+
+    const { res, next } = deliver();
+    await flush();
+
+    expect(next).toHaveBeenCalledWith(lookupError);
+    expect(res.sendStatus).not.toHaveBeenCalled();
+    expect(sync).not.toHaveBeenCalled();
   });
 
   it("collapses deliveries during a sync into one follow-up sync", async function () {

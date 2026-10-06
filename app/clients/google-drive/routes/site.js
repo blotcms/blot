@@ -17,18 +17,40 @@ const pendingResyncs = new Set();
 
 site
   .route("/webhook/changes.watch/:serviceAccountId")
-  .post(function (req, res) {
+  .post(async function (req, res, next) {
     const serviceAccountId = req.params.serviceAccountId;
 
     console.log(
       `${clfdate()} Google Drive client: Received changes.watch webhook for service account ${serviceAccountId}`
     );
 
-    // Tell Google we received the notification before doing any work. Waiting
-    // for the syncs to finish meant Google hung up (499) before we replied.
+    const blogIDs = [];
+
+    // Look up the blogs before replying so a database failure reaches
+    // next(err) and Google redelivers the notification
+    try {
+      await database.blog.iterateByServiceAccountId(
+        serviceAccountId,
+        async function (blogID, account) {
+          blogIDs.push(blogID);
+        }
+      );
+    } catch (err) {
+      return next(err);
+    }
+
+    // Reply before syncing. Waiting for the syncs to finish meant Google hung
+    // up (499) before we replied.
     res.sendStatus(200);
 
-    syncBlogsForServiceAccount(serviceAccountId).catch(function (err) {
+    if (!blogIDs.length) {
+      console.log(
+        `${clfdate()} Google Drive client: No blogs found for service account ${serviceAccountId}`
+      );
+      return;
+    }
+
+    syncBlogs(blogIDs).catch(function (err) {
       console.error(
         `${clfdate()} Google Drive client: Webhook error for service account ${serviceAccountId}:`,
         err.message
@@ -36,23 +58,7 @@ site
     });
   });
 
-async function syncBlogsForServiceAccount(serviceAccountId) {
-  const blogIDs = [];
-
-  await database.blog.iterateByServiceAccountId(
-    serviceAccountId,
-    async function (blogID, account) {
-      blogIDs.push(blogID);
-    }
-  );
-
-  if (!blogIDs.length) {
-    console.log(
-      `${clfdate()} Google Drive client: No blogs found for service account ${serviceAccountId}`
-    );
-    return;
-  }
-
+async function syncBlogs(blogIDs) {
   // sync all blogs in parallel but if one errors don't stop the others
   await Promise.all(
     blogIDs.map(async (blogID) => {
