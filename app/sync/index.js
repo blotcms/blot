@@ -9,6 +9,7 @@ const messenger = require("./messenger");
 const gatherLockDiagnostics = require("./lock-diagnostics");
 const clfdate = require("helper/clfdate");
 const previewReload = require("helper/publishPreviewReload");
+const regenerateTemplateManifests = require("./update/regenerateTemplateManifests");
 const {
   addPendingSync,
   removePendingSync,
@@ -171,6 +172,23 @@ function sync(blogID, callback) {
             folder.status("Error building templates from folder");
             log("Error building templates in folder");
             console.log(err);
+          }
+
+          // Templates which link to files that changed in this sync have
+          // their CDN manifest regenerated once, now, rather than once per
+          // file (see update/rebuildDependents). The blog's cacheID is
+          // bumped below, as for any sync with changes.
+          log("Updating CDN manifests of templates");
+          try {
+            const updated = await new Promise((resolve, reject) =>
+              regenerateTemplateManifests(blogID, log, (err, count) =>
+                err ? reject(err) : resolve(count)
+              )
+            );
+
+            if (updated) changes = true;
+          } catch (manifestError) {
+            log("Error updating CDN manifests of templates", manifestError.message);
           }
 
           // We could do these next two things in parallel

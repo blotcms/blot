@@ -21,8 +21,6 @@ describe("updateCdnManifest folder files", function () {
   const version = (content) =>
     crypto.createHash("sha1").update(content).digest("hex").slice(0, 8);
 
-  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
   beforeEach(async function () {
     await blogSet(this.blog.id, { template: this.template.id });
 
@@ -334,53 +332,75 @@ describe("updateCdnManifest folder files", function () {
   });
 
   describe("when a file in the blog's folder changes", function () {
-    it("regenerates the manifest and bumps the cache", async function () {
-      await this.setView({ name: "index.html", content: '<img src="/a.png">' });
-      expect((await this.manifest())["a.png"]).toBeUndefined();
+    const regenerateTemplateManifests = promisify(
+      require("sync/update/regenerateTemplateManifests")
+    );
+    const pending = (blogID) =>
+      client.sMembers(key.templateManifestsPending(blogID));
 
+    it("marks dependent templates as pending without regenerating anything", async function () {
+      await this.setView({ name: "index.html", content: '<img src="/a.png">' });
       await this.write({ path: "/a.png", content: "one" });
 
       const before = (await blogGet({ id: this.blog.id })).cacheID;
 
-      await sleep(5);
       await rebuildDependents(this.blog.id, "/a.png");
 
-      expect((await this.manifest())["a.png"].version).toBe(version("one"));
-      expect((await blogGet({ id: this.blog.id })).cacheID).not.toBe(before);
+      expect(await pending(this.blog.id)).toEqual([this.template.id]);
+      expect((await this.manifest())["a.png"]).toBeUndefined();
+      expect((await blogGet({ id: this.blog.id })).cacheID).toBe(before);
+    });
 
-      await this.write({ path: "/a.png", content: "two" });
+    it("regenerates each pending template once, when asked", async function () {
+      await this.setView({ name: "index.html", content: '<img src="/a.png"><img src="/b.png">' });
+      await this.write({ path: "/a.png", content: "one" });
+      await this.write({ path: "/b.png", content: "two" });
+
       await rebuildDependents(this.blog.id, "/a.png");
+      await rebuildDependents(this.blog.id, "/b.png");
 
-      expect((await this.manifest())["a.png"].version).toBe(version("two"));
+      // however many of its files changed, the template is pending once
+      expect(await pending(this.blog.id)).toEqual([this.template.id]);
+
+      const log = jasmine.createSpy("log");
+
+      expect(await regenerateTemplateManifests(this.blog.id, log)).toBe(1);
+
+      const manifest = await this.manifest();
+
+      expect(manifest["a.png"].version).toBe(version("one"));
+      expect(manifest["b.png"].version).toBe(version("two"));
+      expect(await pending(this.blog.id)).toEqual([]);
     });
 
     it("matches the path whatever its case", async function () {
       await this.setView({ name: "index.html", content: '<img src="/Photos/A.png">' });
-      await this.write({ path: "/Photos/A.png", content: "one" });
       await rebuildDependents(this.blog.id, "/photos/a.PNG");
 
-      expect((await this.manifest())["Photos/A.png"].version).toBe(version("one"));
+      expect(await pending(this.blog.id)).toEqual([this.template.id]);
     });
 
-    it("does nothing for a file no template links to", async function () {
+    it("marks nothing for a file no template links to", async function () {
       await this.setView({ name: "index.html", content: '<img src="/a.png">' });
-
-      const before = (await blogGet({ id: this.blog.id })).cacheID;
-
-      await sleep(5);
       await rebuildDependents(this.blog.id, "/unrelated.png");
 
-      expect((await blogGet({ id: this.blog.id })).cacheID).toBe(before);
+      expect(await pending(this.blog.id)).toEqual([]);
     });
 
     it("keeps going when a template fails to update", async function () {
       await this.setView({ name: "index.html", content: '<img src="/a.png">' });
-      await client.sAdd(key.templateDependents(this.blog.id, "/a.png"), "nonexistent:template");
       await this.write({ path: "/a.png", content: "one" });
+      await client.sAdd(key.templateManifestsPending(this.blog.id), [
+        "nonexistent:template",
+        this.template.id,
+      ]);
 
-      await rebuildDependents(this.blog.id, "/a.png");
+      const log = jasmine.createSpy("log");
 
+      expect(await regenerateTemplateManifests(this.blog.id, log)).toBe(1);
+      expect(log).toHaveBeenCalled();
       expect((await this.manifest())["a.png"].version).toBe(version("one"));
+      expect(await pending(this.blog.id)).toEqual([]);
     });
   });
 });

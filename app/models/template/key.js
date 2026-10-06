@@ -57,4 +57,13 @@ module.exports = {
       pathNormalizer(path).toLowerCase()
     );
   },
+
+  // Templates whose CDN manifest must be regenerated because a file they
+  // link to changed during a sync. rebuildDependents adds to it for every
+  // synced file; sync/index.js drains it once, at the end of the sync. A
+  // Redis set rather than memory so that a sync which dies part way leaves
+  // them for the next one.
+  templateManifestsPending: function templateManifestsPending(blogID) {
+    return "blog:" + blogID + ":template_manifests_pending";
+  },
 };

@@ -11,6 +11,10 @@ describe("folder links in templates", function () {
   const version = (content) =>
     crypto.createHash("sha1").update(content).digest("hex").slice(0, 8);
 
+  // where a link to a file that isn't in the folder ends up: on the blog's host
+  const missingUrl = (blog, path) =>
+    `https://${blog.handle}.${config.host}${path}`;
+
   const folderUrl = (blog, content, path) =>
     `${config.cdn.origin}/folder/v-${version(content)}/${blog.id}${path}`;
 
@@ -76,7 +80,9 @@ describe("folder links in templates", function () {
   it("rewrites a link to a file that is created later", async function () {
     await this.template({ "entries.html": '<img src="/late.png">' });
 
-    expect(await this.text("/")).toBe('<img src="/late.png">');
+    expect(await this.text("/")).toBe(
+      `<img src="${missingUrl(this.blog, "/late.png")}">`
+    );
 
     await this.write({ path: "/late.png", content: "one" });
 
@@ -93,7 +99,19 @@ describe("folder links in templates", function () {
 
     await this.remove("/a.png");
 
-    expect(await this.text("/")).toBe('<img src="/a.png">');
+    expect(await this.text("/")).toBe(
+      `<img src="${missingUrl(this.blog, "/a.png")}">`
+    );
+  });
+
+  it("keeps {{blog.url}} links absolute when the file is missing", async function () {
+    await this.template({
+      "entries.html": '<meta property="og:image" content="{{{blog.url}}}/share.png">',
+    });
+
+    expect(await this.text("/")).toBe(
+      `<meta property="og:image" content="${missingUrl(this.blog, "/share.png")}">`
+    );
   });
 
   it("rewrites a link whose file is in the folder under a different case", async function () {
@@ -183,5 +201,50 @@ describe("folder links in templates", function () {
     expect(await this.text("/")).toMatch(
       new RegExp(`${config.cdn.origin}/folder/v-[a-f0-9]{8}/${this.blog.id}/a.png`)
     );
+  });
+
+  describe("during a sync", function () {
+    const sync = require("sync");
+    const client = require("models/client");
+    const templateKey = require("models/template/key");
+
+    it("regenerates the manifest once, when the sync finishes", async function () {
+      await this.template({
+        "entries.html": '<img src="/a.png"><img src="/b.png"><img src="/c.png">',
+      });
+
+      const pending = () =>
+        client.sMembers(templateKey.templateManifestsPending(this.blog.id));
+      let pendingDuringSync;
+
+      await new Promise((resolve, reject) => {
+        sync(this.blog.id, async (err, folder, done) => {
+          if (err) return done(err, reject);
+
+          const files = { "/a.png": "one", "/b.png": "two", "/c.png": "three" };
+
+          for (const path in files) {
+            await this.blog.write({ path, content: files[path] });
+            await new Promise((next, fail) =>
+              folder.update(path, (e) => (e ? fail(e) : next()))
+            );
+          }
+
+          // three files changed, one template waiting for one update
+          pendingDuringSync = await pending();
+
+          done(null, resolve);
+        });
+      });
+
+      expect(pendingDuringSync.length).toBe(1);
+      expect(await pending()).toEqual([]);
+
+      const body = await this.text("/");
+
+      expect(body).toContain(folderUrl(this.blog, "one", "/a.png"));
+      expect(body).toContain(folderUrl(this.blog, "two", "/b.png"));
+      expect(body).toContain(folderUrl(this.blog, "three", "/c.png"));
+    });
   });
 });
