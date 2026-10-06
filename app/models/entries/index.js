@@ -232,20 +232,18 @@ module.exports = (function () {
       });
   }
 
-  // Entries are read in full (content included) - a single Entry.get call
-  // with the whole list's ids does one MGET that parses every entry in the
-  // list at once, which for a blog with many large entries can exhaust the
-  // heap before pruneMissing ever gets to zRem the stale ones. Batching the
-  // reads keeps only PRUNE_BATCH_SIZE full entries in memory at a time.
+  // Only whether each entry's key exists matters here, so it's checked with
+  // EXISTS rather than by reading the entry. Reading entries in full (content
+  // included) is what used to exhaust the heap when a blog with many large
+  // entries was read in one MGET before pruneMissing ever got to zRem the
+  // stale ones, and even in batches of 100 the replies (several hundred KB
+  // each on a blog with ~900 posts) stall on production - see models/entry/get.js.
   //
   // The same id is usually a member of several of the lists above (eg. an
   // entry sits in "all", "created", "entries" and "entries:lex" at once), so
-  // checking each list independently used to re-fetch and re-parse that same
-  // full entry once per list it belonged to - up to 8x for one entry. For a
-  // blog with many multi-MB entries those redundant fetches, run back to
-  // back with no time for V8 to reclaim the previous list's entries, is what
-  // exhausts the heap - not any single list's own size. Collecting every
-  // list's ids first and fetching each unique id once fixes that.
+  // checking each list independently used to re-fetch that same entry once
+  // per list it belonged to - up to 8x for one entry. Collecting every list's
+  // ids first and checking each unique id once avoids that.
   var PRUNE_BATCH_SIZE = 100;
 
   function pruneMissing(blogID, callback) {
@@ -287,7 +285,7 @@ module.exports = (function () {
             batches.push(allIds.slice(i, i + PRUNE_BATCH_SIZE));
           }
 
-          // Read the raw keys directly (rather than via Entry.get) so
+          // Check the raw keys directly (rather than via Entry.get) so
           // existence is tracked against the id we actually requested, not
           // an id parsed back out of the entry's JSON - a corrupted entry's
           // stored id can differ from its Redis key. It also lets a failed
@@ -300,10 +298,15 @@ module.exports = (function () {
                 return entryKey(blogID, id);
               });
 
-              redis
-                .mGet(keys)
-                .then(function (values) {
-                  (values || []).forEach(function (value, i) {
+              var existsMulti = redis.multi();
+              keys.forEach(function (key) {
+                existsMulti.exists(key);
+              });
+
+              existsMulti
+                .exec()
+                .then(function (found) {
+                  (found || []).forEach(function (exists, i) {
                     var id = batch[i];
 
                     // entryKey normalizes the path, so a noncanonical id
@@ -313,7 +316,7 @@ module.exports = (function () {
                     // Only trust the lookup for ids that are already
                     // canonical; anything else is a stale/duplicate member
                     // that should be pruned regardless.
-                    if (value && id === pathNormalizer(id)) {
+                    if (exists && id === pathNormalizer(id)) {
                       existing[id] = true;
                     }
                   });
@@ -333,6 +336,9 @@ module.exports = (function () {
         if (err) return callback(err);
 
         var existing = results[1];
+        // listName -> ids removed from that list, for callers (list-ghosts)
+        // that want to report/account for what was pruned.
+        var removed = {};
 
         async.eachSeries(
           lists,
@@ -347,11 +353,15 @@ module.exports = (function () {
             redis
               .zRem(key, missing)
               .then(function () {
+                removed[listName] = missing;
                 nextList();
               })
               .catch(nextList);
           },
-          callback
+          function (err) {
+            if (err) return callback(err);
+            callback(null, removed);
+          }
         );
       }
     );
@@ -924,6 +934,7 @@ module.exports = (function () {
     resave: resave,
     each: each,
     pruneMissing: pruneMissing,
+    sweepExpiredDeleted: require("./sweepExpiredDeleted"),
     adjacentTo: adjacentTo,
     getPage: getPage,
     getListIDs: getListIDs,

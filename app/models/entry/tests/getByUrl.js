@@ -112,8 +112,9 @@ describe("entry.getByUrl", function () {
       },
       getByUrl => {
         expect(function () {
-          getByUrl("blog-id", "/entry", function (entry) {
+          getByUrl("blog-id", "/entry", function (entry, error) {
             expect(entry).toBeUndefined();
+            expect(error).toBe(rejection);
           });
         }).not.toThrow();
 

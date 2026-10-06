@@ -1,3 +1,23 @@
+Fix bug with repeat google drive syncs
+
+Investigate high aws bill cause
+
+Work on removing replaceFolderLinks
+
+Excercise the backlinks with big entries / many backlinks in the benchmarks somewhere
+
+Find what runs `KEYS` on prod redis (slowlog: 789ms at 2026-10-05 09:01Z, blocks everything; not found in app/ or scripts/, maybe a manual redis-cli)
+
+Find what sends the recurring 31-key MGET that takes 10-32ms server-side on prod redis (~30 in the slowlog over 12h, probably Entries.getRecent via getRange(0, 30) on blogs with big entries; slowlog shows only command + duration)
+
+Add error / getHealth issues to sync log (folder.status) for Dropbox/other client Issues
+
+Make sync logs more useful, surface recent changes on dashboard. Group multiple files together if changed at same time, etc. make it useful!
+
+Add dropbox kill switch (when platform goes down, etc.)
+
+Add icloud kill switch (when platform goes down, etc.)
+
 How do we think about a shared asset library across templates? 
 - e.g. shared favicons
 - can we unwind some of the complete delete favion on template delete, etc. code?
@@ -40,6 +60,8 @@ Investigate green crashes (`Lock was lost` / ECOMPROMISED at 2026-09-21 18:02 an
 - Added diagnostics for next time: per-check timing in Fix() (app/sync/fix/index.js), an `entries=N` field on the `validation lag` log line (app/clients/dropbox/init.js), a `runningFixCheck` field on `[LOCK COMPROMISED]` diagnostics (app/sync/lock-diagnostics.js) since Fix() doesn't hold the folder lock and was invisible to pendingSyncs, and fixed `[LOCK COMPROMISED]`'s console.error silently truncating pendingSyncs/pendingUpdates to `[Object]` (app/sync/index.js)
 - Not yet fixed: give the lock heartbeat its own dedicated Redis connection so Fix()'s traffic can't queue ahead of it, or batch Fix()'s per-entry reads
 - Remove the event loop monitor (app/helper/eventLoopMonitor*.js, its setup.js hook, and `logLag`/`measureEventLoop` in app/clients/dropbox/init.js) and the lock heartbeat logging (app/sync/lock.js) once the cause is fixed
+
+Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
 
 Surface template choices on the templates subpages: switch from png to iframe after hovering a selection
 
@@ -963,7 +985,6 @@ Improvements to server
 
 Improvements to sync/reset scripts:
 - [ ] reset should produce a report which I get email
-- [ ] Resync should produce a report which I get via email
 
 ---
 
@@ -1250,3 +1271,16 @@ Self-hosting:
 - Tell Nick when it's possible to deploy a self-hosted [Blot on Vercel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKjxHWSvgjKtCWrbhccKFPlkdD) and [Zia](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsSXWPRNNxDNcdhGHQXBkTtsx)
 
 Add preflight checks in proxy/deploy/{cutover-from-baremetal,blue-green}.sh for PROXY_BLOG_STATIC_DIR/PROXY_GLOBAL_STATIC_DIR existing and readable - docker -v silently creates an empty dir for a missing host path, so a typo or host-layout change would 404 cdn.* static assets with no check catching it
+
+Find and replace the KEYS calls blocking prod Redis (from SLOWLOG, source 172.30.0.122 = the blot host, not repo code — likely a host cron or manual `client` session)
+- `keys ssl:*:latest` ~750ms, roughly daily (21, 23, 24 Sep) — switch to `--scan --pattern`
+- `KEYS *blog_<id>*` 2.4s on 22 Sep
+
+Explore a redesign of Fix() (app/sync/fix) to cut Redis load further, e.g. one chunked walk over every referenced entry id (lists + tag members) that MGETs each entry once and applies every per-entry check, instead of each check re-reading all content. Not an easy win:
+- ghosts include ids with no entry, so the walk must cover the union of list and tag member ids, not just "all"
+- repairs interleave (an entry-ghosts drop changes that entry's lists/tags mid-walk), so the in-memory id picture must be updated as repairs happen
+- report shape keyed by check name must be kept for the dashboard/validators
+- Fix() runs outside the folder lock, so the id snapshot can go stale (same as today)
+- lean on the Fix() regression tests (app/sync/fix/tests/regression*) before attempting it
+
+app/build: entry.contentHash is computed by re-reading the source file(s) after conversion, so a source edited between the converter's read and this hash read can produce a hash that matches a later, genuinely-changed build (or vice versa) - closing this needs threading the bytes each converter already reads back through to the hash, or detect-and-retry on mismatch (flagged in Codex review of PR #2002, out of scope there since it touches every converter)

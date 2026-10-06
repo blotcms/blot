@@ -28,13 +28,16 @@ module.exports = async function setupBlogs(user, folders) {
       blog = await createBlog(user.uid, { handle });
     }
 
-    const update = config[blog.handle] || {};
+    const update = { ...(config[blog.handle] || {}) };
 
     if (update.plugins) {
       update.plugins = {...blog.plugins, ...update.plugins};
     }
 
-    
+    if (update.menu) {
+      update.menu = mergeMenu(update.menu, blog.menu);
+    }
+
     await setBlog(blog.id, { ...update, client: "" });
 
     blogs[blog.id] = { path, blog };
@@ -42,3 +45,16 @@ module.exports = async function setupBlogs(user, folders) {
 
   return blogs;
 };
+
+// The config decides which pages are in the menu and in what order, but each
+// item's label, url and metadata are copied from its page entry by sync/fix.
+// Keep those from the existing menu so rebuilding on every boot doesn't reset
+// them and make Fix() report (and email about) the same repair each deploy.
+function mergeMenu(configMenu, existingMenu = []) {
+  return configMenu.map((item) => {
+    const existing = existingMenu.find((other) => other.id === item.id);
+    if (!existing) return item;
+    const { label, url, metadata } = existing;
+    return { ...item, label, url, metadata };
+  });
+}

@@ -1,11 +1,18 @@
 const normalize = require("models/tags").normalize;
 const type = require("helper/type");
-const { getEntryByUrl } = require("../../lib/models");
+const backlinksFor = require("./backlinks");
 const moment = require("moment");
 const debug = require("debug")("blog:render:augment");
 require("moment-timezone");
 
-module.exports = async function augment(req, res, entry) {
+// backlinks (optional): resolves the entry's backlinks. Share one across a walk
+// over many entries (see ./backlinks.js); the default is for this entry alone.
+module.exports = async function augment(
+  req,
+  res,
+  entry,
+  backlinks = backlinksFor(req)
+) {
   // augment() rewrites several entry fields in place (tags, backlinks, ...)
   // in ways that aren't safe to re-run: a second pass sees the already
   // -converted values and discards them as invalid. Callers are expected to
@@ -28,9 +35,7 @@ module.exports = async function augment(req, res, entry) {
   entry.formatUpdated = FormatDate(entry.updated, req.blog.timeZone);
   entry.formatCreated = FormatDate(entry.created, req.blog.timeZone);
 
-  entry.absoluteURL =
-    req.blog.locals.blogURL +
-    entry.url.split("/").map(encodeURIComponent).join("/");
+  entry.absoluteURL = absoluteURL(req.blog.locals.blogURL, entry.url);
 
   // if the entry exif object is empty, delete it
   if (
@@ -110,46 +115,16 @@ module.exports = async function augment(req, res, entry) {
     delete entry.date;
   }
 
-  entry.backlinks = entry.backlinks || [];
-
-  debug(entry.path, "fetching backlinks", entry.backlinks);
-
-  const resolved = await Promise.all(
-    entry.backlinks.map(async (linkUrl) => {
-      debug("Looking up backlink for linkUrl", linkUrl);
-      if (typeof linkUrl !== "string") {
-        return null;
-      }
-      const linked = await getEntryByUrl(req.blog.id, linkUrl);
-      if (linked) {
-        debug("Found", linked.path, "for", linkUrl);
-      } else {
-        debug("No entry found for", linkUrl);
-      }
-      return linked;
-    })
-  );
-
-  debug(entry.path, "fetched backlinks", resolved);
-  entry.backlinks = resolved.filter(
-    (backlinkedEntry) =>
-      !!backlinkedEntry &&
-      // we don't want to show unpublished entries
-      !backlinkedEntry.scheduled &&
-      // we don't want to show the same entry
-      backlinkedEntry.path !== entry.path
-  );
-
-  // Deduplicate by path without lodash
-  const seen = new Set();
-  entry.backlinks = entry.backlinks.filter((item) => {
-    if (seen.has(item.path)) return false;
-    seen.add(item.path);
-    return true;
-  });
-
-  debug(entry.path, "final backlinks", entry.backlinks);
+  entry.backlinks = await backlinks.resolve(entry);
 };
+
+// blogURL is per request (protocol + the host it arrived on - see
+// blog/middleware/vhosts.js), so shared augmented entries recompute this.
+function absoluteURL(blogURL, url) {
+  return blogURL + url.split("/").map(encodeURIComponent).join("/");
+}
+
+module.exports.absoluteURL = absoluteURL;
 
 function createRenderMetadata(sourceMetadata) {
   if (!sourceMetadata || !type(sourceMetadata, "object")) {

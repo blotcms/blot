@@ -3,6 +3,8 @@ var ensure = require("helper/ensure");
 var debug = require("debug")("blot:entry:assign");
 var redis = require("models/client");
 var pathIndex = require("../entries/pathIndex");
+var sweepExpiredDeleted = require("../entries/sweepExpiredDeleted");
+var clfdate = require("helper/clfdate");
 
 var model = require("./model");
 
@@ -121,11 +123,26 @@ module.exports = function (blogID, entry, callback) {
   multi
     .exec()
     .then(function () {
-      if (entry.menu) {
-        addToMenu(blogID, entry, callback);
-      } else {
-        dropFromMenu(blogID, entry, callback);
-      }
+      // Any write to a blog clears out ids whose deleted entry has since
+      // expired, so they don't linger in "all"/"deleted" until the next
+      // Fix(). A failure here only delays that cleanup, so it shouldn't
+      // fail the write.
+      sweepExpiredDeleted(blogID, function (err) {
+        if (err) {
+          console.error(
+            clfdate(),
+            blogID.slice(0, 12),
+            "Error sweeping expired deleted entries",
+            err
+          );
+        }
+
+        if (entry.menu) {
+          addToMenu(blogID, entry, callback);
+        } else {
+          dropFromMenu(blogID, entry, callback);
+        }
+      });
     })
     .catch(function (err) {
       return callback(err);

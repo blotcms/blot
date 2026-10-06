@@ -11,6 +11,7 @@ const Fix = require("sync/fix");
 const Rebuild = require("sync/rebuild");
 const config = require("config");
 const fetch = require("node-fetch");
+const notifyAdminIfResyncFoundChanges = require("./notifyResyncFoundChanges");
 
 const { promisify } = require("util");
 const getStatuses = promisify(Blog.getStatuses);
@@ -190,8 +191,10 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
 
     res.message(res.locals.base + "/client/reset", "Begin resync of your site");
 
+    let summary;
+
     try {
-      await res.locals.client.resync(
+      summary = await res.locals.client.resync(
         req.blog.id,
         folder.status,
         promisify(folder.update)
@@ -215,6 +218,8 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
         });
       }
     }
+
+    notifyAdminIfResyncFoundChanges(req.blog, res.locals.client, summary);
 
     folder.status("Checking your site for issues");
     Fix(req.blog, { status: folder.status, log: folder.log }, function (err) {

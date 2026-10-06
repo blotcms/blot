@@ -1,8 +1,5 @@
 const clfdate = require("helper/clfdate");
-const { promisify } = require("util");
 const establishSyncLock = require("sync/establishSyncLock");
-const getBlog = promisify(require("models/blog").get);
-const fix = promisify(require("sync/fix"));
 const database = require("../database");
 
 module.exports = async function (blogID) {
@@ -15,12 +12,10 @@ module.exports = async function (blogID) {
       return;
     }
 
-    const blog = await getBlog({ id: blogID });
     const { done, folder } = await establishSyncLock(blogID);
     try {
-      const succeeded = await sync(blogID, folder.status, folder.update);
-      await fix(blog);
-      return succeeded;
+      // Resolves to sync's summary, or false if the walk failed.
+      return await sync(blogID, folder.status, folder.update);
     } catch (err) {
       console.log(clfdate(), "Google Drive Sync:", "Sync failed", err);
       return false;
