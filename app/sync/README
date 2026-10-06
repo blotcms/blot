@@ -161,6 +161,8 @@ Runs in series: `Ignored.drop` → `Entry.drop` → `rebuildDependents`. If the 
 
 Reads the Redis set at `Entry.key.dependents(blogID, path)`. For each dependent path, retrieves the entry, calls `build`, and calls `Entry.set(..., false)` (the `false` suppresses scheduled-post side effects).
 
+It then reads the set at `Template.key.templateDependents(blogID, path)` (the path is lowercased): the blog's templates whose CDN manifest resolves that file. Each one's manifest is regenerated with `updateCdnManifest`, and the blog's `cacheID` is bumped once if any ran. Errors are logged and never fail the sync.
+
 ### `update/drafts.js`
 
 An IIFE exposing:
