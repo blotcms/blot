@@ -7,5 +7,4 @@ new feature ideas:
 - [ ] Exif data in entry page footer
 - [ ] Dynamic back breadcrumb with optional expand button to see navigation trail?
 - [ ] Add search and tags?
-- [ ] Index page?
 - [ ] Graph page? Could build during initial pagination using the backlinks property!!

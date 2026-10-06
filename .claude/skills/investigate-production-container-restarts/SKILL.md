@@ -22,10 +22,26 @@ deploy's automated rollback after a failed health check, or (3) an
 unplanned crash (in-process V8 OOM, or a Linux-level OOM kill) that Docker
 silently recovered from and which would otherwise go unnoticed.
 
-**Always confirm with the user before running anything against
-production**, and stick to read-only commands (log tailing, `docker
-inspect`, `docker logs`, read-only `redis-cli`) unless a state-changing
-action has been explicitly authorized.
+**Confirm with the user before running anything against production
+that isn't on the auto-approved list below**, and stick to read-only
+commands (log tailing, `docker inspect`, `docker logs`, read-only
+`redis-cli`) unless a state-changing action has been explicitly
+authorized.
+
+**Auto-approved (no confirmation needed)** — these read-only commands
+over `ssh blot` may be run without asking:
+
+- `docker ps -a` and `docker inspect` on blot-container-{blue,green,yellow}
+  (release ID, `CreatedAt`, `RestartCount`, `OOMKilled`, exit code)
+- `cat ~/docker-health-check.log`
+- `dmesg | grep -i kill` (or the `kills` helper)
+- `docker logs <container>` with `--since`/`--until`, including grepping
+  for `FATAL ERROR` / `JavaScript heap out of memory`
+- `grep <request-id> /var/instance-ssd/logs/access.log` (or the `req`
+  helper) to find the triggering request
+
+Anything else (state-changing commands, restarts, deploys) still needs
+explicit user approval.
 
 ## 1. Identify the most recent deployment
 
@@ -102,6 +118,26 @@ first one that seems plausible.
 ssh blot "docker logs <container> --since <before-crash> --until <after-crash> 2>&1 | grep -B5 'FATAL ERROR\|JavaScript heap out of memory'"
 ```
 
+Each fatal error also leaves a Node report (JS stack at the crash, heap
+spaces, resource usage; env vars excluded) in
+`/var/www/blot/data/node-reports/<container>/report.*.json` on the host.
+These outlive log rotation and container recreation, so check them first
+(`ls`/`cat` there is read-only):
+
+```bash
+ssh blot "ls -lt /var/www/blot/data/node-reports/<container>/ | head"
+```
+
+If the container's logs have rotated past the crash, openresty still has
+it: the error log shows a burst of `connect() failed` / `prematurely
+closed` errors to the container's port in the crash second, and the
+access log shows the in-flight requests that died with it (502, long
+request time, `up=127.0.0.1:<port>`):
+
+```bash
+ssh blot "zcat -f /var/instance-ssd/logs/error.log* | grep ':8090' | grep -c 'connect() failed'"
+```
+
 The crash timestamp is the `Starting server on ...` line that follows the
 restart in the container's log (search forward from there to find where
 the *previous* run's log ends). Almost always an application-code problem
@@ -176,7 +212,25 @@ ssh blot "grep <request-id> /var/instance-ssd/logs/access.log"
 Or use the `req <pattern>` bashrc helper, which greps access/error logs and
 all three containers' logs in one shot.
 
-## 6. Local reproduction
+## 6. Reproduce on production in a throwaway container
+
+Once a candidate request is identified, `npm run render-probe -- <url>`
+(see `scripts/render-probe/README.md`) renders it in a one-off container of
+the same image, data (read-only) and env, with heap, event loop, GC,
+Redis and per-render-step timings recorded, and optionally a heap snapshot
+near the heap limit. It can't take down the live containers. It runs
+against production, so **confirm with the user before each run**. Useful
+runs:
+
+- `--stats <url>`: entry count, catalog size and backlink weight, with no
+  rendering. Is this blog unusual?
+- `<url> --concurrency N`: does memory scale with concurrent cold renders?
+- `--replay <access log> --from … --to …`: the real traffic leading up to
+  a crash (rotated `.gz` logs work too).
+- `--release <older commit>`: does an older release render the same page
+  fine? That bisects a regression.
+
+## 7. Local reproduction
 
 Prefer reproducing locally over experimenting on production once a
 candidate site/request is identified: clone of a real large blog through
@@ -188,7 +242,7 @@ requests queueing behind event-loop-blocking work rather than running in
 parallel — the same signature as the process eventually exhausting memory
 under sustained load.
 
-## 7. Report
+## 8. Report
 
 This skill only identifies **why** the restart happened — it doesn't fix
 the underlying app bug unless separately asked to. If the cause is a

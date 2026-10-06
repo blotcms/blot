@@ -1,36 +1,25 @@
 const config = require("config");
 const fs = require("fs-extra");
-const crypto = require("crypto");
 const async = require("async");
+const cheerio = require("cheerio");
 const { join, resolve, posix } = require("path");
 const { promisify } = require("util");
-const hash = require("helper/hash");
-const HashFile = require("helper/transformer/hash");
+const contentVersion = require("helper/contentVersion");
 const caseSensitivePath = promisify(require("helper/caseSensitivePath"));
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 const unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
-const { isReservedStaticPath } = require("blog/lib/staticPaths");
+const {
+  GLOBAL_STATIC_DIR,
+  isReservedStaticPath,
+} = require("blog/lib/staticPaths");
 const blogHosts = require("blog/lib/blogHosts");
 const {
   htmlExtRegex,
   fileExtRegex,
   parseSrcset,
+  encodeFolderPath,
+  decodeFolderPath,
 } = require("blog/render/replaceFolderLinks/shared");
-
-const hashFileAsync = promisify(HashFile);
-
-// Files bigger than this fall back to the cheap stat-based fingerprint
-// (mtime+ctime+size) instead of a full content hash, so a rebuild
-// triggered by an unrelated dependency change doesn't force reading a
-// huge video/audio file just to version its URL.
-const MAX_CONTENT_HASH_SIZE = 5 * 1024 * 1024;
-
-// Below this, read the whole file into memory and hash it synchronously
-// instead of going through helper/transformer/hash's readable-stream
-// pipeline. Most folder-relative links point at small images/fonts, and
-// a stream's setup/event overhead measurably dominates the hash itself at
-// this size - a single buffered read+digest is faster in practice.
-const SMALL_FILE_HASH_SIZE = 256 * 1024;
 
 const ATTRS = ["href", "src", "poster"];
 
@@ -59,6 +48,11 @@ const HASH_CONCURRENCY = 8;
 // srcset (and links spliced in from another entry's already-baked HTML by
 // the wikilinks plugin) would otherwise never invalidate.
 //
+// Front matter can replace derived markup fields outright (body, teaser,
+// teaserBody - see build/prepare). That happens after the plugins have run,
+// so build/index.js bakes those fields separately with bakeHTML below and
+// merges the dependencies it returns.
+//
 // Note that baked links can exist before this plugin runs: wikilinks is
 // first, and splices other entries' stored (already baked) HTML into the
 // post, so every plugin in between can see %%BLOT_CDN%% URLs.
@@ -67,6 +61,24 @@ const HASH_CONCURRENCY = 8;
 // rather than skipped, so a copy of another entry's HTML (wikilink embeds)
 // gets a fresh version instead of the embedded entry's stale one.
 function render($, callback, options) {
+  bake($, options).then(
+    ({ dependencies }) => callback(null, { newDependencies: dependencies }),
+    callback
+  );
+}
+
+// Bakes an HTML string, for markup which doesn't go through the plugin
+// pipeline (front matter overrides). options are the same as render's:
+// { blogID, handle, domain, path }. Returns { html, dependencies }; html is
+// the input, untouched, if there was nothing to bake.
+async function bakeHTML(html, options) {
+  const $ = cheerio.load(html, { decodeEntities: false }, false);
+  const { dependencies, changed } = await bake($, options);
+
+  return { html: changed ? $.html() : html, dependencies };
+}
+
+function bake($, options) {
   const blogID = options.blogID;
   const blogFolder = join(config.blog_folder_dir, blogID);
   const dependencies = new Set();
@@ -85,6 +97,8 @@ function render($, callback, options) {
     hostPatterns,
     entryPath: options.path,
     files: new Map(),
+    globalFiles: new Map(),
+    changed: false,
   };
   const tasks = [];
 
@@ -98,7 +112,9 @@ function render($, callback, options) {
 
       tasks.push(() =>
         bakeValue(ctx, value, attr === "poster").then((result) => {
-          if (result !== null) $el.attr(attr, result);
+          if (result === null) return;
+          $el.attr(attr, result);
+          ctx.changed = true;
         })
       );
     });
@@ -108,21 +124,25 @@ function render($, callback, options) {
     if (srcset) {
       tasks.push(() =>
         rewriteSrcset(ctx, srcset).then((rebuilt) => {
-          if (rebuilt !== null) $el.attr("srcset", rebuilt);
+          if (rebuilt === null) return;
+          $el.attr("srcset", rebuilt);
+          ctx.changed = true;
         })
       );
     }
   });
 
-  async.eachLimit(
-    tasks,
-    HASH_CONCURRENCY,
-    (task, next) => task().then(() => next(), next),
-    (err) => {
-      if (err) return callback(err);
-      callback(null, { newDependencies: Array.from(dependencies) });
-    }
-  );
+  return new Promise((resolve, reject) => {
+    async.eachLimit(
+      tasks,
+      HASH_CONCURRENCY,
+      (task, next) => task().then(() => next(), next),
+      (err) => {
+        if (err) return reject(err);
+        resolve({ dependencies: Array.from(dependencies), changed: ctx.changed });
+      }
+    );
+  });
 }
 
 function escapeRegex(str) {
@@ -170,11 +190,9 @@ function isEligible(value) {
 
   const pathPart = pathPartOf(value);
 
-  // Reserved prefixes are served from Blot's global static directory, not
-  // the blog folder (see lookupFile.js and helper/transformer/ownHost.js).
-  // Leave them unbaked so request-time resolution still binds to the
-  // global static file instead of a same-named file in the blog folder.
-  if (isReservedStaticPath(pathPart)) return false;
+  // Reserved global-static prefixes (/fonts, /icons...) stay eligible: they
+  // are baked from the global static directory when the file is there, see
+  // globalStaticFileExists.
 
   if (htmlExtRegex.test(pathPart)) return false;
   if (!fileExtRegex.test(pathPart)) return false;
@@ -197,10 +215,10 @@ async function bakeValue(ctx, value, resolveRelative) {
 
   if (!isEligible(raw)) return null;
 
-  const result = await resolveBuildFile(ctx, raw, wasBaked);
+  const result = await resolveBuildFile(ctx, raw);
 
   if (result) {
-    addDependency(ctx, result.path);
+    if (result.path) addDependency(ctx, result.path);
     return result.url;
   }
 
@@ -210,7 +228,11 @@ async function bakeValue(ctx, value, resolveRelative) {
   // we embedded had already dropped back to the plain path. Where the link
   // was baked, drop back to the plain path so request-time resolution
   // decides instead of keeping a URL for a now-missing versioned file.
-  addDependency(ctx, pathPartOf(raw));
+  //
+  // The path is decoded the way resolveBuildFile decodes it (baked links
+  // hold an encoded path too), because the file which arrives is
+  // "/my pic.jpg" and not "/my%20pic.jpg".
+  addDependency(ctx, decodeFolderPath(pathPartOf(raw)));
 
   return wasBaked ? raw : null;
 }
@@ -255,27 +277,33 @@ async function rewriteSrcset(ctx, value) {
 // the case-corrected file path, for recording as a dependency), or null
 // (ENOENT) if there's no matching file - mirroring
 // app/blog/render/replaceFolderLinks/lookupFile.js's "leave untouched"
-// behavior. alreadyDecoded is set for paths recovered from an
-// already-baked link, which hold the real (unencoded) file path.
-async function resolveBuildFile(ctx, value, alreadyDecoded) {
+// behavior.
+async function resolveBuildFile(ctx, value) {
   const { blogID, blogFolder } = ctx;
   const hashIndex = value.indexOf("#");
   const hash_ = hashIndex > -1 ? value.slice(hashIndex) : "";
   value = hashIndex > -1 ? value.slice(0, hashIndex) : value;
 
-  if (!alreadyDecoded && value.includes("%")) {
-    try {
-      value = decodeURIComponent(value);
-    } catch (err) {
-      // e.g. '100% luck.jpg' will throw an error - leave value unchanged
-    }
-  }
-
-  const [pathFromValue, ...rest] = value.split("?");
+  // Split off the query before decoding, so an encoded '?' (or '#', above)
+  // in a file name stays part of the path. e.g. '100% luck.jpg' isn't valid
+  // percent-encoding, and is left unchanged.
+  const [encodedPath, ...rest] = value.split("?");
   const query = rest.length ? `?${rest.join("?")}` : "";
+  const pathFromValue = decodeFolderPath(encodedPath);
 
-  // Same check as isEligible, but after percent-decoding (e.g. /f%6Fnts).
-  if (isReservedStaticPath(pathFromValue)) return null;
+  // Checked after percent-decoding (e.g. /f%6Fnts). Mirrors lookupFile.js: a
+  // file in the global static directory wins, otherwise the path is looked
+  // up in the blog's folder like any other.
+  if (
+    isReservedStaticPath(pathFromValue) &&
+    (await globalStaticFileExists(ctx, pathFromValue))
+  ) {
+    return {
+      url: `${BLOT_CDN_TOKEN}${encodeFolderPath(pathFromValue)}${query}${hash_}`,
+      // Not a file in the blog's folder, so there is nothing to depend on.
+      path: null,
+    };
+  }
 
   const cacheKey = resolve("/", pathFromValue);
 
@@ -290,13 +318,41 @@ async function resolveBuildFile(ctx, value, alreadyDecoded) {
   const { path: resolvedPath, version } = file;
 
   return {
-    url: `${BLOT_CDN_TOKEN}/folder/v-${version}/${blogID}${resolvedPath}${query}${hash_}`,
+    url: `${BLOT_CDN_TOKEN}/folder/v-${version}/${blogID}${encodeFolderPath(resolvedPath)}${query}${hash_}`,
     path: resolvedPath,
   };
 }
 
+// Whether a reserved path (/fonts/...) is a file in Blot's global static
+// directory. A path which only looks reserved until it is normalized
+// (/fonts/../x) never counts, so it can't reach outside the directory.
+function globalStaticFileExists(ctx, path) {
+  const normalized = posix.normalize(path);
+
+  if (!isReservedStaticPath(normalized)) return Promise.resolve(false);
+
+  if (!ctx.globalFiles.has(normalized)) {
+    ctx.globalFiles.set(
+      normalized,
+      fs.stat(join(GLOBAL_STATIC_DIR, normalized)).then(
+        (stat) => stat.isFile(),
+        () => false
+      )
+    );
+  }
+
+  return ctx.globalFiles.get(normalized);
+}
+
 // Returns { path, version } for a file in the blog folder, or null if it
 // doesn't exist. path is the case-corrected path.
+//
+// The version token is a hash of the file's content (helper/contentVersion),
+// not its mtime/ctime: blog folders are moving from local disk to S3, which
+// can't set a file's Last-Modified and has no ctime, but does hand back a
+// content-derived ETag for free on every PUT. Until storage reads switch
+// over, local disk pays the cost of hashing on each build (contentVersion
+// falls back to a size+mtime token above its size cap instead).
 async function hashFolderFile(blogFolder, path) {
   let stat, resolvedPath;
 
@@ -308,26 +364,8 @@ async function hashFolderFile(blogFolder, path) {
 
   return {
     path: resolvedPath,
-    version: await computeVersion(join(blogFolder, resolvedPath), stat),
+    version: await contentVersion(join(blogFolder, resolvedPath), stat),
   };
-}
-
-async function computeVersion(filePath, stat) {
-  if (stat.size > MAX_CONTENT_HASH_SIZE) {
-    return hash(`${stat.mtime}${stat.ctime}${stat.size}`).slice(0, 8);
-  }
-
-  try {
-    if (stat.size <= SMALL_FILE_HASH_SIZE) {
-      const buffer = await fs.readFile(filePath);
-      return crypto.createHash("sha1").update(buffer).digest("hex").slice(0, 8);
-    }
-
-    const contentHash = await hashFileAsync(filePath);
-    return contentHash.slice(0, 8);
-  } catch (err) {
-    return hash(`${stat.mtime}${stat.ctime}${stat.size}`).slice(0, 8);
-  }
 }
 
 async function getStat(blogFolder, path) {
@@ -346,6 +384,7 @@ async function getStat(blogFolder, path) {
 
 module.exports = {
   render,
+  bakeHTML,
   // Internal build optimization, not a user setting: always runs, and is
   // hidden from the plugins page (see dashboard/site/load/plugins.js).
   optional: false,

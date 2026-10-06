@@ -3,6 +3,7 @@ const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
 const { prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
+const fetchCached = require("../../lib/fetchCached");
 
 const totalPostsCache = new LRUCache({
   max: 10000,
@@ -10,6 +11,17 @@ const totalPostsCache = new LRUCache({
   // consistency with the other retrieve-path caches.
   maxSize: 1 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
+  // Without this, an in-flight fetch evicted by LRU/size pressure aborts and
+  // every request coalesced onto it rejects with "Error: evicted" instead
+  // of getting its count - let the already-running getTotal call finish and
+  // hand its result back even if it can't be cached.
+  ignoreFetchAbort: true,
+  // Coalesce concurrent misses on the same key into one in-flight
+  // getTotal call.
+  fetchMethod: async (key, staleValue, { context }) => {
+    const total = await getTotal(context.blogID);
+    return prepareCacheValue(total);
+  },
 });
 
 function createCacheKey(blog) {
@@ -21,14 +33,10 @@ function createCacheKey(blog) {
 
 async function totalPosts(req, res) {
   const key = createCacheKey(req.blog);
-
-  if (totalPostsCache.has(key)) {
-    return totalPostsCache.get(key).payload;
-  }
-
-  const total = await getTotal(req.blog.id);
-  totalPostsCache.set(key, prepareCacheValue(total));
-  return total;
+  const prepared = await fetchCached(totalPostsCache, "totalPosts", req.log, key, {
+    context: { blogID: req.blog.id },
+  });
+  return prepared.payload;
 }
 
 module.exports = asRetriever(totalPosts);

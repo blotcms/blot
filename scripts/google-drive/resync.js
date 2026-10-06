@@ -3,6 +3,7 @@
 
 const eachBlogOrOneBlog = require("../each/eachBlogOrOneBlog");
 const resetFromDrive = require("clients/google-drive/sync/resetFromDrive");
+const establishSyncLock = require("sync/establishSyncLock");
 
 let totalGoogleDriveBlogs = 0;
 let successfulResyncs = 0;
@@ -15,34 +16,12 @@ const processBlog = async (blog) => {
 
   totalGoogleDriveBlogs++;
 
-  const publish = (...args) => {
-    console.log(
-      `Google Drive resync ${blog.title || "Untitled"} ${blog.id}:`,
-      ...args
-    );
-  };
-
-  const update = (...args) => {
-    if (!args.length) return;
-    console.log(
-      `Google Drive resync update ${blog.title || "Untitled"} ${blog.id}:`,
-      ...args
-    );
-  };
-
   console.log(
     `Starting Google Drive resync for ${blog.id} (${blog.handle || "no handle"})`
   );
 
-  try {
-    await resetFromDrive(blog.id, publish, update);
-    successfulResyncs++;
-    console.log(
-      `✅ Completed Google Drive resync for ${blog.id} (${blog.handle || "no handle"})`
-    );
-  } catch (err) {
+  const recordFailure = (message) => {
     failedResyncs++;
-    const message = err && err.message ? err.message : err;
     console.error(
       `❌ Google Drive resync failed for ${blog.id} (${blog.handle || "no handle"}):`,
       message
@@ -52,6 +31,49 @@ const processBlog = async (blog) => {
       handle: blog.handle,
       error: message,
     });
+  };
+
+  let syncLock;
+
+  try {
+    syncLock = await establishSyncLock(blog.id);
+  } catch (err) {
+    const message = err && err.message ? err.message : err;
+    recordFailure(`Could not acquire sync lock: ${message}`);
+  }
+
+  if (syncLock) {
+    const { folder, done } = syncLock;
+
+    try {
+      // Hold the folder lock for the whole walk so a webhook-triggered sync
+      // can't race it, and pass folder.update so changed files get rebuilt.
+      const summary = await resetFromDrive(
+        blog.id,
+        folder.status,
+        folder.update
+      );
+
+      if (!summary) {
+        recordFailure("Sync did not finish walking the Drive folder");
+      } else {
+        successfulResyncs++;
+        console.log(
+          `✅ Completed Google Drive resync for ${blog.id} (${blog.handle || "no handle"})`
+        );
+      }
+    } catch (err) {
+      recordFailure(err && err.message ? err.message : err);
+    } finally {
+      try {
+        await done();
+      } catch (err) {
+        console.warn(
+          `⚠️  Google Drive resync failed to release sync lock for ${blog.id}:`,
+          err && err.message ? err.message : err
+        );
+      }
+    }
   }
 
   if (totalGoogleDriveBlogs % 50 === 0) {

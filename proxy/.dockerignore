@@ -3,5 +3,6 @@
 tests/
 build/index.js
 build/build.sh
+build/sync-config.js
 build/data/*-previous-*
 *.md

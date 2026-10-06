@@ -56,7 +56,6 @@ async function middleware(req, res, next) {
       res.locals.folder = {directory: true, contents: []};
       res.render("dashboard/folder");
     } else {
-      console.log("HERE", err);
       next(err);
     }
 

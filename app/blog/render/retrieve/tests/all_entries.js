@@ -14,6 +14,62 @@ describe("all_entries", function () {
     expect((await res.text()).trim().split(/\s+/).sort()).toEqual(["A", "B"]);
   });
 
+  it("keeps html for a view that needs it after a view that doesn't, and drops it again after", async function () {
+    await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
+
+    await this.template(
+      {
+        "list.html": `{{#allEntries}}{{title}} {{/allEntries}}`,
+        "full.html": `{{#allEntries}}{{{html}}}{{/allEntries}}`,
+      },
+      {
+        views: {
+          "list.html": { url: "/list" },
+          "full.html": { url: "/full" },
+        },
+      }
+    );
+
+    const before = await (await this.get("/list?json=1")).json();
+    expect(before.allEntries[0].html).toBeUndefined();
+
+    const rendered = await (await this.get("/full")).text();
+    expect(rendered).toContain("A body");
+
+    const after = await (await this.get("/list?json=1")).json();
+    expect(after.allEntries[0].title).toEqual("A");
+    expect(after.allEntries[0].html).toBeUndefined();
+  });
+
+  it("keeps html for a view that only renders it from a nested partial, after a view that doesn't", async function () {
+    await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
+
+    await this.template(
+      {
+        "list.html": `{{#allEntries}}{{title}} {{/allEntries}}`,
+        "full.html": `{{#allEntries}}{{> row.html}}{{/allEntries}}`,
+        "row.html": `<div>{{> content.html}}</div>`,
+        "content.html": `{{{html}}}`,
+      },
+      {
+        views: {
+          "list.html": { url: "/list" },
+          "full.html": { url: "/full" },
+        },
+      }
+    );
+
+    // Fills the catalog cache without html first.
+    const before = await (await this.get("/list?json=1")).json();
+    expect(before.allEntries[0].html).toBeUndefined();
+
+    const full = await (await this.get("/full?json=1")).json();
+    expect(full.allEntries[0].html).toContain("A body");
+
+    const rendered = await (await this.get("/full")).text();
+    expect(rendered).toMatch(/<div>[^]*A body[^]*<\/div>/);
+  });
+
   it("drops unreferenced heavy fields from allEntries locals", async function () {
     await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
 
@@ -131,7 +187,7 @@ describe("all_entries cache", function () {
   it("reuses cached entries for identical cacheIDs", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "A" }]);
     });
 
@@ -148,7 +204,7 @@ describe("all_entries cache", function () {
   it("refetches when cacheID changes", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "A" }]);
     });
 
@@ -171,7 +227,7 @@ describe("all_entries cache", function () {
   it("returns isolated copies so caller mutations do not taint cache", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "Original" }]);
     });
 
@@ -191,7 +247,7 @@ describe("all_entries cache", function () {
     const allEntries = loadAllEntries();
 
     let resolveGetAll;
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       resolveGetAll = () => callback([{ id: "1", title: "A" }]);
     });
 
@@ -216,7 +272,7 @@ describe("all_entries cache", function () {
   it("stores separate entries per referenced field set so a stripped cache entry can't leak into a view that needs more", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "A", html: "<p>A body</p>" }]);
     });
 
@@ -234,6 +290,36 @@ describe("all_entries cache", function () {
 
       allEntries(withHtmlReq, { locals: {} }, function (err, entries2) {
         expect(entries2[0].html).toBe("<p>A body</p>");
+        // The title-only fill never held html, so this view can't be served
+        // from it and has to refetch.
+        expect(Entries.getAll).toHaveBeenCalledTimes(2);
+        done();
+      });
+    });
+  });
+
+  it("serves a title-only view from a catalog cached with html, without leaking html", function (done) {
+    const allEntries = loadAllEntries();
+
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
+      callback([{ id: "1", title: "A", html: "<p>A body</p>" }]);
+    });
+
+    const blog = { id: "blog-1", cacheID: 100 };
+
+    const titleOnlyReq = makeReq(blog, {
+      allEntries: { fields: { title: true } },
+    });
+    const withHtmlReq = makeReq(blog, {
+      allEntries: { fields: { title: true, html: true } },
+    });
+
+    allEntries(withHtmlReq, { locals: {} }, function (err, entries) {
+      expect(entries[0].html).toBe("<p>A body</p>");
+
+      allEntries(titleOnlyReq, { locals: {} }, function (err, entries2) {
+        expect(entries2[0].title).toBe("A");
+        expect(entries2[0].html).toBeUndefined();
         expect(Entries.getAll).toHaveBeenCalledTimes(1);
         done();
       });
@@ -243,7 +329,7 @@ describe("all_entries cache", function () {
   it("bypasses the cache for preview requests", function (done) {
     const allEntries = loadAllEntries();
 
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "A" }]);
     });
 
@@ -266,7 +352,7 @@ describe("all_entries cache", function () {
     // empty array from it is ambiguous between "no posts" and "Redis
     // hiccup." Caching it either way risks hiding every post until the
     // cacheID changes; refetching on every miss is the safe default.
-    spyOn(Entries, "getAll").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
       callback([]);
     });
 
@@ -278,5 +364,208 @@ describe("all_entries cache", function () {
         done();
       });
     });
+  });
+});
+
+describe("all_entries shared augmentation", function () {
+  const Entries = require("models/entries");
+  const EntryModel = require("models/entry");
+  const Entry = require("models/entry/instance");
+  const allEntriesPath = require.resolve("../all_entries");
+  const getAllCachedPath = require.resolve("../helpers/getAllCached");
+
+  function loadAllEntries() {
+    delete require.cache[allEntriesPath];
+    delete require.cache[getAllCachedPath];
+    return require("../all_entries");
+  }
+
+  afterEach(function () {
+    delete require.cache[allEntriesPath];
+    delete require.cache[getAllCachedPath];
+  });
+
+  function makeReq(blogURL, cacheID) {
+    return {
+      blog: {
+        id: "blog-1",
+        cacheID: cacheID || 100,
+        timeZone: "UTC",
+        locals: { blogURL: blogURL || "https://example.com" },
+      },
+      retrieve: {},
+      log: function () {},
+    };
+  }
+
+  function stubCatalog(backlinks) {
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
+      callback([
+        new Entry({
+          id: "/a.txt",
+          path: "/a.txt",
+          url: "/a",
+          title: "A",
+          tags: ["Foo"],
+          dateStamp: Date.UTC(2020, 0, 2),
+          backlinks: backlinks || [],
+        }),
+      ]);
+    });
+  }
+
+  it("caches entries already augmented and shares their nested fields across hits", async function () {
+    const allEntries = loadAllEntries();
+    stubCatalog();
+
+    const first = await allEntries(makeReq(), { locals: {} });
+    const second = await allEntries(makeReq(), { locals: {} });
+
+    expect(first[0].__augmented).toBe(true);
+    expect(first[0].tags[0].slug).toBe("foo");
+    expect(second[0]).not.toBe(first[0]);
+    expect(second[0].tags).toBe(first[0].tags);
+    expect(Object.isFrozen(second[0].tags)).toBe(true);
+  });
+
+  it("computes absoluteURL for the host each request arrived on", async function () {
+    const allEntries = loadAllEntries();
+    stubCatalog();
+
+    const apex = await allEntries(makeReq("https://example.com"), {
+      locals: {},
+    });
+    const www = await allEntries(makeReq("http://www.example.com"), {
+      locals: {},
+    });
+
+    expect(apex[0].absoluteURL).toBe("https://example.com/a");
+    expect(www[0].absoluteURL).toBe("http://www.example.com/a");
+    expect(Entries.getAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("keys the cache on the date settings augment reads", async function () {
+    const allEntries = loadAllEntries();
+    stubCatalog();
+
+    const long = await allEntries(makeReq(), { locals: {} });
+    const yearOnly = await allEntries(makeReq(), {
+      locals: { date_display: "YYYY" },
+    });
+    const hidden = await allEntries(makeReq(), {
+      locals: { hide_dates: true },
+    });
+
+    expect(long[0].date).toBe("January 2, 2020");
+    expect(yearOnly[0].date).toBe("2020");
+    expect(hidden[0].date).toBeUndefined();
+  });
+
+  it("keys the cache on whether the view can use backlinks", function () {
+    const { augmentContext } = require("../../load/augmentedEntries");
+    const allEntries = loadAllEntries();
+    const blog = makeReq().blog;
+    const res = { locals: {} };
+
+    const keyFor = (usesBacklinks) =>
+      allEntries._createCacheKey(
+        blog,
+        {},
+        augmentContext({ blog, usesBacklinks }, res)
+      );
+
+    expect(keyFor(false)).not.toEqual(keyFor(undefined));
+    expect(keyFor(false)).not.toEqual(keyFor(true));
+    expect(keyFor(undefined)).toEqual(keyFor(true));
+  });
+
+  it("does not hand a fill made without backlinks to a view that uses them", async function () {
+    const allEntries = loadAllEntries();
+    stubCatalog(["/b"]);
+
+    spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url, callback) {
+      callback(new Entry({ id: "/b.txt", path: "/b.txt", url: "/b", title: "B" }));
+    });
+
+    const without = makeReq();
+    without.usesBacklinks = false;
+    const withBacklinks = makeReq();
+    withBacklinks.usesBacklinks = true;
+
+    const first = await allEntries(without, { locals: {} });
+    const second = await allEntries(withBacklinks, { locals: {} });
+
+    expect(first[0].backlinks).toEqual([]);
+    expect(second[0].backlinks.map((entry) => entry.title)).toEqual(["B"]);
+    expect(EntryModel.getByUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves backlinks once per fill, not per render", async function () {
+    const allEntries = loadAllEntries();
+    stubCatalog(["/b"]);
+
+    spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url, callback) {
+      callback(new Entry({ id: "/b.txt", path: "/b.txt", url: "/b", title: "B" }));
+    });
+
+    const first = await allEntries(makeReq(), { locals: {} });
+    await allEntries(makeReq(), { locals: {} });
+
+    expect(first[0].backlinks.map((entry) => entry.title)).toEqual(["B"]);
+    expect(EntryModel.getByUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not cache a fill in which a backlink lookup hit a Redis error", async function () {
+    const allEntries = loadAllEntries();
+    stubCatalog(["/b"]);
+
+    spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url, callback) {
+      callback(undefined, new Error("mGet failed"));
+    });
+
+    const first = await allEntries(makeReq(), { locals: {} });
+    await allEntries(makeReq(), { locals: {} });
+
+    expect(first[0].backlinks).toEqual([]);
+    expect(EntryModel.getByUrl).toHaveBeenCalledTimes(2);
+  });
+
+  it("still caches a fill whose backlinks point at entries that no longer exist", async function () {
+    const allEntries = loadAllEntries();
+    stubCatalog(["/deleted"]);
+
+    spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url, callback) {
+      callback();
+    });
+
+    await allEntries(makeReq(), { locals: {} });
+    await allEntries(makeReq(), { locals: {} });
+
+    expect(EntryModel.getByUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces an augmentation failure as a template error through retrieve(), not a page missing allEntries", async function () {
+    loadAllEntries();
+    const retrievePath = require.resolve("../index");
+    delete require.cache[retrievePath];
+    const retrieve = require("../index");
+
+    spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
+      // tags must be an array - augment() reads tags.length
+      callback([new Entry({ id: "/a.txt", path: "/a.txt", url: "/a" })]);
+    });
+
+    let error;
+    try {
+      await retrieve(makeReq(), { locals: {} }, { allEntries: {} });
+    } catch (e) {
+      error = e;
+    }
+
+    delete require.cache[retrievePath];
+    expect(error && error.code).toBe("BADTEMPLATE");
+    expect(error && error.message).toBe(
+      "Your template variables were badly called"
+    );
   });
 });

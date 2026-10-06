@@ -4,6 +4,8 @@ var join = require("path").join;
 var fs = require("fs-extra");
 var localPath = require("helper/localPath");
 var retry = require("./util/retry");
+var persistError = require("./util/persistError");
+var { SOURCES } = require("./util/classifyError");
 var waitForErrorTimeout = require("./util/waitForErrorTimeout");
 
 // Remove should only ever be called inside the function returned
@@ -17,7 +19,11 @@ function remove(blogID, path, callback) {
   debug("Blog:", blogID, "Removing", path);
 
   createClient(blogID, function (err, client, account) {
-    if (err) return callback(err);
+    if (err) {
+      return persistError(blogID, err, SOURCES.AUTH, function () {
+        callback(err);
+      });
+    }
 
     pathOnDropbox = join(account.folder || "/", path);
 
@@ -37,7 +43,7 @@ function remove(blogID, path, callback) {
         // than the file not existing. HTTP 409 means
         // 'CONFLICT' but typically this means that
         // the file did not exist. Am I sure about this?
-        if (err.status !== 409) throw new Error(err);
+        if (err.status !== 409) throw err;
 
         // The file did not exist, no big deal
         return Promise.resolve();
@@ -49,7 +55,9 @@ function remove(blogID, path, callback) {
         callback(null);
       })
       .catch(function (err) {
-        callback(err);
+        persistError(blogID, err, SOURCES.APPLY, function () {
+          callback(err);
+        });
       });
   });
 }

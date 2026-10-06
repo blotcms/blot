@@ -23,6 +23,9 @@ module.exports = function getByUrl(blogID, entryUrl, callback) {
     })
     .catch(function (error) {
       console.error("entry.getByUrl: failed to resolve URL", error);
-      callback();
+      // Second argument lets callers that cache the result (see
+      // blog/render/load/augmentedEntries.js) tell a failed lookup from a
+      // URL that has no entry. Existing callers only read the first.
+      callback(undefined, error);
     });
 };

@@ -1,7 +1,11 @@
 const clfdate = require("helper/clfdate");
+const { performance } = require("perf_hooks");
 
 module.exports = function requestLogger(req, res, next) {
   const requestStart = Date.now();
+  // Share of the request's wall time the event loop spent busy (on this
+  // request or any other). Near 1: blocked on CPU. Near 0: waiting on I/O.
+  const eluStart = performance.eventLoopUtilization();
   const requestId = req.headers["x-request-id"] || "no-request-id";
   
   function formatRequestUrl() {
@@ -37,10 +41,12 @@ module.exports = function requestLogger(req, res, next) {
   res.on("finish", () => {
     try {
       const duration = ((Date.now() - requestStart) / 1000).toFixed(3);
+      const elu = performance.eventLoopUtilization(eluStart).utilization;
       console.log(createLogEntry(
         res.statusCode,
         duration,
-        formatRequestUrl()
+        formatRequestUrl(),
+        `elu=${elu.toFixed(2)}`
       ));
     } catch (err) {
       console.error("Error logging response:", err);

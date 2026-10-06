@@ -8,6 +8,10 @@
 FROM node:22-alpine AS base
 
 ARG PANDOC_VERSION=3.6.1
+# sharp 0.35 needs libvips >= 8.18.6 but the Alpine release this base image is
+# built on ships 8.18.2, so the vips packages (and whatever they pull in) come
+# from Alpine edge. Drop these once the stable release catches up.
+ARG ALPINE_EDGE="--repository=https://dl-cdn.alpinelinux.org/alpine/edge/main --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community"
 ARG TARGETPLATFORM
 
 EXPOSE 8080
@@ -60,7 +64,7 @@ RUN ARCH=$(echo ${TARGETPLATFORM} | sed -nE 's/^linux\/(amd64|arm64)$/\1/p') \
 #    prebuilt libvips ships without HEVC.
 #  - exiftool pulls in the perl runtime it needs; used for image/file metadata.
 # One layer, no apk cache left behind.
-RUN apk add --no-cache \
+RUN apk add --no-cache --upgrade $ALPINE_EDGE \
     vips \
     vips-cpp \
     vips-heif \
@@ -85,18 +89,24 @@ COPY package.json ./
 # `COPY --from`. None of g++/make/python3/pkgconfig/vips-dev ends up in any
 # published image, so the ~250MB they weigh is no longer pulled by every CI job.
 FROM base AS deps
+ARG ALPINE_EDGE
 
-RUN apk add --no-cache build-base python3 pkgconfig vips-dev
+RUN apk add --no-cache --upgrade $ALPINE_EDGE build-base python3 pkgconfig vips-dev
 
 # Build sharp against the system libvips rather than its bundled prebuilt, so
 # HEIC/HEVC decode (car.heic in app/build) works - the prebuilt libvips omits
-# the HEVC codec. Matches how the pre-multi-stage image resolved sharp.
+# the HEVC codec. sharp 0.35 dropped its install-time build: `npm run build` in
+# the package compiles src/build/Release, which sharp loads ahead of the
+# prebuilt @img/* binaries. The bundled libvips reports an `aom` version and the
+# system one doesn't, hence the check (comparing vips versions alone can match
+# by coincidence).
 ENV SHARP_FORCE_GLOBAL_LIBVIPS=1
 
 # NODE_ENV=production (inherited) keeps this to runtime dependencies only.
 RUN npm install --no-package-lock --omit=dev \
- && npm rebuild sharp --build-from-source --foreground-scripts \
- && node -e "const v=require('sharp').versions.vips; if (v!==require('child_process').execSync('pkg-config --modversion vips-cpp').toString().trim()) { console.error('sharp not linked against system libvips, got '+v); process.exit(1) }" \
+ && npm install --no-save --no-package-lock node-addon-api node-gyp \
+ && (cd node_modules/sharp && npm run build) \
+ && node -e "const s=require('sharp'); const v=s.versions.vips; if ('aom' in s.versions || v!==require('child_process').execSync('pkg-config --modversion vips-cpp').toString().trim()) { console.error('sharp not linked against system libvips, got '+v); process.exit(1) }" \
  && npm cache clean --force
 
 ## Stage 3 (dev-deps) - THROWAWAY
@@ -109,8 +119,9 @@ ENV NODE_ENV=development
 # The re-resolve can swap sharp back to its prebuilt libvips; force it back onto
 # the system libvips and confirm before this stage is copied forward.
 RUN npm install --no-package-lock \
- && npm rebuild sharp --build-from-source --foreground-scripts \
- && node -e "const v=require('sharp').versions.vips; if (v!==require('child_process').execSync('pkg-config --modversion vips-cpp').toString().trim()) { console.error('sharp not linked against system libvips, got '+v); process.exit(1) }" \
+ && npm install --no-save --no-package-lock node-addon-api node-gyp \
+ && (cd node_modules/sharp && npm run build) \
+ && node -e "const s=require('sharp'); const v=s.versions.vips; if ('aom' in s.versions || v!==require('child_process').execSync('pkg-config --modversion vips-cpp').toString().trim()) { console.error('sharp not linked against system libvips, got '+v); process.exit(1) }" \
  && npm cache clean --force
 
 ## Stage 4 (development)

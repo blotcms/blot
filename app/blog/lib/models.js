@@ -115,6 +115,16 @@ function getEntryByUrl(blogID, entryUrl) {
   });
 }
 
+// Like getEntryByUrl, but also reports the Redis error Entry.getByUrl
+// otherwise swallows, for callers that must not cache a failed lookup.
+function lookupEntryByUrl(blogID, entryUrl) {
+  return new Promise((resolve) => {
+    Entry.getByUrl(blogID, entryUrl, (entry, error) =>
+      resolve({ entry, error })
+    );
+  });
+}
+
 function adjacentTo(blogID, entryID) {
   return new Promise((resolve) => {
     Entries.adjacentTo(blogID, entryID, (next, previous, index) => {
@@ -129,16 +139,20 @@ function randomEntry(blogID) {
   });
 }
 
-// getAll / getRecent callback with (entries) only — never an error argument.
+// getAll / getRecent callback with (entries) only, never an error argument,
+// and resolve [] on a Redis failure. onError makes them reject on a Redis
+// outage instead, so that no caller renders or caches an empty list as real.
 function getAll(blogID) {
-  return new Promise((resolve) => {
-    Entries.getAll(blogID, (entries) => resolve(entries));
+  return new Promise((resolve, reject) => {
+    Entries.getAll(blogID, { onError: reject }, (entries) => resolve(entries));
   });
 }
 
 function getRecent(blogID) {
-  return new Promise((resolve) => {
-    Entries.getRecent(blogID, (entries) => resolve(entries));
+  return new Promise((resolve, reject) => {
+    Entries.getRecent(blogID, { onError: reject }, (entries) =>
+      resolve(entries)
+    );
   });
 }
 
@@ -164,6 +178,7 @@ module.exports = {
   getViewByURL,
   getEntry,
   getEntryByUrl,
+  lookupEntryByUrl,
   adjacentTo,
   randomEntry,
   getAll,

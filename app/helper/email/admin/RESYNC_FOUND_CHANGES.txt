@@ -1,0 +1,11 @@
+Resync found unsynced changes on {{client}}
+
+A manual resync from the dashboard (Reset your folder) found {{changeCount}} change{{#changeCountPlural}}s{{/changeCountPlural}} on {{client}} that hadn't already been synced, for {{id}} {{handle}} — evidence of a missed sync.
+
+- downloaded: {{downloaded}}
+- removed: {{removed}}
+- created dirs: {{createdDirs}}
+- excluded as modified during the resync: {{modifiedDuringWalk}}
+
+`logs green | grep "{{truncatedId}} sync_"`
+`access {{handle}}`

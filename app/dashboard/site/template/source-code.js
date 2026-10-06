@@ -5,6 +5,7 @@ const formJSON = require("helper/formJSON");
 const extend = require("helper/extend");
 const async = require("async");
 const writeChangeToFolder = require("./save/writeChangeToFolder");
+const previewReload = require("helper/publishPreviewReload");
 
 SourceCode.param("viewSlug", require("./load/template-views"));
 SourceCode.param("viewSlug", require("./load/template-view"));
@@ -74,7 +75,7 @@ SourceCode.route("/:viewSlug/edit")
       res.locals.base + "/source-code/" + req.view.name + "/edit";
     res.locals.selected = { ...res.locals.selected, edit: "selected" };
 
-    res.locals.title = `${req.view.name} - ${req.template.name}`;
+    res.locals.title = `${req.view.name} - ${req.template.displayName}`;
 
     res.locals.layout = "dashboard/template/layout";
     res.render("dashboard/template/source-code/edit");
@@ -103,6 +104,7 @@ SourceCode.route("/:viewSlug/edit")
         parsed,
         function (err, views) {
           if (err) return sendError(err);
+          views = views || {};
 
           Template.getMetadata(req.template.id, function (err, metadata) {
             if (err) return sendError(err);
@@ -133,6 +135,10 @@ SourceCode.route("/:viewSlug/edit")
                   view,
                   function (err) {
                     if (err) return sendError(err);
+                    // package.json is metadata, not a view file. Publish after the
+                    // locals and any view metadata from it are stored so an
+                    // open preview tab reloads.
+                    previewReload.publish(req.blog.id);
                     if (res.locals.templateForked) {
                       res.set("X-Template-Forked", "1");
                     }
@@ -198,7 +204,7 @@ SourceCode.route("/:viewSlug/configure")
       res.locals.base + "/source-code/" + req.view.name + "/configure";
     res.locals.selected = { ...res.locals.selected, config: "selected" };
 
-    res.locals.title = `${req.view.name} - ${req.template.name}`;
+    res.locals.title = `${req.view.name} - ${req.template.displayName}`;
     res.locals.layout = "dashboard/template/layout";
     res.render("dashboard/template/source-code/configure");
   })
@@ -313,7 +319,7 @@ SourceCode.route("/:viewSlug/rename")
       return next(new Error("You cannot rename package.json"));
     }
 
-    res.locals.title = `Rename - ${req.view.name} - ${req.template.name}`;
+    res.locals.title = `Rename - ${req.view.name} - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, rename: "selected" };
     res.render("dashboard/template/source-code/rename");
   })
@@ -352,7 +358,7 @@ SourceCode.route("/:viewSlug/rename")
 
 SourceCode.route("/:viewSlug/delete")
   .get(function (req, res) {
-    res.locals.title = `Delete - ${req.view.name} - ${req.template.name}`;
+    res.locals.title = `Delete - ${req.view.name} - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, delete: "selected" };
     res.render("dashboard/template/source-code/delete");
   })

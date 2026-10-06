@@ -69,4 +69,17 @@ describe("Drive verified-content storage", function() {
     await folder.pruneVerifiedContents();
     expect(await folder.getVerifiedContents(["file", "removed"])).toEqual([record, null]);
   });
+  it("keeps applied records across mapping resync and prunes removed IDs", async function() {
+    await folder.set("file", "/file.txt");
+    await folder.setApplied("file", { modifiedTime: "2026-01-01T00:00:00Z", fingerprint: "fp" });
+    await folder.setApplied("removed", { modifiedTime: "2026-01-01T00:00:00Z", fingerprint: "fp" });
+    await folder.reset({ preserveVerifiedContent: true });
+    expect(await folder.getApplied("file")).toEqual({ modifiedTime: "2026-01-01T00:00:00Z", fingerprint: "fp" });
+    await folder.set("file", "/file.txt");
+    await folder.pruneVerifiedContents();
+    expect(await folder.getApplied("file")).toEqual({ modifiedTime: "2026-01-01T00:00:00Z", fingerprint: "fp" });
+    expect(await folder.getApplied("removed")).toBeNull();
+    await folder.reset();
+    expect(await folder.getApplied("file")).toBeNull();
+  });
 });

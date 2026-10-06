@@ -17,8 +17,10 @@ sync/
   messenger.js              Factory for the log/status/syncID triple attached to every
                             sync session.
   establishSyncLock.js      Promise-based wrapper around index.js for async/await callers.
-  lock-diagnostics.js       Gathers system-state diagnostics (disk, CPU, memory, lock
-                            file stats) when the proper-lockfile lock is compromised.
+  lock.js                   Redis mutex (SET NX PX + token + heartbeat) used as the
+                            per-blog folder lock.
+  lock-diagnostics.js       Gathers system-state diagnostics (disk, CPU, memory, Redis
+                            lock state) when the folder lock is compromised.
   lock-diagnostics-state.js In-process registry of active sync IDs and in-flight
                             file-update paths. Consulted by lock-diagnostics.js.
 
@@ -93,7 +95,7 @@ sync/
 
 **File:** `index.js`
 
-Acquires a filesystem lock on the blog's folder using `proper-lockfile`, then calls `callback(err, folder, done)`.
+Acquires the blog's Redis folder lock (`lock.js`), then calls `callback(err, folder, done)`.
 
 - `blogID` — string. Throws `TypeError` if not a string.
 - `callback(err, folder, done)` — called once the lock is acquired or on failure.
@@ -204,7 +206,7 @@ In-process state tracking using two `Map` structures. Exported functions:
 
 `gatherLockDiagnostics({ blogID, lockPath, lockAcquiredAt, syncContext, timeoutMs })` → `Promise<object>`
 
-Called by `index.js` when `proper-lockfile` fires the `onCompromised` handler. Collects and returns a diagnostics object containing: pending syncs and updates, process PID and memory, OS load averages, disk space, and `stat` results for the lock file and lock directory. Each field is gathered with a shared deadline (default 2 seconds) so diagnostics cannot block indefinitely.
+Called by `index.js` when the lock heartbeat finds the lock has been lost. Collects and returns a diagnostics object containing: pending syncs and updates, process PID and memory, OS load averages, disk space, and the Redis lock state (holder token and remaining TTL). Each field is gathered with a shared deadline (default 2 seconds) so diagnostics cannot block indefinitely.
 
 ### `renames.js`
 
@@ -240,7 +242,7 @@ A complete sync session follows this sequence:
 sync(blogID, cb)
   └─ Blog.get                        Verify blog exists and is not disabled
   └─ messenger(blog)                 Create log/status/syncID
-  └─ lockfile.lock(blogPath)         Acquire filesystem lock
+  └─ folderLock.lock(blogID)        Acquire Redis folder lock
   └─ callback(null, folder, done)    Yield control to caller
        └─ folder.update(path, ...)   [zero or more times]
             └─ hashFile (before)
@@ -258,7 +260,7 @@ sync(blogID, cb)
   └─ done(syncError, finalCallback)
        └─ renames(blogID)            Detect file moves by size/title correlation
        └─ buildFromFolder(blogID)    Rebuild templates from Templates/ folder
-       └─ lockfile.unlock
+       └─ lock.release
        └─ Blog.set({ cacheID })      Only if folder.update was called at least once
        └─ finalCallback(syncError)
 ```
@@ -277,12 +279,12 @@ sync(blogID, cb)
 | `helper/localPath` | Resolves blog-relative paths to absolute paths on disk. |
 | `helper/hashFile` | Detects mid-update file changes. |
 | `helper/pathNormalizer` | Normalises path separators and casing before dispatch. |
-| `proper-lockfile` | Provides the filesystem-level mutual exclusion lock. |
+| `models/client` (Redis) | Backs the mutual exclusion lock in `lock.js`. |
 | `clients/*` | Dropbox, Git, and local clients all call `sync(blogID, ...)` to acquire the lock before processing their change lists. |
 
 ## Known Constraints
 
-- The lock is per-process and file-system based (`proper-lockfile`). It does not coordinate across machines; running multiple application servers against the same blog folder without shared storage will not be safe.
+- The lock lives in Redis (`blog:<id>:folder-lock`, 10s TTL, 3s heartbeat), so it coordinates across processes and hosts. A process that dies while holding it leaves the key until the TTL expires. If the heartbeat finds the lock lost, `[LOCK COMPROMISED]` is logged with diagnostics and the process crashes, so a sync never keeps writing without the lock. Git write/remove and template `writeToFolder`/`removeFromFolder` do not take this lock yet.
 - `renames.js` relies on a 30-second window and a heuristic match by file size or title. Renames involving empty files are skipped (zero `size` is excluded). Ambiguous renames — where multiple deleted entries have the same size or title — are not resolved.
 - `rebuildDependents` suppresses build errors for individual dependents and continues, so a broken dependent entry does not block other rebuilds.
 - `rebuild.js` does not acquire the sync lock itself; callers are responsible for ensuring no concurrent sync is in progress.

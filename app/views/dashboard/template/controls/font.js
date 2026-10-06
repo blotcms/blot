@@ -13,6 +13,13 @@ const submitUpdate = (form, name, value) => {
   const csrfInput = form.querySelector('input[name="_csrf"]');
   if (csrfInput) body.append(csrfInput.name, csrfInput.value);
 
+  form.dispatchEvent(
+    new CustomEvent("template-local-changed", {
+      bubbles: true,
+      detail: { group: "fonts" },
+    })
+  );
+
   fetch(withAjax(window.location.href), { method: 'post', body }).then(
     handleAjaxSaveResponse
   );
@@ -80,11 +87,10 @@ Array.from(document.querySelectorAll('[data-font-picker-form]')).forEach(form =>
     scheduleHide();
   });
 
-
-
   form.querySelectorAll('input[type="number"]').forEach(input => {
     input.addEventListener('change', () => {
       submitUpdate(form, input.name, input.value);
     });
   });
+
 });

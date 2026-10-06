@@ -2,11 +2,9 @@
 // this will fail in that case:
 // https://dropbox.github.io/dropbox-sdk-js/Dropbox.html#filesUpload__anchor
 
-// todo: check client_modified is respected
-
 const fs = require("fs-extra");
 const retry = require("./retry");
-const uuid = require("uuid/v4");
+const { v4: uuid } = require("uuid");
 const clfdate = require("helper/clfdate");
 const callOnce = require("helper/callOnce");
 
@@ -29,19 +27,12 @@ async function upload(client, source, destination, callback) {
 
   try {
     const contents = await fs.readFile(source);
-    const { mtime } = await fs.stat(source);
-    const mtimeString = mtime.toISOString();
-    const mtimePeriodIndex = mtimeString.indexOf(".");
 
-    // Dropbox doesn't like timestamps with the period
-    const client_modified =
-      mtimePeriodIndex === -1
-        ? mtimeString
-        : mtimeString.slice(0, mtimePeriodIndex) + "Z";
-
+    // client_modified is intentionally omitted: Blot doesn't keep a
+    // provider-independent modified time for local files, so Dropbox
+    // stamps the upload with its own server time instead.
     const { result } = await client.filesUpload({
       path: destination,
-      client_modified,
       mode: { ".tag": "overwrite" },
       autorename: false,
       contents,

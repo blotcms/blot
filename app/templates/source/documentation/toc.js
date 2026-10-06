@@ -16,8 +16,6 @@ tocbot.init({
 }
 
   function refreshToc() {
-    console.log('refreshing toc');
- 
   tocbot.refresh();
 
  // if there are no headings, hide the #toc-wrapper

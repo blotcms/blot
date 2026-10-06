@@ -4,23 +4,22 @@ on the services page of the dashboard */
 
 /* Will be replaced with the @font-face rules required
 to load which font is selected as the main body font */
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
 html {
-  {{#body_font}}
+  {{#font}}
   font-family: {{{stack}}};
   font-size: {{{font_size}}}px;
   line-height: {{{line_height}}};
-  {{/body_font}}
+  {{/font}}
   background: {{background_color}};
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
 
-{{#heading_font}}
+{{#font}}
 h1, h2, h3, h4, h5, h6, .index-link {
   font-family: {{{stack}}};
   {{#weight}}
@@ -30,7 +29,7 @@ h1, h2, h3, h4, h5, h6, .index-link {
   font-style: {{{.}}};
   {{/style}}
 }
-{{/heading_font}}
+{{/font}}
 
 .site-logo {
   max-height: 1.5em;
@@ -126,7 +125,7 @@ body.position-left .navigation-container {
   display: block;
   text-indent: calc({{spacing}} * -0.5rem);
   padding-left: calc({{spacing}} * 0.5rem);
-  color: {{navigation_link_color}};
+  color: {{text_color}};
   text-decoration: none;
   transition: color 0.1s;
 }
@@ -137,7 +136,7 @@ body.position-left .navigation-container {
   color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.5);
 }
 .navigation a.active {
-  color: {{accent_color}};
+  color: {{link_color}};
   font-weight: 500;
 }
 
@@ -410,13 +409,10 @@ body.position-top label[for="toggle"] {
 }
 
 .entry a {
-  color: {{text_link_color}};
+  color: {{link_color}};
 }
 
 .entry .caption {display: block;margin:1em 0;}
-.entry a:visited {
-  color: {{text_link_visited_color}};
-}
 
 
 
@@ -426,7 +422,7 @@ body.position-top label[for="toggle"] {
 }
 
 .post.text:hover {
-  border-color: {{accent_color}}
+  border-color: {{link_color}}
 }
 
 
@@ -632,10 +628,10 @@ body.position-right .nav:last-of-type > a:first-of-type {
 }
 
 .nav svg {
-  width:calc({{body_font.font_size}}px * 2.5);
-  height: calc({{body_font.font_size}}px * 2.5);
+  width:calc({{font.font_size}}px * 2.5);
+  height: calc({{font.font_size}}px * 2.5);
   stroke:{{text_color}};
-  stroke-width:calc({{body_font.font_size}}px * 0.14);
+  stroke-width:calc({{font.font_size}}px * 0.14);
   stroke-linecap: square;
 }
 @media screen and (max-width: 800px) {
@@ -692,7 +688,7 @@ body.position-right .nav:last-of-type > a:first-of-type {
 
 .archives a .title {
   display: block;
-  max-height: calc(1 * {{body_font.line_height}}em);
+  max-height: calc(1 * {{font.line_height}}em);
   overflow: hidden
 
 }

@@ -6,8 +6,6 @@ module.exports = function (req, res, next) {
   // the user does not want to enable analytics
   if (!req.updates.plugins.analytics.enabled) return next();
 
-  console.log(req.updates.plugins.analytics);
-
   const { options } = req.updates.plugins.analytics;
   const { provider, trackingID } = options;
 

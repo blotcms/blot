@@ -1,28 +1,33 @@
 
-{{#blog.healthIssue}}
-<div class="line health-issue">
-  <span class="label">Problem</span>
-  <span class="center">{{message}}</span>
-</div>
-{{/blog.healthIssue}}
-
+{{^blog.healthIssue}}
 <a class="line" href="{{{dashboardBase}}}/client/activity" style="flex-wrap: nowrap;">
   <span class="label"  style="flex-shrink: 0;">Status</span>
   <span class="center sync-status-center">
     {{> sync-status}}
   </span>
 </a>
+{{/blog.healthIssue}}
 
-{{#isDevelopment}}
-<a class="line" href="{{{dashboardBase}}}/client/open">
-  <span class="label">{{client.display_name}} folder</span>
-  <span class="center"><span class="link">Open folder in {{client.display_name}}</span></span>
-</a>
-<a class="line" href="{{{dashboardBase}}}/client/open?local=true">
-  <span class="label">Blot folder</span>
-  <span class="center"><span class="link">Open folder on Blot</span></span>
-</a>
-{{/isDevelopment}}
+{{#blog.healthIssue}}
+<div class="line health-issue" style="flex-wrap: nowrap;">
+  <span class="label" style="flex-shrink: 0;">Status</span>
+  <span class="center">
+    <span class="sync-status-center" style="display:block;">
+      {{> sync-status}}
+    </span>
+    <span style="display:block;margin-top:6px;color:var(--medium-text-color);font-size:14px;">{{message}}</span>
+    <div class="buttons" style="margin:12px 0 0;">
+      {{#actionUrl}}
+      <a href="{{{actionUrl}}}">{{action}}</a>
+      {{/actionUrl}}
+      {{^actionUrl}}
+      <a href="{{{base}}}/setup">{{action}}</a>
+      {{/actionUrl}}
+      <a href="{{{dashboardBase}}}/client/activity">View activity</a>
+    </div>
+  </span>
+</div>
+{{/blog.healthIssue}}
 
 <a class="line" href="{{{dashboardBase}}}/client/reset">
     <span class="label">Reset</span>
@@ -37,3 +42,12 @@
 <div class="buttons">
   <a href="{{{dashboardBase}}}" class="button"><span class="icon-small-chevron-right"></span> Back to dashboard</a>
 </div>
+
+{{#isDevelopment}}
+<div style="margin-top:16px;padding:10px 13px;border:1px solid var(--border-color);border-radius:5px;font-size:12px;color:var(--light-text-color);">
+  <div style="margin-bottom:6px;">Development server only:</div>
+  <a href="{{{dashboardBase}}}/client/open" style="color:var(--light-text-color);">Open local {{client.display_name}}</a>
+  &nbsp;&middot;&nbsp;
+  <a href="{{{dashboardBase}}}/client/open?local=true" style="color:var(--light-text-color);">Open data directory</a>
+</div>
+{{/isDevelopment}}

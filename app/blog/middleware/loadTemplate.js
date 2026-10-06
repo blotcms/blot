@@ -2,6 +2,7 @@ const Template = require("models/template");
 const Mustache = require("mustache");
 const fs = require("fs-extra");
 const { getMetadata } = require("../lib/models");
+const { isRedisUnavailableError } = require("helper/redisUnavailable");
 
 module.exports = async function loadTemplate(req, res, next) {
   // We care about template metadata for template
@@ -16,6 +17,9 @@ module.exports = async function loadTemplate(req, res, next) {
   try {
     metadata = await getMetadata(req.blog.template);
   } catch (err) {
+    // An outage is not a missing template, and a 400 would be cached
+    if (isRedisUnavailableError(err)) return next(err);
+
     const error = new Error("This template does not exist.");
     error.code = "NO_TEMPLATE";
     return next(error);

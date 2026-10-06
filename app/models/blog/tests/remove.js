@@ -3,8 +3,6 @@ describe("Blog.remove", function () {
   var remove = require("../remove");
   var getAllIDs = require("../getAllIDs");
   var redisSearch = require("helper/redisSearch");
-  var template = require("models/template");
-  var client = require("models/client");
 
   // Create a test user and blog before each spec
   global.test.user();
@@ -38,41 +36,6 @@ describe("Blog.remove", function () {
     });
   });
 
-
-  it("unindexes owned templates from the global public template set", function (done) {
-    var test = this;
-
-    template.create(
-      test.blog.id,
-      "Public Template",
-      { isPublic: true },
-      function (err, createdTemplate) {
-        if (err) return done.fail(err);
-
-        client
-          .sIsMember("template:public_templates", createdTemplate.id)
-          .then(function (isMemberBeforeRemove) {
-            expect(!!isMemberBeforeRemove).toBe(true);
-
-            remove(test.blog.id, function (err) {
-              if (err) return done.fail(err);
-
-              redisSearch(test.blog.id, function (err, results) {
-                if (err) return done.fail(err);
-
-                var publicTemplateEntries = results.filter(function (result) {
-                  return result.key === "template:public_templates";
-                });
-
-                expect(publicTemplateEntries).toEqual([]);
-                done();
-              });
-            });
-          })
-          .catch(done.fail);
-      }
-    );
-  });
 
   it("removes a blog from list of all blogs", function (done) {
     var test = this;

@@ -27,6 +27,7 @@ The module exports the following properties via `/Volumes/Blot/blot/app/clients/
 - `site_routes` — Express router for site-level webhooks and endpoints.
 - `dashboard_routes` — Express router for dashboard pages.
 - `init` — Initialization function called on server startup.
+- `getHealth(blogID)` — Returns the shared client health object for this blog. Folder trash/delete/unshare is `SOURCE_MISSING`. Setup-in-progress is `syncing`. Setup failures and transient Drive errors are not health issues.
 
 ## Core Architecture
 
@@ -46,7 +47,7 @@ The `write`, `remove`, and `disconnect` operations are explicit Blot-to-Drive sy
 The client uses Redis for persistence. All model state is stored under the prefix defined in `database/prefix.js`:
 
 - **Blog Records** (`database/blog.js`): Stores per-blog configuration including `folderId`, `folderName`, `serviceAccountId`, error state, and sync metadata. Redis hash keys are prefixed with `google-drive:blogs:${blogID}`. Blogs are tracked in sets by service account ID for efficient iteration.
-- **Folder Mappings** (`database/folder.js`): Maintains bidirectional mappings between Google Drive file IDs and local paths for each folder, plus metadata (modification time, directory flag). Stored as Redis hashes with keys like `google-drive:${folderId}:folder` and `google-drive:${folderId}:path`.
+- **Folder Mappings** (`database/folder.js`): Maintains bidirectional mappings between Google Drive file IDs and local paths for each folder, plus metadata (the `modifiedTime` Drive last reported for that file, and a directory flag). Stored as Redis hashes with keys like `google-drive:${folderId}:folder` and `google-drive:${folderId}:path`. A separate hash, `google-drive:${folderId}:applied-modified-time:${blogID}`, holds, per file ID, the Drive `modifiedTime` of the version last written locally and the local file's fingerprint right after that write. It's written only after a successful download, and like verified content it survives mapping resets and is pruned afterwards.
 - **Channels** (`database/channel.js`): Records active webhook channels, including their expiration times and resource IDs. Used to avoid duplicate channels and track channel lifecycle.
 - **Service Account Info** (`database/serviceAccount.js`): Caches service account metadata, especially storage quota usage, for load balancing.
 
@@ -99,6 +100,7 @@ Persistent state management layer:
 - `index.js` — Exports blog, serviceAccount, channel, and folder modules.
 - `prefix.js` — Defines the Redis key prefix for all Google Drive data.
 - `blog.js` — Blog account records: folder ID, service account ID, sync state, error messages.
+- `error.js` — Typed sync-health error codes (`errorCode` / `errorSince`) stored beside the prose `error` field, plus classifiers for Drive API failures and legacy prose-only rows.
 - `folder.js` — File ID ↔ path mappings for a Google Drive folder.
 - `channel.js` — Webhook channel lifecycle: create, store, list, delete.
 - `serviceAccount.js` — Service account metadata: storage quota, client ID.
@@ -135,7 +137,7 @@ Google Drive API client management and monitoring:
 
 Helper functions:
 
-- `download.js` — Downloads files from Google Drive; handles Google Docs by exporting to `.gdoc` format or HTML; tracks MD5 checksums.
+- `download.js` — Downloads files from Google Drive; handles Google Docs by exporting to `.gdoc` format or HTML; tracks MD5 checksums. Does not set the local file's mtime. Its callers (`sync/sync.js` and the hot-doc poller) record the applied `modifiedTime` and local fingerprint only after a call here succeeds.
 - `md5Checksum.js` — Computes MD5 hash of a local file.
 - `checkWeCanContinue.js` — Checks if a sync should proceed (used during setup to detect user cancellation or email changes).
 
@@ -185,10 +187,10 @@ HTML templates for user-facing pages:
 - For each remote file/folder:
   - If missing locally, downloads it or creates a directory.
   - If present but out-of-date, verifies local content and downloads only when needed.
-  - For Google Docs, uses modification time for comparison (no MD5).
-  - For regular files with a remote MD5, compares a previously verified checksum and local stat fingerprint. The fingerprint includes device, inode, size, and nanosecond modification/change times; replacements and same-size writes invalidate it even when modification time is restored.
+  - For Google Docs and other Google-app files (no MD5), change detection compares Drive's `modifiedTime` with the applied `modifiedTime` the client recorded after its last successful download of that file ID, not with the local file's mtime. The record is only trusted while the local fingerprint still matches, so a local overwrite without a Drive edit is still re-downloaded. That lets the client work the same way once blog storage can't set an mtime (e.g. S3). Files synced before this change have no applied time yet and fall back to the local mtime, which older code set from Drive after each successful download; they converge the next time they're confirmed unchanged or re-downloaded. `sync/resetToDrive.js` applies the same rule in the push direction for `.gdoc` files, snapshotting the applied times before it resets the database.
+  - For regular files with a remote MD5, compares a previously verified checksum and local stat fingerprint. The fingerprint includes device, inode, size, and nanosecond modification/change times; replacements and same-size writes invalidate it even when modification time is restored. This fingerprint only needs to detect local changes since the last verified checksum, not mirror a remote timestamp, so it keeps using local stat fields; on S3 it would be replaced by the object's ETag.
   - Verification metadata is fetched with one Redis HMGET per directory and stored separately from path metadata, scoped to the blog as well as the Drive folder. An unchanged warm file causes no content reads. Directory listing and stat work still scale with total file count.
-  - Regular files without a remote MD5 use size and modification time as a metadata fallback. Google-app behavior is unchanged.
+  - Regular files without a remote MD5 use size plus the same stored-`modifiedTime`-with-local-mtime-fallback rule as Google-app files.
   - Checksums are recorded only after stable before/after stat checks around hashing and a successful rebuild. Downloaded temporary files are verified before publication; failed post-publication verification still triggers a rebuild but does not populate the cache.
   - Stream downloads are published only after the destination writer finishes; failed partial downloads are removed.
 - For each local file/folder not present remotely, deletes it (unless it matches an ignore pattern).
@@ -225,7 +227,7 @@ When a new blog is set up, `fetchStorageInfo.js` selects a service account based
 5. **Service Account Storage Quota**: Accounts created after April 15, 2025, do not receive the automatic 15 GB allocation; existing accounts retain theirs.
 6. **Setup Timeout**: If a user does not complete setup (share the folder) within 2 hours, the setup process aborts.
 7. **Webhook Expiration**: Webhook channels expire after 24 hours and must be renewed. The client renews them every 10 minutes during `init()`.
-8. **Modtime Truncation**: Google Docs do not provide MD5 checksums, so only modification time (truncated to the second) is used for comparison.
+8. **Modtime Truncation**: Google Docs do not provide MD5 checksums, so only modification time (truncated to the second) is used for comparison — the client's recorded applied `modifiedTime` when available, otherwise the local file's mtime.
 
 ## Testing
 
@@ -244,3 +246,7 @@ Run tests with your normal test runner; consult individual test files for setup 
 - **Post-Sync Fix**: Calls `sync/fix` after sync completes to validate blog state.
 - **Webhooks**: Registers routes in the main Express app via `site_routes` and `dashboard_routes`.
 - **Service Account Selection**: Consulted by blog setup and write operations to choose where to store new content.
+
+## Testing error states locally
+
+`scripts/google-drive/fake-error.js` answers the folder lookup with a chosen Drive error (trashed, deleted, forbidden, rate limits, quota, ...) via `scripts/development/fake-google-drive-errors.js`, so `sync`, the classifier and `getHealth` run for real. Run `node scripts/google-drive/fake-error.js modes` for the list; `run <mode> <blogID>` syncs a connected blog, prints the resulting health, and restores the row.

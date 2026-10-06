@@ -53,7 +53,6 @@ async function duplicateTemplate({ owner, template }) {
   const { counter: slugCounter } = parseCopySlug(template.slug);
 
   return createTemplateWithUniqueName({
-    isPublic: false,
     owner,
     // The base is the name without ' copy'. The suffix is added by
     // formatAttempt, so making room for it never trims it away and leaves a

@@ -7,7 +7,7 @@
     
 	
   <p>
-    If you <b>delete the {{template.name}} template</b>, Blot will permanently remove its code and its settings. This cannot be undone.
+    If you <b>delete the {{template.displayName}} template</b>, Blot will permanently remove its code and its settings. This cannot be undone.
   </p>
 
   <div class="buttons">
@@ -20,7 +20,7 @@
     {{/template.isMine}}
 
     {{#template.checked}}
-    <p>The <strong>{{template.name}}</strong> template is your current template and cannot be deleted. Use another template first, then delete this one.</p>
+    <p>The <strong>{{template.displayName}}</strong> template is your current template and cannot be deleted. Use another template first, then delete this one.</p>
         <div class="buttons" style="opacity: 0.5;">
         <a href="{{{base}}}">Cancel</a>
     </div>

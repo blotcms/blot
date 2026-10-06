@@ -11,8 +11,13 @@ const Fix = require("sync/fix");
 const Rebuild = require("sync/rebuild");
 const config = require("config");
 const fetch = require("node-fetch");
+const notifyAdminIfResyncFoundChanges = require("./notifyResyncFoundChanges");
 
 const { promisify } = require("util");
+const RESYNC_REFUSALS = [
+  "DROPBOX_TRANSFER_INCOMPLETE",
+  "GOOGLE_DRIVE_FOLDER_MISSING",
+];
 const getStatuses = promisify(Blog.getStatuses);
 
 // So the breadcrumbs look like: Settings > Client
@@ -78,48 +83,52 @@ const verbs = {
 // these still parse into a path, verb and folder URL below.
 const PROGRESS_PREFIX = /^\(\d+\/\d+\)\s+/;
 
-client_routes.route("/activity").get(load.clients, async function (req, res) {
-  res.locals.breadcrumbs.add("Activity", "activity");
+client_routes.route("/activity").get(load.clients, async function (req, res, next) {
+  try {
+    res.locals.breadcrumbs.add("Activity", "activity");
 
-  let { statuses, next, previous } = await getStatuses(req.blog.id);
+    let { statuses, next, previous } = await getStatuses(req.blog.id);
 
-  statuses = _.chain(statuses)
-    .groupBy("syncID")
-    .map((value, key) => ({
-      syncID: key,
-      messages: value
-        .map((item) => {
-          const message = item.message.replace(PROGRESS_PREFIX, "");
-          const matchedVerb = Object.keys(verbs).find((i) =>
-            message.startsWith(i + " /")
-          );
-
-          if (matchedVerb) {
-            const path = message.slice((matchedVerb + " ").length);
-            item.path = Path.parse(path);
-            item.verb = verbs[matchedVerb];
-            item.url = Path.join(
-              res.locals.base,
-              "folder",
-              encodeURIComponent(path.slice(1))
+    statuses = _.chain(statuses)
+      .groupBy("syncID")
+      .map((value, key) => ({
+        syncID: key,
+        messages: value
+          .map((item) => {
+            const message = item.message.replace(PROGRESS_PREFIX, "");
+            const matchedVerb = Object.keys(verbs).find((i) =>
+              message.startsWith(i + " /")
             );
-          }
 
-          item.fromNow = moment(item.datestamp).fromNow();
+            if (matchedVerb) {
+              const path = message.slice((matchedVerb + " ").length);
+              item.path = Path.parse(path);
+              item.verb = verbs[matchedVerb];
+              item.url = Path.join(
+                res.locals.base,
+                "folder",
+                encodeURIComponent(path.slice(1))
+              );
+            }
 
-          return item;
-        })
-        .filter(({ message }) => message !== "Syncing" && message !== "Synced"),
-    }))
-    .filter((i) => i.messages && i.messages.length)
-    .value();
+            item.fromNow = moment(item.datestamp).fromNow();
 
-  res.render("dashboard/clients/activity", {
-    title: "Activity",
-    statuses,
-    next,
-    previous,
-  });
+            return item;
+          })
+          .filter(({ message }) => message !== "Syncing" && message !== "Synced"),
+      }))
+      .filter((i) => i.messages && i.messages.length)
+      .value();
+
+    res.render("dashboard/clients/activity", {
+      title: "Activity",
+      statuses,
+      next,
+      previous,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 client_routes
@@ -133,6 +142,8 @@ client_routes
     });
   });
 
+// N.B. these reset POSTs run on green, the redirect target renders on blue;
+// see dashboard/site/index.js.
 client_routes.post("/reset/rebuild", function (req, res) {
   Sync(req.blog.id, function (err, folder, done) {
     if (err) {
@@ -184,15 +195,37 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
 
     res.message(res.locals.base + "/client/reset", "Begin resync of your site");
 
+    let summary;
+
     try {
-      await res.locals.client.resync(
+      summary = await res.locals.client.resync(
         req.blog.id,
         folder.status,
         promisify(folder.update)
       );
     } catch (err) {
       console.log("ERROR:", err);
+
+      // A client can refuse to resync when it isn't safe or possible to:
+      // Dropbox while its initial transfer to Dropbox hasn't finished
+      // (clients/dropbox/sync/reset-to-blot.js), Google Drive when its
+      // folder was trashed, deleted or unshared
+      // (clients/google-drive/sync/resetFromDrive.js). Surface that refusal
+      // instead of falling through to Fix() and "Finished site rebuild"
+      // below, which would make the refusal look like a successful resync.
+      if (err && RESYNC_REFUSALS.includes(err.code)) {
+        // done() publishes "Synced" before calling back, so re-publish the
+        // refusal afterwards to make it the final status the user sees.
+        const refusal = err.message;
+        folder.status(refusal);
+        return done(null, function (err) {
+          if (err) console.log("Error releasing sync: ", err);
+          folder.status(refusal);
+        });
+      }
     }
+
+    notifyAdminIfResyncFoundChanges(req.blog, res.locals.client, summary);
 
     folder.status("Checking your site for issues");
     Fix(req.blog, { status: folder.status, log: folder.log }, function (err) {
@@ -280,6 +313,7 @@ client_routes.use("/:client", function (req, res, next) {
       "/redirect",
       "/authenticate",
       "/create",
+      "/disconnect",
     ]);
 
     if (!allowedUnpersistedPaths.has(relativePath)) {

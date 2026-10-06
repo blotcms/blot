@@ -13,7 +13,9 @@ const {
   MAX_FILE_SIZE,
   hasUnsupportedExtension,
   isDotfileOrDotfolder,
+  transferIncomplete,
 } = require("../util/constants");
+const modifiedSince = require("./modified-since");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const {
   countLocalFiles,
@@ -21,36 +23,127 @@ const {
 } = require("clients/util/resyncProgress");
 
 const set = promisify(require("../database").set);
+const persistError = promisify(require("../util/persistError"));
+const {
+  SOURCES,
+  classify,
+  keepsErrorAfterDownload,
+} = require("../util/classifyError");
+const tagSource = require("../util/tagSource");
 const createClient = promisify((blogID, cb) =>
   require("../util/createClient")(blogID, (err, ...results) => cb(err, results))
 );
 
+// Caps how many files in one directory are hashed/stat'd at once. Without
+// this, a directory with thousands of files fires that many concurrent
+// streaming sha256 hashes (helper/hashFile) in one Promise.all, and the
+// resulting callback/GC volume can stall the event loop long enough to blow
+// through the folder lock's TTL (app/sync/lock.js) and crash the process.
+const HASH_CONCURRENCY = 10;
+
+async function mapLimit(items, limit, iterator) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await iterator(items[index], index);
+    }
+  }
+
+  const workers = [];
+  for (let i = 0; i < Math.min(limit, items.length); i++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+  return results;
+}
+
 // const upload = promisify(require("clients/dropbox/util/upload"));
 // const get = promisify(require("../database").get);
 
-async function resetToBlot(blogID, publish) {
+// update(path) is called as each file or directory changes on disk, so the
+// database follows the folder even if the walk fails part way through. It is
+// the same (blogID, publish, update) contract the iCloud and Drive clients
+// use, and callers should hold the folder lock while it runs.
+async function resetToBlot(blogID, publish, update) {
   if (!publish)
     publish = (...args) => {
       console.log(clfdate() + " Dropbox:", args.join(" "));
     };
 
+  const updatePath = async (path) => {
+    if (typeof update !== "function") return;
+    try {
+      await update(path);
+    } catch (err) {
+      publish("Failed to update", path, err.message);
+    }
+  };
+
+  // Files Dropbox modified after this moment may just be edits that
+  // landed mid-walk (before their webhook), not changes we failed to sync.
+  const startedAt = Date.now();
+
   publish("Syncing folder from Dropbox to Blot");
 
-  // if (signal.aborted) return;
-  // // this could become verify.fromBlot
-  // await uploadAllFiles(account, folder, signal);
+  let client, account;
+  try {
+    [client, account] = await createClient(blogID);
+  } catch (err) {
+    await persistError(blogID, err, SOURCES.AUTH);
+    throw err;
+  }
 
-  // if (signal.aborted) return;
-  // const account = await get(blogID);
-  const [client, account] = await createClient(blogID);
+  try {
+    return await resetToBlotWithClient(
+      blogID,
+      publish,
+      client,
+      account,
+      updatePath,
+      startedAt
+    );
+  } catch (err) {
+    await persistError(blogID, err, SOURCES.APPLY);
+    throw err;
+  }
+}
+
+async function resetToBlotWithClient(
+  blogID,
+  publish,
+  client,
+  account,
+  updatePath,
+  startedAt
+) {
+  // Guard this at the source rather than only in each caller: resetToBlot
+  // treats Dropbox as the source of truth and deletes any local file with no
+  // Dropbox counterpart (see the walk below), which is exactly wrong while
+  // the initial transfer to Dropbox (reset-from-blot.js, run during setup)
+  // hasn't finished - those are exactly the files that would get wrongly
+  // deleted. init.js's resetToBlotWithLock, the manual "Resync from Dropbox"
+  // dashboard action, and the scripts/dropbox/*.js CLI tools all end up
+  // here, so checking once here (before touching anything, fs or Dropbox)
+  // covers every caller instead of relying on each of them to check first.
+  if (transferIncomplete(account)) {
+    const error = new Error(
+      "Dropbox hasn't finished receiving this blog's initial transfer yet, so it can't be treated as the source of truth without risking deleting files that were never uploaded. Free up space in Dropbox (if that's the issue) and retry the transfer from the Dropbox settings page, or disconnect, then try again."
+    );
+    error.code = "DROPBOX_TRANSFER_INCOMPLETE";
+    throw error;
+  }
 
   let dropboxRoot = "/";
 
   // Load the path to the blog folder root position in Dropbox
   if (account.folder_id) {
-    const { result } = await client.filesGetMetadata({
-      path: account.folder_id,
-    });
+    const { result } = await tagSource(
+      SOURCES.DELTA,
+      client.filesGetMetadata({ path: account.folder_id })
+    );
     const { path_display } = result;
     if (path_display) {
       dropboxRoot = path_display;
@@ -70,30 +163,70 @@ async function resetToBlot(blogID, publish) {
 
   const {
     result: { cursor },
-  } = await client.filesListFolderGetLatestCursor({
-    path: account.folder_id || "",
-    include_deleted: true,
-    recursive: true,
-  });
+  } = await tagSource(
+    SOURCES.DELTA,
+    client.filesListFolderGetLatestCursor({
+      path: account.folder_id || "",
+      include_deleted: true,
+      recursive: true,
+    })
+  );
 
-  // This means that future syncs will be fast
-  await set(blogID, { cursor });
+  // The cursor is fetched before the walk, so edits made during it are still
+  // seen by the next sync, but only saved once the walk succeeds. If the walk
+  // throws, the old cursor stays and the next webhook can still see those files.
 
   const summary = {
     downloaded: 0,
     removed: 0,
     createdDirs: 0,
     skipped: 0,
+    // Subset of downloaded: files Dropbox modified after we started.
+    modifiedDuringWalk: 0,
+    // Changes (of any kind) to paths Dropbox reports changing since the
+    // pre-walk cursor, i.e. edits that landed mid-walk. Not counted by
+    // countChanges, like modifiedDuringWalk. See changedSinceCursor below.
+    changedDuringWalk: 0,
+    // Paths behind downloaded/removed/createdDirs not already excused by
+    // modifiedDuringWalk, checked against the cursor once the walk is done.
+    changedPaths: [],
+    startedAt,
   };
 
   const localRoot = localPath(blogID, "/");
   const progress = createProgress(await countLocalFiles(localRoot), publish);
 
-  await walk(blogID, client, publish, dropboxRoot, "/", summary, progress);
+  await walk(
+    blogID,
+    client,
+    publish,
+    updatePath,
+    dropboxRoot,
+    "/",
+    summary,
+    progress
+  );
 
-  await set(blogID, {
-    error_code: 0,
-  });
+  if (summary.changedPaths.length) {
+    const changed = await changedSinceCursor(client, cursor, dropboxRoot);
+    if (changed) {
+      summary.changedDuringWalk = summary.changedPaths.filter((path) =>
+        overlapsAny(path, changed)
+      ).length;
+      if (summary.changedDuringWalk)
+        publish(
+          `${summary.changedDuringWalk} change(s) were made in Dropbox during the walk`
+        );
+    }
+  }
+
+  // This means that future syncs will be fast
+  // A download-only pass can't show that Dropbox has room for uploads,
+  // so it leaves a quota error in place.
+  await set(
+    blogID,
+    keepsErrorAfterDownload(account) ? { cursor } : { cursor, error_code: 0 }
+  );
 
   progress.finish("Finished processing folder");
 
@@ -104,6 +237,7 @@ const walk = async (
   blogID,
   client,
   publish,
+  updatePath,
   dropboxRoot,
   dir,
   summary,
@@ -130,6 +264,7 @@ const walk = async (
       try {
         await fs.remove(pathOnDisk);
         summary.removed += 1;
+        await updatePath(pathOnBlot);
       } catch (e) {
         publish("Failed to remove ignored", path_display, e.message);
       }
@@ -145,6 +280,8 @@ const walk = async (
       try {
         await fs.remove(pathOnDisk);
         summary.removed += 1;
+        summary.changedPaths.push(pathOnBlot);
+        await updatePath(pathOnBlot);
       } catch (e) {
         publish("Failed to remove", path_display, e.message);
       }
@@ -183,10 +320,13 @@ const walk = async (
         progress.publish("Removing", pathOnBlot);
         await fs.remove(pathOnDisk);
         summary.removed += 1;
+        summary.changedPaths.push(pathOnBlot);
+        await updatePath(pathOnBlot);
         publish("Creating directory", pathOnDisk);
         try {
           await fs.mkdir(pathOnDisk);
           summary.createdDirs += 1;
+          summary.changedPaths.push(pathOnBlot);
         } catch (e) {
           if (e.code !== "ENAMETOOLONG") throw e;
           summary.skipped += 1;
@@ -197,6 +337,8 @@ const walk = async (
         try {
           await fs.mkdir(pathOnDisk);
           summary.createdDirs += 1;
+          summary.changedPaths.push(pathOnBlot);
+          await updatePath(pathOnBlot);
         } catch (e) {
           if (e.code !== "ENAMETOOLONG") throw e;
           summary.skipped += 1;
@@ -211,6 +353,7 @@ const walk = async (
         blogID,
         client,
         publish,
+        updatePath,
         dropboxRoot,
         join(dir, name),
         summary,
@@ -229,6 +372,7 @@ const walk = async (
         summary.skipped += 1;
         try {
           await fs.outputFile(pathOnDisk, "");
+          await updatePath(pathOnBlot);
         } catch (err) {
           publish("Failed to create placeholder", pathOnBlot, err.message);
         }
@@ -247,6 +391,7 @@ const walk = async (
         summary.skipped += 1;
         try {
           await fs.outputFile(pathOnDisk, "");
+          await updatePath(pathOnBlot);
         } catch (err) {
           publish("Failed to create placeholder", pathOnBlot, err.message);
         }
@@ -266,16 +411,22 @@ const walk = async (
         try {
           await download(client, pathOnDropbox, pathOnDisk);
           summary.downloaded += 1;
+          await updatePath(pathOnBlot);
+          if (modifiedSince(remoteItem, summary.startedAt))
+            summary.modifiedDuringWalk += 1;
+          else summary.changedPaths.push(pathOnBlot);
         } catch (e) {
           // A file can end up with a destination path longer than the
           // filesystem allows – seen in production when a Dropbox account
           // got stuck wrapping the same file in nested "(Conflict met
           // exemplaar van ...)" copies. That download can never succeed.
-          // countChanges() (init.js) only looks at downloaded/removed/
+          // countChanges() (clients/util/countChanges.js) only looks at downloaded/removed/
           // createdDirs, so this was never counted as an unsynced change
           // either way; recording it as "skipped" here is just for
           // visibility in logs/summaries, not to affect the hourly email.
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
+          // Revoked access fails every remaining file: fail the resync.
+          if (classify(e, SOURCES.APPLY).persist) throw e;
           continue;
         }
       } else if (!localCounterpart) {
@@ -284,8 +435,14 @@ const walk = async (
         try {
           await download(client, pathOnDropbox, pathOnDisk);
           summary.downloaded += 1;
+          await updatePath(pathOnBlot);
+          if (modifiedSince(remoteItem, summary.startedAt))
+            summary.modifiedDuringWalk += 1;
+          else summary.changedPaths.push(pathOnBlot);
         } catch (e) {
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
+          // Revoked access fails every remaining file: fail the resync.
+          if (classify(e, SOURCES.APPLY).persist) throw e;
           continue;
         }
       } else {
@@ -295,25 +452,64 @@ const walk = async (
   }
 };
 
+// Lowercased paths, relative to the blog folder, that Dropbox reports as
+// changed since cursor. Removals and new directories have no timestamp for
+// modifiedSince to check, so this is how a file deleted in Dropbox mid-walk
+// is told apart from one a sync failed to remove. Returns null if Dropbox
+// can't be asked, so nothing is excused.
+const changedSinceCursor = async (client, cursor, dropboxRoot) => {
+  const root = dropboxRoot === "/" ? "" : dropboxRoot.toLowerCase();
+  const changed = [];
+
+  try {
+    let has_more;
+    do {
+      const { result } = await client.filesListFolderContinue({ cursor });
+      has_more = result.has_more;
+      cursor = result.cursor;
+      for (const { path_lower } of result.entries) {
+        if (!path_lower) continue;
+        if (!root) changed.push(path_lower);
+        else if (path_lower.startsWith(root + "/"))
+          changed.push(path_lower.slice(root.length));
+      }
+    } while (has_more);
+  } catch (err) {
+    return null;
+  }
+
+  return changed;
+};
+
+// Deleting or adding a folder in Dropbox may be reported as just the folder
+// or as the files inside it, so match ancestors and descendants too.
+const overlapsAny = (path, changed) => {
+  path = path.toLowerCase();
+  return changed.some(
+    (other) =>
+      other === path ||
+      path.startsWith(other + "/") ||
+      other.startsWith(path + "/")
+  );
+};
+
 const localReaddir = async (blogID, localRoot, dir) => {
   const contents = await fs.readdir(join(localRoot, dir));
 
-  return Promise.all(
-    contents.map(async (name) => {
-      const pathOnDisk = join(localRoot, dir, name);
-      const [content_hash, stat] = await Promise.all([
-        hashFile(pathOnDisk),
-        fs.stat(pathOnDisk),
-      ]);
+  return mapLimit(contents, HASH_CONCURRENCY, async (name) => {
+    const pathOnDisk = join(localRoot, dir, name);
+    const [content_hash, stat] = await Promise.all([
+      hashFile(pathOnDisk),
+      fs.stat(pathOnDisk),
+    ]);
 
-      return {
-        name,
-        path_display: join(dir, name),
-        is_directory: stat.isDirectory(),
-        content_hash,
-      };
-    })
-  );
+    return {
+      name,
+      path_display: join(dir, name),
+      is_directory: stat.isDirectory(),
+      content_hash,
+    };
+  });
 };
 
 const remoteReaddir = async (client, dir) => {

@@ -323,11 +323,9 @@ module.exports = function setView(templateID, updates, callback) {
 						multi.hSet(viewKey, view);
 
 						if (shouldRemoveUrl) {
-							console.log("removing hdel", viewKey, "url");
 							multi.hDel(viewKey, "url");
 						}
 						if (shouldRemoveUrlPatterns) {
-							console.log("removing hdel", viewKey, "urlPatterns");
 							multi.hDel(viewKey, "urlPatterns");
 						}
 

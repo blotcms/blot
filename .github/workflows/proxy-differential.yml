@@ -1,0 +1,98 @@
+name: proxy-differential
+
+# Runs the same request corpus (proxy/differential/corpus.js) against the
+# bare-metal OpenResty config (config/openresty) and the proxy container's
+# config (proxy/), both pointed at the same stub upstream
+# (proxy/e2e/stub-upstream.js) and Redis, and diffs the results
+# (proxy/differential/diff.js). Recommended item under blotcms/blot#1941:
+# proves the two configs behave the same for a client, beyond what
+# integration.yml's proxy-behaviour job checks against fixed expectations for
+# the container config alone.
+#
+# A separate workflow from integration.yml (not a job added there) so the two
+# don't conflict while both are under active development.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/proxy-differential.yml"
+      - "proxy/**"
+      - "config/openresty/**"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/proxy-differential.yml"
+      - "proxy/**"
+      - "config/openresty/**"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
+
+env:
+  BLOT_REPO: ${{ github.workspace }}
+
+jobs:
+  proxy-differential:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 21.7.3
+
+      - name: Install config generator dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/gendeps"
+          cd "$RUNNER_TEMP/gendeps"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+
+      # Both configs generate "blot.im" as the virtual-host domain: the
+      # bare-metal generator always does (config/openresty/locals.js's
+      # baremetal() ignores BLOT_HOST), so the container side is built with
+      # the same BLOT_HOST here to keep the corpus's Host headers meaningful
+      # against both (see proxy/differential/corpus.js).
+      - name: Generate proxy (container) config
+        run: bash proxy/build/build.sh
+        env:
+          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+          BLOT_HOST: blot.im
+          FETCH_CDN_IPS: "false"
+
+      - name: Build proxy image
+        run: docker build -f proxy/Dockerfile -t blot-proxy:differential proxy/
+
+      - name: Generate bare-metal config
+        run: bash proxy/differential/build-baremetal-config.sh
+        env:
+          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+
+      # FROM the just-built proxy image (proxy/differential/baremetal.Dockerfile),
+      # so both sides run the identical OpenResty + vendored Lua libs and only
+      # the generated nginx config differs.
+      - name: Build bare-metal-in-a-container image
+        run: |
+          docker build -f proxy/differential/baremetal.Dockerfile \
+            --build-arg PROXY_IMAGE=blot-proxy:differential \
+            -t blot-proxy:baremetal-differential .
+
+      - name: Run the differential corpus
+        # -x: a failure anywhere in this script (which does a fair amount of
+        # setup - trap/cleanup, a temp static-file fixture - before the first
+        # docker command) must never be silent again, even one under set -e
+        # that happens before run.sh's own phase echoes would print anything.
+        run: bash -x proxy/differential/run.sh
+
+      - name: Captures and container logs
+        if: always()
+        run: |
+          cd proxy/differential
+          for f in container-capture.json baremetal-capture.json container.log baremetal.log; do
+            echo "=== $f ==="
+            cat "$f" 2>/dev/null || echo "(missing)"
+          done

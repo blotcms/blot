@@ -8,8 +8,4 @@ The following accounts have passed their grace period and are due to be removed:
 
 To remove these users, run:
 
-```
-ssh blot
-login
 node scripts/user/delete-users-to-remove.js -fast
-```

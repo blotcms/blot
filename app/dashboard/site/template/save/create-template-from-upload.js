@@ -82,7 +82,6 @@ module.exports = async function createTemplateFromUpload ({
     // keeps the stored slug and the id routing resolves by in step even when
     // deduplication has had to trim the name
     locals,
-    isPublic: false,
     exhaustedMessage:
       "You already have too many templates with this name — rename it and try again",
   });

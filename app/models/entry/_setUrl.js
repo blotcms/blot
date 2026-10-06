@@ -36,15 +36,6 @@ var UID_LENGTH = 3;
 // case all else fails.
 var UID_PERMUTATIONS = 500;
 
-// console.log(Candidates({
-//   permalink: '',
-//   slug: '',
-//   summary: '',
-//   url: '',
-//   name: 'a.jpg',
-//   path: '/a.jpg'
-// }));
-
 // A folder post ("Album+") is synthesized at the plus-stripped path
 // ("/album") where no source file exists, so unlike a real file it is
 // allowed to claim that exact path as its URL.

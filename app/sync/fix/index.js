@@ -6,6 +6,76 @@ const tagGhosts = require("./tag-ghosts");
 const entriesPathIndex = require("./entries-path-index");
 const async = require("async");
 const callOnce = require("helper/callOnce");
+const clfdate = require("helper/clfdate");
+const email = require("helper/email");
+
+// Cap how many repair items from a single check get quoted in the admin
+// email - a big repair (eg. thousands of stale tag entries) would otherwise
+// produce an email too large to be useful.
+const EMAIL_SAMPLE_SIZE = 10;
+
+// Fire-and-forget: a blog whose Fix() actually repaired something is
+// interesting enough for the admin to hear about, but a failure to send
+// that email should never affect Fix()'s own callback.
+function notifyAdmin(blog, finalReport) {
+  const checks = Object.keys(finalReport).map(function (name) {
+    const items = finalReport[name];
+    const sample = items.slice(0, EMAIL_SAMPLE_SIZE).map(function (item) {
+      try {
+        return JSON.stringify(item);
+      } catch (e) {
+        return String(item);
+      }
+    });
+
+    return {
+      name: name,
+      count: items.length,
+      countPlural: items.length !== 1,
+      sample: sample,
+      moreCount: Math.max(0, items.length - sample.length),
+      hasMore: items.length > sample.length,
+    };
+  });
+
+  email.SYNC_FIX_REPAIRED(
+    null,
+    {
+      blogID: blog.id,
+      handle: blog.handle,
+      client: blog.client,
+      truncatedId: blog.id.slice(0, 12),
+      checks: checks,
+    },
+    function (err) {
+      if (err) {
+        console.error(
+          clfdate(),
+          "Fix: Failed to send admin repair email for",
+          blog.id,
+          err
+        );
+      }
+    }
+  );
+}
+
+// Each check below issues many small, sequential Redis round trips (e.g.
+// entry-ghosts reads every entry one at a time) without holding the blog's
+// folder lock, so it's invisible to sync/lock-diagnostics's pendingSyncs -
+// a [LOCK COMPROMISED] elsewhere gave no sign Fix() was running at all.
+// Tracking the currently-running checks here lets lock-diagnostics report
+// them. Fix() runs for more than one blog at a time in this process (the
+// Dropbox and iCloud hourly validators and user-triggered dashboard fixes
+// all call it independently), so this is keyed per call, not a singleton -
+// a single shared variable would get clobbered by whichever call started
+// most recently and misattribute a compromise to the wrong blog.
+let nextCallID = 0;
+const runningChecks = new Map();
+
+function getRunningChecks() {
+  return Array.from(runningChecks.values());
+}
 
 module.exports = function (blog, options, callback) {
   if (!blog) {
@@ -37,15 +107,26 @@ module.exports = function (blog, options, callback) {
     { name: "entries-path-index", fn: entriesPathIndex },
   ];
   let current = 0;
+  const callID = nextCallID++;
 
   async.eachSeries(
     checks,
     function (check, next) {
       current += 1;
       status(`(${current}/${checks.length}) Checking ${check.name}`);
+      const startedAt = Date.now();
+      runningChecks.set(callID, { blogID: blog.id, check: check.name, startedAt });
       check.fn(
         blog,
         callOnce(function (err, report) {
+          runningChecks.delete(callID);
+          console.log(
+            clfdate(),
+            "Fix:",
+            blog.id,
+            check.name,
+            `duration=${Date.now() - startedAt}ms`
+          );
           if (err) return next(err);
           if (report && report.length) finalReport[check.name] = report;
           next();
@@ -53,10 +134,14 @@ module.exports = function (blog, options, callback) {
       );
     },
     function (err) {
+      runningChecks.delete(callID);
+
       // if final report is empty return immediately
       if (!Object.keys(finalReport).length) {
         return callback(err, finalReport);
       }
+
+      notifyAdmin(blog, finalReport);
 
       // otherwise set cacheID to force cache invalidation
       const cacheID = Date.now();
@@ -68,3 +153,5 @@ module.exports = function (blog, options, callback) {
     }
   );
 };
+
+module.exports.getRunningChecks = getRunningChecks;

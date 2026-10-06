@@ -15,7 +15,7 @@ describe("recent_entries", function () {
   }
 
   it("fetches the full entry list when no field projection metadata is present", async function () {
-    spyOn(Entries, "getRecent").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getRecent").and.callFake(function (blogID, options, callback) {
       callback([{ id: "/a.txt", title: "A", html: "<p>A</p>" }]);
     });
 
@@ -23,13 +23,14 @@ describe("recent_entries", function () {
 
     expect(Entries.getRecent).toHaveBeenCalledWith(
       "blog-1",
+      jasmine.any(Object),
       jasmine.any(Function)
     );
     expect(result).toEqual([{ id: "/a.txt", title: "A", html: "<p>A</p>" }]);
   });
 
   it("strips unreferenced heavy fields when the template only references non-heavy fields", async function () {
-    spyOn(Entries, "getRecent").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getRecent").and.callFake(function (blogID, options, callback) {
       callback([{ id: "/a.txt", title: "A", html: "<p>A</p>" }]);
     });
 
@@ -44,7 +45,7 @@ describe("recent_entries", function () {
   });
 
   it("recognizes the recent_entries alias", async function () {
-    spyOn(Entries, "getRecent").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getRecent").and.callFake(function (blogID, options, callback) {
       callback([{ id: "/a.txt", title: "A", html: "<p>A</p>" }]);
     });
 
@@ -82,7 +83,7 @@ describe("recent_entries cache", function () {
   }
 
   it("reuses cached entries for identical cacheIDs", function (done) {
-    spyOn(Entries, "getRecent").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getRecent").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "A" }]);
     });
 
@@ -97,7 +98,7 @@ describe("recent_entries cache", function () {
   });
 
   it("refetches when cacheID changes", function (done) {
-    spyOn(Entries, "getRecent").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getRecent").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "A" }]);
     });
 
@@ -110,7 +111,7 @@ describe("recent_entries cache", function () {
   });
 
   it("returns isolated copies so caller mutations do not taint cache", function (done) {
-    spyOn(Entries, "getRecent").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getRecent").and.callFake(function (blogID, options, callback) {
       callback([{ id: "1", title: "Original" }]);
     });
 
@@ -127,7 +128,7 @@ describe("recent_entries cache", function () {
   });
 
   it("does not cache an empty result, so a transient Redis failure isn't mistaken for an empty blog", function (done) {
-    spyOn(Entries, "getRecent").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getRecent").and.callFake(function (blogID, options, callback) {
       callback([]);
     });
 
@@ -142,7 +143,7 @@ describe("recent_entries cache", function () {
   });
 
   it("still projects heavy fields on a cache hit", async function () {
-    spyOn(Entries, "getRecent").and.callFake(function (blogID, callback) {
+    spyOn(Entries, "getRecent").and.callFake(function (blogID, options, callback) {
       callback([{ id: "/a.txt", title: "A", html: "<p>A</p>" }]);
     });
 

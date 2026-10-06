@@ -16,9 +16,9 @@ module.exports = function getTemplateList(blogID, callback) {
     client.sMembers(key.blogTemplates(blogID)),
   ])
     .then(function (results) {
-      var publicTemplates = results[0] || [];
+      var siteTemplates = results[0] || [];
       var blogTemplates = results[1] || [];
-      var templateIDs = publicTemplates.concat(blogTemplates);
+      var templateIDs = siteTemplates.concat(blogTemplates);
       var response = [];
 
       async.eachSeries(

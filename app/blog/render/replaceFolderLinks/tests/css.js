@@ -51,7 +51,7 @@ describe("replaceCssUrls", function () {
       "style.css": `.test { background-image: url("/image%20with%20space.jpg"); }`,
     });
     expect(await this.text("/style.css")).toMatch(
-      cdnRegex("/image with space.jpg")
+      cdnRegex("/image%20with%20space.jpg")
     );
   });
 
@@ -60,7 +60,7 @@ describe("replaceCssUrls", function () {
     await this.template({
       "style.css": `.test { background-image: url("/100% luck.jpg"); }`,
     });
-    expect(await this.text("/style.css")).toMatch(cdnRegex("/100% luck.jpg"));
+    expect(await this.text("/style.css")).toMatch(cdnRegex("/100%25%20luck.jpg"));
   });
 
   it("should handle unquoted URLs", async function () {
@@ -372,7 +372,7 @@ describe("replaceCssUrls", function () {
 
     const result = await this.text("/style.css");
 
-    expect(result).toMatch(cdnRegex("/image with spaces.jpg"));
+    expect(result).toMatch(cdnRegex("/image%20with%20spaces.jpg"));
     expect(result).toMatch(cdnRegex("/image.jpg"));
   });
 

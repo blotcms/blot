@@ -81,8 +81,6 @@ async function injectCaseOnlyDeletes(entries, blogID, client) {
   for (let index = 0; index < entries.length; index++) {
     const entry = entries[index];
 
-    console.log(prefix(), "Examining entry", index + 1, "of", entries.length, ":", entry);
-
     if (!entry || (entry[".tag"] !== "file" && entry[".tag"] !== "folder")) {
       continue;
     }

@@ -6,7 +6,7 @@ var { MESSAGES } = require("./error");
 
 // I picked v4 from 5 possible versions
 // because it said random next to its name?
-var uuid = require("uuid/v4");
+var { v4: uuid } = require("uuid");
 
 var STATUSES = {
   CREATE_IN_PROGRESS: "createInProgress",

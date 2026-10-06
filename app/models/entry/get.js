@@ -6,12 +6,25 @@ var entryKey = require("./key").entry;
 
 var Entry = require("./instance");
 
+// Entries are read in full, so one MGET over a whole catalog (e.g. every
+// entry of a blog, for archives) returns tens of MB that are then parsed
+// in a single tick - which blocks the event loop for every other request
+// served by this process. Reading BATCH_SIZE entries at a time and yielding
+// between batches lets those requests run in between.
+//
+// The size also keeps each reply small enough to arrive without stalling. On
+// production, reading a 938-entry (5.3MB) catalog took 0.8-1.5s at 50-100
+// entries per MGET, because about a third of the batches stalled for 300-500ms
+// each (not in Redis, whose slowlog never saw them), but 130-200ms at 10-25,
+// where none of 264 batches did.
+var BATCH_SIZE = 25;
+
 // get(blogID, entryIDs, [fields], callback)
 //
 // entryIDs may be a single path (string) or an array of paths. `fields` is
 // accepted for call-site compatibility but ignored - every entry is read in
-// full with a single MGET over the JSON string keys.
-module.exports = function (blogID, entryIDs, fields, callback) {
+// full with an MGET over the JSON string keys.
+function get(blogID, entryIDs, fields, callback) {
   if (typeof fields === "function") {
     callback = fields;
     fields = undefined;
@@ -38,19 +51,8 @@ module.exports = function (blogID, entryIDs, fields, callback) {
 
   ensure(entryIDs, "array");
 
-  redis
-    .mGet(entryIDs)
+  readInBatches(entryIDs)
     .then(function (entries) {
-      entries = entries || [];
-
-      entries = entries.filter(function (entry) {
-        return entry;
-      });
-
-      entries = entries.map(function (entry) {
-        return new Entry(JSON.parse(entry)); // return value
-      });
-
       if (single) {
         entries = entries[0];
       }
@@ -62,8 +64,42 @@ module.exports = function (blogID, entryIDs, fields, callback) {
     .catch(function (err) {
       console.error(err);
 
-      if (single) return callback();
+      // The error rides along as a second argument so a caller that caches
+      // the result can tell this apart from entries that don't exist - see
+      // getByUrl.js. Existing callers only read the first.
+      if (single) return callback(undefined, err);
 
-      return callback([]);
+      return callback([], err);
     });
-};
+}
+
+// Resolves the entries that exist, in the order requested. Rejects if any
+// batch fails, so a partial list is never mistaken for the whole one.
+async function readInBatches(keys) {
+  var entries = [];
+
+  for (var i = 0; i < keys.length; i += BATCH_SIZE) {
+    // Let other requests run before the next batch is read and parsed
+    if (i > 0) await new Promise(setImmediate);
+
+    var values = (await redis.mGet(keys.slice(i, i + BATCH_SIZE))) || [];
+
+    values.forEach(function (value) {
+      if (value) entries.push(new Entry(JSON.parse(value)));
+    });
+  }
+
+  return entries;
+}
+
+module.exports = get;
+
+// Tests lower this to exercise batching without hundreds of entries
+Object.defineProperty(module.exports, "BATCH_SIZE", {
+  get: function () {
+    return BATCH_SIZE;
+  },
+  set: function (size) {
+    BATCH_SIZE = size;
+  },
+});

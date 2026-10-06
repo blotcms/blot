@@ -1,11 +1,33 @@
+const fs = require("fs");
 const config = require("config");
 const clfdate = require("helper/clfdate");
 const email = require("helper/email");
 const redis = require("models/client");
+const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const setup = require("./setup");
 const server = require("./server");
 
 const DEPLOYMENT_MARKER_EXPIRATION_SECONDS = 90 * 24 * 60 * 60;
+
+// The deploy sets --report-on-fatalerror (scripts/deploy/util/
+// generateDockerCommand.js), but Node won't create the report directory
+// itself, and a missing one means a V8 out-of-memory crash leaves no report.
+if (process.report && process.report.reportOnFatalError && process.report.directory) {
+  try {
+    fs.mkdirSync(process.report.directory, { recursive: true });
+  } catch (err) {
+    console.error(clfdate(), "Could not create Node report directory", err);
+  }
+}
+
+// Background work that hits Redis while it is down rejects with a connection
+// error. Log those rather than crash the process. Installing a listener
+// disables Node's default handling, so anything else is rethrown, which
+// surfaces as an uncaught exception and still exits the process.
+process.on("unhandledRejection", function (err) {
+  if (!isRedisUnavailableError(err)) throw err;
+  console.error(clfdate(), "Unhandled rejection (Redis unavailable):", err.message);
+});
 
 function releaseId() {
   return process.env.BLOT_RELEASE_ID || process.env.GIT_SHA;
@@ -59,8 +81,11 @@ setup(async (err) => {
     }
 
     // Send an email notification if the server starts or restarts
-    serverStartEvent().then((event) =>
-      email.SERVER_START(null, { container: config.container, event })
-    );
+    // Worktree preview sidecars (scripts/development/preview.sh) are not master
+    if (config.master || config.environment !== "development") {
+      serverStartEvent().then((event) =>
+        email.SERVER_START(null, { container: config.container, event })
+      );
+    }
   });
 });

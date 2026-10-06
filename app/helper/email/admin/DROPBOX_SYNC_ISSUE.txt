@@ -4,6 +4,6 @@ The hourly sync validation detected previously unsynced changes from Dropbox for
 
 {{#blogs}}
 - {{id}} {{handle}} — {{changeCount}} change{{#changeCountPlural}}s{{/changeCountPlural}}
-  `logs blue | grep "{{truncatedId}} sync_"`
+  `logs green | grep "{{truncatedId}} sync_"`
   `access {{handle}}`
 {{/blogs}}

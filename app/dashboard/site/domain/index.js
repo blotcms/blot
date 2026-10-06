@@ -46,8 +46,6 @@ Domain.use((req, res, next) => {
             dnsProvider.is[dnsProvider.id] = true;
             res.locals.dnsProvider = dnsProvider;
         }
-        
-        console.log(res.locals.dnsProvider);
 
         res.locals.code = {};
         res.locals.code[activeWarning.code] = true;
