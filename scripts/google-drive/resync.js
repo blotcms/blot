@@ -9,6 +9,7 @@ let totalGoogleDriveBlogs = 0;
 let successfulResyncs = 0;
 let failedResyncs = 0;
 const errors = [];
+const changed = [];
 
 const processBlog = async (blog) => {
   if (!blog || blog.isDisabled) return;
@@ -44,20 +45,23 @@ const processBlog = async (blog) => {
 
   if (syncLock) {
     const { folder, done } = syncLock;
+    const paths = [];
 
     try {
       // Hold the folder lock for the whole walk so a webhook-triggered sync
       // can't race it, and pass folder.update so changed files get rebuilt.
-      const summary = await resetFromDrive(
-        blog.id,
-        folder.status,
-        folder.update
-      );
+      const summary = await resetFromDrive(blog.id, folder.status, (path) => {
+        paths.push(path);
+        return folder.update(path);
+      });
 
       if (!summary) {
         recordFailure("Sync did not finish walking the Drive folder");
       } else {
         successfulResyncs++;
+        if (summary.downloaded || summary.removed || summary.createdDirs) {
+          changed.push({ blogID: blog.id, handle: blog.handle, summary, paths });
+        }
         console.log(
           `✅ Completed Google Drive resync for ${blog.id} (${blog.handle || "no handle"})`
         );
@@ -102,6 +106,27 @@ const summarize = () => {
     if (errors.length > 10) {
       console.log(`  ... and ${errors.length - 10} more errors`);
     }
+  }
+
+  if (changed.length > 0) {
+    // A resync of a folder that is already in sync should change nothing, so
+    // a blog listed here again on the next run is probably stuck in a loop.
+    console.log(
+      `\nBlogs with changes (${changed.length}) - resync again and investigate any that repeat:`
+    );
+    changed.forEach(({ blogID, handle, summary, paths }) => {
+      const counts = [
+        `${summary.downloaded} downloaded`,
+        `${summary.removed} removed`,
+        `${summary.createdDirs} directories created`,
+      ];
+      if (summary.modifiedDuringWalk) {
+        counts.push(`${summary.modifiedDuringWalk} edited during the resync`);
+      }
+      console.log(`  Blog ${blogID} (${handle || "no handle"}): ${counts.join(", ")}`);
+      paths.slice(0, 5).forEach((path) => console.log(`    ${path}`));
+      if (paths.length > 5) console.log(`    ... and ${paths.length - 5} more`);
+    });
   }
 
   if (failedResyncs > 0) {
