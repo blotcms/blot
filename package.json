@@ -25,7 +25,8 @@
     "preview-newsletter": "./scripts/development/preview-newsletter.sh",
     "render-time-chart": "node scripts/render-time-chart",
     "render-probe": "node scripts/render-probe",
-    "build-probe": "node scripts/build-probe"
+    "build-probe": "node scripts/build-probe",
+    "fix-probe": "node scripts/fix-probe"
   },
   "version": "0.0.0",
   "dependencies": {
