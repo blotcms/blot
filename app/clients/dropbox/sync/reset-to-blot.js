@@ -17,6 +17,7 @@ const {
 } = require("../util/constants");
 const modifiedSince = require("./modified-since");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const localDescendants = require("clients/util/localDescendants");
 const {
   countLocalFiles,
   createProgress,
@@ -278,10 +279,14 @@ const walk = async (
     if (!remoteCounterpart) {
       progress.publish("Removing", pathOnBlot, false, removedCount);
       try {
+        const descendants = is_directory
+          ? await localDescendants(pathOnDisk, pathOnBlot)
+          : [];
         await fs.remove(pathOnDisk);
         summary.removed += 1;
         summary.changedPaths.push(pathOnBlot);
         await updatePath(pathOnBlot);
+        for (const descendant of descendants) await updatePath(descendant);
       } catch (e) {
         publish("Failed to remove", path_display, e.message);
       }

@@ -16,6 +16,7 @@ const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const modifiedSince = require("clients/util/modifiedSince");
+const localDescendants = require("clients/util/localDescendants");
 const {
   countLocalFiles,
   createProgress,
@@ -165,9 +166,13 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           join(dir, name),
           "which does not exist remotely"
         );
+        const descendants = isLocalDirectory
+          ? await localDescendants(localPath(blogID, path), path)
+          : [];
         await fs.remove(localPath(blogID, path));
         summary.removed += 1;
         await update(path);
+        for (const descendant of descendants) await update(descendant);
         await remove(await getByPath(path));
       }
     }

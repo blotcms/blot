@@ -9,6 +9,7 @@ const remoteReaddir = require("./util/remoteReaddir");
 const remoteRecursiveList = require("./util/remoteRecursiveList");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const modifiedSince = require("clients/util/modifiedSince");
+const localDescendants = require("clients/util/localDescendants");
 const {
   countLocalFiles,
   createProgress,
@@ -97,9 +98,13 @@ module.exports = async (blogID, publish, update) => {
       ) {
         await checkWeCanContinue();
         progress.publish("Removing local item", path, false, removedCount);
+        const descendants = isLocalDirectory
+          ? await localDescendants(localPath(blogID, path), path)
+          : [];
         await fs.remove(localPath(blogID, path));
         summary.removed += 1;
         await update(path);
+        for (const descendant of descendants) await update(descendant);
       }
     }
 
