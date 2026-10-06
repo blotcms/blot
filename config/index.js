@@ -54,6 +54,10 @@ module.exports = {
   environment,
   host: BLOT_HOST,
   reverse_proxies,
+  // Shared secret sent as X-Blot-Purge-Token when purging the reverse
+  // proxies. Optional: the proxies only require it if they are given the
+  // same BLOT_PURGE_TOKEN.
+  purge_token: process.env.BLOT_PURGE_TOKEN,
   protocol: BLOT_PROTOCOL + "://",
   master: process.env.CONTAINER_NAME === "blot-container-green",
   // map 'blot-container-<container-name>' to 'container-name'

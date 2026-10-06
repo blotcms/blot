@@ -79,8 +79,6 @@ linkFormat.post("/", async (req, res) => {
 
     try {
 
-        console.log('saving changes', {format, custom, isCustom});
-
         const changes = await updateBlog(req.blog.id, {
             permalink: {
                 format,
@@ -91,7 +89,6 @@ linkFormat.post("/", async (req, res) => {
 
         
         if (changes && changes.includes('permalink')) {
-            console.log('resaving entries');
             await resaveEntries(req.blog.id, ()=>{});
         }
 

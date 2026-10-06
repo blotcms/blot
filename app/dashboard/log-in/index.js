@@ -6,6 +6,7 @@ var checkReset = require("./checkReset");
 var checkEmail = require("./checkEmail");
 var checkPassword = require("./checkPassword");
 var errorHandler = require("./errorHandler");
+var { redisUnavailableHandler } = require("helper/redisUnavailable");
 var redirect = require("./redirect");
 
 var form = new Express.Router();
@@ -55,6 +56,8 @@ form
 
   .post(checkEmail, checkReset, errorHandler)
 
+  .post(redisUnavailableHandler)
+
   .post(function (err, req, res, next) {
     res.render("dashboard/log-in/reset");
   });
@@ -71,6 +74,8 @@ form
   .post(require("./rateLimit"), checkEmail, checkReset, checkPassword)
 
   .all(errorHandler)
+
+  .all(redisUnavailableHandler)
 
   .all(function (err, req, res, next) {
     if (req.body && req.body.reset !== undefined)

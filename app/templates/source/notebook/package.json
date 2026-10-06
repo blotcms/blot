@@ -1,5 +1,6 @@
 {
   "name": "Notebook",
+  "popularity": 60,
   "locals": {
     "page_size": 20,
     "hide_dates": false,
@@ -34,7 +35,8 @@
       "line_height": 1.4,
       "line_width": 38,
       "font_size": 16
-    }
+    },
+    "profile_image": {}
   },
   "enabled": true,
   "views": {

@@ -10,24 +10,52 @@ const express = require("express");
 const dashboard = new express.Router();
 
 const finishSetup = require("./setup");
+const health = require("clients/health");
+const {
+  classify,
+  clearAllErrorFields,
+  isSetupError,
+} = require("../database/error");
 
 const VIEWS = require("path").resolve(__dirname + "/../views") + "/";
 
 dashboard.use(async function (req, res, next) {
-  res.locals.account = await database.blog.get(req.blog.id);
+  try {
+    res.locals.account = await database.blog.get(req.blog.id);
 
-  if (res.locals.account && res.locals.account.serviceAccountId) {
-    res.locals.serviceAccount = await database.serviceAccount.get(
-      res.locals.account.serviceAccountId
-    );
+    if (res.locals.account && res.locals.account.serviceAccountId) {
+      res.locals.serviceAccount = await database.serviceAccount.get(
+        res.locals.account.serviceAccountId
+      );
+    }
+
+    next();
+  } catch (err) {
+    next(err);
   }
-
-  next();
 });
 
 dashboard.get("/", function (req, res) {
   if (!res.locals.account) {
     return res.redirect(req.baseUrl + "/connect");
+  }
+
+  // getHealth (../getHealth.js) already treats a fresh setup attempt as
+  // syncing rather than error, because /set-up-folder below clears the
+  // durable error fields in the same write that sets preparing: true. Stay
+  // in sync with that here too, so a future change to that ordering can't
+  // reopen the stale-error-during-setup gap Dropbox's dashboard route
+  // guards against.
+  // Setup failures are deliberately kept out of health (see getHealth.js
+  // and database/error.js: isSetupError) because they aren't one of the
+  // small set of known, actionable codes - just an opaque failure. Surface
+  // the prose here instead so the user isn't left looking at a "syncing"
+  // badge with no explanation of what's stuck.
+  res.locals.account.setupFailed = isSetupError(res.locals.account.error);
+
+  if (res.locals.account.preparing && !res.locals.account.setupFailed) {
+    res.locals.blog.healthIssue = undefined;
+    res.locals.blog.health = health.syncing();
   }
 
   res.render(VIEWS + "index");
@@ -46,109 +74,122 @@ dashboard.route("/connect").get(function (req, res) {
   res.render(VIEWS + "connect");
 });
 
-dashboard.route("/setup").get(async function (req, res) {
-  if (res.locals.account && res.locals.account.email) {
-    res.locals.suggestedEmail = res.locals.account.email;
-  } else {
-    let suggestedEmail = req.user.email;
+dashboard.route("/setup").get(async function (req, res, next) {
+  try {
+    if (res.locals.account && res.locals.account.email) {
+      res.locals.suggestedEmail = res.locals.account.email;
+    } else {
+      let suggestedEmail = req.user.email;
 
-    const otherBlogIDs = req.user.blogs.filter((id) => id !== req.blog.id);
-    const otherDriveAccounts = await Promise.all(
-      otherBlogIDs.map((id) => database.blog.get(id))
-    );
+      const otherBlogIDs = req.user.blogs.filter((id) => id !== req.blog.id);
+      const otherDriveAccounts = await Promise.all(
+        otherBlogIDs.map((id) => database.blog.get(id))
+      );
 
-    otherDriveAccounts.forEach((account) => {
-      if (account && account.email) {
-        suggestedEmail = account.email;
-        return;
-      }
-    });
+      otherDriveAccounts.forEach((account) => {
+        if (account && account.email) {
+          suggestedEmail = account.email;
+          return;
+        }
+      });
 
-    res.locals.suggestedEmail = suggestedEmail;
+      res.locals.suggestedEmail = suggestedEmail;
+    }
+
+    // Reached from the "Recreate folder" health action: explain why the
+    // user is being asked for their email again and what happens next.
+    res.locals.folderLost =
+      classify(res.locals.account) === health.CODES.SOURCE_MISSING;
+
+    res.render(VIEWS + "setup");
+  } catch (err) {
+    next(err);
   }
-
-  res.render(VIEWS + "setup");
 });
 
 dashboard
   .route("/set-up-folder")
   .post(parseBody, async function (req, res, next) {
-    const existingAccount = await database.blog.get(req.blog.id);
+    try {
+      const existingAccount = await database.blog.get(req.blog.id);
 
-    if (req.body.cancel) {
-      if (!req.blog.client) {
-        return res.redirect(res.locals.dashboardBase + "/client");
+      if (req.body.cancel) {
+        if (!req.blog.client) {
+          return res.redirect(res.locals.dashboardBase + "/client");
+        }
+
+        if (existingAccount && existingAccount.folderId && !existingAccount.error) {
+          return res.redirect(req.baseUrl);
+        }
+
+        return disconnect(req.blog.id, next);
       }
 
-      if (existingAccount && existingAccount.folderId && !existingAccount.error) {
+      if (!req.body.email) {
+        return res.message(req.baseUrl, "Please enter your email address");
+      }
+
+      if (existingAccount && existingAccount.email === req.body.email && !existingAccount.error) {
         return res.redirect(req.baseUrl);
       }
 
-      return disconnect(req.blog.id, next);
-    }
+      if (req.body.email.length > 100) {
+        return res.message(req.baseUrl, "Email address is too long");
+      }
 
-    if (!req.body.email) {
-      return res.message(req.baseUrl, "Please enter your email address");
-    }
+      if (req.body.email.indexOf("@") === -1) {
+        return res.message(req.baseUrl, "Please enter a valid email address");
+      }
 
-    if (existingAccount && existingAccount.email === req.body.email && !existingAccount.error) {
-      return res.redirect(req.baseUrl);
-    }
-
-    if (req.body.email.length > 100) {
-      return res.message(req.baseUrl, "Email address is too long");
-    }
-
-    if (req.body.email.indexOf("@") === -1) {
-      return res.message(req.baseUrl, "Please enter a valid email address");
-    }
-
-    const setClientError = await new Promise((resolve) => {
-      Blog.set(req.blog.id, { client: "google-drive" }, function (err) {
-        resolve(err);
+      const setClientError = await new Promise((resolve) => {
+        Blog.set(req.blog.id, { client: "google-drive" }, function (err) {
+          resolve(err);
+        });
       });
-    });
 
-    if (setClientError) {
-      return next(setClientError);
-    }
+      if (setClientError) {
+        return next(setClientError);
+      }
 
-    // Determine the service account ID we'll use to sync this blog.
-    const serviceAccountId = await requestServiceAccount();
-    const blog = req.blog;
-    const email = req.body.email;
+      // Determine the service account ID we'll use to sync this blog.
+      const serviceAccountId = await requestServiceAccount();
+      const blog = req.blog;
+      const email = req.body.email;
 
-    await database.blog.store(req.blog.id, {
-      email,
-      serviceAccountId,
-      error: null,
-      preparing: true,
-      startedSetup: Date.now(),
-      nonEmptyFolderShared: false,
-      nonEditorPermissions: false,
-      folderId: null,
-      folderName: null,
-    });
+      await database.blog.store(req.blog.id, {
+        email,
+        serviceAccountId,
+        preparing: true,
+        startedSetup: Date.now(),
+        nonEmptyFolderShared: false,
+        nonEditorPermissions: false,
+        folderId: null,
+        folderName: null,
+        ...clearAllErrorFields(),
+      });
 
-    let drive;
+      let drive;
 
-    try {
-      drive = await createDriveClient(serviceAccountId);
-    } catch (e) {
-      return res.message(
-        req.baseUrl,
-        "Failed to connect to Google Drive. Please try again later."
-      );
-    }
+      try {
+        drive = await createDriveClient(serviceAccountId);
+      } catch (e) {
+        return res.message(
+          req.baseUrl,
+          "Failed to connect to Google Drive. Please try again later."
+        );
+      }
 
-    console.log(clfdate(), "Google Drive Client", "Setting up folder");
-    res.redirect(req.baseUrl);
+      console.log(clfdate(), "Google Drive Client", "Setting up folder");
+      res.redirect(req.baseUrl);
 
-    // This can happen in the background
-    try {
-      await finishSetup(blog, drive, email, serviceAccountId);
-    } catch (e) {
-      console.log(clfdate(), "Google Drive Client: finishSetup", e);
+      // This can happen in the background
+      try {
+        await finishSetup(blog, drive, email, serviceAccountId);
+      } catch (e) {
+        console.log(clfdate(), "Google Drive Client: finishSetup", e);
+      }
+    } catch (err) {
+      next(err);
     }
   });
 

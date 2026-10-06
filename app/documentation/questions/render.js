@@ -23,7 +23,6 @@ function highlight (html) {
   $("pre code").each(function () {
     try {
       var lang = $(this).attr("class").split("language-")[1];
-      console.log("lang:", lang);
       if (!lang) return;
       var code = $(this).text();
       code = he.decode(code);

@@ -1,0 +1,39 @@
+<div class="preset-grid" data-preset-grid="colors">
+	{{#items}}
+	<form method="post" action="{{{base}}}" data-preset-form data-preset-group="colors">
+		<input type="hidden" name="_csrf" value="{{csrftoken}}">
+		{{#fields}}
+		<input type="hidden" name="{{name}}" value="{{value}}">
+		{{/fields}}
+		<button
+			type="submit"
+			class="preset-tile{{#selected}} is-selected{{/selected}}{{#disabled}} is-disabled{{/disabled}}"
+			aria-pressed="{{pressed}}"
+			aria-label="{{ariaLabel}}"
+			title="{{title}}"
+			data-preset-match="{{match}}"
+			{{#disabled}}disabled{{/disabled}}
+		>
+			{{#sample}}
+			<span class="preset-sample" style="background:{{background}};color:{{text}}">
+				<span class="preset-sample-aa">Aa</span>
+				<span class="preset-sample-link" style="color:{{link}}">Link</span>
+			</span>
+			{{/sample}}
+			{{^sample}}
+			<span class="preset-swatches">
+				{{#swatches}}
+				<span class="preset-swatch"><span style="background:{{value}}"></span></span>
+				{{/swatches}}
+			</span>
+			{{/sample}}
+			{{#selected}}
+			<span class="preset-check-badge" aria-hidden="true">
+				<svg viewBox="0 0 16 16"><path fill="currentColor" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path></svg>
+			</span>
+			{{/selected}}
+			{{#error}}<span class="preset-error">{{error}}</span>{{/error}}
+		</button>
+	</form>
+	{{/items}}
+</div>

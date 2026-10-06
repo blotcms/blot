@@ -68,7 +68,6 @@ module.exports = function drop(owner, templateName, callback) {
     }
 
     multi.sRem(key.blogTemplates(owner), templateID);
-    multi.sRem(key.publicTemplates(), templateID);
     multi.del(key.metadata(templateID));
     multi.del(key.urlPatterns(templateID));
     multi.del(key.allViews(templateID));

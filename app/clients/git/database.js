@@ -4,7 +4,7 @@ var debug = require("debug")("blot:clients:git:database");
 
 // I picked v4 from 5 possible versions
 // because it said random next to its name?
-var uuid = require("uuid/v4");
+var { v4: uuid } = require("uuid");
 
 function tokenKey(user_id) {
   return "user:" + user_id + ":git:token";

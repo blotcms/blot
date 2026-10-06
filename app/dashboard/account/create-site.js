@@ -26,11 +26,15 @@ CreateBlog.use(function (req, res, next) {
 });
 
 CreateBlog.route("/paypal").get(async (req, res, next) => {
-  // fetch the latest subscription from PayPal
-  if (!req.user.paypal.id) return next();
+  try {
+    // fetch the latest subscription from PayPal
+    if (!req.user.paypal.id) return next();
 
-  await updatePayPalSubscription(req.user.paypal.id);
-  res.redirect("/sites/account/create-site");
+    await updatePayPalSubscription(req.user.paypal.id);
+    res.redirect("/sites/account/create-site");
+  } catch (err) {
+    next(err);
+  }
 });
 
 CreateBlog.route("/inform-paypal")

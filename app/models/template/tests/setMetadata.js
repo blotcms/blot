@@ -1,7 +1,4 @@
 const { promisify } = require("util");
-const client = require("models/client");
-const Blog = require("models/blog");
-const key = require("../key");
 
 describe("template", function () {
   require("./setup")({ createTemplate: true });
@@ -23,22 +20,6 @@ describe("template", function () {
     await setMetadata(this.template.id, updates);
     const blog = await getBlog({ id: this.template.owner });
     expect(blog.cacheID).not.toEqual(initialCacheID);
-  });
-
-  it("uses raw isPublic/owner values for set membership and cache bump decisions", async function () {
-    await setMetadata(this.template.id, { isPublic: true });
-
-    const sRemSpy = spyOn(client, "sRem").and.callThrough();
-    const blogSetSpy = spyOn(Blog, "set").and.callThrough();
-
-    await setMetadata(this.template.id, {
-      isPublic: false,
-      description: "Template should remain private",
-    });
-
-    expect(sRemSpy).toHaveBeenCalledWith(key.publicTemplates(), this.template.id);
-    expect(blogSetSpy).toHaveBeenCalled();
-    expect(blogSetSpy.calls.mostRecent().args[0]).toEqual(this.blog.id);
   });
 
   it("it will inject the font styles when you simply supply an id", async function () {

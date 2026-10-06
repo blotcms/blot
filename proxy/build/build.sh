@@ -8,7 +8,8 @@
 # environment the config is generated with.
 #
 # The paths below must match where proxy/Dockerfile copies the generated
-# files inside the image.
+# files inside the image. proxy/config and proxy/html are generated first
+# (from config/openresty, plus container adaptations) by build/index.js.
 
 set -e
 
@@ -31,12 +32,17 @@ export OPENRESTY_USER="${OPENRESTY_USER:-ec2-user}"
 # Base domain the generated virtual hosts are built from (build-time value).
 export BLOT_HOST="${BLOT_HOST:-blot.im}"
 
-# ACME directory for on-demand custom-domain certificates. CI overrides this
-# with a Pebble test server; production leaves it at the Let's Encrypt default.
+# Default ACME directory for on-demand custom-domain certificates. It is a
+# runtime setting (PROXY_ACME_CA, see proxy/render-config.sh); this only sets
+# what the image uses when that is not given.
 export ACME_CA="${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}"
 
 # DNS resolver baked into the generated config (OCSP stapling + ACME).
 export OPENRESTY_RESOLVER="${OPENRESTY_RESOLVER:-8.8.8.8 ipv6=off}"
+
+# BunnyCDN edge IPs for the rate-limit whitelist in http.conf. Default is
+# to fetch them (same as config/openresty/build-config.js). CI sets
+# FETCH_CDN_IPS=false so image builds do not depend on Bunny.
 
 # Container-oriented defaults: bind :80/:443 with SO_REUSEPORT so a second
 # container can join during a blue/green handover, and log to stdout/stderr.

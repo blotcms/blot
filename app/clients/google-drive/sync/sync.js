@@ -4,10 +4,18 @@ const fs = require("fs-extra");
 const { join } = require("path");
 const localPath = require("helper/localPath");
 const database = require("../database");
+const {
+  MESSAGES,
+  isLostFolderError,
+  lostFolderMessage,
+  sourceMissingFields,
+} = require("../database/error");
 const download = require("../util/download");
+const localFingerprint = require("../util/localFingerprint");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const modifiedSince = require("clients/util/modifiedSince");
 const {
   countLocalFiles,
   createProgress,
@@ -19,9 +27,22 @@ const localReaddir = require("./util/localReaddir");
 const truncateToSecond = require("./util/truncateToSecond");
 const transformDriveItems = require("./util/transformDriveItems");
 
-module.exports = async function sync(blogID, publish, update) {
+// Resolves to a summary of what changed (truthy) when the walk finishes, or
+// false when it fails part way through or the folder lookup fails.
+module.exports = async function sync(blogID, publish, update, options = {}) {
   publish = publish || function () {};
   update = update || function () {};
+
+  // Files Drive modified after this moment may just be edits that landed
+  // mid-walk, not changes we failed to sync. Callers hold the folder lock,
+  // so this is (just after) when it was acquired.
+  const startedAt = Date.now();
+  const summary = {
+    downloaded: 0,
+    removed: 0,
+    createdDirs: 0,
+    modifiedDuringWalk: 0,
+  };
 
   const account = await database.blog.get(blogID);
   const { folderId, folderName, serviceAccountId } = account;
@@ -39,7 +60,7 @@ module.exports = async function sync(blogID, publish, update) {
   }
 
   const drive = await createDriveClient(serviceAccountId);
-  const { getByPath, set, remove, getVerifiedContents, setVerifiedContent,
+  const { getByPath, getApplied, setApplied, set, remove, getVerifiedContents, setVerifiedContent,
     getMigrationCursor, setMigrationCursor } = database.folder(folderId, blogID);
   const migrationCursor = await getMigrationCursor();
   const canMigrate = migrationBudget();
@@ -51,6 +72,12 @@ module.exports = async function sync(blogID, publish, update) {
     await countLocalFiles(localPath(blogID, "/")),
     publish
   );
+
+  const markSourceMissing = async (message) => {
+    publish("Error syncing with Google Drive");
+    await database.blog.store(blogID, sourceMissingFields(account, message));
+    return false;
+  };
 
   // fetch the latest folderName, in case it has changed
   // and also whether or not the folder is in the trash
@@ -65,25 +92,27 @@ module.exports = async function sync(blogID, publish, update) {
       await database.blog.store(blogID, { folderName: folder.data.name });
     }
 
-    if (folder.data.trashed) {
-      publish("Error syncing with Google Drive");
-      await database.blog.store(blogID, {
-        error:
-          "The Google Drive folder used to sync this site has been moved to the trash. Please select a new folder to continue syncing.",
-        folderId: null,
-        folderName: null,
-      });
-    }
+    if (folder.data.trashed) return markSourceMissing(MESSAGES.TRASHED);
   } catch (err) {
-    if (err.code === 404) {
-      publish("Error syncing with Google Drive");
-      await database.blog.store(blogID, {
-        error:
-          "The Google Drive folder used to sync this site has been deleted. Please select a new folder to continue syncing.",
-        folderId: null,
-        folderName: null,
-      });
+    if (isLostFolderError(err)) {
+      return markSourceMissing(lostFolderMessage(err));
     }
+
+    // Transient / unknown Drive errors are retried on the next webhook or
+    // poll. Do not persist them as health, and do not walk a folder whose
+    // metadata we failed to load.
+    publish("Sync failed", err.message);
+    console.error("Google Drive folder lookup failed", err);
+    return false;
+  }
+
+  // A resync clears the folder's id-to-path mappings. Do it only once the
+  // folder lookup has succeeded, so a failed lookup does not leave them
+  // empty (which would make later writes duplicate remote files).
+  if (options.reset) {
+    await database
+      .folder(folderId, blogID)
+      .reset({ preserveVerifiedContent: true });
   }
 
   const walk = async (dir, dirId) => {
@@ -121,6 +150,7 @@ module.exports = async function sync(blogID, publish, update) {
         await checkWeCanContinue();
         progress.publish("Removing ignored", path, false, removedCount);
         await fs.remove(localPath(blogID, path));
+        summary.removed += 1;
         await update(path);
         const id = await getByPath(path);
         if (id) await remove(id);
@@ -136,6 +166,7 @@ module.exports = async function sync(blogID, publish, update) {
           "which does not exist remotely"
         );
         await fs.remove(localPath(blogID, path));
+        summary.removed += 1;
         await update(path);
         await remove(await getByPath(path));
       }
@@ -164,8 +195,17 @@ module.exports = async function sync(blogID, publish, update) {
       const existsLocally = localContents.find((item) => item.name === name);
 
       if (!isDirectory) {
-        // Ensure the file is stored in the database
-        // any folders will be stored as they are walked
+        // Compare against the Drive modifiedTime of the version we last
+        // wrote locally, not the local file's mtime: storage backends other
+        // than local disk won't offer a settable mtime. The record is only
+        // trusted while the local file is unchanged since that write. Files
+        // synced before this change have no record yet; their local mtime
+        // was set from Drive after each successful download, so fall back
+        // to it until they converge below.
+        const applied = await getApplied(id);
+
+        // Ensure the file is stored in the database (id <-> path mapping);
+        // any folders will be stored as they are walked.
         await set(id, path, { isDirectory, modifiedTime });
 
         // These do not have a md5Checksum so we fall
@@ -174,16 +214,20 @@ module.exports = async function sync(blogID, publish, update) {
           "application/vnd.google-apps."
         );
 
+        const isModifiedTimeCurrent = applied
+          ? truncateToSecond(applied.modifiedTime) === truncateToSecond(modifiedTime) &&
+            Boolean(applied.fingerprint) && applied.fingerprint === existsLocally?.fingerprint
+          : truncateToSecond(existsLocally?.modifiedTime) === truncateToSecond(modifiedTime);
+
         const cached = verifiedById.get(id);
         const verified = cached && cached.path === path &&
           cached.checksum === md5Checksum && cached.fingerprint &&
           cached.fingerprint === existsLocally?.fingerprint;
         const identical = isGoogleAppFile
-          ? truncateToSecond(existsLocally?.modifiedTime) === truncateToSecond(modifiedTime)
+          ? isModifiedTimeCurrent
           : md5Checksum
             ? Boolean(verified)
-            : existsLocally?.size === size &&
-              truncateToSecond(existsLocally?.modifiedTime) === truncateToSecond(modifiedTime);
+            : existsLocally?.size === size && isModifiedTimeCurrent;
 
         // Warm old equal-size files incrementally, without turning the first
         // sync after deployment into a complete content scan. A persistent
@@ -244,18 +288,42 @@ module.exports = async function sync(blogID, publish, update) {
 
             // A previous rebuild/cache-store may have failed after publication.
             // Rebuild before recording verification, even if bytes now match.
+            // Only count downloads that changed local bytes: a verified
+            // match (e.g. the legacy verification warm-up) isn't a missed
+            // change, even though it still triggers a rebuild below.
+            if (result?.updated) {
+              summary.downloaded += 1;
+              if (modifiedSince(modifiedTime, startedAt)) {
+                summary.modifiedDuringWalk += 1;
+              }
+            }
             if (result?.updated || (!isGoogleAppFile && result?.verifiedContent)) {
               await update(path);
             }
             if (!isGoogleAppFile && result?.verifiedContent) {
               await setVerifiedContent(id, { path, ...result.verifiedContent });
             }
+
+            // Only trust the remote modifiedTime once download() has
+            // returned without throwing: pathOnBlot now reflects that remote
+            // state. A failed download must not be treated as up to date, so
+            // this must not run in the catch below.
+            await setApplied(id, {
+              modifiedTime,
+              fingerprint: await localFingerprint(localPath(blogID, path)),
+            });
           } catch (err) {
             publish("Download failed", path);
             console.error("Download failed for", path, err);
           }
         } else {
           progress.publishThrottled("Checking", path);
+          // Converge: the local file already matches remotely, even though
+          // we only know that via the local-mtime fallback. Store the
+          // remote modifiedTime now so future syncs no longer need it.
+          if (!applied) {
+            await setApplied(id, { modifiedTime, fingerprint: existsLocally?.fingerprint });
+          }
         }
       } else {
         if (existsLocally && !existsLocally.isDirectory) {
@@ -263,14 +331,17 @@ module.exports = async function sync(blogID, publish, update) {
           progress.publish("Removing file", path);
           console.log("Removing file", path, "which is a directory remotely");
           await fs.remove(localPath(blogID, path));
+          summary.removed += 1;
           publish("Creating directory", path);
           await fs.ensureDir(localPath(blogID, path));
+          summary.createdDirs += 1;
           await update(path);
         } else if (!existsLocally) {
           await checkWeCanContinue();
           publish("Creating directory", path);
           console.log("Creating directory locally", path);
           await fs.ensureDir(localPath(blogID, path));
+          summary.createdDirs += 1;
           await update(path);
         }
 
@@ -285,7 +356,7 @@ module.exports = async function sync(blogID, publish, update) {
     progress.finish(deferred
       ? `Finished processing folder (${deferred} content verifications deferred)`
       : "Finished processing folder");
-    return true;
+    return summary;
   } catch (err) {
     if (lastMigrated !== migrationCursor) await setMigrationCursor(lastMigrated);
     publish("Sync failed", err.message);

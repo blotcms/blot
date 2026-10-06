@@ -1,6 +1,6 @@
 {
   "name": "Fieldnotes",
-  "isPublic": false,
+  "popularity": 40,
   "locals": {
     "lang": "en-US",
     "page_size": 10,
@@ -11,13 +11,13 @@
     "background_color": "#ffffff",
     "text_color": "#333333",
     "link_color": "#44c2b2",
-    "header_background_color": "#efefef",
-    "body_font": {
+    "font": {
       "id": "source-sans",
       "font_size": 16,
       "line_height": 1.625
     },
     "header_image_url": "",
+    "profile_image": {},
     "infinite_scroll": true,
     "show_related_posts": true,
     "syntax_highlighter": {

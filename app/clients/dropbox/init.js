@@ -1,25 +1,118 @@
 const scheduler = require("node-schedule");
 const { promisify } = require("util");
 const Blog = require("models/blog");
+const Entries = require("models/entries");
 const clfdate = require("helper/clfdate");
 const email = require("helper/email");
 const resetToBlot = require("./sync/reset-to-blot");
-const { get: getAccount } = require("./database");
+const { transferIncomplete } = require("./util/constants");
+const { get: getAccount, set: setAccount } = require("./database");
 const Fix = require("sync/fix");
+const establishSyncLock = require("sync/establishSyncLock");
+const sync = promisify(require("./sync"));
+const countChanges = require("clients/util/countChanges");
+const { measure: measureEventLoop } = require("helper/eventLoopMonitor");
 
 const getAllIDs = promisify(Blog.getAllIDs);
 const getBlog = promisify(Blog.get);
 const getDropboxAccount = promisify(getAccount);
+const setDropboxAccount = promisify(setAccount);
+// getAllTotal, not getTotal - Fix()'s entry-ghosts (Entries.each) scans the
+// "all" list (drafts/pages/scheduled/deleted included), not just published
+// "entries", so getTotal would under-count the workload this field tracks.
+const getEntryTotal = promisify(Entries.getAllTotal);
 
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_IN_MS = 15 * 60 * 1000;
 
-const countChanges = (summary = {}) => {
-  return (
-    (summary.downloaded || 0) +
-    (summary.removed || 0) +
-    (summary.createdDirs || 0)
+// Returned by resetToBlotWithLock instead of a summary when it finds the
+// transfer incomplete after acquiring the lock. Callers must treat this as
+// "nothing happened" - not a change to count, and not something to follow up
+// with fixBlog/catchUpSync.
+const TRANSFER_INCOMPLETE = Symbol("dropbox-transfer-incomplete");
+
+// Runs resetToBlot while holding the blog's folder lock, so it can't race a
+// webhook sync. resetToBlot updates the database as it changes files, since it
+// advances the Dropbox cursor and later syncs would never revisit them.
+const resetToBlotWithLock = async (blogID, publish) => {
+  const { folder, done } = await establishSyncLock(blogID);
+  let error = null;
+
+  try {
+    return await resetToBlot(blogID, publish, folder.update);
+  } catch (err) {
+    // resetToBlot itself refuses (see sync/reset-to-blot.js) if the account's
+    // initial transfer to Dropbox hasn't finished - that guard runs right
+    // after acquiring the lock's account read, so it's not vulnerable to the
+    // caller's own (cheap, pre-lock) transferIncomplete check having gone
+    // stale while establishSyncLock's retry loop waited to acquire this
+    // lock. Treat that refusal as "nothing happened", not a failure.
+    if (err && err.code === "DROPBOX_TRANSFER_INCOMPLETE") {
+      publish(err.message);
+      return TRANSFER_INCOMPLETE;
+    }
+    error = err;
+    throw err;
+  } finally {
+    // done rejects with the error it is given, once the lock is released
+    await done(error).catch((err) => {
+      if (err !== error)
+        console.error(clfdate(), "Dropbox: Error releasing lock", blogID, err);
+    });
+  }
+};
+
+// Event loop delay while one blog was validated, to find which blog and which
+// phase blocks the loop (a stall longer than the folder lock TTL crashes the
+// process). Every blog is logged so quiet blogs are a baseline. entryCount is
+// included because "fix+catch-up" runs Fix()'s entry-ghosts check, which does
+// one sequential Redis round trip per entry - a large count is the leading
+// suspect for starving another blog's lock heartbeat on the shared
+// connection, and without it that theory can only be checked after the fact.
+const logLag = (blogID, phase, entryCount, { durationMs, maxLagMs, p99LagMs }) => {
+  console.log(
+    clfdate(),
+    "Dropbox: validation lag",
+    blogID,
+    phase,
+    `duration=${durationMs}ms`,
+    `maxLag=${maxLagMs}ms`,
+    `p99Lag=${p99LagMs}ms`,
+    `entries=${entryCount == null ? "unknown" : entryCount}`
   );
+};
+
+const fixBlog = (blog) =>
+  new Promise((resolve) => {
+    Fix(blog, (err) => {
+      if (err) {
+        console.error(clfdate(), "Dropbox: Fix error for blog", blog.id, err);
+      }
+      resolve();
+    });
+  });
+
+// Webhook syncs that arrive while we hold the lock give up waiting for it and
+// are dropped, so run a normal sync once we release it. sync() stamps
+// last_sync, which would keep the blog eligible for validation forever, so
+// put the previous value back.
+const catchUpSync = async (blog) => {
+  let before;
+
+  try {
+    before = await getDropboxAccount(blog.id);
+    await sync(blog);
+  } catch (err) {
+    console.error(clfdate(), "Dropbox: Catch-up sync error", blog.id, err);
+  } finally {
+    // Also on failure: sync() stamps last_sync as soon as it gets the lock
+    if (before && typeof before.last_sync === "number") {
+      await setDropboxAccount(blog.id, { last_sync: before.last_sync }).catch(
+        (err) =>
+          console.error(clfdate(), "Dropbox: Error restoring last_sync", err)
+      );
+    }
+  }
 };
 
 const hasRecentSync = (account) => {
@@ -27,7 +120,25 @@ const hasRecentSync = (account) => {
   return Date.now() - account.last_sync <= ONE_HOUR_IN_MS;
 };
 
+
+let validationRunning = false;
+
 const runValidation = async () => {
+  if (validationRunning) {
+    console.log(clfdate(), "Dropbox: Validation still running, skipping");
+    return;
+  }
+
+  validationRunning = true;
+
+  try {
+    await validateAllBlogs();
+  } finally {
+    validationRunning = false;
+  }
+};
+
+const validateAllBlogs = async () => {
   console.log(clfdate(), "Dropbox: Running hourly sync validation");
 
   let blogIDs = [];
@@ -49,6 +160,10 @@ const runValidation = async () => {
 
       const account = await getDropboxAccount(blogID);
       if (!hasRecentSync(account)) continue;
+      if (transferIncomplete(account)) {
+        console.log(clfdate(), "Dropbox: Skipping blog with incomplete transfer", blogID);
+        continue;
+      }
 
       checkedBlogs += 1;
 
@@ -56,7 +171,34 @@ const runValidation = async () => {
         console.log(clfdate(), "Dropbox:", blogID, ...args);
       };
 
-      const summary = await resetToBlot(blogID, publish);
+      const entryCount = await getEntryTotal(blogID).catch(() => null);
+
+      let summary;
+      const stopWalkMeasure = measureEventLoop();
+
+      try {
+        summary = await resetToBlotWithLock(blogID, publish);
+        logLag(blogID, "walk", entryCount, stopWalkMeasure());
+      } catch (err) {
+        stopWalkMeasure();
+        // A sync is already running for this blog, and that sync will pick
+        // up whatever changed. Check it again next hour.
+        if (err.message === "Failed to acquire folder lock") {
+          console.log(clfdate(), "Dropbox: Skipping busy blog", blogID);
+          checkedBlogs -= 1;
+          continue;
+        }
+        throw err;
+      }
+
+      // The transfer became (or still was) incomplete by the time the lock
+      // was acquired, even though the cheap pre-check above passed. Treat it
+      // the same as never having attempted this blog.
+      if (summary === TRANSFER_INCOMPLETE) {
+        checkedBlogs -= 1;
+        continue;
+      }
+
       const changeCount = countChanges(summary);
 
       if (changeCount > 0) {
@@ -69,19 +211,13 @@ const runValidation = async () => {
         });
       }
 
-      await new Promise((resolve) => {
-        Fix(blog, (fixError) => {
-          if (fixError) {
-            console.error(
-              clfdate(),
-              "Dropbox: Fix error for blog",
-              blogID,
-              fixError
-            );
-          }
-          resolve();
-        });
-      });
+      const stopFollowUpMeasure = measureEventLoop();
+      try {
+        await fixBlog(blog);
+        await catchUpSync(blog);
+      } finally {
+        logLag(blogID, "fix+catch-up", entryCount, stopFollowUpMeasure());
+      }
     } catch (err) {
       console.error(
         clfdate(),
@@ -133,6 +269,10 @@ const resyncRecentSyncsOnStartup = async () => {
       if (!account || typeof account.last_sync !== "number") continue;
 
       if (Date.now() - account.last_sync >= FIFTEEN_MINUTES_IN_MS) continue;
+      if (transferIncomplete(account)) {
+        console.log(clfdate(), "Dropbox: Skipping blog with incomplete transfer", blogID);
+        continue;
+      }
 
       blogsToResync.push({ blog, blogID });
     } catch (err) {
@@ -155,9 +295,23 @@ const resyncRecentSyncsOnStartup = async () => {
 
       try {
         console.log(clfdate(), "Dropbox: Resyncing recent blog", blogID);
-        await resetToBlot(blogID, publish);
+        const summary = await resetToBlotWithLock(blogID, publish);
+        if (summary === TRANSFER_INCOMPLETE) {
+          console.log(
+            clfdate(),
+            "Dropbox: Skipping blog with incomplete transfer",
+            blogID
+          );
+          continue;
+        }
+        await fixBlog(blog);
+        await catchUpSync(blog);
         console.log(clfdate(), "Dropbox: Resync complete for blog", blogID);
       } catch (err) {
+        if (err.message === "Failed to acquire folder lock") {
+          console.log(clfdate(), "Dropbox: Skipping busy blog", blogID);
+          continue;
+        }
         console.error(
           clfdate(),
           "Dropbox: Resync error for blog",
@@ -176,3 +330,12 @@ module.exports = async function init() {
     console.error(clfdate(), "Dropbox: Startup resync failed", err);
   });
 };
+
+// Exposed for tests: both resyncRecentSyncsOnStartup and validateAllBlogs
+// gate on transferIncomplete() (util/constants.js) before ever calling
+// resetToBlotWithLock for a blog, and resetToBlotWithLock itself rechecks it
+// again once the lock is actually held (see its comment above).
+module.exports.resyncRecentSyncsOnStartup = resyncRecentSyncsOnStartup;
+module.exports.validateAllBlogs = validateAllBlogs;
+module.exports.resetToBlotWithLock = resetToBlotWithLock;
+module.exports.TRANSFER_INCOMPLETE = TRANSFER_INCOMPLETE;

@@ -46,6 +46,18 @@ const internal = {
   "/templates/essay": "/templates/portfolio",
   "/templates/picture": "/templates/photo",
   "/templates/scrapbook": "/templates/reference",
+  "/templates/for-blogging": "/templates/for-writing",
+  "/templates/for-organizations": "/templates/for-design",
+  "/templates/for-editorial": "/templates/for-writing",
+  "/templates/for-notes": "/templates/for-research",
+  "/templates/for-documentation": "/templates/for-research",
+  // Categories retired when Templates was realigned to mirror the
+  // Examples audience filters (Writing/Art/Research/Photography/Design).
+  "/templates/for-portfolio": "/templates/for-design",
+  "/templates/for-publication": "/templates/for-writing",
+  "/templates/for-archive": "/templates/for-photography",
+  "/templates/for-personal": "/templates",
+  "/templates/for-organization": "/templates/for-design",
   "/templates/developers/guides": "/developers/guides",
   "/templates/developers/reference/blog": "/developers/reference",
   "/templates/developers/reference/lists": "/developers/reference",

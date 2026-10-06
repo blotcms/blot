@@ -158,9 +158,11 @@ After retrievers run, `render/load/index.js` walks all locals to find `Entry` in
 
 After Mustache rendering, asset URLs in HTML and CSS output that point to files in the blog's folder are rewritten to CDN URLs.
 
+Entry content is already baked at build time (`build/plugins/folderAssets`, plus `bakeHTML` for markup set by front matter), so this pass is only still needed for template output and for entries built before that existed. See the DEPRECATION NOTE in `html.js` for exactly what is covered where.
+
 - `html.js` — Uses `parse5` to parse the HTML DOM and processes `href`, `src`, `poster`, and `srcset` attributes. Skips data URLs, `.html` files, and external URLs not matching the blog's hosts.
 - `css.js` — Uses a regex to find `url(...)` expressions in CSS and rewrites matching paths.
-- `lookupFile.js` — Resolves a path relative to the blog's folder. Returns a CDN URL of the form `cdn.origin/folder/v-{hash}/{blogID}/{path}` where the version hash is derived from the file's `mtime`, `ctime`, and `size`. Results are cached in a 5,000-entry LRU-style map keyed by a hash of `blogID:cacheID:path`. Also handles paths under global static directories (`/fonts`, `/icons`, `/katex`, `/plugins`, `/syntax-highlighter`).
+- `lookupFile.js` — Resolves a path relative to the blog's folder. Returns a CDN URL of the form `cdn.origin/folder/v-{hash}/{blogID}/{path}` where the version hash is derived from the file's size and mtime (`helper/contentVersion`'s `fromStat`), never its ctime; it runs during a render, so it never reads the file. Build-time links (`build/plugins/folderAssets`) use a content hash instead. Results are cached in a 5,000-entry LRU-style map keyed by a hash of `blogID:cacheID:path`. Also handles paths under global static directories (`/fonts`, `/icons`, `/katex`, `/plugins`, `/syntax-highlighter`).
 
 ## Route Handlers
 

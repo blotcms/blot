@@ -1,6 +1,4 @@
 {{#show_date_options}}
-		<div class="settings-group">
-<h2 class="template-heading">Dates</h2>
 <form
     id="dateSettings"
     method="post"
@@ -10,8 +8,9 @@
     <input type="hidden" name="_csrf" value="{{csrftoken}}" />
     
     {{#displayFormats.length}}
-    <div id="date_display_container" style="display: {{#hide_dates}}none{{/hide_dates}}{{^hide_dates}}flex{{/hide_dates}};">
-        <select style="font-size:1rem;" id="date_display" name="locals.date_display">
+    <div id="date_display_container">
+        <label for="date_display" style="flex-shrink: 0;">Dates:</label>
+        <select id="date_display" name="locals.date_display" data-hide-dates-value="{{hide_dates_value}}">
             {{#displayFormats}}
             <option value="{{value}}" {{selected}}>{{date}}</option>
             {{/displayFormats}}
@@ -19,18 +18,5 @@
     </div>
     {{/displayFormats.length}}
 
-{{#show_hide_dates}}
-<label class="bool" style="padding:8px 16px;border-bottom: 1px solid var(--light-border-color);display: block;display: flex;">
-    <span style="flex-grow: 1;">Hide dates:</span>
-    <input type="hidden" value="off" name="locals.hide_dates">
-    {{#hide_dates}}
-    <input type="checkbox" checked name="locals.hide_dates" id="hide_dates_checkbox">
-    {{/hide_dates}}
-    {{^hide_dates}}
-    <input type="checkbox" name="locals.hide_dates" id="hide_dates_checkbox">
-    {{/hide_dates}}
-</label>
-    {{/show_hide_dates}}								
 </form>
-</div>
 {{/show_date_options}}

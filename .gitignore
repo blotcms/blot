@@ -26,9 +26,15 @@ cache/*
 static/*
 tmp/*
 scripts/deploy/out/*
+scripts/render-time-chart/out/*
 config/nginx/server.conf
 
 # Eventually ignore all node_modules directories
 package-lock.json
 node_modules/*
 app/clients/icloud/macserver/node_modules
+
+# Generated from config/openresty by proxy/build/sync-config.js. Edit the
+# canonical files (or the adapter), not these copies.
+/proxy/config/
+/proxy/html/

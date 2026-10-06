@@ -9,8 +9,6 @@ const localreaddir = async (dir) => {
       const path = join(dir, name);
       const stat = await fs.stat(path);
 
-      // Convert the modification time to an ISO string
-      const modifiedTime = stat.mtime.toISOString();
       const isDirectory = stat.isDirectory();
       const size = stat.size;
 
@@ -18,7 +16,6 @@ const localreaddir = async (dir) => {
         name,
         isDirectory,
         size: isDirectory ? undefined : size,
-        modifiedTime: isDirectory ? undefined : modifiedTime,
       };
     })
   );

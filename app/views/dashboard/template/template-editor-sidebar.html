@@ -1,5 +1,19 @@
 <div class="inputs">
 
+{{#colorPresets.hasPresets}}
+<details class="settings-group" data-preset-group="colors" open>
+<summary class="template-heading">Colors</summary>
+{{#colorPresets}}
+{{> preset-colors}}
+{{/colorPresets}}
+<div class="preset-controls">
+{{#colors}}
+{{> color}}
+{{/colors}}
+</div>
+</details>
+{{/colorPresets.hasPresets}}
+	{{^colorPresets.hasPresets}}
 	{{#colors.length}}
 	<div class="settings-group">
 	<h2 class="template-heading">Colors</h2>
@@ -8,12 +22,31 @@
 	{{/colors}}
 	</div>
 	{{/colors.length}}
+	{{/colorPresets.hasPresets}}
 
-	{{#fonts.length}} 	
+{{#fontPresets.hasPresets}}
+<details class="settings-group" data-preset-group="fonts" open>
+<summary class="template-heading">{{#singleFontInput}}Font{{/singleFontInput}}{{^singleFontInput}}Fonts{{/singleFontInput}}</summary>
+{{#fontPresets}}
+{{> preset-fonts}}
+{{/fontPresets}}
+<div class="preset-controls">
+{{#fonts}}
+{{> font}}
+{{/fonts}}
+</div>
+</details>
+{{/fontPresets.hasPresets}}
+	{{^fontPresets.hasPresets}}
+	{{#fonts.length}}
+	<div class="settings-group">
+	<h2 class="template-heading">{{#singleFontInput}}Font{{/singleFontInput}}{{^singleFontInput}}Fonts{{/singleFontInput}}</h2>
         {{#fonts}}
         {{> font}}
         {{/fonts}}
+	</div>
         {{/fonts.length}}
+	{{/fontPresets.hasPresets}}
 
         {{#uploads.length}}
         <div class="settings-group">
@@ -24,60 +57,69 @@
         </div>
 	{{/uploads.length}}
 
-	{{#favicon_supported}}
-	<div class="settings-group">
-		<h2 class="template-heading">Favicon</h2>
-		<a class="line" href="{{{base}}}/favicon" style="padding: 11px 14px;border-bottom: none;">
-			{{#favicon}}
-			<span class="center" style="width:48px;height:48px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;">
-				<img style="width:32px;height:32px;image-rendering:pixelated;" src="{{{png32}}}" alt="Favicon preview" />
-			</span>
-			<span class="link">Edit favicon</span>
-			{{/favicon}}
-			{{^favicon}}
-			<span class="center" style="border:1px dashed var(--border-color);width:48px;height:48px;display:inline-block;vertical-align:middle;margin-right:0.5rem;border-radius:var(--border-radius);"></span>
-			<span class="link">Choose a favicon</span>
-			{{/favicon}}
-		</a>
+	{{#other_images.length}}
+	<div class="template-editor-group">
+	{{#other_images}}
+		{{> image}}
+	{{/other_images}}
 	</div>
-	{{/favicon_supported}}
+	{{/other_images.length}}
+
+	<div class="settings-group">
+		<h2 class="template-heading">Photo</h2>
+		{{#profile_image_control}}
+		<a class="line" href="{{{base}}}/images/{{key}}" style="padding:11px 14px;border-bottom:1px solid var(--light-border-color);{{^favicon_supported}}border-bottom:none;{{/favicon_supported}}">
+		{{#value}}<span style="width:40px;height:40px;border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-right:.5rem;flex:0 0 40px"><img src="{{{thumbnails.small.url}}}" style="max-width:40px;max-height:40px;object-fit:contain" alt="" /></span><span class="link">Edit photo</span>{{/value}}
+		{{^value}}<span class="center" style="border:1px dashed var(--dark-border-color);width:40px;height:40px;display:inline-block;vertical-align:middle;margin-right:.5rem"></span><span class="link">Choose a photo</span>{{/value}}
+		</a>
+		{{/profile_image_control}}
+		{{^profile_image_control}}
+		<a class="line" href="{{{base}}}/photo" style="padding:11px 14px;border-bottom:1px solid var(--light-border-color);{{^favicon_supported}}border-bottom:none;{{/favicon_supported}}">
+		{{^blog.avatar}}
+		<span class="center" style="border: 1px dashed var(--dark-border-color);width: 40px;height:40px;display:inline-block; vertical-align: middle;margin-right: 0.5rem;border-radius: var(--border-radius);">
+		</span>
+		<span class="link">Choose a photo</span>
+		{{/blog.avatar}}
+
+		{{#blog.avatar}}
+		<span class="center" style="width: 48px;height:48px;display:inline-block; vertical-align: middle;">
+			<img style="max-width:48px;max-height:48px;vertical-align: baseline; display: inline;" src="{{blog.avatar}}" class="{{#blog.roundAvatar}}rounded{{/blog.roundAvatar}}" />
+		</span>
+		<span class="link">Edit photo</span>
+			{{/blog.avatar}}
+		</a>
+		{{/profile_image_control}}
+		{{#favicon_supported}}
+		<a class="line" href="{{{base}}}/favicon" style="padding:7px 14px;border-bottom:none;">
+			<span class="center" style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-left:26px;margin-right:0.5rem;">
+				{{#favicon}}<img width="16" height="16" style="width:16px;height:16px;image-rendering:pixelated;" src="{{{png16}}}" alt="Favicon preview" />{{/favicon}}
+				{{^favicon}}<span aria-hidden="true" style="box-sizing:border-box;border:1px dashed var(--dark-border-color);width:16px;height:16px;display:block;"></span>{{/favicon}}
+			</span>
+			<span class="link">{{#favicon}}Edit favicon{{/favicon}}{{^favicon}}Choose a favicon{{/favicon}}</span>
+		</a>
+		{{/favicon_supported}}
+	</div>
 
         <div class="settings-group">
-                <h2 class="template-heading">Menu</h2>
+                <h2 class="template-heading">Navigation</h2>
                 <a class="line links" href="{{{base}}}/links">
                         <span class="center">
                                 {{#blog.menu}}
 				<span class="tablet">{{label}}</span>
 				{{/blog.menu}}
-				
+
 				{{^blog.menu.length}}
 				<i>Your menu is empty</i>
 				{{/blog.menu.length}}
-				<span class="link" >Edit</span>
+				<span class="link">Edit links</span>
 			</span>
 			</a>
 {{#navigation}}
 	{{> template-editor-group}}
-	{{/navigation}}			
-	</div>	
-
-	<div class="settings-group">
-		<h2 class="template-heading">Photo</h2>
-		<a class="line" href="{{{base}}}/photo"  style="padding: 11px 14px;border-bottom: none;"> 
-		{{^blog.avatar}}
-		<span class="center" style="border: 1px dashed var(--border-color);width: 48px;height:48px;display:inline-block; vertical-align: middle;margin-right: 0.5rem;border-radius: var(--border-radius);">
-		</span>
-		<span class="link">Choose a photo</span>
-		{{/blog.avatar}}
-		
-		{{#blog.avatar}}
-		<span class="center" style="width: 48px;height:48px;display:inline-block; vertical-align: middle;">
-			<img style="max-width:48px;max-height:48px;vertical-align: baseline; display: inline;" src="{{blog.avatar}}" class="{{#blog.roundAvatar}}rounded{{/blog.roundAvatar}}" />
-		</span>
-		<span class="link" >Edit</span>    
-			{{/blog.avatar}}
-		</a>
+	{{/navigation}}
 	</div>
+
+
 
 
 
@@ -85,7 +127,7 @@
 
 	{{#index_page.length}}
 	<div class="settings-group">
-	<h2 class="template-heading">Index page</h2>
+		<h2 class="template-heading">Index</h2>
 	{{#index_page}}
 	{{> template-editor-group}}
 	{{/index_page}}
@@ -94,23 +136,21 @@
 
 	{{#post_sorting}}
 	<div class="settings-group">
-	<h2 class="template-heading">Post sorting</h2>
+	<h2 class="template-heading">Posts</h2>
 	{{> template-editor-group}}
-	<p class="template-heading-note">Applies to the index page, tag pages, search results and feeds.</p>
-	</div>
-	{{/post_sorting}}
-
 	{{> date}}
+	{{#post_adjacent_posts}}
+	{{> boolean}}
+	{{/post_adjacent_posts}}
 
 {{#syntax_themes}}
-        <div class="settings-group">
-                <h2 class="template-heading">Syntax highlighter</h2>
-                <a class="line" href="{{{base}}}/syntax-highlighter" style="padding: 11px 20px;border-bottom: none;">
-                        <span class="center">Open syntax controls</span>
-                        <span class="right">Edit</span>
-                </a>
-        </div>
-        {{/syntax_themes}}
+	<a class="line syntax-highlighter-summary" href="{{{base}}}/syntax-highlighter">
+		<span class="syntax-highlighter-summary__label">Syntax highlighting:</span>
+		<span class="syntax-highlighter-summary__theme">{{#value}}{{#name}}{{name}}{{/name}}{{^name}}Select a color scheme{{/name}}{{/value}}</span>
+	</a>
+	{{/syntax_themes}}
+	</div>
+	{{/post_sorting}}
 </div>
 
 	<div class="settings-group template-docs-support-links-group">

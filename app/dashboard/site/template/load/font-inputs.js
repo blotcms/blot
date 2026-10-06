@@ -7,6 +7,7 @@ module.exports = function (req, res, next) {
     .map(key => font(key, req.template.locals[key]));
 
   res.locals.fonts = fonts;
+  res.locals.singleFontInput = fonts.length === 1;
   res.locals.fontPickerOptions = font("", {}).options;
 
   return next();

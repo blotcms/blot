@@ -1,10 +1,16 @@
 const determine_input = require("./util/determine-input");
 
 const MAP = {
+  show_adjacent_posts: {
+    label: "Show adjacent"
+  },
   page_size: {
     label: "Posts per page",
     min: 1,
     max: 60
+  },
+  index_layout: {
+    label: "Layout"
   }
 };
 
@@ -20,8 +26,17 @@ const SORT_INPUT_KEYS = {
 
 module.exports = function (req, res, next) {
   const locals = req.template.locals || {};
+  res.locals.post_adjacent_posts = determine_input(
+    "show_adjacent_posts",
+    locals,
+    MAP
+  );
 
   res.locals.index_page = Object.keys(locals)
+
+    // `_image` is a declaration even when its initial value is `{}`. Never
+    // allow companion range/options keys to turn it into a generic control.
+    .filter(key => !key.endsWith("_image"))
 
     // If the template uses the thumbnails per row
     // option then hide the page size option
@@ -35,6 +50,7 @@ module.exports = function (req, res, next) {
     )
 
     .filter(key => !SORT_INPUT_KEYS[key])
+    .filter(key => key !== "show_adjacent_posts")
 
     .filter(
       key =>

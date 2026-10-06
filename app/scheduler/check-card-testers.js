@@ -38,10 +38,7 @@ module.exports = async function (startingAfter = null) {
         const user = await getByCustomerId(customer.id);
     
         if (!user) {
-            console.log(`No user found for customer ${customer.id}`);
             suspectedUsers.push(customer);
-         } else {
-            console.log(`User found for customer ${customer.id}`);
          }
     }
 

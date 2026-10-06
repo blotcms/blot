@@ -42,7 +42,6 @@ module.exports = async function forkSiteTemplate(blogID, templateID) {
 
     try {
       var forkMetadata = await createAsync(blogID, deduplicatedName, {
-        isPublic: false,
         name: deduplicatedName,
         slug: deduplicatedSlug,
         cloneFrom: templateID,

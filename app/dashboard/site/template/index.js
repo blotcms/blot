@@ -5,8 +5,14 @@ const Template = require("models/template");
 const Blog = require("models/blog");
 const archiver = require("archiver");
 const duplicateTemplate = require("./save/duplicate-template");
-const { isAjaxRequest, sendAjaxResponse } = require("./save/ajax-response");
-const writeChangeToFolder = require('./save/writeChangeToFolder');
+const persistTemplateUpdate = require("./save/persist-template-update");
+const removeTemplateAssetsIfUnreferenced = require("./save/upload-image").removeTemplateAssetsIfUnreferenced;
+const loadFavicon = require("./load/favicon");
+const syntaxHighlighterPreview = require("./syntax-highlighter-preview");
+
+function loadFaviconForProfileImage(req, res, next) {
+  return req.params.key === "profile_image" ? loadFavicon(req, res, next) : next();
+}
 
 // /template/default and /template/default/... redirect to the installed template's slug
 // so docs can deep link to e.g. /sites/gitt/template/default/links
@@ -70,7 +76,7 @@ TemplateEditor.post("/new/upload", require("./save/upload-template"));
 
 TemplateEditor.route("/:templateSlug/install")
   .get(function (req, res) {
-    res.locals.title = `Install - ${req.template.name}`;
+    res.locals.title = `Install - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, install: "selected" };
     res.render("dashboard/template/install");
   })
@@ -114,9 +120,8 @@ TemplateEditor.route("/:templateSlug/install")
               removeErr
             );
           }
-          res.message(
-            "/sites/" + req.blog.handle + "/template/" + req.params.templateSlug,
-            "Installed template"
+          res.redirect(
+            "/sites/" + req.blog.handle + "/template/" + req.params.templateSlug
           );
         }
       );
@@ -153,35 +158,13 @@ function prepareTemplateUpdate(req, res, next) {
   next();
 }
 
-function persistTemplateUpdate(req, res, next) {
-  Template.update(
-    req.blog.id,
-    req.params.templateSlug,
-    { locals: req.locals, partials: req.partials },
-    function (err) {
-      if (err) return next(err);
-      writeChangeToFolder(req.blog, req.template, {}, function (err) {
-        if (err) return next(err);
-
-        if (isAjaxRequest(req)) {
-          const ajaxOptions = {};
-          if (res.locals.templateForked) {
-            ajaxOptions.headers = { "X-Template-Forked": "1" };
-          }
-          return sendAjaxResponse(res, ajaxOptions);
-        }
-
-        res.message(req.baseUrl + req.url, "Success!");
-      });
-    },
-  );
-}
-
 TemplateEditor.route("/:templateSlug")
   .all(require("./load/font-inputs"))
   .all(require("./load/syntax-highlighter"))
   .all(require("./load/color-inputs"))
+  .all(require("./load/presets"))
   .all(require("./load/url-inputs"))
+  .all(require("./load/image-inputs"))
   .all(require("./load/favicon"))
   .all(require("./load/index-inputs"))
   .all(require("./load/sort-input"))
@@ -202,15 +185,32 @@ TemplateEditor.route("/:templateSlug/uploads/:key")
   .get(require("./load/url-inputs"), function (req, res, next) {
     res.locals.upload = res.locals.uploads.find((i) => i.key === req.params.key);
     if (!res.locals.upload) return next();
-    res.locals.title = `${res.locals.upload.label} - ${req.template.name}`;
+    res.locals.title = `${res.locals.upload.label} - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
     res.render("dashboard/template/controls/upload-form");
   })
   .post(require("./save/fork-if-needed"), require("./save/upload-local"));
 
+TemplateEditor.route("/:templateSlug/images/:key")
+  .get(require("./load/image-inputs"), loadFaviconForProfileImage, function (req, res, next) {
+    res.locals.image = res.locals.images.find((item) => item.key === req.params.key);
+    if (!res.locals.image) return next();
+    res.locals.image.isProfileImage = res.locals.image.key === "profile_image";
+    res.locals.title = `${res.locals.image.label} - ${req.template.displayName}`;
+    res.locals.selected = { ...res.locals.selected, settings: "selected" };
+    res.render("dashboard/template/controls/image-form");
+  })
+  .post(
+    require("./load/image-inputs"),
+    loadFaviconForProfileImage,
+    require("./save/preflight-image"),
+    require("./save/fork-if-needed"),
+    require("./save/upload-image")
+  );
+
 TemplateEditor.route("/:templateSlug/favicon")
   .get(require("./load/favicon"), function (req, res) {
-    res.locals.title = `Favicon - ${req.template.name}`;
+    res.locals.title = `Favicon - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
     res.render("dashboard/template/controls/favicon-form");
   })
@@ -233,7 +233,8 @@ TemplateEditor.route("/:templateSlug/syntax-highlighter")
   )
   .get(function (req, res) {
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
-    res.locals.title = `Syntax highlighter - ${req.template.name}`;
+    res.locals.title = `Syntax highlighter - ${req.template.displayName}`;
+    res.locals.syntaxHighlighterPreview = syntaxHighlighterPreview;
     res.render("dashboard/template/syntax-highlighter");
   });
 
@@ -245,7 +246,7 @@ TemplateEditor.route("/:templateSlug/local-editing")
       source: "selected",
       local_editing: "selected",
     };
-    res.locals.title = `Local editing - ${req.template.name}`;
+    res.locals.title = `Local editing - ${req.template.displayName}`;
     res.render("dashboard/template/source-code/local-editing");
   })
   .post(require("./save/fork-if-needed"), function (req, res, next) {
@@ -277,7 +278,7 @@ TemplateEditor.route("/:templateSlug/local-editing")
           res.message(
             "/sites/" +
               req.blog.handle +
-              "/template/" +
+              "/template-folder/" +
               req.template.id.split(":").slice(1).join(":") +
               "/source-code",
             "Moved template to your folder"
@@ -337,7 +338,7 @@ TemplateEditor.route("/:templateSlug/download-zip").get(function (req, res) {
 
 TemplateEditor.route("/:templateSlug/duplicate")
   .get(function (req, res) {
-    res.locals.title = `Duplicate - ${req.template.name}`;
+    res.locals.title = `Duplicate - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, duplicate: "selected" };
     res.render("dashboard/template/duplicate");
   })
@@ -362,11 +363,19 @@ TemplateEditor.route("/:templateSlug/duplicate")
 
 TemplateEditor.route("/:templateSlug/rename")
   .get(function (req, res) {
-    res.locals.title = `Rename - ${req.template.name}`;
+    res.locals.title = `Rename - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, rename: "selected" };
     res.render("dashboard/template/rename");
   })
   .post(function (req, res, next) {
+    if (req.template.localEditing) {
+      return next(
+        new Error(
+          "You cannot rename a locally edited template — rename its folder instead"
+        )
+      );
+    }
+
     Template.setMetadata(
       req.template.id,
       { name: req.body.name },
@@ -379,7 +388,7 @@ TemplateEditor.route("/:templateSlug/rename")
 
 TemplateEditor.route("/:templateSlug/links")
   .get(require("dashboard/site/load/menu"), function (req, res) {
-    res.locals.title = `Links - ${req.template.name}`;
+    res.locals.title = `Links - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
     res.render("dashboard/template/links");
   })
@@ -388,66 +397,95 @@ TemplateEditor.route("/:templateSlug/links")
   });
 
 TemplateEditor.route("/:templateSlug/photo")
-  .get(function (req, res) {
-    res.locals.title = `Photo - ${req.template.name}`;
+  .get(require("./load/favicon"), function (req, res) {
+    res.locals.title = `Photo - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
+    res.locals.photoPath = `${req.baseUrl}/${req.params.templateSlug}/photo`;
     res.render("dashboard/template/photo");
   })
-  .post(function (req, res, next) {
-    res.message(res.locals.base, "Saved photo!");
-  });
+  .post(
+    require("./load/favicon"),
+    require("./save/photo")
+  );
 
 TemplateEditor.route("/:templateSlug/delete")
   .get(function (req, res, next) {
-    res.locals.title = `Delete - ${req.template.name}`;
+    res.locals.title = `Delete - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, delete: "selected" };
     res.render("dashboard/template/delete");
   })
   .post(function (req, res, next) {
     const idSlug = req.template.id.split(":").slice(1).join(":");
+    const imageLocals = Object.values(req.template.locals || {})
+      .filter((value) => value && value.url)
+      .map((value) => ({
+        ...value,
+        thumbnails: Object.fromEntries(
+          Object.entries(value.thumbnails || {}).map(([name, thumbnail]) => [name, { ...thumbnail }])
+        ),
+      }));
+
     Template.removeFromFolder(req.blog.id, req.template.id, function () {
       Template.drop(req.blog.id, idSlug, function (err) {
         if (err) return next(err);
 
-        const currentTemplateIDSlug = req.blog.template
-          .split(":")
-          .slice(1)
-          .join(":");
+        removeTemplateAssetsIfUnreferenced({ blog: req.blog }, imageLocals)
+          .then(() => {
+            const currentTemplateIDSlug = req.blog.template
+              .split(":")
+              .slice(1)
+              .join(":");
 
-        res.message(
-          res.locals.dashboardBase +
-            "/template/" +
-            (currentTemplateIDSlug || ""),
-          "Deleted template <b>" + req.template.name + "</b>"
-        );
+            res.message(
+              res.locals.dashboardBase +
+                "/template/" +
+                (currentTemplateIDSlug || ""),
+              "Deleted template <b>" + req.template.displayName + "</b>"
+            );
+          })
+          .catch(next);
       });
     });
   });
 
 TemplateEditor.route("/:templateSlug/reset")
   .get(function (req, res, next) {
-    res.locals.title = `Reset - ${req.template.name}`;
+    res.locals.title = `Reset - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, reset: "selected" };
     res.render("dashboard/template/reset");
   })
   .post(function (req, res, next) {
     const idSlug = req.template.id.split(":").slice(1).join(":");
+    const imageLocals = Object.values(req.template.locals || {})
+      .filter((value) => value && value.url)
+      .map((value) => ({
+        ...value,
+        thumbnails: Object.fromEntries(
+          Object.entries(value.thumbnails || {}).map(([name, thumbnail]) => [name, { ...thumbnail }])
+        ),
+      }));
+
+    const finishReset = () => {
+      removeTemplateAssetsIfUnreferenced({ blog: req.blog }, imageLocals)
+        .then(() => {
+          res.message(
+            res.locals.dashboardBase + "/template/" + idSlug,
+            "Reset template <b>" + req.template.displayName + "</b>"
+          );
+        })
+        .catch(next);
+    };
+
     // work out if this template is currently installed on this site
     Template.drop(req.blog.id, idSlug, function (err) {
       if (err) return next(err);
       if (req.blog.template === req.template.id) {
         Blog.set(req.blog.id, { template: "SITE:" + idSlug }, function (err) {
           if (err) return next(err);
-          res.message(
-            res.locals.dashboardBase + "/template/" + idSlug,
-            "Reset template <b>" + req.template.name + "</b>"
-          );
+          finishReset();
         });
       } else {
-        res.message(
-          res.locals.dashboardBase + "/template/" + idSlug,
-          "Reset template <b>" + req.template.name + "</b>"
-        );
+        finishReset();
       }
     });
   });

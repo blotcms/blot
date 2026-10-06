@@ -1,3 +1,101 @@
+Fix bug with repeat google drive syncs
+
+Investigate high aws bill cause
+
+Work on removing replaceFolderLinks
+
+Excercise the backlinks with big entries / many backlinks in the benchmarks somewhere
+
+Find what runs `KEYS` on prod redis (slowlog: 789ms at 2026-10-05 09:01Z, blocks everything; not found in app/ or scripts/, maybe a manual redis-cli)
+
+Find what sends the recurring 31-key MGET that takes 10-32ms server-side on prod redis (~30 in the slowlog over 12h, probably Entries.getRecent via getRange(0, 30) on blogs with big entries; slowlog shows only command + duration)
+
+Add error / getHealth issues to sync log (folder.status) for Dropbox/other client Issues
+
+Make sync logs more useful, surface recent changes on dashboard. Group multiple files together if changed at same time, etc. make it useful!
+
+Add dropbox kill switch (when platform goes down, etc.)
+
+Add icloud kill switch (when platform goes down, etc.)
+
+How do we think about a shared asset library across templates? 
+- e.g. shared favicons
+- can we unwind some of the complete delete favion on template delete, etc. code?
+
+Decide whether or not to revert the preset system – should it only be used for the templates index for explaining the customization features?
+
+Begin triaging iCLoud sync issues
+
+Add script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago)
+- test npm run restore-folder
+
+iCloud server should periodically:
+- quit safari (some error flow during auth sometimes opens it)
+- close all system UI prompts (sometimes we get error for maybe accessing a revoked folder?)
+
+Create simple config option to disable a given client when something like the Google Drive issue happens. Make it clear on the dashboard and docs that it's not working.
+
+Under templates index
+- Clicking on file in folder pulls up post on preview site ?
+
+Fix Google Drive sync outage caused by Google account suspesion
+- Future fix to Google Drive client needs to never use the service account to create files (ask the user to handle the initial transfer)
+- Revert 1958
+
+Make Google Drive incremental sync efficient
+- Store hash of their api responses
+- Don’t touch disk
+- Support huge folders with huge directories
+- Start with recently changed files and dirs first
+
+Clarify on cancel / delete / overdue pages for accounts with grandfathered subscription prices that if they re-join Blot they will lose their grandfathered rate.
+
+We need a plan for the suspension of the iCloud user as well... is the code resilient to data loss in this scenario?
+
+Investigate green crashes (`Lock was lost` / ECOMPROMISED at 2026-09-21 18:02 and 20:01 UTC) and slow `/health` in the first minutes of each hour; the Dropbox hourly validation is only a suspect, not confirmed
+- Checked green logs for `validation lag` and `[EVENT LOOP]` after PR #1950 shipped: neither showed any delay near the 10s lock TTL at the 2026-09-22 06:00:49 and 07:00:39 crashes, and Redis's own SLOWLOG had nothing near 10s either — ruled out a classic JS block and a single slow Redis command
+- The two compromised blogs' folders aren't large/flat or full of huge files (824 and 526 files, largest file 9.4MB) — the localReaddir concurrency fix (PR #1952) is good hygiene but isn't the cause here
+- Next: check green logs for `[LOCK] slow heartbeat` / `[LOCK] heartbeat error` after the heartbeat round-trip logging ships (PR #1952) — it separates event-loop-side delay (tickDelay) from Redis-side delay (roundTrip) for the first time
+- 2026-09-24 crashes at 15:04:34 and 16:01:08 UTC (green): `[LOCK] slow heartbeat` showed tickDelay~0ms with roundTrip 1.6-11.3s, so it's neither event-loop block nor a single slow Redis command (SLOWLOG still clean) — it's queueing on the shared singleton Redis connection (app/models/client.js, one TCP connection per process, no pooling). Both crashes landed right as validation's `Fix()` stage (app/sync/fix) started on some other blog with several hundred posts - `entry-ghosts` does one sequential Redis round trip per entry, over that same shared connection, which is enough to starve an unrelated blog's heartbeat. Full timeline (no customer-identifying details) in the investigate-dropbox-sync-issue skill's incident log
+- Added diagnostics for next time: per-check timing in Fix() (app/sync/fix/index.js), an `entries=N` field on the `validation lag` log line (app/clients/dropbox/init.js), a `runningFixCheck` field on `[LOCK COMPROMISED]` diagnostics (app/sync/lock-diagnostics.js) since Fix() doesn't hold the folder lock and was invisible to pendingSyncs, and fixed `[LOCK COMPROMISED]`'s console.error silently truncating pendingSyncs/pendingUpdates to `[Object]` (app/sync/index.js)
+- Not yet fixed: give the lock heartbeat its own dedicated Redis connection so Fix()'s traffic can't queue ahead of it, or batch Fix()'s per-entry reads
+- Remove the event loop monitor (app/helper/eventLoopMonitor*.js, its setup.js hook, and `logLag`/`measureEventLoop` in app/clients/dropbox/init.js) and the lock heartbeat logging (app/sync/lock.js) once the cause is fixed
+
+Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
+
+Surface template choices on the templates subpages: switch from png to iframe after hovering a selection
+
+Perform caching and header audit of site and templates
+- Check logs and headers via curl
+- Identify optimizations
+
+Analyze the proposed proxy container for possible performance regressions after we switch
+
+12 factor screenshot as api
+- use macserver  (docker container?)
+
+Make sure next bill amount is in all billing emails to customers
+
+Move towards proxy container deployment
+- can we simplify anything to make it safer?
+- avoid data loss above all
+- tolerate a few dropped requests during cutover
+
+Add fast rollback action
+
+Get proxy horizontally scalable and multi-region
+- Get proxy container deployed
+
+Explain on the about page the websites started out as files in a folder. But they had to be HTML. Blot makes other file types possible too.
+
+Get node container horizontally scalable and multi-region
+- finish app/storage module with s3
+- solve git storage problem 
+
+Add clear bill change info to new blog flow
+
+Check in on our dropbox sync verification job to make sure it's working well (docker green)
+
 Rebuild all sites to bake in folder CDN urls
 
 Why is Ross' template so slow to install? It takes a few seconds. Let's speed it up.
@@ -8,7 +106,16 @@ Now we have many LRU caches in app/blog we need to gather data in production to 
 
 Finish cross platform folder renderer
 
-Blot (node and proxy) should handle redis down elegantly 
+Redis outage follow-ups
+- Dropbox webhook drops syncs (listBlogs fails after the 200 ack) and git auth maps Redis errors to a 401 while Redis is unreachable
+
+Improve about section
+- Restructure /about into current principles and clearly dated working notes.
+- Rewrite the main page to surface Blot’s purpose, independence, longevity, portability, and open source code.
+- Update History, infrastructure, development tools, refunds, backups, and continuity claims.
+- Date historical material such as the CDN investigation, old mistakes, and threat assessments.
+- Remove outdated self-undermining statements, including dissatisfaction with the templates.
+- Fix incomplete passages, spelling errors, and inconsistent use of “I” and “we.”
 
 Fix performance bugs on various sites:
 - anchor and re-enable site
@@ -51,6 +158,8 @@ Improve Google Drive sync
 - Add proper testing for this
 
 Improve Dropbox sync
+- Bug: removing a directory in Dropbox resync only updates the directory path; child entries wait for Fix
+- Bug: Dropbox validation's catch-up sync restores last_sync from outside sync() after releasing the lock, so it can clobber a webhook sync's stamp; teach sync() not to stamp last_sync for catch-up instead
 - Sync verification should instrument the sync/fix function to also report errors where the folder doesn't match the database.
 - Bug: ensure that when a process dies, any blogs setting up dropbox client will be re-attempted
 - Bug: Adding an additional blog to existing app folder under constant webhooks failed. New blog had correct folder but old blog still used root. To fix we need to acquire a lock on ALL blogs interacting with that dropbox account to proceed with setup process of second site.
@@ -63,10 +172,6 @@ Improve Dropbox sync
 - Bug: reconnecting with the same account and same permissions should not create a new folder for `full_access=true`
 - Bug: add a check for folder storage before doing mass upload
 - Bug: handle folder full error appropriately
-- Bug: dropbox reset TO BLOT should handle removed folder
-- Bug: dropbox reset FROM BLOT should handle removed folder
-- Bug: dropbox reset TO BLOT should handle revoked token
-- Bug: dropbox reset FROM BLOT should handle revoked token
 - Bug: add sync lock process to dropbox connection when writing folder contents
 - Bug: ensure the app permission access_token is destroyed when switching to full-folder and vice versa
 - Add testing for dropbox:
@@ -181,6 +286,7 @@ Fix bug with overdue subscription payment form not working
 - Migrate [Stripe library to v7](https://github.com/stripe/stripe-node/wiki/Migration-guide-for-v7)
 
 Fix bugs with custom domain setup
+- Build in some of these features from the demo: https://customdomain.ai/
 - Validate the domain is pointing to Blot before allowing resty-auto-ssl to request a cert. we seem to get into a DNS mismatch where a client thinks a domain points to Blot, and triggers a cert request through resty-auto-ssl but whatever DNS server Blot's server points to has the stale record (pointing elsewhere)
 - Disable redirect to HTTPS for blogs by default (to ensure old browsers without SNI work) but ensure all prominent links to the blog on dashboard use HTTPS
 - cache domain validity and display checkmark on dashboard
@@ -193,9 +299,6 @@ Fix bug with light mode colors
 
 Fix bug with menu which occur when multiple pages are added at once Menu needs concurrency or atomic operations (so we can build posts in parallel)
 - move menu into its own model (it's possible to add thousands of entries to it...)
-
-Fix bug where one bad page can take down upstream repeatedly 
-– perhaps we need to cache in proxy cache timeouts? or somehow detect if a request causes upstream to crash?
 
 Fix bug with many twitter embeds 
 - [and tell Nash](https://mail.google.com/mail/u/0/#inbox/FMfcgzGllMNfjvRBthVncQtPJQpmrksx)
@@ -258,12 +361,15 @@ Make it possible to create a site for free then require subscription to make it 
 ---
 
 Proxy container (OpenResty) - remaining before it can replace config/openresty:
-- Config de-dup: proxy/config/ is a hand-fork of config/openresty/conf/ and OMITS restrict-bot-uas.conf + reverse-proxy-limit-*.conf + reverse-proxy-preview/base/huge.conf (rate-limiting + bot restrictions - security-relevant, must land before cutover)
+- Can we add modern compression to proxy?
+- Can the proxy remember bad urls and avoid repeatedly sending them to upstream?
+- Fold proxy/build/sync-config.js container adaptations back into the files once proxy/ is canon (stdout logs, reuseport, ACME CA, health socket)
 - Blue/green hook server: :8999 is in a reuseport group, so during a deploy overlap an ACME hook request can hit the other instance (different secret) - needs per-instance hook routing, not a shared reuseport port
-- Wire proxy/deploy/{blue-green,reload-config}.sh into the real deploy pipeline
+- Run the proxy cutover (proxy/deploy/README.md), then run proxy/deploy/blue-green.sh from a deploy workflow like scripts/deploy (images are published by proxy-image.yml)
 - dehydrated version drift: the proxy image vendors dehydrated 0.7.2 (0.6.5, which lua-resty-auto-ssl pins, is rejected by current ACME servers); bare-metal config/openresty still installs the 0.6.5 pin via luarocks - unify (bump lua-resty-auto-ssl, or vendor 0.7.2 there too)
 - Investigate replacing unmaintained lua-resty-auto-ssl (would also resolve the two items above): lua-resty-acme (keeps OpenResty, drops dehydrated/sockproc/:8999) or issuing from the Blot app into Redis; see proxy/README.md
-- Drop or provision the stats. vhost netdata passwords file; Redis auth/TLS; build-arg vs runtime-env for NODE_SERVER_IP/REDIS_IP/netdata creds; container equivalent for fail2ban
+- Redis auth/TLS; container equivalent for fail2ban
+- Purge follow-ups: BLOT_REVERSE_PROXY_URLS is a static list (proxies should register themselves in Redis), and purges queued in a Node process's memory are lost if it dies before sending them
 
 Follow-ups from drag-and-drop template upload:
 - Move the folder browser (views/dashboard/folder/directory.html) onto the shared views/js/collect-dropped-files.js instead of its inline copy of the same traversal
@@ -304,6 +410,8 @@ Improve images:
 - Image cacher should work for webp, tiff, etc. as well as JPG
 
 Improvements to docs and documentation:
+- Add way in to the updates page on the index page (i.e. surface recent tasks done and to do)
+- Add way in to the questions page on the index page (i.e. surface recent questions)
 - Rewrite code which generates a fake 'macOS' folder to work cross platform:
   - if the user is browsing from Windows create a windows folder
   - if the user is browsing from linux create a linux folder
@@ -331,6 +439,7 @@ Improvements to template editor:
 - Introduce collapsible sections or a separately scrollable div on the template dashboard settings, and tell Omar
 - Build image upload feature into template editor. Support default banner images and image avatars, with default images set, maybe some kind of global library feature across templates...
 - Build favicon generator into template editor. Make it distinct from avatar. Generate proper favicons from uploaded avatars (to prevent streched favicons when non-square avatars are uploaded)
+- I wonder if we can Can we avoid storing font styles in package.json, just the ID? then inject these at render time?
 
 Improvements to templates:
 - Improve hypertext template to support listing pages as well as posts in the sidebar
@@ -354,6 +463,8 @@ Improve importer:
 - Map excerpt metadata to summary for Jekyll converter importer
 - Look into how Hexo has written imports for [blogger](https://github.com/hexojs/hexo-migrator-blogger), [joomla](https://github.com/welksonramos/hexo-migrator-joomla), [rss](https://github.com/hexojs/hexo-migrator-rss), [wordpress](https://github.com/hexojs/hexo-migrator-wordpress).
 - Add an importer for Twitter and sell [Sawyer](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVMhRNdQhfDwlXsqqFNgmKfTk)
+
+Let customers duplicate an existing site as a starting point
 
 Improve exporter:
 - Make it possible to configure the export file format (e.g. instead of markdown, word documents) on the importer
@@ -389,8 +500,7 @@ Investigate replybox for comments
 
 Add checkbox to toggle newsletter subscription to account page
 
-Adjust color settings into a simple 'presets' picker, then an option to dive into specific altertions on seperate view.
-- make it possible to conenct two colors, e.g. navigation background color -> same as background color
+Make it possible to connect two colors in the template editor, e.g. navigation background color -> same as background color
 
 Add lang selector (map english -> en) to template editor
 
@@ -725,8 +835,6 @@ Improvements to local folder experience
 - Interpolate fonts based on an ID (a la web template editor)
 - Interpolate syntax highlighting based on an ID
 
-Use [thumbhash](https://github.com/evanw/thumbhash?tab=readme-ov-file) to generate placeholders so thumbnails can have clean lazy loading and tell [David](https://mail.google.com/mail/u/0/#inbox/FMfcgxwJXfqzZvHgrtSxzLBCwcvTsFFB) and [Marius](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLtQPwXwJrwgMzjfvDtcwFZzFC)
-
 Surface recently edited posts on the sites tab of the dashboard
 
 Can we support white-label cdn subdomain so there are no Blot CDN links?
@@ -877,7 +985,6 @@ Improvements to server
 
 Improvements to sync/reset scripts:
 - [ ] reset should produce a report which I get email
-- [ ] Resync should produce a report which I get via email
 
 ---
 
@@ -1136,6 +1243,7 @@ Add email newsletter system
 
 Create an API for Blot
 - Add webhooks and tell [Aurynn](https://mail.google.com/mail/u/0/#inbox/1554260da157b405) and [Shawn](https://twitter.com/soypunk)
+- Use it to build a minimal blot cli sync client run from the command line (could background itself?!)
 
 ---
 
@@ -1161,3 +1269,18 @@ Self-hosting:
   - Tell [Frank](https://mail.google.com/mail/u/0/#inbox/FMfcgzGkZkZWrprNcThxMPQKzSTLbkDs)
   - Tell [Zip](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmthffLmfRBswqGmsDKQWdJZFB)
 - Tell Nick when it's possible to deploy a self-hosted [Blot on Vercel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKjxHWSvgjKtCWrbhccKFPlkdD) and [Zia](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsSXWPRNNxDNcdhGHQXBkTtsx)
+
+Add preflight checks in proxy/deploy/{cutover-from-baremetal,blue-green}.sh for PROXY_BLOG_STATIC_DIR/PROXY_GLOBAL_STATIC_DIR existing and readable - docker -v silently creates an empty dir for a missing host path, so a typo or host-layout change would 404 cdn.* static assets with no check catching it
+
+Find and replace the KEYS calls blocking prod Redis (from SLOWLOG, source 172.30.0.122 = the blot host, not repo code — likely a host cron or manual `client` session)
+- `keys ssl:*:latest` ~750ms, roughly daily (21, 23, 24 Sep) — switch to `--scan --pattern`
+- `KEYS *blog_<id>*` 2.4s on 22 Sep
+
+Explore a redesign of Fix() (app/sync/fix) to cut Redis load further, e.g. one chunked walk over every referenced entry id (lists + tag members) that MGETs each entry once and applies every per-entry check, instead of each check re-reading all content. Not an easy win:
+- ghosts include ids with no entry, so the walk must cover the union of list and tag member ids, not just "all"
+- repairs interleave (an entry-ghosts drop changes that entry's lists/tags mid-walk), so the in-memory id picture must be updated as repairs happen
+- report shape keyed by check name must be kept for the dashboard/validators
+- Fix() runs outside the folder lock, so the id snapshot can go stale (same as today)
+- lean on the Fix() regression tests (app/sync/fix/tests/regression*) before attempting it
+
+app/build: entry.contentHash is computed by re-reading the source file(s) after conversion, so a source edited between the converter's read and this hash read can produce a hash that matches a later, genuinely-changed build (or vice versa) - closing this needs threading the bytes each converter already reads back through to the hash, or detect-and-retry on mismatch (flagged in Codex review of PR #2002, out of scope there since it touches every converter)

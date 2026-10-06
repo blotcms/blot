@@ -1,14 +1,13 @@
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
 body {
-  {{#body_font}}
+  {{#font}}
   font-size: {{{font_size}}}px;
   line-height: {{{line_height}}};
   font-family: {{{stack}}};
-  {{/body_font}}
+  {{/font}}
   color: {{text_color}};
   background: {{background_color}};
   padding: 3em 4em 5em;
@@ -55,21 +54,15 @@ h1, h2, h3, h4, h5, h6 {font-size: inherit;}
 h2, h3 {margin-top: 2em}
 
 h1 {
-  {{#heading_font}}
-  font-family: {{{stack}}};
-  font-size: {{{font_size}}}px;
-  line-height: {{{line_height}}};
-  {{/heading_font}}
+  font-size: 48px;
+  line-height: 1;
   margin-bottom: 60px;
   margin-top:60px
 }
 
 h2 {
-  {{#heading_font}}
-  font-family: {{{stack}}};
-  font-size: {{{font_size}}}px;
-  line-height: {{{line_height}}};
-  {{/heading_font}}
+  font-size: 48px;
+  line-height: 1;
   font-style: italic;
   font-weight: 400;
   margin-top: 3.1rem;
@@ -77,11 +70,8 @@ h2 {
 }
 
 h3 {
-  {{#heading_font}}
-  font-family: {{{stack}}};
-  font-size: {{{font_size}}}px;
-  line-height: {{{line_height}}};
-  {{/heading_font}}
+  font-size: 48px;
+  line-height: 1;
   font-style: italic;
   font-weight: 400;
   margin-top: 2rem;

@@ -63,6 +63,10 @@ if [[ ! -f "$CERT_PATH" || ! -f "$KEY_PATH" ]]; then
   exit 1
 fi
 
+# Fill in the runtime placeholders (Redis host, upstreams, resolver, server
+# label, Bunny edge IPs) from the environment. See proxy/render-config.sh.
+/usr/local/bin/render-config
+
 echo "Certificate present. Starting OpenResty."
 
 # Graceful shutdown: on SIGTERM/SIGQUIT drain in-flight requests with

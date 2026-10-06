@@ -1,8 +1,6 @@
 const fs = require("fs-extra");
-const uuid = require("uuid/v4");
+const { v4: uuid } = require("uuid");
 const clfdate = require("helper/clfdate");
-const promisify = require("util").promisify;
-const setMtime = promisify(require("./setMtime"));
 const retry = require("./retry");
 const callOnce = require("helper/callOnce");
 
@@ -62,10 +60,6 @@ async function download(client, source, destination, callback) {
       );
       await fs.outputFile(destination, "");
       if (timedOut) return;
-      if (metadata.client_modified) {
-        await setMtime(destination, metadata.client_modified);
-        if (timedOut) return;
-      }
       return cleanup();
     }
 
@@ -79,16 +73,12 @@ async function download(client, source, destination, callback) {
       );
       await fs.outputFile(destination, "");
       if (timedOut) return;
-      await setMtime(destination, metadata.client_modified);
-      if (timedOut) return;
       return cleanup();
     }
 
     const { result } = await client.filesDownload({ path: source });
     if (timedOut) return;
     await fs.outputFile(destination, result.fileBinary);
-    if (timedOut) return;
-    await setMtime(destination, result.client_modified);
     if (timedOut) return;
   } catch (err) {
     return cleanup(err);

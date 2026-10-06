@@ -1,9 +1,22 @@
 [Unit]
 Description=Mount instance store
-After=network.target
+# The script only touches the local disk (nvme list, mkfs, mount) and needs
+# no network, so order it after local filesystems are up rather than
+# network.target, which gave no real guarantee here.
+After=local-fs.target
+# docker.service.d/10-instance-store.conf and openresty.service.d/10-instance-store.conf
+# order themselves After= this unit and gate on `mountpoint -q /var/instance-ssd`
+# in an ExecStartPre, so ordering here alone is enough; no Before= needed.
+RefuseManualStop=yes
 
 [Service]
-Type=simple
+# oneshot + RemainAfterExit=yes: the script runs once and exits, but the
+# unit stays "active" afterwards so other units can order themselves after
+# it. With the previous Type=simple, systemd considered the unit "started"
+# the instant the process forked, before the mount happened, so anything
+# ordered after it could still race the mount.
+Type=oneshot
+RemainAfterExit=yes
 ExecStart=/home/ec2-user/scripts/mount-instance-store.sh
 
 [Install]

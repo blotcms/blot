@@ -23,10 +23,6 @@ module.exports = {
     return "template:" + name + ":all_views";
   },
 
-  publicTemplates: function publicTemplates () {
-    return "template:public_templates";
-  },
-
   blogTemplates: function blogTemplates (blogID) {
     return "template:owned_by:" + blogID;
   },

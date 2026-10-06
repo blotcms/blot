@@ -9,6 +9,7 @@ const ensure = require("helper/ensure");
 const extend = require("helper/extend");
 const getTemplateSortOptions = require("blog/sortOptions");
 const callOnce = require("helper/callOnce");
+const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const config = require("config");
 const fromCloudflare = require("../lib/fromCloudflare");
 const CACHE = config.cache;
@@ -19,10 +20,49 @@ const CACHE_CONTROL = "Cache-Control";
 const replaceFolderLinks = require("./replaceFolderLinks/html");
 const replaceFolderLinksCSS = require("./replaceFolderLinks/css");
 const BLOT_CDN_TOKEN = require("./replaceFolderLinks/cdnToken");
+const renderTimeMetric = require("./renderTimeMetric");
+const folderLinkStats = require("./replaceFolderLinks/stats");
+const clfdate = require("helper/clfdate");
 
 const cacheDuration = "public, max-age=31536000";
 const JS = "text/javascript";
 const STYLE = "text/css";
+
+// Measures what the request-time folder-link pass still rewrites (see
+// replaceFolderLinks/stats.js): times it, and when it rewrote something or
+// hit a missing file, logs one line attributing each link to the template,
+// entry or metadata it came from. Instrumentation only: it must never change
+// the output or fail the render.
+async function measureFolderLinks(req, res, name, kind, pass, output, source) {
+  const stats = folderLinkStats.createStats(kind);
+  const startedAt = process.hrtime.bigint();
+  const replaced = await pass(req.blog, output, req.log, stats);
+  const ms = Number(process.hrtime.bigint() - startedAt) / 1e6;
+
+  try {
+    const summary = folderLinkStats.summarize(stats, {
+      blogID: req.blog.id,
+      ms,
+      view: source.view,
+      partials: source.partials,
+      locals: res.locals,
+    });
+
+    if (summary.rewrites || summary.enoent) {
+      req.log(
+        folderLinkStats.formatLine(summary, {
+          handle: req.blog.handle,
+          templateID: req.template.id,
+          view: name,
+        })
+      );
+    }
+  } catch (err) {
+    console.error(clfdate(), "[folder-links] Failed to record stats", err);
+  }
+
+  return replaced;
+}
 
 module.exports = function attachRenderView(req, res, _next) {
   res.renderView = render;
@@ -32,6 +72,12 @@ module.exports = function attachRenderView(req, res, _next) {
     ensure(name, "string").and(next, "function");
 
     if (!req.template) return next();
+
+    // Timed from here to the actual res.send(output) below, which is the
+    // one point every real page request converges on - not the debug/json
+    // inspection branch or the callback path used by non-HTTP callers (e.g.
+    // CDN manifest generation).
+    const renderStartedAt = process.hrtime.bigint();
 
     const blog = req.blog;
     const templateID = req.template.id;
@@ -57,6 +103,7 @@ module.exports = function attachRenderView(req, res, _next) {
         blog,
         template: req.template,
         viewName: name,
+        log: req.log,
       });
 
       if (!response) {
@@ -74,6 +121,11 @@ module.exports = function attachRenderView(req, res, _next) {
       const missingLocals = response[2];
       const viewType = response[3];
       const view = response[4];
+      // Only an explicit false skips resolving backlinks, and not for
+      // ?debug and ?json, which dump every local, backlinks included.
+      req.usesBacklinks =
+        response[5] !== false ||
+        !!(req.query && (req.query.debug || req.query.json));
       const query = Object.keys(req.query).length ? { query: req.query } : {};
 
       extend(res.locals)
@@ -104,10 +156,9 @@ module.exports = function attachRenderView(req, res, _next) {
       try {
         await loadView(req, res);
       } catch (e) {
-        return next(ERROR.BAD_LOCALS());
+        // An outage is not a template problem, and a 400 would be cached
+        return next(isRedisUnavailableError(e) ? e : ERROR.BAD_LOCALS());
       }
-
-      req.log("Loaded other locals");
 
       const locals = res.locals;
       const partials = res.locals.partials;
@@ -161,11 +212,15 @@ module.exports = function attachRenderView(req, res, _next) {
 
       if (viewType === "text/html" && !req.preview) {
         req.log("Replacing folder links with CDN links");
-        output = await replaceFolderLinks(blog, output, req.log);
+        output = await measureFolderLinks(
+          req, res, name, "html", replaceFolderLinks, output, { view, partials }
+        );
         req.log("Replaced folder links with CDN links");
       } else if (viewType === STYLE && !req.preview) {
         req.log("Replacing folder links with CDN links");
-        output = await replaceFolderLinksCSS(blog, output, req.log);
+        output = await measureFolderLinks(
+          req, res, name, "css", replaceFolderLinksCSS, output, { view, partials }
+        );
         req.log("Replaced folder links with CDN links");
       }
 
@@ -196,10 +251,9 @@ module.exports = function attachRenderView(req, res, _next) {
             "<script>window.onload = function() {window.top.postMessage('iframe:' +  window.location.pathname, '*');};</script></body>"
           );
 
-        // Reload the preview whenever the blog's folder finishes syncing
-        // and its rendered output actually changed. See the "reload" event
-        // published in sync/index.js and streamed by
-        // blog/routes/preview-reload.js.
+        // Reload the preview when rendered output changes: folder sync, or a
+        // template editor save of package.json locals. See
+        // helper/publishPreviewReload.js and blog/routes/preview-reload.js.
         output = output
           .split("</body>")
           .join(
@@ -219,6 +273,15 @@ module.exports = function attachRenderView(req, res, _next) {
         // This lets browsers send 'If-Modified-Since' requests
         // to check if the page has changed since the last time
         res.header("Last-Modified", new Date(blog.cacheID).toUTCString());
+        // Templates can expose CSS/JS through this same path (view.js routes
+        // any URL to whatever view matches, not just pages) - only count
+        // actual HTML page renders, not asset requests with very different
+        // latency and cache behavior.
+        if (viewType === "text/html") {
+          renderTimeMetric.record(
+            Number(process.hrtime.bigint() - renderStartedAt) / 1e6
+          );
+        }
         res.send(output);
       } catch (e) {
         next(e);

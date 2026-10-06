@@ -12,67 +12,79 @@ Export.get("/", function (req, res) {
     res.render("dashboard/site/export");
 });
 
-Export.get("/download", async function (req, res) {
+Export.get("/download", async function (req, res, next) {
+  try {
+      // Read from Redis before any header is set or byte is piped, so an
+      // outage can still become a 503 rather than a truncated zip
+      const templates = await getAllTemplates(req.blog.id);
 
-    // create a zip file of the template on the fly and send it to the user
-    // then in a streaming fashion, append the files to the zip file
-    // then send the zip file to the user
-    res.setHeader('Content-Disposition', `attachment; filename=${req.blog.handle}-export.zip`);
-    res.setHeader('Content-Type', 'application/zip');
+      // create a zip file of the template on the fly and send it to the user
+      // then in a streaming fashion, append the files to the zip file
+      // then send the zip file to the user
+      res.setHeader('Content-Disposition', `attachment; filename=${req.blog.handle}-export.zip`);
+      res.setHeader('Content-Type', 'application/zip');
 
-    const archive = archiver('zip', {
-      zlib: { level: 9 } // Sets the compression level.
-    });
+      const archive = archiver('zip', {
+        zlib: { level: 9 } // Sets the compression level.
+      });
 
-    // Handle errors
-    archive.on('error', function(err) {
-        if (res.headersSent) {
-            console.log('Error while sending zip file to the user', err);
-        } else {
-            res.status(400).send({error: err.message});
-        }
-    });
+      // Handle errors
+      archive.on('error', function(err) {
+          if (res.headersSent) {
+              console.log('Error while sending zip file to the user', err);
+          } else {
+              res.status(400).send({error: err.message});
+          }
+      });
 
-    // Pipe the archive data to the response.
-    archive.pipe(res);
+      // Pipe the archive data to the response.
+      archive.pipe(res);
 
-    // walk the static folder and add all the files to the archive
-    // inside a subfolder called 'static' in a recursive, async way
-    const staticFolder = path.join(config.blog_static_files_dir, req.blog.id);
+      // walk the static folder and add all the files to the archive
+      // inside a subfolder called 'static' in a recursive, async way
+      const staticFolder = path.join(config.blog_static_files_dir, req.blog.id);
 
-    // walk the blog folder and add all the files to the archive
-    // inside a subfolder called 'folder' in a recursive, async way
-    const blogFolder = path.join(config.blog_folder_dir, req.blog.id);
+      // walk the blog folder and add all the files to the archive
+      // inside a subfolder called 'folder' in a recursive, async way
+      const blogFolder = path.join(config.blog_folder_dir, req.blog.id);
 
-    // use chokidar to recursively identify all the files in the blog folder
-    // and then add them to the archive and stop the watcher
+      // use chokidar to recursively identify all the files in the blog folder
+      // and then add them to the archive and stop the watcher
 
-    // create a json file with path 'blog.json' to the archive which contains req.blog  
-    const blogJSON = JSON.stringify(req.blog, null, 2);
-    archive.append(blogJSON, { name: 'blog.json' });
+      // create a json file with path 'blog.json' to the archive which contains req.blog  
+      const blogJSON = JSON.stringify(req.blog, null, 2);
+      archive.append(blogJSON, { name: 'blog.json' });
 
-    // iterate over all of the blog's templates and add them to the archive in a file called 'templates.json'
-    
-    try {
-        await recursiveZip(blogFolder, archive, 'folder');
-        await recursiveZip(staticFolder, archive, 'static');
-    } catch (err) {
-        console.log('error', err);
-        if (res.headersSent) {
-            console.log('Error while sending zip file to the user', err);
-        } else {
-            res.status(400).send({error: err.message});
-        }
+      // iterate over all of the blog's templates and add them to the archive in a file called 'templates.json'
+      
+      try {
+          await recursiveZip(blogFolder, archive, 'folder');
+          await recursiveZip(staticFolder, archive, 'static');
+      } catch (err) {
+          console.log('error', err);
+          if (res.headersSent) {
+              console.log('Error while sending zip file to the user', err);
+          } else {
+              res.status(400).send({error: err.message});
+          }
+      }
+
+
+      for (const template of templates) {
+          await addTemplate(template.id, archive);
+      }
+
+      // Finalize the archive
+      archive.finalize();
+  } catch (err) {
+    // The zip headers were set before Redis was touched; drop them so the
+    // error page is not offered as a download
+    if (!res.headersSent) {
+      res.removeHeader("Content-Disposition");
+      res.removeHeader("Content-Type");
     }
-
-    const templates = await getAllTemplates(req.blog.id);
-
-    for (const template of templates) {
-        await addTemplate(template.id, archive);
-    }
-
-    // Finalize the archive
-    archive.finalize();
+    next(err);
+  }
 });
 
 const getAllTemplates = async (blogID) => {
@@ -135,7 +147,7 @@ require("moment-timezone");
 
 const loadEntries = (blogID) => {
     return new Promise((resolve, reject) => {
-        Entries.getAll(blogID, function (allEntries) {
+        Entries.getAll(blogID, { onError: reject }, function (allEntries) {
             resolve(allEntries);
         });
     });
@@ -143,40 +155,44 @@ const loadEntries = (blogID) => {
 
 
 
-Export.get('/wordpress', async function (req, res) {
+Export.get('/wordpress', async function (req, res, next) {
+  try {
 
-    const allEntries = await loadEntries(req.blog.id);
+      const allEntries = await loadEntries(req.blog.id);
 
-    allEntries.forEach((entry, index) => {
-        entry.absoluteURL =
-        req.blog.pretty.url +
-        entry.url.split("/").map(encodeURIComponent).join("/");
+      allEntries.forEach((entry, index) => {
+          entry.absoluteURL =
+          req.blog.pretty.url +
+          entry.url.split("/").map(encodeURIComponent).join("/");
 
-        entry.xmlDate = moment.utc(entry.dateStamp).tz(req.blog.timeZone).format('ddd, DD MMM YYYY HH:mm:ss ZZ');
-        // Stored HTML has build-time-baked %%BLOT_CDN%% links (see
-        // app/build/plugins/folderAssets); this path bypasses
-        // blog/render/middleware.js, which normally resolves them.
-        entry.xmlBody = entry.body.split(BLOT_CDN_TOKEN).join(config.cdn.origin);
+          entry.xmlDate = moment.utc(entry.dateStamp).tz(req.blog.timeZone).format('ddd, DD MMM YYYY HH:mm:ss ZZ');
+          // Stored HTML has build-time-baked %%BLOT_CDN%% links (see
+          // app/build/plugins/folderAssets); this path bypasses
+          // blog/render/middleware.js, which normally resolves them.
+          entry.xmlBody = entry.body.split(BLOT_CDN_TOKEN).join(config.cdn.origin);
 
-        entry.tags = entry.tags.map(tag => {
-            return { tag };
-        });
-    });
+          entry.tags = entry.tags.map(tag => {
+              return { tag };
+          });
+      });
 
-    const locals = {
-        blog: req.blog,
-        blogURL: req.blog.pretty.url,
-        handle: req.blog.handle,
-        allEntries,
-        updatedXmlDate: allEntries.length ? allEntries[0].xmlDate : moment().format('ddd, DD MMM YYYY HH:mm:ss ZZ')
-    };  
+      const locals = {
+          blog: req.blog,
+          blogURL: req.blog.pretty.url,
+          handle: req.blog.handle,
+          allEntries,
+          updatedXmlDate: allEntries.length ? allEntries[0].xmlDate : moment().format('ddd, DD MMM YYYY HH:mm:ss ZZ')
+      };  
 
-    const result = mustache.render(XML, locals);
+      const result = mustache.render(XML, locals);
 
-    // the response should initiate a download of the XML file
-    res.setHeader('Content-Disposition', `attachment; filename=${req.blog.handle}-export.xml`);
-    res.setHeader('Content-Type', 'application/xml');
-    res.send(result);
+      // the response should initiate a download of the XML file
+      res.setHeader('Content-Disposition', `attachment; filename=${req.blog.handle}-export.xml`);
+      res.setHeader('Content-Type', 'application/xml');
+      res.send(result);
+  } catch (err) {
+    next(err);
+  }
 });
 
 

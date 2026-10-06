@@ -1,20 +1,16 @@
 /* Inserts the styles required by various options
 on the services page of the dashboard */
 {{{app_css}}}
-{{{body_font.styles}}}
-{{{heading_font.styles}}}
+{{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
 
 :root {
-  {{#body_font}}
+  {{#font}}
   --font-family: {{{stack}}};
   --font-size: {{{font_size}}}px;
   --line-height: {{{line_height}}};
-  {{/body_font}}
-  {{#heading_font}}
-  --heading-font-family: {{{stack}}};
-  {{/heading_font}}
+  {{/font}}
   {{#syntax_highlighter_font}}
   --code-font-family: {{{stack}}};
   {{/syntax_highlighter_font}}
@@ -26,17 +22,6 @@ on the services page of the dashboard */
   --link-color: {{link_color}};
   --content-width: {{content_width}}em;
   --spacing: {{spacing}};
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background-color: {{dark_background_color}};
-    --off-background-color: rgba({{#rgb}}{{dark_text_color}}{{/rgb}}, 0.08);
-    --text-color: {{dark_text_color}};
-    --light-text-color: rgba({{#rgb}}{{dark_text_color}}{{/rgb}}, 0.3333);
-    --medium-text-color: rgba({{#rgb}}{{dark_text_color}}{{/rgb}}, 0.6666);
-    --link-color: {{dark_link_color}};
-  }
 }
 
 html,
@@ -73,10 +58,6 @@ a {
 
 a:hover {
   text-decoration: underline;
-}
-
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--heading-font-family, var(--font-family));
 }
 
 h1 {
@@ -149,7 +130,7 @@ span.caption {
 
 h3 {
   color: var(--light-text-color);
-  font-size: {{{body_font.font_size}}}px;
+  font-size: {{{font.font_size}}}px;
   font-weight: normal;
 }
 

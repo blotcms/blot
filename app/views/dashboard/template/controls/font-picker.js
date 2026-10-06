@@ -32,7 +32,9 @@ function createFontPicker() {
     ? Array.from(optionsRoot.querySelectorAll("[data-font-option-id]"))
     : [];
 
-  let currentFilter = "all";
+  let currentFilter = filtersRoot
+    ? filtersRoot.dataset.fontPickerDefaultFilter || "all"
+    : "all";
   let activeContext = null;
   let hideTimer = null;
 

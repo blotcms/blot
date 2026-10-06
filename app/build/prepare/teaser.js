@@ -212,4 +212,73 @@ function stripOtherText (node) {
   }
 }
 
+// Returns the HTML with the first breakpoint marker removed and all
+// content kept. Called after the teaser is calculated so the marker
+// does not leak into the rendered entry.
+var markerPatterns = breakPoints.map(function (marker) {
+  return new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+});
+
+var invisibleToMarker = ["code", "head", "pre", "script", "style"];
+
+function stripBreakPoint (html) {
+  // Cheap precheck: every marker contains "more"
+  if (!html || !/more/i.test(html)) return html;
+
+  var $ = cheerio.load(html, { decodeEntities: false }, false);
+  var found = false;
+
+  function earliestMarker (text) {
+    var best = null;
+
+    // Search the original string: lowercasing can change its length
+    markerPatterns.forEach(function (pattern) {
+      var m = pattern.exec(text);
+      if (m && (!best || m.index < best.index || (m.index === best.index && m[0].length > best.length)))
+        best = { index: m.index, length: m[0].length };
+    });
+
+    return best;
+  }
+
+  function walk (nodes) {
+    nodes.each(function (i, node) {
+      if (found) return false;
+
+      if (node.type === "comment") {
+        if (node.data.trim().toLowerCase() === "more") {
+          found = true;
+          $(node).remove();
+        }
+      } else if (node.type === "text") {
+        var marker = earliestMarker(node.data);
+        if (!marker) return;
+
+        found = true;
+        node.data =
+          node.data.slice(0, marker.index) +
+          node.data.slice(marker.index + marker.length);
+
+        // The marker was the only content of its element (e.g. <p>{{more}}</p>)
+        var parent = node.parent;
+        if (
+          !node.data.trim() &&
+          parent &&
+          parent.type === "tag" &&
+          parent.children.length === 1
+        )
+          $(parent).remove();
+      } else if (node.type === "tag" && invisibleToMarker.indexOf(node.name) === -1) {
+        walk($(node).contents());
+      }
+    });
+  }
+
+  walk($.root().contents());
+
+  return found ? $.html() : html;
+}
+
+makeTeaser.stripBreakPoint = stripBreakPoint;
+
 module.exports = makeTeaser;

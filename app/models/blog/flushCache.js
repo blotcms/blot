@@ -1,11 +1,8 @@
 const BackupDomain = require("./util/backupDomain");
-const flushCache = require("helper/flushCache");
+const config = require("config");
+const flush = require("helper/flushProxies");
 const debug = require("debug")("blot:blog:flushCache");
 const get = require("./get");
-
-const config = require("config");
-const { reverse_proxies } = config;
-const flush = flushCache({ reverse_proxies });
 
 // This empties the cache for a blog by emptying the cache
 // for its Blot subdomain and its custom domain, if one is set

@@ -3,7 +3,7 @@ var sharp = require("sharp");
 var ensure = require("helper/ensure");
 var tempDir = require("helper/tempDir")();
 var fs = require("fs-extra");
-var uuid = require("uuid/v4");
+var { v4: uuid } = require("uuid");
 var extname = require("path").extname;
 
 // We don't do .gif because sharp cannot handle animated

@@ -6,8 +6,8 @@
 // newest-first, "desc" is oldest-first. Path sorting is lexicographic: "asc" is
 // A–Z, "desc" is Z–A.
 const OPTIONS = [
-  { label: "Publish date - Newest first", sort_by: "date", sort_order: "asc", value: "date_asc" },
-  { label: "Publish date - Oldest first", sort_by: "date", sort_order: "desc", value: "date_desc" },
+  { label: "Date - Newest first", sort_by: "date", sort_order: "asc", value: "date_asc" },
+  { label: "Date - Oldest first", sort_by: "date", sort_order: "desc", value: "date_desc" },
   { label: "File path - A to Z", sort_by: "id", sort_order: "asc", value: "id_asc" },
   { label: "File path - Z to A", sort_by: "id", sort_order: "desc", value: "id_desc" }
 ];

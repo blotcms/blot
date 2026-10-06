@@ -41,7 +41,6 @@ describe("extend ", function () {
   it("merges two other objects", function () {
     var a2 = {
       name: "Default",
-      isPublic: true,
       description:
         "The default template. Designed to work well with text, image and video posts. Set in Georgia & Helvetica.",
       thumb:
@@ -49,7 +48,6 @@ describe("extend ", function () {
     };
 
     var b2 = {
-      isPublic: true,
       views: {
         archives: { url: "/archives", locals: [Object] },
         sitemap: { url: "/sitemap.xml" },
@@ -64,7 +62,6 @@ describe("extend ", function () {
         "The default template. Designed to work well with text, image and video posts. Set in Georgia & Helvetica.",
       thumb:
         "https://d1u95qvrdsh2gl.cloudfront.net/avatars/1425441405690_u054WwMUSeU8f9PmbymEhtDQ.png",
-      isPublic: true,
       views: {
         archives: { url: "/archives", locals: [Object] },
         sitemap: { url: "/sitemap.xml" },

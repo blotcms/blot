@@ -22,24 +22,36 @@ const STATES = {
 };
 
 // Listed most severe first: this order picks the issue shown when a site
-// has more than one.
+// has more than one. `action` is the short call-to-action label a template
+// can show next to the message; every issue is resolved the same way, by
+// visiting the client's own setup/reconnect page.
 const ISSUES = {
   REAUTH_REQUIRED: {
     label: "Reconnect required",
     message: "Access to your folder was revoked. Reconnect to resume syncing.",
+    action: "Reconnect",
   },
   SOURCE_MISSING: {
     label: "Folder missing",
     message:
-      "The folder used to sync this site no longer exists. Choose a new folder to resume syncing.",
+      "The folder used to sync this site no longer exists. Recreate it to resume syncing.",
+    action: "Recreate folder",
   },
   QUOTA_EXCEEDED: {
     label: "Storage full",
     message: "Your storage is full, so changes can't sync.",
+    action: "Retry",
+  },
+  TRANSFER_INCOMPLETE: {
+    label: "Transfer incomplete",
+    message:
+      "Blot couldn't finish transferring this site's folder. No files were removed.",
+    action: "Retry transfer",
   },
   SYNC_ERROR: {
     label: "Sync problem",
     message: "Something went wrong while syncing this site.",
+    action: "Retry",
   },
 };
 
@@ -108,6 +120,10 @@ function label(code) {
   return ISSUES[code] ? ISSUES[code].label : undefined;
 }
 
+function action(code) {
+  return ISSUES[code] ? ISSUES[code].action : undefined;
+}
+
 module.exports = {
   STATES,
   CODES,
@@ -118,4 +134,5 @@ module.exports = {
   error,
   primaryIssue,
   label,
+  action,
 };

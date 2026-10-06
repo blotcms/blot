@@ -3,6 +3,7 @@ const config = require("config");
 const Blog = require("models/blog");
 const Template = require("models/template");
 const getBlogHealth = require("./get-blog-health");
+const { isRedisUnavailableError } = require("helper/redisUnavailable");
 
 module.exports = function (req, res, next, handle) {
   if (!req.session || !req.user || !req.user.blogs.length) return next();
@@ -11,6 +12,9 @@ module.exports = function (req, res, next, handle) {
   req.handle = handle;
 
   Blog.get({ handle }, function (err, blog) {
+    // An outage is not a missing blog
+    if (isRedisUnavailableError(err)) return next(err);
+
     if (!blog || blog.owner !== req.user.uid) return next(new Error("No blog"));
 
     try {

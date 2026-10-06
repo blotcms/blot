@@ -67,6 +67,10 @@ echo "[start] Launching local folder opener"
 node "$FOLDER_SERVER" &
 FOLDER_PID=$!
 
+if [ "${BLOT_USE_TOXIPROXY:-true}" = "true" ]; then
+  export BLOT_REDIS_HOST="${BLOT_REDIS_HOST:-toxiproxy}"
+fi
+
 compose up --build -d
 
 if [ "${BLOT_USE_TOXIPROXY:-true}" = "true" ]; then

@@ -62,7 +62,6 @@ function main (name, callback) {
           blog.id,
           name,
           {
-            isPublic: false,
             name: name,
             cloneFrom: blog.template
           },
