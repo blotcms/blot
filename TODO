@@ -1,11 +1,10 @@
+Fix bug with repeat google drive syncs
+
 Investigate high aws bill cause
 
-Add option to hypertext template to make homepage chrono list of posts and tell [Brendan](https://mail.google.com/mail/u/0/#inbox/FMfcgzQhWfPnbhmcWTtTJxGgMqJtppML)
+Work on removing replaceFolderLinks
 
-Add script which issues request locally
-- use to debug nashp concurrent requests in isolation on prod infra
-
-Add script to triage fix/build issues individually (with appropriate heap flags etc.)
+Excercise the backlinks with big entries / many backlinks in the benchmarks somewhere
 
 Find what runs `KEYS` on prod redis (slowlog: 789ms at 2026-10-05 09:01Z, blocks everything; not found in app/ or scripts/, maybe a manual redis-cli)
 
