@@ -14,7 +14,7 @@ const {
   warnIfTooLargeToCache,
 } = require("../load/augmentedEntries");
 
-const ALIASES = ["allEntries", "all_entries"];
+const ALIASES = getAllCached.ALIASES.allEntries;
 
 // Caches the already-projected, already-augmented entry list, not just the
 // raw catalog from getAllCached - a view that only reads url/title/dateStamp
@@ -32,7 +32,10 @@ const allEntriesCache = new LRUCache({
   // renders after a cacheID change augments the catalog once, not per request.
   fetchMethod: async (key, staleValue, { context }) => {
     const { req, res } = context;
-    const allEntriesList = await getAllCached(req.blog, { log: req.log });
+    const allEntriesList = await getAllCached(req.blog, {
+      retrieve: req.retrieve,
+      log: req.log,
+    });
     await yieldToEventLoop();
 
     projectEntryFields(allEntriesList, req.retrieve, ALIASES);
@@ -87,6 +90,7 @@ async function allEntries(req, res) {
   if (req.preview) {
     const allEntriesList = await getAllCached(req.blog, {
       bypassCache: true,
+      retrieve: req.retrieve,
       log: req.log,
     });
     projectEntryFields(allEntriesList, req.retrieve, ALIASES);
