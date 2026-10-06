@@ -255,7 +255,14 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             Boolean(existsLocally && existsLocally.isDirectory)
           );
 
-          if (existsLocally) {
+          if (existsLocally && existsLocally.isDirectory) {
+            // e.g. a Drive folder replaced by a shortcut of the same name.
+            // download() can't write a file (or placeholder) over a directory.
+            console.log("Removing directory", path, "which is a file remotely");
+            await fs.remove(localPath(blogID, path));
+            summary.removed += 1;
+            await update(path);
+          } else if (existsLocally) {
             console.log("Updating out-of-sync:", path);
             console.log(
               "identical=false localSize=" + existsLocally.size,

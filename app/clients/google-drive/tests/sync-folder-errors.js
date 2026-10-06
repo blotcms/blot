@@ -16,8 +16,16 @@ function harness(options) {
     serviceAccountId: "service",
   };
 
+  const removed = [];
+  const downloaded = [];
+  const updated = [];
+
   const stubs = {
-    "fs-extra": {},
+    "fs-extra": {
+      remove: async function (path) {
+        removed.push(path);
+      },
+    },
     "helper/localPath": function (_, path) {
       return path;
     },
@@ -48,12 +56,20 @@ function harness(options) {
             return [];
           },
           setVerifiedContent: async function () {},
+          getApplied: async function () {
+            return null;
+          },
+          setApplied: async function () {},
         };
       },
     },
     "../database/error": require("../database/error"),
-    "../util/download": async function () {
+    "../util/download": async function (blogID, drive, path) {
+      downloaded.push(path);
       return { updated: false };
+    },
+    "../util/localFingerprint": async function () {
+      return "fingerprint";
     },
     "../serviceAccount/createDriveClient": async function () {
       return {
@@ -91,10 +107,10 @@ function harness(options) {
     },
     "./util/driveReaddir": async function () {
       walked = true;
-      return [];
+      return options.driveItems || [];
     },
     "./util/localReaddir": async function () {
-      return [];
+      return options.localItems || [];
     },
     "./util/transformDriveItems": require("../sync/util/transformDriveItems"),
     "./util/truncateToSecond": require("../sync/util/truncateToSecond"),
@@ -121,13 +137,18 @@ function harness(options) {
   return {
     stored: stored,
     published: published,
+    removed: removed,
+    downloaded: downloaded,
+    updated: updated,
     run: async function (syncOptions) {
       return module.exports(
         "blog",
         function () {
           published.push(Array.prototype.slice.call(arguments));
         },
-        async function () {},
+        async function (path) {
+          updated.push(path);
+        },
         syncOptions
       );
     },
@@ -197,5 +218,25 @@ describe("google drive sync folder health", function () {
     const plain = harness();
     await plain.run();
     expect(plain.resets()).toBe(0);
+  });
+
+  it("removes a local directory where Drive now has a file", async function () {
+    // e.g. a folder replaced by a shortcut: no size, no md5Checksum
+    const h = harness({
+      driveItems: [
+        {
+          id: "shortcut",
+          name: "Pictures",
+          mimeType: "application/vnd.google-apps.shortcut",
+          modifiedTime: "2026-10-06T00:00:00.000Z",
+        },
+      ],
+      localItems: [{ name: "Pictures", isDirectory: true, size: 4096 }],
+    });
+    const summary = await h.run();
+    expect(h.removed).toEqual(["/Pictures"]);
+    expect(h.updated).toEqual(["/Pictures"]);
+    expect(h.downloaded).toEqual(["/Pictures"]);
+    expect(summary.removed).toBe(1);
   });
 });
