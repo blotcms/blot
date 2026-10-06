@@ -90,7 +90,14 @@ function install() {
     const method = (opts.method || "GET").toUpperCase();
     const url = String(opts.url || "");
 
-    if (mode && method === "GET" && FOLDER_LOOKUP.test(url)) {
+    if (
+      mode &&
+      method === "GET" &&
+      FOLDER_LOOKUP.test(url) &&
+      // file downloads hit the same endpoint with alt=media
+      !(opts.params && opts.params.alt === "media") &&
+      !/[?&]alt=media(&|$)/.test(url)
+    ) {
       const fake = MODES[mode];
       console.log("google-drive:fakeError", mode, "->", fake.status, url);
 

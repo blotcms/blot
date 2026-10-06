@@ -58,13 +58,15 @@ describe("google drive getHealth", function () {
   });
 
   it("does not surface a setup failure as sync health", async function () {
+    // finishSetup's catch leaves preparing: true; nothing is running, so
+    // this must not read as syncing indefinitely either.
     expect(
       await load({
         preparing: true,
         error: "Failed to set up account",
         folderId: null,
       })("blog")
-    ).toEqual(health.syncing());
+    ).toEqual(health.ok());
 
     expect(
       await load({

@@ -11,7 +11,11 @@ const dashboard = new express.Router();
 
 const finishSetup = require("./setup");
 const health = require("clients/health");
-const { clearAllErrorFields, isSetupError } = require("../database/error");
+const {
+  classify,
+  clearAllErrorFields,
+  isSetupError,
+} = require("../database/error");
 
 const VIEWS = require("path").resolve(__dirname + "/../views") + "/";
 
@@ -42,17 +46,17 @@ dashboard.get("/", function (req, res) {
   // in sync with that here too, so a future change to that ordering can't
   // reopen the stale-error-during-setup gap Dropbox's dashboard route
   // guards against.
-  if (res.locals.account.preparing) {
-    res.locals.blog.healthIssue = undefined;
-    res.locals.blog.health = health.syncing();
-  }
-
   // Setup failures are deliberately kept out of health (see getHealth.js
   // and database/error.js: isSetupError) because they aren't one of the
   // small set of known, actionable codes - just an opaque failure. Surface
   // the prose here instead so the user isn't left looking at a "syncing"
   // badge with no explanation of what's stuck.
   res.locals.account.setupFailed = isSetupError(res.locals.account.error);
+
+  if (res.locals.account.preparing && !res.locals.account.setupFailed) {
+    res.locals.blog.healthIssue = undefined;
+    res.locals.blog.health = health.syncing();
+  }
 
   res.render(VIEWS + "index");
 });
@@ -91,6 +95,11 @@ dashboard.route("/setup").get(async function (req, res, next) {
 
       res.locals.suggestedEmail = suggestedEmail;
     }
+
+    // Reached from the "Recreate folder" health action: explain why the
+    // user is being asked for their email again and what happens next.
+    res.locals.folderLost =
+      classify(res.locals.account) === health.CODES.SOURCE_MISSING;
 
     res.render(VIEWS + "setup");
   } catch (err) {

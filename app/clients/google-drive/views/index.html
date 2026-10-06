@@ -4,7 +4,7 @@
 {{> status-line}}
 
 {{#account.setupFailed}}
-<p class="error">{{account.error}}</p>
+<p class="error">Google Drive setup didn't finish. Retry setup to share a folder with Blot again, or cancel to disconnect Google Drive.</p>
 
 <form action="{{{base}}}/disconnect" method="POST">
   <input type="hidden" name="_csrf" value="{{csrftoken}}">

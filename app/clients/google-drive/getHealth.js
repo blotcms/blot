@@ -1,6 +1,6 @@
 const database = require("./database");
 const health = require("clients/health");
-const { classify } = require("./database/error");
+const { classify, isSetupError } = require("./database/error");
 
 module.exports = async function getHealth(blogID) {
   const account = await database.blog.get(blogID);
@@ -24,9 +24,13 @@ module.exports = async function getHealth(blogID) {
   }
 
   // Setup waits for the user to share a folder. That is in-progress
-  // work, not a sync failure, even if a previous setup attempt stored
-  // a prose-only "Failed to set up account" string.
-  if (account.preparing) return health.syncing();
+  // work, not a sync failure. A failed setup leaves preparing: true
+  // beside the prose "Failed to set up account" string (see
+  // routes/setup.js), but nothing is running any more, so it is not
+  // syncing either.
+  if (account.preparing && !isSetupError(account.error)) {
+    return health.syncing();
+  }
 
   return health.ok();
 };
