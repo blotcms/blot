@@ -47,10 +47,13 @@ describe("entry.search", function () {
     const path = "/post.txt";
 
     fs.outputFileSync(this.blogDirectory + "/Café pic.jpg", "image");
-    const entry = await this.set(path, "![](Café%20pic.jpg)");
+    fs.outputFileSync(this.blogDirectory + "/l'été.jpg", "image");
+    const entry = await this.set(path, "![](Café%20pic.jpg) ![](l'%C3%A9t%C3%A9.jpg)");
 
     expect(entry.html).toContain("Caf%C3%A9%20pic.jpg");
+    expect(entry.html).toContain("l%27%C3%A9t%C3%A9.jpg");
     expect((await this.search("café pic.jpg")).map((r) => r.id)).toEqual([path]);
+    expect((await this.search("été")).map((r) => r.id)).toEqual([path]);
     expect(await this.search("folder")).toEqual([]);
 
     done();

@@ -287,6 +287,21 @@ describe("folderAssets plugin", function () {
     });
   });
 
+  it("keeps an encoded '#' or '?' in a file name part of the path", function (done) {
+    var path = "/Hello.txt";
+
+    fs.outputFileSync(this.blogDirectory + path, `<img src="/it's%20%231%3F.jpg?w=1#top">`);
+    fs.outputFileSync(this.blogDirectory + "/it's #1?.jpg", "image");
+
+    build(this.blog, path, function (err, entry) {
+      if (err) return done.fail(err);
+
+      expect(entry.html).toMatch(tokenRegex("/it%27s%20%231%3F\\.jpg\\?w=1#top\""));
+      expect(entry.dependencies).toContain("/it's #1?.jpg");
+      done();
+    });
+  });
+
   it("re-bakes an already-baked encoded srcset, keeping a missing file's path encoded", function (done) {
     var path = "/Hello.txt";
     var baked = (file) => `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${this.blog.id}${file}`;

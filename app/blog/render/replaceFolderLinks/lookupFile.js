@@ -10,7 +10,7 @@ const {
   isReservedStaticPath,
 } = require("../../lib/staticPaths");
 const BLOT_CDN_TOKEN = require("./cdnToken");
-const { encodeFolderPath } = require("./shared");
+const { encodeFolderPath, decodeFolderPath } = require("./shared");
 
 class Cache {
   constructor() {
@@ -48,19 +48,12 @@ async function lookupFile(blogID, cacheID, value) {
   const hash_ = hashIndex > -1 ? value.slice(hashIndex) : "";
   value = hashIndex > -1 ? value.slice(0, hashIndex) : value;
 
-  // if the value contains url-encoded characters, decode it
-  if (value.includes("%")) {
-    try {
-    value = decodeURIComponent(value);
-    } catch (err) {
-      // e.g. '100% luck.jpg' will throw an error
-      // 'Uncaught URIError: malformed URI sequence'
-      // in this case the value is left unchanged
-    }
-  }
-
-  const [pathFromValue, ...rest] = value.split("?");
+  // split off the query, then decode the path - in that order, so an
+  // encoded '?' (or '#', above) in a file name stays part of the path.
+  // e.g. '100% luck.jpg' isn't valid percent-encoding, and is left unchanged
+  const [encodedPath, ...rest] = value.split("?");
   const query = rest.length ? `?${rest.join("?")}` : "";
+  const pathFromValue = decodeFolderPath(encodedPath);
 
   // if the value is a static file, we need to resolve it
   if (isReservedStaticPath(pathFromValue)) {
@@ -68,13 +61,13 @@ async function lookupFile(blogID, cacheID, value) {
     try {
       // check  if the file exists in the global static files set
       if (globalStaticFiles.has(pathFromValue)) {
-        return `${BLOT_CDN_TOKEN}${value}${hash_}`;
+        return `${BLOT_CDN_TOKEN}${encodeFolderPath(pathFromValue)}${query}${hash_}`;
       }
       await fs.stat(filePath);
       // store the pathFromValue in set of valid static files
       // so we can use it later
       globalStaticFiles.add(pathFromValue);
-      return `${BLOT_CDN_TOKEN}${value}${hash_}`;
+      return `${BLOT_CDN_TOKEN}${encodeFolderPath(pathFromValue)}${query}${hash_}`;
     } catch (err) {}
   }
 

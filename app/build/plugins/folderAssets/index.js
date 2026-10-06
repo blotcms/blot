@@ -14,6 +14,7 @@ const {
   fileExtRegex,
   parseSrcset,
   encodeFolderPath,
+  decodeFolderPath,
 } = require("blog/render/replaceFolderLinks/shared");
 
 const ATTRS = ["href", "src", "poster"];
@@ -181,7 +182,7 @@ async function bakeValue(ctx, value, resolveRelative) {
 
   if (!isEligible(raw)) return null;
 
-  const result = await resolveBuildFile(ctx, raw, wasBaked);
+  const result = await resolveBuildFile(ctx, raw);
 
   if (result) {
     addDependency(ctx, result.path);
@@ -194,14 +195,9 @@ async function bakeValue(ctx, value, resolveRelative) {
   // we embedded had already dropped back to the plain path. Where the link
   // was baked, drop back to the plain path so request-time resolution
   // decides instead of keeping a URL for a now-missing versioned file.
-  addDependency(ctx, pathPartOf(raw));
+  addDependency(ctx, decodeFolderPath(pathPartOf(raw)));
 
-  if (!wasBaked) return null;
-
-  // raw came out of unwrapFolderLink decoded, so re-encode its path: a
-  // literal space would split a srcset candidate. lookupFile decodes it.
-  const pathPart = pathPartOf(raw);
-  return encodeFolderPath(pathPart) + raw.slice(pathPart.length);
+  return wasBaked ? raw : null;
 }
 
 // An entry is always rebuilt when its own file changes, and (like
@@ -244,24 +240,19 @@ async function rewriteSrcset(ctx, value) {
 // the case-corrected file path, for recording as a dependency), or null
 // (ENOENT) if there's no matching file - mirroring
 // app/blog/render/replaceFolderLinks/lookupFile.js's "leave untouched"
-// behavior. alreadyDecoded is set for paths recovered from an
-// already-baked link, which hold the real (unencoded) file path.
-async function resolveBuildFile(ctx, value, alreadyDecoded) {
+// behavior.
+async function resolveBuildFile(ctx, value) {
   const { blogID, blogFolder } = ctx;
   const hashIndex = value.indexOf("#");
   const hash_ = hashIndex > -1 ? value.slice(hashIndex) : "";
   value = hashIndex > -1 ? value.slice(0, hashIndex) : value;
 
-  if (!alreadyDecoded && value.includes("%")) {
-    try {
-      value = decodeURIComponent(value);
-    } catch (err) {
-      // e.g. '100% luck.jpg' will throw an error - leave value unchanged
-    }
-  }
-
-  const [pathFromValue, ...rest] = value.split("?");
+  // Split off the query before decoding, so an encoded '?' (or '#', above)
+  // in a file name stays part of the path. e.g. '100% luck.jpg' isn't valid
+  // percent-encoding, and is left unchanged.
+  const [encodedPath, ...rest] = value.split("?");
   const query = rest.length ? `?${rest.join("?")}` : "";
+  const pathFromValue = decodeFolderPath(encodedPath);
 
   // Same check as isEligible, but after percent-decoding (e.g. /f%6Fnts).
   if (isReservedStaticPath(pathFromValue)) return null;

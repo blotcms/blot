@@ -3,6 +3,7 @@ const client = require("models/client");
 const { promisify } = require("util");
 const { sortEntries } = require("blog/sortOptions");
 const metadataCaseInsensitive = require("helper/metadataCaseInsensitive");
+const { decodeFolderPath } = require("blog/render/replaceFolderLinks/shared");
 const get = promisify((blogID, entryIDs, callback) =>
   require("./get")(blogID, entryIDs, function (entries) {
     callback(null, entries);
@@ -21,17 +22,12 @@ const CHUNK_SIZE = 200;
 // %%BLOT_CDN%%/folder/v-<hash>/<blogID>/photo.jpg. Drop the token, version
 // and blog ID so queries like "cdn" or "folder" don't match every post
 // while filename searches still hit the remaining /photo.jpg. The path is
-// percent-encoded (see encodeFolderPath), so decode it for the same reason.
-const BAKED_LINK_REGEX = /%%BLOT_CDN%%\/folder\/v-[a-f0-9]+\/[^/"'\s]+([^"'\s]*)/g;
+// percent-encoded (see encodeFolderPath, which also encodes quotes), so
+// decode it - but not the ?query/#hash after it - for the same reason.
+const BAKED_LINK_REGEX = /%%BLOT_CDN%%\/folder\/v-[a-f0-9]+\/[^/"'\s]+([^?#"'\s]*)/g;
 
 function stripBakedPrefix(html) {
-  return html.replace(BAKED_LINK_REGEX, (match, path) => {
-    try {
-      return decodeURIComponent(path);
-    } catch (err) {
-      return path;
-    }
-  });
+  return html.replace(BAKED_LINK_REGEX, (match, path) => decodeFolderPath(path));
 }
 
 function buildSearchText(entry) {
