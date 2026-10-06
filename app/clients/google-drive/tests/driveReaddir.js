@@ -14,4 +14,24 @@ describe("Drive readdir", function () {
     expect(nfd).not.toBe("à propos.md".normalize("NFC"));
     expect(item.name).toBe("à propos.md".normalize("NFC"));
   });
+
+  it("removes trailing slashes and replaces other slashes in names", async function () {
+    const drive = {
+      files: {
+        list: async () => ({
+          data: {
+            files: [
+              { id: "1", name: "_images/" },
+              { id: "2", name: "AC/DC.jpg" },
+              { id: "3", name: "/" },
+            ],
+          },
+        }),
+      },
+    };
+
+    const items = await driveReaddir(drive, "folder");
+
+    expect(items.map((item) => item.name)).toEqual(["_images", "AC_DC.jpg", "_"]);
+  });
 });

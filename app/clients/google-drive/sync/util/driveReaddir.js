@@ -1,4 +1,5 @@
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const localName = require("../../util/localName");
 
 const readdir = async (drive, dirId) => {
   let res;
@@ -19,11 +20,8 @@ const readdir = async (drive, dirId) => {
     nextPageToken = res.data.nextPageToken;
   } while (nextPageToken);
 
-  // Drive keeps names in whatever Unicode form they were uploaded in (macOS
-  // uploads are often NFD), but localPath writes NFC. Comparing the raw names
-  // against the local folder would never match, so every sync would delete
-  // the local copy and download it again.
-  for (const item of items) item.name = item.name.normalize();
+  // Sync compares these names with the local folder's.
+  for (const item of items) item.name = localName(item.name);
 
   // Filter out system files that shouldn't be synced to Blot
   return items.filter((item) => !shouldIgnoreFile(item.name));
