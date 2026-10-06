@@ -486,15 +486,20 @@ function scanOpenTag(ctx, i, to) {
 }
 
 // Candidates are split at commas and each URL is its first whitespace
-// delimited token, exactly as the request-time pass's parseSrcset does.
+// delimited token, exactly as the request-time pass's parseSrcset does. As
+// there, a srcset with an empty candidate (", /a.png 1x" or a trailing comma)
+// is malformed and left entirely alone.
 function scanSrcset(ctx, from, to) {
   const src = ctx.src;
+  const pieces = [];
   let pieceStart = from;
   let k = from;
 
   while (k <= to) {
     if (k === to || src.charAt(k) === ",") {
-      rewriteCandidate(ctx, pieceStart, k);
+      if (!src.slice(pieceStart, k).trim()) return;
+
+      pieces.push([pieceStart, k]);
       pieceStart = k + 1;
       k++;
     } else if (src.charAt(k) === "{" && src.charAt(k + 1) === "{") {
@@ -503,6 +508,8 @@ function scanSrcset(ctx, from, to) {
       k++;
     }
   }
+
+  pieces.forEach((piece) => rewriteCandidate(ctx, piece[0], piece[1]));
 }
 
 function rewriteCandidate(ctx, from, to) {

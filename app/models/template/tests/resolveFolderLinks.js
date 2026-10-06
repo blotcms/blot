@@ -58,6 +58,20 @@ describe("resolveFolderLinks", function () {
       );
     });
 
+    it("leaves a malformed srcset unchanged, as the request-time pass does", function () {
+      [
+        '<img srcset=", /img.jpg 1x">',
+        '<img srcset="/img.jpg 1x,">',
+        '<img srcset="/a.jpg 1x, , /b.jpg 2x">',
+      ].forEach((input) => expect(html(input)).toBe(input));
+    });
+
+    it("leaves empty href and src values alone", function () {
+      const input = '<img src=""><a href="">';
+
+      expect(html(input)).toBe(input);
+    });
+
     it("wraps meta content that points at a file", function () {
       expect(
         html(
@@ -268,6 +282,22 @@ describe("resolveFolderLinks", function () {
     it("wraps reserved global paths like the request-time pass does", function () {
       expect(html('<link href="/fonts/x.css">')).toBe(
         `<link href="${wrap("/fonts/x.css")}">`
+      );
+    });
+
+    it("ignores path traversal that has no file to point at", function () {
+      const input =
+        '<a href="../../../../etc/passwd">a</a><img src="/../../etc/passwd">';
+
+      expect(html(input)).toBe(input);
+    });
+
+    it("never lets path traversal climb out of the blog's folder", function () {
+      expect(html('<img src="../../../../a.jpg">')).toBe(
+        `<img src="${wrap("/a.jpg")}">`
+      );
+      expect(css("a{background:url(../../../../a.jpg)}")).toBe(
+        `a{background:url(${wrap("/a.jpg")})}`
       );
     });
 

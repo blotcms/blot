@@ -1,5 +1,7 @@
 describe("replaceCssUrls", function () {
   require("blog/tests/util/setup")();
+  // These specs are about the request-time pass: see the helper
+  require("blog/tests/util/requestTimeLinks")();
 
   const config = require("config");
   const fs = require("fs-extra");
