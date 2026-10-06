@@ -228,10 +228,19 @@ function setIssue(blogID, issue, callback) {
   });
 }
 
-function clearIssue(blogID, callback) {
+// clearIssue(blogID, callback) clears whatever issue is persisted.
+// clearIssue(blogID, code, callback) only clears an issue with that code,
+// so a Blot-side write succeeding doesn't wipe a rejected push.
+function clearIssue(blogID, code, callback) {
+  if (typeof code === "function") {
+    callback = code;
+    code = undefined;
+  }
+
   getRecord(blogID, function (err, record) {
     if (err) return callback(err);
     if (!record || !record.issue) return callback(null);
+    if (code && record.issue.code !== code) return callback(null);
     delete record.issue;
     saveRecord(blogID, record, callback);
   });

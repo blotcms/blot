@@ -20,7 +20,7 @@ When a user pushes changes from their local repository to the bare repository, B
 
 - **`getHealth.js`**: Reports structured sync health for the dashboard. Maps create-in-progress to `syncing`, a failed create or persisted hook failure to `SYNC_ERROR`, a missing token to `REAUTH_REQUIRED`, and a missing bare or live repository to `SOURCE_MISSING`.
 
-- **`error.js`**: User-facing copy and classification for durable Git failures (missing repo vs. other sync errors).
+- **`error.js`**: User-facing copy and classification for durable Git failures (missing repo, rejected tree, other sync errors) and the dashboard action button for each health issue.
 
 - **`routes.js`**: Defines Express routes for both the dashboard UI and the Git push endpoint. Includes:
   - Dashboard routes for create, index, disconnect, and token reset
@@ -222,15 +222,18 @@ Symbolic links (including links within the blog) and submodules are not supporte
 
 `getHealth(blogID)` returns a Promise of `{ state, issues }` using `app/clients/health.js`.
 
-| Condition | State / code |
-| --- | --- |
-| `createInProgress` | `syncing` |
-| `createFailed` | `SYNC_ERROR` |
-| Git token missing from Redis | `REAUTH_REQUIRED` |
-| Bare repo or live `.git` missing (after a successful create) | `SOURCE_MISSING` |
-| Rejected push (symlinks/submodules) or other hook failure | `SYNC_ERROR` (persisted until the next successful sync) |
+| Condition | State / code | Persisted message | Dashboard button |
+| --- | --- | --- | --- |
+| `createInProgress` | `syncing` | | |
+| `createFailed` | `SYNC_ERROR` | "Git repository setup failed. Try connecting again." | "Try again" -> `/create` |
+| Git token missing from Redis | `REAUTH_REQUIRED` | (computed live) | "Reset password" -> `/reset-password` |
+| Bare repo or live `.git` missing, or sync/write/remove found no repo | `SOURCE_MISSING` | "...Reconnect Git to resume syncing." | "Reconnect" -> `/disconnect`, then set Git up again |
+| Push rejected for symlinks or submodules (`validateTree.js` error with code `GIT_TREE_REJECTED`) | `SYNC_ERROR` | "Your last push was rejected: ... Remove them and push again." | none (push again) |
+| Any other failure in `sync()` after the lock is held | `SYNC_ERROR` | generic copy from `health.js` | none |
 
-Lock failures and wrong-password attempts are not persisted. A client without `getHealth` is treated as healthy; the local client has none.
+Git has no `/setup` page, so the dashboard route (`routes.js`, via `healthAction` in `error.js`) sets each issue's `actionUrl` and `action`; an undefined `action` hides the button in `disconnect-line.html`. Raw git output (fetch/reset stderr) is only written to the sync log, never shown as the issue message.
+
+A successful sync clears any persisted issue. A successful Blot-side `write()` / `remove()` clears only `SOURCE_MISSING`, so it doesn't hide a rejected push whose tree is still bad. Failing to acquire the sync lock and wrong-password attempts are not persisted. A client without `getHealth` is treated as healthy; the local client has none.
 
 The dashboard Git page still uses `createInProgress` for the setup progress line. `createFailed` is also passed through; after a failed create the bare repo is removed so `/git` redirects to `/create`.
 

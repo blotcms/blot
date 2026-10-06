@@ -6,6 +6,7 @@ describe("Git sync tree policy", function () {
   async function run(tree) {
     const resets = [];
     let released = false;
+    const issues = [];
     const git = {
       silent() { return this; },
       remote(args, cb) { cb(null); },
@@ -25,7 +26,7 @@ describe("Git sync tree policy", function () {
       "./checkGitRepoExists":(path, cb)=>cb(null), "./dataDir":"/test-data",
       "models/blog":{}, "./validateTree":validateTree,
       "./database": {
-        setIssue: function (id, issue, cb) { cb(null); },
+        setIssue: function (id, issue, cb) { issues.push(issue); cb(null); },
         clearIssue: function (id, cb) { cb(null); },
       },
       "./error": require("../error"),
@@ -36,13 +37,19 @@ describe("Git sync tree policy", function () {
       require:name => name in stubs ? stubs[name] : require(name),
     });
     const error = await new Promise(resolve => module.exports("test", "test", resolve));
-    return {error, released, resets};
+    return {error, released, resets, issues};
   }
   it("leaves the checkout untouched and releases its lock on rejection", async function () {
     const result = await run("120000 blob abc\tlink.txt\0");
     expect(result.error.message).toContain("regular files only");
     expect(result.resets).toEqual([]);
     expect(result.released).toBe(true);
+  });
+  it("persists a rejected tree with the specific message", async function () {
+    const result = await run("120000 blob abc\tlink.txt\0");
+    expect(result.issues).toEqual([
+      { code: "SYNC_ERROR", message: require("../error").MESSAGES.TREE_REJECTED },
+    ]);
   });
   it("resets the validated commit ID instead of the mutable branch", async function () {
     const result = await run("100644 blob abc\tfile.txt\0");

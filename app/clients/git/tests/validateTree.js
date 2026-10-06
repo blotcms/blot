@@ -31,4 +31,7 @@ describe("Git tree validation", function () {
   it("rejects submodules", async function () {
     await assert.rejects(validateTree({raw: async args => args[0] === "rev-parse" ? "abc" : "160000 commit abc\tsubmodule\0"}, "HEAD"), /regular files only/);
   });
+  it("tags the rejection so it can be classified without matching prose", async function () {
+    await assert.rejects(validateTree({raw: async args => args[0] === "rev-parse" ? "abc" : "120000 blob abc\tlink\0"}, "HEAD"), { code: "GIT_TREE_REJECTED" });
+  });
 });

@@ -1,3 +1,5 @@
+const { TREE_REJECTED } = require("./error");
+
 // Validate an immutable commit, then use that same ID for checkout: validating
 // a branch name and later resetting it would allow the ref to change in between.
 module.exports = async function validateTree(git, ref) {
@@ -7,7 +9,9 @@ module.exports = async function validateTree(git, ref) {
     if (!record) continue;
     const mode = record.slice(0, record.indexOf(" "));
     if (mode !== "100644" && mode !== "100755") {
-      throw new Error("Git blogs support regular files only (no symbolic links or submodules)");
+      const err = new Error("Git blogs support regular files only (no symbolic links or submodules)");
+      err.code = TREE_REJECTED;
+      throw err;
     }
   }
   return commit;

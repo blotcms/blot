@@ -2,6 +2,7 @@ var authenticate = require("./authenticate");
 var create = require("./create");
 var database = require("./database");
 var disconnect = require("./disconnect");
+var { healthAction } = require("./error");
 var pushover = require("pushover");
 var sync = require("./sync");
 var dataDir = require("./dataDir");
@@ -36,6 +37,27 @@ dashboard.get("/", function (req, res) {
   database.getRecordForBlog(req.blog, function (err, record) {
     database.getToken(req.blog.owner, function (err, token) {
       var status = record && record.status;
+      var issue = res.locals.blog.healthIssue;
+
+      // The generic health action links to /setup, which Git doesn't have.
+      // Point each issue at the page that actually resolves it: resetting
+      // the password, or disconnecting to reconnect Git (a missing repo),
+      // or creating the repo again (a failed create). A rejected push has no
+      // such page - the user has to push again - so healthAction leaves the
+      // action undefined and the template hides the button.
+      if (issue) {
+        var action = healthAction(
+          issue.code,
+          status === database.STATUSES.CREATE_FAILED,
+          res.locals.base
+        );
+
+        if (action) {
+          issue.action = action.action;
+          issue.actionUrl = action.actionUrl;
+        }
+      }
+
       res.render(__dirname + "/views/index.html", {
         title: "Git",
         token: token,

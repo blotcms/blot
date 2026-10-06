@@ -5,7 +5,8 @@ var debug = require("debug")("blot:clients:git:write");
 var checkGitRepoExists = require("./checkGitRepoExists");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 var database = require("./database");
-var { issueFromSyncError } = require("./error");
+var health = require("clients/health");
+var { isMissingRepoError, issueFromSyncError } = require("./error");
 
 // Used to write a file to the user's blog folder
 // contents can be anything supported by fs-extra.outputFile
@@ -29,6 +30,10 @@ module.exports = function write(blogID, path, contents, callback) {
 
   checkGitRepoExists(blogDirectory, function (err) {
     if (err) {
+      // Only a missing repo needs the user to act. Any other failure to
+      // inspect the repo is reported to the caller but not persisted.
+      if (!isMissingRepoError(err)) return callback(err);
+
       return database.setIssue(blogID, issueFromSyncError(err), function () {
         callback(err);
       });
@@ -60,7 +65,7 @@ module.exports = function write(blogID, path, contents, callback) {
             if (err) return callback(new Error(err));
 
             debug("Blog:", blogID, "Wrote", path);
-            database.clearIssue(blogID, function () {
+            database.clearIssue(blogID, health.CODES.SOURCE_MISSING, function () {
               callback(null);
             });
           });

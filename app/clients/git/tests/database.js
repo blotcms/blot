@@ -74,6 +74,31 @@ describe("git database status", function () {
     expect(record.issue).toBeUndefined();
   });
 
+  it("clearIssue with a code leaves a different issue in place", async function () {
+    await setIssue(this.blogs[0].id, {
+      code: health.CODES.SYNC_ERROR,
+      message: MESSAGES.TREE_REJECTED,
+    });
+
+    await clearIssue(this.blogs[0].id, health.CODES.SOURCE_MISSING);
+
+    const record = await getRecord(this.blogs[0].id);
+    expect(record.issue.code).toBe(health.CODES.SYNC_ERROR);
+    expect(record.issue.message).toBe(MESSAGES.TREE_REJECTED);
+  });
+
+  it("clearIssue with a code clears an issue with that code", async function () {
+    await setIssue(this.blogs[0].id, {
+      code: health.CODES.SOURCE_MISSING,
+      message: MESSAGES.SOURCE_MISSING,
+    });
+
+    await clearIssue(this.blogs[0].id, health.CODES.SOURCE_MISSING);
+
+    const record = await getRecord(this.blogs[0].id);
+    expect(record.issue).toBeUndefined();
+  });
+
   it("falls back to the legacy user-keyed status", async function () {
     await client.set(
       database.legacyStatusKey(this.blogs[0].owner),
