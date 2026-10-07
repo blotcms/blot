@@ -76,6 +76,10 @@ describe("icloud upload route", function () {
   };
 
   beforeEach(async () => {
+    // routes/site/index.js may already have loaded the upload route (bound to
+    // the real establishSyncLock) in an earlier spec; reload it with the mock.
+    delete require.cache[uploadPath];
+
     blogID = `icloud-upload-test-${Date.now()}-${Math.floor(
       Math.random() * 10000
     )}`;

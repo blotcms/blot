@@ -10,6 +10,8 @@ const config = require("config"); // For accessing configuration values
 const establishSyncLock = require("sync/establishSyncLock");
 const { handleSyncLockError } = require("./lock");
 const Blog = require("models/blog");
+const health = require("clients/health");
+const { SETUP_FAILED, isSetupError, isSetupInProgress } = require("../error");
 
 const VIEWS = require("path").resolve(__dirname + "/../views") + "/";
 
@@ -28,6 +30,17 @@ dashboard.use(async function (req, res, next) {
 dashboard.get("/", function (req, res) {
   if (!res.locals.account) {
     return res.redirect(req.baseUrl + "/connect");
+  }
+
+  // Setup failures are not health issues (see ../error.js), so the view
+  // shows them itself with retry/cancel.
+  res.locals.account.setupFailed = isSetupError(res.locals.account);
+
+  // The health read before this route ran may predate the write that began
+  // a new setup attempt, so don't show its stale error beside the progress.
+  if (isSetupInProgress(res.locals.account)) {
+    res.locals.blog.healthIssue = undefined;
+    res.locals.blog.health = health.syncing();
   }
 
   res.locals.blotiCloudAccount = config.icloud.email;
@@ -120,6 +133,7 @@ dashboard
           sharingLink,
           blotiCloudAccount,
           error: null,
+          acceptedSharingLink: false,
           setupComplete: false,
           setupStartedAt: Date.now(),
         });
@@ -161,7 +175,10 @@ dashboard
         const message =
           "Couldn't reach the setup server, please try again in a moment";
         try {
-          await database.store(blogID, { error: message });
+          await database.store(blogID, {
+            error: message,
+            errorCode: SETUP_FAILED,
+          });
           const { folder, done } = await establishSyncLock(blogID);
           folder.status("Error: " + message);
           await done();

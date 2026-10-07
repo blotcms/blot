@@ -16,8 +16,29 @@ function harness(options) {
     serviceAccountId: "service",
   };
 
+  const removed = [];
+  const downloaded = [];
+  const updated = [];
+  const removedIds = [];
+  // path -> names of the files and directories ("name/") inside it
+  const localTree = options.localTree || {};
+  const mappings = options.mappings || {};
+
   const stubs = {
-    "fs-extra": {},
+    "fs-extra": {
+      remove: async function (path) {
+        removed.push(path);
+      },
+    },
+    "clients/util/localDescendants": async function descendants(_, path) {
+      const paths = [];
+      for (const name of localTree[path] || []) {
+        const child = path + "/" + name.replace(/\/$/, "");
+        paths.push(child);
+        if (name.endsWith("/")) paths.push(...(await descendants(null, child)));
+      }
+      return paths;
+    },
     "helper/localPath": function (_, path) {
       return path;
     },
@@ -32,11 +53,13 @@ function harness(options) {
       },
       folder: function () {
         return {
-          getByPath: async function () {
-            return null;
+          getByPath: async function (path) {
+            return mappings[path] || null;
           },
           set: async function () {},
-          remove: async function () {},
+          remove: async function (id) {
+            removedIds.push(id);
+          },
           getMigrationCursor: async function () {
             return "";
           },
@@ -48,12 +71,20 @@ function harness(options) {
             return [];
           },
           setVerifiedContent: async function () {},
+          getApplied: async function () {
+            return null;
+          },
+          setApplied: async function () {},
         };
       },
     },
     "../database/error": require("../database/error"),
-    "../util/download": async function () {
+    "../util/download": async function (blogID, drive, path) {
+      downloaded.push(path);
       return { updated: false };
+    },
+    "../util/localFingerprint": async function () {
+      return "fingerprint";
     },
     "../serviceAccount/createDriveClient": async function () {
       return {
@@ -89,12 +120,12 @@ function harness(options) {
         };
       },
     },
-    "./util/driveReaddir": async function () {
+    "./util/driveReaddir": async function (drive, dirId) {
       walked = true;
-      return [];
+      return (dirId === "folder" && options.driveItems) || [];
     },
-    "./util/localReaddir": async function () {
-      return [];
+    "./util/localReaddir": async function (path) {
+      return (path === "/" && options.localItems) || [];
     },
     "./util/transformDriveItems": require("../sync/util/transformDriveItems"),
     "./util/truncateToSecond": require("../sync/util/truncateToSecond"),
@@ -121,13 +152,19 @@ function harness(options) {
   return {
     stored: stored,
     published: published,
+    removed: removed,
+    downloaded: downloaded,
+    updated: updated,
+    removedIds: removedIds,
     run: async function (syncOptions) {
       return module.exports(
         "blog",
         function () {
           published.push(Array.prototype.slice.call(arguments));
         },
-        async function () {},
+        async function (path) {
+          updated.push(path);
+        },
         syncOptions
       );
     },
@@ -197,5 +234,73 @@ describe("google drive sync folder health", function () {
     const plain = harness();
     await plain.run();
     expect(plain.resets()).toBe(0);
+  });
+
+  it("removes a local directory where Drive now has a file", async function () {
+    // e.g. a folder replaced by a Sheet: no size, no md5Checksum
+    const h = harness({
+      driveItems: [
+        {
+          id: "sheet",
+          name: "Pictures",
+          mimeType: "application/vnd.google-apps.spreadsheet",
+          modifiedTime: "2026-10-06T00:00:00.000Z",
+        },
+      ],
+      localItems: [{ name: "Pictures", isDirectory: true, size: 4096 }],
+      localTree: { "/Pictures": ["a.jpg", "Old/"], "/Pictures/Old": ["b.md"] },
+      mappings: { "/Pictures": "oldFolder" },
+    });
+    const summary = await h.run();
+    expect(h.removed).toEqual(["/Pictures"]);
+    // Entries for the files inside are dropped, not just the directory's
+    expect(h.updated).toEqual([
+      "/Pictures",
+      "/Pictures/a.jpg",
+      "/Pictures/Old",
+      "/Pictures/Old/b.md",
+    ]);
+    // and the old folder's mappings (recursively) go with it
+    expect(h.removedIds).toEqual(["oldFolder"]);
+    expect(h.downloaded).toEqual(["/Pictures"]);
+    expect(summary.removed).toBe(1);
+  });
+
+  it("updates every file in a local directory gone from Drive", async function () {
+    const h = harness({
+      localItems: [{ name: "Pictures (1)", isDirectory: true, size: 4096 }],
+      localTree: { "/Pictures (1)": ["a.jpg"] },
+      mappings: { "/Pictures (1)": "folder2" },
+    });
+    await h.run();
+    expect(h.removed).toEqual(["/Pictures (1)"]);
+    expect(h.updated).toEqual(["/Pictures (1)", "/Pictures (1)/a.jpg"]);
+    expect(h.removedIds).toEqual(["folder2"]);
+  });
+
+  it("skips a shortcut so a folder of the same name keeps it", async function () {
+    // The shortcut's id sorts first, so it used to take 'Pictures' and push
+    // the folder it sits beside to 'Pictures (1)'.
+    const h = harness({
+      driveItems: [
+        {
+          id: "14shortcut",
+          name: "Pictures",
+          mimeType: "application/vnd.google-apps.shortcut",
+          modifiedTime: "2025-05-23T18:14:36.451Z",
+        },
+        {
+          id: "18folder",
+          name: "Pictures",
+          mimeType: "application/vnd.google-apps.folder",
+          modifiedTime: "2025-05-23T18:32:09.752Z",
+        },
+      ],
+      localItems: [{ name: "Pictures", isDirectory: true, size: 4096 }],
+    });
+    const summary = await h.run();
+    expect(h.removed).toEqual([]);
+    expect(h.downloaded).toEqual([]);
+    expect(summary.createdDirs).toBe(0);
   });
 });

@@ -1,4 +1,5 @@
 const client = require("models/client");
+const { normalizeErrorFields } = require("./error");
 
 const PREFIX = 'blot:clients:icloud-drive:'
 
@@ -19,9 +20,17 @@ module.exports = {
     }
 
     const currentData = await this.get(blogID);
+    const toWrite = Object.assign({}, data);
+
+    // Keep error / errorCode / errorSince in lockstep so getHealth never
+    // sees a free-text error without a code, and a cleared error cannot
+    // leave a stale code behind.
+    if (Object.prototype.hasOwnProperty.call(toWrite, "error")) {
+      Object.assign(toWrite, normalizeErrorFields(toWrite, currentData));
+    }
 
     // Serialize and save fields
-    for (const [field, value] of Object.entries(data)) {
+    for (const [field, value] of Object.entries(toWrite)) {
       const serializedValue = JSON.stringify(value);
       await client.hSet(key, field, serializedValue);
     }

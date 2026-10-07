@@ -127,6 +127,10 @@ Fix performance bugs on various sites:
 - anchor and re-enable site
 - nashp (improve speed)
 - jaysjay (especially archives)
+  - entry pages take ~3.8s on every render, warm or cold: ~1000 Redis commands / 18MB per render while loading entries (render-probe, 2026-10-06)
+- heydingus /search 0.5-0.8s warm (search_results reads ~10MB per query); its template emits `…/null` links that crawlers 404 on
+- blot.im /questions pages 250-750ms, mostly I/O (elu 0.2-0.4), incl. 302s from /questions/:id/edit
+- replaceFolderLinks looks up `mailto:` links as folder files (`No file found in folder: mailto:…`); skip non-path schemes
 - using additional req trace logging and more possible LRU caching
 - do we need a seperate incrementally updated index of skinny entry properties, e.g. title url etc for rendering archives / allEntries?
 
@@ -140,7 +144,6 @@ Fix benchmark build-corpus action issue
 
 Improve Google Drive sync
 - Fix bug with repeat resyncs of specific sites via Google Drive:
-  - To identify, run node scripts/google-drive/resync.js multiple times, some sites continually resync the same files...
   - Mark's site unneccessarily re-downloads some (all?) files on sync rather than using the correct hash and tell [Mark](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTVmrvkvcfPvcJhcLvrwSndWS)
 - Fix bug with shared drive folders for [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBkLKSVzvjZLRSCpRJwcKBPlf)
 - Fix bug with Google Docs when disconnecting a site from Google Drive on Blot then reconnecting the site to Google Drive. We need to work out how to handle this (Google Docs are not real files)
@@ -197,7 +200,6 @@ Improve Dropbox sync
 - How do we make errors sticky? To make sure users click through to clients page to re-connect to Dropbox, etc...
 
 Improve git sync
-- Investigate a bug with git client credentials triggered when you have two sites using git on one account, and delete one of the sites
 - Work out how to pipe custom error messages down to customer git clients
 - Create tests for large Git repo initialization
 - Make git client setup resumable / handle server restart
@@ -225,7 +227,7 @@ Improve iCloud sync
 - Revert server changes to iCloud to reintroduce integrity checks
   - 0043d91b36621ecd6aef2bcc263f51f209924792
   - 98dc9405c883825917de8e436ec620f60adaf975
-- Fix bug: handle deletion of iCloud folder by user cleanly and clearly. iCloud client which doesn't surface / handle removed folder - to reproduce, connect to icloud then delete the folder
+- iCloud: a Blot edit while the folder is missing (SOURCE_MISSING) still reaches the macserver upload, which re-creates an unshared folder (write.js, remove.js should skip the remote write)
 - If we need to resolve further bugs with sync drift:
   - Implement additional parsing of modified paths from monitorer.js (brctl monitor -i) and reconcile these in addition to the fswatch module with the chokidar events for additional redundancy
 - Think about adding a more efficient endpoint to sync folder state. 

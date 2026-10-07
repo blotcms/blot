@@ -3,10 +3,11 @@ module.exports = {
     description: "A file storage and synchronization service",
     disconnect: require("./disconnect"),
     remove: require("./remove"),
-    resync: require('./sync/fromiCloud'),
+    resync: require('./resync'),
     write: require("./write"),
     site_routes: require("./routes/site"),
     dashboard_routes: require("./routes/dashboard"),
-    init: require('./init')
+    init: require('./init'),
+    getHealth: require("./getHealth"),
   };
   

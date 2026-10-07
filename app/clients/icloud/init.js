@@ -7,6 +7,7 @@ const monitorMacServerStats = require("./util/monitorMacServerStats");
 const establishSyncLock = require("sync/establishSyncLock");
 const initialTransfer = require("./sync/initialTransfer");
 const database = require("./database");
+const { shouldSkipBackgroundSync } = require("./error");
 const syncFromiCloud = require("./sync/fromiCloud");
 const syncToiCloud = require("./sync/toiCloud");
 const countChanges = require("clients/util/countChanges");
@@ -45,10 +46,10 @@ const resyncRecentlySynced = async (options = {}) => {
   );
 
   await database.iterate(async (blogID, account) => {
-    if (!account.setupComplete) {
+    if (shouldSkipBackgroundSync(account)) {
       console.log(
         clfdate(),
-        "Account setup not complete, skipping resync: ",
+        "Skipping resync (setup incomplete or stored error): ",
         blogID
       );
       return;
@@ -129,6 +130,8 @@ const runValidation = async ({ notify = true } = {}) => {
   try {
     await database.iterate(async (blogID, account) => {
       try {
+        if (shouldSkipBackgroundSync(account)) return;
+
         const blog = await getBlog({ id: blogID });
         if (!blog || blog.client !== "icloud") return;
 
@@ -220,21 +223,12 @@ const resyncAllConnected = async ({ notify = true } = {}) => {
 
   try {
     await database.iterate(async (blogID, account) => {
-      if (!account.setupComplete) {
+      if (shouldSkipBackgroundSync(account)) {
         console.log(
           clfdate(),
-          "iCloud: Daily resync skipped (setup incomplete)",
-          blogID
-        );
-        return;
-      }
-
-      if (account.error) {
-        console.log(
-          clfdate(),
-          "iCloud: Daily resync skipped (account error)",
+          "iCloud: Daily resync skipped (setup incomplete or stored error)",
           blogID,
-          account.error
+          account && account.error
         );
         return;
       }

@@ -25,7 +25,8 @@
     "preview-newsletter": "./scripts/development/preview-newsletter.sh",
     "render-time-chart": "node scripts/render-time-chart",
     "render-probe": "node scripts/render-probe",
-    "build-probe": "node scripts/build-probe"
+    "build-probe": "node scripts/build-probe",
+    "fix-probe": "node scripts/fix-probe"
   },
   "version": "0.0.0",
   "dependencies": {
@@ -79,7 +80,7 @@
     "rate-limit-redis": "4.3.1",
     "re2": "1.26.1",
     "redis": "6.1.0",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
     "simple-git": "3.36.0",
     "stripe": "6.36.0",
     "text-to-svg": "3.1.5",

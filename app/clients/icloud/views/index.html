@@ -3,23 +3,21 @@
 {{#account}}
 <div class="live-updates">
 
-  {{#error}}
-
-  <form class="mess error" action="{{{base}}}/set-up-folder" method="post">
-      <input type="hidden" name="_csrf" value="{{csrftoken}}">
-      {{error}}
-      <div class="buttons">
-          <a href="{{{base}}}/setup">Try setup again</a>
-          <button type="submit" name="cancel" value="true">Cancel</button>
-      </div>
-  </form>
-
-
-
-  {{/error}}
-  
-
 {{> status-line}}
+
+{{#setupFailed}}
+<p class="error">iCloud setup didn't finish: {{error}}. Retry setup to share a folder with Blot again, or cancel to disconnect iCloud.</p>
+
+<form action="{{{base}}}/disconnect" method="post">
+  <input type="hidden" name="_csrf" value="{{csrftoken}}">
+  <div class="buttons">
+    <a href="{{{base}}}/setup">Retry setup</a>
+    <button type="submit">Cancel</button>
+  </div>
+</form>
+{{/setupFailed}}
+
+{{^setupFailed}}
 
 {{#sharingLink}}
 {{^error}}
@@ -43,13 +41,9 @@
 {{/error}}
 {{/sharingLink}}
 
+{{> disconnect-line}}
 
-
-
-  
-
-  {{> disconnect-line}}
-
+{{/setupFailed}}
 
 </div>
 <br><br>

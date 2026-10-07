@@ -27,12 +27,19 @@ module.exports = function requestLogger(req, res, next) {
     console.error("Error logging request:", err);
   }
 
-  // Add request-scoped logging helper
+  // Add request-scoped logging helper. Remembers the longest gap between
+  // steps so the response line can say where a slow request spent its time.
   let lastLogTime = Date.now();
+  let slowestGap = 0;
+  let slowestStep = [];
   req.log = function(...args) {
     const now = Date.now();
     const timeDiff = now - lastLogTime;
     lastLogTime = now;
+    if (timeDiff > slowestGap) {
+      slowestGap = timeDiff;
+      slowestStep = args;
+    }
     
     console.log(createLogEntry(`+${timeDiff}ms`, ...args));
   };
@@ -42,12 +49,24 @@ module.exports = function requestLogger(req, res, next) {
     try {
       const duration = ((Date.now() - requestStart) / 1000).toFixed(3);
       const elu = performance.eventLoopUtilization(eluStart).utilization;
-      console.log(createLogEntry(
+      const fields = [
         res.statusCode,
         duration,
         formatRequestUrl(),
         `elu=${elu.toFixed(2)}`
-      ));
+      ];
+      // The step logged after the longest gap, i.e. what that time led up to.
+      // Only for requests that logged steps (blog renders, mostly).
+      const tail = Date.now() - lastLogTime;
+      if (slowestStep.length && tail > slowestGap) {
+        slowestGap = tail;
+        slowestStep = ["(response finished)"];
+      }
+      if (slowestStep.length) {
+        const step = slowestStep.join(" ").replace(/\s+/g, " ").slice(0, 80);
+        fields.push(`slowest=+${slowestGap}ms:${JSON.stringify(step)}`);
+      }
+      console.log(createLogEntry(...fields));
     } catch (err) {
       console.error("Error logging response:", err);
     }

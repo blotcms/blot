@@ -9,12 +9,15 @@ const remoteReaddir = require("./util/remoteReaddir");
 const remoteRecursiveList = require("./util/remoteRecursiveList");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const modifiedSince = require("clients/util/modifiedSince");
+const localDescendants = require("clients/util/localDescendants");
 const {
   countLocalFiles,
   createProgress,
 } = require("clients/util/resyncProgress");
 
 const database = require("../database");
+const health = require("clients/health");
+const { resolveCode } = require("../error");
 const config = require("config");
 const maxFileSize = config.icloud.maxFileSize; // Maximum file size for iCloud uploads in bytes
 
@@ -95,9 +98,13 @@ module.exports = async (blogID, publish, update) => {
       ) {
         await checkWeCanContinue();
         progress.publish("Removing local item", path, false, removedCount);
+        const descendants = isLocalDirectory
+          ? await localDescendants(localPath(blogID, path), path)
+          : [];
         await fs.remove(localPath(blogID, path));
         summary.removed += 1;
         await update(path);
+        for (const descendant of descendants) await update(descendant);
       }
     }
 
@@ -193,8 +200,23 @@ module.exports = async (blogID, publish, update) => {
   try {
     await walk("/");
     progress.finish("Finished processing folder");
-    // update the database to remove the error flag if it exists
-    await database.store(blogID, { error: null });
+    // A successful walk means the shared folder exists. Only clear a stored
+    // error after setup is complete: otherwise a later fromiCloud pass can
+    // wipe a failed initial transfer and leave the blog looking healthy
+    // while setupComplete is still false. Leave an error recorded after the
+    // walk began (the watcher can report the folder deleted mid-walk, and
+    // per-file failures above are swallowed), and SOURCE_MISSING always: the
+    // watcher stops watching a deleted folder, so only setup recovers it.
+    const account = await database.get(blogID);
+    if (
+      account &&
+      account.setupComplete &&
+      account.error &&
+      resolveCode(account) !== health.CODES.SOURCE_MISSING &&
+      !(typeof account.errorSince === "number" && account.errorSince >= startedAt)
+    ) {
+      await database.store(blogID, { error: null });
+    }
   } catch (err) {
     publish("Sync failed", err.message);
     // Possibly rethrow or handle
