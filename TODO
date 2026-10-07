@@ -1,5 +1,8 @@
+Consider dropping Redis client-side caching (CLIENT TRACKING) in favour of the app's in-process LRU caches: on prod 10 clients have tracking on and the server's tracking table sits at its 1M-key cap (tracking-table-max-keys), so Redis is constantly evicting entries and sending invalidations
+Fix blot-airlock crash-restarts: /usr/local/bin/check_docker_health.sh (cron, every minute) restarted it as unhealthy 7 times between 6 Oct 20:55 and 7 Oct 12:04 UTC (~/docker-health-check.log on the blot host); find why its health check fails
 Solve redis kernel issue:
 - can we switch to 1cpu / 16gb ram redis? do we need the second cpu for bgsave? our peak rss is 23gb? can we add maxmemory and error writes?
+  - yes: dataset is 4.6G (RSS 6.7G, frag 1.45); the 23G peak is the high-water mark since Redis started in Sep 2023, before the purge. bgsave COW is only 12-46MB, but `save 60 10000` forks a 32s save every 1-2 min (children ~27% of a core), so the new host saves at most every 5 min
 Redis outage follow-ups
 - Dropbox webhook drops syncs (listBlogs fails after the 200 ack) and git auth maps Redis errors to a 401 while Redis is unreachable
 - Redis auth/TLS; 
