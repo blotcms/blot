@@ -308,7 +308,7 @@ function view(report, newKeys) {
   const isNew = (key) => newKeys.has(key);
   const lines = (list) => list.map((item) => ({ ...item, isNew: isNew(item.key) }));
 
-  const describe = (item) => {
+  const detailFor = (item) => {
     if (item.tier === "expired-and-dropped") {
       return "**expired and dropped**: no certificate in Redis, which auto-ssl does when it fails to renew one after it expires";
     }
@@ -322,7 +322,7 @@ function view(report, newKeys) {
     return text;
   };
 
-  const certs = report.items.filter((item) => item.kind === "cert").map((item) => ({ ...item, detail: describe(item) }));
+  const certs = report.items.filter((item) => item.kind === "cert").map((item) => ({ ...item, detail: detailFor(item) }));
   const wildcard = report.items.filter((item) => item.kind === "wildcard");
   const errors = report.errors.map((e) => ({ ...e, key: "error:" + e.domain }));
 
