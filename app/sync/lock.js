@@ -5,6 +5,10 @@ const clfdate = require("helper/clfdate");
 // A per-blog mutex held in Redis so that it works across processes and hosts
 // without a shared disk. The value is a random token so that a holder whose
 // key expired can never release or extend a lock now owned by someone else.
+// The token ends in ":<acquired at, ms>" so heldSince() can tell how long a
+// lock has been held without a second key: the scripts below only ever
+// compare the whole value for equality, so the suffix changes nothing for
+// them, and it lives and dies with the lock.
 // While held, a heartbeat re-extends the TTL; if the process dies the key
 // simply expires.
 
@@ -148,7 +152,7 @@ async function lock(blogID, options = {}) {
   } = options;
 
   const lockKey = key(blogID);
-  const token = randomUUID();
+  const token = randomUUID() + ":" + Date.now();
 
   setupProbe();
 
@@ -269,4 +273,15 @@ async function inspect(blogID) {
   return { lockKey, held: holder !== null, holder, ttlMs };
 }
 
-module.exports = { lock, inspect, key };
+// When the current holder acquired the lock (ms since epoch), or null if it
+// isn't held or the value predates the timestamp suffix. The heartbeat keeps
+// extending the TTL for as long as the holder's process is alive, so a lock
+// that has been held for a long time means a sync hung inside a live process
+// (a crashed process's lock expires within seconds).
+async function heldSince(blogID) {
+  const holder = await client.get(key(blogID));
+  const match = typeof holder === "string" && /^[^:]+:(\d{10,})$/.exec(holder);
+  return match ? Number(match[1]) : null;
+}
+
+module.exports = { lock, inspect, heldSince, key };

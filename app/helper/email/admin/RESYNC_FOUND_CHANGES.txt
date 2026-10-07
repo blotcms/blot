@@ -1,11 +1,29 @@
-Resync found unsynced changes on {{client}}
+Resync found changes on {{client}}
 
-A manual resync from the dashboard (Reset your folder) found {{changeCount}} change{{#changeCountPlural}}s{{/changeCountPlural}} on {{client}} that hadn't already been synced, for {{id}} {{handle}} — evidence of a missed sync.
+A manual resync from the dashboard (Reset your folder) found issues on {{client}} for {{id}} {{handle}}.
+
+`logs green | grep "{{truncatedId}} sync_"`
+`access {{handle}}`
+
+{{#hasChanges}}
+**{{changeCount}} change{{#changeCountPlural}}s{{/changeCountPlural}} that hadn't already been synced** — evidence of a missed sync.
 
 - downloaded: {{downloaded}}
 - removed: {{removed}}
 - created dirs: {{createdDirs}}
 - excluded as modified during the resync: {{modifiedDuringWalk}}
 
-`logs green | grep "{{truncatedId}} sync_"`
-`access {{handle}}`
+{{/hasChanges}}
+{{#hasRepairs}}
+**Fix() repaired:**
+
+{{#checks}}
+- **{{name}}** — {{count}} item{{#countPlural}}s{{/countPlural}}
+{{#sample}}
+  - {{.}}
+{{/sample}}
+{{#hasMore}}
+  - ...and {{moreCount}} more
+{{/hasMore}}
+{{/checks}}
+{{/hasRepairs}}

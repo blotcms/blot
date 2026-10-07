@@ -182,6 +182,11 @@ async function resetToBlotWithClient(
     removed: 0,
     createdDirs: 0,
     skipped: 0,
+    // Files that could not be downloaded or removed. The walk carries on past
+    // them, so without this a partial walk looks like a complete one; the
+    // hourly sweep reports it as a walk error. firstError is a sample.
+    failed: 0,
+    firstError: null,
     // Subset of downloaded: files Dropbox modified after we started.
     modifiedDuringWalk: 0,
     // Changes (of any kind) to paths Dropbox reports changing since the
@@ -234,6 +239,11 @@ async function resetToBlotWithClient(
   return summary;
 }
 
+function recordFailure(summary, path, err) {
+  summary.failed += 1;
+  if (!summary.firstError) summary.firstError = path + ": " + err.message;
+}
+
 const walk = async (
   blogID,
   client,
@@ -268,6 +278,7 @@ const walk = async (
         await updatePath(pathOnBlot);
       } catch (e) {
         publish("Failed to remove ignored", path_display, e.message);
+        recordFailure(summary, pathOnBlot, e);
       }
       continue;
     }
@@ -289,6 +300,7 @@ const walk = async (
         for (const descendant of descendants) await updatePath(descendant);
       } catch (e) {
         publish("Failed to remove", path_display, e.message);
+        recordFailure(summary, pathOnBlot, e);
       }
     }
   }
@@ -430,6 +442,7 @@ const walk = async (
           // either way; recording it as "skipped" here is just for
           // visibility in logs/summaries, not to affect the hourly email.
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
+          else recordFailure(summary, pathOnBlot, e);
           // Revoked access fails every remaining file: fail the resync.
           if (classify(e, SOURCES.APPLY).persist) throw e;
           continue;
@@ -446,6 +459,7 @@ const walk = async (
           else summary.changedPaths.push(pathOnBlot);
         } catch (e) {
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
+          else recordFailure(summary, pathOnBlot, e);
           // Revoked access fails every remaining file: fail the resync.
           if (classify(e, SOURCES.APPLY).persist) throw e;
           continue;

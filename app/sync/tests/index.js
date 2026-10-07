@@ -183,6 +183,33 @@ describe("sync folder lock", function () {
     const err = await compromised;
     expect(err.code).toEqual("ECOMPROMISED");
   });
+
+  describe("heldSince", function () {
+    it("returns when the current holder acquired the lock", async function () {
+      const before = Date.now();
+      const lock = await folderLock.lock(this.blog.id, { ttl: 5000 });
+      const since = await folderLock.heldSince(this.blog.id);
+
+      expect(since).toBeGreaterThan(before - 1);
+      expect(since).not.toBeGreaterThan(Date.now());
+
+      await lock.release();
+    });
+
+    it("returns null when the lock is not held", async function () {
+      expect(await folderLock.heldSince(this.blog.id)).toBeNull();
+    });
+
+    it("returns null for a lock taken before the timestamp was added", async function () {
+      await client.set(folderLock.key(this.blog.id), "0f8fad5b-d9cb-469f-a165-70867728950e", {
+        PX: 5000,
+      });
+
+      expect(await folderLock.heldSince(this.blog.id)).toBeNull();
+
+      await client.del(folderLock.key(this.blog.id));
+    });
+  });
 });
 
 describe("sync folder lock release", function () {

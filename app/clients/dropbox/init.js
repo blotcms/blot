@@ -4,13 +4,14 @@ const Blog = require("models/blog");
 const Entries = require("models/entries");
 const clfdate = require("helper/clfdate");
 const email = require("helper/email");
+const syncReport = require("clients/util/syncReport");
 const resetToBlot = require("./sync/reset-to-blot");
 const { transferIncomplete } = require("./util/constants");
 const { get: getAccount, set: setAccount } = require("./database");
+const getHealth = require("./getHealth");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
 const sync = promisify(require("./sync"));
-const countChanges = require("clients/util/countChanges");
 const { measure: measureEventLoop } = require("helper/eventLoopMonitor");
 
 const getAllIDs = promisify(Blog.getAllIDs);
@@ -82,28 +83,30 @@ const logLag = (blogID, phase, entryCount, { durationMs, maxLagMs, p99LagMs }) =
   );
 };
 
+// Never rejects: resolves with Fix's error and report so the caller decides
+// what to report. Fix() can fail part way through and still return the
+// repairs it made before that, hence both.
 const fixBlog = (blog) =>
   new Promise((resolve) => {
-    Fix(blog, (err) => {
-      if (err) {
-        console.error(clfdate(), "Dropbox: Fix error for blog", blog.id, err);
+    Fix(blog, (error, report) => {
+      if (error) {
+        console.error(clfdate(), "Dropbox: Fix error for blog", blog.id, error);
       }
-      resolve();
+      resolve({ error, report });
     });
   });
 
 // Webhook syncs that arrive while we hold the lock give up waiting for it and
 // are dropped, so run a normal sync once we release it. sync() stamps
 // last_sync, which would keep the blog eligible for validation forever, so
-// put the previous value back.
+// put the previous value back. Errors propagate so the caller can report
+// them, after the last_sync restore.
 const catchUpSync = async (blog) => {
   let before;
 
   try {
     before = await getDropboxAccount(blog.id);
     await sync(blog);
-  } catch (err) {
-    console.error(clfdate(), "Dropbox: Catch-up sync error", blog.id, err);
   } finally {
     // Also on failure: sync() stamps last_sync as soon as it gets the lock
     if (before && typeof before.last_sync === "number") {
@@ -150,13 +153,25 @@ const validateAllBlogs = async () => {
     return;
   }
 
-  const blogsWithChanges = [];
+  const report = syncReport.create();
   let checkedBlogs = 0;
 
   for (const blogID of blogIDs) {
+    let blog;
+    let phase = "validation";
+
     try {
-      const blog = await getBlog({ id: blogID });
-      if (!blog || blog.client !== "dropbox") continue;
+      blog = await getBlog({ id: blogID });
+      if (!blog || blog.isDisabled || blog.client !== "dropbox") continue;
+
+      // Revoked access, a deleted folder and a full Dropbox are the user's
+      // doing, not bugs, so there is nothing to walk or report.
+      if (await syncReport.hasUserSideIssue(blogID, getHealth)) continue;
+
+      // Before the recency filter: sync() stamps last_sync when it takes the
+      // lock, so a lock held for over an hour belongs to a blog that no
+      // longer looks recently synced.
+      if (await syncReport.recordStuckLock(report, blog)) continue;
 
       const account = await getDropboxAccount(blogID);
       if (!hasRecentSync(account)) continue;
@@ -175,6 +190,7 @@ const validateAllBlogs = async () => {
 
       let summary;
       const stopWalkMeasure = measureEventLoop();
+      phase = "walk";
 
       try {
         summary = await resetToBlotWithLock(blogID, publish);
@@ -182,7 +198,8 @@ const validateAllBlogs = async () => {
       } catch (err) {
         stopWalkMeasure();
         // A sync is already running for this blog, and that sync will pick
-        // up whatever changed. Check it again next hour.
+        // up whatever changed. Check it again next hour (a lock that stays
+        // held is caught by the stuck-lock check above).
         if (err.message === "Failed to acquire folder lock") {
           console.log(clfdate(), "Dropbox: Skipping busy blog", blogID);
           checkedBlogs -= 1;
@@ -199,22 +216,29 @@ const validateAllBlogs = async () => {
         continue;
       }
 
-      const changeCount = countChanges(summary);
-
-      if (changeCount > 0) {
-        blogsWithChanges.push({
-          id: blogID,
-          handle: blog.handle,
-          truncatedId: blogID.slice(0, 12),
-          changeCount,
-          changeCountPlural: changeCount !== 1,
-        });
-      }
+      // A walk that skipped files reports a walk error (and the changes it
+      // did apply), and Fix() and the catch-up sync are skipped for it.
+      if (!syncReport.recordWalk(report, blog, summary)) continue;
 
       const stopFollowUpMeasure = measureEventLoop();
       try {
-        await fixBlog(blog);
-        await catchUpSync(blog);
+        phase = "fix";
+        const fixed = await fixBlog(blog);
+        syncReport.recordFix(report, blog, fixed.report);
+        if (fixed.error) {
+          syncReport.recordError(report, blog, "fix", fixed.error);
+        }
+
+        // Runs even if Fix() failed: it's independent of Fix()'s checks.
+        phase = "catch-up sync";
+        try {
+          await catchUpSync(blog);
+        } catch (err) {
+          // A live sync holds the lock and covers whatever we'd catch up,
+          // same as the walk's busy skip.
+          if (err.message !== "Failed to acquire folder lock") throw err;
+          console.log(clfdate(), "Dropbox: Catch-up skipped, blog busy", blogID);
+        }
       } finally {
         logLag(blogID, "fix+catch-up", entryCount, stopFollowUpMeasure());
       }
@@ -225,25 +249,23 @@ const validateAllBlogs = async () => {
         blogID,
         err
       );
+      if (blog) syncReport.recordError(report, blog, phase, err);
     }
   }
+
+  const reported = await syncReport.send(
+    report,
+    email.DROPBOX_SYNC_ISSUE,
+    "Dropbox:",
+    { client: "dropbox", getHealth }
+  );
 
   console.log(
     clfdate(),
     "Dropbox: Sync validation complete",
     `checked=${checkedBlogs}`,
-    `issues=${blogsWithChanges.length}`
+    `issues=${reported}`
   );
-
-  if (blogsWithChanges.length === 0) return;
-
-  email.DROPBOX_SYNC_ISSUE(null, { blogs: blogsWithChanges }, function (err) {
-    if (err) {
-      console.error(clfdate(), "Dropbox: Failed to send issue email", err);
-    } else {
-      console.log(clfdate(), "Dropbox: Sent sync issue report email");
-    }
-  });
 };
 
 const resyncRecentSyncsOnStartup = async () => {
@@ -304,7 +326,13 @@ const resyncRecentSyncsOnStartup = async () => {
           );
           continue;
         }
-        await fixBlog(blog);
+        // Runs on every restart, so only log what Fix() repaired - the
+        // hourly sweep is what reports repairs to the operator.
+        const fixed = await fixBlog(blog);
+        const repaired = syncReport.summarize(fixed.report);
+        if (repaired) {
+          console.log(clfdate(), "Dropbox: Fix repaired", blogID, repaired);
+        }
         await catchUpSync(blog);
         console.log(clfdate(), "Dropbox: Resync complete for blog", blogID);
       } catch (err) {
