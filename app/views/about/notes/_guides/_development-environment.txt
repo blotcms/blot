@@ -64,11 +64,13 @@ export BLOT_PANDOC_PATH=$(which pandoc)
 
 ## Starting Redis
 
-Start a redis server using the [redis configuation file](/config/redis.conf).
+Start a redis server. The defaults are fine for development:
 
 ```sh
-redis-server config/redis.conf
+redis-server
 ```
+
+Production uses [this configuration](/config/redis/redis.conf), which is written for the Amazon Linux host (it includes a file that only exists there), so it is not meant for a development machine.
 
 ## Install Postgres (for QA forum)
 
