@@ -44,6 +44,13 @@ exists on disk (`localPath`), with case-insensitive fallbacks.
   `Entry.drop`ped. That means a sync missed a delete/rename, or the local
   folder was lost or reset. **Usually a real sync bug.** Check whether the
   path was renamed or moved recently (grep the path in green's logs).
+  **Known cause (fixed): a whole local folder removed by a sync walk.**
+  The Google Drive, iCloud and Dropbox reset-to-blot walks `fs.remove` a
+  folder that's gone remotely, and used to call `update()` on the folder
+  path only. `drop` on a folder path drops nothing beneath it, so every
+  entry inside stayed live until Fix() caught it. The walks now update
+  each path inside (`clients/util/localDescendants`). If this recurs, look
+  for `Removing <parent folder> which does not exist remotely` in the logs.
 - `CASE`: the file exists with different casing. Entry path rewritten.
   Common after case-only renames on Dropbox/macOS. Mostly benign, but if
   you see it repeatedly for one blog, case handling is broken.
@@ -218,3 +225,22 @@ Entry template:
 - Follow-up: fixed by having `setupBlogs` keep each existing menu item's
   entry-derived label/url/metadata instead of resetting them from config
   (the email itself was left on, so real demo-blog repairs still surface).
+
+### 2026-10-06 ~17:30 UTC Fix() run — sync gap (folder removed, child entry left live), triggered by Drive name mapping
+
+- Email: entry-ghosts, 1 `MISSING` row (an image whose Drive name has a
+  `/` in it), client: google-drive. Timestamp is from the email (Drive hourly fix
+  at :30) and wasn't confirmed on prod.
+- Cause: before 5b6f8ddca, localPath turned the `/` in the Drive name
+  into a subfolder plus a file. The new `localName` maps it to `_`, so the
+  next walk downloaded the flat name and removed the subfolder with one
+  `fs.remove` + `update(folder)`. That doesn't drop entries under a folder,
+  so the old nested entry stayed live until Fix() dropped it.
+- Expect one such email per Drive blog that has `/` in a file name, once each,
+  after that deploy. The gap behind it (removing a folder leaves its
+  entries live) is older and also affects Drive folder renames/deletes and
+  Dropbox reset-to-blot.
+- Follow-up: fixed by having the Drive, iCloud and Dropbox reset-to-blot
+  walks update every path inside a folder they remove
+  (`clients/util/localDescendants`). Dropbox webhook syncs were never
+  affected, because Dropbox reports a delete for each descendant.
