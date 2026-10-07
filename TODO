@@ -6,6 +6,8 @@ hypertext template on indexes:
 - anchor links in title need to link to anchor on permalink pages
 - improve aesthetics and spacing of pagination links
 
+Could we improve the performance of posts/pages with lots of images by adding loading=lazy in the output HTML?
+
 Our AWS bill is high because we have run out of reserved instance. Decide on the plan.
 - switch over static files to s3
 - reduce eb2 data volume size
