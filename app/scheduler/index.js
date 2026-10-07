@@ -17,6 +17,7 @@ const checkCardTesters = require("./check-card-testers");
 const subscriptionLifecycleJob = require("./subscription-lifecycle");
 
 const SCHEDULE_RETRY_MS = 60 * 1000;
+const SCHEDULE_RETRY_MAX_MS = 60 * 60 * 1000;
 
 // If any disk has less than 2GB of space, we should notify the admin
 const MINIMUM_DISK_SPACE_IN_K = 2 * 1024 * 1024;
@@ -118,22 +119,25 @@ module.exports = function () {
   });
 
   // Bash the cache for scheduled posts. Don't crash the master (and loop on
-  // restart) because Redis is unavailable or rejecting writes at startup:
-  // try again once it is back, or the entries stay scheduled until the next
+  // restart) if this fails at startup, e.g. because Redis is unavailable or
+  // rejecting writes: try again, or the entries stay scheduled until the next
   // restart. Scheduling an entry twice is harmless (one job per entry path).
-  (function scheduleEntries() {
+  // An outage retries every minute; any other error backs off up to an hour,
+  // since each attempt scans every blog.
+  (function scheduleEntries(attempt) {
     publishScheduledEntries(function (err) {
-      if (err && isRedisUnavailableError(err)) {
-        console.error(clfdate(), "Error scheduling entries for future publication, will retry", err.message);
-        return setTimeout(scheduleEntries, SCHEDULE_RETRY_MS);
+      if (!err) {
+        return console.log(clfdate(), "Scheduled entries for future publication");
       }
-      if (err) {
-        console.error(clfdate(), "Error scheduling entries for future publication", err);
-        return;
-      }
-      console.log(clfdate(), "Scheduled entries for future publication");
+      var delay = isRedisUnavailableError(err)
+        ? SCHEDULE_RETRY_MS
+        : Math.min(SCHEDULE_RETRY_MS * Math.pow(2, attempt), SCHEDULE_RETRY_MAX_MS);
+      console.error(clfdate(), "Error scheduling entries for future publication, retrying in " + delay / 1000 + "s", err);
+      setTimeout(function () {
+        scheduleEntries(attempt + 1);
+      }, delay);
     });
-  })();
+  })(0);
 
   // Warn users about impending subscriptions
   User.getAllIds(function (err, uids) {
