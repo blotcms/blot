@@ -428,7 +428,10 @@ async function takeScreenshotLocked(site, path, options) {
     // as it rendered.
     const renderDeadline = Date.now() + RENDER_GRACE;
     try {
-      await page.waitForFunction(() => document.readyState === "complete", {
+      // A string, not an arrow function: puppeteer serializes functions with
+      // toString(), and under nyc (CI coverage) that source carries counters
+      // which do not exist in the page, so the wait would never resolve.
+      await page.waitForFunction('document.readyState === "complete"', {
         timeout: RENDER_GRACE,
       });
       // A timeout of 0 would mean wait forever
