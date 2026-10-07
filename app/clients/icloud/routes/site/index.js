@@ -1,6 +1,7 @@
 const express = require("express");
 const config = require("config"); // For accessing configuration values
 const email = require("helper/email");
+const notificationCap = require("../../util/notificationCap");
 
 const maxFileSize = config.icloud.maxFileSize; // Maximum file size for iCloud uploads in bytes
 const limit = `${maxFileSize / 1000000}mb`; // limit must be in the format '5mb'
@@ -15,21 +16,18 @@ site.use(express.json());
 site.use(express.raw({ type: "application/octet-stream", limit })); // For handling binary data
 
 // Ping endpoint
-let totalNotificationsSent = 0;
-let panicNotificationsSent = false;
-const maxNotifications = 2;
+const notifyServerStarted = notificationCap({ max: 2 });
 site.get("/started", async function (req, res) {
   res.sendStatus(200);
 
   try {
-    if (totalNotificationsSent < maxNotifications) {
-      email.ICLOUD_SERVER_STARTED();
-      totalNotificationsSent++;
-      // await resyncRecentlySynced();
-    } else if (!panicNotificationsSent) {
-      panicNotificationsSent = true;
-      email.ICLOUD_SERVER_PANIC();
-    } else {
+    const result = notifyServerStarted(
+      "started",
+      () => email.ICLOUD_SERVER_STARTED(),
+      () => email.ICLOUD_SERVER_PANIC()
+    );
+
+    if (result === "suppressed") {
       console.log("iCloud server restart: not sending any more notifications");
     }
   } catch (error) {
