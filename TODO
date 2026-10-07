@@ -69,6 +69,10 @@ Have we solved the green crashes (`Lock was lost` / ECOMPROMISED at 2026-09-21 1
 
 Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
 
+Sync sweep digest (app/clients/util/syncReport.js) follow-ups
+- Don't report a stuck lock for a blog still in its initial setup/transfer (Dropbox transfer_pending, Drive preparing, iCloud transferringToiCloud) - a big first transfer can legitimately hold the lock >1h
+- Once-per-occurrence suppression treats "not seen this run" as cleared, including blogs that just weren't eligible that hour, so an ongoing error can be re-emailed after a quiet hour - remember issues until a successful walk/Fix actually clears them
+
 Surface template choices on the templates subpages: switch from png to iframe after hovering a selection
 
 Perform caching and header audit of site and templates

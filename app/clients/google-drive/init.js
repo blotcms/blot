@@ -8,7 +8,7 @@ const watchChanges = require("./serviceAccount/watchChanges");
 const pollDriveActivity = require("./serviceAccount/pollDriveActivity");
 const hotDocPoller = require("./serviceAccount/hotDocPoller");
 const { restartSetupProcesses } = require("./routes/setup");
-const scheduleHourlyFix = require("./hourlyFix");
+const scheduleValidation = require("./validate");
 
 const main = async (initial = false) => {
   const serviceAccounts = config.google_drive.service_accounts;
@@ -25,7 +25,7 @@ const main = async (initial = false) => {
 
   if (initial) {
     hotDocPoller.start();
-    scheduleHourlyFix();
+    scheduleValidation();
   }
 
   for (const { client_id: serviceAccountId } of serviceAccounts) {
