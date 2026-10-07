@@ -16,6 +16,7 @@ const zombies = require("./zombies");
 const checkCardTesters = require("./check-card-testers");
 const subscriptionLifecycleJob = require("./subscription-lifecycle");
 const checkSSLCertificates = require("./check-ssl-certificates");
+const checkRedisHost = require("./check-redis-host");
 
 const SCHEDULE_RETRY_MS = 60 * 1000;
 const SCHEDULE_RETRY_MAX_MS = 60 * 60 * 1000;
@@ -270,6 +271,32 @@ module.exports = function () {
       );
     } catch (err) {
       console.log(clfdate(), "Error: Checking SSL certificates", err);
+    }
+  });
+
+  // Two minutes after each of the Redis host's 5-minute samples. During a
+  // Redis outage this only logs: /redis-health reports the outage itself.
+  console.log(clfdate(), "Scheduled check of the Redis host's memory limits");
+  let redisHostCheckedAt = null;
+  scheduler.scheduleJob("2-59/5 * * * *", async function () {
+    try {
+      const { sent, report } = await checkRedisHost({
+        lastCheckAt: redisHostCheckedAt,
+        sendEmail: (view) =>
+          new Promise((resolve, reject) =>
+            email.REDIS_HOST_ALERT(null, view, (err) =>
+              err ? reject(err) : resolve()
+            )
+          ),
+      });
+      redisHostCheckedAt = report.now;
+      if (sent) console.log(clfdate(), "Sent Redis host alert email");
+    } catch (err) {
+      if (isRedisUnavailableError(err)) {
+        console.log(clfdate(), "Redis host check skipped: Redis unavailable");
+      } else {
+        console.log(clfdate(), "Error: Checking Redis host", err);
+      }
     }
   });
 
