@@ -8,6 +8,10 @@ const RESYNC_BASE_DELAY_MS = 1000;
 const RESYNC_DEDUP_WINDOW_MS = 10 * 1000;
 const RESYNC_MAX_DELAY_MS = 5 * 60 * 1000;
 const resyncDebounceRegistry = new Map();
+// when the server last acknowledged a resync request, per blog. The debounce
+// registry above only remembers for RESYNC_DEDUP_WINDOW_MS but the resync the
+// server starts can run for many minutes.
+const resyncAcknowledgedAt = new Map();
 
 const requestResyncOnce = async (blogID) => {
   if (!blogID || typeof blogID !== "string") {
@@ -43,6 +47,15 @@ const requestResyncOnce = async (blogID) => {
   }
 
   console.log(clfdate(), `Resync requested for blogID: ${blogID}`);
+};
+
+// True if a resync request for this blog is in flight or was acknowledged by
+// the server within windowMs, i.e. the server is probably (re)syncing the blog
+// from iCloud right now and will pick up any change we could not deliver.
+export const hasRecentResync = (blogID, windowMs) => {
+  if (resyncDebounceRegistry.get(blogID)?.promise) return true;
+  const acknowledgedAt = resyncAcknowledgedAt.get(blogID);
+  return Boolean(acknowledgedAt && Date.now() - acknowledgedAt < windowMs);
 };
 
 export default async (blogID, reason) => {
@@ -81,6 +94,7 @@ export default async (blogID, reason) => {
           clfdate(),
           `Resync acknowledged for blogID: ${blogID} after ${attempt} attempt(s)`
         );
+        resyncAcknowledgedAt.set(blogID, Date.now());
         return;
       } catch (error) {
         const delayMs = Math.min(
