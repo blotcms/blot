@@ -39,10 +39,12 @@ server.set("trust proxy", 1);
 // with the host 'localhost'), otherwise an outage of Redis makes every
 // container unhealthy. The proxy answers /health itself for public traffic.
 // If you remove this, change monit.rc too.
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 server.get("/health", function (req, res, next) {
-  // Only the internal probe: routing is not strict, so this would also catch
-  // a customer's /health/ page, which the blog serves.
-  if (req.path !== "/health" || req.hostname !== "localhost") return next();
+  // Only the internal probe (localhost or a loopback address, e.g. the proxy
+  // cutover script's 127.0.0.1): routing is not strict, so this would also
+  // catch a customer's /health/ page, which the blog serves.
+  if (req.path !== "/health" || !LOOPBACK_HOSTS.has(req.hostname)) return next();
   // do not cache response
   res.set("Cache-Control", "no-store");
   res.send("OK");
