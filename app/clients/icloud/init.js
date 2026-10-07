@@ -7,6 +7,7 @@ const monitorMacServerStats = require("./util/monitorMacServerStats");
 const establishSyncLock = require("sync/establishSyncLock");
 const initialTransfer = require("./sync/initialTransfer");
 const database = require("./database");
+const getHealth = require("./getHealth");
 const { shouldSkipBackgroundSync } = require("./error");
 const syncFromiCloud = require("./sync/fromiCloud");
 const syncToiCloud = require("./sync/toiCloud");
@@ -237,11 +238,23 @@ const validateAllBlogs = async () => {
       let phase = "validation";
 
       try {
+        blog = await getBlog({ id: blogID });
+        if (!blog || blog.isDisabled || blog.client !== "icloud") return;
+
+        // Deleting or unsharing the folder, or running out of iCloud storage,
+        // is the user's doing, not a bug, so there is nothing to walk or
+        // report. (Such an account also carries a stored error, which
+        // shouldSkipBackgroundSync would skip anyway.)
+        if (await syncReport.hasUserSideIssue(blogID, getHealth)) return;
+
+        // Before the stored-error and recency filters: a stuck lock is a
+        // bug whatever state the account is in, and the macserver stamped
+        // lastSync when the sync that now holds the lock began, over an
+        // hour ago.
+        if (await syncReport.recordStuckLock(report, blog)) return;
+
         if (shouldSkipBackgroundSync(account)) return;
         if (!hasRecentSync(account)) return;
-
-        blog = await getBlog({ id: blogID });
-        if (!blog || blog.client !== "icloud") return;
 
         checkedBlogs += 1;
 
@@ -262,11 +275,10 @@ const validateAllBlogs = async () => {
           stopWalkMeasure();
 
           // A sync is already running for this blog and will pick up
-          // whatever changed. Check it again next hour - unless it has held
-          // the lock for suspiciously long, which recordBusy reports.
+          // whatever changed. Check it again next hour (a lock that stays
+          // held is caught by the stuck-lock check above).
           if (err.message === LOCK_BUSY_MESSAGE) {
             console.log(clfdate(), "iCloud: Skipping busy blog", blogID);
-            await syncReport.recordBusy(report, blog);
             checkedBlogs -= 1;
             return;
           }
@@ -287,23 +299,13 @@ const validateAllBlogs = async () => {
           return;
         }
 
-        syncReport.recordChanges(report, blog, summary);
-
         // syncFromiCloud swallows the failures it meets (macserver down,
-        // downloads that failed, the mass-removal breaker) and returns
-        // normal-looking counts, so an outage would read as "no changes".
-        // Don't Fix() after a failed walk: the folder is only partly
-        // reconciled and the error is what needs attention.
-        if (summary.failed > 0) {
-          syncReport.recordError(
-            report,
-            blog,
-            "walk",
-            `${summary.failed} failure${summary.failed === 1 ? "" : "s"}, ` +
-              `first: ${summary.firstError}`
-          );
-          return;
-        }
+        // downloads that failed) and returns normal-looking counts, so an
+        // outage would read as "no changes". recordWalk reports those as a
+        // walk error, with the changes the walk did apply, and Fix() is
+        // skipped: the folder is only partly reconciled and the error is
+        // what needs attention.
+        if (!syncReport.recordWalk(report, blog, summary)) return;
 
         const stopFixMeasure = measureEventLoop();
         try {
@@ -330,7 +332,12 @@ const validateAllBlogs = async () => {
     console.error(clfdate(), "iCloud: Failed to iterate accounts", error);
   }
 
-  const reported = syncReport.view(report).blogs.length;
+  const reported = await syncReport.send(
+    report,
+    email.ICLOUD_SYNC_ISSUE,
+    "iCloud:",
+    { client: "icloud", getHealth }
+  );
 
   console.log(
     clfdate(),
@@ -338,8 +345,6 @@ const validateAllBlogs = async () => {
     `checked=${checkedBlogs}`,
     `issues=${reported}`
   );
-
-  syncReport.send(report, email.ICLOUD_SYNC_ISSUE, "iCloud:");
 };
 
 // Not scheduled (see init()). Reports through the same digest as the hourly
@@ -427,7 +432,10 @@ const resyncAllConnected = async ({ notify = true } = {}) => {
 
   if (!notify) return;
 
-  syncReport.send(report, email.ICLOUD_SYNC_ISSUE, "iCloud:");
+  // No `client`: the once-per-occurrence memory belongs to the hourly sweep.
+  await syncReport.send(report, email.ICLOUD_SYNC_ISSUE, "iCloud:", {
+    getHealth,
+  });
 };
 
 const init = async () => {

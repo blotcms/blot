@@ -11,12 +11,18 @@ describe("icloud init validateAllBlogs", function () {
     folderLock: require.resolve("sync/lock"),
     fix: require.resolve("sync/fix"),
     email: require.resolve("helper/email"),
+    getHealth: require.resolve("../getHealth"),
+    redis: require.resolve("models/client"),
     init: require.resolve("../init"),
   };
   const originals = {};
   const HOUR = 60 * 60 * 1000;
+  // What the digest remembers having reported (see syncReport), as a fake of
+  // the Redis set it lives in. Kept across sweeps within a test.
+  let reported;
 
   beforeEach(function () {
+    reported = new Set();
     Object.keys(paths).forEach((name) => {
       originals[name] = require.cache[paths[name]];
     });
@@ -39,14 +45,24 @@ describe("icloud init validateAllBlogs", function () {
   };
 
   // behaviors: { [blogID]: { account, summary, walkError, busy, disabled,
-  // heldSince, fixReport, fixError, accountAfterLock, gate } }. Calls are recorded
-  // in `calls`: { walked: [blogID], fixed: [blogID], locked: [blogID] }.
+  // heldSince, fixReport, fixError, accountAfterLock, gate, blogDisabled,
+  // health } }. health is a getHealth result, an Error to throw, or a function
+  // of how many times the blog's health has been read (a blog's folder can
+  // vanish mid-sweep); by default it follows the stored account, like the real
+  // thing. Calls are recorded in `calls`: { walked: [blogID], fixed: [blogID],
+  // locked: [blogID] }.
   function load(behaviors, sentEmails, calls) {
     const ids = Object.keys(behaviors);
+    const healthReads = {};
 
     stub("blog", {
       get: ({ id }, callback) =>
-        callback(null, { id, handle: id + "-handle", client: "icloud" }),
+        callback(null, {
+          id,
+          handle: id + "-handle",
+          client: "icloud",
+          isDisabled: Boolean(behaviors[id].blogDisabled),
+        }),
     });
     stub("entries", {
       getAllTotal: (_id, callback) => callback(null, 42),
@@ -96,6 +112,33 @@ describe("icloud init validateAllBlogs", function () {
       calls.fixed.push(blog.id);
       const behavior = behaviors[blog.id];
       callback(behavior.fixError || null, behavior.fixReport || {});
+    });
+    stub("getHealth", async function (blogID) {
+      const health = require("clients/health");
+      const { resolveIssue } = require("../error");
+      let result = behaviors[blogID].health;
+      healthReads[blogID] = (healthReads[blogID] || 0) + 1;
+      if (typeof result === "function") result = result(healthReads[blogID]);
+      if (result instanceof Error) throw result;
+      if (result) return result;
+      const issue = resolveIssue(
+        Object.assign({ setupComplete: true }, behaviors[blogID].account)
+      );
+      return issue ? health.error([issue]) : health.ok();
+    });
+    stub("redis", {
+      sMembers: async () => Array.from(reported),
+      multi: function () {
+        const ops = [];
+        const multi = {
+          del: () => (ops.push(() => reported.clear()), multi),
+          sAdd: (key, ids) => (
+            ops.push(() => ids.forEach((id) => reported.add(id))), multi
+          ),
+          exec: async () => ops.forEach((op) => op()),
+        };
+        return multi;
+      },
     });
     stub("email", {
       ICLOUD_SYNC_ISSUE: function (uid, locals, callback) {
@@ -270,7 +313,9 @@ describe("icloud init validateAllBlogs", function () {
     expect(records[id("down")].errors[0].message).toContain("macserver unreachable");
     // What the walk did before it failed is still reported
     expect(records[id("partial")].changeCount).toEqual(2);
-    expect(records[id("partial")].errors[0].message).toContain("3 failures");
+    expect(records[id("partial")].errors[0].message).toContain(
+      "3 file(s) failed to sync"
+    );
   });
 
   it("runs Fix after a successful walk and reports its repairs and errors", async function () {
@@ -337,5 +382,148 @@ describe("icloud init validateAllBlogs", function () {
     await first;
 
     expect(calls.walked).toEqual([id("slow")]);
+  });
+
+  it("skips a disabled blog before looking at its lock", async function () {
+    const { init, sentEmails, calls } = setup({
+      [id("off")]: { blogDisabled: true, heldSince: Date.now() - 3 * HOUR },
+    });
+
+    await init.validateAllBlogs();
+
+    expect(calls.walked).toEqual([]);
+    expect(sentEmails.length).toEqual(0);
+  });
+
+  describe("what the user is free to do", function () {
+    const health = require("clients/health");
+
+    it("skips and never reports a blog whose folder was deleted or storage is full, even with a stuck lock", async function () {
+      const { init, sentEmails, calls } = setup({
+        [id("deleted")]: {
+          account: { error: "Blog directory deleted", errorCode: "SOURCE_MISSING" },
+          heldSince: Date.now() - 3 * HOUR,
+        },
+        [id("full")]: {
+          health: health.error([{ code: health.CODES.QUOTA_EXCEEDED }]),
+          heldSince: Date.now() - 3 * HOUR,
+          summary: { downloaded: 1 },
+        },
+        [id("revoked")]: {
+          health: health.error([{ code: health.CODES.REAUTH_REQUIRED }]),
+          summary: { failed: 1, firstError: "401" },
+        },
+      });
+
+      await init.validateAllBlogs();
+
+      expect(calls.walked).toEqual([]);
+      expect(calls.fixed).toEqual([]);
+      expect(sentEmails.length).toEqual(0);
+    });
+
+    it("drops a blog whose folder is deleted during the walk", async function () {
+      const { init, sentEmails, calls } = setup({
+        [id("vanished")]: {
+          summary: { failed: 1, firstError: "folder not found" },
+          // fine when the sweep starts, SOURCE_MISSING by the time it sends
+          health: (reads) =>
+            reads === 1
+              ? health.ok()
+              : health.error([{ code: health.CODES.SOURCE_MISSING }]),
+        },
+        [id("changes")]: { summary: { downloaded: 1 } },
+      });
+
+      await init.validateAllBlogs();
+
+      expect(calls.walked.length).toEqual(2);
+      expect(sentEmails.length).toEqual(1);
+      expect(Object.keys(byID(sentEmails[0]))).toEqual([id("changes")]);
+    });
+
+    it("still reports a blog when its health can't be read", async function () {
+      const { init, sentEmails, calls } = setup({
+        [id("unknown")]: {
+          walkError: new Error("walk exploded"),
+          health: new Error("redis hiccup"),
+        },
+      });
+
+      spyOn(console, "error");
+      await init.validateAllBlogs();
+
+      expect(calls.walked).toEqual([id("unknown")]);
+      expect(sentEmails.length).toEqual(1);
+      expect(byID(sentEmails[0])[id("unknown")].errors[0].phase).toEqual("walk");
+    });
+  });
+
+  describe("stuck locks", function () {
+    it("finds one on a blog the macserver hasn't pushed to in hours", async function () {
+      const { init, sentEmails, calls } = setup({
+        [id("quiet")]: {
+          account: { lastSync: Date.now() - 6 * HOUR },
+          heldSince: Date.now() - 5 * HOUR,
+        },
+      });
+
+      await init.validateAllBlogs();
+
+      expect(calls.walked).toEqual([]);
+      expect(sentEmails.length).toEqual(1);
+      expect(byID(sentEmails[0])[id("quiet")].hasStuckLock).toEqual(true);
+    });
+
+    it("finds one on a blog with a stored error that isn't the user's doing", async function () {
+      const { init, sentEmails, calls } = setup({
+        [id("broken")]: {
+          account: { error: "Something went wrong", errorCode: "SYNC_ERROR" },
+          heldSince: Date.now() - 3 * HOUR,
+        },
+      });
+
+      await init.validateAllBlogs();
+
+      expect(calls.walked).toEqual([]);
+      expect(byID(sentEmails[0])[id("broken")].hasStuckLock).toEqual(true);
+    });
+  });
+
+  it("emails an ongoing problem once, and again after it clears and returns", async function () {
+    const behaviors = {
+      [id("threw")]: { walkError: new Error("boom") },
+      [id("stuck")]: { heldSince: Date.now() - 3 * HOUR },
+      [id("changes")]: { summary: { downloaded: 1 } },
+    };
+    const sentEmails = [];
+    const calls = { walked: [], fixed: [], locked: [] };
+
+    spyOn(console, "error");
+    const init = load(behaviors, sentEmails, calls);
+
+    await init.validateAllBlogs();
+    expect(Object.keys(byID(sentEmails[0])).sort()).toEqual(
+      [id("threw"), id("stuck"), id("changes")].sort()
+    );
+
+    // The error and the stuck lock continue; a missed change is an event
+    await init.validateAllBlogs();
+    expect(sentEmails.length).toEqual(2);
+    expect(Object.keys(byID(sentEmails[1]))).toEqual([id("changes")]);
+
+    delete behaviors[id("threw")].walkError;
+    delete behaviors[id("stuck")].heldSince;
+    delete behaviors[id("changes")].summary;
+    await init.validateAllBlogs();
+    expect(sentEmails.length).toEqual(2);
+
+    behaviors[id("threw")].walkError = new Error("boom");
+    behaviors[id("stuck")].heldSince = Date.now() - 3 * HOUR;
+    await init.validateAllBlogs();
+    expect(sentEmails.length).toEqual(3);
+    expect(Object.keys(byID(sentEmails[2])).sort()).toEqual(
+      [id("threw"), id("stuck")].sort()
+    );
   });
 });
