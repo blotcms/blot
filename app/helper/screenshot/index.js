@@ -40,6 +40,11 @@ const PAGE_TIMEOUT = 20000;
 // Some pages never go quiet (a long poll, an analytics beacon that hangs), so
 // after "load" we only wait this long for the network to settle.
 const NETWORK_IDLE_GRACE = 5000;
+// Navigation errors that will recur on every attempt: the hostname does not
+// exist, the certificate is bad, the URL is unusable or redirects forever.
+// Resets, refusals and network changes can be transient, so they are retried.
+const PERMANENT_NAVIGATION_ERROR =
+  /net::ERR_(NAME_NOT_RESOLVED|CERT_[A-Z_]+|SSL_PROTOCOL_ERROR|INVALID_URL|UNSAFE_PORT|UNKNOWN_URL_SCHEME|TOO_MANY_REDIRECTS)\b/;
 // Per-screenshot budgets, sized for one screenshot at a time. See configure().
 const CLOSE_PAGE_TIMEOUT = 2000;
 const SCREENSHOT_TIMEOUT = 2000;
@@ -401,11 +406,11 @@ async function takeScreenshotLocked(site, path, options) {
     try {
       await page.goto(site, { waitUntil: "load", timeout: PAGE_TIMEOUT });
     } catch (error) {
-      // A site that does not load in PAGE_TIMEOUT, or whose hostname does
-      // not resolve, will not do better on the next attempt.
+      // A site that does not load in PAGE_TIMEOUT, or fails in a way that
+      // cannot change, will not do better on the next attempt.
       if (
         error instanceof puppeteer.TimeoutError ||
-        /net::ERR_/.test(error.message)
+        PERMANENT_NAVIGATION_ERROR.test(error.message)
       ) {
         error.retryable = false;
       }
