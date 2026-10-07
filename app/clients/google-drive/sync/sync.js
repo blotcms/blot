@@ -28,6 +28,8 @@ const localReaddir = require("./util/localReaddir");
 const truncateToSecond = require("./util/truncateToSecond");
 const transformDriveItems = require("./util/transformDriveItems");
 
+const SHORTCUT = "application/vnd.google-apps.shortcut";
+
 // Resolves to a summary of what changed (truthy) when the walk finishes, or
 // false when it fails part way through or the folder lookup fails.
 module.exports = async function sync(blogID, publish, update, options = {}) {
@@ -130,8 +132,12 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     ]);
 
     // We handle file name deduplication and the mapping of
-    // google docs to .gdoc files here.
-    const remoteContents = transformDriveItems(driveItems)
+    // google docs to .gdoc files here. Shortcuts are skipped: Blot can't
+    // follow them, and one sharing a name with a real item (e.g. a folder
+    // next to a shortcut to it) would otherwise take that item's name.
+    const remoteContents = transformDriveItems(
+      driveItems.filter((item) => item.mimeType !== SHORTCUT)
+    )
       .sort((a, b) => comparePaths(a.name, b.name));
     const regularFiles = remoteContents.filter(item =>
       !item.isDirectory && !item.mimeType.startsWith("application/vnd.google-apps.") &&
@@ -200,6 +206,21 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       const existsLocally = localContents.find((item) => item.name === name);
 
       if (!isDirectory) {
+        // e.g. a Drive folder replaced by a Sheet of the same name.
+        // download() can't write a file (or placeholder) over a directory,
+        // and the folder's child mappings must not outlive it.
+        if (existsLocally && existsLocally.isDirectory) {
+          await checkWeCanContinue();
+          console.log("Removing directory", path, "which is a file remotely");
+          const descendants = await localDescendants(localPath(blogID, path), path);
+          await fs.remove(localPath(blogID, path));
+          summary.removed += 1;
+          await update(path);
+          for (const descendant of descendants) await update(descendant);
+          const staleId = await getByPath(path);
+          if (staleId && staleId !== id) await remove(staleId);
+        }
+
         // Compare against the Drive modifiedTime of the version we last
         // wrote locally, not the local file's mtime: storage backends other
         // than local disk won't offer a settable mtime. The record is only
@@ -260,7 +281,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             Boolean(existsLocally && existsLocally.isDirectory)
           );
 
-          if (existsLocally) {
+          if (existsLocally && !existsLocally.isDirectory) {
             console.log("Updating out-of-sync:", path);
             console.log(
               "identical=false localSize=" + existsLocally.size,
