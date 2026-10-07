@@ -39,7 +39,10 @@ server.set("trust proxy", 1);
 // with the host 'localhost'), otherwise an outage of Redis makes every
 // container unhealthy. The proxy answers /health itself for public traffic.
 // If you remove this, change monit.rc too.
-server.get("/health", function (req, res) {
+server.get("/health", function (req, res, next) {
+  // Only the internal probe: routing is not strict, so this would also catch
+  // a customer's /health/ page, which the blog serves.
+  if (req.path !== "/health" || req.hostname !== "localhost") return next();
   // do not cache response
   res.set("Cache-Control", "no-store");
   res.send("OK");
