@@ -1,3 +1,21 @@
+Solve redis kernel issue:
+
+Find what runs `KEYS` on prod redis (slowlog: 789ms at 2026-10-05 09:01Z, blocks everything; not found in app/ or scripts/, maybe a manual redis-cli)
+- i suspect ai agents did this? can we confirm if the command came over ssh? via direct client invocation?
+- can we switch to 1cpu / 16gb ram redis? do we need the second cpu for bgsave? our peak rss is 23gb? can we add maxmemory and error writes?
+- Find what sends the recurring 31-key MGET that takes 10-32ms server-side on prod redis (~30 in the slowlog over 12h, probably Entries.getRecent via getRange(0, 30) on blogs with big entries; slowlog shows only command + duration)
+Redis outage follow-ups
+- Dropbox webhook drops syncs (listBlogs fails after the 200 ack) and git auth maps Redis errors to a 401 while Redis is unreachable
+- Redis auth/TLS; 
+- Review, revise, test and run redis orchestration script to restore from s3 backup into new instance
+Find and replace the KEYS calls blocking prod Redis (from SLOWLOG, source 172.30.0.122 = the blot host, not repo code — likely a host cron or manual `client` session)
+- `keys ssl:*:latest` ~750ms, roughly daily (21, 23, 24 Sep) — switch to `--scan --pattern`
+- `KEYS *blog_<id>*` 2.4s on 22 Sep
+
+Migrate static content to s3
+
+---
+
 run node scripts/entry/rebuild-all.js
 
 image zoom plugin doesn't work on hypertext template: https://brendanmcleod.dev/2026/08/30/played-middle-earth-shadow-of-mordor
@@ -11,7 +29,6 @@ Could we improve the performance of posts/pages with lots of images by adding lo
 Our AWS bill is high because we have run out of reserved instance. Decide on the plan.
 - switch over static files to s3
 - reduce eb2 data volume size
-- can we switch to 1cpu / 16gb ram redis? do we need the second cpu for bgsave? our peak rss is 23gb? can we add maxmemory and error writes?
 - can we have multiple smaller webservers with load balancing? 
 
 Safely and very carefully switch AWS account root user email to @blot.im
@@ -25,9 +42,6 @@ Work on removing replaceFolderLinks
 
 Excercise the backlinks with big entries / many backlinks in the benchmarks somewhere
 
-Find what runs `KEYS` on prod redis (slowlog: 789ms at 2026-10-05 09:01Z, blocks everything; not found in app/ or scripts/, maybe a manual redis-cli)
-
-Find what sends the recurring 31-key MGET that takes 10-32ms server-side on prod redis (~30 in the slowlog over 12h, probably Entries.getRecent via getRange(0, 30) on blogs with big entries; slowlog shows only command + duration)
 
 Fix Google Drive sync outage caused by Google account suspesion
 - Future fix to Google Drive client needs to never use the service account to create files (ask the user to handle the initial transfer)
@@ -108,8 +122,6 @@ Now we have many LRU caches in app/blog we need to gather data in production to 
 
 Finish cross platform folder renderer
 
-Redis outage follow-ups
-- Dropbox webhook drops syncs (listBlogs fails after the 200 ack) and git auth maps Redis errors to a 401 while Redis is unreachable
 
 Improve about section
 - Restructure /about into current principles and clearly dated working notes.
@@ -371,8 +383,8 @@ Proxy container (OpenResty) - remaining before it can replace config/openresty:
 - Run the proxy cutover (proxy/deploy/README.md), then run proxy/deploy/blue-green.sh from a deploy workflow like scripts/deploy (images are published by proxy-image.yml)
 - dehydrated version drift: the proxy image vendors dehydrated 0.7.2 (0.6.5, which lua-resty-auto-ssl pins, is rejected by current ACME servers); bare-metal config/openresty still installs the 0.6.5 pin via luarocks - unify (bump lua-resty-auto-ssl, or vendor 0.7.2 there too)
 - Investigate replacing unmaintained lua-resty-auto-ssl (would also resolve the two items above): lua-resty-acme (keeps OpenResty, drops dehydrated/sockproc/:8999) or issuing from the Blot app into Redis; see proxy/README.md
-- Redis auth/TLS; container equivalent for fail2ban
 - Purge follow-ups: BLOT_REVERSE_PROXY_URLS is a static list (proxies should register themselves in Redis), and purges queued in a Node process's memory are lost if it dies before sending them
+- container equivalent for fail2ban
 
 Follow-ups from drag-and-drop template upload:
 - Move the folder browser (views/dashboard/folder/directory.html) onto the shared views/js/collect-dropped-files.js instead of its inline copy of the same traversal
@@ -710,7 +722,6 @@ Move image zoom plugin to templates
       disable image zoom plugin
   Remove image zoom plugin
 
-Review, revise, test and run redis orchestration script to restore from s3 backup into new instance
 
 Reduce service provider risk:
 - move domain registrar from AWS to Epik?
@@ -1273,10 +1284,6 @@ Self-hosting:
 - Tell Nick when it's possible to deploy a self-hosted [Blot on Vercel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKjxHWSvgjKtCWrbhccKFPlkdD) and [Zia](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsSXWPRNNxDNcdhGHQXBkTtsx)
 
 Add preflight checks in proxy/deploy/{cutover-from-baremetal,blue-green}.sh for PROXY_BLOG_STATIC_DIR/PROXY_GLOBAL_STATIC_DIR existing and readable - docker -v silently creates an empty dir for a missing host path, so a typo or host-layout change would 404 cdn.* static assets with no check catching it
-
-Find and replace the KEYS calls blocking prod Redis (from SLOWLOG, source 172.30.0.122 = the blot host, not repo code — likely a host cron or manual `client` session)
-- `keys ssl:*:latest` ~750ms, roughly daily (21, 23, 24 Sep) — switch to `--scan --pattern`
-- `KEYS *blog_<id>*` 2.4s on 22 Sep
 
 Explore a redesign of Fix() (app/sync/fix) to cut Redis load further, e.g. one chunked walk over every referenced entry id (lists + tag members) that MGETs each entry once and applies every per-entry check, instead of each check re-reading all content. Not an easy win:
 - ghosts include ids with no entry, so the walk must cover the union of list and tag member ids, not just "all"
