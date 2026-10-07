@@ -129,6 +129,42 @@ describe("sync/fix", function () {
     });
   });
 
+  it("does not email the admin about what it repaired - callers report the returned report", function (done) {
+    var email = require("helper/email");
+    var reported = function (blog, callback) {
+      callback(null, ["fixed something"]);
+    };
+    var clean = function (blog, callback) {
+      callback(null, []);
+    };
+
+    var fix = loadFixWithStubs({
+      "entry-ghosts": reported,
+      "tag-ghosts": clean,
+      "list-ghosts": clean,
+      "menu-ghosts": clean,
+      "entries-path-index": clean,
+    });
+
+    Object.keys(email).forEach(function (name) {
+      if (typeof email[name] === "function") spyOn(email, name);
+    });
+    spyOn(Blog, "set").and.callFake(function (blogID, updates, callback) {
+      callback(null);
+    });
+
+    fix({ id: "blog-id" }, function (err, report) {
+      expect(err).toBeNull();
+      expect(report).toEqual({ "entry-ghosts": ["fixed something"] });
+      Object.keys(email).forEach(function (name) {
+        if (typeof email[name] === "function") {
+          expect(email[name]).not.toHaveBeenCalled();
+        }
+      });
+      done();
+    });
+  });
+
   it("reports progress through the status callback in order", function (done) {
     var clean = function (blog, callback) {
       callback(null, []);
