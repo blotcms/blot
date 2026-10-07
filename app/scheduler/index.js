@@ -14,6 +14,7 @@ const exec = require("child_process").exec;
 const zombies = require("./zombies");
 const checkCardTesters = require("./check-card-testers");
 const subscriptionLifecycleJob = require("./subscription-lifecycle");
+const checkSSLCertificates = require("./check-ssl-certificates");
 
 // If any disk has less than 2GB of space, we should notify the admin
 const MINIMUM_DISK_SPACE_IN_K = 2 * 1024 * 1024;
@@ -227,6 +228,29 @@ module.exports = function () {
       console.log(clfdate(), "No suspected fraudulent users found");
     } else {
       email.SUSPECTED_FRAUD(null, { customers });
+    }
+  });
+
+  console.log(clfdate(), "Scheduled daily check of SSL certificates");
+  scheduler.scheduleJob({ hour: 13, minute: 0 }, async function () {
+    console.log(clfdate(), "Checking SSL certificates");
+
+    try {
+      const { sent } = await checkSSLCertificates({
+        sendEmail: (view) =>
+          new Promise((resolve, reject) =>
+            email.SSL_CERTIFICATE_ISSUES(null, view, (err) =>
+              err ? reject(err) : resolve()
+            )
+          ),
+      });
+
+      console.log(
+        clfdate(),
+        sent ? "Sent SSL certificate issues email" : "No new SSL certificate issues"
+      );
+    } catch (err) {
+      console.log(clfdate(), "Error: Checking SSL certificates", err);
     }
   });
 
