@@ -7,6 +7,8 @@ describe("screenshot plugin", function () {
   let server;
   const streams = new Set();
   let previewReloadRequests = 0;
+  let neverIdlePageRequests = 0;
+  const hangingResponses = new Set();
 
   global.test.timeout(60 * 1000); // 60s
 
@@ -44,6 +46,28 @@ describe("screenshot plugin", function () {
       );
     });
 
+    app.get("/not-found", (req, res) => {
+      res
+        .status(404)
+        .send(
+          "<html><head><style>body{background:white}</style></head><body><h1>Not found</h1></body></html>"
+        );
+    });
+
+    // Never answers, like the long-lived fetch some sites leave open, which
+    // stops the network from ever going idle.
+    app.get("/never-responds", (req, res) => {
+      hangingResponses.add(res);
+      res.on("close", () => hangingResponses.delete(res));
+    });
+
+    app.get("/never-idle", (req, res) => {
+      neverIdlePageRequests++;
+      res.send(
+        "<html><head><style>body{background:white}</style></head><body><h1>Hello, world!</h1><script>fetch('/never-responds').catch(function () {});</script></body></html>"
+      );
+    });
+
     // Track request times for rate limiting tests
     app.use((req, res, next) => {
       requestTimes.push(Date.now());
@@ -64,15 +88,21 @@ describe("screenshot plugin", function () {
   beforeEach(() => {
     requestTimes = [];
     previewReloadRequests = 0;
+    neverIdlePageRequests = 0;
     // Clean up any leftover screenshots
     if (fs.existsSync(path)) {
       fs.unlinkSync(path);
     }
   });
 
+  afterEach(() => {
+    for (const res of hangingResponses) res.end();
+  });
+
   afterAll(() => {
     console.log("Closing server");
     for (const res of streams) res.end();
+    for (const res of hangingResponses) res.end();
     server.close();
   });
 
@@ -99,6 +129,22 @@ describe("screenshot plugin", function () {
     expect(hash).toBe(expectedHash);
     expect(previewReloadRequests).toBe(0);
     expect(streams.size).toBe(0);
+    fs.unlinkSync(path);
+  });
+
+  it("screenshots a page that responds with an error status", async function () {
+    await screenshot(`${site}/not-found`, path);
+    expect(fs.existsSync(path)).toBe(true);
+    fs.unlinkSync(path);
+  });
+
+  it("screenshots a page whose network never goes idle without retrying", async function () {
+    const started = Date.now();
+    await screenshot(`${site}/never-idle`, path);
+    // Well under PAGE_TIMEOUT (20s), which waiting for networkidle0 would hit
+    expect(Date.now() - started).toBeLessThan(10 * 1000);
+    expect(fs.existsSync(path)).toBe(true);
+    expect(neverIdlePageRequests).toBe(1);
     fs.unlinkSync(path);
   });
 

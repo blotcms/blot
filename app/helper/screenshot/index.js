@@ -37,6 +37,9 @@ const CONCURRENT_SCREENSHOTS = 1;
 const MIN_TIME_BETWEEN_OPS = 2000; // 2 seconds
 const DEFAULT_RESTART_INTERVAL = 1000 * 60 * 60; // 1 hour
 const PAGE_TIMEOUT = 20000;
+// Some pages never go quiet (a long poll, an analytics beacon that hangs), so
+// after "load" we only wait this long for the network to settle.
+const NETWORK_IDLE_GRACE = 5000;
 // Per-screenshot budgets, sized for one screenshot at a time. See configure().
 const CLOSE_PAGE_TIMEOUT = 2000;
 const SCREENSHOT_TIMEOUT = 2000;
@@ -386,7 +389,7 @@ async function takeScreenshotLocked(site, path, options) {
 
     // Preview pages hold an EventSource open at /__blot/preview/reload so the
     // template editor can refresh them. Block that request before it reaches
-    // the server; networkidle0 never arrives while the stream is open.
+    // the server; the network never goes idle while the stream is open.
     await page.setRequestInterception(true);
     page.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
@@ -395,10 +398,35 @@ async function takeScreenshotLocked(site, path, options) {
     });
 
     console.log(prefix(), "Navigating browser to", site);
-    await page.goto(site, {
-      waitUntil: "networkidle0",
-      timeout: PAGE_TIMEOUT,
-    });
+    try {
+      await page.goto(site, { waitUntil: "load", timeout: PAGE_TIMEOUT });
+    } catch (error) {
+      // A site that does not load in PAGE_TIMEOUT, or whose hostname does
+      // not resolve, will not do better on the next attempt.
+      if (
+        error instanceof puppeteer.TimeoutError ||
+        /net::ERR_/.test(error.message)
+      ) {
+        error.retryable = false;
+      }
+      throw error;
+    }
+
+    // Best effort: let late requests (images, fonts, XHR) finish, but a page
+    // that keeps a request open forever is screenshotted as it rendered.
+    try {
+      await page.waitForNetworkIdle({
+        idleTime: 500,
+        timeout: NETWORK_IDLE_GRACE,
+        concurrency: 0,
+      });
+    } catch (error) {
+      if (!(error instanceof puppeteer.TimeoutError)) throw error;
+      console.log(
+        prefix(),
+        "Network never went idle, screenshotting what rendered"
+      );
+    }
 
     console.log(prefix(), "Taking screenshot of", site, "to", path);
     await screenshotWithTimeout(page, path);
