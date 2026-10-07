@@ -133,7 +133,9 @@ explicitly asked.
      blog folder, then renamed or deleted, while its uploads were still
      queued. The server's resync then holds the lock, so the next queued
      `mkdir`/upload calls get `423 Locked`, fail, and request yet another
-     resync.
+     resync. Those 423 requests are kept on purpose: the server ignores a
+     resync request while one is in flight, and a 423 from an unrelated
+     lock holder must still lead to a resync, or the change is lost.
    - **Server unavailable or slow (transient).** 5xx, timeout or connection
      reset during a deploy, restart or overload window. Usually many blogs
      at once.
@@ -200,7 +202,5 @@ Entry template:
   turns one folder move into one email per 10s.
 - Follow-up: fixed in the PR for this entry. A queued upload whose file is
   gone now logs `Skipping upload: file no longer exists` and requests no
-  resync. A 423 within 10 min of an acknowledged resync logs `Skipping
-  resync request: blog is locked by a resync already in progress`. The
-  admin email is capped at one per blog per hour (`Resync email
+  resync. The admin email is capped at one per blog per hour (`Resync email
   suppressed`, `app/clients/icloud/util/notificationCap.js`).
