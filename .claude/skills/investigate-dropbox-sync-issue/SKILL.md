@@ -1,6 +1,6 @@
 ---
 name: investigate-dropbox-sync-issue
-description: Investigate a "Dropbox sync issue" alert email from Blot's hourly Dropbox sync validation ("detected previously unsynced changes from Dropbox for the following sites"). Uses the production log helpers to work out whether the flagged blog had a genuinely missed/dropped webhook sync, a race with a live edit, or a real bug, then appends a short entry to this skill's incident log. Use when the user pastes or forwards one of these alerts, or asks to look into a Dropbox sync validation issue.
+description: Investigate a "Dropbox sync issue" alert email from Blot's hourly Dropbox sync validation (each flagged blog lists unsynced changes, Fix() repairs, errors and/or a stuck folder lock; the changes line is what this skill investigates. For Fix() repairs use `triage-sync-fix-repair`). Uses the production log helpers to work out whether the flagged blog had a genuinely missed/dropped webhook sync, a race with a live edit, or a real bug, then appends a short entry to this skill's incident log. Use when the user pastes or forwards one of these alerts, or asks to look into a Dropbox sync validation issue.
 ---
 
 # Investigate a Dropbox sync issue alert
@@ -12,10 +12,16 @@ hour in the **green** container. For each Dropbox blog with a `last_sync`
 in the last hour it takes the folder lock, does a full resync of the folder
 from Dropbox (`resetToBlotWithLock`), and counts how many files it had to
 change. If the count is > 0 the blog goes in the email
-(`app/helper/email/admin/DROPBOX_SYNC_ISSUE.txt`) — meaning "a full listing
+(`app/helper/email/admin/DROPBOX_SYNC_ISSUE.txt`, built by
+`app/clients/util/syncReport.js`, "N unsynced changes (downloaded, removed,
+created dirs)") — meaning "a full listing
 of Dropbox disagreed with Blot's copy, so the normal delta/webhook sync
 missed something (or hadn't caught up yet)". After the resync it runs
-`fixBlog` and a `catchUpSync`.
+`fixBlog` and a `catchUpSync`. The same email also lists a blog whose Fix()
+repaired anything, whose walk / Fix() / catch-up sync threw ("error during
+<phase>: …"), or whose folder lock is busy and has been held for over an hour
+("folder lock held for Xh Ym - sync may be hung"; a hung sync inside a live
+process, on whichever container holds it).
 
 The email is sent right after the run finishes, so its timestamp ≈ the
 `Sync validation complete checked=N issues=M` log line (email times are the

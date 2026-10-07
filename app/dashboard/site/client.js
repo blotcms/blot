@@ -12,6 +12,7 @@ const Rebuild = require("sync/rebuild");
 const config = require("config");
 const fetch = require("node-fetch");
 const notifyAdminIfResyncFoundChanges = require("./notifyResyncFoundChanges");
+const syncReport = require("clients/util/syncReport");
 
 const { promisify } = require("util");
 const RESYNC_REFUSALS = [
@@ -171,8 +172,11 @@ client_routes.post("/reset/rebuild", function (req, res) {
       function (err) {
         if (err) console.log(err);
         folder.status("Checking your site for issues");
-        Fix(req.blog, { status: folder.status, log: folder.log }, function (err) {
+        Fix(req.blog, { status: folder.status, log: folder.log }, function (err, report) {
           if (err) console.log(err);
+          // Fix() doesn't email; a rebuild only logs what it repaired.
+          const repaired = syncReport.summarize(report);
+          if (repaired) console.log("Fix repaired", req.blog.id, repaired);
           folder.status("Finished site rebuild");
           done(null, function (err) {
             if (err) console.log("Error releasing sync: ", err);
@@ -229,11 +233,11 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
       }
     }
 
-    notifyAdminIfResyncFoundChanges(req.blog, res.locals.client, summary);
-
     folder.status("Checking your site for issues");
-    Fix(req.blog, { status: folder.status, log: folder.log }, function (err) {
+    Fix(req.blog, { status: folder.status, log: folder.log }, function (err, report) {
       if (err) console.log(err);
+      // After Fix() so its repairs go in the same email as the changes.
+      notifyAdminIfResyncFoundChanges(req.blog, res.locals.client, summary, report);
       folder.status("Finished site rebuild");
       done(null, function (err) {
         if (err) console.log("Error releasing sync: ", err);
