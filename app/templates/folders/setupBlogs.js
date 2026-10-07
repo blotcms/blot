@@ -50,11 +50,16 @@ module.exports = async function setupBlogs(user, folders) {
 // item's label, url and metadata are copied from its page entry by sync/fix.
 // Keep those from the existing menu so rebuilding on every boot doesn't reset
 // them and make Fix() report (and email about) the same repair each deploy.
+// Only copy fields the existing item actually has: an item written straight
+// from the config has no metadata, and an undefined key fails validation.
 function mergeMenu(configMenu, existingMenu = []) {
   return configMenu.map((item) => {
     const existing = existingMenu.find((other) => other.id === item.id);
     if (!existing) return item;
-    const { label, url, metadata } = existing;
-    return { ...item, label, url, metadata };
+    const merged = { ...item };
+    for (const key of ["label", "url", "metadata"]) {
+      if (existing[key] !== undefined) merged[key] = existing[key];
+    }
+    return merged;
   });
 }
