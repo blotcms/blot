@@ -22,6 +22,19 @@ class FileTooLargeError extends Error {
   }
 }
 
+// The file was moved or deleted between the watcher event and the upload. The
+// matching unlink/rename event follows separately, so this is not a failure.
+class FileMissingError extends Error {
+  constructor(path) {
+    super(`File no longer exists: ${path}`);
+    this.name = "FileMissingError";
+    this.code = "ERR_FILE_MISSING";
+    this.path = path;
+  }
+}
+
+const isMissingCode = (e) => e?.code === "ENOENT" || e?.code === "ENOTDIR";
+
 export default async (blogID, path) => {
   // Input validation
   if (!blogID || typeof blogID !== "string") {
@@ -93,6 +106,7 @@ export default async (blogID, path) => {
   try {
     preStat = await fs.stat(filePath);
   } catch (e) {
+    if (isMissingCode(e)) throw new FileMissingError(path);
     console.error(clfdate(), `Failed to stat file before upload: ${filePath}`, e);
     throw new Error(`Stat failed: ${e.message}`);
   }
@@ -115,6 +129,10 @@ export default async (blogID, path) => {
   try {
     stat = await brctl.download(filePath);
   } catch (e) {
+    // brctl reports a vanished file as a generic command failure with no code
+    if (isMissingCode(e) || !(await fs.pathExists(filePath))) {
+      throw new FileMissingError(path);
+    }
     console.error(
       clfdate(),
       `Failed to download file before upload: ${filePath}`,
@@ -149,6 +167,7 @@ export default async (blogID, path) => {
   try {
     fileBuffer = await fs.readFile(filePath);
   } catch (error) {
+    if (isMissingCode(error)) throw new FileMissingError(path);
     console.error(clfdate(), `Failed to read file for upload: ${filePath}`, error);
     throw new Error(`Failed to read file: ${error.message}`);
   }

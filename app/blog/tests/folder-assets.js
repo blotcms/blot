@@ -132,7 +132,7 @@ describe("build-time baked folder links", function () {
     const stored = await (await this.get("/encoded?json=true")).json();
 
     expect(stored.entry.html).toContain("/folder/v-");
-    expect(stored.entry.html).toContain("my pic.jpg");
+    expect(stored.entry.html).toContain("/my%20pic.jpg");
   });
 
   it("falls back to the plain path when a baked file is deleted", async function () {

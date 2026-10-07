@@ -17,6 +17,8 @@ const { promisify } = require("util");
 const RESYNC_REFUSALS = [
   "DROPBOX_TRANSFER_INCOMPLETE",
   "GOOGLE_DRIVE_FOLDER_MISSING",
+  "ICLOUD_FOLDER_MISSING",
+  "ICLOUD_SETUP_INCOMPLETE",
 ];
 const getStatuses = promisify(Blog.getStatuses);
 
@@ -210,7 +212,9 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
       // Dropbox while its initial transfer to Dropbox hasn't finished
       // (clients/dropbox/sync/reset-to-blot.js), Google Drive when its
       // folder was trashed, deleted or unshared
-      // (clients/google-drive/sync/resetFromDrive.js). Surface that refusal
+      // (clients/google-drive/sync/resetFromDrive.js), iCloud when its folder
+      // was deleted or its initial transfer hasn't finished
+      // (clients/icloud/resync.js). Surface that refusal
       // instead of falling through to Fix() and "Finished site rebuild"
       // below, which would make the refusal look like a successful resync.
       if (err && RESYNC_REFUSALS.includes(err.code)) {
