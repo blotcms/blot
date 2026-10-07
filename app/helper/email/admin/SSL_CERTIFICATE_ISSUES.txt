@@ -1,0 +1,28 @@
+SSL certificate issues: {{summary}}
+
+{{#hasSystemic}}
+**{{flaggedCount}} custom-domain certificates are under 25 days from expiry and not renewing.** That points at auto-ssl's renewal job being broken rather than at individual domains. Check `/var/instance-ssd/logs/error.log` for `auto-ssl: failed to fetch all certificate domains` and `failed to run do_renew cycle` (for example after an OpenResty config change), and the Redis slowlog.
+
+{{/hasSystemic}}
+**Wildcard certificate (*.{{host}})**: {{wildcard.message}}. Last renewal run: {{wildcard.updatedDate}}.
+
+{{#hasCerts}}
+**Customer certificates under 25 days from expiry**
+
+{{#certs}}
+- `{{domain}}` ({{handle}}): {{daysLeft}} days left, expires {{date}}{{#urgent}} (urgent){{/urgent}}
+{{/certs}}
+
+{{/hasCerts}}
+{{#errorCount}}
+{{errorCount}} certificate(s) in Redis could not be read. Run the script below to see which.
+
+{{/errorCount}}
+**What to do**
+
+- Renewal starts at 30 days left and runs daily, so under 25 days means about five attempts have failed.
+- Find out why: `grep "auto-ssl: issuing renewal certificate failed" /var/instance-ssd/logs/error.log | grep DOMAIN`
+- Check the customer's DNS by hand (`dig DOMAIN`): an extra A record, a proxy or a stale record stops the renewal challenge reaching Blot.
+- Once it is fixed, drop the old certificate: `config/openresty/scripts/purge-expired-ssl.sh DOMAIN`, or `config/openresty/scripts/identify-expiring-certs.sh` for everything expiring within 7 days, or `scripts/blog/reset-ssl-certificate-for-expired-domain.js`.
+- Wildcard problems: check `config/openresty/scripts/renew-wildcard-ssl.sh` ran, and reload OpenResty if Redis has a newer certificate than the one being served.
+- Full report without sending email: `NODE_PATH=app node app/scheduler/check-ssl-certificates.js`
