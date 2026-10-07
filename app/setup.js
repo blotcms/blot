@@ -3,6 +3,7 @@ const fs = require("fs-extra");
 const path = require("path");
 
 const client = require("models/client");
+const createRedisClient = require("models/redis");
 const documentation = require("./documentation/build");
 const templates = require("./templates");
 const folders = require("./templates/folders");
@@ -211,6 +212,10 @@ function main(callback) {
               }),
               new Promise(function (resolve, reject) {
                 timer = setTimeout(function () {
+                  // Stop queueing for a connection we may never get, so the
+                  // requests served from here on fail fast with a 503
+                  // instead of piling up until Redis first connects
+                  createRedisClient.failFast(client);
                   reject(new Error("Timed out waiting for Redis"));
                 }, REDIS_BOOT_TIMEOUT_MS);
               }),
