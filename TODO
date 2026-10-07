@@ -21,8 +21,6 @@ Folder-link lookups: the rewrite tries to look up mailto: links as files in the 
 Make sync logs more useful, surface recent changes on dashboard. Group multiple files together if changed at same time, etc. make it useful!
 - Add error / getHealth issues to sync log (folder.status) for Dropbox/other client Issues
 
-docker exec -it blot-container-green node scripts/entry/rebuild-all.js
-
 Work on removing replaceFolderLinks
 
 Excercise the backlinks with big entries / many backlinks in the benchmarks somewhere
@@ -46,9 +44,7 @@ How do we think about a shared asset library across templates?
 
 Decide whether or not to revert the preset system – should it only be used for the templates index for explaining the customization features?
 
-Begin recieving emails for iCLoud sync issues
-
-Add script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago)
+Test script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago)
 - test npm run restore-folder
 
 iCloud server should periodically:
@@ -66,12 +62,8 @@ Make Google Drive incremental sync efficient
 
 Clarify on cancel / delete / overdue pages for accounts with grandfathered subscription prices that if they re-join Blot they will lose their grandfathered rate.
 
-Have we solved the green crashes (`Lock was lost` / ECOMPROMISED at 2026-09-21 18:02 and 20:01 UTC) and slow `/health` in the first minutes of each hour?
-- Remove the event loop monitor (app/helper/eventLoopMonitor*.js, its setup.js hook, and `logLag`/`measureEventLoop` in app/clients/dropbox/init.js) and the lock heartbeat logging (app/sync/lock.js) once the cause is fixed
-
-Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
-
 Sync sweep digest (app/clients/util/syncReport.js) follow-ups
+- Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
 - Don't report a stuck lock for a blog still in its initial setup/transfer (Dropbox transfer_pending, Drive preparing, iCloud transferringToiCloud) - a big first transfer can legitimately hold the lock >1h
 - Once-per-occurrence suppression treats "not seen this run" as cleared, including blogs that just weren't eligible that hour, so an ongoing error can be re-emailed after a quiet hour - remember issues until a successful walk/Fix actually clears them
 
@@ -105,8 +97,6 @@ Get node container horizontally scalable and multi-region
 - solve git storage problem 
 
 Add clear bill change info to new blog flow
-
-Check in on our dropbox sync verification job to make sure it's working well (docker green)
 
 Rebuild all sites to bake in folder CDN urls
 
@@ -150,7 +140,6 @@ Fix benchmark build-corpus action issue
 
 Improve Google Drive sync
 - Fix bug with repeat resyncs of specific sites via Google Drive:
-  - Mark's site unneccessarily re-downloads some (all?) files on sync rather than using the correct hash and tell [Mark](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTVmrvkvcfPvcJhcLvrwSndWS)
 - Fix bug with shared drive folders for [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBkLKSVzvjZLRSCpRJwcKBPlf)
 - Fix bug with Google Docs when disconnecting a site from Google Drive on Blot then reconnecting the site to Google Drive. We need to work out how to handle this (Google Docs are not real files)
 - Improve sync efficieny with option to target a specific folder or file first (Track ids in database) and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBspgLdtHcrTZqRcPTJFNzBbd) maybe use touch metadata method to force syncs periodically for hot files?
@@ -396,7 +385,6 @@ New templates:
 
 Switch templates from entries.html to index.html with explicit url: ['/', '/page/:page'].
 - fix docs on routing order
-
 
 Improve markdown:
 - Turn on 'preserve linebreaks by default' for markdown 
