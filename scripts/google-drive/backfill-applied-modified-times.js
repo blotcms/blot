@@ -10,10 +10,16 @@
 // non-zero count are resynced sequentially (clients/google-drive/sync/
 // resetFromDrive, i.e. a full sync() pass, which writes an applied record
 // whenever a file is downloaded or already identical), under the blog's sync
-// lock, then re-counted.
+// lock, then re-counted. This is the same reset as the dashboard's "Resync
+// from Google Drive": it clears the blog's ID <-> path mapping before walking
+// Drive, so a walk that fails part way leaves a partial mapping until the
+// blog's next sync.
 //
 // Usage:
 //   node scripts/google-drive/backfill-applied-modified-times.js [--apply] [blog-identifier]
+//
+// Runs unattended: no confirmation prompt, even across all blogs. Exits 1 if
+// any blog failed.
 //
 // Note: after --apply a small residue can remain. sync() defers verification
 // of old equal-size md5 files past its migration budget and `continue`s
@@ -219,7 +225,7 @@ if (require.main === module) {
     }...\n`
   );
 
-  eachBlogOrOneBlog(processBlog)
+  eachBlogOrOneBlog(processBlog, { confirm: false })
     .then(() => {
       summarize();
       process.exit(failedResyncs > 0 ? 1 : 0);

@@ -21,6 +21,7 @@ const apply = args.includes("--apply");
 const identifier = args.find((arg) => !arg.startsWith("--"));
 
 const totals = { entries: 0, missing: 0, stored: 0, unreadable: 0, changed: 0 };
+let failed = 0;
 
 function sourcePathsFor(entry) {
   const sourcePaths = entry.metadata && entry.metadata._sourcePaths;
@@ -148,6 +149,7 @@ async function main() {
     try {
       await processBlog(blog);
     } catch (err) {
+      failed++;
       console.error(`${blog.handle} ${blog.id}: failed:`, err.message || err);
     }
   }
@@ -156,12 +158,13 @@ async function main() {
     `Entries: ${totals.entries}. Missing contentHash: ${totals.missing}.`,
     apply ? `Stored: ${totals.stored}.` : "",
     `Unreadable source (left for the next build): ${totals.unreadable}.`,
-    totals.changed ? `Changed underneath: ${totals.changed}.` : ""
+    totals.changed ? `Changed underneath: ${totals.changed}.` : "",
+    failed ? `Failed blogs: ${failed}.` : ""
   );
 }
 
 main()
-  .then(() => process.exit(0))
+  .then(() => process.exit(failed ? 1 : 0))
   .catch((err) => {
     console.error(err);
     process.exit(1);
