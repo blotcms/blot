@@ -1,49 +1,36 @@
 SSL certificate issues: {{summary}}
 
 {{#hasSystemic}}
-**{{systemicCount}} custom-domain certificates are failing to renew at once.** That points at auto-ssl's renewal job being broken rather than at individual domains. Check `/var/instance-ssd/logs/error.log` for `auto-ssl: failed to fetch all certificate domains` and `failed to run do_renew cycle` (for example after an OpenResty config change), and the Redis slowlog.
+**{{flaggedCount}} custom-domain certificates are under 25 days from expiry and not renewing.** That points at auto-ssl's renewal job being broken rather than at individual domains. Check `/var/instance-ssd/logs/error.log` for `auto-ssl: failed to fetch all certificate domains` and `failed to run do_renew cycle` (for example after an OpenResty config change), and the Redis slowlog.
 
 {{/hasSystemic}}
-{{#hasWildcard}}
-**Wildcard certificate (*.{{host}})**
+**Wildcard certificate (*.{{host}})**: {{wildcard.message}}. Last renewal run: {{wildcard.updatedDate}}.
 
-{{#wildcard}}
-- {{#isNew}}NEW {{/isNew}}**{{tier}}**: {{message}}
-{{/wildcard}}
+{{#hasUrgent}}
+**Urgent: under 7 days left**
 
-{{/hasWildcard}}
-{{#hasCerts}}
-**Custom-domain certificates**, fewest days left first. NEW means first reported, or worse than last time.
+{{#urgent}}
+- `{{domain}}` ({{handle}}): {{daysLeft}} days left, expires {{date}}
+{{/urgent}}
 
-{{#certs}}
-- {{#isNew}}NEW {{/isNew}}`{{domain}}` ({{handle}}): {{{detail}}}
-{{/certs}}
+{{/hasUrgent}}
+{{#hasOther}}
+**Also not renewing: under 25 days left**
 
-{{/hasCerts}}
-{{#hasProxied}}
-**Can't verify DNS (behind a proxy)**: these resolve only to Cloudflare, so they may still go to Blot. If they do, Cloudflare returns 526 once the origin certificate expires.
+{{#other}}
+- `{{domain}}` ({{handle}}): {{daysLeft}} days left, expires {{date}}
+{{/other}}
 
-{{#proxied}}
-- {{#isNew}}NEW {{/isNew}}`{{domain}}` ({{handle}}): {{{detail}}}
-{{/proxied}}
+{{/hasOther}}
+{{#errorCount}}
+{{errorCount}} certificate(s) in Redis could not be read. Run the script below to see which.
 
-{{/hasProxied}}
-{{#hasErrors}}
-**Certificates that could not be read**
-
-{{#errors}}
-- {{#isNew}}NEW {{/isNew}}`{{domain}}` ({{handle}}): {{message}}
-{{/errors}}
-
-{{/hasErrors}}
-{{#hasIgnored}}
-{{ignoredCount}} more domain(s) were left out because their DNS no longer points at Blot, so renewal is expected to fail. They are in the app logs ("SSL check: ignoring").
-
-{{/hasIgnored}}
+{{/errorCount}}
 **What to do**
 
 - Renewal starts at 30 days left and runs daily, so under 25 days means about five attempts have failed.
 - Find out why: `grep "auto-ssl: issuing renewal certificate failed" /var/instance-ssd/logs/error.log | grep DOMAIN`
-- Usually the customer's DNS is wrong (an extra A record, a proxy, a stale record). Once it is fixed, drop the old certificate: `config/openresty/scripts/purge-expired-ssl.sh DOMAIN`, or `config/openresty/scripts/identify-expiring-certs.sh` for everything expiring within 7 days, or `scripts/blog/reset-ssl-certificate-for-expired-domain.js`.
+- Check the customer's DNS by hand (`dig DOMAIN`): an extra A record, a proxy or a stale record stops the renewal challenge reaching Blot.
+- Once it is fixed, drop the old certificate: `config/openresty/scripts/purge-expired-ssl.sh DOMAIN`, or `config/openresty/scripts/identify-expiring-certs.sh` for everything expiring within 7 days, or `scripts/blog/reset-ssl-certificate-for-expired-domain.js`.
 - Wildcard problems: check `config/openresty/scripts/renew-wildcard-ssl.sh` ran, and reload OpenResty if Redis has a newer certificate than the one being served.
-- See the full report without sending email: `NODE_PATH=app node app/scheduler/check-ssl-certificates.js`
+- Full report without sending email: `NODE_PATH=app node app/scheduler/check-ssl-certificates.js`
