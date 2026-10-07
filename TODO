@@ -1,6 +1,25 @@
-Fix bug with repeat google drive syncs
+run node scripts/entry/rebuild-all.js
 
-Investigate high aws bill cause
+image zoom plugin doesn't work on hypertext template: https://brendanmcleod.dev/2026/08/30/played-middle-earth-shadow-of-mordor
+hypertext template on indexes:
+- title needs to link to permalink page 
+- anchor links in title need to link to anchor on permalink pages
+- improve aesthetics and spacing of pagination links
+
+Our AWS bill is high because we have run out of reserved instance. Decide on the plan.
+- switch over static files to s3
+- reduce eb2 data volume size
+- can we switch to 1cpu / 16gb ram redis? do we need the second cpu for bgsave? our peak rss is 23gb? can we add maxmemory and error writes?
+- can we have multiple smaller webservers with load balancing? 
+
+Safely and very carefully switch AWS account root user email to @blot.im
+
+Folder-link lookups: the rewrite tries to look up mailto: links as files in the blog's folder.
+
+Make sync logs more useful, surface recent changes on dashboard. Group multiple files together if changed at same time, etc. make it useful!
+- Add error / getHealth issues to sync log (folder.status) for Dropbox/other client Issues
+
+docker exec -it blot-container-green node scripts/entry/rebuild-all.js
 
 Work on removing replaceFolderLinks
 
@@ -10,13 +29,14 @@ Find what runs `KEYS` on prod redis (slowlog: 789ms at 2026-10-05 09:01Z, blocks
 
 Find what sends the recurring 31-key MGET that takes 10-32ms server-side on prod redis (~30 in the slowlog over 12h, probably Entries.getRecent via getRange(0, 30) on blogs with big entries; slowlog shows only command + duration)
 
-Add error / getHealth issues to sync log (folder.status) for Dropbox/other client Issues
+Fix Google Drive sync outage caused by Google account suspesion
+- Future fix to Google Drive client needs to never use the service account to create files (ask the user to handle the initial transfer)
+- Revert 1958
+- Create simple config option to disable a given client when something like the Google Drive issue happens. Make it clear on the dashboard and docs that it's not working.
+- Add google drive kill switch (when platform goes down, etc.)
 
-Make sync logs more useful, surface recent changes on dashboard. Group multiple files together if changed at same time, etc. make it useful!
-
-Add dropbox kill switch (when platform goes down, etc.)
-
-Add icloud kill switch (when platform goes down, etc.)
+We need a plan for the suspension of the iCloud user as well... is the code resilient to data loss in this scenario?
+- Add icloud kill switch (when platform goes down, etc.)
 
 How do we think about a shared asset library across templates? 
 - e.g. shared favicons
@@ -24,7 +44,7 @@ How do we think about a shared asset library across templates?
 
 Decide whether or not to revert the preset system – should it only be used for the templates index for explaining the customization features?
 
-Begin triaging iCLoud sync issues
+Begin recieving emails for iCLoud sync issues
 
 Add script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago)
 - test npm run restore-folder
@@ -33,14 +53,8 @@ iCloud server should periodically:
 - quit safari (some error flow during auth sometimes opens it)
 - close all system UI prompts (sometimes we get error for maybe accessing a revoked folder?)
 
-Create simple config option to disable a given client when something like the Google Drive issue happens. Make it clear on the dashboard and docs that it's not working.
-
 Under templates index
 - Clicking on file in folder pulls up post on preview site ?
-
-Fix Google Drive sync outage caused by Google account suspesion
-- Future fix to Google Drive client needs to never use the service account to create files (ask the user to handle the initial transfer)
-- Revert 1958
 
 Make Google Drive incremental sync efficient
 - Store hash of their api responses
@@ -50,15 +64,7 @@ Make Google Drive incremental sync efficient
 
 Clarify on cancel / delete / overdue pages for accounts with grandfathered subscription prices that if they re-join Blot they will lose their grandfathered rate.
 
-We need a plan for the suspension of the iCloud user as well... is the code resilient to data loss in this scenario?
-
-Investigate green crashes (`Lock was lost` / ECOMPROMISED at 2026-09-21 18:02 and 20:01 UTC) and slow `/health` in the first minutes of each hour; the Dropbox hourly validation is only a suspect, not confirmed
-- Checked green logs for `validation lag` and `[EVENT LOOP]` after PR #1950 shipped: neither showed any delay near the 10s lock TTL at the 2026-09-22 06:00:49 and 07:00:39 crashes, and Redis's own SLOWLOG had nothing near 10s either — ruled out a classic JS block and a single slow Redis command
-- The two compromised blogs' folders aren't large/flat or full of huge files (824 and 526 files, largest file 9.4MB) — the localReaddir concurrency fix (PR #1952) is good hygiene but isn't the cause here
-- Next: check green logs for `[LOCK] slow heartbeat` / `[LOCK] heartbeat error` after the heartbeat round-trip logging ships (PR #1952) — it separates event-loop-side delay (tickDelay) from Redis-side delay (roundTrip) for the first time
-- 2026-09-24 crashes at 15:04:34 and 16:01:08 UTC (green): `[LOCK] slow heartbeat` showed tickDelay~0ms with roundTrip 1.6-11.3s, so it's neither event-loop block nor a single slow Redis command (SLOWLOG still clean) — it's queueing on the shared singleton Redis connection (app/models/client.js, one TCP connection per process, no pooling). Both crashes landed right as validation's `Fix()` stage (app/sync/fix) started on some other blog with several hundred posts - `entry-ghosts` does one sequential Redis round trip per entry, over that same shared connection, which is enough to starve an unrelated blog's heartbeat. Full timeline (no customer-identifying details) in the investigate-dropbox-sync-issue skill's incident log
-- Added diagnostics for next time: per-check timing in Fix() (app/sync/fix/index.js), an `entries=N` field on the `validation lag` log line (app/clients/dropbox/init.js), a `runningFixCheck` field on `[LOCK COMPROMISED]` diagnostics (app/sync/lock-diagnostics.js) since Fix() doesn't hold the folder lock and was invisible to pendingSyncs, and fixed `[LOCK COMPROMISED]`'s console.error silently truncating pendingSyncs/pendingUpdates to `[Object]` (app/sync/index.js)
-- Not yet fixed: give the lock heartbeat its own dedicated Redis connection so Fix()'s traffic can't queue ahead of it, or batch Fix()'s per-entry reads
+Have we solved the green crashes (`Lock was lost` / ECOMPROMISED at 2026-09-21 18:02 and 20:01 UTC) and slow `/health` in the first minutes of each hour?
 - Remove the event loop monitor (app/helper/eventLoopMonitor*.js, its setup.js hook, and `logLag`/`measureEventLoop` in app/clients/dropbox/init.js) and the lock heartbeat logging (app/sync/lock.js) once the cause is fixed
 
 Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
