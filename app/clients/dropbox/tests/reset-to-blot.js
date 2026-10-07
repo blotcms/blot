@@ -96,6 +96,20 @@ describe("dropbox resetToBlot", function () {
     expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(true);
   });
 
+  it("updates every path inside a folder it removes", async function () {
+    await fs.outputFile(join(blogDirectory, "Sub", "a.txt"), "x");
+    await fs.outputFile(join(blogDirectory, "Sub", "Inner", "b.txt"), "x");
+    const resetToBlot = load({ "/": [] }, { delta: [] });
+    const update = jasmine.createSpy("update").and.returnValue(Promise.resolve());
+
+    await resetToBlot(blogID, () => {}, update);
+
+    const updated = update.calls.allArgs().map(([path]) => path);
+    expect(updated.sort()).toEqual(
+      ["/Sub", "/Sub/a.txt", "/Sub/Inner", "/Sub/Inner/b.txt"].sort()
+    );
+  });
+
   it("keeps updates and the old cursor when the walk throws part way", async function () {
     const resetToBlot = load({
       "/": [file("a.txt"), { ".tag": "folder", name: "sub", path_display: "/sub" }],
