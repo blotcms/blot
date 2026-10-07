@@ -39,6 +39,7 @@ The sync process is bidirectional but heavily weighted toward pulling changes fr
 2. **Polling Fallback**: A background process (`pollDriveActivity`) continuously queries the Drive Activity API as a secondary detection mechanism, respecting API rate limits.
 3. **Sync Execution**: When triggered, `sync(blogID)` acquires a sync lock, then recursively compares the remote folder tree with the local file system.
 4. **Reconciliation**: The sync process downloads missing or out-of-date files, creates missing directories, and removes local files that no longer exist remotely.
+5. **Hourly Verification**: At minute 30 (`validate.js`), blogs with a real sync in the last hour (`lastSync`, stamped by `sync/index.js`) get a plain walk under the folder lock, then `Fix()`. Anything the walk had to change was missed by the webhook and pollers, and is emailed to the operator in one digest (`GOOGLE_DRIVE_SYNC_ISSUE`) along with `Fix()` repairs, errors and stuck locks.
 
 The `write`, `remove`, and `disconnect` operations are explicit Blot-to-Drive synchronizations and do not trigger a full recursive sync.
 
