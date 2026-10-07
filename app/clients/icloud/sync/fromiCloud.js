@@ -183,6 +183,7 @@ module.exports = async (blogID, publish, update) => {
                 publish("Created placeholder for oversized file", path);
               } catch (err) {
                 publish("Failed to create placeholder", path, err.message);
+                fail(err);
               }
 
               continue;

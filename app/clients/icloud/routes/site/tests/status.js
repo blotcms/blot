@@ -46,7 +46,11 @@ describe("icloud status route", function () {
       this.headersSent = true;
       return this;
     },
-    status() {
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    set() {
       return this;
     },
   });
@@ -111,5 +115,40 @@ describe("icloud status route", function () {
     await requestResync(status, "blog_a");
     expect(emails).toEqual(["blog_a", "blog_b", "blog_a"]);
     expect(syncs.length).toBe(5);
+  });
+
+  it("keeps a resync request retryable when the sync lock was busy", async function () {
+    let lockAttempts = 0;
+    const lock = {
+      folder: { status: Object.assign(() => {}, { bind: () => () => {} }), update() {} },
+      done: async () => {},
+    };
+
+    // Busy for the first request, free for the retry
+    mockModule(establishSyncLockPath, async () => {
+      lockAttempts += 1;
+      if (lockAttempts === 1) throw new Error("Failed to acquire folder lock");
+      return lock;
+    });
+    const status = require(statusPath);
+
+    const first = fakeRes();
+    await status(
+      { header: () => "blog_a", body: { resyncRequested: true } },
+      first
+    );
+    expect(first.statusCode).toBe(423);
+
+    // The macserver retries straight away, well inside the 10s window. It
+    // must reach the lock again rather than be acknowledged without a resync.
+    const retry = fakeRes();
+    await status(
+      { header: () => "blog_a", body: { resyncRequested: true } },
+      retry
+    );
+
+    expect(lockAttempts).toBe(2);
+    expect(retry.statusCode).toBeUndefined();
+    expect(syncs).toEqual(["blog_a"]);
   });
 });

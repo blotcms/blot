@@ -46,23 +46,32 @@ describe("icloud init validateAllBlogs", function () {
 
   // behaviors: { [blogID]: { account, summary, walkError, busy, disabled,
   // heldSince, fixReport, fixError, accountAfterLock, gate, blogDisabled,
-  // health } }. health is a getHealth result, an Error to throw, or a function
+  // health, deletedAfterWalk } }. health is a getHealth result, an Error to throw, or a function
   // of how many times the blog's health has been read (a blog's folder can
   // vanish mid-sweep); by default it follows the stored account, like the real
   // thing. Calls are recorded in `calls`: { walked: [blogID], fixed: [blogID],
-  // locked: [blogID] }.
+  // locked: [blogID], fixedLoads: { [blogID]: which Blog.get load Fix was
+  // given, 1 being the one before the walk } }.
   function load(behaviors, sentEmails, calls) {
     const ids = Object.keys(behaviors);
     const healthReads = {};
+    const blogLoads = {};
 
     stub("blog", {
-      get: ({ id }, callback) =>
+      get: ({ id }, callback) => {
+        blogLoads[id] = (blogLoads[id] || 0) + 1;
+        // Deleted while the sweep was walking it
+        if (blogLoads[id] > 1 && behaviors[id].deletedAfterWalk) {
+          return callback(null, null);
+        }
         callback(null, {
           id,
           handle: id + "-handle",
           client: "icloud",
           isDisabled: Boolean(behaviors[id].blogDisabled),
-        }),
+          load: blogLoads[id],
+        });
+      },
     });
     stub("entries", {
       getAllTotal: (_id, callback) => callback(null, 42),
@@ -110,6 +119,7 @@ describe("icloud init validateAllBlogs", function () {
     });
     stub("fix", function (blog, callback) {
       calls.fixed.push(blog.id);
+      calls.fixedLoads[blog.id] = blog.load;
       const behavior = behaviors[blog.id];
       callback(behavior.fixError || null, behavior.fixReport || {});
     });
@@ -155,7 +165,7 @@ describe("icloud init validateAllBlogs", function () {
 
   function setup(behaviors) {
     const sentEmails = [];
-    const calls = { walked: [], fixed: [], locked: [] };
+    const calls = { walked: [], fixed: [], locked: [], fixedLoads: {} };
     const init = load(behaviors, sentEmails, calls);
     return { init, sentEmails, calls };
   }
@@ -349,6 +359,27 @@ describe("icloud init validateAllBlogs", function () {
     expect(records[id("partial")].errors[0].phase).toEqual("fix");
   });
 
+  it("gives Fix a blog loaded after the walk, not the pre-walk snapshot", async function () {
+    const { init, calls } = setup({ [id("fresh")]: {} });
+
+    await init.validateAllBlogs();
+
+    // The walk may have added a menu page that a stale blog.menu would drop
+    expect(calls.fixedLoads[id("fresh")]).toBeGreaterThan(1);
+  });
+
+  it("skips Fix without reporting when the blog was deleted during the walk", async function () {
+    const { init, sentEmails, calls } = setup({
+      [id("gone")]: { summary: {}, deletedAfterWalk: true },
+    });
+
+    await init.validateAllBlogs();
+
+    expect(calls.walked).toEqual([id("gone")]);
+    expect(calls.fixed).toEqual([]);
+    expect(sentEmails.length).toEqual(0);
+  });
+
   it("puts every kind of problem for different blogs in the same email", async function () {
     const { init, sentEmails } = setup({
       [id("changes")]: { summary: { downloaded: 1 } },
@@ -497,7 +528,7 @@ describe("icloud init validateAllBlogs", function () {
       [id("changes")]: { summary: { downloaded: 1 } },
     };
     const sentEmails = [];
-    const calls = { walked: [], fixed: [], locked: [] };
+    const calls = { walked: [], fixed: [], locked: [], fixedLoads: {} };
 
     spyOn(console, "error");
     const init = load(behaviors, sentEmails, calls);

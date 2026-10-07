@@ -366,6 +366,21 @@ describe("icloud fromiCloud sync", function () {
       expect(summary.downloaded).toBe(1);
     });
 
+    it("counts an oversized-file placeholder that could not be written", async () => {
+      mockWalk([
+        { name: "huge.mov", size: 1000 * 1000 * 1000, isDirectory: false },
+      ]);
+      spyOn(fs, "outputFile").and.callFake(async () => {
+        throw new Error("disk full");
+      });
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.placeholdersCreated).toBe(0);
+      expect(summary.failed).toBe(1);
+      expect(summary.firstError).toBe("disk full");
+    });
+
     it("counts a directory listing that fails", async () => {
       mockWalk([]);
       mockModule(remoteReaddirPath, async () => {
