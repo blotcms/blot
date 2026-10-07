@@ -7,7 +7,7 @@ const email = require("helper/email");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
 const syncReport = require("clients/util/syncReport");
-const health = require("clients/health");
+const getHealth = require("./getHealth");
 const { measure: measureEventLoop } = require("helper/eventLoopMonitor");
 const database = require("./database");
 const { classify } = require("./database/error");
@@ -39,6 +39,23 @@ const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 // Fix() does many sequential Redis round trips over the shared connection,
 // and running it after every sync starved folder lock heartbeats until a
 // lease expired and the process crashed, hence once an hour, outside the lock.
+
+// Setup holds the lock while it builds the folder, and walking it mid-setup
+// risks removing files that haven't been uploaded yet. A stored error means
+// the account can't be walked until the user or the client clears it.
+const isEligible = (account) =>
+  Boolean(
+    account &&
+      account.folderId &&
+      account.serviceAccountId &&
+      !account.preparing &&
+      !classify(account)
+  );
+
+// Returned by walkWithLock instead of a summary when the blog stopped being
+// eligible while the sweep waited for the lock. Callers must treat it as
+// "nothing happened".
+const NOT_ELIGIBLE = Symbol("google-drive-not-eligible");
 
 // Every locked sync publishes a "Syncing"/"Synced" status - the sweep's own
 // walk included - so statuses can't say whether a real sync happened. Instead
@@ -83,12 +100,17 @@ const fixBlog = (blog) =>
   });
 
 // Walks the blog's folder while holding its folder lock, so it can't race a
-// webhook sync. Resolves to sync's summary, or false if the walk failed.
+// webhook sync. Resolves to sync's summary, false if the walk failed, or
+// NOT_ELIGIBLE.
 const walkWithLock = async (blogID, publish) => {
   const { folder, done } = await establishSyncLock(blogID);
   let error = null;
 
   try {
+    // The sweep's cheap pre-check ran before the lock, and establishSyncLock
+    // may have waited for it: setup or a stored error can have started since.
+    if (!isEligible(await database.blog.get(blogID))) return NOT_ELIGIBLE;
+
     return await sync(blogID, publish, folder.update);
   } catch (err) {
     error = err;
@@ -132,14 +154,20 @@ const validateAllBlogs = async () => {
     let phase = "validation";
 
     try {
-      // Setup holds the lock while it builds the folder, and walking it
-      // mid-setup risks removing files that haven't been uploaded yet.
-      if (!account.folderId || account.preparing) return;
-      if (!account.serviceAccountId || classify(account)) return;
-      if (!hasRecentSync(account)) return;
-
       blog = await getBlog({ id: blogID });
-      if (!blog || blog.client !== "google-drive") return;
+      if (!blog || blog.isDisabled || blog.client !== "google-drive") return;
+
+      // Trashing or unsharing the folder, or revoking access, is the user's
+      // doing, not a bug, so there is nothing to walk or report.
+      if (await syncReport.hasUserSideIssue(blogID, getHealth)) return;
+
+      // Before the recency filter: sync/index.js stamps lastSync when a sync
+      // starts, so a lock held for over an hour belongs to a blog that no
+      // longer looks recently synced.
+      if (await syncReport.recordStuckLock(report, blog)) return;
+
+      if (!isEligible(account)) return;
+      if (!hasRecentSync(account)) return;
 
       checkedBlogs += 1;
 
@@ -159,11 +187,10 @@ const validateAllBlogs = async () => {
       } catch (err) {
         stopWalkMeasure();
         // A sync is already running for this blog, and that sync will pick
-        // up whatever changed. Check it again next hour - unless it has held
-        // the lock for suspiciously long, which recordBusy reports.
+        // up whatever changed. Check it again next hour (a lock that stays
+        // held is caught by the stuck-lock check above).
         if (err.message === "Failed to acquire folder lock") {
           console.log(clfdate(), "Google Drive: Skipping busy blog", blogID);
-          await syncReport.recordBusy(report, blog);
           checkedBlogs -= 1;
           return;
         }
@@ -175,20 +202,20 @@ const validateAllBlogs = async () => {
         throw err;
       }
 
-      // sync.js resolves false when the walk failed, which is not "no
-      // changes". Don't run Fix() on a folder we couldn't read.
-      if (!summary) {
-        const latest = await database.blog.get(blogID);
-        // The user trashed or unshared the folder; the dashboard already
-        // shows that, so it isn't a sync problem to report.
-        if (classify(latest) === health.CODES.SOURCE_MISSING) {
-          console.log(clfdate(), "Google Drive: Folder missing for blog", blogID);
-          return;
-        }
-        throw new Error("walk failed (see logs)");
+      if (summary === NOT_ELIGIBLE) {
+        checkedBlogs -= 1;
+        return;
       }
 
-      syncReport.recordChanges(report, blog, summary);
+      // sync.js resolves false when the walk failed, which is not "no
+      // changes". Don't run Fix() on a folder we couldn't read. If the
+      // failure was the user trashing or unsharing the folder, sync.js has
+      // stored that on the account and send() drops the blog by its health.
+      if (!summary) throw new Error("walk failed (see logs)");
+
+      // A walk that skipped files reports a walk error (and the changes it
+      // did apply), and Fix() is skipped for it.
+      if (!syncReport.recordWalk(report, blog, summary)) return;
 
       const stopFixMeasure = measureEventLoop();
       try {
@@ -212,7 +239,12 @@ const validateAllBlogs = async () => {
     }
   });
 
-  const reported = syncReport.view(report).blogs.length;
+  const reported = await syncReport.send(
+    report,
+    email.GOOGLE_DRIVE_SYNC_ISSUE,
+    "Google Drive:",
+    { client: "google-drive", getHealth }
+  );
 
   console.log(
     clfdate(),
@@ -220,8 +252,6 @@ const validateAllBlogs = async () => {
     `checked=${checkedBlogs}`,
     `issues=${reported}`
   );
-
-  syncReport.send(report, email.GOOGLE_DRIVE_SYNC_ISSUE, "Google Drive:");
 };
 
 module.exports = function scheduleValidation() {
