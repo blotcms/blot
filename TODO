@@ -1,16 +1,9 @@
 Solve redis kernel issue:
-
-Find what runs `KEYS` on prod redis (slowlog: 789ms at 2026-10-05 09:01Z, blocks everything; not found in app/ or scripts/, maybe a manual redis-cli)
-- i suspect ai agents did this? can we confirm if the command came over ssh? via direct client invocation?
 - can we switch to 1cpu / 16gb ram redis? do we need the second cpu for bgsave? our peak rss is 23gb? can we add maxmemory and error writes?
-- Find what sends the recurring 31-key MGET that takes 10-32ms server-side on prod redis (~30 in the slowlog over 12h, probably Entries.getRecent via getRange(0, 30) on blogs with big entries; slowlog shows only command + duration)
 Redis outage follow-ups
 - Dropbox webhook drops syncs (listBlogs fails after the 200 ack) and git auth maps Redis errors to a 401 while Redis is unreachable
 - Redis auth/TLS; 
 - Review, revise, test and run redis orchestration script to restore from s3 backup into new instance
-Find and replace the KEYS calls blocking prod Redis (from SLOWLOG, source 172.30.0.122 = the blot host, not repo code — likely a host cron or manual `client` session)
-- `keys ssl:*:latest` ~750ms, roughly daily (21, 23, 24 Sep) — switch to `--scan --pattern`
-- `KEYS *blog_<id>*` 2.4s on 22 Sep
 
 Migrate static content to s3
 
@@ -18,7 +11,8 @@ Migrate static content to s3
 
 run node scripts/entry/rebuild-all.js
 
-image zoom plugin doesn't work on hypertext template: https://brendanmcleod.dev/2026/08/30/played-middle-earth-shadow-of-mordor
+Can the status page avoid the LRU caches somehow and fully work redis? Maybe we synthesise a route somehow? Thoughts?
+
 hypertext template on indexes:
 - title needs to link to permalink page 
 - anchor links in title need to link to anchor on permalink pages
@@ -234,6 +228,7 @@ Improve iCloud sync
 - iCloud: the hourly integrity check is back; once it has run cleanly for a while, decide whether to re-enable the daily resync (resyncAllConnected) and the startup/`/started` resync (resyncRecentlySynced), still disabled from these commits
   - 0043d91b36621ecd6aef2bcc263f51f209924792
   - 98dc9405c883825917de8e436ec620f60adaf975
+- iCloud macserver should periodically validate the local blog folders to ensure the client is still connected on blot and clean up any failed initial transfers (i.e. non blog_... folders)
 - iCloud: a Blot edit while the folder is missing (SOURCE_MISSING) still reaches the macserver upload, which re-creates an unshared folder (write.js, remove.js should skip the remote write)
 - If we need to resolve further bugs with sync drift:
   - Implement additional parsing of modified paths from monitorer.js (brctl monitor -i) and reconcile these in addition to the fswatch module with the chokidar events for additional redundancy
