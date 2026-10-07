@@ -74,6 +74,18 @@ for s in $SETTINGS; do printf '%s\t%s\n' "$s" "$(scratch CONFIG GET "$s" | sed -
 scratch SHUTDOWN NOSAVE > /dev/null 2>&1 || true
 
 say "Config files"
+# On a live host already using more than the new limit, keep the limit it runs
+# with: persisting the lower one would make Redis refuse writes (noeviction)
+# as soon as it restarts.
+if redis_up; then
+  used=$(redis6-cli INFO memory | tr -d '\r' | awk -F: '$1 == "used_memory" {print $2}')
+  want=$(awk -F'\t' '$1 == "maxmemory" {print $2}' "$TMP/wanted")
+  if [ "$want" != 0 ] && [ "$used" -gt "$want" ]; then
+    running=$(redis6-cli CONFIG GET maxmemory | sed -n 2p)
+    echo "    WARNING: Redis uses $used bytes, more than maxmemory $want; keeping maxmemory $running"
+    printf '# Written by host/setup.sh: kept at the running value, since memory in use\n# exceeded the new limit (%s).\nmaxmemory %s\n' "$want" "$running" > "$TMP/blot-memory.conf"
+  fi
+fi
 put /etc/redis6/blot-memory.conf 0640 root:redis6 < "$TMP/blot-memory.conf"
 # Keep the package's stock config (or the live host's old one) the first time.
 [ -f /etc/redis6/redis6.conf.dist ] || cp -p /etc/redis6/redis6.conf /etc/redis6/redis6.conf.dist
