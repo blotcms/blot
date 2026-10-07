@@ -116,7 +116,12 @@ module.exports = function () {
 
   // Bash the cache for scheduled posts
   publishScheduledEntries(function (err) {
-    if (err) throw err;
+    // Don't crash the master (and loop on restart) because Redis is
+    // unavailable or rejecting writes at startup
+    if (err) {
+      console.error(clfdate(), "Error scheduling entries for future publication", err);
+      return;
+    }
     console.log(clfdate(), "Scheduled entries for future publication");
   });
 

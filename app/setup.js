@@ -16,6 +16,11 @@ const flush = require("documentation/tools/flush-cache");
 const configureLocalBlogs = require("./configure-local-blogs");
 const purgeCdnUrls = require("helper/purgeCdnUrls");
 
+// The offline queue is still on while we boot, so a command sent while Redis
+// is unreachable waits for the connection instead of failing. Don't let that
+// stop the server from listening.
+const REDIS_BOOT_TIMEOUT_MS = 10 * 1000;
+
 const log = (...args) =>
   console.log.apply(null, [clfdate(), "Setup:", ...args]);
 
@@ -197,11 +202,19 @@ function main(callback) {
         // but since the homepage is not a blog, we just use a placeholder 'X'
         log("Creating SSL key for redis");
         (async function () {
+          let timer;
           try {
-            await client.mSetNX({
-              ["domain:" + config.host]: "X",
-              ["domain:www." + config.host]: "X",
-            });
+            await Promise.race([
+              client.mSetNX({
+                ["domain:" + config.host]: "X",
+                ["domain:www." + config.host]: "X",
+              }),
+              new Promise(function (resolve, reject) {
+                timer = setTimeout(function () {
+                  reject(new Error("Timed out waiting for Redis"));
+                }, REDIS_BOOT_TIMEOUT_MS);
+              }),
+            ]);
           } catch (err) {
             console.error(
               "Unable to set domain flag for host" +
@@ -209,6 +222,8 @@ function main(callback) {
                 ". SSL may not work on site."
             );
             console.error(err);
+          } finally {
+            clearTimeout(timer);
           }
 
           log("Created SSL key for redis");
