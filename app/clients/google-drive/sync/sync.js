@@ -45,6 +45,11 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     removed: 0,
     createdDirs: 0,
     modifiedDuringWalk: 0,
+    // Files that could not be downloaded. The walk carries on past them, so
+    // without this a partial walk looks complete; the hourly sweep reports it
+    // as a walk error. firstError is a sample.
+    failed: 0,
+    firstError: null,
   };
 
   const account = await database.blog.get(blogID);
@@ -341,6 +346,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           } catch (err) {
             publish("Download failed", path);
             console.error("Download failed for", path, err);
+            summary.failed += 1;
+            if (!summary.firstError) summary.firstError = path + ": " + err.message;
           }
         } else {
           progress.publishThrottled("Checking", path);

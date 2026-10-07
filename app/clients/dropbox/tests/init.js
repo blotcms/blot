@@ -352,10 +352,16 @@ describe("dropbox init", function () {
     // fake of the Redis set it lives in. Kept across sweeps within a test.
     let reported;
     let walked;
+    // Which Blog.get load Fix was given (1 being the one before the walk),
+    // and which blogs the catch-up sync ran for
+    let fixedLoads;
+    let synced;
 
     beforeEach(function () {
       reported = new Set();
       walked = [];
+      fixedLoads = {};
+      synced = [];
       Object.keys(paths).forEach((name) => {
         originals[name] = require.cache[paths[name]];
       });
@@ -386,10 +392,23 @@ describe("dropbox init", function () {
 
       const ids = Object.keys(behaviors);
 
+      const blogLoads = {};
+
       stub("blog", {
         getAllIDs: (callback) => callback(null, ids),
-        get: ({ id }, callback) =>
-          callback(null, { id, handle: id + "-handle", client: "dropbox" }),
+        get: ({ id }, callback) => {
+          blogLoads[id] = (blogLoads[id] || 0) + 1;
+          // Deleted while the sweep was walking it
+          if (blogLoads[id] > 1 && behaviors[id].deletedAfterWalk) {
+            return callback(null, null);
+          }
+          callback(null, {
+            id,
+            handle: id + "-handle",
+            client: "dropbox",
+            load: blogLoads[id],
+          });
+        },
       });
       stub("database", {
         get: (_id, callback) =>
@@ -420,9 +439,11 @@ describe("dropbox init", function () {
       });
       stub("fix", function (blog, callback) {
         const behavior = behaviors[blog.id];
+        fixedLoads[blog.id] = blog.load;
         callback(behavior.fixError || null, behavior.fixReport || {});
       });
       stub("sync", function (blog, callback) {
+        synced.push(blog.id);
         callback(behaviors[blog.id].syncError || null);
       });
       stub("getHealth", async function (blogID) {
@@ -468,6 +489,32 @@ describe("dropbox init", function () {
       briefly: "blog_digestbriefly" + stamp,
       clean: "blog_digestclean" + stamp,
     };
+
+    it("runs Fix and the catch-up sync on a blog loaded after the walk", async function () {
+      const sentEmails = [];
+      const init = load({ [ids.clean]: {} }, sentEmails);
+
+      await init.validateAllBlogs();
+
+      // The walk may have added a menu page that a stale blog.menu would drop
+      expect(fixedLoads[ids.clean]).toBeGreaterThan(1);
+      expect(synced).toEqual([ids.clean]);
+    });
+
+    it("skips Fix and the catch-up sync without reporting when the blog was deleted during the walk", async function () {
+      const sentEmails = [];
+      const init = load(
+        { [ids.clean]: { deletedAfterWalk: true } },
+        sentEmails
+      );
+
+      await init.validateAllBlogs();
+
+      expect(walked).toEqual([ids.clean]);
+      expect(fixedLoads).toEqual({});
+      expect(synced).toEqual([]);
+      expect(sentEmails).toEqual([]);
+    });
 
     it("sends one email listing every blog with a problem", async function () {
       const sentEmails = [];

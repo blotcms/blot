@@ -5,6 +5,7 @@ const establishSyncLock = require("sync/establishSyncLock");
 const { handleSyncLockError } = require("../lock");
 const email = require("helper/email");
 const notificationCap = require("../../util/notificationCap");
+const stampLastSync = require("./stampLastSync");
 
 const RESYNC_DEDUP_WINDOW_MS = 10 * 1000;
 // Process-local resync deduplication: if multiple Node processes handle requests,
@@ -66,9 +67,17 @@ module.exports = async function (req, res) {
     };
     resyncDedupRegistry.set(blogID, dedupEntry);
 
+    let lockAcquired = false;
+
     try {
       // This will throw if the sync lock is already established
       const { done, folder } = await establishSyncLock(blogID);
+      lockAcquired = true;
+
+      // A resync request means the macserver saw something go wrong with
+      // its pushes (eg. it gave up retrying after the folder was locked), so
+      // the blog is active and should be checked by the next sweep.
+      await stampLastSync(blogID);
 
       // Now that we have the sync lock, we can send "ok" to the
       // macserver since the resync can take a while
@@ -104,13 +113,20 @@ module.exports = async function (req, res) {
       }
     } catch (err) {
       dedupEntry.inFlight = false;
-      dedupEntry.cooldownUntil = Date.now() + RESYNC_DEDUP_WINDOW_MS;
       if (dedupEntry.cleanupTimeout) {
         clearTimeout(dedupEntry.cleanupTimeout);
       }
-      dedupEntry.cleanupTimeout = setTimeout(() => {
+      if (lockAcquired) {
+        dedupEntry.cooldownUntil = Date.now() + RESYNC_DEDUP_WINDOW_MS;
+        dedupEntry.cleanupTimeout = setTimeout(() => {
+          resyncDedupRegistry.delete(blogID);
+        }, RESYNC_DEDUP_WINDOW_MS);
+      } else {
+        // No resync ran (the lock was busy), and the 423 tells the macserver
+        // to retry. A cooldown here would answer that retry "ok" without
+        // resyncing, so it would stop retrying and the change could be lost.
         resyncDedupRegistry.delete(blogID);
-      }, RESYNC_DEDUP_WINDOW_MS);
+      }
       if (
         handleSyncLockError({
           err,

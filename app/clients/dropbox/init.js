@@ -220,10 +220,17 @@ const validateAllBlogs = async () => {
       // did apply), and Fix() and the catch-up sync are skipped for it.
       if (!syncReport.recordWalk(report, blog, summary)) continue;
 
+      // Fix() persists parts of the blog it is handed (menu-ghosts writes
+      // blog.menu), and the walk may have just added a menu page. The
+      // snapshot loaded before the walk would have that write drop it.
+      phase = "fix";
+      const current = await getBlog({ id: blogID });
+      // Deleted mid-sweep, so there is nothing left to repair or catch up.
+      if (!current) continue;
+
       const stopFollowUpMeasure = measureEventLoop();
       try {
-        phase = "fix";
-        const fixed = await fixBlog(blog);
+        const fixed = await fixBlog(current);
         syncReport.recordFix(report, blog, fixed.report);
         if (fixed.error) {
           syncReport.recordError(report, blog, "fix", fixed.error);
@@ -232,7 +239,7 @@ const validateAllBlogs = async () => {
         // Runs even if Fix() failed: it's independent of Fix()'s checks.
         phase = "catch-up sync";
         try {
-          await catchUpSync(blog);
+          await catchUpSync(current);
         } catch (err) {
           // A live sync holds the lock and covers whatever we'd catch up,
           // same as the walk's busy skip.

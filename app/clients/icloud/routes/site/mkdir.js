@@ -3,6 +3,7 @@ const establishSyncLock = require("sync/establishSyncLock");
 const fs = require("fs-extra");
 const { handleSyncLockError } = require("../lock");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const stampLastSync = require("./stampLastSync");
 
 module.exports = async function (req, res) {
   try {
@@ -19,6 +20,8 @@ module.exports = async function (req, res) {
     if (shouldIgnoreFile(dirPath)) {
       return res.sendStatus(204);
     }
+
+    await stampLastSync(blogID);
 
     console.log(`Creating directory for blogID: ${blogID}, path: ${dirPath}`);
 
