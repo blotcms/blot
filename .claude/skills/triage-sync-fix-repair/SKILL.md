@@ -33,7 +33,8 @@ Fix() is called from:
 - Dropbox hourly validation, minute 0, **green** (`app/clients/dropbox/init.js`,
   blogs with `last_sync` in the past hour, after the resync)
 - iCloud validation (`app/clients/icloud/init.js`)
-- Google Drive hourly fix, minute 30 (`app/clients/google-drive/hourlyFix.js`)
+- Google Drive hourly validation, minute 30 (`app/clients/google-drive/validate.js`,
+  blogs with `lastSync` in the past hour, after a clean walk)
 - Local client setup (`app/clients/local/setup.js`)
 - Dashboard "rebuild"/fix of a site (`app/dashboard/site/client.js`)
 - Template folder installs (`app/templates/folders/index.js`)
