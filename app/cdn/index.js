@@ -6,6 +6,7 @@ const cdn = new express.Router();
 const mime = require("mime-types");
 
 const client = require("models/client");
+const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const key = require("models/template/key");
 const path = require("path");
 
@@ -110,6 +111,8 @@ cdn.get("/template/:encodedViewAndHash(*)", async (req, res, next) => {
     // Return cached output
     return res.send(cachedOutput);
   } catch (err) {
+    // Not a missing file: say so with a 503 rather than a 404
+    if (isRedisUnavailableError(err)) return next(err);
     return next();
   }
 });
