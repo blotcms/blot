@@ -54,6 +54,7 @@ function load({
   const calls = {
     walked: [],
     fixed: [],
+    fixedBlogs: [],
     released: [],
     emails: [],
     scheduled: [],
@@ -91,6 +92,7 @@ function load({
     },
     "sync/fix": (blog, callback) => {
       calls.fixed.push(blog.id);
+      calls.fixedBlogs.push(blog);
       const fix = fixes[blog.id] || {};
       callback(fix.error || null, fix.report);
     },
@@ -199,6 +201,36 @@ describe("Google Drive hourly sync validation", function () {
         createdDirs: 1,
       })
     );
+  });
+
+  it("runs Fix on the blog as it is after the walk, not the pre-walk snapshot", async function () {
+    const blogs = blogsFor("a");
+    const { validate, calls } = load({
+      accounts: { a: driveAccount() },
+      blogs,
+      // The walk added a menu page, which a stale blog.menu would drop
+      onWalk: { a: () => (blogs.a = Object.assign({}, blogs.a, { menu: ["new"] })) },
+    });
+
+    await validate.runValidation();
+
+    expect(calls.fixed).toEqual(["a"]);
+    expect(calls.fixedBlogs[0].menu).toEqual(["new"]);
+  });
+
+  it("skips Fix without reporting when the blog was deleted during the walk", async function () {
+    const blogs = blogsFor("a");
+    const { validate, calls } = load({
+      accounts: { a: driveAccount() },
+      blogs,
+      onWalk: { a: () => delete blogs.a },
+    });
+
+    await validate.runValidation();
+
+    expect(calls.walked).toEqual(["a"]);
+    expect(calls.fixed).toEqual([]);
+    expect(calls.emails).toEqual([]);
   });
 
   it("does not count edits that landed mid-walk", async function () {

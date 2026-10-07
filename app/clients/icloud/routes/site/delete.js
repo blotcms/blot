@@ -3,6 +3,7 @@ const establishSyncLock = require("sync/establishSyncLock");
 const fs = require("fs-extra");
 const path = require("path");
 const { handleSyncLockError } = require("../lock");
+const stampLastSync = require("./stampLastSync");
 
 module.exports = async function (req, res) {
   try {
@@ -15,6 +16,8 @@ module.exports = async function (req, res) {
     if (!blogID || !filePath) {
       return res.status(400).send("Missing required headers: blogID or path");
     }
+
+    await stampLastSync(blogID);
 
     // Compute the local file path on disk before taking the lock
     const pathOnDisk = localPath(blogID, filePath);

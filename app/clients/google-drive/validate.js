@@ -217,10 +217,17 @@ const validateAllBlogs = async () => {
       // did apply), and Fix() is skipped for it.
       if (!syncReport.recordWalk(report, blog, summary)) return;
 
+      // Fix() persists parts of the blog it is handed (menu-ghosts writes
+      // blog.menu), and the walk may have just added a menu page. The
+      // snapshot loaded before the walk would have that write drop it.
+      phase = "fix";
+      const current = await getBlog({ id: blogID });
+      // Deleted mid-sweep, so there is nothing left to repair.
+      if (!current) return;
+
       const stopFixMeasure = measureEventLoop();
       try {
-        phase = "fix";
-        const fixed = await fixBlog(blog);
+        const fixed = await fixBlog(current);
         syncReport.recordFix(report, blog, fixed.report);
         if (fixed.error) {
           syncReport.recordError(report, blog, "fix", fixed.error);
