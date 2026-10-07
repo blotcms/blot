@@ -29,16 +29,15 @@ function harness(options) {
       remove: async function (path) {
         removed.push(path);
       },
-      readdir: async function (path) {
-        return (localTree[path] || []).map(function (name) {
-          return {
-            name: name.replace(/\/$/, ""),
-            isDirectory: function () {
-              return name.endsWith("/");
-            },
-          };
-        });
-      },
+    },
+    "clients/util/localDescendants": async function descendants(_, path) {
+      const paths = [];
+      for (const name of localTree[path] || []) {
+        const child = path + "/" + name.replace(/\/$/, "");
+        paths.push(child);
+        if (name.endsWith("/")) paths.push(...(await descendants(null, child)));
+      }
+      return paths;
     },
     "helper/localPath": function (_, path) {
       return path;
@@ -255,7 +254,12 @@ describe("google drive sync folder health", function () {
     const summary = await h.run();
     expect(h.removed).toEqual(["/Pictures"]);
     // Entries for the files inside are dropped, not just the directory's
-    expect(h.updated).toEqual(["/Pictures/a.jpg", "/Pictures/Old/b.md", "/Pictures"]);
+    expect(h.updated).toEqual([
+      "/Pictures",
+      "/Pictures/a.jpg",
+      "/Pictures/Old",
+      "/Pictures/Old/b.md",
+    ]);
     // and the old folder's mappings (recursively) go with it
     expect(h.removedIds).toEqual(["oldFolder"]);
     expect(h.downloaded).toEqual(["/Pictures"]);
@@ -270,7 +274,7 @@ describe("google drive sync folder health", function () {
     });
     await h.run();
     expect(h.removed).toEqual(["/Pictures (1)"]);
-    expect(h.updated).toEqual(["/Pictures (1)/a.jpg", "/Pictures (1)"]);
+    expect(h.updated).toEqual(["/Pictures (1)", "/Pictures (1)/a.jpg"]);
     expect(h.removedIds).toEqual(["folder2"]);
   });
 

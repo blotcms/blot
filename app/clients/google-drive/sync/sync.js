@@ -16,6 +16,7 @@ const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const modifiedSince = require("clients/util/modifiedSince");
+const localDescendants = require("clients/util/localDescendants");
 const {
   countLocalFiles,
   createProgress,
@@ -117,29 +118,6 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       .reset({ preserveVerifiedContent: true });
   }
 
-  // Every file under a local directory, as blog paths. update() on the
-  // directory only drops an entry at that exact path, so each file inside
-  // must be updated too once the directory is gone.
-  const localFiles = async (path) => {
-    const files = [];
-    const contents = await fs.readdir(localPath(blogID, path), {
-      withFileTypes: true,
-    });
-    for (const item of contents) {
-      const child = join(path, item.name);
-      if (item.isDirectory()) files.push(...(await localFiles(child)));
-      else files.push(child);
-    }
-    return files;
-  };
-
-  const removeLocal = async (path, isLocalDirectory) => {
-    const files = isLocalDirectory ? await localFiles(path) : [];
-    await fs.remove(localPath(blogID, path));
-    for (const file of files) await update(file);
-    await update(path);
-  };
-
   const walk = async (dir, dirId) => {
     if (!dir || !dirId) {
       throw new Error("Missing required arguments for walk");
@@ -194,8 +172,13 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           join(dir, name),
           "which does not exist remotely"
         );
-        await removeLocal(path, isLocalDirectory);
+        const descendants = isLocalDirectory
+          ? await localDescendants(localPath(blogID, path), path)
+          : [];
+        await fs.remove(localPath(blogID, path));
         summary.removed += 1;
+        await update(path);
+        for (const descendant of descendants) await update(descendant);
         await remove(await getByPath(path));
       }
     }
@@ -229,8 +212,11 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
         if (existsLocally && existsLocally.isDirectory) {
           await checkWeCanContinue();
           console.log("Removing directory", path, "which is a file remotely");
-          await removeLocal(path, true);
+          const descendants = await localDescendants(localPath(blogID, path), path);
+          await fs.remove(localPath(blogID, path));
           summary.removed += 1;
+          await update(path);
+          for (const descendant of descendants) await update(descendant);
           const staleId = await getByPath(path);
           if (staleId && staleId !== id) await remove(staleId);
         }
