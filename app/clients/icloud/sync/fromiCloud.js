@@ -164,7 +164,18 @@ module.exports = async (blogID, publish, update) => {
         // We could compare modified time but this seems to bug out on some sites
         const identicalOnRemote = existsLocally && existsLocally.size === size;
 
-        if (!existsLocally || (existsLocally && !identicalOnRemote)) {
+        // An oversized remote file is represented locally by an empty file.
+        // The size never matches the remote's, so without this check every
+        // walk would rewrite (and rebuild) every placeholder it made before.
+        const placeholderInPlace =
+          size > maxFileSize &&
+          existsLocally &&
+          !existsLocally.isDirectory &&
+          existsLocally.size === 0;
+
+        if (placeholderInPlace || identicalOnRemote) {
+          progress.publishThrottled("Checking", path);
+        } else {
           try {
             if (size > maxFileSize) {
               // A missing existsLocally was already added to total by the
@@ -177,10 +188,27 @@ module.exports = async (blogID, publish, update) => {
               );
               summary.skipped += 1;
 
+              // Deliberately not counted as a missed change: a file Blot
+              // can't sync anyway isn't worth an operator alert, and
+              // counting it would need shared counting and template changes.
               try {
+                let descendants = [];
+                if (existsLocally && existsLocally.isDirectory) {
+                  // A directory sits where the file belongs: clear it, and
+                  // tell Blot about everything that was inside it.
+                  descendants = await localDescendants(
+                    localPath(blogID, path),
+                    path
+                  );
+                  await fs.remove(localPath(blogID, path));
+                }
                 await fs.outputFile(localPath(blogID, path), "");
                 summary.placeholdersCreated += 1;
                 publish("Created placeholder for oversized file", path);
+                // Register it, as the /upload placeholder route does, so the
+                // entry is built (or rebuilt) from the empty file.
+                await update(path);
+                for (const descendant of descendants) await update(descendant);
               } catch (err) {
                 publish("Failed to create placeholder", path, err.message);
                 fail(err);
@@ -206,8 +234,6 @@ module.exports = async (blogID, publish, update) => {
             publish("Failed to download", path, e);
             fail(e);
           }
-        } else {
-          progress.publishThrottled("Checking", path);
         }
       }
     }

@@ -142,6 +142,94 @@ describe("icloud fromiCloud sync", function () {
     expect(summary.placeholdersCreated).toBe(1);
   });
 
+  describe("oversized remote files", () => {
+    const remoteFile = {
+      name: "huge.mov",
+      size: 1000 * 1000 * 1000,
+      isDirectory: false,
+    };
+
+    const run = async () => {
+      mockModule(remoteRecursiveListPath, async () => {});
+      mockModule(remoteReaddirPath, async () => [remoteFile]);
+      mockModule(downloadPath, async () => {
+        throw new Error("download should not be called for oversized files");
+      });
+      mockModule(checkWeCanContinuePath, () => async () => {});
+      mockModule(databasePath, {
+        store: async () => {},
+        get: async () => ({ setupComplete: true }),
+      });
+
+      const updated = [];
+      const summary = await require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async (path) => {
+          updated.push(path);
+        }
+      );
+
+      return { summary, updated };
+    };
+
+    it("registers a newly written placeholder with update", async () => {
+      const { summary, updated } = await run();
+
+      expect(
+        (await fs.stat(localPath(blogID, join("/", remoteFile.name)))).size
+      ).toBe(0);
+      expect(summary.placeholdersCreated).toBe(1);
+      expect(updated).toEqual(["/huge.mov"]);
+    });
+
+    it("leaves an existing empty placeholder alone", async () => {
+      const localFile = localPath(blogID, join("/", remoteFile.name));
+      await fs.outputFile(localFile, "");
+      const outputFile = spyOn(fs, "outputFile").and.callThrough();
+
+      const { summary, updated } = await run();
+
+      expect(outputFile).not.toHaveBeenCalled();
+      expect(updated).toEqual([]);
+      expect(summary.skipped).toBe(0);
+      expect(summary.placeholdersCreated).toBe(0);
+      expect(summary.failed).toBe(0);
+    });
+
+    it("truncates a non-empty local file to a placeholder and registers it", async () => {
+      const localFile = localPath(blogID, join("/", remoteFile.name));
+      await fs.outputFile(localFile, "existing local content");
+
+      const { summary, updated } = await run();
+
+      expect((await fs.stat(localFile)).size).toBe(0);
+      expect(summary.placeholdersCreated).toBe(1);
+      expect(updated).toEqual(["/huge.mov"]);
+    });
+
+    it("counts a failed update as a failure", async () => {
+      mockModule(remoteRecursiveListPath, async () => {});
+      mockModule(remoteReaddirPath, async () => [remoteFile]);
+      mockModule(checkWeCanContinuePath, () => async () => {});
+      mockModule(databasePath, {
+        store: async () => {},
+        get: async () => ({ setupComplete: true }),
+      });
+
+      const summary = await require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async () => {
+          throw new Error("update failed");
+        }
+      );
+
+      expect(summary.failed).toBe(1);
+      expect(summary.firstError).toBe("update failed");
+    });
+  });
+
   it("does not remove local files when remoteReaddir fails (partial/unconfirmed listing)", async () => {
     const localFile = localPath(blogID, join("/", "post.txt"));
     await fs.outputFile(localFile, "hello world");
