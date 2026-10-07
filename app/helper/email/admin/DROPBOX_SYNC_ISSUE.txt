@@ -12,7 +12,7 @@ The hourly sync validation found problems for the following sites: changes from 
 - folder lock held for {{lockHeldFor}} — sync may be hung
 {{/hasStuckLock}}
 {{#hasChanges}}
-- {{changeCount}} unsynced change{{#changeCountPlural}}s{{/changeCountPlural}} (downloaded: {{downloaded}}, removed: {{removed}}, created dirs: {{createdDirs}})
+- {{changeCount}} unsynced change{{#changeCountPlural}}s{{/changeCountPlural}} (downloaded: {{downloaded}}, removed: {{removed}}, created dirs: {{createdDirs}}, excluded as edited during the walk: {{excluded}})
 {{/hasChanges}}
 {{#hasRepairs}}
 - Fix() repaired:

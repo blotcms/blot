@@ -8,6 +8,7 @@ const syncReport = require("clients/util/syncReport");
 const resetToBlot = require("./sync/reset-to-blot");
 const { transferIncomplete } = require("./util/constants");
 const { get: getAccount, set: setAccount } = require("./database");
+const getHealth = require("./getHealth");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
 const sync = promisify(require("./sync"));
@@ -161,7 +162,16 @@ const validateAllBlogs = async () => {
 
     try {
       blog = await getBlog({ id: blogID });
-      if (!blog || blog.client !== "dropbox") continue;
+      if (!blog || blog.isDisabled || blog.client !== "dropbox") continue;
+
+      // Revoked access, a deleted folder and a full Dropbox are the user's
+      // doing, not bugs, so there is nothing to walk or report.
+      if (await syncReport.hasUserSideIssue(blogID, getHealth)) continue;
+
+      // Before the recency filter: sync() stamps last_sync when it takes the
+      // lock, so a lock held for over an hour belongs to a blog that no
+      // longer looks recently synced.
+      if (await syncReport.recordStuckLock(report, blog)) continue;
 
       const account = await getDropboxAccount(blogID);
       if (!hasRecentSync(account)) continue;
@@ -188,11 +198,10 @@ const validateAllBlogs = async () => {
       } catch (err) {
         stopWalkMeasure();
         // A sync is already running for this blog, and that sync will pick
-        // up whatever changed. Check it again next hour - unless it has held
-        // the lock for suspiciously long, which recordBusy reports.
+        // up whatever changed. Check it again next hour (a lock that stays
+        // held is caught by the stuck-lock check above).
         if (err.message === "Failed to acquire folder lock") {
           console.log(clfdate(), "Dropbox: Skipping busy blog", blogID);
-          await syncReport.recordBusy(report, blog);
           checkedBlogs -= 1;
           continue;
         }
@@ -207,7 +216,9 @@ const validateAllBlogs = async () => {
         continue;
       }
 
-      syncReport.recordChanges(report, blog, summary);
+      // A walk that skipped files reports a walk error (and the changes it
+      // did apply), and Fix() and the catch-up sync are skipped for it.
+      if (!syncReport.recordWalk(report, blog, summary)) continue;
 
       const stopFollowUpMeasure = measureEventLoop();
       try {
@@ -227,7 +238,6 @@ const validateAllBlogs = async () => {
           // same as the walk's busy skip.
           if (err.message !== "Failed to acquire folder lock") throw err;
           console.log(clfdate(), "Dropbox: Catch-up skipped, blog busy", blogID);
-          await syncReport.recordBusy(report, blog);
         }
       } finally {
         logLag(blogID, "fix+catch-up", entryCount, stopFollowUpMeasure());
@@ -243,7 +253,12 @@ const validateAllBlogs = async () => {
     }
   }
 
-  const reported = syncReport.view(report).blogs.length;
+  const reported = await syncReport.send(
+    report,
+    email.DROPBOX_SYNC_ISSUE,
+    "Dropbox:",
+    { client: "dropbox", getHealth }
+  );
 
   console.log(
     clfdate(),
@@ -251,8 +266,6 @@ const validateAllBlogs = async () => {
     `checked=${checkedBlogs}`,
     `issues=${reported}`
   );
-
-  syncReport.send(report, email.DROPBOX_SYNC_ISSUE, "Dropbox:");
 };
 
 const resyncRecentSyncsOnStartup = async () => {

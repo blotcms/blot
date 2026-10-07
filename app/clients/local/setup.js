@@ -15,9 +15,10 @@ function setup(blogID, callback) {
   Blog.get({ id: blogID }, function (err, blog) {
     if (err || !blog) return callback();
     Fix(blog, function (err, report) {
-      if (err) return callback();
+      // Fix() can fail after repairing some checks, so log first.
       const repaired = syncReport.summarize(report);
       if (repaired) console.log(prefix(), "Fix repaired", blogID, repaired);
+      if (err) return callback();
       if (config.environment === "development") {
         watch(blogID);
       }

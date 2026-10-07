@@ -342,12 +342,20 @@ describe("dropbox init", function () {
       fix: require.resolve("sync/fix"),
       sync: require.resolve("../sync"),
       email: require.resolve("helper/email"),
+      getHealth: require.resolve("../getHealth"),
+      redis: require.resolve("models/client"),
       init: require.resolve("../init"),
     };
     const originals = {};
     const HOUR = 60 * 60 * 1000;
+    // What the digest remembers having reported (see syncReport), as a
+    // fake of the Redis set it lives in. Kept across sweeps within a test.
+    let reported;
+    let walked;
 
     beforeEach(function () {
+      reported = new Set();
+      walked = [];
       Object.keys(paths).forEach((name) => {
         originals[name] = require.cache[paths[name]];
       });
@@ -369,9 +377,13 @@ describe("dropbox init", function () {
       };
     };
 
-    // behaviors: { [blogID]: { summary, walkError, busy, heldSince, fixReport,
-    // fixError, syncError } }
+    // behaviors: { [blogID]: { summary, walkError, busy, heldSince, lastSync,
+    // fixReport, fixError, syncError, health } }. health is a getHealth
+    // result, an Error to throw, or a function of how many times the blog's
+    // health has been read (a blog's folder can vanish mid-sweep).
     function load(behaviors, sentEmails) {
+      const healthReads = {};
+
       const ids = Object.keys(behaviors);
 
       stub("blog", {
@@ -381,7 +393,11 @@ describe("dropbox init", function () {
       });
       stub("database", {
         get: (_id, callback) =>
-          callback(null, { error_code: 0, transfer_pending: false, last_sync: Date.now() }),
+          callback(null, {
+            error_code: 0,
+            transfer_pending: false,
+            last_sync: behaviors[_id].lastSync || Date.now(),
+          }),
         set: (_id, _values, callback) => callback(null),
       });
       stub("lock", function (blogID) {
@@ -395,6 +411,7 @@ describe("dropbox init", function () {
       });
       stub("resetToBlot", function (blogID) {
         const behavior = behaviors[blogID];
+        walked.push(blogID);
         if (behavior.walkError) return Promise.reject(behavior.walkError);
         return Promise.resolve(behavior.summary || {});
       });
@@ -407,6 +424,28 @@ describe("dropbox init", function () {
       });
       stub("sync", function (blog, callback) {
         callback(behaviors[blog.id].syncError || null);
+      });
+      stub("getHealth", async function (blogID) {
+        const health = require("clients/health");
+        let result = behaviors[blogID].health || health.ok();
+        healthReads[blogID] = (healthReads[blogID] || 0) + 1;
+        if (typeof result === "function") result = result(healthReads[blogID]);
+        if (result instanceof Error) throw result;
+        return result;
+      });
+      stub("redis", {
+        sMembers: async () => Array.from(reported),
+        multi: function () {
+          const ops = [];
+          const multi = {
+            del: () => (ops.push(() => reported.clear()), multi),
+            sAdd: (key, ids) => (
+              ops.push(() => ids.forEach((id) => reported.add(id))), multi
+            ),
+            exec: async () => ops.forEach((op) => op()),
+          };
+          return multi;
+        },
       });
       stub("email", {
         DROPBOX_SYNC_ISSUE: function (uid, locals, callback) {
@@ -486,6 +525,159 @@ describe("dropbox init", function () {
       await init.validateAllBlogs();
 
       expect(sentEmails.length).toEqual(0);
+    });
+
+    describe("what the user is free to do", function () {
+      const health = require("clients/health");
+      const userSide = [
+        health.CODES.REAUTH_REQUIRED,
+        health.CODES.SOURCE_MISSING,
+        health.CODES.QUOTA_EXCEEDED,
+      ];
+
+      it("skips a blog with a user-side issue without walking or fixing it", async function () {
+        const sentEmails = [];
+        const behaviors = {};
+        userSide.forEach((code) => {
+          behaviors["blog_userside" + code + stamp] = {
+            health: health.error([{ code }]),
+            walkError: new Error("would be reported if walked"),
+            fixError: new Error("would be reported if fixed"),
+            heldSince: Date.now() - 3 * HOUR,
+          };
+        });
+        const init = load(behaviors, sentEmails);
+
+        await init.validateAllBlogs();
+
+        expect(walked).toEqual([]);
+        expect(sentEmails.length).toEqual(0);
+      });
+
+      it("drops a blog whose folder disappears during the walk", async function () {
+        const sentEmails = [];
+        const init = load(
+          {
+            [ids.walkError]: {
+              walkError: new Error("folder not found"),
+              // ok when the sweep starts, SOURCE_MISSING by the time it sends
+              health: (reads) =>
+                reads === 1
+                  ? health.ok()
+                  : health.error([{ code: health.CODES.SOURCE_MISSING }]),
+            },
+            [ids.changes]: { summary: { downloaded: 1 } },
+          },
+          sentEmails
+        );
+
+        spyOn(console, "error");
+        await init.validateAllBlogs();
+
+        expect(walked.length).toEqual(2);
+        expect(sentEmails.length).toEqual(1);
+        expect(sentEmails[0].blogs.map((blog) => blog.id)).toEqual([ids.changes]);
+      });
+
+      it("still reports a blog when its health can't be read", async function () {
+        const sentEmails = [];
+        const init = load(
+          {
+            [ids.walkError]: {
+              walkError: new Error("walk exploded"),
+              health: new Error("redis hiccup"),
+            },
+          },
+          sentEmails
+        );
+
+        spyOn(console, "error");
+        await init.validateAllBlogs();
+
+        expect(walked).toEqual([ids.walkError]);
+        expect(sentEmails.length).toEqual(1);
+        expect(sentEmails[0].blogs[0].errors[0].phase).toEqual("walk");
+      });
+    });
+
+    it("finds a stuck lock on a blog that has no recent sync", async function () {
+      const sentEmails = [];
+      const init = load(
+        {
+          [ids.stuck]: {
+            heldSince: Date.now() - 5 * HOUR,
+            lastSync: Date.now() - 5 * HOUR,
+          },
+          [ids.briefly]: { lastSync: Date.now() - 5 * HOUR },
+        },
+        sentEmails
+      );
+
+      await init.validateAllBlogs();
+
+      expect(walked).toEqual([]);
+      expect(sentEmails.length).toEqual(1);
+      expect(sentEmails[0].blogs.map((blog) => blog.id)).toEqual([ids.stuck]);
+      expect(sentEmails[0].blogs[0].hasStuckLock).toEqual(true);
+    });
+
+    it("reports a partly failed walk as a walk error, with its changes, and skips Fix()", async function () {
+      const sentEmails = [];
+      const init = load(
+        {
+          [ids.changes]: {
+            summary: { downloaded: 2, failed: 1, firstError: "/a.jpg: boom" },
+            fixError: new Error("must not run"),
+            syncError: new Error("must not run"),
+          },
+        },
+        sentEmails
+      );
+
+      await init.validateAllBlogs();
+
+      const [record] = sentEmails[0].blogs;
+      expect(record.changeCount).toEqual(2);
+      expect(record.errors.length).toEqual(1);
+      expect(record.errors[0].phase).toEqual("walk");
+      expect(record.errors[0].message).toContain("/a.jpg: boom");
+    });
+
+    it("emails an ongoing error once, and again after it clears and returns", async function () {
+      const behaviors = {
+        [ids.walkError]: { walkError: new Error("walk exploded") },
+        [ids.stuck]: { heldSince: Date.now() - 3 * HOUR },
+        [ids.repaired]: { fixReport: { "tag-ghosts": ["a"] } },
+      };
+      const sentEmails = [];
+      const init = load(behaviors, sentEmails);
+
+      spyOn(console, "error");
+      await init.validateAllBlogs();
+      expect(sentEmails[0].blogs.map((blog) => blog.id).sort()).toEqual(
+        [ids.walkError, ids.stuck, ids.repaired].sort()
+      );
+
+      // Same sweep again: the error and the stuck lock continue, but Fix()
+      // repairs are events and are reported every time.
+      await init.validateAllBlogs();
+      expect(sentEmails.length).toEqual(2);
+      expect(sentEmails[1].blogs.map((blog) => blog.id)).toEqual([ids.repaired]);
+
+      // Clear them, then bring them back.
+      delete behaviors[ids.walkError].walkError;
+      delete behaviors[ids.stuck].heldSince;
+      delete behaviors[ids.repaired].fixReport;
+      await init.validateAllBlogs();
+      expect(sentEmails.length).toEqual(2);
+
+      behaviors[ids.walkError].walkError = new Error("walk exploded");
+      behaviors[ids.stuck].heldSince = Date.now() - 3 * HOUR;
+      await init.validateAllBlogs();
+      expect(sentEmails.length).toEqual(3);
+      expect(sentEmails[2].blogs.map((blog) => blog.id).sort()).toEqual(
+        [ids.walkError, ids.stuck].sort()
+      );
     });
   });
 });
