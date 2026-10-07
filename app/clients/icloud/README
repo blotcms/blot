@@ -27,7 +27,7 @@ The architecture separates concerns:
 
 - `index.js` - Main entry point exporting the public API: display name, description, and lifecycle hooks (`init`, `disconnect`, `remove`, `resync`, `write`, `getHealth`, `site_routes`, `dashboard_routes`).
 
-- `database.js` - Redis-backed persistence layer for per-blog iCloud account metadata. Stores sharingLink, setupComplete state, transfer status, and the stored error (`error`, `errorCode`, `errorSince`; `store()` keeps the three in step). Uses the key prefix `blot:clients:icloud-drive:`.
+- `database.js` - Redis-backed persistence layer for per-blog iCloud account metadata. Stores sharingLink, setupComplete state, transfer status, `lastSync` (when the macserver last pushed a change; written by `stampLastSync()` from the `/upload`, `/delete`, `/mkdir` and requested-resync routes, never by a walk Blot starts) and the stored error (`error`, `errorCode`, `errorSince`; `store()` keeps the three in step). Uses the key prefix `blot:clients:icloud-drive:`.
 
 - `error.js` - Typed error state. Codes written at the source: `SOURCE_MISSING` (macserver watcher: shared folder deleted), `TRANSFER_INCOMPLETE` (initial transfer to iCloud failed) and `SETUP_FAILED` (the sharing link was never accepted; the only code that is not a health code). Also infers a code for rows written without one, and holds the backfill patch.
 
@@ -35,7 +35,7 @@ The architecture separates concerns:
 
 - `resync.js` - The client's `resync`. Refuses (with a `code` the dashboard recognises) when the folder was deleted or the initial transfer hasn't finished, since resyncing would remove local files iCloud doesn't have; otherwise runs `sync/fromiCloud.js`.
 
-- `init.js` - Initialization and background job orchestration. On startup, resumes any interrupted initial transfers. Exports functions for hourly validation syncs and daily full resyncs of connected accounts. Monitors macro server health.
+- `init.js` - Initialization and background job orchestration. On startup, resumes any interrupted initial transfers. Schedules the hourly validation sweep (`:45`; Dropbox runs at `:00`, Google Drive at `:30`): for each blog whose `lastSync` is within the last hour it walks the folder under the sync lock, runs Fix() if the walk succeeded, and emails one `ICLOUD_SYNC_ISSUE` digest (`clients/util/syncReport.js`) listing changes it had to pull, Fix() repairs, errors (including walks that swallowed failures) and stuck locks. The daily full resync and the startup resync are exported but not scheduled. Monitors macro server health.
 
 - `disconnect.js` - Handles client disconnection. Notifies the remote macserver to disconnect (best-effort), then locally removes the blog's database entry and clears the blog's client assignment.
 
@@ -49,7 +49,7 @@ Core bidirectional sync logic. All sync operations acquire and hold a sync lock 
 
 - `initialTransfer.js` - Orchestrates the one-time setup flow when a user first connects an iCloud folder. Resolves case conflicts in the folder, syncs files to iCloud (skipDeletions mode), verifies the transfer, syncs back from iCloud, then signals the macserver to begin watching.
 
-- `fromiCloud.js` - Syncs remote iCloud folder state down to local Blot storage. Recursively walks the remote folder tree, comparing sizes to detect changes, downloading new/modified files, removing local files that don't exist remotely, and creating local directories as needed. Skips ignored files and oversized files (creating empty placeholders instead). Returns a summary of changes.
+- `fromiCloud.js` - Syncs remote iCloud folder state down to local Blot storage. Recursively walks the remote folder tree, comparing sizes to detect changes, downloading new/modified files, removing local files that don't exist remotely, and creating local directories as needed. Skips ignored files and oversized files (creating empty placeholders instead). Refuses to remove most of a directory in one walk (the listing is probably incomplete). Returns a summary of changes, including `failed`/`firstError` for the failures it swallows rather than throws.
 
 - `toiCloud.js` - Syncs local Blot folder state up to remote iCloud. Recursively walks the local folder tree, comparing sizes, uploading new/modified files, creating remote directories, and removing remote files not present locally (unless skipDeletions is true). Implements retry logic with exponential backoff for failed operations. Can abort on error or continue.
 

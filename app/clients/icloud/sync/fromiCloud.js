@@ -21,6 +21,17 @@ const { resolveCode } = require("../error");
 const config = require("config");
 const maxFileSize = config.icloud.maxFileSize; // Maximum file size for iCloud uploads in bytes
 
+// The walk removes every local item the remote listing doesn't have, so a
+// listing that comes back empty or truncated (macserver restarting, iCloud
+// not having materialised the folder yet) would wipe the folder. Refuse to
+// remove more than REMOVAL_FLOOR files from one directory in one walk when
+// that is also more than MAX_REMOVAL_SHARE of the directory's local entries:
+// a real cleanup of a few files passes either way, and a user who genuinely
+// deletes most of a large folder gets an error in the sweep's digest and can
+// resync from the dashboard after checking, instead of silently losing it.
+const REMOVAL_FLOOR = 20;
+const MAX_REMOVAL_SHARE = 0.5;
+
 module.exports = async (blogID, publish, update) => {
   if (!publish)
     publish = (...args) => {
@@ -49,6 +60,19 @@ module.exports = async (blogID, publish, update) => {
     // the cutoff (minus a grace period). Directories and removals have no
     // modification time to check here, so only downloads are excluded.
     modifiedDuringWalk: 0,
+    // Failures the walk swallows (it carries on or stops quietly rather than
+    // throwing), so a caller that must not mistake an unreachable macserver
+    // for "nothing changed" can tell: how many, and the first one's message.
+    // Other callers (resync, /status) ignore these.
+    failed: 0,
+    firstError: null,
+  };
+
+  const fail = (error) => {
+    summary.failed += 1;
+    if (!summary.firstError) {
+      summary.firstError = String((error && error.message) || error);
+    }
   };
 
   try {
@@ -60,6 +84,7 @@ module.exports = async (blogID, publish, update) => {
       error,
     });
     publish("Failed to sync folder tree");
+    fail(error);
   }
 
   const walk = async (dir) => {
@@ -69,13 +94,48 @@ module.exports = async (blogID, publish, update) => {
       localReaddir(localPath(blogID, dir)),
     ]);
 
+    // A directory removed in one fs.remove call still accounts for every
+    // file total counted inside it, so current must advance by that many.
+    // Kept by local item name for the removal pass below, which also totals
+    // what the remote listing is missing for the mass-removal check.
+    const removedCounts = new Map();
+    let missingEntries = 0;
+    let missingFiles = 0;
+
     for (const { name, isDirectory: isLocalDirectory } of localContents) {
       const path = join(dir, name);
-      // A directory removed in one fs.remove call still accounts for every
-      // file total counted inside it, so current must advance by that many.
       const removedCount = isLocalDirectory
         ? await countLocalFiles(localPath(blogID, path))
         : 1;
+      removedCounts.set(name, removedCount);
+
+      if (
+        !shouldIgnoreFile(path) &&
+        !remoteContents.find(
+          (item) => item.name.normalize("NFC") === name.normalize("NFC")
+        )
+      ) {
+        missingEntries += 1;
+        missingFiles += removedCount;
+      }
+    }
+
+    // Throws before anything in this directory is removed. The walk's catch
+    // below turns it into summary.failed, so the sweep reports it.
+    if (
+      missingFiles > REMOVAL_FLOOR &&
+      missingEntries > localContents.length * MAX_REMOVAL_SHARE
+    ) {
+      throw new Error(
+        `Refusing to remove ${missingFiles} files (${missingEntries} of ` +
+          `${localContents.length} items) from ${dir}: iCloud's listing ` +
+          "looks incomplete"
+      );
+    }
+
+    for (const { name, isDirectory: isLocalDirectory } of localContents) {
+      const path = join(dir, name);
+      const removedCount = removedCounts.get(name);
 
       if (shouldIgnoreFile(path)) {
         await checkWeCanContinue();
@@ -189,6 +249,7 @@ module.exports = async (blogID, publish, update) => {
             await update(path);
           } catch (e) {
             publish("Failed to download", path, e);
+            fail(e);
           }
         } else {
           progress.publishThrottled("Checking", path);
@@ -219,7 +280,8 @@ module.exports = async (blogID, publish, update) => {
     }
   } catch (err) {
     publish("Sync failed", err.message);
-    // Possibly rethrow or handle
+    fail(err);
+    // Not rethrown: callers rely on getting the partial summary back.
   }
 
   return summary;

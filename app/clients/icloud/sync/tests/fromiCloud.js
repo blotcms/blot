@@ -317,4 +317,153 @@ describe("icloud fromiCloud sync", function () {
     expect(summary.downloaded).toBe(1);
     expect(summary.modifiedDuringWalk).toBe(0);
   });
+
+  function mockWalk(remoteContents) {
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => remoteContents);
+    mockModule(downloadPath, async () => {});
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, { store: async () => {}, get: async () => ({}) });
+  }
+
+  async function localFiles(count, prefix = "post") {
+    const names = [];
+    for (let i = 0; i < count; i++) {
+      const name = `${prefix}-${i}.txt`;
+      await fs.outputFile(localPath(blogID, join("/", name)), "x");
+      names.push(name);
+    }
+    return names;
+  }
+
+  const remoteFile = (name) => ({ name, size: 1, isDirectory: false });
+
+  describe("failure signal", () => {
+    it("reports no failures for a clean walk", async () => {
+      mockWalk([]);
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.failed).toBe(0);
+      expect(summary.firstError).toBeNull();
+    });
+
+    it("counts a failed folder tree listing without stopping the walk", async () => {
+      mockWalk([]);
+      mockModule(remoteRecursiveListPath, async () => {
+        throw new Error("macserver unreachable");
+      });
+      spyOn(console, "error");
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.failed).toBe(1);
+      expect(summary.firstError).toBe("macserver unreachable");
+    });
+
+    it("counts every failed download and keeps the first message", async () => {
+      mockWalk([remoteFile("a.txt"), remoteFile("b.txt"), remoteFile("c.txt")]);
+      let calls = 0;
+      mockModule(downloadPath, async () => {
+        calls += 1;
+        if (calls < 3) throw new Error("download " + calls + " failed");
+      });
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.failed).toBe(2);
+      expect(summary.firstError).toBe("download 1 failed");
+      expect(summary.downloaded).toBe(1);
+    });
+
+    it("counts a directory listing that fails", async () => {
+      mockWalk([]);
+      mockModule(remoteReaddirPath, async () => {
+        throw new Error("Directory listing unavailable");
+      });
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.failed).toBe(1);
+      expect(summary.firstError).toBe("Directory listing unavailable");
+    });
+  });
+
+  describe("mass-removal circuit breaker", () => {
+    it("refuses to empty a directory when the listing comes back empty", async () => {
+      const names = await localFiles(30);
+      mockWalk([]);
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.removed).toBe(0);
+      expect(summary.failed).toBe(1);
+      expect(summary.firstError).toContain("Refusing to remove 30 files");
+      for (const name of names) {
+        expect(await fs.pathExists(localPath(blogID, join("/", name)))).toBe(true);
+      }
+    });
+
+    it("counts the files inside a directory it would remove", async () => {
+      // One top-level item, but it holds enough files to be a wipe
+      for (let i = 0; i < 25; i++) {
+        await fs.outputFile(localPath(blogID, `/Posts/post-${i}.txt`), "x");
+      }
+      mockWalk([]);
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.removed).toBe(0);
+      expect(summary.failed).toBe(1);
+      expect(await fs.pathExists(localPath(blogID, "/Posts"))).toBe(true);
+    });
+
+    it("allows removing a few files from a small folder", async () => {
+      await localFiles(5);
+      mockWalk([]);
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.removed).toBe(5);
+      expect(summary.failed).toBe(0);
+    });
+
+    it("allows removing more than the floor when it is a small share of the directory", async () => {
+      const names = await localFiles(100);
+      // 25 deleted on iCloud, 75 still there
+      mockWalk(names.slice(25).map(remoteFile));
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.removed).toBe(25);
+      expect(summary.failed).toBe(0);
+      expect(await fs.pathExists(localPath(blogID, join("/", names[0])))).toBe(false);
+      expect(await fs.pathExists(localPath(blogID, join("/", names[99])))).toBe(true);
+    });
+
+    it("refuses a removal past the floor that is most of the directory", async () => {
+      const names = await localFiles(40);
+      // Only 10 of 40 are still listed
+      mockWalk(names.slice(0, 10).map(remoteFile));
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.removed).toBe(0);
+      expect(summary.failed).toBe(1);
+      expect(await fs.pathExists(localPath(blogID, join("/", names[39])))).toBe(true);
+    });
+
+    it("doesn't count ignored local files, which are removed whatever the listing says", async () => {
+      for (let i = 0; i < 30; i++) {
+        await fs.outputFile(localPath(blogID, `/scratch-${i}.tmp`), "x");
+      }
+      const names = await localFiles(30);
+      mockWalk(names.map(remoteFile));
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.failed).toBe(0);
+      expect(summary.removed).toBe(30);
+    });
+  });
 });
