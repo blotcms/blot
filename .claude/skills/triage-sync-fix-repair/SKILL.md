@@ -14,14 +14,16 @@ on its own (the standalone "sync/fix repaired" email, `SYNC_FIX_REPAIRED`,
 is gone); callers report it:
 
 - the hourly sweep digest, e.g. "Dropbox sync issue"
-  (`app/helper/email/admin/DROPBOX_SYNC_ISSUE.txt`): a blog's "Fix() repaired:"
+  (`app/helper/email/admin/DROPBOX_SYNC_ISSUE.txt`; Google Drive's, sent at
+  minute 30 by `app/clients/google-drive/validate.js`, is
+  `GOOGLE_DRIVE_SYNC_ISSUE.txt`): a blog's "Fix() repaired:"
   lines, one per check with the first 10 rows `JSON.stringify`d. Formatting
   lives in `app/clients/util/syncReport.js`.
 - the dashboard resync's "Resync found changes" email
   (`RESYNC_FOUND_CHANGES.txt`), when Fix() repaired something after the resync.
 
 Other callers (dashboard rebuild, local setup, template folders, the
-startup resync, and for now the Google Drive hourly fix and iCloud) only log
+startup resync, and for now iCloud) only log
 `Fix repaired <blog> check=N`. Fix() doesn't hold
 the folder lock and repairs as it goes, so the report says what **was**
 wrong; it's already been changed by the time you read it.
