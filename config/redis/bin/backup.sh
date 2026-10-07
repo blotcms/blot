@@ -42,11 +42,15 @@ min_replicas=$(redis CONFIG GET min-replicas-to-write | tail -n 1)
 if [ "$min_replicas" -gt 0 ] && [ "$(field replication min_slaves_good_slaves)" -lt "$min_replicas" ]; then
   log "skipped: writes are refused (min-replicas-to-write)"; exit 0
 fi
-if [ -f /etc/blot-redis/floating-ip ]; then
-  ip=$(tr -d '[:space:]' < /etc/blot-redis/floating-ip)
-  if ! ip -4 -o addr show | awk '{print $4}' | cut -d/ -f1 | grep -qx "$ip"; then
-    log "skipped: floating IP $ip is not on this host"; exit 0
-  fi
+# A freshly launched or restored host is also a writable master, so being one
+# is not enough: the active host is marked with the floating IP clients use,
+# written at cutover, and must currently hold it.
+if [ ! -s /etc/blot-redis/floating-ip ]; then
+  log "skipped: not marked as the active host (/etc/blot-redis/floating-ip)"; exit 0
+fi
+ip=$(tr -d '[:space:]' < /etc/blot-redis/floating-ip)
+if ! /usr/sbin/ip -4 -o addr show | awk '{print $4}' | cut -d/ -f1 | grep -qx "$ip"; then
+  log "skipped: floating IP $ip is not on this host"; exit 0
 fi
 
 # Make sure the snapshot is fresh. On a busy instance Redis saves every few

@@ -82,7 +82,7 @@ put /etc/redis6/redis6.conf 0640 root:redis6 < "$ROOT/redis.conf"
 say "Scripts"
 install -m 0755 -o root -g root -t /usr/local/bin \
   "$ROOT"/bin/*.sh "$HERE/mount-instance-store.sh"
-mkdir -p /etc/blot-redis # holds the optional floating-ip file read by backup.sh
+mkdir -p /etc/blot-redis # holds floating-ip, which marks the active host for backup.sh
 # The backup user reads Redis's RDB through the redis6 group.
 if id "$BACKUP_USER" > /dev/null 2>&1; then
   id -nG "$BACKUP_USER" | grep -qw redis6 || usermod -aG redis6 "$BACKUP_USER"
@@ -93,7 +93,7 @@ fi
 put /etc/cron.d/blot-redis 0644 root:root <<EOF
 # Installed by config/redis/host/setup.sh.
 SHELL=/bin/bash
-PATH=/usr/local/bin:/usr/bin:/bin
+PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 0 * * * * $BACKUP_USER /usr/local/bin/backup.sh hourly >> /home/$BACKUP_USER/backup.log 2>&1
 5 3 * * * $BACKUP_USER /usr/local/bin/backup.sh daily >> /home/$BACKUP_USER/backup.log 2>&1
 0 0 1 * * $BACKUP_USER : > /home/$BACKUP_USER/backup.log

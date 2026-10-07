@@ -42,7 +42,15 @@ to every script, or use a `~/.ssh/config` alias as `<ssh-host>`.
    to compare `DBSIZE` and keyspace), or on the new host
    `redis6-cli REPLICAOF <host> 6379` and wait for `master_link_status:up`.
 
-Then point the app at the new host (still manual, see below).
+Before the app uses a replica, promote it (`cutover.sh` will do this):
+
+1. `./readonly.sh <old-host> on` freezes writes on the old host (`NOREPLICAS`).
+2. Wait until the new host's `master_repl_offset` equals the old host's.
+3. `redis6-cli REPLICAOF NO ONE` on the new host.
+4. Move the floating IP to the new host (or repoint the app), and write that
+   IP to `/etc/blot-redis/floating-ip` on the new host so its backups start.
+
+Undo with `./readonly.sh <old-host> off` if anything fails before step 4.
 
 ### Running bootstrap on a live host
 
@@ -84,10 +92,9 @@ store is wiped on stop) and uploads to
 `s3://blot-redis-backups/{hourly,daily}/<YYYY-MM-DD-hour-HH>.rdb`, keeping the
 6 newest hourly, 7 newest daily and 10 local copies. It runs `BGSAVE` first if
 the last save is over 15 minutes old. It exits quietly without uploading unless
-the host is a master that accepts writes, so an old and a new host never both
-upload. To restrict it further, put the host's floating IP in
-`/etc/blot-redis/floating-ip`; it then uploads only while that address is on
-the host. It works with an instance profile or keys in `~ec2-user/.aws`.
+the host is a master that accepts writes, `/etc/blot-redis/floating-ip` exists,
+and the address in it is on the host. That file is written at cutover, so a
+new or restored host never uploads (or prunes) alongside the live one. It works with an instance profile or keys in `~ec2-user/.aws`.
 
 ## AWS permissions
 

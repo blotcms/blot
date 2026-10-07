@@ -70,7 +70,7 @@ Start a redis server. The defaults are fine for development:
 redis-server
 ```
 
-Production uses [this configuration](/config/redis/redis.conf), which is written for the Amazon Linux host (it includes a file that only exists there), so it is not meant for a development machine.
+Production uses [this configuration](https://github.com/blotcms/blot/blob/master/config/redis/redis.conf), which is written for the Amazon Linux host (it includes a file that only exists there), so it is not meant for a development machine.
 
 ## Install Postgres (for QA forum)
 

@@ -4,9 +4,11 @@
 # mounted", and Redis still starts because it only Wants= this unit.
 set -e
 
-# Already mounted (the unit re-ran, or this is a reboot): nothing to do.
+# Already mounted (the unit re-ran, or this is a reboot): only make sure the
+# backup user owns it, which a host set up by the old root-run scripts lacks.
 if mountpoint -q /backups; then
   echo "/backups is already mounted."
+  chown ec2-user:ec2-user /backups
   exit 0
 fi
 
