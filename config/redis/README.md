@@ -6,7 +6,7 @@ Everything runs from the operator's Mac over ssh; nothing here is used by the
 app. Part of blotcms/blot#2041.
 
 **The current production host predates these scripts.** It was set up by hand
-(x2gd.large, kernel 6.1.38, never updated) and has drifted: backups run from
+(its kernel has never been updated) and has drifted: backups run from
 `ec2-user`'s crontab out of `/home/ec2-user/*.sh`, sshd listens on port 3796
 (the scripts do not change the ssh port; the launch template/AMI user-data
 decides how you get in), and `redis6.conf` has `save 60 10000` and no
@@ -31,7 +31,7 @@ to every script, or use a `~/.ssh/config` alias as `<ssh-host>`.
 
 ## Building a new host
 
-1. `./launch.sh --type x2gd.medium --from latest --key ~/key.pem`
+1. `./launch.sh --type <instance-type> --from latest --key ~/key.pem`
    (`--from <backup-name>` for a specific backup, or `--from replica:<host>` to
    replicate from a running Redis). This runs the next two steps for you. Use
    `--dry-run` first. **launch.sh has never been run**: it was written without

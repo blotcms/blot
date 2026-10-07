@@ -57,7 +57,11 @@ fi
 if [ $(( $(date +%s) - $(redis LASTSAVE) )) -gt "$MAX_SNAPSHOT_AGE" ]; then
   log "last save is older than ${MAX_SNAPSHOT_AGE}s, running BGSAVE"
   [ "$(field persistence rdb_bgsave_in_progress)" = 1 ] || redis BGSAVE > /dev/null
-  while [ "$(field persistence rdb_bgsave_in_progress)" = 1 ]; do sleep 5; done
+  for _ in $(seq 1 360); do
+    [ "$(field persistence rdb_bgsave_in_progress)" = 1 ] || break
+    sleep 5
+  done
+  [ "$(field persistence rdb_bgsave_in_progress)" = 0 ] || { log "BGSAVE still running after 30 minutes"; exit 1; }
   [ "$(field persistence rdb_last_bgsave_status)" = ok ] || { log "BGSAVE failed"; exit 1; }
 fi
 

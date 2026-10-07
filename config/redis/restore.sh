@@ -54,7 +54,7 @@ echo "Backup: s3://$BUCKET/$KEY"
 before=$(ssh_run "$HOST" "redis6-cli DBSIZE")
 echo "Current data on $HOST: $before"
 if [ -z "$ASSUME_YES" ]; then
-  read -r -p "Replace it with $KEY? [y/N] " reply
+  read -r -p "Replace it with $KEY? [y/N] " reply || die "no answer (use --yes when not running interactively)"
   case "$reply" in y | Y | yes) ;; *) die "aborted" ;; esac
 fi
 
@@ -68,9 +68,9 @@ FILE=$(ssh_run "$HOST" "
   dir=/var/tmp; mountpoint -q /backups && dir=/backups
   f=\$dir/restore-\$(basename $KEY)
   aws s3 cp --only-show-errors s3://$BUCKET/$KEY \$f
-  link=\$(mktemp -d)/redis-check-rdb
-  ln -s /usr/bin/redis6-server \$link
-  \$link \$f > /dev/null
+  tmp=\$(mktemp -d); trap 'rm -rf \$tmp' EXIT
+  ln -s /usr/bin/redis6-server \$tmp/redis-check-rdb
+  \$tmp/redis-check-rdb \$f > /dev/null
   echo \$f
 ") || die "download or RDB check failed"
 echo "Backup passed the RDB check: $FILE"
