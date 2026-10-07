@@ -60,6 +60,8 @@ describe("notifyAdminIfResyncFoundChanges", function () {
     expect(locals.removed).toEqual(1);
     expect(locals.createdDirs).toEqual(0);
     expect(locals.modifiedDuringWalk).toEqual(1);
+    expect(locals.hasChanges).toEqual(true);
+    expect(locals.hasRepairs).toEqual(false);
   });
 
   it("does not send an email when the counted changes are zero", function () {
@@ -78,6 +80,35 @@ describe("notifyAdminIfResyncFoundChanges", function () {
     expect(function () {
       notify(blog, client, undefined);
     }).not.toThrow();
+
+    expect(sentEmails.length).toEqual(0);
+  });
+
+  it("sends an email for Fix() repairs alone, and includes them with changes", function () {
+    const sentEmails = [];
+    const notify = load(sentEmails);
+    const fixReport = { "entry-ghosts": [{ path: "/a.txt" }] };
+
+    notify(blog, client, { downloaded: 0 }, fixReport);
+
+    expect(sentEmails.length).toEqual(1);
+    expect(sentEmails[0].hasChanges).toEqual(false);
+    expect(sentEmails[0].hasRepairs).toEqual(true);
+    expect(sentEmails[0].checks[0].name).toEqual("entry-ghosts");
+    expect(sentEmails[0].checks[0].sample).toEqual(['{"path":"/a.txt"}']);
+
+    notify(blog, client, { downloaded: 1 }, fixReport);
+
+    expect(sentEmails.length).toEqual(2);
+    expect(sentEmails[1].hasChanges).toEqual(true);
+    expect(sentEmails[1].hasRepairs).toEqual(true);
+  });
+
+  it("does not send an email when Fix() repaired nothing and nothing changed", function () {
+    const sentEmails = [];
+    const notify = load(sentEmails);
+
+    notify(blog, client, { downloaded: 0 }, {});
 
     expect(sentEmails.length).toEqual(0);
   });

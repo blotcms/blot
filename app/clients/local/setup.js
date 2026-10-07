@@ -4,6 +4,7 @@ const chokidar = require("chokidar");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const localPath = require("helper/localPath");
 const Fix = require("sync/fix");
+const syncReport = require("clients/util/syncReport");
 const establishSyncLock = require("sync/establishSyncLock");
 const clfdate = require("helper/clfdate");
 const prefix = () => clfdate() + " Local folder client:";
@@ -13,8 +14,10 @@ let watchers = {};
 function setup(blogID, callback) {
   Blog.get({ id: blogID }, function (err, blog) {
     if (err || !blog) return callback();
-    Fix(blog, function (err) {
+    Fix(blog, function (err, report) {
       if (err) return callback();
+      const repaired = syncReport.summarize(report);
+      if (repaired) console.log(prefix(), "Fix repaired", blogID, repaired);
       if (config.environment === "development") {
         watch(blogID);
       }

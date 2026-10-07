@@ -3,6 +3,7 @@ const { promisify } = require("util");
 const Blog = require("models/blog");
 const clfdate = require("helper/clfdate");
 const Fix = require("sync/fix");
+const syncReport = require("clients/util/syncReport");
 const database = require("./database");
 
 const getBlog = promisify(Blog.get);
@@ -26,9 +27,13 @@ const hasRecentSync = async (blogID) => {
 
 const fixBlog = (blog) =>
   new Promise((resolve) => {
-    Fix(blog, (err) => {
+    Fix(blog, (err, report) => {
       if (err) {
         console.error(clfdate(), "Google Drive: Fix error for blog", blog.id, err);
+      }
+      const repaired = syncReport.summarize(report);
+      if (repaired) {
+        console.log(clfdate(), "Google Drive: Fix repaired", blog.id, repaired);
       }
       resolve();
     });

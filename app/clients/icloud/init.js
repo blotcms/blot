@@ -12,6 +12,7 @@ const syncFromiCloud = require("./sync/fromiCloud");
 const syncToiCloud = require("./sync/toiCloud");
 const countChanges = require("clients/util/countChanges");
 const Fix = require("sync/fix");
+const syncReport = require("clients/util/syncReport");
 
 const getBlog = promisify(Blog.get);
 
@@ -171,7 +172,7 @@ const runValidation = async ({ notify = true } = {}) => {
         }
 
         await new Promise((resolve) => {
-          Fix(blog, (fixError) => {
+          Fix(blog, (fixError, fixReport) => {
             if (fixError) {
               console.error(
                 clfdate(),
@@ -179,6 +180,10 @@ const runValidation = async ({ notify = true } = {}) => {
                 blogID,
                 fixError
               );
+            }
+            const repaired = syncReport.summarize(fixReport);
+            if (repaired) {
+              console.log(clfdate(), "iCloud: Fix repaired", blogID, repaired);
             }
             resolve();
           });
