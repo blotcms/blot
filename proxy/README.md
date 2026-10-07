@@ -105,6 +105,16 @@ self-signed placeholder so OpenResty can start).
   `PROXY_ACME_CA` set to Let's Encrypt staging for a throwaway domain and
   confirms a staging certificate is issued. See
   [`deploy/README.md`](deploy/README.md).
+- **When Redis is down**: auto-ssl caches each certificate in memory for an
+  hour, then reads Redis again. A handshake that cannot read Redis falls back
+  to the last certificate this proxy read for that domain (the
+  `auto_ssl_stale` shared dict, kept until the certificate expires), so
+  domains served recently keep HTTPS through a longer outage. Domains it has
+  no copy of get the fallback certificate, and nothing new is issued. The
+  copies are in memory: they survive `openresty -s reload` but not a restart
+  or a new container, so do not restart or redeploy the proxy while Redis is
+  down. `PROXY_AUTO_SSL_CACHE_TTL` (seconds) shortens the hour; it exists for
+  the CI checks and is unset in production.
 
 ### Possible replacement for `lua-resty-auto-ssl` (to investigate)
 
@@ -247,7 +257,12 @@ Tracked in the repo's `TODO` under "Proxy container (OpenResty)".
   - `cert-issuance` issues a real custom-domain certificate through the proxy
     against a Pebble ACME server, checks it persists across a container
     recreate, and checks that a Redis which stops answering neither stalls the
-    handshake nor lets the proxy start issuing for an unlisted domain.
+    handshake nor lets the proxy start issuing for an unlisted domain. Then
+    [`e2e/redis-outage-checks.sh`](e2e/redis-outage-checks.sh) stops Redis
+    and checks the issued certificate is still served past the (shortened)
+    cache, including after a reload, that a newer certificate in Redis wins
+    once it is back, and that `READONLY` / `NOREPLICAS` Redis still serves
+    certificates while issuance fails fast.
   - `zero-downtime` runs two proxy containers sharing `:80`/`:443` via
     SO_REUSEPORT and asserts no request is dropped while the first is stopped
     with a drain timeout.
