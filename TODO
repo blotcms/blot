@@ -1,19 +1,53 @@
-Investigate high aws bill cause
+Consider dropping Redis client-side caching (CLIENT TRACKING) in favour of the app's in-process LRU caches: on prod 10 clients have tracking on and the server's tracking table sits at its 1M-key cap (tracking-table-max-keys), so Redis is constantly evicting entries and sending invalidations
+Fix blot-airlock crash-restarts: /usr/local/bin/check_docker_health.sh (cron, every minute) restarted it as unhealthy 7 times between 6 Oct 20:55 and 7 Oct 12:04 UTC (~/docker-health-check.log on the blot host); find why its health check fails
+Solve redis kernel issue:
+- can we switch to 1cpu / 16gb ram redis? do we need the second cpu for bgsave? our peak rss is 23gb? can we add maxmemory and error writes?
+  - yes: dataset is 4.6G (RSS 6.7G, frag 1.45); the 23G peak is the high-water mark since Redis started in Sep 2023, before the purge. bgsave COW is only 12-46MB, but `save 60 10000` forks a 32s save every 1-2 min (children ~27% of a core), so the new host saves at most every 5 min
+Redis outage follow-ups
+- Dropbox webhook drops syncs (listBlogs fails after the 200 ack) and git auth maps Redis errors to a 401 while Redis is unreachable
+- Redis auth/TLS; 
+- Review, revise, test and run redis orchestration script to restore from s3 backup into new instance
 
-Add option to hypertext template to make homepage chrono list of posts and tell [Brendan](https://mail.google.com/mail/u/0/#inbox/FMfcgzQhWfPnbhmcWTtTJxGgMqJtppML)
+Migrate static content to s3
 
-Add script which issues request locally
-- use to debug nashp concurrent requests in isolation on prod infra
+---
 
-Add script to triage fix/build issues individually (with appropriate heap flags etc.)
+run node scripts/entry/rebuild-all.js
 
-Add error / getHealth issues to sync log (folder.status) for Dropbox/other client Issues
+Can the status page avoid the LRU caches somehow and fully work redis? Maybe we synthesise a route somehow? Thoughts?
+
+hypertext template on indexes:
+- title needs to link to permalink page 
+- anchor links in title need to link to anchor on permalink pages
+- improve aesthetics and spacing of pagination links
+
+Could we improve the performance of posts/pages with lots of images by adding loading=lazy in the output HTML?
+
+Our AWS bill is high because we have run out of reserved instance. Decide on the plan.
+- switch over static files to s3
+- reduce eb2 data volume size
+- can we have multiple smaller webservers with load balancing? 
+
+Safely and very carefully switch AWS account root user email to @blot.im
+
+Folder-link lookups: the rewrite tries to look up mailto: links as files in the blog's folder.
 
 Make sync logs more useful, surface recent changes on dashboard. Group multiple files together if changed at same time, etc. make it useful!
+- Add error / getHealth issues to sync log (folder.status) for Dropbox/other client Issues
 
-Add dropbox kill switch (when platform goes down, etc.)
+Work on removing replaceFolderLinks
 
-Add icloud kill switch (when platform goes down, etc.)
+Excercise the backlinks with big entries / many backlinks in the benchmarks somewhere
+
+
+Fix Google Drive sync outage caused by Google account suspesion
+- Future fix to Google Drive client needs to never use the service account to create files (ask the user to handle the initial transfer)
+- Revert 1958
+- Create simple config option to disable a given client when something like the Google Drive issue happens. Make it clear on the dashboard and docs that it's not working.
+- Add google drive kill switch (when platform goes down, etc.)
+
+We need a plan for the suspension of the iCloud user as well... is the code resilient to data loss in this scenario?
+- Add icloud kill switch (when platform goes down, etc.)
 
 How do we think about a shared asset library across templates? 
 - e.g. shared favicons
@@ -21,23 +55,15 @@ How do we think about a shared asset library across templates?
 
 Decide whether or not to revert the preset system – should it only be used for the templates index for explaining the customization features?
 
-Begin triaging iCLoud sync issues
-
-Add script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago)
+Test script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago)
 - test npm run restore-folder
 
 iCloud server should periodically:
 - quit safari (some error flow during auth sometimes opens it)
 - close all system UI prompts (sometimes we get error for maybe accessing a revoked folder?)
 
-Create simple config option to disable a given client when something like the Google Drive issue happens. Make it clear on the dashboard and docs that it's not working.
-
 Under templates index
 - Clicking on file in folder pulls up post on preview site ?
-
-Fix Google Drive sync outage caused by Google account suspesion
-- Future fix to Google Drive client needs to never use the service account to create files (ask the user to handle the initial transfer)
-- Revert 1958
 
 Make Google Drive incremental sync efficient
 - Store hash of their api responses
@@ -47,18 +73,10 @@ Make Google Drive incremental sync efficient
 
 Clarify on cancel / delete / overdue pages for accounts with grandfathered subscription prices that if they re-join Blot they will lose their grandfathered rate.
 
-We need a plan for the suspension of the iCloud user as well... is the code resilient to data loss in this scenario?
-
-Investigate green crashes (`Lock was lost` / ECOMPROMISED at 2026-09-21 18:02 and 20:01 UTC) and slow `/health` in the first minutes of each hour; the Dropbox hourly validation is only a suspect, not confirmed
-- Checked green logs for `validation lag` and `[EVENT LOOP]` after PR #1950 shipped: neither showed any delay near the 10s lock TTL at the 2026-09-22 06:00:49 and 07:00:39 crashes, and Redis's own SLOWLOG had nothing near 10s either — ruled out a classic JS block and a single slow Redis command
-- The two compromised blogs' folders aren't large/flat or full of huge files (824 and 526 files, largest file 9.4MB) — the localReaddir concurrency fix (PR #1952) is good hygiene but isn't the cause here
-- Next: check green logs for `[LOCK] slow heartbeat` / `[LOCK] heartbeat error` after the heartbeat round-trip logging ships (PR #1952) — it separates event-loop-side delay (tickDelay) from Redis-side delay (roundTrip) for the first time
-- 2026-09-24 crashes at 15:04:34 and 16:01:08 UTC (green): `[LOCK] slow heartbeat` showed tickDelay~0ms with roundTrip 1.6-11.3s, so it's neither event-loop block nor a single slow Redis command (SLOWLOG still clean) — it's queueing on the shared singleton Redis connection (app/models/client.js, one TCP connection per process, no pooling). Both crashes landed right as validation's `Fix()` stage (app/sync/fix) started on some other blog with several hundred posts - `entry-ghosts` does one sequential Redis round trip per entry, over that same shared connection, which is enough to starve an unrelated blog's heartbeat. Full timeline (no customer-identifying details) in the investigate-dropbox-sync-issue skill's incident log
-- Added diagnostics for next time: per-check timing in Fix() (app/sync/fix/index.js), an `entries=N` field on the `validation lag` log line (app/clients/dropbox/init.js), a `runningFixCheck` field on `[LOCK COMPROMISED]` diagnostics (app/sync/lock-diagnostics.js) since Fix() doesn't hold the folder lock and was invisible to pendingSyncs, and fixed `[LOCK COMPROMISED]`'s console.error silently truncating pendingSyncs/pendingUpdates to `[Object]` (app/sync/index.js)
-- Not yet fixed: give the lock heartbeat its own dedicated Redis connection so Fix()'s traffic can't queue ahead of it, or batch Fix()'s per-entry reads
-- Remove the event loop monitor (app/helper/eventLoopMonitor*.js, its setup.js hook, and `logLag`/`measureEventLoop` in app/clients/dropbox/init.js) and the lock heartbeat logging (app/sync/lock.js) once the cause is fixed
-
-Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
+Sync sweep digest (app/clients/util/syncReport.js) follow-ups
+- Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
+- Don't report a stuck lock for a blog still in its initial setup/transfer (Dropbox transfer_pending, Drive preparing, iCloud transferringToiCloud) - a big first transfer can legitimately hold the lock >1h
+- Once-per-occurrence suppression treats "not seen this run" as cleared, including blogs that just weren't eligible that hour, so an ongoing error can be re-emailed after a quiet hour - remember issues until a successful walk/Fix actually clears them
 
 Surface template choices on the templates subpages: switch from png to iframe after hovering a selection
 
@@ -91,8 +109,6 @@ Get node container horizontally scalable and multi-region
 
 Add clear bill change info to new blog flow
 
-Check in on our dropbox sync verification job to make sure it's working well (docker green)
-
 Rebuild all sites to bake in folder CDN urls
 
 Why is Ross' template so slow to install? It takes a few seconds. Let's speed it up.
@@ -103,8 +119,6 @@ Now we have many LRU caches in app/blog we need to gather data in production to 
 
 Finish cross platform folder renderer
 
-Redis outage follow-ups
-- Dropbox webhook drops syncs (listBlogs fails after the 200 ack) and git auth maps Redis errors to a 401 while Redis is unreachable
 
 Improve about section
 - Restructure /about into current principles and clearly dated working notes.
@@ -118,6 +132,10 @@ Fix performance bugs on various sites:
 - anchor and re-enable site
 - nashp (improve speed)
 - jaysjay (especially archives)
+  - entry pages take ~3.8s on every render, warm or cold: ~1000 Redis commands / 18MB per render while loading entries (render-probe, 2026-10-06)
+- heydingus /search 0.5-0.8s warm (search_results reads ~10MB per query); its template emits `…/null` links that crawlers 404 on
+- blot.im /questions pages 250-750ms, mostly I/O (elu 0.2-0.4), incl. 302s from /questions/:id/edit
+- replaceFolderLinks looks up `mailto:` links as folder files (`No file found in folder: mailto:…`); skip non-path schemes
 - using additional req trace logging and more possible LRU caching
 - do we need a seperate incrementally updated index of skinny entry properties, e.g. title url etc for rendering archives / allEntries?
 
@@ -131,8 +149,6 @@ Fix benchmark build-corpus action issue
 
 Improve Google Drive sync
 - Fix bug with repeat resyncs of specific sites via Google Drive:
-  - To identify, run node scripts/google-drive/resync.js multiple times, some sites continually resync the same files...
-  - Mark's site unneccessarily re-downloads some (all?) files on sync rather than using the correct hash and tell [Mark](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTVmrvkvcfPvcJhcLvrwSndWS)
 - Fix bug with shared drive folders for [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBkLKSVzvjZLRSCpRJwcKBPlf)
 - Fix bug with Google Docs when disconnecting a site from Google Drive on Blot then reconnecting the site to Google Drive. We need to work out how to handle this (Google Docs are not real files)
 - Improve sync efficieny with option to target a specific folder or file first (Track ids in database) and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBspgLdtHcrTZqRcPTJFNzBbd) maybe use touch metadata method to force syncs periodically for hot files?
@@ -188,7 +204,6 @@ Improve Dropbox sync
 - How do we make errors sticky? To make sure users click through to clients page to re-connect to Dropbox, etc...
 
 Improve git sync
-- Investigate a bug with git client credentials triggered when you have two sites using git on one account, and delete one of the sites
 - Work out how to pipe custom error messages down to customer git clients
 - Create tests for large Git repo initialization
 - Make git client setup resumable / handle server restart
@@ -213,10 +228,11 @@ Improve git sync
 - Rate limit authentication route?
 
 Improve iCloud sync
-- Revert server changes to iCloud to reintroduce integrity checks
+- iCloud: the hourly integrity check is back; once it has run cleanly for a while, decide whether to re-enable the daily resync (resyncAllConnected) and the startup/`/started` resync (resyncRecentlySynced), still disabled from these commits
   - 0043d91b36621ecd6aef2bcc263f51f209924792
   - 98dc9405c883825917de8e436ec620f60adaf975
-- Fix bug: handle deletion of iCloud folder by user cleanly and clearly. iCloud client which doesn't surface / handle removed folder - to reproduce, connect to icloud then delete the folder
+- iCloud macserver should periodically validate the local blog folders to ensure the client is still connected on blot and clean up any failed initial transfers (i.e. non blog_... folders)
+- iCloud: a Blot edit while the folder is missing (SOURCE_MISSING) still reaches the macserver upload, which re-creates an unshared folder (write.js, remove.js should skip the remote write)
 - If we need to resolve further bugs with sync drift:
   - Implement additional parsing of modified paths from monitorer.js (brctl monitor -i) and reconcile these in addition to the fswatch module with the chokidar events for additional redundancy
 - Think about adding a more efficient endpoint to sync folder state. 
@@ -365,8 +381,8 @@ Proxy container (OpenResty) - remaining before it can replace config/openresty:
 - Run the proxy cutover (proxy/deploy/README.md), then run proxy/deploy/blue-green.sh from a deploy workflow like scripts/deploy (images are published by proxy-image.yml)
 - dehydrated version drift: the proxy image vendors dehydrated 0.7.2 (0.6.5, which lua-resty-auto-ssl pins, is rejected by current ACME servers); bare-metal config/openresty still installs the 0.6.5 pin via luarocks - unify (bump lua-resty-auto-ssl, or vendor 0.7.2 there too)
 - Investigate replacing unmaintained lua-resty-auto-ssl (would also resolve the two items above): lua-resty-acme (keeps OpenResty, drops dehydrated/sockproc/:8999) or issuing from the Blot app into Redis; see proxy/README.md
-- Redis auth/TLS; container equivalent for fail2ban
 - Purge follow-ups: BLOT_REVERSE_PROXY_URLS is a static list (proxies should register themselves in Redis), and purges queued in a Node process's memory are lost if it dies before sending them
+- container equivalent for fail2ban
 
 Follow-ups from drag-and-drop template upload:
 - Move the folder browser (views/dashboard/folder/directory.html) onto the shared views/js/collect-dropped-files.js instead of its inline copy of the same traversal
@@ -379,7 +395,6 @@ New templates:
 
 Switch templates from entries.html to index.html with explicit url: ['/', '/page/:page'].
 - fix docs on routing order
-
 
 Improve markdown:
 - Turn on 'preserve linebreaks by default' for markdown 
@@ -705,7 +720,6 @@ Move image zoom plugin to templates
       disable image zoom plugin
   Remove image zoom plugin
 
-Review, revise, test and run redis orchestration script to restore from s3 backup into new instance
 
 Reduce service provider risk:
 - move domain registrar from AWS to Epik?
@@ -1268,10 +1282,6 @@ Self-hosting:
 - Tell Nick when it's possible to deploy a self-hosted [Blot on Vercel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKjxHWSvgjKtCWrbhccKFPlkdD) and [Zia](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsSXWPRNNxDNcdhGHQXBkTtsx)
 
 Add preflight checks in proxy/deploy/{cutover-from-baremetal,blue-green}.sh for PROXY_BLOG_STATIC_DIR/PROXY_GLOBAL_STATIC_DIR existing and readable - docker -v silently creates an empty dir for a missing host path, so a typo or host-layout change would 404 cdn.* static assets with no check catching it
-
-Find and replace the KEYS calls blocking prod Redis (from SLOWLOG, source 172.30.0.122 = the blot host, not repo code — likely a host cron or manual `client` session)
-- `keys ssl:*:latest` ~750ms, roughly daily (21, 23, 24 Sep) — switch to `--scan --pattern`
-- `KEYS *blog_<id>*` 2.4s on 22 Sep
 
 Explore a redesign of Fix() (app/sync/fix) to cut Redis load further, e.g. one chunked walk over every referenced entry id (lists + tag members) that MGETs each entry once and applies every per-entry check, instead of each check re-reading all content. Not an easy win:
 - ghosts include ids with no entry, so the walk must cover the union of list and tag member ids, not just "all"

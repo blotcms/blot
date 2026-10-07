@@ -1,10 +1,33 @@
 iCloud sync issue
 
-The hourly sync validation detected previously unsynced changes from iCloud for the following sites:
+The hourly sync validation found problems for the following sites: changes from iCloud that were never synced, repairs made by Fix(), errors, and folder locks that look stuck.
 
 {{#blogs}}
-- {{id}} {{handle}} — {{changeCount}} change{{#changeCountPlural}}s{{/changeCountPlural}}
-  (downloaded: {{downloaded}}, removed: {{removed}}, created dirs: {{createdDirs}})
-  `logs blue | grep "{{truncatedId}} sync_"`
-  `access {{handle}}`
+**{{id}} {{handle}}**
+
+`logs green | grep "{{truncatedId}} sync_"`
+`access {{handle}}`
+
+{{#hasStuckLock}}
+- folder lock held for {{lockHeldFor}} — sync may be hung
+{{/hasStuckLock}}
+{{#hasChanges}}
+- {{changeCount}} unsynced change{{#changeCountPlural}}s{{/changeCountPlural}} (downloaded: {{downloaded}}, removed: {{removed}}, created dirs: {{createdDirs}}, excluded as edited during the walk: {{excluded}})
+{{/hasChanges}}
+{{#hasRepairs}}
+- Fix() repaired:
+{{#checks}}
+  - **{{name}}** — {{count}} item{{#countPlural}}s{{/countPlural}}
+{{#sample}}
+    - {{.}}
+{{/sample}}
+{{#hasMore}}
+    - ...and {{moreCount}} more
+{{/hasMore}}
+{{/checks}}
+{{/hasRepairs}}
+{{#errors}}
+- error during {{phase}}: {{message}}
+{{/errors}}
+
 {{/blogs}}

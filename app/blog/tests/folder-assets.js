@@ -98,6 +98,43 @@ describe("build-time baked folder links", function () {
     expect(stored.entry.html).toContain(`/folder/${version}/`);
   });
 
+  it("bakes a link to a missing file once it arrives with different casing", async function () {
+    await this.template({ "entry.html": "{{{entry.html}}}" });
+    await this.write({
+      path: "/cased.txt",
+      content: "Link: /cased\n\n![Pic](/Photo.JPG)",
+    });
+
+    expect(await this.text("/cased")).not.toContain("/folder/v-");
+
+    await this.write({ path: "/photo.jpg", content: "pic one" });
+
+    const after = await this.text("/cased");
+
+    expect(versionOf(after, "photo\\.jpg")).toBeTruthy();
+
+    const stored = await (await this.get("/cased?json=true")).json();
+
+    expect(stored.entry.html).toContain("/folder/v-");
+  });
+
+  it("bakes a poster linked by its percent-encoded name once the file arrives", async function () {
+    await this.template({ "entry.html": "{{{entry.html}}}" });
+    await this.write({
+      path: "/encoded.txt",
+      content: 'Link: /encoded\n\n<video poster="/my%20pic.jpg"></video>',
+    });
+
+    expect(await this.text("/encoded")).not.toContain("/folder/v-");
+
+    await this.write({ path: "/my pic.jpg", content: "pic one" });
+
+    const stored = await (await this.get("/encoded?json=true")).json();
+
+    expect(stored.entry.html).toContain("/folder/v-");
+    expect(stored.entry.html).toContain("/my%20pic.jpg");
+  });
+
   it("falls back to the plain path when a baked file is deleted", async function () {
     await this.template({ "entry.html": "{{{entry.html}}}" });
     await this.write({ path: "/photo.jpg", content: "photo one" });

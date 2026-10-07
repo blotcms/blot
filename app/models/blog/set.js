@@ -9,6 +9,7 @@ var client = require("models/client");
 var config = require("config");
 var BackupDomain = require("./util/backupDomain");
 var flushCache = require("./flushCache");
+var rebuildEntriesOnNewHosts = require("./rebuildEntriesOnNewHosts");
 var normalizeImageExif = require("./util/imageExif").normalize;
 var normalizeConverters = require("./util/converters").normalize;
 var updateCdnManifest = require("../template/util/updateCdnManifest");
@@ -215,6 +216,12 @@ module.exports = function (blogID, blog, callback) {
 
       flushCache(blogID, former, function (err) {
         callback(err, changesList);
+
+        // Entries link to the blog's own hosts (see folderAssets), so a new
+        // handle or domain means some stored HTML needs baking again. This
+        // runs in the background, after the caller has its answer.
+        if (!err && (changes.handle || domainChanged))
+          rebuildEntriesOnNewHosts(blogID, former);
       });
     });
   });

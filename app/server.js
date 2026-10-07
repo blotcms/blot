@@ -33,6 +33,23 @@ console.log(
 // req.ip is the address NGINX appended, which a client cannot spoof.
 server.set("trust proxy", 1);
 
+// Docker's HEALTHCHECK and the deploy script request localhost/health to see
+// whether the process is serving requests. This must come before the blog
+// middleware, which looks up the request's host in Redis (there is no blog
+// with the host 'localhost'), otherwise an outage of Redis makes every
+// container unhealthy. The proxy answers /health itself for public traffic.
+// If you remove this, change monit.rc too.
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+server.get("/health", function (req, res, next) {
+  // Only the internal probe (localhost or a loopback address, e.g. the proxy
+  // cutover script's 127.0.0.1): routing is not strict, so this would also
+  // catch a customer's /health/ page, which the blog serves.
+  if (req.path !== "/health" || !LOOPBACK_HOSTS.has(req.hostname)) return next();
+  // do not cache response
+  res.set("Cache-Control", "no-store");
+  res.send("OK");
+});
+
 // Check if the database is healthy. Uses the shared client rather than
 // opening a new connection, which would hang while Redis is down.
 server.get("/redis-health", async function (req, res) {
@@ -128,15 +145,6 @@ server.use(vhost("cdn." + config.host, require("./cdn")));
 // most important. We don't know the hosts for all the blogs in
 // advance so all requests hit this middleware.
 server.use(blog);
-
-// Monit, which we use to monitor the server's health, requests
-// localhost/health to see if it should attempt to restart Blot.
-// If you remove this, change monit.rc too.
-server.get("/health", function (req, res) {
-  // do not cache response
-  res.set("Cache-Control", "no-store");
-  res.send("OK");
-});
 
 // Errors from the site that bubble up to here: respond 503 if Redis is
 // unreachable. The blog and dashboard have their own handlers for the same case.

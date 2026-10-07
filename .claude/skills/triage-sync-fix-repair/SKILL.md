@@ -1,17 +1,31 @@
 ---
 name: triage-sync-fix-repair
-description: Triage a "sync/fix repaired <handle>" admin email ("Fix() found and repaired issues for blog_… (handle, client: …)"), sent whenever sync/fix (Fix()) changes anything for a blog. Works out from the report rows and, if needed, production logs whether the repair was expected housekeeping (e.g. expired deleted entries pruned from lists), the trace of a live edit, or evidence of a real bug that is corrupting blog state, then appends a short entry to this skill's incident log. Use when the user pastes or forwards one of these emails, or asks why Fix() repaired a blog.
+description: Triage Fix() repairs reported in a "<Client> sync issue" digest email (Dropbox sync issue, etc.; the "Fix() repaired:" lines under a blog) or in a "Resync found changes" email. Fix() changes things for a blog whenever one of its checks returns rows. Works out from the report rows and, if needed, production logs whether the repair was expected housekeeping (e.g. expired deleted entries pruned from lists), the trace of a live edit, or evidence of a real bug that is corrupting blog state, then appends a short entry to this skill's incident log. Use when the user pastes or forwards one of these emails, or asks why Fix() repaired a blog.
 ---
 
-# Triage a sync/fix repair email
+# Triage a sync/fix repair
 
-## What the email means
+## What the report means
 
 `app/sync/fix/index.js` runs five checks in series against one blog's Redis
-state and the blog's local folder. If any check returns rows, `notifyAdmin`
-sends `app/helper/email/admin/SYNC_FIX_REPAIRED.txt` (first 10 rows per
-check, `JSON.stringify`d) and bumps the blog's `cacheID`. Fix() doesn't hold
-the folder lock and repairs as it goes, so the email reports what **was**
+state and the blog's local folder. If any check returns rows it bumps the
+blog's `cacheID` and returns the rows as its report. Fix() no longer emails
+on its own (the standalone "sync/fix repaired" email, `SYNC_FIX_REPAIRED`,
+is gone); callers report it:
+
+- the hourly sweep digest, e.g. "Dropbox sync issue"
+  (`app/helper/email/admin/DROPBOX_SYNC_ISSUE.txt`; Google Drive's, sent at
+  minute 30 by `app/clients/google-drive/validate.js`, is
+  `GOOGLE_DRIVE_SYNC_ISSUE.txt`): a blog's "Fix() repaired:"
+  lines, one per check with the first 10 rows `JSON.stringify`d. Formatting
+  lives in `app/clients/util/syncReport.js`.
+- the dashboard resync's "Resync found changes" email
+  (`RESYNC_FOUND_CHANGES.txt`), when Fix() repaired something after the resync.
+
+Other callers (dashboard rebuild, local setup, template folders, the
+startup resync, and for now iCloud) only log
+`Fix repaired <blog> check=N`. Fix() doesn't hold
+the folder lock and repairs as it goes, so the report says what **was**
 wrong; it's already been changed by the time you read it.
 
 Fix() is called from:
@@ -19,12 +33,13 @@ Fix() is called from:
 - Dropbox hourly validation, minute 0, **green** (`app/clients/dropbox/init.js`,
   blogs with `last_sync` in the past hour, after the resync)
 - iCloud validation (`app/clients/icloud/init.js`)
-- Google Drive hourly fix, minute 30 (`app/clients/google-drive/hourlyFix.js`)
+- Google Drive hourly validation, minute 30 (`app/clients/google-drive/validate.js`,
+  blogs with `lastSync` in the past hour, after a clean walk)
 - Local client setup (`app/clients/local/setup.js`)
 - Dashboard "rebuild"/fix of a site (`app/dashboard/site/client.js`)
 - Template folder installs (`app/templates/folders/index.js`)
 
-The `client:` in the email tells you which hourly job probably ran it. Each
+The digest's client (its subject) tells you which hourly job probably ran it. Each
 check logs `Fix: <blogID> <check> duration=Nms`, so the email time gives you
 the run: `grep 'Fix: <blogID>'` to find it.
 
@@ -44,6 +59,13 @@ exists on disk (`localPath`), with case-insensitive fallbacks.
   `Entry.drop`ped. That means a sync missed a delete/rename, or the local
   folder was lost or reset. **Usually a real sync bug.** Check whether the
   path was renamed or moved recently (grep the path in green's logs).
+  **Known cause (fixed): a whole local folder removed by a sync walk.**
+  The Google Drive, iCloud and Dropbox reset-to-blot walks `fs.remove` a
+  folder that's gone remotely, and used to call `update()` on the folder
+  path only. `drop` on a folder path drops nothing beneath it, so every
+  entry inside stayed live until Fix() caught it. The walks now update
+  each path inside (`clients/util/localDescendants`). If this recurs, look
+  for `Removing <parent folder> which does not exist remotely` in the logs.
 - `CASE`: the file exists with different casing. Entry path rewritten.
   Common after case-only renames on Dropbox/macOS. Mostly benign, but if
   you see it repeatedly for one blog, case handling is broken.
@@ -196,7 +218,7 @@ Entry template:
   24h key TTL, but the id stays in `all`/`deleted`. After expiry,
   `pruneMissing` reports each one, which explains the 30 rows (about 15
   files × 2 lists). This was the first email of this kind, sent soon after
-  the repair email was introduced (PR adding `SYNC_FIX_REPAIRED`).
+  the repair email was introduced (PR adding `SYNC_FIX_REPAIRED`, since replaced by the digests).
 - Follow-up: fixed in the PR adding `Entries.sweepExpiredDeleted` (option
   "use the `deleted` scores to clean up after the expiry"). Original notes:
   list-ghosts `MISSING` rows confined to `all`/`deleted` are
@@ -218,3 +240,22 @@ Entry template:
 - Follow-up: fixed by having `setupBlogs` keep each existing menu item's
   entry-derived label/url/metadata instead of resetting them from config
   (the email itself was left on, so real demo-blog repairs still surface).
+
+### 2026-10-06 ~17:30 UTC Fix() run — sync gap (folder removed, child entry left live), triggered by Drive name mapping
+
+- Email: entry-ghosts, 1 `MISSING` row (an image whose Drive name has a
+  `/` in it), client: google-drive. Timestamp is from the email (Drive hourly fix
+  at :30) and wasn't confirmed on prod.
+- Cause: before 5b6f8ddca, localPath turned the `/` in the Drive name
+  into a subfolder plus a file. The new `localName` maps it to `_`, so the
+  next walk downloaded the flat name and removed the subfolder with one
+  `fs.remove` + `update(folder)`. That doesn't drop entries under a folder,
+  so the old nested entry stayed live until Fix() dropped it.
+- Expect one such email per Drive blog that has `/` in a file name, once each,
+  after that deploy. The gap behind it (removing a folder leaves its
+  entries live) is older and also affects Drive folder renames/deletes and
+  Dropbox reset-to-blot.
+- Follow-up: fixed by having the Drive, iCloud and Dropbox reset-to-blot
+  walks update every path inside a folder they remove
+  (`clients/util/localDescendants`). Dropbox webhook syncs were never
+  affected, because Dropbox reports a delete for each descendant.

@@ -25,6 +25,21 @@ describe("models/redis", function () {
     expect(client.options.disableOfflineQueue).toBe(true);
   });
 
+  it("stops queueing after a grace period if the client never connects", function () {
+    jasmine.clock().install();
+    try {
+      const client = new EventEmitter();
+      client.options = {};
+      createRedisClient.failFastOnceReady(client);
+      jasmine.clock().tick(createRedisClient.BOOT_QUEUE_MS - 1);
+      expect(client.options.disableOfflineQueue).toBeUndefined();
+      jasmine.clock().tick(1);
+      expect(client.options.disableOfflineQueue).toBe(true);
+    } finally {
+      jasmine.clock().uninstall();
+    }
+  });
+
   it("commands hang without failFast while redis is unreachable", async function () {
     const client = unreachableClient();
     const outcome = await Promise.race([

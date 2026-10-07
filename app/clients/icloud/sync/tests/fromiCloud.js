@@ -53,6 +53,10 @@ describe("icloud fromiCloud sync", function () {
   beforeEach(async () => {
     blogID = `icloud-test-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     await fs.ensureDir(localPath(blogID, "/"));
+    // Other icloud specs (e.g. getHealth) require the client module, which
+    // caches fromiCloud with its real dependencies. Drop that so each test
+    // can inject mocks before loading fromiCloud.
+    delete require.cache[fromiCloudPath];
   });
 
   afterEach(async () => {
@@ -73,7 +77,10 @@ describe("icloud fromiCloud sync", function () {
       throw new Error("download should not be called for oversized files");
     });
     mockModule(checkWeCanContinuePath, () => async () => {});
-    mockModule(databasePath, { store: async () => {} });
+    mockModule(databasePath, {
+      store: async () => {},
+      get: async () => ({ setupComplete: true }),
+    });
 
     const fromiCloud = require(fromiCloudPath);
     const published = [];
@@ -116,7 +123,10 @@ describe("icloud fromiCloud sync", function () {
       throw new Error("download should not be called for oversized files");
     });
     mockModule(checkWeCanContinuePath, () => async () => {});
-    mockModule(databasePath, { store: async () => {} });
+    mockModule(databasePath, {
+      store: async () => {},
+      get: async () => ({ setupComplete: true }),
+    });
 
     const fromiCloud = require(fromiCloudPath);
     const summary = await fromiCloud(
@@ -132,6 +142,94 @@ describe("icloud fromiCloud sync", function () {
     expect(summary.placeholdersCreated).toBe(1);
   });
 
+  describe("oversized remote files", () => {
+    const remoteFile = {
+      name: "huge.mov",
+      size: 1000 * 1000 * 1000,
+      isDirectory: false,
+    };
+
+    const run = async () => {
+      mockModule(remoteRecursiveListPath, async () => {});
+      mockModule(remoteReaddirPath, async () => [remoteFile]);
+      mockModule(downloadPath, async () => {
+        throw new Error("download should not be called for oversized files");
+      });
+      mockModule(checkWeCanContinuePath, () => async () => {});
+      mockModule(databasePath, {
+        store: async () => {},
+        get: async () => ({ setupComplete: true }),
+      });
+
+      const updated = [];
+      const summary = await require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async (path) => {
+          updated.push(path);
+        }
+      );
+
+      return { summary, updated };
+    };
+
+    it("registers a newly written placeholder with update", async () => {
+      const { summary, updated } = await run();
+
+      expect(
+        (await fs.stat(localPath(blogID, join("/", remoteFile.name)))).size
+      ).toBe(0);
+      expect(summary.placeholdersCreated).toBe(1);
+      expect(updated).toEqual(["/huge.mov"]);
+    });
+
+    it("leaves an existing empty placeholder alone", async () => {
+      const localFile = localPath(blogID, join("/", remoteFile.name));
+      await fs.outputFile(localFile, "");
+      const outputFile = spyOn(fs, "outputFile").and.callThrough();
+
+      const { summary, updated } = await run();
+
+      expect(outputFile).not.toHaveBeenCalled();
+      expect(updated).toEqual([]);
+      expect(summary.skipped).toBe(0);
+      expect(summary.placeholdersCreated).toBe(0);
+      expect(summary.failed).toBe(0);
+    });
+
+    it("truncates a non-empty local file to a placeholder and registers it", async () => {
+      const localFile = localPath(blogID, join("/", remoteFile.name));
+      await fs.outputFile(localFile, "existing local content");
+
+      const { summary, updated } = await run();
+
+      expect((await fs.stat(localFile)).size).toBe(0);
+      expect(summary.placeholdersCreated).toBe(1);
+      expect(updated).toEqual(["/huge.mov"]);
+    });
+
+    it("counts a failed update as a failure", async () => {
+      mockModule(remoteRecursiveListPath, async () => {});
+      mockModule(remoteReaddirPath, async () => [remoteFile]);
+      mockModule(checkWeCanContinuePath, () => async () => {});
+      mockModule(databasePath, {
+        store: async () => {},
+        get: async () => ({ setupComplete: true }),
+      });
+
+      const summary = await require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async () => {
+          throw new Error("update failed");
+        }
+      );
+
+      expect(summary.failed).toBe(1);
+      expect(summary.firstError).toBe("update failed");
+    });
+  });
+
   it("does not remove local files when remoteReaddir fails (partial/unconfirmed listing)", async () => {
     const localFile = localPath(blogID, join("/", "post.txt"));
     await fs.outputFile(localFile, "hello world");
@@ -141,7 +239,10 @@ describe("icloud fromiCloud sync", function () {
       throw new Error("Directory listing unavailable: iCloud has not synced it yet");
     });
     mockModule(checkWeCanContinuePath, () => async () => {});
-    mockModule(databasePath, { store: async () => {} });
+    mockModule(databasePath, {
+      store: async () => {},
+      get: async () => ({ setupComplete: true }),
+    });
 
     const fromiCloud = require(fromiCloudPath);
     const published = [];
@@ -156,6 +257,110 @@ describe("icloud fromiCloud sync", function () {
     expect(stat.isFile()).toBe(true);
     expect(summary.removed).toBe(0);
     expect(published.some((line) => line.includes("Sync failed"))).toBe(true);
+  });
+
+  it("clears a stored error after a successful sync of a set-up blog", async () => {
+    const store = jasmine.createSpy("store").and.returnValue(Promise.resolve());
+
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => []);
+    mockModule(downloadPath, async () => {});
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, {
+      store,
+      get: async () => ({
+        setupComplete: true,
+        error: "Something unexpected",
+        errorCode: "SYNC_ERROR",
+        errorSince: Date.now() - 60 * 1000,
+      }),
+    });
+
+    const fromiCloud = require(fromiCloudPath);
+    await fromiCloud(blogID, () => {}, async () => {});
+
+    expect(store).toHaveBeenCalledWith(blogID, { error: null });
+  });
+
+  async function storeCallsForWalk(account) {
+    const store = jasmine.createSpy("store").and.returnValue(Promise.resolve());
+
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => []);
+    mockModule(downloadPath, async () => {});
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, { store, get: async () => account });
+
+    const fromiCloud = require(fromiCloudPath);
+    await fromiCloud(blogID, () => {}, async () => {});
+
+    return store;
+  }
+
+  it("does not clear SOURCE_MISSING after a successful walk", async () => {
+    const store = await storeCallsForWalk({
+      setupComplete: true,
+      error: "Blog directory deleted",
+      errorCode: "SOURCE_MISSING",
+      errorSince: Date.now() - 60 * 1000,
+    });
+
+    expect(store).not.toHaveBeenCalled();
+  });
+
+  it("does not clear an error recorded after the walk began", async () => {
+    const store = await storeCallsForWalk({
+      setupComplete: true,
+      error: "Something unexpected",
+      errorCode: "SYNC_ERROR",
+      errorSince: Date.now() + 1000,
+    });
+
+    expect(store).not.toHaveBeenCalled();
+  });
+
+  it("does not clear a stored error when setup is incomplete", async () => {
+    const store = jasmine.createSpy("store").and.returnValue(Promise.resolve());
+
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => []);
+    mockModule(downloadPath, async () => {});
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, {
+      store,
+      get: async () => ({
+        setupComplete: false,
+        error: "Transfer failed",
+      }),
+    });
+
+    const fromiCloud = require(fromiCloudPath);
+    await fromiCloud(blogID, () => {}, async () => {});
+
+    expect(store).not.toHaveBeenCalled();
+  });
+
+  it("does not clear a stored error when sync fails", async () => {
+    const store = jasmine.createSpy("store").and.returnValue(Promise.resolve());
+
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => {
+      throw new Error("Folder does not exist");
+    });
+    mockModule(downloadPath, async () => {});
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, {
+      store,
+      get: async () => ({
+        setupComplete: true,
+        error: "Blog directory deleted",
+      }),
+    });
+
+    const fromiCloud = require(fromiCloudPath);
+    await fromiCloud(blogID, () => {}, async () => {});
+
+    expect(store).not.toHaveBeenCalled();
   });
 
   it("excludes a download modified around or after the walk started from modifiedDuringWalk", async () => {
@@ -199,5 +404,81 @@ describe("icloud fromiCloud sync", function () {
 
     expect(summary.downloaded).toBe(1);
     expect(summary.modifiedDuringWalk).toBe(0);
+  });
+
+  function mockWalk(remoteContents) {
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => remoteContents);
+    mockModule(downloadPath, async () => {});
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, { store: async () => {}, get: async () => ({}) });
+  }
+
+  const remoteFile = (name) => ({ name, size: 1, isDirectory: false });
+
+  describe("failure signal", () => {
+    it("reports no failures for a clean walk", async () => {
+      mockWalk([]);
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.failed).toBe(0);
+      expect(summary.firstError).toBeNull();
+    });
+
+    it("counts a failed folder tree listing without stopping the walk", async () => {
+      mockWalk([]);
+      mockModule(remoteRecursiveListPath, async () => {
+        throw new Error("macserver unreachable");
+      });
+      spyOn(console, "error");
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.failed).toBe(1);
+      expect(summary.firstError).toBe("macserver unreachable");
+    });
+
+    it("counts every failed download and keeps the first message", async () => {
+      mockWalk([remoteFile("a.txt"), remoteFile("b.txt"), remoteFile("c.txt")]);
+      let calls = 0;
+      mockModule(downloadPath, async () => {
+        calls += 1;
+        if (calls < 3) throw new Error("download " + calls + " failed");
+      });
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.failed).toBe(2);
+      expect(summary.firstError).toBe("download 1 failed");
+      expect(summary.downloaded).toBe(1);
+    });
+
+    it("counts an oversized-file placeholder that could not be written", async () => {
+      mockWalk([
+        { name: "huge.mov", size: 1000 * 1000 * 1000, isDirectory: false },
+      ]);
+      spyOn(fs, "outputFile").and.callFake(async () => {
+        throw new Error("disk full");
+      });
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.placeholdersCreated).toBe(0);
+      expect(summary.failed).toBe(1);
+      expect(summary.firstError).toBe("disk full");
+    });
+
+    it("counts a directory listing that fails", async () => {
+      mockWalk([]);
+      mockModule(remoteReaddirPath, async () => {
+        throw new Error("Directory listing unavailable");
+      });
+
+      const summary = await require(fromiCloudPath)(blogID, () => {}, async () => {});
+
+      expect(summary.failed).toBe(1);
+      expect(summary.firstError).toBe("Directory listing unavailable");
+    });
   });
 });

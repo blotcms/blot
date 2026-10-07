@@ -44,6 +44,7 @@ function harness(files) {
     "../util/localFingerprint": async (path) => "local-" + path,
     "../util/download": async (blog, drive, path, remote) => {
       state.downloads.push(remote.id);
+      if (state.downloadError) throw state.downloadError;
       return state.downloadResult;
     },
     "../serviceAccount/createDriveClient": async () => ({
@@ -120,6 +121,18 @@ describe("google-drive sync() resync summary", function () {
 
     expect(summary.downloaded).toBe(1);
     expect(summary.modifiedDuringWalk).toBe(0);
+  });
+
+  it("counts a file it could not download, and carries on with the walk", async function () {
+    const h = harness([file({ id: "1" }), file({ id: "2", name: "other.txt" })]);
+    h.downloadError = new Error("download exploded");
+
+    const summary = await h.run();
+
+    expect(h.downloads.sort()).toEqual(["1", "2"]);
+    expect(summary.downloaded).toBe(0);
+    expect(summary.failed).toBe(2);
+    expect(summary.firstError).toBe("/other.txt: download exploded");
   });
 
   it("does not count a download whose bytes already matched", async function () {

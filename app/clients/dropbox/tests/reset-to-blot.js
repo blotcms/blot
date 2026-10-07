@@ -96,6 +96,37 @@ describe("dropbox resetToBlot", function () {
     expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(true);
   });
 
+  it("counts a file it could not download, and carries on with the rest", async function () {
+    load({ "/": [file("a.txt"), file("b.txt")] });
+    require.cache[downloadPath].exports = function (_client, source, destination, callback) {
+      if (source === "/a.txt") return callback(new Error("download exploded"));
+      fs.outputFile(destination, "hello").then(() => callback(null), callback);
+    };
+    // reset-to-blot promisified the download stub when it loaded
+    delete require.cache[resetPath];
+    const resetToBlot = require("../sync/reset-to-blot");
+
+    const summary = await resetToBlot(blogID, () => {}, async () => {});
+
+    expect(summary.downloaded).toEqual(1);
+    expect(summary.failed).toEqual(1);
+    expect(summary.firstError).toEqual("/a.txt: download exploded");
+  });
+
+  it("updates every path inside a folder it removes", async function () {
+    await fs.outputFile(join(blogDirectory, "Sub", "a.txt"), "x");
+    await fs.outputFile(join(blogDirectory, "Sub", "Inner", "b.txt"), "x");
+    const resetToBlot = load({ "/": [] }, { delta: [] });
+    const update = jasmine.createSpy("update").and.returnValue(Promise.resolve());
+
+    await resetToBlot(blogID, () => {}, update);
+
+    const updated = update.calls.allArgs().map(([path]) => path);
+    expect(updated.sort()).toEqual(
+      ["/Sub", "/Sub/a.txt", "/Sub/Inner", "/Sub/Inner/b.txt"].sort()
+    );
+  });
+
   it("keeps updates and the old cursor when the walk throws part way", async function () {
     const resetToBlot = load({
       "/": [file("a.txt"), { ".tag": "folder", name: "sub", path_display: "/sub" }],

@@ -9,6 +9,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const isFileTooLargeError = (error) => error?.code === "ERR_FILE_TOO_LARGE";
 
+const isFileMissingError = (error) => error?.code === "ERR_FILE_MISSING";
+
 const withRetries = async (label, operation, options = {}) => {
   const { attempts = 4, baseDelayMs = 200 } = options;
 
@@ -18,6 +20,11 @@ const withRetries = async (label, operation, options = {}) => {
       return await operation();
     } catch (error) {
       lastError = error;
+
+      // the file is gone, retrying cannot help
+      if (isFileMissingError(error)) {
+        throw error;
+      }
 
       if (isFileTooLargeError(error)) {
         console.warn(
@@ -79,6 +86,14 @@ const performAction = async (blogID, pathInBlogDirectory, action) => {
         );
       }
     } catch (error) {
+      if (isFileMissingError(error)) {
+        console.log(clfdate(), "Skipping upload: file no longer exists", {
+          blogID,
+          pathInBlogDirectory,
+        });
+        return;
+      }
+
       if (isFileTooLargeError(error)) {
         console.warn(
           clfdate(),

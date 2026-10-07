@@ -9,6 +9,7 @@ const sync = require("sync");
 const { dirname } = require("path");
 const { promisify } = require("util");
 const fix = promisify(require("sync/fix"));
+const syncReport = require("clients/util/syncReport");
 
 const setupUser = require("./setupUser");
 const setupBlogs = require("./setupBlogs");
@@ -125,7 +126,8 @@ async function applyChanges(blog, changes) {
           await update(relativePath);
         }
 
-        await fix(blog);
+        const repaired = syncReport.summarize(await fix(blog));
+        if (repaired) console.log("Fix repaired", blog.handle, repaired);
         console.log("Built folder for blog", blog.handle);
         done(null, resolve);
       } catch (err) {

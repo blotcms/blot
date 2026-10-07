@@ -8,6 +8,7 @@ const asRetriever = require("../../lib/asRetriever");
 const LRUCache = require("lru-cache").LRUCache;
 const { prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
+const fetchCached = require("../../lib/fetchCached");
 const { Uncacheable } = require("../../lib/uncacheableFetch");
 const {
   augmentContext,
@@ -16,7 +17,7 @@ const {
   warnIfTooLargeToCache,
 } = require("../load/augmentedEntries");
 
-const ALIASES = ["archives"];
+const ALIASES = getAllCached.ALIASES.archives;
 
 // Caches the year/month grouping itself (already trimmed to only the fields
 // this template's archives view references, and already augmented), not
@@ -126,7 +127,11 @@ function flattenEntries(years) {
 }
 
 async function buildArchives(req, blog, options) {
-  const allEntries = await getAllCached(blog, options);
+  const allEntries = await getAllCached(blog, {
+    ...options,
+    retrieve: req.retrieve,
+    log: req.log,
+  });
   const years = buildYears(allEntries, blog.timeZone);
 
   // Strip heavy fields the current template doesn't reference before the
@@ -153,7 +158,9 @@ async function archives(req, res) {
 
   let prepared;
   try {
-    prepared = await archivesCache.fetch(key, { context: { req, res } });
+    prepared = await fetchCached(archivesCache, "archives", req.log, key, {
+      context: { req, res },
+    });
   } catch (e) {
     if (!(e instanceof Uncacheable)) throw e;
     prepared = e.payload;

@@ -352,6 +352,22 @@ describe("replaceFolderLinks", function () {
     );
   });
 
+  it("should percent-encode srcset paths so a space doesn't split the candidate", async function () {
+    await this.write({ path: "/my pic.jpg", content: "small" });
+    await this.write({ path: "/big pic.jpg", content: "big" });
+    await this.template({
+      "entries.html": '<img srcset="/my%20pic.jpg 1x, /big%20pic.jpg 2x">',
+    });
+
+    const result = await this.text("/");
+
+    expect(result).toMatch(
+      new RegExp(
+        `<img srcset="${config.cdn.origin}/folder/v-[a-f0-9]{8}/blog_[a-f0-9]+/my%20pic.jpg 1x, ${config.cdn.origin}/folder/v-[a-f0-9]{8}/blog_[a-f0-9]+/big%20pic.jpg 2x">`
+      )
+    );
+  });
+
   it("should leave malformed srcset attributes unchanged", async function () {
     await this.template({
       "entries.html": '<img srcset=", /img.jpg 1x">',
@@ -396,7 +412,7 @@ describe("replaceFolderLinks", function () {
 
     const result = await this.text("/");
 
-    expect(result).toMatch(cdnRegex("/image with space.jpg"));
+    expect(result).toMatch(cdnRegex("/image%20with%20space.jpg"));
   });
 
   it("should handle file names with percent signs", async function () {
@@ -407,7 +423,7 @@ describe("replaceFolderLinks", function () {
 
     const result = await this.text("/");
 
-    expect(result).toMatch(cdnRegex("/100% luck.jpg"));
+    expect(result).toMatch(cdnRegex("/100%25%20luck.jpg"));
   });
 
   it("should handle query strings", async function () {

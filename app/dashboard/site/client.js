@@ -12,8 +12,15 @@ const Rebuild = require("sync/rebuild");
 const config = require("config");
 const fetch = require("node-fetch");
 const notifyAdminIfResyncFoundChanges = require("./notifyResyncFoundChanges");
+const syncReport = require("clients/util/syncReport");
 
 const { promisify } = require("util");
+const RESYNC_REFUSALS = [
+  "DROPBOX_TRANSFER_INCOMPLETE",
+  "GOOGLE_DRIVE_FOLDER_MISSING",
+  "ICLOUD_FOLDER_MISSING",
+  "ICLOUD_SETUP_INCOMPLETE",
+];
 const getStatuses = promisify(Blog.getStatuses);
 
 // So the breadcrumbs look like: Settings > Client
@@ -165,8 +172,11 @@ client_routes.post("/reset/rebuild", function (req, res) {
       function (err) {
         if (err) console.log(err);
         folder.status("Checking your site for issues");
-        Fix(req.blog, { status: folder.status, log: folder.log }, function (err) {
+        Fix(req.blog, { status: folder.status, log: folder.log }, function (err, report) {
           if (err) console.log(err);
+          // Fix() doesn't email; a rebuild only logs what it repaired.
+          const repaired = syncReport.summarize(report);
+          if (repaired) console.log("Fix repaired", req.blog.id, repaired);
           folder.status("Finished site rebuild");
           done(null, function (err) {
             if (err) console.log("Error releasing sync: ", err);
@@ -202,12 +212,16 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
     } catch (err) {
       console.log("ERROR:", err);
 
-      // A client can refuse to resync when it isn't safe to (currently just
-      // the Dropbox client, via clients/dropbox/resync.js, while its initial
-      // transfer to Dropbox hasn't finished). Surface that refusal instead of
-      // falling through to Fix() and "Finished site rebuild" below, which
-      // would make the refusal look like a successful resync.
-      if (err && err.code === "DROPBOX_TRANSFER_INCOMPLETE") {
+      // A client can refuse to resync when it isn't safe or possible to:
+      // Dropbox while its initial transfer to Dropbox hasn't finished
+      // (clients/dropbox/sync/reset-to-blot.js), Google Drive when its
+      // folder was trashed, deleted or unshared
+      // (clients/google-drive/sync/resetFromDrive.js), iCloud when its folder
+      // was deleted or its initial transfer hasn't finished
+      // (clients/icloud/resync.js). Surface that refusal
+      // instead of falling through to Fix() and "Finished site rebuild"
+      // below, which would make the refusal look like a successful resync.
+      if (err && RESYNC_REFUSALS.includes(err.code)) {
         // done() publishes "Synced" before calling back, so re-publish the
         // refusal afterwards to make it the final status the user sees.
         const refusal = err.message;
@@ -219,11 +233,11 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
       }
     }
 
-    notifyAdminIfResyncFoundChanges(req.blog, res.locals.client, summary);
-
     folder.status("Checking your site for issues");
-    Fix(req.blog, { status: folder.status, log: folder.log }, function (err) {
+    Fix(req.blog, { status: folder.status, log: folder.log }, function (err, report) {
       if (err) console.log(err);
+      // After Fix() so its repairs go in the same email as the changes.
+      notifyAdminIfResyncFoundChanges(req.blog, res.locals.client, summary, report);
       folder.status("Finished site rebuild");
       done(null, function (err) {
         if (err) console.log("Error releasing sync: ", err);

@@ -8,6 +8,7 @@ const {
 const lookupFile = require("./lookupFile");
 const blogHosts = require("../../lib/blogHosts");
 const BLOT_CDN_TOKEN = require("./cdnToken");
+const { record } = require("./stats");
 
 // Cheap pre-scan of the raw output string, run before the expensive
 // parse5.parse + tree-walk below. Most rendered pages have no folder-file
@@ -30,23 +31,40 @@ function mayNeedFolderLinkReplacement(html) {
   return candidateAttrRegex.test(html);
 }
 
-// DEPRECATION NOTE: this whole request-time pass exists only for content that
-// was NOT baked at build time (app/build/plugins/folderAssets). Once every
-// entry has been rebuilt it should only be needed for TEMPLATE output, which
-// can't be baked (a template renders for many blogs). What it handles that
-// the build-time plugin also handles, and so can be dropped for entries:
+// DEPRECATION NOTE: this whole request-time pass exists for content that is
+// NOT baked at build time (app/build/plugins/folderAssets). For entries that
+// is now nearly everything; once every entry has been rebuilt
+// (scripts/entry/rebuild-all.js) it should only be needed for TEMPLATE
+// output, which can't be baked (a template renders for many blogs). What
+// folderAssets also handles at build time, and so can be dropped for entries:
 //   - relative folder links (href/src/poster/srcset)
 //   - absolute same-host links (https://<blog host>/photo.jpg) - the host is
-//     stripped below via blogHosts(); folderAssets does the same at build time
+//     stripped below via blogHosts(); folderAssets does the same at build
+//     time, and Blog.set rebuilds the entries which link to a handle or
+//     domain added later (models/blog/rebuildEntriesOnNewHosts.js)
+//   - reserved global-static paths (/fonts, /icons, ...): baked from the
+//     global static directory when the file exists there, as lookupFile does
+//   - links to files that didn't exist at build time: folderAssets records a
+//     dependency (lowercased, percent-decoded), so creating the file rebuilds
+//     and bakes the entry (sync/update/set.js -> rebuildDependents)
+//   - markup set by front matter (body, teaser, teaserBody), baked in
+//     build/index.js with folderAssets' bakeHTML
 // What ONLY happens here and must be kept or replaced when removing this:
 //   - template-authored links (partials, CSS/JS references in layouts)
-//   - links in entries built before folderAssets existed (until rebuilt)
-//   - (transiently) files that didn't exist at build time: folderAssets
-//     records a dependency on them, so creating the file rebuilds and bakes
-//     the entry (sync/update/set.js -> rebuildDependents); this pass only
-//     covers the short window before that rebuild finishes
-//   - hosts added after an entry was built (e.g. a custom domain set later)
-module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
+//   - entries not yet rebuilt since folderAssets (or any of the above) landed
+//   - the short window between a file arriving and rebuildDependents
+//     finishing, and between a new host being added and its entries being
+//     rebuilt
+//   - entries whose rebuild was skipped or failed (e.g. the blog was syncing)
+//
+// stats is optional instrumentation (see stats.js): each rewrite, and each
+// lookup that finds no file, is recorded on it. It never affects the output.
+module.exports = async function replaceFolderLinks(
+  blog,
+  html,
+  log = () => {},
+  stats
+) {
   try {
     const blogID = blog.id;
     const cacheID = blog.cacheID;
@@ -62,6 +80,8 @@ module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
     if (!mayNeedFolderLinkReplacement(html)) {
       return html;
     }
+
+    if (stats) stats.parsed = true;
 
     const document = parse5.parse(html);
     const elements = [];
@@ -156,14 +176,17 @@ module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
           if (!htmlExtRegex.test(value) && fileExtRegex.test(value)) {
             promises.push(
               (async () => {
+                const original = attr.value;
                 const result = await lookupFile(blogID, cacheID, value);
 
                 if (result === "ENOENT") {
                   log(`No file found in folder: ${value}`);
+                  if (stats) record(stats, original, value, true);
                   return;
                 }
 
                 log(`Replacing ${attr.value} with ${result}`);
+                if (stats) record(stats, original, value, false);
                 attr.value = result;
                 changes++;
               })()
@@ -217,9 +240,11 @@ module.exports = async function replaceFolderLinks(blog, html, log = () => {}) {
 
                     if (result === "ENOENT") {
                       log(`No file found in folder: ${lookupPath}`);
+                      if (stats) record(stats, originalUrl, lookupPath, true);
                       rewrittenUrl = originalUrl;
                     } else {
                       log(`Replacing ${originalUrl} with ${result}`);
+                      if (stats) record(stats, originalUrl, lookupPath, false);
                       rewrittenUrl = result;
                       changes++;
                     }
