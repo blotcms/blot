@@ -36,7 +36,18 @@ const prefix = () => `${clfdate()} Screenshot:`;
 const CONCURRENT_SCREENSHOTS = 1;
 const MIN_TIME_BETWEEN_OPS = 2000; // 2 seconds
 const DEFAULT_RESTART_INTERVAL = 1000 * 60 * 60; // 1 hour
-const PAGE_TIMEOUT = 20000;
+// How long the page's HTML has to arrive and parse. Past this the site is
+// dead or blocking us, and the screenshot fails.
+const PAGE_TIMEOUT = 10000;
+// Once the HTML is in, how long images, fonts and late requests get to finish
+// before we screenshot whatever has rendered. Some pages never finish (a
+// tracking pixel or long poll that hangs), so this is best effort.
+const RENDER_GRACE = 8000;
+// Navigation errors that will recur on every attempt: the hostname does not
+// exist, the certificate is bad, the URL is unusable or redirects forever.
+// Resets, refusals and network changes can be transient, so they are retried.
+const PERMANENT_NAVIGATION_ERROR =
+  /net::ERR_(NAME_NOT_RESOLVED|CERT_[A-Z_]+|SSL_PROTOCOL_ERROR|INVALID_URL|UNSAFE_PORT|UNKNOWN_URL_SCHEME|TOO_MANY_REDIRECTS)\b/;
 // Per-screenshot budgets, sized for one screenshot at a time. See configure().
 const CLOSE_PAGE_TIMEOUT = 2000;
 const SCREENSHOT_TIMEOUT = 2000;
@@ -386,7 +397,7 @@ async function takeScreenshotLocked(site, path, options) {
 
     // Preview pages hold an EventSource open at /__blot/preview/reload so the
     // template editor can refresh them. Block that request before it reaches
-    // the server; networkidle0 never arrives while the stream is open.
+    // the server; the network never goes idle while the stream is open.
     await page.setRequestInterception(true);
     page.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
@@ -395,10 +406,42 @@ async function takeScreenshotLocked(site, path, options) {
     });
 
     console.log(prefix(), "Navigating browser to", site);
-    await page.goto(site, {
-      waitUntil: "networkidle0",
-      timeout: PAGE_TIMEOUT,
-    });
+    try {
+      await page.goto(site, {
+        waitUntil: "domcontentloaded",
+        timeout: PAGE_TIMEOUT,
+      });
+    } catch (error) {
+      // A site that sends no page in PAGE_TIMEOUT, or fails in a way that
+      // cannot change, will not do better on the next attempt.
+      if (
+        error instanceof puppeteer.TimeoutError ||
+        PERMANENT_NAVIGATION_ERROR.test(error.message)
+      ) {
+        error.retryable = false;
+      }
+      throw error;
+    }
+
+    // Best effort: wait for the load event and then a quiet network, sharing
+    // one RENDER_GRACE budget. A page that never finishes is screenshotted
+    // as it rendered.
+    const renderDeadline = Date.now() + RENDER_GRACE;
+    try {
+      await page.waitForFunction(() => document.readyState === "complete", {
+        timeout: RENDER_GRACE,
+      });
+      // A timeout of 0 would mean wait forever
+      const remaining = Math.max(1, renderDeadline - Date.now());
+      await page.waitForNetworkIdle({
+        idleTime: 500,
+        timeout: remaining,
+        concurrency: 0,
+      });
+    } catch (error) {
+      if (!(error instanceof puppeteer.TimeoutError)) throw error;
+      console.log(prefix(), "Page never finished, screenshotting what rendered");
+    }
 
     console.log(prefix(), "Taking screenshot of", site, "to", path);
     await screenshotWithTimeout(page, path);
