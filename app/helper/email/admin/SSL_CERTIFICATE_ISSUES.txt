@@ -6,22 +6,14 @@ SSL certificate issues: {{summary}}
 {{/hasSystemic}}
 **Wildcard certificate (*.{{host}})**: {{wildcard.message}}. Last renewal run: {{wildcard.updatedDate}}.
 
-{{#hasUrgent}}
-**Urgent: under 7 days left**
+{{#hasCerts}}
+**Customer certificates under 25 days from expiry**
 
-{{#urgent}}
-- `{{domain}}` ({{handle}}): {{daysLeft}} days left, expires {{date}}
-{{/urgent}}
+{{#certs}}
+- `{{domain}}` ({{handle}}): {{daysLeft}} days left, expires {{date}}{{#urgent}} (urgent){{/urgent}}
+{{/certs}}
 
-{{/hasUrgent}}
-{{#hasOther}}
-**Also not renewing: under 25 days left**
-
-{{#other}}
-- `{{domain}}` ({{handle}}): {{daysLeft}} days left, expires {{date}}
-{{/other}}
-
-{{/hasOther}}
+{{/hasCerts}}
 {{#errorCount}}
 {{errorCount}} certificate(s) in Redis could not be read. Run the script below to see which.
 

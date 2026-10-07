@@ -19,18 +19,18 @@ const FLAGGED_DAYS = 25;
 const URGENT_DAYS = 7;
 const WILDCARD_WARNING_DAYS = 21;
 
-// About 19 certificates a day cross the 30 day renewal point, and a handful
-// are always flagged for reasons that are the customer's (a few have extra
-// A records), so 20 flagged means renewal has stopped altogether. That is
-// reached about a day after the five day grace period, whereas a broken
-// domain or two never gets near it.
+// Emailing is for the renewal system failing, not one customer's certificate.
+// A domain with a domain: key whose renewal fails (eg. the customer moved
+// their DNS away) is flagged for at most about 25 days: once it has expired,
+// lua-resty-auto-ssl deletes the certificate (jobs/renewal.lua,
+// storage:delete_cert). So the baseline of flagged certificates is bounded,
+// and is 6 today. Normal renewal moves about 19 certificates a day past the
+// 30 day mark, so if the renewal job breaks the count passes 20 within about a
+// day of the five day grace period.
 const SYSTEMIC_COUNT = 20;
 
 // Certificates are ~7KB each, so read them a batch at a time.
 const BATCH_SIZE = 50;
-
-// Urgent domains we have already emailed about, so each is mentioned once
-const NOTIFIED_KEY = "sslcheck:notified";
 
 const WILDCARD_PEM_KEY = "blot:openresty:ssl:pem";
 const WILDCARD_UPDATED_KEY = "blot:openresty:ssl:updated";
@@ -175,14 +175,11 @@ async function check(deps = {}) {
 
 // What the email template renders
 function view(report) {
-  const urgent = report.certs.filter((cert) => cert.urgent);
-  const format = (cert) => ({ ...cert, date: formatDate(cert.expires) });
   const { wildcard } = report;
 
   const summary = [
     report.systemic && "renewal looks broken",
     wildcard.problem && "wildcard certificate",
-    urgent.length && `${urgent.length} urgent`,
   ]
     .filter(Boolean)
     .join(", ");
@@ -196,35 +193,22 @@ function view(report) {
       ...wildcard,
       updatedDate: wildcard.updated ? formatDate(wildcard.updated) : "never",
     },
-    hasUrgent: urgent.length > 0,
-    urgent: urgent.map(format),
-    hasOther: urgent.length < report.certs.length,
-    other: report.certs.filter((cert) => !cert.urgent).map(format),
+    hasCerts: report.certs.length > 0,
+    certs: report.certs.map((cert) => ({ ...cert, date: formatDate(cert.expires) })),
     errorCount: report.errors.length,
   };
 }
 
-// Runs the check and emails if renewal looks broken, the wildcard certificate
-// needs attention, or a customer certificate has become urgent since the last
-// email. Certificates that are merely flagged are listed but never email on
-// their own. deps.sendEmail(view) must reject on failure so the same domains
-// are reported again next time.
+// Runs the check and emails when renewal looks broken (many certificates
+// flagged) or the wildcard certificate needs attention, and for nothing else.
+// Flagged customer certificates are listed for context. deps.sendEmail(view)
+// must reject on failure.
 async function run(deps = {}) {
-  const client = deps.client || require("models/client");
   const sendEmail = deps.sendEmail || (async () => {});
-  const report = await check({ ...deps, client });
-
-  const urgent = report.certs.filter((cert) => cert.urgent).map((cert) => cert.domain);
-  const notified = new Set(await client.sMembers(NOTIFIED_KEY));
-  const fresh = urgent.filter((domain) => !notified.has(domain));
-  const send = report.systemic || report.wildcard.problem || fresh.length > 0;
+  const report = await check(deps);
+  const send = report.systemic || report.wildcard.problem;
 
   if (send) await sendEmail(view(report));
-
-  // Once no longer urgent, a domain is reported again if it recurs
-  const cleared = Array.from(notified).filter((domain) => !urgent.includes(domain));
-  if (cleared.length) await client.sRem(NOTIFIED_KEY, cleared);
-  if (send && urgent.length) await client.sAdd(NOTIFIED_KEY, urgent);
 
   return { report, sent: send };
 }

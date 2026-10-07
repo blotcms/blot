@@ -40,12 +40,8 @@ describe("scheduler check-ssl-certificates", function () {
   // two pages, repeating the first key in the second.
   function fakeRedis(strings) {
     const store = new Map(Object.entries(strings));
-    const sets = new Map();
-    const set = (key) => sets.get(key) || sets.set(key, new Set()).get(key);
-
     return {
       store,
-      set,
       get: async (key) => (store.has(key) ? store.get(key) : null),
       sendCommand: async ([command, ...keys]) => {
         expect(command).toEqual("MGET");
@@ -57,9 +53,6 @@ describe("scheduler check-ssl-certificates", function () {
         if (cursor === "0") return { cursor: "1", keys: keys.slice(0, 1) };
         return { cursor: "0", keys };
       },
-      sMembers: async (key) => Array.from(set(key)),
-      sAdd: async (key, members) => members.forEach((m) => set(key).add(m)),
-      sRem: async (key, members) => members.forEach((m) => set(key).delete(m)),
     };
   }
 
@@ -306,62 +299,17 @@ describe("scheduler check-ssl-certificates", function () {
       expect(deps.sent).toEqual([]);
     });
 
-    it("lists flagged certificates but does not email for them alone", async function () {
-      const deps = withNow(setup({ certs: { "a.com": certJSON(10) } }));
+    it("does not email for flagged or urgent customer certificates alone", async function () {
+      const deps = withNow(
+        setup({
+          certs: { "a.com": certJSON(3), "b.com": certJSON(10), "c.com": certJSON(60) },
+        })
+      );
 
-      await run(deps);
+      const { sent } = await run(deps);
 
+      expect(sent).toEqual(false);
       expect(deps.sent).toEqual([]);
-    });
-
-    it("emails for an urgent certificate, listing the flagged ones too", async function () {
-      const deps = withNow(
-        setup({ certs: { "a.com": certJSON(3), "b.com": certJSON(10) } })
-      );
-
-      await run(deps);
-
-      expect(deps.sent.length).toEqual(1);
-      expect(deps.sent[0].urgent.map((c) => c.domain)).toEqual(["a.com"]);
-      expect(deps.sent[0].other.map((c) => c.domain)).toEqual(["b.com"]);
-      expect(deps.sent[0].summary).toEqual("1 urgent");
-    });
-
-    it("does not email again the next day for the same urgent domain", async function () {
-      const deps = withNow(setup({ certs: { "a.com": certJSON(3) } }));
-
-      await run(deps);
-      deps.now = NOW + DAY;
-      await run(deps);
-
-      expect(deps.sent.length).toEqual(1);
-    });
-
-    it("emails again when a cleared domain becomes urgent again", async function () {
-      const deps = withNow(setup({ certs: { "a.com": certJSON(3) } }));
-
-      await run(deps);
-
-      deps.client.store.set("ssl:a.com:latest", certJSON(80));
-      await run(deps);
-      expect(Array.from(deps.client.set("sslcheck:notified"))).toEqual([]);
-
-      deps.client.store.set("ssl:a.com:latest", certJSON(3));
-      await run(deps);
-
-      expect(deps.sent.length).toEqual(2);
-    });
-
-    it("emails when a new domain becomes urgent alongside a notified one", async function () {
-      const deps = withNow(
-        setup({ certs: { "a.com": certJSON(3), "b.com": certJSON(20) } })
-      );
-
-      await run(deps);
-      deps.client.store.set("ssl:b.com:latest", certJSON(2));
-      await run(deps);
-
-      expect(deps.sent.length).toEqual(2);
     });
 
     it("emails when 20 certificates are flagged", async function () {
@@ -371,7 +319,7 @@ describe("scheduler check-ssl-certificates", function () {
 
       expect(deps.sent.length).toEqual(1);
       expect(deps.sent[0].hasSystemic).toEqual(true);
-      expect(deps.sent[0].other.length).toEqual(20);
+      expect(deps.sent[0].certs.length).toEqual(20);
     });
 
     it("emails every day while the wildcard needs attention", async function () {
@@ -395,24 +343,16 @@ describe("scheduler check-ssl-certificates", function () {
       expect(deps.sent.length).toEqual(1);
     });
 
-    it("reports an urgent domain again if the email failed", async function () {
-      const deps = withNow(setup({ certs: { "a.com": certJSON(3) } }));
-      const sendEmail = deps.sendEmail;
-      deps.sendEmail = async () => {
-        throw new Error("mailgun down");
-      };
+    it("lists customer certificates as context when it emails", async function () {
+      const certs = { ...many(20, 20), "z.com": certJSON(3) };
+      const deps = withNow(setup({ certs }));
 
-      let error;
-      try {
-        await run(deps);
-      } catch (e) {
-        error = e;
-      }
-      expect(error.message).toEqual("mailgun down");
-
-      deps.sendEmail = sendEmail;
       await run(deps);
-      expect(deps.sent.length).toEqual(1);
+
+      expect(deps.sent[0].certs.length).toEqual(21);
+      expect(deps.sent[0].certs[0].domain).toEqual("z.com");
+      expect(deps.sent[0].certs[0].urgent).toEqual(true);
+      expect(deps.sent[0].summary).toEqual("renewal looks broken");
     });
   });
 });
