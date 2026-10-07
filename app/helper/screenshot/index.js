@@ -36,10 +36,13 @@ const prefix = () => `${clfdate()} Screenshot:`;
 const CONCURRENT_SCREENSHOTS = 1;
 const MIN_TIME_BETWEEN_OPS = 2000; // 2 seconds
 const DEFAULT_RESTART_INTERVAL = 1000 * 60 * 60; // 1 hour
-const PAGE_TIMEOUT = 20000;
-// Some pages never go quiet (a long poll, an analytics beacon that hangs), so
-// after "load" we only wait this long for the network to settle.
-const NETWORK_IDLE_GRACE = 5000;
+// How long the page's HTML has to arrive and parse. Past this the site is
+// dead or blocking us, and the screenshot fails.
+const PAGE_TIMEOUT = 10000;
+// Once the HTML is in, how long images, fonts and late requests get to finish
+// before we screenshot whatever has rendered. Some pages never finish (a
+// tracking pixel or long poll that hangs), so this is best effort.
+const RENDER_GRACE = 8000;
 // Navigation errors that will recur on every attempt: the hostname does not
 // exist, the certificate is bad, the URL is unusable or redirects forever.
 // Resets, refusals and network changes can be transient, so they are retried.
@@ -404,9 +407,12 @@ async function takeScreenshotLocked(site, path, options) {
 
     console.log(prefix(), "Navigating browser to", site);
     try {
-      await page.goto(site, { waitUntil: "load", timeout: PAGE_TIMEOUT });
+      await page.goto(site, {
+        waitUntil: "domcontentloaded",
+        timeout: PAGE_TIMEOUT,
+      });
     } catch (error) {
-      // A site that does not load in PAGE_TIMEOUT, or fails in a way that
+      // A site that sends no page in PAGE_TIMEOUT, or fails in a way that
       // cannot change, will not do better on the next attempt.
       if (
         error instanceof puppeteer.TimeoutError ||
@@ -417,20 +423,24 @@ async function takeScreenshotLocked(site, path, options) {
       throw error;
     }
 
-    // Best effort: let late requests (images, fonts, XHR) finish, but a page
-    // that keeps a request open forever is screenshotted as it rendered.
+    // Best effort: wait for the load event and then a quiet network, sharing
+    // one RENDER_GRACE budget. A page that never finishes is screenshotted
+    // as it rendered.
+    const renderDeadline = Date.now() + RENDER_GRACE;
     try {
+      await page.waitForFunction(() => document.readyState === "complete", {
+        timeout: RENDER_GRACE,
+      });
+      // A timeout of 0 would mean wait forever
+      const remaining = Math.max(1, renderDeadline - Date.now());
       await page.waitForNetworkIdle({
         idleTime: 500,
-        timeout: NETWORK_IDLE_GRACE,
+        timeout: remaining,
         concurrency: 0,
       });
     } catch (error) {
       if (!(error instanceof puppeteer.TimeoutError)) throw error;
-      console.log(
-        prefix(),
-        "Network never went idle, screenshotting what rendered"
-      );
+      console.log(prefix(), "Page never finished, screenshotting what rendered");
     }
 
     console.log(prefix(), "Taking screenshot of", site, "to", path);

@@ -68,6 +68,13 @@ describe("screenshot plugin", function () {
       );
     });
 
+    // An image that never arrives holds back the load event
+    app.get("/never-loads", (req, res) => {
+      res.send(
+        "<html><head><style>body{background:white}</style></head><body><h1>Hello, world!</h1><img src='/never-responds'></body></html>"
+      );
+    });
+
     // Track request times for rate limiting tests
     app.use((req, res, next) => {
       requestTimes.push(Date.now());
@@ -141,10 +148,18 @@ describe("screenshot plugin", function () {
   it("screenshots a page whose network never goes idle without retrying", async function () {
     const started = Date.now();
     await screenshot(`${site}/never-idle`, path);
-    // Well under PAGE_TIMEOUT (20s), which waiting for networkidle0 would hit
-    expect(Date.now() - started).toBeLessThan(10 * 1000);
+    // RENDER_GRACE (8s) plus overhead, rather than three timed-out attempts
+    expect(Date.now() - started).toBeLessThan(15 * 1000);
     expect(fs.existsSync(path)).toBe(true);
     expect(neverIdlePageRequests).toBe(1);
+    fs.unlinkSync(path);
+  });
+
+  it("screenshots a page whose load event never fires", async function () {
+    const started = Date.now();
+    await screenshot(`${site}/never-loads`, path);
+    expect(Date.now() - started).toBeLessThan(15 * 1000);
+    expect(fs.existsSync(path)).toBe(true);
     fs.unlinkSync(path);
   });
 
