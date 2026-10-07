@@ -101,7 +101,15 @@ PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 */5 * * * * $BACKUP_USER /usr/local/bin/redis-mem-log.sh
 EOF
 if crontab -l -u "$BACKUP_USER" 2> /dev/null | grep -E 'backup\.sh|mem-log\.sh|stats\.sh'; then
-  echo "    WARNING: the crontab entries above are now duplicated by /etc/cron.d/blot-redis; remove them"
+  if [ -s /etc/blot-redis/floating-ip ]; then
+    echo "    WARNING: the crontab entries above are now duplicated by /etc/cron.d/blot-redis; remove them"
+  else
+    # backup.sh skips until the host is marked active, so the old jobs are
+    # still the only ones uploading.
+    echo "    WARNING: keep the old backup entries above until /etc/blot-redis/floating-ip"
+    echo "    is written (at cutover); until then the new backup job skips. The"
+    echo "    mem-log/tcpmem entries are duplicated and can go now."
+  fi
 fi
 
 put /etc/logrotate.d/blot-redis 0644 root:root <<'EOF'

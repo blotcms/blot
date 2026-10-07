@@ -42,6 +42,11 @@ to every script, or use a `~/.ssh/config` alias as `<ssh-host>`.
    to compare `DBSIZE` and keyspace), or on the new host
    `redis6-cli REPLICAOF <host> 6379` and wait for `master_link_status:up`.
 
+A host restored from a backup is a point-in-time copy, for a drill or for
+disaster recovery. To move live traffic, always make the new host a replica of
+the live one first (after a restore is fine: the full sync replaces the data),
+so no writes made since the backup are lost.
+
 Before the app uses a replica, promote it (`cutover.sh` will do this):
 
 1. `./readonly.sh <old-host> on` freezes writes on the old host (`NOREPLICAS`).
