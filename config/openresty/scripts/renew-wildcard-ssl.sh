@@ -49,14 +49,9 @@ if [ "$HASH_OF_PEM_BEFORE" = "$HASH_OF_PEM_AFTER" ]; then
   echo "[`date -u +%Y-%m-%dT%T.%3NZ`] Pem changed after renewal, hash after: $HASH_OF_PEM_AFTER hash before: $HASH_OF_PEM_BEFORE"
 fi
 
-# We store the key and pem in redis so that the openresty reload script can fetch them
-echo "[`date -u +%Y-%m-%dT%T.%3NZ`] Beginning storage of key and pem in redis"
-
-cat /etc/ssl/private/letsencrypt-domain.key | redis-cli -h $BLOT_REDIS_HOST -x set 'blot:openresty:ssl:key'
-cat /etc/ssl/private/letsencrypt-domain.pem | redis-cli -h $BLOT_REDIS_HOST -x set 'blot:openresty:ssl:pem'
-
-redis-cli -h $BLOT_REDIS_HOST set 'blot:openresty:ssl:updated' $(date -u +%s)
-
+# Reload first, before anything touches Redis: under set -e a Redis that is
+# down or refusing writes would otherwise stop the script here, and the proxy
+# would keep serving the old certificate until it expires.
 # Reload whichever proxy is serving to use the new cert: the container(s)
 # (proxy/deploy, which mount /etc/ssl/private read-only) once the proxy has
 # moved off bare-metal, otherwise the bare-metal OpenResty. The cutover script
@@ -69,3 +64,11 @@ if [ -n "$containers" ]; then
 else
   openresty -s reload
 fi
+
+# We store the key and pem in redis so that the openresty reload script can fetch them
+echo "[`date -u +%Y-%m-%dT%T.%3NZ`] Beginning storage of key and pem in redis"
+
+cat /etc/ssl/private/letsencrypt-domain.key | redis-cli -h $BLOT_REDIS_HOST -x set 'blot:openresty:ssl:key'
+cat /etc/ssl/private/letsencrypt-domain.pem | redis-cli -h $BLOT_REDIS_HOST -x set 'blot:openresty:ssl:pem'
+
+redis-cli -h $BLOT_REDIS_HOST set 'blot:openresty:ssl:updated' $(date -u +%s)

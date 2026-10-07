@@ -2,6 +2,7 @@ const config = require("config");
 const path = require("path");
 const net = require("net");
 const clfdate = require("helper/clfdate");
+const { ErrorReply, MultiErrorReply } = require("redis");
 
 const PAGE = path.resolve(__dirname + "/../views/error-redis-unavailable.html");
 
@@ -15,10 +16,17 @@ const CLIENT_ERROR_NAMES = new Set([
   "ReconnectStrategyError",
 ]);
 
-// Redis is reachable but not serving: replying -LOADING while it reads its
-// dataset after a restart, or -MASTERDOWN when a replica has lost its master.
-// This is the tail end of a real outage, so treat it the same way.
-const NOT_SERVING_REPLY = /^(LOADING|MASTERDOWN|CLUSTERDOWN|TRYAGAIN)\b/;
+// Redis is reachable but not serving, or is refusing writes: -LOADING while it
+// reads its dataset after a restart, -MASTERDOWN when a replica has lost its
+// master, -READONLY on a replica, -NOREPLICAS when min-replicas-to-write is
+// not satisfied (we use that to freeze writes during a host cutover), -OOM
+// at maxmemory with noeviction, and -MISCONF when persistence is failing.
+// This is the same outage seen from the other side, so treat it the same way.
+// -EXECABORT is left out: it also follows ordinary syntax errors in a MULTI,
+// and the reply that caused it is classified on its own (node-redis rejects
+// multi().exec() with that reply).
+const NOT_SERVING_REPLY =
+  /^(LOADING|MASTERDOWN|CLUSTERDOWN|TRYAGAIN|READONLY|NOREPLICAS|OOM|MISCONF)\b/;
 
 // Network errors are only ours if they were aimed at the Redis server,
 // otherwise an unreachable third party (Dropbox, Stripe) looks like an outage
@@ -40,12 +48,18 @@ function isRedisUnavailableError(err, depth = 0) {
     return true;
   }
 
-  if (
-    err.constructor &&
-    err.constructor.name === "ErrorReply" &&
-    NOT_SERVING_REPLY.test(String(err.message))
-  ) {
-    return true;
+  // node-redis raises server errors as SimpleError or BlobError, both of
+  // which extend ErrorReply, so match on the base class rather than its name
+  if (err instanceof ErrorReply) {
+    if (NOT_SERVING_REPLY.test(String(err.message))) return true;
+
+    // A MULTI/EXEC where some commands failed carries each reply, errors
+    // included, rather than the server's message
+    if (err instanceof MultiErrorReply) {
+      for (const reply of err.errors()) {
+        if (isRedisUnavailableError(reply, depth + 1)) return true;
+      }
+    }
   }
 
   if (SOCKET_ERROR_CODES.has(err.code)) {
