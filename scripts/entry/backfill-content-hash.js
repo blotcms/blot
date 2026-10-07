@@ -5,6 +5,11 @@
 // happen on local disk, not after blog folders move to S3, where the mtime
 // is the upload time and every such post would show the migration date.
 //
+// Takes no sync lock, so live syncs are never blocked. Each write is a
+// compare-and-set against the exact JSON it read: if anything (a build, the
+// scheduler) wrote the entry in between, the write is skipped and that build
+// already stored its own hash.
+//
 // Dry run by default. Pass --apply to write.
 // Usage: node scripts/entry/backfill-content-hash.js [blog-identifier] [--apply]
 
@@ -12,9 +17,17 @@ const Blog = require("models/blog");
 const Entries = require("models/entries");
 const client = require("models/client");
 const key = require("models/entry/key");
-const sync = require("sync");
 const { hashEntrySource } = require("build");
 const getBlog = require("../get/blog");
+
+// Replace the entry's JSON only if it is still exactly what we read.
+const SET_IF_UNCHANGED = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  redis.call('SET', KEYS[1], ARGV[2])
+  return 1
+end
+return 0
+`;
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
@@ -72,43 +85,31 @@ async function backfill(blog) {
     // would re-run URL assignment, list membership, backlinks and draft
     // notifications for every entry.
     const entryKey = key.entry(blog.id, entry.path);
-    const stored = JSON.parse((await client.get(entryKey)) || "null");
+    const json = await client.get(entryKey);
+    const stored = JSON.parse(json || "null");
 
-    // A build landed in between (only possible for disabled blogs, which
-    // are processed without the sync lock); it already did the work.
+    // A build landed since we read the entry; it already did the work.
     if (!stored || stored.deleted || stored.contentHash || stored.updated !== entry.updated) {
       counts.changed++;
       return;
     }
 
     stored.contentHash = contentHash;
-    await client.set(entryKey, JSON.stringify(stored));
-    counts.stored++;
+
+    const written = await client.eval(SET_IF_UNCHANGED, {
+      keys: [entryKey],
+      arguments: [json, JSON.stringify(stored)],
+    });
+
+    if (written) counts.stored++;
+    else counts.changed++;
   });
 
   return counts;
 }
 
-// Hold the blog's sync lock so no build can write the entry between our
-// read and write. sync() refuses disabled blogs, but nothing else writes
-// their entries either, so they're processed without it.
-function withLock(blog, fn) {
-  if (!apply || blog.isDisabled) return fn();
-
-  return new Promise((resolve, reject) => {
-    sync(blog.id, (err, folder, done) => {
-      if (err) return reject(err);
-
-      fn().then(
-        (counts) => done(null, (err) => (err ? reject(err) : resolve(counts))),
-        (fnErr) => done(fnErr, () => reject(fnErr))
-      );
-    });
-  });
-}
-
 async function processBlog(blog) {
-  const counts = await withLock(blog, () => backfill(blog));
+  const counts = await backfill(blog);
 
   for (const name in totals) totals[name] += counts[name];
 

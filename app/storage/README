@@ -186,7 +186,7 @@ the copy to S3:
 - A Drive file with no applied record compares against the local mtime;
   on S3 it would be re-downloaded once.
   `scripts/google-drive/backfill-applied-modified-times.js --apply`
-  resyncs the Drive blogs that have them. Old md5 files deferred by sync's
+  runs a full (non-resetting) sync for the Drive blogs that have them. Old md5 files deferred by sync's
   verification budget can stay unrecorded; they're compared by checksum.
 
 The storage layer's `stat()` returns `size`, `modified` (local mtime now,

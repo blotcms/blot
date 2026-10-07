@@ -7,13 +7,12 @@
 //
 // Default is a dry run: reports, per blog, how many non-directory files in the
 // ID <-> path mapping have no valid applied record. With --apply, blogs with a
-// non-zero count are resynced sequentially (clients/google-drive/sync/
-// resetFromDrive, i.e. a full sync() pass, which writes an applied record
-// whenever a file is downloaded or already identical), under the blog's sync
-// lock, then re-counted. This is the same reset as the dashboard's "Resync
-// from Google Drive": it clears the blog's ID <-> path mapping before walking
-// Drive, so a walk that fails part way leaves a partial mapping until the
-// blog's next sync.
+// non-zero count are synced sequentially under the blog's sync lock, then
+// re-counted. This is the same full walk a webhook sync does (clients/
+// google-drive/sync/sync, without the dashboard resync's reset), which
+// writes an applied record whenever a file is downloaded or already
+// identical. Nothing is cleared first, so a walk that fails part way leaves
+// the blog as it was.
 //
 // Usage:
 //   node scripts/google-drive/backfill-applied-modified-times.js [--apply] [blog-identifier]
@@ -35,7 +34,7 @@ process.argv = process.argv.filter((arg, i) => i < 2 || arg !== "--apply");
 const client = require("models/client");
 const eachBlogOrOneBlog = require("../each/eachBlogOrOneBlog");
 const database = require("clients/google-drive/database");
-const resetFromDrive = require("clients/google-drive/sync/resetFromDrive");
+const sync = require("clients/google-drive/sync/sync");
 const establishSyncLock = require("sync/establishSyncLock");
 
 const SCAN_COUNT = 1000;
@@ -102,7 +101,7 @@ const resync = async (blog) => {
 
   try {
     folder.status("Google Drive applied modifiedTime backfill");
-    result = await resetFromDrive(blog.id, folder.status, folder.update);
+    result = await sync(blog.id, folder.status, folder.update);
   } finally {
     try {
       await done();
