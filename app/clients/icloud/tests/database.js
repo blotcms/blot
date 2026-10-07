@@ -121,6 +121,18 @@ describe("icloud database", function () {
     expect(second.errorSince).toBe(first.errorSince);
   });
 
+  it("stamps lastSync as a number without touching the rest of the row", async function () {
+    await database.store(this.blog.id, { setupComplete: true });
+    const before = Date.now();
+
+    await database.stampLastSync(this.blog.id);
+
+    const stored = await database.get(this.blog.id);
+    expect(stored.setupComplete).toBe(true);
+    expect(typeof stored.lastSync).toBe("number");
+    expect(stored.lastSync).toBeGreaterThanOrEqual(before);
+  });
+
   it("resets errorSince when the code changes", async function () {
     await database.store(this.blog.id, {
       setupComplete: true,

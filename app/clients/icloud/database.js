@@ -39,6 +39,14 @@ module.exports = {
     await client.sAdd(this._globalSetKey(), blogID);
   },
 
+  // The last time the macserver pushed a change for this blog (/upload,
+  // /delete, /mkdir or a requested resync). A single-field write, because it
+  // happens on every file the watcher uploads. Not part of store(): the sweep
+  // that reads it must never be able to refresh it by accident.
+  async stampLastSync(blogID) {
+    await client.hSet(this._key(blogID), "lastSync", JSON.stringify(Date.now()));
+  },
+
   async get(blogID) {
     const key = this._key(blogID);
     const result = await client.hGetAll(key);

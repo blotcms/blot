@@ -228,7 +228,7 @@ Improve git sync
 - Rate limit authentication route?
 
 Improve iCloud sync
-- Revert server changes to iCloud to reintroduce integrity checks
+- iCloud: the hourly integrity check is back; once it has run cleanly for a while, decide whether to re-enable the daily resync (resyncAllConnected) and the startup/`/started` resync (resyncRecentlySynced), still disabled from these commits
   - 0043d91b36621ecd6aef2bcc263f51f209924792
   - 98dc9405c883825917de8e436ec620f60adaf975
 - iCloud: a Blot edit while the folder is missing (SOURCE_MISSING) still reaches the macserver upload, which re-creates an unshared folder (write.js, remove.js should skip the remote write)
