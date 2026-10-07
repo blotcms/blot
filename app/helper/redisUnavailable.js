@@ -20,12 +20,13 @@ const CLIENT_ERROR_NAMES = new Set([
 // reads its dataset after a restart, -MASTERDOWN when a replica has lost its
 // master, -READONLY on a replica, -NOREPLICAS when min-replicas-to-write is
 // not satisfied (we use that to freeze writes during a host cutover), -OOM
-// at maxmemory with noeviction, -MISCONF when persistence is failing, and
-// -EXECABORT when a queued command in a MULTI was rejected for one of these
-// reasons. This is the same outage seen from the other side, so treat it the
-// same way.
+// at maxmemory with noeviction, and -MISCONF when persistence is failing.
+// This is the same outage seen from the other side, so treat it the same way.
+// -EXECABORT is left out: it also follows ordinary syntax errors in a MULTI,
+// and the reply that caused it is classified on its own (node-redis rejects
+// multi().exec() with that reply).
 const NOT_SERVING_REPLY =
-  /^(LOADING|MASTERDOWN|CLUSTERDOWN|TRYAGAIN|READONLY|NOREPLICAS|OOM|MISCONF|EXECABORT)\b/;
+  /^(LOADING|MASTERDOWN|CLUSTERDOWN|TRYAGAIN|READONLY|NOREPLICAS|OOM|MISCONF)\b/;
 
 // Network errors are only ours if they were aimed at the Redis server,
 // otherwise an unreachable third party (Dropbox, Stripe) looks like an outage

@@ -7,6 +7,7 @@ const scheduler = require("node-schedule");
 var checkFeaturedSites = require("../documentation/featured/check");
 var config = require("config");
 var publishScheduledEntries = require("./publish-scheduled-entries");
+var { isRedisUnavailableError } = require("helper/redisUnavailable");
 const freeDiskSpace = require("./free-disk-space");
 const os = require("os");
 const fs = require("fs-extra");
@@ -14,6 +15,8 @@ const exec = require("child_process").exec;
 const zombies = require("./zombies");
 const checkCardTesters = require("./check-card-testers");
 const subscriptionLifecycleJob = require("./subscription-lifecycle");
+
+const SCHEDULE_RETRY_MS = 60 * 1000;
 
 // If any disk has less than 2GB of space, we should notify the admin
 const MINIMUM_DISK_SPACE_IN_K = 2 * 1024 * 1024;
@@ -114,16 +117,23 @@ module.exports = function () {
     });
   });
 
-  // Bash the cache for scheduled posts
-  publishScheduledEntries(function (err) {
-    // Don't crash the master (and loop on restart) because Redis is
-    // unavailable or rejecting writes at startup
-    if (err) {
-      console.error(clfdate(), "Error scheduling entries for future publication", err);
-      return;
-    }
-    console.log(clfdate(), "Scheduled entries for future publication");
-  });
+  // Bash the cache for scheduled posts. Don't crash the master (and loop on
+  // restart) because Redis is unavailable or rejecting writes at startup:
+  // try again once it is back, or the entries stay scheduled until the next
+  // restart. Scheduling an entry twice is harmless (one job per entry path).
+  (function scheduleEntries() {
+    publishScheduledEntries(function (err) {
+      if (err && isRedisUnavailableError(err)) {
+        console.error(clfdate(), "Error scheduling entries for future publication, will retry", err.message);
+        return setTimeout(scheduleEntries, SCHEDULE_RETRY_MS);
+      }
+      if (err) {
+        console.error(clfdate(), "Error scheduling entries for future publication", err);
+        return;
+      }
+      console.log(clfdate(), "Scheduled entries for future publication");
+    });
+  })();
 
   // Warn users about impending subscriptions
   User.getAllIds(function (err, uids) {

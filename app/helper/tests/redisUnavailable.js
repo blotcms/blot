@@ -97,7 +97,6 @@ describe("redisUnavailable", function () {
         "NOREPLICAS Not enough good replicas to write.",
         "OOM command not allowed when used memory > 'maxmemory'.",
         "MISCONF Redis is configured to save RDB snapshots, but it's currently unable to persist to disk.",
-        "EXECABORT Transaction discarded because of previous errors.",
       ];
       messages.forEach(function (message) {
         expect(isRedisUnavailableError(new SimpleError(message))).toBe(true);
@@ -114,6 +113,12 @@ describe("redisUnavailable", function () {
       ).toBe(false);
       expect(
         isRedisUnavailableError(new SimpleError("ERR unknown command 'FOO'"))
+      ).toBe(false);
+      // Also follows syntax errors, so only the reply behind it counts
+      expect(
+        isRedisUnavailableError(
+          new SimpleError("EXECABORT Transaction discarded because of previous errors.")
+        )
       ).toBe(false);
     });
 
@@ -220,7 +225,7 @@ describe("redisUnavailable", function () {
       expect(isRedisUnavailableError(err)).toBe(true);
     });
 
-    it("recognises EXECABORT, when a command queued in a transaction was rejected", async function () {
+    it("recognises the rejection of a command queued in a transaction, not the EXECABORT", async function () {
       await admin.configSet("maxmemory-policy", "noeviction");
       await client.sendCommand(["MULTI"]);
       await admin.configSet("maxmemory", "1");
@@ -232,7 +237,7 @@ describe("redisUnavailable", function () {
 
       const err = await rejection(() => client.sendCommand(["EXEC"]));
       expect(err.message).toMatch(/^EXECABORT/);
-      expect(isRedisUnavailableError(err)).toBe(true);
+      expect(isRedisUnavailableError(err)).toBe(false);
     });
 
     // The master is unreachable, so nothing is synced and no data is lost
