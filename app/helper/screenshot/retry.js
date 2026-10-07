@@ -1,12 +1,22 @@
 const retry = async (fn, retries = 3, delay = 1000) => {
   let lastError;
+  let attempts = 0;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
+    attempts = attempt;
+
     try {
       return await fn();
     } catch (error) {
       lastError = error;
       console.log(`Attempt ${attempt} failed:`, error.message);
+
+      // The caller knows trying again cannot change the outcome (e.g. the
+      // site never loads, or its hostname does not resolve).
+      if (error.retryable === false) {
+        console.log("Error is not retryable.");
+        break;
+      }
 
       if (attempt < retries) {
         console.log(`Waiting ${delay}ms before retry...`);
@@ -19,7 +29,7 @@ const retry = async (fn, retries = 3, delay = 1000) => {
   }
 
   throw new Error(
-    `Failed after ${retries} attempts. Last error: ${lastError.message}`
+    `Failed after ${attempts} attempts. Last error: ${lastError.message}`
   );
 };
 
