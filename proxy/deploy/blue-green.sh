@@ -23,10 +23,12 @@
 #   1. Preflight, nothing started: the image is on the host, its config
 #      renders and parses with this host's settings and certificate, it logs to
 #      the file fail2ban reads, and the site and canary blog answer today.
-#   2. Start the new colour (restart policy `no`) and wait for its health.
-#      If it never becomes healthy, or the script is interrupted, it is
-#      removed and the old one is untouched. With no old colour (a fresh
-#      start) the same site checks as step 4 run before it is made permanent.
+#   2. Start the new colour (restart policy `no`), wait for its health and for
+#      it to finish rebuilding its purge index. If either fails, or the script
+#      is interrupted, it is removed and the old one is untouched. With no old
+#      colour (a fresh start) the same site checks as step 4 run before it is
+#      made permanent, plus a check that it presents a certificate for every
+#      custom domain in Redis.
 #   3. Stop the old colour, but do not remove it.
 #   4. Check the site as the outside world sees it: same status codes as
 #      before, certificate served is the one on disk, every custom-domain
@@ -68,8 +70,12 @@ elif running blot-proxy-green; then
   OLD=blot-proxy-green; NEW=blot-proxy-blue
 else
   OLD=""; NEW=blot-proxy-blue
+  # Legacy guard. Production's bare-metal OpenResty has been uninstalled, so
+  # this is not a normal state; it protects a host that still has an
+  # `openresty` unit, which binds :80/:443 without reuseport (the container
+  # cannot share them) and would race the container for them after a reboot.
   if sys systemctl is-active --quiet openresty || sys systemctl is-enabled --quiet openresty; then
-    die "bare-metal OpenResty is active or still enabled (it would race the container for :80/:443 after a reboot) and no proxy container is running: stop and disable it first (sudo systemctl disable --now openresty; bare-metal binds :80/:443 without reuseport, so the container cannot share them)"
+    die "this host still has an active or enabled legacy bare-metal 'openresty' systemd unit, which would conflict with the container for :80/:443 (and race it after a reboot): stop and disable it first (sudo systemctl disable --now openresty)"
   fi
   log "No proxy container running - starting $NEW fresh (no overlap)."
 fi
@@ -133,11 +139,18 @@ log "Waiting up to ${HEALTH_TIMEOUT}s for $NEW to answer its own health socket"
 wait_healthy "$NEW" "$HEALTH_TIMEOUT" || die "$NEW did not become ready in ${HEALTH_TIMEOUT}s"
 log "$NEW is ready."
 
+# Health only says nginx is listening. Until the purge index has been rebuilt
+# every /purge returns 503, so do not take traffic (or stop $OLD) before that.
+log "Waiting up to ${REHYDRATE_TIMEOUT}s for $NEW to rebuild its purge index"
+wait_rehydrated "$NEW" "$REHYDRATE_TIMEOUT" || die "$NEW did not finish rebuilding its purge index"
+log "$NEW has rebuilt its purge index."
+
 if [ -z "$OLD" ]; then
   # Nothing to compare with, but the site must still answer 200 for every
   # checked host with the right certificate before the container is made permanent.
   log "Checking the site through $NEW"
   live_checks "" || die "checks failed for $NEW_IMAGE"
+  certs_all_served || die "$NEW does not serve every custom-domain certificate in Redis"
   docker update --restart unless-stopped "$NEW" >/dev/null
   STATE=committed
   log "$NEW is now serving."

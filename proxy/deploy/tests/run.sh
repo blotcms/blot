@@ -33,6 +33,20 @@ case "$1" in
   start)
     n="$2"; [ "$n" != "${FAKE_START_FAILS:-}" ] || exit 1
     touch "$R/$n"; rm -f "$FAKE/stopped"
+    if [[ "$n" == blot-proxy-[bg]* ]]; then
+      # what the real container does once nginx is up: worker 0 logs the
+      # outcome of rebuilding the purge index, to the shared error.log, or to
+      # stderr (docker logs) for an ALLOW_STDOUT_LOGS=1 image
+      mkdir -p "$FAKE/started" "$FAKE/dlogs"
+      date -u +%Y-%m-%dT%H:%M:%S.000000000Z > "$FAKE/started/$n"
+      stamp=$(date -u '+%Y/%m/%d %H:%M:%S')
+      line=""
+      if [ -n "${FAKE_REHYDRATE_ERROR:-}" ]; then line="$stamp [error] 7#7: *1 rehydrate: could not add to index, increase lua_shared_dict cacher_dictionary"
+      elif [ -z "${FAKE_NO_REHYDRATE:-}" ]; then line="$stamp [notice] 7#7: *1 rehydrate: complete files=200000 hosts=5000 unparsed=0 seconds=2"; fi
+      if [ -n "$line" ]; then
+        if [ -n "${FAKE_REHYDRATE_VIA_LOGS_ONLY:-}" ]; then echo "$line" >> "$FAKE/dlogs/$n"; else echo "$line" >> "$PROXY_LOG_DIR/error.log"; fi
+      fi
+    fi
     if [[ "$n" == blot-proxy-* ]]; then
       if [ "$(cat "$FAKE/serving")" = baremetal ]; then rm -f "$R/$n"; else echo container > "$FAKE/serving"; fi
     fi ;;
@@ -41,7 +55,8 @@ case "$1" in
   rm) n="${!#}"; rm -f "$R/$n" "$FAKE/all/$n"
     [ -n "$(ls "$R" | grep '^blot-proxy-[bg]')" ] || { [ "$(cat "$FAKE/serving")" != container ] || echo none > "$FAKE/serving"; } ;;
   update) [ -z "${FAKE_UPDATE_FAILS:-}" ] || exit 1 ;;
-  logs) ;;
+  logs) cat "$FAKE/dlogs/${!#}" 2>/dev/null ;;
+  inspect) cat "$FAKE/started/${!#}" 2>/dev/null ;;
   exec)
     n="$2"
     if [[ "$*" == *"--unix-socket"* ]]; then [ -e "$R/$n" ] && [ "$n" != "${FAKE_UNHEALTHY:-}" ]; exit; fi
@@ -109,9 +124,11 @@ case "$1" in
     if [[ "$*" == *-checkend* ]]; then [ -z "${FAKE_CERT_EXPIRING:-}" ]; exit; fi
     if [[ "$*" == *-pubkey* ]]; then echo pub; exit; fi
     if [[ "$*" == *-fingerprint* ]]; then
-      if [[ "$*" != *" -in "* ]] && [[ "$(cat)" == *custom* ]]; then
+      [[ "$*" == *" -in "* ]] || served="$(cat)"
+      if [[ "$*" != *" -in "* ]] && [[ "$served" == *custom* ]]; then
         # a custom domain: the certificate comes from Redis, not the wildcard file
-        if [ -n "${FAKE_CUSTOM_FP_AFTER_STOP:-}" ] && [ -e "$FAKE/stopped" ]; then echo "fp=$FAKE_CUSTOM_FP_AFTER_STOP"
+        if [ -n "${FAKE_NO_CUSTOM_CERT:-}" ] && [[ "$served" == *"$FAKE_NO_CUSTOM_CERT"* ]]; then :
+        elif [ -n "${FAKE_CUSTOM_FP_AFTER_STOP:-}" ] && [ -e "$FAKE/stopped" ]; then echo "fp=$FAKE_CUSTOM_FP_AFTER_STOP"
         elif [ "$(cat "$FAKE/serving")" = container ]; then echo "fp=${FAKE_CUSTOM_FP_CONTAINER:-C}"
         elif [[ "$(cat "$FAKE/serving")" = baremetal ]]; then echo "fp=${FAKE_CUSTOM_FP_BAREMETAL:-C}"; fi
         exit
@@ -130,7 +147,7 @@ export PATH="$T/bin:$PATH"
 
 export PROXY_ENV_FILE="$T/proxy.env" PROXY_CACHE_DIR="$T/cache" PROXY_LOG_DIR="$T/logs" \
   PROXY_CERT_DIR="$T/certs" PROXY_DEPLOY_LOCK="$T/lock" \
-  PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 TMUX=fake # nap() is a no-op, so a refusal busy-waits out PROXY_HEALTH_TIMEOUT real seconds
+  PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 PROXY_REHYDRATE_TIMEOUT=1 TMUX=fake # nap() is a no-op, so a refusal busy-waits out PROXY_HEALTH_TIMEOUT real seconds
 
 pass=0; failed=0
 ok() { pass=$((pass + 1)); echo "  ok   $*"; }
@@ -138,7 +155,7 @@ bad() { failed=$((failed + 1)); echo "  FAIL $*"; echo "----- calls"; sed 's/^/ 
 
 # reset [baremetal|container|none]: fresh host state, `serving` says who owns :443
 reset() {
-  rm -rf "$FAKE"; mkdir -p "$FAKE/running" "$FAKE/all"; : > "$FAKE/calls"
+  rm -rf "$FAKE"; mkdir -p "$FAKE/running" "$FAKE/all"; : > "$FAKE/calls"; rm -f "$PROXY_LOG_DIR/error.log"
   unset "${!FAKE_@}" 2>/dev/null; export FAKE="$T/fake"
   if [ "$1" = none ]; then echo none > "$FAKE/serving"
   elif [ "$1" = baremetal ]; then touch "$FAKE/unit_active"; echo baremetal > "$FAKE/serving"
@@ -239,6 +256,42 @@ check "fresh start whose container never becomes healthy: removed, nothing left"
 
 reset none; FAKE_CONTAINER_CODE=502 bluegreen
 check "fresh start whose site checks fail: removed, never made permanent" '[ $RC != 0 ] && called "docker rm -f blot-proxy-blue" && ! called "docker update"'
+
+echo "purge index (rehydrate)"
+
+reset none; FAKE_REHYDRATE_ERROR=1 bluegreen
+check "fresh start whose purge index fails to rebuild: refused, container removed, never made permanent" '[ $RC != 0 ] && mentions "purge index" && called "docker rm -f blot-proxy-blue" && ! called "docker update"'
+
+reset none; FAKE_NO_REHYDRATE=1 bluegreen
+check "fresh start whose purge index never finishes: refused, container removed" '[ $RC != 0 ] && mentions "rehydrate: complete" && called "docker rm -f blot-proxy-blue" && ! called "docker update"'
+
+reset none; ALLOW_STDOUT_LOGS=1 FAKE_STDOUT_LOGS=1 FAKE_REHYDRATE_VIA_LOGS_ONLY=1 bluegreen
+check "fresh start: the line is accepted from docker logs too (ALLOW_STDOUT_LOGS=1 image)" '[ $RC = 0 ]'
+
+reset container; FAKE_REHYDRATE_ERROR=1 bluegreen
+check "swap whose new colour fails to rebuild its purge index: old one never stopped, new one removed" '[ $RC != 0 ] && ! called "docker stop" && called "docker rm -f blot-proxy-green" && serving container'
+
+reset container; mkdir -p "$PROXY_LOG_DIR"; echo "2000/01/01 00:00:00 [notice] 1#1: *1 rehydrate: complete files=1 hosts=1 unparsed=0 seconds=1" > "$PROXY_LOG_DIR/error.log"
+FAKE_NO_REHYDRATE=1 bluegreen
+check "swap: the old colour's earlier 'complete' line does not count for the new one" '[ $RC != 0 ] && ! called "docker stop" && called "docker rm -f blot-proxy-green"'
+
+reset container; mkdir -p "$PROXY_LOG_DIR"; echo "2000/01/01 00:00:00 [error] 1#1: *1 rehydrate: could not add to index" > "$PROXY_LOG_DIR/error.log"
+bluegreen
+check "swap: an old rehydrate error from before the new colour started is ignored" '[ $RC = 0 ]'
+
+echo "certificates on a fresh start"
+
+reset none; FAKE_NO_CUSTOM_CERT=b.custom.test bluegreen
+check "fresh start where a Redis domain gets no certificate: refused, listed, never made permanent" '[ $RC != 0 ] && mentions "b.custom.test" && mentions "1 of 2" && called "docker rm -f blot-proxy-blue" && ! called "docker update"'
+
+reset none; FAKE_NO_CUSTOM_CERT=b.custom.test PROXY_SKIP_CERT_SWEEP=1 bluegreen
+check "fresh start with PROXY_SKIP_CERT_SWEEP=1: allowed, and says it skipped" '[ $RC = 0 ] && mentions "not checking custom-domain certificates"'
+
+reset none; bluegreen
+check "fresh start where every Redis domain gets a certificate: made permanent" '[ $RC = 0 ] && mentions "all 2 in Redis are being served" && called "docker update --restart unless-stopped blot-proxy-blue"'
+
+reset none; FAKE_CUSTOM_DOMAINS="" bluegreen
+check "fresh start with no custom domains in Redis: nothing to serve, allowed" '[ $RC = 0 ]'
 
 reset container; FAKE_LOCK_HELD=1 bluegreen
 check "another deploy holds the lock: refused, nothing touched" '[ $RC != 0 ] && ! called "docker create" && ! called "docker stop" && ! called "docker rm" && mentions "already running"'

@@ -3,9 +3,9 @@
 The OpenResty reverse proxy that fronts Blot. Production has run it from this
 image since 8 Oct 2026 (#1941), deployed with `npm run deploy-proxy` or the
 Deploy proxy workflow (see [`deploy/README.md`](deploy/README.md)). The
-nginx config and Lua in `config/` are the only copy: the bare-metal OpenResty
-install that preceded the container remains on the host, stopped and
-disabled, as a manual rollback, but nothing in this repo renders its config.
+nginx config and Lua in `config/` are the only copy. The bare-metal OpenResty
+install that preceded the container has been removed from the host; to roll
+back, deploy an older image.
 
 ## Layout
 

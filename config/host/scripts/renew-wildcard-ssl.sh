@@ -54,8 +54,8 @@ fi
 # would keep serving the old certificate until it expires.
 # Reload whichever proxy is serving to use the new cert: the container(s)
 # (proxy/deploy, which mount /etc/ssl/private read-only) once the proxy has
-# moved off bare-metal, otherwise the bare-metal OpenResty. The cutover script
-# refuses to run until this host has this version of the script.
+# moved off bare-metal, otherwise the bare-metal OpenResty (uninstalled from
+# production; the fallback only matters on a host that still has it).
 containers=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^blot-proxy-(blue|green)$' || true)
 if [ -n "$containers" ]; then
   for container in $containers; do

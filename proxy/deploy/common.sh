@@ -27,13 +27,17 @@
 #   PROXY_DRAIN_TIMEOUT    30                   seconds an old container may drain
 #   PROXY_DEPLOY_LOCK      /tmp/blot-proxy-deploy.lock  held by every deploy script
 #   PROXY_SKIP_CERT_SWEEP  (unset)              1 skips the custom-domain certificate
-#                                               comparison (see cert_baseline)
+#                                               checks (see cert_baseline and
+#                                               certs_all_served)
 #   PROXY_NOFILE           65536                --ulimit nofile=N:N. Each proxied
 #                                               connection holds ~2 fds (client +
 #                                               upstream), so worker_connections
 #                                               10000 (proxy/config/initial.conf)
 #                                               needs ~20000 plus cache/log fds;
 #                                               this leaves headroom above that
+#   PROXY_REHYDRATE_TIMEOUT 120                 seconds a new container may take to
+#                                               rebuild its purge index (see
+#                                               wait_rehydrated; ~2.5s in production)
 #
 # PROXY_DEPLOY_SLEEP replaces `sleep` (the tests set it to a no-op).
 
@@ -59,6 +63,7 @@ PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
 # the same reason. 65536 leaves real headroom above both - a root dockerd
 # allows it.
 NOFILE="${PROXY_NOFILE:-65536}"
+REHYDRATE_TIMEOUT="${PROXY_REHYDRATE_TIMEOUT:-120}"
 
 # Never fail because the terminal went away: a deploy ignores SIGPIPE and
 # must still be able to finish and roll back with nobody watching.
@@ -188,6 +193,42 @@ wait_healthy() { # wait_healthy <name> <timeout>
   done
 }
 
+# Worker 0 rebuilds the purge index (cacher.lua build_index) once nginx starts
+# listening, and logs "rehydrate: complete files=... hosts=..." when it
+# finishes, or "[error] ... rehydrate: <reason>" (e.g. cannot read a file, or
+# "increase lua_shared_dict cacher_dictionary") if it gives up. Until it
+# completes every /purge answers 503, so a proxy that never gets there serves
+# stale pages indefinitely. Wait for one or the other, up to <timeout> seconds.
+#
+# Where the line goes: the image writes error.log to the shared $LOG_DIR (also
+# written by the other colour during a swap), or to stderr (`docker logs`) with
+# ALLOW_STDOUT_LOGS=1. Both are read. In the shared file only lines stamped at
+# or after the container's start time count: the old colour's own "complete"
+# line is older, and container pids cannot tell the two apart (each container
+# has its own pid namespace, so both log as 1#1 / 7#7).
+wait_rehydrated() { # wait_rehydrated <name> <timeout>
+  local deadline=$(( $(date +%s) + $2 )) started text
+  started="$(docker inspect -f '{{.State.StartedAt}}' "$1" 2>/dev/null || true)"
+  started="${started%%.*}"; started="${started%Z}"    # 2026-10-08T12:34:56
+  started="${started//-//}"; started="${started/T/ }" # 2026/10/08 12:34:56 (nginx's stamp)
+  [ -n "$started" ] || { log "cannot read when $1 started"; return 1; }
+  while true; do
+    text="$( { tail -n 5000 "$LOG_DIR/error.log" 2>/dev/null \
+                 | awk -v start="$started" 'substr($0, 1, 19) >= start'
+               docker logs "$1" 2>&1; } || true)"
+    # here-strings, not a pipe: grep -q exiting early would SIGPIPE printf and
+    # fail the pipeline under pipefail
+    if grep -q '\[error\].*rehydrate:' <<< "$text"; then
+      log "$1 failed to rebuild its purge index: $(grep -m1 '\[error\].*rehydrate:' <<< "$text")"
+      return 1
+    fi
+    ! grep -q 'rehydrate: complete' <<< "$text" || return 0
+    running "$1" || { log "$1 stopped before its purge index was rebuilt"; return 1; }
+    [ "$(date +%s)" -lt "$deadline" ] || { log "$1 did not log \"rehydrate: complete\" in ${2}s"; return 1; }
+    nap 1
+  done
+}
+
 # ---- what the outside world sees -------------------------------------------
 
 # HTTP status of a request to this host for <host> on <port> (default 443),
@@ -272,6 +313,27 @@ cert_baseline() {
   [ "$served" -gt 0 ] \
     || { log "no custom-domain certificate could be read from the running proxy ($total in Redis): nothing to compare (PROXY_SKIP_CERT_SWEEP=1 to skip)"; return 1; }
   log "Custom-domain certificates: $served of $total in Redis are being served"
+}
+
+# A fresh start has no running proxy to compare with, so require instead that
+# the new one presents a certificate for EVERY custom domain in Redis
+# (ssl:<domain>:latest), looked up by SNI. A container that cannot read or
+# serve them would otherwise pass every other check. A Redis with no custom
+# domains has nothing to serve and passes.
+certs_all_served() { # certs_all_served [port]
+  [ "${PROXY_SKIP_CERT_SWEEP:-}" != 1 ] || { log "PROXY_SKIP_CERT_SWEEP=1: not checking custom-domain certificates"; return 0; }
+  command -v redis-cli >/dev/null 2>&1 \
+    || { log "redis-cli is not installed, so custom-domain certificates cannot be checked (PROXY_SKIP_CERT_SWEEP=1 to skip)"; return 1; }
+  local sweep total missing
+  sweep="$(cert_sweep "${1:-443}" | sed '/^$/d')"
+  total=$(printf '%s\n' "$sweep" | sed '/^$/d' | wc -l | tr -d ' ')
+  missing="$(printf '%s\n' "$sweep" | grep ' none$' | cut -d' ' -f1 || true)"
+  if [ -n "$missing" ]; then
+    log "no certificate presented for $(printf '%s\n' "$missing" | wc -l | tr -d ' ') of $total custom domains in Redis: first few:"
+    printf '%s\n' "$missing" | head -5 | while read -r line; do log "  $line"; done
+    return 1
+  fi
+  log "Custom-domain certificates: all $total in Redis are being served"
 }
 
 all_ok() { ! echo "$1" | tr ' ' '\n' | grep -v '=200$' | grep -q .; }

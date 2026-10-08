@@ -70,15 +70,12 @@ behind and what still depends on it. `deploy.sh` does not install any of it.
   `.key`, the directory the proxy container mounts read-only. On a rebuilt host
   these must exist before `blue-green.sh` will start a container.
 - Enabled and started `mount-instance-store.service`, and installed the
-  `docker.service.d` and `openresty.service.d` drop-ins that gate those units
-  on `/var/instance-ssd` being mounted. `deploy.sh` now installs the first two
-  of these; the `openresty.service.d` drop-in, and the `openresty.service` unit
-  itself, are only on the host from the original install.
+  `docker.service.d` drop-in (and an `openresty.service.d` one) that gate those
+  units on `/var/instance-ssd` being mounted. `deploy.sh` installs the
+  `mount-instance-store.service` and `docker.service.d` files.
 - Installed OpenResty (yum repo `openresty.org`), luarocks and
   `lua-resty-auto-ssl`, created `/etc/resty-auto-ssl`, and pointed
   `/usr/local/openresty/nginx/conf/nginx.conf` at
-  `/home/ec2-user/openresty/openresty.conf`. OpenResty is still installed there,
-  stopped and disabled, as the manual rollback (`docker rm -f
-  blot-proxy-<colour> && sudo systemctl enable --now openresty`). Nothing in this
-  repo renders that `openresty.conf` any more, so the rollback serves the last
-  config it was given.
+  `/home/ec2-user/openresty/openresty.conf`. All of that has since been
+  uninstalled from the production host; a rebuilt host does not need it, since
+  the proxy runs from the container image.

@@ -1,7 +1,7 @@
 # Deploying the proxy container
 
 Production runs the proxy as a container (cut over from bare-metal OpenResty
-on 8 Oct 2026, #1941). Deploy a new image with the **Deploy proxy** workflow
+on 8 Oct 2026, #1941; the bare-metal install has since been removed). Deploy a new image with the **Deploy proxy** workflow
 (`.github/workflows/deploy-proxy.yml`, manual), or from a checkout:
 
 ```sh
@@ -21,10 +21,10 @@ copies this directory to `~/proxy-deploy` on the host and runs
 
 The scripts read the host's settings from `/etc/blot/proxy.env`
 ([`proxy.env.example`](proxy.env.example)) and share [`common.sh`](common.sh).
-Paths default to the ones the bare-metal OpenResty used (`/var/instance-ssd/cache`,
+Paths default to the ones the bare-metal OpenResty used, which the host still has (`/var/instance-ssd/cache`,
 `/var/instance-ssd/logs`, `/etc/ssl/private`, and the `cdn.` static
 directories `/var/www/blot/data/static` and `/var/www/blot/app/blog/static`),
-so a rollback to it loses nothing, and
+so a redeploy keeps the warm cache and
 `cdn.` requests are served from disk (with the `Cache-Control`/CORS headers of
 `location /`) instead of falling through to Node. Containers also get
 `--ulimit nofile=65536:65536` (`PROXY_NOFILE`) - headroom above both the
@@ -69,8 +69,26 @@ presented no certificate beforehand is not held against the replacement. A
 certificate that legitimately renews in the seconds between the two sweeps
 would fail the check; rerun the script.
 
-The scripts refuse to go on if `redis-cli` is missing or no certificate could
-be read from the running proxy. `PROXY_SKIP_CERT_SWEEP=1` skips the comparison.
+On a **fresh start** there is no running proxy to compare with, so instead the
+new container must present a certificate for every custom domain in Redis
+before it is made permanent; the first few domains without one are listed. A
+Redis with no custom domains passes.
+
+The script refuses to go on if `redis-cli` is missing, or (on a swap) no
+certificate could be read from the running proxy. `PROXY_SKIP_CERT_SWEEP=1`
+skips both the comparison and the fresh-start check.
+
+## Purge index
+
+After a new container is healthy, `blue-green.sh` waits up to
+`PROXY_REHYDRATE_TIMEOUT` (default 120s; about 2.5s in production) for it to log
+`rehydrate: complete` while rebuilding its purge index from the cache, and
+fails on a `[error] ... rehydrate:` line. Until it completes every `/purge`
+returns 503. On a swap this happens before the old container is stopped; on
+a fresh start before the container is made permanent. Either way a failure
+removes the new container. During a swap both containers write the same
+`error.log`, so only lines stamped at or after the new container's start time
+are read (plus `docker logs`, for an `ALLOW_STDOUT_LOGS=1` image).
 
 ## Trying issuance against a real ACME server
 
@@ -98,25 +116,26 @@ cannot be left behind and start issuing certificates no browser trusts.
 *Renewal* is still untested: nothing yet exercises dehydrated 0.7.2 renewing a
 certificate.
 
-## First container, and rolling back to bare-metal
+## First container, and rolling back
 
 Production moved from the bare-metal `openresty` systemd unit to the first
 container on 8 Oct 2026 (#1941), using a one-off script that rehearsed the
 image on another port, stopped bare-metal, started the container and rolled
-back on any failed check. That script is deleted, along with the bare-metal
-config generator it relied on. On a host with no proxy container running,
-`blue-green.sh` starts the first one (it refuses while the bare-metal unit is
-active or enabled, which would race the container for `:80`/`:443`; the kernel
-refuses `reuseport` sockets next to bare-metal's plain ones, so stop and
-disable it first).
+back on any failed check. That script is deleted, and the bare-metal install
+has since been removed from the host.
 
-Bare-metal OpenResty stays installed on the host, stopped and disabled, with
-its last rendered config, as a manual rollback only. Nothing in this repo
-renders that config any more. To go back by hand:
+On a host with no proxy container running (a rebuilt host, or after the
+container was removed), `blue-green.sh` starts the first one. It also refuses
+while a legacy `openresty` systemd unit is active or enabled, which would
+conflict with the container for `:80`/`:443`.
+
+To roll back, redeploy an older image:
 
 ```sh
-docker rm -f blot-proxy-<colour> && sudo systemctl enable --now openresty
+npm run deploy-proxy -- <older-commit>
 ```
+
+or run the Deploy proxy workflow with that commit.
 
 ## Known gaps
 
