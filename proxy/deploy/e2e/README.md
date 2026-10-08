@@ -64,8 +64,8 @@ trigger, no sleep:
   blue-green's "starting" state, where the old colour is never touched).
   The forced-failure steps override `PROXY_ENV_FILE` with a copy of the
   real one whose `PROXY_PRIVATE_IP` is `198.51.100.7` (TEST-NET-2, RFC 5737
-  - never assigned to a runner interface). `validate_image()` only runs
-  `openresty -t` (parses the config, never binds), and the cutover
+  - never assigned to a runner interface). `validate_image()` runs
+  `openresty -t` with `ip_nonlocal_bind`, and the cutover
   rehearsal always overrides `PROXY_PRIVATE_IP=127.0.0.1` for its own
   container, so preflight and the rehearsal both still pass; only the real
   container's `:8077` listener fails to bind, so it exits immediately and

@@ -154,11 +154,15 @@ run_args() { # run_args <name>
   )
 }
 
-# Render the image's config with this host's settings and have nginx parse it,
-# without binding anything. Only the certificate directory is mounted: the
-# check must not touch the live cache or logs.
+# Render the image's config with this host's settings and have nginx parse it.
+# Only the certificate directory is mounted: the check must not touch the live
+# cache or logs. `openresty -t` can bind the listeners, and on the Docker bridge
+# the purge listener's PROXY_PRIVATE_IP is not a local address (prod: "bind()
+# ... failed (99: Address not available)"), so allow non-local binds in the
+# container's own network namespace.
 validate_image() { # validate_image <image>
   docker run --rm --entrypoint bash \
+    --sysctl net.ipv4.ip_nonlocal_bind=1 \
     --env-file "$ENV_FILE" -e PROXY_FETCH_CDN_IPS=false \
     -v "$CERT_DIR":/etc/ssl/private:ro \
     "$1" -c 'render-config >/dev/null && /usr/local/openresty/bin/openresty -t' 2>&1
@@ -247,9 +251,17 @@ snapshot() { # snapshot [port] -> "host=status host=status ..."
 # without any of the checked hosts noticing. So ask the proxy for every one of
 # them (by SNI) and require the same certificates from the replacement.
 
+# SCAN by hand: `redis-cli --scan --count` needs redis-cli 7, and the
+# production host has 6.2, whose --scan uses SCAN's default COUNT of 10 (a
+# round trip per 10 keys of the whole keyspace).
 custom_cert_domains() {
-  redis-cli -h "$REDIS_HOST" --scan --count 1000 --pattern 'ssl:*:latest' \
-    | sed -E 's/^ssl:(.*):latest$/\1/' | sort -u
+  local cursor=0 reply
+  while :; do
+    reply=$(redis-cli -h "$REDIS_HOST" --raw scan "$cursor" match 'ssl:*:latest' count 1000) || return 1
+    cursor=$(printf '%s\n' "$reply" | head -n 1)
+    printf '%s\n' "$reply" | tail -n +2
+    [ "$cursor" != 0 ] || break
+  done | sed '/^$/d' | sed -E 's/^ssl:(.*):latest$/\1/' | sort -u
 }
 
 # cert_sweep [port] -> sorted "<domain> <sha256 fingerprint | none>" lines

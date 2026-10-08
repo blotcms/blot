@@ -212,8 +212,8 @@ jobs:
       # PROXY_PRIVATE_IP is 198.51.100.7 (TEST-NET-2, RFC 5737), which no
       # runner interface owns, so the real new container's :8077 listener
       # fails to bind and openresty exits immediately - wait_healthy sees it
-      # not running and fails fast. validate_image() only runs `openresty -t`
-      # (parses, does not bind), so preflight still passes with this file.
+      # not running and fails fast. validate_image() runs `openresty -t` with
+      # ip_nonlocal_bind, so preflight still passes with this file.
       - name: blue-green never touches the old colour when the new one never becomes healthy
         env:
           PROXY_ENV_FILE: ${{ env.PROXY_ENV_FILE_BAD }}
@@ -235,8 +235,8 @@ jobs:
 
       # Same deterministic technique as step 5: PROXY_ENV_FILE_BAD's
       # unroutable PROXY_PRIVATE_IP means the real container never becomes
-      # healthy (preflight and the rehearsal both pass: preflight never binds
-      # anything, and the rehearsal explicitly overrides PROXY_PRIVATE_IP to
+      # healthy (preflight and the rehearsal both pass: validate_image allows
+      # non-local binds, and the rehearsal explicitly overrides PROXY_PRIVATE_IP to
       # 127.0.0.1 for its own container), so the cutover rolls back before
       # ever disabling bare metal - enabled is asserted, not just active.
       - name: cutover rolls back to bare metal when the container never becomes healthy
