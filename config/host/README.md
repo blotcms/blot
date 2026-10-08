@@ -39,23 +39,25 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
   and reloads the proxy. It reads `/etc/blot/wildcard-ssl-env.sh` on the host.
   It runs daily from `/etc/cron.d/blot-wildcard-renewal` (`0 1 * * * root
   /home/ec2-user/scripts/renew-wildcard-ssl.sh >> /home/ec2-user/renew-wildcard.log`),
-  which was written by the bare-metal `setup.sh` when the host was built (see
-  below), not by `deploy.sh`.
+  which was written by the old bare-metal `setup.sh` when the host was built
+  (see below), not by `deploy.sh`. It fails (non-zero exit, before it writes
+  to Redis) if no proxy container is running.
 - `check_docker_health.sh` restarts containers Docker reports as unhealthy. It
   is run from cron every minute (see its header); `deploy.sh` does not install
   that entry.
 - `identify-expiring-certs.sh` and `purge-expired-ssl.sh` are run by hand to
   find and drop custom-domain certificates (see
-  `app/helper/email/admin/SSL_CERTIFICATE_ISSUES.txt`).
+  `app/helper/email/admin/SSL_CERTIFICATE_ISSUES.txt`). Both restart the proxy
+  container and refuse to run if none is running.
 - `mount-instance-store.sh` mounts the NVMe instance store at
   `/var/instance-ssd` (logs and cache) at boot.
 
 ## What the old bare-metal setup script did
 
 `config/openresty/scripts/setup.sh` built the host when the proxy was bare-metal
-OpenResty. It was deleted when `proxy/` became the canonical proxy config, but
-the host it built is still the host in production, so this is what it left
-behind and what still depends on it. `deploy.sh` does not install any of it.
+OpenResty. It was deleted when `proxy/` became the canonical proxy config. The
+host it built is still the host in production, so this is what it left behind
+and what still depends on it. `deploy.sh` does not install any of it.
 
 - Installed the `redis6` package (the host's `redis-cli`, which
   `proxy/deploy/common.sh` and `try-issuance.sh` need) and `nvme-cli` (used by
@@ -70,12 +72,13 @@ behind and what still depends on it. `deploy.sh` does not install any of it.
   `.key`, the directory the proxy container mounts read-only. On a rebuilt host
   these must exist before `blue-green.sh` will start a container.
 - Enabled and started `mount-instance-store.service`, and installed the
-  `docker.service.d` drop-in (and an `openresty.service.d` one) that gate those
-  units on `/var/instance-ssd` being mounted. `deploy.sh` installs the
-  `mount-instance-store.service` and `docker.service.d` files.
-- Installed OpenResty (yum repo `openresty.org`), luarocks and
-  `lua-resty-auto-ssl`, created `/etc/resty-auto-ssl`, and pointed
-  `/usr/local/openresty/nginx/conf/nginx.conf` at
-  `/home/ec2-user/openresty/openresty.conf`. All of that has since been
-  uninstalled from the production host; a rebuilt host does not need it, since
-  the proxy runs from the container image.
+  `docker.service.d` drop-in that gates docker on `/var/instance-ssd` being
+  mounted. `deploy.sh` installs both.
+
+It also installed OpenResty, luarocks and `lua-resty-auto-ssl` on the host.
+Bare-metal OpenResty was uninstalled on 8 Oct 2026 (packages, the `openresty`
+systemd unit and its `openresty.service.d` drop-in, `/usr/local/openresty` and
+`/etc/resty-auto-ssl`), so there is no host rollback. The auto-ssl state now
+lives in the `blot-proxy-auto-ssl` Docker volume, and customer certificates in
+Redis (`ssl:<domain>:latest`). To roll the proxy back, redeploy an older image:
+`npm run deploy-proxy -- <older commit>`.

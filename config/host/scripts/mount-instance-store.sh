@@ -37,7 +37,7 @@ fi
 if ! blkid "$EPHEMERAL_DISK" >/dev/null 2>&1; then
   # Once we work out which disk is the ephemeral disk
   # we create a file system on it and mount it to the cache
-  # directory, which is used by the application and NGINX
+  # directory, which is used by the application and the proxy container
   # to store cached rendered web pages
   mkfs -t xfs "$EPHEMERAL_DISK"
 fi

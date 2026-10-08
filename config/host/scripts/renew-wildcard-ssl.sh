@@ -52,18 +52,20 @@ fi
 # Reload first, before anything touches Redis: under set -e a Redis that is
 # down or refusing writes would otherwise stop the script here, and the proxy
 # would keep serving the old certificate until it expires.
-# Reload whichever proxy is serving to use the new cert: the container(s)
-# (proxy/deploy, which mount /etc/ssl/private read-only) once the proxy has
-# moved off bare-metal, otherwise the bare-metal OpenResty (uninstalled from
-# production; the fallback only matters on a host that still has it).
+# Reload the running proxy container(s) (proxy/deploy, which mount
+# /etc/ssl/private read-only) so they serve the new cert. With no proxy
+# container running there is nothing to reload (and nothing serving traffic),
+# so fail loudly here, before the Redis writes below: a stale Redis copy of the
+# wildcard cert is what makes app/scheduler/check-ssl-certificates.js alert
+# about a failed renewal or reload.
 containers=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^blot-proxy-(blue|green)$' || true)
-if [ -n "$containers" ]; then
-  for container in $containers; do
-    docker exec "$container" /usr/local/openresty/bin/openresty -s reload
-  done
-else
-  openresty -s reload
+if [ -z "$containers" ]; then
+  echo "[`date -u +%Y-%m-%dT%T.%3NZ`] ERROR: no blot-proxy-blue or blot-proxy-green container is running, so there is nothing to reload. The new certificate is on disk in /etc/ssl/private but Redis was NOT updated. Start the proxy (npm run deploy-proxy) and re-run this script." >&2
+  exit 1
 fi
+for container in $containers; do
+  docker exec "$container" /usr/local/openresty/bin/openresty -s reload
+done
 
 # We store the key and pem in redis so that the openresty reload script can fetch them
 echo "[`date -u +%Y-%m-%dT%T.%3NZ`] Beginning storage of key and pem in redis"
