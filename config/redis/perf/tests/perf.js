@@ -327,6 +327,44 @@ esac
     });
   });
 
+  describe("fetch.sh", function () {
+    it("writes app-lock.log only when docker answered for every container", function () {
+      skipUnless("bash", "tar", "awk", "sort", "grep", "ls");
+      const dir = tmp();
+      const stubs = path.join(dir, "stubs");
+      const out = path.join(dir, "out");
+      write(path.join(dir, "home/perf/redis-sample.log"), "2026-10-08T12:00:00Z dt=60\n");
+      // ssh runs its command here, with the fake home; docker answers from the environment
+      write(path.join(stubs, "ssh"), `#!/bin/sh\nwhile [ "$1" = -o ]; do shift 2; done\nshift\nexec sh -c "$*"\n`, 0o755);
+      write(
+        path.join(stubs, "docker"),
+        `#!/bin/sh
+case "$1" in
+  inspect) [ "$MISSING" = "$2" ] && { echo "Error: No such object: $2" >&2; exit 1; }; exit 0 ;;
+  logs) [ "$3" = --since ] && [ "$5" = blot-container-green ] && echo "2026-10-08T12:00:01.123Z [LOCK] slow heartbeat 900ms"; exit 0 ;;
+esac
+`,
+        0o755
+      );
+      const env = Object.assign({}, process.env, { HOME: path.join(dir, "home"), FETCH_OUT: out, PATH: stubs + path.delimiter + process.env.PATH });
+      const fetch = (extra) => spawnSync("bash", [path.join(PERF, "fetch.sh"), "redis-host", "app-host"], { env: Object.assign({}, env, extra), encoding: "utf8" });
+      const lockLog = path.join(out, "app-host/app-lock.log");
+
+      let r = fetch({});
+      expect(r.status).toBe(0);
+      expect(fs.readFileSync(lockLog, "utf8")).toBe("2026-10-08T12:00:00Z container=green slow=1 compromised=0\n");
+
+      // a container docker cannot find: no (empty) app-lock.log for compare.js to read as zero lock lines
+      r = fetch({ MISSING: "blot-container-yellow" });
+      expect(r.status).toBe(0);
+      expect(r.stderr).toContain("No such object: blot-container-yellow");
+      expect(r.stderr).toContain("could not read the app container logs");
+      expect(fs.existsSync(lockLog)).toBe(false);
+      expect(fs.existsSync(lockLog + ".tmp")).toBe(false);
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+  });
+
   describe("cpu-squeeze.sh", function () {
     // A fake host: /proc and /sys under root, systemctl and taskset stand-ins on PATH.
     const squeezeHost = () => {

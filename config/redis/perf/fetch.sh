@@ -49,17 +49,28 @@ fetch_logs app_ssh "$APP_HOST"
 
 if [ "$APP_LOGS" = 1 ]; then
   echo "$APP_HOST: counting [LOCK] lines in the app containers' logs (since $SINCE)"
+  LOCK_LOG=$OUT/$APP_HOST/app-lock.log
   # -t puts a UTC timestamp at the start of each line; the first 16 characters
   # are the minute. The count is done on the host so only a few lines come back.
-  app_ssh "$APP_HOST" "for c in blue green yellow; do
+  # The containers are checked first: a missing docker, a permission error or a
+  # missing container would otherwise give an empty file, which compare.js reads
+  # as "no lock lines". The result is only moved into place if all of it worked.
+  if app_ssh "$APP_HOST" "for c in blue green yellow; do
+    docker inspect blot-container-\$c > /dev/null || { echo \"cannot inspect blot-container-\$c\" >&2; exit 1; }
+  done
+  for c in blue green yellow; do
     docker logs -t --since $SINCE blot-container-\$c 2>&1 |
       grep -F -e '[LOCK] slow heartbeat' -e '[LOCK COMPROMISED]' |
       awk -v c=\$c '{ m = substr(\$1, 1, 16) \":00Z\"; seen[m] = 1
         if (index(\$0, \"[LOCK COMPROMISED]\")) k[m]++; else s[m]++ }
         END { for (m in seen) printf \"%s container=%s slow=%d compromised=%d\\n\", m, c, s[m] + 0, k[m] + 0 }'
-  done | sort" > "$OUT/$APP_HOST/app-lock.log" ||
+  done | sort" > "$LOCK_LOG.tmp"; then
+    mv "$LOCK_LOG.tmp" "$LOCK_LOG"
+    echo "$APP_HOST: app-lock.log ($(wc -l < "$LOCK_LOG" | tr -d ' ') lines)"
+  else
+    rm -f "$LOCK_LOG.tmp" "$LOCK_LOG"
     echo "warning: could not read the app container logs; the lock counts will be missing" >&2
-  echo "$APP_HOST: app-lock.log ($(wc -l < "$OUT/$APP_HOST/app-lock.log" | tr -d ' ') lines)"
+  fi
 fi
 
 echo "Logs are in $OUT"
