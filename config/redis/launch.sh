@@ -14,6 +14,7 @@
 #   --user USER      SSH user (default ec2-user)
 #   --port PORT      SSH port (default 22; the AMI/user-data decides)
 #   --profile NAME   AWS CLI profile        --region NAME   (default us-west-2)
+#   --tag KEY=VALUE  extra instance tag, repeatable (e.g. BlotDrill=2041 to mark a throwaway)
 #   --dry-run        look up the AMI and print the launch command, nothing more
 # The host reaches S3 with an instance profile from the launch template or keys
 # in ~/.aws (you are prompted to add them before the restore step).
@@ -25,7 +26,7 @@ SECURITY_GROUP=sg-0b3b200323d36ce2e
 AMI_PARAMETER=/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
 TYPE=""; FROM=""; DRY_RUN=""
 KEY=${REDIS_SSH_KEY:-}; SSH_USER=ec2-user; SSH_PORT=22
-AWS_REGION=${AWS_REGION:-us-west-2}; AWS_PROFILE_ARGS=""
+AWS_REGION=${AWS_REGION:-us-west-2}; AWS_PROFILE_ARGS=""; EXTRA_TAGS=""
 
 while [ $# -gt 0 ]; do
   [ "$1" = --dry-run ] || [ $# -ge 2 ] || die "$1 needs a value"
@@ -37,6 +38,9 @@ while [ $# -gt 0 ]; do
     --port) SSH_PORT=$2; shift 2 ;;
     --profile) AWS_PROFILE_ARGS="--profile $2"; shift 2 ;;
     --region) AWS_REGION=$2; shift 2 ;;
+    --tag)
+      case "$2" in [A-Za-z]*=*) ;; *) die "--tag needs KEY=VALUE" ;; esac
+      EXTRA_TAGS="$EXTRA_TAGS,{Key=${2%%=*},Value=${2#*=}}"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     *) die "unknown option $1" ;;
   esac
@@ -52,7 +56,7 @@ AMI=$(aws_cli ssm get-parameter --name "$AMI_PARAMETER" --query Parameter.Value 
 echo "AMI: $AMI"
 
 NAME="redis-$(date -u +%Y%m%d-%H%M%S)"
-TAGS="ResourceType=instance,Tags=[{Key=Name,Value=$NAME},{Key=RedisProvisionedBy,Value=config/redis/launch.sh},{Key=RedisSource,Value=$FROM},{Key=RedisProvisionedAt,Value=$(date -u +%Y-%m-%dT%H:%M:%SZ)}]"
+TAGS="ResourceType=instance,Tags=[{Key=Name,Value=$NAME},{Key=RedisProvisionedBy,Value=config/redis/launch.sh},{Key=RedisSource,Value=$FROM},{Key=RedisProvisionedAt,Value=$(date -u +%Y-%m-%dT%H:%M:%SZ)}$EXTRA_TAGS]"
 if [ -n "$DRY_RUN" ]; then
   echo "would run: aws ec2 run-instances --launch-template LaunchTemplateId=$LAUNCH_TEMPLATE,Version=\$Latest --instance-type $TYPE --image-id $AMI --tag-specifications '$TAGS'"
   exit 0
