@@ -1,13 +1,13 @@
-// The "Redis server" lines of the daily email (blotcms/blot#2041): memory and
-// how fast it grows, disk space, the last save and backup, and a nudge to
-// resize the host before it fills.
+// The Redis line of the daily email (blotcms/blot#2041), one line:
 //
-// Redis tells us its own memory, but only the Redis host can read its RAM and
-// disk: config/redis/bin/tcpmem-log.sh stores those in its 5-minute sample
-// (SAMPLE_KEY), and config/redis/bin/backup.sh stores each upload in
-// BACKUP_KEY. The growth trend compares with the snapshot the previous daily
-// run stored at SNAPSHOT_KEY. Missing or stale data is said so in the email;
-// it never fails the rest of it.
+//   **Redis:** memory 27% (resize in ~47 days), disk 21% (19 GB free), saved 3m ago, backed up 30m ago.
+//
+// Redis tells us its own memory and last save, but only the Redis host can
+// read its disk: config/redis/bin/tcpmem-log.sh stores that in its 5-minute
+// sample (SAMPLE_KEY), and config/redis/bin/backup.sh stores each upload in
+// BACKUP_KEY. The resize projection compares with the snapshot the previous
+// daily run stored at SNAPSHOT_KEY. Anything that needs attention is bold;
+// missing or stale data is said so. This never fails the rest of the email.
 const prettySize = require("helper/prettySize");
 const { parseSample, parseMemory, parseInfo, SAMPLE_KEY } = require("../check-redis-host");
 
@@ -17,9 +17,10 @@ const SNAPSHOT_KEY = "blot:redis-host:daily-snapshot";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
 
-// check-redis-host.js emails at 80%; the daily email points at the README a
-// bit earlier, since a bigger host takes a few days to plan.
+// check-redis-host.js emails at 80%; the daily email says to resize a bit
+// earlier, since a bigger host takes a few days to plan.
 const MEMORY_WARNING = 0.7;
 const RESIZE_URL =
   "https://github.com/blotcms/blot/blob/master/config/redis/README.md#increasing-the-redis-server-size";
@@ -27,25 +28,25 @@ const RESIZE_URL =
 // A snapshot closer than this to the last one is no basis for a daily trend
 // (and does not replace it).
 const MIN_TREND_GAP_MS = HOUR;
-// Gaps within this of a day are shown as "in 24h"; others are scaled to a day.
-const DAY_MS = 24 * HOUR;
-const DAY_TOLERANCE_MS = 2 * HOUR;
-// Beyond this the projection is noise.
-const MAX_PROJECTION_DAYS = 730;
+// Growth slower than this, or none, is "stable".
+const STABLE_DAYS = 365;
 
 // The host samples every 5 minutes (see check-redis-host.js's STALE_MS).
 const SAMPLE_STALE_MS = 20 * MINUTE;
 // Backups are hourly (the daily one is a second upload at 03:05).
 const BACKUP_OVERDUE_MS = 2 * HOUR;
+// The instance store holding local backup copies.
+const BACKUP_DISK_FULL = 0.8;
 
 // prettySize takes kilobytes, 1000 to the unit, and divides by 1024.
 const size = (bytes) => prettySize(bytes / 1000, 1);
 const percent = (fraction) => Math.round(fraction * 100) + "%";
 
-function ago(ms) {
-  if (ms < HOUR) return Math.max(0, Math.round(ms / MINUTE)) + " minutes ago";
-  if (ms < 48 * HOUR) return Math.round(ms / HOUR) + " hours ago";
-  return Math.round(ms / (24 * HOUR)) + " days ago";
+// "3m", "2h", "3d"
+function compact(ms) {
+  if (ms < HOUR) return Math.max(0, Math.round(ms / MINUTE)) + "m";
+  if (ms < 48 * HOUR) return Math.round(ms / HOUR) + "h";
+  return Math.round(ms / DAY) + "d";
 }
 
 // "2026-10-08T03:05:11Z daily daily/2026-10-08-hour-03.rdb 4123456789"
@@ -66,7 +67,7 @@ function parseBackup(value) {
   };
 }
 
-// Everything the section needs, from Redis. client.sendCommand keeps these off
+// Everything the line needs, from Redis. client.sendCommand keeps these off
 // the client-side cache: the host writes them from another client.
 async function collect({ client = require("models/client"), now = Date.now() } = {}) {
   const [info, sampleValue, backupValue, snapshotValue] = await Promise.all([
@@ -98,23 +99,12 @@ function keyCount(fields) {
     }, 0);
 }
 
-// INFO persistence. rdb_last_bgsave_time_sec is -1 and latest_fork_usec 0
-// until the first save or fork.
+// INFO persistence
 function parseSave(fields) {
   if (!fields.rdb_last_bgsave_status) return null;
 
-  const seconds = Number(fields.rdb_last_bgsave_time_sec);
-  const fork = Number(fields.latest_fork_usec);
   const saved = Number(fields.rdb_last_save_time);
-  const changes = Number(fields.rdb_changes_since_last_save);
-
-  return {
-    status: fields.rdb_last_bgsave_status,
-    time: saved > 0 ? saved * 1000 : null,
-    seconds: seconds >= 0 ? seconds : null,
-    forkMs: fork > 0 ? fork / 1000 : null,
-    changes: changes >= 0 ? changes : null,
-  };
+  return { status: fields.rdb_last_bgsave_status, time: saved > 0 ? saved * 1000 : null };
 }
 
 function parseSnapshot(value) {
@@ -126,107 +116,72 @@ function parseSnapshot(value) {
   }
 }
 
-const disk = (label, { used, total }) =>
-  `${label} ${size(used)} of ${size(total)} used (${percent(used / total)})`;
+// "(resize in ~47 days)" from how much memory grew since the previous daily
+// run, scaled to a day, or "(stable)". Nothing without a usable snapshot.
+function projection({ now, memory, snapshot }) {
+  if (!snapshot || now - snapshot.time < MIN_TREND_GAP_MS) return "";
 
-const commas = (n) => Math.round(n).toLocaleString("en-US");
-const signed = (n, format) => (n < 0 ? "-" : "+") + format(Math.abs(n));
-const millis = (ms) => (ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : Math.round(ms) + "ms");
+  const perDay = ((memory.used - snapshot.memory) * DAY) / (now - snapshot.time);
+  const days = (memory.maxmemory * MEMORY_WARNING - memory.used) / perDay;
 
-function saveLine({ now, save }) {
-  if (!save) return "Last save: not reported by Redis";
-
-  const parts = [save.status === "ok" ? "ok" : `FAILED (${save.status}), Redis refuses writes until a save succeeds`];
-  if (save.time) parts.push(ago(now - save.time));
-  if (save.seconds !== null) parts.push(`took ${save.seconds}s`);
-  if (save.forkMs) parts.push(`fork ${millis(save.forkMs)}`);
-  if (save.changes !== null) parts.push(`${commas(save.changes)} changes since`);
-  return "Last save: " + parts.join(", ");
+  if (!(perDay > 0) || days > STABLE_DAYS) return " (stable)";
+  return ` (resize in ~${Math.max(1, Math.round(days))} days)`;
 }
 
-// Keys and memory now, the change since the previous daily run (scaled to a
-// day if it was not about one) and, at that rate, when memory reaches
-// MEMORY_WARNING of maxmemory.
-function growthLine({ now, memory, keys, snapshot }) {
-  const current = `${commas(keys)} keys, ${size(memory.used)} memory`;
-  if (!snapshot) return `Growth: ${current}; first snapshot, trend from tomorrow`;
+function memoryPart({ now, memory, snapshot }) {
+  if (!memory.maxmemory) return `memory ${size(memory.used)}, no maxmemory set`;
 
-  const gap = now - snapshot.time;
-  if (gap < MIN_TREND_GAP_MS) return `Growth: ${current}; the previous snapshot is too recent for a trend`;
+  const fraction = memory.used / memory.maxmemory;
+  if (fraction >= MEMORY_WARNING) return `memory ${percent(fraction)}, **[resize now](${RESIZE_URL})**`;
+  return `memory ${percent(fraction)}${projection({ now, memory, snapshot })}`;
+}
 
-  const scale = Math.abs(gap - DAY_MS) <= DAY_TOLERANCE_MS ? 1 : DAY_MS / gap;
-  const label = scale === 1 ? "in 24h" : `per day, over ${Math.round(gap / HOUR)}h`;
-  const keysChange = (keys - snapshot.keys) * scale;
-  const memoryChange = (memory.used - snapshot.memory) * scale;
+// The root disk, from the host's sample, and the instance store only if it
+// needs attention.
+function diskPart({ now, sample }) {
+  if (!sample) return "no sample from the Redis host";
 
-  let text =
-    `Growth: ${commas(keys)} keys (${signed(keysChange, commas)} ${label}), ` +
-    `${size(memory.used)} memory (${signed(memoryChange, size)} ${label})`;
+  const age = now - sample.time;
+  if (age > SAMPLE_STALE_MS) return `sample ${compact(age)} old`;
+  if (!sample.diskRoot) return "disk not reported by the Redis host";
 
-  const target = memory.maxmemory * MEMORY_WARNING;
-  if (memoryChange > 0 && memory.maxmemory && memory.used < target) {
-    const days = (target - memory.used) / memoryChange;
-    text +=
-      days > MAX_PROJECTION_DAYS
-        ? `; at this rate ${percent(MEMORY_WARNING)} of maxmemory is more than 2 years away`
-        : `; at this rate ${percent(MEMORY_WARNING)} of maxmemory in ~${Math.max(1, Math.round(days))} days`;
+  const { used, total } = sample.diskRoot;
+  let text = `disk ${percent(used / total)} (${size(total - used)} free)`;
+
+  if (!sample.diskBackups) text += ", **/backups not mounted**";
+  else if (sample.diskBackups.used / sample.diskBackups.total >= BACKUP_DISK_FULL) {
+    text += `, **backup disk ${percent(sample.diskBackups.used / sample.diskBackups.total)} full**`;
   }
   return text;
 }
 
-// Turns collect()'s data into the lines of the email, as markdown.
-function lines({ now, memory, keys = 0, save = null, snapshot = null, sample, backup }) {
-  const result = [];
-  const stale = sample && now - sample.time > SAMPLE_STALE_MS;
-
-  // Memory. This is the figure check-redis-host.js alerts on: used_memory
-  // less replica output buffers.
-  let text = memory.maxmemory
-    ? `Memory: ${size(memory.used)} used of ${size(memory.maxmemory)} maxmemory (${percent(memory.used / memory.maxmemory)})`
-    : `Memory: ${size(memory.used)} used, no maxmemory set`;
-  text += sample && sample.ramTotal ? `, ${size(sample.ramTotal)} RAM on the host` : ", host RAM unknown";
-  result.push(text);
-
-  result.push(growthLine({ now, memory, keys, snapshot }));
-
-  // Disk, from the host's sample.
-  if (!sample) {
-    result.push("Disk: no sample from the Redis host");
-  } else {
-    const parts = [];
-    if (sample.diskRoot) parts.push(disk("/", sample.diskRoot));
-    if (sample.diskBackups) parts.push(disk("/backups", sample.diskBackups));
-    else if (sample.diskRoot) parts.push("/backups not mounted");
-    text = parts.length ? "Disk: " + parts.join(", ") : "Disk: not reported by the Redis host";
-    if (stale) text += ` (sample from ${ago(now - sample.time)}, the Redis host may have stopped reporting)`;
-    result.push(text);
-  }
-
-  result.push(saveLine({ now, save }));
-
-  // Backup
-  if (!backup) {
-    result.push("Last backup: no backup recorded");
-  } else {
-    const age = now - backup.time;
-    text = `Last backup: ${ago(age)}, ${backup.key}`;
-    if (backup.bytes) text += ` (${size(backup.bytes)})`;
-    if (age > BACKUP_OVERDUE_MS) text += ", overdue: backups should run every hour";
-    result.push(text);
-  }
-
-  if (memory.maxmemory && memory.used / memory.maxmemory >= MEMORY_WARNING) {
-    result.push(
-      `Memory is getting close to the limit: [increasing the Redis server size](${RESIZE_URL})`
-    );
-  }
-
-  return result;
+function savePart({ now, save }) {
+  if (!save) return "save not reported";
+  if (save.status !== "ok") return "**last save failed**";
+  return save.time ? `saved ${compact(now - save.time)} ago` : "never saved";
 }
 
-// Tomorrow's trend starts from today's figures. A failure to store them only
-// costs tomorrow's trend. A manual re-run within the hour leaves the real
-// previous snapshot alone.
+function backupPart({ now, backup }) {
+  if (!backup) return "**no backup recorded**";
+
+  const age = now - backup.time;
+  return age > BACKUP_OVERDUE_MS
+    ? `**last backup ${compact(age)} ago, overdue**`
+    : `backed up ${compact(age)} ago`;
+}
+
+// Turns collect()'s data into the line of the email, as markdown.
+function line(data) {
+  return (
+    "**Redis:** " +
+    [memoryPart(data), diskPart(data), savePart(data), backupPart(data)].join(", ") +
+    "."
+  );
+}
+
+// Tomorrow's projection starts from today's figures. A failure to store them
+// only costs tomorrow's projection. A manual re-run within the hour leaves the
+// real previous snapshot alone.
 async function saveSnapshot({ now, memory, keys, snapshot }, deps) {
   if (snapshot && now - snapshot.time < MIN_TREND_GAP_MS) return;
 
@@ -243,11 +198,12 @@ async function main(callback, deps = {}) {
 
   try {
     const data = await collect(deps);
-    result = lines(data);
+    result = line(data);
     await saveSnapshot(data, deps);
   } catch (err) {
     // Redis down or an unexpected reply: say so and let the email go out.
-    result = ["Unavailable: " + String((err && err.message) || err).slice(0, 200)];
+    const reason = String((err && err.message) || err).replace(/[*`<>[\]]/g, "").slice(0, 80);
+    result = `**Redis:** unavailable (${reason}).`;
   }
 
   callback(null, { redis_server: result });
@@ -255,7 +211,7 @@ async function main(callback, deps = {}) {
 
 module.exports = main;
 module.exports.collect = collect;
-module.exports.lines = lines;
+module.exports.line = line;
 module.exports.parseBackup = parseBackup;
 module.exports.BACKUP_KEY = BACKUP_KEY;
 module.exports.SNAPSHOT_KEY = SNAPSHOT_KEY;

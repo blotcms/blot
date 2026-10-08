@@ -220,7 +220,7 @@ with the clients' folders.
    (or a larger type). This took 2m31s for 2.2M keys in the 8 Oct drill: ~35s
    to ssh, ~45s bootstrap, ~50s download and RDB check, ~13s load.
 3. Check it on the host: `redis6-cli ROLE` is master, `DBSIZE` is about what
-   the daily email last reported, `INFO memory` is well under `maxmemory`, and
+   it was on the old master, `INFO memory` is well under `maxmemory`, and
    the `ssl:*:latest` count (`redis6-cli --scan --pattern 'ssl:*:latest' | wc -l`)
    is about what it was, or the proxy re-issues the missing certificates.
 4. Move the floating IP (`172.30.0.200` today) to it. Add the address on the
@@ -245,7 +245,7 @@ and terminate the host.
 
 ### Increasing the Redis server size
 
-Do this when the daily email says memory is getting close to the limit (70% of
+Do this when the daily email says **resize now** (memory at 70% of
 `maxmemory`) or the 80% alert fires; with `noeviction`, writes fail at the
 limit. `maxmemory` is about 70% of RAM, computed when a host is bootstrapped,
 so a bigger instance gets a proportionally bigger limit with no other change.
@@ -259,7 +259,7 @@ resized in place.
    size in the same family (the current host's type is in the EC2 console).
 2. Check it: `master_link_status:up` on the new host, `DBSIZE` close to the old
    host's, `maxmemory` about 70% of its RAM, and the sample from
-   `tcpmem-log.sh` arrives (the daily email shows its RAM).
+   `tcpmem-log.sh` arrives (`GET blot:redis-host:tcpmem` has `ram_total`).
 3. `./cutover.sh --dry-run --app-host <app-ssh-host> <current-master> <new-host>`,
    then the same without `--dry-run`, inside the allowed windows (see
    Cutover). Do not deploy or restart the proxy around it.
@@ -341,12 +341,19 @@ app only ever sees the live master's sample. The host needs no mail setup.
 The same sample carries the host's RAM and disk space, which only the host can
 read, as extra `key=value` fields in bytes: `ram_total`, `ram_avail`,
 `disk_root=<used>/<total>` and `disk_backups=<used>/<total>` (left out when
-`/backups` is not a mount). They are not in `~/tcpmem.log`. The daily email
-(`app/scheduler/daily/redis-server.js`) shows them with Redis's memory and the
-last save and last backup, and links here when memory passes 70% of
-`maxmemory`. For the growth trend (keys and memory against the day before, and
-when memory would reach 70% of `maxmemory`) the daily job stores its figures in
-`blot:redis-host:daily-snapshot`.
+`/backups` is not a mount). They are not in `~/tcpmem.log`.
+
+The daily email (`app/scheduler/daily/redis-server.js`) has one line from this
+and Redis itself:
+`**Redis:** memory 27% (resize in ~47 days), disk 21% (19 GB free), saved 3m ago, backed up 30m ago.`
+Memory is `used_memory` against `maxmemory`; the bracket is when it would reach
+70% of `maxmemory` at the rate it grew since the previous daily run (the daily
+job keeps its figures in `blot:redis-host:daily-snapshot`), or "stable" if it is
+flat or over a year away, and nothing on the first run. From 70% it says
+**resize now**, linking to "Increasing the Redis server size". Disk is the root
+disk from the sample; the `/backups` disk only appears when it is 80% full or
+not mounted. A failed save, a backup over 2 hours old or none recorded, and a
+missing or stale sample are called out in bold or in words.
 
 Each condition is emailed once when it starts and once when it clears, with
 what was sent kept in `blot:redis-host:alerts`. Emails are rate limited so a
