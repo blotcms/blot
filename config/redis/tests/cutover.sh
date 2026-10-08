@@ -174,19 +174,7 @@ cli "$NEW" REPLICAOF "$OLD_IP" 6379 > /dev/null
 for _ in $(seq 1 50); do cli "$NEW" INFO replication | grep -qx master_link_status:up && break; sleep 0.2; done
 # A client in the "app" connected through the floating IP, reconnecting
 # whenever its connection fails, like node-redis.
-# The loop ends when /tmp/noreconnect exists (redis-cli reconnects by itself,
-# so stopping the clients also needs the running redis-cli killed).
-start_clients() {
-  docker exec "$APP" rm -f /tmp/noreconnect
-  docker exec -d "$APP" sh -c "while [ ! -f /tmp/noreconnect ]; do redis-cli -h $FIP -r -1 -i 0.1 PING > /dev/null 2>&1; sleep 0.05; done"
-}
-stop_clients() {
-  docker exec "$APP" touch /tmp/noreconnect
-  sleep 0.3
-  docker exec "$APP" pkill redis-cli || true
-  sleep 0.3
-}
-start_clients
+docker exec -d "$APP" sh -c "while :; do redis-cli -h $FIP -r -1 -i 0.1 PING > /dev/null 2>&1; sleep 0.05; done"
 sleep 1
 
 cutover() { "$CUTOVER" --yes --any-time --timeout-ms 1000 --lock-wait 5 "$@" < /dev/null; }
@@ -205,8 +193,6 @@ roll_back() {
   ${cmd/ --ip / --yes --any-time --timeout-ms 1000 --ip } < /dev/null > "$TMP/rollback-again" 2>&1 || { cat "$TMP/rollback-again"; fail "rollback of $1"; }
   restore_cron
 }
-# fip_clients <host>: how many clients are connected to <host> through the floating IP.
-fip_clients() { cli "$1" CLIENT LIST TYPE normal | grep -c "laddr=$FIP:6379" || true; }
 
 echo "# Dry run"
 digest=$(cli "$OLD" DEBUG DIGEST)
@@ -343,16 +329,11 @@ wait_link
 unchanged
 
 echo "# No client reaches the new host"
-# One idle connection through the floating IP, which never reconnects (bash
-# holding a /dev/tcp socket), and the reconnecting clients stopped: after the
-# move nobody arrives on the new host. Redis has switched by then, so the
-# cutover reports an error, prints the rollback and we run it.
-stop_clients
-for _ in $(seq 1 50); do [ "$(fip_clients "$OLD")" = 0 ] && break; sleep 0.2; done
-docker exec -d "$APP" bash -c "exec 3<>/dev/tcp/$FIP/6379; sleep 30"
-for _ in $(seq 1 50); do [ "$(fip_clients "$OLD")" = 1 ] && break; sleep 0.2; done
-check "one idle client through the floating IP on the old host" [ "$(fip_clients "$OLD")" = 1 ]
-if cutover --app-host "$APP" "$OLD" "$NEW" > "$TMP/noclients.out" 2> "$TMP/noclients.err"; then
+# Without the neighbour flush the app keeps sending to the old host's MAC
+# address, which no longer has the IP, for longer than CUTOVER_CLIENT_WAIT:
+# Redis has switched but no client arrives, so the cutover reports an error and
+# prints the rollback, which we run with the flush so the clients come back.
+if cutover --no-neigh-flush "$OLD" "$NEW" > "$TMP/noclients.out" 2> "$TMP/noclients.err"; then
   cat "$TMP/noclients.out" "$TMP/noclients.err"
   fail "no client on the new host fails the cutover"
 else
@@ -363,11 +344,10 @@ check "it does not say Done" sh -c "! grep -q 'Done:' '$TMP/noclients.out' '$TMP
 check "it tells how to roll back" grep -q "Rollback: " "$TMP/noclients.err"
 check "Redis did switch" [ "$(role "$NEW") $(role "$OLD")" = "master slave" ]
 check "the IP is on the new host" has_ip "$NEW" "$FIP"
-docker exec "$APP" pkill sleep || true
-roll_back "$TMP/noclients.err"
+sed "s/ --no-neigh-flush / --app-host $APP /" "$TMP/noclients.err" > "$TMP/noclients.flush"
+roll_back "$TMP/noclients.flush"
 check "old is the master again after the error" [ "$(role "$OLD") $(role "$NEW")" = "master slave" ]
 wait_link
-start_clients
 sleep 1
 
 echo "# The FAILOVER session dies after the FAILOVER was sent"
