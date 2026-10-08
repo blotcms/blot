@@ -101,6 +101,28 @@ the host is a master that accepts writes, `/etc/blot-redis/floating-ip` exists,
 and the address in it is on the host. That file is written at cutover, so a
 new or restored host never uploads (or prunes) alongside the live one. It works with an instance profile or keys in `~ec2-user/.aws`.
 
+## Alerts
+
+The app's scheduler (`app/scheduler/check-redis-host.js`, every 5 minutes on
+the master) emails the admin address `REDIS_HOST_ALERT` when:
+
+- the kernel's TCP memory count reaches 50% of `tcp_mem[1]` (where TCP memory
+  pressure starts), or `TCPMemoryPressures` rises;
+- Redis's memory reaches 80% of `maxmemory` (`noeviction`, so writes fail at
+  the limit);
+- `maxmemory` is 0 on a host marked active by `/etc/blot-redis/floating-ip`;
+- the TCP memory sample is over 20 minutes old.
+
+Only the host can read the TCP counters, so `bin/tcpmem-log.sh` also writes
+each sample to the Redis key `blot:redis-host:tcpmem` (no TTL; the app reads
+its timestamp). A replica or a write-frozen master refuses that write, so the
+app only ever sees the live master's sample. The host needs no mail setup.
+
+Each condition is emailed once when it starts and once when it clears, with
+what was sent kept in `blot:redis-host:alerts`. A Redis outage sends nothing
+from here; `/redis-health` covers that. Print the current report with
+`NODE_PATH=app node app/scheduler/check-redis-host.js`.
+
 ## AWS permissions
 
 For the operator running `launch.sh`: `ssm:GetParameter` on

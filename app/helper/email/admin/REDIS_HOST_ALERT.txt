@@ -1,0 +1,29 @@
+Redis host: {{summary}}
+
+{{#hasAlerts}}
+{{#alerts}}
+- **{{title}}**: {{{message}}}
+{{/alerts}}
+
+{{/hasAlerts}}
+{{#hasRecovered}}
+**Recovered**
+
+{{#recovered}}
+- {{title}}
+{{/recovered}}
+
+{{/hasRecovered}}
+**Latest readings**
+
+{{#readings}}
+- {{{.}}}
+{{/readings}}
+
+**What to do**
+
+- **TCP memory** (alert at {{thresholds.tcpMem}} of `tcp_mem[1]`, or any rise in `TCPMemoryPressures`): see blotcms/blot#2041. On the Redis host, `tail ~/tcpmem.log` shows the trend and `cat /proc/net/sockstat` the sockets. If the count keeps rising with few sockets open, it is leaked accounting: replace or reboot onto a fixed kernel. Stopgap until then: `sudo sysctl -w net.ipv4.tcp_mem="1600000 1800000 2000000"` (lost on reboot).
+- **Sample stale** (no new sample for {{thresholds.stale}}): `config/redis/bin/tcpmem-log.sh` stopped running from `/etc/cron.d/blot-redis`, or Redis refused its write (a replica, a write freeze, or `OOM` at maxmemory). Check `systemctl status crond` and `tail ~/tcpmem.log` on the host.
+- **maxmemory** (alert at {{thresholds.maxmemory}}): Redis uses `noeviction`, so writes fail at the limit and the app serves 503s. `tail ~/redis-mem.log` on the host shows the growth. Raise it with `REDIS_MAXMEMORY=<bytes> config/redis/bootstrap.sh <host>` if the instance has the RAM, or move to a larger instance.
+- **maxmemory not set**: run `config/redis/bootstrap.sh <host>`, which writes `/etc/redis6/blot-memory.conf` and applies it with `CONFIG SET`.
+- Full report without sending email: `NODE_PATH=app node app/scheduler/check-redis-host.js`
