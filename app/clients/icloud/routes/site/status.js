@@ -74,16 +74,26 @@ module.exports = async function (req, res) {
       const { done, folder } = await establishSyncLock(blogID);
       lockAcquired = true;
 
-      // A resync request means the macserver saw something go wrong with
-      // its pushes (eg. it gave up retrying after the folder was locked), so
-      // the blog is active and should be checked by the next sweep.
-      await stampLastSync(blogID);
-
-      // Now that we have the sync lock, we can send "ok" to the
-      // macserver since the resync can take a while
-      res.send("ok");
-
       try {
+        // The request may have waited on the lock while the blog was
+        // disconnected (loadAccount only checked before that). Resyncing then
+        // would walk an empty remote folder and remove every local file, so
+        // check again now that nothing else can change the folder.
+        const account = await database.get(blogID);
+        if (!account || !account.sharingLink) {
+          console.log("Resync skipped: blog no longer connected", { blogID });
+          return res.status(400).send("Blog is not connected to iCloud Drive");
+        }
+
+        // A resync request means the macserver saw something go wrong with
+        // its pushes (eg. it gave up retrying after the folder was locked), so
+        // the blog is active and should be checked by the next sweep.
+        await stampLastSync(blogID);
+
+        // Now that we have the sync lock, we can send "ok" to the
+        // macserver since the resync can take a while
+        res.send("ok");
+
         folder.status("Resync requested");
         console.log("Resync requested from iCloud", { blogID });
         const result = notifyResyncRequested(blogID, () =>

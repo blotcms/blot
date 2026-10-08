@@ -42,9 +42,17 @@ module.exports = {
   // The last time the macserver pushed a change for this blog (/upload,
   // /delete, /mkdir or a requested resync). A single-field write, because it
   // happens on every file the watcher uploads. Not part of store(): the sweep
-  // that reads it must never be able to refresh it by accident.
+  // that reads it must never be able to refresh it by accident. Only stamps
+  // an existing account: a push that raced a disconnect must not re-create
+  // the hash, or a later walk would treat the blog as still connected.
   async stampLastSync(blogID) {
-    await client.hSet(this._key(blogID), "lastSync", JSON.stringify(Date.now()));
+    await client.eval(
+      "if redis.call('EXISTS', KEYS[1]) == 1 then return redis.call('HSET', KEYS[1], ARGV[1], ARGV[2]) end return 0",
+      {
+        keys: [this._key(blogID)],
+        arguments: ["lastSync", JSON.stringify(Date.now())],
+      }
+    );
   },
 
   async get(blogID) {
