@@ -163,6 +163,12 @@ function hoursOf(win) {
   return hours;
 }
 
+// A sample is stamped with the end of the dt seconds it covers; the window
+// it belongs to is the one holding the middle of that interval.
+function sampleTime(s) {
+  return typeof s.f.dt === "number" ? s.t - s.f.dt * 500 : s.t;
+}
+
 // Index the samples by the minute they cover. A sample taken at T with dt
 // seconds covers (T - dt, T]; its midpoint falls in the minute the probe that
 // started at that minute ran in. Short (install) or very long (gap) intervals
@@ -172,7 +178,7 @@ function sampleIndex(samples) {
   for (const s of samples) {
     const dt = s.f.dt;
     if (typeof dt !== "number" || dt < 30 || dt > 90) continue;
-    idx.set(Math.floor((s.t - dt * 500) / 60000), s);
+    idx.set(Math.floor(sampleTime(s) / 60000), s);
   }
   return idx;
 }
@@ -185,7 +191,7 @@ function report(win, data, ctx) {
   const head = (t) => rows.push([null, t]);
   const row = (label, text) => rows.push([label, text]);
 
-  const samples = data.samples.filter((s) => inWindow(win, s.t) && !(typeof s.f.dt === "number" && s.f.dt < 30));
+  const samples = data.samples.filter((s) => inWindow(win, sampleTime(s)) && !(typeof s.f.dt === "number" && s.f.dt < 30));
   const col = (name) => samples.map((s) => s.f[name]);
   const secs = (name) => samples.map((s) => per(s.f[name], s.f.dt)); // per second
 

@@ -111,6 +111,9 @@ describe("redis perf tools", function () {
       });
       const out = compare.main(["--data", dir, "--baseline", "2026-10-07T12:00..13:00", "--test", "2026-10-08T12:00..13:00"]);
 
+      // a sample stamped 13:00 covers 12:59-13:00, so it is in the 12:00-13:00 window
+      expect(section(out, "Window")["one-minute samples"]).toEqual(["60", "60"]);
+
       const cpu = section(out, "CPU");
       expect(cpu["cpu0 steal"]).toEqual(["-", "3 / 3 / 3 / 3"]);
       expect(cpu["cpu0 busy"]).toEqual(["20 / 20 / 20 / 20", "20 / 20 / 20 / 20"]);
