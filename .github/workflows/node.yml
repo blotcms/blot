@@ -301,6 +301,10 @@ jobs:
   test:
     needs: setup-tests
     runs-on: ubuntu-latest
+    # A shard takes a few minutes. A spec that starves the event loop stops
+    # Jasmine's own timeout firing, so without this a hang holds the runner
+    # for GitHub's 6 hour default.
+    timeout-minutes: 20
     strategy:
       matrix: ${{ fromJson(needs.setup-tests.outputs.matrix) }}
       fail-fast: false

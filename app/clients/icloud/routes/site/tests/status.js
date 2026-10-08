@@ -9,6 +9,7 @@ const entriesPath = require.resolve("models/entries");
 const fixPath = require.resolve("sync/fix");
 const getHealthPath = require.resolve("../../../getHealth");
 const validateBlogPath = require.resolve("../../../sync/validateBlog");
+const stampLastSyncPath = require.resolve("../stampLastSync");
 
 describe("icloud status route", function () {
   const originals = new Map();
@@ -44,6 +45,7 @@ describe("icloud status route", function () {
     originals.clear();
     delete require.cache[statusPath];
     delete require.cache[validateBlogPath];
+    delete require.cache[stampLastSyncPath];
   };
 
   const fakeRes = () => ({
@@ -90,10 +92,13 @@ describe("icloud status route", function () {
     events = [];
     blog = { id: "blog_a", handle: "a", client: "icloud" };
 
-    // Reload status.js (and the validation it shares with the hourly sweep)
-    // so they pick up the mocks and start with empty state
+    // Reload status.js (and the validation it shares with the hourly sweep,
+    // and stampLastSync) so they pick up the mocks and start with empty
+    // state. A stampLastSync another spec loaded first would hold the real
+    // database and wait on Redis.
     delete require.cache[statusPath];
     delete require.cache[validateBlogPath];
+    delete require.cache[stampLastSyncPath];
 
     mockModule(databasePath, {
       store: async (blogID, status) => {
@@ -317,14 +322,20 @@ describe("icloud status route", function () {
 
   it("keeps the resync in flight until Fix() has finished", async function () {
     let finishFix;
-    mockModule(fixPath, (blog, callback) => {
-      fixes.push(blog.id);
-      finishFix = () => callback(null, {});
+    // A promise rather than spinning on microtasks until Fix() is called:
+    // the spin starves the event loop, so if anything on the way needs I/O
+    // the spec hangs forever instead of hitting Jasmine's timeout.
+    const fixStarted = new Promise((resolve) => {
+      mockModule(fixPath, (blog, callback) => {
+        fixes.push(blog.id);
+        finishFix = () => callback(null, {});
+        resolve();
+      });
     });
     const status = require(statusPath);
 
     const first = requestResync(status, "blog_a");
-    while (!finishFix) await Promise.resolve();
+    await fixStarted;
 
     // A second request arrives while Fix() is still running: deduplicated
     await requestResync(status, "blog_a");
