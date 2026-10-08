@@ -73,6 +73,13 @@ done
 
 # A restart, not a reload: the certificate cache lives in a shared dict, which
 # survives a reload. Restart the proxy container(s) found above.
+# Read the running colour again: a blue/green deploy may have swapped it
+# since the check at the top.
+proxy_containers=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^blot-proxy-(blue|green)$' || true)
+if [ -z "$proxy_containers" ]; then
+  echo "ERROR: no blot-proxy-blue or blot-proxy-green container is running any more, so the certificate cache was not cleared. Restart the proxy by hand."
+  exit 1
+fi
 echo "Restarting proxy container(s): $proxy_containers"
 for container in $proxy_containers; do
     docker restart --time 30 "$container"

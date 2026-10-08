@@ -9,7 +9,8 @@ var getConfirmation = require("../util/getConfirmation");
 
 // This deletes the Redis certificate keys, then prints the commands to run on
 // the proxy host to remove the certificate files from the proxy container and
-// reload it. It does not run them itself.
+// restart it. A restart, not a reload: auto-ssl's in-memory certificate cache
+// (a shared dict) survives a reload. It does not run them itself.
 
 if (!(process.getuid && process.getuid() === 0))
   throw new Error("This script must be run as root");
@@ -48,14 +49,13 @@ get(process.argv[2], function (err, user, blog) {
     console.log("removed redis keys", certKeys);
     console.log("");
     console.log("Now, on the proxy host, remove the certificate files from the");
-    console.log("proxy container and reload it. Find the running colour with:");
+    console.log("proxy container and restart it (a reload keeps auto-ssl's cached");
+    console.log("certificate). Find the running colour with:");
     console.log("  docker ps --filter name=blot-proxy-");
     console.log("then, with <colour> being blue or green:");
     certDirs.forEach((dir) => {
       console.log("  docker exec blot-proxy-<colour> rm -rf", dir);
     });
-    console.log(
-      "  docker exec blot-proxy-<colour> /usr/local/openresty/bin/openresty -s reload"
-    );
+    console.log("  docker restart --time 30 blot-proxy-<colour>");
   });
 });
