@@ -11,6 +11,8 @@ Migrate static content to s3
 
 run node scripts/entry/rebuild-all.js
 
+When you re-connect to Dropbox or Google Drive, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
+
 Can the status page avoid the LRU caches somehow and fully work redis? Maybe we synthesise a route somehow? Thoughts?
 
 hypertext template on indexes:
