@@ -761,4 +761,102 @@ describe("scheduler check-redis-host", function () {
       expect(client.commands.filter((c) => c === "SLOWLOG").length).toBe(1);
     });
   });
+
+  describe("review fixes", function () {
+    it("keeps the state in memory when Redis refuses the write, so the alert is not repeated", async function () {
+      const h = harness({ memory: { extra: { rdb_last_bgsave_status: "err" } } });
+      const keep = { state: null };
+      const write = h.client.sendCommand;
+      h.client.sendCommand = async (args) => {
+        if (args[0] === "SET") throw new Error("MISCONF Errors writing to the AOF file");
+        return write(args);
+      };
+
+      await h.tick({ keep });
+      expect(h.sent.length).toBe(1);
+      expect(h.state).toBe(null);
+      expect(keep.state.alerts["bgsave-failed"]).toBeDefined();
+
+      // Redis still has no state, but the next runs know the email went out
+      await h.tick({ keep });
+      await h.tick({ keep });
+      expect(h.sent.length).toBe(1);
+
+      // Once a write gets through, Redis has it and the copy is dropped
+      h.client.sendCommand = write;
+      await h.tick({ keep });
+      expect(h.sent.length).toBe(1);
+      expect(keep.state).toBe(null);
+      expect(h.state.alerts["bgsave-failed"]).toBeDefined();
+    });
+
+    it("prefers what Redis holds when that is newer than the copy kept in memory", async function () {
+      const h = harness({ memory: { extra: { rdb_last_bgsave_status: "err" } } });
+      const keep = {
+        state: { updatedAt: 1, alerts: { "bgsave-failed": 1 }, mail: { "bgsave-failed": { at: 1, flaps: 0 } } },
+      };
+      h.client.store.set(STATE_KEY, JSON.stringify({ updatedAt: 2, alerts: {} }));
+
+      await h.tick({ keep });
+      expect(h.sent.length).toBe(1);
+    });
+
+    it("sends the originating host with a pressure event held by the cooldown", async function () {
+      const h = harness({ sample: sampleLine({ pressures: 1 }) });
+      await h.tick();
+      h.sample = sampleLine({ time: h.now, pressures: 2 });
+      await h.tick(); // emailed
+      h.sample = sampleLine({ time: h.now, pressures: 4 });
+      await h.tick(); // held
+      expect(h.state.pending["tcp-pressure"]).toEqual({ from: 2, to: 4, host: "ip-10-0-0-1" });
+
+      // By the time it is sent the sample is missing
+      h.advance(EVENT_COOLDOWN.default);
+      h.sample = null;
+      await h.tick();
+      expect(h.sent.length).toBe(2);
+      expect(h.sent[1].alerts[0].message).toContain("from 2 to 4 on ip-10-0-0-1");
+    });
+
+    it("describes the other alerts when one cannot be described", async function () {
+      const report = await check({
+        now: NOW,
+        lastCheckAt: NOW - 5 * MINUTE,
+        client: fakeRedis({ sample: null }),
+      });
+      report.started = [];
+      report.due = {
+        restart: {},
+        errors: { counts: { ERR: 200 } },
+        "tcp-pressure": { from: 1, to: 2 },
+      };
+
+      const v = view(report);
+      expect(v.alerts.map((a) => a.title)).toEqual([
+        "Redis restarted or switched host",
+        "Redis errors",
+        "TCP memory pressure",
+      ]);
+      expect(v.alerts[0].message).toContain("could not be described");
+      expect(v.alerts[1].message).toContain("ERR 200");
+      expect(v.alerts[2].message).toContain("on an unknown host");
+    });
+
+    it("starts new counter baselines after a long gap instead of alerting on the difference", async function () {
+      const h = harness({ memory: { errors: { OOM: 1, ERR: 5 } } });
+      await h.tick();
+
+      h.advance(6 * 60 * MINUTE);
+      set(h, { rejected_connections: 40 }, { OOM: 90, ERR: 5000 });
+      await h.tick();
+      expect(h.sent).toEqual([]);
+      expect(h.state.observed.errors).toEqual({ OOM: 90, ERR: 5000 });
+
+      // And counting works again from there
+      set(h, { rejected_connections: 41 }, { OOM: 91, ERR: 5000 });
+      await h.tick();
+      expect(h.sent.length).toBe(1);
+      expect(h.sent[0].summary).toBe("Redis rejected connections, Redis refused writes (OOM, MISCONF)");
+    });
+  });
 });

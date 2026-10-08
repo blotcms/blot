@@ -31,6 +31,12 @@ const SLOWLOG_ALERT_US = 50 * 1000;
 const CRITICAL_ERRORS = ["OOM", "MISCONF", "NOREPLICAS"];
 const ERROR_ALERT_COUNT = 100;
 
+// Error and rejected-connection thresholds are per 5-minute check. If the last
+// look at the counters is older than this (the scheduler was down, a deploy,
+// a Redis outage), their delta spans a longer period and would trip the
+// thresholds for no reason, so the counters start a new baseline instead.
+const MAX_OBSERVATION_GAP_MS = 15 * 60 * 1000;
+
 // Per email: this many of the slowest commands are listed, the rest counted.
 const SLOWLOG_LISTED = 10;
 // Command text in an email: the command and its first arguments, cut here.
@@ -104,7 +110,7 @@ function observe(info, slowlogReply) {
 //
 // Event data is merged when several accumulate before an email is allowed, so
 // each type's `merge` below must combine two of them.
-function detect(previous, current, { sample = null } = {}) {
+function detect(previous, current, { sample = null, now = Date.now() } = {}) {
   const events = {};
   const slowIds = current.slowlog.map((entry) => entry.id);
   const observed = {
@@ -113,6 +119,7 @@ function detect(previous, current, { sample = null } = {}) {
     uptime: current.uptime,
     rejected: current.rejected,
     errors: current.errors,
+    at: now,
     slowlogId: slowIds.length ? Math.max(...slowIds) : -1,
   };
 
@@ -144,6 +151,8 @@ function detect(previous, current, { sample = null } = {}) {
         },
       ],
     };
+  } else if (!(now - previous.at <= MAX_OBSERVATION_GAP_MS)) {
+    // No usable previous look at the counters (see MAX_OBSERVATION_GAP_MS)
   } else {
     if (current.rejected > previous.rejected) {
       events.rejected = { count: current.rejected - previous.rejected };
@@ -199,6 +208,7 @@ module.exports = {
   SLOWLOG_ENTRIES,
   SLOWLOG_ALERT_US,
   SLOWLOG_LISTED,
+  MAX_OBSERVATION_GAP_MS,
   CRITICAL_ERRORS,
   ERROR_ALERT_COUNT,
   parseInfo,

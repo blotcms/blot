@@ -53,6 +53,20 @@ describe("scheduler redis-host-events", function () {
     expect(observed.slowlogId).toBe(3);
   });
 
+  it("re-baselines the counters when the last look is over 15 minutes old", function () {
+    const T = 1760000000000;
+    const before = detect(null, observe(info(["uptime_in_seconds:10", "errorstat_OOM:count=1", "rejected_connections:0"]), []), { now: T }).observed;
+    const later = observe(info(["uptime_in_seconds:20000", "errorstat_OOM:count=50", "rejected_connections:9"]), []);
+
+    expect(detect(before, later, { now: T + 5 * 60 * 1000 }).events["errors-critical"]).toEqual({ counts: { OOM: 49 } });
+    expect(detect(before, later, { now: T + 5 * 60 * 1000 }).events.rejected).toEqual({ count: 9 });
+
+    const long = detect(before, later, { now: T + 6 * 60 * 60 * 1000 });
+    expect(long.events).toEqual({});
+    expect(long.observed.errors).toEqual({ OOM: 50 });
+    expect(long.observed.at).toBe(T + 6 * 60 * 60 * 1000);
+  });
+
   it("merges pending events", function () {
     expect(merge.errors({ counts: { A: 1 } }, { counts: { A: 2, B: 5 } })).toEqual({ counts: { A: 3, B: 5 } });
     expect(merge["tcp-pressure"]({ from: 1, to: 2 }, { from: 2, to: 5 })).toEqual({ from: 1, to: 5 });

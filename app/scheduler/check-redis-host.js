@@ -64,6 +64,11 @@ const EVENT_COOLDOWN = {
   default: 6 * HOUR,
   "errors-critical": HOUR,
 };
+
+// The latest state that could not be written to Redis, kept in this process
+// until a write succeeds (see run()).
+const unwritten = { state: null };
+
 const eventCooldown = (type) => EVENT_COOLDOWN[type] || EVENT_COOLDOWN.default;
 
 // Leaked or not, healthy use is a tiny fraction of tcp_mem[1] (dozens of
@@ -208,6 +213,7 @@ async function check(deps = {}) {
     now = Date.now(),
     client = require("models/client"),
     lastCheckAt = null,
+    keep = unwritten,
   } = deps;
 
   // sendCommand keeps these off the client-side cache: the sample changes
@@ -227,7 +233,10 @@ async function check(deps = {}) {
   } catch (e) {
     state = {};
   }
+  // The state a run could not write to Redis (see run()), if it is newer
+  if (keep.state && (keep.state.updatedAt || 0) > (state.updatedAt || 0)) state = keep.state;
   state = {
+    updatedAt: state.updatedAt || 0,
     alerts: state.alerts || {},
     pressures: state.pressures || null,
     // { name: { at, flaps } }: when the last email about a condition or event
@@ -276,7 +285,7 @@ async function check(deps = {}) {
     if (sample.pressures !== null) {
       const sameHost = pressures && pressures.host === sample.host;
       if (sameHost && sample.pressures > pressures.count) {
-        pressureRise = { from: pressures.count, to: sample.pressures };
+        pressureRise = { from: pressures.count, to: sample.pressures, host: sample.host };
       }
       pressures = { host: sample.host, count: sample.pressures };
     }
@@ -327,7 +336,7 @@ async function check(deps = {}) {
 
   // Events: what happened since the last check, at most one email per type
   // per cooldown
-  const { events, observed } = detect(state.observed, observe(fields, slowlogReply), { sample });
+  const { events, observed } = detect(state.observed, observe(fields, slowlogReply), { sample, now });
   if (pressureRise) events["tcp-pressure"] = pressureRise;
 
   const pending = { ...state.pending };
@@ -364,14 +373,14 @@ async function check(deps = {}) {
     held,
     send: started.length > 0 || cleared.length > 0 || Object.keys(due).length > 0,
     state,
-    nextState: { alerts, pressures, mail, seen, pending, observed },
+    nextState: { updatedAt: now, alerts, pressures, mail, seen, pending, observed },
   };
 }
 
 function eventMessage(type, data, report) {
   switch (type) {
     case "tcp-pressure":
-      return `TCPMemoryPressures rose from ${data.from} to ${data.to} on ${report.sample.host}: the kernel was rationing TCP buffers, so bursts to Redis may have been dropped`;
+      return `TCPMemoryPressures rose from ${data.from} to ${data.to} on ${data.host || "an unknown host"}: the kernel was rationing TCP buffers, so bursts to Redis may have been dropped`;
     case "errors-critical":
       return `new errors that mean Redis refused writes: ${counts(data.counts)}. OOM is the maxmemory limit (\`noeviction\`), MISCONF a failed background save (\`stop-writes-on-bgsave-error yes\`), NOREPLICAS fewer replicas than \`min-replicas-to-write\``;
     case "errors":
@@ -435,7 +444,13 @@ function view(report) {
   const names = report.started.concat(Object.keys(report.due));
 
   const item = (name) => {
-    let text = message(name, report);
+    let text;
+    try {
+      text = message(name, report);
+    } catch (err) {
+      // One alert that cannot be described must not stop the others
+      text = `could not be described (${String(err && err.message).slice(0, 100)}); see the report from \`check-redis-host.js\``;
+    }
     if (report.flaps[name] > 1) text += ` (flapping: it changed state ${report.flaps[name]} times since the last email about it)`;
     if (report.held[name]) text += ` (includes what was held back by the limit of one email per ${duration(eventCooldown(name))})`;
     return { title: TITLES[name], message: text };
@@ -499,12 +514,23 @@ function view(report) {
 async function run(deps = {}) {
   const sendEmail = deps.sendEmail || (async () => {});
   const client = deps.client || require("models/client");
-  const report = await check({ ...deps, client });
+  const keep = deps.keep || unwritten;
+  const report = await check({ ...deps, client, keep });
 
   if (report.send) await sendEmail(view(report));
 
   if (JSON.stringify(report.nextState) !== JSON.stringify(report.state)) {
-    await client.sendCommand(["SET", STATE_KEY, JSON.stringify(report.nextState)]);
+    try {
+      await client.sendCommand(["SET", STATE_KEY, JSON.stringify(report.nextState)]);
+      keep.state = null;
+    } catch (err) {
+      // The email is out. With a failed save (stop-writes-on-bgsave-error)
+      // Redis refuses this write, and without the new state the next run
+      // would send the same email again, every 5 minutes: keep it here and
+      // use it until a write gets through.
+      keep.state = report.nextState;
+      console.log("Redis host check: could not save its state to Redis:", err && err.message);
+    }
   }
 
   return { report, sent: report.send };
