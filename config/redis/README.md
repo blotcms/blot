@@ -105,9 +105,9 @@ What it does:
    host's interface and carries on if it does. Writes stay unavailable while it
    polls, which is why that is bounded. If it never shows up, the script runs
    FAILOVER back to the old host.
-4. Deletes the app host's neighbour (ARP) entry for the IP (otherwise it keeps
-   sending to the old host's MAC address, which the VPC drops, for 20-50s;
-   Docker containers share the host's table), waits for the new host's
+4. Deletes the app host's neighbour (ARP) entry for the IP (Docker containers
+   share the host's table; in rehearsals the flush made no measurable
+   difference either way, see "Rehearsal" below), waits for the new host's
    instance metadata to list it, and only then removes the IP from the old
    host and deletes the neighbour entry again. The move is asynchronous, and
    until the metadata lists the IP the VPC may still deliver to the old host,
@@ -129,9 +129,10 @@ What it does:
 7. Restarts the refresh timers, waits for the clients that were connected
    through the floating IP to reconnect on the new host, checks the new host
    takes writes, and prints how long each step took. If none of those clients
-   arrived (Redis has switched, but traffic may be down: check the app host's
-   neighbour entry for the IP), or step 4 or 6 left something undone, it
-   exits with an error listing each problem, and the rollback command.
+   arrived (Redis has switched, but traffic may be down: on a rollback AWS can
+   take a while to route the IP back, see "Rehearsal" below), or step 4 or 6
+   left something undone, it exits with an error listing each problem, the
+   rollback command and how to restore the cron jobs it turned off.
 
 Writes are unavailable from the FAILOVER until clients reach the new host.
 That must stay well under the folder lock's 10s TTL (`app/sync/lock.js`): a
@@ -139,9 +140,27 @@ lock is lost when its key expires 10s after its last heartbeat, so depending
 on where the window falls the limit is 6-9s. Aim for about 3s; the script warns
 above 5s. It adds up durations that each come from one clock (the old host's
 FAILOVER, this machine's wait, the new host's watcher), never subtracting
-timestamps from different hosts. Rehearse on two throwaway instances first: the script times the
-`assign-private-ip-addresses` call and how long clients take to arrive, and a
-run with `--no-neigh-flush` shows what the neighbour flush buys.
+timestamps from different hosts.
+
+### Rehearsal (8 Oct 2026, throwaway instances)
+
+A hand-built 6.2.12 "old" host (the live host's AMI, kernel and
+`amazon-ec2-net-utils` 2.3.0) and a bootstrapped x2gd.medium "new" host, with
+probes doing a write every 10ms through the floating IP:
+
+- Forward (4 runs): writes unavailable for 3.5-3.9s: FAILOVER 0.1-0.7s,
+  `assign-private-ip-addresses` ~1.8s, then ~1s for the VPC to switch.
+- Rollback (4 runs): 4.8s, 6.4s, 6.5s and ~16s. Moving the IP back to an
+  interface that held it a minute earlier, the VPC kept delivering to (and its
+  proxy ARP kept answering with the MAC of) the other interface for several
+  seconds after the call returned. Gratuitous ARP from the new owner and
+  skipping the neighbour flush made no difference, so a rollback will likely
+  cost `[LOCK COMPROMISED]` restarts.
+- Adding or removing an IP makes `amazon-ec2-net-utils` (2.3.0 and 2.7.x)
+  reconfigure the interface on its next minute refresh: networkd drops and
+  re-adds the primary address for ~0.1s, one ~0.22s stall on open
+  connections. Step 1 stops the refresh timers so this happens after the
+  switch, when step 7 restarts them.
 
 **Do not deploy or restart the proxy around the cutover.** `proxy/deploy`
 rolls back if Redis is unreachable, and the proxy's stale copy of each
