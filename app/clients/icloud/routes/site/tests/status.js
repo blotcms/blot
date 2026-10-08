@@ -430,6 +430,39 @@ describe("icloud status route", function () {
     expect(syncs).toEqual(["blog_a"]);
   });
 
+  it("keeps a resync request retryable when the blog failed to load", async function () {
+    let failLoad = true;
+    spyOn(console, "error");
+    mockModule(blogPath, {
+      get: ({ id }, callback) =>
+        failLoad
+          ? callback(new Error("Redis unavailable"))
+          : callback(null, Object.assign({}, blog, { id })),
+    });
+    const status = require(statusPath);
+
+    const first = fakeRes();
+    await status(
+      { header: () => "blog_a", body: { resyncRequested: true } },
+      first
+    );
+    expect(first.statusCode).toBe(500);
+    expect(syncs).toEqual([]);
+    expect(releases.count).toBe(1);
+
+    // The macserver's retry, inside the 10s window, must resync rather than
+    // be acknowledged by a cooldown
+    failLoad = false;
+    const retry = fakeRes();
+    await status(
+      { header: () => "blog_a", body: { resyncRequested: true } },
+      retry
+    );
+
+    expect(retry.statusCode).toBeUndefined();
+    expect(syncs).toEqual(["blog_a"]);
+  });
+
   it("keeps a resync request retryable when the sync lock was busy", async function () {
     let lockAttempts = 0;
 

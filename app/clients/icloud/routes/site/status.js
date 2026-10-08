@@ -136,6 +136,25 @@ module.exports = async function (req, res) {
           return res.status(409).send("Blog has not completed set up");
         }
 
+        // Loaded before replying, so a failed load (eg. Redis trouble) gets
+        // a 500 the macserver retries, rather than an "ok" that ends its
+        // retries with no resync.
+        let blog;
+        try {
+          blog = await getBlog({ id: blogID });
+        } catch (err) {
+          console.error("Resync failed: couldn't load blog", blogID, err);
+          refused = true;
+          return res.status(500).send("Failed to load blog");
+        }
+
+        if (!blog || blog.isDisabled || blog.client !== "icloud") {
+          console.log("Resync skipped: blog is gone, disabled or not on iCloud", {
+            blogID,
+          });
+          return res.send("ok");
+        }
+
         // A resync request means the macserver saw something go wrong with
         // its pushes (eg. it gave up retrying after the folder was locked), so
         // the blog is active and should be checked by the next sweep.
@@ -148,19 +167,6 @@ module.exports = async function (req, res) {
         folder.status("Resync requested");
         console.log("Resync requested from iCloud", { blogID, reason });
 
-        let blog = null;
-        try {
-          blog = await getBlog({ id: blogID });
-        } catch (err) {
-          console.error("Resync skipped: failed to load blog", blogID, err);
-        }
-
-        if (!blog || blog.isDisabled || blog.client !== "icloud") {
-          console.log("Resync skipped: blog is gone, disabled or not on iCloud", {
-            blogID,
-          });
-          return;
-        }
 
         const report = syncReport.create();
 
