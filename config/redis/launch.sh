@@ -2,7 +2,9 @@
 # Usage: launch.sh --type <instance-type> --from latest|<backup-name>|replica:<host> [options]
 # Launches a new Redis EC2 instance from the launch template on the newest
 # Amazon Linux 2023 arm64 AMI, waits for SSH, runs bootstrap.sh, then loads
-# data: restore.sh from an S3 backup, or REPLICAOF a running Redis.
+# data: restore.sh from an S3 backup, or REPLICAOF a running Redis. For
+# replica:<host>, give the primary's own private IP, never the floating IP:
+# the replica would replicate from itself once cutover.sh moves the IP.
 #
 # UNTESTED: written without the AWS CLI available. Try it with --dry-run first
 # and watch the first real run.
@@ -91,6 +93,13 @@ ssh_run "$TARGET" true || die "cannot ssh to $TARGET; the instance $ID is still 
 case "$FROM" in
   replica:*)
     PRIMARY=${FROM#replica:}
+    # A full sync of several GB under write load overflows 6.2's default
+    # replica output buffer on the primary (256mb, or 64mb for 60s), which
+    # drops the replica and starts the sync over, again and again. Raise it to
+    # redis.conf's value first, from the new host (Redis has no auth).
+    echo "client-output-buffer-limit on $PRIMARY was: $(ssh_run "$TARGET" "redis6-cli -h $PRIMARY CONFIG GET client-output-buffer-limit | tail -n 1")"
+    ssh_run "$TARGET" "redis6-cli -h $PRIMARY CONFIG SET client-output-buffer-limit 'replica 1073741824 536870912 120' | grep -qx OK" ||
+      die "could not raise client-output-buffer-limit on $PRIMARY"
     echo "Replicating from $PRIMARY"
     ssh_run "$TARGET" "redis6-cli REPLICAOF $PRIMARY 6379 | grep -qx OK" || die "REPLICAOF failed"
     echo "Waiting for the first sync (watch master_link_status on $TARGET)"

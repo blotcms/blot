@@ -1,0 +1,34 @@
+name: redis-cutover
+
+# Runs config/redis/cutover.sh against Redis 6.2 containers (old on 6.2.12,
+# the production version), with ssh and the AWS CLI stubbed: see
+# config/redis/tests/cutover.sh. It needs Docker on the runner, so it cannot
+# run inside the test image like the rest of config/redis.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/redis-cutover.yml"
+      - "config/redis/cutover.sh"
+      - "config/redis/lib.sh"
+      - "config/redis/tests/cutover.sh"
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/redis-cutover.yml"
+      - "config/redis/cutover.sh"
+      - "config/redis/lib.sh"
+      - "config/redis/tests/cutover.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  cutover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cutover, failure paths and rollback
+        run: config/redis/tests/cutover.sh
