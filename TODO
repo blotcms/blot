@@ -1,3 +1,13 @@
+Redis host follow-ups (from #2041, new host since 8 Oct):
+- Burst test and `npm run fix-probe` against a large blog on the new host
+- Lock heartbeat on its own RESP2 connection, no overlapping EXTENDs, per-call timeout; give the shared client a command timeout or TCP user timeout
+- Decide which app/sync/lock.js diagnostics to retire
+- Re-test BATCH_SIZE = 25 in app/models/entry/get.js and the MGET batch of 20 in app/sync/fix/tag-ghosts.js (render-probe --stats --sweep, fix-probe)
+- Remaining dropped write errors: write Redis before deleting files (updateCdnManifest, template/drop); await set() in resetToDrive; Dropbox disconnect.js and _assign.js dropFromMenu check the wrong error; write order in Blog.create; the list-ghosts restore path; error paths for background resave and rebuild; a callback for the messenger's setStatus; make Entry.set atomic
+- Proxy: auto-ssl's lock and hook calls can reuse a timed-out Redis connection
+- Deploy log archive (scripts/deploy/index.js): docker logs -t, outside /tmp, more than 3 files, size-capped; let config/redis/perf/fetch.sh read it
+- Upgrade Redis (7 or Valkey), revisit AOF
+
 Offsite Redis backups (e.g. Backblaze B2) alongside S3, so a lost AWS account or region doesn't take the backups with it: upload from config/redis/bin/backup.sh, and let launch.sh/restore.sh restore from B2 too (#2041)
 
 Consider dropping Redis client-side caching (CLIENT TRACKING) in favour of the app's in-process LRU caches: on prod 10 clients have tracking on and the server's tracking table sits at its 1M-key cap (tracking-table-max-keys), so Redis is constantly evicting entries and sending invalidations
