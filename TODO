@@ -117,6 +117,7 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - scripts/blog/reset-ssl-certificate-for-expired-domain.js calls the bare-metal /usr/local/openresty/bin/openresty; make it act on the container
 - cdn. responses carry Cache-Control twice (expires 1y + add_header), as on bare metal
 - Purges during a blue/green overlap reach only one container (shared SO_REUSEPORT on :8077)
+- Use the proxy container in local development instead of the nginx:alpine in scripts/development/proxy, so local.blot runs the production proxy config
 
 Explain on the about page the websites started out as files in a folder. But they had to be HTML. Blot makes other file types possible too.
 
