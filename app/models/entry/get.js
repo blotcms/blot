@@ -12,11 +12,12 @@ var Entry = require("./instance");
 // served by this process. Reading BATCH_SIZE entries at a time and yielding
 // between batches lets those requests run in between.
 //
-// The size also keeps each reply small enough to arrive without stalling. On
-// production, reading a 938-entry (5.3MB) catalog took 0.8-1.5s at 50-100
-// entries per MGET, because about a third of the batches stalled for 300-500ms
-// each (not in Redis, whose slowlog never saw them), but 130-200ms at 10-25,
-// where none of 264 batches did.
+// On the old Redis host, larger batches also stalled on the network: a
+// 938-entry (5.3MB) catalog took 0.8-1.5s at 50-100 entries per MGET, a third
+// of the batches stalling 300-500ms, from that host's TCP memory pressure
+// (blotcms/blot#2041). On the current host the same catalog reads in 10-17ms
+// at 10 to 100 per MGET with no stalls (render-probe --sweep, 8 Oct 2026), so
+// 25 is kept only to keep each parse short on large catalogs.
 var BATCH_SIZE = 25;
 
 // get(blogID, entryIDs, [fields], callback)
