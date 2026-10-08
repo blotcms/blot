@@ -6,10 +6,10 @@ Everything runs from the operator's Mac over ssh; nothing here is used by the
 app. Part of blotcms/blot#2041.
 
 **The current production host predates these scripts.** It was set up by hand
-(its kernel has never been updated) and has drifted: backups run from
-`ec2-user`'s crontab out of `/home/ec2-user/*.sh`, sshd listens on port 3796
-(the scripts do not change the ssh port; the launch template/AMI user-data
-decides how you get in), and `redis6.conf` has `save 60 10000` and no
+(its kernel has never been updated) and has drifted: backups and `stats.sh` run
+from root's crontab out of `/home/ec2-user/*.sh` (`ec2-user`'s crontab only has
+the two monitoring logs), sshd listens on port 3796 (the scripts do not change
+the ssh port; the launch template/AMI user-data decides how you get in), and `redis6.conf` has `save 60 10000` and no
 `maxmemory`. Build new hosts with these scripts and cut over to them.
 
 ## Files
@@ -62,8 +62,8 @@ Then move traffic to it with `cutover.sh` (next section).
 ```
 
 The dry run makes every check and prints the plan, the old cron jobs it will
-turn off and the rollback command; it changes nothing. The real run asks for
-`yes`, and only runs between :08-:25 and :38-:55 past the hour (backups and
+turn off (labelled `ec2-user` or `root` by crontab) and the rollback command;
+it changes nothing. The real run asks for `yes`, and only runs between :08-:25 and :38-:55 past the hour (backups and
 sync validation run at :00 and :30) and not between 01:00 and 01:30 UTC (the
 proxy's wildcard certificate renewal). `--any-time` skips that for rehearsals.
 
@@ -118,12 +118,14 @@ What it does:
    new host (the refresh timer would also drop it).
 5. Writes the IP to `/etc/blot-redis/floating-ip` on the new host (its backups
    start) and removes it on the old host.
-6. Comments out the old host's `ec2-user` crontab entries except the two
-   monitoring logs, after saving the crontab to `~/crontab.before-cutover-*`.
-   The hand-made backup scripts have none of `backup.sh`'s checks and upload
-   to the same S3 names, so they would overwrite and prune the new host's
-   backups. If the crontab cannot be rewritten the script carries on and
-   reports it at the end.
+6. Comments out the old host's crontab entries except the two monitoring logs
+   (`ec2-user`'s crontab), after saving each crontab it changes to
+   `~/crontab.before-cutover-*` (`ec2-user`'s) and
+   `~/root-crontab.before-cutover-*` (root's, read with `sudo crontab`). The
+   backups and `stats.sh` are in root's crontab. The hand-made backup scripts
+   have none of `backup.sh`'s checks and upload to the same S3 names, so they
+   would overwrite and prune the new host's backups. If a crontab cannot be
+   rewritten the script carries on and reports it at the end.
 7. Restarts the refresh timers, waits for the clients that were connected
    through the floating IP to reconnect on the new host, checks the new host
    takes writes, and prints how long each step took. If none of those clients
@@ -149,7 +151,7 @@ certificate survives `openresty -s reload` but not a container restart.
 command, with `--allow-unbootstrapped` when the old host was not set up by
 `bootstrap.sh`. It works because FAILOVER leaves the old host replicating from
 the new one. On the hand-built host it also prints how to restore the cron
-jobs it turned off.
+jobs it turned off, in both crontabs.
 
 `config/redis/tests/cutover.sh` runs the whole script against Redis 6.2.12 and
 6.2 containers with ssh and the AWS CLI stubbed (`.github/workflows/redis-cutover.yml`).
@@ -173,7 +175,7 @@ with `CONFIG SET` (never `CONFIG REWRITE`) and lists the settings that need a
 restart (for example `tcp-backlog`, and `LimitNOFILE` of the running process).
 It will not lower `maxmemory` below the memory in use. Two things to know on a
 host set up by hand: it adds `/etc/cron.d/blot-redis`, so remove the old
-`ec2-user` crontab entries or backups run twice, and it prints a warning if an
+backup entries from root's crontab or backups run twice, and it prints a warning if an
 existing sysctl file (e.g. `99-sysctl.conf`) sets a key that would override
 `90-blot-redis.conf` at boot.
 

@@ -4,8 +4,9 @@
 # promotes <new> with Redis's FAILOVER command (which also turns <old> into a
 # replica of <new>), moves the floating IP to <new>, marks <new> as the host
 # that uploads backups, and turns off the old hand-made backup cron jobs on
-# <old>. Rollback is this script with the hosts swapped; it prints the exact
-# command at the end. See README.md ("Cutover").
+# <old> (in ec2-user's and root's crontabs). Rollback is this script with the
+# hosts swapped; it prints the exact command at the end. See README.md
+# ("Cutover").
 #
 # Why FAILOVER and not readonly.sh + REPLICAOF NO ONE: FAILOVER blocks every
 # write on <old> (scripts and PUBLISH included), waits for <new> to catch up
@@ -44,8 +45,9 @@ CLIENT_WAIT=${CUTOVER_CLIENT_WAIT:-10}
 # the window must stay under 6-9s depending on where it falls. Aim for ~3s.
 BUDGET_MS=5000
 MAX_LAG_BYTES=16777216 # how far behind <new> may be when we start
-# Crontab entries on <old> to leave alone: the monitoring logs. Everything
-# else on the hand-built host (backups, stats.sh) is turned off.
+# Crontab entries on <old> to leave alone: the monitoring logs (ec2-user's
+# crontab). Everything else in ec2-user's and root's crontabs on the
+# hand-built host (the backups and stats.sh are root's) is turned off.
 KEEP_CRON='tcpmem-log[.]sh|redis-mem-log[.]sh'
 
 while [ $# -gt 0 ]; do
@@ -150,7 +152,9 @@ fi
 echo "s3_running=$(pgrep -f 'aws s3 (cp|rm|sync)' | wc -l | tr -d ' ')"
 echo "sudo=$(sudo -n true 2> /dev/null && echo yes || echo no)"
 crontab -l 2> /dev/null | grep -vE '^[[:space:]]*(#|$)' | grep -vE '^[A-Za-z_]+=' | grep -vE "$KEEP_CRON" | sed 's/^/cron=/' || true
+sudo -n crontab -l 2> /dev/null | grep -vE '^[[:space:]]*(#|$)' | grep -vE '^[A-Za-z_]+=' | grep -vE "$KEEP_CRON" | sed 's/^/root_cron=/' || true
 ls -t ~/crontab.before-cutover-* 2> /dev/null | head -n 1 | sed 's/^/cron_backup=/' || true
+ls -t ~/root-crontab.before-cutover-* 2> /dev/null | head -n 1 | sed 's/^/root_cron_backup=/' || true
 EOF
 }
 
@@ -287,6 +291,7 @@ for app in $APP_HOSTS; do
 done
 
 OLD_CRON=$(echo "$OLD_INFO" | sed -n 's/^cron=//p')
+OLD_ROOT_CRON=$(echo "$OLD_INFO" | sed -n 's/^root_cron=//p')
 OLD_TIMER=$(field "$OLD_INFO" timer); NEW_TIMER=$(field "$NEW_INFO" timer)
 NEW_HAS_FIP=""; case " $(field "$NEW_INFO" addrs) " in *" $FIP "*) NEW_HAS_FIP=1 ;; esac
 
@@ -307,8 +312,8 @@ cat << EOF
  4. ${APP_IFS:+ip neigh del $FIP on:$APP_IFS; }wait for $NEW's metadata to list $FIP, then
     $OLD: ip addr del $FIP/32 dev $OLD_IF${APP_IFS:+; ip neigh del again} (kept, with a warning, if it never does)
  5. write $FIP to /etc/blot-redis/floating-ip on $NEW, remove it on $OLD
- 6. $OLD: back up ec2-user's crontab, then comment out:
-$(if [ -n "$OLD_CRON" ]; then echo "$OLD_CRON" | sed 's/^/      /'; else echo "      (nothing)"; fi)
+ 6. $OLD: back up the crontabs of ec2-user and root, then comment out:
+$(if [ -n "$OLD_CRON$OLD_ROOT_CRON" ]; then echo "$OLD_CRON" | sed -n 's/^./      ec2-user: &/p'; echo "$OLD_ROOT_CRON" | sed -n 's/^./      root:     &/p'; else echo "      (nothing)"; fi)
  7. restart the refresh timers, watch clients arrive on $NEW for ${CLIENT_WAIT}s, check both hosts
 Rollback afterwards: $ROLLBACK
 EOF
@@ -522,18 +527,29 @@ ssh_run "$OLD" "sudo -n rm -f /etc/blot-redis/floating-ip" ||
 say "6. Turning off the old backup jobs on $OLD"
 # They have none of backup.sh's checks and upload to the same S3 names, so
 # they would overwrite and prune the new host's backups.
-# The IP has moved: a failure here must not stop step 7.
+# The IP has moved: a failure here must not stop step 7, and root's crontab
+# still gets its turn if ec2-user's fails.
 on "$OLD" "KEEP_CRON='$KEEP_CRON'" << 'EOF' ||
-current=$(crontab -l 2> /dev/null) || { echo "    no crontab"; exit 0; }
-jobs=$(echo "$current" | grep -vE '^[[:space:]]*(#|$)' | grep -vE '^[A-Za-z_]+=' | grep -vE "$KEEP_CRON" || true)
-[ -n "$jobs" ] || { echo "    nothing to turn off"; exit 0; }
-backup=~/crontab.before-cutover-$(date -u +%Y%m%dT%H%M%SZ)
-echo "$current" > "$backup"
-# Not in one pipeline: a failed awk must not install an empty crontab.
-new=$(echo "$current" | awk -v keep="$KEEP_CRON" '/^[[:space:]]*(#|$)/ || /^[A-Za-z_]+=/ || $0 ~ keep {print; next} {print "#cutover# " $0}') &&
-  echo "$new" | crontab - || { echo "    could not rewrite the crontab (saved copy: $backup)" >&2; exit 1; }
-echo "$jobs" | sed 's/^/    turned off: /'
-echo "    previous crontab: $backup"
+# ct <ec2-user|root> <crontab args>: root's crontab is the one sudo reaches.
+ct() { local who=$1; shift; if [ "$who" = root ]; then sudo -n crontab "$@"; else crontab "$@"; fi; }
+# off <who> <backup file>: comment out <who>'s jobs, after saving a copy.
+off() {
+  local who=$1 backup=$2 current jobs new
+  current=$(ct "$who" -l 2> /dev/null) || { echo "    $who: no crontab"; return 0; }
+  jobs=$(echo "$current" | grep -vE '^[[:space:]]*(#|$)' | grep -vE '^[A-Za-z_]+=' | grep -vE "$KEEP_CRON" || true)
+  [ -n "$jobs" ] || { echo "    $who: nothing to turn off"; return 0; }
+  echo "$current" > "$backup"
+  # Not in one pipeline: a failed awk must not install an empty crontab.
+  new=$(echo "$current" | awk -v keep="$KEEP_CRON" '/^[[:space:]]*(#|$)/ || /^[A-Za-z_]+=/ || $0 ~ keep {print; next} {print "#cutover# " $0}') &&
+    echo "$new" | ct "$who" - || { echo "    $who: could not rewrite the crontab (saved copy: $backup)" >&2; return 1; }
+  echo "$jobs" | sed "s/^/    $who: turned off: /"
+  echo "    $who: previous crontab: $backup"
+}
+ts=$(date -u +%Y%m%dT%H%M%SZ)
+status=0
+off ec2-user ~/crontab.before-cutover-$ts || status=1
+off root ~/root-crontab.before-cutover-$ts || status=1
+exit $status
 EOF
   problem "could not turn off the old backup jobs on $OLD: comment them out by hand before the next :00"
 
@@ -598,4 +614,6 @@ fi
 say "Done: $NEW is the master"
 echo "Rollback: $ROLLBACK"
 backup=$(field "$NEW_INFO" cron_backup)
+root_backup=$(field "$NEW_INFO" root_cron_backup)
 [ -z "$backup" ] || echo "Rolling back to $NEW also needs its old cron jobs back: ssh $NEW crontab $backup"
+[ -z "$root_backup" ] || echo "and root's: ssh $NEW sudo crontab $root_backup"
