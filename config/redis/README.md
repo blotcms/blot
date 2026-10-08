@@ -41,6 +41,12 @@ to every script, or use a `~/.ssh/config` alias as `<ssh-host>`.
    `--dry-run` first. **launch.sh has never been run**: it was written without
    the AWS CLI available, so watch the first run and expect to fix things.
    Or launch by hand with the launch template and do 2 and 3 yourself.
+   `./launch.sh --list` lists the backups in S3. Add `--drill` for any
+   throwaway host (a rehearsal, a restore test): it is named `drill-redis-*`,
+   tagged `BlotDrill=true`, and gets `/etc/blot-redis/drill` before bootstrap,
+   which stops `backup.sh` from ever uploading from it, even after a rehearsal
+   cutover marks it active (otherwise it would overwrite and prune the
+   production backups). `cutover.sh` warns when the new host is a drill host.
 2. `./bootstrap.sh ec2-user@<ip>`
 3. `./restore.sh ec2-user@<ip> latest` (add `--reference <current-redis-host>`
    to compare `DBSIZE` and keyspace), or on the new host
@@ -231,7 +237,8 @@ it says so. `maxmemory` is about 70% of RAM, computed at bootstrap
 store is wiped on stop) and uploads to
 `s3://blot-redis-backups/{hourly,daily}/<YYYY-MM-DD-hour-HH>.rdb`, keeping the
 6 newest hourly, 7 newest daily and 10 local copies. It runs `BGSAVE` first if
-the last save is over 15 minutes old. It exits quietly without uploading unless
+the last save is over 15 minutes old. It exits quietly without uploading on a drill host
+(`/etc/blot-redis/drill`, from `launch.sh --drill`), or unless
 the host is a master that accepts writes, `/etc/blot-redis/floating-ip` exists,
 and the address in it is on the host. That file is written at cutover, so a
 new or restored host never uploads (or prunes) alongside the live one. It works with an instance profile or keys in `~ec2-user/.aws`.

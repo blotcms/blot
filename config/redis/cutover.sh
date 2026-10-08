@@ -139,6 +139,7 @@ iface=$(echo "$route" | sed -n 's/.* dev \([^ ]*\).*/\1/p')
 echo "iface=$iface"
 echo "addrs=$(ip -4 -o addr show dev "$iface" | awk '{print $4}' | cut -d/ -f1 | tr '\n' ' ')"
 echo "marker=$(cat /etc/blot-redis/floating-ip 2> /dev/null | tr -d '[:space:]')"
+[ -e /etc/blot-redis/drill ] && echo drill=yes
 if [ -f /etc/cron.d/blot-redis ] && [ -x /usr/local/bin/backup.sh ] && [ -d /etc/blot-redis ]; then
   echo bootstrapped=yes
 else
@@ -255,6 +256,8 @@ if [ "$(field "$NEW_INFO" bootstrapped)" != yes ]; then
   [ -n "$ALLOW_UNBOOTSTRAPPED" ] || die "$NEW was not set up by bootstrap.sh (no /etc/cron.d/blot-redis); pass --allow-unbootstrapped if you mean it"
   echo "WARNING: $NEW was not set up by bootstrap.sh: nothing will back it up"
 fi
+[ "$(field "$NEW_INFO" drill)" != yes ] ||
+  echo "WARNING: $NEW is a drill host (/etc/blot-redis/drill): it will never upload backups"
 
 say "Checking AWS"
 # This also gets the credentials and the CLI warm before the timed part.
