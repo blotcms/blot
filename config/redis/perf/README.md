@@ -135,7 +135,7 @@ interval, `dt` seconds long. All deltas are over the interval.
 | `bgsave` | `rdb_bgsave_in_progress` at the sample instant |
 | `bgsaves` | BGSAVEs completed during the interval (`rdb_last_save_time` changed) |
 | `bg_active` | 1 if a BGSAVE was running at any point of the interval (running now, running at the previous sample, or completed in between) |
-| `bgsave_sec`, `bgsave_cur_sec`, `bgsave_status` | `rdb_last_bgsave_time_sec`, `rdb_current_bgsave_time_sec`, `rdb_last_bgsave_status` |
+| `bgsave_sec`, `bgsave_cur_sec`, `bgsave_status` | `rdb_last_bgsave_time_sec`, `rdb_current_bgsave_time_sec`, `rdb_last_bgsave_status` (stays `err` until the next good save) |
 | `changes` | `rdb_changes_since_last_save` |
 | `fork_us`, `cow_b` | `latest_fork_usec`, `rdb_last_cow_size` (bytes) |
 | `cmds`, `in_b`, `out_b` | `total_commands_processed` and `total_net_input_bytes` / `_output_bytes` deltas |

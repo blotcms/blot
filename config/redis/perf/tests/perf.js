@@ -131,6 +131,19 @@ describe("redis perf tools", function () {
       fs.rmSync(dir, { recursive: true, force: true });
     });
 
+    it("counts failed saves as changes of status to err, not minutes in err", function () {
+      const dir = tmp();
+      // err from minute 10 to 24 (started before the test window), then 30,
+      // an x, 32, and again at 51 after an ok
+      const err = (m) => (m >= 10 && m <= 24) || m === 30 || m === 32 || m === 51;
+      writeLogs(dir, { sample: (d, m) => "bgsave_status=" + (d === 7 ? "ok" : m === 31 ? "x" : err(m) ? "err" : "ok"), probes: {} });
+      const out = compare.main(["--data", dir, "--baseline", "2026-10-07T12:20..13:00", "--test", "2026-10-08T12:20..13:00"]);
+      const bgsave = section(out, "BGSAVE");
+      expect(bgsave["failed saves (status went to err)"]).toEqual(["0", "2"]);
+      expect(bgsave["minutes with last save failed"]).toEqual(["0", "8"]);
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
     it("explains a missing argument or log directory", function () {
       expect(() => compare.main(["--baseline", "2026-10-07..2026-10-08"])).toThrowError(/required/);
       expect(() =>

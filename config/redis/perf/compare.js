@@ -183,6 +183,22 @@ function sampleIndex(samples) {
   return idx;
 }
 
+const notOk = (s) => typeof s.f.bgsave_status === "string" && s.f.bgsave_status !== "ok";
+
+// The samples at which a BGSAVE had failed since the sample before: the status
+// is not ok and the last known status (an x does not reset it) was ok or unknown.
+// Over all the samples, so a window that starts in a streak of err counts none.
+function failedSaveSamples(samples) {
+  const failed = new Set();
+  let wasOk = true;
+  for (const s of samples) {
+    if (typeof s.f.bgsave_status !== "string") continue;
+    if (notOk(s) && wasOk) failed.add(s);
+    wasOk = !notOk(s);
+  }
+  return failed;
+}
+
 // ------------------------------------------------------------------- report
 
 // rows: [label, text] pairs; a null label is a section heading.
@@ -255,7 +271,10 @@ function report(win, data, ctx) {
   row("duration, s", dist(done.map((s) => s.f.bgsave_sec)));
   row("fork time, ms", dist(done.map((s) => (s.f.fork_us === null ? null : s.f.fork_us / 1000))));
   row("copy-on-write, MB", dist(done.map((s) => (s.f.cow_b === null ? null : s.f.cow_b / 1048576))));
-  row("failed saves (status not ok)", String(samples.filter((s) => s.f.bgsave_status && s.f.bgsave_status !== "ok").length));
+  // rdb_last_bgsave_status stays err until the next good save, so count the
+  // samples where it went to err, and separately the minutes it was in err.
+  row("failed saves (status went to err)", String(samples.filter((s) => ctx.failedSaves.has(s)).length));
+  row("minutes with last save failed", String(samples.filter((s) => notOk(s)).length));
 
   // ---- CPU
   head("CPU, % of each CPU (per minute)");
@@ -382,7 +401,7 @@ function main(argv) {
     }
   }
   cpus.sort();
-  const ctx = { labels, cpus, index: sampleIndex(data.samples) };
+  const ctx = { labels, cpus, index: sampleIndex(data.samples), failedSaves: failedSaveSamples(data.samples) };
   if (!data.samples.length && !labels.length) throw new Error("no logs found under " + args.data + " (run fetch.sh first, or pass --data / --redis-dir / --app-dir)");
 
   return table(baseline, test, report(baseline, data, ctx), report(test, data, ctx), data);
