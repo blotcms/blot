@@ -8,6 +8,8 @@ Newsletter subscribers: {{newsletter_subscribers}}
 
 Response time: {{render_time}}
 
+{{{redis_server}}}
+
 {{#users_by_client.length}}
 Users by client (users on several clients count once each):
 {{#users_by_client}}

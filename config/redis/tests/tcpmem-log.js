@@ -4,8 +4,8 @@ const path = require("path");
 const { execFileSync } = require("child_process");
 const { parseSample } = require("../../../app/scheduler/check-redis-host");
 
-// Runs bin/tcpmem-log.sh against fake /proc files and a fake redis6-cli, and
-// checks the app's scheduler can read the sample it stores.
+// Runs bin/tcpmem-log.sh against fake /proc files and a fake redis6-cli, df and
+// mountpoint, and checks the app's scheduler can read the sample it stores.
 describe("tcpmem-log.sh", function () {
   const SCRIPT = path.join(__dirname, "..", "bin", "tcpmem-log.sh");
   let root;
@@ -33,6 +33,25 @@ describe("tcpmem-log.sh", function () {
         "",
       ].join("\n")
     );
+
+    write("proc/meminfo", "MemTotal:       16000000 kB\nMemFree: 100 kB\nMemAvailable:   12000000 kB\n");
+
+    // df -P -k: the root disk is 1,024,000,000 bytes (256,000,000 used, 716,800,000
+    // available: some blocks are reserved); a separate /backups is twice that
+    write(
+      "bin/df",
+      `#!/bin/sh
+for last; do :; done
+echo "Filesystem 1024-blocks Used Available Capacity Mounted on"
+case "$last" in
+  */backups) echo "/dev/nvme1n1 2000000 500000 1400000 26% /backups" ;;
+  *) echo "/dev/nvme0n1p1 1000000 250000 700000 27% /" ;;
+esac
+`
+    );
+    // /backups is a mount if the test creates a "backups-mounted" file
+    write("bin/mountpoint", `#!/bin/sh\n[ -e "${root}/backups-mounted" ]\n`);
+    ["df", "mountpoint"].forEach((name) => fs.chmodSync(path.join(root, "bin", name), 0o755));
 
     // Records its arguments, one per line
     write(
@@ -73,7 +92,7 @@ describe("tcpmem-log.sh", function () {
     const logged = fs.readFileSync(path.join(root, "tcpmem.log"), "utf8").trim();
 
     expect([command, key]).toEqual(["SET", "blot:redis-host:tcpmem"]);
-    expect(value).toBe(`${logged} host=${os.hostname()} active=0`);
+    expect(value.startsWith(`${logged} host=${os.hostname()} active=0 `)).toBe(true);
 
     const sample = parseSample(value);
     expect(sample.mem).toBe(1234);
@@ -82,6 +101,46 @@ describe("tcpmem-log.sh", function () {
     expect(sample.sockets).toBe(25);
     expect(sample.active).toBe(false);
     expect(Math.abs(Date.now() - sample.time)).toBeLessThan(60 * 1000);
+  });
+
+  it("reports the host's RAM and disk space in bytes, and leaves them out of the log", function () {
+    run();
+    const value = cliArgs()[2];
+
+    expect(value).toMatch(
+      / active=0 ram_total=16384000000 ram_avail=12288000000 disk_root=256000000\/1024000000\/716800000$/
+    );
+    expect(fs.readFileSync(path.join(root, "tcpmem.log"), "utf8")).not.toContain("ram_total");
+
+    const sample = parseSample(value);
+    expect(sample.ramTotal).toBe(16384000000);
+    expect(sample.ramAvailable).toBe(12288000000);
+    expect(sample.diskRoot).toEqual({ used: 256000000, total: 1024000000, available: 716800000 });
+    expect(sample.diskBackups).toBe(null);
+  });
+
+  it("reports /backups when it is a mount", function () {
+    write("backups-mounted", "");
+    run();
+    const value = cliArgs()[2];
+
+    expect(value).toMatch(/ disk_root=256000000\/1024000000\/716800000 disk_backups=512000000\/2048000000\/1433600000$/);
+    expect(parseSample(value).diskBackups).toEqual({
+      used: 512000000,
+      total: 2048000000,
+      available: 1433600000,
+    });
+  });
+
+  it("leaves out the fields it cannot read", function () {
+    fs.rmSync(path.join(root, "proc/meminfo"));
+    write("bin/df", "#!/bin/sh\nexit 1\n");
+    run();
+    const value = cliArgs()[2];
+
+    expect(value).not.toMatch(/ram_|disk_/);
+    expect(parseSample(value).mem).toBe(1234);
+    expect(parseSample(value).ramTotal).toBe(null);
   });
 
   it("marks the host active once cutover has written the floating IP", function () {
