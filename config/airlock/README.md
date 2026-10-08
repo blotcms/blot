@@ -382,7 +382,14 @@ they look different in the logs - only one is a security regression:
   held up in testing to three back-to-back full 1200×1200 @2× screenshots
   with no OOM (peak well under the cap, and Chromium released it right
   after) — but a very JS-heavy page could still push higher, so watch
-  `docker stats` on the host. The app containers can shed some of their
+  `docker stats` on the host. Near the cap the container doesn't get
+  OOM-killed so much as stall (the kernel evicts code pages until nothing
+  answers), the healthcheck times out, and the host's
+  [`check_docker_health.sh`](../openresty/scripts/check_docker_health.sh)
+  cron restarts it — 13 times on 6–7 Oct 2026 during entry rebuilds. To keep
+  one page from doing that, `entrypoint.sh` caps each renderer's JS heap at
+  128m and turns off site isolation so a page's iframes share its renderer;
+  the script logs the failing probes before each restart. The app containers can shed some of their
   own overhead — the half of it that covered running Chromium locally — in
   the follow-up PR that drops the Chromium binary from the app image;
   `helper/screenshot`'s `puppeteer.launch()` path (dev and the macOS
