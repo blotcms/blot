@@ -457,8 +457,15 @@ if ! aws_cli --cli-connect-timeout 3 --cli-read-timeout 10 ec2 assign-private-ip
   else
     # Clients still reach <old>, now a replica: switch Redis straight back.
     echo "The IP did not move: switching Redis back to $OLD"
-    out=$(failover "$NEW" "$OLD_IP" 0) || out="result=unknown"
-    echo "FAILOVER back: $(field "$out" result)"
+    # <old> may still be finishing its sync as <new>'s replica, and FAILOVER
+    # refuses a target that is not an online replica yet: retry for a while.
+    back_end=$(($(now_ms) + 10000))
+    while :; do
+      out=$(failover "$NEW" "$OLD_IP" 0) || out="result=unknown"
+      echo "FAILOVER back: $(field "$out" result)"
+      [ "$(field "$out" result)" != done ] && [ "$(now_ms)" -lt "$back_end" ] || break
+      sleep 0.5
+    done
     [ "$(field "$out" result)" != done ] || undo_prepare
     die "the IP did not move; check that $OLD is the master again (redis6-cli INFO replication)"
   fi
@@ -507,8 +514,10 @@ fi
 flush
 
 say "5. Marking $NEW as the active host"
-ssh_run "$NEW" "sudo -n mkdir -p /etc/blot-redis && echo $FIP | sudo -n tee /etc/blot-redis/floating-ip > /dev/null"
-ssh_run "$OLD" "sudo -n rm -f /etc/blot-redis/floating-ip"
+ssh_run "$NEW" "sudo -n mkdir -p /etc/blot-redis && echo $FIP | sudo -n tee /etc/blot-redis/floating-ip > /dev/null" ||
+  problem "could not write /etc/blot-redis/floating-ip on $NEW (its backups will not run): run there: echo $FIP | sudo tee /etc/blot-redis/floating-ip"
+ssh_run "$OLD" "sudo -n rm -f /etc/blot-redis/floating-ip" ||
+  problem "could not remove /etc/blot-redis/floating-ip on $OLD: run there: sudo rm /etc/blot-redis/floating-ip"
 
 say "6. Turning off the old backup jobs on $OLD"
 # They have none of backup.sh's checks and upload to the same S3 names, so
