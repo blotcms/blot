@@ -261,7 +261,7 @@ sync(blogID, cb)
        └─ renames(blogID)            Detect file moves by size/title correlation
        └─ buildFromFolder(blogID)    Rebuild templates from Templates/ folder
        └─ lock.release
-       └─ Blog.set({ cacheID })      Only if folder.update was called at least once
+       └─ Blog.bumpCacheID           Only if folder.update was called at least once, even if release failed
        └─ finalCallback(syncError)
 ```
 

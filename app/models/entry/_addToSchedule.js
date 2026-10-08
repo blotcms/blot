@@ -40,7 +40,8 @@ module.exports = function (blogID, entry, callback) {
         return;
       }
 
-      require("models/blog").set(blogID, { cacheID: Date.now() }, function (err) {
+      // Retried in the background if Redis is unavailable
+      require("models/blog").bumpCacheID(blogID, function (err) {
         console.log(
           "Blog:",
           blogID + ":",

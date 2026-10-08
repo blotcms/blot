@@ -23,6 +23,7 @@ This module is the authoritative data layer for blog records in Blot. It defines
 | `create.js` | Creates a new blog record, links it to its owner user, initializes the blog's folder on disk, and registers it in the global blog ID set in Redis. |
 | `get.js` | Retrieves a single blog by `id`, `handle`, or `domain`. Applies `imageExif` and `converters` defaults on the way out. |
 | `set.js` | Validates and persists updates to a blog record. Manages side effects: domain/handle key rotation, cache busting, template forking, Git repository renaming, and CDN manifest updates. |
+| `bumpCacheID.js` | Bumps `cacheID` through `set` so render caches miss. If Redis is unavailable it retries every 5s for up to a minute in the background; the callback still fires after the first attempt. |
 | `remove.js` | Deletes a blog fully: disconnects the sync client, removes the record from the owner's user document, wipes the blog folder and static files from disk, and deletes all associated Redis keys. |
 | `extend.js` | Decorates an in-memory blog object with computed, template-facing properties: resolved URL, pretty URL, `cssURL`, `scriptURL`, `feedURL`, `pages`, `locals`, and `imageExif`/converter boolean flags. Does not write to Redis. |
 
@@ -70,6 +71,7 @@ This module is the authoritative data layer for blog records in Blot. It defines
 | `tests/create.js` | Tests for `create`: verifies blog creation, default `imageExif`/`converters` values, registration in the global ID set, and plugin default isolation between blogs. |
 | `tests/get.js` | Tests for `get`: verifies fallback behavior when `imageExif` or `converters` fields are absent from Redis. |
 | `tests/set.js` | Tests for `set`: domain assignment, `imageExif` persistence, converter normalization, handle/domain key rotation, and `cacheID` invalidation on menu changes. |
+| `tests/bumpCacheID.js` | Tests for `bumpCacheID`: retries while Redis is unavailable, gives up after a minute, and does not retry other errors. |
 | `tests/remove.js` | Tests for `remove`: verifies complete Redis key cleanup after deletion and removal from the global ID set. |
 | `tests/setStatus.js` | Tests for `setStatus`: status writes, default value injection, overwrites, and argument validation. |
 | `tests/getStatuses.js` | Tests for `getStatuses`: pagination, ordering (most recent first), empty results, and argument validation. |
