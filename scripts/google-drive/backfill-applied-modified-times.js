@@ -114,6 +114,14 @@ const resync = async (blog) => {
 
   // sync() resolves false when the walk fails part way through
   if (!result) throw new Error("sync did not complete");
+
+  // The walk carries on past files it couldn't download, so a summary can
+  // still come back with failures; those files keep no applied record.
+  if (result.failed) {
+    throw new Error(
+      `${result.failed} file(s) failed to download, e.g. ${result.firstError}`
+    );
+  }
 };
 
 const processBlog = async (blog) => {
