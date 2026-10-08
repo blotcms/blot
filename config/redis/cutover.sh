@@ -286,7 +286,7 @@ ROLLBACK="$0 --ip $FIP"
 if [ -n "$NO_NEIGH" ]; then ROLLBACK="$ROLLBACK --no-neigh-flush"; else for app in $APP_HOSTS; do ROLLBACK="$ROLLBACK --app-host $app"; done; fi
 [ "$(field "$OLD_INFO" bootstrapped)" = yes ] || ROLLBACK="$ROLLBACK --allow-unbootstrapped"
 [ -z "$AWS_PROFILE_ARGS" ] || ROLLBACK="$ROLLBACK $AWS_PROFILE_ARGS"
-ROLLBACK="$ROLLBACK $NEW $OLD"
+ROLLBACK="$ROLLBACK --region $AWS_REGION $NEW $OLD"
 
 say "Plan"
 cat << EOF
@@ -295,7 +295,8 @@ cat << EOF
  2. $OLD: wait until no blog:*:folder-lock is held (up to ${LOCK_WAIT}s), then
     FAILOVER TO $NEW_IP 6379 TIMEOUT $TIMEOUT_MS (FAILOVER ABORT if not done after $((TIMEOUT_MS + 1000))ms)
  3. aws ec2 assign-private-ip-addresses --network-interface-id $NEW_ENI --private-ip-addresses $FIP --allow-reassignment
- 4. ${APP_IFS:+ip neigh del $FIP on:$APP_IFS; }$OLD: ip addr del $FIP/32 dev $OLD_IF; wait for $NEW's metadata to list $FIP
+ 4. ${APP_IFS:+ip neigh del $FIP on:$APP_IFS; }wait for $NEW's metadata to list $FIP, then
+    $OLD: ip addr del $FIP/32 dev $OLD_IF${APP_IFS:+; ip neigh del again}
  5. write $FIP to /etc/blot-redis/floating-ip on $NEW, remove it on $OLD
  6. $OLD: back up ec2-user's crontab, then comment out:
 $(if [ -n "$OLD_CRON" ]; then echo "$OLD_CRON" | sed 's/^/      /'; else echo "      (nothing)"; fi)
@@ -328,22 +329,72 @@ undo_prepare() {
   timer "$NEW" "$NEW_TIMER" start "$NEW_IF" || true
   timer "$OLD" "$OLD_TIMER" start "$OLD_IF" || true
 }
-timer "$NEW" "$NEW_TIMER" stop "$NEW_IF"
-timer "$OLD" "$OLD_TIMER" stop "$OLD_IF"
+# old_state: "<role> <master_failover_state> <master_host>" as <old> reports
+# it now, nothing if it cannot be asked.
+old_state() {
+  local info
+  info=$(ssh_run "$OLD" "redis6-cli INFO replication" 2> /dev/null | tr -d '\r' | sed 's/:/=/') || return 0
+  echo "$(field "$info" role) $(field "$info" master_failover_state) $(field "$info" master_host)"
+}
+# settle_old: ask <old> how the FAILOVER ended and set settled=done (a replica
+# of <new>) or settled=aborted (the master). One still in progress gets a few
+# seconds past TIMEOUT, then our own FAILOVER ABORT. Anything else dies, with
+# <new> untouched: REPLICAOF there while <old> is a replica would leave no master.
+settle_old() {
+  local st role fstate mhost deadline abort_sent=""
+  deadline=$(($(now_ms) + TIMEOUT_MS + 3000))
+  while :; do
+    st=$(old_state)
+    read -r role fstate mhost <<< "$st"
+    case "$fstate" in
+      no-failover)
+        [ "$role" != master ] || { settled=aborted; return 0; }
+        [ "$role$mhost" != "slave$NEW_IP" ] || { settled=done; return 0; }
+        break ;;
+      failover-in-progress | waiting-for-sync)
+        if [ "$(now_ms)" -gt "$deadline" ]; then
+          [ -z "$abort_sent" ] || break
+          ssh_run "$OLD" "redis6-cli FAILOVER ABORT" > /dev/null 2>&1 || true
+          abort_sent=1; deadline=$(($(now_ms) + 2000))
+        fi
+        sleep 0.1 ;;
+      *) break ;;
+    esac
+  done
+  die "cannot tell how the FAILOVER ended ($OLD says: ${st:-nothing}); $NEW was not touched. Check 'redis6-cli INFO replication' on both hosts before anything else."
+}
 # Configured before the move, so the moment the IP moves <new> answers the
 # clients' old connections with a reset and they reconnect at once. An
 # unserved IP is a black hole: a busy client keeps resetting its idle timer
 # and its commands hang until something answers.
-[ -n "$NEW_HAS_FIP" ] || ssh_run "$NEW" "sudo -n ip addr add $FIP/32 dev $NEW_IF noprefixroute"
+# In an if condition set -e is off for the whole && list, so a failure of any
+# step lands in the then branch instead of exiting with the steps half done.
+if ! { timer "$NEW" "$NEW_TIMER" stop "$NEW_IF" &&
+  timer "$OLD" "$OLD_TIMER" stop "$OLD_IF" &&
+  { [ -n "$NEW_HAS_FIP" ] || ssh_run "$NEW" "sudo -n ip addr add $FIP/32 dev $NEW_IF noprefixroute"; }; }; then
+  undo_prepare
+  STAGE=done
+  die "preparation failed and was undone; nothing has switched"
+fi
 
 STAGE="FAILOVER (if unsure how it ended, run FAILOVER ABORT on $OLD)"
 say "2. FAILOVER $OLD -> $NEW"
 out=$(failover "$OLD" "$NEW_IP" "$LOCK_WAIT") || out="result=unknown"
 result=$(field "$out" result); T0=$(field "$out" t0); T1=$(field "$out" t1)
-echo "$result after $((T1 - T0))ms"
+echo "$result${T0:+ after $((T1 - T0))ms}"
 if [ "$result" != done ]; then
-  # Writes are back on <old>. If <new> got as far as promoting itself it is
-  # a master no client can reach yet (the IP has not moved): re-attach it.
+  # FAILOVER keeps going inside Redis when our session dies, and "stuck" is
+  # our abort racing it, so <old> may be a replica of <new> already.
+  settle_old
+  if [ "$settled" = done ]; then
+    echo "$OLD is a replica of $NEW: the FAILOVER did complete; carrying on"
+    result=done; T0=$(now_ms); T1=$T0 # timings below count from here, not from the FAILOVER
+  fi
+fi
+if [ "$result" != done ]; then
+  # <old> is the master again (settle_old checked), writes are back on it. If
+  # <new> got as far as promoting itself it is a master no client can reach
+  # yet (the IP has not moved): re-attach it.
   if ssh_run "$NEW" "redis6-cli INFO replication" | tr -d '\r' | grep -qx role:master; then
     echo "$NEW had promoted itself; making it a replica of $OLD again"
     ssh_run "$NEW" "redis6-cli REPLICAOF $OLD_IP 6379"
@@ -400,8 +451,10 @@ flush() {
   for pid in $pids; do wait "$pid" || true; done
 }
 flush
-ssh_run "$OLD" "sudo -n ip addr del $FIP/32 dev $OLD_IF"
 # The move is asynchronous: the instance metadata lists the IP once it is done.
+# <old> keeps the address until then, as a replica it answers whatever the VPC
+# still delivers to it (reads work, writes get READONLY at once); without it
+# those packets would be black-holed.
 imds_wait='
 t=$(curl -sf -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 60" http://169.254.169.254/latest/api/token)
 mac=$(cat /sys/class/net/$IF/address)
@@ -416,7 +469,10 @@ if echo "$imds_wait" | on "$NEW" "FIP=$FIP" "IF=$NEW_IF" "WANT=yes" "TRIES=100";
 else
   echo "WARNING: $NEW's metadata does not list $FIP after 20s"
 fi
-flush # again, in case an entry was re-learned before the VPC switched
+ssh_run "$OLD" "sudo -n ip addr del $FIP/32 dev $OLD_IF"
+# Again, in case an entry was re-learned before the VPC switched (on a Docker
+# bridge both containers answer ARP while both have the address).
+flush
 
 say "5. Marking $NEW as the active host"
 ssh_run "$NEW" "sudo -n mkdir -p /etc/blot-redis && echo $FIP | sudo -n tee /etc/blot-redis/floating-ip > /dev/null"
@@ -470,6 +526,11 @@ if [ -n "$first" ]; then
   echo "Writes unavailable (FAILOVER to the first client on $NEW): ${window}ms"
   [ -z "$all" ] || echo "All $CLIENTS clients on $NEW after: $((all - T0))ms"
   [ "$window" -le "$BUDGET_MS" ] || echo "WARNING: over the ${BUDGET_MS}ms budget: expect [LOCK COMPROMISED] restarts"
+elif [ "$CLIENTS" -gt 0 ]; then
+  echo "error: none of the $CLIENTS clients reached $NEW within ${CLIENT_WAIT}s, so Redis traffic may be down." >&2
+  echo "Redis has switched and $FIP is on $NEW. Check the app host's neighbour entry for $FIP (ip neigh show $FIP;" >&2
+  echo "ip neigh del $FIP dev <if>) and its Redis connections. Rollback: $ROLLBACK" >&2
+  exit 1
 else
   echo "No client reached $NEW within ${CLIENT_WAIT}s"
 fi

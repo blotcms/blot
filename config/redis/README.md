@@ -94,13 +94,20 @@ What it does:
    then get `READONLY`. If the new host does not catch up in time Redis gives
    up, the blocked writes run on the old host and the script stops, having
    changed nothing. If the switch hangs after the catch-up, the script runs
-   `FAILOVER ABORT`.
+   `FAILOVER ABORT`. If the ssh session dies mid-FAILOVER, Redis carries on, so
+   the script asks the old host how it ended (waiting or aborting if it is
+   still in progress) and never touches the new host until the old host says
+   whether it is the master or a replica of it; if it cannot tell, it stops.
 3. Moves the IP: `aws ec2 assign-private-ip-addresses --allow-reassignment`.
    If that fails, it runs FAILOVER back to the old host.
 4. Deletes the app host's neighbour (ARP) entry for the IP (otherwise it keeps
    sending to the old host's MAC address, which the VPC drops, for 20-50s;
-   Docker containers share the host's table), removes the IP from the old host
-   and waits for the new host's instance metadata to list it.
+   Docker containers share the host's table), waits for the new host's
+   instance metadata to list it, and only then removes the IP from the old
+   host and deletes the neighbour entry again. The move is asynchronous, and
+   until the metadata lists the IP the VPC may still deliver to the old host,
+   which as a replica answers (reads work, writes get `READONLY`); with the
+   address gone those packets would be dropped.
 5. Writes the IP to `/etc/blot-redis/floating-ip` on the new host (its backups
    start) and removes it on the old host.
 6. Comments out the old host's `ec2-user` crontab entries except the two
@@ -110,7 +117,10 @@ What it does:
    backups.
 7. Restarts the refresh timers, waits for the clients that were connected
    through the floating IP to reconnect on the new host, checks the new host
-   takes writes, and prints how long each step took.
+   takes writes, and prints how long each step took. If none of those clients
+   arrived, it exits with an error (Redis has switched, but traffic may be
+   down: check the app host's neighbour entry for the IP) and the rollback
+   command.
 
 Writes are unavailable from the FAILOVER until clients reach the new host.
 That must stay well under the folder lock's 10s TTL (`app/sync/lock.js`): a
