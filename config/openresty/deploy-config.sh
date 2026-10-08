@@ -1,5 +1,10 @@
 #!/bin/sh
 
+# Host setup for the production proxy host: the certificate and health-check
+# scripts in ./scripts, systemd ordering, fail2ban, logrotate, sshd and
+# .bashrc. The proxy itself is a container: deploy it with
+# `npm run deploy-proxy` (scripts/deploy/proxy.sh).
+
 # this exits the script if any command fails
 set -e
 
@@ -8,72 +13,35 @@ if [ -z "$SSH_KEY" ]; then
   exit 1
 fi
 
-# ssh port of the openresty instance, defaults to 22
+# ssh port of the proxy host, defaults to 22
 SSH_PORT="${SSH_PORT:-22}"
 
 if [ -z "$PUBLIC_IP" ]; then
-  echo "PUBLIC_IP variable missing, pass the public ip address of the openresty instance as an argument to this script"
-  exit 1
-fi
-
-if [ -z "$NODE_SERVER_IP" ]; then
-  echo "NODE_SERVER_IP variable missing, pass the ip address of the node instance as an argument to this script"
-  exit 1
-fi
-
-if [ -z "$REDIS_IP" ]; then
-  echo "REDIS_IP variable missing, pass the ip address of the redis instance as an argument to this script"
+  echo "PUBLIC_IP variable missing, pass the public ip address of the proxy host as an argument to this script"
   exit 1
 fi
 
 
-# build the openresty config files
-echo "Building openresty config files..."
-BUILD_SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/build-config.js"
-node $BUILD_SCRIPT
-
-# upload all the built in the directory './data/latest'  
-DATA_DIRECTORY="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/data/latest"
-echo "Uploading $DATA_DIRECTORY to ~/openresty on $PUBLIC_IP"
-ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "rm -rf /home/ec2-user/openresty"
-scp -P "$SSH_PORT" -i $SSH_KEY -r $DATA_DIRECTORY ec2-user@$PUBLIC_IP:/home/ec2-user/openresty
-
-#upload the scripts to the openresty server
+#upload the scripts to the proxy host
 SCRIPTS_DIRECTORY="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/scripts"
 echo "Uploading $SCRIPTS_DIRECTORY to ~/scripts on $PUBLIC_IP"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "rm -rf /home/ec2-user/scripts"
 scp -P "$SSH_PORT" -i $SSH_KEY -r $SCRIPTS_DIRECTORY ec2-user@$PUBLIC_IP:/home/ec2-user/scripts
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "chmod +x /home/ec2-user/scripts/*"
 
-# Install (or update) the mount-instance-store unit and the docker.service /
-# openresty.service drop-ins that gate on it, so neither can (re)start at
-# boot against the not-yet-mounted, empty /var/instance-ssd. Only installs
-# files + daemon-reload: it must NOT restart docker.service, openresty.service
-# or mount-instance-store.service here, since all are live on a running host
+# Install (or update) the mount-instance-store unit and the docker.service
+# drop-in that gates on it, so docker cannot (re)start at boot against the
+# not-yet-mounted, empty /var/instance-ssd. Only installs files +
+# daemon-reload: it must NOT restart docker.service or
+# mount-instance-store.service here, since all are live on a running host
 # (restarting docker would kill the running containers, restarting the mount
 # unit would unmount the cache under them) and daemon-reload alone is safe
 # against a running unit. The new ordering takes effect at the next reboot.
-echo "Installing mount-instance-store.service and its docker.service.d/openresty.service.d drop-ins on $PUBLIC_IP"
+echo "Installing mount-instance-store.service and its docker.service.d drop-in on $PUBLIC_IP"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo cp /home/ec2-user/scripts/mount-instance-store.service /etc/systemd/system/mount-instance-store.service"
-ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo mkdir -p /etc/systemd/system/docker.service.d /etc/systemd/system/openresty.service.d && sudo cp /home/ec2-user/scripts/docker.service.d/10-instance-store.conf /etc/systemd/system/docker.service.d/10-instance-store.conf && sudo cp /home/ec2-user/scripts/openresty.service.d/10-instance-store.conf /etc/systemd/system/openresty.service.d/10-instance-store.conf"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo mkdir -p /etc/systemd/system/docker.service.d && sudo cp /home/ec2-user/scripts/docker.service.d/10-instance-store.conf /etc/systemd/system/docker.service.d/10-instance-store.conf"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo systemctl daemon-reload"
-echo "mount-instance-store / docker.service / openresty.service ordering installed (takes effect on next boot)."
-
-# Once the proxy runs as a container (proxy/deploy) the bare-metal openresty is
-# stopped, and its config is no longer what serves traffic: reloading it would
-# fail (and, with set -e, skip everything below). Config for the container ships
-# in its image via proxy/deploy/blue-green.sh, so only validate here.
-if ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "docker ps --format '{{.Names}}' | grep -qE '^blot-proxy-(blue|green)\$'"; then
-  echo "A proxy container is serving: not reloading bare-metal openresty."
-  echo "Deploy proxy config changes with proxy/deploy/blue-green.sh instead."
-  # The bare-metal copy is the rollback target: still make sure it parses.
-  ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo openresty -t"
-else
-  echo "Reloading openresty...."
-  ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo openresty -t"
-  ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo openresty -s reload"
-  echo "Reload complete."
-fi
+echo "mount-instance-store / docker.service ordering installed (takes effect on next boot)."
 
 #########################################################
 # Begin Fail2Ban deployment section
@@ -146,5 +114,5 @@ echo ".bashrc deployment complete."
 #########################################################
 
 
-echo "Deploy complete. To connect to the openresty server, run:"
+echo "Host setup complete. To connect to the host, run:"
 echo "ssh -p $SSH_PORT -i $SSH_KEY ec2-user@$PUBLIC_IP"
