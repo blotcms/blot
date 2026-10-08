@@ -71,6 +71,9 @@ if [ "$APP_LOGS" = 1 ]; then
     rm -f "$LOCK_LOG.tmp" "$LOCK_LOG"
     echo "warning: could not read the app container logs; the lock counts will be missing" >&2
   fi
+else
+  # not fetched this time: do not leave the counts of an earlier fetch for compare.js
+  rm -f "$OUT/$APP_HOST/app-lock.log"
 fi
 
 echo "Logs are in $OUT"

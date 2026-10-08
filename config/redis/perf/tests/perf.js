@@ -340,7 +340,7 @@ esac
   });
 
   describe("fetch.sh", function () {
-    it("writes app-lock.log only when docker answered for every container", function () {
+    it("writes app-lock.log only when docker answered for every container, and drops it with --no-app-logs", function () {
       skipUnless("bash", "tar", "awk", "sort", "grep", "ls");
       const dir = tmp();
       const stubs = path.join(dir, "stubs");
@@ -373,6 +373,13 @@ esac
       expect(r.stderr).toContain("could not read the app container logs");
       expect(fs.existsSync(lockLog)).toBe(false);
       expect(fs.existsSync(lockLog + ".tmp")).toBe(false);
+
+      // not fetching the app logs must not leave the counts of an earlier fetch
+      expect(fetch({}).status).toBe(0);
+      expect(fs.existsSync(lockLog)).toBe(true);
+      r = spawnSync("bash", [path.join(PERF, "fetch.sh"), "--no-app-logs", "redis-host", "app-host"], { env, encoding: "utf8" });
+      expect(r.status).toBe(0);
+      expect(fs.existsSync(lockLog)).toBe(false);
       fs.rmSync(dir, { recursive: true, force: true });
     });
   });
