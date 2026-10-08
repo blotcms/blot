@@ -7,8 +7,7 @@
 # replica:<host>, give the primary's own private IP, never the floating IP:
 # the replica would replicate from itself once cutover.sh moves the IP.
 #
-# UNTESTED: written without the AWS CLI available. Try it with --dry-run first
-# and watch the first real run.
+# Try it with --dry-run first.
 #
 # Options:
 #   --key PATH       SSH private key (or REDIS_SSH_KEY); needed to reach the new host

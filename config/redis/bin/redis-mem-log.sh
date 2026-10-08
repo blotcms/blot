@@ -2,7 +2,8 @@
 # Appends Redis memory usage to ~/redis-mem.log, to size maxmemory and spot
 # growth before it reaches the limit (blotcms/blot#2041). Byte counts are
 # exact; peak is Redis's high-water mark since it last started, so read it
-# with the start date in mind. Installed in ec2-user's crontab, every 5 min.
+# with the start date in mind. Run by /etc/cron.d/blot-redis as ec2-user,
+# every 5 min.
 LOG="$HOME/redis-mem.log"
 CLI=$(command -v redis6-cli || command -v valkey-cli || command -v redis-cli)
 info=$($CLI INFO 2>&1 | tr -d '\r')

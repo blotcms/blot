@@ -14,6 +14,14 @@ The deployment system uses an SSH user (`deploy`) that can execute commands on t
 - **Automated health checks**: Automatic rollback on failure
 - **Deploy-time verification**: Blue (deployed first) must also pass `verify-container` before green and yellow are touched
 
+### Redis
+
+Redis does not run on the app host or in these containers. It has its own host,
+reached at the floating private IP in `BLOT_REDIS_HOST`, and is built and
+operated with the scripts in `config/redis/` (see
+[config/redis/README.md](../../config/redis/README.md)). Deploys do not touch
+it. Do not deploy or restart the proxy around a Redis cutover.
+
 ## Quick Start
 
 ### 1. Generate SSH Key

@@ -218,7 +218,7 @@ first:
 
 ```bash
 ssh -n redis 'grep TCP: /proc/net/sockstat; cat /proc/sys/net/ipv4/tcp_mem; nstat -az TcpExtTCPMemoryPressures TcpExtTCPMemoryPressuresChrono TcpExtPruneCalled TcpExtTCPRcvQDrop TcpExtTCPOFODrop'
-ssh -n redis 'tail -20 ~/tcpmem.log'   # 5-minute history, from ec2-user's crontab (~/bin/tcpmem-log.sh)
+ssh -n redis 'tail -20 ~/tcpmem.log'   # 5-minute history, from /etc/cron.d/blot-redis (config/redis/bin/tcpmem-log.sh)
 ```
 
 - `sockstat`'s `mem` and `tcp_mem` are both in pages. Once `mem` is above
