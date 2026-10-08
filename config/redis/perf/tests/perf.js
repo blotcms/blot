@@ -405,6 +405,54 @@ esac
       fs.rmSync(dir, { recursive: true, force: true });
     });
 
+    it("does not trust state saved before a reboot", function () {
+      skipUnless("bash", "awk", "sort");
+      const { dir, root, state, run, read } = squeezeHost();
+      const bootId = path.join(root, "proc/sys/kernel/random/boot_id");
+      const stale = () => fs.readdirSync(path.dirname(state)).filter((f) => f.includes(".state.stale."));
+      write(bootId, "boot-aaa\n");
+
+      expect(run("on").status).toBe(0);
+      expect(read(state)).toContain("boot boot-aaa");
+      expect(run("on").stdout).toContain("keeping those original values"); // same boot
+
+      // reboot: the masks and AllowedCPUs are back to normal, the state file is not
+      write(bootId, "boot-bbb\n");
+      for (const irq of [37, 38, 39]) write(path.join(root, `proc/irq/${irq}/smp_affinity`), "3\n");
+      write(path.join(dir, "cpus/system.slice"), "0-1\n");
+      expect(run("status").stdout).toContain("(stale)");
+
+      // off restores nothing from it
+      write(path.join(root, "proc/irq/38/smp_affinity"), "2\n");
+      let r = run("off");
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain("already undid the squeeze");
+      expect(r.stdout).toContain("== redis6-server threads"); // verified
+      expect(read(path.join(root, "proc/irq/38/smp_affinity"))).toBe("2");
+      expect(r.stdout).not.toContain("+ systemctl set-property");
+      expect(fs.existsSync(state)).toBe(false);
+      expect(stale().length).toBe(1);
+
+      // on takes new state instead of keeping the old
+      write(path.join(root, "proc/irq/38/smp_affinity"), "3\n");
+      expect(run("on").status).toBe(0);
+      write(bootId, "boot-ccc\n");
+      for (const irq of [37, 38, 39]) write(path.join(root, `proc/irq/${irq}/smp_affinity`), "2\n");
+      r = run("on");
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain("rebooted since");
+      expect(read(state)).toContain("boot boot-ccc");
+      expect(read(state)).toContain("irq 38 2");
+      expect(read(path.join(root, "proc/irq/38/smp_affinity"))).toBe("1");
+
+      // a state file with no boot id (not written by this script) counts as stale too
+      fs.writeFileSync(state, "nic ens5\nirq 38 3\n");
+      r = run("off");
+      expect(r.stdout).toContain("already undid the squeeze");
+      expect(stale().length).toBe(3);
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
     it("stops at the first failing command when run over ssh, as --local does", function () {
       skipUnless("bash", "awk", "sort");
       const { dir, stubs, env, run } = squeezeHost();

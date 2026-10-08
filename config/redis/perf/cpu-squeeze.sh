@@ -15,14 +15,19 @@
 #
 # on      refuses to run if irqbalance is active (it would undo the IRQ masks).
 #         Saves the current state to /root/blot-cpu-squeeze.state (kept if it is
-#         already there, so a second `on` cannot overwrite the original values):
-#         the smp_affinity of the NIC's IRQs (found by matching ens*/ena in
+#         already there, so a second `on` cannot overwrite the original values;
+#         one saved before the last reboot is moved aside to
+#         /root/blot-cpu-squeeze.state.stale.<time>.<pid> and a new one is taken): the
+#         boot id (/proc/sys/kernel/random/boot_id), the smp_affinity of the NIC's IRQs (found by matching ens*/ena in
 #         /proc/interrupts), the RPS masks in /sys/class/net/<if>/queues/rx-*/rps_cpus
 #         and each unit's AllowedCPUs. Then `systemctl set-property --runtime
 #         AllowedCPUs=0` on system.slice, user.slice and init.scope, the IRQs to
 #         CPU 0 (mask 1) and RPS to mask 1. Then prints the verification below.
 # off     puts back everything in the state file (AllowedCPUs back to what it
-#         was, or all online CPUs, 0-1, if it was unset) and verifies.
+#         was, or all online CPUs, 0-1, if it was unset) and verifies. If the
+#         state file is from before the last reboot, the reboot already undid
+#         the squeeze: it restores nothing, moves the file aside as above and
+#         verifies.
 # status  verifies: the AllowedCPUs of the three units, the IRQ and RPS masks,
 #         redis6-server's affinity (taskset -cp) for every thread, and per-CPU
 #         busy % over 5 seconds.
@@ -55,6 +60,17 @@ remote() {
   }
   online_cpus() { cat "$ROOT/sys/devices/system/cpu/online"; }
 
+  # The squeeze (AllowedCPUs --runtime, IRQ and RPS masks) does not survive a
+  # reboot, but the state file does, so it records the boot it was saved in.
+  boot_id() { cat "$ROOT/proc/sys/kernel/random/boot_id" 2> /dev/null || echo unknown; }
+  state_is_stale() { [ "$(awk '$1 == "boot" {print $2}' "$STATE")" != "$(boot_id)" ]; }
+  set_state_aside() {
+    local to
+    to=$STATE.stale.$(date +%Y%m%dT%H%M%S).$$
+    mv "$STATE" "$to"
+    echo "State file moved to $to"
+  }
+
   find_nic() {
     if [ -n "${NIC:-}" ]; then echo "$NIC"; return; fi
     local d
@@ -78,7 +94,9 @@ remote() {
     nic=$(find_nic)
     echo
     echo "== State (NIC $nic)"
-    if [ -s "$STATE" ]; then echo "state file $STATE: present (squeezed)"; else echo "state file $STATE: absent (not squeezed)"; fi
+    if [ ! -s "$STATE" ]; then echo "state file $STATE: absent (not squeezed)"
+    elif state_is_stale; then echo "state file $STATE: present, but from before the last reboot (stale)"
+    else echo "state file $STATE: present (squeezed)"; fi
     echo "irqbalance: $(systemctl is-active irqbalance 2> /dev/null || true)"
     for u in $UNITS; do
       echo "$u: AllowedCPUs=$(systemctl show -p AllowedCPUs --value "$u" 2> /dev/null || echo '?') EffectiveCPUs=$(systemctl show -p EffectiveCPUs --value "$u" 2> /dev/null || echo '?')"
@@ -129,12 +147,17 @@ remote() {
       irqs=$(find_irqs "$nic")
       [ -n "$irqs" ] || { echo "error: no IRQs for $nic in /proc/interrupts" >&2; return 1; }
 
+      if [ -s "$STATE" ] && state_is_stale; then
+        echo "The host rebooted since $STATE was saved, so that squeeze is already gone."
+        set_state_aside
+      fi
       if [ -s "$STATE" ]; then
         echo "State is already saved in $STATE; keeping those original values."
       else
         echo "Saving state to $STATE"
         mkdir -p "$(dirname "$STATE")"
         {
+          echo "boot $(boot_id)"
           echo "nic $nic"
           for irq in $irqs; do echo "irq $irq $(cat "$ROOT/proc/irq/$irq/smp_affinity")"; done
           for f in "$ROOT"/sys/class/net/"$nic"/queues/rx-*/rps_cpus; do
@@ -159,6 +182,12 @@ remote() {
     off)
       if [ ! -s "$STATE" ]; then
         echo "Not squeezed ($STATE does not exist): nothing to restore."
+        verify
+        return 0
+      fi
+      if state_is_stale; then
+        echo "The host rebooted since $STATE was saved: the reboot already undid the squeeze, so nothing is restored."
+        set_state_aside
         verify
         return 0
       fi

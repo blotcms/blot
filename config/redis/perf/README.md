@@ -61,6 +61,10 @@ All times are UTC, in the logs and in `compare.js`.
 5. **Release:** `./cpu-squeeze.sh <redis-ssh-host> off`, and check the verification
    shows everything back (`cpu1` busy again, IRQ masks as before).
    `./cpu-squeeze.sh <redis-ssh-host> status` shows the state any time.
+   The saved state (`/root/blot-cpu-squeeze.state`) records the boot it was taken
+   in: if the host rebooted since, the reboot already undid the squeeze, so `off`
+   restores nothing and `on` takes new state, moving the old file to
+   `*.stale.<time>`.
 6. **Fetch:** `./fetch.sh <redis-ssh-host> <app-ssh-host>` (`--since 3d` limits the
    docker log window; the default is 7d).
 7. **Compare:** the baseline is the 24h before the squeeze, `--match-hours` keeps
