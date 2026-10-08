@@ -406,12 +406,17 @@ fi
 
 STAGE="moving the IP ($NEW is the master; clients still reach $OLD and get READONLY)"
 say "3. Moving $FIP to $NEW"
-# Watch clients arrive on <new> from now on, in the background.
+# Watch clients arrive on <new> from now on, in the background. Only
+# connections that were not there at the start count: Redis lists a dead one
+# until TCP keepalive notices (300s), so a host the IP left a few minutes ago
+# (a rollback) still shows the clients it had then.
 on "$NEW" "FIP=$FIP" "WANT=$CLIENTS" "WAIT=$CLIENT_WAIT" > "$CTL/clients" 2>&1 << 'EOF' &
 ms() { date +%s%3N; }
+ids() { redis6-cli CLIENT LIST TYPE normal | grep "laddr=$FIP:6379" | cut -d' ' -f1; }
+known=$(ids)
 end=$(($(ms) + WAIT * 1000)); first=""; n=0
 while [ "$(ms)" -lt "$end" ]; do
-  n=$(redis6-cli CLIENT LIST TYPE normal | grep -c "laddr=$FIP:6379" || true)
+  n=$(ids | grep -vxF "$known" | grep -c . || true)
   [ "$n" -eq 0 ] || [ -n "$first" ] || first=$(ms)
   if [ "$WANT" -gt 0 ] && [ "$n" -ge "$WANT" ]; then echo "all=$(ms)"; break; fi
   sleep 0.05
