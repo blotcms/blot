@@ -168,4 +168,113 @@ describe("template", function () {
       });
     });
   });
+
+  // A sync waits on buildFromFolder, which waits on this callback, before it
+  // releases the blog's folder lock. If an error (e.g. Redis rejecting writes
+  // during a host cutover) never reaches the callback the blog can't sync
+  // again until the process restarts.
+  describe("when Redis fails", function () {
+    var originals = {};
+
+    function readFromFolderWith (stubs) {
+      Object.keys(stubs).forEach(function (name) {
+        var path = require.resolve("../" + name);
+        originals[path] = require.cache[path];
+        require.cache[path] = {
+          id: path,
+          filename: path,
+          loaded: true,
+          exports: stubs[name]
+        };
+      });
+
+      var path = require.resolve("../readFromFolder");
+      originals[path] = require.cache[path];
+      delete require.cache[path];
+      return require("../readFromFolder");
+    }
+
+    afterEach(function () {
+      Object.keys(originals).forEach(function (path) {
+        if (originals[path]) require.cache[path] = originals[path];
+        else delete require.cache[path];
+      });
+      originals = {};
+    });
+
+    function redisError () {
+      return new Error("NOREPLICAS Not enough good replicas to write.");
+    }
+
+    // Fails the spec if the callback fires more than once
+    function once (done, check) {
+      var calls = 0;
+      return function () {
+        if (++calls > 1) return done.fail(new Error("Callback invoked twice"));
+        check.apply(null, arguments);
+        setTimeout(done, 100);
+      };
+    }
+
+    it("passes an error creating a new template to the callback", function (done) {
+      var dir = this.tmp + "/new-template";
+      var error = redisError();
+      var create = jasmine.createSpy("create").and.callFake(function (
+        owner,
+        name,
+        metadata,
+        callback
+      ) {
+        callback(error);
+      });
+
+      fs.outputFileSync(dir + "/entries.html", "{{#entries}}{{/entries}}");
+
+      readFromFolderWith({ create: create })(
+        this.blog.id,
+        dir,
+        once(done, function (err) {
+          expect(create).toHaveBeenCalled();
+          expect(err).toBe(error);
+        })
+      );
+    });
+
+    it("passes an error reading the template's metadata to the callback", function (done) {
+      var error = redisError();
+      var create = jasmine.createSpy("create");
+      var getMetadata = function (id, callback) {
+        callback(error);
+      };
+
+      fs.outputFileSync(this.tmp + "/style.css", "body {color:pink}");
+
+      readFromFolderWith({ create: create, getMetadata: getMetadata })(
+        this.blog.id,
+        this.tmp,
+        once(done, function (err) {
+          // Only a missing template should be created
+          expect(create).not.toHaveBeenCalled();
+          expect(err).toBe(error);
+        })
+      );
+    });
+
+    it("passes an error saving the template's metadata to the callback", function (done) {
+      var error = redisError();
+      var setMetadata = function (id, updates, callback) {
+        callback(error);
+      };
+
+      fs.outputFileSync(this.tmp + "/style.css", "body {color:pink}");
+
+      readFromFolderWith({ setMetadata: setMetadata })(
+        this.blog.id,
+        this.tmp,
+        once(done, function (err) {
+          expect(err).toBe(error);
+        })
+      );
+    });
+  });
 });

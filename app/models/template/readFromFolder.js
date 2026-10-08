@@ -18,15 +18,6 @@ const create = require("./create");
 const improveJSONErrorMessage = require("./util/improveJSONErrorMessage");
 const improveMustacheErrorMessage = require("./util/improveMustacheErrorMessage");
 
-async function createLocalTemplate (blogID, dir) {
-  return new Promise(async function (resolve, reject) {
-    create(blogID, dir, { slug: dir }, function (err, template) {
-      if (err) return reject(err);
-      resolve(template);
-    });
-  });
-}
-
 module.exports = function readFromFolder (blogID, dir, callback) {
   // check the directory exists
   fs.readdir(dir, function (err, contents) {
@@ -37,10 +28,20 @@ module.exports = function readFromFolder (blogID, dir, callback) {
 
     var id = makeID(blogID, basename(dir));
 
-    getMetadata(id, async function (err, template) {
-      if (err || !template)
-        template = await createLocalTemplate(blogID, basename(dir));
+    getMetadata(id, function (err, template) {
+      // Only a missing template is created here. Any other error (e.g. Redis
+      // unavailable) must reach the callback, or buildFromFolder stalls and
+      // the sync never releases the folder lock.
+      if (err && err.code !== "ENOENT") return callback(err);
+      if (template) return readTemplate();
 
+      create(blogID, basename(dir), { slug: basename(dir) }, function (err) {
+        if (err) return callback(err);
+        readTemplate();
+      });
+    });
+
+    function readTemplate () {
       loadPackage(id, dir, function (err, views, enabled) {
         const errors = {};
 
@@ -109,7 +110,8 @@ module.exports = function readFromFolder (blogID, dir, callback) {
             },
             function (err) {
               if (err) return callback(err);
-              setMetadata(id, { errors }, function () {
+              setMetadata(id, { errors }, function (err) {
+                if (err) return callback(err);
                 if (enabled === true) {
                   Blog.set(blogID, { template: id }, function (err) {
                     if (err) return callback(err);
@@ -127,7 +129,7 @@ module.exports = function readFromFolder (blogID, dir, callback) {
           );
         });
       });
-    });
+    }
   });
 };
 
@@ -158,6 +160,9 @@ function loadPackage (id, dir, callback) {
 function removeDeletedViews (templateID, contents, callback) {
   const viewsToRemove = [];
 
+  // The rejection handler sits beside the success handler rather than in a
+  // trailing .catch, so a throw further down the callback chain can't call
+  // the callback a second time
   client
     .sMembers(key.allViews(templateID))
     .then(function (viewNames) {
@@ -173,8 +178,7 @@ function removeDeletedViews (templateID, contents, callback) {
         },
         callback
       );
-    })
-    .catch(callback);
+    }, callback);
 }
 
 function badPermission (blogID, templateID) {
