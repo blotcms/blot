@@ -66,6 +66,68 @@ describe("redis perf tools", function () {
       expect(line("cpu0 busy")).toMatch(/25 \/ 30 \/ 30 \/ 30\s+65 \/ 70 \/ 70 \/ 70/);
     });
 
+    // Collector logs for two days in which every minute of 12:00-13:00 is sampled.
+    // sample(day, m) and probe(label, day, m) give the lines; the test supplies them.
+    const iso = (t) => new Date(t).toISOString().slice(0, 19) + "Z";
+    const day = (d) => Date.UTC(2026, 9, d, 12, 0);
+    const writeLogs = (dir, { sample, probes, locks }) => {
+      const lines = { "redis/redis-sample.log": [], "redis/latency-redis-local.log": [], "app/latency-app-to-redis.log": [] };
+      for (const d of [7, 8]) {
+        for (let m = 0; m < 60; m++) {
+          lines["redis/redis-sample.log"].push(iso(day(d) + (m + 1) * 60000) + " dt=60 " + sample(d, m));
+          for (const label of Object.keys(probes)) {
+            const f = probes[label](d, m);
+            if (f) lines[label === "redis-local" ? "redis/latency-redis-local.log" : "app/latency-app-to-redis.log"].push(iso(day(d) + m * 60000) + " label=" + label + " " + f);
+          }
+        }
+      }
+      if (locks) lines["app/app-lock.log"] = locks;
+      for (const file of Object.keys(lines)) write(path.join(dir, file), lines[file].join("\n") + "\n");
+    };
+    const probeFields = (p50) => `n=1000 err=0 reconn=0 conn_ms=0.2 p50=${p50} p90=${p50} p99=${p50} p999=${p50} max=${p50} gt10=0 gt50=0 gt100=0 gt1000=0 burst_ms=20 burst_n=17857`;
+    // the lines of one section of the output, as { label: [baseline, test] }
+    const section = (out, heading) => {
+      const rows = {};
+      let inside = false;
+      for (const l of out.split("\n")) {
+        if (l.startsWith("== ")) inside = l.startsWith("== " + heading);
+        else if (inside && l.trim()) {
+          const cols = l.trim().split(/\s{2,}/);
+          rows[cols[0]] = cols.slice(1);
+        }
+      }
+      return rows;
+    };
+
+    it("keeps rows aligned by label when the windows differ in shape", function () {
+      const dir = tmp();
+      writeLogs(dir, {
+        // steal and psi only in the test day; the redis-local probe only on the baseline day
+        sample: (d, m) => `cpu0_busy=20 cpu0_steal=${d === 8 ? 3 : 0} cpu1_busy=${d === 8 ? 50 : 10} tcpmem=${d === 8 ? "x" : 100} bgsave_status=ok` + (d === 8 ? " psi10=1.5 psi60=1.0" : ""),
+        probes: {
+          "redis-local": (d) => (d === 7 ? probeFields(1) : null),
+          "app-to-redis": (d) => probeFields(d === 8 ? 2 : 1),
+        },
+      });
+      const out = compare.main(["--data", dir, "--baseline", "2026-10-07T12:00..13:00", "--test", "2026-10-08T12:00..13:00"]);
+
+      const cpu = section(out, "CPU");
+      expect(cpu["cpu0 steal"]).toEqual(["-", "3 / 3 / 3 / 3"]);
+      expect(cpu["cpu0 busy"]).toEqual(["20 / 20 / 20 / 20", "20 / 20 / 20 / 20"]);
+      expect(cpu["cpu1 busy"]).toEqual(["10 / 10 / 10 / 10", "50 / 50 / 50 / 50"]);
+      expect(cpu["CPU pressure some avg10, %"]).toEqual(["not available", "1.50 / 1.50 / 1.50 / 1.50"]);
+
+      // the redis-local probe has no rows in the test window; the next section must not shift
+      expect(section(out, "Latency probe: redis-local")["probe minutes"]).toEqual(["60", "0"]);
+      expect(section(out, "Latency probe: redis-local")["p50 per minute"]).toEqual(["1 / 1 / 1 / 1", "-"]);
+      const remote = section(out, "Latency probe: app-to-redis");
+      expect(remote["probe minutes"]).toEqual(["60", "60"]);
+      expect(remote["p50 per minute"]).toEqual(["1 / 1 / 1 / 1", "2 / 2 / 2 / 2"]);
+      expect(remote["250KB burst (burst_ms)"]).toEqual(["20 / 20 / 20 / 20", "20 / 20 / 20 / 20"]);
+      expect(section(out, "TCP memory")["min / mean / max"]).toEqual(["100 / 100 / 100", "-"]);
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
     it("explains a missing argument or log directory", function () {
       expect(() => compare.main(["--baseline", "2026-10-07..2026-10-08"])).toThrowError(/required/);
       expect(() =>

@@ -264,10 +264,9 @@ function report(win, data, ctx) {
     row("NET_RX/s on " + cpu, dist(secs("netrx" + n)));
     row("NET_TX/s on " + cpu, dist(secs("nettx" + n)));
   }
-  if (samples.some((s) => s.f.psi10 !== undefined && s.f.psi10 !== null)) {
-    row("CPU pressure some avg10, %", dist(col("psi10")));
-    row("CPU pressure some avg60, %", dist(col("psi60")));
-  } else row("CPU pressure", "not available");
+  const hasPsi = samples.some((s) => s.f.psi10 !== undefined && s.f.psi10 !== null);
+  row("CPU pressure some avg10, %", hasPsi ? dist(col("psi10")) : "not available");
+  row("CPU pressure some avg60, %", hasPsi ? dist(col("psi60")) : "not available");
 
   // ---- Redis
   head("Redis");
@@ -284,20 +283,19 @@ function report(win, data, ctx) {
   // ---- TCP memory
   head("TCP memory (pages)");
   const mem = samples.filter((s) => s.f.tcpmem !== null && s.f.tcpmem !== undefined);
-  if (mem.length) {
-    const v = mem.map((s) => s.f.tcpmem);
-    row("min / mean / max", fmtNum(Math.min(...v)) + " / " + fmtNum(mean(v)) + " / " + fmtNum(Math.max(...v)));
-    // Drift: the change within each hour, so windows that skip hours still make sense.
-    const byHour = new Map();
-    for (const s of mem) {
-      const h = Math.floor(s.t / 3600000);
-      if (!byHour.has(h)) byHour.set(h, []);
-      byHour.get(h).push(s.f.tcpmem);
-    }
-    const drifts = [...byHour.values()].filter((a) => a.length >= 2).map((a) => a[a.length - 1] - a[0]);
-    row("change within an hour: mean / min / max", drifts.length ? fmtNum(mean(drifts)) + " / " + fmtNum(Math.min(...drifts)) + " / " + fmtNum(Math.max(...drifts)) : "-");
-    row("first -> last in window", fmtNum(v[0]) + " -> " + fmtNum(v[v.length - 1]) + " (" + (v[v.length - 1] - v[0] >= 0 ? "+" : "") + fmtNum(v[v.length - 1] - v[0]) + ")");
-  } else row("tcpmem", "-");
+  const v = mem.map((s) => s.f.tcpmem);
+  const last = v.length - 1;
+  row("min / mean / max", v.length ? fmtNum(Math.min(...v)) + " / " + fmtNum(mean(v)) + " / " + fmtNum(Math.max(...v)) : "-");
+  // Drift: the change within each hour, so windows that skip hours still make sense.
+  const byHour = new Map();
+  for (const s of mem) {
+    const h = Math.floor(s.t / 3600000);
+    if (!byHour.has(h)) byHour.set(h, []);
+    byHour.get(h).push(s.f.tcpmem);
+  }
+  const drifts = [...byHour.values()].filter((a) => a.length >= 2).map((a) => a[a.length - 1] - a[0]);
+  row("change within an hour: mean / min / max", drifts.length ? fmtNum(mean(drifts)) + " / " + fmtNum(Math.min(...drifts)) + " / " + fmtNum(Math.max(...drifts)) : "-");
+  row("first -> last in window", v.length ? fmtNum(v[0]) + " -> " + fmtNum(v[last]) + " (" + (v[last] - v[0] >= 0 ? "+" : "") + fmtNum(v[last] - v[0]) + ")" : "-");
 
   // ---- app lock heartbeats
   head("App sync-lock lines (all containers)");
@@ -315,18 +313,42 @@ function report(win, data, ctx) {
   return rows;
 }
 
+// Lines up two reports by section and label, not by position: a row that one
+// window leaves out (no steal, an empty probe, ...) must not shift the others.
+// The order is the baseline's; a row only the test has goes right after the row
+// that precedes it in the test report.
+function merge(a, b) {
+  const keyed = (rows) => {
+    let section = "";
+    return rows.map(([label, text]) => {
+      if (label === null) section = text;
+      return { key: section + "\n" + (label === null ? "" : label), label, text };
+    });
+  };
+  const merged = keyed(a).map((r) => ({ key: r.key, label: r.label, a: r.text, b: null }));
+  let prev = null;
+  for (const r of keyed(b)) {
+    let at = merged.findIndex((m) => m.key === r.key);
+    if (at < 0) {
+      at = prev === null ? 0 : merged.findIndex((m) => m.key === prev) + 1;
+      merged.splice(at, 0, { key: r.key, label: r.label, a: null, b: null });
+    }
+    merged[at].b = r.text;
+    prev = r.key;
+  }
+  return merged;
+}
+
 function table(baseWin, testWin, a, b, data) {
-  const w0 = Math.max(...a.map((r) => (r[0] || "").length), 20);
-  const w1 = Math.max(...a.map((r) => r[1].length), 24, "baseline".length);
+  const rows = merge(a, b);
+  const w0 = Math.max(...rows.map((r) => (r.label || "").length), 20);
+  const w1 = Math.max(...rows.map((r) => (r.a || "").length), 24, "baseline".length);
   const lines = [];
   lines.push("".padEnd(w0) + "  " + "baseline".padEnd(w1) + "  test");
   lines.push("window".padEnd(w0) + "  " + windowLabel(baseWin).padEnd(w1) + "  " + windowLabel(testWin));
-  for (let i = 0; i < a.length; i++) {
-    if (a[i][0] === null) {
-      lines.push("", "== " + a[i][1] + " ==");
-      continue;
-    }
-    lines.push(a[i][0].padEnd(w0) + "  " + a[i][1].padEnd(w1) + "  " + b[i][1]);
+  for (const r of rows) {
+    if (r.label === null) lines.push("", "== " + (r.a === null ? r.b : r.a) + " ==");
+    else lines.push(r.label.padEnd(w0) + "  " + (r.a === null ? "-" : r.a).padEnd(w1) + "  " + (r.b === null ? "-" : r.b));
   }
   if (data.hasLocks) lines.push("", "Lock counts come from docker logs, which start when a container was created: a deploy during the test empties them.");
   return lines.join("\n");
