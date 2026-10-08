@@ -220,7 +220,7 @@ with the clients' folders.
    (or a larger type). This took 2m31s for 2.2M keys in the 8 Oct drill: ~35s
    to ssh, ~45s bootstrap, ~50s download and RDB check, ~13s load.
 3. Check it on the host: `redis6-cli ROLE` is master, `DBSIZE` is about what
-   the daily email last reported, `INFO memory` is well under `maxmemory`, and
+   it was on the old master, `INFO memory` is well under `maxmemory`, and
    the `ssl:*:latest` count (`redis6-cli --scan --pattern 'ssl:*:latest' | wc -l`)
    is about what it was, or the proxy re-issues the missing certificates.
 4. Move the floating IP (`172.30.0.200` today) to it. Add the address on the
@@ -242,6 +242,33 @@ with the clients' folders.
 To rehearse it, run steps 1-3 with `launch.sh --drill` (it never uploads
 backups), write down the commands for 4-5 with the drill host's interface,
 and terminate the host.
+
+### Increasing the Redis server size
+
+Do this when the daily email says **resize now** (memory at 70% of
+`maxmemory`) or the 80% alert fires; with `noeviction`, writes fail at the
+limit. `maxmemory` is about 70% of RAM, computed when a host is bootstrapped,
+so a bigger instance gets a proportionally bigger limit with no other change.
+Resizing means a new host and a cutover; the instance is not stopped and
+resized in place.
+
+1. Launch the bigger host as a replica of the current master. Give the
+   master's **primary private IP**, not the floating IP:
+   `./launch.sh --type <bigger-type> --from replica:<current-master-primary-ip> --key ~/key.pem`
+   (`--dry-run` first). It keeps the arm64 architecture, so pick a bigger
+   size in the same family (the current host's type is in the EC2 console).
+2. Check it: `master_link_status:up` on the new host, `DBSIZE` close to the old
+   host's, `maxmemory` about 70% of its RAM, and the sample from
+   `tcpmem-log.sh` arrives (`GET blot:redis-host:tcpmem` has `ram_total`).
+3. `./cutover.sh --dry-run --app-host <app-ssh-host> <current-master> <new-host>`,
+   then the same without `--dry-run`, inside the allowed windows (see
+   Cutover). Do not deploy or restart the proxy around it.
+4. Afterwards the old host replicates from the new one. Keep it for a few days,
+   then terminate it. Do not roll back to a host whose interface held the
+   floating IP recently: the VPC kept delivering to the other interface for
+   several seconds after the move (see Rehearsal), which will likely cost
+   `[LOCK COMPROMISED]` restarts. A rollback soon after a cutover is for an
+   emergency only.
 
 ## What gets installed
 
@@ -271,12 +298,18 @@ and terminate the host.
 `bin/backup.sh` copies the RDB to `/backups` (local copies only; the instance
 store is wiped on stop) and uploads to
 `s3://blot-redis-backups/{hourly,daily}/<YYYY-MM-DD-hour-HH>.rdb`, keeping the
-6 newest hourly, 7 newest daily and 10 local copies. It runs `BGSAVE` first if
-the last save is over 15 minutes old. It exits quietly without uploading on a drill host
+6 newest hourly, 7 newest daily and 10 local copies. It runs `BGSAVE` first unless
+a save finished in the last minute, so a backup holds the data as of its
+upload and a restore loses at most the time since then. It exits quietly without uploading on a drill host
 (`/etc/blot-redis/drill`, from `launch.sh --drill`), or unless
 the host is a master that accepts writes, `/etc/blot-redis/floating-ip` exists,
 and the address in it is on the host. That file is written at cutover, so a
 new or restored host never uploads (or prunes) alongside the live one. It works with an instance profile or keys in `~ec2-user/.aws`.
+
+After each upload it stores `<iso-time> <hourly|daily> <s3-key> <bytes>` in the
+Redis key `blot:redis-host:backup` (no TTL), which the daily email shows as the
+time since the last backup. Like the sample below, it is best effort: a refused
+write never fails the backup.
 
 ## Alerts
 
@@ -288,15 +321,49 @@ the master) emails the admin address `REDIS_HOST_ALERT` when:
 - Redis's memory reaches 80% of `maxmemory` (`noeviction`, so writes fail at
   the limit);
 - `maxmemory` is 0 on a host marked active by `/etc/blot-redis/floating-ip`;
-- the TCP memory sample is over 20 minutes old.
+- the TCP memory sample is over 20 minutes old;
+- the last background save failed (`stop-writes-on-bgsave-error yes`, so Redis
+  refuses every write until one succeeds).
+
+It also emails what happened since its last check (it keeps Redis's counters in
+the state key below, and starts again after a restart): errors that mean Redis
+refused writes (`OOM`, `MISCONF`, `NOREPLICAS`), any other error type with 100
+or more in 5 minutes (`READONLY` during a cutover, `WRONGTYPE`...), rejected
+connections, a restart or a different Redis process or host serving (a changed
+`run_id` or version, or lower uptime), and commands in the slowlog that took
+50ms or more.
 
 Only the host can read the TCP counters, so `bin/tcpmem-log.sh` also writes
 each sample to the Redis key `blot:redis-host:tcpmem` (no TTL; the app reads
 its timestamp). A replica or a write-frozen master refuses that write, so the
 app only ever sees the live master's sample. The host needs no mail setup.
 
+The same sample carries the host's RAM and disk space, which only the host can
+read, as extra `key=value` fields in bytes: `ram_total`, `ram_avail`,
+`disk_root=<used>/<total>/<available>` and `disk_backups=<used>/<total>/<available>`
+(from `df`, whose available column is less than total minus used when blocks are
+reserved; `disk_backups` is left out when
+`/backups` is not a mount). They are not in `~/tcpmem.log`.
+
+The daily email (`app/scheduler/daily/redis-server.js`) has one line from this
+and Redis itself:
+`**Redis:** memory 27% (resize in ~47 days), disk 21% (19 GB free), saved 3m ago, backed up 30m ago.`
+Memory is `used_memory` against `maxmemory`; the bracket is when it would reach
+70% of `maxmemory` at the rate it grew since the previous daily run (the daily
+job keeps its figures in `blot:redis-host:daily-snapshot`), or "stable" if it is
+flat or over a year away, and nothing on the first run. From 70% it says
+**resize now**, linking to "Increasing the Redis server size". Disk is the root
+disk from the sample; the `/backups` disk only appears when it is 80% full or
+not mounted. A failed save, a backup over 2 hours old or none recorded, and a
+missing or stale sample are called out in bold or in words.
+
 Each condition is emailed once when it starts and once when it clears, with
-what was sent kept in `blot:redis-host:alerts`. A Redis outage sends nothing
+what was sent kept in `blot:redis-host:alerts`. Emails are rate limited so a
+noisy Redis cannot flood the inbox: the same condition is emailed at most once
+an hour (a start or clear that comes sooner waits, and the email says if the
+condition flapped meanwhile), and each kind of event at most once every 6 hours
+(refused writes: every hour), with what happened in between merged into that
+email (`CONDITION_MIN_INTERVAL` and `EVENT_COOLDOWN`). A Redis outage sends nothing
 from here; `/redis-health` covers that. Print the current report with
 `NODE_PATH=app node app/scheduler/check-redis-host.js`.
 
