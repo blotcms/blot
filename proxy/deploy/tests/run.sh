@@ -22,6 +22,8 @@ R="$FAKE/running"; mkdir -p "$R"
 name_arg() { while [ $# -gt 0 ]; do [ "$1" = --name ] && { echo "$2"; return; }; shift; done; }
 case "$1" in
   image) exit 0 ;;
+  images) for i in ${FAKE_IMAGES-}; do [[ "$i" == "$2":* ]] && echo "$i"; done; exit 0 ;;
+  rmi) [[ " ${FAKE_IMAGE_IN_USE:-} " != *" ${!#} "* ]]; exit ;;
   pull) exit 0 ;;
   network) echo 172.17.0.1 ;;
   ps) if [[ "$*" == *" -a "* ]]; then ls "$FAKE/all" 2>/dev/null; else ls "$R"; fi; exit 0 ;;
@@ -332,5 +334,19 @@ reset container; bash "$DEPLOY/blue-green.sh" abc123 >"$T/out" 2>&1; RC=$?
 check "a bare commit SHA is pulled from the proxy registry" '[ $RC = 0 ] && called "ghcr.io/blotcms/blot-proxy:abc123"'
 
 echo
+echo "old images"
+
+reset container; FAKE_IMAGES="img:1 img:2 img:0 other:1" bluegreen
+check "swap: removes the repository's other images, keeps the deployed one and other repositories" '[ $RC = 0 ] && called "docker rmi img:1" && called "docker rmi img:0" && ! called "docker rmi img:2" && ! called "docker rmi other:1" && mentions "Removed old image img:1"'
+
+reset none; FAKE_IMAGES="img:1 img:2" bluegreen
+check "fresh start: removes the old image too" '[ $RC = 0 ] && called "docker rmi img:1" && ! called "docker rmi img:2"'
+
+reset container; FAKE_IMAGES="img:1 img:2" FAKE_IMAGE_IN_USE="img:1" bluegreen
+check "an image still in use is left alone, and the deploy still succeeds" '[ $RC = 0 ] && ! mentions "Removed old image img:1"'
+
+reset container; FAKE_IMAGES="img:1 img:2" FAKE_UNHEALTHY=blot-proxy-green bluegreen
+check "a failed deploy removes no images" '[ $RC != 0 ] && ! called "docker rmi"'
+
 echo "$pass passed, $failed failed"
 [ "$failed" = 0 ]
