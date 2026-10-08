@@ -329,10 +329,14 @@ wait_link
 unchanged
 
 echo "# No client reaches the new host"
-# Without the neighbour flush the app keeps sending to the old host's MAC
-# address, which no longer has the IP, for longer than CUTOVER_CLIENT_WAIT:
-# Redis has switched but no client arrives, so the cutover reports an error and
-# prints the rollback, which we run with the flush so the clients come back.
+# The app's neighbour entry for the IP pinned to the old host's MAC address
+# (a permanent entry, which no ARP reply replaces; both hosts answer ARP while
+# both have the IP) and no flush: after the move the app keeps sending to the
+# old host, which no longer has the IP. Redis has switched but no client
+# arrives, so the cutover reports an error and prints the rollback, which we
+# run with the entry removed and the flush on so the clients come back.
+docker exec "$APP" ip neigh replace "$FIP" lladdr "$(docker exec "$OLD" cat /sys/class/net/eth0/address)" dev eth0 nud permanent
+sleep 1
 if cutover --no-neigh-flush "$OLD" "$NEW" > "$TMP/noclients.out" 2> "$TMP/noclients.err"; then
   cat "$TMP/noclients.out" "$TMP/noclients.err"
   fail "no client on the new host fails the cutover"
@@ -344,6 +348,7 @@ check "it does not say Done" sh -c "! grep -q 'Done:' '$TMP/noclients.out' '$TMP
 check "it tells how to roll back" grep -q "Rollback: " "$TMP/noclients.err"
 check "Redis did switch" [ "$(role "$NEW") $(role "$OLD")" = "master slave" ]
 check "the IP is on the new host" has_ip "$NEW" "$FIP"
+docker exec "$APP" ip neigh del "$FIP" dev eth0
 sed "s/ --no-neigh-flush / --app-host $APP /" "$TMP/noclients.err" > "$TMP/noclients.flush"
 roll_back "$TMP/noclients.flush"
 check "old is the master again after the error" [ "$(role "$OLD") $(role "$NEW")" = "master slave" ]
