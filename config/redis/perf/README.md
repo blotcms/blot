@@ -66,8 +66,8 @@ All times are UTC, in the logs and in `compare.js`.
    in: if the host rebooted since, the reboot already undid the squeeze, so `off`
    restores nothing and `on` takes new state, moving the old file to
    `*.stale.<time>`.
-6. **Fetch:** `./fetch.sh <redis-ssh-host> <app-ssh-host>` (`--since 3d` limits the
-   docker log window; the default is 7d).
+6. **Fetch:** `./fetch.sh <redis-ssh-host> <app-ssh-host>` (`--since 72h` limits the
+   docker log window; the default is 168h. Docker durations have no `d` unit).
 7. **Compare:** the baseline is the 24h before the squeeze, `--match-hours` keeps
    only the baseline minutes whose UTC time of day is in the test window's (here
    14:00-16:00, so the same number of minutes on both sides; the test window

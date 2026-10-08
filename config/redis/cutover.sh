@@ -284,7 +284,9 @@ echo "Floating IP: $FIP, $CLIENTS clients connected through it"
 
 APP_IFS=""
 for app in $APP_HOSTS; do
-  dev=$(echo "sudo -n true || exit 1; ip -4 -o route get $FIP | sed -n 's/.* dev \([^ ]*\).*/\1/p'" | ssh_run "$app" "bash -s") ||
+  # A non-interactive ssh shell on the app host (Amazon Linux 2) has no
+  # /usr/sbin in PATH, where ip lives.
+  dev=$(echo "sudo -n true || exit 1; PATH=\$PATH:/usr/sbin:/sbin; ip -4 -o route get $FIP | sed -n 's/.* dev \([^ ]*\).*/\1/p'" | ssh_run "$app" "bash -s") ||
     die "cannot run sudo on the app host $app"
   [ -n "$dev" ] || die "no route from $app to $FIP"
   APP_IFS="$APP_IFS $app:$dev"

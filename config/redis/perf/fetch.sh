@@ -9,7 +9,7 @@
 # -yellow; the same lines the investigate-production-container-restarts skill
 # reads) and writes them to data/redis-perf/<app-host>/app-lock.log, one line
 # per container per minute that had any. --since is how far back to look (a
-# `docker logs --since` value, default 7d). docker logs only go back to when each
+# `docker logs --since` value, default 168h; docker has no `d` unit). docker logs only go back to when each
 # container was created, so a deploy during the test cuts them short: fetch
 # before deploying. Only read-only commands are run on the hosts.
 #
@@ -17,7 +17,7 @@
 set -euo pipefail
 . "$(dirname "$0")/common.sh"
 
-SINCE=7d
+SINCE=168h
 APP_LOGS=1
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -27,10 +27,10 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
-[ $# -eq 2 ] || die "usage: fetch.sh [--since 7d] [--no-app-logs] <redis-ssh-host> <app-ssh-host>"
+[ $# -eq 2 ] || die "usage: fetch.sh [--since 168h] [--no-app-logs] <redis-ssh-host> <app-ssh-host>"
 REDIS_HOST=$1
 APP_HOST=$2
-case "$SINCE" in *[!0-9a-z]* | "") die "--since must look like 24h or 7d" ;; esac
+case "$SINCE" in *[!0-9a-z]* | "") die "--since must look like 24h or 168h (docker has no d unit)" ;; esac
 
 REPO=$(cd "$PERF_DIR_LOCAL/../../.." && pwd)
 OUT=${FETCH_OUT:-$REPO/data/redis-perf}
