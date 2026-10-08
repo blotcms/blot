@@ -110,15 +110,22 @@ const percent = (fraction) => Math.round(fraction * 100) + "%";
 const gb = (bytes) => (bytes / 1024 / 1024 / 1024).toFixed(2) + "GB";
 const minutes = (ms) => Math.round(ms / MINUTE) + " minutes";
 
-// "<used>/<total>" in bytes (the host's disk fields), or null.
+// "<used>/<total>/<available>" in bytes (the host's disk fields), or null.
+// Available is what df reports, which is less than total - used on a
+// filesystem with reserved blocks; the older "<used>/<total>" has none (null).
 function parseDisk(value) {
-  const match = /^(\d+)\/(\d+)$/.exec(value || "");
-  return match && Number(match[2]) > 0 ? { used: Number(match[1]), total: Number(match[2]) } : null;
+  const match = /^(\d+)\/(\d+)(?:\/(\d+))?$/.exec(value || "");
+  if (!match || !(Number(match[2]) > 0)) return null;
+  return {
+    used: Number(match[1]),
+    total: Number(match[2]),
+    available: match[3] === undefined ? null : Number(match[3]),
+  };
 }
 
 // "2026-10-07T12:00:00Z mem=123 tcp_mem=1,2,3 sockets=25 pressures=0 ...
 // host=ip-10-0-0-1 active=1 ram_total=<bytes> ram_avail=<bytes>
-// disk_root=<used>/<total> disk_backups=<used>/<total>" (tcpmem-log.sh). The
+// disk_root=<used>/<total>/<avail> disk_backups=<used>/<total>/<avail>" (tcpmem-log.sh). The
 // last four (all in bytes) are for the daily email: they are null if the host
 // did not report them, and disk_backups is omitted when /backups is not a
 // mount. Null if it can't be read.

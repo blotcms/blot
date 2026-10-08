@@ -157,15 +157,16 @@ describe("scheduler check-redis-host", function () {
       const sample = parseSample(
         sampleLine() +
           " ram_total=16384000000 ram_avail=12288000000" +
-          " disk_root=256000000/1024000000 disk_backups=512000000/2048000000"
+          " disk_root=256000000/1024000000/716800000 disk_backups=512000000/2048000000"
       );
 
       expect(sample.mem).toBe(100);
       expect(sample.active).toBe(true);
       expect(sample.ramTotal).toBe(16384000000);
       expect(sample.ramAvailable).toBe(12288000000);
-      expect(sample.diskRoot).toEqual({ used: 256000000, total: 1024000000 });
-      expect(sample.diskBackups).toEqual({ used: 512000000, total: 2048000000 });
+      expect(sample.diskRoot).toEqual({ used: 256000000, total: 1024000000, available: 716800000 });
+      // The older form has no available figure
+      expect(sample.diskBackups).toEqual({ used: 512000000, total: 2048000000, available: null });
     });
 
     it("leaves out RAM and disk fields that are missing or malformed", function () {

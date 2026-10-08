@@ -36,16 +36,16 @@ describe("tcpmem-log.sh", function () {
 
     write("proc/meminfo", "MemTotal:       16000000 kB\nMemFree: 100 kB\nMemAvailable:   12000000 kB\n");
 
-    // df -P -k: the root disk is 1,024,000,000 bytes (256,000,000 used); a
-    // separate /backups is twice that with twice as much used
+    // df -P -k: the root disk is 1,024,000,000 bytes (256,000,000 used, 716,800,000
+    // available: some blocks are reserved); a separate /backups is twice that
     write(
       "bin/df",
       `#!/bin/sh
 for last; do :; done
 echo "Filesystem 1024-blocks Used Available Capacity Mounted on"
 case "$last" in
-  */backups) echo "/dev/nvme1n1 2000000 500000 1500000 25% /backups" ;;
-  *) echo "/dev/nvme0n1p1 1000000 250000 750000 25% /" ;;
+  */backups) echo "/dev/nvme1n1 2000000 500000 1400000 26% /backups" ;;
+  *) echo "/dev/nvme0n1p1 1000000 250000 700000 27% /" ;;
 esac
 `
     );
@@ -108,14 +108,14 @@ esac
     const value = cliArgs()[2];
 
     expect(value).toMatch(
-      / active=0 ram_total=16384000000 ram_avail=12288000000 disk_root=256000000\/1024000000$/
+      / active=0 ram_total=16384000000 ram_avail=12288000000 disk_root=256000000\/1024000000\/716800000$/
     );
     expect(fs.readFileSync(path.join(root, "tcpmem.log"), "utf8")).not.toContain("ram_total");
 
     const sample = parseSample(value);
     expect(sample.ramTotal).toBe(16384000000);
     expect(sample.ramAvailable).toBe(12288000000);
-    expect(sample.diskRoot).toEqual({ used: 256000000, total: 1024000000 });
+    expect(sample.diskRoot).toEqual({ used: 256000000, total: 1024000000, available: 716800000 });
     expect(sample.diskBackups).toBe(null);
   });
 
@@ -124,8 +124,12 @@ esac
     run();
     const value = cliArgs()[2];
 
-    expect(value).toMatch(/ disk_root=256000000\/1024000000 disk_backups=512000000\/2048000000$/);
-    expect(parseSample(value).diskBackups).toEqual({ used: 512000000, total: 2048000000 });
+    expect(value).toMatch(/ disk_root=256000000\/1024000000\/716800000 disk_backups=512000000\/2048000000\/1433600000$/);
+    expect(parseSample(value).diskBackups).toEqual({
+      used: 512000000,
+      total: 2048000000,
+      available: 1433600000,
+    });
   });
 
   it("leaves out the fields it cannot read", function () {

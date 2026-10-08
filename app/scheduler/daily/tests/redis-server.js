@@ -28,7 +28,7 @@ describe("scheduler/daily/redis-server", function () {
     if (extra === undefined) {
       extra =
         ` ram_total=${16 * GB} ram_avail=${12 * GB}` +
-        ` disk_root=${5 * GB}/${24 * GB} disk_backups=${40 * GB}/${100 * GB}`;
+        ` disk_root=${5 * GB}/${24 * GB}/${19 * GB} disk_backups=${40 * GB}/${100 * GB}/${60 * GB}`;
     }
     return (
       `${stamp(NOW - age)} mem=100 tcp_mem=190000,250000,380000 sockets=25 pressures=0 ` +
@@ -153,6 +153,21 @@ describe("scheduler/daily/redis-server", function () {
 
       const full = ` disk_root=${5 * GB}/${24 * GB} disk_backups=${85 * GB}/${100 * GB}`;
       expect(await render({ sample: sampleLine({ extra: full }) })).toContain(
+        "disk 21% (19 GB free), **backup disk 85% full**, saved"
+      );
+    });
+
+    it("uses df's available figure, which excludes reserved blocks", async function () {
+      // 5 GB used of 24 GB, but only 17 GB available: 1 - 17 / (5 + 17) = 23%
+      const extra = ` disk_root=${5 * GB}/${24 * GB}/${17 * GB} disk_backups=${78 * GB}/${100 * GB}/${17 * GB}`;
+      const result = await render({ sample: sampleLine({ extra }) });
+
+      expect(result).toContain("disk 23% (17 GB free), **backup disk 82% full**, saved");
+    });
+
+    it("works out the disk from used and total for a sample without the available figure", async function () {
+      const extra = ` disk_root=${5 * GB}/${24 * GB} disk_backups=${85 * GB}/${100 * GB}`;
+      expect(await render({ sample: sampleLine({ extra }) })).toContain(
         "disk 21% (19 GB free), **backup disk 85% full**, saved"
       );
     });

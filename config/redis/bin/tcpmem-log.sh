@@ -9,7 +9,7 @@
 # stops being updated (app/scheduler/check-redis-host.js). A replica or a
 # write-frozen master refuses the write, so only the live master's sample is
 # seen. The Redis value also carries the host's RAM and disk space in bytes
-# (ram_total, ram_avail, disk_root and disk_backups as used/total), for the
+# (ram_total, ram_avail, disk_root and disk_backups as used/total/available), for the
 # app's daily email; they are not in the log. BLOT_ROOT prefixes /proc, /etc,
 # / and /backups, for the tests.
 ROOT=${BLOT_ROOT:-}
@@ -30,12 +30,13 @@ if [ "$(wc -l < "$LOG")" -gt 110000 ]; then tail -n 100000 "$LOG" > "$LOG.tmp" &
 active=0
 [ -s "$ROOT/etc/blot-redis/floating-ip" ] && active=1
 # RAM and disk, for the daily email. A field that cannot be read is left out.
-# df -k, because busybox df has that too. disk_backups only if /backups is a
+# df -k, because busybox df has that too. Available is kept apart from
+# total - used, which counts blocks reserved for root. disk_backups only if /backups is a
 # mount: the instance store is absent on a host without one, and df would then
 # report the root disk.
 extra=""
 add() { [ -z "$2" ] || extra="$extra $1=$2"; }
-disk() { df -P -k "$1" 2> /dev/null | awk 'NR == 2 {printf "%.0f/%.0f", $3 * 1024, $2 * 1024}'; }
+disk() { df -P -k "$1" 2> /dev/null | awk 'NR == 2 {printf "%.0f/%.0f/%.0f", $3 * 1024, $2 * 1024, $4 * 1024}'; }
 add ram_total "$(awk '/^MemTotal:/ {printf "%.0f", $2 * 1024}' "$ROOT/proc/meminfo" 2> /dev/null)"
 add ram_avail "$(awk '/^MemAvailable:/ {printf "%.0f", $2 * 1024}' "$ROOT/proc/meminfo" 2> /dev/null)"
 add disk_root "$(disk "$ROOT/")"

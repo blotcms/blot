@@ -340,7 +340,9 @@ app only ever sees the live master's sample. The host needs no mail setup.
 
 The same sample carries the host's RAM and disk space, which only the host can
 read, as extra `key=value` fields in bytes: `ram_total`, `ram_avail`,
-`disk_root=<used>/<total>` and `disk_backups=<used>/<total>` (left out when
+`disk_root=<used>/<total>/<available>` and `disk_backups=<used>/<total>/<available>`
+(from `df`, whose available column is less than total minus used when blocks are
+reserved; `disk_backups` is left out when
 `/backups` is not a mount). They are not in `~/tcpmem.log`.
 
 The daily email (`app/scheduler/daily/redis-server.js`) has one line from this

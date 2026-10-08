@@ -136,6 +136,13 @@ function memoryPart({ now, memory, snapshot }) {
   return `memory ${percent(fraction)}${projection({ now, memory, snapshot })}`;
 }
 
+// df's Available column when the host sent it (it excludes blocks reserved for
+// root), else total - used. Fullness is used / (used + available), as df's own
+// Use% is.
+const free = ({ used, total, available }) => (available === null ? total - used : available);
+const fullness = ({ used, total, available }) =>
+  available === null ? used / total : 1 - available / (used + available);
+
 // The root disk, from the host's sample, and the instance store only if it
 // needs attention.
 function diskPart({ now, sample }) {
@@ -145,12 +152,11 @@ function diskPart({ now, sample }) {
   if (age > SAMPLE_STALE_MS) return `sample ${compact(age)} old`;
   if (!sample.diskRoot) return "disk not reported by the Redis host";
 
-  const { used, total } = sample.diskRoot;
-  let text = `disk ${percent(used / total)} (${size(total - used)} free)`;
+  let text = `disk ${percent(fullness(sample.diskRoot))} (${size(free(sample.diskRoot))} free)`;
 
   if (!sample.diskBackups) text += ", **/backups not mounted**";
-  else if (sample.diskBackups.used / sample.diskBackups.total >= BACKUP_DISK_FULL) {
-    text += `, **backup disk ${percent(sample.diskBackups.used / sample.diskBackups.total)} full**`;
+  else if (fullness(sample.diskBackups) >= BACKUP_DISK_FULL) {
+    text += `, **backup disk ${percent(fullness(sample.diskBackups))} full**`;
   }
   return text;
 }
