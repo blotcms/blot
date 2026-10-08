@@ -71,8 +71,9 @@ What it checks first: both hosts answer over ssh with passwordless sudo and run
 Redis 6.2.x; the new host replicates from the old host's **primary private
 IP** (from the floating IP it would replicate from itself once the IP moves),
 its link is up and it is at most 16MB and 1s behind; it has
-`min-replicas-to-write 0` and uses under 80% of its `maxmemory` (otherwise it
-refuses writes the moment it is promoted); it has as many `ssl:*:latest`
+`min-replicas-to-write 0`, uses under 80% of its `maxmemory` and its last
+background save did not fail (otherwise, with `stop-writes-on-bgsave-error yes`,
+it refuses writes the moment it is promoted); it has as many `ssl:*:latest`
 certificate keys as the old host (the proxy trusts Redis over its own copy, so
 a missing one gets re-issued); it was set up by `bootstrap.sh`; no backup upload
 is running; the AWS CLI works, both primary IPs are their interfaces' primary
@@ -99,7 +100,11 @@ What it does:
    still in progress) and never touches the new host until the old host says
    whether it is the master or a replica of it; if it cannot tell, it stops.
 3. Moves the IP: `aws ec2 assign-private-ip-addresses --allow-reassignment`.
-   If that fails, it runs FAILOVER back to the old host.
+   If the call fails (its timeout is only a socket timeout, and the move is
+   asynchronous) it polls AWS for up to 10s for the IP to show up on the new
+   host's interface and carries on if it does. Writes stay unavailable while it
+   polls, which is why that is bounded. If it never shows up, the script runs
+   FAILOVER back to the old host.
 4. Deletes the app host's neighbour (ARP) entry for the IP (otherwise it keeps
    sending to the old host's MAC address, which the VPC drops, for 20-50s;
    Docker containers share the host's table), waits for the new host's
@@ -107,26 +112,32 @@ What it does:
    host and deletes the neighbour entry again. The move is asynchronous, and
    until the metadata lists the IP the VPC may still deliver to the old host,
    which as a replica answers (reads work, writes get `READONLY`); with the
-   address gone those packets would be dropped.
+   address gone those packets would be dropped. If the metadata has not listed
+   the IP after 20s the address stays on the old host, with a warning that
+   gives the `ip addr del` command to run there once AWS shows the IP on the
+   new host (the refresh timer would also drop it).
 5. Writes the IP to `/etc/blot-redis/floating-ip` on the new host (its backups
    start) and removes it on the old host.
 6. Comments out the old host's `ec2-user` crontab entries except the two
    monitoring logs, after saving the crontab to `~/crontab.before-cutover-*`.
    The hand-made backup scripts have none of `backup.sh`'s checks and upload
    to the same S3 names, so they would overwrite and prune the new host's
-   backups.
+   backups. If the crontab cannot be rewritten the script carries on and
+   reports it at the end.
 7. Restarts the refresh timers, waits for the clients that were connected
    through the floating IP to reconnect on the new host, checks the new host
    takes writes, and prints how long each step took. If none of those clients
-   arrived, it exits with an error (Redis has switched, but traffic may be
-   down: check the app host's neighbour entry for the IP) and the rollback
-   command.
+   arrived (Redis has switched, but traffic may be down: check the app host's
+   neighbour entry for the IP), or step 4 or 6 left something undone, it
+   exits with an error listing each problem, and the rollback command.
 
 Writes are unavailable from the FAILOVER until clients reach the new host.
 That must stay well under the folder lock's 10s TTL (`app/sync/lock.js`): a
 lock is lost when its key expires 10s after its last heartbeat, so depending
 on where the window falls the limit is 6-9s. Aim for about 3s; the script warns
-above 5s. Rehearse on two throwaway instances first: the script times the
+above 5s. It adds up durations that each come from one clock (the old host's
+FAILOVER, this machine's wait, the new host's watcher), never subtracting
+timestamps from different hosts. Rehearse on two throwaway instances first: the script times the
 `assign-private-ip-addresses` call and how long clients take to arrive, and a
 run with `--no-neigh-flush` shows what the neighbour flush buys.
 

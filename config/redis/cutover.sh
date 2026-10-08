@@ -79,6 +79,11 @@ case "$TIMEOUT_MS$LOCK_WAIT" in *[!0-9]*) die "--timeout-ms and --lock-wait take
 is_ip() { echo "$1" | grep -qE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; }
 now_ms() { perl -MTime::HiRes=time -e 'printf "%d\n", time * 1000'; }
 say() { printf '\n==> %s\n' "$*"; }
+# problem <text>: something went wrong after the IP moved. The run carries on
+# (the later steps still matter), then reports them all and exits 1.
+PROBLEMS=""
+problem() { echo "WARNING: $*"; PROBLEMS="$PROBLEMS$*
+"; }
 # shellcheck disable=SC2086
 aws_cli() { aws $AWS_PROFILE_ARGS --region "$AWS_REGION" "$@"; }
 
@@ -115,11 +120,12 @@ field() { echo "$1" | awk -v k="$2" '{i = index($0, "=")} i && substr($0, 1, i -
 gather() {
   on "$1" "KEEP_CRON='$KEEP_CRON'" << 'EOF'
 r() { redis6-cli "$@" | tr -d '\r'; }
-info=$(r INFO replication && r INFO server && r INFO memory) && [ -n "$info" ] || { echo redis=down; exit 0; }
+info=$(r INFO replication && r INFO server && r INFO memory && r INFO persistence) && [ -n "$info" ] || { echo redis=down; exit 0; }
 echo redis=up
-echo "$info" | grep -E '^(redis_version|role|master_host|master_port|master_link_status|master_repl_offset|master_failover_state|used_memory|slave[0-9]+):' | sed 's/:/=/'
+echo "$info" | grep -E '^(redis_version|role|master_host|master_port|master_link_status|master_repl_offset|master_failover_state|used_memory|rdb_last_bgsave_status|slave[0-9]+):' | sed 's/:/=/'
 echo "min_replicas=$(r CONFIG GET min-replicas-to-write | tail -n 1)"
 echo "maxmemory=$(r CONFIG GET maxmemory | tail -n 1)"
+echo "stop_writes_on_bgsave_error=$(r CONFIG GET stop-writes-on-bgsave-error | tail -n 1)"
 # The proxy's certificates (lua-resty-auto-ssl keys ssl:<domain>:latest) and
 # its issuance locks (ssl:<domain>:issue_cert_lock), with SCAN, never KEYS.
 r --scan --pattern 'ssl:*' | awk '/:latest$/ {c++} /:issue_cert_lock$/ {l++} END {print "ssl_latest=" c + 0; print "ssl_locks=" l + 0}'
@@ -226,11 +232,14 @@ behind=$(($(field "$OLD_INFO" master_repl_offset) - $(r offset)))
 [ "$(r state)" = online ] || die "$NEW is '$(r state)' on $OLD, not online"
 [ "$(r lag)" -le 1 ] && [ "$behind" -le "$MAX_LAG_BYTES" ] || die "$NEW is too far behind ($behind bytes, last ack $(r lag)s ago)"
 echo "Replication: $NEW is $behind bytes behind, last ack $(r lag)s ago"
-# Once promoted, min-replicas-to-write, or more data than maxmemory allows
-# (noeviction: OOM on every write), would refuse writes straight away.
+# Once promoted, min-replicas-to-write, more data than maxmemory allows
+# (noeviction: OOM on every write) or a failed background save (MISCONF on
+# every write) would refuse writes straight away.
 [ "$(field "$NEW_INFO" min_replicas)" = 0 ] || die "min-replicas-to-write is $(field "$NEW_INFO" min_replicas) on $NEW; it would refuse writes once promoted"
 maxmem=$(field "$NEW_INFO" maxmemory); used=$(field "$NEW_INFO" used_memory)
 [ "$maxmem" = 0 ] || [ "$used" -lt $((maxmem / 10 * 8)) ] || die "$NEW uses $used bytes, over 80% of its maxmemory $maxmem"
+[ "$(field "$NEW_INFO" rdb_last_bgsave_status)" = ok ] || [ "$(field "$NEW_INFO" stop_writes_on_bgsave_error)" != yes ] ||
+  die "the last background save on $NEW failed and stop-writes-on-bgsave-error is yes; it would refuse every write once promoted (MISCONF)"
 # The proxy trusts Redis over its own stale copy of a certificate, so one
 # missing on <new> would be re-issued about an hour later.
 [ "$(field "$NEW_INFO" ssl_latest)" = "$(field "$OLD_INFO" ssl_latest)" ] ||
@@ -296,7 +305,7 @@ cat << EOF
     FAILOVER TO $NEW_IP 6379 TIMEOUT $TIMEOUT_MS (FAILOVER ABORT if not done after $((TIMEOUT_MS + 1000))ms)
  3. aws ec2 assign-private-ip-addresses --network-interface-id $NEW_ENI --private-ip-addresses $FIP --allow-reassignment
  4. ${APP_IFS:+ip neigh del $FIP on:$APP_IFS; }wait for $NEW's metadata to list $FIP, then
-    $OLD: ip addr del $FIP/32 dev $OLD_IF${APP_IFS:+; ip neigh del again}
+    $OLD: ip addr del $FIP/32 dev $OLD_IF${APP_IFS:+; ip neigh del again} (kept, with a warning, if it never does)
  5. write $FIP to /etc/blot-redis/floating-ip on $NEW, remove it on $OLD
  6. $OLD: back up ec2-user's crontab, then comment out:
 $(if [ -n "$OLD_CRON" ]; then echo "$OLD_CRON" | sed 's/^/      /'; else echo "      (nothing)"; fi)
@@ -380,6 +389,7 @@ fi
 STAGE="FAILOVER (if unsure how it ended, run FAILOVER ABORT on $OLD)"
 say "2. FAILOVER $OLD -> $NEW"
 out=$(failover "$OLD" "$NEW_IP" "$LOCK_WAIT") || out="result=unknown"
+F1=$(now_ms) # before settle_old, so the time it takes counts in the outage
 result=$(field "$out" result); T0=$(field "$out" t0); T1=$(field "$out" t1)
 echo "$result${T0:+ after $((T1 - T0))ms}"
 if [ "$result" != done ]; then
@@ -388,7 +398,7 @@ if [ "$result" != done ]; then
   settle_old
   if [ "$settled" = done ]; then
     echo "$OLD is a replica of $NEW: the FAILOVER did complete; carrying on"
-    result=done; T0=$(now_ms); T1=$T0 # timings below count from here, not from the FAILOVER
+    result=done; T0=$(now_ms); T1=$T0 # <old>'s clock cannot time it now: F1 to W0 below counts the wait
   fi
 fi
 if [ "$result" != done ]; then
@@ -410,8 +420,10 @@ say "3. Moving $FIP to $NEW"
 # connections that were not there at the start count: Redis lists a dead one
 # until TCP keepalive notices (300s), so a host the IP left a few minutes ago
 # (a rollback) still shows the clients it had then.
+W0=$(now_ms)
 on "$NEW" "FIP=$FIP" "WANT=$CLIENTS" "WAIT=$CLIENT_WAIT" > "$CTL/clients" 2>&1 << 'EOF' &
 ms() { date +%s%3N; }
+start=$(ms)
 ids() { redis6-cli CLIENT LIST TYPE normal | grep "laddr=$FIP:6379" | cut -d' ' -f1; }
 known=$(ids)
 end=$(($(ms) + WAIT * 1000)); first=""; n=0
@@ -421,22 +433,31 @@ while [ "$(ms)" -lt "$end" ]; do
   if [ "$WANT" -gt 0 ] && [ "$n" -ge "$WANT" ]; then echo "all=$(ms)"; break; fi
   sleep 0.05
 done
-echo "first=$first"; echo "count=$n"
+echo "start=$start"; echo "first=$first"; echo "count=$n"
 EOF
 WATCHER=$!
 m0=$(now_ms)
 if ! aws_cli --cli-connect-timeout 3 --cli-read-timeout 10 ec2 assign-private-ip-addresses \
   --network-interface-id "$NEW_ENI" --private-ip-addresses "$FIP" --allow-reassignment; then
-  case ",$(eni "$NEW_IP" | awk '{print $5}')," in
-    *",$FIP,"*) echo "The call failed, but $FIP is on $NEW_ENI: carrying on" ;;
-    *)
-      # Clients still reach <old>, now a replica: switch Redis straight back.
-      echo "The IP did not move: switching Redis back to $OLD"
-      out=$(failover "$NEW" "$OLD_IP" 0) || out="result=unknown"
-      echo "FAILOVER back: $(field "$out" result)"
-      [ "$(field "$out" result)" != done ] || undo_prepare
-      die "the IP did not move; check that $OLD is the master again (redis6-cli INFO replication)" ;;
-  esac
+  # The read timeout is only a socket timeout: EC2 may have accepted the
+  # request, and the move is asynchronous. Writes stay unavailable while we
+  # poll (clients still reach <old>, now a replica), hence the bound.
+  moved=""; poll_end=$(($(now_ms) + 10000))
+  while :; do
+    case ",$(eni "$NEW_IP" | awk '{print $5}')," in *",$FIP,"*) moved=1; break ;; esac
+    [ "$(now_ms)" -lt "$poll_end" ] || break
+    sleep 0.5
+  done
+  if [ -n "$moved" ]; then
+    echo "The call failed, but $FIP is on $NEW_ENI: carrying on"
+  else
+    # Clients still reach <old>, now a replica: switch Redis straight back.
+    echo "The IP did not move: switching Redis back to $OLD"
+    out=$(failover "$NEW" "$OLD_IP" 0) || out="result=unknown"
+    echo "FAILOVER back: $(field "$out" result)"
+    [ "$(field "$out" result)" != done ] || undo_prepare
+    die "the IP did not move; check that $OLD is the master again (redis6-cli INFO replication)"
+  fi
 fi
 m1=$(now_ms)
 echo "assign-private-ip-addresses returned after $((m1 - m0))ms"
@@ -471,10 +492,11 @@ done
 exit 1'
 if echo "$imds_wait" | on "$NEW" "FIP=$FIP" "IF=$NEW_IF" "WANT=yes" "TRIES=100"; then
   echo "$NEW's metadata lists $FIP $(($(now_ms) - m1))ms after the call"
+  ssh_run "$OLD" "sudo -n ip addr del $FIP/32 dev $OLD_IF"
 else
-  echo "WARNING: $NEW's metadata does not list $FIP after 20s"
+  # Without that address <old> would black-hole whatever the VPC still delivers to it.
+  problem "$NEW's metadata does not list $FIP after 20s, so $FIP stays on $OLD. Once AWS shows it on $NEW, run on $OLD: sudo ip addr del $FIP/32 dev $OLD_IF (or start refresh-policy-routes@$OLD_IF.timer, which rebuilds the addresses from metadata and drops it)"
 fi
-ssh_run "$OLD" "sudo -n ip addr del $FIP/32 dev $OLD_IF"
 # Again, in case an entry was re-learned before the VPC switched (on a Docker
 # bridge both containers answer ARP while both have the address).
 flush
@@ -486,17 +508,20 @@ ssh_run "$OLD" "sudo -n rm -f /etc/blot-redis/floating-ip"
 say "6. Turning off the old backup jobs on $OLD"
 # They have none of backup.sh's checks and upload to the same S3 names, so
 # they would overwrite and prune the new host's backups.
-on "$OLD" "KEEP_CRON='$KEEP_CRON'" << 'EOF'
+# The IP has moved: a failure here must not stop step 7.
+on "$OLD" "KEEP_CRON='$KEEP_CRON'" << 'EOF' ||
 current=$(crontab -l 2> /dev/null) || { echo "    no crontab"; exit 0; }
 jobs=$(echo "$current" | grep -vE '^[[:space:]]*(#|$)' | grep -vE '^[A-Za-z_]+=' | grep -vE "$KEEP_CRON" || true)
 [ -n "$jobs" ] || { echo "    nothing to turn off"; exit 0; }
 backup=~/crontab.before-cutover-$(date -u +%Y%m%dT%H%M%SZ)
 echo "$current" > "$backup"
-echo "$current" | awk -v keep="$KEEP_CRON" '/^[[:space:]]*(#|$)/ || /^[A-Za-z_]+=/ || $0 ~ keep {print; next} {print "#cutover# " $0}' |
-  crontab -
+# Not in one pipeline: a failed awk must not install an empty crontab.
+new=$(echo "$current" | awk -v keep="$KEEP_CRON" '/^[[:space:]]*(#|$)/ || /^[A-Za-z_]+=/ || $0 ~ keep {print; next} {print "#cutover# " $0}') &&
+  echo "$new" | crontab - || { echo "    could not rewrite the crontab (saved copy: $backup)" >&2; exit 1; }
 echo "$jobs" | sed 's/^/    turned off: /'
 echo "    previous crontab: $backup"
 EOF
+  problem "could not turn off the old backup jobs on $OLD: comment them out by hand before the next :00"
 
 say "7. Checking"
 timer "$NEW" "$NEW_TIMER" start "$NEW_IF"
@@ -527,17 +552,25 @@ say "Timings"
 echo "FAILOVER (writes blocked, then switched): $((T1 - T0))ms"
 echo "assign-private-ip-addresses call: $((m1 - m0))ms"
 if [ -n "$first" ]; then
-  window=$((first - T0))
+  # Each part is a duration on one clock: <old>'s FAILOVER, the controller's
+  # wait from its return to the watcher's launch, <new>'s watcher start to the client.
+  lead=$((T1 - T0 + W0 - F1 - $(field "$WATCH" start)))
+  window=$((lead + first))
   echo "Writes unavailable (FAILOVER to the first client on $NEW): ${window}ms"
-  [ -z "$all" ] || echo "All $CLIENTS clients on $NEW after: $((all - T0))ms"
+  [ -z "$all" ] || echo "All $CLIENTS clients on $NEW after: $((lead + all))ms"
   [ "$window" -le "$BUDGET_MS" ] || echo "WARNING: over the ${BUDGET_MS}ms budget: expect [LOCK COMPROMISED] restarts"
 elif [ "$CLIENTS" -gt 0 ]; then
-  echo "error: none of the $CLIENTS clients reached $NEW within ${CLIENT_WAIT}s, so Redis traffic may be down." >&2
-  echo "Redis has switched and $FIP is on $NEW. Check the app host's neighbour entry for $FIP (ip neigh show $FIP;" >&2
-  echo "ip neigh del $FIP dev <if>) and its Redis connections. Rollback: $ROLLBACK" >&2
-  exit 1
+  problem "none of the $CLIENTS clients reached $NEW within ${CLIENT_WAIT}s, so Redis traffic may be down. Redis has switched and $FIP is on $NEW. Check the app host's neighbour entry for $FIP (ip neigh show $FIP; ip neigh del $FIP dev <if>) and its Redis connections."
 else
   echo "No client reached $NEW within ${CLIENT_WAIT}s"
+fi
+
+if [ -n "$PROBLEMS" ]; then
+  echo >&2
+  echo "error: $NEW is the master and has $FIP, but:" >&2
+  printf '%s' "$PROBLEMS" | sed 's/^/  - /' >&2
+  echo "Rollback: $ROLLBACK" >&2
+  exit 1
 fi
 
 say "Done: $NEW is the master"
