@@ -89,20 +89,20 @@ function readLog(file) {
   return out.sort((a, b) => a.t - b.t);
 }
 
-// The directory holding <name>: the one given, or the first sub-directory of root that has it.
-function findDir(root, given, name) {
+// The directory holding <name>: the one given, or the only sub-directory of root that has it.
+function findDir(root, given, name, option) {
   if (given) return given;
   if (!fs.existsSync(root)) return null;
-  for (const d of fs.readdirSync(root).sort()) {
-    const p = path.join(root, d);
-    if (fs.statSync(p).isDirectory() && (fs.existsSync(path.join(p, name)) || fs.existsSync(path.join(p, name + ".1")))) return p;
-  }
-  return null;
+  const found = fs.readdirSync(root).sort().map((d) => path.join(root, d)).filter(
+    (p) => fs.statSync(p).isDirectory() && (fs.existsSync(path.join(p, name)) || fs.existsSync(path.join(p, name + ".1")))
+  );
+  if (found.length > 1) throw new Error("more than one directory under " + root + " has " + name + " (" + found.map((p) => path.basename(p)).join(", ") + "): pass " + option + " to say which");
+  return found[0] || null;
 }
 
 function load(args) {
-  const redisDir = findDir(args.data, args.redisDir, "redis-sample.log");
-  const appDir = findDir(args.data, args.appDir, "latency-app-to-redis.log");
+  const redisDir = findDir(args.data, args.redisDir, "redis-sample.log", "--redis-dir");
+  const appDir = findDir(args.data, args.appDir, "latency-app-to-redis.log", "--app-dir");
   const rd = (dir, name) => (dir ? readLog(path.join(dir, name)) : []);
   const lockRecords = rd(appDir, "app-lock.log").map((r) => ({ t: r.t, container: r.f.container, slow: r.f.slow || 0, compromised: r.f.compromised || 0 }));
   return {

@@ -73,8 +73,9 @@ All times are UTC, in the logs and in `compare.js`.
 
    A time is `YYYY-MM-DD[THH[:MM]]`; the end of a window may be just `HH[:MM]`.
    Leave a few minutes at each end of the test window for `cpu-squeeze on`/`off`
-   to settle. It finds the logs under `data/redis-perf/` by itself (`--data`,
-   `--redis-dir` and `--app-dir` override).
+   to settle. It finds the logs under `data/redis-perf/` by itself if one
+   directory there has each (`--data`, `--redis-dir` and `--app-dir` override, and
+   are needed when several do).
 8. **Clean up:** `./install.sh --uninstall <redis-ssh-host> <app-ssh-host>` removes
    the cron lines (other crontab entries are untouched; the old crontab is saved as
    `~/perf/crontab.bak.<ts>`). Logs and scripts stay in `~/perf/` until you delete them.

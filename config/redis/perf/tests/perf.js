@@ -144,6 +144,20 @@ describe("redis perf tools", function () {
       fs.rmSync(dir, { recursive: true, force: true });
     });
 
+    it("refuses to pick between several log directories", function () {
+      const d = tmp();
+      for (const host of ["old-host", "new-host"]) {
+        write(path.join(d, host, "redis-sample.log"), "2026-10-08T12:00:00Z dt=60\n");
+        write(path.join(d, host, "latency-app-to-redis.log"), "");
+      }
+      const args = ["--data", d, "--baseline", "2026-10-07..2026-10-08", "--test", "2026-10-08..2026-10-09"];
+      expect(() => compare.main(args)).toThrowError(/more than one directory.*new-host, old-host.*--redis-dir/);
+      // naming the Redis directory is not enough: the app one is still ambiguous
+      expect(() => compare.main(args.concat(["--redis-dir", path.join(d, "old-host")]))).toThrowError(/--app-dir/);
+      expect(() => compare.main(args.concat(["--redis-dir", path.join(d, "old-host"), "--app-dir", path.join(d, "new-host")]))).not.toThrow();
+      fs.rmSync(d, { recursive: true, force: true });
+    });
+
     it("explains a missing argument or log directory", function () {
       expect(() => compare.main(["--baseline", "2026-10-07..2026-10-08"])).toThrowError(/required/);
       expect(() =>
