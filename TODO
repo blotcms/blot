@@ -6,10 +6,40 @@ Redis host follow-ups (from #2041, new host since 8 Oct):
 - Proxy: auto-ssl's lock and hook calls can reuse a timed-out Redis connection
 - Deploy log archive (scripts/deploy/index.js): docker logs -t, outside /tmp, more than 3 files, size-capped; let config/redis/perf/fetch.sh read it
 - Upgrade Redis (7 or Valkey), revisit AOF
+- Offsite Redis backups (e.g. Backblaze B2) alongside S3, so a lost AWS account or region doesn't take the backups with it: upload from config/redis/bin/backup.sh, and let launch.sh/restore.sh restore from B2 too (#2041)
+- Consider dropping Redis client-side caching (CLIENT TRACKING) in favour of the app's in-process LRU caches: on prod 10 clients have tracking on and the server's tracking table sits at its 1M-key cap (tracking-table-max-keys), so Redis is constantly evicting entries and sending invalidations
 
-Offsite Redis backups (e.g. Backblaze B2) alongside S3, so a lost AWS account or region doesn't take the backups with it: upload from config/redis/bin/backup.sh, and let launch.sh/restore.sh restore from B2 too (#2041)
-
-Consider dropping Redis client-side caching (CLIENT TRACKING) in favour of the app's in-process LRU caches: on prod 10 clients have tracking on and the server's tracking table sits at its 1M-key cap (tracking-table-max-keys), so Redis is constantly evicting entries and sending invalidations
+Proxy container follow-ups (cut over 8 Oct 2026, #1941)
+- Check webhooks. SSE through the container, and that a known data/static file on cdn. has Cache-Control 1y and no Blot-Upstream
+- After the next 03:46 logrotate: access.log/error.log still written after copytruncate, fail2ban counts still moving
+- After the next wildcard renewal (/home/ec2-user/renew-wildcard.log): container reloaded, served cert fingerprint matches /etc/ssl/private/letsencrypt-domain.pem
+- Custom-domain certs renew inside the container: none within ~20 days of expiry apart from domains that no longer point at Blot; identify-expiring-certs cron restarts the container cleanly
+- Reboot the host once in a maintenance window: mount-instance-store mounts without reformatting, docker starts after it, the proxy comes back with cache/log mounts, :80/:443 answer
+- First Deploy proxy workflow run after `sudo chgrp docker /etc/blot/proxy.env` (#2080 deployment plan)
+- Uninstall bare-metal OpenResty from the host after a month of full renewal cycles (it is the manual rollback until then)
+- HTTP/3 is not advertised (no Alt-Svc on either stack); decide whether to open UDP 443 and make fail2ban bans cover UDP too
+- http://www.blot.im/ returns 404: confirm intended
+- app/blog/static has no copy on the host, so those cdn. files fall through to Node: export them from the Node image on deploy, or accept
+- scripts/blog/reset-ssl-certificate-for-expired-domain.js calls the bare-metal /usr/local/openresty/bin/openresty; make it act on the container
+- cdn. responses carry Cache-Control twice (expires 1y + add_header), as on bare metal
+- Purges during a blue/green overlap reach only one container (shared SO_REUSEPORT on :8077)
+- Use the proxy container in local development instead of the nginx:alpine in scripts/development/proxy, so local.blot runs the production proxy config
+- Does proxy container deploy check for enough free memory and disk on host before proceeding?
+- Does proxy container deploy work in paralell with node container deploy with nothing breaking?
+- Get proxy horizontally scalable and multi-region
+- Can we add modern compression to proxy?
+- Can the proxy remember bad urls and avoid repeatedly sending them to upstream?
+- container equivalent for fail2ban?
+- Tune proxy next upstream status code conditions to preserve zero-downtime-deployments but prevent expensive requests (timeout?)
+- Add support for IPv6 and tell [Raul](https://mail.google.com/mail/u/0/#inbox/167083384282a5df)
+- Verify that nginx config serves as many CDN static files as possible
+- Investigate whether openrestycache can be modified to pre-compress gzip responses
+  - can we add support for brotli?
+  - can we use https://nginx.org/en/docs/http/ngx_http_gzip_static_module.html#gzip_static
+  - should we just be using varnish?
+- Can I use proxy_store instead of openrestycache?
+- Re-set up html minification using html-terser?
+- Get blot proxy communicating with node process via unix socket
 
 Migrate static content to s3
 
@@ -19,7 +49,7 @@ email warnings if no sync from client for more than x hours
 
 ---
 
-run node scripts/entry/rebuild-all.js -s 260 (226 on current run)
+run node scripts/entry/rebuild-all.js -s 810
 
 When you re-connect to Dropbox or Google Drive, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
 
@@ -91,8 +121,6 @@ Surface template choices on the templates subpages: switch from png to iframe af
 Perform caching and header audit of site and templates
 - Check logs and headers via curl
 - Identify optimizations
-
-Analyze the proposed proxy container for possible performance regressions after we switch
 
 12 factor screenshot as api
 - use macserver  (docker container?)
@@ -707,17 +735,6 @@ Improve folder to CDN pipeline
 
 Add per request resource monitoring, e.g. heap size before/after
 
-Improve openresty proxy:
-- Tune proxy next upstream status code conditions to preserve zero-downtime-deployments but prevent expensive requests (timeout?)
-- Add support for IPv6 and tell [Raul](https://mail.google.com/mail/u/0/#inbox/167083384282a5df)
-- Verify that nginx config serves as many CDN static files as possible
-- Investigate whether openrestycache can be modified to pre-compress gzip responses
-  - can we add support for brotli?
-  - can we use https://nginx.org/en/docs/http/ngx_http_gzip_static_module.html#gzip_static
-  - should we just be using varnish?
-- Can I use proxy_store instead of openrestycache?
-- Re-set up html minification using html-terser?
-
 Move image zoom plugin to templates
   - Fix bug with image zoomer on mobile devices and tell [Alessandro](https://mail.google.com/mail/u/0/#inbox/FMfcgxwChSCwptjLtLGMjWxdkQNnNfTk)
   - Fix bug with images zooming inside footnotes and tell [Nathan](https://mail.google.com/mail/u/0/#inbox/FMfcgzGtwWCBmtldhMfQRgZjHDpFvSGb)
@@ -964,7 +981,6 @@ Adjust title generator so h2 titles within the file dont become the title of the
 Server improvements:
 - Copy the cron tab into the new server setup script
 - Add more stringent checks to scripts which mount instance storage and external volumes
-- Get blot proxy communicating with node process via unix socket
 - Understand why the server gets so slow when we switch from SSD ebs to HDD ebs
 - it would be ideal to use HDD for bulk of blog storage, and take advantage of the local SSD for high performance operations
   - Investigate use of aws s3 sync for backing up ebs volume rather than snapshots

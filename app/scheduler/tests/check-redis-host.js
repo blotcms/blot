@@ -392,6 +392,7 @@ describe("scheduler check-redis-host", function () {
         stale: "20 minutes",
         errors: 100,
         slowlog: "50ms",
+        fork: "500ms",
         conditionInterval: "1 hour",
         eventCooldown: "6 hours",
       });
