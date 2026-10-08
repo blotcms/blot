@@ -23,6 +23,13 @@ case "$KIND" in
 esac
 
 log() { echo "[$(date +%Y-%m-%d-%H-%M-%S)] $KIND backup: $*"; }
+
+# A drill host (launch.sh --drill) holds a copy of production data and may be
+# put through a real cutover, which marks it active below. It must never upload
+# to (or prune) the production bucket.
+if [ -e /etc/blot-redis/drill ]; then
+  log "skipped: drill host (/etc/blot-redis/drill)"; exit 0
+fi
 redis() { redis6-cli "$@" | tr -d '\r'; }
 field() { redis INFO "$1" | awk -F: -v k="$2" '$1 == k {print $2}'; }
 
