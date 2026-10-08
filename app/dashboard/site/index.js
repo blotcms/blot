@@ -3,7 +3,7 @@ var site = express.Router();
 
 // N.B. In production a GET/HEAD to /sites/:handle/... is served by blue but any
 // other method (POST etc.) is served by green - see $dashboard_upstream in
-// config/openresty/conf/http.conf. A page load right after a save can therefore
+// proxy/config/http.conf. A page load right after a save can therefore
 // run in a different process from the write, so in-process caches (LRUs,
 // memoized lookups) can be stale across the redirect. Key caches on something
 // stored in Redis (e.g. blog.cacheID, which sync bumps, as the folder caches do)

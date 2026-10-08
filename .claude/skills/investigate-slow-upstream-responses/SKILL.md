@@ -27,7 +27,7 @@ operator has agreed to probing in this session. Its output in
 
 ## Background
 
-Log format (`config/openresty/conf/http.conf`, `access_log_format`):
+Log format (`proxy/config/http.conf`, `access_log_format`):
 
 ```
 [06/Oct/2026:09:28:17 +0000] <request_id> <status> <request_time> <req>:<bytes> <url>  cache=<HIT|MISS|-> ip=… st=<upstream_response_time> lrs=… up=<addr> ua=…

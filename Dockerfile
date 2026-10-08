@@ -151,7 +151,7 @@ RUN git config --global --add safe.directory /usr/src/app \
  && git config --global user.email "you@example.com" \
  && git config --global user.name "Your Name"
 
-# OpenResty is spawned by config/openresty (cacher) tests via `openresty -c ...`.
+# OpenResty is spawned by the proxy (cacher) tests in proxy/tests via `openresty -c ...`.
 # Alpine's community package installs the binary at /usr/lib/nginx/bin/openresty,
 # which start-openresty.sh already probes for. procps provides the `ps` used when
 # restarting OpenResty between specs; the /var dirs are nginx's compiled-in

@@ -11,7 +11,7 @@ ROOTDISK=$(lsblk -no PKNAME $(findmnt -n -o SOURCE /) | head -n1)
 EBS_DISK=$(nvme list | awk '/Elastic Block Store/ {print $1}' | grep -v "/dev/$ROOTDISK")
 
 # If you change the cache directory, make sure to update
-# the build-config.js property 'cache_directory'
+# the cache_directory default in proxy/build/locals.js
 mkdir -p /var/www/blot/data
 
 if [ -z "$EBS_DISK" ]; then

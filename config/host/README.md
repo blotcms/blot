@@ -31,8 +31,7 @@ mount-before-docker ordering takes effect at the next reboot.
 
 The install paths are load-bearing: `mount-instance-store.service` hardcodes
 `/home/ec2-user/scripts/mount-instance-store.sh`, cron calls
-`/home/ec2-user/scripts/renew-wildcard-ssl.sh`, and
-`proxy/deploy/cutover-from-baremetal.sh` looks for the helpers there.
+`/home/ec2-user/scripts/renew-wildcard-ssl.sh`.
 
 ## Scripts and cron
 
@@ -40,8 +39,8 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
   and reloads the proxy. It reads `/etc/blot/wildcard-ssl-env.sh` on the host.
   It runs daily from `/etc/cron.d/blot-wildcard-renewal` (`0 1 * * * root
   /home/ec2-user/scripts/renew-wildcard-ssl.sh >> /home/ec2-user/renew-wildcard.log`),
-  which was written by `config/openresty/scripts/setup.sh` when the host was
-  built, not by `deploy.sh`.
+  which was written by the bare-metal `setup.sh` when the host was built (see
+  below), not by `deploy.sh`.
 - `check_docker_health.sh` restarts containers Docker reports as unhealthy. It
   is run from cron every minute (see its header); `deploy.sh` does not install
   that entry.
@@ -50,3 +49,33 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
   `app/helper/email/admin/SSL_CERTIFICATE_ISSUES.txt`).
 - `mount-instance-store.sh` mounts the NVMe instance store at
   `/var/instance-ssd` (logs and cache) at boot.
+
+## What the old bare-metal setup script did
+
+`config/openresty/scripts/setup.sh` built the host when the proxy was bare-metal
+OpenResty. It was deleted when `proxy/` became the canonical proxy config, but
+the host it built is still the host in production, so this is what it left
+behind and what still depends on it. `deploy.sh` does not install any of it.
+
+- Installed the `redis6` package (the host's `redis-cli`, which
+  `proxy/deploy/common.sh` and `try-issuance.sh` need) and `nvme-cli` (used by
+  `mount-instance-store.sh`).
+- Installed `cronie` and wrote `/etc/cron.d/blot-wildcard-renewal`, which runs
+  `/home/ec2-user/scripts/renew-wildcard-ssl.sh` daily at 01:00 as root, logging
+  to `/home/ec2-user/renew-wildcard.log`. **The container host still relies on
+  this**: nothing else renews the wildcard certificate, so a rebuilt host needs
+  `cronie` running and that file recreated by hand.
+- Wrote the wildcard certificate and key from Redis (`blot:openresty:ssl:pem`
+  and `blot:openresty:ssl:key`) to `/etc/ssl/private/letsencrypt-domain.pem` and
+  `.key`, the directory the proxy container mounts read-only. On a rebuilt host
+  these must exist before `blue-green.sh` will start a container.
+- Enabled and started `mount-instance-store.service`, and installed the
+  `docker.service.d` drop-in (and an `openresty.service.d` one) that gate those
+  units on `/var/instance-ssd` being mounted. `deploy.sh` installs the
+  `mount-instance-store.service` and `docker.service.d` files.
+- Installed OpenResty (yum repo `openresty.org`), luarocks and
+  `lua-resty-auto-ssl`, created `/etc/resty-auto-ssl`, and pointed
+  `/usr/local/openresty/nginx/conf/nginx.conf` at
+  `/home/ec2-user/openresty/openresty.conf`. All of that has since been
+  uninstalled from the production host; a rebuilt host does not need it, since
+  the proxy runs from the container image.

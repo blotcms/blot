@@ -4,7 +4,7 @@
 # CDN edge list, from the container's environment. Run by entrypoint.sh on
 # every start and by proxy/deploy/reload-config.sh before a reload.
 #
-# The template carries ${PROXY_*} placeholders (config/openresty/locals.js).
+# The template carries ${PROXY_*} placeholders (proxy/build/locals.js).
 # For each one, the value is, in order: the container's environment, then
 # defaults.env (baked in at build time from REDIS_IP, SERVER_LABEL and
 # OPENRESTY_RESOLVER, and today's loopback upstreams).

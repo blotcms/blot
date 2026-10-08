@@ -43,7 +43,8 @@ if ! blkid "$EPHEMERAL_DISK" >/dev/null 2>&1; then
 fi
 
 # If you change the cache directory, make sure to update
-# the build-config.js propert 'cache_directory'
+# the cache_directory default in proxy/build/locals.js and PROXY_CACHE_DIR in
+# proxy/deploy/common.sh
 mkdir -p /var/instance-ssd
 
 mount "$EPHEMERAL_DISK" /var/instance-ssd

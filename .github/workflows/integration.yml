@@ -24,7 +24,6 @@ on:
     paths:
       - ".github/workflows/integration.yml"
       - "proxy/**"
-      - "config/openresty/**"
       - "package.json"
       - "app/config.js"
       - "config/index.js"
@@ -33,7 +32,6 @@ on:
     paths:
       - ".github/workflows/integration.yml"
       - "proxy/**"
-      - "config/openresty/**"
       - "package.json"
       - "app/config.js"
       - "config/index.js"
@@ -73,7 +71,7 @@ jobs:
       - name: Start proxy + stub upstream
         run: |
           # A file under the image's default GLOBAL_STATIC_FILES_DIR
-          # (config/openresty/locals.js), read-only, so checks.sh can prove
+          # (proxy/build/locals.js), read-only, so checks.sh can prove
           # cdn. serves it from disk (location @cdn_global in server.conf)
           # instead of falling through to the stub upstream.
           mkdir -p "$RUNNER_TEMP/global-static"

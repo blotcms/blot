@@ -118,7 +118,7 @@ send_until 403 -H 'Host: someblog.example' -H "X-Forwarded-For: $SPOOFED_XFF_IP"
 n403=$((n403 + 1))
 
 echo "-- nginx-403 again, this time with a spoofed CF-Connecting-IP"
-# This is the header config/openresty/conf/cloudflare-real-ip.conf actually
+# This is the header proxy/config/cloudflare-real-ip.conf actually
 # trusts (real_ip_header CF-Connecting-IP) - but only when the *immediate*
 # TCP peer is one of Cloudflare's own edge ranges (set_real_ip_from). This
 # request comes directly from the runner, not from one of those ranges, so

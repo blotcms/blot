@@ -41,8 +41,8 @@ RUN curl -fsSL -o /vendor/lualib/resty/auto-ssl/vendor/shell.lua \
 # handling a current ACME server rejects ("Key ID (kid) in JWS header missing
 # expected URL prefix"). Use maintained 0.7.2 instead - the hook contract
 # (bin/resty-auto-ssl/letsencrypt_hooks) is unchanged and it tolerates any
-# extra hooks 0.7.x adds. The bare-metal config/openresty still uses the
-# 0.6.5 pin; unifying that is tracked in TODO.
+# extra hooks 0.7.x adds. The bare-metal OpenResty install this
+# replaced, now gone from the host, had the 0.6.5 pin.
 ARG DEHYDRATED_TAG=v0.7.2
 RUN curl -fsSL -o /vendor/resty-auto-ssl/dehydrated \
       "https://raw.githubusercontent.com/dehydrated-io/dehydrated/${DEHYDRATED_TAG}/dehydrated" && \
@@ -76,7 +76,7 @@ COPY --from=deps /vendor/resty-auto-ssl/ /usr/bin/resty-auto-ssl/
 RUN chmod 0755 /usr/bin/resty-auto-ssl/*
 
 # Per-container runtime dir for the health-probe Unix socket (see
-# proxy/build/sync-config.js, which injects it into the copied server.conf).
+# proxy/config/server.conf).
 # entrypoint.sh also (re)creates and chowns it.
 RUN mkdir -p /run/openresty
 

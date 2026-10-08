@@ -46,7 +46,7 @@ nginx access log (for cross-checking / a broader traffic sample, and to see
 ssh blot "wc -l /var/instance-ssd/logs/access.log"
 ```
 
-Log format (see `config/openresty/conf/http.conf` `log_format
+Log format (see `proxy/config/http.conf` `log_format
 access_log_format`): space-separated, `$7` = full URL, `$10` = `st=` value
 (comma-separated if the request was retried across upstreams — sum the
 parts). `st=-` means no upstream was contacted (pure cache hit) — skip

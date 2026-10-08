@@ -1,6 +1,6 @@
 # Publishes the proxy container image (proxy/) to GHCR as
-# ghcr.io/<owner>/blot-proxy:<commit sha>, for proxy/deploy/blue-green.sh and
-# cutover-from-baremetal.sh to pull. Mirrors the app and airlock jobs in
+# ghcr.io/<owner>/blot-proxy:<commit sha>, for proxy/deploy/blue-green.sh to
+# pull. Mirrors the app and airlock jobs in
 # build.yml: one image per architecture, then a multi-arch manifest.
 #
 # Every push to master gets an image, so `npm run deploy-proxy` and the Deploy
@@ -22,7 +22,6 @@ on:
     paths:
       - ".github/workflows/proxy-image.yml"
       - "proxy/**"
-      - "config/openresty/**"
       - "package.json"
       - "app/config.js"
       - "config/index.js"

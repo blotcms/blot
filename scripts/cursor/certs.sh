@@ -10,7 +10,7 @@ export CAROOT="$(mkcert -CAROOT)"
 
 mkcert -install >/dev/null 2>&1 || true
 
-# wildcard.crt / wildcard.key consumed by config/openresty (see setup.sh).
+# wildcard.crt / wildcard.key consumed by the local-dev nginx (see scripts/development/proxy/setup.sh).
 bash "$REPO_DIR/scripts/development/proxy/setup.sh" "${BLOT_HOST:-local.blot}"
 
 # Trust the mkcert root CA in Chrome's NSS database for computer-use testing.

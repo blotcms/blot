@@ -63,7 +63,6 @@ jobs:
         - app/storage:1
         - app/sync:1
         - app/templates:1
-        - config/openresty:1
         - config/redis:1
         - proxy:1
         - scripts/deploy:1

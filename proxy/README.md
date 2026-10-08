@@ -1,28 +1,25 @@
-# Containerised OpenResty proxy (build-only scaffolding)
+# Containerised OpenResty proxy
 
-This directory is a work-in-progress containerisation of the OpenResty reverse
-proxy that currently runs on bare metal from [`config/openresty`](../config/openresty).
-
-**It is not wired to production.** Nothing here is deployed, and merging it
-changes no running system. The goal at this stage is only that the image
-builds, the generated config is valid, and the container boots and serves a
-health check, so the work stops rotting while the remaining pieces are done
-separately.
+The OpenResty reverse proxy that fronts Blot. Production has run it from this
+image since 8 Oct 2026 (#1941), deployed with `npm run deploy-proxy` or the
+Deploy proxy workflow (see [`deploy/README.md`](deploy/README.md)). The
+nginx config and Lua in `config/` are the only copy. The bare-metal OpenResty
+install that preceded the container has been removed from the host; to roll
+back, deploy an older image.
 
 ## Layout
 
 | Path | Purpose |
 | --- | --- |
-| `config/` | Generated copy of [`config/openresty/conf`](../config/openresty/conf). Do not edit. |
-| `html/` | Generated copy of [`config/openresty/html`](../config/openresty/html). Do not edit. |
-| `build/sync-config.js` | Copies the canonical files into `config/` + `html/` and applies container-only patches (stdout logs, `reuseport`, ACME CA, health socket, ...). |
-| `build/index.js` | Renders `config/server.conf` + partials into a single `openresty.conf`, with the locals from [`config/openresty/locals.js`](../config/openresty/locals.js) (shared with the bare-metal generator; `config/openresty/tests/locals.js` fails if a template reads a variable either leaves undefined). |
+| `config/` | The nginx config as mustache templates (`server.conf` includes the others as partials) plus `cacher.lua`. Edit these. |
+| `html/` | Error pages served when an upstream is offline. |
+| `build/index.js` | Renders `config/server.conf` + partials into a single `openresty.conf`, with the locals from [`build/locals.js`](build/locals.js). `tests/locals.js` fails if a template reads a variable that `locals.js` leaves undefined. |
 | `build/build.sh` | Wrapper that runs `build/index.js` with the container's paths. Run this before `docker build`. |
 | `build/data/latest/` | Generated output (git-ignored). |
 | `Dockerfile` | Two-stage build: vendors the Lua deps, then assembles the image. |
 | `entrypoint.sh` | Fixes volume ownership, optionally trusts a test ACME CA, then starts OpenResty with a SIGTERM drain (`openresty -s quit`). |
-| `deploy/` | `blue-green.sh` (image swap via SO_REUSEPORT + drain, per-container health socket, requires a real cert mount) (and `reload-config.sh`, which needs a bind-mounted conf dir the production scripts do not use). They are run on the host; see [`deploy/README.md`](deploy/README.md) for the first cutover from bare-metal (`cutover-from-baremetal.sh`) and the checks each script makes. |
-| `tests/` | Cache (`cacher.lua`) behaviour specs. Run as the `proxy` suite in the `node` workflow's test matrix, same as `config/openresty`. |
+| `deploy/` | `blue-green.sh` (image swap via SO_REUSEPORT + drain, per-container health socket, requires a real cert mount) (and `reload-config.sh`, which needs a bind-mounted conf dir the production scripts do not use). They are run on the host; see [`deploy/README.md`](deploy/README.md) for the checks each script makes. |
+| `tests/` | Cache (`cacher.lua`) behaviour specs and a check that every variable the config reads has a value. Run as the `proxy` suite in the `node` workflow's test matrix. |
 | `e2e/` | Full-stack checks driven through the built image (stub upstream + a real Blot app container + Pebble for certs). Run by the `integration` workflow. |
 
 ## Build and run locally
@@ -56,15 +53,15 @@ serves any host:
 | `PROXY_FETCH_CDN_IPS` | `true` | fetch the Bunny edge list (exempt from rate limits) at start; `false` uses the list baked into the image |
 
 The upstream groups keep their weights and failover roles from
-`config/openresty/conf/http.conf`; only where each Node is changes. The Bunny
+`config/http.conf`; only where each Node is changes. The Bunny
 list is fetched on start and falls back to the baked-in one, so a running
 container does not pick up changes to it until it restarts.
 
 `BLOT_HOST` at `docker run` time is only read by `entrypoint.sh` for
 certificate handling; it does not change the already-generated vhosts. Set it
 when running `build.sh` to change the domain the config is built for.
-`build.sh` also fetches BunnyCDN edge IPs for the rate-limit whitelist (same
-as `config/openresty/build-config.js`); CI sets `FETCH_CDN_IPS=false` so image
+`build.sh` also fetches BunnyCDN edge IPs for the rate-limit whitelist (the
+list baked into the image as a fallback); CI sets `FETCH_CDN_IPS=false` so image
 builds do not depend on that API.
 
 HTTP/3 (QUIC) is served on UDP `:443` as on bare-metal, so the host firewall and
@@ -75,7 +72,7 @@ using `--network host`.
 `worker_priority` in an unprivileged container.
 
 CI runs the same steps in [`.github/workflows/proxy.yml`](../.github/workflows/proxy.yml)
-on any change under `proxy/` or `config/openresty/` (plus `package.json` and
+on any change under `proxy/` (plus `package.json` and
 `config/index.js`, which the generator reads).
 
 ## Certificate issuance for custom domains
@@ -87,7 +84,7 @@ over `/etc/ssl/private/letsencrypt-domain.{pem,key}` (the image ships a
 self-signed placeholder so OpenResty can start).
 
 - **Which domains are allowed**: `allow_domain` in
-  [`config/openresty/conf/init.conf`](../config/openresty/conf/init.conf) returns true only if
+  [`config/init.conf`](config/init.conf) returns true only if
   `domain:<host>` exists in Redis (Blot writes this key in
   `app/models/blog/set.js`) or the cert is already cached.
 - **ACME endpoint**: the runtime setting `PROXY_ACME_CA`, default Let's
@@ -100,7 +97,7 @@ self-signed placeholder so OpenResty can start).
 - **Trusting a test CA**: set `ACME_CA_CERT` to a PEM path (mounted into the
   container); `entrypoint.sh` exports `CURL_CA_BUNDLE`/`SSL_CERT_FILE` so the
   `dehydrated` hook accepts a non-public ACME endpoint. Unset in production.
-- **Pre-cutover check against a real ACME server**:
+- **Check against a real ACME server before deploying an image**:
   [`deploy/try-issuance.sh`](deploy/try-issuance.sh) runs the image with
   `PROXY_ACME_CA` set to Let's Encrypt staging for a throwaway domain and
   confirms a staging certificate is issued. See
@@ -120,9 +117,9 @@ self-signed placeholder so OpenResty can start).
 
 `lua-resty-auto-ssl` is effectively unmaintained, and its shell-out chain
 (`dehydrated` + `sockproc` + the `:8999` hook server) is why the image vendors
-and patches so much, why `dehydrated` has drifted from the bare-metal pin, and
+and patches so much, why `dehydrated` is vendored separately from its pin, and
 why issuance can be flaky during a blue/green overlap. Options worth a spike
-before cutover - none evaluated or tested yet:
+(none evaluated or tested yet):
 
 - **[`lua-resty-acme`](https://github.com/fffonion/lua-resty-acme)** - pure-Lua
   ACMEv2 client with an on-demand `autossl` mode; would keep OpenResty and
@@ -139,17 +136,15 @@ before cutover - none evaluated or tested yet:
   statically declared `server_name`s and probably does not fit on-demand
   issuance (unverified).
 
-## Deployment (mechanism only - not wired to production)
+## Deployment
 
 The container runs with `--network host` (the generated upstreams are
 `127.0.0.1:8088-8091`). Two kinds of change:
 
-- **Config-only** (a `.conf` edit): keep the container, use
-  [`deploy/reload-config.sh`](deploy/reload-config.sh)`<container> <host-conf-dir>`
-  - it regenerates the config, **writes `nginx.conf` into the bind-mounted
-    config dir**, then runs `openresty -t` and `openresty -s reload` inside
-    the container. The listening sockets are never dropped. `cacher.lua` /
-    `html` need their own bind-mounts if a change touches them.
+- **Config-only** (a `.conf` edit): ship it as a new image like any other
+  change. [`deploy/reload-config.sh`](deploy/reload-config.sh) can reload a
+  container whose conf directory is bind-mounted, but the production
+  containers do not mount one.
 - **Image change** (base image, Lua deps, Dockerfile): use
   [`deploy/blue-green.sh`](deploy/blue-green.sh). The generated config sets
   `reuseport` on the single default server for `:80` and `:443` (and on the
@@ -218,28 +213,24 @@ Reproducibility relies on pinning, because the upstream toolchain has drifted:
 
 ## Not done yet
 
-Still build-only scaffolding: nothing here is deployed. Certificate issuance,
-the deploy mechanism and persistent volumes now exist and are covered by CI
-(above), but before this can replace `config/openresty`:
+Open items are tracked in the repo's `TODO` under "Proxy container (OpenResty)"
+and "Proxy container follow-ups". The main ones:
 
-- **Fold container adaptations back in.** `proxy/build/sync-config.js` still
-  patches a copy of `config/openresty` (stdout logs, `reuseport`, ACME CA,
-  the per-container health socket). When this directory becomes canon, those
-  bits belong in the files themselves and the copy step goes away.
-- **Redis auth/TLS**. `config/openresty/conf/init.conf` hard-codes port 6379 with no auth;
+- **Redis auth/TLS**. `config/init.conf` hard-codes port 6379 with no auth;
   production Redis credentials need wiring.
 - **`fail2ban` / `logrotate`** are host-level in [`config/host`](../config/host); the
-  container logs to stdout/stderr (so `docker logs` and the host's log
-  shipper work) but has no equivalent request-ban layer.
-
-Tracked in the repo's `TODO` under "Proxy container (OpenResty)".
+  container logs to stdout/stderr by default (so `docker logs` works), but the
+  production image is built with `LOG_TO_STDOUT=false` so the host's fail2ban
+  and logrotate can read the shared log directory, and the container has no
+  request-ban layer of its own.
+- **Replacing `lua-resty-auto-ssl`** (above).
 
 ## Tests
 
 - **`proxy` suite** (`.github/workflows/node.yml` test matrix) runs
   `proxy/tests/*.js` inside the Blot dev image, spinning up OpenResty against
-  `config/openresty/conf/cacher.lua` - the `cacher.lua` behaviour specs (`basic`, `gzip`,
-  `inspect`, `lru_purge`, `rehydrate`, plus `coverage` for per-host keys,
+  `config/cacher.lua` - the `cacher.lua` behaviour specs (`basic`, `gzip`,
+  `inspect`, `lru_purge`, `rehydrate`, `startup`, plus `coverage` for per-host keys,
   method/health cacheability, binary bodies and argument validation).
 - **`integration` workflow** (`.github/workflows/integration.yml`):
   - `proxy/e2e/checks.sh` drives the built image against

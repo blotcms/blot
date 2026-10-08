@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 #
-# A self-signed CA plus a wildcard leaf certificate for BLOT_HOST (blot.im -
-# the bare-metal generator hardcodes that host name regardless of BLOT_HOST,
-# see config/openresty/locals.js's baremetal(), so this harness uses it too),
-# trusted by the runner's CA store so curl's ordinary certificate validation
-# (https_status in proxy/deploy/common.sh) passes without CURL_CA_BUNDLE /
-# -k. served_cert_matches_disk compares the served certificate's fingerprint
+# A self-signed CA plus a wildcard leaf certificate for BLOT_HOST (blot.im,
+# the host the image's virtual hosts are built for), trusted by the runner's
+# CA store so curl's ordinary certificate validation (https_status in
+# proxy/deploy/common.sh) passes without CURL_CA_BUNDLE / -k.
+# served_cert_matches_disk compares the served certificate's fingerprint
 # against $CERT_DIR/letsencrypt-domain.pem byte for byte, so the leaf here IS
 # that file - no chain, matching the single PEM the real host has.
 #

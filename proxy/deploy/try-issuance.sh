@@ -2,7 +2,7 @@
 #
 # Issue a certificate through the proxy image from Let's Encrypt STAGING, for a
 # throwaway domain, without touching what is serving. Run it on the production
-# host, before a cutover or blue-green deploy:
+# host, before a blue-green deploy:
 #
 #   proxy/deploy/try-issuance.sh <commit-sha | image> <throwaway-domain>
 #

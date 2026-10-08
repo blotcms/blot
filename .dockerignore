@@ -12,7 +12,7 @@ node_modules/
 package-lock.json
 app/views-built/
 data/
-config/openresty/tests/data/
+proxy/tests/data/
 
 # Test and benchmark fixtures (~45MB) are never used at runtime. The dev/CI
 # image bind-mounts the working tree instead of copying it, so these are still
