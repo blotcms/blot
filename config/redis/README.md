@@ -216,7 +216,7 @@ with the clients' folders.
 
 1. `./launch.sh --list` and pick the newest backup.
 2. `./launch.sh --type x2gd.medium --from <backup-name> --key ~/key.pem`
-   (or a larger type). This took 2m31s for 2.2M keys in the 8 Oct drill: ~35s
+   (or a larger type). This took 2m31s for the full dataset in the 8 Oct drill: ~35s
    to ssh, ~45s bootstrap, ~50s download and RDB check, ~13s load.
 3. Check it on the host: `redis6-cli ROLE` is master, `DBSIZE` is about what
    it was on the old master, `INFO memory` is well under `maxmemory`, and

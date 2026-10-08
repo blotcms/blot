@@ -373,6 +373,6 @@ Entry template:
   `assign-private-ip-addresses` 1.8s), no folder lock lost. The TCP memory
   alert cleared. The same fix-probe on the new host: worst shared-connection
   wait 188ms, 0 retransmits. A disaster-recovery restore drill
-  (`launch.sh --drill`, newest backup) took 2m31s for 2.16M keys.
+  (`launch.sh --drill`, newest backup) took 2m31s for the full production dataset.
 - Follow-up: the previous host was terminated. Remaining items are under
   "Redis host follow-ups" in `TODO`.
