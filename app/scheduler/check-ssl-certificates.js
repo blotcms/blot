@@ -6,7 +6,7 @@
 // attempts. We warn long before the certificate expires and auto-ssl deletes it.
 //
 // The wildcard certificate for *.<host> is renewed by
-// config/openresty/scripts/renew-wildcard-ssl.sh, which writes it to Redis.
+// config/host/scripts/renew-wildcard-ssl.sh, which writes it to Redis.
 //
 // Print the report without sending email:
 //   NODE_PATH=app node app/scheduler/check-ssl-certificates.js

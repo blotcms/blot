@@ -11,7 +11,7 @@ export CAROOT="$(mkcert -CAROOT)"
 mkcert -install >/dev/null 2>&1 || true
 
 # wildcard.crt / wildcard.key consumed by config/openresty (see setup.sh).
-bash "$REPO_DIR/config/openresty/setup.sh" "${BLOT_HOST:-local.blot}"
+bash "$REPO_DIR/scripts/development/proxy/setup.sh" "${BLOT_HOST:-local.blot}"
 
 # Trust the mkcert root CA in Chrome's NSS database for computer-use testing.
 # Wrapped in `timeout` because certutil can block on the DB lock if Chrome is

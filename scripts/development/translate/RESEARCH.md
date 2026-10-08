@@ -228,7 +228,7 @@ routing → the `config.host` value the rest of the script will build URLs from.
   `*.blot` — including wildcard subdomains such as `<handle>.local.blot` and
   `preview-of-x-on-y.local.blot` — to `127.0.0.1`. There is **no** `/etc/hosts`
   entry for `local.blot`; do not look for one.
-- `config/openresty/setup.sh` generates a wildcard cert for `$BLOT_HOST` and
+- `scripts/development/proxy/setup.sh` generates a wildcard cert for `$BLOT_HOST` and
   `*.$BLOT_HOST` with `mkcert` into `data/ssl/`, and `mkcert -install` trusts it.
   It exits early if `data/ssl/certs/wildcard.crt` and `.../private/wildcard.key`
   already exist.
@@ -1704,7 +1704,7 @@ app/templates/folders/index.js               round-trip validation pattern (§5.
 ```
 app/server.js:116                            GET /health (Express catch-all)
 app/site/index.js:49                         GET /health (site vhost)
-config/openresty/setup.sh                    mkcert wildcard cert into data/ssl
+scripts/development/proxy/setup.sh                    mkcert wildcard cert into data/ssl
 /etc/resolver/blot                           nameserver 127.0.0.1 → *.blot wildcard
 ```
 

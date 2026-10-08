@@ -1,6 +1,6 @@
 name: proxy-fail2ban
 
-# Proves that host fail2ban (config/openresty/fail2ban/jail.local, which
+# Proves that host fail2ban (config/host/fail2ban/jail.local, which
 # reads /var/instance-ssd/logs/access.log - the container's log dir bind
 # mount, see proxy/deploy/common.sh) still bans on the container's access
 # log the way it did on bare metal.
@@ -10,7 +10,7 @@ name: proxy-fail2ban
 # runner, sends requests through a stub upstream that should each produce a
 # 403 / 404 / 429 / 444, and runs the real `fail2ban-regex` against the
 # resulting access.log with every filter in
-# config/openresty/fail2ban/filter.d/ - asserting each one matches exactly
+# config/host/fail2ban/filter.d/ - asserting each one matches exactly
 # the requests meant to trigger it, AND that the <HOST> it extracts is the
 # real client IP (not an attacker-supplied X-Forwarded-For), since that's
 # what fail2ban actually bans.
@@ -30,6 +30,7 @@ on:
       - ".github/workflows/proxy-fail2ban.yml"
       - "proxy/**"
       - "config/openresty/**"
+      - "config/host/**"
       - "package.json"
       - "app/config.js"
       - "config/index.js"
@@ -39,6 +40,7 @@ on:
       - ".github/workflows/proxy-fail2ban.yml"
       - "proxy/**"
       - "config/openresty/**"
+      - "config/host/**"
       - "package.json"
       - "app/config.js"
       - "config/index.js"
