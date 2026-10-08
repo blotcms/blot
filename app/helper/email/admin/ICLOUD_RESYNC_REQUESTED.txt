@@ -1,3 +1,0 @@
-iCloud resync requested
-
-A resync was requested for site {{blogID}}.
