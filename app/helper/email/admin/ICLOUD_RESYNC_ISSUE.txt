@@ -1,0 +1,32 @@
+iCloud resync found changes
+
+The macserver requested a resync after a push to Blot failed, and the resync found differences on iCloud: changes that only reached Blot because of the resync (or repairs by Fix(), or errors) for the following sites.
+
+{{#reason}}Reason: {{reason}}{{/reason}}{{^reason}}No reason was given (an older macserver).{{/reason}}
+
+{{#blogs}}
+**{{id}} {{handle}}**
+
+`logs <blue|green|yellow> | grep "{{truncatedId}} sync_"` (the request can land on any container)
+`access {{handle}}`
+
+{{#hasChanges}}
+- {{changeCount}} unsynced change{{#changeCountPlural}}s{{/changeCountPlural}} (downloaded: {{downloaded}}, removed: {{removed}}, created dirs: {{createdDirs}}, excluded as edited during the walk: {{excluded}})
+{{/hasChanges}}
+{{#hasRepairs}}
+- Fix() repaired:
+{{#checks}}
+  - **{{name}}** — {{count}} item{{#countPlural}}s{{/countPlural}}
+{{#sample}}
+    - {{.}}
+{{/sample}}
+{{#hasMore}}
+    - ...and {{moreCount}} more
+{{/hasMore}}
+{{/checks}}
+{{/hasRepairs}}
+{{#errors}}
+- error during {{phase}}: {{message}}
+{{/errors}}
+
+{{/blogs}}

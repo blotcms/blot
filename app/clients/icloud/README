@@ -35,7 +35,7 @@ The architecture separates concerns:
 
 - `resync.js` - The client's `resync`. Refuses (with a `code` the dashboard recognises) when the folder was deleted or the initial transfer hasn't finished, since resyncing would remove local files iCloud doesn't have; otherwise runs `sync/fromiCloud.js`.
 
-- `init.js` - Initialization and background job orchestration. On startup, resumes any interrupted initial transfers. Schedules the hourly validation sweep (`:45`; Dropbox runs at `:00`, Google Drive at `:30`): for each blog whose `lastSync` is within the last hour it walks the folder under the sync lock, runs Fix() if the walk succeeded, and emails one `ICLOUD_SYNC_ISSUE` digest (`clients/util/syncReport.js`) listing changes it had to pull, Fix() repairs, errors (including walks that swallowed failures) and stuck locks. Blogs with a user-side issue (folder deleted, storage full) are skipped silently, and an ongoing error or stuck lock is emailed once per occurrence. The daily full resync and the startup resync are exported but not scheduled. Monitors macro server health.
+- `init.js` - Initialization and background job orchestration. On startup, resumes any interrupted initial transfers. Schedules the hourly validation sweep (`:45`; Dropbox runs at `:00`, Google Drive at `:30`): for each blog whose `lastSync` is within the last hour it walks the folder under the sync lock and runs Fix() if the walk succeeded (both in `sync/validateBlog.js`), and emails one `ICLOUD_SYNC_ISSUE` digest (`clients/util/syncReport.js`) listing changes it had to pull, Fix() repairs, errors (including walks that swallowed failures) and stuck locks. Blogs with a user-side issue (folder deleted, storage full) are skipped silently, and an ongoing error or stuck lock is emailed once per occurrence. The daily full resync and the startup resync are exported but not scheduled. Monitors macro server health.
 
 - `disconnect.js` - Handles client disconnection. Notifies the remote macserver to disconnect (best-effort), then locally removes the blog's database entry and clears the blog's client assignment.
 
@@ -48,6 +48,8 @@ The architecture separates concerns:
 Core bidirectional sync logic. All sync operations acquire and hold a sync lock via `establishSyncLock()` to prevent concurrent modifications.
 
 - `initialTransfer.js` - Orchestrates the one-time setup flow when a user first connects an iCloud folder. Resolves case conflicts in the folder, syncs files to iCloud (skipDeletions mode), verifies the transfer, syncs back from iCloud, then signals the macserver to begin watching.
+
+- `validateBlog.js` - The per-blog check shared by the hourly validation and the macserver-requested resync: walks under the sync lock (taking it, or using one the caller already holds), records the walk in a `syncReport`, releases the lock, then runs Fix() on a freshly loaded blog and records it. Walk and Fix() failures are recorded, not thrown.
 
 - `fromiCloud.js` - Syncs remote iCloud folder state down to local Blot storage. Recursively walks the remote folder tree, comparing sizes to detect changes, downloading new/modified files, removing local files that don't exist remotely, and creating local directories as needed. Skips ignored files and oversized files (creating empty placeholders instead). Returns a summary of changes, including `failed`/`firstError` for the failures it swallows rather than throws.
 
@@ -78,7 +80,7 @@ Authenticated endpoints called by the remote macserver to report status, upload/
   - `/delete` - POST endpoint to delete files locally on behalf of macserver.
   - `/mkdir` - POST endpoint to create directories locally.
 
-- `status.js` - Handles macserver status updates. Processes resync requests (with deduplication to avoid duplicate in-flight syncs), acceptedSharingLink notifications (triggering initialTransfer), and general sync notifications. Deduplicates resync requests within a 10-second window.
+- `status.js` - Handles macserver status updates. Processes resync requests (with deduplication to avoid duplicate in-flight syncs), acceptedSharingLink notifications (triggering initialTransfer), and general sync notifications. Deduplicates resync requests within a 10-second window. A resync request (`{ resyncRequested, reason }`, where `reason` is the macserver's description of the failed push and is not stored on the account) runs the same walk and Fix() as the hourly validation through `sync/validateBlog.js`, with the lock it already holds, then emails `ICLOUD_RESYNC_ISSUE` only if the resync found changes, Fix() repaired something or a phase errored (at most one per blog per hour).
 
 - `upload.js` - Binary file upload handler. Accepts raw binary data, validates headers, stores files locally, and supports placeholder uploads for oversized files. Treats a file as already current when its contents match, regardless of mtime, since local storage doesn't keep a settable modification time. Uses sync lock to coordinate with other operations.
 
@@ -159,8 +161,8 @@ Exported from `index.js`:
 ### Ongoing Sync Flow
 
 1. **User modifies file on macOS iCloud folder**: macserver detects change, posts `/status` to Node.js with change metadata.
-2. **Macserver detects resync request (e.g., user resolves conflict)**: posts `/status` with `resyncRequested: true`.
-3. **Node.js process responds**: Acquires sync lock and runs `syncFromiCloud()` to pull all changes.
+2. **Macserver gives up on a push after retries**: posts `/status` with `resyncRequested: true` and a `reason`.
+3. **Node.js process responds**: Acquires sync lock, runs `syncFromiCloud()` to pull all changes, releases the lock, runs Fix(), and emails what it found (`ICLOUD_RESYNC_ISSUE`).
 4. **Blot user uploads/modifies file via web or API**: Blot calls the iCloud client's `write()` function, which syncs to iCloud via `remoteUpload()`.
 5. **File size limit**: Files exceeding `config.icloud.maxFileSize` are rejected on upload and skipped on download (empty placeholder created on download).
 
@@ -179,7 +181,7 @@ Exported from `index.js`:
 - `models/blog` - Blog model for querying and updating blog metadata.
 - `models/client` - Redis client for persistent storage of iCloud account data.
 - `helper/localPath` - Computes local file paths given blogID and relative path.
-- `helper/email` - Sends notifications for server errors, resync requests, and sync issues.
+- `helper/email` - Sends notifications for server errors and sync issues (including resyncs the macserver requested that found changes).
 - `helper/clfdate` - Formats log timestamps.
 - `clients/util/shouldIgnoreFile` - Determines if a file should be excluded from sync (e.g., .DS_Store).
 - `sync/establishSyncLock` - Acquires exclusive folder lock to prevent concurrent syncs.

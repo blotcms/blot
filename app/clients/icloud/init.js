@@ -11,15 +11,10 @@ const getHealth = require("./getHealth");
 const { shouldSkipBackgroundSync } = require("./error");
 const syncFromiCloud = require("./sync/fromiCloud");
 const syncToiCloud = require("./sync/toiCloud");
-const Entries = require("models/entries");
-const Fix = require("sync/fix");
+const validateBlog = require("./sync/validateBlog");
 const syncReport = require("clients/util/syncReport");
-const { measure: measureEventLoop } = require("helper/eventLoopMonitor");
 
 const getBlog = promisify(Blog.get);
-// getAllTotal, not getTotal: Fix()'s entry-ghosts check scans every entry
-// (drafts, pages, scheduled, deleted included), not just published ones.
-const getEntryTotal = promisify(Entries.getAllTotal);
 
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 const RESYNC_WINDOW = 1000 * 60 * 10; // 10 minutes
@@ -130,84 +125,6 @@ const hasRecentSync = (account) => {
   return Date.now() - account.lastSync <= ONE_HOUR_IN_MS;
 };
 
-// Returned by syncFromiCloudWithLock instead of a summary when it finds the
-// account unfit to walk after acquiring the lock. Callers must treat this as
-// "nothing happened" - not a change to count, and not something to follow up
-// with Fix().
-const REFUSED = Symbol("icloud-walk-refused");
-
-const LOCK_BUSY_MESSAGE = "Failed to acquire folder lock";
-// Thrown by sync() when the blog is disabled or gone.
-const CANNOT_SYNC_MESSAGE = "Cannot sync blog";
-
-// Runs syncFromiCloud while holding the blog's folder lock, so the removals
-// it makes can't race an upload from the macserver, or an initial transfer
-// whose files haven't reached iCloud yet. No catch-up sync afterwards (unlike
-// Dropbox's sweep): a macserver push that finds the lock busy gets a 423,
-// retries, and then requests a full resync through /status, so nothing is
-// dropped while the sweep holds the lock.
-const syncFromiCloudWithLock = async (blogID, publish) => {
-  const { folder, done } = await establishSyncLock(blogID);
-  let error = null;
-
-  try {
-    // The caller's account check ran before the lock was acquired and
-    // establishSyncLock may have waited for it, so look again. A stored error
-    // (which includes SOURCE_MISSING, the watcher's "folder deleted") or an
-    // unfinished transfer means iCloud isn't a source of truth for this blog
-    // right now, and walking it would remove Blot's own files.
-    const account = await database.get(blogID);
-
-    if (shouldSkipBackgroundSync(account)) {
-      publish("Skipping validation: setup incomplete or stored error");
-      return REFUSED;
-    }
-
-    return await syncFromiCloud(blogID, publish, folder.update);
-  } catch (err) {
-    error = err;
-    throw err;
-  } finally {
-    // done rejects with the error it is given, once the lock is released
-    await done(error).catch((err) => {
-      if (err !== error)
-        console.error(clfdate(), "iCloud: Error releasing lock", blogID, err);
-    });
-  }
-};
-
-// Event loop delay while one blog was validated, so the operator can watch
-// the sweep's impact on the shared Redis connection (and the macserver, via
-// duration) after it is switched on, and find which blog and phase block the
-// loop. Every blog is logged so quiet blogs are a baseline. entryCount is
-// there because Fix()'s entry-ghosts check does one sequential Redis round
-// trip per entry.
-const logLag = (blogID, phase, entryCount, { durationMs, maxLagMs, p99LagMs }) => {
-  console.log(
-    clfdate(),
-    "iCloud: validation lag",
-    blogID,
-    phase,
-    `duration=${durationMs}ms`,
-    `maxLag=${maxLagMs}ms`,
-    `p99Lag=${p99LagMs}ms`,
-    `entries=${entryCount == null ? "unknown" : entryCount}`
-  );
-};
-
-// Never rejects: resolves with Fix's error and report so the caller decides
-// what to report. Fix() can fail part way through and still return the
-// repairs it made before that, hence both.
-const fixBlog = (blog) =>
-  new Promise((resolve) => {
-    Fix(blog, (error, report) => {
-      if (error) {
-        console.error(clfdate(), "iCloud: Fix error for blog", blog.id, error);
-      }
-      resolve({ error, report });
-    });
-  });
-
 let validationRunning = false;
 
 // The sweep is sequential and a slow macserver can stretch it past an hour.
@@ -262,69 +179,11 @@ const validateAllBlogs = async () => {
           console.log(clfdate(), "iCloud:", blogID, ...args);
         };
 
-        const entryCount = await getEntryTotal(blogID).catch(() => null);
-
-        let summary;
-        const stopWalkMeasure = measureEventLoop();
-        phase = "walk";
-
-        try {
-          summary = await syncFromiCloudWithLock(blogID, publish);
-          logLag(blogID, "walk", entryCount, stopWalkMeasure());
-        } catch (err) {
-          stopWalkMeasure();
-
-          // A sync is already running for this blog and will pick up
-          // whatever changed. Check it again next hour (a lock that stays
-          // held is caught by the stuck-lock check above).
-          if (err.message === LOCK_BUSY_MESSAGE) {
-            console.log(clfdate(), "iCloud: Skipping busy blog", blogID);
-            checkedBlogs -= 1;
-            return;
-          }
-
-          // The blog was disabled or removed since the sweep started.
-          if (String(err.message).startsWith(CANNOT_SYNC_MESSAGE)) {
-            checkedBlogs -= 1;
-            return;
-          }
-
-          throw err;
-        }
-
-        // The account became unfit between the cheap check above and the
-        // lock being acquired. Same as never having attempted this blog.
-        if (summary === REFUSED) {
-          checkedBlogs -= 1;
-          return;
-        }
-
-        // syncFromiCloud swallows the failures it meets (macserver down,
-        // downloads that failed) and returns normal-looking counts, so an
-        // outage would read as "no changes". recordWalk reports those as a
-        // walk error, with the changes the walk did apply, and Fix() is
-        // skipped: the folder is only partly reconciled and the error is
-        // what needs attention.
-        if (!syncReport.recordWalk(report, blog, summary)) return;
-
-        // Fix() persists parts of the blog it is handed (menu-ghosts writes
-        // blog.menu), and the walk may have just added a menu page. The
-        // snapshot loaded before the walk would have that write drop it.
-        phase = "fix";
-        const current = await getBlog({ id: blogID });
-        // Deleted mid-sweep, so there is nothing left to repair.
-        if (!current) return;
-
-        const stopFixMeasure = measureEventLoop();
-        try {
-          const fixed = await fixBlog(current);
-          syncReport.recordFix(report, blog, fixed.report);
-          if (fixed.error) {
-            syncReport.recordError(report, blog, "fix", fixed.error);
-          }
-        } finally {
-          logLag(blogID, "fix", entryCount, stopFixMeasure());
-        }
+        // Walks under the lock and runs Fix(), recording both in the report.
+        // False means it didn't get to check the blog (a lock held by a sync
+        // already running, a disabled blog, or an account that became unfit
+        // once the lock was held), so it doesn't count as checked.
+        if (!(await validateBlog(blog, report, { publish }))) checkedBlogs -= 1;
       } catch (err) {
         console.error(
           clfdate(),
@@ -478,7 +337,5 @@ init.resyncAllConnected = resyncAllConnected;
 // Exposed for tests
 init.validateAllBlogs = validateAllBlogs;
 init.runValidation = runValidation;
-init.syncFromiCloudWithLock = syncFromiCloudWithLock;
-init.REFUSED = REFUSED;
 
 module.exports = init;

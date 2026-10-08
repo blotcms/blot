@@ -1,6 +1,6 @@
 ---
 name: triage-sync-fix-repair
-description: Triage Fix() repairs reported in a "<Client> sync issue" digest email (Dropbox sync issue, etc.; the "Fix() repaired:" lines under a blog) or in a "Resync found changes" email. Fix() changes things for a blog whenever one of its checks returns rows. Works out from the report rows and, if needed, production logs whether the repair was expected housekeeping (e.g. expired deleted entries pruned from lists), the trace of a live edit, or evidence of a real bug that is corrupting blog state, then appends a short entry to this skill's incident log. Use when the user pastes or forwards one of these emails, or asks why Fix() repaired a blog.
+description: Triage Fix() repairs reported in a "<Client> sync issue" digest email (Dropbox sync issue, etc.; the "Fix() repaired:" lines under a blog) or in a "Resync found changes" or "iCloud resync found changes" email. Fix() changes things for a blog whenever one of its checks returns rows. Works out from the report rows and, if needed, production logs whether the repair was expected housekeeping (e.g. expired deleted entries pruned from lists), the trace of a live edit, or evidence of a real bug that is corrupting blog state, then appends a short entry to this skill's incident log. Use when the user pastes or forwards one of these emails, or asks why Fix() repaired a blog.
 ---
 
 # Triage a sync/fix repair
@@ -21,9 +21,15 @@ is gone); callers report it:
   lives in `app/clients/util/syncReport.js`.
 - the dashboard resync's "Resync found changes" email
   (`RESYNC_FOUND_CHANGES.txt`), when Fix() repaired something after the resync.
+- iCloud: the hourly "iCloud sync issue" digest (`ICLOUD_SYNC_ISSUE.txt`,
+  sent at minute 45 by `app/clients/icloud/init.js`) and the "iCloud resync
+  found changes" email (`ICLOUD_RESYNC_ISSUE.txt`) that a macserver-requested
+  resync sends from `app/clients/icloud/routes/site/status.js`. Both run the
+  walk and Fix() from `app/clients/icloud/sync/validateBlog.js`, and the
+  resync email carries the macserver's reason for requesting it.
 
-Other callers (dashboard rebuild, local setup, template folders, the
-startup resync, and for now iCloud) only log
+Other callers (dashboard rebuild, local setup, template folders and the
+startup resync) only log
 `Fix repaired <blog> check=N`. Fix() doesn't hold
 the folder lock and repairs as it goes, so the report says what **was**
 wrong; it's already been changed by the time you read it.
@@ -32,7 +38,10 @@ Fix() is called from:
 
 - Dropbox hourly validation, minute 0, **green** (`app/clients/dropbox/init.js`,
   blogs with `last_sync` in the past hour, after the resync)
-- iCloud validation (`app/clients/icloud/init.js`)
+- iCloud hourly validation, minute 45 (`app/clients/icloud/init.js`, blogs
+  with `lastSync` in the past hour, after a clean walk), and the resync the
+  macserver requests after a failed push (`app/clients/icloud/routes/site/status.js`),
+  both through `app/clients/icloud/sync/validateBlog.js`
 - Google Drive hourly validation, minute 30 (`app/clients/google-drive/validate.js`,
   blogs with `lastSync` in the past hour, after a clean walk)
 - Local client setup (`app/clients/local/setup.js`)

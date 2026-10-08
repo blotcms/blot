@@ -12,6 +12,11 @@ describe("icloud routes stamp lastSync", function () {
     initialTransfer: require.resolve("../../../sync/initialTransfer"),
     fromiCloud: require.resolve("../../../sync/fromiCloud"),
     email: require.resolve("helper/email"),
+    blog: require.resolve("models/blog"),
+    entries: require.resolve("models/entries"),
+    fix: require.resolve("sync/fix"),
+    getHealth: require.resolve("../../../getHealth"),
+    validateBlog: require.resolve("../../../sync/validateBlog"),
   };
   routeNames.forEach((name) => (paths[name] = require.resolve("../" + name)));
 
@@ -84,9 +89,20 @@ describe("icloud routes stamp lastSync", function () {
       }),
     });
     stub("initialTransfer", async () => {});
-    stub("fromiCloud", async (id) => walked.push(id));
-    stub("email", { ICLOUD_RESYNC_REQUESTED: () => {} });
-    // Reload each route bound to the stubs above
+    stub("fromiCloud", async (id) => {
+      walked.push(id);
+      return {};
+    });
+    stub("email", { ICLOUD_RESYNC_ISSUE: (_, locals, callback) => callback() });
+    stub("blog", {
+      get: ({ id }, callback) => callback(null, { id, client: "icloud" }),
+    });
+    stub("entries", { getAllTotal: (_id, callback) => callback(null, 0) });
+    stub("fix", (blog, callback) => callback(null, {}));
+    stub("getHealth", async () => ({ issues: [] }));
+    // Reload each route, and the walk and Fix() it runs, bound to the stubs
+    // above
+    delete require.cache[paths.validateBlog];
     routeNames.forEach((name) => delete require.cache[paths[name]]);
   });
 

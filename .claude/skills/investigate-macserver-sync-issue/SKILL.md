@@ -1,6 +1,6 @@
 ---
 name: investigate-macserver-sync-issue
-description: Investigate an "iCloud resync requested" admin email ("A resync was requested for site blog_…") or any other iCloud / macserver sync problem. Reads the macserver's pm2 logs over `ssh macserver` to find which watcher action (upload/remove/mkdir) failed and why, cross-checks the production container logs and the blog's iCloud account state, classifies the cause, then appends a short entry to this skill's incident log. Use when the user pastes or forwards one of these alerts, or asks to look into iCloud / macserver sync.
+description: Investigate an "iCloud resync found changes" admin email (the ICLOUD_RESYNC_ISSUE email a macserver-requested resync sends when it found changes, Fix() repairs or errors, with the macserver's reason), an "iCloud sync issue" hourly digest, or any other iCloud / macserver sync problem. Reads the macserver's pm2 logs over `ssh macserver` to find which watcher action (upload/remove/mkdir) failed and why, cross-checks the production container logs and the blog's iCloud account state, classifies the cause, then appends a short entry to this skill's incident log. Use when the user pastes or forwards one of these alerts, or asks to look into iCloud / macserver sync.
 ---
 
 # Investigate a macserver (iCloud) sync issue
@@ -18,30 +18,43 @@ Blot's iCloud client is two halves:
   pushes dashboard edits the other way via the macserver's own routes
   (`app/clients/icloud/write.js`, `sync/util/remote*.js`).
 
-`ICLOUD_RESYNC_REQUESTED` has exactly one trigger: a watcher action on the
+A resync can be requested by exactly one thing: a watcher action on the
 macserver failed even after retrying
 (`macserver/watcher/actions.js` — `withRetries`, 4 attempts, each `fetch`
 itself retried 3× with a 10s timeout, 60s for uploads). The macserver then
-calls `httpClient/resync.js`, which POSTs `{resyncRequested:true}` to
-`/clients/icloud/status`. The server (`routes/site/status.js`) dedups for
-10s, takes the folder sync lock (replying **423** if it's held, so the
-macserver retries up to 20× with backoff ≤5 min), sends the email, and runs
-`syncFromiCloud` with **iCloud as the source of truth** (can clobber
-files that only existed on Blot's side, e.g. dashboard template edits).
+calls `httpClient/resync.js`, which POSTs
+`{resyncRequested:true, reason}` to `/clients/icloud/status`, where `reason`
+is e.g. `upload for Posts/x.md failed after retries`. The server
+(`routes/site/status.js`) dedups for 10s, takes the folder sync lock
+(replying **423** if it's held, so the macserver retries up to 20× with
+backoff ≤5 min), re-checks the account, and runs the same walk and Fix() as
+the hourly validation (`sync/validateBlog.js`) with **iCloud as the source of
+truth** (can clobber files that only existed on Blot's side, e.g. dashboard
+template edits).
 
-**The email carries no reason.** The reason is only in the macserver log:
-`Requesting resync for blogID: <id> (<action> for <path> failed after retries)`.
-So always start on the macserver.
+**`ICLOUD_RESYNC_ISSUE` ("iCloud resync found changes")** is sent straight
+after that resync, and only if it found something: changes that only reached
+Blot because of the resync (the push that failed, or others dropped with it),
+Fix() repairs, or a walk or Fix() error. A resync that finds nothing sends no
+email. It is capped at one per blog per hour (`Resync report suppressed` on
+the server), so one email can stand for a whole burst of requests. It
+carries the macserver's `reason` ("No reason was given" means an older
+macserver), the same per-blog change, Fix() and error lines as the hourly
+digest, and the `logs green | grep "<blog12> sync_"` helper. The old
+`ICLOUD_RESYNC_REQUESTED` email ("A resync was requested for site …", sent
+on every request) is gone; older incident entries below refer to it. For a
+Fix() repair in the email use `triage-sync-fix-repair`.
 
-There is **no scheduled iCloud integrity check** (unlike Dropbox's hourly
-validation): `runValidation` / `resyncAllConnected` exist in
-`app/clients/icloud/init.js` but their schedules were commented out in
-`98dc9405c Disable sync validation`. The `iCloud: Scheduling hourly sync
-validation` / `Scheduling daily resync` log lines still print at boot and
-are misleading — nothing runs. The only active checks are
+The hourly validation is separate: `validateAllBlogs` in
+`app/clients/icloud/init.js`, scheduled at :45, walks every blog the
+macserver pushed to in the last hour and emails one `ICLOUD_SYNC_ISSUE`
+("iCloud sync issue") digest of unsynced changes, Fix() repairs, errors and
+stuck folder locks. Changes there mean a macserver push was missed without
+even a resync request. The daily full resync (`resyncAllConnected`) and the
+startup resync stay unscheduled. The other active checks are
 `monitorMacServerStats` (minutely `GET /stats`: down/recovered/disk/quota
-emails) and this on-failure resync. A manual full resync of one or all
-blogs is `scripts/icloud/resync.js` (writes; never run without approval).
+emails). A manual full resync of one or all blogs is
+`scripts/icloud/resync.js` (writes; never run without approval).
 
 ## Access and safety
 
@@ -75,9 +88,11 @@ explicitly asked.
 
 ## Method
 
-1. **Find the resync request(s) on the macserver.** The email is capped
-   at one per blog per hour (`Resync email suppressed` on the server), so
-   one email can stand for a whole burst of requests.
+1. **Find the resync request(s) on the macserver.** The email's `Reason:`
+   line says which action failed; the macserver log has the rest and the
+   timing. The email is capped at one per blog per hour (`Resync report
+   suppressed` on the server), so one email can stand for a whole burst of
+   requests, and a request whose resync found nothing sends none.
    ```
    ssh macserver "grep -h 'Requesting resync for blogID\|Resync acknowledged\|Failed to request resync\|Deduplicating resync' ~/.pm2/logs/macserver-*.log | tail -60"
    ```

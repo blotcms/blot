@@ -1,6 +1,7 @@
-// The hourly sweep (init.js validateAllBlogs): which blogs it walks, how it
-// treats a busy lock or a refused walk, and what ends up in the one
-// ICLOUD_SYNC_ISSUE digest it sends.
+// The hourly sweep (init.js validateAllBlogs, with the per-blog walk and Fix()
+// in sync/validateBlog.js): which blogs it walks, how it treats a busy lock or
+// a refused walk, and what ends up in the one ICLOUD_SYNC_ISSUE digest it
+// sends.
 describe("icloud init validateAllBlogs", function () {
   const paths = {
     blog: require.resolve("models/blog"),
@@ -13,6 +14,7 @@ describe("icloud init validateAllBlogs", function () {
     email: require.resolve("helper/email"),
     getHealth: require.resolve("../getHealth"),
     redis: require.resolve("models/client"),
+    validateBlog: require.resolve("../sync/validateBlog"),
     init: require.resolve("../init"),
   };
   const originals = {};
@@ -156,6 +158,8 @@ describe("icloud init validateAllBlogs", function () {
         callback();
       },
     });
+    // Both load the stubs above at require time
+    delete require.cache[paths.validateBlog];
     delete require.cache[paths.init];
     return require("../init");
   }
