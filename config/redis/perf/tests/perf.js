@@ -42,6 +42,18 @@ describe("redis perf tools", function () {
       expect(() => compare.parseWindow("nonsense")).toThrow();
     });
 
+    it("rejects times that Date.UTC would roll over", function () {
+      for (const bad of ["2026-02-31T10:00..2026-03-01", "2026-13-01..2026-12-02", "2026-10-08T25:00..2026-10-09", "2026-10-08T24:00..2026-10-09", "2026-10-08T10:60..2026-10-09", "2026-10-08..2026-10-09T01:70", "2026-10-08..2026-02-30"]) {
+        expect(() => compare.parseWindow(bad)).toThrowError(/bad (start|end) time/);
+      }
+      for (const bad of ["25", "13:60", "24:30", "99"]) {
+        expect(() => compare.parseWindow("2026-10-08T12:00.." + bad)).toThrowError(/bad end time/);
+      }
+      // 24 means midnight; a leap day is fine
+      expect(new Date(compare.parseWindow("2026-10-08T12:00..24").to).toISOString()).toBe("2026-10-09T00:00:00.000Z");
+      expect(new Date(compare.parseWindow("2028-02-29T00:00..2028-03-01").from).toISOString()).toBe("2028-02-29T00:00:00.000Z");
+    });
+
     it("parses a log line, with x as null", function () {
       const r = compare.parseLine("2026-10-08T12:00:00Z a=1 b=x c=ok d=-1");
       expect(r.f).toEqual({ a: 1, b: null, c: "ok", d: -1 });

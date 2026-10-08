@@ -39,7 +39,9 @@ function parseArgs(argv) {
 function parseTime(s) {
   const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2})(?::(\d{2}))?)?Z?$/.exec(s);
   if (!m) return null;
-  return Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0));
+  const t = Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0));
+  // Date.UTC rolls 02-31 over to March; refuse what does not round-trip
+  return new Date(t).toISOString().slice(0, 10) === m[1] + "-" + m[2] + "-" + m[3] && +(m[4] || 0) < 24 && +(m[5] || 0) < 60 ? t : null;
 }
 
 function parseWindow(spec) {
@@ -50,7 +52,8 @@ function parseWindow(spec) {
   let to = parseTime(parts[1]);
   if (to === null) {
     const m = /^(\d{1,2})(?::(\d{2}))?Z?$/.exec(parts[1]);
-    if (!m) throw new Error("bad end time: " + parts[1]);
+    // 24 is allowed for midnight at the end of the day
+    if (!m || +m[1] > 24 || +(m[2] || 0) > 59 || (+m[1] === 24 && +(m[2] || 0) > 0)) throw new Error("bad end time: " + parts[1]);
     const day = from - (from % 86400000);
     to = day + +m[1] * 3600000 + +(m[2] || 0) * 60000;
     if (to <= from) to += 86400000;
