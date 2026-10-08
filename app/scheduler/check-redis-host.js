@@ -59,8 +59,18 @@ const percent = (fraction) => Math.round(fraction * 100) + "%";
 const gb = (bytes) => (bytes / 1024 / 1024 / 1024).toFixed(2) + "GB";
 const minutes = (ms) => Math.round(ms / MINUTE) + " minutes";
 
+// "<used>/<total>" in bytes (the host's disk fields), or null.
+function parseDisk(value) {
+  const match = /^(\d+)\/(\d+)$/.exec(value || "");
+  return match && Number(match[2]) > 0 ? { used: Number(match[1]), total: Number(match[2]) } : null;
+}
+
 // "2026-10-07T12:00:00Z mem=123 tcp_mem=1,2,3 sockets=25 pressures=0 ...
-// host=ip-10-0-0-1 active=1" (tcpmem-log.sh). Null if it can't be read.
+// host=ip-10-0-0-1 active=1 ram_total=<bytes> ram_avail=<bytes>
+// disk_root=<used>/<total> disk_backups=<used>/<total>" (tcpmem-log.sh). The
+// last four (all in bytes) are for the daily email: they are null if the host
+// did not report them, and disk_backups is omitted when /backups is not a
+// mount. Null if it can't be read.
 function parseSample(value) {
   if (!value) return null;
 
@@ -88,6 +98,10 @@ function parseSample(value) {
     pressures: fields.pressures !== "" && pressures >= 0 ? pressures : null,
     host: String(fields.host || "unknown").replace(/[^\w.-]/g, ""),
     active: fields.active === "1",
+    ramTotal: Number(fields.ram_total) > 0 ? Number(fields.ram_total) : null,
+    ramAvailable: /^\d+$/.test(fields.ram_avail || "") ? Number(fields.ram_avail) : null,
+    diskRoot: parseDisk(fields.disk_root),
+    diskBackups: parseDisk(fields.disk_backups),
   };
 }
 

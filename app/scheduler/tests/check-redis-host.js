@@ -102,7 +102,38 @@ describe("scheduler check-redis-host", function () {
         pressures: 2,
         host: "ip-10-0-0-1",
         active: true,
+        ramTotal: null,
+        ramAvailable: null,
+        diskRoot: null,
+        diskBackups: null,
       });
+    });
+
+    it("reads the RAM and disk fields a newer tcpmem-log.sh adds", function () {
+      const sample = parseSample(
+        sampleLine() +
+          " ram_total=16384000000 ram_avail=12288000000" +
+          " disk_root=256000000/1024000000 disk_backups=512000000/2048000000"
+      );
+
+      expect(sample.mem).toBe(100);
+      expect(sample.active).toBe(true);
+      expect(sample.ramTotal).toBe(16384000000);
+      expect(sample.ramAvailable).toBe(12288000000);
+      expect(sample.diskRoot).toEqual({ used: 256000000, total: 1024000000 });
+      expect(sample.diskBackups).toEqual({ used: 512000000, total: 2048000000 });
+    });
+
+    it("leaves out RAM and disk fields that are missing or malformed", function () {
+      const sample = parseSample(
+        sampleLine() + " ram_total=lots ram_avail= disk_root=5 disk_backups=1/0"
+      );
+
+      expect(sample.mem).toBe(100);
+      expect(sample.ramTotal).toBe(null);
+      expect(sample.ramAvailable).toBe(null);
+      expect(sample.diskRoot).toBe(null);
+      expect(sample.diskBackups).toBe(null);
     });
 
     it("rejects a malformed sample", function () {

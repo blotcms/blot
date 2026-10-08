@@ -4,13 +4,16 @@
 # s3://blot-redis-backups/<hourly|daily>/<YYYY-MM-DD-hour-HH>.rdb, then prunes
 # old copies. Runs as ec2-user from /etc/cron.d/blot-redis (hourly at :00, daily
 # at 03:05) and uses whatever AWS credentials that user has (instance profile
-# or ~/.aws).
+# or ~/.aws). After an upload it records it in Redis at blot:redis-host:backup,
+# which the app's daily email reads. BLOT_ROOT prefixes paths, for the tests.
 set -euo pipefail
 
 KIND=${1:?usage: backup.sh hourly|daily}
 BUCKET=${BLOT_BACKUP_BUCKET:-s3://blot-redis-backups}
-RDB=/var/lib/redis6/dump.rdb
-LOCAL=/backups
+ROOT=${BLOT_ROOT:-}
+RDB=$ROOT/var/lib/redis6/dump.rdb
+LOCAL=$ROOT/backups
+FLOATING_IP=$ROOT/etc/blot-redis/floating-ip
 MAX_SNAPSHOT_AGE=900 # seconds; older than this and we save first
 NAME=$(date +%Y-%m-%d-hour-%H)
 
@@ -34,7 +37,7 @@ redis() { redis6-cli "$@" | tr -d '\r'; }
 field() { redis INFO "$1" | awk -F: -v k="$2" '$1 == k {print $2}'; }
 
 # One backup at a time, so the daily never races an hourly that is still running.
-exec 9> /tmp/blot-redis-backup.lock
+exec 9> "$ROOT/tmp/blot-redis-backup.lock"
 flock -w 900 9 || { log "another backup is still running"; exit 1; }
 
 # Fail loudly (rather than "skip") if Redis is down.
@@ -52,11 +55,11 @@ fi
 # A freshly launched or restored host is also a writable master, so being one
 # is not enough: the active host is marked with the floating IP clients use,
 # written at cutover, and must currently hold it.
-if [ ! -s /etc/blot-redis/floating-ip ]; then
+if [ ! -s "$FLOATING_IP" ]; then
   log "skipped: not marked as the active host (/etc/blot-redis/floating-ip)"; exit 0
 fi
-ip=$(tr -d '[:space:]' < /etc/blot-redis/floating-ip)
-if ! /usr/sbin/ip -4 -o addr show | awk '{print $4}' | cut -d/ -f1 | grep -qx "$ip"; then
+ip=$(tr -d '[:space:]' < "$FLOATING_IP")
+if ! "$ROOT/usr/sbin/ip" -4 -o addr show | awk '{print $4}' | cut -d/ -f1 | grep -qx "$ip"; then
   log "skipped: floating IP $ip is not on this host"; exit 0
 fi
 
@@ -93,6 +96,15 @@ fi
 
 log "uploading to $BUCKET/$KIND/$NAME.rdb"
 aws s3 cp --only-show-errors "$SOURCE" "$BUCKET/$KIND/$NAME.rdb"
+
+# Record it for the app: "<time> <kind> <s3 key> <bytes>", no TTL. Best effort
+# like tcpmem-log.sh's SET: a failure here never fails the backup, and cron
+# has nowhere to send errors (it goes in backup.log instead).
+bytes=$(wc -c < "$SOURCE" 2> /dev/null | tr -d '[:space:]') || bytes=
+TIMEOUT=$(command -v timeout > /dev/null && echo "timeout 10" || true)
+$TIMEOUT redis6-cli SET blot:redis-host:backup \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ) $KIND $KIND/$NAME.rdb ${bytes:-0}" > /dev/null 2>&1 ||
+  log "WARNING: could not record the backup in Redis"
 
 # Names sort chronologically, so everything after the newest $KEEP is old.
 log "pruning $BUCKET/$KIND"
