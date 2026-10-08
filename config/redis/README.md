@@ -199,6 +199,12 @@ it says so. `maxmemory` is about 70% of RAM, computed at bootstrap
   03:05, log in `~/backup.log`, truncated monthly) and the two monitoring
   scripts every 5 minutes (`~/tcpmem.log`, `~/redis-mem.log`).
 - journald `SystemMaxUse=100M`, logrotate for `/var/log/redis6`.
+- `/etc/ssh/sshd_config.d/10-blot.conf`: key-only ssh (`PasswordAuthentication no`,
+  `KbdInteractiveAuthentication no`, `PermitRootLogin no`), since ssh stays open
+  to the internet. It is named `10-` so it sorts before the distro's
+  `50-redhat.conf` (sshd keeps the first value it reads). Applied with
+  `systemctl reload sshd`, and only if `sshd -t` passes; otherwise the file is
+  removed with a warning.
 
 ### Backups
 

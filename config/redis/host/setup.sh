@@ -209,6 +209,25 @@ EOF
   systemctl enable --now blot-instance-store.service ||
     echo "    WARNING: /backups is not mounted; Redis will still start (see: journalctl -u blot-instance-store)"
   systemctl enable --now crond
+
+  say "SSH"
+  # ssh stays open to the internet so the operator can reach the host from a
+  # phone anywhere, so it is key-only. sshd uses the first value it reads for
+  # each keyword and the distro's 50-redhat.conf is read in name order, hence
+  # 10-. Reloaded, not restarted, so a live session survives; and only if
+  # `sshd -t` accepts the result, so a bad config never stops sshd.
+  put /etc/ssh/sshd_config.d/10-blot.conf 0600 root:root <<'EOF'
+# Installed by config/redis/host/setup.sh.
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+EOF
+  if sshd -t; then
+    [ "$CHANGED" = 0 ] || systemctl reload sshd
+  else
+    rm -f /etc/ssh/sshd_config.d/10-blot.conf
+    echo "    WARNING: sshd -t rejected the config; removed 10-blot.conf, so ssh still allows passwords"
+  fi
 fi
 
 say "Redis"
