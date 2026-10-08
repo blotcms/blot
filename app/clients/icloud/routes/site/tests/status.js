@@ -69,7 +69,10 @@ describe("icloud status route", function () {
 
     mockModule(databasePath, {
       store: async () => {},
-      get: async () => ({ sharingLink: "https://www.icloud.com/iclouddrive/x" }),
+      get: async () => ({
+        sharingLink: "https://www.icloud.com/iclouddrive/x",
+        setupComplete: true,
+      }),
     });
     mockModule(initialTransferPath, async () => {});
     mockModule(fromiCloudPath, async (blogID) => {
@@ -143,6 +146,30 @@ describe("icloud status route", function () {
     expect(syncs).toEqual([]);
     expect(emails).toEqual([]);
     expect(released).toBe(true);
+  });
+
+  it("skips the resync if the blog was reconnected but its setup isn't complete", async function () {
+    // Disconnected and reconnected while the request waited for the lock:
+    // the new account's initial transfer hasn't finished
+    mockModule(databasePath, {
+      store: async () => {},
+      get: async () => ({
+        sharingLink: "https://www.icloud.com/iclouddrive/x",
+        setupComplete: false,
+        transferringToiCloud: true,
+      }),
+    });
+    const status = require(statusPath);
+
+    const res = fakeRes();
+    await status(
+      { header: () => "blog_a", body: { resyncRequested: true } },
+      res
+    );
+
+    expect(res.statusCode).toBe(409);
+    expect(syncs).toEqual([]);
+    expect(emails).toEqual([]);
   });
 
   it("keeps a resync request retryable when the sync lock was busy", async function () {

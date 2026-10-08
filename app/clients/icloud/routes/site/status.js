@@ -76,13 +76,21 @@ module.exports = async function (req, res) {
 
       try {
         // The request may have waited on the lock while the blog was
-        // disconnected (loadAccount only checked before that). Resyncing then
-        // would walk an empty remote folder and remove every local file, so
-        // check again now that nothing else can change the folder.
+        // disconnected, or disconnected and reconnected (loadAccount only
+        // checked before that). Resyncing then would walk an empty or
+        // half-transferred remote folder and remove local files, so check
+        // again now that nothing else can change the folder.
         const account = await database.get(blogID);
         if (!account || !account.sharingLink) {
           console.log("Resync skipped: blog no longer connected", { blogID });
           return res.status(400).send("Blog is not connected to iCloud Drive");
+        }
+        if (
+          account.setupComplete !== true ||
+          account.transferringToiCloud === true
+        ) {
+          console.log("Resync skipped: blog setup not complete", { blogID });
+          return res.status(409).send("Blog has not completed set up");
         }
 
         // A resync request means the macserver saw something go wrong with

@@ -229,4 +229,6 @@ Entry template:
   read an empty remote folder and wiped Blot's copy of a disconnected blog.
 - Follow-up: fixed in the PR for this entry. After taking the lock,
   `status.js` re-checks the account and logs `Resync skipped: blog no longer
-  connected` (400). `stampLastSync` no longer creates a missing hash.
+  connected` (400) or `Resync skipped: blog setup not complete` (409, a
+  reconnect still transferring). `stampLastSync` no longer creates a
+  missing hash.
