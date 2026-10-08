@@ -11,7 +11,13 @@
 # Checks: the dry run changes nothing; a FAILOVER that cannot complete leaves
 # the old host the master; the cutover waits for a held folder lock, loses no
 # acknowledged write under load and moves IP, marker and cron jobs; the
-# printed rollback command moves everything back.
+# printed rollback command (with its --region) moves everything back; a failed
+# IP move switches Redis back; a failed preparation is undone; when the ssh
+# session running the FAILOVER dies, the cutover asks the old host how it
+# ended: it carries on if the FAILOVER completed, stops with the old host
+# still the master if it never started, and stops without touching the new
+# host if the old host cannot be asked; when no client reaches the new host
+# the cutover exits with an error instead of "Done".
 #
 # Needs docker and perl. Usage: config/redis/tests/cutover.sh (works on a Mac
 # with bash 3.2 too, which checks cutover.sh runs there).
@@ -70,6 +76,16 @@ FIP=$(echo "$OLD_IP" | cut -d. -f1-3).200
 echo "# old $OLD_IP, new $NEW_IP, floating $FIP"
 
 # ssh <options> <host> <command>: docker exec in the container named <host>.
+# Fault injection for the failure cases: a hook is a file in $STUB_HOOKS that
+# a test creates just before the cutover it breaks, and that fires once
+# (except "down", which the test removes).
+#   session  mode before|after|after-down: the first "bash -s" session that
+#            runs FAILOVER TO dies with status 137 and no output, just before
+#            the FAILOVER is sent or just after Redis accepted it (after-down
+#            also makes every later ssh to that host fail, like a lost host).
+#   ipadd    host name: "ip addr add" on that host runs, then ssh reports
+#            failure, as if the connection dropped after the command ran.
+#   down     host name: every ssh to that host fails (ssh's status 255).
 cat > "$TMP/bin/ssh" << 'EOF'
 #!/bin/bash
 while [ $# -gt 0 ]; do
@@ -82,6 +98,37 @@ while [ $# -gt 0 ]; do
 done
 host=$1
 shift
+H=${STUB_HOOKS:-/nonexistent}
+if [ -f "$H/down" ] && [ "$host" = "$(cat "$H/down")" ]; then
+  echo "ssh: connect to host $host: Connection refused" >&2
+  exit 255
+fi
+if [ -f "$H/ipadd" ] && [ "$host" = "$(cat "$H/ipadd")" ]; then
+  case "$*" in
+    *"ip addr add"*)
+      rm -f "$H/ipadd"
+      docker exec -i "$host" sh -c "$*"
+      exit 1 ;;
+  esac
+fi
+if [ -f "$H/session" ] && [ "$*" = "bash -s" ]; then
+  script=$(cat)
+  case "$script" in
+    *"FAILOVER TO"*)
+      mode=$(cat "$H/session")
+      rm -f "$H/session"
+      case "$mode" in
+        before) script=$(printf '%s\n' "$script" | awk '/^reply=.*FAILOVER TO/ {print "exit 137"} {print}') ;;
+        *) script=$(printf '%s\n' "$script" | awk '{print} /^reply=.*FAILOVER TO/ {print "exit 137"}') ;;
+      esac
+      printf '%s\n' "$script" | docker exec -i "$host" sh -c "$*"
+      status=$?
+      [ "$mode" != after-down ] || echo "$host" > "$H/down"
+      exit $status ;;
+  esac
+  printf '%s\n' "$script" | docker exec -i "$host" sh -c "$*"
+  exit
+fi
 exec docker exec -i "$host" sh -c "$*"
 EOF
 # aws: the floating IP's owner lives in $AWS_STUB_STATE ("<fip> <owner-ip>");
@@ -108,7 +155,8 @@ case "$args" in
 esac
 EOF
 chmod +x "$TMP/bin/ssh" "$TMP/bin/aws"
-export PATH="$TMP/bin:$PATH" AWS_STUB_STATE="$TMP/aws-state" AWS_STUB_HOSTS="$OLD:$OLD_IP $NEW:$NEW_IP"
+mkdir -p "$TMP/hooks"
+export PATH="$TMP/bin:$PATH" AWS_STUB_STATE="$TMP/aws-state" AWS_STUB_HOSTS="$OLD:$OLD_IP $NEW:$NEW_IP" STUB_HOOKS="$TMP/hooks"
 export CUTOVER_CLIENT_WAIT=3
 
 # Production as it will be on the day: the floating IP on the old host, the
@@ -126,10 +174,39 @@ cli "$NEW" REPLICAOF "$OLD_IP" 6379 > /dev/null
 for _ in $(seq 1 50); do cli "$NEW" INFO replication | grep -qx master_link_status:up && break; sleep 0.2; done
 # A client in the "app" connected through the floating IP, reconnecting
 # whenever its connection fails, like node-redis.
-docker exec -d "$APP" sh -c "while :; do redis-cli -h $FIP -r -1 -i 0.1 PING > /dev/null 2>&1; sleep 0.05; done"
+# The loop ends when /tmp/noreconnect exists (redis-cli reconnects by itself,
+# so stopping the clients also needs the running redis-cli killed).
+start_clients() {
+  docker exec "$APP" rm -f /tmp/noreconnect
+  docker exec -d "$APP" sh -c "while [ ! -f /tmp/noreconnect ]; do redis-cli -h $FIP -r -1 -i 0.1 PING > /dev/null 2>&1; sleep 0.05; done"
+}
+stop_clients() {
+  docker exec "$APP" touch /tmp/noreconnect
+  sleep 0.3
+  docker exec "$APP" pkill redis-cli || true
+  sleep 0.3
+}
+start_clients
 sleep 1
 
 cutover() { "$CUTOVER" --yes --any-time --timeout-ms 1000 --lock-wait 5 "$@" < /dev/null; }
+# A completed cutover comments out the old host's cron jobs; the rollback only
+# says how to bring them back: "crontab <backup>". Do that, and drop the backups.
+restore_cron() {
+  docker exec "$OLD" sh -c 'f=$(ls -t /root/crontab.before-cutover-* 2> /dev/null | head -n 1); [ -z "$f" ] || { crontab "$f"; rm -f /root/crontab.before-cutover-*; }'
+}
+# roll_back <log>: run the rollback command a cutover printed in <log> (also
+# when it sits at the end of an error line), then restore the crontab.
+roll_back() {
+  local cmd
+  cmd=$(grep -h 'Rollback: ' "$1" | tail -n 1 | sed 's/.*Rollback: //')
+  [ -n "$cmd" ] || { fail "no rollback command in $1"; return 0; }
+  # shellcheck disable=SC2086
+  ${cmd/ --ip / --yes --any-time --timeout-ms 1000 --ip } < /dev/null > "$TMP/rollback-again" 2>&1 || { cat "$TMP/rollback-again"; fail "rollback of $1"; }
+  restore_cron
+}
+# fip_clients <host>: how many clients are connected to <host> through the floating IP.
+fip_clients() { cli "$1" CLIENT LIST TYPE normal | grep -c "laddr=$FIP:6379" || true; }
 
 echo "# Dry run"
 digest=$(cli "$OLD" DEBUG DIGEST)
@@ -139,13 +216,14 @@ check "dry run lists the old cron jobs" grep -q "/root/hourly.sh" "$TMP/dry"
 check "dry run keeps the monitoring cron job" sh -c "! grep -q 'tcpmem-log' '$TMP/dry'"
 check "dry run changes nothing" [ "$(role "$OLD") $(role "$NEW") $(cli "$OLD" DEBUG DIGEST)" = "master slave $digest" ]
 
+wait_link() { for _ in $(seq 1 50); do cli "$NEW" INFO replication | grep -qx master_link_status:up && break; sleep 0.2; done; }
 unchanged() {
   check "the old host is still the master" [ "$(role "$OLD") $(role "$NEW")" = "master slave" ]
   check "the old host takes writes" [ "$(cli "$OLD" SET probe 1)" = OK ]
   check "the IP stayed on the old host" has_ip "$OLD" "$FIP"
   check "the IP was taken off the new host again" sh -c "! docker exec $NEW ip -4 -o addr show dev eth0 | grep -q ' $FIP/'"
   check "the old cron jobs are untouched" sh -c "! docker exec $OLD crontab -l | grep -q '#cutover#'"
-  for _ in $(seq 1 50); do cli "$NEW" INFO replication | grep -qx master_link_status:up && break; sleep 0.2; done
+  wait_link
 }
 
 echo "# A folder lock that stays held"
@@ -201,6 +279,7 @@ echo "# Rollback with the printed command"
 rollback=$(sed -n 's/^Rollback: //p' "$TMP/cutover")
 check "a rollback command is printed" [ -n "$rollback" ]
 case "$rollback" in *"--allow-unbootstrapped"*"$NEW $OLD") ok "it swaps the hosts" ;; *) fail "rollback command: $rollback" ;; esac
+case "$rollback" in *" --region "*" $NEW $OLD") ok "it keeps the AWS region" ;; *) fail "rollback command without the region: $rollback" ;; esac
 # shellcheck disable=SC2086
 ${rollback/ --ip / --yes --any-time --timeout-ms 1000 --ip } < /dev/null > "$TMP/rollback" 2>&1 || { cat "$TMP/rollback"; fail "rollback"; }
 check "old is the master again" [ "$(role "$OLD") $(role "$NEW")" = "master slave" ]
@@ -208,11 +287,96 @@ check "the IP is back on the old host" sh -c "docker exec $OLD ip -4 -o addr sho
 check "the marker is back on the old host" [ "$(docker exec "$OLD" cat /etc/blot-redis/floating-ip)" = "$FIP" ]
 check "it says how to restore the old cron jobs" grep -q "crontab /root/crontab.before-cutover-" "$TMP/rollback"
 check "both hold the same data" [ "$(cli "$OLD" DEBUG DIGEST)" = "$(cli "$NEW" DEBUG DIGEST)" ]
+# Do what the rollback says, so the cases below start from the same crontab.
+restore_cron
 
 echo "# A failed IP move switches Redis back"
 AWS_STUB_FAIL_ASSIGN=1 cutover --app-host "$APP" "$OLD" "$NEW" > "$TMP/noip" 2>&1 && fail "a failed IP move fails the cutover" || ok "a failed IP move fails the cutover"
 check "old is the master again after a failed move" [ "$(role "$OLD") $(role "$NEW")" = "master slave" ]
 check "the old host takes writes after a failed move" [ "$(cli "$OLD" SET probe 2)" = OK ]
+
+# The cases below break one thing in one cutover with a hook in the ssh stub.
+# Each leaves the pair as it found it (old the master, the IP on old, the
+# crontab restored): the ones that complete are rolled back with the command
+# they print, so they run last.
+wait_link
+
+echo "# A preparation step that fails is undone"
+# "ip addr add" on the new host reports failure after it ran, so the address
+# is there and has to be taken off again. (The refresh timers do not exist in
+# these containers, so stopping them cannot be made to fail here.)
+echo "$NEW" > "$STUB_HOOKS/ipadd"
+if cutover --app-host "$APP" "$OLD" "$NEW" > "$TMP/prepfail" 2>&1; then fail "a failed preparation fails the cutover"; else ok "a failed preparation fails the cutover"; fi
+check "it says nothing switched" grep -q "preparation failed and was undone; nothing has switched" "$TMP/prepfail"
+check "it never reached the FAILOVER" sh -c "! grep -q 'FAILOVER $OLD' '$TMP/prepfail'"
+unchanged
+
+echo "# The FAILOVER session dies before the FAILOVER is sent"
+echo before > "$STUB_HOOKS/session"
+if cutover --app-host "$APP" "$OLD" "$NEW" > "$TMP/diebefore" 2>&1; then fail "a session lost before the FAILOVER fails the cutover"; else ok "a session lost before the FAILOVER fails the cutover"; fi
+check "it says the FAILOVER did not complete" grep -q "FAILOVER did not complete (unknown)" "$TMP/diebefore"
+unchanged
+
+echo "# The FAILOVER session dies and the old host cannot be asked"
+# The FAILOVER goes through (new becomes the master, old its replica) but the
+# script cannot find out: it must not touch the new host, which a REPLICAOF
+# would turn into a second replica with no master left.
+echo after-down > "$STUB_HOOKS/session"
+if cutover --app-host "$APP" "$OLD" "$NEW" > "$TMP/unreachable" 2>&1; then fail "an unreachable old host fails the cutover"; else ok "an unreachable old host fails the cutover"; fi
+rm -f "$STUB_HOOKS/down"
+check "it says it cannot tell and left the new host alone" grep -q "cannot tell how the FAILOVER ended.*was not touched" "$TMP/unreachable"
+check "it did not re-attach the new host" sh -c "! grep -q 'making it a replica' '$TMP/unreachable'"
+for _ in $(seq 1 25); do [ "$(role "$NEW")" = master ] && break; sleep 0.2; done
+check "new is still the master and old its replica" [ "$(role "$NEW") $(role "$OLD")" = "master slave" ]
+# Back to where we started: the preparation was left in place on purpose, so
+# take the address off the new host, then FAILOVER back (retrying while the
+# old host's link comes up).
+docker exec "$NEW" ip addr del "$FIP/32" dev eth0
+for _ in $(seq 1 25); do
+  [ "$(role "$OLD")" = master ] && break
+  cli "$NEW" FAILOVER TO "$OLD_IP" 6379 TIMEOUT 2000 > /dev/null 2>&1 || true
+  sleep 0.4
+done
+wait_link
+unchanged
+
+echo "# No client reaches the new host"
+# One idle connection through the floating IP, which never reconnects (bash
+# holding a /dev/tcp socket), and the reconnecting clients stopped: after the
+# move nobody arrives on the new host. Redis has switched by then, so the
+# cutover reports an error, prints the rollback and we run it.
+stop_clients
+for _ in $(seq 1 50); do [ "$(fip_clients "$OLD")" = 0 ] && break; sleep 0.2; done
+docker exec -d "$APP" bash -c "exec 3<>/dev/tcp/$FIP/6379; sleep 30"
+for _ in $(seq 1 50); do [ "$(fip_clients "$OLD")" = 1 ] && break; sleep 0.2; done
+if cutover --app-host "$APP" "$OLD" "$NEW" > "$TMP/noclients.out" 2> "$TMP/noclients.err"; then fail "no client on the new host fails the cutover"; else ok "no client on the new host fails the cutover"; fi
+check "it says none of the clients reached the new host" grep -q "none of the [1-9][0-9]* clients reached" "$TMP/noclients.err"
+check "it does not say Done" sh -c "! grep -q 'Done:' '$TMP/noclients.out' '$TMP/noclients.err'"
+check "it tells how to roll back" grep -q "Rollback: " "$TMP/noclients.err"
+check "Redis did switch" [ "$(role "$NEW") $(role "$OLD")" = "master slave" ]
+check "the IP is on the new host" has_ip "$NEW" "$FIP"
+docker exec "$APP" pkill sleep || true
+roll_back "$TMP/noclients.err"
+check "old is the master again after the error" [ "$(role "$OLD") $(role "$NEW")" = "master slave" ]
+wait_link
+start_clients
+sleep 1
+
+echo "# The FAILOVER session dies after the FAILOVER was sent"
+# The FAILOVER completes inside Redis without the script seeing it: old reports
+# it is a replica of the new host and the cutover carries on to the end.
+echo after > "$STUB_HOOKS/session"
+cutover --region eu-west-1 --app-host "$APP" "$OLD" "$NEW" > "$TMP/dieafter" 2>&1 || { cat "$TMP/dieafter"; fail "a session lost after the FAILOVER still completes the cutover"; }
+check "it found the FAILOVER had completed" grep -q "the FAILOVER did complete; carrying on" "$TMP/dieafter"
+check "it finished" grep -q "Done: " "$TMP/dieafter"
+check "new is the master, old its replica" [ "$(role "$NEW") $(role "$OLD")" = "master slave" ]
+check "old replicates from new's own address" sh -c "docker exec $OLD redis6-cli INFO replication | tr -d '\r' | grep -qx master_host:$NEW_IP"
+check "the IP is on the new host only" sh -c "docker exec $NEW ip -4 -o addr show dev eth0 | grep -q ' $FIP/' && ! docker exec $OLD ip -4 -o addr show dev eth0 | grep -q ' $FIP/'"
+check "AWS has the IP on the new interface" grep -qx "$FIP $NEW_IP" "$AWS_STUB_STATE"
+check "the rollback command carries the region" grep -q "Rollback: .* --region eu-west-1 $NEW $OLD" "$TMP/dieafter"
+roll_back "$TMP/dieafter"
+check "old is the master again after the rollback" [ "$(role "$OLD") $(role "$NEW")" = "master slave" ]
+check "the IP is back on the old host" sh -c "docker exec $OLD ip -4 -o addr show dev eth0 | grep -q ' $FIP/' && grep -qx '$FIP $OLD_IP' '$AWS_STUB_STATE'"
 
 [ "$FAILED" = 0 ] || { echo "Some checks failed"; exit 1; }
 echo "All checks passed"
