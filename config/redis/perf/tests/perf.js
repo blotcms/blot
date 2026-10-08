@@ -347,13 +347,14 @@ esac
       const out = path.join(dir, "out");
       write(path.join(dir, "home/perf/redis-sample.log"), "2026-10-08T12:00:00Z dt=60\n");
       // ssh runs its command here, with the fake home; docker answers from the environment
-      write(path.join(stubs, "ssh"), `#!/bin/sh\nwhile [ "$1" = -o ]; do shift 2; done\nshift\nexec sh -c "$*"\n`, 0o755);
+      write(path.join(stubs, "ssh"), `#!/bin/sh\nwhile [ "$1" = -o ]; do shift 2; done\nshift\nexec bash -c "$*"\n`, 0o755);
       write(
         path.join(stubs, "docker"),
         `#!/bin/sh
 case "$1" in
   inspect) [ "$MISSING" = "$2" ] && { echo "Error: No such object: $2" >&2; exit 1; }; exit 0 ;;
-  logs) [ "$3" = --since ] && [ "$5" = blot-container-green ] && echo "2026-10-08T12:00:01.123Z [LOCK] slow heartbeat 900ms"; exit 0 ;;
+  logs) [ "$5" = "$LOGS_FAIL" ] && { echo "Error response from daemon: configured logging driver does not support reading"; exit 1; }
+        [ "$3" = --since ] && [ "$5" = blot-container-green ] && echo "2026-10-08T12:00:01.123Z [LOCK] slow heartbeat 900ms"; exit 0 ;;
 esac
 `,
         0o755
@@ -373,6 +374,14 @@ esac
       expect(r.stderr).toContain("could not read the app container logs");
       expect(fs.existsSync(lockLog)).toBe(false);
       expect(fs.existsSync(lockLog + ".tmp")).toBe(false);
+
+      // docker logs failing after docker inspect passed is a failure too; grep finding nothing (blue, yellow) is not
+      expect(fetch({}).status).toBe(0);
+      expect(fs.existsSync(lockLog)).toBe(true);
+      r = fetch({ LOGS_FAIL: "blot-container-blue" });
+      expect(r.stderr).toContain("docker logs blot-container-blue failed");
+      expect(r.stderr).toContain("could not read the app container logs");
+      expect(fs.existsSync(lockLog)).toBe(false);
 
       // not fetching the app logs must not leave the counts of an earlier fetch
       expect(fetch({}).status).toBe(0);

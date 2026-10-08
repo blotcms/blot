@@ -54,17 +54,22 @@ if [ "$APP_LOGS" = 1 ]; then
   # are the minute. The count is done on the host so only a few lines come back.
   # The containers are checked first: a missing docker, a permission error or a
   # missing container would otherwise give an empty file, which compare.js reads
-  # as "no lock lines". The result is only moved into place if all of it worked.
+  # as "no lock lines". The same goes for docker logs failing (grep exiting 1
+  # for no match is fine). The result is only moved into place if all of it worked.
   if app_ssh "$APP_HOST" "for c in blue green yellow; do
     docker inspect blot-container-\$c > /dev/null || { echo \"cannot inspect blot-container-\$c\" >&2; exit 1; }
   done
+  set -o pipefail
+  { rc=0
   for c in blue green yellow; do
     docker logs -t --since $SINCE blot-container-\$c 2>&1 |
-      grep -F -e '[LOCK] slow heartbeat' -e '[LOCK COMPROMISED]' |
+      { grep -F -e '[LOCK] slow heartbeat' -e '[LOCK COMPROMISED]' || [ \$? -eq 1 ]; } |
       awk -v c=\$c '{ m = substr(\$1, 1, 16) \":00Z\"; seen[m] = 1
         if (index(\$0, \"[LOCK COMPROMISED]\")) k[m]++; else s[m]++ }
-        END { for (m in seen) printf \"%s container=%s slow=%d compromised=%d\\n\", m, c, s[m] + 0, k[m] + 0 }'
-  done | sort" > "$LOCK_LOG.tmp"; then
+        END { for (m in seen) printf \"%s container=%s slow=%d compromised=%d\\n\", m, c, s[m] + 0, k[m] + 0 }' ||
+      { echo \"docker logs blot-container-\$c failed\" >&2; rc=1; }
+  done
+  exit \$rc; } | sort" > "$LOCK_LOG.tmp"; then
     mv "$LOCK_LOG.tmp" "$LOCK_LOG"
     echo "$APP_HOST: app-lock.log ($(wc -l < "$LOCK_LOG" | tr -d ' ') lines)"
   else
