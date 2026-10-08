@@ -17,8 +17,9 @@
 #         Saves the current state to /root/blot-cpu-squeeze.state (kept if it is
 #         already there, so a second `on` cannot overwrite the original values;
 #         one saved before the last reboot is moved aside to
-#         /root/blot-cpu-squeeze.state.stale.<time>.<pid> and a new one is taken): the
-#         boot id (/proc/sys/kernel/random/boot_id), the smp_affinity of the NIC's IRQs (found by matching ens*/ena in
+#         /root/blot-cpu-squeeze.state.stale.<time>.<pid> and a new one is
+#         taken): the boot id (/proc/sys/kernel/random/boot_id), the
+#         smp_affinity of the NIC's IRQs (found by matching ens*/ena in
 #         /proc/interrupts), the RPS masks in /sys/class/net/<if>/queues/rx-*/rps_cpus
 #         and each unit's AllowedCPUs. Then `systemctl set-property --runtime
 #         AllowedCPUs=0` on system.slice, user.slice and init.scope, the IRQs to
