@@ -267,20 +267,27 @@ snapshot() { # snapshot [port] -> "host=status host=status ..."
 # SCAN by hand: `redis-cli --scan --count` needs redis-cli 7, and the
 # production host has 6.2, whose --scan uses SCAN's default COUNT of 10 (a
 # round trip per 10 keys of the whole keyspace).
+# Fails (rather than listing nothing) if a SCAN fails or returns an error
+# reply, so a broken Redis cannot pass for one with no custom domains. The loop
+# is not piped: a failure inside a pipeline would be lost.
 custom_cert_domains() {
-  local cursor=0 reply
+  local cursor=0 reply keys=""
   while :; do
     reply=$(redis-cli -h "$REDIS_HOST" --raw scan "$cursor" match 'ssl:*:latest' count 1000) || return 1
     cursor=$(printf '%s\n' "$reply" | head -n 1)
-    printf '%s\n' "$reply" | tail -n +2
+    case "$cursor" in ''|*[!0-9]*) return 1 ;; esac
+    keys="$keys$(printf '%s\n' "$reply" | tail -n +2)
+"
     [ "$cursor" != 0 ] || break
-  done | sed '/^$/d' | sed -E 's/^ssl:(.*):latest$/\1/' | sort -u
+  done
+  printf '%s' "$keys" | sed '/^$/d' | sed -E 's/^ssl:(.*):latest$/\1/' | sort -u
 }
 
 # cert_sweep [port] -> sorted "<domain> <sha256 fingerprint | none>" lines
 cert_sweep() {
-  local port="${1:-443}"
-  custom_cert_domains | xargs -r -P 16 -I{} bash -c '
+  local port="${1:-443}" domains
+  domains="$(custom_cert_domains)" || return 1
+  printf '%s\n' "$domains" | sed '/^$/d' | xargs -r -P 16 -I{} bash -c '
     fp=$(echo | timeout 5 openssl s_client -connect "$1:$2" -servername "$3" 2>/dev/null \
       | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
     echo "$3 ${fp:-none}"' _ "$SITE_IP" "$port" {} | sort
@@ -324,12 +331,17 @@ certs_all_served() { # certs_all_served [port]
   [ "${PROXY_SKIP_CERT_SWEEP:-}" != 1 ] || { log "PROXY_SKIP_CERT_SWEEP=1: not checking custom-domain certificates"; return 0; }
   command -v redis-cli >/dev/null 2>&1 \
     || { log "redis-cli is not installed, so custom-domain certificates cannot be checked (PROXY_SKIP_CERT_SWEEP=1 to skip)"; return 1; }
-  local sweep total missing
-  sweep="$(cert_sweep "${1:-443}" | sed '/^$/d')"
+  local sweep total missing wildcard
+  sweep="$(cert_sweep "${1:-443}")" \
+    || { log "cannot list the custom domains in Redis (SCAN failed), so their certificates cannot be checked"; return 1; }
+  sweep="$(printf '%s\n' "$sweep" | sed '/^$/d')"
   total=$(printf '%s\n' "$sweep" | sed '/^$/d' | wc -l | tr -d ' ')
-  missing="$(printf '%s\n' "$sweep" | grep ' none$' | cut -d' ' -f1 || true)"
+  # A custom domain served the wildcard file is auto-ssl falling back: it
+  # could not load that domain's certificate, and browsers will reject it.
+  wildcard=$(openssl x509 -in "$CERT_DIR/letsencrypt-domain.pem" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
+  missing="$(printf '%s\n' "$sweep" | awk -v w="$wildcard" '$2 == "none" || (w != "" && $2 == w) { print $1 }')"
   if [ -n "$missing" ]; then
-    log "no certificate presented for $(printf '%s\n' "$missing" | wc -l | tr -d ' ') of $total custom domains in Redis: first few:"
+    log "no certificate of its own presented for $(printf '%s\n' "$missing" | wc -l | tr -d ' ') of $total custom domains in Redis: first few:"
     printf '%s\n' "$missing" | head -5 | while read -r line; do log "  $line"; done
     return 1
   fi

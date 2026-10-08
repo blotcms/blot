@@ -101,6 +101,8 @@ cat > "$T/bin/redis-cli" <<'F'
 #!/usr/bin/env bash
 if [[ " $* " == *" scan "* ]]; then
   # common.sh's custom_cert_domains: a cursor line (0 = done), then the keys
+  if [ -n "${FAKE_SCAN_FAIL:-}" ]; then echo "ERR fake scan failure"; exit 1; fi
+  if [ -n "${FAKE_SCAN_ERROR_REPLY:-}" ]; then echo "LOADING Redis is loading the dataset in memory"; exit 0; fi
   echo 0
   for d in ${FAKE_CUSTOM_DOMAINS-a.custom.test b.custom.test}; do echo "ssl:$d:latest"; done
   exit
@@ -292,6 +294,15 @@ check "fresh start where every Redis domain gets a certificate: made permanent" 
 
 reset none; FAKE_CUSTOM_DOMAINS="" bluegreen
 check "fresh start with no custom domains in Redis: nothing to serve, allowed" '[ $RC = 0 ]'
+
+reset none; FAKE_CUSTOM_FP_CONTAINER=A bluegreen
+check "fresh start where custom domains get the wildcard (auto-ssl fallback): refused, never made permanent" '[ $RC != 0 ] && mentions "no certificate of its own" && mentions "2 of 2" && called "docker rm -f blot-proxy-blue" && ! called "docker update"'
+
+reset none; FAKE_SCAN_FAIL=1 bluegreen
+check "fresh start where the Redis SCAN fails: refused, not mistaken for no custom domains" '[ $RC != 0 ] && mentions "SCAN failed" && ! called "docker update"'
+
+reset none; FAKE_SCAN_ERROR_REPLY=1 bluegreen
+check "fresh start where SCAN returns an error reply: refused" '[ $RC != 0 ] && mentions "SCAN failed" && ! called "docker update"'
 
 reset container; FAKE_LOCK_HELD=1 bluegreen
 check "another deploy holds the lock: refused, nothing touched" '[ $RC != 0 ] && ! called "docker create" && ! called "docker stop" && ! called "docker rm" && mentions "already running"'
