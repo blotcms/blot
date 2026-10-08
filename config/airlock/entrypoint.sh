@@ -52,6 +52,15 @@ echo "airlock: tinyproxy started on :8888 (pid ${PROXY_PID})"
 #    The rest mirrors app/helper/screenshot/args.js: no disk cache, no
 #    background network chatter (component/sync/domain-reliability/breakpad),
 #    deterministic rendering.
+#
+#    The last three flags keep one heavy page from starving the container. At
+#    512m with ~150m idle, a page near the limit makes the kernel evict
+#    Chromium's, nginx's and tinyproxy's code pages, everything stalls, the
+#    HEALTHCHECK times out and the host's check_docker_health.sh restarts us.
+#    Capping each renderer's JS heap makes a runaway page crash its own tab
+#    (that screenshot fails, the post builds without it) instead. Site
+#    isolation gives every cross-site iframe (ads, embeds) its own renderer;
+#    with --no-sandbox it isolates nothing, so keep a page in one process.
 # ---------------------------------------------------------------------------
 su-exec airlock:airlock "$CHROMIUM_BIN" \
     --headless=new \
@@ -90,7 +99,10 @@ su-exec airlock:airlock "$CHROMIUM_BIN" \
     --user-data-dir=/home/airlock/profile \
     --remote-debugging-address=127.0.0.1 \
     --remote-debugging-port=9221 \
-    --remote-allow-origins=* &
+    --remote-allow-origins=* \
+    --js-flags=--max-old-space-size=128 \
+    --disable-features=IsolateOrigins,site-per-process \
+    --disable-site-isolation-trials &
 CHROMIUM_PID=$!
 echo "airlock: chromium started on 127.0.0.1:9221 (pid ${CHROMIUM_PID})"
 
