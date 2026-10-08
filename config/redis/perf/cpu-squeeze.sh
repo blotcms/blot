@@ -195,6 +195,7 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     . "$(dirname "$0")/common.sh"
     echo "Running '$2' on $1 (every command is printed before it runs)"
     ssh_run "$1" "sudo env NIC='${NIC:-}' bash -s" << EOF
+set -euo pipefail
 $(declare -f remote)
 remote $2
 EOF

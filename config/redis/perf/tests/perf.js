@@ -328,12 +328,11 @@ esac
   });
 
   describe("cpu-squeeze.sh", function () {
-    it("saves state once, confines CPUs and IRQs, and restores them", function () {
-      skipUnless("bash", "awk", "sort");
+    // A fake host: /proc and /sys under root, systemctl and taskset stand-ins on PATH.
+    const squeezeHost = () => {
       const dir = tmp();
       const root = path.join(dir, "root");
       const stubs = path.join(dir, "stubs");
-      const state = path.join(root, "root/blot-cpu-squeeze.state");
       // /proc and /sys of a 2-CPU host with an ENA card (names as on the real host)
       write(path.join(root, "proc/interrupts"), "       CPU0 CPU1\n 37: 1 2 ITS-MSI 1 Edge ena-mgmnt@pci:0000:00:05.0\n 38: 1 2 ITS-MSI 2 Edge ens5-Tx-Rx-0\n 39: 1 2 ITS-MSI 3 Edge ens5-Tx-Rx-1\n 40: 1 2 ITS-MSI 4 Edge nvme0q1\n");
       for (const irq of [37, 38, 39, 40]) write(path.join(root, `proc/irq/${irq}/smp_affinity`), "3\n");
@@ -361,8 +360,20 @@ esac
       );
       write(path.join(stubs, "taskset"), `#!/bin/sh\necho "pid $2's current affinity list: 0"\n`, 0o755);
       const env = Object.assign({}, process.env, { BLOT_ROOT: root, BUSY_SECS: "0", PATH: stubs + path.delimiter + process.env.PATH });
-      const run = (action) => spawnSync("bash", [path.join(PERF, "cpu-squeeze.sh"), "--local", action], { env, encoding: "utf8" });
-      const read = (file) => fs.readFileSync(file, "utf8").trim();
+      return {
+        dir,
+        root,
+        stubs,
+        env,
+        state: path.join(root, "root/blot-cpu-squeeze.state"),
+        run: (action) => spawnSync("bash", [path.join(PERF, "cpu-squeeze.sh"), "--local", action], { env, encoding: "utf8" }),
+        read: (file) => fs.readFileSync(file, "utf8").trim(),
+      };
+    };
+
+    it("saves state once, confines CPUs and IRQs, and restores them", function () {
+      skipUnless("bash", "awk", "sort");
+      const { dir, root, state, run, read } = squeezeHost();
 
       let r = run("on");
       expect(r.status).toBe(0);
@@ -391,6 +402,31 @@ esac
       expect(run("off").stdout).toContain("nothing to restore");
 
       expect(run("bogus").status).not.toBe(0);
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("stops at the first failing command when run over ssh, as --local does", function () {
+      skipUnless("bash", "awk", "sort");
+      const { dir, stubs, env, run } = squeezeHost();
+      // ssh runs its command here instead, under a sudo that does nothing, with the script on stdin
+      write(path.join(stubs, "ssh"), `#!/bin/sh\nwhile [ "$1" = -o ]; do shift 2; done\nshift\nexec sh -c "$*"\n`, 0o755);
+      write(path.join(stubs, "sudo"), `#!/bin/sh\nexec "$@"\n`, 0o755);
+      const viaSsh = (action) => spawnSync("bash", [path.join(PERF, "cpu-squeeze.sh"), "somehost", action], { env, encoding: "utf8" });
+
+      const ok = viaSsh("on");
+      expect(ok.stderr).toBe("");
+      expect(ok.status).toBe(0);
+      expect(ok.stdout).toContain("== redis6-server threads");
+      expect(viaSsh("off").status).toBe(0);
+
+      // systemctl set-property fails: no verification afterwards and a nonzero exit
+      write(path.join(stubs, "systemctl"), `#!/bin/sh\ncase "$1" in is-active) exit 3 ;; set-property) exit 1 ;; esac\n`, 0o755);
+      for (const go of [viaSsh, run]) {
+        const r = go("on");
+        expect(r.status).not.toBe(0);
+        expect(r.stdout).toContain("+ systemctl set-property");
+        expect(r.stdout).not.toContain("== redis6-server threads");
+      }
       fs.rmSync(dir, { recursive: true, force: true });
     });
 
