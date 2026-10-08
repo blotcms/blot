@@ -6,7 +6,7 @@ const async = require("async");
 const { join, resolve, basename } = require("path");
 const localPath = require("helper/localPath");
 const messenger = require("./messenger");
-const { blog_static_files_dir } = require("config");
+const assets = require("storage/assets");
 const { promisify } = require("util");
 const Transformer = require("helper/transformer");
 const Blog = require("models/blog");
@@ -68,16 +68,12 @@ module.exports = function main(blogID, options, callback) {
 
       try {
         if (options.thumbnails) {
-          const directory = join(blog_static_files_dir, blog.id, "_thumbnails");
+          const directory = assets.path(blog.id, "_thumbnails");
           await wipeCache({ blogID: blog.id, label: "thumbnails", directory });
         }
 
         if (options.imageCache) {
-          const directory = join(
-            blog_static_files_dir,
-            blog.id,
-            "_image_cache"
-          );
+          const directory = assets.path(blog.id, "_image_cache");
           await wipeCache({ blogID: blog.id, label: "image-cache", directory });
         }
       } catch (e) {

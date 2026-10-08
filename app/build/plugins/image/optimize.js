@@ -1,4 +1,5 @@
 var config = require("config");
+var assets = require("storage/assets");
 var { v4: uuid } = require("uuid");
 var join = require("path").join;
 var fs = require("fs-extra");
@@ -60,12 +61,7 @@ module.exports = function (blogID, originalSrc) {
       relativePath = name;
     }
     
-    var finalPath = join(
-      config.blog_static_files_dir,
-      blogID,
-      cache_folder_name,
-      relativePath
-    );
+    var finalPath = assets.path(blogID, cache_folder_name, relativePath);
 
     var src =
       config.cdn.origin + "/" + blogID + "/" + cache_folder_name + "/" + relativePath;
@@ -86,7 +82,7 @@ module.exports = function (blogID, originalSrc) {
       );
 
     // Ensure the directory exists (in case we're using UUID as a subdirectory)
-    var finalDir = join(config.blog_static_files_dir, blogID, cache_folder_name);
+    var finalDir = assets.path(blogID, cache_folder_name);
     if (originalFilename && originalFilename.length > 0) {
       finalDir = join(finalDir, uuidPart);
     }
