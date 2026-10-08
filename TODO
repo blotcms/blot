@@ -103,6 +103,21 @@ Add fast rollback action
 
 Get proxy horizontally scalable and multi-region
 
+Proxy container follow-ups (cut over 8 Oct 2026, #1941)
+- Check webhooks. SSE through the container, and that a known data/static file on cdn. has Cache-Control 1y and no Blot-Upstream
+- After the next 03:46 logrotate: access.log/error.log still written after copytruncate, fail2ban counts still moving
+- After the next wildcard renewal (/home/ec2-user/renew-wildcard.log): container reloaded, served cert fingerprint matches /etc/ssl/private/letsencrypt-domain.pem
+- Custom-domain certs renew inside the container: none within ~20 days of expiry apart from domains that no longer point at Blot; identify-expiring-certs cron restarts the container cleanly
+- Reboot the host once in a maintenance window: mount-instance-store mounts without reformatting, docker starts after it, the proxy comes back with cache/log mounts, :80/:443 answer
+- First Deploy proxy workflow run after `sudo chgrp docker /etc/blot/proxy.env` (#2080 deployment plan)
+- Uninstall bare-metal OpenResty from the host after a month of full renewal cycles (it is the manual rollback until then)
+- HTTP/3 is not advertised (no Alt-Svc on either stack); decide whether to open UDP 443 and make fail2ban bans cover UDP too
+- http://www.blot.im/ returns 404: confirm intended
+- app/blog/static has no copy on the host, so those cdn. files fall through to Node: export them from the Node image on deploy, or accept
+- scripts/blog/reset-ssl-certificate-for-expired-domain.js calls the bare-metal /usr/local/openresty/bin/openresty; make it act on the container
+- cdn. responses carry Cache-Control twice (expires 1y + add_header), as on bare metal
+- Purges during a blue/green overlap reach only one container (shared SO_REUSEPORT on :8077)
+
 Explain on the about page the websites started out as files in a folder. But they had to be HTML. Blot makes other file types possible too.
 
 Get node container horizontally scalable and multi-region
