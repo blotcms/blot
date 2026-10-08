@@ -62,7 +62,7 @@ EOF
 # deterministic forced-failure scenarios in the workflow: 198.51.100.7 is
 # TEST-NET-2 (RFC 5737), never assigned to a runner interface, so the real
 # container's :8077 listener fails to bind and it never becomes healthy.
-# validate_image() only runs `openresty -t` (parses, does not bind) and the
+# validate_image() runs `openresty -t` with ip_nonlocal_bind, and the
 # cutover rehearsal explicitly overrides PROXY_PRIVATE_IP=127.0.0.1 for its
 # own container, so preflight and the rehearsal both still pass with this
 # file - only the real container fails, which is the point.
