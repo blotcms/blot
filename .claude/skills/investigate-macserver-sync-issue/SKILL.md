@@ -204,3 +204,31 @@ Entry template:
   gone now logs `Skipping upload: file no longer exists` and requests no
   resync. The admin email is capped at one per blog per hour (`Resync email
   suppressed`, `app/clients/icloud/util/notificationCap.js`).
+
+### 2026-10-08 12:13:54 UTC resync request — account/setup state (reconnect churn), plus a bug
+
+- Alert: one `ICLOUD_RESYNC_REQUESTED` email, sent 12:14:11 UTC. The macserver
+  requested at 12:13:54 UTC (05:13:54 Mac, -0700): an upload got `409` (setup
+  not complete) after retries. Further requests at 12:14:24, 12:15:00, 12:15:33,
+  12:16:38 and 12:19:03 hit `400` (not connected), `409` and `423`. The email
+  cap suppressed the later emails. Container green.
+- Key events (UTC): the owner connected, disconnected and reconnected three
+  times (10:05–10:57, 11:53–11:56, 12:13–12:16). The first share was
+  read-only, so the 10:52 disconnect hit `EPERM`. While the blog was
+  disconnected, the owner moved every post into year subfolders. The
+  macserver logs `Dropping … event for inactive blogID` for those changes, so
+  they were never pushed. 12:13:36 reconnect: `sync_720af62` Blot→iCloud
+  transfer. 12:14:04 disconnect; the transfer aborts at 12:14:08. 12:14:11
+  the queued resync `sync_0263946` takes the lock and removes every local
+  post (0 downloaded). 12:15:43 reconnect. 12:16:07 the dashboard Reset
+  `sync_c16e43d` downloads the year folders (the `RESYNC_FOUND_CHANGES` email).
+- Cause: changes made while disconnected are dropped by design, and the Reset
+  is what picked them up. Bug: a resync request waiting on the folder lock
+  outlived the disconnect. `stampLastSync` (`hSet`) recreated a stub account
+  hash after `database.delete`, so `checkWeCanContinue` passed. The walk then
+  read an empty remote folder and wiped Blot's copy of a disconnected blog.
+- Follow-up: fixed in the PR for this entry. After taking the lock,
+  `status.js` re-checks the account and logs `Resync skipped: blog no longer
+  connected` (400) or `Resync skipped: blog setup not complete` (409, a
+  reconnect still transferring). `stampLastSync` no longer creates a
+  missing hash.

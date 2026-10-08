@@ -67,7 +67,13 @@ describe("icloud status route", function () {
     // Reload status.js so it picks up the mocks and starts with empty state
     delete require.cache[statusPath];
 
-    mockModule(databasePath, { store: async () => {} });
+    mockModule(databasePath, {
+      store: async () => {},
+      get: async () => ({
+        sharingLink: "https://www.icloud.com/iclouddrive/x",
+        setupComplete: true,
+      }),
+    });
     mockModule(initialTransferPath, async () => {});
     mockModule(fromiCloudPath, async (blogID) => {
       syncs.push(blogID);
@@ -115,6 +121,87 @@ describe("icloud status route", function () {
     await requestResync(status, "blog_a");
     expect(emails).toEqual(["blog_a", "blog_b", "blog_a"]);
     expect(syncs.length).toBe(5);
+  });
+
+  it("skips the resync if the blog was disconnected while it waited for the lock", async function () {
+    let released = false;
+    // loadAccount passed, then the disconnect deleted the account before
+    // the lock came free
+    mockModule(databasePath, { store: async () => {}, get: async () => null });
+    mockModule(establishSyncLockPath, async () => ({
+      folder: { status: Object.assign(() => {}, { bind: () => () => {} }), update() {} },
+      done: async () => {
+        released = true;
+      },
+    }));
+    const status = require(statusPath);
+
+    const res = fakeRes();
+    await status(
+      { header: () => "blog_a", body: { resyncRequested: true } },
+      res
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(syncs).toEqual([]);
+    expect(emails).toEqual([]);
+    expect(released).toBe(true);
+  });
+
+  it("skips the resync if the blog was reconnected but its setup isn't complete", async function () {
+    // Disconnected and reconnected while the request waited for the lock:
+    // the new account's initial transfer hasn't finished
+    mockModule(databasePath, {
+      store: async () => {},
+      get: async () => ({
+        sharingLink: "https://www.icloud.com/iclouddrive/x",
+        setupComplete: false,
+        transferringToiCloud: true,
+      }),
+    });
+    const status = require(statusPath);
+
+    const res = fakeRes();
+    await status(
+      { header: () => "blog_a", body: { resyncRequested: true } },
+      res
+    );
+
+    expect(res.statusCode).toBe(409);
+    expect(syncs).toEqual([]);
+    expect(emails).toEqual([]);
+  });
+
+  it("keeps a resync request retryable when setup wasn't complete", async function () {
+    let setupComplete = false;
+    mockModule(databasePath, {
+      store: async () => {},
+      get: async () => ({
+        sharingLink: "https://www.icloud.com/iclouddrive/x",
+        setupComplete,
+      }),
+    });
+    const status = require(statusPath);
+
+    const first = fakeRes();
+    await status(
+      { header: () => "blog_a", body: { resyncRequested: true } },
+      first
+    );
+    expect(first.statusCode).toBe(409);
+
+    // The macserver retries straight away, well inside the 10s window, and
+    // setup has finished meanwhile. The retry must resync, not be
+    // acknowledged by a cooldown.
+    setupComplete = true;
+    const retry = fakeRes();
+    await status(
+      { header: () => "blog_a", body: { resyncRequested: true } },
+      retry
+    );
+
+    expect(retry.statusCode).toBeUndefined();
+    expect(syncs).toEqual(["blog_a"]);
   });
 
   it("keeps a resync request retryable when the sync lock was busy", async function () {

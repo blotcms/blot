@@ -76,7 +76,13 @@ describe("icloud routes stamp lastSync", function () {
       folder: { status: () => {}, update: async () => {} },
       done: async () => {},
     }));
-    stub("database", { store: async () => {} });
+    stub("database", {
+      store: async () => {},
+      get: async () => ({
+        sharingLink: "https://www.icloud.com/iclouddrive/x",
+        setupComplete: true,
+      }),
+    });
     stub("initialTransfer", async () => {});
     stub("fromiCloud", async (id) => walked.push(id));
     stub("email", { ICLOUD_RESYNC_REQUESTED: () => {} });

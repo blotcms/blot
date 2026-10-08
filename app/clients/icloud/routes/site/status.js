@@ -74,16 +74,40 @@ module.exports = async function (req, res) {
       const { done, folder } = await establishSyncLock(blogID);
       lockAcquired = true;
 
-      // A resync request means the macserver saw something go wrong with
-      // its pushes (eg. it gave up retrying after the folder was locked), so
-      // the blog is active and should be checked by the next sweep.
-      await stampLastSync(blogID);
-
-      // Now that we have the sync lock, we can send "ok" to the
-      // macserver since the resync can take a while
-      res.send("ok");
+      // Set when the account check below turns the resync down, so no resync
+      // runs and the macserver is told to retry.
+      let refused = false;
 
       try {
+        // The request may have waited on the lock while the blog was
+        // disconnected, or disconnected and reconnected (loadAccount only
+        // checked before that). Resyncing then would walk an empty or
+        // half-transferred remote folder and remove local files, so check
+        // again now that nothing else can change the folder.
+        const account = await database.get(blogID);
+        if (!account || !account.sharingLink) {
+          console.log("Resync skipped: blog no longer connected", { blogID });
+          refused = true;
+          return res.status(400).send("Blog is not connected to iCloud Drive");
+        }
+        if (
+          account.setupComplete !== true ||
+          account.transferringToiCloud === true
+        ) {
+          console.log("Resync skipped: blog setup not complete", { blogID });
+          refused = true;
+          return res.status(409).send("Blog has not completed set up");
+        }
+
+        // A resync request means the macserver saw something go wrong with
+        // its pushes (eg. it gave up retrying after the folder was locked), so
+        // the blog is active and should be checked by the next sweep.
+        await stampLastSync(blogID);
+
+        // Now that we have the sync lock, we can send "ok" to the
+        // macserver since the resync can take a while
+        res.send("ok");
+
         folder.status("Resync requested");
         console.log("Resync requested from iCloud", { blogID });
         const result = notifyResyncRequested(blogID, () =>
@@ -102,13 +126,20 @@ module.exports = async function (req, res) {
         folder.status("Resync complete");
       } finally {
         dedupEntry.inFlight = false;
-        dedupEntry.cooldownUntil = Date.now() + RESYNC_DEDUP_WINDOW_MS;
         if (dedupEntry.cleanupTimeout) {
           clearTimeout(dedupEntry.cleanupTimeout);
         }
-        dedupEntry.cleanupTimeout = setTimeout(() => {
+        if (refused) {
+          // As with a busy lock below: a cooldown would answer the
+          // macserver's retry "ok" without resyncing, so it would stop
+          // retrying (eg. before a reconnect's setup completes).
           resyncDedupRegistry.delete(blogID);
-        }, RESYNC_DEDUP_WINDOW_MS);
+        } else {
+          dedupEntry.cooldownUntil = Date.now() + RESYNC_DEDUP_WINDOW_MS;
+          dedupEntry.cleanupTimeout = setTimeout(() => {
+            resyncDedupRegistry.delete(blogID);
+          }, RESYNC_DEDUP_WINDOW_MS);
+        }
         await done();
       }
     } catch (err) {

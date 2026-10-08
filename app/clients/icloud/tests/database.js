@@ -133,6 +133,15 @@ describe("icloud database", function () {
     expect(stored.lastSync).toBeGreaterThanOrEqual(before);
   });
 
+  it("doesn't re-create a disconnected account when stamping lastSync", async function () {
+    await database.store(this.blog.id, { setupComplete: true });
+    await database.delete(this.blog.id);
+
+    await database.stampLastSync(this.blog.id);
+
+    expect(await database.get(this.blog.id)).toBe(null);
+  });
+
   it("resets errorSince when the code changes", async function () {
     await database.store(this.blog.id, {
       setupComplete: true,
