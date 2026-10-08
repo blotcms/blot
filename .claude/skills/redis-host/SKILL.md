@@ -387,3 +387,16 @@ Entry template:
   `FORK_ALERT_US` (500ms) or more (`app/scheduler/redis-host-events.js`).
 - Follow-up: none. A fork over 500ms is worth a look (dataset growth, memory
   pressure on the host).
+
+### 2026-10-08 — restore drill 2, with a cutover dry run
+
+- Trigger / evidence: rehearsal after the cleanup of `cutover.sh` (#2079).
+  `hourly/2026-10-08-hour-21` (the first backup saved right before upload)
+  restored onto a `--drill` host in 2m25s; key count within 0.001% of live.
+- Then made it a replica of the live master (~67s; a ~63ms fork and ~33s save
+  on the master, no visible effect, no `[LOCK]` lines) and ran
+  `cutover.sh --dry-run`: every check passed, the drill-host warning showed,
+  plan steps 1-6, rollback command without `--allow-unbootstrapped`.
+- Fix / outcome: README "Disaster recovery" now stops the refresh timer
+  around a hand-made IP move and removes the drill marker if a drill host
+  goes live. Drill host terminated after.
