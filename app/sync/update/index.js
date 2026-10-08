@@ -11,6 +11,17 @@ var Blog = require("models/blog");
 var build = require("build");
 var Entry = require("models/entry");
 var folderPostSourceFolder = require("./folderPostSourceFolder");
+var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
+
+// Keep the first error, except that a Redis outage always wins: it is the
+// only kind that update() passes on, so a per-file error seen earlier in the
+// same update must not hide it.
+function firstError(current, next) {
+  if (!next) return current;
+  if (!current) return next;
+  if (isRedisUnavailableError(current)) return current;
+  return isRedisUnavailableError(next) ? next : current;
+}
 
 module.exports = function (blog, log, status) {
   return function update(path, callback) {
@@ -31,10 +42,21 @@ module.exports = function (blog, log, status) {
     assertNoSymlinks(localPath(blog.id, "/"), localPath(blog.id, path)).then(function () {
       hashFile(localPath(blog.id, path), function (err, hashBefore) {
         function done(err) {
-          // we never let this error escape out
           if (err) {
             console.error(clfdate(), blog.id, path, err);
           }
+
+          // Redis cannot take the write (a host cutover, a restart, an
+          // outage), so the database does not reflect the file on disk. The
+          // client must know, otherwise it marks the change as applied and
+          // nothing ever builds the entry. Skip the re-hash and cache flush:
+          // both would only wait on the same Redis.
+          if (err && isRedisUnavailableError(err)) return callback(err);
+
+          // Any other error is usually about this one file (a source that
+          // will not build, say) and must not stop the rest of the sync,
+          // so it is logged above and never escapes.
+          var updateError = err;
           hashFile(localPath(blog.id, path), function (err, hashAfter) {
             if (hashBefore !== hashAfter) {
               status("Re-syncing " + path);
@@ -45,7 +67,7 @@ module.exports = function (blog, log, status) {
             // but if we don't do it after updating each files
             // long syncs can produce weird cache behaviour
             flushCache(blog.id, function () {
-              callback(null, { error: err || null });
+              callback(null, { error: updateError || err || null });
             });
           });
         }
@@ -55,6 +77,8 @@ module.exports = function (blog, log, status) {
             var multiInfo = build.findMultiFolder(path);
 
             resolveEnoentTargets(blog, path, multiInfo, function (targets) {
+              if (targets.error) return done(targets.error);
+
               var dropTargets = targets.dropTargets;
               var rebuildTarget = targets.rebuildTarget;
               var dropError = null;
@@ -67,7 +91,7 @@ module.exports = function (blog, log, status) {
                     localPath(blog.id, rebuildTarget),
                     function (existsErr, exists) {
                       if (existsErr) {
-                        if (!dropError) dropError = existsErr;
+                        dropError = firstError(dropError, existsErr);
                         return done(dropError);
                       }
 
@@ -82,7 +106,7 @@ module.exports = function (blog, log, status) {
                             "Error rebuilding multi-folder in database",
                             err
                           );
-                          if (!dropError) dropError = err;
+                          dropError = firstError(dropError, err);
                         } else {
                           log(
                             rebuildTarget,
@@ -101,7 +125,7 @@ module.exports = function (blog, log, status) {
                 drop(blog.id, target, function (err) {
                   if (err) {
                     log(target, "Error dropping from database", err);
-                    if (!dropError) dropError = err;
+                    dropError = firstError(dropError, err);
                   } else {
                     log(target, "Dropping from database succeeded");
                   }
@@ -164,7 +188,12 @@ module.exports = function (blog, log, status) {
 //    aggregate): rebuild that folder now that the collision is gone.
 function resolveEnoentTargets(blog, path, multiInfo, callback) {
   if (multiInfo && multiInfo.folderPath === path && multiInfo.entryPath) {
-    return Entry.get(blog.id, multiInfo.entryPath, function (existing) {
+    return Entry.get(blog.id, multiInfo.entryPath, function (existing, getErr) {
+      // Without the entry we cannot tell whose aggregate it is, and guessing
+      // could unpublish the wrong post
+      if (!existing && getErr && isRedisUnavailableError(getErr))
+        return callback({ error: getErr });
+
       var sourceFolder = folderPostSourceFolder(existing);
       var isOwnAggregate =
         sourceFolder &&
