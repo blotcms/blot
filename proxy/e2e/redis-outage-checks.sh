@@ -50,7 +50,7 @@ expect_issued_cert() {
 }
 
 served_subject() {
-  echo | openssl s_client -connect "$HOSTIP:443" -servername "$1" 2>/dev/null \
+  echo | timeout 15 openssl s_client -connect "$HOSTIP:443" -servername "$1" 2>/dev/null \
     | openssl x509 -noout -subject
 }
 
