@@ -16,6 +16,7 @@ const {
   transferIncomplete,
 } = require("../util/constants");
 const modifiedSince = require("./modified-since");
+const { deletedSince } = modifiedSince;
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const localDescendants = require("clients/util/localDescendants");
 const {
@@ -31,7 +32,6 @@ const {
   keepsErrorAfterDownload,
 } = require("../util/classifyError");
 const tagSource = require("../util/tagSource");
-const latestCursor = require("./latest-cursor");
 const createClient = promisify((blogID, cb) =>
   require("../util/createClient")(blogID, (err, ...results) => cb(err, results))
 );
@@ -69,12 +69,7 @@ async function mapLimit(items, limit, iterator) {
 // database follows the folder even if the walk fails part way through. It is
 // the same (blogID, publish, update) contract the iCloud and Drive clients
 // use, and callers should hold the folder lock while it runs.
-//
-// options.excuseChangesSince: a cursor fetched before the walk's own (e.g. by
-// validation, a few seconds before taking the lock). Changes Dropbox reports
-// since it are excused from the unsynced-change count, instead of just those
-// since the pre-walk cursor. The pre-walk cursor is still the one saved.
-async function resetToBlot(blogID, publish, update, options = {}) {
+async function resetToBlot(blogID, publish, update) {
   if (!publish)
     publish = (...args) => {
       console.log(clfdate() + " Dropbox:", args.join(" "));
@@ -110,8 +105,7 @@ async function resetToBlot(blogID, publish, update, options = {}) {
       client,
       account,
       updatePath,
-      startedAt,
-      options
+      startedAt
     );
   } catch (err) {
     await persistError(blogID, err, SOURCES.APPLY);
@@ -125,8 +119,7 @@ async function resetToBlotWithClient(
   client,
   account,
   updatePath,
-  startedAt,
-  options = {}
+  startedAt
 ) {
   // Guard this at the source rather than only in each caller: resetToBlot
   // treats Dropbox as the source of truth and deletes any local file with no
@@ -160,7 +153,26 @@ async function resetToBlotWithClient(
     }
   }
 
-  const cursor = await latestCursor(client, account);
+  // It's import that these args match those used in delta.js
+  // A way to quickly get a cursor for the folder's state.
+  // From the docs:
+  // https://dropbox.github.io/dropbox-sdk-js/Dropbox.html
+  // Unlike list_folder, list_folder/get_latest_cursor doesn't
+  // return any entries. This endpoint is for app which only
+  // needs to know about new files and modifications and doesn't
+  // need to know about files that already exist in Dropbox.
+  // Route attributes: scope: files.metadata.read
+
+  const {
+    result: { cursor },
+  } = await tagSource(
+    SOURCES.DELTA,
+    client.filesListFolderGetLatestCursor({
+      path: account.folder_id || "",
+      include_deleted: true,
+      recursive: true,
+    })
+  );
 
   // The cursor is fetched before the walk, so edits made during it are still
   // seen by the next sync, but only saved once the walk succeeds. If the walk
@@ -178,15 +190,23 @@ async function resetToBlotWithClient(
     firstError: null,
     // Subset of downloaded: files Dropbox modified after we started.
     modifiedDuringWalk: 0,
-    // Changes (of any kind) to paths Dropbox reports changing since the
-    // pre-walk cursor, i.e. edits that landed mid-walk, or since
-    // options.excuseChangesSince if given, i.e. just before it too. Not
-    // counted by countChanges, like modifiedDuringWalk. See changedSinceCursor
-    // below.
+    // Changes (of any kind) that Dropbox shows were made during the walk or
+    // just before it (see GRACE_MS): paths it reports changing since the
+    // pre-walk cursor, or whose deletion or contents are timestamped recently.
+    // Not counted by countChanges, like modifiedDuringWalk. See
+    // excuseRecentChanges below.
     changedDuringWalk: 0,
     // Paths behind downloaded/removed/createdDirs not already excused by
-    // modifiedDuringWalk, checked against the cursor once the walk is done.
+    // modifiedDuringWalk, checked once the walk is done.
     changedPaths: [],
+    // Removals and folders carry no timestamp in a folder listing, so these
+    // give excuseRecentChanges something to timestamp them by:
+    // removedFiles maps a removed path to up to MAX_REMOVED_SAMPLES file paths
+    // on Blot that were removed with it (itself, for a file), whose deletion
+    // time list_revisions can give; modifiedPaths are the downloaded files
+    // modifiedSince excused, which date the folders created for them.
+    removedFiles: {},
+    modifiedPaths: [],
     startedAt,
   };
 
@@ -205,20 +225,11 @@ async function resetToBlotWithClient(
   );
 
   if (summary.changedPaths.length) {
-    const changed = await changedSinceCursor(
-      client,
-      options.excuseChangesSince || cursor,
-      dropboxRoot
-    );
-    if (changed) {
-      summary.changedDuringWalk = summary.changedPaths.filter((path) =>
-        overlapsAny(path, changed)
-      ).length;
-      if (summary.changedDuringWalk)
-        publish(
-          `${summary.changedDuringWalk} change(s) were made in Dropbox during or just before the walk`
-        );
-    }
+    await excuseRecentChanges(client, cursor, dropboxRoot, summary);
+    if (summary.changedDuringWalk)
+      publish(
+        `${summary.changedDuringWalk} change(s) were made in Dropbox during or just before the walk`
+      );
   }
 
   // This means that future syncs will be fast
@@ -288,6 +299,10 @@ const walk = async (
         const descendants = is_directory
           ? await localDescendants(pathOnDisk, pathOnBlot)
           : [];
+        // Before the removal, while there is something left to stat
+        summary.removedFiles[pathOnBlot] = is_directory
+          ? await sampleFiles(localRoot, descendants)
+          : [pathOnBlot];
         await fs.remove(pathOnDisk);
         summary.removed += 1;
         summary.changedPaths.push(pathOnBlot);
@@ -424,9 +439,10 @@ const walk = async (
           await download(client, pathOnDropbox, pathOnDisk);
           summary.downloaded += 1;
           await updatePath(pathOnBlot);
-          if (modifiedSince(remoteItem, summary.startedAt))
+          if (modifiedSince(remoteItem, summary.startedAt)) {
             summary.modifiedDuringWalk += 1;
-          else summary.changedPaths.push(pathOnBlot);
+            summary.modifiedPaths.push(pathOnBlot);
+          } else summary.changedPaths.push(pathOnBlot);
         } catch (e) {
           // A file can end up with a destination path longer than the
           // filesystem allows – seen in production when a Dropbox account
@@ -449,9 +465,10 @@ const walk = async (
           await download(client, pathOnDropbox, pathOnDisk);
           summary.downloaded += 1;
           await updatePath(pathOnBlot);
-          if (modifiedSince(remoteItem, summary.startedAt))
+          if (modifiedSince(remoteItem, summary.startedAt)) {
             summary.modifiedDuringWalk += 1;
-          else summary.changedPaths.push(pathOnBlot);
+            summary.modifiedPaths.push(pathOnBlot);
+          } else summary.changedPaths.push(pathOnBlot);
         } catch (e) {
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
           else recordFailure(summary, pathOnBlot, e);
@@ -505,6 +522,84 @@ const overlapsAny = (path, changed) => {
       path.startsWith(other + "/") ||
       other.startsWith(path + "/")
   );
+};
+
+// How many files of a removed folder to ask list_revisions about, and how many
+// such calls one walk makes at most. A folder is dated by any one file inside
+// it, and a walk that removed more than a handful of separate things has
+// missed more than a webhook that was still in flight.
+const MAX_REMOVED_SAMPLES = 3;
+const MAX_REVISION_LOOKUPS = 20;
+
+// The first few files (not folders) among the blog paths of a removed folder's
+// descendants, as returned by localDescendants. Call it before the removal.
+const sampleFiles = async (localRoot, descendants) => {
+  const files = [];
+  for (const path of descendants) {
+    if (files.length >= MAX_REMOVED_SAMPLES) break;
+    try {
+      if ((await fs.stat(join(localRoot, path))).isFile()) files.push(path);
+    } catch (err) {}
+  }
+  return files;
+};
+
+// True if Dropbox says one of these files on Blot was deleted during the walk
+// or shortly before it. list_revisions is the only call that timestamps a
+// deletion, and costs a request per file, so it is only made for changes the
+// cursor check couldn't excuse. Any failure (the file never existed in
+// Dropbox, rate limiting, no such route) means "unknown", never an error: the
+// change is counted, as it was before this check existed. The error isn't
+// persisted onto the blog either - it isn't a sync step that failed.
+const deletedRecently = async (client, dropboxRoot, files, startedAt) => {
+  for (const file of files) {
+    try {
+      const { result } = await client.filesListRevisions({
+        path: join(dropboxRoot, file),
+        mode: "path",
+        limit: 1,
+      });
+      if (deletedSince(result, startedAt)) return true;
+    } catch (err) {}
+  }
+  return false;
+};
+
+// Sets summary.changedDuringWalk to the number of summary.changedPaths that
+// Dropbox shows were changed during the walk, or just before it, by:
+// - the cursor: Dropbox reports the path (or something under or over it) as
+//   changed since the pre-walk cursor;
+// - a removal's deletion time (see deletedRecently), for a removed file, or a
+//   removed folder via the files that were in it;
+// - a created folder with a recently modified file downloaded into it.
+// A change that none of these excuses is counted by countChanges.
+const excuseRecentChanges = async (client, cursor, dropboxRoot, summary) => {
+  const changed = await changedSinceCursor(client, cursor, dropboxRoot);
+  let lookups = 0;
+
+  for (const path of summary.changedPaths) {
+    if (changed && overlapsAny(path, changed)) {
+      summary.changedDuringWalk += 1;
+      continue;
+    }
+
+    const lower = path.toLowerCase();
+    if (
+      summary.modifiedPaths.some((modified) =>
+        modified.toLowerCase().startsWith(lower + "/")
+      )
+    ) {
+      summary.changedDuringWalk += 1;
+      continue;
+    }
+
+    const files = summary.removedFiles[path] || [];
+    if (!files.length || lookups + files.length > MAX_REVISION_LOOKUPS)
+      continue;
+    lookups += files.length;
+    if (await deletedRecently(client, dropboxRoot, files, summary.startedAt))
+      summary.changedDuringWalk += 1;
+  }
 };
 
 const localReaddir = async (blogID, localRoot, dir) => {

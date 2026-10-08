@@ -12,6 +12,7 @@ describe("dropbox resetToBlot", function () {
   const blogDirectory = join(blog_folder_dir, blogID);
   const originals = {};
   let saved;
+  let revisionCalls;
 
   beforeEach(async function () {
     saved = [];
@@ -32,17 +33,26 @@ describe("dropbox resetToBlot", function () {
   });
 
   // delta: entries Dropbox reports since the pre-walk cursor, i.e. edits
-  // made during the walk. Omit it to make that call fail. deltaCursor is the
-  // cursor those entries are listed from.
-  function load(
-    remote,
-    { delta, account = {}, deltaCursor = "new-cursor" } = {}
-  ) {
+  // made during the walk. Omit it to make that call fail. revisions: what
+  // list_revisions says for each Dropbox path, a result or an Error to throw;
+  // omit it for a client with no such method at all. revisionCalls records
+  // the paths it was asked about.
+  function load(remote, { delta, account = {}, revisions } = {}) {
+    revisionCalls = [];
     require.cache[createClientPath] = {
       exports: function (_blogID, callback) {
         callback(null, {
           filesGetMetadata: async () => ({
             result: { path_display: "/Blog Folder" },
+          }),
+          ...(revisions && {
+            filesListRevisions: async ({ path, mode, limit }) => {
+              revisionCalls.push({ path, mode, limit });
+              const result = revisions[path];
+              if (!result || result instanceof Error)
+                throw result || new Error("path/not_found");
+              return { result };
+            },
           }),
           filesListFolderGetLatestCursor: async () => ({
             result: { cursor: "new-cursor" },
@@ -54,7 +64,7 @@ describe("dropbox resetToBlot", function () {
             return { result: { entries, has_more: false, cursor: "c" } };
           },
           filesListFolderContinue: async ({ cursor }) => {
-            if (cursor !== deltaCursor || !delta)
+            if (cursor !== "new-cursor" || !delta)
               throw new Error("Dropbox unavailable");
             return {
               result: { entries: delta, has_more: false, cursor: "later" },
@@ -200,30 +210,179 @@ describe("dropbox resetToBlot", function () {
       expect(countChanges(summary)).toEqual(1);
     });
 
-    it("excuses a removal made before the pre-walk cursor, from an earlier one", async function () {
-      await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
-      // Only the early cursor can list the change: the pre-walk cursor
-      // ("new-cursor") was fetched after it, and would find nothing
-      const resetToBlot = load(
-        { "/": [] },
-        { delta: [deleted("/gone.txt")], deltaCursor: "early-cursor" }
-      );
+    describe("when Dropbox can't list what changed since the cursor", function () {
+      const now = () => new Date().toISOString();
+      const deletedAt = (server_deleted) => ({ is_deleted: true, server_deleted });
+      const longAgo = "2026-01-01T00:00:00Z";
 
-      const withoutEarly = await resetToBlot(blogID, () => {});
-      expect(countChanges(withoutEarly)).toEqual(1);
+      it("excuses a file removed just before the walk, by its deletion time", async function () {
+        await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+        const resetToBlot = load(
+          { "/": [] },
+          { revisions: { "/gone.txt": deletedAt(now()) } }
+        );
 
-      await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
-      saved.length = 0;
-      const summary = await resetToBlot(blogID, () => {}, undefined, {
-        excuseChangesSince: "early-cursor",
+        const summary = await resetToBlot(blogID, () => {});
+
+        expect(summary.removed).toEqual(1);
+        expect(summary.changedDuringWalk).toEqual(1);
+        expect(countChanges(summary)).toEqual(0);
+        expect(revisionCalls).toEqual([
+          { path: "/gone.txt", mode: "path", limit: 1 },
+        ]);
       });
 
-      expect(summary.removed).toEqual(1);
-      expect(summary.changedDuringWalk).toEqual(1);
-      expect(countChanges(summary)).toEqual(0);
-      // Still the pre-walk cursor that later syncs resume from
-      expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(true);
-      expect(saved.some((values) => values.cursor === "early-cursor")).toEqual(false);
+      it("looks the file up under the blog folder in Dropbox", async function () {
+        await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+        const resetToBlot = load(
+          { "/Blog Folder": [] },
+          {
+            account: { folder_id: "id:folder" },
+            revisions: { "/Blog Folder/gone.txt": deletedAt(now()) },
+          }
+        );
+
+        const summary = await resetToBlot(blogID, () => {});
+
+        expect(countChanges(summary)).toEqual(0);
+      });
+
+      it("counts a file deleted long ago", async function () {
+        await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+        const resetToBlot = load(
+          { "/": [] },
+          { revisions: { "/gone.txt": deletedAt(longAgo) } }
+        );
+
+        const summary = await resetToBlot(blogID, () => {});
+
+        expect(summary.changedDuringWalk).toEqual(0);
+        expect(countChanges(summary)).toEqual(1);
+      });
+
+      it("counts a file Dropbox doesn't say was deleted, or doesn't date", async function () {
+        await fs.outputFile(join(blogDirectory, "a.txt"), "x");
+        await fs.outputFile(join(blogDirectory, "b.txt"), "x");
+        const resetToBlot = load(
+          { "/": [] },
+          {
+            revisions: {
+              "/a.txt": { is_deleted: false, server_deleted: now() },
+              "/b.txt": { is_deleted: true },
+            },
+          }
+        );
+
+        const summary = await resetToBlot(blogID, () => {});
+
+        expect(summary.removed).toEqual(2);
+        expect(countChanges(summary)).toEqual(2);
+      });
+
+      it("excuses a removed folder by when a file in it was deleted", async function () {
+        await fs.outputFile(join(blogDirectory, "Sub", "Inner", "b.txt"), "x");
+        await fs.outputFile(join(blogDirectory, "Sub", "a.txt"), "x");
+        const resetToBlot = load(
+          { "/": [] },
+          { revisions: { "/Sub/a.txt": deletedAt(now()) } }
+        );
+
+        const summary = await resetToBlot(blogID, () => {});
+
+        expect(summary.removed).toEqual(1);
+        expect(summary.changedDuringWalk).toEqual(1);
+        expect(countChanges(summary)).toEqual(0);
+        // Files only: list_revisions doesn't work on folders. It stops at the
+        // first file with a recent deletion, whichever readdir lists first.
+        expect(revisionCalls.length).toBeGreaterThan(0);
+        revisionCalls.forEach(({ path }) => expect(path).toMatch(/\.txt$/));
+      });
+
+      it("asks about only a few files of a removed folder", async function () {
+        for (const name of ["a", "b", "c", "d", "e"])
+          await fs.outputFile(join(blogDirectory, "Sub", name + ".txt"), "x");
+        const resetToBlot = load({ "/": [] }, { revisions: {} });
+
+        const summary = await resetToBlot(blogID, () => {});
+
+        expect(revisionCalls.length).toEqual(3);
+        expect(countChanges(summary)).toEqual(1);
+      });
+
+      it("counts a removed empty folder, which has nothing to date it", async function () {
+        await fs.ensureDir(join(blogDirectory, "Empty"));
+        const resetToBlot = load({ "/": [] }, { revisions: {} });
+
+        const summary = await resetToBlot(blogID, () => {});
+
+        expect(revisionCalls).toEqual([]);
+        expect(countChanges(summary)).toEqual(1);
+      });
+
+      it("excuses a created folder when a file downloaded into it was modified recently", async function () {
+        const resetToBlot = load({
+          "/": [{ ".tag": "folder", name: "Sub", path_display: "/Sub" }],
+          "/Sub": [
+            {
+              ".tag": "file",
+              name: "a.txt",
+              path_display: "/Sub/a.txt",
+              content_hash: "hash",
+              size: 5,
+              server_modified: now(),
+            },
+          ],
+        });
+
+        const summary = await resetToBlot(blogID, () => {});
+
+        expect(summary.createdDirs).toEqual(1);
+        expect(summary.modifiedDuringWalk).toEqual(1);
+        expect(summary.changedDuringWalk).toEqual(1);
+        expect(countChanges(summary)).toEqual(0);
+      });
+
+      it("counts a created folder whose files were modified long ago", async function () {
+        const resetToBlot = load({
+          "/": [{ ".tag": "folder", name: "Sub", path_display: "/Sub" }],
+          "/Sub": [{ ...file("a.txt"), path_display: "/Sub/a.txt" }],
+        });
+
+        const summary = await resetToBlot(blogID, () => {});
+
+        expect(summary.createdDirs).toEqual(1);
+        expect(countChanges(summary)).toEqual(2);
+      });
+
+      it("counts the change if list_revisions fails, and persists no error", async function () {
+        await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+        const resetToBlot = load(
+          { "/": [] },
+          { revisions: { "/gone.txt": new Error("too_many_requests") } }
+        );
+
+        const summary = await resetToBlot(blogID, () => {});
+
+        expect(summary.changedDuringWalk).toEqual(0);
+        expect(countChanges(summary)).toEqual(1);
+        expect(saved.some((values) => values.error_code)).toEqual(false);
+      });
+
+      it("doesn't count a change twice if the cursor already excused it", async function () {
+        await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+        const resetToBlot = load(
+          { "/": [] },
+          {
+            delta: [deleted("/gone.txt")],
+            revisions: { "/gone.txt": deletedAt(now()) },
+          }
+        );
+
+        const summary = await resetToBlot(blogID, () => {});
+
+        expect(summary.changedDuringWalk).toEqual(1);
+        expect(revisionCalls).toEqual([]);
+      });
     });
 
     it("counts every change if Dropbox can't list what changed", async function () {
