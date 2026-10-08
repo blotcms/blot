@@ -359,6 +359,39 @@ esac
       }
     });
 
+    it("logs a burst answered with errors as failed, not as fast", async function () {
+      skipUnless("python3");
+      // +PONG for the first 100 PINGs (the timed ones), then -LOADING for the rest (the burst):
+      // each error is longer than a PONG, so counting bytes alone would see the burst as done.
+      let pings = 0;
+      const server = net.createServer((socket) => {
+        let pending = Buffer.alloc(0);
+        socket.on("data", (chunk) => {
+          pending = Buffer.concat([pending, chunk]);
+          const frames = Math.floor(pending.length / 14);
+          pending = pending.slice(frames * 14);
+          for (let i = 0; i < frames; i++) socket.write(pings++ < 100 ? "+PONG\r\n" : "-LOADING Redis is loading the dataset in memory\r\n");
+        });
+        socket.on("error", () => {});
+      });
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const dir = tmp();
+      try {
+        const out = await new Promise((resolve, reject) =>
+          execFile(
+            "python3",
+            [path.join(PERF, "latency-probe.py"), "--label", "t", "--port", String(server.address().port), "--duration", "1", "--burst-bytes", "14000", "--log", "-"],
+            { env: Object.assign({}, process.env, { PERF_DIR: dir }) },
+            (err, stdout) => (err ? reject(err) : resolve(stdout))
+          )
+        );
+        expect(out).toMatch(/ err=0 .* burst_ms=x burst_n=1000\n$/);
+      } finally {
+        server.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it("logs errors and x rather than failing when nothing is listening", async function () {
       skipUnless("python3");
       const dir = tmp();

@@ -78,7 +78,10 @@ def fmt(v):
 
 
 def burst(s, nbytes):
-    """Write nbytes of PINGs in one go, read every reply; return (ms, n) or (None, n)."""
+    """Write nbytes of PINGs in one go, read every reply; return (ms, n) or (None, n).
+
+    The replies must be exactly n times +PONG: anything else (an error such as
+    -LOADING is longer than a PONG) means the burst failed."""
     n = nbytes // len(PING)
     payload = PING * n
     t0 = time.perf_counter()
@@ -88,7 +91,8 @@ def burst(s, nbytes):
         # everything first and reading afterwards cannot deadlock.
         s.settimeout(BURST_TIMEOUT)
         s.sendall(payload)
-        want = n * len(PONG)
+        expected = PONG * n
+        want = len(expected)
         got = 0
         while got < want:
             left = deadline - time.monotonic()
@@ -98,6 +102,8 @@ def burst(s, nbytes):
             chunk = s.recv(min(65536, want - got))
             if not chunk:
                 raise ConnectionError("closed")
+            if chunk != expected[got:got + len(chunk)]:
+                return None, n
             got += len(chunk)
         return (time.perf_counter() - t0) * 1000.0, n
     except (OSError, socket.timeout):
