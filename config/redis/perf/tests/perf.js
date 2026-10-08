@@ -70,11 +70,11 @@ describe("redis perf tools", function () {
     // sample(day, m) and probe(label, day, m) give the lines; the test supplies them.
     const iso = (t) => new Date(t).toISOString().slice(0, 19) + "Z";
     const day = (d) => Date.UTC(2026, 9, d, 12, 0);
-    const writeLogs = (dir, { sample, probes, locks }) => {
+    const writeLogs = (dir, { sample, probes, locks, dt }) => {
       const lines = { "redis/redis-sample.log": [], "redis/latency-redis-local.log": [], "app/latency-app-to-redis.log": [] };
       for (const d of [7, 8]) {
         for (let m = 0; m < 60; m++) {
-          lines["redis/redis-sample.log"].push(iso(day(d) + (m + 1) * 60000) + " dt=60 " + sample(d, m));
+          lines["redis/redis-sample.log"].push(iso(day(d) + (m + 1) * 60000) + " dt=" + (dt ? dt(d, m) : 60) + " " + sample(d, m));
           for (const label of Object.keys(probes)) {
             const f = probes[label](d, m);
             if (f) lines[label === "redis-local" ? "redis/latency-redis-local.log" : "app/latency-app-to-redis.log"].push(iso(day(d) + m * 60000) + " label=" + label + " " + f);
@@ -128,6 +128,18 @@ describe("redis perf tools", function () {
       expect(remote["p50 per minute"]).toEqual(["1 / 1 / 1 / 1", "2 / 2 / 2 / 2"]);
       expect(remote["250KB burst (burst_ms)"]).toEqual(["20 / 20 / 20 / 20", "20 / 20 / 20 / 20"]);
       expect(section(out, "TCP memory")["min / mean / max"]).toEqual(["100 / 100 / 100", "-"]);
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("leaves out samples that cover a long gap and says how many", function () {
+      const dir = tmp();
+      // the sample after a 10 minute cron gap has counters from outside the window
+      writeLogs(dir, { sample: () => "cmds=6000", dt: (d, m) => (d === 8 && m === 30 ? 600 : 60), probes: {} });
+      const out = compare.main(["--data", dir, "--baseline", "2026-10-07T12:00..13:00", "--test", "2026-10-08T12:00..13:00"]);
+      const win = section(out, "Window");
+      expect(win["one-minute samples"]).toEqual(["60", "59"]);
+      expect(win["samples dropped (gap over 90s)"]).toEqual(["-", "1"]);
+      expect(section(out, "Redis")["commands/s"]).toEqual(["100 / 100 / 100 / 100", "100 / 100 / 100 / 100"]);
       fs.rmSync(dir, { recursive: true, force: true });
     });
 

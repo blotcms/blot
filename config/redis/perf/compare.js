@@ -169,6 +169,12 @@ function sampleTime(s) {
   return typeof s.f.dt === "number" ? s.t - s.f.dt * 500 : s.t;
 }
 
+// One-minute samples only: install-time (short) and after-a-gap (long)
+// intervals have counters that do not belong to one minute of the window.
+const MIN_DT = 30;
+const MAX_DT = 90;
+const isGap = (s) => typeof s.f.dt === "number" && s.f.dt > MAX_DT;
+
 // Index the samples by the minute they cover. A sample taken at T with dt
 // seconds covers (T - dt, T]; its midpoint falls in the minute the probe that
 // started at that minute ran in. Short (install) or very long (gap) intervals
@@ -177,7 +183,7 @@ function sampleIndex(samples) {
   const idx = new Map();
   for (const s of samples) {
     const dt = s.f.dt;
-    if (typeof dt !== "number" || dt < 30 || dt > 90) continue;
+    if (typeof dt !== "number" || dt < MIN_DT || dt > MAX_DT) continue;
     idx.set(Math.floor(sampleTime(s) / 60000), s);
   }
   return idx;
@@ -207,12 +213,14 @@ function report(win, data, ctx) {
   const head = (t) => rows.push([null, t]);
   const row = (label, text) => rows.push([label, text]);
 
-  const samples = data.samples.filter((s) => inWindow(win, sampleTime(s)) && !(typeof s.f.dt === "number" && s.f.dt < 30));
+  const inWin = data.samples.filter((s) => inWindow(win, sampleTime(s)));
+  const samples = inWin.filter((s) => !(typeof s.f.dt === "number" && (s.f.dt < MIN_DT || s.f.dt > MAX_DT)));
   const col = (name) => samples.map((s) => s.f[name]);
   const secs = (name) => samples.map((s) => per(s.f[name], s.f.dt)); // per second
 
   head("Window");
   row("one-minute samples", String(samples.length));
+  if (inWin.some(isGap)) row("samples dropped (gap over " + MAX_DT + "s)", String(inWin.filter(isGap).length));
 
   // ---- latency probes
   for (const label of ctx.labels) {
