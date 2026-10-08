@@ -6,6 +6,7 @@ const {
   parseSlowlog,
   describeCommand,
   SLOWLOG_ALERT_US,
+  FORK_ALERT_US,
 } = require("../redis-host-events");
 
 describe("scheduler redis-host-events", function () {
@@ -51,6 +52,19 @@ describe("scheduler redis-host-events", function () {
     expect(events.slowlog.count).toBe(1);
     expect(events.slowlog.worst[0].command).toBe("SORT k");
     expect(observed.slowlogId).toBe(3);
+  });
+
+  it("reports a fork (BGSAVE) only when it is slow enough to matter", function () {
+    const before = detect(null, observe(info(["uptime_in_seconds:10"]), [])).observed;
+    const now = observe(info(["uptime_in_seconds:310"]), [
+      entry(3, FORK_ALERT_US, "BGREWRITEAOF"),
+      entry(2, FORK_ALERT_US - 1, "bgsave"),
+      entry(1, 84000, "BGSAVE"),
+    ]);
+    const { events } = detect(before, now);
+
+    expect(events.slowlog.count).toBe(1);
+    expect(events.slowlog.worst[0].command).toBe("BGREWRITEAOF");
   });
 
   it("re-baselines the counters when the last look is over 15 minutes old", function () {

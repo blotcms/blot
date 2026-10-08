@@ -23,6 +23,13 @@ const SLOWLOG_ENTRIES = 128;
 // per-type cooldown bounds the noise if that changes.
 const SLOWLOG_ALERT_US = 50 * 1000;
 
+// BGSAVE and BGREWRITEAOF are logged with the time Redis spent forking, which
+// is ~60-85ms on the current host for every save config/redis/bin/backup.sh
+// asks for (hourly). Those are reported only when the fork itself is long
+// enough to stall clients noticeably.
+const FORK_COMMANDS = ["BGSAVE", "BGREWRITEAOF"];
+const FORK_ALERT_US = 500 * 1000;
+
 // Errors that mean Redis is refusing writes or running out of room are
 // alerted on any occurrence. Other errors (READONLY while a cutover is under
 // way, WRONGTYPE, ERR from an app bug) happen in small numbers all the time:
@@ -175,7 +182,11 @@ function detect(previous, current, { sample = null, now = Date.now() } = {}) {
     if (Object.keys(other).length) events.errors = { counts: other };
   }
 
-  const slow = current.slowlog.filter((entry) => entry.id > lastSlowId && entry.us >= SLOWLOG_ALERT_US);
+  const slow = current.slowlog.filter((entry) => {
+    if (entry.id <= lastSlowId) return false;
+    const fork = FORK_COMMANDS.includes(String(entry.args[0] || "").toUpperCase());
+    return entry.us >= (fork ? FORK_ALERT_US : SLOWLOG_ALERT_US);
+  });
   if (slow.length) {
     events.slowlog = {
       count: slow.length,
@@ -211,6 +222,7 @@ const merge = {
 module.exports = {
   SLOWLOG_ENTRIES,
   SLOWLOG_ALERT_US,
+  FORK_ALERT_US,
   SLOWLOG_LISTED,
   MAX_OBSERVATION_GAP_MS,
   CRITICAL_ERRORS,
