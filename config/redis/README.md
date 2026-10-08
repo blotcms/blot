@@ -298,8 +298,9 @@ resized in place.
 `bin/backup.sh` copies the RDB to `/backups` (local copies only; the instance
 store is wiped on stop) and uploads to
 `s3://blot-redis-backups/{hourly,daily}/<YYYY-MM-DD-hour-HH>.rdb`, keeping the
-6 newest hourly, 7 newest daily and 10 local copies. It runs `BGSAVE` first if
-the last save is over 15 minutes old. It exits quietly without uploading on a drill host
+6 newest hourly, 7 newest daily and 10 local copies. It runs `BGSAVE` first unless
+a save finished in the last minute, so a backup holds the data as of its
+upload and a restore loses at most the time since then. It exits quietly without uploading on a drill host
 (`/etc/blot-redis/drill`, from `launch.sh --drill`), or unless
 the host is a master that accepts writes, `/etc/blot-redis/floating-ip` exists,
 and the address in it is on the host. That file is written at cutover, so a

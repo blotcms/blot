@@ -14,7 +14,11 @@ ROOT=${BLOT_ROOT:-}
 RDB=$ROOT/var/lib/redis6/dump.rdb
 LOCAL=$ROOT/backups
 FLOATING_IP=$ROOT/etc/blot-redis/floating-ip
-MAX_SNAPSHOT_AGE=900 # seconds; older than this and we save first
+# Save first unless a save finished in the last minute: the backup is then the
+# data as of now rather than as of the last scheduled save (up to ~5 minutes,
+# or an hour on a quiet host, earlier), which bounds a restore's data loss by
+# the backup interval. It costs one extra fork (~60-80ms on an x2gd.medium).
+MAX_SNAPSHOT_AGE=60 # seconds
 NAME=$(date +%Y-%m-%d-hour-%H)
 
 # How many to keep in S3. Local copies (hourly and daily share them) are
