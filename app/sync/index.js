@@ -176,30 +176,40 @@ function sync(blogID, callback) {
           // We could do these next two things in parallel
           // but it's a little bit of refactoring...
           log("Releasing lock");
+          let releaseError = null;
           try {
             await release();
-          } catch (releaseError) {
+            log("Finished sync");
+          } catch (err) {
             // Redis unreachable or the lock was already lost. Never leave
             // the caller's callback pending; surface the failure instead.
-            log("Failed to release lock", releaseError.message);
-            return callback(syncError || releaseError);
+            // The folder still changed, so the cacheID must still be bumped.
+            log("Failed to release lock", err.message);
+            releaseError = err;
           }
-          log("Finished sync");
 
           if (!changes) {
-            return callback(syncError);
+            return callback(syncError || releaseError);
           }
 
+          // If Redis is unavailable the bump is retried in the background,
+          // and the preview reloaded again once it lands
           log("Updating cacheID of blog");
-          Blog.set(blogID, { cacheID: Date.now() }, async function (err) {
-            if (err) {
-              log("Error updating cacheID of blog");
+          Blog.bumpCacheID(
+            blogID,
+            function (err) {
+              if (err) {
+                log("Error updating cacheID of blog");
+              }
+
+              previewReload.publish(blogID);
+
+              callback(syncError || releaseError);
+            },
+            function () {
+              previewReload.publish(blogID);
             }
-
-            previewReload.publish(blogID);
-
-            callback(syncError);
-          });
+          );
         });
       });
     });
