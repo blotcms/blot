@@ -320,7 +320,7 @@ function table(baseWin, testWin, a, b, data) {
   const w1 = Math.max(...a.map((r) => r[1].length), 24, "baseline".length);
   const lines = [];
   lines.push("".padEnd(w0) + "  " + "baseline".padEnd(w1) + "  test");
-  lines.push("window".padEnd(w0) + "  " + describe(baseWin).padEnd(w1) + "  " + describe(testWin));
+  lines.push("window".padEnd(w0) + "  " + windowLabel(baseWin).padEnd(w1) + "  " + windowLabel(testWin));
   for (let i = 0; i < a.length; i++) {
     if (a[i][0] === null) {
       lines.push("", "== " + a[i][1] + " ==");
@@ -332,7 +332,7 @@ function table(baseWin, testWin, a, b, data) {
   return lines.join("\n");
 }
 
-function describe(win) {
+function windowLabel(win) {
   const iso = (t) => new Date(t).toISOString().slice(0, 16) + "Z";
   const hrs = (win.to - win.from) / 3600000;
   return iso(win.from) + ".." + iso(win.to) + " (" + fmtNum(hrs) + "h" + (win.hours ? ", hours " + [...win.hours].sort((x, y) => x - y).join(",") : "") + ")";
