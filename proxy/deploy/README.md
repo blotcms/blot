@@ -1,11 +1,17 @@
 # Deploying the proxy container
 
-Two scripts, both run **on the production host** (copy the directory over, no
-checkout needed there):
+Production runs the proxy as a container (cut over from bare-metal OpenResty
+on 8 Oct 2026, #1941). Deploy a new image with the **Deploy proxy** workflow
+(`.github/workflows/deploy-proxy.yml`, manual), or from a checkout:
 
 ```sh
-scp -r proxy/deploy blot:~/proxy-deploy
+npm run deploy-proxy             # newest master commit with a proxy image
+npm run deploy-proxy -- <commit>
 ```
+
+Both run [`scripts/deploy/proxy.sh`](../../scripts/deploy/proxy.sh), which
+copies this directory to `~/proxy-deploy` on the host and runs
+`blue-green.sh` there. The scripts below all run **on the production host**:
 
 | Script | When |
 | --- | --- |

@@ -99,15 +99,24 @@ Analyze the proposed proxy container for possible performance regressions after 
 
 Make sure next bill amount is in all billing emails to customers
 
-Move towards proxy container deployment
-- can we simplify anything to make it safer?
-- avoid data loss above all
-- tolerate a few dropped requests during cutover
-
 Add fast rollback action
 
 Get proxy horizontally scalable and multi-region
-- Get proxy container deployed
+
+Proxy container follow-ups (cut over 8 Oct 2026, #1941)
+- Check webhooks. SSE through the container, and that a known data/static file on cdn. has Cache-Control 1y and no Blot-Upstream
+- After the next 03:46 logrotate: access.log/error.log still written after copytruncate, fail2ban counts still moving
+- After the next wildcard renewal (/home/ec2-user/renew-wildcard.log): container reloaded, served cert fingerprint matches /etc/ssl/private/letsencrypt-domain.pem
+- Custom-domain certs renew inside the container: none within ~20 days of expiry apart from domains that no longer point at Blot; identify-expiring-certs cron restarts the container cleanly
+- Reboot the host once in a maintenance window: mount-instance-store mounts without reformatting, docker starts after it, the proxy comes back with cache/log mounts, :80/:443 answer
+- First Deploy proxy workflow run after `sudo chgrp docker /etc/blot/proxy.env` (#2080 deployment plan)
+- Uninstall bare-metal OpenResty from the host after a month of full renewal cycles (it is the manual rollback until then)
+- HTTP/3 is not advertised (no Alt-Svc on either stack); decide whether to open UDP 443 and make fail2ban bans cover UDP too
+- http://www.blot.im/ returns 404: confirm intended
+- app/blog/static has no copy on the host, so those cdn. files fall through to Node: export them from the Node image on deploy, or accept
+- scripts/blog/reset-ssl-certificate-for-expired-domain.js calls the bare-metal /usr/local/openresty/bin/openresty; make it act on the container
+- cdn. responses carry Cache-Control twice (expires 1y + add_header), as on bare metal
+- Purges during a blue/green overlap reach only one container (shared SO_REUSEPORT on :8077)
 
 Explain on the about page the websites started out as files in a folder. But they had to be HTML. Blot makes other file types possible too.
 
@@ -382,7 +391,6 @@ Proxy container (OpenResty) - remaining before it can replace config/openresty:
 - Can the proxy remember bad urls and avoid repeatedly sending them to upstream?
 - Fold proxy/build/sync-config.js container adaptations back into the files once proxy/ is canon (stdout logs, reuseport, ACME CA, health socket)
 - Blue/green hook server: :8999 is in a reuseport group, so during a deploy overlap an ACME hook request can hit the other instance (different secret) - needs per-instance hook routing, not a shared reuseport port
-- Run the proxy cutover (proxy/deploy/README.md), then run proxy/deploy/blue-green.sh from a deploy workflow like scripts/deploy (images are published by proxy-image.yml)
 - dehydrated version drift: the proxy image vendors dehydrated 0.7.2 (0.6.5, which lua-resty-auto-ssl pins, is rejected by current ACME servers); bare-metal config/openresty still installs the 0.6.5 pin via luarocks - unify (bump lua-resty-auto-ssl, or vendor 0.7.2 there too)
 - Investigate replacing unmaintained lua-resty-auto-ssl (would also resolve the two items above): lua-resty-acme (keeps OpenResty, drops dehydrated/sockproc/:8999) or issuing from the Blot app into Redis; see proxy/README.md
 - Purge follow-ups: BLOT_REVERSE_PROXY_URLS is a static list (proxies should register themselves in Redis), and purges queued in a Node process's memory are lost if it dies before sending them
