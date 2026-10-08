@@ -4,9 +4,10 @@ Description=Mount instance store
 # no network, so order it after local filesystems are up rather than
 # network.target, which gave no real guarantee here.
 After=local-fs.target
-# docker.service.d/10-instance-store.conf and openresty.service.d/10-instance-store.conf
-# order themselves After= this unit and gate on `mountpoint -q /var/instance-ssd`
-# in an ExecStartPre, so ordering here alone is enough; no Before= needed.
+# docker.service.d/10-instance-store.conf orders docker.service After= this unit
+# and gates on `mountpoint -q /var/instance-ssd` in an ExecStartPre, so ordering
+# here alone is enough; no Before= needed. (The proxy and app run as containers,
+# so docker.service is the only unit that needs the mount.)
 RefuseManualStop=yes
 
 [Service]

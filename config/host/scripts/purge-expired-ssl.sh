@@ -17,6 +17,15 @@ if [ -z "$BLOT_LOG_DIRECTORY" ]; then
   exit 1
 fi
 
+# Everything below acts on the proxy container. With none running there is
+# nothing to restart, and every domain would fail the curl/openssl checks
+# (connection refused), so stop before doing anything.
+proxy_containers=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^blot-proxy-(blue|green)$' || true)
+if [ -z "$proxy_containers" ]; then
+  echo "ERROR: no blot-proxy-blue or blot-proxy-green container is running; nothing was changed. Start the proxy (npm run deploy-proxy) and re-run this script."
+  exit 1
+fi
+
 # if the user has passed a series of domains, use those for HOSTS, otherwise use the command below
 if [ -z "$1" ]; then
     HOSTS=$(cat $BLOT_LOG_DIRECTORY/error.log | grep "ocsp stapling" | sed -E 's/.*ssl_certificate.lua:260: set_response_cert\(\): auto-ssl: failed to set ocsp stapling for ([^ ]+) .*/\1/' | sort | uniq)
@@ -63,22 +72,12 @@ done
 
 
 # A restart, not a reload: the certificate cache lives in a shared dict, which
-# survives a reload. Once the proxy runs as a container (proxy/deploy) restart
-# that instead; the bare-metal unit is stopped and must not be started beside it.
-proxy_containers=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^blot-proxy-(blue|green)$' || true)
-if [ -n "$proxy_containers" ]; then
-    echo "Restarting proxy container(s): $proxy_containers"
-    for container in $proxy_containers; do
-        docker restart --time 30 "$container"
-    done
-    echo "Restarted proxy container(s)"
-else
-    echo "Restarting openresty"
-
-    sudo systemctl restart openresty
-
-    echo "Restarted openresty"
-fi
+# survives a reload. Restart the proxy container(s) found above.
+echo "Restarting proxy container(s): $proxy_containers"
+for container in $proxy_containers; do
+    docker restart --time 30 "$container"
+done
+echo "Restarted proxy container(s)"
 echo ""
 
 # now we loop over the INVALID_HOSTS and check that the SSL cert is now valid

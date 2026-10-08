@@ -1,14 +1,15 @@
 const request = require("request");
 const fs = require("fs-extra");
+// Inside the proxy container (the blot-proxy-auto-ssl volume), not on the host
 const CERT_DIR = "/etc/resty-auto-ssl/letsencrypt/certs";
 const get = require("../get/blog");
 const client = require("models/client");
 const exec = require("child_process").exec;
-const nginx = "/usr/local/openresty/bin/openresty";
 var getConfirmation = require("../util/getConfirmation");
 
-// This doesn't work because of a cluster of permissions
-// related issues but it should show you what needs to happen
+// This deletes the Redis certificate keys, then prints the commands to run on
+// the proxy host to remove the certificate files from the proxy container and
+// reload it. It does not run them itself.
 
 if (!(process.getuid && process.getuid() === 0))
   throw new Error("This script must be run as root");
@@ -45,11 +46,16 @@ get(process.argv[2], function (err, user, blog) {
     await client.del(certKeys);
 
     console.log("removed redis keys", certKeys);
-    console.log("You need to remove the directories manually");
+    console.log("");
+    console.log("Now, on the proxy host, remove the certificate files from the");
+    console.log("proxy container and reload it. Find the running colour with:");
+    console.log("  docker ps --filter name=blot-proxy-");
+    console.log("then, with <colour> being blue or green:");
     certDirs.forEach((dir) => {
-      console.log("rm -rf", dir);
+      console.log("  docker exec blot-proxy-<colour> rm -rf", dir);
     });
-    console.log("You need to restart nginx manually");
-    console.log("sudo", nginx, "-s reload");
+    console.log(
+      "  docker exec blot-proxy-<colour> /usr/local/openresty/bin/openresty -s reload"
+    );
   });
 });
