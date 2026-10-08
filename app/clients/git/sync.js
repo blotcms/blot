@@ -6,6 +6,44 @@ var checkGitRepoExists = require("./checkGitRepoExists");
 var dataDir = require("./dataDir");
 var Blog = require("models/blog");
 var validateTree = require("./validateTree");
+var fs = require("fs-extra");
+var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
+
+// The working tree is reset to the new commit before the changed paths are
+// passed to Blot, and the next sync only compares the commit it starts at
+// with the one it ends at. So if Redis cannot take the writes for some paths,
+// nothing would ever tell Blot about them. We remember them here, inside the
+// blog's .git directory (never part of the working tree), and apply them
+// along with whatever the next sync finds. Applying a path twice is harmless.
+function unappliedFile(folderPath) {
+  return folderPath + "/.git/blot-unapplied-paths.json";
+}
+
+// Calls back with the paths waiting from an earlier sync. A missing file is
+// the usual case, but a file that cannot be read or parsed is an error:
+// carrying on as if nothing were waiting would lose those paths for good.
+function readUnapplied(folderPath, callback) {
+  fs.readJson(unappliedFile(folderPath), function (err, paths) {
+    if (err && err.code === "ENOENT") return callback(null, []);
+    if (err) return callback(err);
+    if (!Array.isArray(paths))
+      return callback(new Error("Unapplied paths file is not a list"));
+    callback(null, paths);
+  });
+}
+
+// Written to a temporary file and renamed, so a process exit part way
+// through never leaves a truncated list behind
+function writeUnapplied(folderPath, paths, callback) {
+  if (!paths.length) return fs.remove(unappliedFile(folderPath), callback);
+
+  var temporary = unappliedFile(folderPath) + ".tmp";
+
+  fs.outputJson(temporary, paths, function (err) {
+    if (err) return callback(err);
+    fs.rename(temporary, unappliedFile(folderPath), callback);
+  });
+}
 
 module.exports = function sync (blogID, gitHandle, callback) {
 
@@ -99,67 +137,93 @@ module.exports = function sync (blogID, gitHandle, callback) {
                   // Remove whitespace from stdout
                   headAfterPull = headAfterPull.trim();
 
-                  if (headAfterPull === headBeforePull) {
-                    folder.log("No changes to repo");
-                    return done(null, callback);
-                  } else {
-                    folder.log(`Comparing ${headBeforePull} with ${headAfterPull}`);
-                  }
+                  changedPaths(
+                    git,
+                    folder,
+                    headBeforePull,
+                    headAfterPull,
+                    function (err, changed) {
+                      if (err) return done(err, callback);
 
-                  git.raw(
-                    [
-                      "diff",
-                      "--name-status",
-                      "--no-renames",
-                      // The 'z' flag will output paths
-                      // in UTF-8 format, instead of octal
-                      // Without this flag, files with foreign
-                      // characters are not synced to Blot.
-                      "-z",
-                      headBeforePull + ".." + headAfterPull
-                    ],
-                    function (err, res) {
-                      if (err) return done(new Error(err), callback);
-
-                      // If you push an empty commit then res
-                      // will be null, or perhaps a commit and
-                      // then a subsequent commit which reverts
-                      // the previous commit.
-                      if (res === null) {
-                        return done(null, callback);
-                      }
-
-                      // The output for diff with -z and the other flags looks like:
-                      // A^@Hello copy.txt^@A^@Hello.txt^@A^@[アーカイブ]/Hello.txt^@
-                      // So we split on null bytes (^@) and then filter the A/M/Ds
-                      // which indicated whether the path was added, modified
-                      var modified = res.split("\u0000").filter((x, i) => i % 2);
-
-                      folder.log(`Found ${modified.length} changes to git repo`);
-
-                      modified.forEach(function (path) {
-                        folder.log("/" + path, "changed");
-                      });
-
-                      // Tell Blot something has changed at these paths!
-                      // We must do this in series until entry.set becomes
-                      // atomic. Right now, making changes to the blog's
-                      // menu cannot be done concurrently, hence eachSeries!
-                      async.eachSeries(
-                        modified,
-                        function (path, next) {
-                          folder.update(path, function (err) {
-                            // We don't want the error to stop
-                            // processing other files in the sync
-                            if (err) console.log("Git client:", err);
-                            next();
-                          });
-                        },
-                        function (err) {
-                          folder.log(`Processed ${modified.length} changes`);
-                          done(null, callback);
+                      readUnapplied(folder.path, function (err, unapplied) {
+                        if (err) {
+                          folder.log(
+                            "Error reading changes left for this sync: " +
+                              err.message
+                          );
+                          return done(err, callback);
                         }
-                      );
+
+                        // Left over from a sync that Redis interrupted
+                        var modified = unapplied.concat(
+                          changed.filter(function (path) {
+                            return unapplied.indexOf(path) === -1;
+                          })
+                        );
+
+                        // Nothing changed, and nothing is waiting
+                        if (!modified.length) return done(null, callback);
+
+                        if (unapplied.length) {
+                          folder.log(
+                            `Found ${unapplied.length} changes left over from an earlier sync`
+                          );
+                        }
+
+                        modified.forEach(function (path) {
+                          folder.log("/" + path, "changed");
+                        });
+
+                        // Tell Blot something has changed at these paths!
+                        // We must do this in series until entry.set becomes
+                        // atomic. Right now, making changes to the blog's
+                        // menu cannot be done concurrently, hence eachSeries!
+                        var applied = 0;
+
+                        async.eachSeries(
+                          modified,
+                          function (path, next) {
+                            folder.update(path, function (err) {
+                              // Redis cannot take the write, so this path
+                              // and those after it are not in the database.
+                              // Stop and remember them, see above.
+                              if (err && isRedisUnavailableError(err))
+                                return next(err);
+
+                              // We don't want any other error to stop
+                              // processing other files in the sync
+                              if (err) console.log("Git client:", err);
+                              applied++;
+                              next();
+                            });
+                          },
+                          function (err) {
+                            if (err) {
+                              folder.log(
+                                `Redis unavailable, kept ${modified.length - applied} changes for the next sync`
+                              );
+                              return writeUnapplied(
+                                folder.path,
+                                modified.slice(applied),
+                                function (writeErr) {
+                                  if (writeErr) {
+                                    folder.log(
+                                      "Error saving changes for the next sync: " +
+                                        writeErr.message
+                                    );
+                                  }
+                                  done(err, callback);
+                                }
+                              );
+                            }
+
+                            folder.log(`Processed ${modified.length} changes`);
+                            writeUnapplied(folder.path, [], function () {
+                              done(null, callback);
+                            });
+                          }
+                        );
+                      });
                     }
                   );
                 });
@@ -174,3 +238,46 @@ module.exports = function sync (blogID, gitHandle, callback) {
     });
   });
 };
+
+// Calls back with the paths that differ between two commits
+function changedPaths(git, folder, before, after, callback) {
+  if (after === before) {
+    folder.log("No changes to repo");
+    return callback(null, []);
+  }
+
+  folder.log(`Comparing ${before} with ${after}`);
+
+  git.raw(
+    [
+      "diff",
+      "--name-status",
+      "--no-renames",
+      // The 'z' flag will output paths
+      // in UTF-8 format, instead of octal
+      // Without this flag, files with foreign
+      // characters are not synced to Blot.
+      "-z",
+      before + ".." + after
+    ],
+    function (err, res) {
+      if (err) return callback(new Error(err));
+
+      // If you push an empty commit then res
+      // will be null, or perhaps a commit and
+      // then a subsequent commit which reverts
+      // the previous commit.
+      if (res === null) return callback(null, []);
+
+      // The output for diff with -z and the other flags looks like:
+      // A^@Hello copy.txt^@A^@Hello.txt^@A^@[アーカイブ]/Hello.txt^@
+      // So we split on null bytes (^@) and then filter the A/M/Ds
+      // which indicated whether the path was added, modified
+      var modified = res.split("\u0000").filter((x, i) => i % 2);
+
+      folder.log(`Found ${modified.length} changes to git repo`);
+
+      callback(null, modified);
+    }
+  );
+}

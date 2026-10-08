@@ -2,7 +2,12 @@ const localPath = require("helper/localPath");
 const establishSyncLock = require("sync/establishSyncLock");
 const fs = require("fs-extra");
 const path = require("path");
+const { join } = path;
 const { handleSyncLockError } = require("../lock");
+const { handleRedisUnavailable } = require("../unavailable");
+const { isRedisUnavailableError } = require("helper/redisUnavailable");
+const { tmp_directory } = require("config");
+const { randomBytes } = require("crypto");
 const stampLastSync = require("./stampLastSync");
 
 module.exports = async function (req, res) {
@@ -75,25 +80,47 @@ module.exports = async function (req, res) {
         );
       }
 
-      // Remove the file (if it exists)
-      await fs.remove(pathOnDisk); // Removes the file or directory
+      // Take the file out of the blog folder, but keep it until Blot has
+      // dropped its entries. If Redis cannot take the update it goes back,
+      // because the macserver will ask again and would be told the file is
+      // already gone. The temporary directory sits beside the blog folders
+      // by default, so moving a folder there is normally a rename.
+      const stash = join(
+        tmp_directory,
+        "icloud-delete-" + randomBytes(8).toString("hex")
+      );
 
-      // Call the folder's update method to register the file deletion
-      for (const pathToUpdate of pathsToUpdate) {
-        await folder.update(pathToUpdate);
-        // Set the folder status to reflect the delete action
-        folder.status("Removed " + pathToUpdate);
+      await fs.move(pathOnDisk, stash);
+
+      try {
+        // Call the folder's update method to register the file deletion
+        for (const pathToUpdate of pathsToUpdate) {
+          await folder.update(pathToUpdate);
+          // Set the folder status to reflect the delete action
+          folder.status("Removed " + pathToUpdate);
+        }
+      } catch (err) {
+        if (isRedisUnavailableError(err)) await fs.move(stash, pathOnDisk);
+        throw err;
+      } finally {
+        await fs.remove(stash);
       }
 
       console.log(`Successfully deleted: ${pathOnDisk}`);
       return res.status(200).send(`Successfully deleted for blogID: ${blogID}`);
     } finally {
       // Release the sync lock
-      done();
+      done().catch((err) => console.error("Error releasing lock:", err));
     }
   } catch (err) {
     if (
       handleSyncLockError({
+        err,
+        res,
+        blogID: req.header("blogID"),
+        action: "delete",
+      }) ||
+      handleRedisUnavailable({
         err,
         res,
         blogID: req.header("blogID"),
