@@ -35,6 +35,7 @@
 const {
   SLOWLOG_ENTRIES,
   SLOWLOG_ALERT_US,
+  FORK_ALERT_US,
   ERROR_ALERT_COUNT,
   parseInfo,
   observe,
@@ -509,6 +510,7 @@ function view(report) {
       stale: minutes(STALE_MS),
       errors: ERROR_ALERT_COUNT,
       slowlog: ms(SLOWLOG_ALERT_US),
+      fork: ms(FORK_ALERT_US),
       conditionInterval: duration(CONDITION_MIN_INTERVAL),
       eventCooldown: duration(EVENT_COOLDOWN.default),
     },

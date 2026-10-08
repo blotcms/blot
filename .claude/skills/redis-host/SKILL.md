@@ -376,3 +376,14 @@ Entry template:
   (`launch.sh --drill`, newest backup) took 2m31s for the full production dataset.
 - Follow-up: the previous host was terminated. Remaining items are under
   "Redis host follow-ups" in `TODO`.
+
+### 2026-10-08 — "Slow Redis commands": BGSAVE 84ms (false positive)
+
+- Trigger / evidence: one entry, `BGSAVE` 84ms at 21:00Z, the hourly backup's
+  own save (`backup.sh` saves right before each upload). Redis logs a
+  `BGSAVE` with the time it took to fork, ~60-85ms on the current host.
+- Cause: expected; not a slow command.
+- Fix / outcome: `BGSAVE`/`BGREWRITEAOF` are now only reported at
+  `FORK_ALERT_US` (500ms) or more (`app/scheduler/redis-host-events.js`).
+- Follow-up: none. A fork over 500ms is worth a look (dataset growth, memory
+  pressure on the host).
