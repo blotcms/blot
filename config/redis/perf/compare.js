@@ -216,6 +216,13 @@ function report(win, data, ctx) {
   const inWin = data.samples.filter((s) => inWindow(win, sampleTime(s)));
   const samples = inWin.filter((s) => !(typeof s.f.dt === "number" && (s.f.dt < MIN_DT || s.f.dt > MAX_DT)));
   const col = (name) => samples.map((s) => s.f[name]);
+  // A count over the samples: "-" if the field was unavailable (x) in all of
+  // them, and a note if in some, so it does not pass for an exact figure.
+  const counted = (name, value) => {
+    const n = samples.filter((s) => s.f[name] === null || s.f[name] === undefined).length;
+    if (n && n === samples.length) return "-";
+    return String(value) + (n ? " (" + n + " of " + samples.length + " minutes unknown)" : "");
+  };
   const secs = (name) => samples.map((s) => per(s.f[name], s.f.dt)); // per second
 
   head("Window");
@@ -274,15 +281,15 @@ function report(win, data, ctx) {
   // ---- BGSAVE
   head("BGSAVE");
   const done = samples.filter((s) => s.f.bgsaves === 1);
-  row("saves completed", String(done.length));
+  row("saves completed", counted("bgsaves", done.length));
   row("minutes with a save running", samples.length ? fmtNum((100 * samples.filter((s) => s.f.bg_active === 1).length) / samples.length) + "%" : "-");
   row("duration, s", dist(done.map((s) => s.f.bgsave_sec)));
   row("fork time, ms", dist(done.map((s) => (s.f.fork_us === null ? null : s.f.fork_us / 1000))));
   row("copy-on-write, MB", dist(done.map((s) => (s.f.cow_b === null ? null : s.f.cow_b / 1048576))));
   // rdb_last_bgsave_status stays err until the next good save, so count the
   // samples where it went to err, and separately the minutes it was in err.
-  row("failed saves (status went to err)", String(samples.filter((s) => ctx.failedSaves.has(s)).length));
-  row("minutes with last save failed", String(samples.filter((s) => notOk(s)).length));
+  row("failed saves (status went to err)", counted("bgsave_status", samples.filter((s) => ctx.failedSaves.has(s)).length));
+  row("minutes with last save failed", counted("bgsave_status", samples.filter((s) => notOk(s)).length));
 
   // ---- CPU
   head("CPU, % of each CPU (per minute)");
@@ -311,7 +318,7 @@ function report(win, data, ctx) {
   row("net out, KB/s", dist(secs("out_b").map((v) => (v === null ? null : v / 1024))));
   row("connected clients", dist(col("clients")));
   row("new connections/min", dist(col("conns_new")));
-  row("new slowlog entries (total)", fmtNum(sum(col("slow_new"))));
+  row("new slowlog entries (total)", counted("slow_new", fmtNum(sum(col("slow_new")))));
 
   // ---- TCP memory
   head("TCP memory (pages)");

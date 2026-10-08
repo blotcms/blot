@@ -151,8 +151,27 @@ describe("redis perf tools", function () {
       writeLogs(dir, { sample: (d, m) => "bgsave_status=" + (d === 7 ? "ok" : m === 31 ? "x" : err(m) ? "err" : "ok"), probes: {} });
       const out = compare.main(["--data", dir, "--baseline", "2026-10-07T12:20..13:00", "--test", "2026-10-08T12:20..13:00"]);
       const bgsave = section(out, "BGSAVE");
-      expect(bgsave["failed saves (status went to err)"]).toEqual(["0", "2"]);
-      expect(bgsave["minutes with last save failed"]).toEqual(["0", "8"]);
+      // the x at minute 31 is not a known "ok"
+      expect(bgsave["failed saves (status went to err)"]).toEqual(["0", "2 (1 of 40 minutes unknown)"]);
+      expect(bgsave["minutes with last save failed"]).toEqual(["0", "8 (1 of 40 minutes unknown)"]);
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("does not show a count as 0 when its field is unavailable", function () {
+      const dir = tmp();
+      // baseline: known; test: bgsaves, bgsave_status and slow_new are x for all of it, then for part of the hour
+      writeLogs(dir, {
+        sample: (d, m) => (d === 7 ? "bgsaves=1 bgsave_status=ok slow_new=2" : m < 30 ? "bgsaves=x bgsave_status=x slow_new=x" : "bgsaves=1 bgsave_status=ok slow_new=2"),
+        probes: {},
+      });
+      let out = compare.main(["--data", dir, "--baseline", "2026-10-07T12:00..13:00", "--test", "2026-10-08T12:00..12:30"]);
+      expect(section(out, "BGSAVE")["saves completed"]).toEqual(["60", "-"]);
+      expect(section(out, "BGSAVE")["failed saves (status went to err)"]).toEqual(["0", "-"]);
+      expect(section(out, "BGSAVE")["minutes with last save failed"]).toEqual(["0", "-"]);
+      expect(section(out, "Redis")["new slowlog entries (total)"]).toEqual(["120", "-"]);
+      out = compare.main(["--data", dir, "--baseline", "2026-10-07T12:30..13:00", "--test", "2026-10-08T12:00..13:00"]);
+      expect(section(out, "BGSAVE")["saves completed"]).toEqual(["30", "30 (30 of 60 minutes unknown)"]);
+      expect(section(out, "Redis")["new slowlog entries (total)"]).toEqual(["60", "60 (30 of 60 minutes unknown)"]);
       fs.rmSync(dir, { recursive: true, force: true });
     });
 
