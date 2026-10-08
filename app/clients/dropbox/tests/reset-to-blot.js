@@ -32,8 +32,12 @@ describe("dropbox resetToBlot", function () {
   });
 
   // delta: entries Dropbox reports since the pre-walk cursor, i.e. edits
-  // made during the walk. Omit it to make that call fail.
-  function load(remote, { delta, account = {} } = {}) {
+  // made during the walk. Omit it to make that call fail. deltaCursor is the
+  // cursor those entries are listed from.
+  function load(
+    remote,
+    { delta, account = {}, deltaCursor = "new-cursor" } = {}
+  ) {
     require.cache[createClientPath] = {
       exports: function (_blogID, callback) {
         callback(null, {
@@ -50,7 +54,7 @@ describe("dropbox resetToBlot", function () {
             return { result: { entries, has_more: false, cursor: "c" } };
           },
           filesListFolderContinue: async ({ cursor }) => {
-            if (cursor !== "new-cursor" || !delta)
+            if (cursor !== deltaCursor || !delta)
               throw new Error("Dropbox unavailable");
             return {
               result: { entries: delta, has_more: false, cursor: "later" },
@@ -194,6 +198,32 @@ describe("dropbox resetToBlot", function () {
 
       expect(summary.removed).toEqual(2);
       expect(countChanges(summary)).toEqual(1);
+    });
+
+    it("excuses a removal made before the pre-walk cursor, from an earlier one", async function () {
+      await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+      // Only the early cursor can list the change: the pre-walk cursor
+      // ("new-cursor") was fetched after it, and would find nothing
+      const resetToBlot = load(
+        { "/": [] },
+        { delta: [deleted("/gone.txt")], deltaCursor: "early-cursor" }
+      );
+
+      const withoutEarly = await resetToBlot(blogID, () => {});
+      expect(countChanges(withoutEarly)).toEqual(1);
+
+      await fs.outputFile(join(blogDirectory, "gone.txt"), "x");
+      saved.length = 0;
+      const summary = await resetToBlot(blogID, () => {}, undefined, {
+        excuseChangesSince: "early-cursor",
+      });
+
+      expect(summary.removed).toEqual(1);
+      expect(summary.changedDuringWalk).toEqual(1);
+      expect(countChanges(summary)).toEqual(0);
+      // Still the pre-walk cursor that later syncs resume from
+      expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(true);
+      expect(saved.some((values) => values.cursor === "early-cursor")).toEqual(false);
     });
 
     it("counts every change if Dropbox can't list what changed", async function () {

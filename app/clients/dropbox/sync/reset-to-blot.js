@@ -31,6 +31,7 @@ const {
   keepsErrorAfterDownload,
 } = require("../util/classifyError");
 const tagSource = require("../util/tagSource");
+const latestCursor = require("./latest-cursor");
 const createClient = promisify((blogID, cb) =>
   require("../util/createClient")(blogID, (err, ...results) => cb(err, results))
 );
@@ -68,7 +69,12 @@ async function mapLimit(items, limit, iterator) {
 // database follows the folder even if the walk fails part way through. It is
 // the same (blogID, publish, update) contract the iCloud and Drive clients
 // use, and callers should hold the folder lock while it runs.
-async function resetToBlot(blogID, publish, update) {
+//
+// options.excuseChangesSince: a cursor fetched before the walk's own (e.g. by
+// validation, a few seconds before taking the lock). Changes Dropbox reports
+// since it are excused from the unsynced-change count, instead of just those
+// since the pre-walk cursor. The pre-walk cursor is still the one saved.
+async function resetToBlot(blogID, publish, update, options = {}) {
   if (!publish)
     publish = (...args) => {
       console.log(clfdate() + " Dropbox:", args.join(" "));
@@ -104,7 +110,8 @@ async function resetToBlot(blogID, publish, update) {
       client,
       account,
       updatePath,
-      startedAt
+      startedAt,
+      options
     );
   } catch (err) {
     await persistError(blogID, err, SOURCES.APPLY);
@@ -118,7 +125,8 @@ async function resetToBlotWithClient(
   client,
   account,
   updatePath,
-  startedAt
+  startedAt,
+  options = {}
 ) {
   // Guard this at the source rather than only in each caller: resetToBlot
   // treats Dropbox as the source of truth and deletes any local file with no
@@ -152,26 +160,7 @@ async function resetToBlotWithClient(
     }
   }
 
-  // It's import that these args match those used in delta.js
-  // A way to quickly get a cursor for the folder's state.
-  // From the docs:
-  // https://dropbox.github.io/dropbox-sdk-js/Dropbox.html
-  // Unlike list_folder, list_folder/get_latest_cursor doesn't
-  // return any entries. This endpoint is for app which only
-  // needs to know about new files and modifications and doesn't
-  // need to know about files that already exist in Dropbox.
-  // Route attributes: scope: files.metadata.read
-
-  const {
-    result: { cursor },
-  } = await tagSource(
-    SOURCES.DELTA,
-    client.filesListFolderGetLatestCursor({
-      path: account.folder_id || "",
-      include_deleted: true,
-      recursive: true,
-    })
-  );
+  const cursor = await latestCursor(client, account);
 
   // The cursor is fetched before the walk, so edits made during it are still
   // seen by the next sync, but only saved once the walk succeeds. If the walk
@@ -190,8 +179,10 @@ async function resetToBlotWithClient(
     // Subset of downloaded: files Dropbox modified after we started.
     modifiedDuringWalk: 0,
     // Changes (of any kind) to paths Dropbox reports changing since the
-    // pre-walk cursor, i.e. edits that landed mid-walk. Not counted by
-    // countChanges, like modifiedDuringWalk. See changedSinceCursor below.
+    // pre-walk cursor, i.e. edits that landed mid-walk, or since
+    // options.excuseChangesSince if given, i.e. just before it too. Not
+    // counted by countChanges, like modifiedDuringWalk. See changedSinceCursor
+    // below.
     changedDuringWalk: 0,
     // Paths behind downloaded/removed/createdDirs not already excused by
     // modifiedDuringWalk, checked against the cursor once the walk is done.
@@ -214,14 +205,18 @@ async function resetToBlotWithClient(
   );
 
   if (summary.changedPaths.length) {
-    const changed = await changedSinceCursor(client, cursor, dropboxRoot);
+    const changed = await changedSinceCursor(
+      client,
+      options.excuseChangesSince || cursor,
+      dropboxRoot
+    );
     if (changed) {
       summary.changedDuringWalk = summary.changedPaths.filter((path) =>
         overlapsAny(path, changed)
       ).length;
       if (summary.changedDuringWalk)
         publish(
-          `${summary.changedDuringWalk} change(s) were made in Dropbox during the walk`
+          `${summary.changedDuringWalk} change(s) were made in Dropbox during or just before the walk`
         );
     }
   }

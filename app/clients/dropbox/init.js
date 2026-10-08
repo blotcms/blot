@@ -6,6 +6,7 @@ const clfdate = require("helper/clfdate");
 const email = require("helper/email");
 const syncReport = require("clients/util/syncReport");
 const resetToBlot = require("./sync/reset-to-blot");
+const latestCursor = require("./sync/latest-cursor");
 const { transferIncomplete } = require("./util/constants");
 const { get: getAccount, set: setAccount } = require("./database");
 const getHealth = require("./getHealth");
@@ -26,6 +27,17 @@ const getEntryTotal = promisify(Entries.getAllTotal);
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_IN_MS = 15 * 60 * 1000;
 
+// Dropbox's webhook can arrive a few seconds after a change is made. A
+// change made just before validation takes the lock would be fixed by the
+// walk and counted as unsynced, though its webhook sync is merely about to
+// lose the race for the lock. So validation fetches a cursor, waits this long,
+// and only then takes the lock: changes since that cursor are excused (see
+// excuseChangesSince in sync/reset-to-blot.js). Webhook syncs can still run
+// during the wait, as the lock isn't held yet.
+const WEBHOOK_GRACE_MS = 5 * 1000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // Returned by resetToBlotWithLock instead of a summary when it finds the
 // transfer incomplete after acquiring the lock. Callers must treat this as
 // "nothing happened" - not a change to count, and not something to follow up
@@ -35,12 +47,12 @@ const TRANSFER_INCOMPLETE = Symbol("dropbox-transfer-incomplete");
 // Runs resetToBlot while holding the blog's folder lock, so it can't race a
 // webhook sync. resetToBlot updates the database as it changes files, since it
 // advances the Dropbox cursor and later syncs would never revisit them.
-const resetToBlotWithLock = async (blogID, publish) => {
+const resetToBlotWithLock = async (blogID, publish, options) => {
   const { folder, done } = await establishSyncLock(blogID);
   let error = null;
 
   try {
-    return await resetToBlot(blogID, publish, folder.update);
+    return await resetToBlot(blogID, publish, folder.update, options);
   } catch (err) {
     // resetToBlot itself refuses (see sync/reset-to-blot.js) if the account's
     // initial transfer to Dropbox hasn't finished - that guard runs right
@@ -141,7 +153,7 @@ const runValidation = async () => {
   }
 };
 
-const validateAllBlogs = async () => {
+const validateAllBlogs = async ({ graceMs = WEBHOOK_GRACE_MS } = {}) => {
   console.log(clfdate(), "Dropbox: Running hourly sync validation");
 
   let blogIDs = [];
@@ -188,12 +200,29 @@ const validateAllBlogs = async () => {
 
       const entryCount = await getEntryTotal(blogID).catch(() => null);
 
+      // Fetched before the grace wait; without one there is nothing to wait
+      // for and the walk just excuses changes made during it, as before.
+      let excuseChangesSince;
+      try {
+        excuseChangesSince = await latestCursor.forBlog(blogID);
+        await sleep(graceMs);
+      } catch (err) {
+        console.error(
+          clfdate(),
+          "Dropbox: Failed to fetch early cursor for blog",
+          blogID,
+          err
+        );
+      }
+
       let summary;
       const stopWalkMeasure = measureEventLoop();
       phase = "walk";
 
       try {
-        summary = await resetToBlotWithLock(blogID, publish);
+        summary = await resetToBlotWithLock(blogID, publish, {
+          excuseChangesSince,
+        });
         logLag(blogID, "walk", entryCount, stopWalkMeasure());
       } catch (err) {
         stopWalkMeasure();

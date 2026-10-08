@@ -23,6 +23,12 @@ repaired anything, whose walk / Fix() / catch-up sync threw ("error during
 ("folder lock held for Xh Ym - sync may be hung"; a hung sync inside a live
 process, on whichever container holds it).
 
+Changes Dropbox reports as made during the walk, or in the 5s before it
+(validation fetches an "early" cursor, waits 5s for slow webhooks, then takes
+the lock), are not counted: the walk logs `N change(s) were made in Dropbox
+during or just before the walk`. So a flagged change was made earlier than that,
+or after the walk's listing of its folder, or Dropbox couldn't list the changes.
+
 The email is sent right after the run finishes, so its timestamp ≈ the
 `Sync validation complete checked=N issues=M` log line (email times are the
 user's local time; **logs are UTC**). The email's two backtick commands are
@@ -75,6 +81,8 @@ gone.
      validation walked the folder → race, not a missed webhook.
    - Was a webhook sync dropped? `Failed to acquire lock on folder` while
      validation held the lock is **by design** (the `catchUpSync` covers it).
+     A change in the 5s before the lock is excused, so a webhook that lagged
+     more than that is the likely cause if one still gets flagged.
    - Was a sync still running / stuck when validation started (`Starting sync`
      with no `Finished sync`)? Any slow steps (`Saving file in database`
      taking many seconds)?
@@ -258,3 +266,24 @@ Entry template:
   `resetToBlot` lists what Dropbox changed since its pre-walk cursor and
   doesn't count those changes (`changedDuringWalk`; it logs `N change(s) were
   made in Dropbox during the walk`).
+
+### 2026-10-08 15:00:00 UTC validation run — race with a live edit (benign)
+
+- Alert: 1 removal for 1 blog; run complete at 15:02:38 UTC (green).
+- Key events (UTC): the user's tooling was rewriting files in a template folder
+  (syncs every few seconds, many `Webhook received mid-sync`). Last normal sync
+  `sync_d8a98e7` finished in sync at 14:59:59. A generated cache directory was
+  deleted in Dropbox shortly before validation `sync_0f8a25a` took the lock and
+  fetched its pre-walk cursor at 15:01:09.48. That change's webhook arrived
+  15:01:10.2. Its sync (`sync_116b8ad`) and the follow-up (`sync_3ea890d`) both hit
+  `Failed to acquire lock` (by design). Validation removed the directory at
+  15:01:29. Catch-up `sync_b933cb4` (15:01:43) fetched 0 changes. The 14:00 run
+  was clean.
+- Cause: the deletion landed just *before* the pre-walk cursor, so
+  `changedDuringWalk` (added 2026-09-28) didn't excuse it. Dropbox's webhook lag
+  is about 1s, so this edge remains.
+- Follow-up: fixed by adding a 5s webhook grace. Validation fetches an early
+  cursor, waits 5s, then takes the lock, and changes made in that window are
+  excused (the walk's changes-since-cursor check lists from the early cursor).
+  Tip: use `sync_` ids, not webhook lines, to tell which webhooks were for this
+  blog. Webhook POSTs are shared across all Dropbox accounts.

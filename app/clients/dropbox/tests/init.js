@@ -165,6 +165,12 @@ describe("dropbox init", function () {
       require.cache[resetToBlotPath] = {
         exports: resetToBlotBehavior,
       };
+      // No Dropbox to ask for the early cursor, so none is fetched or waited for
+      require.cache[latestCursorPath] = {
+        exports: Object.assign(function () {}, {
+          forBlog: () => Promise.reject(new Error("no Dropbox in tests")),
+        }),
+      };
       require.cache[lockPath] = {
         exports: function () {
           return Promise.resolve({
@@ -229,6 +235,7 @@ describe("dropbox init", function () {
     const blogPath = require.resolve("models/blog");
     const databasePath = require.resolve("../database");
     const resetToBlotPath = require.resolve("../sync/reset-to-blot");
+    const latestCursorPath = require.resolve("../sync/latest-cursor");
     const lockPath = require.resolve("sync/establishSyncLock");
     const initPath = require.resolve("../init");
 
@@ -236,13 +243,24 @@ describe("dropbox init", function () {
     const originals = {};
 
     beforeEach(function () {
-      [blogPath, databasePath, resetToBlotPath, lockPath, initPath].forEach(
-        (path) => (originals[path] = require.cache[path])
-      );
+      [
+        blogPath,
+        databasePath,
+        resetToBlotPath,
+        latestCursorPath,
+        lockPath,
+        initPath,
+      ].forEach((path) => (originals[path] = require.cache[path]));
     });
 
     afterEach(function () {
-      [blogPath, databasePath, resetToBlotPath, lockPath].forEach((path) => {
+      [
+        blogPath,
+        databasePath,
+        resetToBlotPath,
+        latestCursorPath,
+        lockPath,
+      ].forEach((path) => {
         if (originals[path]) require.cache[path] = originals[path];
         else delete require.cache[path];
       });
@@ -337,6 +355,7 @@ describe("dropbox init", function () {
       blog: require.resolve("models/blog"),
       database: require.resolve("../database"),
       resetToBlot: require.resolve("../sync/reset-to-blot"),
+      latestCursor: require.resolve("../sync/latest-cursor"),
       lock: require.resolve("sync/establishSyncLock"),
       folderLock: require.resolve("sync/lock"),
       fix: require.resolve("sync/fix"),
@@ -352,6 +371,8 @@ describe("dropbox init", function () {
     // fake of the Redis set it lives in. Kept across sweeps within a test.
     let reported;
     let walked;
+    // The options validation passed to each walk, by blog
+    let walkOptions;
     // Which Blog.get load Fix was given (1 being the one before the walk),
     // and which blogs the catch-up sync ran for
     let fixedLoads;
@@ -360,6 +381,7 @@ describe("dropbox init", function () {
     beforeEach(function () {
       reported = new Set();
       walked = [];
+      walkOptions = {};
       fixedLoads = {};
       synced = [];
       Object.keys(paths).forEach((name) => {
@@ -428,9 +450,20 @@ describe("dropbox init", function () {
           done: async function () {},
         });
       });
-      stub("resetToBlot", function (blogID) {
+      stub(
+        "latestCursor",
+        Object.assign(function () {}, {
+          forBlog: async (blogID) => {
+            if (behaviors[blogID].earlyCursorError)
+              throw new Error("early cursor exploded");
+            return "early-cursor";
+          },
+        })
+      );
+      stub("resetToBlot", function (blogID, publish, update, options) {
         const behavior = behaviors[blogID];
         walked.push(blogID);
+        walkOptions[blogID] = options;
         if (behavior.walkError) return Promise.reject(behavior.walkError);
         return Promise.resolve(behavior.summary || {});
       });
@@ -489,6 +522,30 @@ describe("dropbox init", function () {
       briefly: "blog_digestbriefly" + stamp,
       clean: "blog_digestclean" + stamp,
     };
+
+    it("hands the walk a cursor fetched before it took the lock", async function () {
+      const init = load({ [ids.clean]: {} }, []);
+
+      await init.validateAllBlogs({ graceMs: 0 });
+
+      expect(walkOptions[ids.clean]).toEqual({
+        excuseChangesSince: "early-cursor",
+      });
+    });
+
+    it("still walks, without an early cursor, if it can't be fetched", async function () {
+      const sentEmails = [];
+      const init = load(
+        { [ids.clean]: { earlyCursorError: true } },
+        sentEmails
+      );
+
+      await init.validateAllBlogs();
+
+      expect(walked).toEqual([ids.clean]);
+      expect(walkOptions[ids.clean].excuseChangesSince).toBeUndefined();
+      expect(sentEmails.length).toEqual(0);
+    });
 
     it("runs Fix and the catch-up sync on a blog loaded after the walk", async function () {
       const sentEmails = [];
