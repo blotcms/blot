@@ -13,7 +13,8 @@ Graviton has no SMT, so one vCPU is one physical core: one busy core plus one
 idle core is the same compute as the medium's single vCPU. See the header of
 `cpu-squeeze.sh` for what it does not reproduce.
 
-**Redis's config is not touched in either phase.** `save 60 10000` stays (a ~30s
+**Redis's config is not touched in either phase.** `save 60 10000` stays (the
+current host's policy, not the new host's in `../redis.conf`; a ~30s
 BGSAVE every 1-2 minutes is the worst case being tested), and nothing here sets
 `latency-monitor-threshold` or any other Redis setting: the collectors only run
 `INFO`, `SLOWLOG`, `CONFIG GET` and `LATENCY LATEST`, plus `PING`.
