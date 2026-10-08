@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Shared by blue-green.sh and cutover-from-baremetal.sh. Source it, do not run
-# it. Everything here runs ON the production host (copy proxy/deploy/ across,
-# or run it in place from a checkout):
+# Shared by blue-green.sh, try-issuance.sh and reload-config.sh. Source it, do
+# not run it. Everything here runs ON the production host (copy proxy/deploy/
+# across, or run it in place from a checkout):
 #
 #   scp -r proxy/deploy blot:~/proxy-deploy
 #
@@ -10,8 +10,7 @@
 #
 #   PROXY_ENV_FILE         /etc/blot/proxy.env  docker --env-file for the proxy
 #                                               (see proxy.env.example)
-#   PROXY_CACHE_DIR        /var/instance-ssd/cache  the same disk cache the
-#                                               bare-metal OpenResty uses
+#   PROXY_CACHE_DIR        /var/instance-ssd/cache  the proxy's disk cache
 #   PROXY_LOG_DIR          /var/instance-ssd/logs   fail2ban and logrotate
 #                                               read the access log here
 #   PROXY_CERT_DIR         /etc/ssl/private     wildcard cert + key (read-only)
@@ -28,16 +27,17 @@
 #   PROXY_DRAIN_TIMEOUT    30                   seconds an old container may drain
 #   PROXY_DEPLOY_LOCK      /tmp/blot-proxy-deploy.lock  held by every deploy script
 #   PROXY_SKIP_CERT_SWEEP  (unset)              1 skips the custom-domain certificate
-#                                               comparison (see cert_baseline)
+#                                               checks (see cert_baseline and
+#                                               certs_all_served)
 #   PROXY_NOFILE           65536                --ulimit nofile=N:N. Each proxied
 #                                               connection holds ~2 fds (client +
 #                                               upstream), so worker_connections
-#                                               10000 (config/openresty/conf/initial.conf)
+#                                               10000 (proxy/config/initial.conf)
 #                                               needs ~20000 plus cache/log fds;
 #                                               this leaves headroom above that
-#   PROXY_REHYDRATE_TIMEOUT 180                 seconds the rehearsal waits for
-#                                               "rehydrate: complete" in error.log
-#                                               (~20s for today's ~200k files)
+#   PROXY_REHYDRATE_TIMEOUT 120                 seconds a new container may take to
+#                                               rebuild its purge index (see
+#                                               wait_rehydrated; ~2.5s in production)
 #
 # PROXY_DEPLOY_SLEEP replaces `sleep` (the tests set it to a no-op).
 
@@ -55,7 +55,7 @@ HEALTH_SOCK="/run/openresty/health.sock"
 LOCK_FILE="${PROXY_DEPLOY_LOCK:-/tmp/blot-proxy-deploy.lock}"
 SITE_IP="127.0.0.1"
 PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
-# worker_connections is 10000 (config/openresty/conf/initial.conf) and each
+# worker_connections is 10000 (proxy/config/initial.conf) and each
 # proxied connection holds about two fds (client + upstream), so 10000
 # connections can need about 20000; add cache/log/socket fds on top and
 # Docker's default (1024) is nowhere close. This is the CONTAINER's limit; the
@@ -63,16 +63,16 @@ PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
 # the same reason. 65536 leaves real headroom above both - a root dockerd
 # allows it.
 NOFILE="${PROXY_NOFILE:-65536}"
-REHYDRATE_TIMEOUT="${PROXY_REHYDRATE_TIMEOUT:-180}"
+REHYDRATE_TIMEOUT="${PROXY_REHYDRATE_TIMEOUT:-120}"
 
-# Never fail because the terminal went away: the cutover ignores SIGPIPE and
+# Never fail because the terminal went away: a deploy ignores SIGPIPE and
 # must still be able to finish and roll back with nobody watching.
 log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*" 2>/dev/null || true; }
 die() { log "ERROR: $*" >&2; exit 1; }
 nap() { ${PROXY_DEPLOY_SLEEP:-sleep} "$1"; }
 
 # Commands which need root (systemctl). The deploy user has passwordless sudo;
-# fail early and clearly rather than hanging on a prompt mid-cutover.
+# fail early and clearly rather than hanging on a prompt mid-deploy.
 sys() {
   if [ "$(id -u)" = 0 ]; then "$@"; else sudo -n "$@"; fi
 }
@@ -129,7 +129,7 @@ ensure_image() { # pull only when it is not already on the host
   docker image inspect "$1" >/dev/null 2>&1 || { log "Pulling $1"; docker pull "$1"; }
 }
 
-# Arguments common to every real proxy container (not the rehearsal).
+# Arguments common to every real proxy container.
 # Host networking: the generated upstreams are 127.0.0.1:8088-8090 and the
 # Node containers publish those ports on the host.
 run_args() { # run_args <name>
@@ -146,7 +146,7 @@ run_args() { # run_args <name>
     -v "$CERT_DIR":/etc/ssl/private:ro
     # Mounted at the same paths the image defaults to
     # (BLOG_STATIC_FILES_DIR / GLOBAL_STATIC_FILES_DIR in
-    # config/openresty/locals.js), so `try_files` on cdn.<host> finds files on
+    # proxy/build/locals.js), so `try_files` on cdn.<host> finds files on
     # disk instead of falling through to @cdn_node, which misses the
     # Cache-Control/CORS headers `location /` sets.
     -v "$BLOG_STATIC_DIR":/var/www/blot/data/static:ro
@@ -194,24 +194,37 @@ wait_healthy() { # wait_healthy <name> <timeout>
 }
 
 # Worker 0 rebuilds the purge index (cacher.lua build_index) once nginx starts
-# listening, and logs "rehydrate: complete files=... hosts=..." to error.log
-# when it finishes, or "[error] ... rehydrate: <reason>" (e.g. cannot read a
-# file, or "increase lua_shared_dict cacher_dictionary") if it gives up. Read
-# BOTH log sinks: normally the container's own error.log (no log mount here),
-# but with ALLOW_STDOUT_LOGS=1 (image_logs_to_file's override) error_log goes
-# to stderr instead, where only `docker logs` sees it - checking just the file
-# would then time out and refuse every cutover on such an image. Poll until
-# one or the other shows the complete/error line, or <timeout> seconds pass
-# (~20s for today's ~200k files; a cold disk can take longer, hence a
-# generous default).
+# listening, and logs "rehydrate: complete files=... hosts=..." when it
+# finishes, or "[error] ... rehydrate: <reason>" (e.g. cannot read a file, or
+# "increase lua_shared_dict cacher_dictionary") if it gives up. Until it
+# completes every /purge answers 503, so a proxy that never gets there serves
+# stale pages indefinitely. Wait for one or the other, up to <timeout> seconds.
+#
+# Where the line goes: the image writes error.log to the shared $LOG_DIR (also
+# written by the other colour during a swap), or to stderr (`docker logs`) with
+# ALLOW_STDOUT_LOGS=1. Both are read. In the shared file only lines stamped at
+# or after the container's start time count: the old colour's own "complete"
+# line is older, and container pids cannot tell the two apart (each container
+# has its own pid namespace, so both log as 1#1 / 7#7).
 wait_rehydrated() { # wait_rehydrated <name> <timeout>
-  local deadline=$(( $(date +%s) + $2 )) log
+  local deadline=$(( $(date +%s) + $2 )) started text
+  started="$(docker inspect -f '{{.State.StartedAt}}' "$1" 2>/dev/null || true)"
+  started="${started%%.*}"; started="${started%Z}"    # 2026-10-08T12:34:56
+  started="${started//-//}"; started="${started/T/ }" # 2026/10/08 12:34:56 (nginx's stamp)
+  [ -n "$started" ] || { log "cannot read when $1 started"; return 1; }
   while true; do
-    log="$( { docker exec "$1" cat /var/log/openresty/error.log 2>/dev/null; docker logs "$1" 2>&1; } || true)"
-    echo "$log" | grep -q '\[error\].*rehydrate:' && return 1
-    echo "$log" | grep -q 'rehydrate: complete' && return 0
-    running "$1" || return 1
-    [ "$(date +%s)" -lt "$deadline" ] || return 1
+    text="$( { tail -n 5000 "$LOG_DIR/error.log" 2>/dev/null \
+                 | awk -v start="$started" 'substr($0, 1, 19) >= start'
+               docker logs "$1" 2>&1; } || true)"
+    # here-strings, not a pipe: grep -q exiting early would SIGPIPE printf and
+    # fail the pipeline under pipefail
+    if grep -q '\[error\].*rehydrate:' <<< "$text"; then
+      log "$1 failed to rebuild its purge index: $(grep -m1 '\[error\].*rehydrate:' <<< "$text")"
+      return 1
+    fi
+    ! grep -q 'rehydrate: complete' <<< "$text" || return 0
+    running "$1" || { log "$1 stopped before its purge index was rebuilt"; return 1; }
+    [ "$(date +%s)" -lt "$deadline" ] || { log "$1 did not log \"rehydrate: complete\" in ${2}s"; return 1; }
     nap 1
   done
 }
@@ -254,20 +267,27 @@ snapshot() { # snapshot [port] -> "host=status host=status ..."
 # SCAN by hand: `redis-cli --scan --count` needs redis-cli 7, and the
 # production host has 6.2, whose --scan uses SCAN's default COUNT of 10 (a
 # round trip per 10 keys of the whole keyspace).
+# Fails (rather than listing nothing) if a SCAN fails or returns an error
+# reply, so a broken Redis cannot pass for one with no custom domains. The loop
+# is not piped: a failure inside a pipeline would be lost.
 custom_cert_domains() {
-  local cursor=0 reply
+  local cursor=0 reply keys=""
   while :; do
     reply=$(redis-cli -h "$REDIS_HOST" --raw scan "$cursor" match 'ssl:*:latest' count 1000) || return 1
     cursor=$(printf '%s\n' "$reply" | head -n 1)
-    printf '%s\n' "$reply" | tail -n +2
+    case "$cursor" in ''|*[!0-9]*) return 1 ;; esac
+    keys="$keys$(printf '%s\n' "$reply" | tail -n +2)
+"
     [ "$cursor" != 0 ] || break
-  done | sed '/^$/d' | sed -E 's/^ssl:(.*):latest$/\1/' | sort -u
+  done
+  printf '%s' "$keys" | sed '/^$/d' | sed -E 's/^ssl:(.*):latest$/\1/' | sort -u
 }
 
 # cert_sweep [port] -> sorted "<domain> <sha256 fingerprint | none>" lines
 cert_sweep() {
-  local port="${1:-443}"
-  custom_cert_domains | xargs -r -P 16 -I{} bash -c '
+  local port="${1:-443}" domains
+  domains="$(custom_cert_domains)" || return 1
+  printf '%s\n' "$domains" | sed '/^$/d' | xargs -r -P 16 -I{} bash -c '
     fp=$(echo | timeout 5 openssl s_client -connect "$1:$2" -servername "$3" 2>/dev/null \
       | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
     echo "$3 ${fp:-none}"' _ "$SITE_IP" "$port" {} | sort
@@ -286,7 +306,7 @@ certs_unchanged() { # certs_unchanged <baseline> <now>
 }
 
 # Record the certificates the running proxy serves; CERT_BASELINE is what
-# live_checks and the rehearsal compare against. Refuses to go on with no
+# live_checks compares against. Refuses to go on with no
 # certificates to compare unless PROXY_SKIP_CERT_SWEEP=1.
 cert_baseline() {
   CERT_BASELINE=""
@@ -300,6 +320,32 @@ cert_baseline() {
   [ "$served" -gt 0 ] \
     || { log "no custom-domain certificate could be read from the running proxy ($total in Redis): nothing to compare (PROXY_SKIP_CERT_SWEEP=1 to skip)"; return 1; }
   log "Custom-domain certificates: $served of $total in Redis are being served"
+}
+
+# A fresh start has no running proxy to compare with, so require instead that
+# the new one presents a certificate for EVERY custom domain in Redis
+# (ssl:<domain>:latest), looked up by SNI. A container that cannot read or
+# serve them would otherwise pass every other check. A Redis with no custom
+# domains has nothing to serve and passes.
+certs_all_served() { # certs_all_served [port]
+  [ "${PROXY_SKIP_CERT_SWEEP:-}" != 1 ] || { log "PROXY_SKIP_CERT_SWEEP=1: not checking custom-domain certificates"; return 0; }
+  command -v redis-cli >/dev/null 2>&1 \
+    || { log "redis-cli is not installed, so custom-domain certificates cannot be checked (PROXY_SKIP_CERT_SWEEP=1 to skip)"; return 1; }
+  local sweep total missing wildcard
+  sweep="$(cert_sweep "${1:-443}")" \
+    || { log "cannot list the custom domains in Redis (SCAN failed), so their certificates cannot be checked"; return 1; }
+  sweep="$(printf '%s\n' "$sweep" | sed '/^$/d')"
+  total=$(printf '%s\n' "$sweep" | sed '/^$/d' | wc -l | tr -d ' ')
+  # A custom domain served the wildcard file is auto-ssl falling back: it
+  # could not load that domain's certificate, and browsers will reject it.
+  wildcard=$(openssl x509 -in "$CERT_DIR/letsencrypt-domain.pem" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
+  missing="$(printf '%s\n' "$sweep" | awk -v w="$wildcard" '$2 == "none" || (w != "" && $2 == w) { print $1 }')"
+  if [ -n "$missing" ]; then
+    log "no certificate of its own presented for $(printf '%s\n' "$missing" | wc -l | tr -d ' ') of $total custom domains in Redis: first few:"
+    printf '%s\n' "$missing" | head -5 | while read -r line; do log "  $line"; done
+    return 1
+  fi
+  log "Custom-domain certificates: all $total in Redis are being served"
 }
 
 all_ok() { ! echo "$1" | tr ' ' '\n' | grep -v '=200$' | grep -q .; }

@@ -141,7 +141,7 @@ describe("authentication form limits", function () {
   });
 
   it("matches authentication locations case-insensitively in nginx", function () {
-    const confDir = path.join(__dirname, "../../../../config/openresty/conf");
+    const confDir = path.join(__dirname, "../../../../proxy/config");
     const contents = fs.readFileSync(
       path.join(confDir, "blot-site.conf"),
       "utf8"

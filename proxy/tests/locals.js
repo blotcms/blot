@@ -2,8 +2,7 @@ const mustache = require("mustache");
 const fs = require("fs-extra");
 const path = require("path");
 const config = require("config");
-const locals = require("../locals");
-const { sync } = require("../../../proxy/build/sync-config");
+const locals = require("../build/locals");
 
 // Mustache renders a variable it cannot find as an empty string. This walks a
 // template the way mustache would render it, with real values, and returns
@@ -105,63 +104,41 @@ describe("unresolved (the check itself)", function () {
   });
 });
 
-describe("openresty config locals", function () {
-  const REQUIRED = { NODE_SERVER_IP: "127.0.0.1", REDIS_IP: "127.0.0.1" };
-
+describe("proxy config locals", function () {
   // Optional locals set, so the sections they guard are rendered too
   const ALL_OPTIONAL = {
-    ...REQUIRED,
     DISABLE_HTTP2: "1",
     OPENRESTY_INSTANCE_PRIVATE_IP: "10.0.0.1",
     LUA_PACKAGE_PATH: "/lua",
   };
 
-  const cdn_ips = ["203.0.113.1"];
+  const directory = path.join(__dirname, "../config");
 
-  const generators = {
-    "bare-metal": {
-      locals: (env) => locals.baremetal({ env, config, cdn_ips }),
-      directory: () => path.join(__dirname, "../conf"),
-    },
-    container: {
-      locals: (env) => locals.container({ env, config, cdn_ips }),
-      // proxy/config is generated from config/openresty/conf plus the
-      // container adaptations, which read locals of their own
-      directory: () => {
-        sync();
-        return path.join(__dirname, "../../../proxy/config");
-      },
-    },
-  };
+  [
+    ["no env at all", {}],
+    ["every optional env set", ALL_OPTIONAL],
+    ["logging to files", { LOG_TO_STDOUT: "false" }],
+    ["without reuseport", { ENABLE_REUSEPORT: "false" }],
+  ].forEach(([description, env]) => {
+    it(`every variable the templates read has a value (${description})`, function () {
+      const partials = readPartials(directory);
 
-  Object.keys(generators).forEach((name) => {
-    [
-      ["required env only", REQUIRED],
-      ["every optional env set", ALL_OPTIONAL],
-    ].forEach(([description, env]) => {
-      it(`${name}: every variable the templates read has a value (${description})`, function () {
-        const directory = generators[name].directory();
-        const partials = readPartials(directory);
-
-        expect(
-          unresolved(partials["server.conf"], partials, generators[name].locals(env))
-        ).toEqual([]);
-      });
+      expect(
+        unresolved(partials["server.conf"], partials, locals.container({ env, config }))
+      ).toEqual([]);
     });
   });
 
-  it("container: every runtime placeholder has a default", function () {
-    const directory = generators.container.directory();
+  it("every runtime placeholder has a default", function () {
     const used = new Set();
     const collect = (text) =>
       (text.match(/\$\{PROXY_[A-Z_]+\}/g) || []).forEach((placeholder) =>
         used.add(placeholder.slice(2, -1))
       );
 
-    // some are written into the templates by sync-config, others come in
-    // through the locals
+    // some are written into the templates, others come in through the locals
     Object.values(readPartials(directory)).forEach(collect);
-    collect(JSON.stringify(generators.container.locals(REQUIRED)));
+    collect(JSON.stringify(locals.container({ env: {}, config })));
 
     expect(used.size).toBeGreaterThan(0);
     expect(Array.from(used).sort()).toEqual(
@@ -169,16 +146,7 @@ describe("openresty config locals", function () {
     );
   });
 
-  it("bare-metal requires NODE_SERVER_IP and REDIS_IP", function () {
-    expect(() => locals.baremetal({ env: {}, config, cdn_ips })).toThrowError(
-      "NODE_SERVER_IP not set"
-    );
-    expect(() =>
-      locals.baremetal({ env: { NODE_SERVER_IP: "x" }, config, cdn_ips })
-    ).toThrowError("REDIS_IP not set");
-  });
-
-  it("the container does not need them: they are runtime settings", function () {
+  it("needs no environment: the host-specific values are runtime settings", function () {
     expect(() => locals.container({ env: {}, config })).not.toThrow();
   });
 });
