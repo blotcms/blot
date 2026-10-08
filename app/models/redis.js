@@ -1,5 +1,6 @@
 const config = require("config");
 const redis = require("redis");
+const { markRedisClientError } = require("helper/redisUnavailable");
 
 const url = `redis://${config.redis.host}:${config.redis.port}`;
 const clientSideCaches = new WeakMap();
@@ -45,6 +46,7 @@ function createRedisClient() {
   createRedisClient.failFastOnceReady(client);
 
   client.on("error", function (err) {
+    markRedisClientError(err);
     console.log("Redis Error:");
     console.log(err);
     if (err.trace) console.log(err.trace);
@@ -100,6 +102,7 @@ createRedisClient.createLibraryClient = function (label) {
   });
 
   client.on("error", function (err) {
+    markRedisClientError(err);
     console.error(label + " Redis error:", err.message);
   });
   createRedisClient.failFastOnceReady(client);
