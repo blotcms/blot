@@ -2,6 +2,7 @@ var async = require("async");
 var client = require("models/client");
 var config = require("config");
 var fs = require("fs-extra");
+var assets = require("storage/assets");
 var get = require("./get");
 var set = require("./set");
 var key = require("./key");
@@ -54,12 +55,15 @@ function wipeFolders(blog, callback) {
     return callback(new Error("Invalid blog id"));
 
   var blogFolder = config.blog_folder_dir + "/" + blog.id;
-  var staticFolder = config.blog_static_files_dir + "/" + blog.id;
 
   async.parallel(
     [
       safelyRemove.bind(null, blogFolder, config.blog_folder_dir),
-      safelyRemove.bind(null, staticFolder, config.blog_static_files_dir),
+      function (callback) {
+        assets.removeAll(blog.id).then(function () {
+          callback();
+        }, callback);
+      },
     ],
     function (err) {
       callback(err);
