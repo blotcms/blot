@@ -3,9 +3,10 @@
 # cutover-from-baremetal.sh to pull. Mirrors the app and airlock jobs in
 # build.yml: one image per architecture, then a multi-arch manifest.
 #
-# Only runs when something the image is built from changes (same paths as
-# proxy.yml), so not every commit has an image: deploy a SHA from a run of this
-# workflow. Pull requests build and check the image; same-repo PRs also push it (as build.yml does), fork PRs do not.
+# Every push to master gets an image, so `npm run deploy-proxy` and the Deploy
+# proxy workflow can deploy any master commit (like build.yml for the app).
+# Pull requests only build when something the image is built from changes
+# (same paths as proxy.yml), and check the image; same-repo PRs also push it (as build.yml does), fork PRs do not.
 #
 # The image is built for production: file logging (LOG_TO_STDOUT=false, so
 # fail2ban and logrotate on the host keep working) and BLOT_HOST=blot.im. Host
@@ -16,13 +17,6 @@ name: proxy-image
 on:
   push:
     branches: [master]
-    paths:
-      - ".github/workflows/proxy-image.yml"
-      - "proxy/**"
-      - "config/openresty/**"
-      - "package.json"
-      - "app/config.js"
-      - "config/index.js"
   pull_request:
     branches: [master]
     paths:
