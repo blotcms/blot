@@ -69,10 +69,8 @@ narrow what's already covered:
 
 - `proxy/config/blot-blogs.conf` — path/extension-based `location`
   blocks (`.env`, `.git`, wp-*, php extensions, sensitive JSON files, etc.)
-  This is the file that's actually deployed to production (see
-  `proxy/README.md` — `proxy/` is a separate work-in-progress
-  containerization fork, **not yet wired to production**; don't edit it for
-  a live-traffic fix).
+  This is the production config: it ships in the proxy image, deployed with
+  `npm run deploy-proxy` or the Deploy proxy workflow.
 - `proxy/config/server.conf` — the `$bad_bot` user-agent map
   (`restrict-bot-uas.conf` returns 403 for matches). Scanner traffic
   usually spoofs a real browser UA, so this rarely helps for the paths
