@@ -3,7 +3,12 @@
 # Host setup for the production proxy host: the certificate and health-check
 # scripts in ./scripts, systemd ordering, fail2ban, logrotate, sshd and
 # .bashrc. The proxy itself is a container: deploy it with
-# `npm run deploy-proxy` (scripts/deploy/proxy.sh).
+# `npm run deploy-proxy` (scripts/deploy/proxy.sh). Run it with
+# `npm run deploy-host`; see README.md in this directory.
+#
+# Everything here is found relative to this file, so it can be run from any
+# directory. The install paths on the host (/home/ec2-user/scripts, /etc/...)
+# are hardcoded elsewhere (systemd units, cron, proxy/deploy) and must not move.
 
 # this exits the script if any command fails
 set -e

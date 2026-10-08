@@ -228,7 +228,7 @@ the deploy mechanism and persistent volumes now exist and are covered by CI
   bits belong in the files themselves and the copy step goes away.
 - **Redis auth/TLS**. `config/openresty/conf/init.conf` hard-codes port 6379 with no auth;
   production Redis credentials need wiring.
-- **`fail2ban` / `logrotate`** are host-level in `config/openresty`; the
+- **`fail2ban` / `logrotate`** are host-level in [`config/host`](../config/host); the
   container logs to stdout/stderr (so `docker logs` and the host's log
   shipper work) but has no equivalent request-ban layer.
 

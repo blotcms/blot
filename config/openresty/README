@@ -14,7 +14,7 @@ node config/openresty/build-config.js
 
 then once you're happy with the diff, run the deploy script:
 
-./config/openresty/deploy-config.sh
+./config/host/deploy.sh
 
 
 
