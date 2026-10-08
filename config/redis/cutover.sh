@@ -426,6 +426,7 @@ ms() { date +%s%3N; }
 start=$(ms)
 ids() { redis6-cli CLIENT LIST TYPE normal | grep "laddr=$FIP:6379" | cut -d' ' -f1; }
 known=$(ids)
+echo ready
 end=$(($(ms) + WAIT * 1000)); first=""; n=0
 while [ "$(ms)" -lt "$end" ]; do
   n=$(ids | grep -vxF "$known" | grep -c . || true)
@@ -436,6 +437,9 @@ done
 echo "start=$start"; echo "first=$first"; echo "count=$n"
 EOF
 WATCHER=$!
+# Clients that reconnect before the watcher has taken its baseline would never
+# count: wait for it (the ssh connection is already open, so this is quick).
+for _ in $(seq 1 60); do grep -qx ready "$CTL/clients" 2> /dev/null && break; sleep 0.05; done
 m0=$(now_ms)
 if ! aws_cli --cli-connect-timeout 3 --cli-read-timeout 10 ec2 assign-private-ip-addresses \
   --network-interface-id "$NEW_ENI" --private-ip-addresses "$FIP" --allow-reassignment; then
@@ -492,7 +496,8 @@ done
 exit 1'
 if echo "$imds_wait" | on "$NEW" "FIP=$FIP" "IF=$NEW_IF" "WANT=yes" "TRIES=100"; then
   echo "$NEW's metadata lists $FIP $(($(now_ms) - m1))ms after the call"
-  ssh_run "$OLD" "sudo -n ip addr del $FIP/32 dev $OLD_IF"
+  ssh_run "$OLD" "sudo -n ip addr del $FIP/32 dev $OLD_IF" ||
+    problem "could not remove $FIP from $OLD: run there sudo ip addr del $FIP/32 dev $OLD_IF"
 else
   # Without that address <old> would black-hole whatever the VPC still delivers to it.
   problem "$NEW's metadata does not list $FIP after 20s, so $FIP stays on $OLD. Once AWS shows it on $NEW, run on $OLD: sudo ip addr del $FIP/32 dev $OLD_IF (or start refresh-policy-routes@$OLD_IF.timer, which rebuilds the addresses from metadata and drops it)"
@@ -531,7 +536,7 @@ if [ "$OLD_TIMER" = active ]; then
   if echo "$imds_wait" | on "$OLD" "FIP=$FIP" "IF=$OLD_IF" "WANT=no" "TRIES=150"; then
     timer "$OLD" active start "$OLD_IF"
   else
-    echo "WARNING: $OLD's metadata still lists $FIP; refresh-policy-routes@$OLD_IF.timer left stopped"
+    problem "$OLD's metadata still lists $FIP, so refresh-policy-routes@$OLD_IF.timer is left stopped; once it no longer does, run there: sudo systemctl start refresh-policy-routes@$OLD_IF.timer"
   fi
 fi
 wait "$WATCHER" || true
@@ -540,11 +545,19 @@ first=$(field "$WATCH" first); all=$(field "$WATCH" all)
 echo "Clients through $FIP on $NEW: $(field "$WATCH" count) (there were $CLIENTS on $OLD)"
 [ "$(ssh_run "$NEW" "redis6-cli INFO replication" | tr -d '\r' | grep '^role:')" = role:master ] || die "$NEW is not a master"
 [ "$(ssh_run "$NEW" "redis6-cli SET blot:cutover:check $T0 EX 60" | tr -d '\r')" = OK ] || die "$NEW refuses writes"
-ssh_run "$OLD" "redis6-cli INFO replication" | tr -d '\r' | grep -qx "master_host:$NEW_IP" ||
-  echo "WARNING: $OLD is not replicating from $NEW_IP; rollback needs it to"
+# Rollback needs <old> replicating from <new> with its link up (its own
+# checks refuse otherwise); the link may still be finishing its sync.
+link=""
+for _ in $(seq 1 20); do
+  link=$(ssh_run "$OLD" "redis6-cli INFO replication" | tr -d '\r' | grep -E '^(master_host|master_link_status):' | tr '\n' ' ' || true)
+  [ "$link" != "master_host:$NEW_IP master_link_status:up " ] || break
+  sleep 0.5
+done
+[ "$link" = "master_host:$NEW_IP master_link_status:up " ] ||
+  problem "$OLD is not replicating from $NEW_IP with its link up (${link:-no answer}); rollback needs it to"
 case ",$(eni "$NEW_IP" | awk '{print $5}')," in
   *",$FIP,"*) echo "AWS shows $FIP on $NEW_ENI" ;;
-  *) echo "WARNING: AWS does not show $FIP on $NEW_ENI" ;;
+  *) problem "AWS does not show $FIP on $NEW_ENI" ;;
 esac
 STAGE=done
 
