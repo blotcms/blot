@@ -2,6 +2,7 @@ var ensure = require("helper/ensure");
 
 var set = require("./set");
 var get = require("./get");
+var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
 
 function sanitize(entry) {
   var now = Date.now();
@@ -47,9 +48,11 @@ function sanitize(entry) {
 module.exports = function drop(blogID, path, callback) {
   ensure(blogID, "string").and(path, "string").and(callback, "function");
 
-  get(blogID, path, function (entry) {
+  get(blogID, path, function (entry, err) {
     if (!entry) {
-      return callback();
+      // A read that failed because Redis is unavailable says nothing about
+      // whether the entry exists. Reporting success would lose the drop.
+      return callback(err && isRedisUnavailableError(err) ? err : undefined);
     }
 
     set(blogID, path, sanitize(entry), callback);

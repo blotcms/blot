@@ -16,6 +16,7 @@ var path = require("path");
 var IgnoredFiles = require("models/ignoredFiles");
 var isUnsafeFolderPostPreview = require("./isUnsafeFolderPostPreview");
 var folderPostSourceFolder = require("./folderPostSourceFolder");
+var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
 
 var basename = (path.posix || path).basename;
 var noop = () => {};
@@ -43,8 +44,11 @@ function isTemplate(path) {
 function dropEntryAndPreview(blogID, targetPath, callback) {
   targetPath = pathNormalizer(targetPath);
 
-  Entry.get(blogID, targetPath, function (entry) {
-    if (!entry) return callback();
+  Entry.get(blogID, targetPath, function (entry, err) {
+    // A failed read is not a missing entry: dropping nothing would lose the
+    // deletion, so pass on a Redis outage.
+    if (!entry)
+      return callback(err && isRedisUnavailableError(err) ? err : undefined);
 
     var skipPreview = isUnsafeFolderPostPreview(targetPath, entry.html);
 
@@ -69,7 +73,10 @@ function buildAndSet(blog, path, multiInfo, callback) {
     // not unpublish an unrelated "/post.md" sibling.
     function dropStaleAggregate(finalErr) {
       if (!multiInfo) return callback(finalErr);
-      Entry.get(blog.id, multiInfo.entryPath, function (existing) {
+      Entry.get(blog.id, multiInfo.entryPath, function (existing, getErr) {
+        if (!existing && getErr && isRedisUnavailableError(getErr))
+          return callback(getErr);
+
         var sourceFolder = folderPostSourceFolder(existing);
         if (
           sourceFolder &&

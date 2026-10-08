@@ -21,6 +21,7 @@ var fs = require("fs-extra");
 var async = require("async");
 var Sync = require("sync");
 var caseSensitivePath = require("helper/caseSensitivePath");
+var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
 
 var MAX_CHECKS_WITHOUT_RESULTS = 5;
 
@@ -104,60 +105,75 @@ module.exports = function main(blog, callback) {
             });
           }
           // we have successfully applied this batch of changes
-          // to the user's Dropbox folder. Now we save the new
-          // cursor and folderID and folder path to the database.
-          // This means that future webhooks will invoke calls to
-          // delta which return changes made after this point in time.
-          if (!keepsErrorAfterDownload(account)) {
-            account.error_code = 0;
-            account.error_source = "";
-            account.error_since = 0;
-          }
-          account.last_sync = Date.now();
-          account.cursor = result.cursor;
-          // we store account folder for use on the dashboard
-          if (result.path_display) account.folder = result.path_display;
+          // to the blog folder on disk. Now we report back to Blot about
+          // them, which builds (or drops) the entries in the database.
+          // We must do this in series until entry.set becomes
+          // atomic. Right now, making changes to the blog's
+          // menu cannot be done concurrently, hence eachSeries!
+          async.eachSeries(
+            result.entries,
+            function (item, next) {
+              debug("Updating on Blot:", item.relative_path);
 
-          debug("Storing latest cursor and folder information...", account);
+              // The items's relative path is computed by delta, based on the
+              // current path to the blog's folder in the user's Dropbox.
+              // The relative path is also lowercase. This is because Dropbox
+              // is case-insensitive but the file system for Blot's server is not.
+              // We therefore pass the name of the file, which has its case preserved
+              // to update, so things like automatic title generation based on the
+              // file can be computed nicely, along with the display path, which also
+              // has case-preserved, for things like extracting tags from tag folders.
+              // Use resolved_relative_path if available (set by determinePathOnDisk),
+              // otherwise fall back to relative_path
+              const pathToUpdate = item.resolved_relative_path || item.relative_path;
+              folder.log(pathToUpdate, "Updating path");
+              folder.update(
+                pathToUpdate,
+                function (err) {
+                  // Redis cannot take writes (a host cutover, an outage), so
+                  // this change and those after it are not in the database.
+                  // Stop here. The cursor below is not saved, so the next
+                  // sync (a webhook, or the hourly catch-up) fetches the same
+                  // changes again and applies them: the files already on
+                  // disk hash-match and are not downloaded again.
+                  if (err && isRedisUnavailableError(err)) return next(err);
 
-          Database.set(blog.id, account, function (err) {
-            if (err) return done(err, callback);
-
-            // Now we report back to Blot about the changes made during
-            // this synchronization. We don't care about errors because
-            // those lie beyond the scope of this client. Its responsibilty
-            // is to ensure the blog folder on Blot's server is in sync.
-            // We must do this in series until entry.set becomes
-            // atomic. Right now, making changes to the blog's
-            // menu cannot be done concurrently, hence eachSeries!
-            async.eachSeries(
-              result.entries,
-              function (item, next) {
-                debug("Updating on Blot:", item.relative_path);
-
-                // The items's relative path is computed by delta, based on the
-                // current path to the blog's folder in the user's Dropbox.
-                // The relative path is also lowercase. This is because Dropbox
-                // is case-insensitive but the file system for Blot's server is not.
-                // We therefore pass the name of the file, which has its case preserved
-                // to update, so things like automatic title generation based on the
-                // file can be computed nicely, along with the display path, which also
-                // has case-preserved, for things like extracting tags from tag folders.
-                // Use resolved_relative_path if available (set by determinePathOnDisk),
-                // otherwise fall back to relative_path
-                const pathToUpdate = item.resolved_relative_path || item.relative_path;
-                folder.log(pathToUpdate, "Updating path");
-                folder.update(
-                  pathToUpdate,
-                  function (err) {
-                    // We don't want an error here to block other
-                    // changes from being applied.
-                    if (err) console.log("Dropbox client:", err);
-                    next();
-                  }
+                  // We don't want any other error here to block other
+                  // changes from being applied.
+                  if (err) console.log("Dropbox client:", err);
+                  next();
+                }
+              );
+            },
+            function (updateError) {
+              if (updateError) {
+                folder.log(
+                  "Redis unavailable, leaving cursor so changes are fetched again",
+                  updateError
                 );
-              },
-              function () {
+                return done(updateError, callback);
+              }
+
+              // Every change in this batch is now in the database, so it is
+              // safe to move the cursor on. Saving it any earlier would mean
+              // a failed update is never fetched again. Future webhooks will
+              // invoke calls to delta which return changes made after this
+              // point in time.
+              if (!keepsErrorAfterDownload(account)) {
+                account.error_code = 0;
+                account.error_source = "";
+                account.error_since = 0;
+              }
+              account.last_sync = Date.now();
+              account.cursor = result.cursor;
+              // we store account folder for use on the dashboard
+              if (result.path_display) account.folder = result.path_display;
+
+              debug("Storing latest cursor and folder information...", account);
+
+              Database.set(blog.id, account, function (err) {
+                if (err) return done(err, callback);
+
                 // If Dropbox says there are more changes
                 // we get them before returning the callback.
                 // This is important because a rename could
@@ -187,9 +203,9 @@ module.exports = function main(blog, callback) {
 
                 folder.log("Folder in sync with Dropbox");
                 done(null, callback);
-              }
-            );
-          });
+              });
+            }
+          );
         });
       });
     });
