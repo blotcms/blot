@@ -112,6 +112,18 @@ describe("Git sync when Redis is unavailable", function () {
     expect(fs.existsSync(unappliedFile())).toBe(false);
   });
 
+  it("fails rather than forget the waiting paths when the list cannot be read", async function () {
+    fs.writeFileSync(unappliedFile(), '["a.txt", "b.t');
+
+    const error = await run({ push: true });
+
+    expect(error).toBeTruthy();
+    expect(isRedisUnavailableError(error)).toBe(false);
+    expect(released).toBe(1);
+    expect(updates).toEqual([]);
+    expect(fs.readFileSync(unappliedFile(), "utf-8")).toEqual('["a.txt", "b.t');
+  });
+
   it("keeps going past other errors, and remembers nothing", async function () {
     spyOn(console, "log");
     failing["a.txt"] = new Error("this file is broken");

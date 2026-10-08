@@ -19,16 +19,30 @@ function unappliedFile(folderPath) {
   return folderPath + "/.git/blot-unapplied-paths.json";
 }
 
+// Calls back with the paths waiting from an earlier sync. A missing file is
+// the usual case, but a file that cannot be read or parsed is an error:
+// carrying on as if nothing were waiting would lose those paths for good.
 function readUnapplied(folderPath, callback) {
   fs.readJson(unappliedFile(folderPath), function (err, paths) {
-    // Missing (the usual case) or unreadable: nothing is waiting
-    callback(!err && Array.isArray(paths) ? paths : []);
+    if (err && err.code === "ENOENT") return callback(null, []);
+    if (err) return callback(err);
+    if (!Array.isArray(paths))
+      return callback(new Error("Unapplied paths file is not a list"));
+    callback(null, paths);
   });
 }
 
+// Written to a temporary file and renamed, so a process exit part way
+// through never leaves a truncated list behind
 function writeUnapplied(folderPath, paths, callback) {
   if (!paths.length) return fs.remove(unappliedFile(folderPath), callback);
-  fs.outputJson(unappliedFile(folderPath), paths, callback);
+
+  var temporary = unappliedFile(folderPath) + ".tmp";
+
+  fs.outputJson(temporary, paths, function (err) {
+    if (err) return callback(err);
+    fs.rename(temporary, unappliedFile(folderPath), callback);
+  });
 }
 
 module.exports = function sync (blogID, gitHandle, callback) {
@@ -131,7 +145,15 @@ module.exports = function sync (blogID, gitHandle, callback) {
                     function (err, changed) {
                       if (err) return done(err, callback);
 
-                      readUnapplied(folder.path, function (unapplied) {
+                      readUnapplied(folder.path, function (err, unapplied) {
+                        if (err) {
+                          folder.log(
+                            "Error reading changes left for this sync: " +
+                              err.message
+                          );
+                          return done(err, callback);
+                        }
+
                         // Left over from a sync that Redis interrupted
                         var modified = unapplied.concat(
                           changed.filter(function (path) {

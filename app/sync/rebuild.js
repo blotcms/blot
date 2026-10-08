@@ -11,6 +11,7 @@ const { promisify } = require("util");
 const Transformer = require("helper/transformer");
 const Blog = require("models/blog");
 const build = require("build");
+const { isRedisUnavailableError } = require("helper/redisUnavailable");
 
 function walk(dir, done) {
   var results = [];
@@ -123,14 +124,17 @@ module.exports = function main(blogID, options, callback) {
           update(path, function (err, result) {
             // Redis is unavailable, so every path after this one would fail
             // the same way. Stop, and tell the caller.
-            if (err) return next(err);
+            if (err && isRedisUnavailableError(err)) return next(err);
 
-            // Any other error is about this one file and must not stop the
-            // rebuild of the others. update has already logged it, so count
-            // them and say so once at the end.
-            if (result && result.error) {
+            // Any other error is about this one file (update reports some as
+            // err, such as a symlink in the way, and others in result.error)
+            // and must not stop the rebuild of the others. Count them and
+            // say so once at the end.
+            var fileError = err || (result && result.error);
+
+            if (fileError) {
               failed++;
-              if (!firstError) firstError = result.error;
+              if (!firstError) firstError = fileError;
             }
 
             next();

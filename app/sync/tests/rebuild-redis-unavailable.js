@@ -67,4 +67,36 @@ describe("rebuild when Redis is unavailable", function () {
     expect(summaries[0].join(" ")).toContain("1 of");
     expect(summaries[0].join(" ")).toContain("this file is broken");
   });
+
+  it("carries on past a path update rejects outright, such as a symlink", async function () {
+    var fs = require("fs-extra");
+    var os = require("os");
+    var path = require("path");
+    var fine = "/Fine.txt";
+    var log = jasmine.createSpy("log");
+    var outside = fs.mkdtempSync(path.join(os.tmpdir(), "rebuild-link-"));
+
+    spyOn(console, "error");
+
+    fs.outputFileSync(path.join(outside, "target.txt"), "Title: Linked");
+    fs.symlinkSync(
+      path.join(outside, "target.txt"),
+      path.join(this.blogDirectory, "Link.txt")
+    );
+    await this.blog.write({ path: fine, content: "Title: Fine" });
+
+    try {
+      await this.blog.rebuild({ log: log, status: function () {} });
+    } finally {
+      fs.removeSync(outside);
+    }
+
+    await this.blog.check({ path: fine, title: "Fine" });
+
+    var summaries = log.calls.allArgs().filter(function (args) {
+      return /failed to build/.test(args.join(" "));
+    });
+
+    expect(summaries.length).toBe(1);
+  });
 });
