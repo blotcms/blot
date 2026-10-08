@@ -8,7 +8,8 @@
 //   that monitoring stopped, which is alerted too.
 // - Redis's memory nearing maxmemory. With noeviction, writes fail at the
 //   limit. maxmemory being unset is alerted too, but only on a host that
-//   cutover has marked active: the hand-built host it replaces has none.
+//   cutover.sh has marked active (/etc/blot-redis/floating-ip): a host still
+//   being built or drilled has no marker and may not be bootstrapped yet.
 // - A failed background save. With stop-writes-on-bgsave-error yes Redis
 //   refuses every write until a save succeeds.
 // - Events since the last check (redis-host-events.js): errors that mean Redis

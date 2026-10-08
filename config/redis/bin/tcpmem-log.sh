@@ -2,7 +2,8 @@
 # Appends the kernel's TCP memory accounting and pressure/drop counters to
 # ~/tcpmem.log, to date any recurrence of the TCP memory accounting leak
 # (blotcms/blot#2041). mem and tcp_mem are in pages; Chrono is ms spent in
-# memory pressure since boot. Installed in ec2-user's crontab, every 5 min.
+# memory pressure since boot. Run by /etc/cron.d/blot-redis as ec2-user,
+# every 5 min.
 #
 # It also stores the sample in Redis at blot:redis-host:tcpmem, since only this
 # host can read these counters. The app's scheduler alerts from it, and when it

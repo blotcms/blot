@@ -5,19 +5,23 @@ host (Amazon Linux 2023 arm64, `redis6` 6.2.x, RDB persistence, backups to S3).
 Everything runs from the operator's Mac over ssh; nothing here is used by the
 app. Part of blotcms/blot#2041.
 
-**The current production host predates these scripts.** It was set up by hand
-(its kernel has never been updated) and has drifted: backups and `stats.sh` run
-from root's crontab out of `/home/ec2-user/*.sh` (`ec2-user`'s crontab only has
-the two monitoring logs), sshd listens on port 3796 (the scripts do not change
-the ssh port; the launch template/AMI user-data decides how you get in), and `redis6.conf` has `save 60 10000` and no
-`maxmemory`. Build new hosts with these scripts and cut over to them.
+Production Redis is one host built by these scripts: an x2gd.medium (one
+vCPU) running Amazon Linux 2023 arm64 and `redis6` 6.2.x, with ssh on port 22,
+key-only. Its primary private IP is 172.30.0.163, but nothing connects to
+that: the app containers (`BLOT_REDIS_HOST`), the OpenResty proxy (`REDIS_IP`)
+and the certificate scripts all use the floating private IP 172.30.0.200,
+which `cutover.sh` moves between hosts. Hourly and daily RDB backups go to
+`s3://blot-redis-backups` from `/etc/cron.d/blot-redis`, and only on the host
+marked by `/etc/blot-redis/floating-ip`. To resize, launch a replica of the
+live host on a new instance type and cut over to it (see "Increasing the Redis
+server size"). The hand-built host that served Redis until 8 Oct 2026 is gone.
 
 ## Files
 
 | File | What it does |
 | --- | --- |
 | `redis.conf` | The Redis config, every non-default setting commented. |
-| `launch.sh` | Launch an instance, bootstrap it, load data (**untested**, see below). |
+| `launch.sh` | Launch an instance, bootstrap it, load data. |
 | `bootstrap.sh <ssh-host>` | Install and configure Redis on a host (runs `host/setup.sh` via sudo). |
 | `restore.sh <ssh-host> latest\|<name>\|list` | Restore an S3 backup onto a host. |
 | `cutover.sh <old> <new>` | Move live traffic to a replica: FAILOVER, floating IP, backups (see below). |
@@ -27,8 +31,9 @@ the ssh port; the launch template/AMI user-data decides how you get in), and `re
 | `bin/backup.sh` | Hourly and daily backup to S3 (cron). |
 | `bin/redis-mem-log.sh`, `bin/tcpmem-log.sh` | Memory logging every 5 minutes (cron). |
 
-`SSH_OPTS` (for example `SSH_OPTS="-i $HOME/key.pem -p 22"`) adds ssh options
-to every script, or use a `~/.ssh/config` alias as `<ssh-host>`.
+`SSH_OPTS` (for example `SSH_OPTS="-i $HOME/key.pem"`) adds ssh options to
+every script, or use a `~/.ssh/config` alias as `<ssh-host>` (`redis` is the
+Redis host, `blot` the app host).
 
 ## Building a new host
 
@@ -38,9 +43,8 @@ to every script, or use a `~/.ssh/config` alias as `<ssh-host>`.
    floating IP, and it first raises that host's replica output buffer to
    `redis.conf`'s value so a multi-GB sync under load does not loop). This runs
    the next two steps for you. Use
-   `--dry-run` first. **launch.sh has never been run**: it was written without
-   the AWS CLI available, so watch the first run and expect to fix things.
-   Or launch by hand with the launch template and do 2 and 3 yourself.
+   `--dry-run` first. Or launch by hand with the launch template and do 2 and 3
+   yourself.
    `./launch.sh --list` lists the backups in S3. Add `--drill` for any
    throwaway host (a rehearsal, a restore test): it is named `drill-redis-*`,
    tagged `BlotDrill=true`, and gets `/etc/blot-redis/drill` before bootstrap,
@@ -67,11 +71,11 @@ Then move traffic to it with `cutover.sh` (next section).
 ./cutover.sh --app-host <app-ssh-host> <old-ssh-host> <new-ssh-host>
 ```
 
-The dry run makes every check and prints the plan, the old cron jobs it will
-turn off (labelled `ec2-user` or `root` by crontab) and the rollback command;
-it changes nothing. The real run asks for `yes`, and only runs between :08-:25 and :38-:55 past the hour (backups and
-sync validation run at :00 and :30) and not between 01:00 and 01:30 UTC (the
-proxy's wildcard certificate renewal). `--any-time` skips that for rehearsals.
+The dry run makes every check and prints the plan and the rollback command; it
+changes nothing. The real run asks for `yes`, and only runs between :08-:25 and
+:38-:55 past the hour (backups and sync validation run at :00 and :30) and not
+between 01:00 and 01:30 UTC (the proxy's wildcard certificate renewal).
+`--any-time` skips that for rehearsals.
 
 What it checks first: both hosts answer over ssh with passwordless sudo and run
 Redis 6.2.x; the new host replicates from the old host's **primary private
@@ -81,7 +85,8 @@ its link is up and it is at most 16MB and 1s behind; it has
 background save did not fail (otherwise, with `stop-writes-on-bgsave-error yes`,
 it refuses writes the moment it is promoted); it has as many `ssl:*:latest`
 certificate keys as the old host (the proxy trusts Redis over its own copy, so
-a missing one gets re-issued); it was set up by `bootstrap.sh`; no backup upload
+a missing one gets re-issued); it was set up by `bootstrap.sh` (otherwise
+nothing would back it up); no backup upload
 is running; the AWS CLI works, both primary IPs are their interfaces' primary
 addresses in the same subnet, and the floating IP is on the old host's
 interface and configured on the old host.
@@ -113,7 +118,7 @@ What it does:
    FAILOVER back to the old host.
 4. Deletes the app host's neighbour (ARP) entry for the IP (Docker containers
    share the host's table; in rehearsals the flush made no measurable
-   difference either way, see "Rehearsal" below), waits for the new host's
+   difference either way, see "Timings and rollback" below), waits for the new host's
    instance metadata to list it, and only then removes the IP from the old
    host and deletes the neighbour entry again. The move is asynchronous, and
    until the metadata lists the IP the VPC may still deliver to the old host,
@@ -123,22 +128,15 @@ What it does:
    gives the `ip addr del` command to run there once AWS shows the IP on the
    new host (the refresh timer would also drop it).
 5. Writes the IP to `/etc/blot-redis/floating-ip` on the new host (its backups
-   start) and removes it on the old host.
-6. Comments out the old host's crontab entries except the two monitoring logs
-   (`ec2-user`'s crontab), after saving each crontab it changes to
-   `~/crontab.before-cutover-*` (`ec2-user`'s) and
-   `~/root-crontab.before-cutover-*` (root's, read with `sudo crontab`). The
-   backups and `stats.sh` are in root's crontab. The hand-made backup scripts
-   have none of `backup.sh`'s checks and upload to the same S3 names, so they
-   would overwrite and prune the new host's backups. If a crontab cannot be
-   rewritten the script carries on and reports it at the end.
-7. Restarts the refresh timers, waits for the clients that were connected
+   start) and removes it on the old host (its backups stop; `backup.sh` checks
+   the file, so no cron editing is needed).
+6. Restarts the refresh timers, waits for the clients that were connected
    through the floating IP to reconnect on the new host, checks the new host
    takes writes, and prints how long each step took. If none of those clients
    arrived (Redis has switched, but traffic may be down: on a rollback AWS can
-   take a while to route the IP back, see "Rehearsal" below), or step 4 or 6
-   left something undone, it exits with an error listing each problem, the
-   rollback command and how to restore the cron jobs it turned off.
+   take a while to route the IP back, see "Timings and rollback" below), or
+   step 4 or 5 left something undone, it exits with an error listing each
+   problem and the rollback command.
 
 Writes are unavailable from the FAILOVER until clients reach the new host.
 That must stay well under the folder lock's 10s TTL (`app/sync/lock.js`): a
@@ -148,11 +146,15 @@ above 5s. It adds up durations that each come from one clock (the old host's
 FAILOVER, this machine's wait, the new host's watcher), never subtracting
 timestamps from different hosts.
 
-### Rehearsal (8 Oct 2026, throwaway instances)
+### Timings and rollback
 
-A hand-built 6.2.12 "old" host (the live host's AMI, kernel and
-`amazon-ec2-net-utils` 2.3.0) and a bootstrapped x2gd.medium "new" host, with
-probes doing a write every 10ms through the floating IP:
+The cutover of 8 Oct 2026 (18:18 UTC, from the previous host to the current
+one): writes were unavailable for 2.85s (FAILOVER 40ms,
+`assign-private-ip-addresses` 1.8s) and all clients were on the new host after
+3.9s. No folder lock was lost.
+
+Rehearsals earlier that day on throwaway instances, with probes doing a write
+every 10ms through the floating IP:
 
 - Forward (4 runs): writes unavailable for 3.5-3.9s: FAILOVER 0.1-0.7s,
   `assign-private-ip-addresses` ~1.8s, then ~1s for the VPC to switch.
@@ -166,17 +168,16 @@ probes doing a write every 10ms through the floating IP:
   reconfigure the interface on its next minute refresh: networkd drops and
   re-adds the primary address for ~0.1s, one ~0.22s stall on open
   connections. Step 1 stops the refresh timers so this happens after the
-  switch, when step 7 restarts them.
+  switch, when step 6 restarts them.
 
 **Do not deploy or restart the proxy around the cutover.** `proxy/deploy`
 rolls back if Redis is unreachable, and the proxy's stale copy of each
 certificate survives `openresty -s reload` but not a container restart.
 
 **Rollback** is `cutover.sh` with the hosts swapped; it prints the exact
-command, with `--allow-unbootstrapped` when the old host was not set up by
-`bootstrap.sh`. It works because FAILOVER leaves the old host replicating from
-the new one. On the hand-built host it also prints how to restore the cron
-jobs it turned off, in both crontabs.
+command. It works because FAILOVER leaves the old host replicating from the new
+one. Do not roll back to a host whose interface held the floating IP recently
+(see the timings above): go forward to a fresh host instead.
 
 `config/redis/tests/cutover.sh` runs the whole script against Redis 6.2.12 and
 6.2 containers with ssh and the AWS CLI stubbed (`.github/workflows/redis-cutover.yml`).
@@ -198,10 +199,8 @@ leaves the old host replicating from the new one, which is what rollback needs.
 the new config with a throwaway Redis, installs it, applies what Redis allows
 with `CONFIG SET` (never `CONFIG REWRITE`) and lists the settings that need a
 restart (for example `tcp-backlog`, and `LimitNOFILE` of the running process).
-It will not lower `maxmemory` below the memory in use. Two things to know on a
-host set up by hand: it adds `/etc/cron.d/blot-redis`, so remove the old
-backup entries from root's crontab or backups run twice, and it prints a warning if an
-existing sysctl file (e.g. `99-sysctl.conf`) sets a key that would override
+It will not lower `maxmemory` below the memory in use. It prints a warning if
+an existing sysctl file (e.g. `99-sysctl.conf`) sets a key that would override
 `90-blot-redis.conf` at boot.
 
 To change a setting: edit `redis.conf`, run `bootstrap.sh`, restart Redis if
@@ -241,7 +240,8 @@ with the clients' folders.
 
 To rehearse it, run steps 1-3 with `launch.sh --drill` (it never uploads
 backups), write down the commands for 4-5 with the drill host's interface,
-and terminate the host.
+and terminate the host by its instance ID, after checking it has the
+`BlotDrill` tag and is not a production instance.
 
 ### Increasing the Redis server size
 
@@ -264,9 +264,10 @@ resized in place.
    then the same without `--dry-run`, inside the allowed windows (see
    Cutover). Do not deploy or restart the proxy around it.
 4. Afterwards the old host replicates from the new one. Keep it for a few days,
-   then terminate it. Do not roll back to a host whose interface held the
+   then terminate it (by instance ID; production instances have termination
+   protection). Do not roll back to a host whose interface held the
    floating IP recently: the VPC kept delivering to the other interface for
-   several seconds after the move (see Rehearsal), which will likely cost
+   several seconds after the move (see "Timings and rollback"), which will likely cost
    `[LOCK COMPROMISED]` restarts. A rollback soon after a cutover is for an
    emergency only.
 
@@ -376,8 +377,7 @@ template and the resources it uses), `ec2:CreateTags`, `ec2:DescribeInstances`,
 profile. For `cutover.sh`: `sts:GetCallerIdentity`,
 `ec2:DescribeNetworkInterfaces` (needs `Resource: "*"`) and
 `ec2:AssignPrivateIpAddresses` (can be scoped to the two network interfaces'
-ARNs, or by tag). For the Redis host (instance profile, or the keys in `~ec2-user/.aws`
-the current host uses): `s3:ListBucket` on `blot-redis-backups`, `s3:GetObject`
+ARNs, or by tag). For the Redis host (instance profile, or keys in `~ec2-user/.aws`): `s3:ListBucket` on `blot-redis-backups`, `s3:GetObject`
 on `hourly/*` and `daily/*` (restore), and `s3:PutObject` and `s3:DeleteObject`
 on the same (backups).
 
@@ -386,8 +386,6 @@ on the same (backups).
 - Access to the host (ssh port and keys come from the launch template/AMI),
   and S3 credentials if it has no instance profile (`aws configure` as
   `ec2-user`; `launch.sh` pauses for this before restoring).
-- Putting the floating IP on the first host and pointing the app and proxy at
-  it (#2041). `cutover.sh` moves it from then on.
 - Redis has no auth or TLS (the security group is the protection), no AOF, and
   is still Redis 6; those are separate pieces of work.
 
