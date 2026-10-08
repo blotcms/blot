@@ -243,6 +243,33 @@ To rehearse it, run steps 1-3 with `launch.sh --drill` (it never uploads
 backups), write down the commands for 4-5 with the drill host's interface,
 and terminate the host.
 
+### Increasing the Redis server size
+
+Do this when the daily email says memory is getting close to the limit (70% of
+`maxmemory`) or the 80% alert fires; with `noeviction`, writes fail at the
+limit. `maxmemory` is about 70% of RAM, computed when a host is bootstrapped,
+so a bigger instance gets a proportionally bigger limit with no other change.
+Resizing means a new host and a cutover; the instance is not stopped and
+resized in place.
+
+1. Launch the bigger host as a replica of the current master. Give the
+   master's **primary private IP**, not the floating IP:
+   `./launch.sh --type <bigger-type> --from replica:<current-master-primary-ip> --key ~/key.pem`
+   (`--dry-run` first). It keeps the arm64 architecture, so pick a bigger
+   size in the same family (the current host's type is in the EC2 console).
+2. Check it: `master_link_status:up` on the new host, `DBSIZE` close to the old
+   host's, `maxmemory` about 70% of its RAM, and the sample from
+   `tcpmem-log.sh` arrives (the daily email shows its RAM).
+3. `./cutover.sh --dry-run --app-host <app-ssh-host> <current-master> <new-host>`,
+   then the same without `--dry-run`, inside the allowed windows (see
+   Cutover). Do not deploy or restart the proxy around it.
+4. Afterwards the old host replicates from the new one. Keep it for a few days,
+   then terminate it. Do not roll back to a host whose interface held the
+   floating IP recently: the VPC kept delivering to the other interface for
+   several seconds after the move (see Rehearsal), which will likely cost
+   `[LOCK COMPROMISED]` restarts. A rollback soon after a cutover is for an
+   emergency only.
+
 ## What gets installed
 
 - `/etc/redis6/redis6.conf` plus `/etc/redis6/blot-memory.conf` (`maxmemory`).
@@ -278,6 +305,11 @@ the host is a master that accepts writes, `/etc/blot-redis/floating-ip` exists,
 and the address in it is on the host. That file is written at cutover, so a
 new or restored host never uploads (or prunes) alongside the live one. It works with an instance profile or keys in `~ec2-user/.aws`.
 
+After each upload it stores `<iso-time> <hourly|daily> <s3-key> <bytes>` in the
+Redis key `blot:redis-host:backup` (no TTL), which the daily email shows as the
+time since the last backup. Like the sample below, it is best effort: a refused
+write never fails the backup.
+
 ## Alerts
 
 The app's scheduler (`app/scheduler/check-redis-host.js`, every 5 minutes on
@@ -294,6 +326,13 @@ Only the host can read the TCP counters, so `bin/tcpmem-log.sh` also writes
 each sample to the Redis key `blot:redis-host:tcpmem` (no TTL; the app reads
 its timestamp). A replica or a write-frozen master refuses that write, so the
 app only ever sees the live master's sample. The host needs no mail setup.
+
+The same sample carries the host's RAM and disk space, which only the host can
+read, as extra `key=value` fields in bytes: `ram_total`, `ram_avail`,
+`disk_root=<used>/<total>` and `disk_backups=<used>/<total>` (left out when
+`/backups` is not a mount). They are not in `~/tcpmem.log`. The daily email
+(`app/scheduler/daily/redis-server.js`) shows them with Redis's memory and the
+last backup, and links here when memory passes 70% of `maxmemory`.
 
 Each condition is emailed once when it starts and once when it clears, with
 what was sent kept in `blot:redis-host:alerts`. A Redis outage sends nothing

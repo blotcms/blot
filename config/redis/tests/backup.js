@@ -117,6 +117,16 @@ esac
     expect(fs.existsSync(file("set-args"))).toBe(false);
   });
 
+  it("records nothing on a drill host", function () {
+    write("etc/blot-redis/drill", "");
+    const result = run("hourly");
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("skipped: drill host");
+    expect(fs.existsSync(file("aws-calls"))).toBe(false);
+    expect(fs.existsSync(file("set-args"))).toBe(false);
+  });
+
   it("records nothing when the host is not the active one", function () {
     fs.rmSync(file("etc/blot-redis/floating-ip"));
     const result = run("hourly");
