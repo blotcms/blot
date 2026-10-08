@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Shared by blue-green.sh and cutover-from-baremetal.sh. Source it, do not run
-# it. Everything here runs ON the production host (copy proxy/deploy/ across,
-# or run it in place from a checkout):
+# Shared by blue-green.sh, try-issuance.sh and reload-config.sh. Source it, do
+# not run it. Everything here runs ON the production host (copy proxy/deploy/
+# across, or run it in place from a checkout):
 #
 #   scp -r proxy/deploy blot:~/proxy-deploy
 #
@@ -10,8 +10,7 @@
 #
 #   PROXY_ENV_FILE         /etc/blot/proxy.env  docker --env-file for the proxy
 #                                               (see proxy.env.example)
-#   PROXY_CACHE_DIR        /var/instance-ssd/cache  the same disk cache the
-#                                               bare-metal OpenResty uses
+#   PROXY_CACHE_DIR        /var/instance-ssd/cache  the proxy's disk cache
 #   PROXY_LOG_DIR          /var/instance-ssd/logs   fail2ban and logrotate
 #                                               read the access log here
 #   PROXY_CERT_DIR         /etc/ssl/private     wildcard cert + key (read-only)
@@ -32,12 +31,9 @@
 #   PROXY_NOFILE           65536                --ulimit nofile=N:N. Each proxied
 #                                               connection holds ~2 fds (client +
 #                                               upstream), so worker_connections
-#                                               10000 (config/openresty/conf/initial.conf)
+#                                               10000 (proxy/config/initial.conf)
 #                                               needs ~20000 plus cache/log fds;
 #                                               this leaves headroom above that
-#   PROXY_REHYDRATE_TIMEOUT 180                 seconds the rehearsal waits for
-#                                               "rehydrate: complete" in error.log
-#                                               (~20s for today's ~200k files)
 #
 # PROXY_DEPLOY_SLEEP replaces `sleep` (the tests set it to a no-op).
 
@@ -55,7 +51,7 @@ HEALTH_SOCK="/run/openresty/health.sock"
 LOCK_FILE="${PROXY_DEPLOY_LOCK:-/tmp/blot-proxy-deploy.lock}"
 SITE_IP="127.0.0.1"
 PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
-# worker_connections is 10000 (config/openresty/conf/initial.conf) and each
+# worker_connections is 10000 (proxy/config/initial.conf) and each
 # proxied connection holds about two fds (client + upstream), so 10000
 # connections can need about 20000; add cache/log/socket fds on top and
 # Docker's default (1024) is nowhere close. This is the CONTAINER's limit; the
@@ -63,16 +59,15 @@ PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
 # the same reason. 65536 leaves real headroom above both - a root dockerd
 # allows it.
 NOFILE="${PROXY_NOFILE:-65536}"
-REHYDRATE_TIMEOUT="${PROXY_REHYDRATE_TIMEOUT:-180}"
 
-# Never fail because the terminal went away: the cutover ignores SIGPIPE and
+# Never fail because the terminal went away: a deploy ignores SIGPIPE and
 # must still be able to finish and roll back with nobody watching.
 log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*" 2>/dev/null || true; }
 die() { log "ERROR: $*" >&2; exit 1; }
 nap() { ${PROXY_DEPLOY_SLEEP:-sleep} "$1"; }
 
 # Commands which need root (systemctl). The deploy user has passwordless sudo;
-# fail early and clearly rather than hanging on a prompt mid-cutover.
+# fail early and clearly rather than hanging on a prompt mid-deploy.
 sys() {
   if [ "$(id -u)" = 0 ]; then "$@"; else sudo -n "$@"; fi
 }
@@ -129,7 +124,7 @@ ensure_image() { # pull only when it is not already on the host
   docker image inspect "$1" >/dev/null 2>&1 || { log "Pulling $1"; docker pull "$1"; }
 }
 
-# Arguments common to every real proxy container (not the rehearsal).
+# Arguments common to every real proxy container.
 # Host networking: the generated upstreams are 127.0.0.1:8088-8090 and the
 # Node containers publish those ports on the host.
 run_args() { # run_args <name>
@@ -146,7 +141,7 @@ run_args() { # run_args <name>
     -v "$CERT_DIR":/etc/ssl/private:ro
     # Mounted at the same paths the image defaults to
     # (BLOG_STATIC_FILES_DIR / GLOBAL_STATIC_FILES_DIR in
-    # config/openresty/locals.js), so `try_files` on cdn.<host> finds files on
+    # proxy/build/locals.js), so `try_files` on cdn.<host> finds files on
     # disk instead of falling through to @cdn_node, which misses the
     # Cache-Control/CORS headers `location /` sets.
     -v "$BLOG_STATIC_DIR":/var/www/blot/data/static:ro
@@ -187,29 +182,6 @@ healthy() { # healthy <name>
 wait_healthy() { # wait_healthy <name> <timeout>
   local deadline=$(( $(date +%s) + $2 ))
   while ! healthy "$1"; do
-    running "$1" || return 1
-    [ "$(date +%s)" -lt "$deadline" ] || return 1
-    nap 1
-  done
-}
-
-# Worker 0 rebuilds the purge index (cacher.lua build_index) once nginx starts
-# listening, and logs "rehydrate: complete files=... hosts=..." to error.log
-# when it finishes, or "[error] ... rehydrate: <reason>" (e.g. cannot read a
-# file, or "increase lua_shared_dict cacher_dictionary") if it gives up. Read
-# BOTH log sinks: normally the container's own error.log (no log mount here),
-# but with ALLOW_STDOUT_LOGS=1 (image_logs_to_file's override) error_log goes
-# to stderr instead, where only `docker logs` sees it - checking just the file
-# would then time out and refuse every cutover on such an image. Poll until
-# one or the other shows the complete/error line, or <timeout> seconds pass
-# (~20s for today's ~200k files; a cold disk can take longer, hence a
-# generous default).
-wait_rehydrated() { # wait_rehydrated <name> <timeout>
-  local deadline=$(( $(date +%s) + $2 )) log
-  while true; do
-    log="$( { docker exec "$1" cat /var/log/openresty/error.log 2>/dev/null; docker logs "$1" 2>&1; } || true)"
-    echo "$log" | grep -q '\[error\].*rehydrate:' && return 1
-    echo "$log" | grep -q 'rehydrate: complete' && return 0
     running "$1" || return 1
     [ "$(date +%s)" -lt "$deadline" ] || return 1
     nap 1
@@ -286,7 +258,7 @@ certs_unchanged() { # certs_unchanged <baseline> <now>
 }
 
 # Record the certificates the running proxy serves; CERT_BASELINE is what
-# live_checks and the rehearsal compare against. Refuses to go on with no
+# live_checks compares against. Refuses to go on with no
 # certificates to compare unless PROXY_SKIP_CERT_SWEEP=1.
 cert_baseline() {
   CERT_BASELINE=""

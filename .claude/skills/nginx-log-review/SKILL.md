@@ -1,6 +1,6 @@
 ---
 name: nginx-log-review
-description: Review recent production nginx/openresty access logs, identify scanner/exploit traffic not already blocked, and update config/openresty/conf/blot-blogs.conf accordingly. Use when asked to analyze prod nginx/access logs, find new paths to block, or audit openresty for scanner traffic.
+description: Review recent production nginx/openresty access logs, identify scanner/exploit traffic not already blocked, and update proxy/config/blot-blogs.conf accordingly. Use when asked to analyze prod nginx/access logs, find new paths to block, or audit openresty for scanner traffic.
 ---
 
 # Nginx access log review → openresty blocklist update
@@ -67,13 +67,13 @@ ssh blot "grep -oE 'ip=[0-9.]+' /tmp/combined_access.log | sort | uniq -c | sort
 Read the current rules before proposing new ones — don't duplicate or
 narrow what's already covered:
 
-- `config/openresty/conf/blot-blogs.conf` — path/extension-based `location`
+- `proxy/config/blot-blogs.conf` — path/extension-based `location`
   blocks (`.env`, `.git`, wp-*, php extensions, sensitive JSON files, etc.)
   This is the file that's actually deployed to production (see
   `proxy/README.md` — `proxy/` is a separate work-in-progress
   containerization fork, **not yet wired to production**; don't edit it for
   a live-traffic fix).
-- `config/openresty/conf/server.conf` — the `$bad_bot` user-agent map
+- `proxy/config/server.conf` — the `$bad_bot` user-agent map
   (`restrict-bot-uas.conf` returns 403 for matches). Scanner traffic
   usually spoofs a real browser UA, so this rarely helps for the paths
   found here — check `ua=` values for the offending paths before assuming
@@ -117,7 +117,7 @@ Kubernetes serviceaccount tokens, and CVE-specific RCE probe paths
 
 ## 5. Update the openresty config
 
-Edit `config/openresty/conf/blot-blogs.conf`. Follow the existing
+Edit `proxy/config/blot-blogs.conf`. Follow the existing
 convention in that file:
 
 - `return 444;` for requests that are **clearly malicious** (faster
@@ -134,9 +134,8 @@ convention in that file:
 
 ## 6. Validate
 
-There's no local nginx/openresty binary and the full mustache-based build
-needs network access (fetches BunnyCDN IPs) and repo secrets, so don't try
-to run the real build pipeline locally. Instead, sanity-check just the new
+There's no local nginx/openresty binary, so don't try to boot the proxy
+locally. Sanity-check just the new
 `location` block syntax against a real openresty binary in Docker:
 
 ```bash
@@ -147,14 +146,14 @@ docker run --rm -v /path/to/snippet-nginx.conf:/etc/nginx/nginx.conf:ro \
 Wrap the new/changed `location { ... }` blocks in a minimal
 `events{} http { limit_req_zone $binary_remote_addr zone=bots:10m rate=1r/s; server { listen 8080; ...; location / { return 200; } } }`
 skeleton for this check. This catches syntax errors but not deployment
-behavior — the repo's `proxy` GitHub Actions workflow (a separate,
-not-yet-production fork) does full build+boot validation; per this
+behavior — the repo's `proxy` GitHub Actions workflow renders the config
+(`proxy/build/build.sh`) and boots the image with `openresty -t`; per this
 project's convention, prefer letting GitHub CI do heavier validation over
 elaborate local Docker setups.
 
 ## 7. Ship it
 
-- Commit only `config/openresty/conf/blot-blogs.conf` (and this skill file
+- Commit only `proxy/config/blot-blogs.conf` (and this skill file
   if it's being updated).
 - Push a branch and open a PR. In the PR description: state the log window
   analyzed, a table of pattern → approximate daily request count, note
@@ -163,6 +162,9 @@ elaborate local Docker setups.
   and how the regex was anchored to avoid them, and confirm whether
   IP-based blocking would or wouldn't help (Cloudflare-fronted domains
   usually mean it wouldn't).
+- The rule only reaches production when a new proxy image is deployed
+  (Deploy proxy workflow / `npm run deploy-proxy`, see
+  `proxy/deploy/README.md`); mention that in the PR.
 - If the log review surfaces something that **isn't** an openresty block —
   e.g. an app/template bug generating a pathological amount of traffic, a
   slow endpoint, a caching gap — don't fold it into the openresty PR. File

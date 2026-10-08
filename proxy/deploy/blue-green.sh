@@ -4,10 +4,11 @@
 #
 #   proxy/deploy/blue-green.sh <commit-sha | image>
 #
-# Run it on the production host. For the one-off move from the bare-metal
-# OpenResty to the first container use cutover-from-baremetal.sh instead; for a
-# config-only change, deploy a new image the same way (reload-config.sh needs a
-# bind-mounted conf dir, which these scripts' containers do not have).
+# Run it on the production host. With no proxy container running it starts
+# the first one (no overlap, so a few seconds without a proxy if something
+# else was serving); for a config-only change, deploy a new image the same
+# way (reload-config.sh needs a bind-mounted conf dir, which these scripts'
+# containers do not have).
 #
 # How it works
 # ------------
@@ -68,7 +69,7 @@ elif running blot-proxy-green; then
 else
   OLD=""; NEW=blot-proxy-blue
   if sys systemctl is-active --quiet openresty || sys systemctl is-enabled --quiet openresty; then
-    die "bare-metal OpenResty is active or still enabled (it would race the container for :80/:443 after a reboot) and no proxy container is running: use cutover-from-baremetal.sh"
+    die "bare-metal OpenResty is active or still enabled (it would race the container for :80/:443 after a reboot) and no proxy container is running: stop and disable it first (sudo systemctl disable --now openresty; bare-metal binds :80/:443 without reuseport, so the container cannot share them)"
   fi
   log "No proxy container running - starting $NEW fresh (no overlap)."
 fi

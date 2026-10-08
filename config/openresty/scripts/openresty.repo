@@ -1,9 +1,0 @@
-[openresty]
-name=Official OpenResty Open Source Repository for Amazon Linux
-baseurl=https://openresty.org/package/amazon/2/$basearch
-skip_if_unavailable=False
-gpgcheck=1
-repo_gpgcheck=0
-gpgkey=https://openresty.org/package/pubkey.gpg
-enabled=1
-enabled_metadata=1

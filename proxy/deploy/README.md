@@ -15,46 +15,43 @@ copies this directory to `~/proxy-deploy` on the host and runs
 
 | Script | When |
 | --- | --- |
-| [`cutover-from-baremetal.sh`](cutover-from-baremetal.sh) | Once. Moves `:80`/`:443` from the bare-metal `openresty` systemd unit to the first container. Not zero-downtime (a few seconds), and built to be reversible at every step. |
-| [`blue-green.sh`](blue-green.sh) | Every image change after that. Container to container, zero-downtime. |
-| [`try-issuance.sh`](try-issuance.sh) | Before a cutover or an image change. Issues a Let's Encrypt **staging** certificate through the image for a throwaway domain, changing nothing that serves traffic. |
+| [`blue-green.sh`](blue-green.sh) | Every image change. Container to container, zero-downtime. With no proxy container running it starts the first one instead (no overlap, so a few seconds without a proxy if something else was serving). |
+| [`try-issuance.sh`](try-issuance.sh) | Before an image change. Issues a Let's Encrypt **staging** certificate through the image for a throwaway domain, changing nothing that serves traffic. |
 | [`reload-config.sh`](reload-config.sh) | Not for these containers: it needs the conf directory bind-mounted, which `blue-green.sh` does not do. Ship config changes as a new image. |
 
-Both read the host's settings from `/etc/blot/proxy.env`
+The scripts read the host's settings from `/etc/blot/proxy.env`
 ([`proxy.env.example`](proxy.env.example)) and share [`common.sh`](common.sh).
-Paths default to the ones bare-metal uses (`/var/instance-ssd/cache`,
+Paths default to the ones the bare-metal OpenResty used (`/var/instance-ssd/cache`,
 `/var/instance-ssd/logs`, `/etc/ssl/private`, and the `cdn.` static
 directories `/var/www/blot/data/static` and `/var/www/blot/app/blog/static`),
-so the cache stays warm across the cutover, a rollback loses nothing, and
+so a rollback to it loses nothing, and
 `cdn.` requests are served from disk (with the `Cache-Control`/CORS headers of
 `location /`) instead of falling through to Node. Containers also get
 `--ulimit nofile=65536:65536` (`PROXY_NOFILE`) - headroom above both the
 ~20000 fds `worker_connections 10000` can need (two fds per proxied
 connection) and the config's own `worker_rlimit_nofile 20480`
-(`config/openresty/conf/initial.conf`).
-`bash tests/run.sh` exercises both against fake `docker`/`systemctl` (CI runs it).
+(`proxy/config/initial.conf`).
+`bash tests/run.sh` exercises both scripts against fake `docker`/`systemctl` (CI runs it), and the `proxy-deploy-e2e` workflow runs `blue-green.sh` against real Docker ([`e2e/`](e2e/README.md)).
 
-## Before the first cutover
+## Setting up a host
 
 1. **An image.** `.github/workflows/proxy-image.yml` publishes
    `ghcr.io/blotcms/blot-proxy:<sha>` (multi-arch, built with
    `LOG_TO_STDOUT=false` because `fail2ban`, `logrotate` and the `.bashrc`
    helpers read `/var/instance-ssd/logs/access.log` and the container has no
-   ban layer of its own; both scripts refuse an image that logs to stdout).
-   It builds every push to master. Pass the SHA to either script;
+   ban layer of its own; `blue-green.sh` refuses an image that logs to stdout).
+   It builds every push to master. Pass the SHA to a script;
    anything containing `/` or `:` is used as a full image reference.
 2. **`/etc/blot/proxy.env`** from the example. `PROXY_PRIVATE_IP` and
-   `PROXY_REDIS_HOST` (both required, the scripts refuse empty values) must equal what bare-metal uses today
-   (`OPENRESTY_INSTANCE_PRIVATE_IP`, `REDIS_IP`), and `BLOT_REVERSE_PROXY_URLS`
+   `PROXY_REDIS_HOST` (both required, the scripts refuse empty values) must be the host's private IP and Redis host, and `BLOT_REVERSE_PROXY_URLS`
    in `/etc/blot/secrets.env` must point at `http://<PROXY_PRIVATE_IP>:8077`,
    because Node purges the cache from a Docker bridge that cannot see the
    host's `127.0.0.1`. The scripts read the value from the running Node
    container, so recreate the Node containers (a normal deploy) after editing it.
-3. **Ship the certificate-renewal change.** `config/host/scripts/renew-wildcard-ssl.sh`
-   now reloads the container when there is one. Run
-   `config/host/deploy.sh` from this branch so the host has it;
-   the cutover refuses to run until it does, because otherwise the container
-   would keep serving the old wildcard certificate after the next renewal.
+3. **The certificate-renewal helpers.** `config/host/scripts/renew-wildcard-ssl.sh`
+   reloads the container after renewing; install it with `npm run deploy-host`.
+   See [`config/host/README.md`](../../config/host/README.md) for the cron entry
+   that runs it, which the bare-metal setup wrote and `deploy.sh` does not.
 4. Optionally run the scripts with `PROXY_CUSTOM_DOMAIN=<a real custom domain>` set:
    it adds a domain whose certificate comes from Redis to every before/after
    comparison. This is in addition to the sweep below, which always runs.
@@ -64,11 +61,10 @@ connection) and the config's own `worker_rlimit_nofile 20480`
 
 Custom domains are not among the checked hosts and their certificates come from
 Redis, not the wildcard file, so a container that could not read or serve them
-would pass every other check. Both scripts therefore record the certificate the
+would pass every other check. `blue-green.sh` therefore records the certificate the
 running proxy presents for **every** `ssl:<domain>:latest` key in Redis (looked
-up by SNI on `127.0.0.1`), and require every one to be unchanged: on the
-rehearsal port before the cutover, and on the real ports after the swap
-(`blue-green.sh` rolls back, the cutover restores bare-metal). A domain that
+up by SNI on `127.0.0.1`), and requires every one to be unchanged on the
+real ports after the swap (it rolls back if one differs). A domain that
 presented no certificate beforehand is not held against the replacement. A
 certificate that legitimately renews in the seconds between the two sweeps
 would fail the check; rerun the script.
@@ -79,7 +75,7 @@ be read from the running proxy. `PROXY_SKIP_CERT_SWEEP=1` skips the comparison.
 ## Trying issuance against a real ACME server
 
 The sweep above covers certificates that already exist. For *issuing*, CI can
-only use Pebble, so run this once per new image, before the cutover:
+only use Pebble, so run this once per new image, before deploying it:
 
 ```sh
 ~/proxy-deploy/try-issuance.sh <commit-sha> <throwaway-domain>
@@ -102,40 +98,24 @@ cannot be left behind and start issuing certificates no browser trusts.
 *Renewal* is still untested: nothing yet exercises dehydrated 0.7.2 renewing a
 certificate.
 
-## Cutover
+## First container, and rolling back to bare-metal
+
+Production moved from the bare-metal `openresty` systemd unit to the first
+container on 8 Oct 2026 (#1941), using a one-off script that rehearsed the
+image on another port, stopped bare-metal, started the container and rolled
+back on any failed check. That script is deleted, along with the bare-metal
+config generator it relied on. On a host with no proxy container running,
+`blue-green.sh` starts the first one (it refuses while the bare-metal unit is
+active or enabled, which would race the container for `:80`/`:443`; the kernel
+refuses `reuseport` sockets next to bare-metal's plain ones, so stop and
+disable it first).
+
+Bare-metal OpenResty stays installed on the host, stopped and disabled, with
+its last rendered config, as a manual rollback only. Nothing in this repo
+renders that config any more. To go back by hand:
 
 ```sh
-ssh blot
-tmux new -s proxy-cutover
-~/proxy-deploy/cutover-from-baremetal.sh --dry-run <commit-sha>   # preflight + rehearsal only
-~/proxy-deploy/cutover-from-baremetal.sh <commit-sha>             # asks you to type "cutover"
-```
-
-The dry run is safe at any time. The header of the script lists everything
-checked. In short, the image is run on `127.0.0.1:18443` against the real Node
-containers, Redis and certificate and must answer exactly as bare-metal does,
-*before* anything is stopped. The rehearsal itself does not mount the real
-cache (`use_temp_path=off` means nginx writes new cache entries on every MISS,
-so a read-only mount would turn ordinary rehearsal traffic into 500s).
-Instead, a second, traffic-free container (`blot-proxy-rehydrate-probe`) mounts
-the real cache read-only alongside it, and the cutover fails unless that
-container's `error.log` shows the purge index finished rebuilding from it
-(`rehydrate: complete`, no rehydrate error) within `PROXY_REHYDRATE_TIMEOUT`
-(default 180s; ~20s for today's ~200k files) - proof the container's worker
-can read the whole cache and that the index fits `cacher_dictionary`, without
-which every `/purge` after a real cutover returns 503 indefinitely. Neither
-container has a log mount, so this is read with `docker exec ... cat
-error.log` rather than from the host. Then bare-metal stops, the container
-starts, the same checks run over the real ports, and any failure (or Ctrl-C,
-or a dropped connection) puts bare-metal back. The bare-metal unit stays
-enabled, and the container has
-no restart policy, until a two-minute soak passes, so a reboot during the
-cutover also lands on bare-metal.
-
-Afterwards bare-metal OpenResty stays installed but disabled. To go back by hand:
-
-```sh
-docker rm -f blot-proxy-blue && sudo systemctl enable --now openresty
+docker rm -f blot-proxy-<colour> && sudo systemctl enable --now openresty
 ```
 
 ## Known gaps

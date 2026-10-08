@@ -387,13 +387,11 @@ Make it possible to create a site for free then require subscription to make it 
 
 ---
 
-Proxy container (OpenResty) - remaining before it can replace config/openresty:
+Proxy container (OpenResty):
 - Can we add modern compression to proxy?
 - Can the proxy remember bad urls and avoid repeatedly sending them to upstream?
-- Fold proxy/build/sync-config.js container adaptations back into the files once proxy/ is canon (stdout logs, reuseport, ACME CA, health socket)
 - Blue/green hook server: :8999 is in a reuseport group, so during a deploy overlap an ACME hook request can hit the other instance (different secret) - needs per-instance hook routing, not a shared reuseport port
-- dehydrated version drift: the proxy image vendors dehydrated 0.7.2 (0.6.5, which lua-resty-auto-ssl pins, is rejected by current ACME servers); bare-metal config/openresty still installs the 0.6.5 pin via luarocks - unify (bump lua-resty-auto-ssl, or vendor 0.7.2 there too)
-- Investigate replacing unmaintained lua-resty-auto-ssl (would also resolve the two items above): lua-resty-acme (keeps OpenResty, drops dehydrated/sockproc/:8999) or issuing from the Blot app into Redis; see proxy/README.md
+- Investigate replacing unmaintained lua-resty-auto-ssl (would also resolve the :8999 item above): lua-resty-acme (keeps OpenResty, drops dehydrated/sockproc/:8999) or issuing from the Blot app into Redis; see proxy/README.md
 - Purge follow-ups: BLOT_REVERSE_PROXY_URLS is a static list (proxies should register themselves in Redis), and purges queued in a Node process's memory are lost if it dies before sending them
 - container equivalent for fail2ban
 
@@ -456,7 +454,7 @@ Improvements to template editor:
   - the injected script in `app/blog/render/middleware.js` and `app/blog/views/template-error.html` does `new EventSource('/__blot/preview/reload').onmessage = function() { window.location.reload(); }` on every message, including background tabs / hidden template-editor iframes. the expensive part is the full render that `location.reload()` triggers, not the SSE connection (keep that open; 10s heartbeats are cheap)
   - follow the visibility pattern in `app/views/js/sync_status.js`: if `document.visibilityState === "hidden"`, set a pending flag; on `visibilitychange` to visible, reload once
   - debounce? no long debounce. the server already publishes once per completed sync that had changes (`app/sync/index.js` after the cacheID bump), so events are not per-keystroke. coalesce instead: one pending reload is enough if several events arrive while hidden or while a reload is already in flight. a short (100–300ms) debounce would only matter for back-to-back completed syncs while the tab is visible
-  - etags? not nicely, not yet. `location.reload()` may send If-None-Match / If-Modified-Since and openresty already forwards those (`config/openresty/conf/reverse-proxy-preview.conf`). render middleware sets Last-Modified from cacheID and Express default weak etags come from the body, but freshness is checked in `res.send()` after the expensive render, so a 304 still costs a full render. skipping the reload when hidden is the real win. a cheap cacheID-based etag checked *before* render would actually leverage them — related to the etag question above
+  - etags? not nicely, not yet. `location.reload()` may send If-None-Match / If-Modified-Since and openresty already forwards those (`proxy/config/reverse-proxy-preview.conf`). render middleware sets Last-Modified from cacheID and Express default weak etags come from the body, but freshness is checked in `res.send()` after the expensive render, so a 304 still costs a full render. skipping the reload when hidden is the real win. a cheap cacheID-based etag checked *before* render would actually leverage them — related to the etag question above
 - Add [commit mono](https://commitmono.com/) font to font picker
 - File upload feature (_url) needs to generate image dimensions too.. maybe it needs MORE power
 - Enforce size limits on setting tempalte views
@@ -1244,7 +1242,7 @@ Write new clients to sync blog folders
 Add password protection for blogs 
 - tell [Ed](https://mail.google.com/mail/u/0/#inbox/164edd9d46596ec7), [this person](https://mail.google.com/mail/u/0/#inbox/155f01452a3f7231), [this person](https://mail.google.com/mail/u/0/#inbox/1645b6e48dc13281), and [Will](https://mail.google.com/mail/u/0/#inbox/FMfcgzGlkXsdBcCssKznzgvJQPDQpKlh), and [Modomiro](https://twitter.com/modomiro/status/1053345173743329281) and [Julian](https://mail.google.com/mail/u/0/#inbox/FMfcgxwCgpVWqGMHszwgxZRxNTNXRTlX) and [Raph](https://mail.google.com/mail/u/0/#inbox/FMfcgxwCgzFTCKQXQmQqdNMdjMfDFkMW) and [Jeremy](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmvTvDjVMLQQmxvnZHBnnxdRpk) and [Tara](https://mail.google.com/mail/u/0/#sent/FMfcgxwChJlBCNMWSFhSctjMkBcKdpsq) and [Phil](https://mail.google.com/mail/u/0/#inbox/FMfcgxwChSHbCCgQqZqqKQftJbwHRkss) and [Florian](https://mail.google.com/mail/u/0/#inbox/FMfcgxwDrlSVCrQSVMBlFwQcNcGfZLzn) and Roy's friend Tim and [Kaleb](https://mail.google.com/mail/u/0/#inbox/FMfcgxwGDNWPljXXlwQVtswFCCLGFCQV) and [Lotus](https://mail.google.com/mail/u/0/#inbox/FMfcgxwGDNQfSzPBHtqRCQqCDjMTZLCQ) and [Khaled](https://mail.google.com/mail/u/0/#inbox/FMfcgxwHMGBFrctdVXhksCvqXXVPfDWR) and [Noel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwHNMdwcwMqfVjmJPHKBMxzQChR) and [Franz](https://mail.google.com/mail/u/0/#inbox/FMfcgxwJXVMfwXfsWswWjvrpVKrPqpDt) and [Justin](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKjBRFjtljCQvlhsfXsSxrCKdJ) and [Kyle](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKkHZVgwCNwsdlhdzCggRtsRhN) and [Devan](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsJznDjRgbzwPmChbNQdqfnfq) and [John](https://mail.google.com/mail/u/0/?zx=bjx0x027sgct#inbox/FMfcgzGqQvvRpSrnkRNsrhddkzBhMsvf) and [Anita](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsSWMtCTdmrbscFCFLggctmxH) and [Emerald](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLtkXpvTkdGzkFCLtmmLTlvrJL) and [Ben](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmvBmLLlZwPLbdJdXKQXrwrJnL) and [Giuseppe](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmvBnTWqHgFgdwBvcCDcmzLXGV) and [Annie](https://mail.google.com/mail/u/0/?zx=j8rkxjpin0du#inbox/FMfcgzGqRQCwsXBNDJqLjDnJrjGmctdJ) and [Jan](https://mail.google.com/mail/u/0/?zx=j8rkxjpin0du#inbox/FMfcgzGqRPzfVlDPLLjkqCfnBWqmVqKg)
 - think about how to add simple password (just a string) protection to sites. 
-- we need to consider both the node.js app (app/index) and the openresty reverse proxy (config/openresty), especially the proxy caching behaviour for sites. 
+- we need to consider both the node.js app (app/index) and the openresty reverse proxy (proxy/), especially the proxy caching behaviour for sites. 
 - perhaps we'll need to handle sessions for sites with password protection in some way at the open resty level? or just use some response header from upstream to always bypass the proxy cache? or some cookie? we don't want to add any extra work in openresty for sites without passwords. perhaps sites with passwords return responses with a header that prevents any proxy caching from taking place?
 - anyway, it would involve:
 - updating the blog model (password: string).
@@ -1294,7 +1292,7 @@ Self-hosting:
   - Tell [Zip](https://mail.google.com/mail/u/0/#inbox/FMfcgzGmthffLmfRBswqGmsDKQWdJZFB)
 - Tell Nick when it's possible to deploy a self-hosted [Blot on Vercel](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKjxHWSvgjKtCWrbhccKFPlkdD) and [Zia](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsSXWPRNNxDNcdhGHQXBkTtsx)
 
-Add preflight checks in proxy/deploy/{cutover-from-baremetal,blue-green}.sh for PROXY_BLOG_STATIC_DIR/PROXY_GLOBAL_STATIC_DIR existing and readable - docker -v silently creates an empty dir for a missing host path, so a typo or host-layout change would 404 cdn.* static assets with no check catching it
+Add preflight checks in proxy/deploy/blue-green.sh for PROXY_BLOG_STATIC_DIR/PROXY_GLOBAL_STATIC_DIR existing and readable - docker -v silently creates an empty dir for a missing host path, so a typo or host-layout change would 404 cdn.* static assets with no check catching it
 
 Explore a redesign of Fix() (app/sync/fix) to cut Redis load further, e.g. one chunked walk over every referenced entry id (lists + tag members) that MGETs each entry once and applies every per-entry check, instead of each check re-reading all content. Not an easy win:
 - ghosts include ids with no entry, so the walk must cover the union of list and tag member ids, not just "all"

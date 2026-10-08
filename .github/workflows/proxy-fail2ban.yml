@@ -19,7 +19,7 @@ name: proxy-fail2ban
 # common.sh run_args) - not -p-published ports - so $remote_addr is the real
 # peer address rather than a docker bridge gateway, and targets the runner's
 # routable IP rather than 127.0.0.1: the internal cache-purge server also
-# binds 127.0.0.1:80 (config/openresty/conf/server.conf) and would shadow
+# binds 127.0.0.1:80 (proxy/config/server.conf) and would shadow
 # the custom-domain default_server for anything sent to loopback. Same
 # pattern integration.yml's zero-downtime job uses and for the same reason.
 
@@ -29,7 +29,6 @@ on:
     paths:
       - ".github/workflows/proxy-fail2ban.yml"
       - "proxy/**"
-      - "config/openresty/**"
       - "config/host/**"
       - "package.json"
       - "app/config.js"
@@ -39,7 +38,6 @@ on:
     paths:
       - ".github/workflows/proxy-fail2ban.yml"
       - "proxy/**"
-      - "config/openresty/**"
       - "config/host/**"
       - "package.json"
       - "app/config.js"
