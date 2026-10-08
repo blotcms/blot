@@ -1,18 +1,10 @@
 Consider dropping Redis client-side caching (CLIENT TRACKING) in favour of the app's in-process LRU caches: on prod 10 clients have tracking on and the server's tracking table sits at its 1M-key cap (tracking-table-max-keys), so Redis is constantly evicting entries and sending invalidations
-Fix blot-airlock crash-restarts: /usr/local/bin/check_docker_health.sh (cron, every minute) restarted it as unhealthy 7 times between 6 Oct 20:55 and 7 Oct 12:04 UTC (~/docker-health-check.log on the blot host); find why its health check fails
-Solve redis kernel issue:
-- can we switch to 1cpu / 16gb ram redis? do we need the second cpu for bgsave? our peak rss is 23gb? can we add maxmemory and error writes?
-  - yes: dataset is 4.6G (RSS 6.7G, frag 1.45); the 23G peak is the high-water mark since Redis started in Sep 2023, before the purge. bgsave COW is only 12-46MB, but `save 60 10000` forks a 32s save every 1-2 min (children ~27% of a core), so the new host saves at most every 5 min
-Redis outage follow-ups
-- Dropbox webhook drops syncs (listBlogs fails after the 200 ack) and git auth maps Redis errors to a 401 while Redis is unreachable
-- Redis auth/TLS; 
-- Review, revise, test and run redis orchestration script to restore from s3 backup into new instance
 
 Migrate static content to s3
 
 ---
 
-run node scripts/entry/rebuild-all.js
+run node scripts/entry/rebuild-all.js -s 260 (226 on current run)
 
 When you re-connect to Dropbox or Google Drive, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
 
@@ -40,7 +32,6 @@ Make sync logs more useful, surface recent changes on dashboard. Group multiple 
 Work on removing replaceFolderLinks
 
 Excercise the backlinks with big entries / many backlinks in the benchmarks somewhere
-
 
 Fix Google Drive sync outage caused by Google account suspesion
 - Future fix to Google Drive client needs to never use the service account to create files (ask the user to handle the initial transfer)
@@ -119,9 +110,6 @@ Now we have many LRU caches in app/blog we need to gather data in production to 
 - Maybe move all LRU caching into app/models and simplify app/blog?
 - Maybe remove redis client side caching and instead implement LRU caching more aggressively in the models?
 
-Finish cross platform folder renderer
-
-
 Improve about section
 - Restructure /about into current principles and clearly dated working notes.
 - Rewrite the main page to surface Blot’s purpose, independence, longevity, portability, and open source code.
@@ -150,7 +138,6 @@ Fix benchmark build-corpus action issue
 ---
 
 Improve Google Drive sync
-- Fix bug with repeat resyncs of specific sites via Google Drive:
 - Fix bug with shared drive folders for [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBkLKSVzvjZLRSCpRJwcKBPlf)
 - Fix bug with Google Docs when disconnecting a site from Google Drive on Blot then reconnecting the site to Google Drive. We need to work out how to handle this (Google Docs are not real files)
 - Improve sync efficieny with option to target a specific folder or file first (Track ids in database) and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBspgLdtHcrTZqRcPTJFNzBbd) maybe use touch metadata method to force syncs periodically for hot files?
