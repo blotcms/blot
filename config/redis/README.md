@@ -208,6 +208,41 @@ To change a setting: edit `redis.conf`, run `bootstrap.sh`, restart Redis if
 it says so. `maxmemory` is about 70% of RAM, computed at bootstrap
 (`REDIS_MAXMEMORY=10gb ./bootstrap.sh ...` to override).
 
+## Disaster recovery
+
+For when the master is gone (instance lost, data unusable) and no replica can
+take over with `cutover.sh`. Everything written since the newest backup's
+snapshot is lost (up to an hour), and the app's sync state can then disagree
+with the clients' folders.
+
+1. `./launch.sh --list` and pick the newest backup.
+2. `./launch.sh --type x2gd.medium --from <backup-name> --key ~/key.pem`
+   (or a larger type). This took 2m31s for 2.2M keys in the 8 Oct drill: ~35s
+   to ssh, ~45s bootstrap, ~50s download and RDB check, ~13s load.
+3. Check it on the host: `redis6-cli ROLE` is master, `DBSIZE` is about what
+   the daily email last reported, `INFO memory` is well under `maxmemory`, and
+   the `ssl:*:latest` count (`redis6-cli --scan --pattern 'ssl:*:latest' | wc -l`)
+   is about what it was, or the proxy re-issues the missing certificates.
+4. Move the floating IP (`172.30.0.200` today) to it. Add the address on the
+   host first, so it answers the moment the VPC moves it:
+   ```
+   ssh <new> 'sudo ip addr add <floating-ip>/32 dev ens5 noprefixroute'
+   aws ec2 assign-private-ip-addresses --network-interface-id <new-eni> \
+     --private-ip-addresses <floating-ip> --allow-reassignment
+   ```
+   If the old master comes back, make sure it no longer has the address
+   (stop it, or `sudo ip addr del <floating-ip>/32 dev ens5` there).
+5. Turn on its backups: `echo <floating-ip> | sudo tee /etc/blot-redis/floating-ip`,
+   then `sudo -u ec2-user /usr/local/bin/backup.sh hourly` for a first upload.
+6. Check the app: every client in `redis6-cli CLIENT LIST` has
+   `laddr=<floating-ip>`, `/redis-health` is fine, and expect
+   `[LOCK COMPROMISED]` container restarts from the outage. Then run sync
+   validation for the blogs, since Redis lost what changed after the snapshot.
+
+To rehearse it, run steps 1-3 with `launch.sh --drill` (it never uploads
+backups), write down the commands for 4-5 with the drill host's interface,
+and terminate the host.
+
 ## What gets installed
 
 - `/etc/redis6/redis6.conf` plus `/etc/redis6/blot-memory.conf` (`maxmemory`).
