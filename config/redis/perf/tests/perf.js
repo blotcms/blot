@@ -411,9 +411,22 @@ esac
   describe("install.sh", function () {
     it("rejects a bad private IP before touching any host", function () {
       skipUnless("bash");
-      const r = spawnSync("bash", [path.join(PERF, "install.sh"), "redis", "app", "not-an-ip"], { encoding: "utf8" });
-      expect(r.status).toBe(1);
-      expect(r.stderr).toContain("IPv4");
+      // ssh and scp that would fail the test if they were reached
+      const dir = tmp();
+      const stubs = path.join(dir, "stubs");
+      for (const cmd of ["ssh", "scp"]) write(path.join(stubs, cmd), "#!/bin/sh\necho reached $0 >&2\nexit 99\n", 0o755);
+      const env = Object.assign({}, process.env, { PATH: stubs + path.delimiter + process.env.PATH });
+      for (const ip of ["not-an-ip", "", "10..0.1", "999.999.999.999", "256.1.1.1", "10.0.0", "10.0.0.1.5", ".10.0.0.1", "10.0.0.1.", "10.0.0.1234", "10.0.-1.1", "10.0.0.1/24"]) {
+        const r = spawnSync("bash", [path.join(PERF, "install.sh"), "redis", "app", ip], { encoding: "utf8", env });
+        expect(r.status).toBe(1, "ip '" + ip + "'");
+        expect(r.stderr).toContain("IPv4");
+        expect(r.stderr).not.toContain("reached");
+      }
+      // a good one gets past the check (to ssh, which here fails)
+      const ok = spawnSync("bash", [path.join(PERF, "install.sh"), "redis", "app", "10.0.255.0"], { encoding: "utf8", env });
+      expect(ok.stderr).not.toContain("IPv4");
+      expect(ok.stderr).toContain("reached");
+      fs.rmSync(dir, { recursive: true, force: true });
     });
   });
 

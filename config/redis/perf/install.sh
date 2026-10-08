@@ -17,15 +17,25 @@
 set -euo pipefail
 . "$(dirname "$0")/common.sh"
 
+# valid_ipv4 <string>: exactly four dot-separated octets, 0-255 (bash 3.2).
+valid_ipv4() {
+  local IFS=. o n=0
+  case "$1" in *[!0-9.]* | "" | .* | *. | *..*) return 1 ;; esac
+  # shellcheck disable=SC2086  # split on the dots
+  for o in $1; do
+    n=$((n + 1))
+    [ "${#o}" -le 3 ] && [ "$o" -le 255 ] || return 1
+  done
+  [ "$n" -eq 4 ]
+}
+
 UNINSTALL=0
 if [ "${1:-}" = "--uninstall" ]; then UNINSTALL=1; shift; fi
 if [ "$UNINSTALL" = 1 ]; then
   [ $# -eq 2 ] || die "usage: install.sh --uninstall <redis-ssh-host> <app-ssh-host>"
 else
   [ $# -eq 3 ] || die "usage: install.sh <redis-ssh-host> <app-ssh-host> <redis-private-ip>"
-  case "$3" in
-    *[!0-9.]* | "") die "redis-private-ip must be an IPv4 address, got '$3'" ;;
-  esac
+  valid_ipv4 "$3" || die "redis-private-ip must be an IPv4 address, got '$3'"
 fi
 REDIS_HOST=$1
 APP_HOST=$2
