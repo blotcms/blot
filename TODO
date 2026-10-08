@@ -2,6 +2,10 @@ Consider dropping Redis client-side caching (CLIENT TRACKING) in favour of the a
 
 Migrate static content to s3
 
+add client status to status page (check api)
+
+email warnings if no sync from client for more than x hours
+
 ---
 
 run node scripts/entry/rebuild-all.js -s 260 (226 on current run)
