@@ -1,4 +1,5 @@
 module.exports = {
+  bumpCacheID: require("./bumpCacheID"),
   create: require("./create"),
   defaults: require("./defaults"),
   extend: require("./extend"),

@@ -7,6 +7,7 @@ const scheduler = require("node-schedule");
 var checkFeaturedSites = require("../documentation/featured/check");
 var config = require("config");
 var publishScheduledEntries = require("./publish-scheduled-entries");
+var { isRedisUnavailableError } = require("helper/redisUnavailable");
 const freeDiskSpace = require("./free-disk-space");
 const os = require("os");
 const fs = require("fs-extra");
@@ -14,6 +15,11 @@ const exec = require("child_process").exec;
 const zombies = require("./zombies");
 const checkCardTesters = require("./check-card-testers");
 const subscriptionLifecycleJob = require("./subscription-lifecycle");
+const checkSSLCertificates = require("./check-ssl-certificates");
+const checkRedisHost = require("./check-redis-host");
+
+const SCHEDULE_RETRY_MS = 60 * 1000;
+const SCHEDULE_RETRY_MAX_MS = 60 * 60 * 1000;
 
 // If any disk has less than 2GB of space, we should notify the admin
 const MINIMUM_DISK_SPACE_IN_K = 2 * 1024 * 1024;
@@ -114,11 +120,26 @@ module.exports = function () {
     });
   });
 
-  // Bash the cache for scheduled posts
-  publishScheduledEntries(function (err) {
-    if (err) throw err;
-    console.log(clfdate(), "Scheduled entries for future publication");
-  });
+  // Bash the cache for scheduled posts. Don't crash the master (and loop on
+  // restart) if this fails at startup, e.g. because Redis is unavailable or
+  // rejecting writes: try again, or the entries stay scheduled until the next
+  // restart. Scheduling an entry twice is harmless (one job per entry path).
+  // An outage retries every minute; any other error backs off up to an hour,
+  // since each attempt scans every blog.
+  (function scheduleEntries(attempt) {
+    publishScheduledEntries(function (err) {
+      if (!err) {
+        return console.log(clfdate(), "Scheduled entries for future publication");
+      }
+      var delay = isRedisUnavailableError(err)
+        ? SCHEDULE_RETRY_MS
+        : Math.min(SCHEDULE_RETRY_MS * Math.pow(2, attempt), SCHEDULE_RETRY_MAX_MS);
+      console.error(clfdate(), "Error scheduling entries for future publication, retrying in " + delay / 1000 + "s", err);
+      setTimeout(function () {
+        scheduleEntries(attempt + 1);
+      }, delay);
+    });
+  })(0);
 
   // Warn users about impending subscriptions
   User.getAllIds(function (err, uids) {
@@ -227,6 +248,55 @@ module.exports = function () {
       console.log(clfdate(), "No suspected fraudulent users found");
     } else {
       email.SUSPECTED_FRAUD(null, { customers });
+    }
+  });
+
+  console.log(clfdate(), "Scheduled daily check of SSL certificates");
+  scheduler.scheduleJob({ hour: 13, minute: 0 }, async function () {
+    console.log(clfdate(), "Checking SSL certificates");
+
+    try {
+      const { sent } = await checkSSLCertificates({
+        sendEmail: (view) =>
+          new Promise((resolve, reject) =>
+            email.SSL_CERTIFICATE_ISSUES(null, view, (err) =>
+              err ? reject(err) : resolve()
+            )
+          ),
+      });
+
+      console.log(
+        clfdate(),
+        sent ? "Sent SSL certificate issues email" : "No new SSL certificate issues"
+      );
+    } catch (err) {
+      console.log(clfdate(), "Error: Checking SSL certificates", err);
+    }
+  });
+
+  // Two minutes after each of the Redis host's 5-minute samples. During a
+  // Redis outage this only logs: /redis-health reports the outage itself.
+  console.log(clfdate(), "Scheduled check of the Redis host's memory limits");
+  let redisHostCheckedAt = null;
+  scheduler.scheduleJob("2-59/5 * * * *", async function () {
+    try {
+      const { sent, report } = await checkRedisHost({
+        lastCheckAt: redisHostCheckedAt,
+        sendEmail: (view) =>
+          new Promise((resolve, reject) =>
+            email.REDIS_HOST_ALERT(null, view, (err) =>
+              err ? reject(err) : resolve()
+            )
+          ),
+      });
+      redisHostCheckedAt = report.now;
+      if (sent) console.log(clfdate(), "Sent Redis host alert email");
+    } catch (err) {
+      if (isRedisUnavailableError(err)) {
+        console.log(clfdate(), "Redis host check skipped: Redis unavailable");
+      } else {
+        console.log(clfdate(), "Error: Checking Redis host", err);
+      }
     }
   });
 

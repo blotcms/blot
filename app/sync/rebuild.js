@@ -6,11 +6,12 @@ const async = require("async");
 const { join, resolve, basename } = require("path");
 const localPath = require("helper/localPath");
 const messenger = require("./messenger");
-const { blog_static_files_dir } = require("config");
+const assets = require("storage/assets");
 const { promisify } = require("util");
 const Transformer = require("helper/transformer");
 const Blog = require("models/blog");
 const build = require("build");
+const { isRedisUnavailableError } = require("helper/redisUnavailable");
 
 function walk(dir, done) {
   var results = [];
@@ -68,16 +69,12 @@ module.exports = function main(blogID, options, callback) {
 
       try {
         if (options.thumbnails) {
-          const directory = join(blog_static_files_dir, blog.id, "_thumbnails");
+          const directory = assets.path(blog.id, "_thumbnails");
           await wipeCache({ blogID: blog.id, label: "thumbnails", directory });
         }
 
         if (options.imageCache) {
-          const directory = join(
-            blog_static_files_dir,
-            blog.id,
-            "_image_cache"
-          );
+          const directory = assets.path(blog.id, "_image_cache");
           await wipeCache({ blogID: blog.id, label: "image-cache", directory });
         }
       } catch (e) {
@@ -112,18 +109,45 @@ module.exports = function main(blogID, options, callback) {
 
       const total = paths.length;
       let current = 0;
+      let failed = 0;
+      let firstError = null;
 
       async.eachSeries(
         updatePaths,
         function (path, next) {
           current += updatePathCounts.get(path);
           status(`(${current}/${total}) Rebuilding ${path}`);
-          update(path, function () {
-            // todo: don't swallow error here
+          update(path, function (err, result) {
+            // Redis is unavailable, so every path after this one would fail
+            // the same way. Stop, and tell the caller.
+            if (err && isRedisUnavailableError(err)) return next(err);
+
+            // Any other error is about this one file (update reports some as
+            // err, such as a symlink in the way, and others in result.error)
+            // and must not stop the rebuild of the others. Count them and
+            // say so once at the end.
+            var fileError = err || (result && result.error);
+
+            if (fileError) {
+              failed++;
+              if (!firstError) firstError = fileError;
+            }
+
             next();
           });
         },
-        () => {
+        (err) => {
+          if (err) {
+            log("Rebuild stopped, Redis is unavailable", err.message);
+            return callback(err);
+          }
+
+          if (failed) {
+            log(
+              `Rebuild finished but ${failed} of ${updatePaths.length} paths failed to build, e.g. ${firstError.message || firstError}`
+            );
+          }
+
           // Rebuild can change every entry's parsed fields (e.g. dateStamp,
           // after a dateFormat/timeZone change) without going through
           // sync/index.js's normal "done" flow, which is what usually bumps

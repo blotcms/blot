@@ -1,5 +1,6 @@
 const config = require("config");
 const redis = require("redis");
+const { markRedisClientError } = require("helper/redisUnavailable");
 
 const url = `redis://${config.redis.host}:${config.redis.port}`;
 const clientSideCaches = new WeakMap();
@@ -45,6 +46,7 @@ function createRedisClient() {
   createRedisClient.failFastOnceReady(client);
 
   client.on("error", function (err) {
+    markRedisClientError(err);
     console.log("Redis Error:");
     console.log(err);
     if (err.trace) console.log(err.trace);
@@ -64,8 +66,19 @@ createRedisClient.failFast = function (client) {
   client.options.disableOfflineQueue = true;
 };
 
+// If Redis is never reached, stop queueing anyway after a grace period, or
+// every client created during an outage (the shared one, sessions, the log-in
+// rate limiter) would hold requests open until Redis first connects.
+const BOOT_QUEUE_MS = 10 * 1000;
+
 createRedisClient.failFastOnceReady = function (client) {
+  const timer = setTimeout(function () {
+    createRedisClient.failFast(client);
+  }, BOOT_QUEUE_MS);
+  if (typeof timer.unref === "function") timer.unref();
+
   client.once("ready", function () {
+    clearTimeout(timer);
     createRedisClient.failFast(client);
   });
 };
@@ -89,6 +102,7 @@ createRedisClient.createLibraryClient = function (label) {
   });
 
   client.on("error", function (err) {
+    markRedisClientError(err);
     console.error(label + " Redis error:", err.message);
   });
   createRedisClient.failFastOnceReady(client);
@@ -101,6 +115,7 @@ createRedisClient.createLibraryClient = function (label) {
 
 createRedisClient.reconnectStrategy = reconnectStrategy;
 createRedisClient.PING_INTERVAL_MS = PING_INTERVAL_MS;
+createRedisClient.BOOT_QUEUE_MS = BOOT_QUEUE_MS;
 createRedisClient.SOCKET_TIMEOUT_MS = SOCKET_TIMEOUT_MS;
 
 // Only expose an immutable stats snapshot, rather than the controllable cache.

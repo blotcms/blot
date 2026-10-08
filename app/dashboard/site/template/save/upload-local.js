@@ -2,6 +2,7 @@ const fs = require("fs-extra");
 const { join, extname } = require("path");
 const { v4: uuid } = require("uuid");
 const config = require("config");
+const assets = require("storage/assets");
 const Template = require("models/template");
 const { isAjaxRequest } = require("./ajax-response");
 const cleanupFiles = require("./cleanup-files");
@@ -77,7 +78,7 @@ module.exports = async (req, res, next) => {
   }
 
   const subdir = req.blog.id + "/_template_assets";
-  const templateDir = join(config.blog_static_files_dir, subdir);
+  const templateDir = assets.path(req.blog.id, "_template_assets");
   const extension = extname(file.originalFilename || file.path).toLowerCase();
   const filename = `${uuid()}${extension}`;
   const finalPath = join(templateDir, filename);
