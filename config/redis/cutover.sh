@@ -480,9 +480,11 @@ echo "assign-private-ip-addresses returned after $((m1 - m0))ms"
 
 STAGE="after the IP move ($NEW is the master and owns $FIP)"
 say "4. Data plane"
-# A host that still has <old>'s MAC address for the IP keeps sending frames
-# there, which the VPC drops, until the neighbour entry goes stale (20-50s).
-# Docker containers on the app host share its neighbour table.
+# Clear the app host's neighbour entry for the IP so it re-learns the MAC.
+# Docker containers on the app host share its neighbour table. In rehearsals
+# this made no measurable difference: the VPC switched within ~1s moving to a
+# fresh interface, and moving back to a recently used one its proxy ARP kept
+# answering with the other MAC for seconds whatever we did (README.md).
 flush() {
   local pair pids=""
   for pair in $APP_IFS; do
@@ -598,22 +600,30 @@ if [ -n "$first" ]; then
   [ -z "$all" ] || echo "All $CLIENTS clients on $NEW after: $((lead + all))ms"
   [ "$window" -le "$BUDGET_MS" ] || echo "WARNING: over the ${BUDGET_MS}ms budget: expect [LOCK COMPROMISED] restarts"
 elif [ "$CLIENTS" -gt 0 ]; then
-  problem "none of the $CLIENTS clients reached $NEW within ${CLIENT_WAIT}s, so Redis traffic may be down. Redis has switched and $FIP is on $NEW. Check the app host's neighbour entry for $FIP (ip neigh show $FIP; ip neigh del $FIP dev <if>) and its Redis connections."
+  problem "none of the $CLIENTS clients reached $NEW within ${CLIENT_WAIT}s, so Redis traffic may be down. Redis has switched and $FIP is on $NEW. Moving the IP back to a host that held it recently, AWS can take a while longer to route it: check the clients again, then the app host's neighbour entry for $FIP (ip neigh show $FIP) and its Redis connections."
 else
   echo "No client reached $NEW within ${CLIENT_WAIT}s"
 fi
+
+# <new> is a hand-built host this script cut away from before (a rollback):
+# its cron jobs are still commented out. Printed on success and on error.
+cron_hint() {
+  local backup root_backup
+  backup=$(field "$NEW_INFO" cron_backup)
+  root_backup=$(field "$NEW_INFO" root_cron_backup)
+  [ -z "$backup" ] || echo "Rolling back to $NEW also needs ec2-user's old cron jobs back: ssh $NEW crontab $backup"
+  [ -z "$root_backup" ] || echo "Rolling back to $NEW also needs root's old cron jobs back: ssh $NEW sudo crontab $root_backup"
+}
 
 if [ -n "$PROBLEMS" ]; then
   echo >&2
   echo "error: $NEW is the master and has $FIP, but:" >&2
   printf '%s' "$PROBLEMS" | sed 's/^/  - /' >&2
   echo "Rollback: $ROLLBACK" >&2
+  cron_hint >&2
   exit 1
 fi
 
 say "Done: $NEW is the master"
 echo "Rollback: $ROLLBACK"
-backup=$(field "$NEW_INFO" cron_backup)
-root_backup=$(field "$NEW_INFO" root_cron_backup)
-[ -z "$backup" ] || echo "Rolling back to $NEW also needs its old cron jobs back: ssh $NEW crontab $backup"
-[ -z "$root_backup" ] || echo "and root's: ssh $NEW sudo crontab $root_backup"
+cron_hint
