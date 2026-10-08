@@ -66,7 +66,7 @@ describe("redis perf tools", function () {
         "--test", "2026-10-08T12:00..16:00",
         "--match-hours",
       ]);
-      expect(out).toContain("hours 12,13,14,15");
+      expect(out).toContain("times 12:00-16:00 UTC");
       expect(out).toContain("[BGSAVE running] minutes");
       expect(out).toContain("[no BGSAVE] minutes");
       const line = (label) => out.split("\n").find((l) => l.startsWith(label));
@@ -199,6 +199,20 @@ describe("redis perf tools", function () {
       expect(() => compare.main(args.concat(["--redis-dir", path.join(d, "old-host")]))).toThrowError(/--app-dir/);
       expect(() => compare.main(args.concat(["--redis-dir", path.join(d, "old-host"), "--app-dir", path.join(d, "new-host")]))).not.toThrow();
       fs.rmSync(d, { recursive: true, force: true });
+    });
+
+    it("--match-hours keeps the baseline minutes of the test window's times of day, even past midnight", function () {
+      const run = (test) => compare.main(["--data", dir, "--baseline", "2026-10-07T00:00..2026-10-08T00:00", "--match-hours", "--test", test]);
+      const samples = (test) => section(run(test), "Window")["one-minute samples"];
+      // half hours: as many baseline minutes as test minutes, not whole hours
+      expect(samples("2026-10-08T12:30..14:30")).toEqual(["120", "120"]);
+      expect(run("2026-10-08T12:30..14:30")).toContain("times 12:30-14:30 UTC");
+      // wrapping past midnight: 23:00-01:00 of the baseline day is 00:00-01:00 and 23:00-24:00
+      expect(samples("2026-10-07T23:00..2026-10-08T01:00")).toEqual(["120", "120"]);
+      expect(run("2026-10-07T23:00..2026-10-08T01:00")).toContain("times 23:00-01:00 UTC");
+      // exactly 24h is every minute; more is refused
+      expect(samples("2026-10-08T00:00..2026-10-09T00:00")).toEqual(["1440", "1440"]);
+      expect(() => run("2026-10-08T00:00..2026-10-09T00:01")).toThrowError(/24h or less/);
     });
 
     it("explains a missing argument or log directory", function () {

@@ -69,7 +69,9 @@ All times are UTC, in the logs and in `compare.js`.
 6. **Fetch:** `./fetch.sh <redis-ssh-host> <app-ssh-host>` (`--since 3d` limits the
    docker log window; the default is 7d).
 7. **Compare:** the baseline is the 24h before the squeeze, `--match-hours` keeps
-   only the baseline hours of the day the test window covers:
+   only the baseline minutes whose UTC time of day is in the test window's (here
+   14:00-16:00, so the same number of minutes on both sides; the test window
+   may be up to 24h and may wrap past midnight):
 
    ```
    node compare.js --baseline 2026-10-09T14:00..2026-10-10T14:00 \

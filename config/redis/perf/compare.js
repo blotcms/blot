@@ -8,9 +8,11 @@
 // A time is YYYY-MM-DD, YYYY-MM-DDTHH or YYYY-MM-DDTHH:MM; the end of a window
 // may be just HH or HH:MM, meaning that time on the start's date (or the next
 // day if it is not later). --match-hours keeps only the baseline minutes whose
-// UTC hour of day is one the test window covers, so a 24h baseline is compared
-// with the same hours of the day as the test (the :00 backups, the evening
-// traffic, ...) rather than with its quietest hours too.
+// UTC time of day is in the test window's time-of-day range (12:30..14:30 keeps
+// 12:30-14:30 of each baseline day; a range may wrap past midnight), so a 24h
+// baseline is compared with the same times of the day as the test (the :00
+// backups, the evening traffic, ...) rather than with its quietest hours too,
+// and with as many minutes. The test window may not be longer than 24h.
 //
 // Every distribution reads "p50 / p90 / p99 / max" over the one-minute
 // samples of the window. The latency lines are also split into the minutes in
@@ -155,15 +157,20 @@ const per = (a, b) => (typeof a === "number" && typeof b === "number" && b > 0 ?
 
 // ------------------------------------------------------------------ windows
 
+const DAY = 86400000;
+
 function inWindow(win, t) {
   if (t < win.from || t >= win.to) return false;
-  return !win.hours || win.hours.has(new Date(t).getUTCHours());
+  if (!win.tod) return true;
+  const ms = t % DAY;
+  if (win.tod.from === win.tod.to) return true; // a whole day
+  return win.tod.from < win.tod.to ? ms >= win.tod.from && ms < win.tod.to : ms >= win.tod.from || ms < win.tod.to;
 }
 
-function hoursOf(win) {
-  const hours = new Set();
-  for (let t = win.from - (win.from % 3600000); t < win.to; t += 3600000) hours.add(new Date(t).getUTCHours());
-  return hours;
+// The time-of-day range [from, to) (ms since UTC midnight) a window covers.
+function timeOfDay(win) {
+  if (win.to - win.from > DAY) throw new Error("--match-hours needs a test window of 24h or less, got " + win.spec);
+  return { from: win.from % DAY, to: win.to % DAY };
 }
 
 // A sample is stamped with the end of the dt seconds it covers; the window
@@ -400,14 +407,15 @@ function table(baseWin, testWin, a, b, data) {
 function windowLabel(win) {
   const iso = (t) => new Date(t).toISOString().slice(0, 16) + "Z";
   const hrs = (win.to - win.from) / 3600000;
-  return iso(win.from) + ".." + iso(win.to) + " (" + fmtNum(hrs) + "h" + (win.hours ? ", hours " + [...win.hours].sort((x, y) => x - y).join(",") : "") + ")";
+  const hm = (ms) => new Date(ms).toISOString().slice(11, 16);
+  return iso(win.from) + ".." + iso(win.to) + " (" + fmtNum(hrs) + "h" + (win.tod ? ", times " + hm(win.tod.from) + "-" + hm(win.tod.to) + " UTC" : "") + ")";
 }
 
 function main(argv) {
   const args = parseArgs(argv);
   const baseline = parseWindow(args.baseline);
   const test = parseWindow(args.test);
-  if (args.matchHours) baseline.hours = hoursOf(test);
+  if (args.matchHours) baseline.tod = timeOfDay(test);
 
   const data = load(args);
   const labels = Object.keys(data.probes).filter((l) => data.probes[l].length);
