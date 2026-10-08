@@ -236,3 +236,58 @@ describe("sync folder lock release", function () {
     expect(compromised && compromised.code).toEqual("ECOMPROMISED");
   });
 });
+
+describe("sync cacheID", function () {
+  const sync = require("../index");
+  const folderLock = require("../lock");
+  const Blog = require("models/blog");
+  const fs = require("fs-extra");
+
+  global.test.blog();
+
+  // Changes one file in the blog's folder, then finishes the sync
+  function syncChange(blogID, callback) {
+    sync(blogID, function (err, folder, done) {
+      if (err) return callback(err);
+      fs.outputFileSync(folder.path + "/a.txt", "Hello");
+      folder.update("/a.txt", function (err) {
+        if (err) return callback(err);
+        done(null, callback);
+      });
+    });
+  }
+
+  // Render caches are keyed on cacheID, so skipping the bump leaves the
+  // site serving stale pages until something else bumps it
+  it("bumps the cacheID even if releasing the lock fails", function (testDone) {
+    const blogID = this.blog.id;
+    const lock = folderLock.lock;
+    const releaseError = new Error("NOREPLICAS Not enough good replicas to write.");
+
+    spyOn(folderLock, "lock").and.callFake(async function () {
+      const held = await lock.apply(folderLock, arguments);
+      const release = held.release;
+      held.release = async function () {
+        await release();
+        throw releaseError;
+      };
+      return held;
+    });
+    spyOn(Blog, "bumpCacheID").and.callThrough();
+
+    Blog.get({ id: blogID }, function (err, before) {
+      if (err) return testDone.fail(err);
+
+      syncChange(blogID, function (err) {
+        expect(err).toBe(releaseError);
+        expect(Blog.bumpCacheID).toHaveBeenCalled();
+
+        Blog.get({ id: blogID }, function (err, after) {
+          if (err) return testDone.fail(err);
+          expect(after.cacheID).toBeGreaterThan(before.cacheID);
+          testDone();
+        });
+      });
+    });
+  });
+});

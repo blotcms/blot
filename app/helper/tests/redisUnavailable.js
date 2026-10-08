@@ -11,6 +11,7 @@ describe("redisUnavailable", function () {
   const {
     isRedisUnavailableError,
     redisUnavailableHandler,
+    markRedisClientError,
   } = require("helper/redisUnavailable");
 
   describe("isRedisUnavailableError", function () {
@@ -80,6 +81,23 @@ describe("redisUnavailable", function () {
       expect(isRedisUnavailableError(err)).toBe(false);
     });
 
+    it("recognises such a socket error once a redis client has reported it", function () {
+      const reset = new Error("read ECONNRESET");
+      reset.code = "ECONNRESET";
+      const other = new Error("read ECONNRESET");
+      other.code = "ECONNRESET";
+      markRedisClientError(reset);
+      expect(isRedisUnavailableError(reset)).toBe(true);
+      expect(isRedisUnavailableError(other)).toBe(false);
+
+      // Reported by a redis client, but not a network failure
+      const bug = new TypeError("boom");
+      markRedisClientError(bug);
+      expect(isRedisUnavailableError(bug)).toBe(false);
+
+      markRedisClientError(null);
+    });
+
     it("ignores socket errors aimed at other servers", function () {
       const err = new Error("connect ECONNREFUSED");
       err.code = "ECONNREFUSED";
@@ -87,20 +105,81 @@ describe("redisUnavailable", function () {
       expect(isRedisUnavailableError(err)).toBe(false);
     });
 
-    it("recognises a server that is still loading its dataset", function () {
-      const { ErrorReply } = require("redis");
-      expect(
-        isRedisUnavailableError(
-          new ErrorReply("LOADING Redis is loading the dataset in memory")
-        )
-      ).toBe(true);
-      expect(isRedisUnavailableError(new ErrorReply("MASTERDOWN Link down"))).toBe(true);
+    it("recognises error replies by class, as node-redis raises them", function () {
+      // node-redis raises SimpleError (or BlobError), never a bare ErrorReply
+      const { SimpleError, BlobError } = require("redis");
+      const messages = [
+        "LOADING Redis is loading the dataset in memory",
+        "MASTERDOWN Link with MASTER is down and replica-serve-stale-data is set to 'no'.",
+        "READONLY You can't write against a read only replica.",
+        "NOREPLICAS Not enough good replicas to write.",
+        "OOM command not allowed when used memory > 'maxmemory'.",
+        "MISCONF Redis is configured to save RDB snapshots, but it's currently unable to persist to disk.",
+      ];
+      messages.forEach(function (message) {
+        expect(isRedisUnavailableError(new SimpleError(message))).toBe(true);
+        expect(isRedisUnavailableError(new BlobError(message))).toBe(true);
+      });
+    });
+
+    it("recognises a refused write inside EVAL or EVALSHA", function () {
+      // As returned by redis 6.2, for redis.call('set', 'k', 'v')
+      const { SimpleError } = require("redis");
+      const messages = [
+        "ERR Error running script (call to f_d223ed8c7345b684e8ed044ed472601f536fa58b): @user_script:1: @user_script: 1: -NOREPLICAS Not enough good replicas to write.",
+        "ERR Error running script (call to f_d223ed8c7345b684e8ed044ed472601f536fa58b): @user_script:1: @user_script: 1: -READONLY You can't write against a read only replica.",
+        "ERR Error running script (call to f_d223ed8c7345b684e8ed044ed472601f536fa58b): @user_script:1: @user_script: 1: -OOM command not allowed when used memory > 'maxmemory'.",
+      ];
+      messages.forEach(function (message) {
+        expect(isRedisUnavailableError(new SimpleError(message))).toBe(true);
+      });
+    });
+
+    it("ignores script errors that merely mention a refusal", function () {
+      const { SimpleError } = require("redis");
+      const messages = [
+        "ERR Error running script (call to f_d223ed8c7345b684e8ed044ed472601f536fa58b): @user_script:1: user_script:1: bad READONLY argument",
+        "ERR Error running script (call to f_d223ed8c7345b684e8ed044ed472601f536fa58b): @user_script:1: @user_script: 1: -WRONGTYPE Operation against a key holding the wrong kind of value",
+        "ERR Error compiling script (new function): user_script:1: -READONLY unexpected symbol",
+        "ERR syntax error -READONLY",
+      ];
+      messages.forEach(function (message) {
+        expect(isRedisUnavailableError(new SimpleError(message))).toBe(false);
+      });
     });
 
     it("ignores other error replies", function () {
-      const { ErrorReply } = require("redis");
+      const { SimpleError } = require("redis");
       expect(
-        isRedisUnavailableError(new ErrorReply("WRONGTYPE Operation against a key"))
+        isRedisUnavailableError(
+          new SimpleError("WRONGTYPE Operation against a key")
+        )
+      ).toBe(false);
+      expect(
+        isRedisUnavailableError(new SimpleError("ERR unknown command 'FOO'"))
+      ).toBe(false);
+      // Also follows syntax errors, so only the reply behind it counts
+      expect(
+        isRedisUnavailableError(
+          new SimpleError("EXECABORT Transaction discarded because of previous errors.")
+        )
+      ).toBe(false);
+    });
+
+    it("looks inside the replies of a failed MULTI", function () {
+      const { SimpleError, MultiErrorReply } = require("redis");
+      expect(
+        isRedisUnavailableError(
+          new MultiErrorReply(
+            ["OK", new SimpleError("OOM command not allowed")],
+            [1]
+          )
+        )
+      ).toBe(true);
+      expect(
+        isRedisUnavailableError(
+          new MultiErrorReply(["OK", new SimpleError("WRONGTYPE nope")], [1])
+        )
       ).toBe(false);
     });
 
@@ -113,6 +192,211 @@ describe("redisUnavailable", function () {
       expect(isRedisUnavailableError(new Error("nope"))).toBe(false);
       expect(isRedisUnavailableError(null)).toBe(false);
       expect(isRedisUnavailableError("ClientOfflineError")).toBe(false);
+    });
+  });
+
+  // Puts a real Redis into each state and checks that what node-redis raises
+  // is recognised. Building error objects by hand is what hid the original bug
+  // (the classifier compared the class name, which is never what node-redis
+  // uses). Specs run one at a time against a Redis of their own, and every
+  // state is undone afterwards.
+  describe("against a redis that rejects writes", function () {
+    const redis = require("redis");
+    const createRedisClient = require("models/redis");
+    let admin, client, original;
+
+    // Runs the callback and resolves to the error it rejects with
+    async function rejection(fn) {
+      try {
+        await fn();
+      } catch (err) {
+        return err;
+      }
+      throw new Error("Expected the command to be rejected");
+    }
+
+    async function redisConfig(name) {
+      const reply = await admin.configGet(name);
+      return reply[name];
+    }
+
+    beforeEach(async function () {
+      admin = redis.createClient({
+        url: `redis://${config.redis.host}:${config.redis.port}`,
+      });
+      admin.on("error", function () {});
+      await admin.connect();
+      client = createRedisClient();
+      client.on("error", function () {});
+      await client.connect();
+      original = {
+        minReplicas: await redisConfig("min-replicas-to-write"),
+        maxmemory: await redisConfig("maxmemory"),
+        policy: await redisConfig("maxmemory-policy"),
+        serveStale: await redisConfig("replica-serve-stale-data"),
+      };
+    });
+
+    afterEach(async function () {
+      await admin.sendCommand(["REPLICAOF", "NO", "ONE"]);
+      await admin.configSet("min-replicas-to-write", original.minReplicas);
+      await admin.configSet("maxmemory", original.maxmemory);
+      await admin.configSet("maxmemory-policy", original.policy);
+      await admin.configSet("replica-serve-stale-data", original.serveStale);
+      await client.destroy();
+      await admin.destroy();
+    });
+
+    it("recognises NOREPLICAS, the write freeze used during a cutover", async function () {
+      await admin.configSet("min-replicas-to-write", "1");
+
+      const err = await rejection(() => client.set("redis-unavailable:a", "1"));
+      expect(err.message).toMatch(/^NOREPLICAS/);
+      expect(isRedisUnavailableError(err)).toBe(true);
+
+      const multiErr = await rejection(() =>
+        client.multi().set("redis-unavailable:a", "1").exec()
+      );
+      expect(isRedisUnavailableError(multiErr)).toBe(true);
+    });
+
+    it("recognises OOM, when maxmemory is reached with noeviction", async function () {
+      await admin.configSet("maxmemory-policy", "noeviction");
+      await admin.configSet("maxmemory", "1");
+
+      const err = await rejection(() => client.set("redis-unavailable:a", "1"));
+      expect(err.message).toMatch(/^OOM/);
+      expect(isRedisUnavailableError(err)).toBe(true);
+    });
+
+    it("recognises the rejection of a command queued in a transaction, not the EXECABORT", async function () {
+      await admin.configSet("maxmemory-policy", "noeviction");
+      await client.sendCommand(["MULTI"]);
+      await admin.configSet("maxmemory", "1");
+
+      const queued = await rejection(() =>
+        client.sendCommand(["SET", "redis-unavailable:a", "1"])
+      );
+      expect(isRedisUnavailableError(queued)).toBe(true);
+
+      const err = await rejection(() => client.sendCommand(["EXEC"]));
+      expect(err.message).toMatch(/^EXECABORT/);
+      expect(isRedisUnavailableError(err)).toBe(false);
+    });
+
+    // The master is unreachable, so nothing is synced and no data is lost
+    it("recognises READONLY, when the host has become a replica", async function () {
+      await admin.sendCommand(["REPLICAOF", "127.0.0.1", "1"]);
+
+      const err = await rejection(() => client.set("redis-unavailable:a", "1"));
+      expect(err.message).toMatch(/^READONLY/);
+      expect(isRedisUnavailableError(err)).toBe(true);
+    });
+
+    it("recognises NOREPLICAS and READONLY refusing a write inside a script", async function () {
+      const script = "return redis.call('set', KEYS[1], 'v')";
+      const sha = await client.scriptLoad(script);
+      const key = "redis-unavailable:a";
+
+      await admin.configSet("min-replicas-to-write", "1");
+      const noReplicas = await rejection(() =>
+        client.eval(script, { keys: [key] })
+      );
+      expect(noReplicas.message).toMatch(/^ERR Error running script.*-NOREPLICAS/);
+      expect(isRedisUnavailableError(noReplicas)).toBe(true);
+
+      const noReplicasSha = await rejection(() =>
+        client.evalSha(sha, { keys: [key] })
+      );
+      expect(isRedisUnavailableError(noReplicasSha)).toBe(true);
+
+      await admin.configSet("min-replicas-to-write", original.minReplicas);
+      await admin.sendCommand(["REPLICAOF", "127.0.0.1", "1"]);
+      const readOnly = await rejection(() =>
+        client.eval(script, { keys: [key] })
+      );
+      expect(readOnly.message).toMatch(/^ERR Error running script.*-READONLY/);
+      expect(isRedisUnavailableError(readOnly)).toBe(true);
+    });
+
+    it("recognises MASTERDOWN, when a replica that won't serve stale data has lost its master", async function () {
+      await admin.configSet("replica-serve-stale-data", "no");
+      await admin.sendCommand(["REPLICAOF", "127.0.0.1", "1"]);
+
+      const err = await rejection(() => client.get("redis-unavailable:a"));
+      expect(err.message).toMatch(/^MASTERDOWN/);
+      expect(isRedisUnavailableError(err)).toBe(true);
+    });
+
+    it("does not mistake an ordinary command error for an outage", async function () {
+      await client.set("redis-unavailable:string", "1");
+
+      const err = await rejection(() => client.lPush("redis-unavailable:string", "x"));
+      expect(err.message).toMatch(/^WRONGTYPE/);
+      expect(isRedisUnavailableError(err)).toBe(false);
+
+      await client.del("redis-unavailable:string");
+    });
+  });
+
+  // Redis resetting the connection (a crash, a firewall) rejects what is in
+  // flight with a bare "read ECONNRESET". A proxy stands in for the reset.
+  describe("against a connection that is reset", function () {
+    const net = require("net");
+    let proxy, client, reset;
+
+    beforeEach(async function () {
+      const target = { host: config.redis.host, port: config.redis.port };
+      reset = false;
+      proxy = net.createServer(function (downstream) {
+        const upstream = net.connect(target.port, target.host);
+        downstream.on("data", function (data) {
+          if (reset && /BLPOP/i.test(data.toString())) {
+            downstream.resetAndDestroy();
+            return upstream.destroy();
+          }
+          upstream.write(data);
+        });
+        upstream.on("data", (data) => downstream.write(data));
+        downstream.on("error", () => upstream.destroy());
+        upstream.on("error", () => downstream.destroy());
+      });
+      await new Promise((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+
+      // models/redis reads the address when it is loaded
+      const modulePath = require.resolve("models/redis");
+      const original = { host: config.redis.host, port: config.redis.port };
+      const cached = require.cache[modulePath];
+      config.redis.host = "127.0.0.1";
+      config.redis.port = proxy.address().port;
+      delete require.cache[modulePath];
+      try {
+        client = require("models/redis")();
+      } finally {
+        config.redis.host = original.host;
+        config.redis.port = original.port;
+        if (cached) require.cache[modulePath] = cached;
+      }
+      client.on("error", function () {});
+      await client.connect();
+    });
+
+    afterEach(async function () {
+      await client.destroy();
+      await new Promise((resolve) => proxy.close(resolve));
+    });
+
+    it("recognises the command that was in flight", async function () {
+      reset = true;
+      let err;
+      try {
+        await client.blPop("redis-unavailable:queue", 5);
+      } catch (e) {
+        err = e;
+      }
+      expect(err.code).toBe("ECONNRESET");
+      expect(err.port).toBeUndefined();
+      expect(isRedisUnavailableError(err)).toBe(true);
     });
   });
 

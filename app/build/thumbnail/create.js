@@ -5,6 +5,7 @@ var Transform = require("./transform");
 var TransformGIF = require("./transform-gif");
 var join = require("path").join;
 var config = require("config");
+var assets = require("storage/assets");
 var extname = require("path").extname;
 var TIMEOUT = 20 * 1000; // 20s
 var validate = require("./validate");
@@ -18,9 +19,8 @@ function create(blogID, path, done) {
     done(new Error("Timeout"));
   }, TIMEOUT);
 
-  var root = join(config.blog_static_files_dir, blogID);
   var outputDirectory = "/" + join("_thumbnails", uuid());
-  var fullPathToOutputDirectory = join(root, outputDirectory);
+  var fullPathToOutputDirectory = assets.path(blogID, outputDirectory);
   var extension = extname(path).toLowerCase();
 
   validate(path, function (err) {

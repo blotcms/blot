@@ -3,27 +3,55 @@ const scheduled = new Map();
 const timeoutFallbacks = new Map();
 var ensure = require("helper/ensure");
 var model = require("./model");
+var clfdate = require("helper/clfdate");
+var { isRedisUnavailableError } = require("helper/redisUnavailable");
+
+// If the re-save is rejected because Redis is unavailable (or frozen for a
+// host cutover) the entry would stay scheduled until the next restart
+var REFRESH_RETRY_MS = 60 * 1000;
 
 module.exports = function (blogID, entry, callback) {
   ensure(blogID, "string").and(entry, model).and(callback, "function");
 
   var set = require("./set");
 
-  // Refresh will perform a re-save of the entry
-  var refresh = set.bind(this, blogID, entry.path, {}, function () {
-    require("models/blog").set(blogID, { cacheID: Date.now() }, function (err) {
-      console.log(
-        "Blog:",
-        blogID + ":",
-        "Published entry as scheduled!",
-        entry.path
-      );
-    });
-  });
-
   // Use a deterministic key to ensure one scheduled job per entry path.
   // We reschedule whenever the entry's publication date changes.
   var key = [blogID, entry.path].join(":");
+
+  // Refresh will perform a re-save of the entry
+  var refresh = function () {
+    set(blogID, entry.path, {}, function (err) {
+      if (err && isRedisUnavailableError(err)) {
+        console.error(
+          clfdate(),
+          "Blog:",
+          blogID + ":",
+          "Could not publish entry as scheduled, will retry",
+          entry.path,
+          err.message
+        );
+        var retry = setTimeout(function () {
+          timeoutFallbacks.delete(key);
+          refresh();
+        }, REFRESH_RETRY_MS);
+        if (typeof retry.unref === "function") retry.unref();
+        timeoutFallbacks.set(key, retry);
+        return;
+      }
+
+      // Retried in the background if Redis is unavailable
+      require("models/blog").bumpCacheID(blogID, function (err) {
+        console.log(
+          "Blog:",
+          blogID + ":",
+          "Published entry as scheduled!",
+          entry.path
+        );
+      });
+    });
+  };
+
   var existing = scheduled.get(key);
 
   if (existing) {

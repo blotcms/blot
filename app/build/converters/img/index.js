@@ -5,7 +5,7 @@ const ensure = require("helper/ensure");
 const LocalPath = require("helper/localPath");
 const hash = require("helper/hash");
 const sharp = require("sharp");
-const config = require("config");
+const assets = require("storage/assets");
 const exif = require("./exif");
 const Transformer = require("helper/transformer");
 
@@ -33,7 +33,7 @@ async function read(blog, path, callback) {
   ensure(blog, "object").and(path, "string").and(callback, "function");
 
   const localPath = LocalPath(blog.id, path);
-  const assetDirectory = join(config.blog_static_files_dir, blog.id);
+  const assetDirectory = assets.path(blog.id);
   // If we need to convert the image to another format, store the converted
   // image in the asset directory for the blog.
 

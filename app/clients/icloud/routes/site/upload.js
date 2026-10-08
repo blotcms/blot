@@ -2,8 +2,24 @@ const localPath = require("helper/localPath");
 const establishSyncLock = require("sync/establishSyncLock");
 const fs = require("fs-extra");
 const { handleSyncLockError } = require("../lock");
+const { handleRedisUnavailable } = require("../unavailable");
+const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const stampLastSync = require("./stampLastSync");
+
+// If Redis cannot take the update, take the file we just wrote back off the
+// disk. The macserver will push it again, and the upload route would
+// otherwise find it already current and never build the entry. Removing it,
+// rather than restoring what was there, also lets a resync notice the change:
+// it compares sizes, which an edit can leave unchanged.
+async function updateOrRollBack(folder, filePath, pathOnDisk) {
+  try {
+    await folder.update(filePath);
+  } catch (err) {
+    if (isRedisUnavailableError(err)) await fs.remove(pathOnDisk);
+    throw err;
+  }
+}
 
 module.exports = async function (req, res) {
   try {
@@ -69,7 +85,7 @@ module.exports = async function (req, res) {
 
         await fs.outputFile(pathOnDisk, Buffer.alloc(0));
 
-        await folder.update(filePath);
+        await updateOrRollBack(folder, filePath, pathOnDisk);
         folder.status("Updated placeholder " + filePath);
 
         console.warn(
@@ -94,7 +110,7 @@ module.exports = async function (req, res) {
       await fs.outputFile(pathOnDisk, incomingContents);
 
       // Call the folder's update method to register the file change
-      await folder.update(filePath);
+      await updateOrRollBack(folder, filePath, pathOnDisk);
 
       // Set the folder status to reflect the upload action
       folder.status("Updated " + filePath);
@@ -103,11 +119,17 @@ module.exports = async function (req, res) {
       res.status(200).send(`File successfully uploaded for blogID: ${blogID}`);
     } finally {
       // Release the sync lock
-      done();
+      done().catch((err) => console.error("Error releasing lock:", err));
     }
   } catch (err) {
     if (
       handleSyncLockError({
+        err,
+        res,
+        blogID: req.header("blogID"),
+        action: "upload",
+      }) ||
+      handleRedisUnavailable({
         err,
         res,
         blogID: req.header("blogID"),
