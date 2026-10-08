@@ -1,5 +1,8 @@
 Fix github action proxy deploy: https://github.com/blotcms/blot/actions/runs/37851678284/job/113565835440
 
+maybe horizontal scaling involves redis replicas in other aws regions?
+- s3 multi region replication?
+
 Redis host follow-ups (from #2041, new host since 8 Oct):
 - From 15 Oct 2026: run config/redis/perf/fetch.sh redis blot and compare.js (a full day on the new host against the 8 Oct baseline), then uninstall the perf collectors: config/redis/perf/install.sh --uninstall redis blot
 - Lock heartbeat on its own RESP2 connection, no overlapping EXTENDs, per-call timeout; give the shared client a command timeout or TCP user timeout
@@ -49,7 +52,7 @@ email warnings if no sync from client for more than x hours
 
 ---
 
-run node scripts/entry/rebuild-all.js -s 810
+run node scripts/entry/rebuild-all.js -s 900
 
 When you re-connect to Dropbox or Google Drive, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
 
