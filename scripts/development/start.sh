@@ -15,7 +15,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd ../../ && pwd)"
 : "${BLOT_HOST:=local.blot}"
 
 # Files
-SETUP="$DIR/config/openresty/setup.sh"
+SETUP="$DIR/scripts/development/proxy/setup.sh"
 COMPOSE_FILE="$DIR/scripts/development/docker-compose.yml"
 FOLDER_SERVER="$DIR/scripts/development/open-folder-server.js"
 TOXIPROXY_SETUP="$DIR/scripts/development/setup-toxiproxy.sh"

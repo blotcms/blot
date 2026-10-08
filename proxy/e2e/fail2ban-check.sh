@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Sends requests through the built proxy image that should trigger each
-# fail2ban filter in config/openresty/fail2ban/filter.d/, then runs
+# fail2ban filter in config/host/fail2ban/filter.d/, then runs
 # fail2ban-regex against the container's access.log - exactly as host
-# fail2ban does per config/openresty/fail2ban/jail.local - and asserts:
+# fail2ban does per config/host/fail2ban/jail.local - and asserts:
 #
 #   1. each filter matches exactly the requests that should have triggered
 #      it, no more and no fewer;
@@ -12,7 +12,7 @@
 #   3. an attacker-supplied X-Forwarded-For or CF-Connecting-IP can't change
 #      what gets banned (either by getting an innocent IP banned, or
 #      dodging a ban itself); and
-#   4. every filter in config/openresty/fail2ban/filter.d/ has a traffic
+#   4. every filter in config/host/fail2ban/filter.d/ has a traffic
 #      case here, and vice versa - a filter added later without updating
 #      this script would otherwise be silently skipped.
 #
@@ -37,7 +37,7 @@ set -u
 HTTP="${PROXY_HTTP:-http://127.0.0.1}"
 ACCESS_LOG="${ACCESS_LOG:?ACCESS_LOG must be set}"
 HOSTIP="${HOSTIP:?HOSTIP must be set}"
-FILTER_DIR="config/openresty/fail2ban/filter.d"
+FILTER_DIR="config/host/fail2ban/filter.d"
 SPOOFED_XFF_IP="203.0.113.9"
 SPOOFED_CF_IP="203.0.113.10"
 fail=0

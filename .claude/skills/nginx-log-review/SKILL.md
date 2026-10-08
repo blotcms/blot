@@ -78,7 +78,7 @@ narrow what's already covered:
   usually spoofs a real browser UA, so this rarely helps for the paths
   found here — check `ua=` values for the offending paths before assuming
   a UA-based rule would work.
-- `config/openresty/fail2ban/jail.local` — IP-banning jails keyed off
+- `config/host/fail2ban/jail.local` — IP-banning jails keyed off
   404/403/429/444 rates. Complementary to path blocks, not a substitute.
 
 For each candidate pattern, grep its current count and check whether it's

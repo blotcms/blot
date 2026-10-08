@@ -51,9 +51,9 @@ connection) and the config's own `worker_rlimit_nofile 20480`
    because Node purges the cache from a Docker bridge that cannot see the
    host's `127.0.0.1`. The scripts read the value from the running Node
    container, so recreate the Node containers (a normal deploy) after editing it.
-3. **Ship the certificate-renewal change.** `config/openresty/scripts/renew-wildcard-ssl.sh`
+3. **Ship the certificate-renewal change.** `config/host/scripts/renew-wildcard-ssl.sh`
    now reloads the container when there is one. Run
-   `config/openresty/deploy-config.sh` from this branch so the host has it;
+   `config/host/deploy.sh` from this branch so the host has it;
    the cutover refuses to run until it does, because otherwise the container
    would keep serving the old wildcard certificate after the next renewal.
 4. Optionally run the scripts with `PROXY_CUSTOM_DOMAIN=<a real custom domain>` set:

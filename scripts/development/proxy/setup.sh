@@ -3,8 +3,8 @@ set -euo pipefail
 
 BLOT_HOST=${1:-local.blot}
 
-# project root = two levels up from this script
-PROJ_ROOT="$(cd "$(dirname "$0")/../.."; pwd)"
+# project root = three levels up from this script
+PROJ_ROOT="$(cd "$(dirname "$0")/../../.."; pwd)"
 CERT_DIR="$PROJ_ROOT/data/ssl"
 CRT="$CERT_DIR/certs/wildcard.crt"
 KEY="$CERT_DIR/private/wildcard.key"

@@ -166,7 +166,7 @@ openssl x509 -in "$CERT_DIR/letsencrypt-domain.pem" -noout -checkend $((14 * 864
 SCRIPTS_DIR="$(dirname "$RENEW_SCRIPT")"
 for helper in "$RENEW_SCRIPT" "$SCRIPTS_DIR/identify-expiring-certs.sh" "$SCRIPTS_DIR/purge-expired-ssl.sh"; do
   grep -q 'blot-proxy' "$helper" 2>/dev/null \
-    || refuse "$helper does not act on the proxy container: run config/openresty/deploy-config.sh from this branch first"
+    || refuse "$helper does not act on the proxy container: run config/host/deploy.sh from this branch first"
 done
 
 for port in $UPSTREAM_PORTS; do

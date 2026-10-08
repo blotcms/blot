@@ -385,7 +385,7 @@ they look different in the logs - only one is a security regression:
   `docker stats` on the host. Near the cap the container doesn't get
   OOM-killed so much as stall (the kernel evicts code pages until nothing
   answers), the healthcheck times out, and the host's
-  [`check_docker_health.sh`](../openresty/scripts/check_docker_health.sh)
+  [`check_docker_health.sh`](../host/scripts/check_docker_health.sh)
   cron restarts it — 13 times on 6–7 Oct 2026 during entry rebuilds. To keep
   one page from doing that, `entrypoint.sh` caps each renderer's JS heap at
   128m and turns off site isolation so a page's iframes share its renderer;

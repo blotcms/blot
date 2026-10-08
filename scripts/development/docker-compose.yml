@@ -94,14 +94,14 @@ services:
 
   nginx:
     build:
-      context: ../../config/openresty
+      context: ./proxy
       dockerfile: Dockerfile
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ../../config/openresty/development_server.conf:/etc/nginx/nginx.conf:ro
-      - ../../config/openresty/init.sh:/etc/nginx/init.sh:ro
+      - ./proxy/development_server.conf:/etc/nginx/nginx.conf:ro
+      - ./proxy/init.sh:/etc/nginx/init.sh:ro
       - ../../data/ssl:/etc/ssl:ro
     depends_on:
       - node-app

@@ -87,7 +87,7 @@ up() {
   # mounts from the main checkout. Without it, <slot>-local.blot shows "no site here".
   if ! docker exec blot-nginx-1 grep -q preview_upstream /etc/nginx/nginx.conf 2>/dev/null; then
     echo "WARNING: the running nginx has no preview routing, so https://$host will not reach this sidecar." >&2
-    echo "  Update the main checkout to a commit containing config/openresty/development_server.conf's" >&2
+    echo "  Update the main checkout to a commit containing scripts/development/proxy/development_server.conf's" >&2
     echo "  preview block, then: docker compose -f $MAIN_ROOT/scripts/development/docker-compose.yml restart nginx" >&2
   fi
 

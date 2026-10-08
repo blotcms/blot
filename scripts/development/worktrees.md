@@ -36,9 +36,9 @@ Sibling hosts rather than `*.wt.local.blot`: `*.local.blot` does not cover
 wildcard certs. `a-local.blot` has the same shape as `local.blot`, so one
 wildcard per slot works. dnsmasq already answers everything under `.blot`.
 
-- **TLS:** `config/openresty/setup.sh` adds `a-local.blot`/`*.a-local.blot` …
+- **TLS:** `scripts/development/proxy/setup.sh` adds `a-local.blot`/`*.a-local.blot` …
   to the mkcert cert and regenerates an existing cert that lacks them.
-- **nginx:** one regex `server` block in `development_server.conf` sends
+- **nginx:** one regex `server` block in `scripts/development/proxy/development_server.conf` sends
   `[a-e]-local.blot` (and subdomains) to `blot-node-<slot>:8080`. It uses a
   variable `proxy_pass` with Docker's resolver, so nginx boots with no sidecars
   and a free slot returns 502. Nothing reloads on claim.
