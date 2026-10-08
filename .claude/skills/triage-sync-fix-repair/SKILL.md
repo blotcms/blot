@@ -259,3 +259,15 @@ Entry template:
   walks update every path inside a folder they remove
   (`clients/util/localDescendants`). Dropbox webhook syncs were never
   affected, because Dropbox reports a delete for each descendant.
+
+### 2026-10-08 12:16:07 UTC dashboard Reset — missed changes explained (iCloud reconnect churn)
+
+- Email: `RESYNC_FOUND_CHANGES`, iCloud, no Fix() rows. 93 downloaded, 11
+  dirs, 0 removed, from `sync_c16e43d` on green (12:16:07–12:18:27).
+- Cause: the owner reorganised every post into year folders while the blog
+  was disconnected from iCloud. The macserver drops events for inactive
+  blogs, so nothing was pushed. A resync at 12:14:11 had already wiped the
+  local folder (see the macserver skill's entry for the same date). The
+  Reset correctly restored everything. No dropped webhook.
+- Follow-up: none for this email. A Reset straight after a reconnect will
+  always report "missed" changes when edits were made while disconnected.
