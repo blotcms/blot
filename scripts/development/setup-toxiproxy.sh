@@ -3,9 +3,11 @@ set -euo pipefail
 
 COMPOSE_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/docker-compose.yml"
 
-# Measured against prod Redis (172.30.0.138) via `redis-cli --latency` /
-# `--latency-history` over SSH: min 0ms, max 1ms, avg ~0.15-0.27ms, very
-# stable across samples (near-zero jitter) - it's same-VPC/same-AZ traffic.
+# Measured against the previous production Redis host (Oct 2026, before the
+# move to config/redis/'s one-CPU host; the numbers may be lower now) via
+# `redis-cli --latency` / `--latency-history` over SSH: min 0ms, max 1ms, avg
+# ~0.15-0.27ms, very stable across samples (near-zero jitter) - it's
+# same-VPC/same-AZ traffic.
 # 3ms/3ms below is already a couple ms of margin above that observed worst
 # case, not a literal replay of it.
 LATENCY_MS="${BLOT_TOXIPROXY_LATENCY_MS:-3}"

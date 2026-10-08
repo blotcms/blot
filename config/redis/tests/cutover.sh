@@ -10,8 +10,9 @@
 #
 # Checks: the dry run changes nothing; a FAILOVER that cannot complete leaves
 # the old host the master; the cutover waits for a held folder lock, loses no
-# acknowledged write under load and moves IP, marker and cron jobs; the
-# printed rollback command (with its --region) moves everything back; a failed
+# acknowledged write under load and moves IP and marker; a new host that
+# bootstrap.sh did not set up is refused; the printed rollback command (with
+# its --region) moves everything back; a failed
 # IP move switches Redis back; a failed preparation is undone; when the ssh
 # session running the FAILOVER dies, the cutover asks the old host how it
 # ended: it carries on if the FAILOVER completed, stops with the old host
@@ -58,12 +59,8 @@ for version in 6.2.12 6.2; do
   docker build -q -t "$PREFIX:$version" - > /dev/null << EOF
 FROM redis:$version-alpine
 RUN apk add --no-cache bash coreutils iproute2 > /dev/null && ln -s /usr/local/bin/redis-cli /usr/local/bin/redis6-cli
-# sudo -n <command>: everything runs as root here, except that "sudo crontab"
-# is root's crontab, kept apart from the ssh user's (also root here) under
-# another user's name (busybox crontab -u drops privileges, so a file argument
-# is passed on stdin).
-RUN adduser -D rootjobs
-RUN printf '#!/bin/sh\n[ "\$1" = -n ] && shift\nif [ "\$1" = crontab ]; then shift; case "\$1" in -* | "") exec crontab -u rootjobs "\$@" ;; *) exec crontab -u rootjobs - < "\$1" ;; esac; fi\nexec "\$@"\n' > /usr/local/bin/sudo && chmod +x /usr/local/bin/sudo
+# sudo -n <command>: everything runs as root here.
+RUN printf '#!/bin/sh\n[ "\$1" = -n ] && shift\nexec "\$@"\n' > /usr/local/bin/sudo && chmod +x /usr/local/bin/sudo
 # Instance metadata: a token, and this interface's IPs from /tmp/imds-ips.
 RUN printf '#!/bin/sh\ncase "\$*" in *api/token*) echo token ;; *local-ipv4s*) cat /tmp/imds-ips ;; *) exit 22 ;; esac\n' > /usr/local/bin/curl && chmod +x /usr/local/bin/curl
 EOF
@@ -163,17 +160,17 @@ mkdir -p "$TMP/hooks"
 export PATH="$TMP/bin:$PATH" AWS_STUB_STATE="$TMP/aws-state" AWS_STUB_HOSTS="$OLD:$OLD_IP $NEW:$NEW_IP" STUB_HOOKS="$TMP/hooks"
 export CUTOVER_CLIENT_WAIT=3
 
-# Production as it will be on the day: the floating IP on the old host, the
-# new host bootstrapped and replicating from the old host's own address, and
-# the old host's hand-made crontab.
+# Production as it is: the floating IP on the old host, both hosts bootstrapped
+# (the old one so that a rollback can go back to it) and the new host
+# replicating from the old host's own address.
 echo "$FIP $OLD_IP" > "$AWS_STUB_STATE"
 printf '%s\n%s\n' "$OLD_IP" "$FIP" | docker exec -i "$OLD" sh -c 'cat > /tmp/imds-ips'
 echo "$NEW_IP" | docker exec -i "$NEW" sh -c 'cat > /tmp/imds-ips'
 docker exec "$OLD" ip addr add "$FIP/32" dev eth0 noprefixroute
-docker exec "$NEW" sh -c 'mkdir -p /etc/blot-redis /etc/cron.d && touch /etc/cron.d/blot-redis && printf "#!/bin/sh\n" > /usr/local/bin/backup.sh && chmod +x /usr/local/bin/backup.sh'
-printf '0 * * * * /root/hourly.sh\n*/5 * * * * /root/bin/tcpmem-log.sh\n* * * * * /root/stats.sh\n' | docker exec -i "$OLD" crontab -
-# On the real host the backups are in root's crontab, not the ssh user's.
-printf '0 3 * * * /home/ec2-user/daily-backup.sh >> /home/ec2-user/backup.log 2>&1\n0 * * * * /home/ec2-user/hourly-backup.sh >> /home/ec2-user/backup.log 2>&1\n* * * * * /home/ec2-user/stats.sh\n' | docker exec -i "$OLD" sudo -n crontab -
+for c in "$OLD" "$NEW"; do
+  docker exec "$c" sh -c 'mkdir -p /etc/blot-redis /etc/cron.d && touch /etc/cron.d/blot-redis && printf "#!/bin/sh\n" > /usr/local/bin/backup.sh && chmod +x /usr/local/bin/backup.sh'
+done
+echo "$FIP" | docker exec -i "$OLD" sh -c 'cat > /etc/blot-redis/floating-ip'
 cli "$OLD" DEBUG POPULATE 200000 key 100 > /dev/null
 cli "$OLD" SET ssl:example.com:latest cert > /dev/null
 cli "$NEW" REPLICAOF "$OLD_IP" 6379 > /dev/null
@@ -184,33 +181,29 @@ docker exec -d "$APP" sh -c "while :; do redis-cli -h $FIP -r -1 -i 0.1 PING > /
 sleep 1
 
 cutover() { "$CUTOVER" --yes --any-time --timeout-ms 1000 --lock-wait 5 "$@" < /dev/null; }
-# A completed cutover comments out the old host's cron jobs; the rollback only
-# says how to bring them back: "crontab <backup>" and "sudo crontab <backup>".
-# Do that, and drop the backups.
-restore_cron() {
-  docker exec "$OLD" sh -c 'f=$(ls -t /root/crontab.before-cutover-* 2> /dev/null | head -n 1); [ -z "$f" ] || { crontab "$f"; rm -f /root/crontab.before-cutover-*; }'
-  docker exec "$OLD" sh -c 'f=$(ls -t /root/root-crontab.before-cutover-* 2> /dev/null | head -n 1); [ -z "$f" ] || { sudo -n crontab "$f"; rm -f /root/root-crontab.before-cutover-*; }'
-}
 # roll_back <log>: run the rollback command a cutover printed in <log> (also
-# when it sits at the end of an error line), then restore the crontab.
+# when it sits at the end of an error line).
 roll_back() {
   local cmd
   cmd=$(grep -h 'Rollback: ' "$1" | tail -n 1 | sed 's/.*Rollback: //' || true)
   [ -n "$cmd" ] || { fail "no rollback command in $1"; return 0; }
   # shellcheck disable=SC2086
   ${cmd/ --ip / --yes --any-time --timeout-ms 1000 --ip } < /dev/null > "$TMP/rollback-again" 2>&1 || { cat "$TMP/rollback-again"; fail "rollback of $1"; }
-  restore_cron
 }
 
 echo "# Dry run"
 digest=$(cli "$OLD" DEBUG DIGEST)
 cutover --dry-run --app-host "$APP" "$OLD" "$NEW" > "$TMP/dry" 2>&1 || { cat "$TMP/dry"; fail "dry run"; }
 check "dry run prints the plan" grep -q "Dry run: nothing changed" "$TMP/dry"
-check "dry run lists the old cron jobs" grep -q "/root/hourly.sh" "$TMP/dry"
-check "dry run lists root's backup cron jobs" sh -c "grep -q 'root: .*/home/ec2-user/hourly-backup.sh' '$TMP/dry' && grep -q 'root: .*/home/ec2-user/daily-backup.sh' '$TMP/dry'"
-check "dry run labels the ssh user's jobs" grep -q "ec2-user: .*/root/hourly.sh" "$TMP/dry"
-check "dry run keeps the monitoring cron job" sh -c "! grep -q 'tcpmem-log' '$TMP/dry'"
+check "dry run prints the rollback command" grep -q "^Rollback afterwards: .* $NEW $OLD$" "$TMP/dry"
 check "dry run changes nothing" [ "$(role "$OLD") $(role "$NEW") $(cli "$OLD" DEBUG DIGEST)" = "master slave $digest" ]
+
+echo "# A new host that bootstrap.sh did not set up"
+docker exec "$NEW" rm /etc/cron.d/blot-redis
+if cutover --app-host "$APP" "$OLD" "$NEW" > "$TMP/unbootstrapped" 2>&1; then fail "an unbootstrapped new host stops the cutover"; else ok "an unbootstrapped new host stops the cutover"; fi
+check "it says why" grep -q "was not set up by bootstrap.sh" "$TMP/unbootstrapped"
+check "nothing switched" [ "$(role "$OLD") $(role "$NEW")" = "master slave" ]
+docker exec "$NEW" touch /etc/cron.d/blot-redis
 
 wait_link() { for _ in $(seq 1 50); do cli "$NEW" INFO replication | grep -qx master_link_status:up && break; sleep 0.2; done; }
 unchanged() {
@@ -218,7 +211,8 @@ unchanged() {
   check "the old host takes writes" [ "$(cli "$OLD" SET probe 1)" = OK ]
   check "the IP stayed on the old host" has_ip "$OLD" "$FIP"
   check "the IP was taken off the new host again" sh -c "! docker exec $NEW ip -4 -o addr show dev eth0 | grep -q ' $FIP/'"
-  check "the old cron jobs are untouched" sh -c "! docker exec $OLD crontab -l | grep -q '#cutover#' && ! docker exec $OLD sudo -n crontab -l | grep -q '#cutover#'"
+  check "the old host is still the active one" [ "$(docker exec "$OLD" cat /etc/blot-redis/floating-ip)" = "$FIP" ]
+  check "the new host is not marked active" sh -c "! docker exec $NEW test -e /etc/blot-redis/floating-ip"
   wait_link
 }
 
@@ -264,32 +258,21 @@ check "the IP is on the new host only" sh -c "docker exec $NEW ip -4 -o addr sho
 check "AWS has the IP on the new interface" grep -qx "$FIP $NEW_IP" "$AWS_STUB_STATE"
 check "the new host is marked active" [ "$(docker exec "$NEW" cat /etc/blot-redis/floating-ip)" = "$FIP" ]
 check "the old host is not" sh -c "! docker exec $OLD test -e /etc/blot-redis/floating-ip"
-crontab=$(docker exec "$OLD" crontab -l)
-check "old backup jobs are commented out" sh -c "echo '$crontab' | grep -qx '#cutover# 0 \* \* \* \* /root/hourly.sh' && echo '$crontab' | grep -qx '#cutover# \* \* \* \* \* /root/stats.sh'"
-check "the monitoring job is kept" sh -c "echo '$crontab' | grep -qx '\*/5 \* \* \* \* /root/bin/tcpmem-log.sh'"
-check "the old crontab is backed up" docker exec "$OLD" sh -c 'grep -qx "0 \* \* \* \* /root/hourly.sh" /root/crontab.before-cutover-*'
-rootcron=$(docker exec "$OLD" sudo -n crontab -l)
-check "root's backup jobs are commented out" sh -c "echo '$rootcron' | grep -qx '#cutover# 0 \* \* \* \* /home/ec2-user/hourly-backup.sh >> /home/ec2-user/backup.log 2>&1' && echo '$rootcron' | grep -qx '#cutover# 0 3 \* \* \* /home/ec2-user/daily-backup.sh >> /home/ec2-user/backup.log 2>&1' && echo '$rootcron' | grep -qx '#cutover# \* \* \* \* \* /home/ec2-user/stats.sh'"
-check "root's crontab is backed up" docker exec "$OLD" sh -c 'grep -qx "0 \* \* \* \* /home/ec2-user/hourly-backup.sh >> /home/ec2-user/backup.log 2>&1" /root/root-crontab.before-cutover-*'
-check "the ssh user's crontab was not given root's jobs" sh -c "! docker exec $OLD crontab -l | grep -q 'hourly-backup.sh'"
 check "the client through the floating IP reached the new host" grep -q "Writes unavailable" "$TMP/cutover"
 echo "# took ${waited}s including the lock wait"
 
 echo "# Rollback with the printed command"
 rollback=$(sed -n 's/^Rollback: //p' "$TMP/cutover")
 check "a rollback command is printed" [ -n "$rollback" ]
-case "$rollback" in *"--allow-unbootstrapped"*"$NEW $OLD") ok "it swaps the hosts" ;; *) fail "rollback command: $rollback" ;; esac
+case "$rollback" in *" $NEW $OLD") ok "it swaps the hosts" ;; *) fail "rollback command: $rollback" ;; esac
+check "it needs no --allow-unbootstrapped" sh -c "! echo '$rollback' | grep -q allow-unbootstrapped"
 case "$rollback" in *" --region "*" $NEW $OLD") ok "it keeps the AWS region" ;; *) fail "rollback command without the region: $rollback" ;; esac
 # shellcheck disable=SC2086
 ${rollback/ --ip / --yes --any-time --timeout-ms 1000 --ip } < /dev/null > "$TMP/rollback" 2>&1 || { cat "$TMP/rollback"; fail "rollback"; }
 check "old is the master again" [ "$(role "$OLD") $(role "$NEW")" = "master slave" ]
 check "the IP is back on the old host" sh -c "docker exec $OLD ip -4 -o addr show dev eth0 | grep -q ' $FIP/' && grep -qx '$FIP $OLD_IP' '$AWS_STUB_STATE'"
 check "the marker is back on the old host" [ "$(docker exec "$OLD" cat /etc/blot-redis/floating-ip)" = "$FIP" ]
-check "it says how to restore the old cron jobs" grep -q "crontab /root/crontab.before-cutover-" "$TMP/rollback"
-check "it says how to restore root's cron jobs" grep -q "sudo crontab /root/root-crontab.before-cutover-" "$TMP/rollback"
 check "both hold the same data" [ "$(cli "$OLD" DEBUG DIGEST)" = "$(cli "$NEW" DEBUG DIGEST)" ]
-# Do what the rollback says, so the cases below start from the same crontab.
-restore_cron
 
 echo "# A failed IP move switches Redis back"
 AWS_STUB_FAIL_ASSIGN=1 cutover --app-host "$APP" "$OLD" "$NEW" > "$TMP/noip" 2>&1 && fail "a failed IP move fails the cutover" || ok "a failed IP move fails the cutover"
@@ -297,9 +280,9 @@ check "old is the master again after a failed move" [ "$(role "$OLD") $(role "$N
 check "the old host takes writes after a failed move" [ "$(cli "$OLD" SET probe 2)" = OK ]
 
 # The cases below break one thing in one cutover with a hook in the ssh stub.
-# Each leaves the pair as it found it (old the master, the IP on old, the
-# crontab restored): the ones that complete are rolled back with the command
-# they print, so they run last.
+# Each leaves the pair as it found it (old the master, the IP on old): the
+# ones that complete are rolled back with the command they print, so they run
+# last.
 wait_link
 
 echo "# A preparation step that fails is undone"

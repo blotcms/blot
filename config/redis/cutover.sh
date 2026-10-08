@@ -3,9 +3,9 @@
 # Moves live traffic from the Redis master on <old> to its replica on <new>:
 # promotes <new> with Redis's FAILOVER command (which also turns <old> into a
 # replica of <new>), moves the floating IP to <new>, marks <new> as the host
-# that uploads backups, and turns off the old hand-made backup cron jobs on
-# <old> (in ec2-user's and root's crontabs). Rollback is this script with the
-# hosts swapped; it prints the exact command at the end. See README.md
+# that uploads backups (bin/backup.sh only runs on the host with that marker).
+# Rollback is this script with the hosts swapped; it prints the exact command
+# at the end. Both hosts must have been set up by bootstrap.sh. See README.md
 # ("Cutover").
 #
 # Why FAILOVER and not readonly.sh + REPLICAOF NO ONE: FAILOVER blocks every
@@ -26,8 +26,6 @@
 #                        giving up, writes then resume on <old> (default 2000)
 #   --lock-wait SECONDS  how long to wait for held folder locks (default 120)
 #   --profile NAME       AWS CLI profile       --region NAME   (default us-west-2)
-#   --allow-unbootstrapped  <new> was not set up by bootstrap.sh (rolling back
-#                        to the hand-built host); nothing will back it up
 #   --any-time           skip the refusal near :00, :30 and 01:00 (rehearsals)
 #   --yes                do not ask for confirmation
 #   --dry-run            run the checks and print every step; change nothing
@@ -37,7 +35,7 @@ set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
 FIP=""; APP_HOSTS=""; NO_NEIGH=""; TIMEOUT_MS=2000; LOCK_WAIT=120; DRY_RUN=""; YES=""
-ANY_TIME=""; ALLOW_UNBOOTSTRAPPED=""; AWS_REGION=${AWS_REGION:-us-west-2}; AWS_PROFILE_ARGS=""
+ANY_TIME=""; AWS_REGION=${AWS_REGION:-us-west-2}; AWS_PROFILE_ARGS=""
 CLIENT_WAIT=${CUTOVER_CLIENT_WAIT:-10}
 # Writes are unavailable from the FAILOVER until clients reach <new>. A
 # folder lock (app/sync/lock.js) is lost once its key expires on the server,
@@ -45,10 +43,6 @@ CLIENT_WAIT=${CUTOVER_CLIENT_WAIT:-10}
 # the window must stay under 6-9s depending on where it falls. Aim for ~3s.
 BUDGET_MS=5000
 MAX_LAG_BYTES=16777216 # how far behind <new> may be when we start
-# Crontab entries on <old> to leave alone: the monitoring logs (ec2-user's
-# crontab). Everything else in ec2-user's and root's crontabs on the
-# hand-built host (the backups and stats.sh are root's) is turned off.
-KEEP_CRON='tcpmem-log[.]sh|redis-mem-log[.]sh'
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -62,7 +56,6 @@ while [ $# -gt 0 ]; do
     --lock-wait) LOCK_WAIT=$2; shift 2 ;;
     --profile) AWS_PROFILE_ARGS="--profile $2"; shift 2 ;;
     --region) AWS_REGION=$2; shift 2 ;;
-    --allow-unbootstrapped) ALLOW_UNBOOTSTRAPPED=1; shift ;;
     --any-time) ANY_TIME=1; shift ;;
     --yes) YES=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -120,7 +113,7 @@ field() { echo "$1" | awk -v k="$2" '{i = index($0, "=")} i && substr($0, 1, i -
 # trip. The primary IP is the source address the host uses to go out; AWS
 # confirms below that it is the interface's primary address.
 gather() {
-  on "$1" "KEEP_CRON='$KEEP_CRON'" << 'EOF'
+  on "$1" << 'EOF'
 r() { redis6-cli "$@" | tr -d '\r'; }
 info=$(r INFO replication && r INFO server && r INFO memory && r INFO persistence) && [ -n "$info" ] || { echo redis=down; exit 0; }
 echo redis=up
@@ -152,10 +145,6 @@ else
 fi
 echo "s3_running=$(pgrep -f 'aws s3 (cp|rm|sync)' | wc -l | tr -d ' ')"
 echo "sudo=$(sudo -n true 2> /dev/null && echo yes || echo no)"
-crontab -l 2> /dev/null | grep -vE '^[[:space:]]*(#|$)' | grep -vE '^[A-Za-z_]+=' | grep -vE "$KEEP_CRON" | sed 's/^/cron=/' || true
-sudo -n crontab -l 2> /dev/null | grep -vE '^[[:space:]]*(#|$)' | grep -vE '^[A-Za-z_]+=' | grep -vE "$KEEP_CRON" | sed 's/^/root_cron=/' || true
-ls -t ~/crontab.before-cutover-* 2> /dev/null | head -n 1 | sed 's/^/cron_backup=/' || true
-ls -t ~/root-crontab.before-cutover-* 2> /dev/null | head -n 1 | sed 's/^/root_cron_backup=/' || true
 EOF
 }
 
@@ -252,10 +241,8 @@ maxmem=$(field "$NEW_INFO" maxmemory); used=$(field "$NEW_INFO" used_memory)
 echo "Certificates: $(field "$OLD_INFO" ssl_latest) ssl:*:latest keys on both hosts"
 [ "$(field "$OLD_INFO" ssl_locks)" = 0 ] ||
   echo "WARNING: the proxy is issuing a certificate right now ($(field "$OLD_INFO" ssl_locks) ssl:*:issue_cert_lock keys); better to wait a minute"
-if [ "$(field "$NEW_INFO" bootstrapped)" != yes ]; then
-  [ -n "$ALLOW_UNBOOTSTRAPPED" ] || die "$NEW was not set up by bootstrap.sh (no /etc/cron.d/blot-redis); pass --allow-unbootstrapped if you mean it"
-  echo "WARNING: $NEW was not set up by bootstrap.sh: nothing will back it up"
-fi
+[ "$(field "$NEW_INFO" bootstrapped)" = yes ] ||
+  die "$NEW was not set up by bootstrap.sh (no /etc/cron.d/blot-redis, backup.sh or /etc/blot-redis): nothing would back it up"
 [ "$(field "$NEW_INFO" drill)" != yes ] ||
   echo "WARNING: $NEW is a drill host (/etc/blot-redis/drill): it will never upload backups"
 
@@ -295,15 +282,12 @@ for app in $APP_HOSTS; do
   APP_IFS="$APP_IFS $app:$dev"
 done
 
-OLD_CRON=$(echo "$OLD_INFO" | sed -n 's/^cron=//p')
-OLD_ROOT_CRON=$(echo "$OLD_INFO" | sed -n 's/^root_cron=//p')
 OLD_TIMER=$(field "$OLD_INFO" timer); NEW_TIMER=$(field "$NEW_INFO" timer)
 NEW_HAS_FIP=""; case " $(field "$NEW_INFO" addrs) " in *" $FIP "*) NEW_HAS_FIP=1 ;; esac
 
 # The command that undoes all of this, with the options it will need.
 ROLLBACK="$0 --ip $FIP"
 if [ -n "$NO_NEIGH" ]; then ROLLBACK="$ROLLBACK --no-neigh-flush"; else for app in $APP_HOSTS; do ROLLBACK="$ROLLBACK --app-host $app"; done; fi
-[ "$(field "$OLD_INFO" bootstrapped)" = yes ] || ROLLBACK="$ROLLBACK --allow-unbootstrapped"
 [ -z "$AWS_PROFILE_ARGS" ] || ROLLBACK="$ROLLBACK $AWS_PROFILE_ARGS"
 ROLLBACK="$ROLLBACK --region $AWS_REGION $NEW $OLD"
 
@@ -317,9 +301,7 @@ cat << EOF
  4. ${APP_IFS:+ip neigh del $FIP on:$APP_IFS; }wait for $NEW's metadata to list $FIP, then
     $OLD: ip addr del $FIP/32 dev $OLD_IF${APP_IFS:+; ip neigh del again} (kept, with a warning, if it never does)
  5. write $FIP to /etc/blot-redis/floating-ip on $NEW, remove it on $OLD
- 6. $OLD: back up the crontabs of ec2-user and root, then comment out:
-$(if [ -n "$OLD_CRON$OLD_ROOT_CRON" ]; then echo "$OLD_CRON" | sed -n 's/^./      ec2-user: &/p'; echo "$OLD_ROOT_CRON" | sed -n 's/^./      root:     &/p'; else echo "      (nothing)"; fi)
- 7. restart the refresh timers, watch clients arrive on $NEW for ${CLIENT_WAIT}s, check both hosts
+ 6. restart the refresh timers, watch clients arrive on $NEW for ${CLIENT_WAIT}s, check both hosts
 Rollback afterwards: $ROLLBACK
 EOF
 if [ -n "$DRY_RUN" ]; then echo; echo "Dry run: nothing changed."; exit 0; fi
@@ -531,36 +513,7 @@ ssh_run "$NEW" "sudo -n mkdir -p /etc/blot-redis && echo $FIP | sudo -n tee /etc
 ssh_run "$OLD" "sudo -n rm -f /etc/blot-redis/floating-ip" ||
   problem "could not remove /etc/blot-redis/floating-ip on $OLD: run there: sudo rm /etc/blot-redis/floating-ip"
 
-say "6. Turning off the old backup jobs on $OLD"
-# They have none of backup.sh's checks and upload to the same S3 names, so
-# they would overwrite and prune the new host's backups.
-# The IP has moved: a failure here must not stop step 7, and root's crontab
-# still gets its turn if ec2-user's fails.
-on "$OLD" "KEEP_CRON='$KEEP_CRON'" << 'EOF' ||
-# ct <ec2-user|root> <crontab args>: root's crontab is the one sudo reaches.
-ct() { local who=$1; shift; if [ "$who" = root ]; then sudo -n crontab "$@"; else crontab "$@"; fi; }
-# off <who> <backup file>: comment out <who>'s jobs, after saving a copy.
-off() {
-  local who=$1 backup=$2 current jobs new
-  current=$(ct "$who" -l 2> /dev/null) || { echo "    $who: no crontab"; return 0; }
-  jobs=$(echo "$current" | grep -vE '^[[:space:]]*(#|$)' | grep -vE '^[A-Za-z_]+=' | grep -vE "$KEEP_CRON" || true)
-  [ -n "$jobs" ] || { echo "    $who: nothing to turn off"; return 0; }
-  echo "$current" > "$backup"
-  # Not in one pipeline: a failed awk must not install an empty crontab.
-  new=$(echo "$current" | awk -v keep="$KEEP_CRON" '/^[[:space:]]*(#|$)/ || /^[A-Za-z_]+=/ || $0 ~ keep {print; next} {print "#cutover# " $0}') &&
-    echo "$new" | ct "$who" - || { echo "    $who: could not rewrite the crontab (saved copy: $backup)" >&2; return 1; }
-  echo "$jobs" | sed "s/^/    $who: turned off: /"
-  echo "    $who: previous crontab: $backup"
-}
-ts=$(date -u +%Y%m%dT%H%M%SZ)
-status=0
-off ec2-user ~/crontab.before-cutover-$ts || status=1
-off root ~/root-crontab.before-cutover-$ts || status=1
-exit $status
-EOF
-  problem "could not turn off the old backup jobs on $OLD: comment them out by hand before the next :00"
-
-say "7. Checking"
+say "6. Checking"
 timer "$NEW" "$NEW_TIMER" start "$NEW_IF"
 # Restart <old>'s timer only once its metadata has dropped the IP, or the
 # timer would put the address straight back.
@@ -610,25 +563,13 @@ else
   echo "No client reached $NEW within ${CLIENT_WAIT}s"
 fi
 
-# <new> is a hand-built host this script cut away from before (a rollback):
-# its cron jobs are still commented out. Printed on success and on error.
-cron_hint() {
-  local backup root_backup
-  backup=$(field "$NEW_INFO" cron_backup)
-  root_backup=$(field "$NEW_INFO" root_cron_backup)
-  [ -z "$backup" ] || echo "Rolling back to $NEW also needs ec2-user's old cron jobs back: ssh $NEW crontab $backup"
-  [ -z "$root_backup" ] || echo "Rolling back to $NEW also needs root's old cron jobs back: ssh $NEW sudo crontab $root_backup"
-}
-
 if [ -n "$PROBLEMS" ]; then
   echo >&2
   echo "error: $NEW is the master and has $FIP, but:" >&2
   printf '%s' "$PROBLEMS" | sed 's/^/  - /' >&2
   echo "Rollback: $ROLLBACK" >&2
-  cron_hint >&2
   exit 1
 fi
 
 say "Done: $NEW is the master"
 echo "Rollback: $ROLLBACK"
-cron_hint
