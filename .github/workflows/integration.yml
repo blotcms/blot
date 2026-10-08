@@ -11,8 +11,10 @@ name: integration
 #                    hardened - see TODO "Proxy container (OpenResty)" - so it
 #                    is allowed to fail without failing the workflow.
 #  cert-issuance   : on-demand custom-domain certificate issuance through the
-#                    proxy against a Pebble ACME test server, and that an
-#                    issued cert survives a container recreate (persistence).
+#                    proxy against a Pebble ACME test server, that an issued
+#                    cert survives a container recreate (persistence), and
+#                    what custom-domain HTTPS does while Redis is paused,
+#                    stopped, READONLY or NOREPLICAS.
 #  zero-downtime   : a blue/green handover (SO_REUSEPORT + graceful drain)
 #                    serves every request while the old container is stopped.
 
@@ -416,6 +418,32 @@ jobs:
 
           after=$(docker logs proxy 2>&1 | grep -c "failed to obtain lock" || true)
           [ "$after" -eq "$before" ]
+
+      # auto-ssl caches a certificate for an hour before reading Redis again;
+      # PROXY_AUTO_SSL_CACHE_TTL shortens that so the checks below can get
+      # past it.
+      - name: Restart the proxy with a 5s certificate cache
+        run: |
+          set -eux
+          docker rm -f proxy
+          docker run -d --name proxy --network host --cap-add SYS_NICE \
+            -e BLOT_HOST=localhost \
+            -e PROXY_ACME_CA=https://127.0.0.1:14000/dir \
+            -e ACME_CA_CERT=/pebble-ca.pem \
+            -e PROXY_AUTO_SSL_CACHE_TTL=5 \
+            -v "$PWD/pebble.minica.pem:/pebble-ca.pem:ro" \
+            -v blot-acme-storage:/etc/resty-auto-ssl \
+            blot-proxy:acme
+          for i in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' proxy)" = healthy ] && break
+            sleep 2
+          done
+
+      - name: Redis stopped, a newer certificate in Redis, READONLY and NOREPLICAS
+        env:
+          CA_BUNDLE: pebble-ca.bundle.pem
+          CACHE_TTL: "5"
+        run: bash proxy/e2e/redis-outage-checks.sh
 
       - name: Logs
         if: always()
