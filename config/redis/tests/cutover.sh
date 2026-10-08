@@ -199,7 +199,7 @@ restore_cron() {
 # when it sits at the end of an error line), then restore the crontab.
 roll_back() {
   local cmd
-  cmd=$(grep -h 'Rollback: ' "$1" | tail -n 1 | sed 's/.*Rollback: //')
+  cmd=$(grep -h 'Rollback: ' "$1" | tail -n 1 | sed 's/.*Rollback: //' || true)
   [ -n "$cmd" ] || { fail "no rollback command in $1"; return 0; }
   # shellcheck disable=SC2086
   ${cmd/ --ip / --yes --any-time --timeout-ms 1000 --ip } < /dev/null > "$TMP/rollback-again" 2>&1 || { cat "$TMP/rollback-again"; fail "rollback of $1"; }
@@ -330,8 +330,10 @@ for _ in $(seq 1 25); do [ "$(role "$NEW")" = master ] && break; sleep 0.2; done
 check "new is still the master and old its replica" [ "$(role "$NEW") $(role "$OLD")" = "master slave" ]
 # Back to where we started: the preparation was left in place on purpose, so
 # take the address off the new host, then FAILOVER back (retrying while the
-# old host's link comes up).
+# old host's link comes up). While both hosts had the address the app may have
+# learned the new host's MAC for it: forget it, or its connections black-hole.
 docker exec "$NEW" ip addr del "$FIP/32" dev eth0
+docker exec "$APP" ip neigh del "$FIP" dev eth0 2> /dev/null || true
 for _ in $(seq 1 25); do
   [ "$(role "$OLD")" = master ] && break
   cli "$NEW" FAILOVER TO "$OLD_IP" 6379 TIMEOUT 2000 > /dev/null 2>&1 || true
@@ -349,7 +351,13 @@ stop_clients
 for _ in $(seq 1 50); do [ "$(fip_clients "$OLD")" = 0 ] && break; sleep 0.2; done
 docker exec -d "$APP" bash -c "exec 3<>/dev/tcp/$FIP/6379; sleep 30"
 for _ in $(seq 1 50); do [ "$(fip_clients "$OLD")" = 1 ] && break; sleep 0.2; done
-if cutover --app-host "$APP" "$OLD" "$NEW" > "$TMP/noclients.out" 2> "$TMP/noclients.err"; then fail "no client on the new host fails the cutover"; else ok "no client on the new host fails the cutover"; fi
+check "one idle client through the floating IP on the old host" [ "$(fip_clients "$OLD")" = 1 ]
+if cutover --app-host "$APP" "$OLD" "$NEW" > "$TMP/noclients.out" 2> "$TMP/noclients.err"; then
+  cat "$TMP/noclients.out" "$TMP/noclients.err"
+  fail "no client on the new host fails the cutover"
+else
+  ok "no client on the new host fails the cutover"
+fi
 check "it says none of the clients reached the new host" grep -q "none of the [1-9][0-9]* clients reached" "$TMP/noclients.err"
 check "it does not say Done" sh -c "! grep -q 'Done:' '$TMP/noclients.out' '$TMP/noclients.err'"
 check "it tells how to roll back" grep -q "Rollback: " "$TMP/noclients.err"
