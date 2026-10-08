@@ -5,7 +5,7 @@ on 8 Oct 2026, #1941). Deploy a new image with the **Deploy proxy** workflow
 (`.github/workflows/deploy-proxy.yml`, manual), or from a checkout:
 
 ```sh
-npm run deploy-proxy             # newest master commit with a proxy image
+npm run deploy-proxy             # master's tip, waiting for its image
 npm run deploy-proxy -- <commit>
 ```
 
@@ -41,8 +41,7 @@ connection) and the config's own `worker_rlimit_nofile 20480`
    `LOG_TO_STDOUT=false` because `fail2ban`, `logrotate` and the `.bashrc`
    helpers read `/var/instance-ssd/logs/access.log` and the container has no
    ban layer of its own; both scripts refuse an image that logs to stdout).
-   It only runs when `proxy/`, `config/openresty/` or the generator's inputs
-   change, so pick a SHA from a run of it. Pass the SHA to either script;
+   It builds every push to master. Pass the SHA to either script;
    anything containing `/` or `:` is used as a full image reference.
 2. **`/etc/blot/proxy.env`** from the example. `PROXY_PRIVATE_IP` and
    `PROXY_REDIS_HOST` (both required, the scripts refuse empty values) must equal what bare-metal uses today

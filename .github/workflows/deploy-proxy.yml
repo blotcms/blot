@@ -9,27 +9,25 @@ on:
   workflow_dispatch:
     inputs:
       commit:
-        description: "Optional commit on master with a proxy image (defaults to the newest successful proxy-image build on master)"
+        description: "Optional commit hash or short code on master (defaults to the dispatched commit)"
         required: false
         default: ""
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
   group: deploy-proxy
   cancel-in-progress: false
 
 env:
-  REGISTRY_URL: ghcr.io/blotcms/blot-proxy
   BLOT_DEPLOY_SSH_HOST: ${{ secrets.BLOT_DEPLOY_SSH_HOST }}
   BLOT_DEPLOY_SSH_PORT: ${{ secrets.BLOT_DEPLOY_SSH_PORT }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment: deploy
 
     steps:
@@ -55,22 +53,20 @@ jobs:
           # Bind inputs to the environment so a dispatcher cannot inject
           # shell syntax into the script below.
           COMMIT_INPUT: ${{ github.event.inputs.commit }}
-          GH_TOKEN: ${{ github.token }}
+          DISPATCH_SHA: ${{ github.sha }}
         run: |
           git fetch --quiet origin master
 
           if [ -z "$COMMIT_INPUT" ]; then
-            # proxy-image.yml only builds pushes that touch the proxy, so
-            # master's tip often has no image: take the newest that does.
-            SHA=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow proxy-image.yml \
-              --branch master --event push --status success --limit 1 \
-              --json headSha --jq '.[0].headSha')
-            [ -n "$SHA" ] || { echo "❌ Error: no successful proxy-image build on master"; exit 1; }
+            # Default: the immutable commit the run was dispatched against.
+            SHA="$DISPATCH_SHA"
+            echo "custom=false" >> "$GITHUB_OUTPUT"
           else
             SHA=$(git rev-parse --verify --quiet "${COMMIT_INPUT}^{commit}") || {
               echo "❌ Error: could not resolve commit '$COMMIT_INPUT'"
               exit 1
             }
+            echo "custom=true" >> "$GITHUB_OUTPUT"
           fi
 
           if ! git merge-base --is-ancestor "$SHA" origin/master; then
@@ -80,26 +76,6 @@ jobs:
 
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "✅ Target commit: $SHA"
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check the proxy image exists
-        env:
-          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
-        run: |
-          IMAGE="${REGISTRY_URL}:${TARGET_SHA}"
-          if ! docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
-            echo "❌ Proxy image not found: $IMAGE"
-            echo "   proxy-image.yml only builds master pushes that touch the proxy (see its paths filter)."
-            echo "   Leave the commit empty to deploy the newest image, or run proxy-image.yml for this commit first."
-            exit 1
-          fi
-          echo "✅ Proxy image found: $IMAGE"
 
       # Run the deploy scripts from the commit being deployed.
       - name: Switch workspace to target commit
@@ -130,9 +106,13 @@ jobs:
       - name: Verify SSH connection
         run: ssh blot "echo 'SSH connection successful'"
 
+      # proxy.sh waits for the image (up to 25 min for the dispatched commit,
+      # 2 min for a chosen one, as deploy.yml does).
       - name: Deploy
         env:
           TARGET_SHA: ${{ steps.resolve.outputs.sha }}
+          SKIP_BRANCH_CHECK: true
+          PROXY_IMAGE_WAIT: ${{ steps.resolve.outputs.custom == 'true' && '120' || '1500' }}
         run: |
           set -o pipefail
           scripts/deploy/proxy.sh "$TARGET_SHA" 2>&1 | tee deploy.log
