@@ -125,6 +125,21 @@ resolve_image() {
   case "$1" in */*|*:*) echo "$1" ;; *) echo "$PROXY_REGISTRY_URL:$1" ;; esac
 }
 
+# After a committed deploy, remove the other tags of the deployed image's
+# repository, so proxy deploys do not pile up ~400MB images between app deploys
+# (scripts/deploy prunes every unused image, but only when it runs). Only this
+# repository, never the image just deployed; `docker rmi` refuses an image any
+# container still uses. Best effort: it never fails the deploy.
+prune_old_images() { # prune_old_images <image just deployed>
+  case "$1" in *@*) return 0 ;; esac
+  local repo="${1%:*}" ref
+  docker images "$repo" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | while read -r ref; do
+    if [ "$ref" = "$1" ] || [ "$ref" = "$repo:<none>" ]; then continue; fi
+    if docker rmi "$ref" >/dev/null 2>&1; then log "Removed old image $ref"; fi
+  done
+  return 0
+}
+
 ensure_image() { # pull only when it is not already on the host
   docker image inspect "$1" >/dev/null 2>&1 || { log "Pulling $1"; docker pull "$1"; }
 }
