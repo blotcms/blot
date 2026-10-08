@@ -3,7 +3,8 @@
 // excluded: they are most likely edits whose webhook hadn't arrived yet, not
 // missed changes. modifiedDuringWalk covers downloads (by timestamp, with a
 // grace period) and changedDuringWalk covers everything else (by Dropbox's
-// pre-walk cursor - the other clients have no equivalent and leave it out).
+// pre-walk cursor, or the deletion time in a file's revision history - the
+// other clients have no equivalent and leave it out).
 module.exports = function countChanges(summary = {}) {
   return Math.max(
     0,

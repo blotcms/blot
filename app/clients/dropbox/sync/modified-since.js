@@ -5,7 +5,19 @@
 // Keep this short: it also hides genuinely missed changes from the alert.
 const GRACE_MS = 30 * 1000;
 
-module.exports = function modifiedSince(remoteItem, timestamp) {
+function modifiedSince(remoteItem, timestamp) {
   const modified = Date.parse(remoteItem.server_modified);
   return !isNaN(modified) && modified >= timestamp - GRACE_MS;
-};
+}
+
+// The same rule for a deletion: result is files/list_revisions' result for
+// the path, which timestamps a deleted file (folder listings don't).
+function deletedSince(result, timestamp) {
+  if (!result || !result.is_deleted) return false;
+  const deleted = Date.parse(result.server_deleted);
+  return !isNaN(deleted) && deleted >= timestamp - GRACE_MS;
+}
+
+module.exports = modifiedSince;
+module.exports.deletedSince = deletedSince;
+module.exports.GRACE_MS = GRACE_MS;
