@@ -62,5 +62,9 @@ describe("redis.conf", function () {
     expect(setup).toContain("net.core.somaxconn = 4096");
     expect(setup).toContain("LimitNOFILE=65536");
     expect(setup).not.toContain("tcp_mem =");
+    expect(setup).toContain("/etc/ssh/sshd_config.d/10-blot.conf");
+    expect(setup).toContain("PasswordAuthentication no");
+    expect(setup).toContain("KbdInteractiveAuthentication no");
+    expect(setup).toContain("PermitRootLogin no");
   });
 });
