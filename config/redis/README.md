@@ -320,7 +320,17 @@ the master) emails the admin address `REDIS_HOST_ALERT` when:
 - Redis's memory reaches 80% of `maxmemory` (`noeviction`, so writes fail at
   the limit);
 - `maxmemory` is 0 on a host marked active by `/etc/blot-redis/floating-ip`;
-- the TCP memory sample is over 20 minutes old.
+- the TCP memory sample is over 20 minutes old;
+- the last background save failed (`stop-writes-on-bgsave-error yes`, so Redis
+  refuses every write until one succeeds).
+
+It also emails what happened since its last check (it keeps Redis's counters in
+the state key below, and starts again after a restart): errors that mean Redis
+refused writes (`OOM`, `MISCONF`, `NOREPLICAS`), any other error type with 100
+or more in 5 minutes (`READONLY` during a cutover, `WRONGTYPE`...), rejected
+connections, a restart or a different Redis process or host serving (a changed
+`run_id` or version, or lower uptime), and commands in the slowlog that took
+50ms or more.
 
 Only the host can read the TCP counters, so `bin/tcpmem-log.sh` also writes
 each sample to the Redis key `blot:redis-host:tcpmem` (no TTL; the app reads
@@ -332,10 +342,18 @@ read, as extra `key=value` fields in bytes: `ram_total`, `ram_avail`,
 `disk_root=<used>/<total>` and `disk_backups=<used>/<total>` (left out when
 `/backups` is not a mount). They are not in `~/tcpmem.log`. The daily email
 (`app/scheduler/daily/redis-server.js`) shows them with Redis's memory and the
-last backup, and links here when memory passes 70% of `maxmemory`.
+last save and last backup, and links here when memory passes 70% of
+`maxmemory`. For the growth trend (keys and memory against the day before, and
+when memory would reach 70% of `maxmemory`) the daily job stores its figures in
+`blot:redis-host:daily-snapshot`.
 
 Each condition is emailed once when it starts and once when it clears, with
-what was sent kept in `blot:redis-host:alerts`. A Redis outage sends nothing
+what was sent kept in `blot:redis-host:alerts`. Emails are rate limited so a
+noisy Redis cannot flood the inbox: the same condition is emailed at most once
+an hour (a start or clear that comes sooner waits, and the email says if the
+condition flapped meanwhile), and each kind of event at most once every 6 hours
+(refused writes: every hour), with what happened in between merged into that
+email (`CONDITION_MIN_INTERVAL` and `EVENT_COOLDOWN`). A Redis outage sends nothing
 from here; `/redis-health` covers that. Print the current report with
 `NODE_PATH=app node app/scheduler/check-redis-host.js`.
 
