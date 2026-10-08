@@ -21,7 +21,16 @@ cd /var/www/blot
 
 LOGS=/var/instance-ssd/logs
 
-alias nginx-stats='ps aux | grep nginx | grep -v grep | awk "{sum+=\$6} END {print sum/1024 \"MB\"}"'
+# Memory and CPU of the running proxy container(s); the proxy no longer runs on the host.
+nginx-stats() {
+  local proxies
+  proxies=$(docker ps --filter name=blot-proxy- --format '{{.Names}}')
+  if [ -z "$proxies" ]; then
+    echo "No blot-proxy-* container is running" >&2
+    return 1
+  fi
+  docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.CPUPerc}}' $proxies
+}
 alias client='redis-cli -h $(grep BLOT_REDIS_HOST /etc/blot/secrets.env | cut -d"=" -f2 | tr -d " ")'
 alias login="docker exec -it blot-container-blue /bin/sh"
 alias candidates="docker exec blot-container-blue node app/documentation/featured/candidates"
@@ -68,7 +77,7 @@ live() {
     pids+=($!)
   done
  
-  # Start tail -f on $LOGS/access.log, injecting [openresty] after the timestamp
+  # Start tail -f on $LOGS/access.log, injecting [openresty] (the proxy container writes this log) after the timestamp
   if [ -n "$LOGS" ] && [ -f "$LOGS/access.log" ]; then
     tail -F "$LOGS/access.log" | sed -u 's/^\(\[[^]]\+\]\) /\1 [openresty] /' &
     pids+=($!)
