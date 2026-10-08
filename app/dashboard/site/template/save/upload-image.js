@@ -2,6 +2,7 @@ const fs = require("fs-extra");
 const sharp = require("sharp");
 const { join, basename } = require("path");
 const config = require("config");
+const assets = require("storage/assets");
 const Template = require("models/template");
 const client = require("models/client");
 const templateKey = require("models/template/key");
@@ -13,7 +14,7 @@ const previewReload = require("helper/publishPreviewReload");
 const { isAjaxRequest } = require("./ajax-response");
 const { generate, MAX_PIXELS } = require("../../../../build/thumbnail/template-image");
 
-const directory = (blog) => join(config.blog_static_files_dir, blog.id, "_template_assets");
+const directory = (blog) => assets.path(blog.id, "_template_assets");
 const url = (blog, name) => `${config.cdn.origin}/${blog.id}/_template_assets/${encodeURIComponent(name)}`;
 const first = (files) => Array.isArray(files && files.image) ? files.image[0] : files && files.image;
 const update = (blog, slug, locals) => new Promise((resolve, reject) => Template.update(blog.id, slug, { locals }, (error) => error ? reject(error) : resolve()));

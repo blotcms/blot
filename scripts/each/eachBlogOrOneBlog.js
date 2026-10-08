@@ -7,9 +7,12 @@ const getConfirmation = require("../util/getConfirmation");
  * Processes either a single blog (if identifier provided) or all blogs (if no identifier).
  * 
  * @param {Function} processBlog - Async function that takes a blog object and processes it
+ * @param {Object} [options]
+ * @param {boolean} [options.confirm=true] - Ask before processing all blogs. Pass
+ *   false for scripts that must run unattended.
  * @returns {Promise} Resolves when processing is complete
  */
-module.exports = function eachBlogOrOneBlog(processBlog) {
+module.exports = function eachBlogOrOneBlog(processBlog, options = {}) {
   const identifier = process.argv[2];
 
   if (identifier) {
@@ -38,9 +41,14 @@ module.exports = function eachBlogOrOneBlog(processBlog) {
         console.log(`Found ${blogCount} blog${blogCount !== 1 ? "s" : ""} to process.`);
 
         // Ask for confirmation, then process
-        getConfirmation(
-          `Are you sure you want to process all ${blogCount} blog${blogCount !== 1 ? "s" : ""}?`
-        )
+        const confirmation =
+          options.confirm === false
+            ? Promise.resolve(true)
+            : getConfirmation(
+                `Are you sure you want to process all ${blogCount} blog${blogCount !== 1 ? "s" : ""}?`
+              );
+
+        confirmation
           .then((confirmed) => {
             if (!confirmed) {
               console.log("Processing cancelled.");

@@ -1,6 +1,7 @@
 const fs = require("fs-extra");
 const { join } = require("path");
 const config = require("config");
+const assets = require("storage/assets");
 const Template = require("models/template");
 const clfdate = require("helper/clfdate");
 const cleanupFiles = require("./cleanup-files");
@@ -8,7 +9,7 @@ const writeChangeToFolder = require("./writeChangeToFolder");
 const { isAjaxRequest } = require("./ajax-response");
 const { generate, PNG_SIZES } = require("./favicon-assets");
 
-const faviconDirectory = (blog) => join(config.blog_static_files_dir, blog.id, "_template_assets");
+const faviconDirectory = (blog) => assets.path(blog.id, "_template_assets");
 const faviconURL = (blog, filename) => `${config.cdn.origin}/${blog.id}/_template_assets/${encodeURIComponent(filename)}`;
 
 function firstFile(files = {}) {

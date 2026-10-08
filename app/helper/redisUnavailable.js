@@ -25,8 +25,17 @@ const CLIENT_ERROR_NAMES = new Set([
 // -EXECABORT is left out: it also follows ordinary syntax errors in a MULTI,
 // and the reply that caused it is classified on its own (node-redis rejects
 // multi().exec() with that reply).
-const NOT_SERVING_REPLY =
-  /^(LOADING|MASTERDOWN|CLUSTERDOWN|TRYAGAIN|READONLY|NOREPLICAS|OOM|MISCONF)\b/;
+const NOT_SERVING_CODES =
+  "LOADING|MASTERDOWN|CLUSTERDOWN|TRYAGAIN|READONLY|NOREPLICAS|OOM|MISCONF";
+const NOT_SERVING_REPLY = new RegExp("^(" + NOT_SERVING_CODES + ")\\b");
+
+// A write refused inside EVAL or EVALSHA comes back wrapped, e.g.
+// "ERR Error running script (call to f_<sha>): @user_script:1: @user_script: 1:
+// -NOREPLICAS Not enough good replicas to write." Only the code after a "-"
+// counts, so a script that merely mentions READONLY in its own error does not.
+const NOT_SERVING_SCRIPT_REPLY = new RegExp(
+  "^ERR Error running script\\b[\\s\\S]*\\s-(" + NOT_SERVING_CODES + ")\\b"
+);
 
 // Network errors are only ours if they were aimed at the Redis server,
 // otherwise an unreachable third party (Dropbox, Stripe) looks like an outage
@@ -41,6 +50,17 @@ const SOCKET_ERROR_CODES = new Set([
   "EPIPE",
 ]);
 
+// Commands in flight when the server resets the connection reject with the
+// bare socket error ("read ECONNRESET", no address or port), the same object
+// the client emits as its "error" event. Our clients (models/redis) record
+// those here, which tells them apart from an ECONNRESET on, say, a Dropbox
+// request, and costs nothing when the error is never rejected into a command.
+const clientSocketErrors = new WeakSet();
+
+function markRedisClientError(err) {
+  if (err && typeof err === "object") clientSocketErrors.add(err);
+}
+
 function isRedisUnavailableError(err, depth = 0) {
   if (!err || typeof err !== "object" || depth > 2) return false;
 
@@ -51,7 +71,9 @@ function isRedisUnavailableError(err, depth = 0) {
   // node-redis raises server errors as SimpleError or BlobError, both of
   // which extend ErrorReply, so match on the base class rather than its name
   if (err instanceof ErrorReply) {
-    if (NOT_SERVING_REPLY.test(String(err.message))) return true;
+    const message = String(err.message);
+    if (NOT_SERVING_REPLY.test(message)) return true;
+    if (NOT_SERVING_SCRIPT_REPLY.test(message)) return true;
 
     // A MULTI/EXEC where some commands failed carries each reply, errors
     // included, rather than the server's message
@@ -63,6 +85,8 @@ function isRedisUnavailableError(err, depth = 0) {
   }
 
   if (SOCKET_ERROR_CODES.has(err.code)) {
+    if (clientSocketErrors.has(err)) return true;
+
     const redis = config.redis || {};
     // Node reports the target as port + address (connect) or hostname (lookup)
     const target = err.address !== undefined ? err.address : err.hostname;
@@ -105,4 +129,8 @@ function redisUnavailableHandler(err, req, res, next) {
   });
 }
 
-module.exports = { isRedisUnavailableError, redisUnavailableHandler };
+module.exports = {
+  isRedisUnavailableError,
+  redisUnavailableHandler,
+  markRedisClientError,
+};
