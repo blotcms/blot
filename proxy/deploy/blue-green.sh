@@ -154,6 +154,7 @@ if [ -z "$OLD" ]; then
   docker update --restart unless-stopped "$NEW" >/dev/null
   STATE=committed
   log "$NEW is now serving."
+  prune_old_images "$NEW_IMAGE" || true
   exit 0
 fi
 
@@ -173,3 +174,4 @@ live_checks "$BASELINE" || die "checks failed after the swap to $NEW_IMAGE"
 STATE=committed
 docker rm "$OLD" >/dev/null 2>&1 || true
 log "Swapped $OLD -> $NEW"
+prune_old_images "$NEW_IMAGE" || true
