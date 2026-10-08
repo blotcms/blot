@@ -41,8 +41,11 @@ Redis host, `blot` the app host).
    (`--from <backup-name>` for a specific backup, or `--from replica:<ip>` to
    replicate from a running Redis: give the live host's own private IP, not the
    floating IP, and it first raises that host's replica output buffer to
-   `redis.conf`'s value so a multi-GB sync under load does not loop). This runs
-   the next two steps for you. Use
+   `redis.conf`'s value so a multi-GB sync under load does not loop; on a
+   bootstrapped master it already is). The full sync costs the master one
+   extra save: on 8 Oct a ~63ms fork and a ~33s save, with no visible effect
+   on its traffic, and the replica was in sync about a minute after
+   `REPLICAOF`. This runs the next two steps for you. Use
    `--dry-run` first. Or launch by hand with the launch template and do 2 and 3
    yourself.
    `./launch.sh --list` lists the backups in S3. Add `--drill` for any
@@ -214,34 +217,48 @@ take over with `cutover.sh`. Everything written since the newest backup's
 snapshot is lost (up to an hour), and the app's sync state can then disagree
 with the clients' folders.
 
-1. `./launch.sh --list` and pick the newest backup.
-2. `./launch.sh --type x2gd.medium --from <backup-name> --key ~/key.pem`
-   (or a larger type). This took 2m31s for the full dataset in the 8 Oct drill: ~35s
-   to ssh, ~45s bootstrap, ~50s download and RDB check, ~13s load.
+1. `./launch.sh --list --profile <aws-profile>` and pick the newest backup
+   (its times are in your Mac's local time; the names are UTC hours).
+2. `./launch.sh --type x2gd.medium --from <backup-name> --key ~/key.pem --profile <aws-profile>`
+   (or a larger type). In the 8 Oct drills this took about 2.5 minutes for the
+   full dataset: ~75s to ssh and bootstrap, ~50s download and RDB check, ~13s
+   load.
 3. Check it on the host: `redis6-cli ROLE` is master, `DBSIZE` is about what
    it was on the old master, `INFO memory` is well under `maxmemory`, and
    the `ssl:*:latest` count (`redis6-cli --scan --pattern 'ssl:*:latest' | wc -l`)
    is about what it was, or the proxy re-issues the missing certificates.
-4. Move the floating IP (`172.30.0.200` today) to it. Add the address on the
-   host first, so it answers the moment the VPC moves it:
+4. Move the floating IP (`172.30.0.200` today) to it. Stop the interface's
+   refresh timer and add the address on the host first, so it answers the
+   moment the VPC moves it (the timer rebuilds the addresses from instance
+   metadata every ~60s and would drop one AWS doesn't list yet), then start
+   the timer again once AWS lists it:
    ```
+   ssh <new> 'sudo systemctl stop refresh-policy-routes@ens5.timer'
    ssh <new> 'sudo ip addr add <floating-ip>/32 dev ens5 noprefixroute'
    aws ec2 assign-private-ip-addresses --network-interface-id <new-eni> \
      --private-ip-addresses <floating-ip> --allow-reassignment
+   aws ec2 describe-network-interfaces --network-interface-ids <new-eni> \
+     --query 'NetworkInterfaces[0].PrivateIpAddresses[].PrivateIpAddress'
+   ssh <new> 'sudo systemctl start refresh-policy-routes@ens5.timer'
    ```
    If the old master comes back, make sure it no longer has the address
    (stop it, or `sudo ip addr del <floating-ip>/32 dev ens5` there).
 5. Turn on its backups: `echo <floating-ip> | sudo tee /etc/blot-redis/floating-ip`,
    then `sudo -u ec2-user /usr/local/bin/backup.sh hourly` for a first upload.
+   A host launched with `--drill` also has `/etc/blot-redis/drill`, which
+   makes `backup.sh` skip silently: remove it first if a drill host goes live.
 6. Check the app: every client in `redis6-cli CLIENT LIST` has
    `laddr=<floating-ip>`, `/redis-health` is fine, and expect
    `[LOCK COMPROMISED]` container restarts from the outage. Then run sync
    validation for the blogs, since Redis lost what changed after the snapshot.
 
 To rehearse it, run steps 1-3 with `launch.sh --drill` (it never uploads
-backups), write down the commands for 4-5 with the drill host's interface,
-and terminate the host by its instance ID, after checking it has the
-`BlotDrill` tag and is not a production instance.
+backups). To also exercise `cutover.sh`, make the drill host a replica of the
+live master (`redis6-cli REPLICAOF <master-primary-ip> 6379` on it) and run
+`cutover.sh --dry-run`, then `REPLICAOF NO ONE`. Then write down the
+commands for 4-5 with the drill host's interface, and terminate the host by
+its instance ID, after checking it has the `BlotDrill` tag and is not a
+production instance.
 
 ### Increasing the Redis server size
 
