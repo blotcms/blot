@@ -180,14 +180,14 @@ function hasExited(ps) {
 
 // Ends a git child whose client has gone away.
 //
-// Signalling it is not enough. git-receive-pack hands the pack to
-// `git index-pack --stdin`, which inherits receive-pack's stdin: the pipe from
-// us. Killing receive-pack leaves index-pack (hundreds of MB of RSS for a big
-// push) blocked reading a pipe that we still hold open, and the push's
-// quarantine directory (objects/tmp_objdir-incoming-*) stays on disk. Closing
-// the pipe instead gives every reader EOF: index-pack fails with "early EOF",
-// receive-pack reports the failure, deletes the quarantine directory and
-// exits; upload-pack sees the end of its request and exits.
+// git-receive-pack hands the pack to `git index-pack --stdin`, which inherits
+// receive-pack's stdin: the pipe from us. Left alone, both wait on that pipe
+// forever (index-pack can hold hundreds of MB of RSS for a big push). Killing
+// receive-pack does end them, but leaves the push's quarantine directory
+// (objects/tmp_objdir-incoming-*) on disk. Closing the pipe instead gives
+// every reader EOF: index-pack fails with "early EOF", receive-pack reports
+// the failure, deletes the quarantine directory and exits; upload-pack sees
+// the end of its request and exits.
 function stop(ps) {
   if (!ps || ps._blotStopping || hasExited(ps)) return;
 
