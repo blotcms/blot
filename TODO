@@ -1,11 +1,8 @@
-deploy macserver
-node scripts/entry/rebuild-all.js -s 1200
-
-Add aws billing info to daily update
+node scripts/entry/rebuild-all.js -s 1200 (40 now)
 
 ---
 
-Do we eventually prune and rotate the data gathered in the various statistics Ron jobs eventually we need to purge these we don’t want the database growing infinitely. 
+Do we eventually prune and rotate the data gathered in the various statistics cron jobs? Eventually we need to purge these we don’t want the database growing infinitely
 
 archives and all_entries in the template engine should be bounded to a maximum of 10,000 posts 
 - separately we should investigate other parts of the code which perform unbounded work 
@@ -14,8 +11,10 @@ Add script to size down ebs volume immediately
 - In place and reuse as we move more to s3 
 - Can we test my assumption that the ephemeral instance store hard disk is faster than EBS discs? 
 
-maybe horizontal scaling involves redis replicas in other aws regions?
+Maybe horizontal scaling involves redis replicas in other aws regions?
 - s3 multi region replication?
+
+Add aws billing info to daily update
 
 Redis host follow-ups (from #2041, new host since 8 Oct):
 - From 15 Oct 2026: run config/redis/perf/fetch.sh redis blot and compare.js (a full day on the new host against the 8 Oct baseline), then uninstall the perf collectors: config/redis/perf/install.sh --uninstall redis blot
@@ -59,12 +58,11 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 
 Migrate static content to s3
 
-add client status to status page (check api)
+Add client status to status page (check api)
 
-email warnings if no sync from client for more than x hours
+Add email warnings if no sync from client for more than x hours
 
 ---
-
 
 When you re-connect to Dropbox or Google Drive, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
 
