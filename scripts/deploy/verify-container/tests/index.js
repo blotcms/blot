@@ -84,6 +84,26 @@ describe("deploy verify-container", function () {
     }
   });
 
+  it("fails the data volume marker check when the marker is missing", async function () {
+    const markerCheck = checks.find((c) => c.name === "data volume marker");
+    const fs = require("fs");
+    const os = require("os");
+    const path = require("path");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "verify-"));
+
+    try {
+      const run = () =>
+        rejection(markerCheck.run({ config: { data_directory: dir } }));
+
+      expect((await run()).message).toMatch(/data volume not mounted/);
+
+      fs.writeFileSync(path.join(dir, ".blot-data-volume"), "vol-0123456789abcdef0\n");
+      expect(await run()).toBe(null);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("fails the blog folder check when the data mount is empty", async function () {
     const dataCheck = checks.find((c) => c.name === "blog folders match redis");
     const fs = require("fs");

@@ -1,0 +1,22 @@
+[Unit]
+Description=Mount data volume
+# The script only touches the local disk (it waits for the EBS device to
+# appear and mounts it) and needs no network, so order it after local
+# filesystems are up.
+After=local-fs.target
+# docker.service.d/20-data-volume.conf orders docker.service After= this unit
+# and gates on `mountpoint -q /var/www/blot/data` in an ExecStartPre, so
+# ordering here alone is enough; no Before= needed.
+RefuseManualStop=yes
+
+[Service]
+# oneshot + RemainAfterExit=yes: the script runs once and exits, but the
+# unit stays "active" afterwards so other units can order themselves after
+# it. With Type=simple systemd would consider the unit "started" the instant
+# the process forked, before the mount happened.
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/home/ec2-user/scripts/mount-data-volume.sh
+
+[Install]
+WantedBy=multi-user.target

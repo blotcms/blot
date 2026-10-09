@@ -21,6 +21,8 @@ the private key) and `PUBLIC_IP` (the host), and optionally `SSH_PORT`
 | `scripts/` (all of it, replacing the old directory) | `/home/ec2-user/scripts/` |
 | `scripts/mount-instance-store.service` | `/etc/systemd/system/mount-instance-store.service` |
 | `scripts/docker.service.d/10-instance-store.conf` | `/etc/systemd/system/docker.service.d/10-instance-store.conf` |
+| `scripts/mount-data-volume.service` | `/etc/systemd/system/mount-data-volume.service` |
+| `scripts/docker.service.d/20-data-volume.conf` | `/etc/systemd/system/docker.service.d/20-data-volume.conf` |
 | `fail2ban/filter.d/*.conf`, `fail2ban/jail.local` | `/etc/fail2ban/` (then restarts fail2ban) |
 | `logrotate/*` | `/etc/logrotate.d/` |
 | `.bashrc` | `/home/ec2-user/.bashrc` |
@@ -29,8 +31,35 @@ It also turns off X11 forwarding in `sshd_config`. The systemd files are
 installed and `daemon-reload`ed only: docker is not restarted, so the
 mount-before-docker ordering takes effect at the next reboot.
 
+The data volume (the EBS volume at `/var/www/blot/data`) is mounted at boot by
+`mount-data-volume.service`, and the drop-in gates docker on it the same way.
+Which volume belongs there is host state, not repo state, because the volume
+changes whenever it is swapped for a resized or restored one:
+
+- `/etc/blot/data-volume` holds the expected EBS volume ID on one line (e.g.
+  `vol-0a2e04d301e025e60`). `mount-data-volume.sh` reads it, waits for the
+  matching `/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_vol...` device,
+  mounts it, and refuses to carry on if a different device is already mounted
+  there.
+- `.blot-data-volume` at the root of the volume holds the same ID.
+  `mount-data-volume.sh` unmounts and fails if it is missing or doesn't match,
+  and the deploy's verify step fails a container that can't see it (a
+  container started against an empty directory on the root disk). Put it on a
+  replacement volume before swapping it in.
+
+On the first run against a host with the volume already mounted (and no
+`/etc/blot/data-volume`), `deploy.sh` works out the volume ID from the mounted
+device and writes both files; it never overwrites them afterwards. If there is
+neither the file nor a mounted volume it warns and leaves the unit disabled.
+`mount-data-volume.sh` also makes the mount `shared`, which the app
+containers' `bind-propagation=rslave` bind of the data directory needs, so a
+volume mounted on the host over `/var/www/blot/data` reaches running
+containers without a restart. `deploy.sh` also removes the legacy
+`mount-data-disk.service` (its script no longer exists on the host).
+
 The install paths are load-bearing: `mount-instance-store.service` hardcodes
-`/home/ec2-user/scripts/mount-instance-store.sh`, cron calls
+`/home/ec2-user/scripts/mount-instance-store.sh` (likewise
+`mount-data-volume.service` and `mount-data-volume.sh`), cron calls
 `/home/ec2-user/scripts/renew-wildcard-ssl.sh`.
 
 ## Scripts and cron
@@ -51,6 +80,8 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
   container and refuse to run if none is running.
 - `mount-instance-store.sh` mounts the NVMe instance store at
   `/var/instance-ssd` (logs and cache) at boot.
+- `mount-data-volume.sh` mounts the EBS data volume at `/var/www/blot/data` at
+  boot (see above).
 
 ## What the old bare-metal setup script did
 

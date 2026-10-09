@@ -48,6 +48,72 @@ ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo mkdir -p /etc/systemd/s
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo systemctl daemon-reload"
 echo "mount-instance-store / docker.service ordering installed (takes effect on next boot)."
 
+# Install (or update) the mount-data-volume unit and its docker.service
+# drop-in, the same way: docker must not (re)start at boot against an unmounted,
+# empty /var/www/blot/data on the root disk. Again no docker restart here.
+#
+# /etc/blot/data-volume (the expected EBS volume ID) and the .blot-data-volume
+# marker on the volume are host state, so the first run on a host that
+# already has the volume mounted adopts it: it works out which volume that is
+# from the mounted device and writes both. They are only written when missing,
+# so a later run never overwrites what a volume swap put there. Starting the
+# unit afterwards is safe on a running host: with the right volume already
+# mounted the script verifies the device and exits 0 without touching it.
+echo "Installing mount-data-volume.service and its docker.service.d drop-in on $PUBLIC_IP"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo cp /home/ec2-user/scripts/mount-data-volume.service /etc/systemd/system/mount-data-volume.service"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo mkdir -p /etc/systemd/system/docker.service.d && sudo cp /home/ec2-user/scripts/docker.service.d/20-data-volume.conf /etc/systemd/system/docker.service.d/20-data-volume.conf"
+
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo bash -s" <<'ADOPT'
+set -eu
+DATA_DIRECTORY=/var/www/blot/data
+VOLUME_ID_FILE=/etc/blot/data-volume
+LINK_PREFIX=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_vol
+
+if [ ! -f "$VOLUME_ID_FILE" ] && mountpoint -q "$DATA_DIRECTORY"; then
+  # findmnt prints bind-mounted sources as /dev/xxx[/subdir]; drop the [...]
+  SOURCE=$(findmnt -n -o SOURCE --target "$DATA_DIRECTORY")
+  MOUNTED_DEVICE=$(readlink -f "${SOURCE%%[*}")
+  FOUND=""
+  for link in "$LINK_PREFIX"*; do
+    [ -e "$link" ] || continue
+    case "$link" in *-ns-*|*-part*) continue ;; esac
+    if [ "$(readlink -f "$link")" = "$MOUNTED_DEVICE" ]; then
+      FOUND="vol-${link#"$LINK_PREFIX"}"
+      break
+    fi
+  done
+
+  if [ -n "$FOUND" ]; then
+    mkdir -p /etc/blot
+    echo "$FOUND" > "$VOLUME_ID_FILE"
+    echo "Adopted $MOUNTED_DEVICE mounted at $DATA_DIRECTORY as $FOUND ($VOLUME_ID_FILE written)."
+    if [ ! -f "$DATA_DIRECTORY/.blot-data-volume" ]; then
+      echo "$FOUND" > "$DATA_DIRECTORY/.blot-data-volume"
+      echo "Wrote $DATA_DIRECTORY/.blot-data-volume."
+    fi
+  else
+    echo "WARNING: $DATA_DIRECTORY is mounted from $MOUNTED_DEVICE but no EBS volume in /dev/disk/by-id matches it."
+  fi
+fi
+
+if [ ! -f "$VOLUME_ID_FILE" ]; then
+  echo "WARNING: $VOLUME_ID_FILE does not exist and no data volume could be adopted from $DATA_DIRECTORY."
+  echo "Create it with the data volume's ID (e.g. vol-0a2e04d301e025e60), put the same ID in .blot-data-volume at the root of the volume, then re-run."
+fi
+ADOPT
+
+# Remove the legacy mount-data-disk unit: its script was never part of this
+# directory and no longer exists on the host, so the unit only fails at boot.
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "if [ -f /etc/systemd/system/mount-data-disk.service ]; then sudo systemctl disable mount-data-disk.service || true; sudo rm -f /etc/systemd/system/mount-data-disk.service; fi"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo systemctl daemon-reload && sudo systemctl reset-failed mount-data-disk.service 2>/dev/null || true"
+
+if ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "test -f /etc/blot/data-volume"; then
+  ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo systemctl enable --now mount-data-volume.service"
+  echo "mount-data-volume / docker.service ordering installed and unit enabled."
+else
+  echo "WARNING: /etc/blot/data-volume is missing on $PUBLIC_IP, so mount-data-volume.service was NOT enabled."
+fi
+
 #########################################################
 # Begin Fail2Ban deployment section
 #########################################################
