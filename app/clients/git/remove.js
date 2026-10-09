@@ -3,6 +3,7 @@ var localPath = require("helper/localPath");
 var Git = require("simple-git");
 var debug = require("debug")("blot:clients:git:remove");
 var checkGitRepoExists = require("./checkGitRepoExists");
+var bareRepo = require("./bareRepo");
 
 // This should probably copy the file to a
 // temporary location so the removal can be
@@ -35,32 +36,38 @@ module.exports = function remove (blogID, path, callback) {
       // Git does not like paths with leading slashes
       if (path[0] === "/") path = path.slice(1);
 
-      // Could we queue these commands for better performance?
-      git.add(path, function (err) {
-        // If this path was not tracked by git, no worries.
-        // simple-git returns errors as strings, with a trailing
-        // newline so we trim this and check against this template
-        // This doesn't feel *robust* but it seems to work.
-        if (
-          err &&
-          err.message.trim() ===
-            "fatal: pathspec '" + path + "' did not match any files"
-        ) {
-          return callback(null);
-        }
+      // Make sure we push to the bare repository, even if the
+      // checkout's origin has gone stale (sync does the same)
+      bareRepo.pointOriginAtBareRepoForBlog(git, blogID, function (err) {
+        if (err) return callback(err);
 
-        // simple-git returns errors as strings
-        if (err) return callback(new Error(err));
+        // Could we queue these commands for better performance?
+        git.add(path, function (err) {
+          // If this path was not tracked by git, no worries.
+          // simple-git returns errors as strings, with a trailing
+          // newline so we trim this and check against this template
+          // This doesn't feel *robust* but it seems to work.
+          if (
+            err &&
+            err.message.trim() ===
+              "fatal: pathspec '" + path + "' did not match any files"
+          ) {
+            return callback(null);
+          }
 
-        git.commit("Removed " + path, function (err) {
+          // simple-git returns errors as strings
           if (err) return callback(new Error(err));
 
-          // We push changes made to the bare repository
-          git.push(function (err) {
+          git.commit("Removed " + path, function (err) {
             if (err) return callback(new Error(err));
 
-            debug("Blog:", blogID, "Successfully removed", path);
-            callback(null);
+            // We push changes made to the bare repository
+            git.push(function (err) {
+              if (err) return callback(new Error(err));
+
+              debug("Blog:", blogID, "Successfully removed", path);
+              callback(null);
+            });
           });
         });
       });

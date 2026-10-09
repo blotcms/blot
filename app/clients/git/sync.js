@@ -3,7 +3,7 @@ var Sync = require("sync");
 var debug = require("debug")("blot:clients:git:sync");
 var Git = require("simple-git");
 var checkGitRepoExists = require("./checkGitRepoExists");
-var dataDir = require("./dataDir");
+var bareRepo = require("./bareRepo");
 var Blog = require("models/blog");
 var validateTree = require("./validateTree");
 var fs = require("fs-extra");
@@ -93,7 +93,7 @@ module.exports = function sync (blogID, gitHandle, callback) {
         headBeforePull = headBeforePull.trim();
 
         // Update the remote to ensure it's in sync
-        var bareRepoDirectory = dataDir + "/" + gitHandle + ".git";
+        var bareRepoDirectory = bareRepo.directory(gitHandle);
         git.remote(["set-url", "origin", bareRepoDirectory], function (err) {
 
           if (err) {
