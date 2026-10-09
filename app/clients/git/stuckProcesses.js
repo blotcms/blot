@@ -9,10 +9,19 @@ var MAX_AGE_SECONDS = 2 * 60 * 60;
 
 var GIT_PROCESS = /^(\S*\/)?git[- ](receive-pack|upload-pack|index-pack)(\s|$)/;
 
-// The container's busybox ps has no `etimes`, only `etime`: [[dd-]hh:]mm:ss
-// (procps prints the same form)
+// The container's busybox ps has no `etimes`, only `etime`, which it prints
+// as mm:ss, then 2h15 (hours, minutes), then 3d04 (days, hours). procps
+// prints [[dd-]hh:]mm:ss.
 function parseElapsed(etime) {
-  var match = /^(?:(\d+)-)?(\d+(?::\d+){1,2})$/.exec(etime);
+  var match = /^(\d+)h(\d+)$/.exec(etime);
+
+  if (match) return Number(match[1]) * 60 * 60 + Number(match[2]) * 60;
+
+  match = /^(\d+)d(\d+)$/.exec(etime);
+
+  if (match) return Number(match[1]) * 24 * 60 * 60 + Number(match[2]) * 60 * 60;
+
+  match = /^(?:(\d+)-)?(\d+(?::\d+){1,2})$/.exec(etime);
 
   if (!match) return NaN;
 
@@ -21,6 +30,15 @@ function parseElapsed(etime) {
   }, 0);
 
   return seconds + Number(match[1] || 0) * 24 * 60 * 60;
+}
+
+// busybox prints large RSS values with a suffix, e.g. 503m; plain numbers are KB
+function parseRssKb(rss) {
+  var match = /^(\d+)([mgt]?)$/i.exec(rss);
+
+  if (!match) return NaN;
+
+  return Number(match[1]) * Math.pow(1024, " mgt".indexOf(match[2].toLowerCase() || " "));
 }
 
 function ps() {
@@ -43,7 +61,7 @@ module.exports = async function stuckProcesses(options) {
   var stuck = [];
 
   output.split("\n").forEach(function (line) {
-    var match = /^\s*(\d+)\s+(\S+)\s+(\d+)\s+(.*)$/.exec(line);
+    var match = /^\s*(\d+)\s+(\S+)\s+(\S+)\s+(.*)$/.exec(line);
 
     if (!match || !GIT_PROCESS.test(match[4])) return;
 
@@ -54,7 +72,7 @@ module.exports = async function stuckProcesses(options) {
     stuck.push({
       pid: Number(match[1]),
       seconds: seconds,
-      rssKb: Number(match[3]),
+      rssKb: parseRssKb(match[3]),
       args: match[4],
     });
   });

@@ -10,7 +10,7 @@ describe("scheduler sweep-git", function () {
     directories: [],
   };
 
-  // busybox `ps -eo pid=,etime=,rss=,args=`
+  // `ps -eo pid=,etime=,rss=,args=` in the procps form
   const PS = [
     "    1  3-04:05:06  1780 /sbin/tini -- node app/index.js",
     "   40     1:05:09 30000 git-receive-pack /git/example.git",
@@ -40,6 +40,26 @@ describe("scheduler sweep-git", function () {
     expect(stuck[0].seconds).toBe(7201);
     expect(stuck[0].rssKb).toBe(9000);
     expect(stuck[0].args).toBe("git index-pack --stdin");
+  });
+
+  // What the production container's busybox ps actually prints once a
+  // process is over 100 minutes old, or uses a lot of memory
+  it("reads busybox's hours, days and RSS suffixes", async function () {
+    const stuck = await stuckProcesses({
+      ps: async () =>
+        [
+          " 1355  2h15   2820 git-receive-pack --stateless-rpc /git/example.git",
+          " 1357  2h15   503m /usr/libexec/git-core/git index-pack --stdin",
+          " 1360  1h50   2828 git-receive-pack --stateless-rpc /git/example.git",
+          " 1370  3d04   1g git-upload-pack /git/example.git",
+        ].join("\n"),
+    });
+
+    expect(stuck.map((p) => [p.pid, p.seconds, p.rssKb])).toEqual([
+      [1355, 8100, 2820],
+      [1357, 8100, 503 * 1024],
+      [1370, 3 * 86400 + 4 * 3600, 1024 * 1024],
+    ]);
   });
 
   it("sends nothing when nothing is wrong", async function () {
