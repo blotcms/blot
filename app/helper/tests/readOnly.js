@@ -153,16 +153,23 @@ describe("readOnly", function () {
       return req.get("x-allowed") === "yes";
     }
 
+    function deniedByHeader(req) {
+      return req.get("x-denied") === "yes";
+    }
+
     beforeEach(function (done) {
       seen = [];
 
       const app = Express();
 
-      app.use(readOnly.exposeToViews);
-      app.use(readOnly.rejectWrites({ allow: [allowedByHeader] }));
+      app.use(
+        readOnly.rejectWrites({
+          allow: [allowedByHeader],
+          deny: [deniedByHeader],
+        })
+      );
       app.use(function (req, res) {
         seen.push(req.method);
-        res.set("x-read-only", JSON.stringify(res.locals.readOnly || null));
         res.send("handled");
       });
 
@@ -242,35 +249,53 @@ describe("readOnly", function () {
           200
         );
       });
-    });
 
-    describe("exposeToViews", function () {
-      it("sets res.locals.readOnly to null when writes are allowed", async function () {
-        const res = await fetch(origin + "/page");
+      describe("deny", function () {
+        it("answers 503 with Retry-After to a denied GET while frozen", async function () {
+          await readOnly.enable({ reason: "maintenance", ttl: 100 });
 
-        expect(res.headers.get("x-read-only")).toBe("null");
-      });
-
-      it("sets res.locals.readOnly to the status while frozen", async function () {
-        await readOnly.enable({ reason: "banner", ttl: 100 });
-
-        const res = await fetch(origin + "/page");
-        const exposed = JSON.parse(res.headers.get("x-read-only"));
-
-        expect(exposed.reason).toBe("banner");
-        expect(exposed.since).toEqual(jasmine.any(Number));
-        expect(exposed.expiresInSeconds).toBeGreaterThan(0);
-      });
-
-      it("leaves res.locals alone on unsafe requests", function (done) {
-        const res = { locals: {} };
-
-        readOnly.enable({ reason: "banner", ttl: 100 }).then(function () {
-          readOnly.exposeToViews({ method: "POST" }, res, function (err) {
-            expect(err).toBeUndefined();
-            expect(res.locals.readOnly).toBeUndefined();
-            done();
+          const res = await fetch(origin + "/page", {
+            headers: { "x-denied": "yes" },
           });
+          const body = await res.text();
+
+          expect(res.status).toBe(503);
+          expect(res.headers.get("retry-after")).toBe(
+            String(readOnly.RETRY_AFTER_SECONDS)
+          );
+          expect(res.headers.get("cache-control")).toBe("no-store");
+          expect(body).toContain("read-only");
+          expect(seen).toEqual([]);
+        });
+
+        it("passes a GET that no deny predicate matches while frozen", async function () {
+          await readOnly.enable({ reason: "maintenance", ttl: 100 });
+
+          const res = await fetch(origin + "/page");
+
+          expect(res.status).toBe(200);
+          expect(seen).toEqual(["GET"]);
+        });
+
+        it("rejects an unsafe request that matches both allow and deny while frozen", async function () {
+          await readOnly.enable({ reason: "maintenance", ttl: 100 });
+
+          const res = await fetch(origin + "/page", {
+            method: "POST",
+            headers: { "x-allowed": "yes", "x-denied": "yes" },
+          });
+
+          expect(res.status).toBe(503);
+          expect(seen).toEqual([]);
+        });
+
+        it("passes a denied GET when writes are allowed", async function () {
+          const res = await fetch(origin + "/page", {
+            headers: { "x-denied": "yes" },
+          });
+
+          expect(res.status).toBe(200);
+          expect(seen).toEqual(["GET"]);
         });
       });
     });

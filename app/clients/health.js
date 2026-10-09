@@ -53,6 +53,14 @@ const ISSUES = {
     message: "Something went wrong while syncing this site.",
     action: "Retry",
   },
+  // Not a problem with the client: Blot is briefly read-only for maintenance
+  // (helper/readOnly) and syncs wait until it ends. Least severe, so a real
+  // issue is still the one shown, and there is nothing for the user to do.
+  SYNC_PAUSED: {
+    label: "Sync paused",
+    message:
+      "Blot is briefly read-only for maintenance. Changes to your folder will sync in a few minutes.",
+  },
 };
 
 const CODES = Object.keys(ISSUES).reduce(function (codes, code) {
