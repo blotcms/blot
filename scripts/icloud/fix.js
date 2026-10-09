@@ -8,11 +8,11 @@
 // check clears them, and Fix() only runs on the hourly sweep for blogs that
 // synced recently. This is one quiet pass to clear the backlog.
 //
-// Each blog is fixed under its sync lock. A blog whose lock can't be had (it
-// is syncing) is skipped with a WARN and listed in the summary, so the script
-// can be run again. Disabled blogs and iCloud accounts whose setup isn't
-// complete are skipped. For every blog Fix() repaired, the check names and
-// the number of rows each returned are printed.
+// Fix() runs outside the sync lock, as in the hourly sweep: on a large blog
+// its sequential Redis calls can starve the lock's heartbeat until the lease
+// expires and the process crashes. Disabled blogs and iCloud accounts whose
+// setup isn't complete are skipped. For every blog Fix() repaired, the check
+// names and the number of rows each returned are printed.
 //
 // Usage:
 //   docker exec -it blot-container-green node scripts/icloud/fix.js
@@ -22,19 +22,16 @@
 
 const { promisify } = require("util");
 const eachBlogOrOneBlog = require("../each/eachBlogOrOneBlog");
-const establishSyncLock = require("sync/establishSyncLock");
 const database = require("clients/icloud/database");
-const fix = promisify(require("sync/fix"));
+const Fix = require("sync/fix");
 const getBlog = promisify(require("models/blog").get);
 
 const PROGRESS_INTERVAL_MS = 30000;
 
 let checkedBlogs = 0;
-let skippedBlogs = 0;
 let repairedBlogs = 0;
 let failedBlogs = 0;
 const rowsPerCheck = {};
-const skipped = [];
 const errors = [];
 let progressInterval;
 
@@ -44,9 +41,16 @@ const formatError = (err) => {
   return String(err);
 };
 
+// Fix() can fail part way through and still return the repairs it made
+// before that, so resolve with both.
+const fixBlog = (blog) =>
+  new Promise((resolve) => {
+    Fix(blog, (error, report) => resolve({ error, report }));
+  });
+
 const logProgress = () => {
   console.log(
-    `INFO: iCloud fix progress: ${checkedBlogs} checked, ${skippedBlogs} skipped, ${repairedBlogs} repaired, ${failedBlogs} failed`
+    `INFO: iCloud fix progress: ${checkedBlogs} checked, ${repairedBlogs} repaired, ${failedBlogs} failed`
   );
 };
 
@@ -62,8 +66,6 @@ const stopProgress = () => {
 const processBlog = async (blog) => {
   if (blog.client !== "icloud" || blog.isDisabled) return;
 
-  let done;
-
   try {
     const account = await database.get(blog.id);
 
@@ -72,36 +74,19 @@ const processBlog = async (blog) => {
       return;
     }
 
+    // Fix() persists parts of the blog it is handed (menu-ghosts writes
+    // blog.menu), so hand it the current copy.
+    const current = await getBlog({ id: blog.id });
+    if (!current) return;
+
     console.log(
       `INFO: Starting iCloud fix for ${blog.id} (${blog.handle || "no handle"})`
     );
 
-    let syncLock;
-
-    try {
-      syncLock = await establishSyncLock(blog.id);
-    } catch (err) {
-      skippedBlogs++;
-      skipped.push({ blogID: blog.id, handle: blog.handle });
-      console.error(
-        `WARN: iCloud fix skipped ${blog.id} (${blog.handle || "no handle"}), could not take the sync lock: ${formatError(
-          err
-        )}`
-      );
-      return;
-    }
-
-    done = syncLock.done;
-
-    // A sync we waited on may have changed the blog (e.g. its menu), and
-    // Fix() writes the menu back whole, so use the current copy.
-    const current = await getBlog({ id: blog.id });
-    if (!current) return;
-
     checkedBlogs++;
 
-    const report = (await fix(current)) || {};
-    const checks = Object.keys(report);
+    const { error, report } = await fixBlog(current);
+    const checks = Object.keys(report || {});
 
     if (checks.length > 0) {
       repairedBlogs++;
@@ -114,6 +99,8 @@ const processBlog = async (blog) => {
         console.log(`INFO:   ${check}: ${rows} row${rows === 1 ? "" : "s"}`);
       });
     }
+
+    if (error) throw error;
 
     console.log(
       `SUCCESS: Completed iCloud fix for ${blog.id} (${blog.handle || "no handle"})`
@@ -130,18 +117,6 @@ const processBlog = async (blog) => {
       handle: blog.handle,
       error: message,
     });
-  } finally {
-    if (done) {
-      try {
-        await done();
-      } catch (err) {
-        console.error(
-          `WARN: iCloud fix failed to release sync lock for ${blog.id}: ${formatError(
-            err
-          )}`
-        );
-      }
-    }
   }
 };
 
@@ -149,7 +124,6 @@ const summarize = () => {
   console.log(`\n${"=".repeat(60)}`);
   console.log("iCloud fix summary:");
   console.log(`  iCloud blogs checked: ${checkedBlogs}`);
-  console.log(`  Skipped (sync lock busy): ${skippedBlogs}`);
   console.log(`  Blogs repaired: ${repairedBlogs}`);
   console.log(`  Failed: ${failedBlogs}`);
 
@@ -159,13 +133,6 @@ const summarize = () => {
     console.log("\nRows repaired per check:");
     checks.forEach((check) => {
       console.log(`  ${check}: ${rowsPerCheck[check]}`);
-    });
-  }
-
-  if (skipped.length > 0) {
-    console.log("\nSkipped (run again to cover them):");
-    skipped.forEach((blog) => {
-      console.log(`  Blog ${blog.blogID} (${blog.handle || "no handle"})`);
     });
   }
 
@@ -180,8 +147,6 @@ const summarize = () => {
 
   if (failedBlogs > 0) {
     console.log("\nWARN: Fix() failed on some iCloud blogs. Review errors above.");
-  } else if (skippedBlogs > 0) {
-    console.log("\nWARN: Some iCloud blogs were skipped. Run the script again.");
   } else if (checkedBlogs > 0) {
     console.log("\nSUCCESS: Fix() ran on all iCloud blogs.");
   } else {
