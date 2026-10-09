@@ -8,13 +8,13 @@
 // check clears them, and Fix() only runs on the hourly sweep for blogs that
 // synced recently. This is one quiet pass to clear the backlog.
 //
-// Each blog is fixed under its sync lock. A blog whose lock can't be had (it
-// is syncing) is skipped with a WARN and listed in the summary, so the script
-// can be run again. Disabled blogs are skipped, as are accounts the hourly
-// sweep wouldn't walk: setup unfinished (no folder or service account yet, or
-// still preparing) or a stored error such as a trashed or inaccessible
-// folder. For every blog Fix() repaired, the check names and the number of
-// rows each returned are printed.
+// Fix() runs outside the sync lock, as in the hourly sweep: on a large blog
+// its sequential Redis calls can starve the lock's heartbeat until the lease
+// expires and the process crashes. Disabled blogs are skipped, as are accounts
+// the hourly sweep wouldn't check: setup unfinished (no folder or service
+// account yet, or still preparing) or a stored error such as a trashed or
+// inaccessible folder. For every blog Fix() repaired, the check names and the
+// number of rows each returned are printed.
 //
 // Usage:
 //   docker exec -it blot-container-green node scripts/google-drive/fix.js
@@ -24,16 +24,16 @@
 
 const { promisify } = require("util");
 const eachBlogOrOneBlog = require("../each/eachBlogOrOneBlog");
-const establishSyncLock = require("sync/establishSyncLock");
 const database = require("clients/google-drive/database");
 const { classify } = require("clients/google-drive/database/error");
-const fix = promisify(require("sync/fix"));
+const Fix = require("sync/fix");
+const getBlog = promisify(require("models/blog").get);
 
 const PROGRESS_INTERVAL_MS = 30000;
 
 // Same test as the hourly sweep (clients/google-drive/validate.js): setup
-// holds the folder lock while it builds the folder, and a stored error means
-// the account can't be used until the user or the client clears it.
+// builds the folder while it runs, and a stored error means the account
+// can't be used until the user or the client clears it.
 const isEligible = (account) =>
   Boolean(
     account &&
@@ -44,11 +44,9 @@ const isEligible = (account) =>
   );
 
 let checkedBlogs = 0;
-let skippedBlogs = 0;
 let repairedBlogs = 0;
 let failedBlogs = 0;
 const rowsPerCheck = {};
-const skipped = [];
 const errors = [];
 let progressInterval;
 
@@ -58,9 +56,16 @@ const formatError = (err) => {
   return String(err);
 };
 
+// Fix() can fail part way through and still return the repairs it made
+// before that, so resolve with both.
+const fixBlog = (blog) =>
+  new Promise((resolve) => {
+    Fix(blog, (error, report) => resolve({ error, report }));
+  });
+
 const logProgress = () => {
   console.log(
-    `INFO: Google Drive fix progress: ${checkedBlogs} checked, ${skippedBlogs} skipped, ${repairedBlogs} repaired, ${failedBlogs} failed`
+    `INFO: Google Drive fix progress: ${checkedBlogs} checked, ${repairedBlogs} repaired, ${failedBlogs} failed`
   );
 };
 
@@ -76,8 +81,6 @@ const stopProgress = () => {
 const processBlog = async (blog) => {
   if (blog.client !== "google-drive" || blog.isDisabled) return;
 
-  let done;
-
   try {
     if (!isEligible(await database.blog.get(blog.id))) {
       console.log(
@@ -86,39 +89,19 @@ const processBlog = async (blog) => {
       return;
     }
 
+    // Fix() persists parts of the blog it is handed (menu-ghosts writes
+    // blog.menu), so hand it the current copy.
+    const current = await getBlog({ id: blog.id });
+    if (!current) return;
+
     console.log(
       `INFO: Starting Google Drive fix for ${blog.id} (${blog.handle || "no handle"})`
     );
 
-    let syncLock;
-
-    try {
-      syncLock = await establishSyncLock(blog.id);
-    } catch (err) {
-      skippedBlogs++;
-      skipped.push({ blogID: blog.id, handle: blog.handle });
-      console.error(
-        `WARN: Google Drive fix skipped ${blog.id} (${blog.handle || "no handle"}), could not take the sync lock: ${formatError(
-          err
-        )}`
-      );
-      return;
-    }
-
-    done = syncLock.done;
-
-    // Setup or a stored error can have started while we waited for the lock.
-    if (!isEligible(await database.blog.get(blog.id))) {
-      console.log(
-        `INFO: Skipping Google Drive blog, no longer eligible: ${blog.id}`
-      );
-      return;
-    }
-
     checkedBlogs++;
 
-    const report = (await fix(blog)) || {};
-    const checks = Object.keys(report);
+    const { error, report } = await fixBlog(current);
+    const checks = Object.keys(report || {});
 
     if (checks.length > 0) {
       repairedBlogs++;
@@ -131,6 +114,8 @@ const processBlog = async (blog) => {
         console.log(`INFO:   ${check}: ${rows} row${rows === 1 ? "" : "s"}`);
       });
     }
+
+    if (error) throw error;
 
     console.log(
       `SUCCESS: Completed Google Drive fix for ${blog.id} (${blog.handle || "no handle"})`
@@ -147,18 +132,6 @@ const processBlog = async (blog) => {
       handle: blog.handle,
       error: message,
     });
-  } finally {
-    if (done) {
-      try {
-        await done();
-      } catch (err) {
-        console.error(
-          `WARN: Google Drive fix failed to release sync lock for ${blog.id}: ${formatError(
-            err
-          )}`
-        );
-      }
-    }
   }
 };
 
@@ -166,7 +139,6 @@ const summarize = () => {
   console.log(`\n${"=".repeat(60)}`);
   console.log("Google Drive fix summary:");
   console.log(`  Google Drive blogs checked: ${checkedBlogs}`);
-  console.log(`  Skipped (sync lock busy): ${skippedBlogs}`);
   console.log(`  Blogs repaired: ${repairedBlogs}`);
   console.log(`  Failed: ${failedBlogs}`);
 
@@ -176,13 +148,6 @@ const summarize = () => {
     console.log("\nRows repaired per check:");
     checks.forEach((check) => {
       console.log(`  ${check}: ${rowsPerCheck[check]}`);
-    });
-  }
-
-  if (skipped.length > 0) {
-    console.log("\nSkipped (run again to cover them):");
-    skipped.forEach((blog) => {
-      console.log(`  Blog ${blog.blogID} (${blog.handle || "no handle"})`);
     });
   }
 
@@ -197,8 +162,6 @@ const summarize = () => {
 
   if (failedBlogs > 0) {
     console.log("\nWARN: Fix() failed on some Google Drive blogs. Review errors above.");
-  } else if (skippedBlogs > 0) {
-    console.log("\nWARN: Some Google Drive blogs were skipped. Run the script again.");
   } else if (checkedBlogs > 0) {
     console.log("\nSUCCESS: Fix() ran on all Google Drive blogs.");
   } else {
@@ -213,7 +176,7 @@ if (require.main === module) {
     .then(() => {
       stopProgress();
       summarize();
-      process.exit(0);
+      process.exit(failedBlogs > 0 ? 1 : 0);
     })
     .catch((err) => {
       stopProgress();
