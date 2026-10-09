@@ -5,6 +5,7 @@ const sshCommand = require("./sshCommand");
 const { INTERNAL_PORT } = CONSTANTS;
 const { DATA_DIRECTORY_ON_SERVER } = CONSTANTS;
 const { DATA_DIRECTORY_ON_CONTAINER } = CONSTANTS;
+const { TMP_DIRECTORY } = CONSTANTS;
 const { ENV_FILE_ON_SERVER } = CONSTANTS;
 const { REGISTRY_URL } = CONSTANTS;
 const { LOG_MAX_SIZE, LOG_MAX_FILE, LOG_COMPRESS } = CONSTANTS;
@@ -235,6 +236,13 @@ async function generateDockerCommand(container, platform, commitHash) {
     // reaches running containers without a restart. Docker only accepts it if
     // the host mount is shared, which mount-data-volume.sh ensures.
     `--mount type=bind,source=${DATA_DIRECTORY_ON_SERVER},target=${DATA_DIRECTORY_ON_CONTAINER},bind-propagation=rslave`,
+    // The tmp directory lives on the instance store, not the data volume.
+    // It is wiped when the instance is stopped and started, and the host
+    // recreates it at boot (mount-instance-store.sh). --mount, unlike -v,
+    // fails if the source is missing rather than quietly creating it on the
+    // root disk, so a host without the instance store can't start a container.
+    `--mount type=bind,source=${TMP_DIRECTORY},target=${TMP_DIRECTORY}`,
+    `-e BLOT_TMP_DIRECTORY=${TMP_DIRECTORY}`,
     `--memory=${memory}`,
     `--cpus=${cpuValue}`,
     `${REGISTRY_URL}:${commitHash}`,

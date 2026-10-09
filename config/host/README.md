@@ -79,7 +79,9 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
   `app/helper/email/admin/SSL_CERTIFICATE_ISSUES.txt`). Both restart the proxy
   container and refuse to run if none is running.
 - `mount-instance-store.sh` mounts the NVMe instance store at
-  `/var/instance-ssd` (logs and cache) at boot.
+  `/var/instance-ssd` (logs, cache and the app's tmp directory) at boot, and
+  creates `/var/instance-ssd/tmp` for the app containers (uid 1000), since a
+  stop/start of the instance wipes the disk.
 - `mount-data-volume.sh` mounts the EBS data volume at `/var/www/blot/data` at
   boot (see above).
 

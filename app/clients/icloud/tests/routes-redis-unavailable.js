@@ -128,7 +128,7 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
   });
 
   describe("delete", function () {
-    it("refuses and puts the file back, then drops the entry on the retry", async function () {
+    it("refuses, and the entry waits for a resync because the file is already gone", async function () {
       const path = "/gone.txt";
       const blogID = this.blog.id;
 
@@ -138,30 +138,17 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
 
       const res = await call(remove, blogID, path);
       expect(res.code).toBe(503);
-      expect(await fs.readFile(this.onDisk(path), "utf-8")).toEqual("Bye");
+      expect(await fs.pathExists(this.onDisk(path))).toBe(false);
       expect((await getEntry(blogID, path)).deleted).toBeFalsy();
 
       Entry.drop.and.callThrough();
 
-      expect((await call(remove, blogID, path)).code).toBe(200);
-      expect(await fs.pathExists(this.onDisk(path))).toBe(false);
-      expect((await getEntry(blogID, path)).deleted).toBe(true);
+      // Nothing left to delete, so the retry does not touch the entry
+      expect((await call(remove, blogID, path)).code).toBe(204);
+      expect((await getEntry(blogID, path)).deleted).toBeFalsy();
     });
 
-    it("restores a whole folder", async function () {
-      const blogID = this.blog.id;
-
-      await call(upload, blogID, "/folder/a.txt", Buffer.from("A"));
-      await call(upload, blogID, "/folder/b.txt", Buffer.from("B"));
-
-      spyOn(Entry, "drop").and.callFake((id, p, callback) => callback(freeze()));
-
-      expect((await call(remove, blogID, "/folder")).code).toBe(503);
-      expect(await fs.readFile(this.onDisk("/folder/a.txt"), "utf-8")).toEqual("A");
-      expect(await fs.readFile(this.onDisk("/folder/b.txt"), "utf-8")).toEqual("B");
-    });
-
-    it("does not put the file back when update fails for another reason", async function () {
+    it("still answers 200 when update fails for another reason", async function () {
       const path = "/gone.txt";
       const blogID = this.blog.id;
 

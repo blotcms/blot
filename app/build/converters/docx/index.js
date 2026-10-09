@@ -214,7 +214,7 @@ function read (blog, path, callback) {
             }
 
             callback(null, html, stat);
-            fs.remove(outPath, function (err) {});
+            fs.remove(outDir, function (err) {});
           });
         }
       );

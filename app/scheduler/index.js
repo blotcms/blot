@@ -18,6 +18,7 @@ const subscriptionLifecycleJob = require("./subscription-lifecycle");
 const checkSSLCertificates = require("./check-ssl-certificates");
 const checkRedisHost = require("./check-redis-host");
 const sweepGit = require("./sweep-git");
+const pruneTmp = require("./prune-tmp");
 
 const SCHEDULE_RETRY_MS = 60 * 1000;
 const SCHEDULE_RETRY_MAX_MS = 60 * 60 * 1000;
@@ -328,6 +329,27 @@ module.exports = function () {
       if (sent) console.log(clfdate(), "Sent git sweep alert email");
     } catch (err) {
       console.log(clfdate(), "Error: Sweeping git push quarantine directories", err);
+    }
+  });
+
+  // config.tmp_directory is on the host's instance store and shared by every
+  // container, so it is pruned once, by the container that runs the scheduler
+  // (config.master).
+  console.log(clfdate(), "Scheduled daily prune of old files in the tmp directory");
+  scheduler.scheduleJob({ hour: 5, minute: 30 }, async function () {
+    try {
+      const report = await pruneTmp();
+
+      console.log(
+        clfdate(),
+        "Tmp: removed",
+        report.removed,
+        "old entries, freed",
+        report.bytes,
+        "bytes" + (report.errors ? ", " + report.errors + " errors" : "")
+      );
+    } catch (err) {
+      console.log(clfdate(), "Error: Pruning the tmp directory", err);
     }
   });
 
