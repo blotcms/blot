@@ -89,7 +89,7 @@ mounts_of() { { cat /proc/[0-9]*/mountinfo 2> /dev/null || true; } | awk -v d="$
 data_mount() { findmnt -n -o "$1" --target "$DATA" 2> /dev/null | tail -n 1 || true; }
 # findmnt prints a bind-mounted source as /dev/xxx[/subdir]: drop the [...].
 data_device() { readlink -f "$(data_mount SOURCE | sed 's/\[.*//')"; }
-read_marker() { tr -d '[:space:]' < "$1/$MARKER" 2> /dev/null || true; }
+read_marker() { { tr -d '[:space:]' < "$1/$MARKER"; } 2> /dev/null || true; }
 now_mono() { awk '{print int($1)}' /proc/uptime; }
 containers() { command -v docker > /dev/null && docker ps --format '{{.Names}}' | grep '^blot-container-' || true; }
 
@@ -100,6 +100,9 @@ state_write() {
   printf 'old_volume=%s\nnew_volume=%s\nphase=%s\n' "$1" "$2" "$3" > "$STATE.tmp"
   mv "$STATE.tmp" "$STATE"
 }
+have() { command -v "$1" > /dev/null; }
+# phase_in <phase>...: is the recorded phase one of these?
+phase_in() { local p x; p=$(state_get phase); for x in "$@"; do [ "$p" != "$x" ] || return 0; done; return 1; }
 set_phase() { state_write "$(state_get old_volume)" "$(state_get new_volume)" "$1"; }
 
 # One run at a time that touches the data or the staging mount. The lock file
@@ -108,6 +111,17 @@ set_phase() { state_write "$(state_get old_volume)" "$(state_get new_volume)" "$
 take_lock() {
   exec 9> "$LOCK"
   flock -n 9 || die "another data-volume command is running on this host (holding $LOCK)"
+}
+
+# precondition <message> <command...>: a check that must hold for a real run.
+# A dry run may not have prepared anything (a fresh "shrink --dry-run" has no
+# state file and no staging mount), so there a failed check is only a note and
+# the dry run goes on to print every step.
+precondition() {
+  local msg=$1
+  shift
+  "$@" && return 0
+  if [ -n "$DRY_RUN" ]; then echo "note: a real run would stop here: $msg" >&2; else die "$msg"; fi
 }
 
 stop_rsyncs() { pkill -TERM -f "rsync .*$NEW_MNT" || true; }
@@ -190,7 +204,7 @@ cmd_prepare() {
     plan "wait up to 120s for $link; refuse if it is mounted anywhere except $NEW_MNT"
     plan "mkfs.xfs -L blotdata on it if blank (or accept an XFS whose $MARKER says $new)"
     plan "mount --bind $STAGING $STAGING && mount --make-private $STAGING; mount -o noatime the device at $NEW_MNT"
-    plan "write $new to $NEW_MNT/$MARKER and record old=$cur new=$new phase=prepared in $STATE"
+    plan "write $new to $NEW_MNT/$MARKER and record old=$cur new=$new phase=prepared in $STATE (a resumed phase=copied stays only while $DATA is read-only)"
     return 0
   fi
   take_lock
@@ -252,7 +266,17 @@ cmd_prepare() {
   # On a resume the phase stays what it was; a final copy that was already
   # done is still valid until the source is written to again (thaw-disk
   # demotes it).
-  if [ -n "$resumed" ]; then state_write "$cur" "$new" "$phase"; else state_write "$cur" "$new" prepared; fi
+  # A final copy is only good while the source cannot have changed since: if the
+  # data directory is writable again (thawed, or the host rebooted), it is
+  # stale, so demote it as thaw-disk does.
+  if [ -n "$resumed" ]; then
+    if [ "$phase" = copied ]; then
+      case ",$(data_mount OPTIONS)," in *,ro,*) ;; *) phase=prepared ;; esac
+    fi
+    state_write "$cur" "$new" "$phase"
+  else
+    state_write "$cur" "$new" prepared
+  fi
   echo "prepared=yes"
   echo "device=$dev"
   echo "staging=$NEW_MNT"
@@ -292,9 +316,9 @@ cmd_copy() {
   local label=${1:-} unit st other
   [[ "$label" =~ ^[a-z0-9]+$ ]] || die "pass label must be lowercase letters and digits"
   unit=${UNIT_PREFIX}$label.service
-  [ "$(state_get phase)" = prepared ] || die "phase is '$(state_get phase)', not prepared (see $STATE)"
-  mountpoint -q "$NEW_MNT" || die "$NEW_MNT is not mounted: run prepare first"
-  command -v rsync > /dev/null || die "rsync is not installed"
+  precondition "phase is '$(state_get phase)', not prepared (see $STATE)" [ "$(state_get phase)" = prepared ]
+  precondition "$NEW_MNT is not mounted: run prepare first" mountpoint -q "$NEW_MNT"
+  precondition "rsync is not installed" have rsync
   st=$(unit_state "$unit")
   if [ "$st" = running ] || [ "$st" = ok ]; then unit_report "$label"; return 0; fi
   for other in $(copy_units); do
@@ -356,9 +380,9 @@ cmd_copy_status() { [[ "${1:-}" =~ ^[a-z0-9]+$ ]] || die "pass label must be low
 # the single-rsync live passes made.
 cmd_final_copy() {
   local budget=${1:-0} ex p shards=0 start rc=0 wd="" i_old
-  command -v rsync > /dev/null || die "rsync is not installed"
-  [ "$(state_get phase)" = prepared ] || [ "$(state_get phase)" = copied ] || die "phase is '$(state_get phase)', not prepared"
-  mountpoint -q "$NEW_MNT" || die "$NEW_MNT is not mounted: run prepare first"
+  precondition "rsync is not installed" have rsync
+  precondition "phase is '$(state_get phase)', not prepared" phase_in prepared copied
+  precondition "$NEW_MNT is not mounted: run prepare first" mountpoint -q "$NEW_MNT"
   case ",$(data_mount OPTIONS)," in
     *,ro,*) ;;
     *) if [ -n "$DRY_RUN" ]; then echo "note: $DATA is not read-only (it will be by then)" >&2; else die "$DATA is not read-only: freeze-disk first"; fi ;;
@@ -372,7 +396,7 @@ cmd_final_copy() {
       [ -d "$DATA/$p" ] && shards=$((shards + $(find "$DATA/$p" -mindepth 1 -maxdepth 1 -type d | wc -l)))
     done
     plan "rsync ${RSYNC_OPTS[*]} ${ex[*]} $DATA/ $NEW_MNT/"
-    plan "per shard parent ($SHARD_PARENTS): rsync -dlptgoD -AX --numeric-ids --delete"
+    plan "per shard parent ($SHARD_PARENTS): rsync -dlptgoD -AXS --numeric-ids --delete"
     plan "$shards rsyncs of the child directories, $FINAL_COPY_JOBS at a time, then sync; phase=copied"
     return 0
   fi
@@ -391,7 +415,7 @@ cmd_final_copy() {
   if [ "$rc" = 0 ]; then
     for p in $SHARD_PARENTS; do
       [ -d "$DATA/$p" ] || continue
-      rsync -dlptgoD -AX --numeric-ids --delete "$DATA/$p/" "$NEW_MNT/$p/" || { rc=$?; break; }
+      rsync -dlptgoD -AXS --numeric-ids --delete "$DATA/$p/" "$NEW_MNT/$p/" || { rc=$?; break; }
       find "$DATA/$p" -mindepth 1 -maxdepth 1 -type d -printf "$p/%f\\0" >> "$work/list"
     done
   fi
@@ -475,16 +499,17 @@ cmd_thaw_disk() {
 cmd_swap() {
   local old new dev_new got c bad="" containers_list
   old=$(state_get old_volume); new=$(state_get new_volume)
-  [ "$(state_get phase)" = copied ] || die "phase is '$(state_get phase)', not copied: run final-copy first"
-  [ "$(current_volume)" = "$old" ] || die "$ID_FILE says $(current_volume), the resize started from $old"
-  mountpoint -q "$NEW_MNT" || die "$NEW_MNT is not mounted"
-  [ "$(read_marker "$NEW_MNT")" = "$new" ] || die "$NEW_MNT/$MARKER does not say $new"
+  precondition "phase is '$(state_get phase)', not copied: run final-copy first" phase_in copied
+  precondition "$ID_FILE says $(current_volume), the resize started from $old" [ "$(current_volume)" = "$old" ]
+  precondition "$NEW_MNT is not mounted" mountpoint -q "$NEW_MNT"
+  precondition "$NEW_MNT/$MARKER does not say $new" [ "$(read_marker "$NEW_MNT")" = "$new" ]
   case ",$(data_mount OPTIONS)," in
     *,ro,*) ;;
     *) if [ -n "$DRY_RUN" ]; then echo "note: $DATA is not read-only (it will be by then)" >&2; else die "$DATA is not read-only: refusing to swap while the old volume can still change"; fi ;;
   esac
   containers_list=$(containers)
   if [ -n "$DRY_RUN" ]; then
+    [ -n "$new" ] || new="<the new volume>"
     plan "write $new to $ID_FILE (previous kept in $ID_FILE.previous)"
     plan "mount --move $NEW_MNT $DATA; mount --make-shared $DATA"
     plan "check $MARKER says $new on the host and in: $(echo "$containers_list" | tr '\n' ' ')"
@@ -498,22 +523,34 @@ cmd_swap() {
   # underneath, still read-only, so the caller thaws it afterwards. Lazy
   # unmount is the fallback: a process that opened a file on the new volume in
   # the last few seconds would make a plain umount fail with EBUSY.
+  # swap_open is set from the moment the ID file is changed; moved, once the
+  # new volume is mounted over the data directory (undoing before that must not
+  # unmount the old volume). The EXIT trap below runs undo on ANY failure in
+  # between (a failed command under set -e, die, a signal); explicit undo calls
+  # clear swap_open first, so it never runs twice.
+  swap_open=""; moved=""
   undo() {
-    umount "$DATA" 2> /dev/null || umount -l "$DATA" || echo "WARNING: could not unmount the new volume from $DATA" >&2
+    set +e
+    swap_open=""
+    if [ -n "$moved" ]; then
+      umount "$DATA" 2> /dev/null || umount -l "$DATA" || echo "WARNING: could not unmount the new volume from $DATA" >&2
+      moved=""
+    fi
     cp -p "$ID_FILE.previous" "$ID_FILE"
     set_phase prepared
     echo "swap=undone"
     echo "restored=$(read_marker "$DATA")"
     echo "after the undo the new volume is unmounted; prepare mounts it again" >&2
   }
+  trap 'rc=$?; if [ -n "$swap_open" ]; then echo "error: the swap failed (exit $rc); putting the old volume back" >&2; undo; fi; exit $rc' EXIT
+  trap 'exit 143' INT TERM HUP
 
   cp -p "$ID_FILE" "$ID_FILE.previous"
+  swap_open=1
   printf '%s\n' "$new" > "$ID_FILE.tmp"
   mv "$ID_FILE.tmp" "$ID_FILE"
-  if ! mount --move "$NEW_MNT" "$DATA"; then
-    cp -p "$ID_FILE.previous" "$ID_FILE"
-    die "mount --move failed; nothing changed"
-  fi
+  mount --move "$NEW_MNT" "$DATA" || die "mount --move failed; nothing changed"
+  moved=1
   # The next swap needs the top mount to be shared, as mount-data-volume.sh
   # leaves it at boot: the move does not carry that over.
   mount --make-shared "$DATA"
@@ -536,6 +573,7 @@ cmd_swap() {
     die "these containers do not see the new volume:$bad"
   fi
   set_phase swapped
+  swap_open=""
   echo "swap=ok"
   echo "new_volume=$new"
 }
