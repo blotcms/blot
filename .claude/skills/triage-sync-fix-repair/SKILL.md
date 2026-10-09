@@ -280,3 +280,25 @@ Entry template:
   Reset correctly restored everything. No dropped webhook.
 - Follow-up: none for this email. A Reset straight after a reconnect will
   always report "missed" changes when edits were made while disconnected.
+
+### 2026-10-08 22:45:15 UTC Fix() run — backlog of old folder-removal ghosts (first Fix() on the blog)
+
+- Email: entry-ghosts, 144 `MISSING` rows, all under two old top-level
+  folders the owner had since renamed/moved (they now live under new folder
+  names). Client: icloud (hourly sweep, green, walk `sync_c9f6105`).
+- Key events (UTC): node deploy c545474d0 at 22:09, green created 22:12:20.
+  Owner's first activity after the sweep went live (7 Oct 09:43) was 21:56;
+  the 21:45 sweep didn't cover the blog. The 22:45:07 walk (1543 items)
+  removed and downloaded nothing; Fix() then logged `delete` for every old
+  path at 22:45:14. The 23:45 sweep was clean.
+- Cause: the local copies of the old folders were removed at some earlier,
+  unlogged point (macserver logs back to 13 Sep show no event for either
+  old folder; old container logs are gone). That was most likely a walk
+  before 3e6433ef2 (deployed 7 Oct 08:11), which removed folders without
+  dropping their entries. So these were stale entries that the first Fix()
+  on this blog cleared. Same class as the 2026-10-06 entry; nothing new is
+  broken.
+- Follow-up: expect one such one-off email for other iCloud/Drive blogs
+  that carry pre-fix ghosts, as each one is first swept after activity.
+  Option: a one-off Fix() pass over all connected blogs to clear the
+  backlog quietly.
