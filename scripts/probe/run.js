@@ -33,6 +33,7 @@ const {
   DATA_DIRECTORY_ON_CONTAINER,
   AIRLOCK,
   CONTAINERS,
+  TMP_DIRECTORY,
 } = require("../deploy/constants");
 
 const execFileAsync = promisify(execFile);
@@ -101,7 +102,14 @@ function parseMemoryMB(value) {
 //   airlock       connect the container to the airlock network before it
 //                 starts and pass the airlock env vars, as the deploy does
 //   mounts        extra -v specs, e.g. ["/var/instance-ssd/logs:/logs:ro"]
-//   env           extra environment variables, { NAME: value }
+//   env           extra environment variables, { NAME: value }; these come
+//                 last, so they win over the ones set here
+//
+// Every probe container also gets the host's tmp directory (TMP_DIRECTORY,
+// on the instance store) bind-mounted read-write at the same path, with
+// BLOT_TMP_DIRECTORY pointing at it, as the app containers do. Without it
+// the app would fall back to <data>/tmp, which no longer exists on the data
+// volume (and can't be created when the data directory is mounted read-only).
 //
 // Resolves to { exitCode, localDir }; exitCode is the container's, or null
 // if it never ran.
@@ -199,6 +207,8 @@ async function runProbe({
     ...(/^[0-9a-f]{7,40}$/.test(releaseId) ? { BLOT_RELEASE_ID: releaseId } : {}),
     // Empty, so the env file can't override the flags given to node below.
     NODE_OPTIONS: "",
+    // Where the app's tmp directory is (config.tmp_directory); mounted below.
+    BLOT_TMP_DIRECTORY: TMP_DIRECTORY,
     ...(airlock ? AIRLOCK_ENV : {}),
     ...env,
   };
@@ -210,6 +220,10 @@ async function runProbe({
     `--env-file ${ENV_FILE_ON_SERVER}`,
     ...Object.entries(environment).map(([key, value]) => `-e ${shellQuote(`${key}=${value}`)}`),
     `-v ${DATA_DIRECTORY_ON_SERVER}:${DATA_DIRECTORY_ON_CONTAINER}${writableData ? "" : ":ro"}`,
+    // Scratch space for helper/tempDir, writable even when data is read-only.
+    // --mount, unlike -v, fails if the source is missing rather than quietly
+    // creating it on the root disk (as generateDockerCommand.js does).
+    `--mount ${shellQuote(`type=bind,source=${TMP_DIRECTORY},target=${TMP_DIRECTORY}`)}`,
     `-v ${remoteDir}/out:${OUT}`,
     ...files.map((file) => `-v ${shellQuote(`${file.remote}:${file.container}:ro`)}`),
     ...mounts.map((mount) => `-v ${shellQuote(mount)}`),
