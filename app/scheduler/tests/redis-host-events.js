@@ -67,6 +67,18 @@ describe("scheduler redis-host-events", function () {
     expect(events.slowlog.worst[0].command).toBe("BGREWRITEAOF");
   });
 
+  it("reports a replica's full sync (PSYNC) only when it is slow enough to matter", function () {
+    const before = detect(null, observe(info(["uptime_in_seconds:10"]), [])).observed;
+    const now = observe(info(["uptime_in_seconds:310"]), [
+      entry(2, FORK_ALERT_US, "PSYNC", "abc", "1"),
+      entry(1, FORK_ALERT_US - 1, "PSYNC", "abc", "1"),
+    ]);
+    const { events } = detect(before, now);
+
+    expect(events.slowlog.count).toBe(1);
+    expect(events.slowlog.worst[0].us).toBe(FORK_ALERT_US);
+  });
+
   it("re-baselines the counters when the last look is over 15 minutes old", function () {
     const T = 1760000000000;
     const before = detect(null, observe(info(["uptime_in_seconds:10", "errorstat_OOM:count=1", "rejected_connections:0"]), []), { now: T }).observed;
