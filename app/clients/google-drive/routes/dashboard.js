@@ -53,7 +53,11 @@ dashboard.get("/", function (req, res) {
   // badge with no explanation of what's stuck.
   res.locals.account.setupFailed = isSetupError(res.locals.account.error);
 
-  if (res.locals.account.preparing && !res.locals.account.setupFailed) {
+  if (
+    res.locals.account.preparing &&
+    !res.locals.account.setupFailed &&
+    !health.isPaused(res.locals.blog.health)
+  ) {
     res.locals.blog.healthIssue = undefined;
     res.locals.blog.health = health.syncing();
   }
