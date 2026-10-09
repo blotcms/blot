@@ -8,6 +8,7 @@ const setup = require("./setup");
 const server = require("./server");
 
 const DEPLOYMENT_MARKER_EXPIRATION_SECONDS = 90 * 24 * 60 * 60;
+const REQUEST_TIMEOUT_MS = 60 * 60 * 1000;
 
 // The deploy sets --report-on-fatalerror (scripts/deploy/util/
 // generateDockerCommand.js), but Node won't create the report directory
@@ -63,7 +64,7 @@ setup(async (err) => {
   console.log(clfdate(), "Finished setting up server");
 
   // Open the server to handle requests
-  server.listen(config.port, function () {
+  const httpServer = server.listen(config.port, function () {
     console.log(clfdate(), `Server listening`);
 
     // Run non-blocking setup tasks after the port is bound so startup isn't delayed.
@@ -88,4 +89,15 @@ setup(async (err) => {
       );
     }
   });
+
+  // Node's default requestTimeout (300s) answers 408 to any request whose whole
+  // request, body included, takes longer than that to arrive. A large git push
+  // over a slow connection does (a ~700 MB push at 2 MB/s needs ~350s), so it
+  // was cut off while it was still making progress. nginx is in front of every
+  // request (10s header and body timeouts, 60s for git, and a body size cap),
+  // so a stalled or oversized request never gets this far; this only ends
+  // uploads which are still progressing, and an hour is long enough for one.
+  // It applies to every upload, the dashboard's too. headersTimeout is left
+  // alone.
+  httpServer.requestTimeout = REQUEST_TIMEOUT_MS;
 });
