@@ -314,6 +314,8 @@ step_create_and_attach() {
     done
     [ -n "$dev" ] || die "no free device name between /dev/sdf and /dev/sdp (in use: $used)"
     aws_mut ec2 attach-volume --volume-id "$NEW_VOL" --instance-id "$INSTANCE" --device "$dev" > /dev/null
+    # A dry run attached nothing, so there is nothing to wait for.
+    [ -z "$DRY_RUN" ] || return 0
     echo "Attached as $dev"
   fi
   aws_cli ec2 wait volume-in-use --volume-ids "$NEW_VOL"
@@ -376,6 +378,20 @@ duration_s=0"
 step_passes() {
   local n runs=0 have_ok="" st age dur used
   say "3. Live copy passes (the app keeps running; each pass copies what changed since the last)"
+  # An earlier run that got as far as the final copy and was interrupted: the
+  # state is copied and the data directory is still read-only (prepare keeps
+  # phase=copied only then), so there is nothing to copy live. Go straight on
+  # to the freeze, whose freeze-disk is a no-op on a read-only mount and whose
+  # final-copy accepts phase=copied.
+  gather_facts
+  case ",$(field "$FACTS" options)," in
+    *,ro,*)
+      if [ "$PHASE" = copied ]; then
+        echo "The host is already at phase=copied with the data directory read-only (an interrupted run): no live pass, on to the freeze."
+        LAST_DUR=0
+        return 0
+      fi ;;
+  esac
   trap 'echo; echo "Interrupted. The copy keeps running on the host; re-run the same command to attach to it."; exit 130' INT TERM
   n=$(highest_pass)
   if [ "$n" -gt 0 ] && [ -z "$DRY_RUN" ]; then
@@ -503,7 +519,8 @@ step_freeze_and_swap() {
   FREEZE_STAGE=app
   if [ "$DRILL" = yes ]; then
     PAUSED=$(echo "$FACTS" | sed -n 's/^container\.\([^=]*\)=.*/\1/p' | tr '\n' ' ')
-    ssh_run "$HOST" "sudo docker pause $PAUSED" < /dev/null > /dev/null || die "docker pause failed"
+    # (a container left paused by an interrupted run counts as paused)
+    ssh_run "$HOST" 'for c in '"$PAUSED"'; do sudo docker pause "$c" > /dev/null 2>&1 || [ "$(sudo docker inspect -f "{{.State.Paused}}" "$c")" = true ] || exit 1; done' < /dev/null || die "docker pause failed"
   else
     out=$(ro on --ttl "$FREEZE_TTL" --reason "'data volume resize'") || die "read-only.js on failed"
     echo "$out" | grep -q '"readOnly":null' && die "the freeze did not take effect: $out"

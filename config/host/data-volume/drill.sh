@@ -198,10 +198,12 @@ EOF
 
 cmd_setup() {
   [ -n "$ARG" ] || die "usage: drill.sh setup [--key PATH] <ssh-target>"
+  [ -z "$DRY_RUN" ] || die "setup has no dry-run mode: it installs packages and formats the data volume"
   local target=$ARG instance vol i
   # Keep what the caller put in SSH_OPTS (e.g. -F, -p); the defaults only apply
   # when it is empty.
-  if [ -z "${SSH_OPTS:-}" ]; then SSH_OPTS="${KEY:+-i $KEY }-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"; fi
+  if [ -z "${SSH_OPTS:-}" ]; then SSH_OPTS="${KEY:+-i $KEY }-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+  elif [ -n "$KEY" ]; then SSH_OPTS="$SSH_OPTS -i $KEY"; fi
   [ -z "$KEY" ] || [ -f "$KEY" ] || die "no such key file: $KEY"
   work=$(mktemp -d) # global: the EXIT trap uses it
   trap 'rm -rf "$work"' EXIT
@@ -245,7 +247,7 @@ EOF
 
 cmd_teardown() {
   [[ "$ARG" =~ ^i-[0-9a-f]{8,17}$ ]] || die "usage: drill.sh teardown <instance-id>"
-  local id=$ARG state flag vols found snaps v s out
+  local id=$ARG state flag vols snaps v s out
   # Re-described right before anything is deleted: the tag, not the ID the
   # operator typed, decides what is a drill.
   flag=$(aws_cli ec2 describe-instances --instance-ids "$id" --query 'Reservations[0].Instances[0].Tags[?Key==`BlotDrill`].Value | [0]' --output text)
@@ -253,20 +255,34 @@ cmd_teardown() {
   state=$(aws_cli ec2 describe-instances --instance-ids "$id" --query 'Reservations[0].Instances[0].State.Name' --output text)
   [ "$state" != terminated ] || die "$id is already terminated; its volumes can no longer be tied to it, delete any leftovers by hand"
   vols=$(aws_cli ec2 describe-instances --instance-ids "$id" --query 'Reservations[0].Instances[0].BlockDeviceMappings[].Ebs.VolumeId' --output text | tr '\t' ' ')
-  # Volumes the resize made from this instance's volumes: they are not in the
-  # instance's mappings once it is gone, or never were if the shrink was
-  # interrupted before the attach.
-  found=""; snaps=""
-  for v in $vols; do
-    found="$found $(aws_cli ec2 describe-volumes --filters "Name=tag:BlotDataVolumeResizeFrom,Values=$v" --query 'Volumes[].VolumeId' --output text | tr '\t' ' ')"
-    snaps="$snaps $(aws_cli ec2 describe-snapshots --owner-ids self --filters "Name=tag:BlotDataVolumeResizeFrom,Values=$v" --query 'Snapshots[].SnapshotId' --output text | tr '\t' ' ')"
+  # Volumes the resizes made. After a shrink the old volume may be detached
+  # (it is not in the instance's mappings any more) and the new one points back
+  # at it with a BlotDataVolumeResizeFrom tag, so follow that tag both ways,
+  # transitively, from every volume the instance has: to the volume it names
+  # (the predecessor) and to the volumes that name it (the successors). Only
+  # volumes tagged BlotDrill=true are followed or listed. Then the snapshots
+  # whose BlotDataVolumeResizeFrom names any of them.
+  local all="$vols" queue="$vols" next x p succ
+  while [ -n "$queue" ]; do
+    next=""
+    for v in $queue; do
+      p=$(aws_cli ec2 describe-volumes --volume-ids "$v" --query 'Volumes[0].Tags[?Key==`BlotDataVolumeResizeFrom`].Value | [0]' --output text 2> /dev/null) || p=None
+      succ=$(aws_cli ec2 describe-volumes --filters "Name=tag:BlotDataVolumeResizeFrom,Values=$v" "Name=tag:BlotDrill,Values=true" --query 'Volumes[].VolumeId' --output text | tr '\t' ' ')
+      for x in $p $succ; do
+        [[ "$x" =~ ^vol-[0-9a-f]{8,17}$ ]] || continue
+        case " $all " in *" $x "*) continue ;; esac
+        # a predecessor must be a drill volume too (or already gone: nothing to delete)
+        [ "$(volume_tag "$x" BlotDrill 2> /dev/null || echo None)" = true ] || continue
+        all="$all $x"; next="$next $x"
+      done
+    done
+    queue=$next
   done
-  # A second generation (a grow after a shrink does not make one, a second shrink does).
-  for v in $found; do
-    found="$found $(aws_cli ec2 describe-volumes --filters "Name=tag:BlotDataVolumeResizeFrom,Values=$v" --query 'Volumes[].VolumeId' --output text | tr '\t' ' ')"
-    snaps="$snaps $(aws_cli ec2 describe-snapshots --owner-ids self --filters "Name=tag:BlotDataVolumeResizeFrom,Values=$v" --query 'Snapshots[].SnapshotId' --output text | tr '\t' ' ')"
+  snaps=""
+  for v in $all; do
+    snaps="$snaps $(aws_cli ec2 describe-snapshots --owner-ids self --filters "Name=tag:BlotDataVolumeResizeFrom,Values=$v" "Name=tag:BlotDrill,Values=true" --query 'Snapshots[].SnapshotId' --output text | tr '\t' ' ')"
   done
-  vols=$(echo "$vols $found" | tr ' ' '\n' | grep . | sort -u | tr '\n' ' ')
+  vols=$(echo "$all" | tr ' ' '\n' | grep . | sort -u | tr '\n' ' ')
   snaps=$(echo "$snaps" | tr ' ' '\n' | grep . | sort -u | tr '\n' ' ')
   say "Teardown plan"
   echo "Terminate $id ($state)"

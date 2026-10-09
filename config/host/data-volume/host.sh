@@ -564,9 +564,10 @@ cmd_swap() {
   fi
   for c in $containers_list; do
     # nsenter, not docker exec: it also works on a paused container (a drill
-    # pauses them) and does not depend on the container's processes.
+    # pauses them) and does not depend on the container's processes. -r sets
+    # the root to the container's, so the path resolves inside it, not on the host.
     pid=$(docker inspect -f '{{.State.Pid}}' "$c" 2> /dev/null || true)
-    got=$(timeout 20 nsenter -m -t "$pid" cat "$CONTAINER_DATA/$MARKER" 2> /dev/null | tr -d '[:space:]' || true)
+    got=$(timeout 20 nsenter -t "$pid" -m -r cat "$CONTAINER_DATA/$MARKER" 2> /dev/null | tr -d '[:space:]' || true)
     echo "container.$c=${got:-unreadable}"
     [ "$got" = "$new" ] || bad="$bad $c"
   done
