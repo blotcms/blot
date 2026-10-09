@@ -19,6 +19,8 @@ const MIN_PORT = 1024;
 const MAX_PORT = 65535;
 const MIN_CPUS = 0.1;
 const MAX_CPUS = 32;
+const MIN_CPU_SHARES = 2; // the range Docker accepts for --cpu-shares
+const MAX_CPU_SHARES = 262144;
 const MIN_MEMORY_MB = 32;
 const MAX_MEMORY_MB = 1024 * 128; // 128GB
 const MIN_OLD_SPACE_SIZE = 512;
@@ -125,6 +127,7 @@ async function generateDockerCommand(container, platform, commitHash) {
     name: containerName,
     port: containerPort,
     cpus,
+    cpuShares,
     memory,
     maxOldSpaceSize,
   } = container;
@@ -157,6 +160,19 @@ async function generateDockerCommand(container, platform, commitHash) {
   const cpuValue = parseFloat(cpus);
   if (isNaN(cpuValue) || cpuValue < MIN_CPUS || cpuValue > MAX_CPUS) {
     throw new Error(`CPUs must be between ${MIN_CPUS} and ${MAX_CPUS}`);
+  }
+
+  // Validate CPU shares (optional: omitted, Docker's default weight applies)
+  if (cpuShares !== undefined) {
+    if (
+      !Number.isInteger(cpuShares) ||
+      cpuShares < MIN_CPU_SHARES ||
+      cpuShares > MAX_CPU_SHARES
+    ) {
+      throw new Error(
+        `cpuShares must be an integer between ${MIN_CPU_SHARES} and ${MAX_CPU_SHARES}`
+      );
+    }
   }
 
   // Validate memory
@@ -237,6 +253,7 @@ async function generateDockerCommand(container, platform, commitHash) {
     `--mount type=bind,source=${DATA_DIRECTORY_ON_SERVER},target=${DATA_DIRECTORY_ON_CONTAINER},bind-propagation=rslave`,
     `--memory=${memory}`,
     `--cpus=${cpuValue}`,
+    ...(cpuShares !== undefined ? [`--cpu-shares=${cpuShares}`] : []),
     `${REGISTRY_URL}:${commitHash}`,
   ].join(" ");
 }

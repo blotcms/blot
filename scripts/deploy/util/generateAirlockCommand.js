@@ -3,6 +3,9 @@ const CONSTANTS = require("../constants");
 const { AIRLOCK } = CONSTANTS;
 const { LOG_MAX_SIZE, LOG_MAX_FILE, LOG_COMPRESS } = CONSTANTS;
 
+const MIN_CPU_SHARES = 2; // the range Docker accepts for --cpu-shares
+const MAX_CPU_SHARES = 262144;
+
 const VALID_PLATFORMS = {
   linux: ["amd64", "arm64"],
 };
@@ -23,6 +26,19 @@ function generateAirlockCommand(platform, commitHash) {
     throw new Error("Invalid commit hash format");
   }
 
+  const { cpuShares } = AIRLOCK;
+
+  if (
+    cpuShares !== undefined &&
+    (!Number.isInteger(cpuShares) ||
+      cpuShares < MIN_CPU_SHARES ||
+      cpuShares > MAX_CPU_SHARES)
+  ) {
+    throw new Error(
+      `cpuShares must be an integer between ${MIN_CPU_SHARES} and ${MAX_CPU_SHARES}`
+    );
+  }
+
   return [
     "docker run",
     "-d",
@@ -41,6 +57,7 @@ function generateAirlockCommand(platform, commitHash) {
     `--log-opt compress=${LOG_COMPRESS}`,
     `--memory=${AIRLOCK.memory}`,
     `--cpus=${AIRLOCK.cpus}`,
+    ...(cpuShares !== undefined ? [`--cpu-shares=${cpuShares}`] : []),
     `${AIRLOCK.registry}:${commitHash}`,
   ].join(" ");
 }
