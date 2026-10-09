@@ -90,6 +90,16 @@ else
     warn "Docker group not found - docker may not be installed"
 fi
 
+# The proxy deploy scripts read /etc/blot/proxy.env, which can hold
+# BLOT_PURGE_TOKEN, so grant read with an ACL rather than making it world-readable
+PROXY_ENV="/etc/blot/proxy.env"
+if [ -f "${PROXY_ENV}" ]; then
+    log "Granting ${DEPLOY_USER} read access to ${PROXY_ENV}..."
+    setfacl -m "u:${DEPLOY_USER}:r" "${PROXY_ENV}" 2>/dev/null || warn "Could not set an ACL on ${PROXY_ENV} (is setfacl installed?): run: sudo setfacl -m u:${DEPLOY_USER}:r ${PROXY_ENV}"
+else
+    log "${PROXY_ENV} does not exist yet: once created, grant ${DEPLOY_USER} read access (see proxy/deploy/README.md)"
+fi
+
 # Set up audit logging
 log "Setting up audit logging..."
 touch "${AUDIT_LOG}"
@@ -174,5 +184,6 @@ warn "1. Add the GitHub Actions SSH private key as a secret: DEPLOY_SSH_KEY"
 warn "2. Add the EC2 hostname/IP as a secret: EC2_HOST"
 warn "3. Test the connection: ssh -i /path/to/key deploy@HOST 'docker ps'"
 warn "4. Restart SSH service if you modified sshd_config"
+warn "5. Proxy deploys: ${DEPLOY_USER} must be able to read ${PROXY_ENV} (see proxy/deploy/README.md)"
 log ""
 

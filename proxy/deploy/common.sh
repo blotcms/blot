@@ -71,17 +71,26 @@ log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*" 2>/dev/null || true; }
 die() { log "ERROR: $*" >&2; exit 1; }
 nap() { ${PROXY_DEPLOY_SLEEP:-sleep} "$1"; }
 
-# Commands which need root (systemctl). The deploy user has passwordless sudo;
-# fail early and clearly rather than hanging on a prompt mid-deploy.
+# Commands which need root (systemctl). `sudo -n` fails rather than prompting,
+# and the `deploy` user GitHub runs as has no sudo, so under it this always
+# fails: its only caller is blue-green.sh's fresh-start check for a legacy
+# openresty unit, which then passes without having checked.
 sys() {
   if [ "$(id -u)" = 0 ]; then "$@"; else sudo -n "$@"; fi
 }
 
 # One deploy at a time on this host: two scripts would pick the same colours
 # and remove each other's containers. Held (fd 9) until the script exits.
+# Deploys run as different users (ec2-user from a Mac, deploy from GitHub), and
+# fs.protected_regular refuses a creating open of another user's file in /tmp,
+# so an existing lock is opened read-only (flock does not need write access).
 acquire_lock() {
-  exec 9>>"$LOCK_FILE" || die "cannot open the deploy lock $LOCK_FILE"
-  chmod 666 "$LOCK_FILE" 2>/dev/null || true
+  if [ -e "$LOCK_FILE" ]; then
+    exec 9<"$LOCK_FILE" || die "cannot open the deploy lock $LOCK_FILE"
+  else
+    exec 9>>"$LOCK_FILE" || die "cannot open the deploy lock $LOCK_FILE"
+    chmod 666 "$LOCK_FILE" 2>/dev/null || true
+  fi
   flock -n 9 || die "another proxy deploy is already running on this host (lock $LOCK_FILE)"
 }
 
