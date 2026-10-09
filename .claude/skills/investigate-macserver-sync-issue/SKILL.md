@@ -50,8 +50,11 @@ The hourly validation is separate: `validateAllBlogs` in
 macserver pushed to in the last hour and emails one `ICLOUD_SYNC_ISSUE`
 ("iCloud sync issue") digest of unsynced changes, Fix() repairs, errors and
 stuck folder locks. Changes there mean a macserver push was missed without
-even a resync request. The daily full resync (`resyncAllConnected`) and the
-startup resync stay unscheduled. The other active checks are
+even a resync request. Removals and created directories are excluded as live
+edits when their parent directory's mtime (returned by the macserver's
+`/readdir`) falls within the grace period before the walk or after it started;
+changes directly in the root aren't covered. The daily full resync
+(`resyncAllConnected`) and the startup resync stay unscheduled. The other active checks are
 `monitorMacServerStats` (minutely `GET /stats`: down/recovered/disk/quota
 emails). A manual full resync of one or all blogs is
 `scripts/icloud/resync.js` (writes; never run without approval).
@@ -247,3 +250,19 @@ Entry template:
   connected` (400) or `Resync skipped: blog setup not complete` (409, a
   reconnect still transferring). `stampLastSync` no longer creates a
   missing hash.
+
+### 2026-10-09 04:45:00 UTC hourly digest — rename during the validation walk (benign false positive)
+
+- Alert: `ICLOUD_SYNC_ISSUE` digest at 04:45 UTC, one blog: 2 unsynced changes
+  (removed: 1, created dirs: 1, downloaded: 0). No resync requested. Container green.
+- Key events (UTC; Mac is -0700): the owner was reorganising a subfolder. 04:44:58
+  the macserver pushed a mkdir for a new "untitled folder" (200). 04:45:00 the
+  folder was renamed in iCloud, the same second the validation started (04:45:00.015).
+  04:45:01.18 the macserver's delete arrived and waited on the walk's lock.
+  04:45:03.05 the walk removed the old folder, and at 04:45:03.29 it created the renamed one.
+  04:45:06.44 the delete returned 204 (`File not found (locked)`), and at 04:45:06.57
+  the mkdir returned 200 (`Directory already exists`).
+- Cause: the walk applied a live rename before the macserver's pushes, which were
+  waiting on the lock. The digest counted that as unsynced. Live edits are only excluded
+  for downloads (by mtime). Removals and created dirs are never excluded.
+- Follow-up: fixed in the PR for this entry: the macserver's /readdir now returns directory mtimes, and removals and created dirs in a directory modified around the walk count as excluded.

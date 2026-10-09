@@ -112,7 +112,10 @@ export default async (req, res) => {
           name: file.name,
           isDirectory,
           size: isDirectory ? undefined : size,
-          modifiedTime: isDirectory ? undefined : modifiedTime,
+          // A directory's mtime changes when an entry in it is created,
+          // removed or renamed, which lets the caller (sync/fromiCloud) tell
+          // that the directory's contents were changed by a live edit.
+          modifiedTime,
         });
       } catch (error) {
         // Don't let this error block the response, a file 
