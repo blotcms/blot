@@ -400,3 +400,18 @@ Entry template:
 - Fix / outcome: README "Disaster recovery" now stops the refresh timer
   around a hand-made IP move and removes the drill marker if a drill host
   goes live. Drill host terminated after.
+
+### 2026-10-09 — "Slow Redis commands": PSYNC 63ms, BGSAVE 250ms (false positives)
+
+- Trigger / evidence: email at 03:02Z listing `BGSAVE` 250ms at 22:00Z and
+  `PSYNC` 63ms at 21:06Z, both held back by the 6-hour limit since the
+  21:00Z BGSAVE email.
+- Cause: the PSYNC was restore drill 2's replica attaching (the fork for its
+  full sync). The BGSAVE was the hourly backup, detected at about 22:05Z by
+  code deployed before the `FORK_ALERT_US` filter went live (deploy
+  22:09-22:13Z); held-back events aren't re-filtered.
+- Fix / outcome: `PSYNC`/`SYNC` added to `FORK_COMMANDS`, so a replica's full
+  sync is only reported at 500ms or more.
+- Follow-up: the 250ms fork is ~3x the usual 60-85ms, an hour after the
+  drill's full sync; under the threshold, so the 500ms alert will catch a
+  trend.

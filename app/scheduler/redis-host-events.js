@@ -26,8 +26,10 @@ const SLOWLOG_ALERT_US = 50 * 1000;
 // BGSAVE and BGREWRITEAOF are logged with the time Redis spent forking, which
 // is ~60-85ms on the current host for every save config/redis/bin/backup.sh
 // asks for (hourly). Those are reported only when the fork itself is long
-// enough to stall clients noticeably.
-const FORK_COMMANDS = ["BGSAVE", "BGREWRITEAOF"];
+// enough to stall clients noticeably. A replica attaching for a full sync
+// (PSYNC, or SYNC from an old replica) is logged with the fork time too, e.g.
+// during a restore drill or cutover.
+const FORK_COMMANDS = ["BGSAVE", "BGREWRITEAOF", "PSYNC", "SYNC"];
 const FORK_ALERT_US = 500 * 1000;
 
 // Errors that mean Redis is refusing writes or running out of room are
