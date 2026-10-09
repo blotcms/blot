@@ -229,8 +229,12 @@ async function generateDockerCommand(container, platform, commitHash) {
     // --network here - see the comment on AIRLOCK in ../constants.js for why.
     ...Object.entries(AIRLOCK_ENV).map(([key, value]) => `-e ${key}=${value}`),
     // Mount the data directory on the host to the container
-    // Every container has access to the same data directory
-    `-v ${DATA_DIRECTORY_ON_SERVER}:${DATA_DIRECTORY_ON_CONTAINER}`,
+    // Every container has access to the same data directory.
+    // rslave propagation: a mount made on the host at this path (swapping
+    // the data volume for another, see config/host/scripts/mount-data-volume.sh)
+    // reaches running containers without a restart. Docker only accepts it if
+    // the host mount is shared, which mount-data-volume.sh ensures.
+    `--mount type=bind,source=${DATA_DIRECTORY_ON_SERVER},target=${DATA_DIRECTORY_ON_CONTAINER},bind-propagation=rslave`,
     `--memory=${memory}`,
     `--cpus=${cpuValue}`,
     `${REGISTRY_URL}:${commitHash}`,

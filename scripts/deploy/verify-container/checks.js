@@ -71,6 +71,24 @@ async function redisRoundTrip({ redis }) {
   return "ping, write and read succeeded";
 }
 
+// config/host/scripts/mount-data-volume.sh requires this file on the data
+// volume before it will mount it. A container started against an empty
+// directory on the root disk (the volume not mounted) won't have it.
+const DATA_VOLUME_MARKER = ".blot-data-volume";
+
+async function dataVolumeMarker({ config }) {
+  const file = path.join(config.data_directory, DATA_VOLUME_MARKER);
+  let volumeID;
+  try {
+    volumeID = (await fs.readFile(file, "utf8")).trim();
+  } catch (err) {
+    throw new Error(
+      `cannot read ${file}: ${err.message} - data volume not mounted?`
+    );
+  }
+  return volumeID ? `data volume ${volumeID}` : `${file} is present`;
+}
+
 async function dataDirectory({ config, redis }) {
   const blogsDir = config.blog_folder_dir;
   let entries;
@@ -211,6 +229,7 @@ async function loginPage({ config }) {
 module.exports = [
   { name: "release ID", run: releaseID },
   { name: "redis read/write", run: redisRoundTrip },
+  { name: "data volume marker", run: dataVolumeMarker },
   { name: "blog folders match redis", run: dataDirectory },
   { name: "data directory writable", run: dataDirectoryWritable },
   { name: "disk space", run: diskSpace },
