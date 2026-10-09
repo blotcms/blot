@@ -124,8 +124,8 @@ proxy container that binds only `data/static`. The drill host is marked by
 `/etc/blot/drill`, so `resize.sh` pauses the containers instead of calling
 `read-only.js`, and tags the new volume `BlotDrill=true` and names it
 `drill-data-volume` (never the production tag, or DLM would snapshot it).
-`setup` takes `mount-data-volume.{sh,service}` from this checkout, or from
-`origin/claude/data-volume-mount` until that is merged. `teardown` refuses an
+`setup` takes `mount-data-volume.{sh,service}` and the docker drop-in from this
+checkout, or from `origin/master`. `teardown` refuses an
 instance that is not tagged `BlotDrill=true` and deletes volumes and snapshots
 one by one by ID, re-checking each tag first.
 

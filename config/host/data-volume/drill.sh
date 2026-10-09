@@ -16,13 +16,15 @@
 #                  --query 'Reservations[0].Instances[0].[ImageId,SubnetId,SecurityGroups[0].GroupId,KeyName]'
 #              (an Amazon Linux 2 arm64 AMI, so the kernel matches production)
 #   setup      install docker, rsync and xfsprogs, format the data volume,
-#              install mount-data-volume.sh from the data-volume-mount branch,
+#              install mount-data-volume.sh and the docker drop-in from the repo,
 #              fill it, start the containers; then print the resize.sh commands
 #   teardown   terminate the instance and delete its volumes and the snapshots
 #              the drill made, each by explicit ID, each only after its
 #              BlotDrill=true tag is checked again
 #
 # Options:
+#   --ssh-port N     launch: move sshd to port N before boot finishes (user data), for a
+#                    security group that does not allow 22; then ssh with -p N (or -F)
 #   --profile NAME   AWS CLI profile (default blot)    --region NAME (default us-west-2)
 #   --key PATH       SSH private key (setup; or DRILL_SSH_KEY)
 #   --yes            do not ask for confirmation (teardown)
@@ -32,21 +34,22 @@ set -euo pipefail
 
 AWS_PROFILE_NAME=blot
 AWS_REGION=${AWS_REGION:-us-west-2}
-AMI=""; SUBNET=""; SECURITY_GROUP=""; KEY_NAME=""
+AMI=""; SUBNET=""; SECURITY_GROUP=""; KEY_NAME=""; SSH_PORT=""
 KEY=${DRILL_SSH_KEY:-}
 YES=""; DRY_RUN=""; CMD=""; ARG=""
-MOUNT_BRANCH=origin/claude/data-volume-mount
+MOUNT_BRANCH=origin/master
 REPO=$(cd "$HERE/../../.." && pwd)
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --ami | --subnet | --security-group | --key-name | --key | --profile | --region) [ $# -ge 2 ] || die "$1 needs a value" ;;
+    --ami | --subnet | --security-group | --key-name | --ssh-port | --key | --profile | --region) [ $# -ge 2 ] || die "$1 needs a value" ;;
   esac
   case "$1" in
     --ami) AMI=$2; shift 2 ;;
     --subnet) SUBNET=$2; shift 2 ;;
     --security-group) SECURITY_GROUP=$2; shift 2 ;;
     --key-name) KEY_NAME=$2; shift 2 ;;
+    --ssh-port) SSH_PORT=$2; shift 2 ;;
     --key) KEY=$2; shift 2 ;;
     --profile) AWS_PROFILE_NAME=$2; shift 2 ;;
     --region) AWS_REGION=$2; shift 2 ;;
@@ -81,14 +84,24 @@ cmd_launch() {
   # DeleteOnTermination is false for the data volume so that teardown, not
   # termination, is what deletes it, by ID and after checking the tag.
   local mappings='[{"DeviceName":"/dev/sdf","Ebs":{"VolumeSize":8,"VolumeType":"gp3","DeleteOnTermination":false}}]'
+  # --ssh-port: user data that moves sshd to that port on first boot, before
+  # cloud-init finishes, for a security group that does not allow 22 (the app
+  # host's sshd is on a non-standard port too). The group itself is not touched.
+  local userdata=""
+  if [ -n "$SSH_PORT" ]; then
+    [[ "$SSH_PORT" =~ ^[0-9]+$ ]] || die "--ssh-port takes a port number"
+    userdata=$(printf '#!/bin/bash\nsed -i "s/^#*Port .*/Port %s/" /etc/ssh/sshd_config\ngrep -q "^Port %s" /etc/ssh/sshd_config || echo "Port %s" >> /etc/ssh/sshd_config\nsystemctl restart sshd\n' "$SSH_PORT" "$SSH_PORT" "$SSH_PORT")
+  fi
   if [ -n "$DRY_RUN" ]; then
+    [ -z "$userdata" ] || echo "user data:
+$userdata"
     echo "would run: aws --profile $AWS_PROFILE_NAME --region $AWS_REGION ec2 run-instances --image-id $AMI --instance-type t4g.small --subnet-id $SUBNET --security-group-ids $SECURITY_GROUP --key-name $KEY_NAME --block-device-mappings '$mappings' --tag-specifications '$specs'"
     return 0
   fi
   local id ip
   id=$(aws_cli ec2 run-instances --image-id "$AMI" --instance-type t4g.small --subnet-id "$SUBNET" \
     --security-group-ids "$SECURITY_GROUP" --key-name "$KEY_NAME" \
-    --block-device-mappings "$mappings" --tag-specifications "$specs" \
+    --block-device-mappings "$mappings" --tag-specifications "$specs" ${userdata:+--user-data "$userdata"} \
     --query 'Instances[0].InstanceId' --output text)
   echo "Instance: $id"
   aws_cli ec2 wait instance-running --instance-ids "$id"
@@ -101,13 +114,12 @@ cmd_launch() {
 }
 
 # repo_file <path in the repo> <destination>: from the working tree if it is
-# there (once the data-volume-mount branch is merged), else from that branch
-# in the local clone. Vendoring copies here would go stale; this needs the
-# branch fetched (git fetch origin) until it is merged.
+# there, else from origin/master in the local clone (git fetch origin). A
+# vendored copy here would go stale.
 repo_file() {
   if [ -f "$REPO/$1" ]; then cp "$REPO/$1" "$2"
   else git -C "$REPO" show "$MOUNT_BRANCH:$1" > "$2" 2> /dev/null ||
-    die "$1 is neither in this checkout nor on $MOUNT_BRANCH: git fetch origin, or merge the data-volume-mount branch first"; fi
+    die "$1 is neither in this checkout nor on $MOUNT_BRANCH: git fetch origin, or merge master first"; fi
 }
 
 # The root-side half of setup, run on the drill host with VOLUME_ID set.
@@ -136,6 +148,10 @@ touch /etc/blot/drill
 
 chmod 755 /home/ec2-user/scripts/mount-data-volume.sh
 cp /home/ec2-user/scripts/mount-data-volume.service /etc/systemd/system/mount-data-volume.service
+systemctl daemon-reload
+# Docker starts only after the data volume is mounted, as in production.
+mkdir -p /etc/systemd/system/docker.service.d
+cp /home/ec2-user/scripts/20-data-volume.conf /etc/systemd/system/docker.service.d/20-data-volume.conf
 systemctl daemon-reload
 systemctl enable --now mount-data-volume.service
 mountpoint -q "$DATA"
@@ -183,12 +199,15 @@ EOF
 cmd_setup() {
   [ -n "$ARG" ] || die "usage: drill.sh setup [--key PATH] <ssh-target>"
   local target=$ARG instance vol i
-  SSH_OPTS="${KEY:+-i $KEY }-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+  # Keep what the caller put in SSH_OPTS (e.g. -F, -p); the defaults only apply
+  # when it is empty.
+  if [ -z "${SSH_OPTS:-}" ]; then SSH_OPTS="${KEY:+-i $KEY }-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"; fi
   [ -z "$KEY" ] || [ -f "$KEY" ] || die "no such key file: $KEY"
   work=$(mktemp -d) # global: the EXIT trap uses it
   trap 'rm -rf "$work"' EXIT
   repo_file config/host/scripts/mount-data-volume.sh "$work/mount-data-volume.sh"
   repo_file config/host/scripts/mount-data-volume.service "$work/mount-data-volume.service"
+  repo_file config/host/scripts/docker.service.d/20-data-volume.conf "$work/20-data-volume.conf"
   chmod 755 "$work/mount-data-volume.sh"
 
   say "Waiting for SSH to $target"
@@ -204,7 +223,7 @@ cmd_setup() {
   echo "$instance, data volume $vol"
 
   say "Installing mount-data-volume and setting the host up"
-  COPYFILE_DISABLE=1 tar -C "$work" -cf - mount-data-volume.sh mount-data-volume.service |
+  COPYFILE_DISABLE=1 tar -C "$work" -cf - mount-data-volume.sh mount-data-volume.service 20-data-volume.conf |
     ssh_run "$target" 'mkdir -p /home/ec2-user/scripts && tar -xf - -C /home/ec2-user/scripts'
   remote_setup | ssh_run "$target" "sudo env VOLUME_ID=$vol bash -s"
 
