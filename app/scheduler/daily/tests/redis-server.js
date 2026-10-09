@@ -215,21 +215,21 @@ describe("scheduler/daily/redis-server", function () {
 
   describe("last backup", function () {
     it("says how long ago", async function () {
-      expect(await render({ backup: backupLine({ age: 2 * HOUR }) })).toEndWith("backed up 2h ago.");
+      expect(await render({ backup: backupLine({ age: 2 * HOUR }) })).toEndWith("backed up 2h ago");
     });
 
     it("says overdue after two hours", async function () {
       expect(await render({ backup: backupLine({ age: 3 * HOUR, kind: "daily" }) })).toEndWith(
-        "**last backup 3h ago, overdue**."
+        "**last backup 3h ago, overdue**"
       );
       expect(await render({ backup: backupLine({ age: 3 * DAY }) })).toEndWith(
-        "**last backup 3d ago, overdue**."
+        "**last backup 3d ago, overdue**"
       );
     });
 
     it("says when none is recorded or it cannot be read", async function () {
-      expect(await render({ backup: null })).toEndWith("**no backup recorded**.");
-      expect(await render({ backup: "garbage" })).toEndWith("**no backup recorded**.");
+      expect(await render({ backup: null })).toEndWith("**no backup recorded**");
+      expect(await render({ backup: "garbage" })).toEndWith("**no backup recorded**");
       expect(parseBackup(null)).toBe(null);
       expect(parseBackup(backupLine({ bytes: 1234 }))).toEqual({
         time: NOW - 30 * MINUTE,
