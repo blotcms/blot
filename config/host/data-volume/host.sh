@@ -325,28 +325,29 @@ cmd_copy() {
     [ "$other" = "$unit" ] || [ "$(unit_state "$other")" != running ] || die "$other is still running"
   done
   if [ -n "$DRY_RUN" ]; then
-    plan "systemd-run --unit=${unit%.service} --property=Nice=10 --property=IOSchedulingClass=idle rsync ${RSYNC_OPTS[*]} --stats ${RSYNC_EXCLUDES[*]} $DATA/ $NEW_MNT/"
+    plan "systemd-run --unit=${unit%.service} --remain-after-exit --property=Nice=10 ionice -c 3 rsync (exit 24 counts as success) ${RSYNC_OPTS[*]} --stats ${RSYNC_EXCLUDES[*]} $DATA/ $NEW_MNT/"
     return 0
   fi
   # A failed pass is retried by calling copy again with the same label.
   [ "$st" != failed ] || systemctl reset-failed "$unit"
   # A transient unit, so the copy survives the operator's ssh session (and
-  # laptop) going away; the pass is observed with copy-status.
-  #  - Nice and the idle I/O class keep it behind the app, as far as the
+  # laptop) going away; the pass is observed with copy-status. systemd 219
+  # (Amazon Linux 2) lets systemd-run set only a few properties, so:
+  #  - --remain-after-exit keeps the finished unit around, with its exit status
+  #    and timestamps, for copy-status. Without it systemd forgets a unit the
+  #    moment it succeeds.
+  #  - Nice=10 and ionice -c 3 (idle) keep it behind the app, as far as the
   #    kernel's I/O scheduler honours that (NVMe devices usually have none, so
   #    this mostly protects the CPU).
-  #  - RemainAfterExit keeps the finished unit around, with its exit status and
-  #    timestamps, for copy-status. Without it systemd 219 forgets a unit the
-  #    moment it succeeds.
-  #  - SuccessExitStatus=24: rsync exits 24 when files vanished between the
-  #    scan and the transfer. On a live source that is routine (temp files,
-  #    deleted blogs) and the next pass picks up the difference, so it counts
-  #    as success here. The frozen pass (final-copy) has no such excuse.
+  #  - The shell wrapper turns rsync's exit 24 (files vanished between the scan
+  #    and the transfer) into success: on a live source that is routine (temp
+  #    files, deleted blogs) and the next pass picks up the difference. The
+  #    frozen pass (final-copy) has no such excuse.
   systemd-run --unit="${unit%.service}" \
     --description="Blot data volume copy ($label)" \
-    --property=Nice=10 --property=IOSchedulingClass=idle \
-    --property=RemainAfterExit=yes --property=SuccessExitStatus=24 \
-    "$(command -v rsync)" "${RSYNC_OPTS[@]}" --stats "${RSYNC_EXCLUDES[@]}" "$DATA/" "$NEW_MNT/" > /dev/null 2>&1
+    --remain-after-exit --property=Nice=10 \
+    ionice -c 3 bash -c 'rsync "$@"; rc=$?; [ "$rc" = 24 ] && rc=0; exit $rc' _ \
+    "${RSYNC_OPTS[@]}" --stats "${RSYNC_EXCLUDES[@]}" "$DATA/" "$NEW_MNT/" > /dev/null
   unit_report "$label"
 }
 
@@ -427,7 +428,7 @@ cmd_final_copy() {
     # recorded in $work/failed so the summary can name it.
     xargs -0 -n 1 -P "$FINAL_COPY_JOBS" -a "$work/list" bash -c 'shard_copy "$1"' _ || rc=$?
   fi
-  [ -z "$wd" ] || { pkill -P "$wd" 2> /dev/null || true; kill "$wd" 2> /dev/null || true; }
+  [ -z "$wd" ] || { pkill -P "$wd" 2> /dev/null || true; kill "$wd" 2> /dev/null || true; wait "$wd" 2> /dev/null || true; }
   if [ -e "$work/over" ]; then die "over the ${budget}s budget"; fi
   if [ -s "$work/failed" ]; then echo "failed shards:" >&2; cat "$work/failed" >&2; fi
   [ "$rc" = 0 ] || die "the final copy failed (rsync exit $rc)"
@@ -497,7 +498,7 @@ cmd_thaw_disk() {
 ##########################################################
 
 cmd_swap() {
-  local old new dev_new got c bad="" containers_list
+  local old new dev_new got c pid bad="" containers_list
   old=$(state_get old_volume); new=$(state_get new_volume)
   precondition "phase is '$(state_get phase)', not copied: run final-copy first" phase_in copied
   precondition "$ID_FILE says $(current_volume), the resize started from $old" [ "$(current_volume)" = "$old" ]
@@ -562,7 +563,10 @@ cmd_swap() {
     die "the host sees '$got' at $DATA (device $(data_device)), expected $new on $dev_new"
   fi
   for c in $containers_list; do
-    got=$(timeout 20 docker exec "$c" cat "$CONTAINER_DATA/$MARKER" 2> /dev/null | tr -d '[:space:]' || true)
+    # nsenter, not docker exec: it also works on a paused container (a drill
+    # pauses them) and does not depend on the container's processes.
+    pid=$(docker inspect -f '{{.State.Pid}}' "$c" 2> /dev/null || true)
+    got=$(timeout 20 nsenter -m -t "$pid" cat "$CONTAINER_DATA/$MARKER" 2> /dev/null | tr -d '[:space:]' || true)
     echo "container.$c=${got:-unreadable}"
     [ "$got" = "$new" ] || bad="$bad $c"
   done
