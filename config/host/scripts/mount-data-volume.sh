@@ -56,10 +56,27 @@ fi
 
 DEVICE=$(readlink -f "$DEVICE_LINK")
 
-# Already mounted (e.g. this ran once already, the unit is re-run, or the
-# volume was mounted by hand): nothing to do, as long as it is the right
-# volume. A different device here means something else was mounted over the
-# data directory; do not paper over that.
+# Belt and braces: make sure it is our data volume and not some other XFS
+# volume (or a blank one) that happens to be at that device. The marker file
+# is written by deploy.sh when it adopts a volume, and must be put on any
+# replacement volume before it is swapped in. Its content is the volume ID
+# so that a marker copied onto the wrong volume still fails.
+marker_matches() {
+  local marker=""
+  if [ -f "$MARKER_FILE" ]; then
+    read -r marker < "$MARKER_FILE" || true
+    marker=$(printf '%s' "$marker" | tr -d '[:space:]')
+  fi
+  [ "$marker" = "$VOLUME_ID" ] && return 0
+  echo "$MARKER_FILE says '$marker', expected $VOLUME_ID."
+  return 1
+}
+
+# Already mounted (e.g. this ran once already, docker.service's ExecStartPre
+# runs it again, or the volume was mounted by hand): nothing to mount, as long
+# as it is the right volume with the right marker. A different device here
+# means something else was mounted over the data directory; do not paper over
+# that, and do not unmount it either: leave it for a person to look at.
 if mountpoint -q "$DATA_DIRECTORY"; then
   # findmnt prints bind-mounted sources as /dev/xxx[/subdir]; drop the [...]
   MOUNTED_SOURCE=$(findmnt -n -o SOURCE --target "$DATA_DIRECTORY")
@@ -69,6 +86,8 @@ if mountpoint -q "$DATA_DIRECTORY"; then
     echo "$DATA_DIRECTORY is mounted from $MOUNTED_DEVICE, but $VOLUME_ID is $DEVICE."
     exit 1
   fi
+
+  marker_matches || exit 1
 
   echo "$DATA_DIRECTORY is already mounted from $DEVICE ($VOLUME_ID)."
   mount --make-shared "$DATA_DIRECTORY"
@@ -80,19 +99,8 @@ mkdir -p "$DATA_DIRECTORY"
 mount -t xfs -o noatime "$DEVICE" "$DATA_DIRECTORY"
 echo "Mounted $DEVICE ($VOLUME_ID) at $DATA_DIRECTORY."
 
-# Belt and braces: make sure it is our data volume and not some other XFS
-# volume (or a blank one) that happens to be at that device. The marker file
-# is written by deploy.sh when it adopts a volume, and must be put on any
-# replacement volume before it is swapped in. Its content is the volume ID
-# so that a marker copied onto the wrong volume still fails.
-MARKER=""
-if [ -f "$MARKER_FILE" ]; then
-  read -r MARKER < "$MARKER_FILE" || true
-  MARKER=$(printf '%s' "$MARKER" | tr -d '[:space:]')
-fi
-
-if [ "$MARKER" != "$VOLUME_ID" ]; then
-  echo "$MARKER_FILE says '$MARKER', expected $VOLUME_ID: unmounting $DEVICE."
+if ! marker_matches; then
+  echo "Unmounting $DEVICE."
   umount "$DATA_DIRECTORY"
   exit 1
 fi
