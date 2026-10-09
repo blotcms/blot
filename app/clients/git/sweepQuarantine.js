@@ -76,6 +76,11 @@ async function sweepRepository(objectsDirectory, now, maxAgeMs, report) {
 
       report.removed++;
       report.bytes += bytes;
+      report.directories.push({
+        repository: path.basename(path.dirname(objectsDirectory)),
+        bytes: bytes,
+        ageMs: now - stat.mtimeMs,
+      });
     } catch (err) {
       report.errors++;
       console.error("Git: could not remove " + directory, err);
@@ -92,7 +97,13 @@ module.exports = async function sweepQuarantine(options) {
   var dataDir = options.dataDir || require("./dataDir");
   var now = options.now === undefined ? Date.now() : options.now;
   var maxAgeMs = options.maxAgeMs === undefined ? MAX_AGE_MS : options.maxAgeMs;
-  var report = { repositories: 0, removed: 0, bytes: 0, errors: 0 };
+  var report = {
+    repositories: 0,
+    removed: 0,
+    bytes: 0,
+    errors: 0,
+    directories: [], // one { repository, bytes, ageMs } per directory removed
+  };
   var entries = await fs.readdir(dataDir, { withFileTypes: true });
 
   for (var entry of entries) {
