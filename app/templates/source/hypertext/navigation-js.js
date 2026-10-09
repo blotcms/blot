@@ -4,7 +4,7 @@ const COLLAPSE_NAVIGATION_BY_DEFAULT = {{#collapse_navigation_by_default}}true{{
 
 function sidebarCacheKey(root) {
   return (
-    "sidebarState:v2:" +
+    "sidebarState:v3:" +
     document.querySelector('meta[name="blot-cache-id"]')?.content +
     ":sort:" +
     (root?.dataset.sortBy || "id") +
@@ -313,9 +313,7 @@ class SidebarNavigation {
     folders.sort(cmp);
     files.sort(cmp);
 
-    // Root pages must come before folders. Folders-first leaves those pages
-    // under the last directory, where they look like an expanded submenu.
-    const ordered = ul === this.root ? [...files, ...folders] : [...folders, ...files];
+    const ordered = [...folders, ...files];
     ordered.forEach((li) => ul.appendChild(li));
 
     folders.forEach((li) => {
