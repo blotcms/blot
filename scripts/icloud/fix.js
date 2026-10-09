@@ -25,6 +25,7 @@ const eachBlogOrOneBlog = require("../each/eachBlogOrOneBlog");
 const establishSyncLock = require("sync/establishSyncLock");
 const database = require("clients/icloud/database");
 const fix = promisify(require("sync/fix"));
+const getBlog = promisify(require("models/blog").get);
 
 const PROGRESS_INTERVAL_MS = 30000;
 
@@ -91,9 +92,15 @@ const processBlog = async (blog) => {
     }
 
     done = syncLock.done;
+
+    // A sync we waited on may have changed the blog (e.g. its menu), and
+    // Fix() writes the menu back whole, so use the current copy.
+    const current = await getBlog({ id: blog.id });
+    if (!current) return;
+
     checkedBlogs++;
 
-    const report = (await fix(blog)) || {};
+    const report = (await fix(current)) || {};
     const checks = Object.keys(report);
 
     if (checks.length > 0) {
@@ -189,7 +196,7 @@ if (require.main === module) {
     .then(() => {
       stopProgress();
       summarize();
-      process.exit(0);
+      process.exit(failedBlogs > 0 ? 1 : 0);
     })
     .catch((err) => {
       stopProgress();
