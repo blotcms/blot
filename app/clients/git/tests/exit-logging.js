@@ -17,6 +17,41 @@ describe("git client process logging and limits", function () {
     });
   }
 
+  // A push starts a sync of the blog folder once its response has finished.
+  // Wait for that to end, otherwise it can still hold the folder lock when
+  // the spec's cleanup deletes the blog, and its lost-lock error then fails
+  // whichever spec happens to be running.
+  async function waitForSync(ctx) {
+    var syncUrl =
+      "http://127.0.0.1:" +
+      ctx.server.port +
+      "/clients/git/syncs-finished/" +
+      ctx.blog.id;
+
+    for (var i = 0; i < 300; i++) {
+      var finished = await new Promise(function (resolve, reject) {
+        require("http")
+          .get(syncUrl, function (res) {
+            var body = "";
+            res.setEncoding("utf8");
+            res.on("data", function (chunk) {
+              body += chunk;
+            });
+            res.on("end", function () {
+              resolve(body === "true");
+            });
+          })
+          .on("error", reject);
+      });
+
+      if (finished) return;
+
+      await sleep(100);
+    }
+
+    throw new Error("Sync did not finish");
+  }
+
   // The lines passed to console.log which were logged by the git client
   function gitLines(spy) {
     return spy.calls
@@ -74,6 +109,8 @@ describe("git client process logging and limits", function () {
 
       var lines = await waitForLines(log, /Git: receive-pack /);
 
+      await waitForSync(ctx);
+
       expect(lines.length).toBe(1);
       expect(lines[0]).toContain(" Git: receive-pack " + ctx.blog.handle + " ");
       expect(lines[0]).toMatch(/ exit=0 duration=\d+\.\d{3}s rx=[1-9]\d* tx=\d+/);
@@ -97,6 +134,7 @@ describe("git client process logging and limits", function () {
       await ctx.git.add(".");
       await ctx.git.commit("add hello");
       await ctx.git.push();
+      await waitForSync(ctx);
 
       var clone = require("simple-git")(ctx.tmp).silent(true);
 
