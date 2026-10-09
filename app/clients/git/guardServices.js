@@ -27,8 +27,76 @@ var HttpDuplex = require(
 
 var processKey = "_blotGitProcess";
 
+// How long a git child gets to exit by itself once we have closed its input
+// before we send it SIGTERM. Git normally exits within milliseconds.
+var STOP_GRACE_MS = 5 * 1000;
+
+function noop() {}
+
 function isConnectionError(err) {
   return err && (err.code === "ECONNRESET" || err.code === "EPIPE");
+}
+
+// Pushover pipes a legacy `through` stream into the child's stdin and the
+// child's stdout out to the response. A legacy pipe throws if its destination
+// errors and nothing else is listening, so a late write to a stdin we have
+// destroyed (or a read from a stdout whose reader has gone) would otherwise
+// become an uncaught exception.
+function ignoreStreamErrors(ps) {
+  if (ps._blotStreamErrorsIgnored) return;
+
+  ps._blotStreamErrorsIgnored = true;
+
+  [ps.stdin, ps.stdout, ps.stderr].forEach(function (stream) {
+    if (stream) stream.on("error", noop);
+  });
+}
+
+function hasExited(ps) {
+  return ps.exitCode !== null || ps.signalCode !== null;
+}
+
+// Ends a git child whose client has gone away.
+//
+// Signalling it is not enough. git-receive-pack hands the pack to
+// `git index-pack --stdin`, which inherits receive-pack's stdin: the pipe from
+// us. Killing receive-pack leaves index-pack (hundreds of MB of RSS for a big
+// push) blocked reading a pipe that we still hold open, and the push's
+// quarantine directory (objects/tmp_objdir-incoming-*) stays on disk. Closing
+// the pipe instead gives every reader EOF: index-pack fails with "early EOF",
+// receive-pack reports the failure, deletes the quarantine directory and
+// exits; upload-pack sees the end of its request and exits.
+function stop(ps) {
+  if (!ps || ps._blotStopping || hasExited(ps)) return;
+
+  ps._blotStopping = true;
+
+  ignoreStreamErrors(ps);
+
+  try {
+    if (ps.stdin) ps.stdin.destroy();
+  } catch (err) {
+    debug("Error closing git stdin", err);
+  }
+
+  // Backstop in case git does not exit when its input ends.
+  var timer = setTimeout(function () {
+    if (hasExited(ps)) return;
+
+    debug("Git process did not exit after its input closed, killing it");
+
+    try {
+      ps.kill();
+    } catch (err) {
+      debug("Error killing git process", err);
+    }
+  }, STOP_GRACE_MS);
+
+  timer.unref();
+
+  ps.once("exit", function () {
+    clearTimeout(timer);
+  });
 }
 
 function onError(duplex, err) {
@@ -41,19 +109,24 @@ function onError(duplex, err) {
   // The client has gone (or the response failed), so nothing will ever finish
   // reading the request body. Stop the git subprocess pushover may have started
   // for it rather than leaving it waiting on stdin forever.
-  var ps = duplex[processKey];
-  if (ps && ps.exitCode === null && !ps.killed) {
-    try {
-      ps.kill();
-    } catch (err) {
-      debug("Error stopping git process", err);
-    }
-  }
+  stop(duplex[processKey]);
 }
 
 function guard(duplex) {
   duplex.on("service", function (ps) {
     duplex[processKey] = ps;
+    ignoreStreamErrors(ps);
+
+    // A client that hangs up while git is still sending (a clone or fetch)
+    // closes the response without an error, and the response then never
+    // drains: git would block writing to a full pipe indefinitely.
+    var res = duplex.response;
+
+    if (res && typeof res.once === "function") {
+      res.once("close", function () {
+        if (!res.writableFinished) stop(ps);
+      });
+    }
   });
 
   duplex.on("error", function (err) {

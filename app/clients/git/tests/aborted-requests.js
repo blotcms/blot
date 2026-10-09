@@ -10,7 +10,8 @@ describe("git client aborted requests", function () {
   var net = require("net");
   var url = require("url");
   var crypto = require("crypto");
-  var spawn = require("child_process").spawn;
+  var childProcess = require("child_process");
+  var spawn = childProcess.spawn;
   var dataDir = require("clients/git/dataDir");
 
   // Pushover wraps every Git request in an http-duplex object that re-emits
@@ -18,7 +19,9 @@ describe("git client aborted requests", function () {
   // request used to throw an unhandled 'error' event for any request that
   // pushover did not report as a branch push, which killed the whole process
   // (and every other request in flight with it). These specs abort requests of
-  // each kind and check the server carries on.
+  // each kind and check the server carries on, and that git itself winds down:
+  // no git process left waiting on a client that has gone, and no quarantine
+  // directory left behind in the repository.
 
   // Roughly 24MB of random (so incompressible) data across a few files.
   var BIG_FILES = 3;
@@ -26,6 +29,11 @@ describe("git client aborted requests", function () {
 
   // Let the server notice the dropped connection before we check on it.
   var SETTLE_MS = 1000;
+
+  // How long git has to wind down once its client has gone away. The server
+  // closes git's input straight away, so this only needs to cover git
+  // noticing, cleaning up and exiting.
+  var CLEANUP_MS = 10 * 1000;
 
   beforeEach(function () {
     var ctx = this;
@@ -239,11 +247,113 @@ describe("git client aborted requests", function () {
   var ZERO = new Array(41).join("0");
   var SHA = new Array(41).join("a");
 
-  // The server must not have thrown, and must still answer a new git client.
+
+  // The git processes the server runs for a request are the service itself
+  // (git-receive-pack or git-upload-pack, which has the repository path in its
+  // arguments) and the helpers that service starts. index-pack and
+  // pack-objects have no repository path in their arguments but, like the
+  // service, run with the bare repository as their working directory, so that
+  // is how we recognise them.
+  var GIT_SERVICE_PROCESS = /(^|[\s/])git[ -](receive-pack|upload-pack|index-pack|unpack-objects|pack-objects)(\s|$)/;
+
+  function run(command, args) {
+    return new Promise(function (resolve) {
+      childProcess.execFile(command, args, function (err, stdout) {
+        resolve(err ? "" : String(stdout));
+      });
+    });
+  }
+
+  async function workingDirectory(pid) {
+    try {
+      return await fs.realpath("/proc/" + pid + "/cwd");
+    } catch (err) {
+      // No /proc (macOS)
+    }
+
+    var output = await run("lsof", ["-a", "-d", "cwd", "-p", String(pid), "-Fn"]);
+    var line = output.split("\n").find(function (line) {
+      return line[0] === "n";
+    });
+
+    if (!line) return null;
+
+    try {
+      return await fs.realpath(line.slice(1));
+    } catch (err) {
+      return null;
+    }
+  }
+
+  // Lists the git service processes (and their index-pack and pack-objects
+  // helpers) running against the given bare repository, as "pid args" strings.
+  async function gitProcessesFor(repoPath) {
+    var realRepoPath = await fs.realpath(repoPath).catch(function () {
+      return repoPath;
+    });
+    var listing = await run("ps", ["-eo", "pid=,ppid=,args="]);
+    var found = [];
+
+    for (var line of listing.split("\n")) {
+      var match = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
+
+      if (!match || Number(match[1]) === process.pid) continue;
+      if (!GIT_SERVICE_PROCESS.test(match[3])) continue;
+
+      if (
+        match[3].indexOf(repoPath) !== -1 ||
+        match[3].indexOf(realRepoPath) !== -1 ||
+        (await workingDirectory(match[1])) === realRepoPath
+      ) {
+        found.push(match[1] + " " + match[3]);
+      }
+    }
+
+    return found;
+  }
+
+  // Directories git creates to hold a push until it has been checked
+  // (objects/tmp_objdir-incoming-*). It deletes them when the push fails, but
+  // not if the process is killed first.
+  async function quarantinesIn(repoPath) {
+    var entries = await fs.readdir(repoPath + "/objects").catch(function () {
+      return [];
+    });
+
+    return entries.filter(function (name) {
+      return name.indexOf("tmp_objdir-incoming-") === 0;
+    });
+  }
+
+  // An aborted request must not leave git running (a stuck git-receive-pack
+  // and the git index-pack it started hold hundreds of MB between them) or its
+  // quarantine directory on disk, so wait for git to finish cleaning up.
+  async function expectGitToCleanUp(ctx) {
+    var repoPath = dataDir + "/" + ctx.blog.handle + ".git";
+    var deadline = Date.now() + CLEANUP_MS;
+    var processes, quarantines;
+
+    do {
+      processes = await gitProcessesFor(repoPath);
+      quarantines = await quarantinesIn(repoPath);
+
+      if (!processes.length && !quarantines.length) break;
+
+      await sleep(250);
+    } while (Date.now() < deadline);
+
+    expect(processes).toEqual([]);
+    expect(quarantines).toEqual([]);
+  }
+
+  // The server must not have thrown, must have cleaned up after the aborted
+  // request, and must still answer a new git client.
   async function expectServerStillWorks(ctx) {
     await sleep(SETTLE_MS);
 
     expect(ctx.uncaught.map(String)).toEqual([]);
+
+    await expectGitToCleanUp(ctx);
     expect(ctx.server.listening).toBe(true);
 
     var result = await runGit(["ls-remote", ctx.repoUrl], ctx.tmp);
