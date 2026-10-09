@@ -118,10 +118,25 @@ hr {
   margin-top: 0.5rem;
 }
 
-.pagination {
+.entries > .entry:not(.listing) + .entry:not(.listing) {
   margin-top: 3rem;
-  color: var(--light-text-color);
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  margin-top: 3rem;
+  padding: 1rem 0 0 2rem;
+  border-top: 1px solid var(--dark-border-color);
+  color: var(--text-color);
   font-size: var(--small-font-size);
+}
+
+.pagination[data-total="1"] {
+  display: none;
 }
 
 .pagination a {
@@ -130,6 +145,34 @@ hr {
 
 .pagination a:hover {
   color: var(--link-color);
+}
+
+.pagination-previous,
+.pagination-next {
+  display: inline-flex;
+  min-height: 2.5em;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.55em 1em;
+  border: 1px solid var(--dark-border-color);
+  border-radius: 999px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pagination-status {
+  color: var(--light-text-color);
+  white-space: nowrap;
+  text-align: left;
+  letter-spacing: 0.04em;
+  word-spacing: 0.15em;
+}
+
+@media (max-width: 480px) {
+  .pagination-previous,
+  .pagination-next {
+    padding-inline: 0.7em;
+  }
 }
 
 main {
@@ -475,8 +518,7 @@ figcaption {
 .entry h2 {font-size: calc(var(--heading-font-size) * 0.91);}
 .entry h3 {font-size: calc(var(--heading-font-size) * 0.8);}
 
-.entry > :first-child
- {
+.entry > :nth-child(1 of :not(script, style)) {
   margin-top: 12px;
 }
 
