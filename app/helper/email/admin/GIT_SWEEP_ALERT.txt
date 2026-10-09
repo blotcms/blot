@@ -1,0 +1,26 @@
+Git sweep: {{summary}}
+
+{{#hasStuck}}
+**Stuck git processes** (running for more than 2 hours; a push or clone ends within the 1 hour request timeout)
+
+{{#stuck}}
+- pid {{pid}}, running {{age}}, {{rss}} resident: `{{{args}}}`
+{{/stuck}}
+
+{{/hasStuck}}
+{{#hasRemoved}}
+**Stale push directories removed** ({{freed}} freed; left behind by pushes cut off by a crash or a deploy)
+
+{{#removed}}
+- `{{repository}}`: {{size}}, {{age}} old
+{{/removed}}
+
+{{/hasRemoved}}
+{{#hasErrors}}
+**Sweep errors**: {{errors}}. The details are in the green container's log: `logs green | grep "Git: could not"`
+
+{{/hasErrors}}
+**What to do**
+
+- **Stuck processes** hold memory and the repository's pack. Find the repository they belong to in the arguments, then check `logs green | grep "Git:"` around the time they started. Killing them is safe, since nothing healthy runs this long.
+- **Removed directories** need nothing: the sweep already deleted them. Several in a day means pushes are being cut off, so look for a crash or restart (`investigate-production-container-restarts`).

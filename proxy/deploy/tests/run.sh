@@ -309,6 +309,12 @@ check "fresh start where SCAN returns an error reply: refused" '[ $RC != 0 ] && 
 reset container; FAKE_LOCK_HELD=1 bluegreen
 check "another deploy holds the lock: refused, nothing touched" '[ $RC != 0 ] && ! called "docker create" && ! called "docker stop" && ! called "docker rm" && mentions "already running"'
 
+if [ "$(id -u)" != 0 ]; then # root ignores file modes
+  reset container; : > "$T/lock"; chmod 444 "$T/lock"; bluegreen
+  check "an existing lock file the user cannot write is opened read-only: the swap proceeds" '[ $RC = 0 ] && called "docker create" && ! mentions "cannot open the deploy lock"'
+  chmod 644 "$T/lock"; rm -f "$T/lock"
+fi
+
 reset container; FAKE_REDIS_DOWN=1 bluegreen
 check "Redis unreachable after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm blot-proxy-blue"'
 

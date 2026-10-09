@@ -48,6 +48,11 @@ connection) and the config's own `worker_rlimit_nofile 20480`
    because Node purges the cache from a Docker bridge that cannot see the
    host's `127.0.0.1`. The scripts read the value from the running Node
    container, so recreate the Node containers (a normal deploy) after editing it.
+   GitHub's Deploy proxy workflow runs the scripts as the `deploy` user, which
+   must be able to read the file. It can hold `BLOT_PURGE_TOKEN`, so grant that
+   user an ACL rather than making it world-readable:
+   `sudo setfacl -m u:deploy:r /etc/blot/proxy.env`
+   ([`setup-deploy-user.sh`](../../scripts/deploy/setup-deploy-user.sh) does this if the file already exists).
 3. **The certificate-renewal helpers.** `config/host/scripts/renew-wildcard-ssl.sh`
    reloads the container after renewing; install it with `npm run deploy-host`.
    See [`config/host/README.md`](../../config/host/README.md) for the cron entry

@@ -61,7 +61,7 @@ describe("Git sync when Redis is unavailable", function () {
           }
         ),
       "./checkGitRepoExists": (path, cb) => cb(null),
-      "./dataDir": "/test-data",
+      "./bareRepo": { directory: (handle) => "/test-data/" + handle + ".git" },
       "models/blog": {},
       "./validateTree": validateTree,
     };

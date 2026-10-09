@@ -17,6 +17,7 @@ const checkCardTesters = require("./check-card-testers");
 const subscriptionLifecycleJob = require("./subscription-lifecycle");
 const checkSSLCertificates = require("./check-ssl-certificates");
 const checkRedisHost = require("./check-redis-host");
+const sweepGit = require("./sweep-git");
 
 const SCHEDULE_RETRY_MS = 60 * 1000;
 const SCHEDULE_RETRY_MAX_MS = 60 * 60 * 1000;
@@ -297,6 +298,36 @@ module.exports = function () {
       } else {
         console.log(clfdate(), "Error: Checking Redis host", err);
       }
+    }
+  });
+
+  // A push cut off by a crash or a deploy leaves its quarantine directory in
+  // the bare repository, and git never removes it. The scheduler runs in the
+  // container that serves git pushes (config.master, the green one) and sees
+  // the same git data directory.
+  console.log(clfdate(), "Scheduled daily sweep of stale git push quarantine directories");
+  scheduler.scheduleJob({ hour: 5, minute: 0 }, async function () {
+    try {
+      const { report, sent } = await sweepGit({
+        sendEmail: (view) =>
+          new Promise((resolve, reject) =>
+            email.GIT_SWEEP_ALERT(null, view, (err) =>
+              err ? reject(err) : resolve()
+            )
+          ),
+      });
+
+      console.log(
+        clfdate(),
+        "Git: swept " + report.repositories + " repositories, removed",
+        report.removed,
+        "stale push quarantine directories, freed",
+        report.bytes,
+        "bytes" + (report.errors ? ", " + report.errors + " errors" : "")
+      );
+      if (sent) console.log(clfdate(), "Sent git sweep alert email");
+    } catch (err) {
+      console.log(clfdate(), "Error: Sweeping git push quarantine directories", err);
     }
   });
 

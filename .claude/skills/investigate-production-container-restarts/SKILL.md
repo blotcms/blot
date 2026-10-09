@@ -114,8 +114,8 @@ ssh blot "cat ~/docker-health-check.log"
 Several distinct causes look identical in `docker ps` but require
 different evidence and point to different fixes. Check each — don't stop
 at the first one that seems plausible. Grep the end of the previous run's
-log for `FATAL ERROR` and `LOCK COMPROMISED` before anything else; between
-them they cover most crashes.
+log for `FATAL ERROR`, `LOCK COMPROMISED` and `Unhandled 'error' event`
+before anything else; between them they cover most crashes.
 
 ### V8/Node heap OOM (in-process crash, not a Linux OOM kill)
 
@@ -283,6 +283,45 @@ too.
   under that name, even when the containers are running it.
 - Don't write scratch files on the production hosts. Pull the logs locally
   and analyse them there.
+
+### Unhandled 'error' event (e.g. an aborted git request)
+
+The log ends with `throw er; // Unhandled 'error' event` and the name of
+the object that emitted it. There is no Node report, `OOMKilled=false`, and
+no `LOCK COMPROMISED`. The emitter names the culprit; look for an in-flight
+request on that container in the same second (step 5), usually a 502 in the
+access log with a long request time.
+
+Example (green, 9 Oct 2026): `Error: aborted` (`ECONNRESET`) emitted "on
+Service instance", during a ~580 MB `git push`. Pushover wraps each git
+request in an http-duplex `Service` that re-emits the request's errors, and
+only some of those objects had a listener. Fixed by
+`app/clients/git/guardServices.js` (#2086), which gives every one a listener
+and stops its git process.
+
+For the git client, also check:
+
+- every git child now logs one line when it exits:
+  `Git: receive-pack|upload-pack <handle> exit=… duration=… rx=… tx=…
+  [stderr=…]`. A push that was cut off shows a non-zero exit, a signal or
+  git's own error.
+- stuck git processes (before #2086 an aborted push left `git-receive-pack`
+  and `git index-pack` waiting forever, each `index-pack` holding hundreds of
+  MB inside the container's memory limit):
+
+  ```bash
+  ssh -n blot "docker exec blot-container-green sh -c 'ps -o pid,etime,rss,args | grep [g]it-'"
+  ```
+
+- leftover push staging directories (`objects/tmp_objdir-incoming-*` in the
+  bare repos). A push killed by a crash or deploy can't clean up after
+  itself; `app/clients/git/sweepQuarantine.js` removes ones older than 24h
+  daily at 05:00 on green. Several similar-sized directories in one repo
+  mean a user retried a large push that kept failing:
+
+  ```bash
+  ssh -n blot "docker exec blot-container-green sh -c 'find /usr/src/app/data/git -mindepth 3 -maxdepth 3 -type d -name \"tmp_objdir-incoming-*\" -exec du -sh {} +'"
+  ```
 
 ### Neither — the deploy's own health check failed
 

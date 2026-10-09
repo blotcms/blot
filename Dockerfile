@@ -37,11 +37,20 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 # Also configure git to handle lots of large binary files in memory-constrained
 # environments. Folded into one layer to keep the image's layer count (and so
 # its per-job pull cost) down.
+#
+# This is system config, so it applies to every git process in the container,
+# including the git-receive-pack / git-upload-pack processes the git client
+# spawns for pushes and clones (app/clients/git). pack.threads 1 stops
+# index-pack and pack-objects taking every core. receive.maxInputSize caps a
+# push just under the 2000M the proxy accepts for /clients/git/end/ (see
+# proxy/config/blot-site.conf), so one that is too big fails with a git error
+# the user can read rather than nginx's bare 413. Keep the two in step.
 RUN apk add --no-cache git tini curl ca-certificates \
  && git config --system pack.threads 1 \
  && git config --system pack.windowMemory 32m \
  && git config --system pack.deltaCacheSize 32m \
- && git config --system pack.window 5
+ && git config --system pack.window 5 \
+ && git config --system receive.maxInputSize 1900m
 
 # Use tini as the init process so simple-git child processes are reaped instead of becoming zombies.
 ENTRYPOINT ["/sbin/tini", "--"]
