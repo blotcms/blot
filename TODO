@@ -1,3 +1,14 @@
+disk alerts emails add 
+
+create skills which delegate cheap subagents to scan logs for issues:
+- proxy logs (focussed on error)
+- node container logs
+
+adjust disk resize script to autosuggest values on run without args
+- i.e. propose shrink if free space found via ssh is X or grow if Y
+
+harden app against full  disk
+
 Add script to size down ebs volume immediately
 - In place and reuse as we move more to s3 
 - Can we test my assumption that the ephemeral instance store hard disk is faster than EBS discs? 
