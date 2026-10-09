@@ -13,7 +13,8 @@
 #   thaw-disk                  remount it read-write (rollback)
 #   swap                       move the new volume over the data directory
 #   stop-copy                  stop any copy still running (rollback)
-#   old-volume-status <id>     is the old volume still mounted anywhere?
+#   old-volume-status <id>     is the old volume still mounted anywhere, and where?
+#   release-old <id>           unmount the old volume from the host, no reboot
 #   grow-fs <size-bytes>       xfs_growfs after an online EBS grow
 #
 # Every subcommand prints key=value lines on stdout (resize.sh parses them with
@@ -25,8 +26,8 @@
 # with bind-propagation=rslave (config/host/scripts/mount-data-volume.sh makes
 # the host mount shared), so a mount made on the host over the data directory
 # shows up inside running containers at once. The old volume stays mounted
-# underneath, read-only, until the containers are recreated and the host
-# reboots.
+# underneath, read-only, until the containers are recreated; on the host it
+# can be released without a reboot (release-old).
 set -euo pipefail
 
 DATA=/var/www/blot/data
@@ -42,6 +43,9 @@ MARKER=.blot-data-volume
 LINK_PREFIX=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_vol
 UNIT_PREFIX=blot-data-copy-
 LOCK=/run/blot-data-volume.lock
+# Installed by config/host/deploy.sh; release-old uses it to mount the current
+# volume again.
+MOUNT_SCRIPT=/home/ec2-user/scripts/mount-data-volume.sh
 # The top-level directories whose children are copied by separate rsyncs in the
 # frozen pass (final-copy). Everything else at the top level is one rsync.
 SHARD_PARENTS=${SHARD_PARENTS:-"static blogs git"}
@@ -74,7 +78,8 @@ RSYNC_EXCLUDES=('--exclude=/.blot-data-volume' '--exclude=/logs/*' '--exclude=/t
 # Small helpers
 ##########################################################
 
-valid_volume() { [[ "${1:-}" =~ ^vol-[0-9a-f]{8,17}$ ]] || die "not a volume ID: '${1:-}'"; }
+is_volume_id() { [[ "${1:-}" =~ ^vol-[0-9a-f]{8,17}$ ]]; }
+valid_volume() { is_volume_id "${1:-}" || die "not a volume ID: '${1:-}'"; }
 volume_link() { echo "${LINK_PREFIX}${1#vol-}"; }
 current_volume() { tr -d '[:space:]' < "$ID_FILE" 2> /dev/null || true; }
 # <major>:<minor> of a block device, as /proc/*/mountinfo prints it.
@@ -83,6 +88,47 @@ devno() { printf '%d:%d' "0x$(stat -L -c %t "$1")" "0x$(stat -L -c %T "$1")"; }
 # container has its own), one per line. A bind mount of the same filesystem
 # shows the same device number.
 mounts_of() { { cat /proc/[0-9]*/mountinfo 2> /dev/null || true; } | awk -v d="$1" '$3 == d {print $5}' | sort -u; }
+# The mounts at the data directory in the host's own mount namespace.
+data_mount_count() { awk -v d="$DATA" '$5 == d' /proc/self/mountinfo | wc -l | tr -d ' '; }
+# scan_mounts <major:minor>: where a device is mounted, by mount namespace.
+# Sets M_HOST (yes|no: the host's namespace, pid 1's, has it) and M_OTHERS: one
+# "holder=<pid> <comm>[ (container <name>)]" line for each OTHER namespace that
+# has it (a container's namespace is created by docker, and keeps what it
+# inherited when it was created: the old volume, stacked under the new one).
+# One process per namespace is enough; for a container it is the one docker
+# reports, so the name can be given.
+scan_mounts() {
+  local no=$1 host_ns map="" c row cpid cname d p ns seen=" " hit
+  host_ns=$(readlink /proc/1/ns/mnt)
+  if awk -v d="$no" '$3 == d {f = 1} END {exit !f}' /proc/1/mountinfo; then M_HOST=yes; else M_HOST=no; fi
+  M_OTHERS=""
+  if have docker; then
+    for c in $(docker ps -q 2> /dev/null || true); do
+      row=$(docker inspect -f '{{.State.Pid}} {{.Name}}' "$c" 2> /dev/null || true)
+      cpid=${row%% *}; cname=${row#* }; cname=${cname#/}
+      [ -n "$cpid" ] && [ "$cpid" != 0 ] || continue
+      ns=$(readlink "/proc/$cpid/ns/mnt" 2> /dev/null) || continue
+      map="$map$ns|$cpid|$cname"$'\n'
+    done
+  fi
+  for d in /proc/[0-9]*; do
+    p=${d#/proc/}
+    ns=$(readlink "$d/ns/mnt" 2> /dev/null) || continue
+    [ "$ns" != "$host_ns" ] || continue
+    case "$seen" in *" $ns "*) continue ;; esac
+    [ -r "$d/mountinfo" ] || continue # the process just exited: another one in its namespace will do
+    seen="$seen$ns "
+    awk -v d="$no" '$3 == d {f = 1} END {exit !f}' "$d/mountinfo" 2> /dev/null || continue
+    hit=$(printf '%s' "$map" | awk -F'|' -v n="$ns" '$1 == n {print $2 "|" $3; exit}')
+    if [ -n "$hit" ]; then
+      cpid=${hit%%|*}; cname=${hit#*|}
+      M_OTHERS="$M_OTHERS""holder=$cpid $(tr -d '\n' < "/proc/$cpid/comm" 2> /dev/null || echo '?') (container $cname)"$'\n'
+    else
+      M_OTHERS="$M_OTHERS""holder=$p $(tr -d '\n' < "$d/comm" 2> /dev/null || echo '?')"$'\n'
+    fi
+  done
+  M_OTHERS=${M_OTHERS%$'\n'}
+}
 # findmnt -o <column> for the topmost mount at the data directory. Stacked
 # mounts (after a swap) print one line each; the last one is the one in use.
 # AL2's findmnt takes one target per call.
@@ -614,10 +660,11 @@ cmd_stop_copy() {
 ##########################################################
 
 # After a swap the old volume stays mounted, stacked under the new one on the
-# host and in every container, until the containers are recreated and the host
-# reboots. It can be detached once no mount namespace has it. A mount of a
-# volume in a container's own namespace does not show up in the host's
-# /proc/self/mountinfo, hence the scan of every process.
+# host and in every container, until the containers are recreated (and, with
+# release-old, the host's own copy is unmounted by hand). It can be detached
+# once no mount namespace has it. A mount of a volume in a container's own
+# namespace does not show up in the host's /proc/self/mountinfo, hence the
+# scan of every process, grouped by mount namespace.
 cmd_old_volume_status() {
   local id=${1:-} link dev m
   valid_volume "$id"
@@ -626,6 +673,8 @@ cmd_old_volume_status() {
   if [ ! -e "$link" ]; then
     echo "device=absent"
     echo "mounted=no"
+    echo "mounted_host=no"
+    echo "mounted_elsewhere=0"
     return 0
   fi
   dev=$(readlink -f "$link")
@@ -633,6 +682,127 @@ cmd_old_volume_status() {
   m=$(mounts_of "$(devno "$dev")")
   if [ -n "$m" ]; then echo "mounted=yes"; else echo "mounted=no"; fi
   for dev in $m; do echo "mount=$dev"; done
+  scan_mounts "$(devno "$(readlink -f "$link")")"
+  echo "mounted_host=$M_HOST"
+  echo "mounted_elsewhere=$([ -z "$M_OTHERS" ] && echo 0 || echo "$M_OTHERS" | wc -l | tr -d ' ')"
+  [ -z "$M_OTHERS" ] || echo "$M_OTHERS"
+}
+
+# release-old
+##########################################################
+
+# After a swap the host's own mount namespace has two mounts at the data
+# directory: the new volume on top of the old one. Unmounting both and
+# mounting the current volume again leaves one, and frees the old device on
+# the host with no reboot. The containers are not affected: each has its own
+# copy of the mounts (rslave), and unmounting on the host does not reach a
+# mount a container is using. What they lose is the link to the host's new
+# mount, so a later swap would not reach them until an app deploy recreates
+# them; swap checks every container's marker and puts the old volume back if
+# one does not follow, so that is safe. Only for an old volume that no
+# container's namespace holds any more (the deploys recreated them all).
+#
+# The data directory is an empty directory for a moment between the second
+# umount and the mount, and shows the old, read-only volume between the first
+# and the second. Nothing else is done in between, and the signals that would
+# stop the script there are ignored.
+cmd_release_old() {
+  local old=${1:-} cur link dev_old no_old u c pid got bad="" err
+  valid_volume "$old"
+  cur=$(current_volume)
+  link=$(volume_link "$old")
+
+  [ "$(readlink /proc/self/ns/mnt)" = "$(readlink /proc/1/ns/mnt)" ] || die "this is not the host's mount namespace"
+  precondition "$ID_FILE names '$cur', which is not a volume ID" is_volume_id "$cur"
+  precondition "$old is the current data volume ($ID_FILE)" [ "$old" != "$cur" ]
+  [ -e "$link" ] || die "$link is absent: $old is not attached to this host, nothing to release"
+  dev_old=$(readlink -f "$link")
+  no_old=$(devno "$dev_old")
+  scan_mounts "$no_old"
+  if [ "$M_HOST" = no ] && [ -z "$M_OTHERS" ]; then die "$old ($dev_old) is not mounted anywhere: nothing to release"; fi
+  precondition "$old is mounted in the host's namespace" [ "$M_HOST" = yes ]
+  precondition "$old is still mounted in other mount namespaces (containers that were not recreated):
+$M_OTHERS
+Deploy (app and, if a proxy container is listed, the proxy), then try again" [ -z "$M_OTHERS" ]
+  precondition "$(data_mount_count) mounts at $DATA in the host's namespace, expected 2 (the new volume on top of the old one)" [ "$(data_mount_count)" = 2 ]
+  precondition "$(read_marker "$DATA") is on top at $DATA, expected the current volume $cur" [ "$(read_marker "$DATA")" = "$cur" ]
+  precondition "the volume mounted at $DATA is '$(mounted_volume)', not $cur" [ "$(mounted_volume)" = "$cur" ]
+  precondition "$MOUNT_SCRIPT is missing or not executable (config/host/deploy.sh installs it)" [ -x "$MOUNT_SCRIPT" ]
+  for u in $(copy_units); do
+    precondition "$u is still running" [ "$(unit_state "$u")" != running ]
+  done
+  if [ -n "$DRY_RUN" ]; then
+    plan "umount $DATA (the new volume $cur; containers keep their own copies); check $MARKER says $old and one mount is left"
+    plan "umount $DATA (the old volume $old); check nothing is mounted there"
+    plan "$MOUNT_SCRIPT (mounts $cur by ID, checks its marker, makes it shared)"
+    plan "check one mount at $DATA, marker $cur, propagation shared, and the same marker in: $(containers | tr '\n' ' ')"
+    plan "set phase=released in $STATE if its old_volume is $old"
+    return 0
+  fi
+  take_lock
+
+  trap '' HUP INT TERM
+  if ! err=$(umount "$DATA" 2>&1); then
+    trap - HUP INT TERM
+    echo "could not unmount $DATA: $err" >&2
+    echo "Open on it (lsof):" >&2
+    if command -v lsof > /dev/null; then
+      lsof +f -- "$DATA" 2> /dev/null | head -n 40 >&2 || true
+    else
+      echo "lsof is not installed" >&2
+    fi
+    die "nothing was changed"
+  fi
+  got=$(read_marker "$DATA")
+  if [ "$got" != "$old" ] || [ "$(data_mount_count)" != 1 ]; then
+    trap - HUP INT TERM
+    die "after the first umount, $DATA shows marker '$got' with $(data_mount_count) mount(s) (device $(data_device)); expected the old volume $old ($dev_old) as the only mount. Not touching anything else. Inspect with: findmnt --target $DATA; grep ' $DATA ' /proc/self/mountinfo; cat $DATA/$MARKER"
+  fi
+  # The one place the containers could be affected if unmounts did reach them.
+  for c in $(containers); do
+    pid=$(docker inspect -f '{{.State.Pid}}' "$c" 2> /dev/null || true)
+    got=$(timeout 20 nsenter -t "$pid" -m -r cat "$CONTAINER_DATA/$MARKER" 2> /dev/null | tr -d '[:space:]' || true)
+    echo "container.$c=${got:-unreadable}" >&2
+    [ "$got" = "$cur" ] || bad="$bad $c"
+  done
+  if [ -n "$bad" ]; then
+    trap - HUP INT TERM
+    die "after the first umount these containers no longer see the current volume $cur:$bad. $DATA on the host now shows the old volume $old (read-only). Not touching anything else: look with docker exec, and remount the current volume ($(readlink -f "$(volume_link "$cur")")) at $DATA by hand if needed"
+  fi
+
+  if ! err=$(umount "$DATA" 2>&1); then
+    trap - HUP INT TERM
+    die "could not unmount the old volume from $DATA: $err. The host now shows the OLD volume there, read-only (containers are unaffected). To go back to the stacked state: mount -t xfs -o noatime $(readlink -f "$(volume_link "$cur")") $DATA && mount --make-shared $DATA. To retry: find what holds it with lsof +f -- $DATA, then umount $DATA again, then run $MOUNT_SCRIPT"
+  fi
+  if [ "$(data_mount_count)" != 0 ]; then
+    trap - HUP INT TERM
+    die "after the second umount there are still $(data_mount_count) mount(s) at $DATA (marker '$(read_marker "$DATA")'). Not touching anything else. Inspect with: findmnt --target $DATA; grep ' $DATA ' /proc/self/mountinfo"
+  fi
+  if ! err=$("$MOUNT_SCRIPT" 2>&1); then
+    trap - HUP INT TERM
+    echo "$err" >&2
+    die "$MOUNT_SCRIPT failed; $DATA is now an EMPTY directory on the host (containers are unaffected). Fix the cause above and run $MOUNT_SCRIPT, or mount by hand: mount -t xfs -o noatime $(readlink -f "$(volume_link "$cur")") $DATA && mount --make-shared $DATA"
+  fi
+  trap - HUP INT TERM
+
+  # What the next swap and the next deploy rely on.
+  got=$(read_marker "$DATA")
+  [ "$(data_mount_count)" = 1 ] || die "$DATA has $(data_mount_count) mounts after remounting, expected 1"
+  [ "$got" = "$cur" ] || die "$DATA shows marker '$got' after remounting, expected $cur"
+  [ "$(data_mount PROPAGATION)" = shared ] || die "$DATA is '$(data_mount PROPAGATION)' after remounting, expected shared"
+  echo "mounts=1"
+  echo "marker=$got"
+  echo "propagation=shared"
+  for c in $(containers); do
+    pid=$(docker inspect -f '{{.State.Pid}}' "$c" 2> /dev/null || true)
+    got=$(timeout 20 nsenter -t "$pid" -m -r cat "$CONTAINER_DATA/$MARKER" 2> /dev/null | tr -d '[:space:]' || true)
+    echo "container.$c=${got:-unreadable}"
+    [ "$got" = "$cur" ] || bad="$bad $c"
+  done
+  [ -z "$bad" ] || die "these containers do not see the current volume $cur:$bad (the host side is done: one shared mount of $cur)"
+  if [ "$(state_get old_volume)" = "$old" ]; then set_phase released; fi
+  echo "released=yes"
+  echo "old_volume=$old"
 }
 
 # grow-fs
@@ -672,6 +842,7 @@ case "$sub" in
   swap) cmd_swap ;;
   stop-copy) cmd_stop_copy ;;
   old-volume-status) cmd_old_volume_status "$@" ;;
+  release-old) cmd_release_old "$@" ;;
   grow-fs) cmd_grow_fs "$@" ;;
-  *) die "usage: host.sh [--dry-run] facts|prepare|copy|copy-status|final-copy|freeze-disk|thaw-disk|swap|stop-copy|old-volume-status|grow-fs" ;;
+  *) die "usage: host.sh [--dry-run] facts|prepare|copy|copy-status|final-copy|freeze-disk|thaw-disk|swap|stop-copy|old-volume-status|release-old|grow-fs" ;;
 esac

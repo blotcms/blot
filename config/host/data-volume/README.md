@@ -95,11 +95,37 @@ After it:
 - Redeploy the proxy (`npm run deploy-proxy`). It bind-mounts only
   `data/static` and does not follow the swap, so until then it serves the old
   volume; files it misses fall through to Node, so nothing breaks.
-- The next app deploy recreates the containers on the new volume.
-- The old volume stays mounted underneath the new one, read-only, in every
-  mount namespace until the containers are recreated and the host reboots, so
-  it cannot be detached right away. Then `resize.sh finish` checks it is no
-  longer mounted anywhere and detaches it. It never deletes anything.
+- The next app deploy (`npm run deploy-node`) recreates the containers on the
+  new volume.
+- The old volume stays mounted underneath the new one, read-only, on the host
+  and in every container's mount namespace, so it cannot be detached right
+  away. Once the app and proxy deploys have recreated every container, run
+  `resize.sh finish` (no reboot, no downtime):
+  - `host.sh old-volume-status` reports which mount namespaces still have the
+    old volume (`mounted_host`, `mounted_elsewhere`, a `holder=` line naming a
+    process and, for a container, its name). While a container holds it,
+    `finish` says which and stops: a deploy releases them.
+  - When only the host's own namespace has it, `finish` asks, then runs
+    `host.sh release-old`: it checks that exactly two mounts are stacked at
+    the data directory and the top one carries the current volume's marker,
+    that no copy is running and that `mount-data-volume.sh` is installed;
+    unmounts the top mount, checks the old volume shows, unmounts that
+    too, and runs `mount-data-volume.sh`, which mounts the current volume by ID,
+    checks its marker and makes it shared. It then checks one mount, the
+    marker, `shared`, and the marker inside every `blot-container-*`, and sets
+    the state file's phase to `released`. If the first `umount` fails (EBUSY)
+    nothing has changed and it prints what has files open; any other
+    surprise stops it with the state and the commands to inspect it, without
+    guessing. For a few seconds the data directory shows the old volume and then
+    nothing, on the host only: the containers keep their own copies of the
+    mounts and are not affected.
+  - Then `finish` detaches the old volume (re-checking its tags, by explicit
+    ID). It never deletes anything.
+- After `release-old`, the running containers' copies are no longer linked to
+  the host's mount, so a later swap would not reach them until the next app
+  deploy recreates them. `swap` checks the marker in every container and puts
+  the old volume back if one does not follow, so this is safe, only a
+  reason to deploy before the next resize.
 
 ## Grow
 
