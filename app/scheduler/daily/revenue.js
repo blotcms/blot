@@ -6,8 +6,8 @@ const prettyNumber = require("helper/prettyNumber");
 
 function main (callback) {
   var annual_recurring_revenue = 0;
+  var annual_billed_revenue = 0;
   var paypal_annual_recurring_revenue = 0;
-  var revenue_billed_monthly = 0;
   var total_active_blogs = 0;
   var total_active_blogs_paypal = 0;
   var total_customers = 0;
@@ -28,8 +28,8 @@ function main (callback) {
 
         if (user.isMonthly === false) {
           annual_recurring_revenue += user.totalFee;
+          annual_billed_revenue += user.totalFee;
         } else {
-          revenue_billed_monthly += user.totalFee;
           annual_recurring_revenue += user.totalFee * 12;
         }
 
@@ -50,9 +50,9 @@ function main (callback) {
             (paypal_annual_recurring_revenue / annual_recurring_revenue) *
             100
           ).toFixed(1) + "%",
-        monthly_percentage:
+        annual_percentage:
           (
-            ((revenue_billed_monthly * 12) / annual_recurring_revenue) *
+            (annual_billed_revenue / annual_recurring_revenue) *
             100
           ).toFixed(1) + "%",
         annual_recurring_revenue: prettyPrice(

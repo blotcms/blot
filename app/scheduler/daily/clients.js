@@ -7,33 +7,30 @@ const getAllUserIds = promisify(User.getAllIds);
 const getUserById = promisify(User.getById);
 const getBlog = promisify(Blog.get);
 
-const NO_CLIENT_LABEL = "No client";
+const NO_CLIENT_LABEL = "no client";
 
-// Turns a list of { clients: Set<string> } (one entry per current user, each
-// holding the distinct clients used across their non-disabled blogs) into a
-// sorted array of { client, users, percentage }. Kept pure so it can be
-// tested without touching Redis.
-function buildRows(usersClients, totalUsers) {
+// Turns one client name per active subscribed site into a sorted list of
+// client/site counts. Percentages use those sites as the denominator.
+function buildRows(siteClients) {
   const counts = {};
 
-  usersClients.forEach(function (clients) {
-    clients.forEach(function (client) {
-      counts[client] = (counts[client] || 0) + 1;
-    });
+  siteClients.forEach(function (client) {
+    counts[client] = (counts[client] || 0) + 1;
   });
 
   const rows = Object.keys(counts).map(function (client) {
-    const users = counts[client];
+    const sites = counts[client];
 
     return {
       client,
-      users,
-      percentage: (totalUsers ? (users / totalUsers) * 100 : 0).toFixed(1) + "%"
+      sites,
+      percentage: (siteClients.length ? (sites / siteClients.length) * 100 : 0)
+        .toFixed(1) + "%"
     };
   });
 
   rows.sort(function (a, b) {
-    return b.users - a.users;
+    return b.sites - a.sites;
   });
 
   return rows;
@@ -42,7 +39,7 @@ function buildRows(usersClients, totalUsers) {
 async function main(callback) {
   try {
     const userIds = await getAllUserIds();
-    const usersClients = [];
+    const siteClients = [];
 
     for (const userId of userIds) {
       try {
@@ -56,8 +53,6 @@ async function main(callback) {
 
         if (!user.isSubscribed) continue;
 
-        const clients = new Set();
-
         if (Array.isArray(user.blogs)) {
           for (const blogId of user.blogs) {
             try {
@@ -65,21 +60,26 @@ async function main(callback) {
 
               if (!blog || blog.isDisabled) continue;
 
-              clients.add(blog.client || NO_CLIENT_LABEL);
+              siteClients.push(blog.client || NO_CLIENT_LABEL);
             } catch (err) {
               continue;
             }
           }
         }
-
-        usersClients.push(clients);
       } catch (err) {
         continue;
       }
     }
 
+    const rows = buildRows(siteClients);
+    const syncSummary = rows
+      .map(function (row) {
+        return `${row.client}: ${row.sites} sites (${row.percentage})`;
+      })
+      .join(", ");
+
     callback(null, {
-      users_by_client: buildRows(usersClients, usersClients.length)
+      sync_summary: syncSummary || "no sites"
     });
   } catch (err) {
     callback(err);

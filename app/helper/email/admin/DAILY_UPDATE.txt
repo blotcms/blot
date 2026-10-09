@@ -1,21 +1,16 @@
 Daily update for {{date}}
 
-Sites: {{total_active_blogs}} sites with active subscriptions, {{total_customers}} customers
+Sites: {{total_active_blogs}} sites, {{total_customers}} customers
 
-Recurring revenue: {{annual_recurring_revenue}} per year, {{monthly_percentage}} paid monthly, {{paypal_percentage}} paid with PayPal
-
-Newsletter subscribers: {{newsletter_subscribers}}
+Revenue: {{annual_recurring_revenue}}, {{paypal_percentage}} through PayPal, {{annual_percentage}} pay annually
 
 Response time: {{render_time}}
 
 {{{redis_server}}}
 
-{{#users_by_client.length}}
-Users by client (users on several clients count once each):
-{{#users_by_client}}
-- {{client}}: {{users}} ({{percentage}})
-{{/users_by_client}}
-{{/users_by_client.length}}
+Sync: {{sync_summary}}
+
+Newsletter subscribers: {{newsletter_subscribers}}
 
 {{#new_customers.length}}
 New customers:

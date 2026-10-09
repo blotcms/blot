@@ -88,13 +88,13 @@ describe("scheduler/daily/redis-server", function () {
 
   it("is one line: memory with the days to a resize, disk, last save and last backup", async function () {
     expect(await render(withSnapshot)).toBe(
-      "**Redis:** memory 27% (resize in ~47 days), disk 21% (19 GB free), saved 3m ago, backed up 30m ago."
+      "Redis server: memory 27% (resize in ~47 days), disk 21% (19 GB free), saved 3m ago, backed up 30m ago"
     );
   });
 
   describe("memory", function () {
     it("leaves out the projection with no previous snapshot or one that is too recent", async function () {
-      const expected = "**Redis:** memory 27%, disk 21% (19 GB free), saved 3m ago, backed up 30m ago.";
+      const expected = "Redis server: memory 27%, disk 21% (19 GB free), saved 3m ago, backed up 30m ago";
 
       expect(await render()).toBe(expected);
       expect(await render({ snapshot: snapshotLine({ age: 10 * MINUTE }) })).toBe(expected);
@@ -123,7 +123,7 @@ describe("scheduler/daily/redis-server", function () {
 
       const at = await render({ memory: info({ used: 7.7 * GB }), snapshot: snapshotLine({ memory: 7.6 * GB }) });
       expect(at).toBe(
-        `**Redis:** memory 70%, **[resize now](${RESIZE_URL})**, disk 21% (19 GB free), saved 3m ago, backed up 30m ago.`
+        `Redis server: memory 70%, **[resize now](${RESIZE_URL})**, disk 21% (19 GB free), saved 3m ago, backed up 30m ago`
       );
       expect(RESIZE_URL).toBe(
         "https://github.com/blotcms/blot/blob/master/config/redis/README.md#increasing-the-redis-server-size"
@@ -181,7 +181,7 @@ describe("scheduler/daily/redis-server", function () {
 
     it("says so when the host has sent no sample", async function () {
       expect(await render({ sample: null })).toBe(
-        "**Redis:** memory 27%, no sample from the Redis host, saved 3m ago, backed up 30m ago."
+        "Redis server: memory 27%, no sample from the Redis host, saved 3m ago, backed up 30m ago"
       );
     });
 
@@ -215,21 +215,21 @@ describe("scheduler/daily/redis-server", function () {
 
   describe("last backup", function () {
     it("says how long ago", async function () {
-      expect(await render({ backup: backupLine({ age: 2 * HOUR }) })).toEndWith("backed up 2h ago.");
+      expect(await render({ backup: backupLine({ age: 2 * HOUR }) })).toEndWith("backed up 2h ago");
     });
 
     it("says overdue after two hours", async function () {
       expect(await render({ backup: backupLine({ age: 3 * HOUR, kind: "daily" }) })).toEndWith(
-        "**last backup 3h ago, overdue**."
+        "**last backup 3h ago, overdue**"
       );
       expect(await render({ backup: backupLine({ age: 3 * DAY }) })).toEndWith(
-        "**last backup 3d ago, overdue**."
+        "**last backup 3d ago, overdue**"
       );
     });
 
     it("says when none is recorded or it cannot be read", async function () {
-      expect(await render({ backup: null })).toEndWith("**no backup recorded**.");
-      expect(await render({ backup: "garbage" })).toEndWith("**no backup recorded**.");
+      expect(await render({ backup: null })).toEndWith("**no backup recorded**");
+      expect(await render({ backup: "garbage" })).toEndWith("**no backup recorded**");
       expect(parseBackup(null)).toBe(null);
       expect(parseBackup(backupLine({ bytes: 1234 }))).toEqual({
         time: NOW - 30 * MINUTE,
@@ -249,7 +249,7 @@ describe("scheduler/daily/redis-server", function () {
     it("passes the line to the email", async function () {
       const result = await run({ client: fakeRedis(withSnapshot), now: NOW });
       expect(Object.keys(result)).toEqual(["redis_server"]);
-      expect(result.redis_server).toStartWith("**Redis:** memory 27% (resize in ~47 days)");
+      expect(result.redis_server).toStartWith("Redis server: memory 27% (resize in ~47 days)");
       expect(result.redis_server).not.toContain("\n");
     });
 
@@ -281,7 +281,7 @@ describe("scheduler/daily/redis-server", function () {
       };
 
       const result = await run({ client, now: NOW });
-      expect(result.redis_server).toStartWith("**Redis:** memory 27%");
+      expect(result.redis_server).toStartWith("Redis server: memory 27%");
     });
 
     it("never fails the daily email when Redis cannot be read", async function () {
@@ -291,12 +291,12 @@ describe("scheduler/daily/redis-server", function () {
         },
       };
 
-      expect(await run({ client })).toEqual({ redis_server: "**Redis:** unavailable (connection refused)." });
+      expect(await run({ client })).toEqual({ redis_server: "Redis server: unavailable (connection refused)" });
     });
 
     it("never fails the daily email when INFO is unexpected", async function () {
       const result = await run({ client: fakeRedis({ memory: "# Memory\r\n" }) });
-      expect(result.redis_server).toMatch(/^\*\*Redis:\*\* unavailable \(INFO memory has no used_memory/);
+      expect(result.redis_server).toMatch(/^Redis server: unavailable \(INFO memory has no used_memory/);
     });
   });
 
@@ -309,12 +309,12 @@ describe("scheduler/daily/redis-server", function () {
     const html = marked.parse(
       Mustache.render(template, {
         render_time: "p50 10ms",
-        redis_server: `**Redis:** memory 72%, **[resize now](${RESIZE_URL})**, disk 21% (19 GB free), saved 3m ago.`,
+        redis_server: `Redis server: memory 72%, **[resize now](${RESIZE_URL})**, disk 21% (19 GB free), saved 3m ago`,
       })
     );
 
     expect(html).toContain(
-      `<p><strong>Redis:</strong> memory 72%, <strong><a href="${RESIZE_URL}">resize now</a></strong>, disk 21% (19 GB free), saved 3m ago.</p>`
+      `<p>Redis server: memory 72%, <strong><a href="${RESIZE_URL}">resize now</a></strong>, disk 21% (19 GB free), saved 3m ago</p>`
     );
   });
 });

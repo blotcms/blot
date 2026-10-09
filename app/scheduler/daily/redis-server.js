@@ -1,6 +1,6 @@
-// The Redis line of the daily email (blotcms/blot#2041), one line:
+// The Redis server line of the daily email (blotcms/blot#2041), one line:
 //
-//   **Redis:** memory 27% (resize in ~47 days), disk 21% (19 GB free), saved 3m ago, backed up 30m ago.
+//   Redis server: memory 27% (resize in ~47 days), disk 21% (19 GB free), saved 3m ago, backed up 30m ago
 //
 // Redis tells us its own memory and last save, but only the Redis host can
 // read its disk: config/redis/bin/tcpmem-log.sh stores that in its 5-minute
@@ -176,12 +176,11 @@ function backupPart({ now, backup }) {
     : `backed up ${compact(age)} ago`;
 }
 
-// Turns collect()'s data into the line of the email, as markdown.
+// Turns collect()'s data into the line of the email.
 function line(data) {
   return (
-    "**Redis:** " +
-    [memoryPart(data), diskPart(data), savePart(data), backupPart(data)].join(", ") +
-    "."
+    "Redis server: " +
+    [memoryPart(data), diskPart(data), savePart(data), backupPart(data)].join(", ")
   );
 }
 
@@ -209,7 +208,7 @@ async function main(callback, deps = {}) {
   } catch (err) {
     // Redis down or an unexpected reply: say so and let the email go out.
     const reason = String((err && err.message) || err).replace(/[*`<>[\]]/g, "").slice(0, 80);
-    result = `**Redis:** unavailable (${reason}).`;
+    result = `Redis server: unavailable (${reason})`;
   }
 
   callback(null, { redis_server: result });

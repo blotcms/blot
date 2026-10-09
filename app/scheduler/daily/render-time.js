@@ -63,7 +63,7 @@ async function main(callback) {
 
     const format = (ms) => (isNaN(ms) ? "n/a" : `${ms}ms`);
 
-    let p95Message = format(p95Ms);
+    let p95Message = `${format(p95Ms)} p95`;
 
     if (priorDays.length >= HISTORY_DAYS) {
       const trailingAverage =
@@ -72,11 +72,11 @@ async function main(callback) {
 
       if (Math.abs(diff) / trailingAverage >= SUBSTANTIAL_CHANGE_FRACTION) {
         const direction = diff > 0 ? "slower" : "faster";
-        p95Message += ` (${Math.round(Math.abs(diff))}ms ${direction} than ${HISTORY_DAYS} day average)`;
+        p95Message += ` (${Math.round(Math.abs(diff))}ms ${direction} than ${HISTORY_DAYS} day avg)`;
       }
     }
 
-    const message = `p50 ${format(p50Ms)}, p95 ${p95Message}, p99 ${format(p99Ms)}`;
+    const message = `${p95Message}, ${format(p50Ms)} p50, ${format(p99Ms)} p99`;
 
     const multi = client.multi();
     multi.rPush(HISTORY_KEY, encodeEntry(Date.now(), { p50Ms, p95Ms, p99Ms }));
