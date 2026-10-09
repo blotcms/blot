@@ -3,7 +3,6 @@
 # Flags
 export NODE_ENV=production
 export BLOT_CACHE=true
-export BLOT_MAINTENANCE=false
 export BLOT_DEBUG=false
 
 # Server configuration

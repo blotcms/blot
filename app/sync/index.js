@@ -9,6 +9,7 @@ const messenger = require("./messenger");
 const gatherLockDiagnostics = require("./lock-diagnostics");
 const clfdate = require("helper/clfdate");
 const previewReload = require("helper/publishPreviewReload");
+const readOnly = require("helper/readOnly");
 const {
   addPendingSync,
   removePendingSync,
@@ -31,6 +32,16 @@ function sync(blogID, callback) {
     );
   }
 
+  // While the data directory is read-only, wait rather than fail, so the
+  // sync runs as soon as the freeze lifts. Nothing is held while waiting,
+  // and the blog is loaded afterwards so the sync sees current settings.
+  readOnly.whenWritable("sync " + blogID).then(
+    () => start(blogID, callback),
+    (err) => callback(err)
+  );
+}
+
+function start(blogID, callback) {
   Blog.get({ id: blogID }, async function (err, blog) {
     if (err || !blog || !blog.id || blog.isDisabled) {
       return callback(new Error("Cannot sync blog " + blogID));
@@ -93,6 +104,16 @@ function sync(blogID, callback) {
             });
         }
       });
+      // The freeze may have begun between the check in sync() and taking the
+      // lock. Back off and wait again, so that once the freeze is on, any
+      // lock still held belongs to a sync that started before it.
+      // A failed check counts as writable, so it can never strand the lock.
+      if (await readOnly.status().catch(() => null)) {
+        await lock.release();
+        log("Data directory became read-only, waiting");
+        return sync(blogID, callback);
+      }
+
       release = lock.release;
       lockAcquiredAt = Date.now();
       addPendingSync(blogID, syncID);
