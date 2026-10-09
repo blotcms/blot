@@ -182,6 +182,10 @@ preflight() {
   [ "$(field "$FACTS" mountpoint)" = yes ] || die "/var/www/blot/data is not a mount point on $HOST"
   [ "$FSTYPE" = xfs ] || die "/var/www/blot/data is $FSTYPE, not xfs"
   [[ "$CUR_VOL" =~ ^vol-[0-9a-f]{8,17}$ ]] || die "/etc/blot/data-volume on $HOST does not hold a volume ID ('$CUR_VOL'): see config/host/README.md"
+  [ "$(field "$FACTS" mounted_volume)" = "$CUR_VOL" ] ||
+    die "/etc/blot/data-volume says $CUR_VOL, but the volume mounted at /var/www/blot/data is '$(field "$FACTS" mounted_volume)'"
+  [ "$(field "$FACTS" mounted_marker)" = "$CUR_VOL" ] ||
+    die "the mounted data volume's .blot-data-volume says '$(field "$FACTS" mounted_marker)', expected $CUR_VOL"
   describe_volume "$CUR_VOL"
   [ "$V_INST" = "$INSTANCE" ] || die "$CUR_VOL is attached to '$V_INST', not to $HOST's instance"
   [ "$V_AZ" = "$AZ" ] || die "$CUR_VOL is in $V_AZ but the host is in $AZ"
@@ -629,14 +633,19 @@ cmd_shrink() {
   [ "$SIZE" -lt "$CUR_SIZE" ] || die "$SIZE GiB is not smaller than the current $CUR_SIZE GiB (use grow to go larger)"
   # The app must be able to follow the swap and be frozen.
   [ "$PROPAGATION" = shared ] || die "/var/www/blot/data is '$PROPAGATION' on $HOST, not shared: deploy config/host (mount-data-volume) first"
-  local found=0 line
+  local found=0 line out
   for line in $(echo "$FACTS" | grep '^container\.'); do
     found=1
     [ "${line#*=}" = rslave ] || die "${line%%=*} binds the data directory with '${line#*=}', not rslave: deploy the rslave change first (a deploy recreates the containers)"
   done
   [ "$found" = 1 ] || die "no running blot-container-* on $HOST"
   if [ "$DRILL" != yes ]; then
-    ro status > /dev/null || die "'node scripts/read-only.js status' does not work in $CONTAINER: deploy the read-only freeze first"
+    out=$(ro status) || die "'node scripts/read-only.js status' does not work in $CONTAINER: deploy the read-only freeze first"
+    # A freeze that is already on belongs to someone else unless it is ours
+    # from an interrupted run; lifting it at the end would end their freeze.
+    if ! echo "$out" | grep -q '"readOnly":null' && ! echo "$out" | grep -q '"reason":"data volume resize"'; then
+      die "the app is already read-only for something else: $out"
+    fi
   fi
   need=$((SIZE * 1073741824 / 100 * 85))
   [ "$USED_B" -le "$need" ] ||

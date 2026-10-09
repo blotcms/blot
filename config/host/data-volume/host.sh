@@ -89,6 +89,16 @@ mounts_of() { { cat /proc/[0-9]*/mountinfo 2> /dev/null || true; } | awk -v d="$
 data_mount() { findmnt -n -o "$1" --target "$DATA" 2> /dev/null | tail -n 1 || true; }
 # findmnt prints a bind-mounted source as /dev/xxx[/subdir]: drop the [...].
 data_device() { readlink -f "$(data_mount SOURCE | sed 's/\[.*//')"; }
+# The vol-... ID of the EBS volume whose device is mounted at the data
+# directory, from the by-id links; empty if none matches.
+mounted_volume() {
+  local dev link
+  dev=$(data_device)
+  for link in "$LINK_PREFIX"*; do
+    case "$link" in *-ns-* | *-part*) continue ;; esac
+    [ "$(readlink -f "$link")" = "$dev" ] && { echo "vol-${link#"$LINK_PREFIX"}"; return 0; }
+  done
+}
 read_marker() { { tr -d '[:space:]' < "$1/$MARKER"; } 2> /dev/null || true; }
 now_mono() { awk '{print int($1)}' /proc/uptime; }
 containers() { command -v docker > /dev/null && docker ps --format '{{.Names}}' | grep '^blot-container-' || true; }
@@ -156,6 +166,12 @@ cmd_facts() {
   if mountpoint -q "$DATA"; then
     echo mountpoint=yes
     echo "source=$(data_mount SOURCE | sed 's/\[.*//')"
+    # Which EBS volume is really mounted there (the topmost mount), and the
+    # marker it carries: resize.sh checks both against /etc/blot/data-volume
+    # before changing anything, so a stale ID file can't point it at another
+    # volume attached to this instance.
+    echo "mounted_volume=$(mounted_volume)"
+    echo "mounted_marker=$(read_marker "$DATA")"
     echo "propagation=$(data_mount PROPAGATION)"
     echo "fstype=$(data_mount FSTYPE)"
     echo "options=$(data_mount OPTIONS)"
@@ -416,7 +432,7 @@ cmd_final_copy() {
   if [ "$rc" = 0 ]; then
     for p in $SHARD_PARENTS; do
       [ -d "$DATA/$p" ] || continue
-      rsync -dlptgoD -AXS --numeric-ids --delete "$DATA/$p/" "$NEW_MNT/$p/" || { rc=$?; break; }
+      rsync -dlptgoD -HAXS --numeric-ids --delete "$DATA/$p/" "$NEW_MNT/$p/" || { rc=$?; break; }
       find "$DATA/$p" -mindepth 1 -maxdepth 1 -type d -printf "$p/%f\\0" >> "$work/list"
     done
   fi
