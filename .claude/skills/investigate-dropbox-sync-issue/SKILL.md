@@ -58,6 +58,13 @@ directly so you can window by time.) Docker logs are lost when the container
 is recreated by a deploy, so investigate promptly and say so if the window is
 gone.
 
+**A read-only freeze explains delays, not failures.** While the data volume is
+being resized (or anyone ran `scripts/read-only.js on`), syncs deliberately
+wait and client writes get 503s; the dashboard shows "Sync paused". If the
+alert window overlaps one, look for `[READ ONLY] waiting to write` in the
+container logs and see the `data-volume` skill's incident log before
+classifying anything as a bug.
+
 1. **Find the validation run that sent the alert.** The run's `issues=` is
    the number of blogs flagged.
    ```

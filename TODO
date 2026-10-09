@@ -1,3 +1,11 @@
+Data volume follow-ups (shrunk to gp3 on 9 Oct with config/host/data-volume/resize.sh; see the data-volume skill):
+- From 16 Oct: delete the old data volume vol-0a2e04d301e025e60 and its pre-resize snapshot snap-0e4fdce70e58e0da6 (the rollback until then)
+- Move data/tmp to the instance store (BLOT_TMP_DIRECTORY=/var/instance-ssd/tmp) and prune it: nothing prunes it today (the ec2-user cron prunes /var/www/blot/tmp, a different path)
+- Remove the legacy data/.git and data/.github (bare-metal leftovers, unused)
+- Migrate static content to S3, then shrink the volume again with resize.sh
+- Have resize.sh shrink redeploy the proxy itself (its data/static bind does not follow a swap)
+- Can we test my assumption that the ephemeral instance store hard disk is faster than EBS discs?
+
 disk alerts emails add 
 
 create skills which delegate cheap subagents to scan logs for issues:
@@ -8,11 +16,6 @@ adjust disk resize script to autosuggest values on run without args
 - i.e. propose shrink if free space found via ssh is X or grow if Y
 
 harden app against full  disk
-
-Add script to size down ebs volume immediately
-- In place and reuse as we move more to s3 
-- Can we test my assumption that the ephemeral instance store hard disk is faster than EBS discs? 
-- Migrate static content to s3
 
 Our AWS bill is high because we have run out of reserved instance. Decide on the plan.
 - switch over static files to s3

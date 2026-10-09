@@ -91,6 +91,13 @@ explicitly asked.
 
 ## Method
 
+**A read-only freeze explains delays, not failures.** While the data volume is
+being resized (or anyone ran `scripts/read-only.js on`), syncs deliberately
+wait and client writes get 503s; the dashboard shows "Sync paused". If the
+alert window overlaps one, look for `[READ ONLY] waiting to write` in the
+container logs and see the `data-volume` skill's incident log before
+classifying anything as a bug.
+
 1. **Find the resync request(s) on the macserver.** The email's `Reason:`
    line says which action failed; the macserver log has the rest and the
    timing. The email is capped at one per blog per hour (`Resync report
