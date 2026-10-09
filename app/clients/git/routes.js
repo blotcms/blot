@@ -2,6 +2,9 @@ var authenticate = require("./authenticate");
 var create = require("./create");
 var database = require("./database");
 var disconnect = require("./disconnect");
+// Must come before pushover is used. Gives every Git request's duplex an
+// "error" listener so an aborted request can never be an unhandled error.
+require("./guardServices");
 var pushover = require("pushover");
 var sync = require("./sync");
 var dataDir = require("./dataDir");
@@ -171,41 +174,18 @@ site.get("/syncs-finished/:blogID", function (req, res) {
   res.send(finishedAllSyncs(req.params.blogID));
 });
 
+// Tags and fetches have no special handling: pushover accepts them when nobody
+// is listening, so keep doing exactly that, explicitly. Errors on these (and on
+// every other Git request) are handled for all requests in guardServices.js and
+// in the site.use handler below.
+["tag", "fetch"].forEach(function (eventName) {
+  repos.on(eventName, function (service) {
+    debug("Git " + eventName);
+    service.accept();
+  });
+});
+
 repos.on("push", function (push) {
-  if (push) {
-    push.on("error", function (err) {
-      if (err && (err.code === "ECONNRESET" || err.code === "EPIPE")) {
-        return debug("Git push error", err.message || err);
-      }
-
-      debug("Git push unexpected error", err);
-    });
-  }
-
-  if (push && push.request) {
-    push.request.on("error", function (err) {
-      if (err && (err.code === "ECONNRESET" || err.code === "EPIPE")) {
-        return debug("Git push request connection error", err.message || err);
-      }
-
-      debug("Git push request error", err);
-    });
-
-    push.request.on("aborted", function () {
-      debug("Git push request aborted");
-    });
-  }
-
-  if (push && push.response) {
-    push.response.on("error", function (err) {
-      if (err && (err.code === "ECONNRESET" || err.code === "EPIPE")) {
-        return debug("Git push response connection error", err.message || err);
-      }
-
-      debug("Git push response error", err);
-    });
-  }
-
   if (push && push.branch && push.branch !== "master") {
     return push.reject(
       400,
