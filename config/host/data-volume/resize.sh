@@ -12,8 +12,10 @@
 #            read-only for a short window, the last differences are copied and
 #            the new volume is mounted over the data directory. Resumable:
 #            re-run the same command after Ctrl-C or an error.
-#   finish   after a shrink, once the old volume is no longer mounted anywhere
-#            (containers recreated, host rebooted): detach it. Never deletes.
+#   finish   after a shrink and the app and proxy deploys, once no container
+#            holds the old volume any more: release the host's own mount of it
+#            (no reboot, no downtime; asks first), then detach it. Never
+#            deletes.
 #
 # Read config/host/data-volume/README.md first, and rehearse with drill.sh.
 # Needs the read-only freeze (scripts/read-only.js) and the rslave data bind
@@ -601,9 +603,11 @@ step_retag() {
     only data/static and does not follow the swap; until then it serves the old
     volume, and files missing there fall through to Node, so nothing breaks):
       npm run deploy-proxy
- 2. The next app deploy recreates the containers on the new volume.
- 3. The old volume ($REPLACED_VOL) stays mounted underneath until the containers
-    are recreated and the host is rebooted. Then detach it:
+ 2. The next app deploy recreates the containers on the new volume:
+      npm run deploy-node
+ 3. The old volume ($REPLACED_VOL) stays mounted underneath the new one until the
+    app and proxy deploys have recreated every container. Then finish releases
+    the host's own mount of it (no reboot, no downtime) and detaches it:
       $0 --host $HOST --profile $AWS_PROFILE_NAME finish
  4. Keep the old volume and the snapshot as the rollback for about a week, then
     delete them by hand. DLM now snapshots the new volume; its first snapshot
@@ -695,7 +699,7 @@ EOF
 
 cmd_finish() {
   local old out name replaced_at
-  if [ "$PHASE" = swapped ] && [ "$R_NEW" = "$CUR_VOL" ]; then
+  if { [ "$PHASE" = swapped ] || [ "$PHASE" = released ]; } && [ "$R_NEW" = "$CUR_VOL" ]; then
     old=$R_OLD
   else
     old=$(aws_cli ec2 describe-volumes --filters "Name=attachment.instance-id,Values=$INSTANCE" "Name=tag-key,Values=BlotDataVolumeReplacedAt" \
@@ -719,8 +723,30 @@ cmd_finish() {
   if [ "$(field "$out" current)" = yes ]; then die "/etc/blot/data-volume on the host still says $old"; fi
   if [ "$(field "$out" mounted)" = yes ]; then
     echo "$old ($name, replaced $replaced_at) is still mounted on $HOST (see above)."
-    echo "It is mounted underneath the new volume until the containers are recreated (the next deploy) and the host is rebooted. Run finish again after that."
-    return 0
+    if [ "$(field "$out" mounted_elsewhere)" != 0 ]; then
+      # A container keeps the mounts it was created with, the old volume under
+      # the new one, until it is recreated.
+      echo "Containers still hold it (the holder= lines above). A deploy recreates them; run finish again after:"
+      echo "  npm run deploy-node     for the blot-container-* ones"
+      echo "  npm run deploy-proxy    for any other container listed (the proxy)"
+      return 0
+    fi
+    # Only the host's own namespace has it, stacked under the new volume.
+    echo "Only the host itself still has it mounted, under the new volume. release-old unmounts both"
+    echo "from the host and mounts the current volume again: no downtime, the containers keep running"
+    echo "on their own copies; their link to the host's mounts comes back with the next app deploy."
+    confirm "Release it now?"
+    out=$(host_do release-old "$old") || die "release-old failed (see above, and the state it describes)"
+    echo "$out" | sed 's/^/  /'
+    # (A dry run released nothing: go on to show the detach.)
+    if [ -z "$DRY_RUN" ]; then
+      out=$(host old-volume-status "$old") || die "cannot check the old volume on the host"
+      if [ "$(field "$out" mounted)" = yes ]; then
+        echo "$old is still mounted on $HOST after the release:"
+        echo "$out" | sed 's/^/  /'
+        return 0
+      fi
+    fi
   fi
   confirm "Detach $old from $INSTANCE? (It is not deleted.)"
   aws_mut ec2 detach-volume --volume-id "$old" > /dev/null

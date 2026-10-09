@@ -16,7 +16,6 @@ Add script to size down ebs volume immediately
 
 Our AWS bill is high because we have run out of reserved instance. Decide on the plan.
 - switch over static files to s3
-- reduce eb2 data volume size
 - can we have multiple smaller webservers with load balancing? 
 - Should we move to a single, AWS instance and make redis a container as well? This may be makes deployment harder perhaps we should consider moving to three AWS instances one for proxy one for node and one for redis we could still consider using a container on the redis instance? 
 - Safely and very carefully switch AWS account root user email to @blot.im
