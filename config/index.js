@@ -78,7 +78,6 @@ module.exports = {
     development_host: "local.blot",
   },
 
-  maintenance: process.env.BLOT_MAINTENANCE === "true",
   cache: process.env.BLOT_CACHE === "true",
   debug: process.env.BLOT_DEBUG === "true",
 

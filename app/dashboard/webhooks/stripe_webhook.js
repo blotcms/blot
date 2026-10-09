@@ -135,10 +135,6 @@ function verifyStripeEvent(req, res) {
 }
 
 webhooks.post("/", parser.raw({ type: "application/json" }), function (req, res) {
-  // Down for maintenance, Stripe should
-  // back off and try again later.
-  if (config.maintenance) return res.sendStatus(503);
-
   var event = verifyStripeEvent(req, res);
 
   // verifyStripeEvent has already sent a response if it returned null.

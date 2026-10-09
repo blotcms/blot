@@ -6,6 +6,9 @@
 <body class="{{#selected.watch}}watch-page{{/selected.watch}}">
   {{> header}}
   <main class="content">
+    {{#readOnly}}
+    <p class="error">Blot is briefly read-only for maintenance. Changes you make now won't save, and your folder will sync again in a few minutes.</p>
+    {{/readOnly}}
     {{#show-main-section-right}}
     <section class="main-section main-section-with-toc">
       <section class="main-section-content {{#show-toc-or-on-this-page}}js-toc-content{{/show-toc-or-on-this-page}}">

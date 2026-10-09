@@ -105,8 +105,6 @@ function runSync(blog, callback) {
 }
 
 site.post("/webhook", function (req, res) {
-  if (config.maintenance) return res.sendStatus(503);
-
   var data = "";
   var accounts = [];
   var signature = req.headers["x-dropbox-signature"];
