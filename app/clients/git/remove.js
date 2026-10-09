@@ -23,23 +23,25 @@ module.exports = function remove (blogID, path, callback) {
   checkGitRepoExists(blogDirectory, function (err) {
     if (err) return callback(err);
 
-    fs.remove(localPath(blogID, path), function (err) {
+    // Throws an error if directory does not exist
+    try {
+      git = Git(localPath(blogID, "/")).silent(true);
+    } catch (err) {
+      return callback(err);
+    }
+
+    // Make sure we push to the bare repository, even if the
+    // checkout's origin has gone stale (sync does the same). We do
+    // this before touching the blog folder, so if it fails the
+    // checkout is left as it was.
+    bareRepo.pointOriginAtBareRepoForBlog(git, blogID, function (err) {
       if (err) return callback(err);
 
-      // Throws an error if directory does not exist
-      try {
-        git = Git(localPath(blogID, "/")).silent(true);
-      } catch (err) {
-        return callback(err);
-      }
-
-      // Git does not like paths with leading slashes
-      if (path[0] === "/") path = path.slice(1);
-
-      // Make sure we push to the bare repository, even if the
-      // checkout's origin has gone stale (sync does the same)
-      bareRepo.pointOriginAtBareRepoForBlog(git, blogID, function (err) {
+      fs.remove(localPath(blogID, path), function (err) {
         if (err) return callback(err);
+
+        // Git does not like paths with leading slashes
+        if (path[0] === "/") path = path.slice(1);
 
         // Could we queue these commands for better performance?
         git.add(path, function (err) {
