@@ -120,17 +120,9 @@ chown -R ec2-user:ec2-user /etc/blot
 
 chown -R ec2-user:ec2-user $BLOT_DIRECTORY
 
-# Install the tool used to list the disks used by mount-data-disk.sh
+# nvme-cli lists the NVMe disks (the data volume is mounted by
+# config/host/scripts/mount-data-volume.sh, installed by config/host/deploy.sh)
 yum install -y nvme-cli
-
-cp $SCRIPTS_DIRECTORY/mount-data-disk.service /etc/systemd/system/mount-data-disk.service
-
-# reload systemd
-systemctl daemon-reload
-
-# start and enable the mount-instance-store service
-systemctl start mount-data-disk
-systemctl enable mount-data-disk
 
 # TODO:
 # edit /etc/systemd/journald.conf
