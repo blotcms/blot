@@ -10,7 +10,7 @@
             <p class="entry">Nothing here.</p>
         {{/entries.length}}
         {{#entries}}
-        <article class="entry listing">
+        <article class="entry listing" data-permalink="{{url}}">
             <h2><a href="{{{url}}}" title="{{title}}">{{title}}</a></h2>
             {{#summary}}<div class="summary">{{{summary}}}</div>{{/summary}}
             <div class="entry-meta">
@@ -23,10 +23,18 @@
         {{/entries}}
 
         {{#pagination}}
-        <nav class="pagination" aria-label="Tag pagination">
-            {{#previous}}<a href="/tagged/{{slug}}/page/{{previous}}">&larr; Previous</a>{{/previous}}
-            <span>Page {{current}} of {{total}}</span>
-            {{#next}}<a href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>{{/next}}
+        <nav
+            class="pagination"
+            aria-label="Tag pagination"
+            data-total="{{total}}"
+        >
+            {{#previous}}
+            <a class="pagination-previous" href="/tagged/{{slug}}/page/{{previous}}">&larr; Previous</a>
+            {{/previous}}
+            <span class="pagination-status" aria-current="page">Page {{current}} of {{total}}</span>
+            {{#next}}
+            <a class="pagination-next" href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>
+            {{/next}}
         </nav>
         {{/pagination}}
         </div>

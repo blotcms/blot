@@ -36,26 +36,59 @@ function renderHeadingAnchors () {
   }
 
   headings.forEach(h => {
+    const entry = h.closest('.entry[data-permalink]');
+    const permalink = entry?.dataset.permalink;
+
+    // In the Full posts index, the first heading is the post title. Link it
+    // to the permalink while keeping the copy-link anchor as its own control.
+    if (
+      permalink &&
+      h.tagName === 'H1' &&
+      h.parentElement === entry &&
+      h.textContent.trim() === entry.dataset.entryTitle?.trim() &&
+      !h.querySelector('.entry-title-link')
+    ) {
+      const existingLink = h.querySelector('a');
+      if (
+        existingLink &&
+        existingLink.textContent.trim() === entry.dataset.entryTitle?.trim()
+      ) {
+        existingLink.href = permalink;
+        existingLink.classList.add('entry-title-link');
+      } else if (!existingLink) {
+        const titleLink = document.createElement('a');
+        titleLink.href = permalink;
+        titleLink.className = 'entry-title-link';
+        while (h.firstChild) titleLink.appendChild(h.firstChild);
+        h.appendChild(titleLink);
+      }
+    }
+
     if (!h.id) return;
 
     const a = document.createElement('a');
-    a.href = `#${h.id}`;
+    const target = permalink ? new URL(permalink, window.location.href) : null;
+    if (target) target.hash = h.id;
+    a.href = target ? target.href : `#${h.id}`;
     a.className = 'heading-anchor';
     a.setAttribute('aria-label', 'Copy link to this section');
     a.addEventListener('click', async (e) => {
       e.preventDefault();
+      e.stopPropagation();
 
-      // Update URL and scroll to the heading
-      if (h.id !== window.location.hash.slice(1)) {
-        // pushState preserves scroll; setting hash may jump. Do both for robustness.
-        history.pushState(null, '', `#${h.id}`);
-      } else {
-        // Force focus/scroll if already on the same hash
-        h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!permalink) {
+        // Update URL and scroll to the heading on permalink pages.
+        if (h.id !== window.location.hash.slice(1)) {
+          // pushState preserves scroll; setting hash may jump. Do both for robustness.
+          history.pushState(null, '', `#${h.id}`);
+        } else {
+          // Force focus/scroll if already on the same hash
+          h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       }
 
-      // Copy full URL with hash
-      const url = fullUrlWithHash(h.id);
+      // Copy the section URL, which points to the post when used in a listing.
+      const url = target ? target.href : fullUrlWithHash(h.id);
       try { await navigator.clipboard.writeText(url); } catch {}
 
       showToast('Link copied to your clipboard');
