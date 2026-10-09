@@ -1,3 +1,10 @@
+deploy macserver
+node scripts/entry/rebuild-all.js -s 1200
+
+Add aws billing info to daily update
+
+---
+
 Fix github action proxy deploy: https://github.com/blotcms/blot/actions/runs/37851678284/job/113565835440
 
 maybe horizontal scaling involves redis replicas in other aws regions?
@@ -52,7 +59,6 @@ email warnings if no sync from client for more than x hours
 
 ---
 
-run node scripts/entry/rebuild-all.js -s 900
 
 When you re-connect to Dropbox or Google Drive, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
 
