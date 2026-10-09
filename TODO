@@ -1,3 +1,5 @@
+Tell the owner of the blog whose ~700 MB git pushes failed on 9 Oct 2026 that large pushes should now go through, once #2086 and #2087 are deployed
+
 Fix github action proxy deploy: https://github.com/blotcms/blot/actions/runs/37851678284/job/113565835440
 
 maybe horizontal scaling involves redis replicas in other aws regions?
