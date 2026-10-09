@@ -114,13 +114,24 @@ async function dataDirectory({ config, redis }) {
   return summary;
 }
 
-async function dataDirectoryWritable({ config }) {
-  // The mount is owned by the host; the app runs as uid 1000.
-  await fs.mkdir(config.tmp_directory, { recursive: true });
-  const file = path.join(config.tmp_directory, `deploy-verify-${process.pid}`);
+async function writable(directory) {
+  const file = path.join(directory, `deploy-verify-${process.pid}`);
   await fs.writeFile(file, "ok");
   await fs.unlink(file);
-  return `${config.tmp_directory} is writable`;
+  return `${directory} is writable`;
+}
+
+// The mount is owned by the host; the app runs as uid 1000.
+async function dataDirectoryWritable({ config }) {
+  return writable(config.data_directory);
+}
+
+// The tmp directory is a separate mount (the host's instance store), so
+// proving the data volume writable says nothing about it. The host creates it
+// (mount-instance-store.sh): not creating it here means a missing or
+// root-owned one fails the deploy rather than being papered over.
+async function tmpDirectoryWritable({ config }) {
+  return writable(config.tmp_directory);
 }
 
 async function diskSpace({ config }) {
@@ -232,6 +243,7 @@ module.exports = [
   { name: "data volume marker", run: dataVolumeMarker },
   { name: "blog folders match redis", run: dataDirectory },
   { name: "data directory writable", run: dataDirectoryWritable },
+  { name: "tmp directory writable", run: tmpDirectoryWritable },
   { name: "disk space", run: diskSpace },
   { name: "pandoc", run: pandoc },
   { name: "git", run: git },

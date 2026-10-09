@@ -7,6 +7,7 @@ rsync -azvv --exclude "/node_modules" --exclude "/logs" --exclude "/tmp" -e "ssh
 cron scripts for ec2-user:
 1 0 * * * /var/www/blot/scripts/log-rotate.sh
 0 1 * * * find /var/www/blot/tmp -mtime +1 -delete
+(stale: the app's tmp is now /var/instance-ssd/tmp and app/scheduler/prune-tmp.js prunes it)
 
 cron scripts for root:
 1 0 * * * /var/www/blot/scripts/log-rotate.sh
