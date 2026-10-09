@@ -32,12 +32,6 @@ var alreadyPaid = signup.route("/paid/:token");
 var passwordForm = signup.route("/create-account");
 var firstSite = signup.route("/first-site");
 
-if (config.maintenance) {
-  paymentForm.use("/sign-up", function (req, res) {
-    res.redirect("/maintenance");
-  });
-}
-
 // For users who paid by PayPal or institutional customers
 // who paid on Stripe I have a tool to skip the form using
 // a generated access token.
