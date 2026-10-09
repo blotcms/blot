@@ -22,11 +22,9 @@ describe("scheduler prune-tmp", function () {
   beforeEach(async function () {
     this.root = await fs.mkdtemp(os.tmpdir() + "/prune-tmp-");
     this.tmp = this.root + "/tmp";
-    this.stash = this.root + "/icloud-delete";
     await fs.ensureDir(this.tmp);
-    await fs.ensureDir(this.stash);
     this.run = (options) =>
-      pruneTmp({ tmpDirectory: this.tmp, stashDirectory: this.stash, ...options });
+      pruneTmp({ tmpDirectory: this.tmp, ...options });
   });
 
   afterEach(async function () {
@@ -107,23 +105,11 @@ describe("scheduler prune-tmp", function () {
     });
   });
 
-  it("removes old entries from the iCloud delete stash", async function () {
-    await write(this.stash, "orphan", 2 * DAY);
-    await write(this.stash, "in-flight/file.txt", HOUR, "in-flight");
-
-    await this.run();
-
-    expect(await exists(this.stash + "/orphan")).toBe(false);
-    expect(await exists(this.stash + "/in-flight/file.txt")).toBe(true);
-  });
-
-  it("copes with a stash directory that does not exist yet", async function () {
-    await fs.remove(this.stash);
-    await write(this.tmp, "old-upload", 2 * DAY);
+  it("copes with a tmp directory that does not exist yet", async function () {
+    await fs.remove(this.tmp);
 
     const report = await this.run();
 
-    expect(report.removed).toBe(1);
-    expect(report.errors).toBe(0);
+    expect(report).toEqual({ removed: 0, bytes: 0, errors: 0 });
   });
 });

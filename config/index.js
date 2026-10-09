@@ -90,11 +90,6 @@ module.exports = {
     process.env.BLOT_LOG_DIRECTORY || BLOT_DATA_DIRECTORY + "/logs",
   blog_static_files_dir: BLOT_DATA_DIRECTORY + "/static",
   blog_folder_dir: BLOT_DATA_DIRECTORY + "/blogs",
-  // Where the iCloud client sets a deleted file aside until Blot has dropped
-  // its entries (app/clients/icloud/routes/site/delete.js). On the data
-  // volume, beside the blog folders, so moving a file there is a rename.
-  icloud_delete_stash_directory: BLOT_DATA_DIRECTORY + "/icloud-delete",
-
   ip: process.env.BLOT_IP || "127.0.0.1",
   ipv6: BLOT_IPV6,
 

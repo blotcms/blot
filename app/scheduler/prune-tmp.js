@@ -2,9 +2,7 @@
 // instance store, shared by every container): uploads, conversions and the
 // like are meant to remove their own files, but a crash or a deploy mid-job
 // leaves them behind. This removes what is old enough that nothing can still
-// be using it. It also sweeps the iCloud delete stash, which holds a file only
-// until Blot has dropped its entries and is left behind only by a crash. It is
-// run daily by the scheduler (app/scheduler/index.js).
+// be using it. It is run daily by the scheduler (app/scheduler/index.js).
 const fs = require("fs-extra");
 const config = require("config");
 const path = require("path");
@@ -43,7 +41,7 @@ async function readdir(directory) {
   try {
     return await fs.readdir(directory);
   } catch (err) {
-    // nothing there yet (the stash is created by the first iCloud delete)
+    // nothing there yet
     if (err.code === "ENOENT" || err.code === "ENOTDIR") return [];
     throw err;
   }
@@ -74,14 +72,12 @@ async function prune(directory, maxAgeMs, now, report, skip) {
   }
 }
 
-// options: tmpDirectory, stashDirectory, now, maxAgeMs, importMaxAgeMs
+// options: tmpDirectory, now, maxAgeMs, importMaxAgeMs
 // (default to the real ones)
 module.exports = async function pruneTmp(options) {
   options = options || {};
 
   const tmpDirectory = options.tmpDirectory || config.tmp_directory;
-  const stashDirectory =
-    options.stashDirectory || config.icloud_delete_stash_directory;
   const now = options.now === undefined ? Date.now() : options.now;
   const maxAgeMs = options.maxAgeMs === undefined ? MAX_AGE_MS : options.maxAgeMs;
   const importMaxAgeMs =
@@ -103,8 +99,6 @@ module.exports = async function pruneTmp(options) {
       return expiresAt !== undefined && expiresAt > now;
     });
   }
-
-  await prune(stashDirectory, maxAgeMs, now, report);
 
   return report;
 };

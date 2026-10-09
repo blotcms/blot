@@ -2,12 +2,8 @@ const localPath = require("helper/localPath");
 const establishSyncLock = require("sync/establishSyncLock");
 const fs = require("fs-extra");
 const path = require("path");
-const { join } = path;
 const { handleSyncLockError } = require("../lock");
 const { handleRedisUnavailable } = require("../unavailable");
-const { isRedisUnavailableError } = require("helper/redisUnavailable");
-const { icloud_delete_stash_directory } = require("config");
-const { randomBytes } = require("crypto");
 const stampLastSync = require("./stampLastSync");
 
 module.exports = async function (req, res) {
@@ -80,33 +76,18 @@ module.exports = async function (req, res) {
         );
       }
 
-      // Take the file out of the blog folder, but keep it until Blot has
-      // dropped its entries. If Redis cannot take the update it goes back,
-      // because the macserver will ask again and would be told the file is
-      // already gone. The stash directory is on the data volume beside the
-      // blog folders (not in tmp, which is on another filesystem), so moving
-      // a folder there is a rename. app/scheduler/prune-tmp.js removes
-      // anything a crash left behind.
-      const stash = join(
-        icloud_delete_stash_directory,
-        randomBytes(8).toString("hex")
-      );
+      // The file is removed before Blot's entries are updated. If Redis
+      // refuses the update the route answers 503, but the file is already
+      // gone, so the macserver's retry is told there is nothing to delete and
+      // the entries (for a folder, those of the files inside it) stay until a
+      // resync or Fix(). Accepted: it needs Redis to fail in the middle of a delete.
+      await fs.remove(pathOnDisk); // Removes the file or directory
 
-      await fs.ensureDir(icloud_delete_stash_directory);
-      await fs.move(pathOnDisk, stash);
-
-      try {
-        // Call the folder's update method to register the file deletion
-        for (const pathToUpdate of pathsToUpdate) {
-          await folder.update(pathToUpdate);
-          // Set the folder status to reflect the delete action
-          folder.status("Removed " + pathToUpdate);
-        }
-      } catch (err) {
-        if (isRedisUnavailableError(err)) await fs.move(stash, pathOnDisk);
-        throw err;
-      } finally {
-        await fs.remove(stash);
+      // Call the folder's update method to register the file deletion
+      for (const pathToUpdate of pathsToUpdate) {
+        await folder.update(pathToUpdate);
+        // Set the folder status to reflect the delete action
+        folder.status("Removed " + pathToUpdate);
       }
 
       console.log(`Successfully deleted: ${pathOnDisk}`);
