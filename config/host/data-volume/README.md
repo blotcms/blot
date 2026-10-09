@@ -114,6 +114,7 @@ clearly.
 production kernel, without touching production:
 
     drill.sh launch --ami <id> --subnet <id> --security-group <id> --key-name <name>
+    # add --ssh-port N if the security group does not allow 22: user data moves sshd there
     drill.sh --key <pem> setup ec2-user@<ip>
     # then the commands setup prints: resize.sh --host ... shrink 6, grow 10
     drill.sh teardown <instance-id>
