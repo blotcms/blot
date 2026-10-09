@@ -38,7 +38,10 @@ dashboard.get("/", function (req, res) {
 
   // The health read before this route ran may predate the write that began
   // a new setup attempt, so don't show its stale error beside the progress.
-  if (isSetupInProgress(res.locals.account)) {
+  if (
+    isSetupInProgress(res.locals.account) &&
+    !health.isPaused(res.locals.blog.health)
+  ) {
     res.locals.blog.healthIssue = undefined;
     res.locals.blog.health = health.syncing();
   }

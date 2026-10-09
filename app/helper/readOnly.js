@@ -9,7 +9,7 @@ const { isRedisUnavailableError } = require("helper/redisUnavailable");
 //
 // - state-changing requests to the dashboard and the clients get a 503 with
 //   Retry-After (rejectWrites below), which the sync clients already treat as
-//   "try again later", and the dashboard shows a banner (exposeToViews)
+//   "try again later", and the dashboard shows a "Sync paused" health issue
 // - sync() waits before taking a folder lock (whenWritable), so background
 //   syncs pause rather than fail, and resume once the freeze lifts
 //
@@ -88,11 +88,13 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 // Express middleware that answers 503 to any request that could write while
 // the freeze is on. `allow` lists functions of req for unsafe requests that
-// only touch Redis (logging in) or only read (a git fetch's POST).
-function rejectWrites({ allow = [] } = {}) {
+// only touch Redis (logging in) or only read (a git fetch's POST); `deny`
+// lists safe requests to refuse anyway (the GET that starts a git push).
+function rejectWrites({ allow = [], deny = [] } = {}) {
   return async function (req, res, next) {
-    if (SAFE_METHODS.has(req.method)) return next();
-    if (allow.some((isAllowed) => isAllowed(req))) return next();
+    const denied = deny.some((isDenied) => isDenied(req));
+    if (!denied && SAFE_METHODS.has(req.method)) return next();
+    if (!denied && allow.some((isAllowed) => isAllowed(req))) return next();
 
     let frozen;
     try {
@@ -114,19 +116,6 @@ function rejectWrites({ allow = [] } = {}) {
   };
 }
 
-// Express middleware that sets res.locals.readOnly for the layout's banner
-async function exposeToViews(req, res, next) {
-  if (!SAFE_METHODS.has(req.method)) return next();
-
-  try {
-    res.locals.readOnly = await status();
-  } catch (err) {
-    return next(err);
-  }
-
-  next();
-}
-
 module.exports = {
   KEY,
   DEFAULT_TTL_SECONDS,
@@ -136,5 +125,4 @@ module.exports = {
   disable,
   whenWritable,
   rejectWrites,
-  exposeToViews,
 };

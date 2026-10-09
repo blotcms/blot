@@ -69,11 +69,11 @@ site.get("/health", (req, res) => {
 // pushes, the iCloud macserver's uploads (it retries, then asks for a
 // resync). Let through what only touches Redis (logging in and out) or only
 // queues a sync (the Dropbox and Google Drive webhooks): sync() itself waits
-// for the freeze to lift. The payment webhooks only touch Redis, so they are
-// mounted outside this gate.
+// for the freeze to lift, and the dashboard shows it as a "Sync paused"
+// health issue (dashboard/util/get-blog-health). The payment webhooks only
+// touch Redis, so they are mounted outside this gate.
 const startsWith = (prefix) => (req) => req.path.startsWith(prefix);
 
-site.use("/sites", readOnly.exposeToViews);
 site.use(
   "/sites",
   readOnly.rejectWrites({
@@ -87,6 +87,15 @@ site.use(
       startsWith("/dropbox/webhook"),
       startsWith("/google-drive/webhook/"),
       (req) => req.path.startsWith("/git/") && req.path.endsWith("/git-upload-pack"),
+    ],
+    // A push starts with this GET. Refusing it, rather than the POST that
+    // follows, stops git before it sends anything, so it prints the 503
+    // instead of "unexpected disconnect".
+    deny: [
+      (req) =>
+        req.path.startsWith("/git/") &&
+        req.path.endsWith("/info/refs") &&
+        req.query.service === "git-receive-pack",
     ],
   })
 );
