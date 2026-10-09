@@ -5,7 +5,14 @@ Add aws billing info to daily update
 
 ---
 
-Fix github action proxy deploy: https://github.com/blotcms/blot/actions/runs/37851678284/job/113565835440
+Do we eventually prune and rotate the data gathered in the various statistics Ron jobs eventually we need to purge these we don’t want the database growing infinitely. 
+
+archives and all_entries in the template engine should be bounded to a maximum of 10,000 posts 
+- separately we should investigate other parts of the code which perform unbounded work 
+
+Add script to size down ebs volume immediately
+- In place and reuse as we move more to s3 
+- Can we test my assumption that the ephemeral instance store hard disk is faster than EBS discs? 
 
 maybe horizontal scaling involves redis replicas in other aws regions?
 - s3 multi region replication?
@@ -27,7 +34,6 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - After the next wildcard renewal (/home/ec2-user/renew-wildcard.log): container reloaded, served cert fingerprint matches /etc/ssl/private/letsencrypt-domain.pem
 - Custom-domain certs renew inside the container: none within ~20 days of expiry apart from domains that no longer point at Blot; identify-expiring-certs cron restarts the container cleanly
 - Reboot the host once in a maintenance window: mount-instance-store mounts without reformatting, docker starts after it, the proxy comes back with cache/log mounts, :80/:443 answer
-- First Deploy proxy workflow run after `sudo chgrp docker /etc/blot/proxy.env` (#2080 deployment plan)
 - HTTP/3 is not advertised (no Alt-Svc on either stack); decide whether to open UDP 443 and make fail2ban bans cover UDP too
 - http://www.blot.im/ returns 404: confirm intended
 - app/blog/static has no copy on the host, so those cdn. files fall through to Node: export them from the Node image on deploy, or accept
@@ -75,6 +81,7 @@ Our AWS bill is high because we have run out of reserved instance. Decide on the
 - switch over static files to s3
 - reduce eb2 data volume size
 - can we have multiple smaller webservers with load balancing? 
+- Should we move to a single, AWS instance and make redis a container as well? This may be makes deployment harder perhaps we should consider moving to three AWS instances one for proxy one for node and one for redis we could still consider using a container on the redis instance? 
 
 Safely and very carefully switch AWS account root user email to @blot.im
 
