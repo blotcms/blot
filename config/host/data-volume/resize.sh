@@ -27,7 +27,7 @@
 #   --grace SECONDS          how long to wait after the freeze starts before
 #                            looking at the folder locks (default 15)
 #   --max-final-seconds N    stop the live passes once one takes this long or
-#                            less (default 60); after 5 passes you are asked
+#                            less (default 300); after 5 passes you are asked
 #   --freeze-ttl SECONDS     how long the read-only freeze lasts if this script
 #                            dies (default 900); the frozen copy must fit in it
 #   --any-time               allow the freeze within 10 minutes of 01:00 and 05:00 UTC
@@ -45,7 +45,10 @@ AWS_REGION=${AWS_REGION:-us-west-2}
 CONTAINER=blot-container-blue
 LOCK_WAIT=120
 GRACE=15
-MAX_FINAL=60
+# A live pass is one rsync walking the whole tree; the frozen pass walks it in
+# parallel shards, so it takes well under the last live pass. Five minutes of
+# live pass is a frozen pass of about a minute or less.
+MAX_FINAL=300
 FREEZE_TTL=900
 ANY_TIME=""; YES=""; DRY_RUN=""
 VTYPE=gp3; IOPS=""; THROUGHPUT=""

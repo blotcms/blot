@@ -49,8 +49,8 @@ phase confirmed unless `--yes`:
    so it survives the ssh session. The first pass takes hours; each later one
    copies only what changed and is shorter. Ctrl-C the script whenever you
    like; re-running the same command attaches to the unit. Passes stop once one
-   takes `--max-final-seconds` or less (default 60, which a tree this size
-   will probably not reach; `--max-final-seconds 600` is a more useful target),
+   takes `--max-final-seconds` or less (default 300: the frozen pass walks the
+   tree in parallel, so it takes well under the last live pass),
    or after five, when you are asked whether to go on. The contents of `logs/`
    and `tmp/` are not copied (the directories are), and the new volume keeps its
    own marker.
