@@ -8,6 +8,7 @@ const remoteReaddirPath = require.resolve("../util/remoteReaddir");
 const downloadPath = require.resolve("../util/download");
 const checkWeCanContinuePath = require.resolve("../util/checkWeCanContinue");
 const databasePath = require.resolve("../../database");
+const countChanges = require("clients/util/countChanges");
 
 describe("icloud fromiCloud sync", function () {
   test.timeout(10000);
@@ -481,4 +482,101 @@ describe("icloud fromiCloud sync", function () {
       expect(summary.firstError).toBe("Directory listing unavailable");
     });
   });
+  describe("removals and created directories in a directory modified around the walk", () => {
+    const recent = () => new Date(Date.now() - 3000).toISOString();
+    const anHourAgo = () => new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const dir = (name, modifiedTime) => ({ name, isDirectory: true, modifiedTime });
+
+    // listings maps a directory path to what the macserver reports for it
+    async function walk(listings) {
+      mockModule(remoteRecursiveListPath, async () => {});
+      mockModule(remoteReaddirPath, async (_, path) => listings[path] || []);
+      mockModule(downloadPath, async () => {});
+      mockModule(checkWeCanContinuePath, () => async () => {});
+      mockModule(databasePath, { store: async () => {}, get: async () => ({}) });
+
+      return require(fromiCloudPath)(blogID, () => {}, async () => {});
+    }
+
+    // A rename (untitled folder -> inactive) in /pages/projects, which
+    // updates that directory's mtime
+    const renameIn = (projectsModifiedTime) => ({
+      "/": [dir("pages", anHourAgo())],
+      "/pages": [dir("projects", projectsModifiedTime)],
+      "/pages/projects": [dir("inactive", recent())],
+    });
+
+    beforeEach(async () => {
+      await fs.ensureDir(localPath(blogID, "/pages/projects/untitled folder"));
+    });
+
+    it("excludes a rename in a directory modified around the walk", async () => {
+      const summary = await walk(renameIn(recent()));
+
+      expect(summary.removed).toBe(1);
+      expect(summary.createdDirs).toBe(1);
+      expect(summary.changedDuringWalk).toBe(2);
+      expect(countChanges(summary)).toBe(0);
+    });
+
+    it("counts a rename in a directory modified well before the walk", async () => {
+      const summary = await walk(renameIn(anHourAgo()));
+
+      expect(summary.removed).toBe(1);
+      expect(summary.createdDirs).toBe(1);
+      expect(summary.changedDuringWalk).toBe(0);
+      expect(countChanges(summary)).toBe(2);
+    });
+
+    it("counts a rename when the macserver reports no directory modified time", async () => {
+      const summary = await walk(renameIn(undefined));
+
+      expect(summary.changedDuringWalk).toBe(0);
+      expect(countChanges(summary)).toBe(2);
+    });
+
+    it("counts a removal in the root, which has no modified time", async () => {
+      await fs.outputFile(localPath(blogID, "/gone.txt"), "hello");
+
+      const summary = await walk({
+        "/": [dir("pages", anHourAgo())],
+        "/pages": [dir("projects", anHourAgo())],
+        "/pages/projects": [dir("untitled folder", anHourAgo())],
+      });
+
+      expect(summary.removed).toBe(1);
+      expect(summary.changedDuringWalk).toBe(0);
+      expect(countChanges(summary)).toBe(1);
+    });
+
+    it("excludes both halves of a file replaced by a directory", async () => {
+      await fs.outputFile(localPath(blogID, "/pages/projects/inactive"), "x");
+
+      const summary = await walk({
+        "/": [dir("pages", anHourAgo())],
+        "/pages": [dir("projects", recent())],
+        "/pages/projects": [dir("untitled folder", anHourAgo()), dir("inactive", recent())],
+      });
+
+      expect(summary.removed).toBe(1);
+      expect(summary.createdDirs).toBe(1);
+      expect(summary.changedDuringWalk).toBe(2);
+      expect(countChanges(summary)).toBe(0);
+    });
+
+    it("does not excuse removing an ignored local file", async () => {
+      await fs.outputFile(localPath(blogID, "/pages/projects/.DS_Store"), "x");
+
+      const summary = await walk({
+        "/": [dir("pages", anHourAgo())],
+        "/pages": [dir("projects", recent())],
+        "/pages/projects": [dir("untitled folder", recent())],
+      });
+
+      expect(summary.removed).toBe(1);
+      expect(summary.changedDuringWalk).toBe(0);
+      expect(countChanges(summary)).toBe(1);
+    });
+  });
+
 });
