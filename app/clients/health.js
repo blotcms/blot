@@ -124,6 +124,14 @@ function primaryIssue(health) {
     : undefined;
 }
 
+// True while Blot is read-only for maintenance (SYNC_PAUSED, see
+// dashboard/util/get-blog-health). Setup pages that replace a stale error
+// with "syncing" keep this one: it explains why the setup isn't moving.
+function isPaused(health) {
+  const issue = primaryIssue(health);
+  return !!issue && issue.code === CODES.SYNC_PAUSED;
+}
+
 function label(code) {
   return ISSUES[code] ? ISSUES[code].label : undefined;
 }
@@ -141,6 +149,7 @@ module.exports = {
   syncing,
   error,
   primaryIssue,
+  isPaused,
   label,
   action,
 };
