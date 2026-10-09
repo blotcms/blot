@@ -91,6 +91,9 @@ done
 case "$CMD" in status | grow | shrink | finish) ;; *) die "usage: resize.sh [options] status|grow <GiB>|shrink <GiB>|finish" ;; esac
 case "$LOCK_WAIT$GRACE$MAX_FINAL$FREEZE_TTL$IOPS$THROUGHPUT" in *[!0-9]*) die "--lock-wait, --grace, --max-final-seconds, --freeze-ttl, --iops and --throughput take numbers" ;; esac
 case "$VTYPE" in gp2 | gp3) ;; *) die "--type must be gp3 or gp2" ;; esac
+# The final copy gets FREEZE_TTL minus 90 seconds (for the snapshot, the swap
+# and lifting the freeze) as its time limit, so the TTL has to leave a real one.
+[ "$FREEZE_TTL" -ge 300 ] || die "--freeze-ttl must be at least 300 seconds (the final copy gets the TTL minus 90 s as its time limit)"
 if [ "$CMD" = grow ] || [ "$CMD" = shrink ]; then
   case "$SIZE" in "" | *[!0-9]*) die "$CMD needs a size in GiB, e.g. resize.sh $CMD 600" ;; esac
 elif [ -n "$SIZE" ]; then
@@ -216,11 +219,21 @@ cmd_status() {
 # filesystem, and XFS grows while mounted. Nothing stops, nothing is copied.
 cmd_grow() {
   case "$PHASE" in prepared | copied) die "a shrink is in progress ($R_NEW); finish or abandon it first" ;; esac
-  [ "$SIZE" -gt "$CUR_SIZE" ] || die "$SIZE GiB is not larger than the current $CUR_SIZE GiB (use shrink to go smaller)"
-  say "Grow $CUR_VOL from $CUR_SIZE to $SIZE GiB (same type, IOPS and throughput: $CUR_TYPE)"
-  confirm "Grow it? This runs online; AWS allows one change per volume every 6 hours."
-  local out state i
-  if [ -n "$DRY_RUN" ]; then
+  local out state i fs_only=""
+  if [ "$SIZE" -eq "$CUR_SIZE" ] && [ "$SIZE_B" -lt $((SIZE * 1073741824 / 100 * 99)) ]; then
+    # EBS already has the new size (an earlier grow stopped before the
+    # filesystem step): only the filesystem is left.
+    fs_only=1
+    say "$CUR_VOL is already $SIZE GiB but the filesystem is only $(gib "$SIZE_B") GiB (an interrupted grow?): growing the filesystem only"
+    confirm "Grow the filesystem?"
+  else
+    [ "$SIZE" -gt "$CUR_SIZE" ] || die "$SIZE GiB is not larger than the current $CUR_SIZE GiB (use shrink to go smaller)"
+    say "Grow $CUR_VOL from $CUR_SIZE to $SIZE GiB (same type, IOPS and throughput: $CUR_TYPE)"
+    confirm "Grow it? This runs online; AWS allows one change per volume every 6 hours."
+  fi
+  if [ -n "$fs_only" ]; then
+    :
+  elif [ -n "$DRY_RUN" ]; then
     aws_mut ec2 modify-volume --volume-id "$CUR_VOL" --size "$SIZE"
   else
     out=$(aws_cli ec2 modify-volume --volume-id "$CUR_VOL" --size "$SIZE" 2>&1) || {
@@ -481,7 +494,7 @@ step_freeze_and_swap() {
     if [ "$DRILL" = yes ]; then echo "would run: docker pause (the blot-container-* containers)"; else echo "would run: docker exec $CONTAINER node scripts/read-only.js on --ttl $FREEZE_TTL --reason 'data volume resize'"; fi
     if [ "$DRILL" != yes ]; then echo "would wait ${GRACE}s, then until lockedBlogs is empty (up to ${LOCK_WAIT}s)"; fi
     host_do freeze-disk 30
-    host_do final-copy $([ "$DRILL" = yes ] && echo 0 || echo $((FREEZE_TTL - 90)))
+    host_do final-copy $((FREEZE_TTL - 90))
     aws_mut ec2 create-snapshot --volume-id "$CUR_VOL" --description "before resize to $NEW_VOL"
     host_do swap
     echo "would lift the freeze and print how long it lasted"
@@ -518,13 +531,13 @@ step_freeze_and_swap() {
 
   FREEZE_STAGE=copying
   if [ "$DRILL" != yes ]; then
-    # Restart the TTL clock so the copy gets all of it; the budget leaves 90s
-    # for the snapshot, the swap and lifting the freeze.
+    # Restart the TTL clock so the copy gets all of it.
     ro on --ttl "$FREEZE_TTL" --reason "'data volume resize'" > /dev/null || die "could not extend the freeze"
-    budget=$((FREEZE_TTL - 90))
-  else
-    budget=0
   fi
+  budget=$((FREEZE_TTL - 90))
+  # The budget leaves 90s of the TTL for the snapshot, the swap and lifting the
+  # freeze; final-copy stops itself when it is used up (a drill has no TTL, but
+  # keeps the same limit).
   echo "Final copy (parallel)..."
   out=$(host_do final-copy "$budget") || die "the final copy failed (see above)"
   echo "Final copy: $(field "$out" shards) shards in $(fmt_duration "$(field "$out" duration_s)"), $(gib "$(field "$out" new_used_bytes)") GiB on the new volume, inodes $(field "$out" inodes_old) -> $(field "$out" inodes_new) (logs/ and tmp/ contents are not copied)"
@@ -582,8 +595,15 @@ cmd_shrink() {
   REPLACED_VOL=""; NEW_VOL=""; LAST_DUR=0; REP=""
 
   # An earlier run that swapped but did not finish tagging.
-  if [ "$PHASE" = swapped ] && [ "$R_NEW" = "$CUR_VOL" ] && [ "$CUR_NAME" != "$DATA_NAME" ] && [ "$CUR_NAME" != drill-data-volume ]; then
-    echo "A previous resize from $R_OLD swapped to $CUR_VOL but was not retagged: finishing that."
+  # (Not retagged: the new volume still has its copy-in-progress name, or the old
+  # one lacks its "replaced" tags, e.g. because the second create-tags call failed.)
+  local old_replaced=""
+  if [ "$PHASE" = swapped ] && [ "$R_NEW" = "$CUR_VOL" ]; then
+    old_replaced=$(aws_cli ec2 describe-volumes --volume-ids "$R_OLD" --query 'Volumes[0].Tags[?Key==`BlotDataVolumeReplacedAt`].Value | [0]' --output text 2> /dev/null) || old_replaced=unknown
+  fi
+  if [ "$PHASE" = swapped ] && [ "$R_NEW" = "$CUR_VOL" ] &&
+    { { [ "$CUR_NAME" != "$DATA_NAME" ] && [ "$CUR_NAME" != drill-data-volume ]; } || [ "$old_replaced" = None ]; }; then
+    echo "A previous resize from $R_OLD swapped to $CUR_VOL but was not fully retagged: finishing that."
     NEW_VOL=$CUR_VOL; REPLACED_VOL=$R_OLD
     step_retag
     return 0
