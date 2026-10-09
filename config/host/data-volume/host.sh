@@ -69,7 +69,8 @@ plan() { echo "would: $*"; }
 # would balloon on a smaller volume.
 #
 # The contents of logs/ and tmp/ are skipped (the directories are kept: cron
-# appends to logs/expiring-certs.log, and the app expects tmp/ to exist). The
+# appends to logs/expiring-certs.log; the app's own tmp is on the instance
+# store now, so tmp/ here is only a leftover). The
 # marker is skipped so the new volume keeps its own, which prepare wrote and
 # mount-data-volume.sh checks.
 RSYNC_OPTS=(-aHAXS --numeric-ids --delete)

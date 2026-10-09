@@ -52,3 +52,9 @@ mount "$EPHEMERAL_DISK" /var/instance-ssd
 # Belt and braces: make sure the mount actually landed, rather than trusting
 # `mount`'s exit code alone.
 mountpoint -q /var/instance-ssd
+
+# The app's tmp directory (BLOT_TMP_DIRECTORY, see scripts/deploy/constants.js)
+# is bind-mounted into the app containers. A stop/start of the instance wipes
+# the disk, and the containers run as uid 1000, not root, so recreate it here
+# on every boot, owned by them. install -d is idempotent.
+install -d -o 1000 -g 1000 /var/instance-ssd/tmp

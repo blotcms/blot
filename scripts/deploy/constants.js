@@ -58,6 +58,15 @@ module.exports = {
   DATA_DIRECTORY_ON_SERVER: "/var/www/blot/data",
   DATA_DIRECTORY_ON_CONTAINER: "/usr/src/app/data",
 
+  // Scratch space for uploads, imports and conversions (config.tmp_directory,
+  // set in the container by BLOT_TMP_DIRECTORY). It is on the host's
+  // ephemeral NVMe instance store, mounted at /var/instance-ssd, not the data
+  // volume: nothing in it needs to outlive an instance stop/start, which wipes
+  // it. The host creates it at boot (config/host/scripts/mount-instance-store.sh)
+  // and it is mounted at the same path inside the containers, so the
+  // instance-store disk free-disk-space.js reports there is the one tmp fills.
+  TMP_DIRECTORY: "/var/instance-ssd/tmp",
+
   ENV_FILE_ON_SERVER: "/etc/blot/secrets.env",
 
   // The airlock container (config/airlock) - the egress boundary for

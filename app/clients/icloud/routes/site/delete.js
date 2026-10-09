@@ -6,7 +6,7 @@ const { join } = path;
 const { handleSyncLockError } = require("../lock");
 const { handleRedisUnavailable } = require("../unavailable");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
-const { tmp_directory } = require("config");
+const { icloud_delete_stash_directory } = require("config");
 const { randomBytes } = require("crypto");
 const stampLastSync = require("./stampLastSync");
 
@@ -83,13 +83,16 @@ module.exports = async function (req, res) {
       // Take the file out of the blog folder, but keep it until Blot has
       // dropped its entries. If Redis cannot take the update it goes back,
       // because the macserver will ask again and would be told the file is
-      // already gone. The temporary directory sits beside the blog folders
-      // by default, so moving a folder there is normally a rename.
+      // already gone. The stash directory is on the data volume beside the
+      // blog folders (not in tmp, which is on another filesystem), so moving
+      // a folder there is a rename. app/scheduler/prune-tmp.js removes
+      // anything a crash left behind.
       const stash = join(
-        tmp_directory,
-        "icloud-delete-" + randomBytes(8).toString("hex")
+        icloud_delete_stash_directory,
+        randomBytes(8).toString("hex")
       );
 
+      await fs.ensureDir(icloud_delete_stash_directory);
       await fs.move(pathOnDisk, stash);
 
       try {
