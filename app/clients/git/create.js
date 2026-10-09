@@ -26,6 +26,17 @@ const TEMPORARY_GIT_GC_CONFIG = [
 const setStatus = promisify(database.setStatus.bind(database));
 const createToken = promisify(database.createToken.bind(database));
 
+// Stops git from searching above the blog's folder for a repository, so a
+// command run before `git init` (or after the folder's .git is removed)
+// fails instead of acting on some enclosing repo, e.g. a stray .git in the
+// data directory, which once picked up this module's "Add N files" commits.
+function liveGit(liveDirectory) {
+  return Git(liveDirectory, { maxConcurrentProcesses: 1 }).env({
+    ...process.env,
+    GIT_CEILING_DIRECTORIES: path.dirname(path.resolve(liveDirectory)),
+  });
+}
+
 function delay(ms) {
   return new Promise(function (resolve) {
     setTimeout(resolve, ms);
@@ -150,7 +161,7 @@ async function createRepository(blog, folder) {
   await prepareDirectoriesAndMetadata(blog, liveDirectory, bareDirectory);
 
   const bareRepo = Git(bareDirectory, { maxConcurrentProcesses: 1 });
-  const liveRepo = Git(liveDirectory, { maxConcurrentProcesses: 1 });
+  const liveRepo = liveGit(liveDirectory);
 
   report(folder, "Creating bare repository", "initing bareRepo");
   await bareRepo.init(true);
@@ -219,7 +230,7 @@ async function assertDirectoryOwnership(liveDirectory) {
 }
 
 async function cleanupFailedRepository(blog, liveDirectory, bareDirectory) {
-  const liveRepo = Git(liveDirectory, { maxConcurrentProcesses: 1 });
+  const liveRepo = liveGit(liveDirectory);
 
   await unsetTemporaryGitGc(liveRepo);
 
