@@ -1,7 +1,6 @@
 Data volume follow-ups (shrunk to gp3 on 9 Oct with config/host/data-volume/resize.sh; see the data-volume skill):
 - From 16 Oct: delete the 8 snapshots of the old data volume vol-0a2e04d301e025e60 (deleted 9 Oct): the pre-resize snapshot snap-0e4fdce70e58e0da6 (the rollback until then) and the 7 daily DLM ones, which the policy stopped managing when the volume lost its Name tag
 - Move data/tmp to the instance store (BLOT_TMP_DIRECTORY=/var/instance-ssd/tmp) and prune it: nothing prunes it today (the ec2-user cron prunes /var/www/blot/tmp, a different path)
-- Git client setup (app/clients/git/create.js) should refuse to run git outside the blog's own repo (check <blog>/.git exists, or set GIT_CEILING_DIRECTORIES): a stray data/.git once caught its "Add N files" commit (removed 9 Oct with data/.github and data/views)
 - Migrate static content to S3, then shrink the volume again with resize.sh
 - Have resize.sh shrink redeploy the proxy itself (its data/static bind does not follow a swap)
 - Can we test my assumption that the ephemeral instance store hard disk is faster than EBS discs?
