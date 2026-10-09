@@ -48,11 +48,15 @@ module.exports = async (blogID, publish, update) => {
     // Subset of downloaded: files the macserver reports modified at/after
     // the cutoff (minus a grace period).
     modifiedDuringWalk: 0,
-    // Subset of removed + createdDirs: removals and new directories have no
-    // modification time of their own, but creating, removing or renaming an
-    // entry updates its parent directory's mtime, so those in a directory
-    // modified at/after the cutoff (minus a grace period) are most likely a
-    // live edit (e.g. a rename), not a change we failed to sync.
+    // Subset of removed + createdDirs + downloaded: removals and new
+    // directories have no modification time of their own, but creating,
+    // removing or renaming an entry updates its parent directory's mtime, so
+    // those in a directory modified at/after the cutoff (minus a grace
+    // period) are most likely a live edit (e.g. a rename), not a change we
+    // failed to sync. Renaming a directory touches neither its own mtime nor
+    // its files', so everything the walk then creates or downloads inside a
+    // directory it created that way is counted here too (a download already
+    // counted in modifiedDuringWalk is not counted twice).
     changedDuringWalk: 0,
     // Failures the walk swallows (it carries on or stops quietly rather than
     // throwing), so a caller that must not mistake an unreachable macserver
@@ -83,8 +87,10 @@ module.exports = async (blogID, publish, update) => {
 
   // dirModifiedTime is the directory's own mtime, from its entry in its
   // parent's listing. The root has no such entry, so changes made directly
-  // in the root are always counted.
-  const walk = async (dir, dirModifiedTime) => {
+  // in the root are always counted. createdLive is true inside a directory
+  // the walk created as part of a live edit: it was empty locally, so all
+  // that the walk does in there belongs to that edit.
+  const walk = async (dir, dirModifiedTime, createdLive = false) => {
     console.log(clfdate(), `Syncing folder: ${dir}`);
     const dirChangedDuringWalk = modifiedSince(dirModifiedTime, startedAt);
     const [remoteContents, localContents] = await Promise.all([
@@ -154,6 +160,7 @@ module.exports = async (blogID, publish, update) => {
       );
 
       if (isDirectory) {
+        let walkedDirCreatedLive = false;
         if (existsLocally && !existsLocally.isDirectory) {
           await checkWeCanContinue();
           progress.publish("Removing", path);
@@ -163,18 +170,24 @@ module.exports = async (blogID, publish, update) => {
           publish("Creating directory", path);
           await fs.ensureDir(localPath(blogID, path));
           summary.createdDirs += 1;
-          if (dirChangedDuringWalk) summary.changedDuringWalk += 1;
+          if (dirChangedDuringWalk || createdLive) {
+            summary.changedDuringWalk += 1;
+            walkedDirCreatedLive = true;
+          }
           await update(path);
         } else if (!existsLocally) {
           await checkWeCanContinue();
           publish("Creating directory", path);
           await fs.ensureDir(localPath(blogID, path));
           summary.createdDirs += 1;
-          if (dirChangedDuringWalk) summary.changedDuringWalk += 1;
+          if (dirChangedDuringWalk || createdLive) {
+            summary.changedDuringWalk += 1;
+            walkedDirCreatedLive = true;
+          }
           await update(path);
         }
 
-        await walk(path, modifiedTime);
+        await walk(path, modifiedTime, walkedDirCreatedLive);
       } else {
         // We could compare modified time but this seems to bug out on some sites
         const identicalOnRemote = existsLocally && existsLocally.size === size;
@@ -243,6 +256,8 @@ module.exports = async (blogID, publish, update) => {
             summary.downloaded += 1;
             if (modifiedSince(modifiedTime, startedAt)) {
               summary.modifiedDuringWalk += 1;
+            } else if (createdLive) {
+              summary.changedDuringWalk += 1;
             }
             await update(path);
           } catch (e) {

@@ -577,6 +577,51 @@ describe("icloud fromiCloud sync", function () {
       expect(summary.changedDuringWalk).toBe(0);
       expect(countChanges(summary)).toBe(1);
     });
+
+    describe("a non-empty directory renamed into the directory", () => {
+      const file = (name, modifiedTime) => ({ name, isDirectory: false, size: 1, modifiedTime });
+
+      // Renaming old -> new touches neither new's own mtime nor its files'
+      const renamedTree = (pagesModifiedTime, aModifiedTime = anHourAgo()) => ({
+        "/": [dir("pages", pagesModifiedTime)],
+        "/pages": [dir("new", anHourAgo())],
+        "/pages/new": [file("a.md", aModifiedTime), dir("sub", anHourAgo())],
+        "/pages/new/sub": [file("b.md", anHourAgo())],
+      });
+
+      beforeEach(async () => {
+        await fs.remove(localPath(blogID, "/pages/projects"));
+        await fs.outputFile(localPath(blogID, "/pages/old/a.md"), "a");
+      });
+
+      it("excludes its files and subdirectories when the parent was modified around the walk", async () => {
+        const summary = await walk(renamedTree(recent()));
+
+        expect(summary.removed).toBe(1);
+        expect(summary.createdDirs).toBe(2);
+        expect(summary.downloaded).toBe(2);
+        expect(countChanges(summary)).toBe(0);
+      });
+
+      it("counts them all when the parent was modified well before the walk", async () => {
+        const summary = await walk(renamedTree(anHourAgo()));
+
+        expect(summary.changedDuringWalk).toBe(0);
+        expect(countChanges(summary)).toBe(5);
+      });
+
+      it("counts a download with a recent modified time once", async () => {
+        const summary = await walk(renamedTree(recent(), recent()));
+
+        expect(summary.downloaded).toBe(2);
+        expect(summary.modifiedDuringWalk).toBe(1);
+        expect(summary.changedDuringWalk).toBe(4);
+        expect(summary.changedDuringWalk + summary.modifiedDuringWalk).toBe(
+          summary.downloaded + summary.removed + summary.createdDirs
+        );
+        expect(countChanges(summary)).toBe(0);
+      });
+    });
   });
 
 });

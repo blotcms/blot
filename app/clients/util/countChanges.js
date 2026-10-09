@@ -6,7 +6,9 @@
 // sets it from its pre-walk cursor or a file's deletion time in its revision
 // history, and iCloud from the mtime of the directory holding a removal or
 // created directory (creating, removing or renaming an entry updates its
-// parent's mtime). Google Drive has no equivalent and leaves it out.
+// parent's mtime), plus the downloads and subdirectories inside a directory
+// created that way (a renamed directory's own contents keep their old
+// mtimes). Google Drive has no equivalent and leaves it out.
 module.exports = function countChanges(summary = {}) {
   return Math.max(
     0,
