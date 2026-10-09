@@ -57,6 +57,10 @@ describe("git client sweepQuarantine", function () {
     expect(report.removed).toBe(2);
     expect(report.bytes).toBe(2000);
     expect(report.errors).toBe(0);
+    expect(report.directories.length).toBe(2);
+    expect(report.directories[0].repository).toBe("example.git");
+    expect(report.directories[0].bytes).toBe(1000);
+    expect(report.directories.every((d) => d.ageMs > DAY)).toBe(true);
   });
 
   it("only touches directories with exactly that prefix, directly inside objects", async function () {
@@ -151,6 +155,12 @@ describe("git client sweepQuarantine", function () {
   it("does nothing when there is nothing to remove", async function () {
     var report = await sweepQuarantine({ dataDir: this.dataDir });
 
-    expect(report).toEqual({ repositories: 1, removed: 0, bytes: 0, errors: 0 });
+    expect(report).toEqual({
+      repositories: 1,
+      removed: 0,
+      bytes: 0,
+      errors: 0,
+      directories: [],
+    });
   });
 });
