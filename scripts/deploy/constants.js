@@ -30,6 +30,18 @@ const blogsConfig = {
   maxOldSpaceSize: 1500,
 };
 
+// CPU weights (docker --cpu-shares), set per container in CONTAINERS below.
+// Docker's default weight is 1024. Shares only matter when the host's CPUs
+// are contended - they decide who gets the CPU when there isn't enough to
+// go around - so green can still use its full `cpus` quota whenever the box
+// is idle. Under contention blog serving (yellow) and dashboard reads (blue)
+// get ~4x green's CPU time. Green holds the background work - entry builds,
+// syncs, webhooks and the scheduler - but also takes the dashboard writes,
+// so dashboard POSTs are deprioritised along with it. That is accepted: a
+// slightly slower save is better than a slow blog.
+const SERVING_CPU_SHARES = 2048;
+const BACKGROUND_CPU_SHARES = 512;
+
 module.exports = {
   REGISTRY_URL: "ghcr.io/blotcms/blot",
   PLATFORM_OS: "linux",
@@ -100,6 +112,9 @@ module.exports = {
     network: "blotnet",
     memory: "512m",
     cpus: 1,
+    // Screenshots and remote downloads for entry builds - background work,
+    // weighted like green (see the CPU weights note above).
+    cpuShares: BACKGROUND_CPU_SHARES,
   },
 
   CONTAINERS: {
@@ -112,6 +127,7 @@ module.exports = {
       port: 8088,
       verify: true,
       ...siteConfig,
+      cpuShares: SERVING_CPU_SHARES,
     },
 
     // Site server (dashboard, brochure, sync folders)
@@ -119,6 +135,7 @@ module.exports = {
       name: "blot-container-green",
       port: 8089,
       ...siteConfig,
+      cpuShares: BACKGROUND_CPU_SHARES,
     },
 
     // Blog server (previews, published blogs)
@@ -126,6 +143,7 @@ module.exports = {
       name: "blot-container-yellow",
       port: 8090,
       ...blogsConfig,
+      cpuShares: SERVING_CPU_SHARES,
     },
   },
 };
