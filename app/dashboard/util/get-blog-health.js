@@ -1,5 +1,6 @@
 const clients = require("clients");
 const health = require("clients/health");
+const readOnly = require("helper/readOnly");
 
 // A slow or failing health check must never break or stall a dashboard page.
 const TIMEOUT = 2000;
@@ -28,6 +29,18 @@ module.exports = async function getBlogHealth(blog) {
       result = health.ok();
     } finally {
       clearTimeout(timer);
+    }
+  }
+
+  // While Blot is read-only, syncs wait (sync/index.js), so say so rather
+  // than let the site look stuck. readOnly.status() counts as off when Redis
+  // is unreachable, and a failure here must not break the page either.
+  if (blog.client && (!result || result.state !== health.STATES.ERROR)) {
+    const frozen = await readOnly.status().catch(() => null);
+    if (frozen) {
+      result = health.error([
+        { code: health.CODES.SYNC_PAUSED, since: frozen.since || undefined },
+      ]);
     }
   }
 
