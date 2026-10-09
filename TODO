@@ -7,9 +7,7 @@ Do we eventually prune and rotate the data gathered in the various statistics cr
 archives and all_entries in the template engine should be bounded to a maximum of 10,000 posts 
 - separately we should investigate other parts of the code which perform unbounded work 
 
-Add script to size down ebs volume immediately
-- In place and reuse as we move more to s3 
-- Can we test my assumption that the ephemeral instance store hard disk is faster than EBS discs? 
+Can we test my assumption that the ephemeral instance store hard disk is faster than EBS discs? 
 
 Maybe horizontal scaling involves redis replicas in other aws regions?
 - s3 multi region replication?
