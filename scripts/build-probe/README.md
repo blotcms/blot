@@ -54,7 +54,9 @@ checks and how it cleans up. For build-probe the container:
 
 - runs the same image and secrets as the app containers (yellow's current
   image, unless `--release`) and shares Redis with them;
-- mounts the data directory **read-write**, since builds write to it;
+- mounts the data directory **read-write**, since builds write to it, and the
+  host's tmp directory (`/var/instance-ssd/tmp`) read-write, as the app
+  containers do;
 - is attached to the airlock network, since builds fetch remote images and
   take screenshots through it;
 - has its own memory limit (default 2g: room for a heap snapshot on top of a
