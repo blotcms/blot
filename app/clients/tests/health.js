@@ -45,6 +45,31 @@ describe("client health", function () {
     expect(health.primaryIssue(result).code).toBe("REAUTH_REQUIRED");
   });
 
+  it("ranks SYNC_PAUSED last, with no action", function () {
+    const codes = Object.keys(health.CODES);
+
+    expect(codes[codes.length - 1]).toBe("SYNC_PAUSED");
+    expect(health.label("SYNC_PAUSED")).toBe("Sync paused");
+    expect(health.action("SYNC_PAUSED")).toBeUndefined();
+    expect(
+      health.primaryIssue(
+        health.error([{ code: "SYNC_PAUSED" }, { code: "SYNC_ERROR" }])
+      ).code
+    ).toBe("SYNC_ERROR");
+  });
+
+  it("isPaused is true only when SYNC_PAUSED is the issue shown", function () {
+    expect(health.isPaused(health.error([{ code: "SYNC_PAUSED" }]))).toBe(true);
+    expect(
+      health.isPaused(
+        health.error([{ code: "SYNC_PAUSED" }, { code: "SYNC_ERROR" }])
+      )
+    ).toBe(false);
+    expect(health.isPaused(health.ok())).toBe(false);
+    expect(health.isPaused(health.syncing())).toBe(false);
+    expect(health.isPaused(undefined)).toBe(false);
+  });
+
   it("returns ok rather than an empty error", function () {
     expect(health.error([])).toEqual(health.ok());
     expect(health.error()).toEqual(health.ok());

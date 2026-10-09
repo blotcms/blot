@@ -63,8 +63,10 @@ dashboard.get("/", function (req, res) {
     // seconds, until setup() (routes/setup/index.js) gets far enough to
     // clear error_code. We know better here: a session-tracked setup is
     // actively running, so show it as syncing instead of a stale error.
-    delete res.locals.blog.healthIssue;
-    res.locals.blog.health = health.syncing();
+    if (!health.isPaused(res.locals.blog.health)) {
+      delete res.locals.blog.healthIssue;
+      res.locals.blog.health = health.syncing();
+    }
   }
 
   var dropboxBreadcrumbs = [];
