@@ -137,6 +137,13 @@ body {
   padding-right: 3rem
 }
 
+@media screen and (min-width: 1061px) {
+  .page-container .entry .wide:not(.left):not(.right) {
+    width: min(158.6666667%, 47rem, calc(100vw - 19rem));
+    margin-left: 0;
+  }
+}
+
 #close-nav {
   display: none
 }
@@ -434,6 +441,7 @@ figure cite, figure cite a {font-size:0.8rem;color:rgba({{#rgb}}{{text_color}}{{
 
 .nav {
   width:12rem;
+  z-index:1;
   {{#sticky_navigation}}
   position: fixed;
   {{/sticky_navigation}}
