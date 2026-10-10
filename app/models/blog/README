@@ -24,7 +24,7 @@ This module is the authoritative data layer for blog records in Blot. It defines
 | `get.js` | Retrieves a single blog by `id`, `handle`, or `domain`. Applies `imageExif` and `converters` defaults on the way out. |
 | `set.js` | Validates and persists updates to a blog record. Manages side effects: domain/handle key rotation, cache busting, template forking, Git repository renaming, and CDN manifest updates. |
 | `bumpCacheID.js` | Bumps `cacheID` through `set` so render caches miss. If Redis is unavailable it retries every 5s for up to a minute in the background; the callback still fires after the first attempt. |
-| `remove.js` | Deletes a blog fully: disconnects the sync client, removes the record from the owner's user document, wipes the blog folder and static files from disk, and deletes all associated Redis keys. |
+| `remove.js` | Deletes a blog fully: disconnects the sync client, removes the record from the owner's user document, wipes the blog folder from disk and its generated assets from the assets bucket, and deletes all associated Redis keys. |
 | `extend.js` | Decorates an in-memory blog object with computed, template-facing properties: resolved URL, pretty URL, `cssURL`, `scriptURL`, `feedURL`, `pages`, `locals`, and `imageExif`/converter boolean flags. Does not write to Redis. |
 
 ### Status log
@@ -161,7 +161,7 @@ Fully deletes a blog. Runs four steps in sequence:
 
 1. Disconnects the sync client (`clients[blog.client].disconnect`)
 2. Removes the blog from the owner's user record
-3. Deletes the blog folder and static files directory from disk
+3. Deletes the blog folder from disk and the blog's generated assets from the assets bucket
 4. Deletes all `blog:{id}:*` and `template:{id}:*` Redis keys, domain/handle routing keys, and removes the ID from the global set
 
 ### `extend(blog)`
@@ -264,7 +264,7 @@ The Redis key generator. Methods:
 | `helper/localPath` | Resolves the filesystem path for a blog's content folder |
 | `helper/punycode` | Encodes/decodes internationalized domain names |
 | `helper/flushCache` | Clears reverse-proxy cache directories for specified hostnames |
-| `config` | Provides `config.host`, `config.blog_folder_dir`, `config.blog_static_files_dir`, and `config.reverse_proxies` |
+| `config` | Provides `config.host`, `config.blog_folder_dir`, and `config.reverse_proxies` |
 | `build/plugins` | Provides the default plugin list (`defaultList`) used in `defaults.js` |
 | `clients` | Loaded dynamically in `remove` to disconnect the blog's sync client |
 | `clients/git/renameRepo` | Called in `set` when a handle change affects a Git-backed blog |

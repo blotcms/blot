@@ -1,15 +1,20 @@
 # Assets bucket
 
 Generated per-blog assets (thumbnails, the image cache, converter output,
-bookmark screenshots, avatars, template uploads) are written to local disk
-and, when a bucket is configured, to S3 as well. `app/storage/assets.js` is
-the only code that touches either; `app/storage/README` explains the design.
+bookmark screenshots, avatars, template uploads) live in one S3 bucket, and
+nowhere else: there is no copy on the app host's disk. `app/storage/assets.js`
+is the only code that touches them; `app/storage/README` explains the design.
 
 Objects are keyed `{blogID}/{path}` at the bucket root, the same as the
-asset's public CDN path (`https://cdn.blot.im/{blogID}/{path}`), so the CDN can
-fetch `blog_*` straight from the bucket. The bucket allows public
+asset's public CDN path (`https://cdn.blot.im/{blogID}/{path}`), so the CDN
+fetches `blog_*` straight from the bucket. The bucket allows public
 `s3:GetObject` on `blog_*` keys and nothing else public: no listing, no
 writes.
+
+Tools that need a local path (sharp, pandoc, puppeteer) write to a staging
+directory under the app's tmp directory, `{tmp}/storage-assets-staging/
+{blogID}/...`; `assets.commit()` uploads it and deletes what it uploaded. The
+daily tmp prune removes staged files a week after they were last written.
 
 ## Create the bucket and the app's IAM user
 
@@ -40,35 +45,56 @@ with `--env-file`; see `config/environment.sh` for the full list), then deploy:
 
 | Variable | Value |
 | --- | --- |
-| `BLOT_ASSETS_BUCKET` | The bucket name. Empty (the default) keeps assets on local disk only. |
+| `BLOT_ASSETS_BUCKET` | The bucket name. Required: the app refuses to start without it, and the deploy's container checks fail if it can't reach the bucket. |
 | `BLOT_ASSETS_REGION` | `us-west-2` (the default). |
 | `BLOT_AWS_KEY`, `BLOT_AWS_SECRET` | The IAM user's access key. When unset, the AWS SDK's default credential chain is used. |
-| `BLOT_ASSETS_READ` | `disk` (the default) or `s3`. Where reads look first; the other is the fallback. |
 | `BLOT_ASSETS_ENDPOINT` | Only for a simulated S3 (MinIO) in development and tests. |
 
-With a bucket set, every new asset is written to disk and uploaded, and
-deletes remove both. While `BLOT_ASSETS_READ=disk`, a failed upload or delete
-is logged and doesn't fail the operation; grep the app logs for
-`[storage/assets] s3`. Once reads are `s3` a failure is an error, because
-disk is no longer the copy to trust. Files which were already on disk before
-the bucket was set aren't uploaded until the backfill.
+A failed upload or delete is an error for the operation which asked for it (a
+build fails, a dashboard upload shows an error); nothing is kept locally to
+fall back on.
 
-## Backfill
+## Bunny
 
-`scripts/storage/backfill-assets.js` copies what is on disk into the bucket.
-It lists the keys already in S3 for each blog, and uploads files which are
-missing or whose size differs, so it is safe to run repeatedly and to resume.
-Run it on the app host inside a node container (the same image, environment
-file and data directory as the app containers), for example:
+On the pull zone for `cdn.blot.im`, two edge rules with the same condition,
+URL matches `*/blog_*`:
+
+- Change Origin URL to `https://<bucket>.s3.us-west-2.amazonaws.com`. Check
+  that the pull zone isn't forwarding the CDN's own host header to the origin;
+  S3 needs the bucket's host.
+- Set Response Header `Access-Control-Allow-Origin: *`. The app's CORS header
+  doesn't apply to responses that don't come from it.
+
+Everything else on the CDN (`/template`, `/folder`, fonts, ...) still comes
+from the app, which also serves `/blog_*` itself (from the bucket) to blog
+domains and to anything that reaches it before the CDN does. Without the
+rules, the CDN would fetch `blog_*` through the app: slower, but it works.
+
+## Backup
+
+`_avatars` and `_template_assets` exist only here and can't be regenerated, so
+the bucket is backed up hourly to Backblaze B2 (see `app/storage/README` §3).
+Check that backup before anything which could lose objects.
+
+## Re-seeding from a local copy
+
+`scripts/storage/backfill-assets.js` copies a local directory of `blog_*`
+directories into the bucket: for restoring a backup into an empty or damaged
+bucket, and it is how the assets first got here from the app host's disk. It
+lists the keys already in S3 for each blog and uploads files which are missing
+or whose size differs, so it is safe to run repeatedly and to resume. Run it
+where the directory is, with the app's environment (for example in a node
+container from the same image with the directory mounted):
 
 ```
-docker exec <container> node scripts/storage/backfill-assets.js --dry-run
-docker exec <container> node scripts/storage/backfill-assets.js
-docker exec <container> node scripts/storage/backfill-assets.js --verify
+node scripts/storage/backfill-assets.js --source /restore/static --dry-run
+node scripts/storage/backfill-assets.js --source /restore/static
+node scripts/storage/backfill-assets.js --source /restore/static --verify
 ```
 
 | Option | |
 | --- | --- |
+| `--source <dir>` | Required. The directory of `blog_*` directories to copy from. |
 | `--dry-run` | Report what would be uploaded. |
 | `--verify` | Upload nothing; report, by directory, what is missing from the bucket or has a different size, and exit non-zero if anything is. |
 | `--blog <blogID>` | Only this blog. |
@@ -76,37 +102,7 @@ docker exec <container> node scripts/storage/backfill-assets.js --verify
 | `--concurrency <n>` | Uploads at once (default 16). |
 
 It prints a progress line every few seconds. Run `--dry-run`, then for real,
-then `--verify` until it reports nothing missing; files written while the
-backfill runs are uploaded by the app itself, and a later run catches any that
-weren't. Both `--dry-run` and `--verify` also list keys that may not survive
-being fetched through a plain URL (`+`, `%`, `#`, `?`, `\`, control
-characters, spaces at the ends of a name, non-ASCII). Fetch each of those
-through the public bucket URL and through the CDN before the flip (below).
-
-## Flip reads to S3 and the CDN to the bucket
-
-Only once `--verify` is clean:
-
-1. Set `BLOT_ASSETS_READ=s3` and redeploy. Disk stays as the fallback, and
-   writes still go to both.
-2. In Bunny, on the pull zone for `cdn.blot.im`, add two edge rules with the
-   same condition, URL matches `*/blog_*`:
-   - Change Origin URL to `https://<bucket>.s3.us-west-2.amazonaws.com`. Check
-     that the pull zone isn't forwarding the CDN's own host header to the
-     origin; S3 needs the bucket's host.
-   - Set Response Header `Access-Control-Allow-Origin: *`. The app's CORS
-     header no longer applies to responses that don't come from it.
-
-   Everything else on the CDN (`/template`, `/folder`, fonts, ...) still comes
-   from the app.
-3. Check images, a range request and one of the odd keys from the `--verify`
-   list through `https://cdn.blot.im/...`.
-
-To go back, remove the Bunny edge rules and set `BLOT_ASSETS_READ=disk`.
-
-## Later
-
-Back up the bucket (`_avatars` and `_template_assets` can't be regenerated)
-before deleting anything on disk. Once reads and the CDN are on S3, the local
-`data/static` copy can go and the data volume can shrink; see
-`app/storage/README` §5 for the order.
+then `--verify` until it reports nothing missing. Both `--dry-run` and
+`--verify` also list keys that may not survive being fetched through a plain
+URL (`+`, `%`, `#`, `?`, `\`, control characters, spaces at the ends of a
+name, non-ASCII); fetch each through the public bucket URL and through the CDN.

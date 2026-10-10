@@ -88,14 +88,12 @@ export BLOT_YOUTUBE_SECRET=
 export BLOT_AWS_KEY=
 export BLOT_AWS_SECRET=
 
-# Bucket for generated per-blog assets (config/assets-bucket/README.md).
-# Leave BLOT_ASSETS_BUCKET empty to keep them on local disk only.
+# Bucket for generated per-blog assets (config/assets-bucket/README.md). They
+# live nowhere else, so the app will not start without it.
 export BLOT_ASSETS_BUCKET=
 export BLOT_ASSETS_REGION=us-west-2
 # Only for a simulated S3 such as MinIO in development
 export BLOT_ASSETS_ENDPOINT=
-# Where reads look first: disk (default, falling back to the bucket) or s3
-export BLOT_ASSETS_READ=disk
 
 # AWS for controlling route 53 for wildcard SSL certficate
 export AWS_ACCESS_KEY_ID=
