@@ -163,8 +163,8 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
      `Cache-Control: public, max-age=31536000, immutable` and
      `Access-Control-Allow-Origin: *`.
    - A missing key returns 403, not 404: the public policy has no
-     `ListBucket`, so S3 doesn't say whether a key exists. Error responses
-     aren't cached.
+     `ListBucket`, so S3 doesn't say whether a key exists. Bunny holds error
+     responses for only 5 s.
    - A sample of the odd keys `--verify` lists behaves as it does on the app
      origin today.
 6. **Go live.** Remove the `X-Blot-Origin` condition from both rules. The
