@@ -151,8 +151,7 @@ const downloadGoogleDocAsZip = async ({
     await extractZip(zipPath, extractDir);
     const { htmlPath, imagesDir } = await resolveHtmlAndImagesDir(extractDir);
     const docHash = hash(path);
-    const assetDir = assets.path(blogID, "_assets", docHash);
-    await fs.ensureDir(assetDir);
+    const assetDir = "_assets/" + docHash;
 
     if (imagesDir) {
       const imageFiles = await fs.readdir(imagesDir);
@@ -160,7 +159,9 @@ const downloadGoogleDocAsZip = async ({
         const srcPath = join(imagesDir, name);
         const st = await fs.stat(srcPath);
         if (st.isFile()) {
-          await fs.copy(srcPath, join(assetDir, name), { overwrite: true });
+          await assets.writeFrom(blogID, assetDir + "/" + name, srcPath, {
+            overwrite: true,
+          });
         }
       }
     }

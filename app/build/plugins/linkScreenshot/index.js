@@ -1,7 +1,5 @@
 const { callbackify } = require("util");
 const screenshot = callbackify(require("helper/screenshot"));
-const { join } = require("path");
-const config = require("config");
 const assets = require("storage/assets");
 const { v4: uuid } = require("uuid");
 const { is } = require("build/converters/webloc");
@@ -16,10 +14,10 @@ function render($, callback, { blogID, path }) {
   const href = link.attr("href");
   const caption = link.html();
   const filename = uuid() + ".png";
-  const localPathToScreenshot = assets.path(blogID, SCREENSHOT_DIR, filename);
+  const screenshotPath = SCREENSHOT_DIR + "/" + filename;
+  const localPathToScreenshot = assets.path(blogID, screenshotPath);
 
-  const src =
-    config.cdn.origin + "/" + join(blogID, SCREENSHOT_DIR, filename);
+  const src = assets.url(blogID, screenshotPath);
 
   if (!href) {
     return callback();
@@ -57,16 +55,21 @@ function render($, callback, { blogID, path }) {
         return callback();
       }
 
-      $.root().html(
-        `<p class="bookmark-container">
+      // The screenshot was written locally by the browser, now it's in place
+      callbackify(assets.commit)(blogID, screenshotPath, function (err) {
+        if (err) return callback();
+
+        $.root().html(
+          `<p class="bookmark-container">
         <a class="bookmark-screenshot" href="${href}">
           <img width="${SCREENSHOT_WIDTH}" height="${SCREENSHOT_HEIGHT}" src="${src}" title="Screenshot of ${caption}" />
         </a>
         <a class="bookmark" href="${href}">${caption}</a>
        </p>`
-      );
+        );
 
-      return callback();
+        return callback();
+      });
     }
   );
 }

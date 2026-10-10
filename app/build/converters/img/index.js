@@ -33,7 +33,6 @@ async function read(blog, path, callback) {
   ensure(blog, "object").and(path, "string").and(callback, "function");
 
   const localPath = LocalPath(blog.id, path);
-  const assetDirectory = assets.path(blog.id);
   // If we need to convert the image to another format, store the converted
   // image in the asset directory for the blog.
 
@@ -65,15 +64,15 @@ async function read(blog, path, callback) {
       const convertedFilename = `${name}.png`;
       const convertedRelativePath = `/_assets/${hashPath}/${convertedFilename}`;
 
-      const absoluteFromRelative = (relativePath) =>
-        join(assetDirectory, relativePath.replace(/^\//, ""));
-
       const writeConversion = async (sourcePath, relativePath) => {
-        const absolutePath = absoluteFromRelative(relativePath);
+        // sharp writes the converted image to a local path, which we then
+        // commit to the blog's assets
+        const absolutePath = assets.path(blog.id, relativePath);
 
         await fs.ensureDir(dirname(absolutePath));
-        await fs.remove(absolutePath);
+        await assets.remove(blog.id, relativePath);
         await sharp(sourcePath).png().toFile(absolutePath);
+        await assets.commit(blog.id, relativePath);
 
         return { relativePath };
       };
@@ -89,11 +88,8 @@ async function read(blog, path, callback) {
 
       const conversionRelativePath =
         conversion?.relativePath || convertedRelativePath;
-      const conversionAbsolutePath = absoluteFromRelative(
-        conversionRelativePath
-      );
 
-      if (!(await fs.pathExists(conversionAbsolutePath))) {
+      if (!(await assets.exists(blog.id, conversionRelativePath))) {
         await writeConversion(localPath, conversionRelativePath);
       }
 

@@ -28,8 +28,8 @@ Delete.route("/")
   // Save any changes to the user's subscription
   // then remove the blogID from the list of blogs
   // owned by the user.
-  // Finally delete contents of the blog's folder on s3
-  // which contains cached images/avatars. Also delete
+  // Finally delete the blog's generated assets (cached images,
+  // avatars, ...) through storage/assets. Also delete
   // the contents blog's folder on the server.
   // Delete the credentials used to sync the blog's folder
   .post(

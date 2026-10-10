@@ -1,6 +1,3 @@
-const fs = require("fs-extra");
-const { join } = require("path");
-const config = require("config");
 const assets = require("storage/assets");
 const Template = require("models/template");
 const clfdate = require("helper/clfdate");
@@ -9,22 +6,26 @@ const writeChangeToFolder = require("./writeChangeToFolder");
 const { isAjaxRequest } = require("./ajax-response");
 const { generate, PNG_SIZES } = require("./favicon-assets");
 
-const faviconDirectory = (blog) => assets.path(blog.id, "_template_assets");
-const faviconURL = (blog, filename) => `${config.cdn.origin}/${blog.id}/_template_assets/${encodeURIComponent(filename)}`;
+const ASSETS = "_template_assets";
+const faviconDirectory = (blog) => assets.path(blog.id, ASSETS);
+const faviconURL = (blog, filename) => assets.url(blog.id, `${ASSETS}/${encodeURIComponent(filename)}`);
 
 function firstFile(files = {}) {
   const list = files.favicon;
   return Array.isArray(list) ? list[0] : list;
 }
 
+// Paths of a favicon's files, relative to the blog's asset directory
 function assetPaths(blog, favicon) {
   if (!favicon || !favicon.prefix || !/^favicon-[a-f0-9-]+$/.test(favicon.prefix)) return [];
-  const dir = faviconDirectory(blog);
   return [
-    join(dir, `${favicon.prefix}.ico`),
-    ...Object.values(PNG_SIZES).map((size) => join(dir, `${favicon.prefix}-${size}.png`)),
+    `${ASSETS}/${favicon.prefix}.ico`,
+    ...Object.values(PNG_SIZES).map((size) => `${ASSETS}/${favicon.prefix}-${size}.png`),
   ];
 }
+
+const removeAssets = (blog, favicon) =>
+  Promise.all(assetPaths(blog, favicon).map((path) => assets.remove(blog.id, path).catch(() => {})));
 
 const update = (blog, slug, locals) => new Promise((resolve, reject) =>
   Template.update(blog.id, slug, { locals }, (err) => err ? reject(err) : resolve())
@@ -59,7 +60,7 @@ async function removeAssetsIfUnreferenced(blog, favicon) {
 
   await Promise.all(
     paths.map((path) =>
-      fs.remove(path).catch((err) =>
+      assets.remove(blog.id, path).catch((err) =>
         console.log(clfdate(), "uploadFavicon", "Failed to remove old asset", path, err.message)
       )
     )
@@ -87,6 +88,13 @@ async function createFavicon(blog, template, slug, filePath, cropBox, { onFilePr
   const previous = template.locals.favicon;
 
   const created = await generate(filePath, faviconDirectory(blog), cropBox, { source });
+  // generate() wrote the files to the local directory
+  try {
+    await Promise.all(assetPaths(blog, created).map((path) => assets.commit(blog.id, path)));
+  } catch (error) {
+    await removeAssets(blog, created);
+    throw error;
+  }
   if (onFileProcessed) await onFileProcessed();
 
   const favicon = {
@@ -102,7 +110,7 @@ async function createFavicon(blog, template, slug, filePath, cropBox, { onFilePr
     await update(blog, slug, template.locals);
   } catch (error) {
     // Metadata never took on the new URLs, so discard the freshly generated files.
-    await Promise.all(assetPaths(blog, favicon).map((path) => fs.remove(path).catch(() => {})));
+    await removeAssets(blog, favicon);
     throw error;
   }
 
@@ -116,7 +124,7 @@ async function createFavicon(blog, template, slug, filePath, cropBox, { onFilePr
     try {
       await update(blog, slug, template.locals);
       await persistToFolder(blog, template);
-      await Promise.all(assetPaths(blog, favicon).map((path) => fs.remove(path).catch(() => {})));
+      await removeAssets(blog, favicon);
     } catch (_) {
       // A failed rollback may still have a package.json reference to either
       // set, so retaining both is safer than creating a broken favicon URL.
