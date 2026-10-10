@@ -65,21 +65,102 @@ a request forgery in the app could then read role credentials that can write
 and delete the public bucket. A key scoped to this bucket gives the app the
 same access without that exposure. See `app/storage/README` §3.
 
-## Bunny
+## Bunny (cdn.blot.im)
 
-On the pull zone for `cdn.blot.im`, two edge rules with the same condition,
-URL matches `*/blog_*`:
+### Current pull zone (as of 10 Oct 2026)
 
-- Change Origin URL to `https://<bucket>.s3.us-west-2.amazonaws.com`. Check
-  that the pull zone isn't forwarding the CDN's own host header to the origin;
-  S3 needs the bucket's host.
-- Set Response Header `Access-Control-Allow-Origin: *`. The app's CORS header
-  doesn't apply to responses that don't come from it.
+Pull zone `blot-cdn`, hostnames `cdn.blot.im`, `cdn.blot.site` and the system
+hostname `blot-cdn.b-cdn.net` (SSL on, Force SSL off). High-volume tier,
+SafeHop on.
 
-Everything else on the CDN (`/template`, `/folder`, fonts, ...) still comes
-from the app, which also serves `/blog_*` itself (from the bucket) to blog
-domains and to anything that reaches it before the CDN does. Without the
-rules, the CDN would fetch `blog_*` through the app: slower, but it works.
+- **Origin.** Type Origin URL, `http://<origin IP>` (the app host's openresty).
+  Host header `cdn.blot.im`, Forward host header off, Verify origin SSL off,
+  Follow redirects off, no middleware.
+- **Caching.** Smart Cache on; cache expiration overridden to 1 year; browser
+  cache "match server"; query string sort on; vary cache by URL query string;
+  cache error responses off (errors are not cached); strip response cookies
+  on; optimize for large object delivery on; stale cache while origin offline
+  and while updating.
+- **Perma-Cache** on, storage zone `blot-cdn-storage`. It serves any object it
+  already holds without asking the origin.
+- **Request coalescing** on, 30 s lock timeout.
+- **Edge rules**, in order:
+  1. Block requests by bot User-Agent: img2dataset, Bytespider, AhrefsBot,
+     ClaudeBot, bingbot.
+  2. The same, for GPTBot, python-requests, AliyunSecBot, Go-http-client,
+     Yandex.
+  3. "Disable Cache For Support Testing": request header `support: true`
+     overrides the cache time to 0 s.
+
+The `cdn.` server block in `proxy/config/server.conf` answers whatever Bunny
+asks the app host for. It serves the app's global static files (fonts, icons,
+KaTeX, plugins, documentation, ...) from disk and passes everything else
+straight to node (no openresty cache), which serves `/folder/v-...`,
+`/template/...`, the dashboard bundles and `/blog_*` (from the bucket). No
+per-blog file comes from disk.
+
+### Pointing `/blog_*` at the bucket
+
+Object keys in the bucket equal the CDN path (`{blogID}/_thumbnails/...`), so
+nothing is rewritten. Only `/blog_*` changes origin. Everything else
+(`/fonts`, `/icons`, `/katex`, `/plugins`, `/documentation`, `/folder/v-...`,
+`/template/...`, the dashboard bundles) stays on the app.
+
+1. **Prerequisites.** `backfill-assets.js --verify` reports nothing missing or
+   different (see below), and the app is writing to S3 with a failed upload
+   failing the write (before this change has deployed: `BLOT_ASSETS_READ=s3`),
+   so the CDN never has a missing object behind a successful build. After the
+   change deploys there is no flag; S3 is the only store.
+2. **Edge rule "Storage bucket for generated assets".** Action: Change Origin
+   URL to `https://blot-storage-prod.s3.us-west-2.amazonaws.com` (HTTPS: the
+   bucket name has no dots, so S3's wildcard certificate matches). Condition:
+   Request URL matches any of
+
+   ```
+   *://cdn.blot.im/blog_*
+   *://cdn.blot.site/blog_*
+   *://blot-cdn.b-cdn.net/blog_*
+   ```
+
+   Anchor on the hostname. A bare `*/blog_*` also matches
+   `/folder/v-.../blog_.../` and `/template/...` URLs, which must stay on the
+   app.
+3. **Edge rule for CORS**, same condition: Set Response Header
+   `Access-Control-Allow-Origin: *`. openresty and node add it today; S3
+   doesn't, and fonts uploaded through the template editor need it on custom
+   domains.
+4. **Host header caveat.** The pull zone forces `Host: cdn.blot.im` on origin
+   requests. If that also applies to the overridden origin, S3 reads
+   `cdn.blot.im` as the bucket name and fails (`NoSuchBucket`, or a wrong-host
+   error). Check this in the test. If it does:
+   give the app origin its own DNS name (for example `origin-cdn.blot.im`
+   pointing at the app host), add it to `server_name` in the `cdn.` server
+   block of `proxy/config/server.conf`, set the pull zone's Origin URL to it
+   and clear the Host header field. Every origin, app or bucket, then gets its
+   own hostname as `Host`. (The app origin can then move to HTTPS as well.)
+5. **Test before going live.** Add a second condition to rules 2 and 3,
+   Request Header `X-Blot-Origin` equals `s3` (a header, not a query string:
+   Perma-Cache may key on the path alone), and send it together with
+   `support: true` (rule 3 above sets cache time 0). Use objects Bunny hasn't
+   stored yet, since Perma-Cache answers for anything it holds: a fresh image
+   post on a test blog (the `test-blogs` skill). Check:
+   - 200, with the S3 copy's `Content-Type`,
+     `Cache-Control: public, max-age=31536000, immutable` and
+     `Access-Control-Allow-Origin: *`.
+   - A missing key returns 403, not 404: the public policy has no
+     `ListBucket`, so S3 doesn't say whether a key exists. Error responses
+     aren't cached.
+   - A sample of the odd keys `--verify` lists behaves as it does on the app
+     origin today.
+6. **Go live.** Remove the `X-Blot-Origin` condition from both rules. The
+   effect is gradual: Perma-Cache keeps serving what it already stores, and
+   only cache misses reach the bucket. Watch Bunny's origin error statistics
+   for a day.
+7. **Roll back.** Disable rules 2 and 3 (or put the test condition back).
+   Misses go to the app again. Before this change deploys the app still has
+   its disk and S3; after, it serves `/blog_*` from S3 itself.
+8. **Nothing to purge.** The objects in the bucket are byte-identical to what
+   the app served.
 
 ## Backup
 

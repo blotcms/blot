@@ -167,14 +167,18 @@ at sync/build time instead.
   that becomes a problem. Latency isn't simulated for S3 (toxiproxy only
   fronts Redis).
 - **Bunny pulls `blog_*` from the bucket.** Once the bucket is complete, an
-  edge rule on `cdn.blot.im` (URL matches `*/blog_*`) changes the origin to
-  the bucket, and a second sets `Access-Control-Allow-Origin: *` (the app's
-  CORS header no longer applies). The app stays the origin for everything
-  else on the CDN (`/template`, `/folder`, ...) and still serves `/blog_*`
-  itself, from S3, to blog domains and to anything that reaches it before the
-  CDN does. The openresty `cdn.` host no longer serves any per-blog file from
-  disk. This replaces the earlier plan of keeping the app as
-  Bunny's origin and warming Perma-Cache with a GET after each write.
+  edge rule on the CDN's hostnames (URL matches `*://cdn.blot.im/blog_*` and
+  the same for `cdn.blot.site` and `blot-cdn.b-cdn.net`; anchored on the host
+  so `/folder/v-.../blog_...` and `/template/...` stay on the app) changes the
+  origin to the bucket, and a second sets `Access-Control-Allow-Origin: *`
+  (the app's CORS header no longer applies). The pull zone's forced `Host`
+  header may break the bucket origin; `config/storage-bucket/README.md` has
+  the rules, the test and the fallback. The app stays the origin for
+  everything else on the CDN (`/template`, `/folder`, ...) and still serves
+  `/blog_*` itself, from S3, to blog domains and to anything that reaches it
+  before the CDN does. The openresty `cdn.` host no longer serves any
+  per-blog file from disk. This replaces the earlier plan of keeping the app
+  as Bunny's origin and warming Perma-Cache with a GET after each write.
 - **The bucket is public for `s3:GetObject` on `blog_*` keys only** — never
   `ListBucket`, never write. That covers a blog's folder content under
   `{blogID}/folder/` as well as its assets, which is intended: blog IDs are
