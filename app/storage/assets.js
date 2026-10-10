@@ -1,5 +1,4 @@
 var config = require("config");
-var { blog_static_files_dir } = config;
 var ensure = require("helper/ensure");
 var clfdate = require("helper/clfdate");
 var fs = require("fs-extra");
@@ -8,18 +7,12 @@ var { pipeline } = require("stream/promises");
 var { Readable } = require("stream");
 var { join, dirname, resolve, relative, sep } = require("path");
 var s3 = require("./s3");
-var { isMissing, walkLocal, createPool } = require("./util");
+var { isMissing, walkLocal, createPool, STAGING_DIRECTORY } = require("./util");
 
 // Every per-blog generated asset (thumbnails, image cache, converter output,
-// avatars, template uploads, ...) lives under blog_static_files_dir/{blogID}.
-// This module is the single choke point for reading, writing, deleting,
-// listing and serving those files.
-//
-// When config.assets.bucket is set, every write is also uploaded to the
-// bucket (key: {blogID}/{relPath}) and every delete removes the object too.
-// Reads try config.assets.read first ("disk", the default, or "s3") and fall
-// back to the other source when the file isn't there. With no bucket set
-// nothing here touches S3. See README.
+// avatars, template uploads, ...) lives in the assets bucket (config.assets),
+// keyed {blogID}/{relPath}. This module is the single choke point for
+// reading, writing, deleting, listing and serving those objects.
 //
 // Callers name a file by (blogID, relPath), where relPath is relative to the
 // blog's asset directory, e.g. "_thumbnails/{uuid}/small.jpg". A leading "/"
@@ -27,9 +20,12 @@ var { isMissing, walkLocal, createPool } = require("./util");
 // ignored. Every relPath goes through the same escape guard as path().
 //
 // Tools that insist on writing to a local path themselves (sharp's toFile,
-// pandoc --extract-media, puppeteer) write to path(blogID, relPath) and then
-// call commit(blogID, relPath) once the file or directory is in its final
-// place. Everything else uses write() or writeFrom().
+// pandoc --extract-media, puppeteer) write to path(blogID, relPath), which is
+// a staging path under the app's tmp directory, and then call
+// commit(blogID, relPath) once the file or directory is complete. commit
+// uploads it and deletes the staged copy, so nothing is kept locally: read it
+// back with read(), createReadStream() or ensureLocal(). Everything else uses
+// write() or writeFrom(), which stage and commit the same way. See README.
 
 // The one signal for "no such file", whatever the backend. It carries
 // code "ENOENT" so existing err.code checks keep working.
@@ -42,17 +38,33 @@ class NotFoundError extends Error {
   }
 }
 
+// Where tools stage files before they are committed. It is under the tmp
+// directory, so it is on the instance store and is pruned with it (see
+// app/scheduler/prune-tmp.js, which gives it a far longer life than a build).
+function stagingRoot() {
+  return join(config.tmp_directory, STAGING_DIRECTORY);
+}
+
 function root(blogID) {
   ensure(blogID, "string");
 
   if (!blogID) throw new Error("storage/assets: blogID must be a non-empty string");
 
-  return join(blog_static_files_dir, blogID);
+  var base = stagingRoot();
+  var directory = join(base, blogID);
+
+  // A blogID which is a path (or ".."), not a name
+  if (dirname(directory) !== base) {
+    throw new Error("storage/assets: invalid blogID: " + blogID);
+  }
+
+  return directory;
 }
 
-// Builds an absolute local path inside a blog's asset directory. With no
-// segments this returns the directory itself. Throws if the joined path would
-// resolve outside of it (e.g. a segment of "../").
+// Builds an absolute local staging path for a file in a blog's asset
+// directory. With no segments this returns the blog's staging directory
+// itself. Throws if the joined path would resolve outside of it (e.g. a
+// segment of "../").
 function path(blogID, ...segments) {
   var base = root(blogID);
 
@@ -83,19 +95,11 @@ function notFound(blogID, relPath, err) {
   return error;
 }
 
-// Fraction of disk-first reads which find the file only in S3 that are logged
-const FALLBACK_LOG_RATE = 0.01;
+// Where objects downloaded for ensureLocal are cached, under the tmp directory
+const DOWNLOAD_DIRECTORY = "storage-assets";
 
 // How many files of a directory are uploaded at once
 const COMMIT_CONCURRENCY = 8;
-
-function useS3() {
-  return s3.enabled();
-}
-
-function s3First() {
-  return useS3() && config.assets.read === "s3";
-}
 
 // relPath normalised to the form used in keys: relative to the blog's asset
 // directory, "/"-separated, with no leading slash, and "" for the directory
@@ -118,55 +122,6 @@ async function fromS3(blogID, relPath, fn) {
   }
 }
 
-// What to do when S3 refuses a write or delete. While disk is still the
-// source of truth the file is safe locally, so it's logged (grep for
-// "[storage/assets] s3") and the operation succeeds; once reads come from S3
-// a missing object is a real problem so the error goes to the caller.
-function s3Failed(action, blogID, relPath, err) {
-  if (s3First()) throw err;
-
-  console.log(
-    clfdate(),
-    "[storage/assets] s3 " + action + " failed",
-    "blog=" + blogID,
-    "path=" + strip(relPath),
-    (err && err.name) + ":",
-    err && err.message
-  );
-}
-
-// Calls the source functions in read order until one has the file. Each
-// throws NotFoundError when it doesn't; any other error is final. Without a
-// bucket only fromDisk is called.
-async function fromSources(blogID, relPath, op, fromDisk, fromBucket) {
-  if (!useS3()) return fromDisk();
-
-  var order = s3First()
-    ? [fromBucket, fromDisk]
-    : [fromDisk, fromBucket];
-
-  for (var i = 0; i < order.length; i++) {
-    try {
-      var result = await order[i]();
-
-      if (i === 1 && order[i] === fromBucket && Math.random() < FALLBACK_LOG_RATE) {
-        console.log(
-          clfdate(),
-          "[storage/assets] " + op + " not on disk, read from s3",
-          "blog=" + blogID,
-          "path=" + strip(relPath)
-        );
-      }
-
-      return result;
-    } catch (err) {
-      if (!(err instanceof NotFoundError)) throw err;
-    }
-  }
-
-  throw notFound(blogID, relPath);
-}
-
 // The public CDN URL of an asset. Names are used as given; callers which
 // URL-encode their filenames encode them before passing them in.
 function url(blogID, relPath) {
@@ -174,25 +129,56 @@ function url(blogID, relPath) {
   return config.cdn.origin + "/" + blogID + "/" + strip(relPath);
 }
 
-// Uploads one local file, applying the failure policy
-async function uploadFile(blogID, relPath, localFile) {
+// Uploads one staged file and deletes it. A file which has already gone was
+// taken by a commit of a directory which held it too, so there's nothing to do.
+async function uploadAndRemove(blogID, file) {
   try {
-    await s3.upload(blogID, relPath, localFile);
+    await s3.upload(blogID, file.rel, file.local);
   } catch (err) {
-    s3Failed("upload", blogID, relPath, err);
+    if (err.code === "ENOENT") return;
+    throw err;
+  }
+
+  // Not deleting it only leaves it for the tmp pruner
+  await fs.remove(file.local).catch(function () {});
+}
+
+// Removes the directories a commit emptied, best-effort. A blog's top-level
+// directories (_thumbnails, _assets, ...) are shared by every build of the
+// blog, and a tool may have just created one to write into, so they stay
+// (the pruner removes them when they've been empty a while); anything deeper
+// is removed only if nothing is in it.
+async function removeEmptyDirectories(blogID, rels) {
+  var directories = new Set();
+
+  rels.forEach(function (rel) {
+    var parts = rel.split("/").slice(0, -1);
+
+    while (parts.length >= 2) {
+      directories.add(parts.join("/"));
+      parts.pop();
+    }
+  });
+
+  var deepestFirst = Array.from(directories).sort(function (a, b) {
+    return b.split("/").length - a.split("/").length;
+  });
+
+  for (var i = 0; i < deepestFirst.length; i++) {
+    await fs.rmdir(path(blogID, deepestFirst[i])).catch(function () {});
   }
 }
 
 // Called after a file (or directory tree) has been written to
-// path(blogID, relPath) by a tool that needed a local path. The file is
-// already where it belongs on disk; with a bucket configured it's uploaded
-// too (every file, for a directory). Nothing existing at relPath (e.g. a
-// converter whose document had no media) is not an error.
+// path(blogID, relPath) by a tool that needed a local path. Uploads the file
+// (every file, for a directory) and then deletes exactly the files it
+// uploaded from staging, leaving any other file in the same directory alone.
+// If an upload fails, the staged files are deleted and the error thrown.
+// Nothing existing at relPath (e.g. a converter whose document had no media)
+// is not an error.
 async function commit(blogID, relPath) {
   var local = path(blogID, relPath);
-
-  if (!useS3()) return;
-
+  var rel = normalise(blogID, relPath);
   var stat;
 
   try {
@@ -202,106 +188,87 @@ async function commit(blogID, relPath) {
     throw err;
   }
 
-  var rel = normalise(blogID, relPath);
+  var files = [];
 
-  if (!stat.isDirectory()) return uploadFile(blogID, rel, local);
+  if (!stat.isDirectory()) {
+    files.push({ rel: rel, local: local });
+  } else {
+    for await (var file of walkLocal(local)) {
+      files.push({ rel: rel ? rel + "/" + file : file, local: join(local, file) });
+    }
+  }
 
   var pool = createPool(COMMIT_CONCURRENCY);
 
-  for await (var file of walkLocal(local)) {
-    await pool.add(
-      uploadFile.bind(null, blogID, rel ? rel + "/" + file : file, join(local, file))
+  try {
+    for (var i = 0; i < files.length; i++) {
+      await pool.add(uploadAndRemove.bind(null, blogID, files[i]));
+    }
+
+    await pool.drain();
+  } catch (err) {
+    // let uploads in flight finish so nothing is left behind, then clean up
+    await pool.drain().catch(function () {});
+    await Promise.all(
+      files.map(function (f) {
+        return fs.remove(f.local).catch(function () {});
+      })
     );
+    await removeEmptyDirectories(
+      blogID,
+      files.map(function (f) {
+        return f.rel;
+      })
+    );
+
+    throw err;
   }
 
-  await pool.drain();
+  await removeEmptyDirectories(
+    blogID,
+    files.map(function (f) {
+      return f.rel;
+    })
+  );
 }
 
-// Writes a Buffer or string, then commits it.
+// Writes a Buffer or string to the bucket.
 async function write(blogID, relPath, data) {
   await fs.outputFile(path(blogID, relPath), data);
   await commit(blogID, relPath);
 }
 
-// Copies (or, with move: true, moves) a local file into place, then commits
-// it. overwrite is passed to fs-extra, so by default a copy replaces an
-// existing file and a move refuses to.
+// Copies (or, with move: true, moves) a local file into the bucket,
+// replacing any object already at relPath.
 async function writeFrom(blogID, relPath, srcPath, options) {
   options = options || {};
 
   var destination = path(blogID, relPath);
-  var fsOptions = {};
-
-  if (options.overwrite !== undefined) fsOptions.overwrite = options.overwrite;
 
   await fs.ensureDir(dirname(destination));
 
-  if (options.move) await fs.move(srcPath, destination, fsOptions);
-  else await fs.copy(srcPath, destination, fsOptions);
+  if (options.move) await fs.move(srcPath, destination, { overwrite: true });
+  else await fs.copy(srcPath, destination);
 
   await commit(blogID, relPath);
 }
 
 async function read(blogID, relPath) {
-  return fromSources(
-    blogID,
-    relPath,
-    "read",
-    async function () {
-      try {
-        return await fs.readFile(path(blogID, relPath));
-      } catch (err) {
-        if (isMissing(err)) throw notFound(blogID, relPath, err);
-        throw err;
-      }
-    },
-    function () {
-      return fromS3(blogID, relPath, async function () {
-        var data = await s3.get(keyFor(blogID, relPath));
-        return Buffer.from(await data.Body.transformToByteArray());
-      });
-    }
-  );
+  return fromS3(blogID, relPath, async function () {
+    var data = await s3.get(keyFor(blogID, relPath));
+    return Buffer.from(await data.Body.transformToByteArray());
+  });
 }
 
 async function exists(blogID, relPath) {
-  try {
-    return await fromSources(
-      blogID,
-      relPath,
-      "exists",
-      async function () {
-        if (await fs.pathExists(path(blogID, relPath))) return true;
-        throw notFound(blogID, relPath);
-      },
-      async function () {
-        if (await s3.head(keyFor(blogID, relPath))) return true;
-        throw notFound(blogID, relPath);
-      }
-    );
-  } catch (err) {
-    if (err instanceof NotFoundError) return false;
-    throw err;
-  }
+  return !!(await s3.head(keyFor(blogID, relPath)));
 }
 
 // Names of the immediate children of a directory, or [] if it doesn't exist.
-// With a bucket, the children found on disk and in S3 together.
 async function list(blogID, relDir) {
-  var names;
-
-  try {
-    names = await fs.readdir(path(blogID, relDir || ""));
-  } catch (err) {
-    if (!isMissing(err)) throw err;
-    names = [];
-  }
-
-  if (!useS3()) return names;
-
   var rel = normalise(blogID, relDir || "");
   var prefix = blogID + "/" + (rel ? rel + "/" : "");
-  var found = new Set(names);
+  var found = new Set();
 
   for await (var entry of s3.listEntries(prefix, "/")) {
     var name = (entry.key || entry.prefix).slice(prefix.length).replace(/\/$/, "");
@@ -313,36 +280,25 @@ async function list(blogID, relDir) {
   return Array.from(found).sort();
 }
 
-// Every file in a blog's asset scope, as relPaths with no leading slash. With
-// a bucket, files on disk and then those only in S3.
+// Every file in a blog's asset scope, as relPaths with no leading slash.
 async function* walk(blogID) {
-  var seen = useS3() ? new Set() : null;
-
-  for await (var file of walkLocal(root(blogID))) {
-    if (seen) seen.add(file);
-    yield file;
-  }
-
-  if (!seen) return;
+  root(blogID);
 
   var prefix = blogID + "/";
 
   for await (var entry of s3.listEntries(prefix)) {
     var rel = entry.key.slice(prefix.length);
 
-    if (rel && !/\/$/.test(rel) && !seen.has(rel)) yield rel;
+    if (rel && !/\/$/.test(rel)) yield rel;
   }
 }
 
 // A stream of the file's bytes, which errors with NotFoundError if there's no
-// such file. With a bucket the file is opened (disk or S3, in read order)
-// only when the stream is first read, so a caller can queue many streams
-// without holding connections open.
+// such file. The object is opened only when the stream is first read, so a
+// caller can queue many streams without holding connections open.
 function createReadStream(blogID, relPath) {
-  var local = path(blogID, relPath);
-
-  if (!useS3()) return fs.createReadStream(local);
-
+  // Throws if relPath tries to leave the blog's asset directory
+  var objectKey = keyFor(blogID, relPath);
   var source;
   var started = false;
   var stream = new Readable({
@@ -378,26 +334,9 @@ function createReadStream(blogID, relPath) {
   }
 
   function open() {
-    return fromSources(
-      blogID,
-      relPath,
-      "createReadStream",
-      async function () {
-        try {
-          await fs.stat(local);
-        } catch (err) {
-          if (isMissing(err)) throw notFound(blogID, relPath, err);
-          throw err;
-        }
-
-        return fs.createReadStream(local);
-      },
-      function () {
-        return fromS3(blogID, relPath, async function () {
-          return (await s3.get(keyFor(blogID, relPath))).Body;
-        });
-      }
-    );
+    return fromS3(blogID, relPath, async function () {
+      return (await s3.get(objectKey)).Body;
+    });
   }
 
   return stream;
@@ -412,7 +351,7 @@ var downloads = new Map();
 async function download(blogID, relPath) {
   var rel = normalise(blogID, relPath);
   var objectKey = s3.key(blogID, rel);
-  var destination = join(config.tmp_directory, "storage-assets", blogID, rel);
+  var destination = join(config.tmp_directory, DOWNLOAD_DIRECTORY, blogID, rel);
 
   var info = await s3.head(objectKey);
 
@@ -464,29 +403,10 @@ async function download(blogID, relPath) {
 
 // Resolves to an absolute local path which holds the file, for callers which
 // need a real file (hashing, sharp input). The caller must not modify or
-// delete it. A file which is only in S3 is downloaded to a cache in the tmp
-// directory (never into the static files directory).
+// delete it. The object is downloaded to a cache in the tmp directory, which
+// is not where path() stages files and is pruned with the rest of tmp.
 async function ensureLocal(blogID, relPath) {
-  var local = path(blogID, relPath);
-
-  return fromSources(
-    blogID,
-    relPath,
-    "ensureLocal",
-    async function () {
-      try {
-        await fs.stat(local);
-      } catch (err) {
-        if (isMissing(err)) throw notFound(blogID, relPath, err);
-        throw err;
-      }
-
-      return local;
-    },
-    function () {
-      return download(blogID, relPath);
-    }
-  );
+  return download(blogID, relPath);
 }
 
 // Formats a Cache-Control the way send (and so res.sendFile) does: maxAge is
@@ -524,25 +444,6 @@ function cacheControl(options) {
 function hasHeader(headers, name) {
   return Object.keys(headers || {}).some(function (key) {
     return key.toLowerCase() === name;
-  });
-}
-
-function serveDisk(req, res, blogID, relPath, options) {
-  var sendOptions = {
-    root: root(blogID),
-    dotfiles: options.dotfiles || "allow",
-  };
-
-  if (options.maxAge !== undefined) sendOptions.maxAge = options.maxAge;
-  if (options.immutable !== undefined) sendOptions.immutable = options.immutable;
-  if (options.headers) sendOptions.headers = options.headers;
-
-  return new Promise(function (resolve, reject) {
-    res.sendFile(strip(relPath), sendOptions, function (err) {
-      if (!err) return resolve();
-      if (isMissing(err)) return reject(notFound(blogID, relPath, err));
-      reject(err);
-    });
   });
 }
 
@@ -632,34 +533,24 @@ function applyHeaders(res, headers) {
   });
 }
 
-// Sends an asset as the response. Range requests, ETag, Last-Modified and
-// content-type come from res.sendFile (or, for an object only in S3, from
-// S3's answer). Rejects with NotFoundError if the asset doesn't exist so
-// callers can fall through or send a 404.
+// Sends an asset as the response, the way res.sendFile would send a file:
+// Range, If-None-Match and If-Modified-Since are passed to S3, and the status
+// (200, 206, 304, 416), validators and caching headers are set from its
+// answer. Rejects with NotFoundError if the asset doesn't exist so callers can
+// fall through or send a 404.
 //   maxAge     milliseconds or an ms string, e.g. "1y"
 //   immutable  adds the immutable Cache-Control directive
 //   headers    extra response headers (they win over the defaults)
 //   dotfiles   "allow" (default) or "ignore" to treat dotfiles as missing
 async function serve(req, res, blogID, relPath, options) {
-  options = options || {};
-
   // Throws if relPath tries to leave the blog's asset directory
   path(blogID, relPath);
 
-  return fromSources(
-    blogID,
-    relPath,
-    "serve",
-    function () {
-      return serveDisk(req, res, blogID, relPath, options);
-    },
-    function () {
-      return serveS3(req, res, blogID, relPath, options);
-    }
-  );
+  return serveS3(req, res, blogID, relPath, options || {});
 }
 
-// Removes a file or a whole directory. A missing path is not an error.
+// Removes a file or a whole directory, from the bucket and from staging if a
+// tool left anything there. A missing path is not an error.
 async function remove(blogID, relPath) {
   var local = path(blogID, relPath);
 
@@ -668,34 +559,30 @@ async function remove(blogID, relPath) {
     throw new Error("storage/assets: remove needs a path inside the blog's asset directory");
   }
 
-  await fs.remove(local);
-
-  if (!useS3()) return;
-
-  try {
-    await s3.remove(keyFor(blogID, relPath));
-  } catch (err) {
-    s3Failed("delete", blogID, relPath, err);
-  }
+  await fs.remove(local).catch(function () {});
+  await s3.remove(keyFor(blogID, relPath));
 }
 
 // Removes a blog's entire asset directory. This is only used by blog
-// deletion. Preserves the realpath safety check that used to live in
-// app/models/blog/remove.js's safelyRemove: resolve both realpaths and make
-// sure the folder is strictly inside blog_static_files_dir before removing.
+// deletion. Anything the blog has in staging or in the download cache goes
+// too, best-effort; the realpath check which guarded the deletion of a blog's
+// directory on disk still applies to the staging directory.
 async function removeAll(blogID) {
   var folder = root(blogID);
+
+  await s3.removePrefix(blogID + "/");
+
   var realpathToFolder;
 
   try {
     realpathToFolder = await fs.realpath(folder);
   } catch (err) {
-    // This folder does not exist, so there is nothing on disk to remove
+    // Nothing was staged for this blog
     if (err.code !== "ENOENT") throw err;
   }
 
   if (realpathToFolder) {
-    var realpathToRoot = await fs.realpath(blog_static_files_dir);
+    var realpathToRoot = await fs.realpath(stagingRoot());
 
     if (realpathToFolder.indexOf(realpathToRoot + sep) !== 0) {
       throw new Error("Could not safely remove directory: " + folder);
@@ -704,13 +591,9 @@ async function removeAll(blogID) {
     await fs.remove(realpathToFolder);
   }
 
-  if (!useS3()) return;
-
-  try {
-    await s3.removePrefix(blogID + "/");
-  } catch (err) {
-    s3Failed("delete", blogID, "", err);
-  }
+  await fs
+    .remove(join(config.tmp_directory, DOWNLOAD_DIRECTORY, blogID))
+    .catch(function () {});
 }
 
 module.exports = {

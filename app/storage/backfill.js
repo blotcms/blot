@@ -4,8 +4,9 @@ const config = require("config");
 const s3 = require("./s3");
 const { walkLocal, createPool } = require("./util");
 
-// Copies the assets on local disk into the bucket (scripts/storage/
-// backfill-assets.js is the command line for this). For each blog it lists
+// Copies a local copy of the assets into the bucket (scripts/storage/
+// backfill-assets.js is the command line for this), for re-seeding it from a
+// backup or an old data/static directory. For each blog it lists
 // the keys already in S3, walks the blog's directory and uploads the files
 // which are missing there or whose size differs, with the same headers
 // assets.commit gives (s3.upload). In verify mode nothing is uploaded; the
@@ -45,15 +46,19 @@ function formatBytes(bytes) {
 //   dryRun       report what would be uploaded
 //   verify       report what's missing or different, uploading nothing
 //   log          function for output (default console.log)
-//   directory    the directory of blog directories (default
-//                config.blog_static_files_dir)
+//   directory    the directory of blog directories (required)
 //   progressEvery / progressIntervalMs
 //                a progress line this many files / ms apart, whichever first
 async function backfill(options) {
   options = options || {};
 
   const log = options.log || console.log;
-  const directory = options.directory || config.blog_static_files_dir;
+  const directory = options.directory;
+
+  if (!directory) {
+    throw new Error("storage/backfill: options.directory is required");
+  }
+
   const concurrency = options.concurrency || 16;
   const progressEvery = options.progressEvery || 5000;
   const progressIntervalMs = options.progressIntervalMs || 10000;

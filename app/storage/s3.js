@@ -12,10 +12,9 @@ const {
 
 // A thin layer over the S3 API for the assets bucket (config.assets): a lazily
 // created client and put/get/head/list/delete helpers which speak in
-// bucket keys. storage/assets.js is the facade which decides when to call
-// them. Only the S3 API subset Backblaze B2 also supports is used (no
-// tagging, storage classes or conditional writes), so B2 could be swapped in
-// as the store later.
+// bucket keys. storage/assets.js is the facade over them. Only the S3 API
+// subset Backblaze B2 also supports is used (no tagging, storage classes or
+// conditional writes), so B2 could be swapped in as the store later.
 //
 // Keys are "{blogID}/{path}" at the bucket root, identical to the asset's
 // public CDN path.
@@ -31,11 +30,22 @@ const UPLOAD_RETRY_DELAY_MS = 200;
 
 let current = null;
 
-function enabled() {
-  return !!(config.assets && config.assets.bucket);
+const NOT_CONFIGURED =
+  "storage/s3: BLOT_ASSETS_BUCKET is not set. Generated assets are stored " +
+  "only in the assets bucket (see config/assets-bucket/README.md); in " +
+  "development and tests it is the MinIO bucket the stack creates.";
+
+// Throws unless an assets bucket is configured. Called when the app starts so
+// a missing bucket is a failed boot, not a failed upload later.
+function assertConfigured() {
+  if (!(config.assets && config.assets.bucket)) {
+    throw new Error(NOT_CONFIGURED);
+  }
 }
 
 function bucket() {
+  assertConfigured();
+
   return config.assets.bucket;
 }
 
@@ -356,7 +366,7 @@ async function remove(objectKey) {
 
 module.exports = {
   CACHE_CONTROL,
-  enabled,
+  assertConfigured,
   key,
   client,
   reset,

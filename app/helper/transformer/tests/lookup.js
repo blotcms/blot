@@ -4,7 +4,7 @@ describe("transformer", function () {
   var client = require("models/client");
   var blogKey = require("models/blog/key");
   var Transformer = require("../index");
-  var STATIC_DIRECTORY = require("config").blog_static_files_dir;
+  var assets = require("storage/assets");
 
   // Creates test environment
   require("./setup")({});
@@ -88,38 +88,48 @@ describe("transformer", function () {
       done();
     });
   });
-  it("will not resolve a source that climbs out of the blog's static folder", function (done) {
+  it("will not resolve a source that climbs out of the blog's static folder", async function () {
     var spy = jasmine.createSpy().and.callFake(this.transform);
 
-    // A file that exists in the static root but NOT in this blog's subtree.
+    // An asset that exists for another blog but NOT in this blog's scope.
+    var otherBlogID = "blog_other" + this.blog.id.slice(5);
     var secretName = "secret-" + Date.now() + ".txt";
-    var secretPath = STATIC_DIRECTORY + "/" + secretName;
-    fs.outputFileSync(secretPath, "top secret");
 
-    this.transformer.lookup("../" + secretName, spy, function (err, result) {
-      fs.removeSync(secretPath);
+    await assets.write(otherBlogID, secretName, "top secret");
 
-      expect(err instanceof Error).toBe(true);
-      expect(err.code).toEqual("ENOENT");
-      expect(spy).not.toHaveBeenCalled();
-      expect(result).not.toBeTruthy();
-      done();
-    });
+    try {
+      await new Promise((resolve) => {
+        this.transformer.lookup(
+          "../" + otherBlogID + "/" + secretName,
+          spy,
+          function (err, result) {
+            expect(err instanceof Error).toBe(true);
+            expect(err.code).toEqual("ENOENT");
+            expect(spy).not.toHaveBeenCalled();
+            expect(result).not.toBeTruthy();
+            resolve();
+          }
+        );
+      });
+    } finally {
+      await assets.removeAll(otherBlogID);
+    }
   });
 
-  it("transforms a file in the blog's static directory", function (done) {
+  it("transforms a file in the blog's static directory", async function () {
     var fullPath = this.blogDirectory + "/" + this.path;
     var path = "/" + Date.now() + "-" + this.path;
-    var newFullPath = STATIC_DIRECTORY + "/" + this.blog.id + path;
 
-    fs.copySync(fullPath, newFullPath);
+    await assets.write(this.blog.id, path, await fs.readFile(fullPath));
 
-    this.transformer.lookup(path, this.transform, function (err, result) {
-      if (err) return done.fail(err);
+    await new Promise((resolve, reject) => {
+      this.transformer.lookup(path, this.transform, function (err, result) {
+        if (err) return reject(err);
 
-      expect(result).toEqual(jasmine.any(Object));
-      expect(result.size).toEqual(jasmine.any(Number));
-      done();
+        expect(result).toEqual(jasmine.any(Object));
+        expect(result.size).toEqual(jasmine.any(Number));
+        resolve();
+      });
     });
   });
 

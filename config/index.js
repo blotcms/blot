@@ -88,7 +88,6 @@ module.exports = {
   tmp_directory: process.env.BLOT_TMP_DIRECTORY || BLOT_DATA_DIRECTORY + "/tmp",
   log_directory:
     process.env.BLOT_LOG_DIRECTORY || BLOT_DATA_DIRECTORY + "/logs",
-  blog_static_files_dir: BLOT_DATA_DIRECTORY + "/static",
   blog_folder_dir: BLOT_DATA_DIRECTORY + "/blogs",
   ip: process.env.BLOT_IP || "127.0.0.1",
   ipv6: BLOT_IPV6,
@@ -217,17 +216,14 @@ module.exports = {
     secret: process.env.BLOT_AWS_SECRET,
   },
 
-  // Object storage for generated per-blog assets (app/storage/assets.js).
-  // Keys are {blogID}/{path}, identical to the public CDN path.
+  // Object storage for generated per-blog assets (app/storage/assets.js),
+  // their only home. Keys are {blogID}/{path}, identical to the public CDN
+  // path. The app refuses to start without a bucket.
   assets: {
-    // When empty, assets live on local disk only.
     bucket: process.env.BLOT_ASSETS_BUCKET || "",
     region: process.env.BLOT_ASSETS_REGION || "us-west-2",
     // Set to point at a simulated S3 (MinIO) in development and tests.
     endpoint: process.env.BLOT_ASSETS_ENDPOINT || "",
-    // Where reads look first once a bucket is set: "disk" (falling back to
-    // the bucket) or "s3" (falling back to disk). Writes go to both.
-    read: process.env.BLOT_ASSETS_READ === "s3" ? "s3" : "disk",
   },
 
   mailgun: {

@@ -1,6 +1,11 @@
 const fs = require("fs-extra");
 const { join, sep } = require("path");
 
+// Where storage/assets stages files for upload, inside config.tmp_directory:
+// {tmp}/storage-assets-staging/{blogID}/{relPath}. app/scheduler/prune-tmp.js
+// looks after it too.
+const STAGING_DIRECTORY = "storage-assets-staging";
+
 function isMissing(err) {
   return (
     err &&
@@ -83,4 +88,4 @@ function createPool(limit) {
   return { add, drain };
 }
 
-module.exports = { isMissing, walkLocal, createPool };
+module.exports = { STAGING_DIRECTORY, isMissing, walkLocal, createPool };

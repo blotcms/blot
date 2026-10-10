@@ -13,7 +13,7 @@ describe("storage/backfill", function () {
 
   var lines;
 
-  // A directory of blogs' assets like blog_static_files_dir
+  // A directory of blogs' assets: blog_*/{path}
   async function populate(directory) {
     await fs.outputFile(join(directory, "blog_a/_thumbnails/x/small.jpg"), "small");
     await fs.outputFile(join(directory, "blog_a/_avatars/me.png"), "avatar");
@@ -193,10 +193,19 @@ describe("storage/backfill", function () {
   it("counts errors and carries on", async function () {
     var directory = this.directory;
 
+    var endpoint = config.assets.endpoint;
+    var stats;
+
     config.assets.endpoint = "http://127.0.0.1:1";
     s3.reset();
 
-    var stats = await run.call(this);
+    try {
+      stats = await run.call(this);
+    } finally {
+      // so the test blog can be cleaned up
+      config.assets.endpoint = endpoint;
+      s3.reset();
+    }
 
     // one failed listing for each blog
     expect(stats.errors).toEqual(3);

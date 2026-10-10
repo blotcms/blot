@@ -15,6 +15,7 @@ const renderTimeMetric = require("./blog/render/renderTimeMetric");
 const flush = require("documentation/tools/flush-cache");
 const configureLocalBlogs = require("./configure-local-blogs");
 const purgeCdnUrls = require("helper/purgeCdnUrls");
+const { assertConfigured: assertAssetsBucket } = require("storage/s3");
 
 // The offline queue is still on while we boot, so a command sent while Redis
 // is unreachable waits for the connection instead of failing. Don't let that
@@ -173,6 +174,18 @@ async function runPostListenTasks() {
 function main(callback) {
   async.series(
     [
+      function (callback) {
+        // Generated assets live only in the assets bucket: without one every
+        // build and upload would fail, so refuse to start
+        try {
+          assertAssetsBucket();
+        } catch (err) {
+          return callback(err);
+        }
+
+        callback();
+      },
+
       async function () {
         const featuredDir = path.join(config.data_directory, "featured");
         const featuredFile = path.join(featuredDir, "featured.json");
@@ -186,7 +199,6 @@ function main(callback) {
       async function () {
         log("Creating required directories");
         await fs.ensureDir(config.blog_folder_dir);
-        await fs.ensureDir(config.blog_static_files_dir);
         await fs.ensureDir(config.log_directory);
         await fs.ensureDir(config.tmp_directory);
         log("Created required directories");
