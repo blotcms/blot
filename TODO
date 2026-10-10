@@ -1,3 +1,5 @@
+Bunny: decide Volume vs Standard tier (more PoPs, faster first byte far from Volume PoPs) once we've run the numbers on cost and latency; also why cache HIT is low (Statistics: status codes, top uncached URLs)
+
 Rewrite node deploy to wait for image after all the init steps to speed up runs
 
 Create a skill which interacts with the production test blogs through the locally synced folders
