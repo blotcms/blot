@@ -1,7 +1,5 @@
-var fs = require("fs-extra");
 var { v4: uuid } = require("uuid");
 var extname = require("path").extname;
-var config = require("config");
 var assets = require("storage/assets");
 var folder = "_avatars";
 
@@ -27,17 +25,19 @@ module.exports = function (req, res, next) {
   }
 
   var name = uuid() + extension;
-  var finalPath = assets.path(req.blog.id, folder, name);
-  var url = config.cdn.origin + "/" + req.blog.id + "/" + folder + "/" + name;
+  var relPath = folder + "/" + name;
+  var url = assets.url(req.blog.id, relPath);
 
   // The combined photo/favicon flow needs the temporary upload after the
   // avatar has been stored, so it opts into copying rather than moving it.
-  var store = req.preserveAvatarUpload ? fs.copy : fs.move;
-  store(avatar.path, finalPath, function (err) {
-    if (err) return next(err);
+  var move = !req.preserveAvatarUpload;
 
-    req.updates.avatar = url;
-    req.savedAvatarPath = finalPath;
-    next();
-  });
+  assets.writeFrom(req.blog.id, relPath, avatar.path, { move: move }).then(
+    function () {
+      req.updates.avatar = url;
+      req.savedAvatarRelPath = relPath;
+      next();
+    },
+    next
+  );
 };
