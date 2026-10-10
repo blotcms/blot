@@ -1,14 +1,15 @@
 const config = require("config");
 const fs = require("fs-extra");
 const contentTypeFor = require("./contentType");
-const {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-  HeadObjectCommand,
-  ListObjectsV2Command,
-  DeleteObjectsCommand,
-} = require("@aws-sdk/client-s3");
+
+// The SDK is loaded on first use, so an app with no bucket configured never
+// loads it (and starts from an image built before it was a dependency)
+let sdk;
+
+function SDK() {
+  if (!sdk) sdk = require("@aws-sdk/client-s3");
+  return sdk;
+}
 
 // A thin layer over the S3 API for the assets bucket (config.assets): a lazily
 // created client and put/get/head/list/delete helpers which speak in
@@ -81,7 +82,7 @@ function client() {
     };
   }
 
-  current = { signature, client: new S3Client(options) };
+  current = { signature, client: new (SDK().S3Client)(options) };
 
   return current.client;
 }
@@ -132,7 +133,7 @@ async function upload(blogID, relPath, localFile) {
 
       try {
         await client().send(
-          new PutObjectCommand({
+          new (SDK().PutObjectCommand)({
             Bucket: bucket(),
             Key: objectKey,
             Body: body,
@@ -166,7 +167,7 @@ async function upload(blogID, relPath, localFile) {
 async function head(objectKey) {
   try {
     const data = await client().send(
-      new HeadObjectCommand({ Bucket: bucket(), Key: objectKey })
+      new (SDK().HeadObjectCommand)({ Bucket: bucket(), Key: objectKey })
     );
 
     return {
@@ -194,7 +195,7 @@ async function get(objectKey, options) {
   if (options.ifNoneMatch) input.IfNoneMatch = options.ifNoneMatch;
   if (options.ifModifiedSince) input.IfModifiedSince = options.ifModifiedSince;
 
-  return client().send(new GetObjectCommand(input));
+  return client().send(new (SDK().GetObjectCommand)(input));
 }
 
 function parseDate(value) {
@@ -227,7 +228,7 @@ async function open(objectKey, options) {
 
   try {
     data = await client().send(
-      options.head ? new HeadObjectCommand(input) : new GetObjectCommand(input)
+      options.head ? new (SDK().HeadObjectCommand)(input) : new (SDK().GetObjectCommand)(input)
     );
   } catch (err) {
     const status = err && err.$metadata && err.$metadata.httpStatusCode;
@@ -283,7 +284,7 @@ async function* listEntries(prefix, delimiter) {
 
   do {
     const data = await client().send(
-      new ListObjectsV2Command({
+      new (SDK().ListObjectsV2Command)({
         Bucket: bucket(),
         Prefix: prefix,
         Delimiter: delimiter,
@@ -308,7 +309,7 @@ async function deleteKeys(keys) {
   if (!keys.length) return;
 
   const data = await client().send(
-    new DeleteObjectsCommand({
+    new (SDK().DeleteObjectsCommand)({
       Bucket: bucket(),
       Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
     })
