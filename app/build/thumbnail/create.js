@@ -4,8 +4,8 @@ var callOnce = require("helper/callOnce");
 var Transform = require("./transform");
 var TransformGIF = require("./transform-gif");
 var join = require("path").join;
-var config = require("config");
 var assets = require("storage/assets");
+var callbackify = require("util").callbackify;
 var extname = require("path").extname;
 var TIMEOUT = 20 * 1000; // 20s
 var validate = require("./validate");
@@ -41,16 +41,18 @@ function create(blogID, path, done) {
 
         for (var i in thumbnails) {
           thumbnails[i].path = outputDirectory + "/" + thumbnails[i].name;
-          thumbnails[i].url =
-            config.cdn.origin + "/" + blogID + thumbnails[i].path;
+          thumbnails[i].url = assets.url(blogID, thumbnails[i].path);
         }
 
-        if (err) return done(err);
+        // The transform wrote the files locally, now they are all in place
+        callbackify(assets.commit)(blogID, outputDirectory, function (err) {
+          if (err) return done(err);
 
-        clearTimeout(timeout);
+          clearTimeout(timeout);
 
-        debug(blogID, "Done", thumbnails);
-        done(null, thumbnails);
+          debug(blogID, "Done", thumbnails);
+          done(null, thumbnails);
+        });
       });
     });
   });

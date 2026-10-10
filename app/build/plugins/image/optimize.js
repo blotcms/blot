@@ -1,8 +1,8 @@
-var config = require("config");
 var assets = require("storage/assets");
 var { v4: uuid } = require("uuid");
 var join = require("path").join;
 var fs = require("fs-extra");
+var callbackify = require("util").callbackify;
 var cache_folder_name = "_image_cache";
 var resize = require("./resize");
 var extname = require("path").extname;
@@ -61,17 +61,19 @@ module.exports = function (blogID, originalSrc) {
       relativePath = name;
     }
     
-    var finalPath = assets.path(blogID, cache_folder_name, relativePath);
+    var assetPath = cache_folder_name + "/" + relativePath;
 
-    var src =
-      config.cdn.origin + "/" + blogID + "/" + cache_folder_name + "/" + relativePath;
+    // The image is copied here, resized in place, and then committed.
+    var finalPath = assets.path(blogID, assetPath);
+
+    var src = assets.url(blogID, assetPath);
 
     // Wrap callback to clean up file if we encounter an error in this module
     // When transformer creates and cleans up a tmp file for us, can remove this.
     var callback = function (err, info) {
       if (!err) return _callback(null, info);
 
-      fs.remove(finalPath, function () {
+      callbackify(assets.remove)(blogID, assetPath, function () {
         _callback(err, info);
       });
     };
@@ -109,7 +111,11 @@ module.exports = function (blogID, originalSrc) {
 
         info.src = src;
 
-        callback(null, info);
+        callbackify(assets.commit)(blogID, assetPath, function (err) {
+          if (err) return callback(err);
+
+          callback(null, info);
+        });
         // });
       });
       });

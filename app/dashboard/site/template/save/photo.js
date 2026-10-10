@@ -1,5 +1,6 @@
 const fs = require("fs-extra");
 const Blog = require("models/blog");
+const assets = require("storage/assets");
 const Template = require("models/template");
 const saveAvatar = require("dashboard/site/save/avatar");
 const forkIfNeeded = require("./fork-if-needed");
@@ -146,8 +147,8 @@ module.exports = async function savePhoto(req, res, next) {
 
     // Keep the new file if the database could not be restored; the stored URL
     // may still point at it. Otherwise it is safe to discard the failed upload.
-    if (!avatarChanged && avatarRestored && req.savedAvatarPath) {
-      await fs.remove(req.savedAvatarPath).catch(() => {});
+    if (!avatarChanged && avatarRestored && req.savedAvatarRelPath) {
+      await assets.remove(req.blog.id, req.savedAvatarRelPath).catch(() => {});
     }
     if (uploaded) await fs.remove(uploaded.path).catch(() => {});
     return next(finalError);

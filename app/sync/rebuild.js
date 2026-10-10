@@ -69,13 +69,19 @@ module.exports = function main(blogID, options, callback) {
 
       try {
         if (options.thumbnails) {
-          const directory = assets.path(blog.id, "_thumbnails");
-          await wipeCache({ blogID: blog.id, label: "thumbnails", directory });
+          await wipeCache({
+            blogID: blog.id,
+            label: "thumbnails",
+            directory: "_thumbnails",
+          });
         }
 
         if (options.imageCache) {
-          const directory = assets.path(blog.id, "_image_cache");
-          await wipeCache({ blogID: blog.id, label: "image-cache", directory });
+          await wipeCache({
+            blogID: blog.id,
+            label: "image-cache",
+            directory: "_image_cache",
+          });
         }
       } catch (e) {
         return callback(e);
@@ -169,5 +175,6 @@ async function wipeCache({ blogID, label, directory }) {
   const flush = promisify(store.flush);
 
   await flush();
-  await fs.emptyDir(directory);
+  // The writers recreate the directory when they next need it
+  await assets.remove(blogID, directory);
 }
