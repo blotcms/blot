@@ -1,9 +1,13 @@
-// Copies the generated assets on local disk (data/static/blog_*) into the
-// assets bucket, so every file has an object at {blogID}/{path}. Safe to run
+// Re-seeds the assets bucket from a local copy of the generated assets (a
+// directory of blog_* directories), so every file has an object at
+// {blogID}/{path}. The app keeps no such copy any more; this is for recovery
+// (restoring a backup of the bucket's contents into an empty or damaged
+// bucket) and for the one-off copy made when assets moved to S3. Safe to run
 // repeatedly: files already in the bucket with the same size are skipped.
 //
-//   node scripts/storage/backfill-assets.js [options]
+//   node scripts/storage/backfill-assets.js --source <dir> [options]
 //
+//   --source <dir>     the directory of blog_* directories to copy from
 //   --dry-run          report what would be uploaded
 //   --verify           upload nothing; report what's missing or different,
 //                      and exit non-zero if anything is
@@ -25,7 +29,7 @@ function usage(message) {
   if (message) console.error(message + "\n");
 
   console.error(
-    "Usage: node scripts/storage/backfill-assets.js [--dry-run | --verify]" +
+    "Usage: node scripts/storage/backfill-assets.js --source <dir> [--dry-run | --verify]" +
       " [--blog <blogID>] [--from <blogID>] [--concurrency <n>]"
   );
   process.exit(2);
@@ -39,7 +43,12 @@ function parse(argv) {
 
     if (arg === "--dry-run") options.dryRun = true;
     else if (arg === "--verify") options.verify = true;
-    else if (arg === "--blog" || arg === "--from" || arg === "--concurrency") {
+    else if (
+      arg === "--source" ||
+      arg === "--blog" ||
+      arg === "--from" ||
+      arg === "--concurrency"
+    ) {
       const value = argv[++i];
 
       if (!value) usage(arg + " needs a value");
@@ -47,6 +56,8 @@ function parse(argv) {
       if (arg === "--concurrency") {
         options.concurrency = parseInt(value, 10);
         if (!(options.concurrency >= 1)) usage("--concurrency must be 1 or more");
+      } else if (arg === "--source") {
+        options.directory = value;
       } else {
         options[arg.slice(2)] = value;
       }
@@ -56,6 +67,7 @@ function parse(argv) {
   }
 
   if (options.dryRun && options.verify) usage("Use --dry-run or --verify, not both");
+  if (!options.directory) usage("--source <dir> is required");
 
   return options;
 }
@@ -63,15 +75,17 @@ function parse(argv) {
 async function main() {
   const options = parse(process.argv.slice(2));
 
-  if (!s3.enabled()) {
-    console.error("BLOT_ASSETS_BUCKET is not set, so there is no bucket to copy to.");
+  try {
+    s3.assertConfigured();
+  } catch (err) {
+    console.error(err.message);
     return 2;
   }
 
   console.log(
     "[backfill] bucket " + config.assets.bucket + " in " + config.assets.region +
       (config.assets.endpoint ? " at " + config.assets.endpoint : "") +
-      ", from " + config.blog_static_files_dir
+      ", from " + options.directory
   );
 
   const stats = await backfill(options);
