@@ -9,6 +9,7 @@ const client = require("models/client");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const key = require("models/template/key");
 const path = require("path");
+const assets = require("storage/assets");
 
 const GLOBAL_STATIC_FILES = config.blot_directory + "/app/blog/static";
 
@@ -119,9 +120,61 @@ cdn.get("/template/:encodedViewAndHash(*)", async (req, res, next) => {
 
 // Blog-specific static files, e.g.
 // /blog_de64881e0dd94a5f8ba8f7aeaf807b86/_image_cache/739749f7-85eb-4b51-a6b9-c238b61c2c97.jpg
-cdn.use(static(config.blog_static_files_dir));
+// Served from storage/assets with the semantics express.static had here:
+// GET/HEAD only, a year of caching, dotfiles ignored, and a miss is a 404
+// error rather than falling through to another handler.
+cdn.use(async (req, res, next) => {
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    res.statusCode = 405;
+    res.setHeader("Allow", "GET, HEAD");
+    res.setHeader("Content-Length", "0");
+    return res.end();
+  }
+
+  let pathname;
+
+  try {
+    pathname = decodeURIComponent(req.path);
+  } catch (err) {
+    return next(httpError(400, "Bad Request"));
+  }
+
+  // pathname is /{blogID}/{path in the blog's assets}
+  const match = /^\/(blog_[^/]+)\/(.+)$/.exec(pathname);
+
+  if (!match || pathname.indexOf("\0") !== -1) {
+    return next(httpError(404, "Not Found"));
+  }
+
+  if (match[2].split("/").indexOf("..") !== -1) {
+    return next(httpError(403, "Forbidden"));
+  }
+
+  try {
+    await assets.serve(req, res, match[1], match[2], {
+      maxAge: "1y",
+      dotfiles: "ignore",
+    });
+  } catch (err) {
+    // The client went away after we started sending
+    if (res.headersSent) return;
+
+    if (err instanceof assets.NotFoundError) {
+      return next(httpError(404, "Not Found"));
+    }
+
+    next(err);
+  }
+});
 
 module.exports = cdn;
+
+function httpError(status, message) {
+  const err = new Error(message);
+  err.status = err.statusCode = status;
+  err.expose = true;
+  return err;
+}
 
 /**
  * Get content type from view name

@@ -109,7 +109,8 @@ describe("transformer", function () {
 
   it("transforms a file in the blog's static directory", function (done) {
     var fullPath = this.blogDirectory + "/" + this.path;
-    var path = "/" + Date.now() + "-" + this.path;
+    // Generated assets live in the blog's underscore directories
+    var path = "/_image_cache/" + Date.now() + "-" + this.path;
     var newFullPath = STATIC_DIRECTORY + "/" + this.blog.id + path;
 
     fs.copySync(fullPath, newFullPath);

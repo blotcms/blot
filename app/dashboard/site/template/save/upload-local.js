@@ -1,7 +1,5 @@
-const fs = require("fs-extra");
-const { join, extname } = require("path");
+const { extname } = require("path");
 const { v4: uuid } = require("uuid");
-const config = require("config");
 const assets = require("storage/assets");
 const Template = require("models/template");
 const { isAjaxRequest } = require("./ajax-response");
@@ -77,23 +75,25 @@ module.exports = async (req, res, next) => {
     return res.message(redirect, "Removed file");
   }
 
-  const subdir = req.blog.id + "/_template_assets";
-  const templateDir = assets.path(req.blog.id, "_template_assets");
   const extension = extname(file.originalFilename || file.path).toLowerCase();
   const filename = `${uuid()}${extension}`;
-  const finalPath = join(templateDir, filename);
+  const assetPath = `_template_assets/${filename}`;
 
   try {
-    await fs.ensureDir(templateDir);
-    await fs.move(file.path, finalPath, { overwrite: true });
+    await assets.writeFrom(req.blog.id, assetPath, file.path, {
+      move: true,
+      overwrite: true,
+    });
     await cleanupFiles(files);
   } catch (err) {
     await cleanupFiles(files);
     return next(err);
   }
 
-  const cdnUrl =
-    `${config.cdn.origin}/${subdir}/` + encodeURIComponent(filename);
+  const cdnUrl = assets.url(
+    req.blog.id,
+    `_template_assets/${encodeURIComponent(filename)}`
+  );
 
   req.template.locals[key] = cdnUrl;
 
@@ -104,7 +104,7 @@ module.exports = async (req, res, next) => {
       req.template.locals
     );
   } catch (err) {
-    await fs.remove(finalPath).catch(() => {});
+    await assets.remove(req.blog.id, assetPath).catch(() => {});
     return next(err);
   }
   res.locals.template = req.template;
