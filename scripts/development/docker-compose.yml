@@ -38,13 +38,11 @@ services:
       # app hit the network directly (no SSRF protection).
       - BLOT_AIRLOCK_BROWSER_URL=http://airlock:9222
       - BLOT_AIRLOCK_PROXY_URL=http://airlock:8888
-      # Generated assets are written to local disk and to this simulated S3
-      # (MinIO, below), as in production. Reads look on disk first; start with
-      # BLOT_ASSETS_READ=s3 npm start to read from the bucket first. The
-      # credentials are MinIO's development root user, set below.
+      # Generated assets live only in this simulated S3 (MinIO, below), as in
+      # production; the app won't start without a bucket. The credentials are
+      # MinIO's development root user, set below.
       - BLOT_ASSETS_BUCKET=blot-assets-dev
       - BLOT_ASSETS_ENDPOINT=http://minio:9000
-      - BLOT_ASSETS_READ=${BLOT_ASSETS_READ:-disk}
       - BLOT_AWS_KEY=blot-dev
       - BLOT_AWS_SECRET=blot-dev-secret
     volumes:

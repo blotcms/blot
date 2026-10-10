@@ -27,7 +27,6 @@ services:
       # docker-compose.yml
       - BLOT_ASSETS_BUCKET=blot-assets-dev
       - BLOT_ASSETS_ENDPOINT=http://minio:9000
-      - BLOT_ASSETS_READ=${BLOT_ASSETS_READ:-disk}
       - BLOT_AWS_KEY=blot-dev
       - BLOT_AWS_SECRET=blot-dev-secret
     networks:
