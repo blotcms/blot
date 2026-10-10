@@ -25,13 +25,15 @@ at sync/build time instead.
   `blog_folder_dir` directly (e.g. `app/blog/routes/assets.js`,
   `app/cdn/index.js`, `app/models/template/*`, `app/models/blog/remove.js`,
   `app/dashboard/site/export.js`).
-- Per-blog asset paths all go through `app/storage/assets.js` (Phase 0):
-  `path(blogID, ...segments)` and `removeAll(blogID)`. The only direct
+- Per-blog asset IO all goes through `app/storage/assets.js` (Phase 0), over
+  local disk: `path`, `url`, `commit`, `write`, `writeFrom`, `read`,
+  `exists`, `list`, `walk`, `createReadStream`, `ensureLocal`, `serve`,
+  `remove`, `removeAll`, and a `NotFoundError`. The only direct
   `blog_static_files_dir` references left are whole-tree ones:
-  `app/setup.js`, the `express.static` mount in `app/cdn/index.js`, and
-  admin scripts under `scripts/`. Subdirectories in use: `_thumbnails`,
-  `_image_cache`, `_assets`, `_bookmark_screenshots`, `_avatars`,
-  `_template_assets` (see §3's table for which are regenerable).
+  `app/setup.js` and admin scripts under `scripts/`; `proxy/` config still
+  serves the directory straight from disk. Subdirectories in use:
+  `_thumbnails`, `_image_cache`, `_assets`, `_bookmark_screenshots`,
+  `_avatars`, `_template_assets` (see §3's table for which are regenerable).
 - Both directories map to the public CDN URL as bare `{blogID}/{path}`
   today, no scope prefix — relevant to the object-key plan in §3.
 - No exotic IO patterns — overwhelmingly `fs-extra` (`readFile`,
@@ -245,14 +247,22 @@ should consolidate into one storage-layer method, exposed explicitly
 
 ## 5. Phases
 
-- **Phase 0:** `app/storage/assets.js` centralizes generated-asset paths
-  — `path(blogID, ...segments)` and `removeAll(blogID)` — over local disk,
-  and every per-blog `blog_static_files_dir` call site goes through it.
-  7 of those sites hand a path to a tool that writes
-  itself (sharp's `.toFile`, pandoc `--extract-media`, puppeteer
-  screenshots, thumbnail/favicon generators), so the API shape is
-  "write locally, then commit," not `write(buffer)`. `removeAll(blogID)`
-  is the only whole-scope delete, used solely by blog deletion.
+- **Phase 0 (done):** `app/storage/assets.js` is the only module that
+  touches generated-asset files, over local disk. Callers name a file by
+  `(blogID, relPath)`, relative to the blog's asset directory; every
+  `relPath` goes through the same escape guard as `path()`. The API:
+  `url`, `write`, `writeFrom` (copy or move a local file in), `read`,
+  `exists`, `list`, `walk` (every file in a blog's scope, for export and
+  backfill), `createReadStream`, `ensureLocal` (an absolute local path for
+  callers which need a real file), `serve` (sends the response, keeping
+  range, ETag and Last-Modified) and `remove`. Missing files surface as one
+  `NotFoundError` (code `ENOENT`), which S3's 404/`NoSuchKey` will map to
+  too. A few sites hand a path to a tool that writes itself (sharp's
+  `.toFile`, pandoc `--extract-media`, puppeteer screenshots, the template
+  image and favicon generators), so the shape there is "write to
+  `path(blogID, relPath)`, then `commit(blogID, relPath)`" (a no-op on disk;
+  a file or a directory). `removeAll(blogID)` is the only whole-scope
+  delete, used solely by blog deletion.
 - **Phase 1 — `.assets` first.** These files are written asynchronously,
   UUID- or content-hash-named, and never change once written — the
   simplest shape to move. No production code reads their mtime or ctime,
