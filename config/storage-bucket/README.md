@@ -84,6 +84,11 @@ SafeHop on.
 - **Perma-Cache** on, storage zone `blot-cdn-storage`. It serves any object it
   already holds without asking the origin.
 - **Request coalescing** on, 30 s lock timeout.
+- **Headers:** "Add CORS headers" on for `eot, ttf, woff, woff2, css, otf`
+  (added whatever the origin); canonical headers off.
+- **Optimizer** off and no token authentication or URL signing (everything on
+  the CDN is public by design), so Bunny requests the origin with the plain
+  path.
 - **Edge rules**, in order:
   1. Block requests by bot User-Agent: img2dataset, Bytespider, AhrefsBot,
      ClaudeBot, bingbot.
@@ -126,9 +131,11 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
    `/folder/v-.../blog_.../` and `/template/...` URLs, which must stay on the
    app.
 3. **Edge rule for CORS**, same condition: Set Response Header
-   `Access-Control-Allow-Origin: *`. openresty and node add it today; S3
-   doesn't, and fonts uploaded through the template editor need it on custom
-   domains.
+   `Access-Control-Allow-Origin: *`. openresty and node add it to every file
+   today and S3 doesn't. Bunny's own CORS setting already covers fonts and
+   CSS (so template-editor font uploads keep working without this rule); the
+   rule keeps parity for everything else, e.g. images a template loads with
+   `crossorigin`.
 4. **Host header caveat.** The pull zone forces `Host: cdn.blot.im` on origin
    requests. If that also applies to the overridden origin, S3 reads
    `cdn.blot.im` as the bucket name and fails (`NoSuchBucket`, or a wrong-host
