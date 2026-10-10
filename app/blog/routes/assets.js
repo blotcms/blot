@@ -2,7 +2,7 @@ const assertNoSymlinks = require("helper/assertNoSymlinks");
 const config = require("config");
 const storage = require("storage/assets");
 const express = require("express");
-const mime = require("mime-types");
+const contentTypeFor = require("storage/contentType");
 const { join, basename, dirname } = require("path");
 const { promisify } = require("util");
 const fs = require("fs-extra");
@@ -209,18 +209,6 @@ function withoutTrailingSlash(path) {
 function addLeadingUnderscore(path) {
   path = withoutTrailingSlash(decodeURIComponent(path));
   return join(dirname(path), "_" + basename(path));
-}
-
-function contentTypeFor(path) {
-  const isDirectory = path.indexOf(".") === -1;
-  const defaultMime = isDirectory ? "text/html" : "application/octet-stream";
-  let contentType = mime.contentType(mime.lookup(path) || defaultMime);
-
-  if (contentType === "application/mp4") {
-    contentType = "video/mp4";
-  }
-
-  return contentType;
 }
 
 async function sendFile(path, { req, res, maxAge = 0, immutable = false } = {}) {
