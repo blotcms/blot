@@ -73,7 +73,7 @@ Pull zone `blot-cdn`, hostnames `cdn.blot.im`, `cdn.blot.site` and the system
 hostname `blot-cdn.b-cdn.net` (SSL on, Force SSL off). High-volume tier,
 SafeHop on.
 
-- **Origin.** Type Origin URL, `http://<origin IP>` (the app host's openresty).
+- **Origin.** Type Origin URL, `http://<origin IP>` (the app host's openresty); plain HTTP to the IP on purpose, to keep the origin hop as fast as possible.
   Host header `cdn.blot.im`, Forward host header off, Verify origin SSL off,
   Follow redirects off, no middleware.
 - **Caching.** Smart Cache on; cache expiration overridden to 1 year; browser
@@ -149,7 +149,7 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
    pointing at the app host), add it to `server_name` in the `cdn.` server
    block of `proxy/config/server.conf`, set the pull zone's Origin URL to it
    and clear the Host header field. Every origin, app or bucket, then gets its
-   own hostname as `Host`. (The app origin can then move to HTTPS as well.)
+   own hostname as `Host`.
 5. **Test before going live.** Add a second condition to rules 2 and 3,
    Request Header `X-Blot-Origin` equals `s3` (a header, not a query string:
    Perma-Cache may key on the path alone), and send it together with
