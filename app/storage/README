@@ -25,10 +25,11 @@ at sync/build time instead.
   `blog_folder_dir` directly (e.g. `app/blog/routes/assets.js`,
   `app/cdn/index.js`, `app/models/template/*`, `app/models/blog/remove.js`,
   `app/dashboard/site/export.js`).
-- Per-blog asset IO all goes through `app/storage/assets.js` (Phase 0), over
-  local disk: `path`, `url`, `commit`, `write`, `writeFrom`, `read`,
-  `exists`, `list`, `walk`, `createReadStream`, `ensureLocal`, `serve`,
-  `remove`, `removeAll`, and a `NotFoundError`. The only direct
+- Per-blog asset IO all goes through `app/storage/assets.js` (Phase 0):
+  `path`, `url`, `commit`, `write`, `writeFrom`, `read`, `exists`, `list`,
+  `walk`, `createReadStream`, `ensureLocal`, `serve`, `remove`, `removeAll`,
+  and a `NotFoundError`. It works over local disk, and also over S3 when
+  `config.assets.bucket` is set (Phase 1). The only direct
   `blog_static_files_dir` references left are whole-tree ones:
   `app/setup.js` and admin scripts under `scripts/`; `proxy/` config still
   serves the directory straight from disk. Subdirectories in use:
@@ -56,7 +57,7 @@ at sync/build time instead.
 - No per-blog storage-size accounting or quota enforcement exists, except a
   manual audit script (`scripts/user/identify-overdue-users.js`, `du -sb`
   against both directories for disabled accounts).
-- No AWS SDK dependency anywhere in the repo — greenfield integration.
+- The AWS SDK (`@aws-sdk/client-s3`) is used only by `app/storage/s3.js`.
 - Don't store bulk file content in Redis; Redis is
   fine for small bounded metadata (locks, directory listings, cache
   entries).
@@ -121,15 +122,40 @@ at sync/build time instead.
 - **One IAM role**, not scoped per prefix — revisit only if a concrete need
   for narrower blast radius shows up.
 - **Separate bucket per environment** (dev/staging/prod).
-- **Dev/test: MinIO + toxiproxy** in the dev docker-compose stack, the same
-  way Redis latency is already simulated.
-- **Bunny unchanged.** The app server stays Bunny's origin in every planned
-  phase — `app/cdn/index.js` and `app/blog/routes/assets.js` keep serving
-  the same routes, just backed by S3 instead of local disk. After writing a
-  new asset, issue one GET to its public CDN URL to warm Bunny's
-  Perma-Cache (the only documented way to populate it — there's no
-  supported direct-write path). Direct-to-S3 serving is a possible later
-  step, not part of this plan.
+- **Dev/test: MinIO** in the dev docker-compose stack (with a one-shot job
+  that creates the bucket and sets the same public-read-on-`blog_*` policy as
+  production), and in the tests: `scripts/tests/invoke.sh` and the
+  `app/storage` CI shard start one. Dev mirrors production as closely as it
+  can, so the app writes to it as well as to disk and the dev proxy's `cdn`
+  host serves `/blog_*` from it. MinIO has stopped publishing its own images,
+  so these use a pinned third-party build of the upstream release; swap it if
+  that becomes a problem. Latency isn't simulated for S3 (toxiproxy only
+  fronts Redis).
+- **Bunny pulls `blog_*` from the bucket.** Once the bucket is complete, an
+  edge rule on `cdn.blot.im` (URL matches `*/blog_*`) changes the origin to
+  the bucket, and a second sets `Access-Control-Allow-Origin: *` (the app's
+  CORS header no longer applies). The app stays the origin for everything
+  else on the CDN (`/template`, `/folder`, ...) and still serves `/blog_*`
+  itself, from disk or S3, to blog domains and to anything that reaches it
+  before the flip. This replaces the earlier plan of keeping the app as
+  Bunny's origin and warming Perma-Cache with a GET after each write.
+- **The bucket is public for `s3:GetObject` on `blog_*` keys only** — never
+  `ListBucket`, never write. Blog IDs are UUIDs and blog folders are already
+  served unauthenticated via `/folder/v-:version`, so this isn't a new
+  exposure. Keys are `{blogID}/{path}` at the root, identical to the CDN path,
+  which is what lets Bunny fetch them with no rewriting. `config/assets-bucket`
+  has the setup script and the operator steps.
+- **A read-order flag, `BLOT_ASSETS_READ`** (`config.assets.read`). Writes go
+  to both disk and S3 whenever a bucket is configured. Reads try `disk` first
+  (the default) or `s3` first, and fall back to the other source on a miss;
+  any other error is final. A disk-first read that finds the file only in S3
+  logs a sampled line. With no bucket, everything is exactly the local-disk
+  behaviour.
+- **Failure policy.** While reads are disk-first, a failed upload or delete
+  is logged (`[storage/assets] s3 upload failed` / `s3 delete failed`) and the
+  operation succeeds, since disk still has the file and the backfill
+  reconciles. Once reads are S3-first the error is thrown, since disk is no
+  longer the copy to trust.
 - **`.assets` holds non-regenerable dashboard uploads**, not just
   generated files:
 
@@ -147,12 +173,6 @@ at sync/build time instead.
   and the storage layer shouldn't expose a scope-wide delete). Quota is
   enforced on `.folder` writes only; `.assets` bytes are tracked but not
   capped.
-- **Bucket stays private for now.** The app is the origin in every planned
-  phase, so there's no current need for public reads. Public-read
-  `GetObject` (never `ListBucket`, never write) would be acceptable later
-  if direct-to-S3 serving is wanted — blog folders are already served
-  unauthenticated via `/folder/v-:version`, and blog IDs are UUIDs, so this
-  wouldn't be a new exposure.
 
 ## 4. Caveats for moving `.folder` to S3
 
@@ -256,30 +276,50 @@ should consolidate into one storage-layer method, exposed explicitly
   backfill), `createReadStream`, `ensureLocal` (an absolute local path for
   callers which need a real file), `serve` (sends the response, keeping
   range, ETag and Last-Modified) and `remove`. Missing files surface as one
-  `NotFoundError` (code `ENOENT`), which S3's 404/`NoSuchKey` will map to
+  `NotFoundError` (code `ENOENT`), which S3's 404/`NoSuchKey` maps to
   too. A few sites hand a path to a tool that writes itself (sharp's
   `.toFile`, pandoc `--extract-media`, puppeteer screenshots, the template
   image and favicon generators), so the shape there is "write to
-  `path(blogID, relPath)`, then `commit(blogID, relPath)`" (a no-op on disk;
-  a file or a directory). `removeAll(blogID)` is the only whole-scope
+  `path(blogID, relPath)`, then `commit(blogID, relPath)`" (a file or a
+  directory; it uploads to S3 when a bucket is set). `removeAll(blogID)` is the only whole-scope
   delete, used solely by blog deletion.
 - **Phase 1 — `.assets` first.** These files are written asynchronously,
   UUID- or content-hash-named, and never change once written — the
-  simplest shape to move. No production code reads their mtime or ctime,
-  and both serving routes send `immutable` one-year cache headers, so
-  plain `PutObject` with no custom metadata is enough.
-  - Add a `commit()` hook at write sites: write to a temp path on local
-    disk, upload, then **delete the local copy**. Keeping a local copy on
-    EBS as a read-through cache would defeat the point of shrinking the
-    volume; any read cache goes on ephemeral SSD, bounded in size.
-  - Reads go to S3 on a miss; Bunny's Perma-Cache absorbs most of them.
-    Warm it with a GET in the same async step as the upload.
-  - `rebuild.js`'s `_thumbnails`/`_image_cache` wipe becomes a prefix
-    delete (list + `DeleteObjects`).
-  - The B2 backup must already be running before local disk stops holding
-    a copy — dashboard uploads in this scope can't be regenerated.
-  - Add sampled shadow-read timing instrumentation here to start gathering
-    real S3-vs-local numbers.
+  simplest shape to move. No production code reads their mtime or ctime.
+  Because Bunny will fetch them straight from the bucket (§3), each object
+  is uploaded with the `Content-Type` its name implies and
+  `Cache-Control: public, max-age=31536000, immutable`, the headers both
+  serving routes send today; nothing else is stored as metadata.
+  - **Done:** `app/storage/s3.js` (the client and `upload`, `head`, `open`,
+    list and delete helpers, over the S3 API subset B2 also supports) behind
+    `app/storage/assets.js`. `commit()` uploads a file or every file under a
+    directory (bounded concurrency); `remove`/`removeAll` delete the key and
+    the prefix below it (list + `DeleteObjects`, which also makes
+    `rebuild.js`'s `_thumbnails`/`_image_cache` wipe a prefix delete); reads,
+    `serve` (Range, conditional and HEAD requests included), `list` and
+    `walk` honour the read order. A file only in S3 is downloaded for
+    `ensureLocal` into a cache under the tmp directory
+    (`{tmp}/storage-assets/`), never into `data/static`.
+  - **Done:** `scripts/storage/backfill-assets.js` (`--dry-run`, `--verify`,
+    `--blog`, `--from`) and the MinIO setup for dev and tests (§3);
+    `config/assets-bucket` creates the bucket and IAM user.
+  - **To do, in order:**
+    1. Create the bucket, set the environment variables and deploy
+       (`config/assets-bucket/README.md`). Writes now go to both.
+    2. Backfill, `--verify` until clean, and test the odd keys it lists
+       through the public bucket URL.
+    3. Set `BLOT_ASSETS_READ=s3`. Disk stays as the fallback.
+    4. Add the Bunny edge rules so the CDN fetches `blog_*` from the bucket.
+    5. Start the B2 backup of the bucket. It must be running before local
+       disk stops holding a copy — `_avatars` and `_template_assets` can't be
+       regenerated.
+    6. Delete the local `data/static`, shrink the data volume with
+       `config/host/data-volume/resize.sh`, and drop the openresty `cdn.`
+       `try_files` from disk.
+  - Not done: any read cache beyond the `ensureLocal` download cache (it is
+    pruned with the rest of the tmp directory); a read cache on ephemeral SSD
+    would be bounded in size. Shadow-read timing instrumentation is limited
+    to the sampled log line when a disk-first read has to go to S3.
 - **Phase 2 — `.folder`.** Run both §4a backfill scripts on local disk
   before the copy to S3. Grow the storage-layer API as call sites need it
   (read/write/remove/list/stat, with `stat()` as described in §4a), migrate
