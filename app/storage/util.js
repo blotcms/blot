@@ -16,6 +16,15 @@ function isMissing(err) {
   );
 }
 
+// The assets scope is exactly the top-level directories of a blog (on disk, or
+// under {blogID}/ in the bucket) whose names start with "_" (_thumbnails,
+// _image_cache, _assets, ...). Anything else under a blog's prefix, such as
+// folder/ for the blog's folder content, belongs to something else and the
+// assets code must neither touch nor report it.
+function isScopeName(name) {
+  return typeof name === "string" && name.charAt(0) === "_";
+}
+
 // Every file under a local directory, as paths relative to it using "/",
 // with no leading slash. A directory which doesn't exist has no files.
 async function* walkLocal(directory) {
@@ -88,4 +97,4 @@ function createPool(limit) {
   return { add, drain };
 }
 
-module.exports = { STAGING_DIRECTORY, isMissing, walkLocal, createPool };
+module.exports = { STAGING_DIRECTORY, isMissing, isScopeName, walkLocal, createPool };

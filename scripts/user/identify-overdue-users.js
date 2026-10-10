@@ -7,9 +7,12 @@ const fs = require("fs");
 
 let rolling_total = 0;
 
-// Bytes of a blog's generated assets, summed over its objects in the assets
-// bucket
-async function assetBytes(blogID) {
+// Bytes of everything stored for a blog in the storage bucket, summed over all
+// of its objects under {blogID}/. Today that is its generated assets (the
+// {blogID}/_*/ prefixes); once the blog's folder content is also stored under
+// {blogID}/folder/, this total includes it, so folderBytes below must stop
+// being added at that point.
+async function bucketBytes(blogID) {
   let total = 0;
 
   for await (const object of s3.listEntries(blogID + "/")) {
@@ -44,7 +47,7 @@ each(
 
         for (const blogID of user.blogs) {
           try {
-            const static_space_used_in_bytes = await assetBytes(blogID);
+            const static_space_used_in_bytes = await bucketBytes(blogID);
             const folder_space_used_in_bytes = folderBytes(blogID);
 
             const total_kilo_bytes =

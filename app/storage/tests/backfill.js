@@ -82,6 +82,43 @@ describe("storage/backfill", function () {
     expect(object.cacheControl).toEqual("public, max-age=31536000, immutable");
   });
 
+  it("considers only the underscore directories, locally and in the bucket", async function () {
+    var directory = this.directory;
+
+    await fs.outputFile(join(directory, "blog_a/folder/local.txt"), "not an asset");
+    await fs.outputFile(join(directory, "blog_a/top.txt"), "not an asset");
+    await s3.client().send(
+      new (require("@aws-sdk/client-s3").PutObjectCommand)({
+        Bucket: config.storage.bucket,
+        Key: "blog_a/folder/x",
+        Body: Buffer.from("folder content"),
+      })
+    );
+
+    var stats = await run.call(this);
+
+    expect(stats.scanned).toEqual(5);
+    expect(stats.uploaded).toEqual(5);
+    expect(Object.keys(await keys()).sort()).toEqual([
+      "blog_a/_avatars/me.png",
+      "blog_a/_thumbnails/x/small.jpg",
+      "blog_a/folder/x",
+      "blog_b/_assets/doc/media/one.png",
+      "blog_b/_assets/doc/media/two.png",
+      "blog_c/_image_cache/c.jpg",
+    ]);
+
+    // verify finds nothing wrong: the folder object in the bucket isn't
+    // extraneous and the local non-asset files aren't missing from it
+    stats = await run.call(this, { verify: true });
+
+    expect(stats.scanned).toEqual(5);
+    expect(stats.missing + stats.mismatched + stats.stale).toEqual(0);
+    expect(stats.bySubdirectory["(top level)"]).toBeUndefined();
+    expect(stats.bySubdirectory["folder"]).toBeUndefined();
+    expect(failed(stats, { verify: true })).toBe(false);
+  });
+
   it("uploads only what is missing or a different size", async function () {
     var directory = this.directory;
 

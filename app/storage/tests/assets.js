@@ -134,6 +134,136 @@ describe("storage/assets", function () {
     });
   });
 
+  describe("the assets scope", function () {
+    // What the blog's folder content (folder/...) or a top-level object would
+    // look like under the same {blogID}/ prefix
+    async function putOthers(blogID) {
+      await putS3(blogID, "folder/x", "folder content");
+      await putS3(blogID, "folder/_sneaky/y", "looks like an asset dir");
+      await putS3(blogID, "top.txt", "top level object");
+    }
+
+    function others(blogID) {
+      return [
+        blogID + "/folder/_sneaky/y",
+        blogID + "/folder/x",
+        blogID + "/top.txt",
+      ];
+    }
+
+    it("rejects a write, delete, path or list outside the scope without touching the bucket", async function () {
+      var id = this.blog.id;
+
+      await putOthers(id);
+
+      var calls = [
+        function () { return assets.path(id, "folder/a.txt"); },
+        function () { return assets.path(id, "_thumbnails/../folder/a.txt"); },
+        function () { return assets.url(id, "folder/a.txt"); },
+        function () { return assets.commit(id, "folder/a.txt"); },
+        function () { return assets.write(id, "folder/a.txt", "x"); },
+        function () { return assets.write(id, "/git/config", "x"); },
+        function () { return assets.writeFrom(id, "folder/a.txt", __filename); },
+        function () { return assets.list(id, "folder"); },
+        function () { return assets.createReadStream(id, "folder/a.txt"); },
+        function () { return assets.remove(id, "folder"); },
+        function () { return assets.remove(id, "a.txt"); },
+      ];
+
+      for (var call of calls) {
+        var err = await rejection(Promise.resolve().then(call));
+        expect(err && err.message).toMatch(/not in the assets scope/);
+      }
+
+      expect(await keys(id + "/")).toEqual(others(id));
+      expect(await fs.pathExists(assets.path(id))).toBe(false);
+    });
+
+    it("treats a read outside the scope as a miss, even if the bucket has the object", async function () {
+      var id = this.blog.id;
+
+      await putOthers(id);
+
+      expect(await assets.exists(id, "folder/x")).toBe(false);
+      expect(await assets.exists(id, "/top.txt")).toBe(false);
+
+      for (var call of [
+        function () { return assets.read(id, "folder/x"); },
+        function () { return assets.ensureLocal(id, "/folder/x"); },
+        function () { return assets.read(id, "top.txt"); },
+      ]) {
+        var err = await rejection(call());
+        expect(err instanceof assets.NotFoundError).toBe(true);
+      }
+    });
+
+    it("serve answers NotFoundError for a path outside the scope, even if the bucket has the object", async function () {
+      var id = this.blog.id;
+
+      await putOthers(id);
+
+      var err = await rejection(
+        assets.serve({ headers: {}, method: "GET" }, {}, id, "folder/x", {})
+      );
+
+      expect(err instanceof assets.NotFoundError).toBe(true);
+    });
+
+    it("still allows the blog's root directory where it names the scope itself", async function () {
+      var id = this.blog.id;
+
+      expect(assets.path(id)).toEqual(join(STAGING, id));
+      expect(await assets.list(id)).toEqual([]);
+      expect(await assets.list(id, "")).toEqual([]);
+    });
+
+    it("walk and list of the blog's root ignore other keys", async function () {
+      var id = this.blog.id;
+
+      await assets.write(id, "_avatars/a.png", "a");
+      await putS3(id, "_assets/only-s3.png", "c");
+      await putOthers(id);
+
+      var found = [];
+      for await (var relPath of assets.walk(id)) found.push(relPath);
+
+      expect(found.sort()).toEqual(["_assets/only-s3.png", "_avatars/a.png"]);
+      expect(await assets.list(id)).toEqual(["_assets", "_avatars"]);
+      expect(await assets.list(id, "")).toEqual(["_assets", "_avatars"]);
+    });
+
+    it("removeAll deletes the underscore prefixes and leaves everything else", async function () {
+      var id = this.blog.id;
+
+      await assets.write(id, "_avatars/a.png", "a");
+      await assets.write(id, "_assets/doc/b.png", "b");
+      await putS3(id, "_image_cache/only-s3.png", "c");
+      await putOthers(id);
+      await stage(id, "_thumbnails/x/leftover.jpg", "left");
+
+      await assets.removeAll(id);
+
+      expect(await keys(id + "/")).toEqual(others(id));
+      expect(await fs.pathExists(assets.path(id))).toBe(false);
+    });
+
+    it("keeps committing and removing staged files within the scope", async function () {
+      var id = this.blog.id;
+
+      await stage(id, "_thumbnails/x/a.jpg", "a");
+      await assets.commit(id, "_thumbnails");
+
+      expect(await keys(id + "/")).toEqual([id + "/_thumbnails/x/a.jpg"]);
+      expect(await fs.pathExists(assets.path(id, "_thumbnails/x"))).toBe(false);
+
+      await stage(id, "_thumbnails/x/b.jpg", "b");
+      await assets.remove(id, "_thumbnails");
+
+      expect(await keys(id + "/")).toEqual([]);
+      expect(await fs.pathExists(assets.path(id, "_thumbnails/x/b.jpg"))).toBe(false);
+    });
+  });
+
   describe("url", function () {
     it("builds the public CDN URL", function () {
       var test = this;

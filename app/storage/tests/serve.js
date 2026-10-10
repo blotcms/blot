@@ -151,6 +151,19 @@ describe("storage/assets serve", function () {
       expect((await fetch(origin + "/_assets/doc")).status).toEqual(404);
     });
 
+    it("responds 404 for a path outside the assets scope, although the bucket has the object", async function () {
+      await putS3(this.blog.id, "folder/a.txt", "folder content");
+      await putS3(this.blog.id, "top.txt", "top level");
+
+      for (var path of ["/folder/a.txt", "/top.txt", "/folder"]) {
+        var res = await fetch(origin + path);
+
+        expect(res.status).toEqual(404);
+        expect(await res.text()).not.toContain("folder content");
+        expect((await fetch(origin + path, { method: "HEAD" })).status).toEqual(404);
+      }
+    });
+
     it("ignores dotfiles when asked", async function () {
       await putS3(this.blog.id, "_assets/.hidden", "secret");
 
