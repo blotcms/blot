@@ -38,6 +38,8 @@ Redis host follow-ups (from #2041, new host since 8 Oct):
 - Offsite Redis backups (e.g. Backblaze B2) alongside S3, so a lost AWS account or region doesn't take the backups with it: upload from config/redis/bin/backup.sh, and let launch.sh/restore.sh restore from B2 too (#2041)
 - Consider dropping Redis client-side caching (CLIENT TRACKING) in favour of the app's in-process LRU caches: on prod 10 clients have tracking on and the server's tracking table sits at its 1M-key cap (tracking-table-max-keys), so Redis is constantly evicting entries and sending invalidations
 
+odt converter extracts every document's media into one shared _assets/media (image1.png etc. overwrite each other, served immutable): give it a per-document hash dir like docx
+
 Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - Check webhooks. SSE through the container, and that a known data/static file on cdn. has Cache-Control 1y and no Blot-Upstream
 - After the next 03:46 logrotate: access.log/error.log still written after copytruncate, fail2ban counts still moving

@@ -111,6 +111,96 @@ describe("storage/assets", function () {
     });
   });
 
+  describe("the assets scope", function () {
+    it("rejects every relPath whose first segment doesn't start with an underscore", async function () {
+      var test = this;
+      var id = test.blog.id;
+
+      var calls = [
+        function () { return assets.path(id, "folder/a.txt"); },
+        function () { return assets.path(id, "_thumbnails/../folder/a.txt"); },
+        function () { return assets.url(id, "folder/a.txt"); },
+        function () { return assets.commit(id, "folder/a.txt"); },
+        function () { return assets.write(id, "folder/a.txt", "x"); },
+        function () { return assets.write(id, "/git/config", "x"); },
+        function () { return assets.writeFrom(id, "folder/a.txt", __filename); },
+        function () { return assets.list(id, "folder"); },
+        function () { return assets.createReadStream(id, "folder/a.txt"); },
+        function () { return assets.remove(id, "folder"); },
+        function () { return assets.remove(id, "a.txt"); },
+      ];
+
+      for (var call of calls) {
+        var message;
+        try {
+          await call();
+        } catch (err) {
+          message = err.message;
+        }
+        expect(message).toMatch(/not in the assets scope/);
+        message = undefined;
+      }
+
+      expect(await fs.pathExists(assets.path(id, "_x"))).toBe(false);
+    });
+
+    it("treats a read outside the scope as a miss", async function () {
+      var id = this.blog.id;
+
+      expect(await assets.exists(id, "folder/a.txt")).toBe(false);
+
+      for (var call of [
+        function () { return assets.read(id, "folder/a.txt"); },
+        function () { return assets.ensureLocal(id, "/folder/a.txt"); },
+      ]) {
+        var error;
+        try {
+          await call();
+        } catch (err) {
+          error = err;
+        }
+        expect(error instanceof assets.NotFoundError).toBe(true);
+        error = undefined;
+      }
+    });
+
+    it("still allows the blog's root directory where it names the scope itself", async function () {
+      var id = this.blog.id;
+
+      expect(assets.path(id)).toEqual(join(config.blog_static_files_dir, id));
+      expect(await assets.list(id)).toEqual([]);
+      expect(await assets.list(id, "")).toEqual([]);
+    });
+
+    it("serve treats a path outside the scope as not found", async function () {
+      var id = this.blog.id;
+      var res = { sendFile: function () { throw new Error("should not be reached"); } };
+      var error;
+
+      try {
+        await assets.serve({ headers: {} }, res, id, "folder/a.txt", {});
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error instanceof assets.NotFoundError).toBe(true);
+    });
+
+    it("lists only the underscore names at the blog's root", async function () {
+      var id = this.blog.id;
+
+      await assets.write(id, "_avatars/a.png", "a");
+      await fs.outputFile(join(config.blog_static_files_dir, id, "folder/a.txt"), "x");
+      await fs.outputFile(join(config.blog_static_files_dir, id, "stray.txt"), "x");
+
+      expect(await assets.list(id)).toEqual(["_avatars"]);
+
+      var found = [];
+      for await (var relPath of assets.walk(id)) found.push(relPath);
+      expect(found).toEqual(["_avatars/a.png"]);
+    });
+  });
+
   describe("url", function () {
     it("builds the public CDN URL", function () {
       var test = this;
