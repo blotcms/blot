@@ -24,6 +24,8 @@ services:
         condition: service_started
       airlock:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     env_file:
       - ../../.env
     environment:
@@ -36,6 +38,15 @@ services:
       # app hit the network directly (no SSRF protection).
       - BLOT_AIRLOCK_BROWSER_URL=http://airlock:9222
       - BLOT_AIRLOCK_PROXY_URL=http://airlock:8888
+      # Generated assets are written to local disk and to this simulated S3
+      # (MinIO, below), as in production. Reads look on disk first; start with
+      # BLOT_ASSETS_READ=s3 npm start to read from the bucket first. The
+      # credentials are MinIO's development root user, set below.
+      - BLOT_ASSETS_BUCKET=blot-assets-dev
+      - BLOT_ASSETS_ENDPOINT=http://minio:9000
+      - BLOT_ASSETS_READ=${BLOT_ASSETS_READ:-disk}
+      - BLOT_AWS_KEY=blot-dev
+      - BLOT_AWS_SECRET=blot-dev-secret
     volumes:
       - ../../data:/usr/src/app/data
       - ../../.git:/usr/src/app/.git
@@ -59,6 +70,47 @@ services:
       timeout: 3s
       retries: 30
       start_period: 15s
+
+  # A simulated S3 for the generated assets (config.assets). MinIO no longer
+  # publishes images itself; this is a pinned build of the upstream release.
+  # The console is at http://localhost:9001 (blot-dev / blot-dev-secret).
+  minio:
+    image: alpine/minio:RELEASE.2025-10-15T17-29-55Z
+    # the image's own user can't write to the bind mount
+    user: root
+    command: server /data --console-address :9001
+    environment:
+      - MINIO_ROOT_USER=blot-dev
+      - MINIO_ROOT_PASSWORD=blot-dev-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - "../../data/minio:/data"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9000/minio/health/live"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
+
+  # One-shot: creates the bucket and allows anonymous downloads of blog_*
+  # keys, as the production bucket does (see minio/init.sh)
+  minio-init:
+    image: amazon/aws-cli:2.37.12
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      - AWS_ACCESS_KEY_ID=blot-dev
+      - AWS_SECRET_ACCESS_KEY=blot-dev-secret
+      - AWS_DEFAULT_REGION=us-west-2
+      - AWS_ENDPOINT_URL=http://minio:9000
+      - BLOT_ASSETS_BUCKET=blot-assets-dev
+    volumes:
+      - ./minio:/minio:ro
+    entrypoint: ["/bin/sh", "/minio/init.sh"]
+    restart: "no"
 
   toxiproxy:
     build:
@@ -106,4 +158,6 @@ services:
     depends_on:
       - node-app
       - toxiproxy
+      # the cdn host proxies /blog_* to it
+      - minio
     command: /bin/sh -c "sh /etc/nginx/init.sh"
