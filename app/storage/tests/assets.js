@@ -209,6 +209,26 @@ describe("storage/assets", function () {
       expect(err instanceof assets.NotFoundError).toBe(true);
     });
 
+    it("treats a read outside the scope as a miss", async function () {
+      var id = this.blog.id;
+
+      expect(await assets.exists(id, "folder/a.txt")).toBe(false);
+
+      for (var call of [
+        function () { return assets.read(id, "folder/a.txt"); },
+        function () { return assets.ensureLocal(id, "/folder/a.txt"); },
+      ]) {
+        var error;
+        try {
+          await call();
+        } catch (err) {
+          error = err;
+        }
+        expect(error instanceof assets.NotFoundError).toBe(true);
+        error = undefined;
+      }
+    });
+
     it("still allows the blog's root directory where it names the scope itself", async function () {
       var id = this.blog.id;
 

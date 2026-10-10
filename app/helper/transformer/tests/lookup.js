@@ -93,7 +93,7 @@ describe("transformer", function () {
 
     // An asset that exists for another blog but NOT in this blog's scope.
     var otherBlogID = "blog_other" + this.blog.id.slice(5);
-    var secretName = "secret-" + Date.now() + ".txt";
+    var secretName = "_assets/secret-" + Date.now() + ".txt";
 
     await assets.write(otherBlogID, secretName, "top secret");
 
@@ -118,7 +118,8 @@ describe("transformer", function () {
 
   it("transforms a file in the blog's static directory", async function () {
     var fullPath = this.blogDirectory + "/" + this.path;
-    var path = "/" + Date.now() + "-" + this.path;
+    // Generated assets live in the blog's underscore directories
+    var path = "/_image_cache/" + Date.now() + "-" + this.path;
 
     await assets.write(this.blog.id, path, await fs.readFile(fullPath));
 
