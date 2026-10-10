@@ -116,9 +116,12 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
    failing the write (before this change has deployed: `BLOT_ASSETS_READ=s3`),
    so the CDN never has a missing object behind a successful build. After the
    change deploys there is no flag; S3 is the only store.
-2. **Edge rule "Storage bucket for generated assets".** Action: Change Origin
-   URL to `https://blot-storage-prod.s3.us-west-2.amazonaws.com` (HTTPS: the
-   bucket name has no dots, so S3's wildcard certificate matches). Condition:
+2. **Edge rule "Storage bucket for generated assets"**, two actions:
+   **Override Origin URL** to
+   `https://blot-storage-prod.s3.us-west-2.amazonaws.com` (HTTPS: the bucket
+   name has no dots, so S3's wildcard certificate matches), and **Set Request
+   Header** `Host` = `blot-storage-prod.s3.us-west-2.amazonaws.com` (step 4).
+   Condition:
    Request URL matches any of
 
    ```
@@ -136,10 +139,12 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
    CSS (so template-editor font uploads keep working without this rule); the
    rule keeps parity for everything else, e.g. images a template loads with
    `crossorigin`.
-4. **Host header caveat.** The pull zone forces `Host: cdn.blot.im` on origin
-   requests. If that also applies to the overridden origin, S3 reads
-   `cdn.blot.im` as the bucket name and fails (`NoSuchBucket`, or a wrong-host
-   error). Check this in the test. If it does:
+4. **Host header.** The pull zone forces `Host: cdn.blot.im` on origin
+   requests, and Override Origin URL has no host field of its own. S3 would
+   read `cdn.blot.im` as the bucket name and fail (`NoSuchBucket`, or a
+   wrong-host error), so rule 2 also sets `Host` with Set Request Header, the
+   way Bunny's direct-IP-origin guide does. Confirm it in the test. If Bunny
+   still sends `cdn.blot.im`:
    give the app origin its own DNS name (for example `origin-cdn.blot.im`
    pointing at the app host), add it to `server_name` in the `cdn.` server
    block of `proxy/config/server.conf`, set the pull zone's Origin URL to it
