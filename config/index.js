@@ -216,14 +216,15 @@ module.exports = {
     secret: process.env.BLOT_AWS_SECRET,
   },
 
-  // Object storage for generated per-blog assets (app/storage/assets.js),
-  // their only home. Keys are {blogID}/{path}, identical to the public CDN
-  // path. The app refuses to start without a bucket.
-  assets: {
-    bucket: process.env.BLOT_ASSETS_BUCKET || "",
-    region: process.env.BLOT_ASSETS_REGION || "us-west-2",
+  // The S3 bucket behind app/storage. Today it holds generated per-blog
+  // assets (app/storage/assets.js), their only home, keyed {blogID}/{path},
+  // identical to the public CDN path. The app refuses to start without a
+  // bucket.
+  storage: {
+    bucket: process.env.BLOT_STORAGE_BUCKET || "",
+    region: process.env.BLOT_STORAGE_REGION || "us-west-2",
     // Set to point at a simulated S3 (MinIO) in development and tests.
-    endpoint: process.env.BLOT_ASSETS_ENDPOINT || "",
+    endpoint: process.env.BLOT_STORAGE_ENDPOINT || "",
   },
 
   mailgun: {

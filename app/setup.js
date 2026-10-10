@@ -15,7 +15,7 @@ const renderTimeMetric = require("./blog/render/renderTimeMetric");
 const flush = require("documentation/tools/flush-cache");
 const configureLocalBlogs = require("./configure-local-blogs");
 const purgeCdnUrls = require("helper/purgeCdnUrls");
-const { assertConfigured: assertAssetsBucket } = require("storage/s3");
+const { assertConfigured: assertStorageBucket } = require("storage/s3");
 
 // The offline queue is still on while we boot, so a command sent while Redis
 // is unreachable waits for the connection instead of failing. Don't let that
@@ -175,10 +175,10 @@ function main(callback) {
   async.series(
     [
       function (callback) {
-        // Generated assets live only in the assets bucket: without one every
+        // Generated assets live only in the storage bucket: without one every
         // build and upload would fail, so refuse to start
         try {
-          assertAssetsBucket();
+          assertStorageBucket();
         } catch (err) {
           return callback(err);
         }

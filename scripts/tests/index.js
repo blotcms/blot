@@ -272,7 +272,7 @@ registerGlobalTest();
 
 // get the number of keys in the database
 (async function ensureEmptyDatabase() {
-  // Every build and upload writes to the assets bucket
+  // Every build and upload writes to the storage bucket
   await require("./util/bucket")();
 
   let hasKeys = false;

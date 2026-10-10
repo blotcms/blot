@@ -82,18 +82,18 @@ export BLOT_DROPBOX_TEST_ACCOUNT_FULL_TOKEN=
 # Youtube for fetching video player codes
 export BLOT_YOUTUBE_SECRET=
 
-# AWS access key for the assets bucket below (the key of the IAM user created
-# by config/assets-bucket/setup.sh). Leave unset to use the AWS SDK's default
+# AWS access key for the storage bucket below (the key of the IAM user created
+# by config/storage-bucket/setup.sh). Leave unset to use the AWS SDK's default
 # credential provider chain.
 export BLOT_AWS_KEY=
 export BLOT_AWS_SECRET=
 
-# Bucket for generated per-blog assets (config/assets-bucket/README.md). They
+# Bucket for generated per-blog assets (config/storage-bucket/README.md). They
 # live nowhere else, so the app will not start without it.
-export BLOT_ASSETS_BUCKET=
-export BLOT_ASSETS_REGION=us-west-2
+export BLOT_STORAGE_BUCKET=
+export BLOT_STORAGE_REGION=us-west-2
 # Only for a simulated S3 such as MinIO in development
-export BLOT_ASSETS_ENDPOINT=
+export BLOT_STORAGE_ENDPOINT=
 
 # AWS for controlling route 53 for wildcard SSL certficate
 export AWS_ACCESS_KEY_ID=

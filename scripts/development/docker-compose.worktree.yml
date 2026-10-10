@@ -25,8 +25,8 @@ services:
       - BLOT_AIRLOCK_PROXY_URL=http://airlock:8888
       # Same bucket as the main stack (its MinIO is on this network); see
       # docker-compose.yml
-      - BLOT_ASSETS_BUCKET=blot-assets-dev
-      - BLOT_ASSETS_ENDPOINT=http://minio:9000
+      - BLOT_STORAGE_BUCKET=blot-storage-dev
+      - BLOT_STORAGE_ENDPOINT=http://minio:9000
       - BLOT_AWS_KEY=blot-dev
       - BLOT_AWS_SECRET=blot-dev-secret
     networks:

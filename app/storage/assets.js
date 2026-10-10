@@ -10,7 +10,7 @@ var s3 = require("./s3");
 var { isMissing, walkLocal, createPool, STAGING_DIRECTORY } = require("./util");
 
 // Every per-blog generated asset (thumbnails, image cache, converter output,
-// avatars, template uploads, ...) lives in the assets bucket (config.assets),
+// avatars, template uploads, ...) lives in the storage bucket (config.storage),
 // keyed {blogID}/{relPath}. This module is the single choke point for
 // reading, writing, deleting, listing and serving those objects.
 //

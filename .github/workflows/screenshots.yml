@@ -284,7 +284,7 @@ jobs:
             echo "No cached demo blogs at $DEMO_BLOGS_CACHE_KEY to delete"
 
       # The resized images and thumbnails of the demo blogs live only in the
-      # assets bucket (a simulated S3), so its data directory is cached with
+      # storage bucket (a simulated S3), so its data directory is cached with
       # the folders and Redis, and the app is configured to use it.
       - name: Start MinIO
         run: |
@@ -293,9 +293,9 @@ jobs:
             minio server data/minio --address :9000 > "$RUNNER_TEMP/minio.log" 2>&1 &
           until curl -fsS http://localhost:9000/minio/health/live > /dev/null 2>&1; do sleep 0.5; done
           {
-            echo "BLOT_ASSETS_BUCKET=blot-test-assets"
-            echo "BLOT_ASSETS_ENDPOINT=http://localhost:9000"
-            echo "BLOT_ASSETS_REGION=us-east-1"
+            echo "BLOT_STORAGE_BUCKET=blot-test-storage"
+            echo "BLOT_STORAGE_ENDPOINT=http://localhost:9000"
+            echo "BLOT_STORAGE_REGION=us-east-1"
             echo "BLOT_AWS_KEY=blot-test"
             echo "BLOT_AWS_SECRET=blot-test-secret"
           } >> "$GITHUB_ENV"
@@ -317,7 +317,7 @@ jobs:
           export BLOT_DIRECTORY=$(pwd)
           export NODE_PATH=$(pwd)/app
 
-          echo "Creating the assets bucket"
+          echo "Creating the storage bucket"
           node -e 'require("./scripts/tests/util/bucket")().then(() => process.exit(0), (err) => { console.error(err); process.exit(1); })'
 
           echo "Building templates"

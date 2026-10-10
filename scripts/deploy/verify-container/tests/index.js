@@ -70,20 +70,20 @@ describe("deploy verify-container", function () {
     }
   });
 
-  it("passes the assets bucket check against a reachable bucket and fails without one", async function () {
+  it("passes the storage bucket check against a reachable bucket and fails without one", async function () {
     const config = require("config");
-    const check = checks.find((c) => c.name === "assets bucket reachable");
+    const check = checks.find((c) => c.name === "storage bucket reachable");
 
-    expect(await check.run({ config })).toContain(config.assets.bucket);
+    expect(await check.run({ config })).toContain(config.storage.bucket);
 
-    const bucket = config.assets.bucket;
-    config.assets.bucket = "";
+    const bucket = config.storage.bucket;
+    config.storage.bucket = "";
 
     try {
       const error = await rejection(check.run({ config }));
-      expect(error && error.message).toMatch(/BLOT_ASSETS_BUCKET is not set/);
+      expect(error && error.message).toMatch(/BLOT_STORAGE_BUCKET is not set/);
     } finally {
-      config.assets.bucket = bucket;
+      config.storage.bucket = bucket;
     }
   });
 

@@ -15,7 +15,7 @@ describe("storage/assets serve", function () {
   async function putS3(blogID, relPath, data) {
     await s3.client().send(
       new PutObjectCommand({
-        Bucket: config.assets.bucket,
+        Bucket: config.storage.bucket,
         Key: blogID + "/" + relPath,
         Body: Buffer.from(data),
       })

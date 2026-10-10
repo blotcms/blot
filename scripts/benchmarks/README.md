@@ -278,9 +278,9 @@ working `data/` under `--out-dir` for exactly this reason.
 
 ```bash
 NODE_PATH=app node scripts/benchmarks/converter-bench.js --converter markdown --converter img --n 50
-# docx, odt and img upload what they produce to the assets bucket: start a
-# MinIO (see scripts/tests/invoke.sh) and set BLOT_ASSETS_BUCKET,
-# BLOT_ASSETS_ENDPOINT, BLOT_ASSETS_REGION, BLOT_AWS_KEY and BLOT_AWS_SECRET
+# docx, odt and img upload what they produce to the storage bucket: start a
+# MinIO (see scripts/tests/invoke.sh) and set BLOT_STORAGE_BUCKET,
+# BLOT_STORAGE_ENDPOINT, BLOT_STORAGE_REGION, BLOT_AWS_KEY and BLOT_AWS_SECRET
 ```
 
 No Docker needed for most converters - see "Per-converter benchmarks" below.

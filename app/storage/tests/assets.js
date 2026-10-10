@@ -19,7 +19,7 @@ describe("storage/assets", function () {
   async function putS3(blogID, relPath, data) {
     await s3.client().send(
       new PutObjectCommand({
-        Bucket: config.assets.bucket,
+        Bucket: config.storage.bucket,
         Key: blogID + "/" + relPath,
         Body: Buffer.from(data),
       })
@@ -692,13 +692,13 @@ describe("storage/assets", function () {
   describe("when the bucket can't be reached", function () {
     beforeEach(function () {
       // nothing is listening on port 1
-      config.assets.endpoint = "http://127.0.0.1:1";
+      config.storage.endpoint = "http://127.0.0.1:1";
       s3.reset();
     });
 
     // so the test blog can be cleaned up
     afterEach(function () {
-      config.assets.endpoint = process.env.BLOT_ASSETS_ENDPOINT;
+      config.storage.endpoint = process.env.BLOT_STORAGE_ENDPOINT;
       s3.reset();
     });
 

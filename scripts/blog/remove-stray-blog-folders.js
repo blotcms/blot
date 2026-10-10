@@ -14,7 +14,7 @@ if (require.main === module)
     process.exit();
   });
 
-// The blog IDs which have objects in the assets bucket, i.e. its top-level
+// The blog IDs which have objects in the storage bucket, i.e. its top-level
 // "folders" (blog_*/). Reported only, never moved or deleted.
 async function listAssetPrefixes() {
   const blogIDs = [];

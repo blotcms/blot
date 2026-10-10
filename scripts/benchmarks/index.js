@@ -153,7 +153,7 @@ jasmine.addReporter({
 });
 
 (async function ensureEmptyDatabase() {
-  // Builds upload the images they cache to the assets bucket (MinIO, started
+  // Builds upload the images they cache to the storage bucket (MinIO, started
   // by the workflow, or by build-corpus.js)
   await require("../tests/util/bucket")();
 

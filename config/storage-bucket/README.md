@@ -1,4 +1,4 @@
-# Assets bucket
+# Storage bucket
 
 Generated per-blog assets (thumbnails, the image cache, converter output,
 bookmark screenshots, avatars, template uploads) live in one S3 bucket, and
@@ -23,20 +23,20 @@ CLI finds:
 
 ```
 export AWS_PROFILE=<profile> AWS_REGION=us-west-2
-./config/assets-bucket/setup.sh --dry-run <bucket>   # prints each call, changes nothing
-./config/assets-bucket/setup.sh <bucket>
+./config/storage-bucket/setup.sh --dry-run <bucket>   # prints each call, changes nothing
+./config/storage-bucket/setup.sh <bucket>
 ```
 
 It creates the bucket in us-west-2 (ACLs disabled, versioning off, public ACLs
 blocked but a public bucket policy allowed), attaches the public-read policy
-for `blog_*`, and creates an IAM user named after the bucket, `blot-assets-app-<bucket>` (so
+for `blog_*`, and creates an IAM user named after the bucket, `blot-storage-app-<bucket>` (so
 another environment's bucket gets its own user and policy; override with
 `IAM_USER`, and give each bucket a different one), with an inline policy for `s3:PutObject`, `s3:GetObject` and
 `s3:DeleteObject` on the objects and `s3:ListBucket` on the bucket. It does not
 create an access key. Make one and keep it out of the repo:
 
 ```
-aws iam create-access-key --user-name blot-assets-app-<bucket>
+aws iam create-access-key --user-name blot-storage-app-<bucket>
 ```
 
 ## Configure the app
@@ -46,10 +46,10 @@ with `--env-file`; see `config/environment.sh` for the full list), then deploy:
 
 | Variable | Value |
 | --- | --- |
-| `BLOT_ASSETS_BUCKET` | The bucket name. Required: the app refuses to start without it, and the deploy's container checks fail if it can't reach the bucket. |
-| `BLOT_ASSETS_REGION` | `us-west-2` (the default). |
+| `BLOT_STORAGE_BUCKET` | The bucket name. Required: the app refuses to start without it, and the deploy's container checks fail if it can't reach the bucket. |
+| `BLOT_STORAGE_REGION` | `us-west-2` (the default). |
 | `BLOT_AWS_KEY`, `BLOT_AWS_SECRET` | The IAM user's access key. When unset, the AWS SDK's default credential chain is used. |
-| `BLOT_ASSETS_ENDPOINT` | Only for a simulated S3 (MinIO) in development and tests. |
+| `BLOT_STORAGE_ENDPOINT` | Only for a simulated S3 (MinIO) in development and tests. |
 
 A failed upload or delete is an error for the operation which asked for it (a
 build fails, a dashboard upload shows an error); nothing is kept locally to

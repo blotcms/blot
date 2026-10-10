@@ -177,7 +177,7 @@ function main() {
     "-c",
     "rm -f /data/dump.rdb && redis-server",
   ]);
-  // A simulated S3 for the assets bucket (the benchmark creates the bucket).
+  // A simulated S3 for the storage bucket (the benchmark creates the bucket).
   // Keep the image in step with .github/actions/start-minio.
   run("docker", [
     "run",
@@ -230,11 +230,11 @@ function main() {
     "-e",
     "BLOT_PROTOCOL=https",
     "-e",
-    "BLOT_ASSETS_BUCKET=blot-test-assets",
+    "BLOT_STORAGE_BUCKET=blot-test-storage",
     "-e",
-    `BLOT_ASSETS_ENDPOINT=http://${minioContainer}:9000`,
+    `BLOT_STORAGE_ENDPOINT=http://${minioContainer}:9000`,
     "-e",
-    "BLOT_ASSETS_REGION=us-east-1",
+    "BLOT_STORAGE_REGION=us-east-1",
     "-e",
     "BLOT_AWS_KEY=blot-test",
     "-e",

@@ -13,35 +13,35 @@ describe("storage/s3", function () {
     });
 
     it("fails with a clear error when there is no bucket", function () {
-      var bucket = config.assets.bucket;
+      var bucket = config.storage.bucket;
 
-      config.assets.bucket = "";
+      config.storage.bucket = "";
 
       try {
         expect(function () {
           s3.assertConfigured();
-        }).toThrowError(/BLOT_ASSETS_BUCKET is not set/);
+        }).toThrowError(/BLOT_STORAGE_BUCKET is not set/);
 
       } finally {
-        config.assets.bucket = bucket;
+        config.storage.bucket = bucket;
       }
     });
 
     it("is refused by every call that needs the bucket", async function () {
-      var bucket = config.assets.bucket;
+      var bucket = config.storage.bucket;
       var error;
 
-      config.assets.bucket = "";
+      config.storage.bucket = "";
 
       try {
         await s3.head("blog_x/a");
       } catch (err) {
         error = err;
       } finally {
-        config.assets.bucket = bucket;
+        config.storage.bucket = bucket;
       }
 
-      expect(error && error.message).toMatch(/BLOT_ASSETS_BUCKET is not set/);
+      expect(error && error.message).toMatch(/BLOT_STORAGE_BUCKET is not set/);
     });
   });
 });

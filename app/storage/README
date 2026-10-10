@@ -18,7 +18,7 @@ at sync/build time instead.
 
 - `config/index.js` derives `blog_folder_dir` (`/blogs`) off
   `BLOT_DATA_DIRECTORY`. There is no longer a static files directory: generated
-  assets are in the assets bucket (`config.assets`).
+  assets are in the storage bucket (`config.storage`).
 - [`app/helper/localPath.js`](app/helper/localPath.js) resolves
   `(blogID, relativePath)` to an absolute path but does no IO — every caller
   does its own raw `fs`/`fs-extra` call. ~60 files call `localPath`, including
@@ -83,6 +83,14 @@ at sync/build time instead.
   object at write time rather than via prefix-filtered lifecycle rules.
   Two buckets are only needed if versioning/cross-region replication is
   wanted later (e.g. for a "restore deleted file" feature).
+  **Key namespaces are reserved:** top-level `blog_*` prefixes are generated
+  assets, publicly readable through the bucket policy (`s3:GetObject` on
+  `blog_*`), with keys identical to their CDN paths. Every other top-level
+  prefix (`folder/`, later git repos) is private, and nothing else may ever
+  be written at the top level with a `blog_` prefix. If versioning or
+  replication is ever wanted for folder content but not for assets, that
+  needs a second bucket, because versioning is bucket-wide; decide that
+  before Phase 2 puts folder data in the bucket.
 - **Versioning: off**, bucket-wide.
 - **Backup: hourly `aws s3 sync` (whole bucket, no `--delete`) to
   Backblaze B2**, US West region (closest to the app's `us-west-2`; B2's
@@ -119,11 +127,11 @@ at sync/build time instead.
   from one bucket; live multi-region storage replication would add
   cross-region conflict-resolution risk the current single-writer-per-blog
   lock isn't built to handle.
-- **One IAM user for the app**, scoped to the assets bucket and not to
+- **One IAM user for the app**, scoped to the storage bucket and not to
   prefixes — revisit only if a concrete need for narrower blast radius shows
   up.
 - **Credentials: a static IAM user key, not the host's instance profile.** The
-  app containers use a key scoped to the assets bucket
+  app containers use a key scoped to the storage bucket
   (`BLOT_AWS_KEY`/`BLOT_AWS_SECRET`). Reaching instance credentials from a
   container on Docker's bridge network needs the metadata service's hop limit
   raised to 2, and the app host keeps it at 1 (`config/airlock/README.md`) so
@@ -158,7 +166,7 @@ at sync/build time instead.
   `ListBucket`, never write. Blog IDs are UUIDs and blog folders are already
   served unauthenticated via `/folder/v-:version`, so this isn't a new
   exposure. Keys are `{blogID}/{path}` at the root, identical to the CDN path,
-  which is what lets Bunny fetch them with no rewriting. `config/assets-bucket`
+  which is what lets Bunny fetch them with no rewriting. `config/storage-bucket`
   has the setup script and the operator steps.
 - **S3 is the only store; local disk is only a staging area.** A tool which
   needs a local path (sharp, pandoc, puppeteer) writes to `path(blogID,
@@ -321,7 +329,7 @@ should consolidate into one storage-layer method, exposed explicitly
     then S3 alone and no `data/static` (and no `static` mount in the proxy).
     `scripts/storage/backfill-assets.js --source <dir>` remains for re-seeding
     the bucket from a local copy, such as a backup;
-    `config/assets-bucket` creates the bucket and IAM user.
+    `config/storage-bucket` creates the bucket and IAM user.
   - The B2 backup of the bucket (§3) is what stands between `_avatars` /
     `_template_assets` and loss, since nothing is kept on the host.
   - Not done: any read cache beyond the `ensureLocal` download cache (it is

@@ -27,7 +27,7 @@ directory `/var/www/blot/app/blog/static`),
 so a redeploy keeps the warm cache and
 the app's own `cdn.` files are served from disk (with the `Cache-Control`/CORS headers of
 `location /`) instead of falling through to Node. Per-blog assets are not on
-the host: they live in the assets bucket, which the CDN fetches from directly
+the host: they live in the storage bucket, which the CDN fetches from directly
 and the app serves as a fallback. Containers also get
 `--ulimit nofile=65536:65536` (`PROXY_NOFILE`) - headroom above both the
 ~20000 fds `worker_connections 10000` can need (two fds per proxied

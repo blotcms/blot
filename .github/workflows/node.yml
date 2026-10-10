@@ -333,7 +333,7 @@ jobs:
           echo "name=coverage-${SAFE_SUITE}-${SAFE_SHARD}" >> "$GITHUB_OUTPUT"
 
       # A simulated S3 for the generated assets, which live only in the
-      # assets bucket, so every suite needs it (the runner creates the
+      # storage bucket, so every suite needs it (the runner creates the
       # bucket, scripts/tests/util/bucket.js).
       - name: Start MinIO
         uses: ./.github/actions/start-minio
@@ -360,9 +360,9 @@ jobs:
           docker run --rm \
             --network host \
             -e BLOT_REDIS_HOST=localhost \
-            -e BLOT_ASSETS_BUCKET \
-            -e BLOT_ASSETS_ENDPOINT \
-            -e BLOT_ASSETS_REGION \
+            -e BLOT_STORAGE_BUCKET \
+            -e BLOT_STORAGE_ENDPOINT \
+            -e BLOT_STORAGE_REGION \
             -e BLOT_AWS_KEY \
             -e BLOT_AWS_SECRET \
             -e BLOT_STRIPE_KEY=$BLOT_STRIPE_KEY \

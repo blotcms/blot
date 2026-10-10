@@ -11,7 +11,7 @@ function SDK() {
   return sdk;
 }
 
-// A thin layer over the S3 API for the assets bucket (config.assets): a lazily
+// A thin layer over the S3 API for the storage bucket (config.storage): a lazily
 // created client and put/get/head/list/delete helpers which speak in
 // bucket keys. storage/assets.js is the facade over them. Only the S3 API
 // subset Backblaze B2 also supports is used (no tagging, storage classes or
@@ -32,14 +32,14 @@ const UPLOAD_RETRY_DELAY_MS = 200;
 let current = null;
 
 const NOT_CONFIGURED =
-  "storage/s3: BLOT_ASSETS_BUCKET is not set. Generated assets are stored " +
-  "only in the assets bucket (see config/assets-bucket/README.md); in " +
+  "storage/s3: BLOT_STORAGE_BUCKET is not set. Generated assets are stored " +
+  "only in the storage bucket (see config/storage-bucket/README.md); in " +
   "development and tests it is the MinIO bucket the stack creates.";
 
-// Throws unless an assets bucket is configured. Called when the app starts so
+// Throws unless a storage bucket is configured. Called when the app starts so
 // a missing bucket is a failed boot, not a failed upload later.
 function assertConfigured() {
-  if (!(config.assets && config.assets.bucket)) {
+  if (!(config.storage && config.storage.bucket)) {
     throw new Error(NOT_CONFIGURED);
   }
 }
@@ -47,7 +47,7 @@ function assertConfigured() {
 function bucket() {
   assertConfigured();
 
-  return config.assets.bucket;
+  return config.storage.bucket;
 }
 
 // The key for an asset. relPath is relative to the blog's asset directory.
@@ -55,10 +55,10 @@ function key(blogID, relPath) {
   return blogID + "/" + relPath.replace(/^\/+/, "");
 }
 
-// The client is created on first use, from config.assets as it is then, and
+// The client is created on first use, from config.storage as it is then, and
 // replaced if that configuration changes.
 function client() {
-  const { region, endpoint } = config.assets;
+  const { region, endpoint } = config.storage;
   const signature = [region, endpoint, config.aws.key, config.aws.secret].join(
     "|"
   );

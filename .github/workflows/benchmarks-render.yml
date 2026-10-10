@@ -185,7 +185,7 @@ jobs:
             --comment-tag render \
             --title "Render benchmark (large corpus)"
 
-      # The app needs an assets bucket to start serving; nothing the render
+      # The app needs a storage bucket to start serving; nothing the render
       # benchmark requests is in it
       - name: Start MinIO
         if: steps.corpus-check.outputs.available == 'true'
@@ -222,9 +222,9 @@ jobs:
             -e BLOT_REDIS_HOST=localhost \
             -e BLOT_HOST=localhost \
             -e BLOT_PROTOCOL=https \
-            -e BLOT_ASSETS_BUCKET \
-            -e BLOT_ASSETS_ENDPOINT \
-            -e BLOT_ASSETS_REGION \
+            -e BLOT_STORAGE_BUCKET \
+            -e BLOT_STORAGE_ENDPOINT \
+            -e BLOT_STORAGE_REGION \
             -e BLOT_AWS_KEY \
             -e BLOT_AWS_SECRET \
             -e GITHUB_SHA=${{ github.sha }} \

@@ -1,4 +1,4 @@
-// Re-seeds the assets bucket from a local copy of the generated assets (a
+// Re-seeds the storage bucket from a local copy of the generated assets (a
 // directory of blog_* directories), so every file has an object at
 // {blogID}/{path}. The app keeps no such copy any more; this is for recovery
 // (restoring a backup of the bucket's contents into an empty or damaged
@@ -17,8 +17,8 @@
 //   --concurrency <n>  uploads at once (default 16)
 //
 // Both --dry-run and --verify also list keys which may not round-trip
-// through a plain CDN to bucket URL. Needs BLOT_ASSETS_BUCKET and
-// credentials (see config/assets-bucket/README.md). On the production host:
+// through a plain CDN to bucket URL. Needs BLOT_STORAGE_BUCKET and
+// credentials (see config/storage-bucket/README.md). On the production host:
 //
 //   docker exec <container> node scripts/storage/backfill-assets.js --source <dir> --dry-run
 
@@ -84,8 +84,8 @@ async function main() {
   }
 
   console.log(
-    "[backfill] bucket " + config.assets.bucket + " in " + config.assets.region +
-      (config.assets.endpoint ? " at " + config.assets.endpoint : "") +
+    "[backfill] bucket " + config.storage.bucket + " in " + config.storage.region +
+      (config.storage.endpoint ? " at " + config.storage.endpoint : "") +
       ", from " + options.directory
   );
 

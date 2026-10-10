@@ -1,6 +1,6 @@
 // Shared setup for the specs which need a bucket of their own. Not a spec
 // itself. The test runner provides MinIO and the app's own configuration for
-// it (BLOT_ASSETS_ENDPOINT, BLOT_AWS_KEY, ...): scripts/tests/invoke.sh
+// it (BLOT_STORAGE_ENDPOINT, BLOT_AWS_KEY, ...): scripts/tests/invoke.sh
 // locally, .github/workflows/node.yml in CI. Every spec has a bucket anyway
 // (scripts/tests/util/bucket.js); these want an empty one, which they can fill,
 // break, and delete without disturbing anything else.
@@ -10,7 +10,7 @@ const s3 = require("storage/s3");
 const { CreateBucketCommand, DeleteBucketCommand } = require("@aws-sdk/client-s3");
 
 // Call inside a describe(). Gives the specs in it a bucket of their own,
-// configured as config.assets for their duration, and undoes that after.
+// configured as config.storage for their duration, and undoes that after.
 // Returns { bucket }.
 module.exports = function useBucket() {
   const state = {
@@ -21,12 +21,12 @@ module.exports = function useBucket() {
 
   beforeAll(async function () {
     saved = {
-      assets: Object.assign({}, config.assets),
+      storage: Object.assign({}, config.storage),
       aws: Object.assign({}, config.aws),
     };
-    endpoint = config.assets.endpoint;
+    endpoint = config.storage.endpoint;
 
-    config.assets.bucket = state.bucket;
+    config.storage.bucket = state.bucket;
     s3.reset();
 
     await s3.client().send(new CreateBucketCommand({ Bucket: state.bucket }));
@@ -36,22 +36,22 @@ module.exports = function useBucket() {
     if (!saved) return;
 
     // Put the real endpoint back in case a spec pointed it elsewhere
-    config.assets.endpoint = endpoint;
-    config.assets.bucket = state.bucket;
+    config.storage.endpoint = endpoint;
+    config.storage.bucket = state.bucket;
     s3.reset();
 
     await s3.removePrefix("");
     await s3.client().send(new DeleteBucketCommand({ Bucket: state.bucket }));
 
-    Object.assign(config.assets, saved.assets);
+    Object.assign(config.storage, saved.storage);
     Object.assign(config.aws, saved.aws);
     s3.reset();
   });
 
   // Each spec starts with an empty bucket
   beforeEach(async function () {
-    config.assets.endpoint = endpoint;
-    config.assets.bucket = state.bucket;
+    config.storage.endpoint = endpoint;
+    config.storage.bucket = state.bucket;
     s3.reset();
 
     await s3.removePrefix("");

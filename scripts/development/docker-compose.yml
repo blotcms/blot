@@ -41,8 +41,8 @@ services:
       # Generated assets live only in this simulated S3 (MinIO, below), as in
       # production; the app won't start without a bucket. The credentials are
       # MinIO's development root user, set below.
-      - BLOT_ASSETS_BUCKET=blot-assets-dev
-      - BLOT_ASSETS_ENDPOINT=http://minio:9000
+      - BLOT_STORAGE_BUCKET=blot-storage-dev
+      - BLOT_STORAGE_ENDPOINT=http://minio:9000
       - BLOT_AWS_KEY=blot-dev
       - BLOT_AWS_SECRET=blot-dev-secret
     volumes:
@@ -69,7 +69,7 @@ services:
       retries: 30
       start_period: 15s
 
-  # A simulated S3 for the generated assets (config.assets). MinIO no longer
+  # A simulated S3 for the generated assets (config.storage). MinIO no longer
   # publishes images itself; this is a pinned build of the upstream release.
   # The console is at http://localhost:9001 (blot-dev / blot-dev-secret).
   minio:
@@ -104,7 +104,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=blot-dev-secret
       - AWS_DEFAULT_REGION=us-west-2
       - AWS_ENDPOINT_URL=http://minio:9000
-      - BLOT_ASSETS_BUCKET=blot-assets-dev
+      - BLOT_STORAGE_BUCKET=blot-storage-dev
     volumes:
       - ./minio:/minio:ro
     entrypoint: ["/bin/sh", "/minio/init.sh"]

@@ -1,7 +1,7 @@
 name: Start MinIO
 description: >
   Starts a simulated S3 for the generated assets, which live only in the
-  assets bucket, and exports the app's configuration for it (BLOT_ASSETS_*,
+  storage bucket, and exports the app's configuration for it (BLOT_STORAGE_*,
   BLOT_AWS_*) to the rest of the job. The bucket itself is created by the
   test and benchmark runners (scripts/tests/util/bucket.js). GitHub service
   containers can't be given a command, which MinIO needs, so it's started by
@@ -22,9 +22,9 @@ runs:
         for i in $(seq 1 30); do
           if curl -fsS http://localhost:9000/minio/health/live > /dev/null; then
             {
-              echo "BLOT_ASSETS_BUCKET=blot-test-assets"
-              echo "BLOT_ASSETS_ENDPOINT=http://localhost:9000"
-              echo "BLOT_ASSETS_REGION=us-east-1"
+              echo "BLOT_STORAGE_BUCKET=blot-test-storage"
+              echo "BLOT_STORAGE_ENDPOINT=http://localhost:9000"
+              echo "BLOT_STORAGE_REGION=us-east-1"
               echo "BLOT_AWS_KEY=blot-test"
               echo "BLOT_AWS_SECRET=blot-test-secret"
             } >> "$GITHUB_ENV"

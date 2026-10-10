@@ -24,7 +24,7 @@ This module is the authoritative data layer for blog records in Blot. It defines
 | `get.js` | Retrieves a single blog by `id`, `handle`, or `domain`. Applies `imageExif` and `converters` defaults on the way out. |
 | `set.js` | Validates and persists updates to a blog record. Manages side effects: domain/handle key rotation, cache busting, template forking, Git repository renaming, and CDN manifest updates. |
 | `bumpCacheID.js` | Bumps `cacheID` through `set` so render caches miss. If Redis is unavailable it retries every 5s for up to a minute in the background; the callback still fires after the first attempt. |
-| `remove.js` | Deletes a blog fully: disconnects the sync client, removes the record from the owner's user document, wipes the blog folder from disk and its generated assets from the assets bucket, and deletes all associated Redis keys. |
+| `remove.js` | Deletes a blog fully: disconnects the sync client, removes the record from the owner's user document, wipes the blog folder from disk and its generated assets from the storage bucket, and deletes all associated Redis keys. |
 | `extend.js` | Decorates an in-memory blog object with computed, template-facing properties: resolved URL, pretty URL, `cssURL`, `scriptURL`, `feedURL`, `pages`, `locals`, and `imageExif`/converter boolean flags. Does not write to Redis. |
 
 ### Status log
@@ -161,7 +161,7 @@ Fully deletes a blog. Runs four steps in sequence:
 
 1. Disconnects the sync client (`clients[blog.client].disconnect`)
 2. Removes the blog from the owner's user record
-3. Deletes the blog folder from disk and the blog's generated assets from the assets bucket
+3. Deletes the blog folder from disk and the blog's generated assets from the storage bucket
 4. Deletes all `blog:{id}:*` and `template:{id}:*` Redis keys, domain/handle routing keys, and removes the ID from the global set
 
 ### `extend(blog)`

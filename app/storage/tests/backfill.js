@@ -48,7 +48,7 @@ describe("storage/backfill", function () {
 
   // so the test blog can be removed (its assets are deleted from the bucket)
   afterEach(function () {
-    config.assets.endpoint = process.env.BLOT_ASSETS_ENDPOINT;
+    config.storage.endpoint = process.env.BLOT_STORAGE_ENDPOINT;
     s3.reset();
   });
 
@@ -229,17 +229,17 @@ describe("storage/backfill", function () {
   it("counts errors and carries on", async function () {
     var directory = this.directory;
 
-    var endpoint = config.assets.endpoint;
+    var endpoint = config.storage.endpoint;
     var stats;
 
-    config.assets.endpoint = "http://127.0.0.1:1";
+    config.storage.endpoint = "http://127.0.0.1:1";
     s3.reset();
 
     try {
       stats = await run.call(this);
     } finally {
       // so the test blog can be cleaned up
-      config.assets.endpoint = endpoint;
+      config.storage.endpoint = endpoint;
       s3.reset();
     }
 

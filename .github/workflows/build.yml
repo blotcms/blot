@@ -98,10 +98,10 @@ jobs:
             sleep $interval; elapsed=$((elapsed+interval))
           done
 
-          # The app refuses to start without an assets bucket. Nothing is
+          # The app refuses to start without a storage bucket. Nothing is
           # uploaded while it starts, so this one needn't exist.
           app_id=$(docker run -d --network test_network -e BLOT_REDIS_HOST=test_redis \
-            -e BLOT_ASSETS_BUCKET=health-check -p 8080:8080 "$IMAGE")
+            -e BLOT_STORAGE_BUCKET=health-check -p 8080:8080 "$IMAGE")
 
           timeout=60; interval=5; elapsed=0
           until [ "$(docker inspect --format='{{json .State.Health.Status}}' "$app_id")" = '"healthy"' ]; do
