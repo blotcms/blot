@@ -51,7 +51,9 @@ With a bucket set, every new asset is written to disk and uploaded, and
 deletes remove both. While `BLOT_ASSETS_READ=disk`, a failed upload or delete
 is logged and doesn't fail the operation; grep the app logs for
 `[storage/assets] s3`. Once reads are `s3` a failure is an error, because
-disk is no longer the copy to trust. Files which were already on disk before
+disk is no longer the copy to trust. Deleting a blog is the exception: its
+bucket delete always fails the deletion, so no public assets are left behind.
+Files which were already on disk before
 the bucket was set aren't uploaded until the backfill.
 
 ## Backfill

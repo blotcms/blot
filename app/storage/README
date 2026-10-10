@@ -155,7 +155,9 @@ at sync/build time instead.
   is logged (`[storage/assets] s3 upload failed` / `s3 delete failed`) and the
   operation succeeds, since disk still has the file and the backfill
   reconciles. Once reads are S3-first the error is thrown, since disk is no
-  longer the copy to trust.
+  longer the copy to trust. Blog deletion (`removeAll`) always throws: the
+  bucket is public for `blog_*` keys, so a delete that silently failed would
+  leave a deleted blog's assets readable.
 - **`.assets` holds non-regenerable dashboard uploads**, not just
   generated files:
 
