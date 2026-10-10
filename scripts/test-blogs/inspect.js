@@ -54,7 +54,7 @@ function decode(string) {
 
 // Tolerates the S3 backend not existing yet, or no bucket being configured.
 function loadS3() {
-  if (!(config.assets && config.assets.bucket)) return null;
+  if (!(config.storage && config.storage.bucket)) return null;
 
   try {
     const s3 = require("storage/s3");
@@ -213,7 +213,7 @@ async function main() {
       " client=" +
       (blog.client || "none") +
       " s3=" +
-      (s3 ? config.assets.bucket : "not configured")
+      (s3 ? config.storage.bucket : "not configured")
   );
 
   let entries = [];
