@@ -1,12 +1,12 @@
 #!/bin/sh
-# Creates the development assets bucket in MinIO and allows anonymous
+# Creates the development storage bucket in MinIO and allows anonymous
 # downloads of blog_* keys only, as the production bucket does (see
-# config/assets-bucket/setup.sh): public s3:GetObject on blog_*, no listing,
+# config/storage-bucket/setup.sh): public s3:GetObject on blog_*, no listing,
 # no public writes. Safe to run again. Run by the minio-init service in
 # docker-compose.yml, which provides the endpoint and credentials.
 set -eu
 
-BUCKET="${BLOT_ASSETS_BUCKET:-blot-assets-dev}"
+BUCKET="${BLOT_STORAGE_BUCKET:-blot-storage-dev}"
 
 if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
   echo "Bucket $BUCKET exists"

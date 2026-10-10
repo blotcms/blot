@@ -1,5 +1,5 @@
 // Copies the generated assets on local disk (data/static/blog_*) into the
-// assets bucket, so every file has an object at {blogID}/{path}. Safe to run
+// storage bucket, so every file has an object at {blogID}/{path}. Safe to run
 // repeatedly: files already in the bucket with the same size, and not changed on disk
 // since they were uploaded, are skipped.
 //
@@ -13,8 +13,8 @@
 //   --concurrency <n>  uploads at once (default 16)
 //
 // Both --dry-run and --verify also list keys which may not round-trip
-// through a plain CDN to bucket URL. Needs BLOT_ASSETS_BUCKET and
-// credentials (see config/assets-bucket/README.md). On the production host:
+// through a plain CDN to bucket URL. Needs BLOT_STORAGE_BUCKET and
+// credentials (see config/storage-bucket/README.md). On the production host:
 //
 //   docker exec <container> node scripts/storage/backfill-assets.js --dry-run
 
@@ -65,13 +65,13 @@ async function main() {
   const options = parse(process.argv.slice(2));
 
   if (!s3.enabled()) {
-    console.error("BLOT_ASSETS_BUCKET is not set, so there is no bucket to copy to.");
+    console.error("BLOT_STORAGE_BUCKET is not set, so there is no bucket to copy to.");
     return 2;
   }
 
   console.log(
-    "[backfill] bucket " + config.assets.bucket + " in " + config.assets.region +
-      (config.assets.endpoint ? " at " + config.assets.endpoint : "") +
+    "[backfill] bucket " + config.storage.bucket + " in " + config.storage.region +
+      (config.storage.endpoint ? " at " + config.storage.endpoint : "") +
       ", from " + config.blog_static_files_dir
   );
 

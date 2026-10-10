@@ -217,14 +217,19 @@ module.exports = {
     secret: process.env.BLOT_AWS_SECRET,
   },
 
-  // Object storage for generated per-blog assets (app/storage/assets.js).
-  // Keys are {blogID}/{path}, identical to the public CDN path.
-  assets: {
+  // The S3 bucket behind app/storage. Today it holds generated per-blog
+  // assets (app/storage/assets.js), keyed {blogID}/{path}, identical to the
+  // public CDN path.
+  storage: {
     // When empty, assets live on local disk only.
-    bucket: process.env.BLOT_ASSETS_BUCKET || "",
-    region: process.env.BLOT_ASSETS_REGION || "us-west-2",
+    bucket: process.env.BLOT_STORAGE_BUCKET || "",
+    region: process.env.BLOT_STORAGE_REGION || "us-west-2",
     // Set to point at a simulated S3 (MinIO) in development and tests.
-    endpoint: process.env.BLOT_ASSETS_ENDPOINT || "",
+    endpoint: process.env.BLOT_STORAGE_ENDPOINT || "",
+  },
+
+  // Generated per-blog assets (app/storage/assets.js).
+  assets: {
     // Where reads look first once a bucket is set: "disk" (falling back to
     // the bucket) or "s3" (falling back to disk). Writes go to both.
     read: process.env.BLOT_ASSETS_READ === "s3" ? "s3" : "disk",

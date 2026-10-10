@@ -10,13 +10,13 @@
 # already exists, so it prints the create steps too).
 #
 # The bucket is created in us-west-2, whatever AWS_REGION says: the app hosts
-# are there. The IAM user is named after the bucket (blot-assets-app-<bucket>)
+# are there. The IAM user is named after the bucket (blot-storage-app-<bucket>)
 # so that each environment's bucket gets its own user and policy; the name can
 # be changed with IAM_USER.
 set -euo pipefail
 
 BUCKET_REGION="us-west-2"
-POLICY_NAME="blot-assets-bucket-access"
+POLICY_NAME="blot-storage-bucket-access"
 
 DRY_RUN=false
 BUCKET=""
@@ -49,7 +49,7 @@ fi
 # replace the first one's policy (the policy is named the same on each user).
 # IAM user names are at most 64 characters of letters, digits and +=,.@_-
 if [ -z "${IAM_USER:-}" ]; then
-  IAM_USER="blot-assets-app-$BUCKET"
+  IAM_USER="blot-storage-app-$BUCKET"
 fi
 
 if [ "${#IAM_USER}" -gt 64 ] || ! [[ "$IAM_USER" =~ ^[A-Za-z0-9+=,.@_-]+$ ]]; then

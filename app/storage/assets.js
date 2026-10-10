@@ -15,7 +15,7 @@ var { isMissing, walkLocal, createPool } = require("./util");
 // This module is the single choke point for reading, writing, deleting,
 // listing and serving those files.
 //
-// When config.assets.bucket is set, every write is also uploaded to the
+// When config.storage.bucket is set, every write is also uploaded to the
 // bucket (key: {blogID}/{relPath}) and every delete removes the object too.
 // Reads try config.assets.read first ("disk", the default, or "s3") and fall
 // back to the other source when the file isn't there. With no bucket set

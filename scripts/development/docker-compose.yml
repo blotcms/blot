@@ -42,8 +42,8 @@ services:
       # (MinIO, below), as in production. Reads look on disk first; start with
       # BLOT_ASSETS_READ=s3 npm start to read from the bucket first. The
       # credentials are MinIO's development root user, set below.
-      - BLOT_ASSETS_BUCKET=blot-assets-dev
-      - BLOT_ASSETS_ENDPOINT=http://minio:9000
+      - BLOT_STORAGE_BUCKET=blot-storage-dev
+      - BLOT_STORAGE_ENDPOINT=http://minio:9000
       - BLOT_ASSETS_READ=${BLOT_ASSETS_READ:-disk}
       - BLOT_AWS_KEY=blot-dev
       - BLOT_AWS_SECRET=blot-dev-secret
@@ -106,7 +106,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=blot-dev-secret
       - AWS_DEFAULT_REGION=us-west-2
       - AWS_ENDPOINT_URL=http://minio:9000
-      - BLOT_ASSETS_BUCKET=blot-assets-dev
+      - BLOT_STORAGE_BUCKET=blot-storage-dev
     volumes:
       - ./minio:/minio:ro
     entrypoint: ["/bin/sh", "/minio/init.sh"]

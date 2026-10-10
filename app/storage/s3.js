@@ -11,7 +11,7 @@ function SDK() {
   return sdk;
 }
 
-// A thin layer over the S3 API for the assets bucket (config.assets): a lazily
+// A thin layer over the S3 API for the storage bucket (config.storage): a lazily
 // created client and put/get/head/list/delete helpers which speak in
 // bucket keys. storage/assets.js is the facade which decides when to call
 // them. Only the S3 API subset Backblaze B2 also supports is used (no
@@ -33,11 +33,11 @@ const UPLOAD_RETRY_DELAY_MS = 200;
 let current = null;
 
 function enabled() {
-  return !!(config.assets && config.assets.bucket);
+  return !!(config.storage && config.storage.bucket);
 }
 
 function bucket() {
-  return config.assets.bucket;
+  return config.storage.bucket;
 }
 
 // The key for an asset. relPath is relative to the blog's asset directory.
@@ -45,10 +45,10 @@ function key(blogID, relPath) {
   return blogID + "/" + relPath.replace(/^\/+/, "");
 }
 
-// The client is created on first use, from config.assets as it is then, and
+// The client is created on first use, from config.storage as it is then, and
 // replaced if that configuration changes.
 function client() {
-  const { region, endpoint } = config.assets;
+  const { region, endpoint } = config.storage;
   const signature = [region, endpoint, config.aws.key, config.aws.secret].join(
     "|"
   );

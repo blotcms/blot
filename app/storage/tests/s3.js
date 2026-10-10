@@ -18,7 +18,7 @@ describe("storage/assets with an S3 bucket", function () {
   async function putS3(blogID, relPath, data) {
     await s3.client().send(
       new PutObjectCommand({
-        Bucket: config.assets.bucket,
+        Bucket: config.storage.bucket,
         Key: blogID + "/" + relPath,
         Body: Buffer.from(data),
       })
@@ -164,11 +164,11 @@ describe("storage/assets with an S3 bucket", function () {
 
     it("leaves the bucket alone when no bucket is configured", async function () {
       var test = this;
-      var bucket = config.assets.bucket;
+      var bucket = config.storage.bucket;
 
-      config.assets.bucket = "";
+      config.storage.bucket = "";
       await assets.write(test.blog.id, "_assets/local-only.txt", "x");
-      config.assets.bucket = bucket;
+      config.storage.bucket = bucket;
 
       expect(await fs.pathExists(assets.path(test.blog.id, "_assets/local-only.txt"))).toBe(true);
       expect(await keys(test.blog.id + "/")).toEqual([]);
@@ -572,14 +572,14 @@ describe("storage/assets with an S3 bucket", function () {
   describe("when the bucket can't be reached", function () {
     beforeEach(function () {
       // nothing is listening on port 1
-      config.assets.endpoint = "http://127.0.0.1:1";
+      config.storage.endpoint = "http://127.0.0.1:1";
       s3.reset();
       spyOn(console, "log");
     });
 
     // so the test blog can be cleaned up
     afterEach(function () {
-      config.assets.endpoint = process.env.BLOT_TEST_S3_ENDPOINT;
+      config.storage.endpoint = process.env.BLOT_TEST_S3_ENDPOINT;
       config.assets.read = "disk";
       s3.reset();
     });

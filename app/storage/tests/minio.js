@@ -14,7 +14,7 @@ const MISSING =
   "Run the tests with `npm test` (which starts MinIO) or point it at one.";
 
 // Call inside a describe(). Gives the specs in it a bucket of their own,
-// configured as config.assets for their duration, and undoes that after.
+// configured as config.storage for their duration, and undoes that after.
 // Returns { bucket }.
 module.exports = function useBucket() {
   const state = {
@@ -30,13 +30,14 @@ module.exports = function useBucket() {
     }
 
     saved = {
+      storage: Object.assign({}, config.storage),
       assets: Object.assign({}, config.assets),
       aws: Object.assign({}, config.aws),
     };
 
-    config.assets.bucket = state.bucket;
-    config.assets.endpoint = process.env.BLOT_TEST_S3_ENDPOINT;
-    config.assets.region = "us-east-1";
+    config.storage.bucket = state.bucket;
+    config.storage.endpoint = process.env.BLOT_TEST_S3_ENDPOINT;
+    config.storage.region = "us-east-1";
     config.assets.read = "disk";
     config.aws.key = process.env.BLOT_TEST_S3_KEY;
     config.aws.secret = process.env.BLOT_TEST_S3_SECRET;
@@ -49,12 +50,13 @@ module.exports = function useBucket() {
     if (!saved) return;
 
     // Put the real endpoint back in case a spec pointed it elsewhere
-    config.assets.endpoint = process.env.BLOT_TEST_S3_ENDPOINT;
+    config.storage.endpoint = process.env.BLOT_TEST_S3_ENDPOINT;
     s3.reset();
 
     await s3.removePrefix("");
     await s3.client().send(new DeleteBucketCommand({ Bucket: state.bucket }));
 
+    Object.assign(config.storage, saved.storage);
     Object.assign(config.assets, saved.assets);
     Object.assign(config.aws, saved.aws);
     s3.reset();
@@ -64,7 +66,7 @@ module.exports = function useBucket() {
   beforeEach(async function () {
     if (!state.available) pending(MISSING);
 
-    config.assets.endpoint = process.env.BLOT_TEST_S3_ENDPOINT;
+    config.storage.endpoint = process.env.BLOT_TEST_S3_ENDPOINT;
     config.assets.read = "disk";
     s3.reset();
 
