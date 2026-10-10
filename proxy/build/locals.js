@@ -84,11 +84,6 @@ function container({ env = process.env, config }) {
     // certificate handling in entrypoint.sh, not the already-generated config.
     host: env.BLOT_HOST || "blot.im",
 
-    // The container does not mount the blog static tree, so try_files finds
-    // nothing and every cdn. request that reaches it falls through to
-    // @cdn_node (blot_node). Set these and mount the tree to serve from disk.
-    blog_static_files_dir:
-      env.BLOG_STATIC_FILES_DIR || "/var/www/blot/data/static",
     global_static_files_dir:
       env.GLOBAL_STATIC_FILES_DIR || "/var/www/blot/app/blog/static",
 

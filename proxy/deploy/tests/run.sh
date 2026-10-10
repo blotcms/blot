@@ -233,9 +233,9 @@ echo "blue-green.sh"
 reset container; bluegreen
 check "success: green starts, blue drains and is only removed afterwards" '[ $RC = 0 ] && before "docker start blot-proxy-green" "docker stop --time 30 blot-proxy-blue" && before "docker stop --time 30" "docker rm blot-proxy-blue"'
 check "success: green gets its restart policy before blue is removed" 'before "docker update --restart unless-stopped blot-proxy-green" "docker rm blot-proxy-blue" && serving container'
-check "success: green also gets the CDN static mounts and the fd ulimit" \
+check "success: green also gets the CDN static mount and the fd ulimit" \
   'called "docker create --restart no --name blot-proxy-green --network host --cap-add SYS_NICE --ulimit nofile=65536:65536" \
-   && called "-v /var/www/blot/data/static:/var/www/blot/data/static:ro"'
+   && called "-v /var/www/blot/app/blog/static:/var/www/blot/app/blog/static:ro"'
 
 reset container; FAKE_UNHEALTHY=blot-proxy-green bluegreen
 check "new colour never healthy: old one is never stopped" '[ $RC != 0 ] && ! called "docker stop" && called "docker rm -f blot-proxy-green" && serving container'
