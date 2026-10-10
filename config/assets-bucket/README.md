@@ -47,6 +47,13 @@ with `--env-file`; see `config/environment.sh` for the full list), then deploy:
 | `BLOT_ASSETS_READ` | `disk` (the default) or `s3`. Where reads look first; the other is the fallback. |
 | `BLOT_ASSETS_ENDPOINT` | Only for a simulated S3 (MinIO) in development and tests. |
 
+**Why a key and not an instance profile.** The containers can't reach the
+host's instance credentials unless the metadata service's hop limit is raised
+to 2, which the app host deliberately doesn't do (`config/airlock/README.md`):
+a request forgery in the app could then read role credentials that can write
+and delete the public bucket. A key scoped to this bucket gives the app the
+same access without that exposure. See `app/storage/README` §3.
+
 With a bucket set, every new asset is written to disk and uploaded, and
 deletes remove both. While `BLOT_ASSETS_READ=disk`, a failed upload or delete
 is logged and doesn't fail the operation; grep the app logs for

@@ -98,8 +98,8 @@ at sync/build time instead.
   of this doc.
 - **Code against the S3 API subset B2 also supports**, so B2 can become
   the primary store later. What that rules out, and other B2 differences:
-  - No object tagging, storage classes or IAM roles (EC2 hosts would
-    hold a static B2 application key).
+  - No object tagging, storage classes or IAM roles (hosts would hold a
+    static B2 application key).
   - Versioning is always on: a delete only hides the object, so a
     lifecycle rule is needed for deletes to free space.
   - Lifecycle rules are B2-native (`daysFromHidingToDeleting`), not S3's.
@@ -119,8 +119,21 @@ at sync/build time instead.
   from one bucket; live multi-region storage replication would add
   cross-region conflict-resolution risk the current single-writer-per-blog
   lock isn't built to handle.
-- **One IAM role**, not scoped per prefix — revisit only if a concrete need
-  for narrower blast radius shows up.
+- **One IAM user for the app**, scoped to the assets bucket and not to
+  prefixes — revisit only if a concrete need for narrower blast radius shows
+  up.
+- **Credentials: a static IAM user key, not the host's instance profile.** The
+  app containers use a key scoped to the assets bucket
+  (`BLOT_AWS_KEY`/`BLOT_AWS_SECRET`). Reaching instance credentials from a
+  container on Docker's bridge network needs the metadata service's hop limit
+  raised to 2, and the app host keeps it at 1 (`config/airlock/README.md`) so
+  a server-side request forgery in the app can't read role credentials, which
+  here could write and delete the public bucket. A scoped key in the host's
+  env file grants the same access without that exposure, and B2 (if it
+  becomes primary) has no roles anyway. Jobs that run on the host itself (e.g.
+  the Redis backups, a future B2 sync) can use an instance profile. The SDK
+  falls back to the default provider chain when the key isn't set, so this is
+  a deployment choice, not code.
 - **Separate bucket per environment** (dev/staging/prod).
 - **Dev/test: MinIO** in the dev docker-compose stack (with a one-shot job
   that creates the bucket and sets the same public-read-on-`blog_*` policy as
