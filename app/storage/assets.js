@@ -472,7 +472,9 @@ async function serveS3(req, res, blogID, relPath, options) {
   var object = await fromS3(blogID, relPath, function () {
     return s3.open(s3.key(blogID, rel), {
       head: isHead,
-      range: req.headers.range,
+      // S3 can't answer several ranges in one GET; ignoring a multi-range
+      // header and sending the whole object (200) is valid HTTP
+      range: /,/.test(req.headers.range || "") ? undefined : req.headers.range,
       ifNoneMatch: req.headers["if-none-match"],
       ifModifiedSince: req.headers["if-modified-since"],
     });
