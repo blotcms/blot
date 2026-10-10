@@ -1,3 +1,7 @@
+S3 assets (#2111 waits on both):
+- Bunny: add the blot-storage-prod edge rule with the X-Blot-Origin: s3 test condition, run the checks in config/storage-bucket/README.md (#2111), then drop the test condition to go live
+- Back up blot-storage-prod off AWS (Backblaze B2, hourly, no --delete) before #2111 deletes data/static
+
 Bunny: decide Volume vs Standard tier (more PoPs, faster first byte far from Volume PoPs) once we've run the numbers on cost and latency; also why cache HIT is low (Statistics: status codes, top uncached URLs)
 
 Rewrite node deploy to wait for image after all the init steps to speed up runs
