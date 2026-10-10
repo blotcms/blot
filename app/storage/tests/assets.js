@@ -124,10 +124,7 @@ describe("storage/assets", function () {
         function () { return assets.write(id, "folder/a.txt", "x"); },
         function () { return assets.write(id, "/git/config", "x"); },
         function () { return assets.writeFrom(id, "folder/a.txt", __filename); },
-        function () { return assets.read(id, "folder/a.txt"); },
-        function () { return assets.exists(id, "folder/a.txt"); },
         function () { return assets.list(id, "folder"); },
-        function () { return assets.ensureLocal(id, "folder/a.txt"); },
         function () { return assets.createReadStream(id, "folder/a.txt"); },
         function () { return assets.remove(id, "folder"); },
         function () { return assets.remove(id, "a.txt"); },
@@ -145,6 +142,26 @@ describe("storage/assets", function () {
       }
 
       expect(await fs.pathExists(assets.path(id, "_x"))).toBe(false);
+    });
+
+    it("treats a read outside the scope as a miss", async function () {
+      var id = this.blog.id;
+
+      expect(await assets.exists(id, "folder/a.txt")).toBe(false);
+
+      for (var call of [
+        function () { return assets.read(id, "folder/a.txt"); },
+        function () { return assets.ensureLocal(id, "/folder/a.txt"); },
+      ]) {
+        var error;
+        try {
+          await call();
+        } catch (err) {
+          error = err;
+        }
+        expect(error instanceof assets.NotFoundError).toBe(true);
+        error = undefined;
+      }
     });
 
     it("still allows the blog's root directory where it names the scope itself", async function () {

@@ -595,10 +595,11 @@ describe("storage/assets with an S3 bucket", function () {
       for (var order of ["disk", "s3"]) {
         config.assets.read = order;
 
+        expect(await assets.exists(id, "folder/x")).toBe(false);
+        expect((await rejection(assets.read(id, "folder/x"))) instanceof assets.NotFoundError).toBe(true);
+        expect((await rejection(assets.ensureLocal(id, "folder/x"))) instanceof assets.NotFoundError).toBe(true);
+
         for (var call of [
-          function () { return assets.read(id, "folder/x"); },
-          function () { return assets.exists(id, "folder/x"); },
-          function () { return assets.ensureLocal(id, "folder/x"); },
           function () { return assets.remove(id, "folder"); },
           function () { return assets.write(id, "folder/z", "z"); },
         ]) {

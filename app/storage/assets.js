@@ -68,6 +68,19 @@ class OutOfScopeError extends Error {
   }
 }
 
+// For the read-style functions: a relPath outside the assets scope names
+// something which isn't an asset, so it's a miss (NotFoundError) rather than
+// an error. Callers like the Transformer probe arbitrary paths here before
+// falling back to the blog's folder.
+function inScope(blogID, relPath) {
+  try {
+    path(blogID, relPath);
+  } catch (err) {
+    if (err instanceof OutOfScopeError) throw notFound(blogID, relPath, err);
+    throw err;
+  }
+}
+
 // Builds an absolute local path inside a blog's asset directory. With no
 // segments (or segments which resolve to the directory itself) this returns
 // the directory. Throws if the joined path would resolve outside of it (e.g.
@@ -280,6 +293,8 @@ async function writeFrom(blogID, relPath, srcPath, options) {
 }
 
 async function read(blogID, relPath) {
+  inScope(blogID, relPath);
+
   return fromSources(
     blogID,
     relPath,
@@ -302,6 +317,13 @@ async function read(blogID, relPath) {
 }
 
 async function exists(blogID, relPath) {
+  try {
+    inScope(blogID, relPath);
+  } catch (err) {
+    if (err instanceof NotFoundError) return false;
+    throw err;
+  }
+
   try {
     return await fromSources(
       blogID,
@@ -512,6 +534,8 @@ async function download(blogID, relPath) {
 // delete it. A file which is only in S3 is downloaded to a cache in the tmp
 // directory (never into the static files directory).
 async function ensureLocal(blogID, relPath) {
+  inScope(blogID, relPath);
+
   var local = path(blogID, relPath);
 
   return fromSources(
@@ -693,12 +717,7 @@ async function serve(req, res, blogID, relPath, options) {
   // Throws if relPath tries to leave the blog's asset directory. A path
   // outside the assets scope (e.g. /blog_x/folder/a.txt on the CDN) is not an
   // asset, so it's a plain miss whatever is in the bucket or on disk.
-  try {
-    path(blogID, relPath);
-  } catch (err) {
-    if (err instanceof OutOfScopeError) throw notFound(blogID, relPath, err);
-    throw err;
-  }
+  inScope(blogID, relPath);
 
   return fromSources(
     blogID,
