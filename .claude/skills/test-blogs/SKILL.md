@@ -43,7 +43,9 @@ Names must be unique and recognisable: prefix everything `skilltest-{unix timest
 (e.g. `skilltest-1760000000/post.md`) so cleanup is a glob. Keep it small and
 write only what the question needs:
 
-- Markdown post (`# Title` and a paragraph): fastest; exercises sync, build, render.
+- Markdown post: fastest; exercises sync, build, render. Put `Title: Skilltest {ts}`
+  and `Link: skilltest-{ts}` metadata lines at the top so the post is at a
+  known URL, `/skilltest-{ts}`.
 - Post with a JPEG/PNG (from anywhere on disk, copied in beside the post and
   referenced `![alt](photo.jpg)`): exercises `_image_cache` and `_thumbnails`
   (thumbnails need the image in the post body or a `Thumbnail:` metadata line).
@@ -59,21 +61,30 @@ Dropbox, Drive, iCloud: `mkdir -p` a `skilltest-{ts}` folder in the blog's
 folder above and copy the files in.
 
 If a copy fails with "Operation not permitted", macOS privacy controls (TCC)
-are blocking the shell from the cloud folder. Do not work around it: tell the
-operator to grant the Claude app Full Disk Access (System Settings, Privacy &
-Security) and restart Claude.
+are blocking the shell from the cloud folder. Do not work around it. The
+process macOS holds responsible is not Claude.app but the Claude Code binary
+it bundles (a `disclaimer` helper starts it), at a versioned path; find it
+with `ps -o pid=,ppid=,comm= -p <pid>` up the chain from `$$`, e.g.
+`~/Library/Application Support/Claude/claude-code/<version>/<hash>/claude.app`.
+Ask the operator to add that `claude.app` under System Settings → Privacy &
+Security → Full Disk Access (⌘⇧G to paste the path) and restart Claude. The
+grant follows the version, so it needs redoing after a Claude Code update.
 
 Git: the remote URL, with credentials, is the single line of
-`data/test-blogs/gittest-remote` (gitignored; the operator creates it once).
+`~/.config/blot/test-blogs/gittest-remote` (mode 600, outside every checkout so
+any worktree's session finds it; the email in the URL is written `%40`). The
+operator creates it once.
 If the file is missing, tell the operator to create it; never ask for
 credentials in chat. Never print, log or echo the URL.
 
 ```
-git clone "$(cat data/test-blogs/gittest-remote)" "$SCRATCH/gittest" >/dev/null 2>&1
-cd "$SCRATCH/gittest"   # SCRATCH = session scratchpad, REPO = the repo root
+R=~/.config/blot/test-blogs/gittest-remote
+git clone -q "$(cat $R)" "$SCRATCH/gittest" >/dev/null 2>&1   # SCRATCH = session scratchpad
+cd "$SCRATCH/gittest"
 # add skilltest-{ts}/..., then:
-git add -A && git commit -qm "skilltest-{ts}"
-git -c credential.helper= push -q "$(cat $REPO/data/test-blogs/gittest-remote)" HEAD 2>&1 | sed 's#https\?://[^ ]*#<remote>#g'
+git add -A && git -c user.name=skilltest -c user.email=skilltest@localhost commit -qm "skilltest-{ts}"
+git -c credential.helper= push -q "$(cat $R)" HEAD 2>&1 | sed 's#https\?://[^ ]*#<remote>#g'
+git ls-remote "$(cat $R)" HEAD 2>&1 | sed 's#https\?://[^ ]*#<remote>#g' | cut -c1-12   # matches `git rev-parse HEAD`?
 ```
 
 Redirect or redact all git output, since errors can echo the remote URL. Do
@@ -83,8 +94,8 @@ not run `git remote -v`, `git config --list` or `set -x`.
 
 1. **Public page.** Poll `https://{handle}.blot.im/{post-url}` (or the homepage,
    or `/search?q={ts}`) every few seconds with a timeout until the title appears.
-   Typical: Dropbox/Drive seconds, iCloud tens of seconds to a minute or two,
-   git immediate after the push. No result within a few minutes is a finding;
+   Seen 10 Oct 2026: Dropbox ~6s, iCloud ~8s, Drive ~20s, git within
+   seconds of the push (removals similar). No result within a few minutes is a finding;
    check the sync client rather than waiting longer.
 2. **Asset URLs.** From the HTML, extract CDN URLs (`https://cdn.blot.im/blog_.../...`)
    and blog-domain `/_assets/`, `/_image_cache/`, `/_thumbnails/` URLs. `curl -sI`
@@ -134,3 +145,9 @@ Newest last. Add one dated entry per run.
 - Result: …
 - Odd: …
 ```
+
+### 2026-10-10 — first run: image post on all four blogs (after PR #2109)
+- Blogs / content: `skilltest-1791618418/post.md` + `photo.png` (a 1024×768 PNG) on dbtest, drivetest, icloudtest, gittest.
+- Result: live after dbtest 6s, icloudtest 8s, drivetest 20s, gittest <15s. Each post's `_image_cache` image and `large` thumbnail returned 200 `image/png` `max-age=31536000` from cdn.blot.im. `ls` on prod found the cached image and all four thumbnail sizes in `data/static/<blogID>/`. Cleanup: gone after 5-28s.
+- Odd: TCC needed Full Disk Access on the bundled, versioned Claude Code `claude.app`, not Claude.app. The zsh shell has no `PIPESTATUS`, so push success is checked with `ls-remote`. `inspect.js` is not deployed yet, so verification used the `ls` fallback.
+
