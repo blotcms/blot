@@ -38,8 +38,10 @@ if [ -z "$BUCKET" ]; then
   exit 2
 fi
 
-if ! [[ "$BUCKET" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]]; then
-  echo "'$BUCKET' isn't a valid bucket name" >&2
+# No dots: Bunny reaches the bucket at https://<bucket>.s3.<region>.amazonaws.com,
+# and S3's wildcard certificate doesn't cover dotted bucket names
+if ! [[ "$BUCKET" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; then
+  echo "'$BUCKET' isn't a valid bucket name (lowercase letters, digits and hyphens; no dots)" >&2
   exit 2
 fi
 
