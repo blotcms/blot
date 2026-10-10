@@ -221,7 +221,7 @@ Global static directories served with a one-year `Cache-Control` header (from `l
 
 Additional global files: `/html2canvas.min.js`, `/layout.css`.
 
-Blog-specific static paths served from `config.blog_static_files_dir/{blogID}`:
+Blog-specific static paths served from the storage bucket (`storage/assets`, key `{blogID}/{path}`):
 - `/_assets` — Processed entry assets.
 - `/_avatars` — Avatar images.
 - `/_bookmark_screenshots` — Bookmark preview images.
@@ -304,7 +304,7 @@ The blog module reads the following values from `config`:
 - `config.cache` — When truthy, enables one-year `Cache-Control` headers for JS and CSS view responses.
 - `config.cdn.origin` — CDN base URL used by `lookupFile.js` and `cdn.js`.
 - `config.blog_folder_dir` — Base path for blog file folders on disk.
-- `config.blog_static_files_dir` — Base path for processed blog static assets on disk.
+- `config.storage` — The storage bucket (`storage/assets`) that holds processed blog static assets.
 - `config.blot_directory` — Absolute path to the Blot application root, used to locate `app/blog/static`.
 
 ## Testing

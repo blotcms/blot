@@ -105,6 +105,40 @@ describe("scheduler prune-tmp", function () {
     });
   });
 
+  describe("staged assets", function () {
+    const staged = (root, relative) =>
+      root + "/storage-assets-staging/blog_1/" + relative;
+
+    it("keeps files being staged for a week, judging each file and not its directory", async function () {
+      await write(this.tmp, "storage-assets-staging/blog_1/_thumbnails/a/small.jpg", 3 * DAY);
+      await write(this.tmp, "storage-assets-staging/blog_1/_thumbnails/b/small.jpg", 8 * DAY);
+
+      // neither the staging root nor the blog's directory is judged on its own age
+      const then = new Date(Date.now() - 30 * DAY);
+      await fs.utimes(this.tmp + "/storage-assets-staging", then, then);
+      await fs.utimes(this.tmp + "/storage-assets-staging/blog_1", then, then);
+
+      await this.run();
+
+      expect(await exists(staged(this.tmp, "_thumbnails/a/small.jpg"))).toBe(true);
+      expect(await exists(staged(this.tmp, "_thumbnails/b/small.jpg"))).toBe(false);
+    });
+
+    it("removes old empty directories but not new ones or the root", async function () {
+      await fs.ensureDir(staged(this.tmp, "_assets/old"));
+      await fs.ensureDir(staged(this.tmp, "_assets/new"));
+
+      const then = new Date(Date.now() - 8 * DAY);
+      await fs.utimes(staged(this.tmp, "_assets/old"), then, then);
+
+      await this.run();
+
+      expect(await exists(staged(this.tmp, "_assets/old"))).toBe(false);
+      expect(await exists(staged(this.tmp, "_assets/new"))).toBe(true);
+      expect(await exists(this.tmp + "/storage-assets-staging")).toBe(true);
+    });
+  });
+
   it("copes with a tmp directory that does not exist yet", async function () {
     await fs.remove(this.tmp);
 

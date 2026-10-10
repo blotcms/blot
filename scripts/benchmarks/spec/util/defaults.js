@@ -92,7 +92,7 @@ const BENCHMARK_DEFAULTS = Object.freeze({
   // "build": generate the workload (using whatever sites/files/distribution
   // is configured, typically the big skewed corpus) and rebuild every site,
   // then stop - used by build-corpus.js, which takes over from there to
-  // snapshot Redis + data/blogs + data/static.
+  // snapshot Redis + data/blogs.
   // "render": skip workload generation and blog.rebuild() entirely and just
   // run the render + burst phases against blogs that already exist (loaded
   // from a corpus manifest) - used by benchmarks-render.yml against a
@@ -103,7 +103,7 @@ const BENCHMARK_DEFAULTS = Object.freeze({
   corpusManifestPath: ".benchmarks/corpus/manifest.json",
   // Bump whenever the *shape* of the corpus produced by build-corpus.js
   // changes (site/post/tag/media distribution, symlink layout, etc) - this
-  // invalidates the cached Redis dump + data/blogs + data/static tarballs
+  // invalidates the cached Redis dump + data/blogs tarball
   // independently of historySchemaVersion, which only tracks metric
   // definitions for the render/build benchmark itself.
   corpusSchemaVersion: 1,

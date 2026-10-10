@@ -1,7 +1,7 @@
 var Blog = require("models/blog");
 var fs = require("fs-extra");
 var BLOGS_DIRECTORY = require("config").blog_folder_dir;
-var STATIC_DIRECTORY = require("config").blog_static_files_dir;
+var s3 = require("storage/s3");
 
 var tmp = require("helper/tempDir")();
 var async = require("async");
@@ -14,12 +14,23 @@ if (require.main === module)
     process.exit();
   });
 
+// The blog IDs which have objects in the storage bucket, i.e. its top-level
+// "folders" (blog_*/). Reported only, never moved or deleted.
+async function listAssetPrefixes() {
+  const blogIDs = [];
+
+  for await (const entry of s3.listEntries("", "/")) {
+    if (entry.prefix) blogIDs.push(entry.prefix.replace(/\/$/, ""));
+  }
+
+  return blogIDs;
+}
+
 function main(callback) {
   Blog.getAllIDs(function (err, ids) {
     if (err) return callback(err);
 
     const blogs_directory_contents = fs.readdirSync(BLOGS_DIRECTORY);
-    const static_directory_contents = fs.readdirSync(STATIC_DIRECTORY);
 
     const strayFolders = [];
 
@@ -33,35 +44,35 @@ function main(callback) {
         });
     });
 
-    static_directory_contents.forEach((folder) => {
-      if (folder.endsWith(".lock")) return;
-
-      if (!ids.includes(folder))
-        strayFolders.push({
-          from: STATIC_DIRECTORY + "/" + folder,
-          to: tmp + folder,
-        });
-    });
-
     console.log(
       `There are ${strayFolders.length} folders without a corresponding blog in the db`
     );
 
     console.log(strayFolders);
 
-    async.eachSeries(
-      strayFolders,
-      function ({ from, to }, next) {
-        getConfirmation(
-          "Move?" + colors.dim("\nFrom: " + from + "\n. To: " + to),
-          function (err, ok) {
-            if (!ok) return next();
-            console.log("Moving");
-            fs.move(from, to, next);
-          }
-        );
-      },
-      callback
-    );
+    listAssetPrefixes().then(function (prefixes) {
+      const strayAssets = prefixes.filter((blogID) => !ids.includes(blogID));
+
+      console.log(
+        `There are ${strayAssets.length} blogs with assets in the bucket but no ` +
+          "corresponding blog in the db (reported only, not moved):"
+      );
+      console.log(strayAssets);
+
+      async.eachSeries(
+        strayFolders,
+        function ({ from, to }, next) {
+          getConfirmation(
+            "Move?" + colors.dim("\nFrom: " + from + "\n. To: " + to),
+            function (err, ok) {
+              if (!ok) return next();
+              console.log("Moving");
+              fs.move(from, to, next);
+            }
+          );
+        },
+        callback
+      );
+    }, callback);
   });
 }

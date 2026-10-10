@@ -6,8 +6,8 @@ describe("cdn serving a blog's assets", function () {
   const fetch = require("node-fetch");
   const assets = require("storage/assets");
   const config = require("config");
-  const fs = require("fs-extra");
-  const { join } = require("path");
+  const s3 = require("storage/s3");
+  const { PutObjectCommand } = require("@aws-sdk/client-s3");
   let server, origin;
 
   beforeEach(function (done) {
@@ -70,46 +70,28 @@ describe("cdn serving a blog's assets", function () {
     }
   });
 
-  it("responds 404 for a path outside the assets scope, even one which exists", async function () {
-    await fs.outputFile(assets.path(this.blog.id, "_assets/a.txt"), "a");
-    await fs.outputFile(
-      join(config.blog_static_files_dir, this.blog.id, "folder/a.txt"),
-      "not an asset"
-    );
-
-    for (const path of ["/folder/a.txt", "/folder", "/a.txt"]) {
-      expect((await fetch(origin + "/" + this.blog.id + path)).status).toBe(404);
-    }
-  });
-
-  describe("with a bucket", function () {
-    const s3 = require("storage/s3");
-    const { PutObjectCommand } = require("@aws-sdk/client-s3");
-
-    require("./minio")();
-
-    it("responds 404 for /blog_x/folder/a.txt although the bucket has that object", async function () {
+  it("responds 404 for a path outside the assets scope, although the bucket has the object", async function () {
+    for (const key of ["folder/a.txt", "top.txt"]) {
       await s3.client().send(
         new PutObjectCommand({
           Bucket: config.storage.bucket,
-          Key: this.blog.id + "/folder/a.txt",
+          Key: this.blog.id + "/" + key,
           Body: Buffer.from("folder content"),
         })
       );
-      await assets.write(this.blog.id, "_assets/a.txt", "asset");
+    }
 
-      for (const order of ["disk", "s3"]) {
-        config.assets.read = order;
+    await assets.write(this.blog.id, "_assets/a.txt", "asset");
 
-        const res = await fetch(origin + "/" + this.blog.id + "/folder/a.txt");
-        expect(res.status).toBe(404);
-        expect(await res.text()).not.toContain("folder content");
+    for (const path of ["/folder/a.txt", "/folder", "/a.txt", "/top.txt"]) {
+      const res = await fetch(origin + "/" + this.blog.id + path);
+      expect(res.status).toBe(404);
+      expect(await res.text()).not.toContain("folder content");
+    }
 
-        const asset = await fetch(origin + "/" + this.blog.id + "/_assets/a.txt");
-        expect(asset.status).toBe(200);
-        expect(await asset.text()).toBe("asset");
-      }
-    });
+    const asset = await fetch(origin + "/" + this.blog.id + "/_assets/a.txt");
+    expect(asset.status).toBe(200);
+    expect(await asset.text()).toBe("asset");
   });
 
   it("does not serve dotfiles", async function () {

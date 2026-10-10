@@ -110,7 +110,6 @@ jobs:
           path: |
             ${{ env.CORPUS_DIR }}/redis-dump.rdb
             ${{ env.CORPUS_DIR }}/blogs.tar.gz
-            ${{ env.CORPUS_DIR }}/static.tar.gz
             ${{ env.CORPUS_DIR }}/manifest.json
           key: benchmark-corpus-v${{ env.CORPUS_SCHEMA_VERSION }}-nonexistent
           restore-keys: |
@@ -132,7 +131,7 @@ jobs:
         id: corpus-check
         run: |
           available=true
-          for f in redis-dump.rdb blogs.tar.gz static.tar.gz manifest.json; do
+          for f in redis-dump.rdb blogs.tar.gz manifest.json; do
             if [ ! -s "$CORPUS_DIR/$f" ]; then
               available=false
             fi
@@ -172,9 +171,8 @@ jobs:
       - name: Extract corpus data directories
         if: steps.corpus-check.outputs.available == 'true'
         run: |
-          mkdir -p .benchmarks/corpus/data/blogs .benchmarks/corpus/data/static
+          mkdir -p .benchmarks/corpus/data/blogs
           tar -xzf "$CORPUS_DIR/blogs.tar.gz" -C .benchmarks/corpus/data
-          tar -xzf "$CORPUS_DIR/static.tar.gz" -C .benchmarks/corpus/data
 
       - name: Mark PR benchmark comment as running
         if: steps.corpus-check.outputs.available == 'true' && github.event_name == 'pull_request'
@@ -186,6 +184,12 @@ jobs:
             --sha "$HEAD_SHA" \
             --comment-tag render \
             --title "Render benchmark (large corpus)"
+
+      # The app needs a storage bucket to start serving; nothing the render
+      # benchmark requests is in it
+      - name: Start MinIO
+        if: steps.corpus-check.outputs.available == 'true'
+        uses: ./.github/actions/start-minio
 
       - name: Restore render benchmark history
         if: steps.corpus-check.outputs.available == 'true'
@@ -218,6 +222,11 @@ jobs:
             -e BLOT_REDIS_HOST=localhost \
             -e BLOT_HOST=localhost \
             -e BLOT_PROTOCOL=https \
+            -e BLOT_STORAGE_BUCKET \
+            -e BLOT_STORAGE_ENDPOINT \
+            -e BLOT_STORAGE_REGION \
+            -e BLOT_AWS_KEY \
+            -e BLOT_AWS_SECRET \
             -e GITHUB_SHA=${{ github.sha }} \
             -v ${{ github.workspace }}/app:/usr/src/app/app \
             -v ${{ github.workspace }}/scripts:/usr/src/app/scripts \

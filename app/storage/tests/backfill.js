@@ -13,7 +13,7 @@ describe("storage/backfill", function () {
 
   var lines;
 
-  // A directory of blogs' assets like blog_static_files_dir
+  // A directory of blogs' assets: blog_*/{path}
   async function populate(directory) {
     await fs.outputFile(join(directory, "blog_a/_thumbnails/x/small.jpg"), "small");
     await fs.outputFile(join(directory, "blog_a/_avatars/me.png"), "avatar");
@@ -48,7 +48,7 @@ describe("storage/backfill", function () {
 
   // so the test blog can be removed (its assets are deleted from the bucket)
   afterEach(function () {
-    config.storage.endpoint = process.env.BLOT_TEST_S3_ENDPOINT;
+    config.storage.endpoint = process.env.BLOT_STORAGE_ENDPOINT;
     s3.reset();
   });
 
@@ -266,10 +266,19 @@ describe("storage/backfill", function () {
   it("counts errors and carries on", async function () {
     var directory = this.directory;
 
+    var endpoint = config.storage.endpoint;
+    var stats;
+
     config.storage.endpoint = "http://127.0.0.1:1";
     s3.reset();
 
-    var stats = await run.call(this);
+    try {
+      stats = await run.call(this);
+    } finally {
+      // so the test blog can be cleaned up
+      config.storage.endpoint = endpoint;
+      s3.reset();
+    }
 
     // one failed listing for each blog
     expect(stats.errors).toEqual(3);

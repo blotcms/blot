@@ -14,8 +14,6 @@
 #   PROXY_LOG_DIR          /var/instance-ssd/logs   fail2ban and logrotate
 #                                               read the access log here
 #   PROXY_CERT_DIR         /etc/ssl/private     wildcard cert + key (read-only)
-#   PROXY_BLOG_STATIC_DIR  /var/www/blot/data/static  per-blog static files
-#                                               (thumbnails, etc), read-only (see run_args())
 #   PROXY_GLOBAL_STATIC_DIR /var/www/blot/app/blog/static  the app's own static
 #                                               assets, read-only (see run_args())
 #   PROXY_AUTOSSL_VOLUME   blot-proxy-auto-ssl  dehydrated account state
@@ -45,7 +43,6 @@ ENV_FILE="${PROXY_ENV_FILE:-/etc/blot/proxy.env}"
 CACHE_DIR="${PROXY_CACHE_DIR:-/var/instance-ssd/cache}"
 LOG_DIR="${PROXY_LOG_DIR:-/var/instance-ssd/logs}"
 CERT_DIR="${PROXY_CERT_DIR:-/etc/ssl/private}"
-BLOG_STATIC_DIR="${PROXY_BLOG_STATIC_DIR:-/var/www/blot/data/static}"
 GLOBAL_STATIC_DIR="${PROXY_GLOBAL_STATIC_DIR:-/var/www/blot/app/blog/static}"
 AUTOSSL_VOLUME="${PROXY_AUTOSSL_VOLUME:-blot-proxy-auto-ssl}"
 NODE_CONTAINER="${PROXY_NODE_CONTAINER:-blot-container-blue}"
@@ -168,12 +165,10 @@ run_args() { # run_args <name>
     -v "$LOG_DIR":/var/log/openresty
     -v "$AUTOSSL_VOLUME":/etc/resty-auto-ssl
     -v "$CERT_DIR":/etc/ssl/private:ro
-    # Mounted at the same paths the image defaults to
-    # (BLOG_STATIC_FILES_DIR / GLOBAL_STATIC_FILES_DIR in
-    # proxy/build/locals.js), so `try_files` on cdn.<host> finds files on
-    # disk instead of falling through to @cdn_node, which misses the
-    # Cache-Control/CORS headers `location /` sets.
-    -v "$BLOG_STATIC_DIR":/var/www/blot/data/static:ro
+    # Mounted at the path the image defaults to (GLOBAL_STATIC_FILES_DIR in
+    # proxy/build/locals.js), so `try_files` on cdn.<host> finds the app's
+    # own static files on disk instead of falling through to @cdn_node,
+    # which misses the Cache-Control/CORS headers `location /` sets.
     -v "$GLOBAL_STATIC_DIR":/var/www/blot/app/blog/static:ro
   )
 }

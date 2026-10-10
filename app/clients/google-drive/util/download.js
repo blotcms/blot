@@ -159,9 +159,7 @@ const downloadGoogleDocAsZip = async ({
         const srcPath = join(imagesDir, name);
         const st = await fs.stat(srcPath);
         if (st.isFile()) {
-          await assets.writeFrom(blogID, assetDir + "/" + name, srcPath, {
-            overwrite: true,
-          });
+          await assets.writeFrom(blogID, assetDir + "/" + name, srcPath);
         }
       }
     }

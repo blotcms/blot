@@ -80,10 +80,7 @@ module.exports = async (req, res, next) => {
   const assetPath = `_template_assets/${filename}`;
 
   try {
-    await assets.writeFrom(req.blog.id, assetPath, file.path, {
-      move: true,
-      overwrite: true,
-    });
+    await assets.writeFrom(req.blog.id, assetPath, file.path, { move: true });
     await cleanupFiles(files);
   } catch (err) {
     await cleanupFiles(files);

@@ -12,8 +12,7 @@ Should we do a hybrid static build into s3 for blog HTML JS and CSS only?
 
 Data volume follow-ups (shrunk to gp3 on 9 Oct with config/host/data-volume/resize.sh; see the data-volume skill):
 - From 16 Oct: delete the 8 snapshots of the old data volume vol-0a2e04d301e025e60 (deleted 9 Oct): the pre-resize snapshot snap-0e4fdce70e58e0da6 (the rollback until then) and the 7 daily DLM ones, which the policy stopped managing when the volume lost its Name tag
-- Migrate static content to S3, then shrink the volume again with resize.sh
-- Have resize.sh shrink redeploy the proxy itself (its data/static bind does not follow a swap)
+- After the S3 assets cutover deploys: delete data/static on the host, then shrink the data volume with resize.sh
 - Can we test my assumption that the ephemeral instance store hard disk is faster than EBS discs?
 
 disk alerts emails add 
@@ -28,7 +27,6 @@ adjust disk resize script to autosuggest values on run without args
 harden app against full  disk
 
 Our AWS bill is high because we have run out of reserved instance. Decide on the plan.
-- switch over static files to s3
 - can we have multiple smaller webservers with load balancing? 
 - Should we move to a single, AWS instance and make redis a container as well? This may be makes deployment harder perhaps we should consider moving to three AWS instances one for proxy one for node and one for redis we could still consider using a container on the redis instance? 
 - Safely and very carefully switch AWS account root user email to @blot.im
@@ -44,10 +42,11 @@ Redis host follow-ups (from #2041, new host since 8 Oct):
 - Offsite Redis backups (e.g. Backblaze B2) alongside S3, so a lost AWS account or region doesn't take the backups with it: upload from config/redis/bin/backup.sh, and let launch.sh/restore.sh restore from B2 too (#2041)
 - Consider dropping Redis client-side caching (CLIENT TRACKING) in favour of the app's in-process LRU caches: on prod 10 clients have tracking on and the server's tracking table sits at its 1M-key cap (tracking-table-max-keys), so Redis is constantly evicting entries and sending invalidations
 
+Image cache and thumbnails name some files after a slug that is still percent-encoded (literal %E8..., sometimes cut mid-sequence: ...-%E2.png, large.jpg%e2%80%9d) and build URLs without escaping, so those images 404/400 today: slug from the decoded name, then rebuild affected blogs (backfill --dry-run lists them)
 odt converter extracts every document's media into one shared _assets/media (image1.png etc. overwrite each other, served immutable): give it a per-document hash dir like docx
 
 Proxy container follow-ups (cut over 8 Oct 2026, #1941)
-- Check webhooks. SSE through the container, and that a known data/static file on cdn. has Cache-Control 1y and no Blot-Upstream
+- Check webhooks. SSE through the container, and that a known /blog_* asset on cdn. has Cache-Control 1y and no Blot-Upstream
 - After the next 03:46 logrotate: access.log/error.log still written after copytruncate, fail2ban counts still moving
 - After the next wildcard renewal (/home/ec2-user/renew-wildcard.log): container reloaded, served cert fingerprint matches /etc/ssl/private/letsencrypt-domain.pem
 - Custom-domain certs renew inside the container: none within ~20 days of expiry apart from domains that no longer point at Blot; identify-expiring-certs cron restarts the container cleanly
@@ -199,7 +198,7 @@ Fix performance bugs on various sites:
 
 Implement an abstract blog storage mechanism that will simulatenously make it possible to:
 - implement folder storage limits (include generated files in this amount?)
-- implement s3 storage for static generated assets (and then subsequently folder files)
+- implement s3 storage for folder files
 
 Fix benchmark build-corpus action issue
 
@@ -815,9 +814,8 @@ Testing:
 - [ ] how can we test the 'scheduler' functions? we ran into error where it was running twice
 
 Move from EBS to s3
-- Create abstract models/storage that could be used to eventually migrate blog data folders onto s3:
-  - 1. Add `app/storage/index.js` that exposes namespaced helpers (e.g., `storage.blogs.resolve(blogID, relativePath)`, `storage.blogs.readFile`, `storage.static.writeFile`) implemented with `fs-extra` and the existing `config.blog_folder_dir` / `config.blog_static_files_dir`.
-- Lower costs using s3 instead of EBS disks for static file storage
+- Extend app/storage (assets are done) with helpers for blog folders (`config.blog_folder_dir`) that could eventually migrate them onto s3
+- Lower costs using s3 instead of EBS disks for blog folders
 - Goal is cost reduction and improved scalability
   - should lower storage costs + transfer from $200/month to $20/month
   - no more charges for unused GB disk space
@@ -825,16 +823,9 @@ Move from EBS to s3
   - no issue of 'running out of space' which has taken down service multiple times
 - General considerations:
   - what s3 category to use? standard? 1 zone express? latency is important for some use-cases, e.g. blog folder
-  - the static files (e.g. thumbnails) are more long term infrequent access though (because of CDN)
   - do we re-organize how files are stored? one bucket per site?
   - make sure s3 versioning is disabled?
   - how to back up? maybe have a special bucket for blog folder data? everything else is downstream of the folder
-- Come up with plan for static files directory
-  - rewrite docx, odt, clients to use a temp dir, then
-  - create an abstract helper function which can be used to write files to static directory
-    - make this file also upload to s3
-    - write script to sync existing static files to s3
-  - we probably don't need a caching layer for static files since static files will end up in CDN storage after first request
 - Come up with plan for blog files directory
  - abstract write / read from blog directory
  - we probably need a caching layer using instance SSD as LRU cache of say 10GB

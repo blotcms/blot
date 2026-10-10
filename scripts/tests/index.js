@@ -272,6 +272,9 @@ registerGlobalTest();
 
 // get the number of keys in the database
 (async function ensureEmptyDatabase() {
+  // Every build and upload writes to the storage bucket
+  await require("./util/bucket")();
+
   let hasKeys = false;
 
   for await (const _ of client.scanIterator({ MATCH: "*", COUNT: 1 })) {

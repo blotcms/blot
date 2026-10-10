@@ -134,6 +134,23 @@ async function tmpDirectoryWritable({ config }) {
   return writable(config.tmp_directory);
 }
 
+// Generated assets live only in the storage bucket, so a container that can't
+// reach it (no bucket, wrong region or credentials) must not go live. Asking
+// for a key which isn't there proves the bucket, the credentials and
+// s3:GetObject together: it answers "not found", where a wrong bucket or
+// credentials is an error.
+async function storageBucket({ config }) {
+  const s3 = require("storage/s3");
+
+  s3.assertConfigured();
+
+  const missing = await s3.head("deploy-verify/does-not-exist");
+
+  if (missing) throw new Error("deploy-verify/does-not-exist exists in the storage bucket");
+
+  return `storage bucket ${config.storage.bucket} is reachable`;
+}
+
 async function diskSpace({ config }) {
   const stats = await fs.statfs(config.data_directory);
   const free = stats.bavail * stats.bsize;
@@ -244,6 +261,7 @@ module.exports = [
   { name: "blog folders match redis", run: dataDirectory },
   { name: "data directory writable", run: dataDirectoryWritable },
   { name: "tmp directory writable", run: tmpDirectoryWritable },
+  { name: "storage bucket reachable", run: storageBucket },
   { name: "disk space", run: diskSpace },
   { name: "pandoc", run: pandoc },
   { name: "git", run: git },

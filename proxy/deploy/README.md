@@ -23,10 +23,12 @@ The scripts read the host's settings from `/etc/blot/proxy.env`
 ([`proxy.env.example`](proxy.env.example)) and share [`common.sh`](common.sh).
 Paths default to the ones the bare-metal OpenResty used, which the host still has (`/var/instance-ssd/cache`,
 `/var/instance-ssd/logs`, `/etc/ssl/private`, and the `cdn.` static
-directories `/var/www/blot/data/static` and `/var/www/blot/app/blog/static`),
+directory `/var/www/blot/app/blog/static`),
 so a redeploy keeps the warm cache and
-`cdn.` requests are served from disk (with the `Cache-Control`/CORS headers of
-`location /`) instead of falling through to Node. Containers also get
+the app's own `cdn.` files are served from disk (with the `Cache-Control`/CORS headers of
+`location /`) instead of falling through to Node. Per-blog assets are not on
+the host: they live in the storage bucket, which the CDN fetches from directly
+and the app serves as a fallback. Containers also get
 `--ulimit nofile=65536:65536` (`PROXY_NOFILE`) - headroom above both the
 ~20000 fds `worker_connections 10000` can need (two fds per proxied
 connection) and the config's own `worker_rlimit_nofile 20480`

@@ -39,7 +39,7 @@ expect "custom domain / (default server)" "$(code -H 'Host: someblog.example' "$
 
 echo "cdn. static files"
 # integration.yml mounts a file under the global static dir; this proves
-# location @cdn_global in server.conf actually serves it from disk (with
+# location / on cdn. in server.conf actually serves it from disk (with
 # location /'s headers) rather than falling through to @cdn_node.
 expect "cdn. serves a file from the global static dir" \
   "$(code -H 'Host: cdn.localhost' "$HTTP/cdn-test.txt")" 200

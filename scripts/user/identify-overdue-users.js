@@ -1,14 +1,39 @@
 const each = require("../each/user");
 const child_process = require("child_process");
-const { blog_static_files_dir, blog_folder_dir } = require("config");
+const { blog_folder_dir } = require("config");
+const s3 = require("storage/s3");
 const prettySize = require("helper/prettySize");
 const fs = require("fs");
 
 let rolling_total = 0;
 
+// Bytes of everything stored for a blog in the storage bucket, summed over all
+// of its objects under {blogID}/. Today that is its generated assets (the
+// {blogID}/_*/ prefixes); once the blog's folder content is also stored under
+// {blogID}/folder/, this total includes it, so folderBytes below must stop
+// being added at that point.
+async function bucketBytes(blogID) {
+  let total = 0;
+
+  for await (const object of s3.listEntries(blogID + "/")) {
+    total += object.size;
+  }
+
+  return total;
+}
+
+function folderBytes(blogID) {
+  if (!fs.existsSync(`${blog_folder_dir}/${blogID}`)) return 0;
+
+  const folder_space_used = child_process
+    .execSync(`du -sb ${blog_folder_dir}/${blogID}`)
+    .toString();
+
+  return parseInt(folder_space_used.trim().split("\t")[0]);
+}
+
 each(
   function (user, next) {
-
     if (!user) {
       console.log("No user found, exiting.");
       return next();
@@ -17,41 +42,32 @@ each(
     if (
       user.isDisabled ||  (user.subscription && user.subscription.status === "unpaid")) {
 
-      let user_total = 0;
-      for (const blogID of user.blogs) {
+      (async function () {
+        let user_total = 0;
 
-        try {
-          const static_space_used = fs.existsSync(`${blog_static_files_dir}/${blogID}`) ?
-            child_process
-            .execSync(`du -sb ${blog_static_files_dir}/${blogID}`)
-            .toString() : "0\t0";
+        for (const blogID of user.blogs) {
+          try {
+            const static_space_used_in_bytes = await bucketBytes(blogID);
+            const folder_space_used_in_bytes = folderBytes(blogID);
 
-          const folder_space_used = fs.existsSync(`${blog_folder_dir}/${blogID}`) ?
-          
-          child_process
-            .execSync(`du -sb ${blog_folder_dir}/${blogID}`)
-            .toString() : "0\t0";
+            const total_kilo_bytes =
+              (static_space_used_in_bytes + folder_space_used_in_bytes) / 1000;
 
-          const static_space_used_in_bytes = parseInt(
-            static_space_used.trim().split("\t")[0]
-          );
-
-          const folder_space_used_in_bytes = parseInt(
-            folder_space_used.trim().split("\t")[0]
-          );
-
-          const total_kilo_bytes =
-            (static_space_used_in_bytes + folder_space_used_in_bytes) / 1000;
-
-          rolling_total += total_kilo_bytes;
-          user_total += total_kilo_bytes;
-        } catch (e) {
-          console.log("error", e);
+            rolling_total += total_kilo_bytes;
+            user_total += total_kilo_bytes;
+          } catch (e) {
+            console.log("error", e);
+          }
         }
-      }
 
-      console.log(prettySize(user_total), user.email, user.blogs.join(","));
+        console.log(prettySize(user_total), user.email, user.blogs.join(","));
+      })().then(function () {
+        next();
+      }, next);
+
+      return;
     }
+
     next();
   },
   function (err) {

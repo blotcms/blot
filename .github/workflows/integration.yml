@@ -72,7 +72,7 @@ jobs:
         run: |
           # A file under the image's default GLOBAL_STATIC_FILES_DIR
           # (proxy/build/locals.js), read-only, so checks.sh can prove
-          # cdn. serves it from disk (location @cdn_global in server.conf)
+          # cdn. serves it from disk (location / on cdn. in server.conf)
           # instead of falling through to the stub upstream.
           mkdir -p "$RUNNER_TEMP/global-static"
           echo -n "served from disk" > "$RUNNER_TEMP/global-static/cdn-test.txt"
