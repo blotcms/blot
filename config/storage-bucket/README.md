@@ -77,8 +77,11 @@ SafeHop on.
   Host header `cdn.blot.im`, Forward host header off, Verify origin SSL off,
   Follow redirects off, no middleware.
 - **Caching.** Smart Cache on; cache expiration overridden to 1 year; browser
-  cache "match server"; query string sort on; vary cache by URL query string;
-  cache error responses off (errors are not cached); strip response cookies
+  cache "match server"; query string sort on; vary cache by URL query string,
+  limited to the `version` parameter (the only one CDN URLs use, as the
+  fonts' cache-buster; no CDN route reads the query string, so other
+  parameters only fragmented the cache); cache error responses on (errors
+  held for 5 s); strip response cookies
   on; optimize for large object delivery on; stale cache while origin offline
   and while updating.
 - **Perma-Cache** on, storage zone `blot-cdn-storage`. It serves any object it
