@@ -20,10 +20,17 @@ echo "Running tests in path: $TEST_PATH with args: $RUNNER_ARGS"
 # Unique run ID so multiple invocations can run in parallel (containers named per run)
 BLOT_TEST_ID="${BLOT_TEST_ID:-blot-test-$$-${RANDOM}}"
 REDIS_CONTAINER="test-redis-${BLOT_TEST_ID}"
+MINIO_CONTAINER="test-minio-${BLOT_TEST_ID}"
 TEST_CONTAINER="test-runner-${BLOT_TEST_ID}"
 
 # Image names
 REDIS_IMAGE="redis:alpine"
+# MinIO stands in for S3 in app/storage/tests/s3.js. MinIO no longer publishes
+# images itself; this is a pinned build of the upstream release. Keep it in
+# step with .github/workflows/node.yml and scripts/development/docker-compose.yml
+MINIO_IMAGE="alpine/minio:RELEASE.2025-10-15T17-29-55Z"
+MINIO_USER="blot-test"
+MINIO_PASSWORD="blot-test-secret"
 TEST_IMAGE="blot-tests"
 
 # Paths (adjust as needed)
@@ -33,7 +40,7 @@ CONFIG_DIR=$(realpath "$TESTS_DIR/../../config")
 TEST_ENV_FILE="$TESTS_DIR/test.env"
 
 # Stop and remove any existing containers
-docker rm -f $REDIS_CONTAINER $TEST_CONTAINER 2>/dev/null || true
+docker rm -f $REDIS_CONTAINER $MINIO_CONTAINER $TEST_CONTAINER 2>/dev/null || true
 
 # Create test.env if it doesn't exist
 if [ ! -f "$TEST_ENV_FILE" ]; then
@@ -46,6 +53,16 @@ docker run -d \
   --rm \
   $REDIS_IMAGE \
   sh -c "rm -f /data/dump.rdb && redis-server"
+
+# Start MinIO container (as root so it can write to /data)
+docker run -d \
+  --name $MINIO_CONTAINER \
+  --rm \
+  --user root \
+  -e MINIO_ROOT_USER=$MINIO_USER \
+  -e MINIO_ROOT_PASSWORD=$MINIO_PASSWORD \
+  $MINIO_IMAGE \
+  server /data
 
 # Build the test image. The Dockerfile needs TARGETPLATFORM to pick a
 # Pandoc architecture. BuildKit sets this automatically; the classic
@@ -66,12 +83,16 @@ docker build \
 docker run --rm \
   --name $TEST_CONTAINER \
   --link $REDIS_CONTAINER:redis \
+  --link $MINIO_CONTAINER:minio \
   --env-file "$TEST_ENV_FILE" \
   -e TEST_PATH="$TEST_PATH" \
   -e TEST_SEED="$TEST_SEED" \
   -e DEBUG="$DEBUG" \
   -e BLOT_REDIS_HOST="redis" \
   -e BLOT_HOST="localhost" \
+  -e BLOT_TEST_S3_ENDPOINT="http://minio:9000" \
+  -e BLOT_TEST_S3_KEY="$MINIO_USER" \
+  -e BLOT_TEST_S3_SECRET="$MINIO_PASSWORD" \
   -v "$APP_DIR:/usr/src/app/app" \
   -v "$TESTS_DIR:/usr/src/app/tests" \
   -v "$CONFIG_DIR:/usr/src/app/config" \
@@ -79,7 +100,7 @@ docker run --rm \
   sh -c "rm -rf /usr/src/app/data && mkdir /usr/src/app/data && node -v && npm -v && nyc --include $TEST_PATH node tests $TEST_PATH $RUNNER_ARGS"
 TEST_EXIT=$?
 
-# Stop Redis container
-docker stop $REDIS_CONTAINER 2>/dev/null || true
+# Stop Redis and MinIO containers
+docker stop $REDIS_CONTAINER $MINIO_CONTAINER 2>/dev/null || true
 
 exit $TEST_EXIT

@@ -210,9 +210,24 @@ module.exports = {
     secret: process.env.BLOT_YOUTUBE_SECRET,
   },
 
+  // Credentials for the S3 client in app/storage/s3.js. When these aren't
+  // set the AWS SDK's default provider chain is used instead.
   aws: {
     key: process.env.BLOT_AWS_KEY,
     secret: process.env.BLOT_AWS_SECRET,
+  },
+
+  // Object storage for generated per-blog assets (app/storage/assets.js).
+  // Keys are {blogID}/{path}, identical to the public CDN path.
+  assets: {
+    // When empty, assets live on local disk only.
+    bucket: process.env.BLOT_ASSETS_BUCKET || "",
+    region: process.env.BLOT_ASSETS_REGION || "us-west-2",
+    // Set to point at a simulated S3 (MinIO) in development and tests.
+    endpoint: process.env.BLOT_ASSETS_ENDPOINT || "",
+    // Where reads look first once a bucket is set: "disk" (falling back to
+    // the bucket) or "s3" (falling back to disk). Writes go to both.
+    read: process.env.BLOT_ASSETS_READ === "s3" ? "s3" : "disk",
   },
 
   mailgun: {

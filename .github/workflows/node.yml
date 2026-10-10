@@ -332,6 +332,32 @@ jobs:
           SAFE_SHARD=$(echo "${{ matrix.shard }}" | tr '/' '-')
           echo "name=coverage-${SAFE_SUITE}-${SAFE_SHARD}" >> "$GITHUB_OUTPUT"
 
+      # A simulated S3 for app/storage/tests/s3.js and backfill.js. GitHub
+      # service containers can't be given a command, which MinIO needs, so
+      # it's started by hand. MinIO no longer publishes images itself; this
+      # is a pinned build of the upstream release. Only the suite which uses
+      # it starts it. Its throwaway credentials mean nothing outside the job.
+      - name: Start MinIO
+        if: matrix.test_suite == 'app/storage'
+        run: |
+          docker run -d --name minio --network host --user root \
+            -e MINIO_ROOT_USER=blot-test \
+            -e MINIO_ROOT_PASSWORD=blot-test-secret \
+            alpine/minio:RELEASE.2025-10-15T17-29-55Z \
+            server /data --address :9000 --console-address :9001
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:9000/minio/health/live > /dev/null; then
+              echo "BLOT_TEST_S3_ENDPOINT=http://localhost:9000" >> "$GITHUB_ENV"
+              echo "BLOT_TEST_S3_KEY=blot-test" >> "$GITHUB_ENV"
+              echo "BLOT_TEST_S3_SECRET=blot-test-secret" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs minio
+          echo "MinIO did not become ready"
+          exit 1
+
       - name: Run tests - ${{ matrix.test_suite }} (shard ${{ matrix.shard }})
         env:
           BLOT_STRIPE_KEY: ${{ secrets.BLOT_STRIPE_KEY }}
@@ -354,6 +380,10 @@ jobs:
           docker run --rm \
             --network host \
             -e BLOT_REDIS_HOST=localhost \
+            -e BLOT_TEST_S3_REQUIRED=${{ matrix.test_suite == 'app/storage' && 'true' || '' }} \
+            -e BLOT_TEST_S3_ENDPOINT \
+            -e BLOT_TEST_S3_KEY \
+            -e BLOT_TEST_S3_SECRET \
             -e BLOT_STRIPE_KEY=$BLOT_STRIPE_KEY \
             -e BLOT_STRIPE_SECRET=$BLOT_STRIPE_SECRET \
             -e BLOT_STRIPE_PRODUCT=$BLOT_STRIPE_PRODUCT \
