@@ -14,6 +14,7 @@ var config = require("config");
 var assets = require("storage/assets");
 var join = require("path").join;
 var resolve = require("path").resolve;
+var callbackify = require("util").callbackify;
 var async = require("async");
 var caseSensitivePath = require("../caseSensitivePath");
 var he = require("he");
@@ -166,8 +167,14 @@ function Transformer(blogID, name) {
     // and yields an absolute path, which join() then re-roots under the
     // blog's folder - the same containment trick helper/localPath uses.
     tasks.push(function (next) {
-      fullLocalPath = assets.path(blogID, resolve("/", src));
-      fromPath(fullLocalPath, transform, next);
+      callbackify(assets.ensureLocal)(
+        blogID,
+        resolve("/", src),
+        function (err, fullLocalPath) {
+          if (err) return next(err);
+          fromPath(fullLocalPath, transform, next);
+        }
+      );
     });
 
     // If we make it here, the file doesn't match anything in the static

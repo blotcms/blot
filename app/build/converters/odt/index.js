@@ -1,4 +1,5 @@
 var fs = require("fs-extra");
+var callbackify = require("util").callbackify;
 var ensure = require("helper/ensure");
 var makeUid = require("helper/makeUid");
 var LocalPath = require("helper/localPath");
@@ -198,8 +199,15 @@ function read (blog, path, callback) {
               html = metadataString + html;
             }
 
-            callback(null, html, stat);
-            fs.remove(outDir, function (err) {});
+            // pandoc extracted any media from the document into the blog's
+            // asset directory, now it is all in place
+            callbackify(assets.commit)(blog.id, "_assets/media", function (err) {
+              fs.remove(outDir, function (err) {});
+
+              if (err) return callback(err);
+
+              callback(null, html, stat);
+            });
           });
         }
       );

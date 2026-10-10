@@ -1,8 +1,8 @@
 const assertNoSymlinks = require("helper/assertNoSymlinks");
 const config = require("config");
-const assetsPath = require("storage/assets").path;
+const storage = require("storage/assets");
 const express = require("express");
-const mime = require("mime-types");
+const contentTypeFor = require("storage/contentType");
 const { join, basename, dirname } = require("path");
 const { promisify } = require("util");
 const fs = require("fs-extra");
@@ -87,15 +87,11 @@ assets.get("/layout.css", async (req, res, next) => {
 // Blog-specific static assets
 assets.use(BLOG_STATIC_PATHS, async (req, res, next) => {
   try {
-    const filePath = assetsPath(
-      req.blog.id,
-      req.baseUrl + decodeURIComponent(req.path)
-    );
-    await sendFile(filePath, {
-      req,
-      res,
+    const relPath = req.baseUrl + decodeURIComponent(req.path);
+    await storage.serve(req, res, req.blog.id, relPath, {
       maxAge: LARGEST_POSSIBLE_MAXAGE,
       immutable: true,
+      headers: { "Content-Type": contentTypeFor(relPath) },
     });
   } catch (err) {
     next();
@@ -222,20 +218,12 @@ async function sendFile(path, { req, res, maxAge = 0, immutable = false } = {}) 
   if (blogRoot && (path === blogRoot || path.startsWith(blogRoot + "/"))) {
     await assertNoSymlinks(blogRoot, path);
   }
-  const isDirectory = path.indexOf(".") === -1;
-  const defaultMime = isDirectory ? "text/html" : "application/octet-stream";
-  let contentType = mime.contentType(mime.lookup(path) || defaultMime);
-
-  if (contentType === "application/mp4") {
-    contentType = "video/mp4";
-  }
-
   const options = {
     maxAge,
     immutable,
     dotfiles: "allow",
     headers: {
-      "Content-Type": contentType,
+      "Content-Type": contentTypeFor(path),
     },
   };
 

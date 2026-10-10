@@ -1,7 +1,5 @@
-const fs = require("fs-extra");
 const sharp = require("sharp");
-const { join, basename } = require("path");
-const config = require("config");
+const { basename } = require("path");
 const assets = require("storage/assets");
 const Template = require("models/template");
 const client = require("models/client");
@@ -14,8 +12,10 @@ const previewReload = require("helper/publishPreviewReload");
 const { isAjaxRequest } = require("./ajax-response");
 const { generate, MAX_PIXELS } = require("../../../../build/thumbnail/template-image");
 
-const directory = (blog) => assets.path(blog.id, "_template_assets");
-const url = (blog, name) => `${config.cdn.origin}/${blog.id}/_template_assets/${encodeURIComponent(name)}`;
+const ASSETS = "_template_assets";
+const directory = (blog) => assets.path(blog.id, ASSETS);
+const assetPath = (name) => `${ASSETS}/${name}`;
+const url = (blog, name) => assets.url(blog.id, assetPath(encodeURIComponent(name)));
 const first = (files) => Array.isArray(files && files.image) ? files.image[0] : files && files.image;
 const update = (blog, slug, locals) => new Promise((resolve, reject) => Template.update(blog.id, slug, { locals }, (error) => error ? reject(error) : resolve()));
 const sync = (blog, template) => new Promise((resolve, reject) => writeChangeToFolder(blog, template, {}, (error) => error ? reject(error) : resolve()));
@@ -61,7 +61,7 @@ function getTemplatesStrictly(blogID) {
 
 async function removeAssets(blog, image) {
   await Promise.all(filenames(image).map((name) =>
-    fs.remove(join(directory(blog), name)).catch(() => {})
+    assets.remove(blog.id, assetPath(name)).catch(() => {})
   ));
 }
 
@@ -87,7 +87,7 @@ async function removeAssetsIfUnreferenced(req, old) {
   );
   if (!referenced) {
     await Promise.all(names.map((name) =>
-      fs.remove(join(directory(req.blog), name)).catch(() => {})
+      assets.remove(req.blog.id, assetPath(name)).catch(() => {})
     ));
   }
 }
@@ -101,6 +101,17 @@ async function removeTemplateAssetsIfUnreferenced(req, images) {
   await Promise.all([...uniqueImages.values()].map((image) =>
     removeAssetsIfUnreferenced(req, image)
   ));
+}
+
+// The original and every thumbnail were written locally by generate()
+async function commitGenerated(blog, made) {
+  const names = [made.original.name, ...Object.values(made.thumbnails).map((item) => item.name)];
+  try {
+    await Promise.all(names.map((name) => assets.commit(blog.id, assetPath(name))));
+  } catch (error) {
+    await Promise.all(names.map((name) => assets.remove(blog.id, assetPath(name)).catch(() => {})));
+    throw error;
+  }
 }
 
 function restoreLocal(locals, key, previous, hadPrevious) {
@@ -188,6 +199,8 @@ module.exports = async function uploadImage(req, res, next) {
       y: req.body.crop_y,
       size: req.body.crop_size,
     }, { source });
+    // generate() wrote the derivatives to the local directory
+    await commitGenerated(req.blog, made);
     if (!wantsFavicon) await cleanupFiles(req.files);
   } catch (error) {
     await cleanupFiles(req.files);
