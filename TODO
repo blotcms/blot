@@ -2,8 +2,6 @@ Bunny: decide Volume vs Standard tier (more PoPs, faster first byte far from Vol
 
 Rewrite node deploy to wait for image after all the init steps to speed up runs
 
-Create a skill which interacts with the production test blogs through the locally synced folders
-
 Set up cloud, watch memory agent on instance and in code
 
 We get two emails one after the other and we should only get one
