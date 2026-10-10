@@ -93,6 +93,55 @@ describe("storage/assets with an S3 bucket", function () {
       expect(await bodyOf(test.blog.id, "_assets/doc/media/odd/image7.jpg")).toEqual("image 7");
     });
 
+    it("waits for uploads in flight before failing a directory when S3 is read first", async function () {
+      var test = this;
+      var upload = s3.upload;
+      var inFlight = 0;
+      var started = 0;
+
+      for (var i = 0; i < 24; i++) {
+        await putDisk(test.blog.id, "_assets/doc/file" + i + ".txt", "file " + i);
+      }
+
+      config.assets.read = "s3";
+
+      spyOn(s3, "upload").and.callFake(async function () {
+        var n = ++started;
+
+        inFlight++;
+
+        try {
+          await new Promise(function (resolve) {
+            setTimeout(resolve, n === 1 ? 10 : 150);
+          });
+
+          if (n === 1) throw new Error("upload failed");
+
+          return await upload.apply(s3, arguments);
+        } finally {
+          inFlight--;
+        }
+      });
+
+      var err;
+
+      try {
+        await assets.commit(test.blog.id, "_assets/doc");
+      } catch (e) {
+        err = e;
+      } finally {
+        config.assets.read = "disk";
+      }
+
+      var inFlightWhenRejected = inFlight;
+
+      expect(err && err.message).toEqual("upload failed");
+      expect(inFlightWhenRejected).toEqual(0);
+      // it stopped starting uploads once one had failed
+      expect(started).toBeLessThan(24);
+      expect(started).toBeGreaterThan(1);
+    });
+
     it("does nothing when there's nothing at the path", async function () {
       await assets.commit(this.blog.id, "_assets/nothing");
 

@@ -208,10 +208,18 @@ async function commit(blogID, relPath) {
 
   var pool = createPool(COMMIT_CONCURRENCY);
 
-  for await (var file of walkLocal(local)) {
-    await pool.add(
-      uploadFile.bind(null, blogID, rel ? rel + "/" + file : file, join(local, file))
-    );
+  try {
+    for await (var file of walkLocal(local)) {
+      await pool.add(
+        uploadFile.bind(null, blogID, rel ? rel + "/" + file : file, join(local, file))
+      );
+    }
+  } catch (err) {
+    // add() rejects as soon as an earlier upload has failed. Wait for the
+    // uploads still running to settle before failing, so none are left in
+    // flight once the caller has been told; the first error is the one thrown.
+    await pool.drain().catch(function () {});
+    throw err;
   }
 
   await pool.drain();
