@@ -680,7 +680,11 @@ async function remove(blogID, relPath) {
 }
 
 // Removes a blog's entire asset directory. This is only used by blog
-// deletion. Preserves the realpath safety check that used to live in
+// deletion. Unlike remove(), a bucket failure is never swallowed, whatever the
+// read order: the bucket is publicly readable for blog_* keys, so a delete
+// which silently failed would leave a deleted blog's assets on the CDN. The
+// error goes to the caller (blog deletion), which reports it and can be
+// retried. Preserves the realpath safety check that used to live in
 // app/models/blog/remove.js's safelyRemove: resolve both realpaths and make
 // sure the folder is strictly inside blog_static_files_dir before removing.
 async function removeAll(blogID) {
@@ -706,11 +710,7 @@ async function removeAll(blogID) {
 
   if (!useS3()) return;
 
-  try {
-    await s3.removePrefix(blogID + "/");
-  } catch (err) {
-    s3Failed("delete", blogID, "", err);
-  }
+  await s3.removePrefix(blogID + "/");
 }
 
 module.exports = {
