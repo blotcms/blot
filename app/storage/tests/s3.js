@@ -401,6 +401,15 @@ describe("storage/assets with an S3 bucket", function () {
         expect(res.headers.get("content-length")).toEqual("3");
       });
 
+      it("sends the whole object for a multi-range request, which S3 can't serve", async function () {
+        await putS3(this.blog.id, "_assets/a.txt", "0123456789");
+
+        var res = await fetch(origin + "/_assets/a.txt", { headers: { Range: "bytes=0-1,4-5" } });
+
+        expect(res.status).toEqual(200);
+        expect(await res.text()).toEqual("0123456789");
+      });
+
       it("rejects a range which can't be satisfied", async function () {
         await putS3(this.blog.id, "_assets/a.txt", "0123456789");
 

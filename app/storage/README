@@ -328,9 +328,13 @@ should consolidate into one storage-layer method, exposed explicitly
     5. Start the B2 backup of the bucket. It must be running before local
        disk stops holding a copy — `_avatars` and `_template_assets` can't be
        regenerated.
-    6. Delete the local `data/static`, shrink the data volume with
-       `config/host/data-volume/resize.sh`, and drop the openresty `cdn.`
-       `try_files` from disk.
+    6. Ship the S3-only cutover (#2111): tools stage on the instance-store
+       tmp directory and `commit()` deletes the staged copy, so nothing
+       writes to `data/static` any more, and openresty stops serving it.
+       Until then every new asset is still written to disk, so the
+       directory can't be deleted yet.
+    7. Then delete the local `data/static` and shrink the data volume with
+       `config/host/data-volume/resize.sh`.
   - Not done: any read cache beyond the `ensureLocal` download cache (it is
     pruned with the rest of the tmp directory); a read cache on ephemeral SSD
     would be bounded in size. Shadow-read timing instrumentation is limited

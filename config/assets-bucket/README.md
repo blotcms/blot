@@ -120,6 +120,7 @@ To go back, remove the Bunny edge rules and set `BLOT_ASSETS_READ=disk`.
 ## Later
 
 Back up the bucket (`_avatars` and `_template_assets` can't be regenerated)
-before deleting anything on disk. Once reads and the CDN are on S3, the local
-`data/static` copy can go and the data volume can shrink; see
+before deleting anything on disk. While dual write is on, every new asset is
+still written to `data/static`, so it can only be deleted (and the data volume
+shrunk) after the S3-only cutover (#2111) has deployed; see
 `app/storage/README` §5 for the order.
