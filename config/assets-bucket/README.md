@@ -24,13 +24,14 @@ export AWS_PROFILE=<profile> AWS_REGION=us-west-2
 
 It creates the bucket in us-west-2 (ACLs disabled, versioning off, public ACLs
 blocked but a public bucket policy allowed), attaches the public-read policy
-for `blog_*`, and creates the IAM user `blot-assets-app` (override with
-`IAM_USER`) with an inline policy for `s3:PutObject`, `s3:GetObject` and
+for `blog_*`, and creates an IAM user named after the bucket, `blot-assets-app-<bucket>` (so
+another environment's bucket gets its own user and policy; override with
+`IAM_USER`, and give each bucket a different one), with an inline policy for `s3:PutObject`, `s3:GetObject` and
 `s3:DeleteObject` on the objects and `s3:ListBucket` on the bucket. It does not
 create an access key. Make one and keep it out of the repo:
 
 ```
-aws iam create-access-key --user-name blot-assets-app
+aws iam create-access-key --user-name blot-assets-app-<bucket>
 ```
 
 ## Configure the app
