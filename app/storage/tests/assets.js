@@ -251,6 +251,46 @@ describe("storage/assets", function () {
       expect(await bodyOf(test.blog.id, "_assets/doc/media/odd/image7.jpg")).toEqual("image 7");
     });
 
+    it("waits for uploads in flight before failing a directory, and still cleans up staging", async function () {
+      var test = this;
+      var upload = s3.upload;
+      var inFlight = 0;
+      var started = 0;
+
+      for (var i = 0; i < 24; i++) {
+        await stage(test.blog.id, "_assets/doc/file" + i + ".txt", "file " + i);
+      }
+
+      spyOn(s3, "upload").and.callFake(async function () {
+        var n = ++started;
+
+        inFlight++;
+
+        try {
+          await new Promise(function (resolve) {
+            setTimeout(resolve, n === 1 ? 10 : 150);
+          });
+
+          if (n === 1) throw new Error("upload failed");
+
+          return await upload.apply(s3, arguments);
+        } finally {
+          inFlight--;
+        }
+      });
+
+      var err = await rejection(assets.commit(test.blog.id, "_assets/doc"));
+      var inFlightWhenRejected = inFlight;
+
+      expect(err && err.message).toEqual("upload failed");
+      expect(inFlightWhenRejected).toEqual(0);
+      // it stopped starting uploads once one had failed
+      expect(started).toBeLessThan(24);
+      expect(started).toBeGreaterThan(1);
+      // and every staged file is gone, uploaded or not
+      expect(await fs.pathExists(assets.path(test.blog.id, "_assets/doc"))).toBe(false);
+    });
+
     it("does nothing when there's nothing at the path", async function () {
       await assets.commit(this.blog.id, "_assets/nothing");
 

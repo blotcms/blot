@@ -3,13 +3,14 @@
 // {blogID}/{path}. The app keeps no such copy any more; this is for recovery
 // (restoring a backup of the bucket's contents into an empty or damaged
 // bucket) and for the one-off copy made when assets moved to S3. Safe to run
-// repeatedly: files already in the bucket with the same size are skipped.
+// repeatedly: files already in the bucket with the same size, and not changed
+// on disk since they were uploaded, are skipped.
 //
 //   node scripts/storage/backfill-assets.js --source <dir> [options]
 //
 //   --source <dir>     the directory of blog_* directories to copy from
 //   --dry-run          report what would be uploaded
-//   --verify           upload nothing; report what's missing or different,
+//   --verify           upload nothing; report what's missing, different or stale,
 //                      and exit non-zero if anything is
 //   --blog <blogID>    only this blog
 //   --from <blogID>    start at this blog (inclusive), e.g. to resume
@@ -19,7 +20,7 @@
 // through a plain CDN to bucket URL. Needs BLOT_ASSETS_BUCKET and
 // credentials (see config/assets-bucket/README.md). On the production host:
 //
-//   docker exec <container> node scripts/storage/backfill-assets.js --dry-run
+//   docker exec <container> node scripts/storage/backfill-assets.js --source <dir> --dry-run
 
 const config = require("config");
 const s3 = require("storage/s3");

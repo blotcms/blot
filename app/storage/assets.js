@@ -207,7 +207,10 @@ async function commit(blogID, relPath) {
 
     await pool.drain();
   } catch (err) {
-    // let uploads in flight finish so nothing is left behind, then clean up
+    // add() rejects as soon as an earlier upload has failed. Wait for the
+    // uploads still running to settle before failing, so none are left in
+    // flight once the caller has been told, then clean up staging. The first
+    // error is the one thrown.
     await pool.drain().catch(function () {});
     await Promise.all(
       files.map(function (f) {
@@ -564,9 +567,13 @@ async function remove(blogID, relPath) {
 }
 
 // Removes a blog's entire asset directory. This is only used by blog
-// deletion. Anything the blog has in staging or in the download cache goes
-// too, best-effort; the realpath check which guarded the deletion of a blog's
-// directory on disk still applies to the staging directory.
+// deletion. A bucket failure is never swallowed: the bucket is publicly
+// readable for blog_* keys, so a delete which silently failed would leave a
+// deleted blog's assets on the CDN. The error goes to the caller (blog
+// deletion), which reports it and can be retried. Anything the blog has in
+// staging or in the download cache goes too, best-effort; the realpath check
+// which guarded the deletion of a blog's directory on disk still applies to
+// the staging directory.
 async function removeAll(blogID) {
   var folder = root(blogID);
 

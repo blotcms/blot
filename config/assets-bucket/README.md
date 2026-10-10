@@ -29,13 +29,14 @@ export AWS_PROFILE=<profile> AWS_REGION=us-west-2
 
 It creates the bucket in us-west-2 (ACLs disabled, versioning off, public ACLs
 blocked but a public bucket policy allowed), attaches the public-read policy
-for `blog_*`, and creates the IAM user `blot-assets-app` (override with
-`IAM_USER`) with an inline policy for `s3:PutObject`, `s3:GetObject` and
+for `blog_*`, and creates an IAM user named after the bucket, `blot-assets-app-<bucket>` (so
+another environment's bucket gets its own user and policy; override with
+`IAM_USER`, and give each bucket a different one), with an inline policy for `s3:PutObject`, `s3:GetObject` and
 `s3:DeleteObject` on the objects and `s3:ListBucket` on the bucket. It does not
 create an access key. Make one and keep it out of the repo:
 
 ```
-aws iam create-access-key --user-name blot-assets-app
+aws iam create-access-key --user-name blot-assets-app-<bucket>
 ```
 
 ## Configure the app
@@ -53,6 +54,13 @@ with `--env-file`; see `config/environment.sh` for the full list), then deploy:
 A failed upload or delete is an error for the operation which asked for it (a
 build fails, a dashboard upload shows an error); nothing is kept locally to
 fall back on.
+
+**Why a key and not an instance profile.** The containers can't reach the
+host's instance credentials unless the metadata service's hop limit is raised
+to 2, which the app host deliberately doesn't do (`config/airlock/README.md`):
+a request forgery in the app could then read role credentials that can write
+and delete the public bucket. A key scoped to this bucket gives the app the
+same access without that exposure. See `app/storage/README` §3.
 
 ## Bunny
 
@@ -81,8 +89,10 @@ Check that backup before anything which could lose objects.
 `scripts/storage/backfill-assets.js` copies a local directory of `blog_*`
 directories into the bucket: for restoring a backup into an empty or damaged
 bucket, and it is how the assets first got here from the app host's disk. It
-lists the keys already in S3 for each blog and uploads files which are missing
-or whose size differs, so it is safe to run repeatedly and to resume. Run it
+lists the keys already in S3 for each blog and uploads files which are missing,
+whose size differs, or which are stale (changed on disk after the object was
+written, such as an overwrite whose upload failed), so it is safe to run
+repeatedly and to resume. Run it
 where the directory is, with the app's environment (for example in a node
 container from the same image with the directory mounted):
 
@@ -96,7 +106,7 @@ node scripts/storage/backfill-assets.js --source /restore/static --verify
 | --- | --- |
 | `--source <dir>` | Required. The directory of `blog_*` directories to copy from. |
 | `--dry-run` | Report what would be uploaded. |
-| `--verify` | Upload nothing; report, by directory, what is missing from the bucket or has a different size, and exit non-zero if anything is. |
+| `--verify` | Upload nothing; report, by directory, what is missing from the bucket, has a different size or is stale, and exit non-zero if anything is. |
 | `--blog <blogID>` | Only this blog. |
 | `--from <blogID>` | Start at this blog (inclusive), to resume a stopped run. |
 | `--concurrency <n>` | Uploads at once (default 16). |

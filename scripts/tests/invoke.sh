@@ -81,6 +81,38 @@ docker build \
   -t $TEST_IMAGE \
   $(realpath "$TESTS_DIR/../..")
 
+# Wait for MinIO to answer its health check, like the CI workflow does. It
+# isn't published on the host, so the check runs in a throwaway container from
+# the test image, linked to MinIO the way the test container is.
+MINIO_WAIT_SECONDS=30
+
+if ! docker run --rm \
+  --link $MINIO_CONTAINER:minio \
+  --entrypoint node \
+  $TEST_IMAGE \
+  -e '
+    const deadline = Date.now() + '"$MINIO_WAIT_SECONDS"' * 1000;
+    function check() {
+      require("http")
+        .get("http://minio:9000/minio/health/live", (res) => {
+          res.resume();
+          if (res.statusCode === 200) process.exit(0);
+          again();
+        })
+        .on("error", again);
+    }
+    function again() {
+      if (Date.now() > deadline) process.exit(1);
+      setTimeout(check, 500);
+    }
+    check();
+  '; then
+  echo "MinIO did not become ready within ${MINIO_WAIT_SECONDS}s" >&2
+  docker logs $MINIO_CONTAINER >&2 || true
+  docker stop $REDIS_CONTAINER $MINIO_CONTAINER 2>/dev/null || true
+  exit 1
+fi
+
 # Run the test container
 docker run --rm \
   --name $TEST_CONTAINER \

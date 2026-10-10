@@ -8,9 +8,15 @@ const { walkLocal, createPool } = require("./util");
 // backfill-assets.js is the command line for this), for re-seeding it from a
 // backup or an old data/static directory. For each blog it lists
 // the keys already in S3, walks the blog's directory and uploads the files
-// which are missing there or whose size differs, with the same headers
-// assets.commit gives (s3.upload). In verify mode nothing is uploaded; the
-// result says what would be missing or different. Safe to run again and again.
+// which are missing there, whose size differs, or which are stale (changed on
+// disk after the object was written, e.g. an overwrite whose upload failed),
+// with the same headers assets.commit gives (s3.upload). In verify mode
+// nothing is uploaded; the result says what would be missing, different or
+// stale. Safe to run again and again.
+
+// S3 reports LastModified to the second, and clocks differ a little, so a
+// file counts as newer than its object only by more than this
+const STALE_AFTER_MS = 2000;
 
 // Keys which may not survive a trip from a CDN URL to the bucket unchanged:
 // characters which are special in URLs, control characters, spaces at the
@@ -73,6 +79,7 @@ async function backfill(options) {
     bytes: 0, // uploaded, or to upload in a dry run
     missing: 0,
     mismatched: 0,
+    stale: 0,
     errors: 0,
     ignored: 0,
     bySubdirectory: {},
@@ -101,7 +108,7 @@ async function backfill(options) {
     log(
       "[backfill] blogs=" + stats.blogs,
       "scanned=" + stats.scanned,
-      (readonly ? "to-upload=" + (stats.missing + stats.mismatched) : "uploaded=" + stats.uploaded),
+      (readonly ? "to-upload=" + (stats.missing + stats.mismatched + stats.stale) : "uploaded=" + stats.uploaded),
       "bytes=" + formatBytes(stats.bytes),
       "errors=" + stats.errors,
       "rate=" + (stats.scanned / seconds).toFixed(0) + " files/s",
@@ -126,7 +133,7 @@ async function backfill(options) {
     const name = rel.indexOf("/") === -1 ? "(top level)" : rel.split("/")[0];
 
     if (!stats.bySubdirectory[name]) {
-      stats.bySubdirectory[name] = { scanned: 0, missing: 0, mismatched: 0 };
+      stats.bySubdirectory[name] = { scanned: 0, missing: 0, mismatched: 0, stale: 0 };
     }
 
     return stats.bySubdirectory[name];
@@ -174,7 +181,7 @@ async function backfill(options) {
 
     try {
       for await (const object of s3.listEntries(blogID + "/")) {
-        remote.set(object.key, object.size);
+        remote.set(object.key, { size: object.size, modified: object.modified });
       }
     } catch (err) {
       return fail("listing " + blogID, err);
@@ -184,9 +191,12 @@ async function backfill(options) {
       const key = blogID + "/" + rel;
       const local = join(blogDirectory, rel);
       let size;
+      let mtimeMs;
 
       try {
-        size = (await fs.stat(local)).size;
+        const stat = await fs.stat(local);
+        size = stat.size;
+        mtimeMs = stat.mtimeMs;
       } catch (err) {
         // removed since we listed the directory
         if (err.code === "ENOENT") continue;
@@ -204,19 +214,20 @@ async function backfill(options) {
         }
       }
 
-      const remoteSize = remote.get(key);
+      const object = remote.get(key);
 
-      if (remoteSize === size) {
-        progress();
-        continue;
-      }
-
-      if (remoteSize === undefined) {
+      if (object === undefined) {
         stats.missing++;
         subdirectory(rel).missing++;
-      } else {
+      } else if (object.size !== size) {
         stats.mismatched++;
         subdirectory(rel).mismatched++;
+      } else if (object.modified && mtimeMs > object.modified.getTime() + STALE_AFTER_MS) {
+        stats.stale++;
+        subdirectory(rel).stale++;
+      } else {
+        progress();
+        continue;
       }
 
       if (readonly) {
@@ -274,10 +285,12 @@ function summarise(stats, options) {
   if (options.verify) {
     lines.push("Missing from the bucket: " + stats.missing);
     lines.push("Different size in the bucket: " + stats.mismatched);
+    lines.push("Stale in the bucket (changed on disk since): " + stats.stale);
   } else if (options.dryRun) {
     lines.push(
-      "Would upload " + (stats.missing + stats.mismatched) + " files (" +
-        stats.missing + " missing, " + stats.mismatched + " different size), " +
+      "Would upload " + (stats.missing + stats.mismatched + stats.stale) + " files (" +
+        stats.missing + " missing, " + stats.mismatched + " different size, " +
+        stats.stale + " stale), " +
         formatBytes(stats.bytes)
     );
   } else {
@@ -286,12 +299,12 @@ function summarise(stats, options) {
 
   if (names.length) {
     lines.push("");
-    lines.push("By directory (scanned / " + (readonly ? "" : "had been ") + "missing / different size):");
+    lines.push("By directory (scanned / " + (readonly ? "" : "had been ") + "missing / different size / stale):");
 
     for (const name of names) {
       const entry = stats.bySubdirectory[name];
       lines.push(
-        "  " + name + ": " + entry.scanned + " / " + entry.missing + " / " + entry.mismatched
+        "  " + name + ": " + entry.scanned + " / " + entry.missing + " / " + entry.mismatched + " / " + entry.stale
       );
     }
   }
@@ -320,7 +333,7 @@ function summarise(stats, options) {
 function failed(stats, options) {
   if (stats.errors) return true;
 
-  return !!(options && options.verify && (stats.missing || stats.mismatched));
+  return !!(options && options.verify && (stats.missing || stats.mismatched || stats.stale));
 }
 
 module.exports = { backfill, summarise, failed, isOddKey };
