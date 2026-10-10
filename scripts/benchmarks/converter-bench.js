@@ -227,6 +227,10 @@ async function main() {
 
   console.log(`[converter-bench] benchmarking: ${converters.join(", ")} (n=${n})`);
 
+  // docx, odt and img upload what they extract or convert to the assets
+  // bucket (MinIO, started by the workflow)
+  await require("../tests/util/bucket")();
+
   const results = [];
 
   for (const name of converters) {

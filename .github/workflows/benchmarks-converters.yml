@@ -148,6 +148,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends pandoc libreoffice
 
+      # The docx/odt/img converters upload what they extract to the assets
+      # bucket; the benchmark creates it.
+      - name: Start MinIO
+        uses: ./.github/actions/start-minio
+
       - name: Restore converter history
         uses: actions/cache/restore@v4
         with:

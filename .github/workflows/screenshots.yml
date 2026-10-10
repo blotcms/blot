@@ -2,7 +2,7 @@
 #
 # Nearly all of the wall-clock time used to go on rebuilding the demo blogs the
 # previews are rendered from, so this workflow:
-#   - caches the built demo blogs (data/blogs, data/static, data/redis) and
+#   - caches the built demo blogs (data/blogs, data/minio, data/redis) and
 #     re-uses them, leaving the folder build to sync only what changed
 #   - builds only the demo folders needed by the templates being screenshotted
 #   - takes screenshots several at a time instead of one every two seconds
@@ -217,8 +217,8 @@ jobs:
           restore-keys: |
             homebrew-${{ runner.os }}-
 
-      - name: Install dnsmasq, Redis and Nginx
-        run: brew install dnsmasq redis nginx
+      - name: Install dnsmasq, Redis, Nginx and MinIO
+        run: brew install dnsmasq redis nginx minio
 
       - name: Use dnsmasq to resolve blot.development
         run: |
@@ -267,7 +267,7 @@ jobs:
         with:
           path: |
             data/blogs
-            data/static
+            data/minio
             data/cdn
             data/redis
           key: ${{ env.DEMO_BLOGS_CACHE_KEY }}
@@ -282,6 +282,23 @@ jobs:
         run: |
           gh cache delete "$DEMO_BLOGS_CACHE_KEY" --repo "${{ github.repository }}" ||
             echo "No cached demo blogs at $DEMO_BLOGS_CACHE_KEY to delete"
+
+      # The resized images and thumbnails of the demo blogs live only in the
+      # assets bucket (a simulated S3), so its data directory is cached with
+      # the folders and Redis, and the app is configured to use it.
+      - name: Start MinIO
+        run: |
+          mkdir -p data/minio
+          MINIO_ROOT_USER=blot-test MINIO_ROOT_PASSWORD=blot-test-secret \
+            minio server data/minio --address :9000 > "$RUNNER_TEMP/minio.log" 2>&1 &
+          until curl -fsS http://localhost:9000/minio/health/live > /dev/null 2>&1; do sleep 0.5; done
+          {
+            echo "BLOT_ASSETS_BUCKET=blot-test-assets"
+            echo "BLOT_ASSETS_ENDPOINT=http://localhost:9000"
+            echo "BLOT_ASSETS_REGION=us-east-1"
+            echo "BLOT_AWS_KEY=blot-test"
+            echo "BLOT_AWS_SECRET=blot-test-secret"
+          } >> "$GITHUB_ENV"
 
       - name: Start Redis
         run: |
@@ -299,6 +316,9 @@ jobs:
         run: |
           export BLOT_DIRECTORY=$(pwd)
           export NODE_PATH=$(pwd)/app
+
+          echo "Creating the assets bucket"
+          node -e 'require("./scripts/tests/util/bucket")().then(() => process.exit(0), (err) => { console.error(err); process.exit(1); })'
 
           echo "Building templates"
           node app/templates/index.js --no-watch
@@ -338,7 +358,7 @@ jobs:
         with:
           path: |
             data/blogs
-            data/static
+            data/minio
             data/cdn
             data/redis
           key: ${{ env.DEMO_BLOGS_CACHE_KEY }}

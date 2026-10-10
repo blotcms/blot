@@ -184,11 +184,13 @@ enough that no PR should pay for it. Instead:
    [`build-corpus.js`](build-corpus.js): spins up Docker + a throwaway Redis,
    runs the spec in `--corpus-mode build` (generate the skewed workload,
    `blog.rebuild()` every site, then stop - no render/burst phases), then
-   snapshots three artifacts into `.benchmarks/corpus/`:
+   snapshots two artifacts into `.benchmarks/corpus/`:
    - `redis-dump.rdb` - a Redis `SAVE` dump of every entry/tag/index key
    - `blogs.tar.gz` - `data/blogs/` (raw source + hard-linked media - small)
-   - `static.tar.gz` - `data/static/` (derived/build output - the expensive
-     part to regenerate)
+
+   (The images and thumbnails the build generates are uploaded to a throwaway
+   MinIO that `build-corpus.js` starts, and are not kept: the render benchmark
+   requests pages, never those files.)
 
    plus `manifest.json` (blog IDs/handles, and each site's tags/search
    keywords/hub path, so a later render-only run doesn't need to recompute
@@ -258,7 +260,7 @@ smaller scale instead:
 # Skewed distribution + media, small scale
 node scripts/benchmarks --distribution skewed --sites 20 --files 2000 --media-fraction 0.2
 
-# Full build-corpus.js flow (Docker + throwaway Redis + all three artifacts),
+# Full build-corpus.js flow (Docker + throwaway Redis + both artifacts),
 # small scale
 node scripts/benchmarks/build-corpus.js --sites 20 --files 2000 --out-dir /tmp/corpus-rehearsal
 
@@ -268,7 +270,7 @@ node scripts/benchmarks --corpus-mode render \
 ```
 
 The last command needs the corpus's Redis dump already loaded and its
-`data/blogs`/`data/static` tarballs already extracted into wherever your
+`data/blogs` tarball already extracted into wherever your
 local container mounts `/usr/src/app/data` - `build-corpus.js` writes its
 working `data/` under `--out-dir` for exactly this reason.
 
@@ -276,6 +278,9 @@ working `data/` under `--out-dir` for exactly this reason.
 
 ```bash
 NODE_PATH=app node scripts/benchmarks/converter-bench.js --converter markdown --converter img --n 50
+# docx, odt and img upload what they produce to the assets bucket: start a
+# MinIO (see scripts/tests/invoke.sh) and set BLOT_ASSETS_BUCKET,
+# BLOT_ASSETS_ENDPOINT, BLOT_ASSETS_REGION, BLOT_AWS_KEY and BLOT_AWS_SECRET
 ```
 
 No Docker needed for most converters - see "Per-converter benchmarks" below.
@@ -341,8 +346,7 @@ artifact, no comment, no issue.
   `workflow_dispatch`
 - restores the newest `benchmark-corpus-v*` cache (falls back to
   [`seed-corpus.js`](seed-corpus.js) if missing entirely), loads the Redis
-  dump into its job's `redis:6` service container, extracts `data/blogs`/
-  `data/static`
+  dump into its job's `redis:6` service container, extracts `data/blogs`
 - runs render + all six burst phases via `--corpus-mode render`
 - its own sticky PR comment, its own `render-benchmarks-history-<arch>`
   cache, its own `render-benchmark-regression` issue label - not comparable

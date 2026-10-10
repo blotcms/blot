@@ -153,6 +153,10 @@ jasmine.addReporter({
 });
 
 (async function ensureEmptyDatabase() {
+  // Builds upload the images they cache to the assets bucket (MinIO, started
+  // by the workflow, or by build-corpus.js)
+  await require("../tests/util/bucket")();
+
   // corpusMode "render" deliberately runs against a *restored* corpus (a
   // Redis dump full of keys) rather than a throwaway empty database, so skip
   // the emptiness check in that mode only.

@@ -161,6 +161,10 @@ jobs:
             type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:buildcache
           cache-to: type=gha,scope=benchmarks-${{ matrix.arch }},mode=max
 
+      # Builds upload the images they cache to the assets bucket
+      - name: Start MinIO
+        uses: ./.github/actions/start-minio
+
       - name: Restore benchmark history
         uses: actions/cache/restore@v4
         with:
@@ -186,6 +190,11 @@ jobs:
               -e BLOT_REDIS_HOST=localhost \
               -e BLOT_HOST=localhost \
               -e BLOT_PROTOCOL=https \
+              -e BLOT_ASSETS_BUCKET \
+              -e BLOT_ASSETS_ENDPOINT \
+              -e BLOT_ASSETS_REGION \
+              -e BLOT_AWS_KEY \
+              -e BLOT_AWS_SECRET \
               -e GITHUB_SHA=${{ github.sha }} \
               -e SITES_ARG="${{ github.event.inputs.sites }}" \
               -e FILES_ARG="${{ github.event.inputs.files }}" \
