@@ -1,6 +1,6 @@
 ---
 name: test-blogs
-description: Write content into Blot's production test blogs (gittest, dbtest, drivetest, icloudtest - one per sync client) the way a real user would, wait for Blot to sync and build it, then verify it end to end - the published page, CDN and /_assets responses, the generated assets on production disk, and their copy in S3 once the assets bucket exists - and clean up. Use when asked to write to, exercise or test the production test blogs, to check a sync client (Git, Dropbox, Google Drive, iCloud) after a change or deploy, to verify a post, image, thumbnail, document conversion or generated asset end to end, to check the S3 migration of generated assets, or to smoke-test a read-only freeze or deploy with real syncs.
+description: Write content into Blot's production test blogs (gittest, dbtest, drivetest, icloudtest - one per sync client) the way a real user would, wait for Blot to sync and build it, then verify it end to end - the published page, CDN and /_assets responses, the generated assets on production disk, and their copy in S3 once the storage bucket exists - and clean up. Use when asked to write to, exercise or test the production test blogs, to check a sync client (Git, Dropbox, Google Drive, iCloud) after a change or deploy, to verify a post, image, thumbnail, document conversion or generated asset end to end, to check the S3 migration of generated assets, or to smoke-test a read-only freeze or deploy with real syncs.
 ---
 
 # Test blogs
@@ -115,7 +115,7 @@ not run `git remote -v`, `git config --list` or `set -x`.
      asset via=cdn disk=yes  s3=yes 18342B image/jpeg cache-control="public, max-age=31536000"  _image_cache/<uuid>/photo.jpg
    ```
    `disk=` is `storage/assets.exists`; the `s3=` part appears only when the
-   assets bucket is configured and `storage/s3` exists (`s3=missing` is a
+   storage bucket is configured and `storage/s3` exists (`s3=missing` is a
    failure then). The script only exists on production after the next deploy
    that includes it; before that, fall back to
    `ssh blot ls -la /var/www/blot/data/static/<blogID>/<subdir>/...`
