@@ -61,8 +61,7 @@ its own), `redis-host` (the same style of operation for the Redis host).
   about two minutes. Blogs and the dashboard keep serving; writes get 503s,
   syncs wait and catch up within seconds of the freeze lifting, iCloud's retry
   within about 20s.
-- Afterwards: `npm run deploy-proxy` (its `data/static` bind does not follow a
-  swap) and an app deploy; then `resize.sh finish` releases the old volume on
+- Afterwards: an app deploy; then `resize.sh finish` releases the old volume on
   the host without a reboot and detaches it.
 
 ## Incident log

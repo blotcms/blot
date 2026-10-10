@@ -12,7 +12,7 @@
 #            read-only for a short window, the last differences are copied and
 #            the new volume is mounted over the data directory. Resumable:
 #            re-run the same command after Ctrl-C or an error.
-#   finish   after a shrink and the app and proxy deploys, once no container
+#   finish   after a shrink and the app deploy, once no container
 #            holds the old volume any more: release the host's own mount of it
 #            (no reboot, no downtime; asks first), then detach it. Never
 #            deletes.
@@ -599,17 +599,13 @@ step_retag() {
   aws_mut ec2 create-tags --resources "$REPLACED_VOL" --tags '[{"Key":"Name","Value":"Blot data (replaced by '"$NEW_VOL"')"},{"Key":"BlotDataVolumeReplacedAt","Value":"'"$now"'"}]'
   say "Next"
   cat << EOF
- 1. Redeploy the proxy so it serves static files from the new volume (it bind-mounts
-    only data/static and does not follow the swap; until then it serves the old
-    volume, and files missing there fall through to Node, so nothing breaks):
-      npm run deploy-proxy
- 2. The next app deploy recreates the containers on the new volume:
+ 1. The next app deploy recreates the containers on the new volume:
       npm run deploy-node
- 3. The old volume ($REPLACED_VOL) stays mounted underneath the new one until the
-    app and proxy deploys have recreated every container. Then finish releases
+ 2. The old volume ($REPLACED_VOL) stays mounted underneath the new one until the
+    app deploy has recreated every container. Then finish releases
     the host's own mount of it (no reboot, no downtime) and detaches it:
       $0 --host $HOST --profile $AWS_PROFILE_NAME finish
- 4. Keep the old volume and the snapshot as the rollback for about a week, then
+ 3. Keep the old volume and the snapshot as the rollback for about a week, then
     delete them by hand. DLM now snapshots the new volume; its first snapshot
     is a full copy, so snapshot cost is roughly doubled for about a week.
 EOF
@@ -728,7 +724,6 @@ cmd_finish() {
       # the new one, until it is recreated.
       echo "Containers still hold it (the holder= lines above). A deploy recreates them; run finish again after:"
       echo "  npm run deploy-node     for the blot-container-* ones"
-      echo "  npm run deploy-proxy    for any other container listed (the proxy)"
       return 0
     fi
     # Only the host's own namespace has it, stacked under the new volume.

@@ -92,14 +92,11 @@ phase confirmed unless `--yes`:
 
 After it:
 
-- Redeploy the proxy (`npm run deploy-proxy`). It bind-mounts only
-  `data/static` and does not follow the swap, so until then it serves the old
-  volume; files it misses fall through to Node, so nothing breaks.
 - The next app deploy (`npm run deploy-node`) recreates the containers on the
   new volume.
 - The old volume stays mounted underneath the new one, read-only, on the host
   and in every container's mount namespace, so it cannot be detached right
-  away. Once the app and proxy deploys have recreated every container, run
+  away. Once the app deploy has recreated every container, run
   `resize.sh finish` (no reboot, no downtime):
   - `host.sh old-volume-status` reports which mount namespaces still have the
     old volume (`mounted_host`, `mounted_elsewhere`, a `holder=` line naming a
@@ -146,8 +143,7 @@ production kernel, without touching production:
     drill.sh teardown <instance-id>
 
 `setup` fills a small data volume with tens of thousands of files and runs
-reader and writer containers (named `blot-container-*`, `rslave` binds) and a
-proxy container that binds only `data/static`. The drill host is marked by
+reader and writer containers (named `blot-container-*`, `rslave` binds). The drill host is marked by
 `/etc/blot/drill`, so `resize.sh` pauses the containers instead of calling
 `read-only.js`, and tags the new volume `BlotDrill=true` and names it
 `drill-data-volume` (never the production tag, or DLM would snapshot it).
