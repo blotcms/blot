@@ -1,11 +1,12 @@
 // Copies the generated assets on local disk (data/static/blog_*) into the
 // assets bucket, so every file has an object at {blogID}/{path}. Safe to run
-// repeatedly: files already in the bucket with the same size are skipped.
+// repeatedly: files already in the bucket with the same size, and not changed on disk
+// since they were uploaded, are skipped.
 //
 //   node scripts/storage/backfill-assets.js [options]
 //
 //   --dry-run          report what would be uploaded
-//   --verify           upload nothing; report what's missing or different,
+//   --verify           upload nothing; report what's missing, different or stale,
 //                      and exit non-zero if anything is
 //   --blog <blogID>    only this blog
 //   --from <blogID>    start at this blog (inclusive), e.g. to resume

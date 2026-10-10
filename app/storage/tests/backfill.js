@@ -96,6 +96,36 @@ describe("storage/backfill", function () {
     expect(stats.scanned).toEqual(6);
   });
 
+  it("re-uploads a file changed on disk since it was uploaded, even at the same size", async function () {
+    var directory = this.directory;
+    var file = join(directory, "blog_a/_avatars/me.png");
+
+    await run.call(this);
+
+    // a newer local overwrite of the same size whose upload failed
+    await fs.outputFile(file, "AVATAR");
+    var future = new Date(Date.now() + 60 * 60 * 1000);
+    await fs.utimes(file, future, future);
+
+    var stats = await run.call(this, { verify: true });
+
+    expect(stats.stale).toEqual(1);
+    expect(stats.missing + stats.mismatched).toEqual(0);
+    expect(stats.bySubdirectory["_avatars"].stale).toEqual(1);
+    expect(stats.bySubdirectory["_thumbnails"].stale).toEqual(0);
+    expect(failed(stats, { verify: true })).toBe(true);
+    expect(summarise(stats, { verify: true })).toContain("Stale in the bucket (changed on disk since): 1");
+    expect(stats.uploaded).toEqual(0);
+
+    stats = await run.call(this);
+
+    expect(stats.stale).toEqual(1);
+    expect(stats.uploaded).toEqual(1);
+
+    var body = await s3.get("blog_a/_avatars/me.png");
+    expect(Buffer.from(await body.Body.transformToByteArray()).toString()).toEqual("AVATAR");
+  });
+
   it("can be limited to one blog or resumed from one", async function () {
     var stats = await run.call(this, { blog: "blog_b" });
 
@@ -148,16 +178,16 @@ describe("storage/backfill", function () {
     expect(stats.uploaded).toEqual(0);
     expect(stats.missing).toEqual(1);
     expect(stats.mismatched).toEqual(1);
-    expect(stats.bySubdirectory["_assets"]).toEqual({ scanned: 2, missing: 0, mismatched: 1 });
-    expect(stats.bySubdirectory["_image_cache"]).toEqual({ scanned: 1, missing: 1, mismatched: 0 });
-    expect(stats.bySubdirectory["_avatars"]).toEqual({ scanned: 1, missing: 0, mismatched: 0 });
+    expect(stats.bySubdirectory["_assets"]).toEqual({ scanned: 2, missing: 0, mismatched: 1, stale: 0 });
+    expect(stats.bySubdirectory["_image_cache"]).toEqual({ scanned: 1, missing: 1, mismatched: 0, stale: 0 });
+    expect(stats.bySubdirectory["_avatars"]).toEqual({ scanned: 1, missing: 0, mismatched: 0, stale: 0 });
     expect(failed(stats, { verify: true })).toBe(true);
     expect(Object.keys(await keys()).length).toEqual(4);
 
     await run.call(this);
     stats = await run.call(this, { verify: true });
 
-    expect(stats.missing + stats.mismatched).toEqual(0);
+    expect(stats.missing + stats.mismatched + stats.stale).toEqual(0);
     expect(failed(stats, { verify: true })).toBe(false);
   });
 

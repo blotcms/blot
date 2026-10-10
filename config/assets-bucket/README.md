@@ -57,7 +57,9 @@ the bucket was set aren't uploaded until the backfill.
 
 `scripts/storage/backfill-assets.js` copies what is on disk into the bucket.
 It lists the keys already in S3 for each blog, and uploads files which are
-missing or whose size differs, so it is safe to run repeatedly and to resume.
+missing, whose size differs, or which are stale (changed on disk after the
+object was written, such as an overwrite whose upload failed), so it is safe to
+run repeatedly and to resume.
 Run it on the app host inside a node container (the same image, environment
 file and data directory as the app containers), for example:
 
@@ -70,7 +72,7 @@ docker exec <container> node scripts/storage/backfill-assets.js --verify
 | Option | |
 | --- | --- |
 | `--dry-run` | Report what would be uploaded. |
-| `--verify` | Upload nothing; report, by directory, what is missing from the bucket or has a different size, and exit non-zero if anything is. |
+| `--verify` | Upload nothing; report, by directory, what is missing from the bucket, has a different size or is stale, and exit non-zero if anything is. |
 | `--blog <blogID>` | Only this blog. |
 | `--from <blogID>` | Start at this blog (inclusive), to resume a stopped run. |
 | `--concurrency <n>` | Uploads at once (default 16). |

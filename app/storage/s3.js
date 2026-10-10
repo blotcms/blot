@@ -276,7 +276,7 @@ async function open(objectKey, options) {
   };
 }
 
-// Every object under a prefix, as { key, size }, a page at a time. With a
+// Every object under a prefix, as { key, size, modified }, a page at a time. With a
 // delimiter ("/") this also yields { prefix } for each "directory" directly
 // under the prefix.
 async function* listEntries(prefix, delimiter) {
@@ -293,7 +293,7 @@ async function* listEntries(prefix, delimiter) {
     );
 
     for (const object of data.Contents || []) {
-      yield { key: object.Key, size: object.Size };
+      yield { key: object.Key, size: object.Size, modified: object.LastModified };
     }
 
     for (const common of data.CommonPrefixes || []) {
