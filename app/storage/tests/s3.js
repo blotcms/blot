@@ -608,14 +608,13 @@ describe("storage/assets with an S3 bucket", function () {
       expect(await rejection(assets.commit(test.blog.id, "_assets/doc"))).toBeTruthy();
     }, 30000);
 
-    it("logs a failed delete while reading from disk, but removes the local file", async function () {
+    it("throws a failed delete even while reading from disk, keeping the local file", async function () {
       var test = this;
 
       await putDisk(test.blog.id, "_assets/a.txt", "a");
-      await assets.remove(test.blog.id, "_assets/a.txt");
 
-      expect(await fs.pathExists(assets.path(test.blog.id, "_assets/a.txt"))).toBe(false);
-      expect(logged()).toContain("[storage/assets] s3 delete failed");
+      expect(await rejection(assets.remove(test.blog.id, "_assets/a.txt"))).toBeTruthy();
+      expect(await fs.pathExists(assets.path(test.blog.id, "_assets/a.txt"))).toBe(true);
     }, 30000);
 
     it("throws a failed removeAll even while reading from disk, after removing the local files", async function () {

@@ -118,8 +118,8 @@ async function fromS3(blogID, relPath, fn) {
   }
 }
 
-// What to do when S3 refuses a write or delete. While disk is still the
-// source of truth the file is safe locally, so it's logged (grep for
+// What to do when S3 refuses an upload. While disk is still the source of
+// truth the file is safe locally, so it's logged (grep for
 // "[storage/assets] s3") and the operation succeeds; once reads come from S3
 // a missing object is a real problem so the error goes to the caller.
 function s3Failed(action, blogID, relPath, err) {
@@ -667,7 +667,12 @@ async function serve(req, res, blogID, relPath, options) {
   );
 }
 
-// Removes a file or a whole directory. A missing path is not an error.
+// Removes a file or a whole directory. A missing path is not an error. The
+// bucket copy goes first and a failure there is thrown in either read order:
+// unlike a failed upload, a failed delete isn't covered by disk, because a
+// read that misses on disk falls back to the bucket and would bring the file
+// back (publicly, for blog_* keys). Throwing before the local delete leaves
+// both copies in place for the caller to retry.
 async function remove(blogID, relPath) {
   var local = path(blogID, relPath);
 
@@ -676,15 +681,9 @@ async function remove(blogID, relPath) {
     throw new Error("storage/assets: remove needs a path inside the blog's asset directory");
   }
 
+  if (useS3()) await s3.remove(keyFor(blogID, relPath));
+
   await fs.remove(local);
-
-  if (!useS3()) return;
-
-  try {
-    await s3.remove(keyFor(blogID, relPath));
-  } catch (err) {
-    s3Failed("delete", blogID, relPath, err);
-  }
 }
 
 // Removes a blog's entire asset directory. This is only used by blog

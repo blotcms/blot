@@ -55,11 +55,12 @@ and delete the public bucket. A key scoped to this bucket gives the app the
 same access without that exposure. See `app/storage/README` §3.
 
 With a bucket set, every new asset is written to disk and uploaded, and
-deletes remove both. While `BLOT_ASSETS_READ=disk`, a failed upload or delete
-is logged and doesn't fail the operation; grep the app logs for
-`[storage/assets] s3`. Once reads are `s3` a failure is an error, because
-disk is no longer the copy to trust. Deleting a blog is the exception: its
-bucket delete always fails the deletion, so no public assets are left behind.
+deletes remove both. While `BLOT_ASSETS_READ=disk`, a failed upload is logged
+and doesn't fail the operation; grep the app logs for `[storage/assets] s3`.
+Once reads are `s3` a failed upload is an error, because disk is no longer the
+copy to trust. A failed delete is always an error: a read that misses on disk
+falls back to the bucket, so a silently failed delete would bring a deleted
+asset (or a deleted blog's assets) back, publicly.
 Files which were already on disk before
 the bucket was set aren't uploaded until the backfill.
 
