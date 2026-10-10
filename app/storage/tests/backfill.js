@@ -46,6 +46,12 @@ describe("storage/backfill", function () {
     );
   }
 
+  // so the test blog can be removed (its assets are deleted from the bucket)
+  afterEach(function () {
+    config.assets.endpoint = process.env.BLOT_TEST_S3_ENDPOINT;
+    s3.reset();
+  });
+
   beforeEach(async function () {
     this.directory = join(this.tmp, "static");
     await populate(this.directory);
