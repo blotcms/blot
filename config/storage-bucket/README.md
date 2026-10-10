@@ -7,9 +7,12 @@ the only code that touches either; `app/storage/README` explains the design.
 
 Objects are keyed `{blogID}/{path}` at the bucket root, the same as the
 asset's public CDN path (`https://cdn.blot.im/{blogID}/{path}`), so the CDN can
-fetch `blog_*` straight from the bucket. The bucket allows public
-`s3:GetObject` on `blog_*` keys and nothing else public: no listing, no
-writes.
+fetch `blog_*` straight from the bucket. Assets are a blog's top-level `_`
+directories (`{blogID}/_thumbnails/...`); the rest of `{blogID}/` is reserved
+for later content (`folder/` for the blog's folder, possibly `git/`), which the
+assets code never lists, backfills or deletes. The bucket allows public
+`s3:GetObject` on `blog_*` keys, which covers all of it because blog content is
+public by design, and nothing else public: no listing, no writes.
 
 ## Create the bucket and the app's IAM user
 

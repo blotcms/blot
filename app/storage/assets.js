@@ -8,12 +8,20 @@ var { pipeline } = require("stream/promises");
 var { Readable } = require("stream");
 var { join, dirname, resolve, relative, sep } = require("path");
 var s3 = require("./s3");
-var { isMissing, walkLocal, createPool } = require("./util");
+var { isMissing, isScopeName, walkLocal, createPool } = require("./util");
 
 // Every per-blog generated asset (thumbnails, image cache, converter output,
 // avatars, template uploads, ...) lives under blog_static_files_dir/{blogID}.
 // This module is the single choke point for reading, writing, deleting,
 // listing and serving those files.
+//
+// The assets scope is exactly a blog's top-level directories whose names
+// start with "_" (_thumbnails, _image_cache, _assets, ...). Any other
+// relPath, such as "folder/a.txt", is rejected by every function below, and
+// the whole-scope operations (walk, list of the blog root, removeAll) only
+// see those directories: the rest of {blogID}/ in the bucket (the blog's
+// folder content, later possibly git/) is not this module's to read, list or
+// delete.
 //
 // When config.storage.bucket is set, every write is also uploaded to the
 // bucket (key: {blogID}/{relPath}) and every delete removes the object too.
@@ -50,9 +58,21 @@ function root(blogID) {
   return join(blog_static_files_dir, blogID);
 }
 
+// Thrown for a relPath outside the assets scope. serve() turns it into a
+// NotFoundError, because a URL which names something else is just a miss.
+class OutOfScopeError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "OutOfScopeError";
+    this.code = "EOUTOFSCOPE";
+  }
+}
+
 // Builds an absolute local path inside a blog's asset directory. With no
-// segments this returns the directory itself. Throws if the joined path would
-// resolve outside of it (e.g. a segment of "../").
+// segments (or segments which resolve to the directory itself) this returns
+// the directory. Throws if the joined path would resolve outside of it (e.g.
+// a segment of "../"), or if it isn't under one of the directories of the
+// assets scope: its first segment must start with "_".
 function path(blogID, ...segments) {
   var base = root(blogID);
 
@@ -63,6 +83,15 @@ function path(blogID, ...segments) {
   if (full !== base && full.indexOf(base + sep) !== 0) {
     throw new Error(
       "storage/assets: path escapes blog's asset directory: " +
+        segments.join("/")
+    );
+  }
+
+  var rel = relative(base, full);
+
+  if (rel && !isScopeName(rel)) {
+    throw new OutOfScopeError(
+      'storage/assets: not in the assets scope (the first segment must start with "_"): ' +
         segments.join("/")
     );
   }
@@ -294,9 +323,12 @@ async function exists(blogID, relPath) {
 }
 
 // Names of the immediate children of a directory, or [] if it doesn't exist.
-// With a bucket, the children found on disk and in S3 together.
+// With a bucket, the children found on disk and in S3 together. An empty
+// relDir is the blog's root, where only the names which start with "_" (the
+// assets scope) are listed.
 async function list(blogID, relDir) {
   var names;
+  var rel = normalise(blogID, relDir || "");
 
   try {
     names = await fs.readdir(path(blogID, relDir || ""));
@@ -305,9 +337,8 @@ async function list(blogID, relDir) {
     names = [];
   }
 
-  if (!useS3()) return names;
+  if (!useS3()) return rel ? names : names.filter(isScopeName);
 
-  var rel = normalise(blogID, relDir || "");
   var prefix = blogID + "/" + (rel ? rel + "/" : "");
   var found = new Set(names);
 
@@ -318,15 +349,21 @@ async function list(blogID, relDir) {
     if (name) found.add(name);
   }
 
-  return Array.from(found).sort();
+  names = Array.from(found).sort();
+
+  // At the blog's root only the assets scope's directories are listed
+  return rel ? names : names.filter(isScopeName);
 }
 
-// Every file in a blog's asset scope, as relPaths with no leading slash. With
-// a bucket, files on disk and then those only in S3.
+// Every file in a blog's asset scope (its top-level "_" directories), as
+// relPaths with no leading slash. With a bucket, files on disk and then those
+// only in S3. Other keys under {blogID}/ in the bucket are not listed.
 async function* walk(blogID) {
   var seen = useS3() ? new Set() : null;
 
   for await (var file of walkLocal(root(blogID))) {
+    if (!isScopeName(file)) continue;
+
     if (seen) seen.add(file);
     yield file;
   }
@@ -335,7 +372,7 @@ async function* walk(blogID) {
 
   var prefix = blogID + "/";
 
-  for await (var entry of s3.listEntries(prefix)) {
+  for await (var entry of s3.listScope(blogID)) {
     var rel = entry.key.slice(prefix.length);
 
     if (rel && !/\/$/.test(rel) && !seen.has(rel)) yield rel;
@@ -653,8 +690,15 @@ function applyHeaders(res, headers) {
 async function serve(req, res, blogID, relPath, options) {
   options = options || {};
 
-  // Throws if relPath tries to leave the blog's asset directory
-  path(blogID, relPath);
+  // Throws if relPath tries to leave the blog's asset directory. A path
+  // outside the assets scope (e.g. /blog_x/folder/a.txt on the CDN) is not an
+  // asset, so it's a plain miss whatever is in the bucket or on disk.
+  try {
+    path(blogID, relPath);
+  } catch (err) {
+    if (err instanceof OutOfScopeError) throw notFound(blogID, relPath, err);
+    throw err;
+  }
 
   return fromSources(
     blogID,
@@ -688,12 +732,14 @@ async function remove(blogID, relPath) {
   await fs.remove(local);
 }
 
-// Removes a blog's entire asset directory. This is only used by blog
-// deletion. Unlike remove(), a bucket failure is never swallowed, whatever the
-// read order: the bucket is publicly readable for blog_* keys, so a delete
-// which silently failed would leave a deleted blog's assets on the CDN. The
-// error goes to the caller (blog deletion), which reports it and can be
-// retried. Preserves the realpath safety check that used to live in
+// Removes a blog's entire asset scope: its asset directory on disk and, in
+// the bucket, the {blogID}/_*/ prefixes only. Nothing else under {blogID}/ is
+// touched (blog deletion removes the folder scope separately once it exists).
+// This is only used by blog deletion. Unlike remove(), a bucket failure is
+// never swallowed, whatever the read order: the bucket is publicly readable
+// for blog_* keys, so a delete which silently failed would leave a deleted
+// blog's assets on the CDN. The error goes to the caller (blog deletion),
+// which reports it and can be retried. Preserves the realpath safety check that used to live in
 // app/models/blog/remove.js's safelyRemove: resolve both realpaths and make
 // sure the folder is strictly inside blog_static_files_dir before removing.
 async function removeAll(blogID) {
@@ -719,7 +765,7 @@ async function removeAll(blogID) {
 
   if (!useS3()) return;
 
-  await s3.removePrefix(blogID + "/");
+  await s3.removeScope(blogID);
 }
 
 module.exports = {

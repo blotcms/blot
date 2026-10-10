@@ -76,20 +76,33 @@ at sync/build time instead.
   `exists`/`size`, not `fs-extra`'s names. `fs-extra` supports operations
   that don't map onto S3 (symlinks, `chmod`, atomic rename); reusing its
   names would invite callers to assume that surface exists.
-- **One bucket**, not two. `.folder` under `folder/{blogID}/{path}`;
-  `.assets` at the bucket root as `{blogID}/{path}` so its keys are
-  identical to its public CDN paths (blog IDs are always `blog_<uuid>`,
-  never `folder`, so the two can't collide). Storage class is set per
-  object at write time rather than via prefix-filtered lifecycle rules.
-  Two buckets are only needed if versioning/cross-region replication is
-  wanted later (e.g. for a "restore deleted file" feature).
-  **Key namespaces are reserved:** top-level `blog_*` prefixes are generated
-  assets, publicly readable through the bucket policy (`s3:GetObject` on
-  `blog_*`), with keys identical to their CDN paths. Every other top-level
-  prefix (`folder/`, later git repos) is private, and nothing else may ever
-  be written at the top level with a `blog_` prefix. If versioning or
-  replication is ever wanted for folder content but not for assets, that
-  needs a second bucket, because versioning is bucket-wide; decide that
+- **One bucket** (`config.storage.bucket`), not two, with everything for a
+  blog under its own prefix:
+  - `{blogID}/_thumbnails/...`, `{blogID}/_image_cache/...` etc.: the
+    generated assets (`.assets`). Keys are identical to their public CDN paths
+    (`cdn.blot.im/{blogID}/...`).
+  - `{blogID}/folder/...`: the blog's folder content (`.folder`, Phase 2).
+  - later possibly `{blogID}/git/...` for the git client repo (Phase 3).
+
+  **The assets scope is exactly a blog's top-level directories whose names
+  start with `_`.** `storage/assets` enforces it: a relPath whose first
+  segment doesn't start with `_` is rejected (a CDN request for
+  `/{blogID}/folder/...` is a 404), and the whole-scope operations (`walk`,
+  `list` of the blog root, `removeAll`, the backfill and its `--verify`) only
+  look at the `{blogID}/_*/` prefixes, never at `folder/`, `git/` or anything
+  else under `{blogID}/`. `folder/` and `git/` are reserved names under each
+  blog prefix; nothing else may be written at a blog's top level without an
+  underscore. Blog IDs are always `blog_<uuid>`, so nothing else belongs at
+  the bucket's top level.
+
+  Storage class is set per object at write time rather than via
+  prefix-filtered lifecycle rules. The whole bucket is public-read for
+  `blog_*` keys (no listing, no public writes) because both scopes are
+  public by design: assets are served on the CDN, and a blog's folder is
+  served at the blog's domain and through the CDN's `/folder/v-:version`
+  route. Two buckets are only needed if versioning/cross-region replication
+  is wanted for folder content but not for assets (e.g. for a "restore
+  deleted file" feature), because versioning is bucket-wide; decide that
   before Phase 2 puts folder data in the bucket.
 - **Versioning: off**, bucket-wide.
 - **Backup: hourly `aws s3 sync` (whole bucket, no `--delete`) to
@@ -161,10 +174,12 @@ at sync/build time instead.
   before the flip. This replaces the earlier plan of keeping the app as
   Bunny's origin and warming Perma-Cache with a GET after each write.
 - **The bucket is public for `s3:GetObject` on `blog_*` keys only** — never
-  `ListBucket`, never write. Blog IDs are UUIDs and blog folders are already
-  served unauthenticated via `/folder/v-:version`, so this isn't a new
-  exposure. Keys are `{blogID}/{path}` at the root, identical to the CDN path,
-  which is what lets Bunny fetch them with no rewriting. `config/storage-bucket`
+  `ListBucket`, never write. That covers a blog's folder content under
+  `{blogID}/folder/` as well as its assets, which is intended: blog IDs are
+  UUIDs and blog folders are already served unauthenticated at the blog's
+  domain and via `/folder/v-:version`, so this isn't a new exposure. Asset
+  keys are `{blogID}/{path}`, identical to the CDN path, which is what lets
+  Bunny fetch them with no rewriting. `config/storage-bucket`
   has the setup script and the operator steps.
 - **A read-order flag, `BLOT_ASSETS_READ`** (`config.assets.read`). Writes go
   to both disk and S3 whenever a bucket is configured. Reads try `disk` first
@@ -193,7 +208,9 @@ at sync/build time instead.
 
   Nothing may wipe the whole `.assets` scope except blog deletion (today
   `app/sync/rebuild.js` only `fs.emptyDir`s `_thumbnails`/`_image_cache`,
-  and the storage layer shouldn't expose a scope-wide delete). Quota is
+  and the storage layer shouldn't expose a scope-wide delete). Even then
+  `removeAll` deletes only the `{blogID}/_*/` prefixes; blog deletion will
+  remove the folder scope separately once it exists. Quota is
   enforced on `.folder` writes only; `.assets` bytes are tracked but not
   capped.
 
@@ -305,7 +322,7 @@ should consolidate into one storage-layer method, exposed explicitly
   image and favicon generators), so the shape there is "write to
   `path(blogID, relPath)`, then `commit(blogID, relPath)`" (a file or a
   directory; it uploads to S3 when a bucket is set). `removeAll(blogID)` is the only whole-scope
-  delete, used solely by blog deletion.
+  delete, used solely by blog deletion; it removes the `_*` directories only.
 - **Phase 1 — `.assets` first.** These files are written asynchronously,
   UUID- or content-hash-named, and never change once written — the
   simplest shape to move. No production code reads their mtime or ctime.
@@ -347,8 +364,10 @@ should consolidate into one storage-layer method, exposed explicitly
     pruned with the rest of the tmp directory); a read cache on ephemeral SSD
     would be bounded in size. Shadow-read timing instrumentation is limited
     to the sampled log line when a disk-first read has to go to S3.
-- **Phase 2 — `.folder`.** Run both §4a backfill scripts on local disk
-  before the copy to S3. Grow the storage-layer API as call sites need it
+- **Phase 2 — `.folder`.** Folder content is stored under
+  `{blogID}/folder/{path}` in the same bucket (§3), outside the assets scope,
+  and blog deletion removes it separately from `removeAll`. Run both §4a
+  backfill scripts on local disk before the copy to S3. Grow the storage-layer API as call sites need it
   (read/write/remove/list/stat, with `stat()` as described in §4a), migrate
   sync clients onto a staging pattern, resolve the caveats in §4, parallelize
   `rebuild.js`, then cut over. Add a paginated `list()` when a caller
@@ -363,7 +382,8 @@ should consolidate into one storage-layer method, exposed explicitly
   separate from blog folders. Git needs a real filesystem, so store each
   repo in object storage as one bundle or packed archive. Restore it onto
   the SSD when a push arrives, then upload it again, all under the
-  existing per-blog lock. mtime doesn't matter to git.
+  existing per-blog lock. mtime doesn't matter to git. If the archive goes in
+  the bucket it belongs under `{blogID}/git/`.
 - **Quotas** — decouple from the storage-layer build-out. Maintain a
   per-blog byte counter in `app/sync/update` (which already sees every
   changed path), backed by periodic `du`/`ListObjects` reconciliation to

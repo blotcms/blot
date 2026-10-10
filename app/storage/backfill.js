@@ -2,7 +2,7 @@ const fs = require("fs-extra");
 const { join } = require("path");
 const config = require("config");
 const s3 = require("./s3");
-const { walkLocal, createPool } = require("./util");
+const { isScopeName, walkLocal, createPool } = require("./util");
 
 // Copies the assets on local disk into the bucket (scripts/storage/
 // backfill-assets.js is the command line for this). For each blog it lists
@@ -12,6 +12,12 @@ const { walkLocal, createPool } = require("./util");
 // with the same headers assets.commit gives (s3.upload). In verify mode
 // nothing is uploaded; the result says what would be missing, different or
 // stale. Safe to run again and again.
+//
+// Only a blog's assets scope is considered: the top-level directories whose
+// names start with "_", locally and in the bucket (keys {blogID}/_*). Other
+// keys under {blogID}/ (e.g. folder/ for the blog's folder content) are
+// neither counted nor reported as extraneous, and other local entries are
+// skipped.
 
 // S3 reports LastModified to the second, and clocks differ a little, so a
 // file counts as newer than its object only by more than this
@@ -175,7 +181,7 @@ async function backfill(options) {
     const remote = new Map();
 
     try {
-      for await (const object of s3.listEntries(blogID + "/")) {
+      for await (const object of s3.listScope(blogID)) {
         remote.set(object.key, { size: object.size, modified: object.modified });
       }
     } catch (err) {
@@ -183,6 +189,8 @@ async function backfill(options) {
     }
 
     for await (const rel of walkLocal(blogDirectory)) {
+      if (!isScopeName(rel)) continue;
+
       const key = blogID + "/" + rel;
       const local = join(blogDirectory, rel);
       let size;

@@ -59,7 +59,8 @@ if [ "${#IAM_USER}" -gt 64 ] || ! [[ "$IAM_USER" =~ ^[A-Za-z0-9+=,.@_-]+$ ]]; th
 fi
 
 # Anyone may download an object whose key starts with blog_ (a blog's
-# assets: {blogID}/{path}). Nothing else is public: no listing, no writes.
+# assets, {blogID}/_*/..., and later its folder content, {blogID}/folder/...,
+# all public by design). Nothing else is public: no listing, no writes.
 BUCKET_POLICY=$(cat <<JSON
 {
   "Version": "2012-10-17",

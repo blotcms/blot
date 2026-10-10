@@ -569,6 +569,96 @@ describe("storage/assets with an S3 bucket", function () {
     });
   });
 
+  describe("the assets scope in a bucket shared with other content", function () {
+    // What the blog's folder content (folder/...) or a top-level object would
+    // look like under the same {blogID}/ prefix
+    async function putOthers(blogID) {
+      await putS3(blogID, "folder/x", "folder content");
+      await putS3(blogID, "folder/_sneaky/y", "looks like an asset dir");
+      await putS3(blogID, "top.txt", "top level object");
+    }
+
+    function others(blogID) {
+      return [
+        blogID + "/folder/_sneaky/y",
+        blogID + "/folder/x",
+        blogID + "/top.txt",
+      ];
+    }
+
+    it("rejects paths outside the scope without touching the bucket", async function () {
+      var test = this;
+      var id = test.blog.id;
+
+      await putOthers(id);
+
+      for (var order of ["disk", "s3"]) {
+        config.assets.read = order;
+
+        for (var call of [
+          function () { return assets.read(id, "folder/x"); },
+          function () { return assets.exists(id, "folder/x"); },
+          function () { return assets.ensureLocal(id, "folder/x"); },
+          function () { return assets.remove(id, "folder"); },
+          function () { return assets.write(id, "folder/z", "z"); },
+        ]) {
+          var err = await rejection(call());
+          expect(err && err.message).toMatch(/not in the assets scope/);
+        }
+      }
+
+      expect(await keys(id + "/")).toEqual(others(id));
+    });
+
+    it("serve answers NotFoundError for a path outside the scope, even if the bucket has the object", async function () {
+      var test = this;
+      var id = test.blog.id;
+
+      await putOthers(id);
+
+      for (var order of ["disk", "s3"]) {
+        config.assets.read = order;
+
+        var err = await rejection(
+          assets.serve({ headers: {}, method: "GET" }, {}, id, "folder/x", {})
+        );
+
+        expect(err instanceof assets.NotFoundError).toBe(true);
+      }
+    });
+
+    it("walk and list of the blog's root ignore other keys", async function () {
+      var test = this;
+      var id = test.blog.id;
+
+      await assets.write(id, "_avatars/a.png", "a");
+      await putS3(id, "_assets/only-s3.png", "c");
+      await putOthers(id);
+
+      var found = [];
+      for await (var relPath of assets.walk(id)) found.push(relPath);
+
+      expect(found.sort()).toEqual(["_assets/only-s3.png", "_avatars/a.png"]);
+      expect(await assets.list(id)).toEqual(["_assets", "_avatars"]);
+      expect(await assets.list(id, "")).toEqual(["_assets", "_avatars"]);
+    });
+
+    it("removeAll deletes the underscore prefixes and leaves everything else", async function () {
+      var test = this;
+      var id = test.blog.id;
+
+      await assets.write(id, "_avatars/a.png", "a");
+      await assets.write(id, "_assets/doc/b.png", "b");
+      await putS3(id, "_image_cache/only-s3.png", "c");
+      await putOthers(id);
+
+      await assets.removeAll(id);
+
+      expect(await keys(id + "/")).toEqual(others(id));
+      expect(await fs.pathExists(assets.path(id))).toBe(false);
+    });
+  });
+
   describe("when the bucket can't be reached", function () {
     beforeEach(function () {
       // nothing is listening on port 1

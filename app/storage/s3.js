@@ -1,6 +1,7 @@
 const config = require("config");
 const fs = require("fs-extra");
 const contentTypeFor = require("./contentType");
+const { isScopeName } = require("./util");
 
 // The SDK is loaded on first use, so an app with no bucket configured never
 // loads it (and starts from an image built before it was a dependency)
@@ -304,6 +305,37 @@ async function* listEntries(prefix, delimiter) {
   } while (token);
 }
 
+// The "directories" of a blog's assets scope in the bucket: {blogID}/_*/.
+// Top-level objects and every other prefix under {blogID}/ (folder/, ...)
+// are not assets and are not listed.
+async function* listScopePrefixes(blogID) {
+  const prefix = blogID + "/";
+
+  for await (const entry of listEntries(prefix, "/")) {
+    if (entry.prefix && isScopeName(entry.prefix.slice(prefix.length))) {
+      yield entry.prefix;
+    }
+  }
+}
+
+// Every object in a blog's assets scope, as { key, size, modified }
+async function* listScope(blogID) {
+  for await (const prefix of listScopePrefixes(blogID)) {
+    yield* listEntries(prefix);
+  }
+}
+
+// Deletes every object in a blog's assets scope and nothing else under
+// {blogID}/
+async function removeScope(blogID) {
+  const prefixes = [];
+
+  // collected first so the listing isn't changing underneath the deletes
+  for await (const prefix of listScopePrefixes(blogID)) prefixes.push(prefix);
+
+  for (const prefix of prefixes) await removePrefix(prefix);
+}
+
 // Deletes up to 1000 keys at once
 async function deleteKeys(keys) {
   if (!keys.length) return;
@@ -367,6 +399,9 @@ module.exports = {
   get,
   open,
   listEntries,
+  listScopePrefixes,
+  listScope,
   remove,
   removePrefix,
+  removeScope,
 };
