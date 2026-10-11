@@ -1,0 +1,50 @@
+{{> status-line}}
+
+{{#account}}
+
+  {{#revoked}}
+  <a href="{{{base}}}/redirect" class="mess error">
+    <b>Error</b><br><br>
+    Blot can no longer access OneDrive for <b>{{blog.title}}</b>. You can probably fix this by reconnecting to OneDrive.<br><br>
+    <span class="button">Re-connect to OneDrive</span>
+  </a>
+  {{/revoked}}
+
+  {{#folder_missing}}
+  <div class="mess error">
+    <b>Error</b><br><br>
+    The OneDrive folder for <b>{{blog.title}}</b> was deleted, so Blot cannot sync it. To create a new folder, disconnect OneDrive and connect it again.
+  </div>
+  {{/folder_missing}}
+
+  {{#quota_exceeded}}
+  <div class="mess error">
+    <b>Error</b><br><br>
+    Your OneDrive storage is full, so changes to <b>{{blog.title}}</b> cannot sync. Free up space in OneDrive to resume syncing.
+  </div>
+  {{/quota_exceeded}}
+
+  <div class="live-updates">
+    <div class="line">
+      <div class="label">OneDrive account</div>
+      <div class="center">{{email}}</div>
+    </div>
+    {{#folder}}
+    <div class="line">
+      <div class="label">OneDrive folder</div>
+      <div class="center">
+        <img src="/images/sync/onedrive.svg" width="16" style="position:relative;top:2px;margin-right:2px">
+        Apps / {{folder}}
+      </div>
+    </div>
+    {{/folder}}
+  </div>
+
+  {{#preparing}}
+  <p>Setting up your folder on OneDrive. Please wait to make any changes to this folder until the set-up is complete.</p>
+  {{/preparing}}
+  {{^preparing}}
+  <p>Blot uploads changes to your folder to OneDrive. Changes made in OneDrive don't appear on your site yet: syncing from OneDrive is still being built.</p>
+  {{/preparing}}
+
+{{/account}}
