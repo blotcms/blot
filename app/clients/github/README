@@ -1,0 +1,21 @@
+GitHub client
+-------------
+
+Skeleton only. See PLAN.md in this directory for the full design (GitHub
+App registration, OAuth + repo picker, file transfer, webhook sync).
+
+Current state (plan step 2):
+
+- `disconnect`, `write`, `remove` only touch the local blog folder. They
+  do not yet talk to the GitHub API.
+- `dashboard_routes` exposes a connect page that explains sync is not
+  available yet, and a disconnect page.
+- `site_routes` exposes `POST /webhook`, which verifies GitHub's
+  HMAC-SHA256 signature and responds 200, but does not act on events.
+- The client is only registered (`app/clients/index.js`) once all of
+  `config.github.{app_id,client_id,client_secret,private_key,
+  webhook_secret}` are set, so it stays hidden on the dashboard until a
+  real GitHub App exists and its credentials are configured.
+
+Everything else in PLAN.md - OAuth, the repo picker, Redis storage,
+transfer, and real commit-backed write/remove - is not implemented yet.
