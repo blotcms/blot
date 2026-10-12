@@ -1,3 +1,23 @@
+How could we generate the directory tree structure used in the hypertext template sidebar on the Server in the template engine
+
+Merge proxy and note containers into a single image which may be used as child processes
+- Does the airlock need to be a separate image or can we bake this in as well? 
+
+Add a tool which randomly samples, production markdown posts, and runs version of build and version B of build on it
+- Goal would be to identify regression in a new version of the build process 
+
+add transfer site flow to blot
+- for designers and develeopers to transfer a site to their client after building it
+
+Add site per customer stat to daily update
+
+Open source as content marketing
+- Close my GitHub account 
+- Release pane and other open source projects that I can spin out of blot
+
+Add rebuild button to each file on dashboard
+- Add json viewer to files on dashboard
+
 Rewrite node deploy to wait for image after all the init steps to speed up runs
 
 Create a skill which interacts with the production test blogs through the locally synced folders
