@@ -1,5 +1,8 @@
 How could we generate the directory tree structure used in the hypertext template sidebar on the Server in the template engine
 
+Implement liveline for stats streaming
+- https://benji.org/liveline
+
 Merge proxy and note containers into a single image which may be used as child processes
 - Does the airlock need to be a separate image or can we bake this in as well? 
 
