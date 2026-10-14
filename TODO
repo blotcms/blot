@@ -4,6 +4,10 @@ Suppress new site admin notification for no subscription change (i.e. user delet
 
 PayPal end cancellation didn't fire native admin notification for cancellation jesse@xxx 
 
+Add one time login cancellation links to renewal emails 
+
+Add lifetime subscription to the billing interval page
+
 Implement liveline for stats streaming
 - https://benji.org/liveline
 
