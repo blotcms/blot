@@ -1,5 +1,9 @@
 How could we generate the directory tree structure used in the hypertext template sidebar on the Server in the template engine
 
+Suppress new site admin notification for no subscription change (i.e. user deletes then adds back in a single site)
+
+PayPal end cancellation didn't fire native admin notification for cancellation jesse@xxx 
+
 Implement liveline for stats streaming
 - https://benji.org/liveline
 
