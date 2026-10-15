@@ -1,6 +1,7 @@
 const { callbackify } = require("util");
 const screenshot = callbackify(require("helper/screenshot"));
 const assets = require("storage/assets");
+const clfdate = require("helper/clfdate");
 const { v4: uuid } = require("uuid");
 const { is } = require("build/converters/webloc");
 const SCREENSHOT_DIR = "_bookmark_screenshots";
@@ -57,7 +58,16 @@ function render($, callback, { blogID, path }) {
 
       // The screenshot was written locally by the browser, now it's in place
       callbackify(assets.commit)(blogID, screenshotPath, function (err) {
-        if (err) return callback();
+        if (err) {
+          console.log(
+            clfdate(),
+            "[linkScreenshot] commit failed",
+            "blog=" + blogID,
+            "path=" + screenshotPath,
+            err.message
+          );
+          return callback();
+        }
 
         $.root().html(
           `<p class="bookmark-container">

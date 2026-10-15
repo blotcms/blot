@@ -12,6 +12,7 @@ var config = require("config");
 var assets = require("storage/assets");
 var Pandoc = config.pandoc.bin;
 var tempDir = require("helper/tempDir");
+var hash = require("helper/hash");
 
 function is (path) {
   return [".odt"].indexOf(extname(path).toLowerCase()) > -1;
@@ -32,7 +33,9 @@ function read (blog, path, callback) {
   var outPath = outDir + "/out.html";
 
   var blogDir = assets.path(blog.id);
-  var assetDir = assets.path(blog.id, "_assets");
+  // pandoc keeps the document's own folder names (Pictures/ for odt), so
+  // give each document its own directory and commit all of it
+  var assetDir = assets.path(blog.id, "_assets", hash(path));
 
   fs.ensureDir(outDir, function (err) {
     if (err) return callback(err);
@@ -201,7 +204,7 @@ function read (blog, path, callback) {
 
             // pandoc extracted any media from the document into the blog's
             // asset directory, now it is all in place
-            callbackify(assets.commit)(blog.id, "_assets/media", function (err) {
+            callbackify(assets.commit)(blog.id, "_assets/" + hash(path), function (err) {
               fs.remove(outDir, function (err) {});
 
               if (err) return callback(err);
