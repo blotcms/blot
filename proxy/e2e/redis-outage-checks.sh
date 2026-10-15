@@ -2,9 +2,9 @@
 #
 # What custom-domain HTTPS does when Redis, which holds the certificates, is
 # stopped, comes back with a different certificate, or refuses writes
-# (READONLY, NOREPLICAS). Run by the cert-issuance job in
-# .github/workflows/integration.yml, after a certificate for $TEST_DOMAIN has
-# been issued, against:
+# (READONLY, NOREPLICAS), or is connected but errors or does not answer. Run
+# by the cert-issuance job in .github/workflows/integration.yml, after a
+# certificate for $TEST_DOMAIN has been issued, against:
 #
 #   - a proxy container, started with PROXY_AUTO_SSL_CACHE_TTL set (seconds;
 #     it stands in for auto-ssl's hour)
@@ -30,6 +30,7 @@ restore_redis() {
   docker start "$REDIS" >/dev/null 2>&1 || true
   redis replicaof no one >/dev/null 2>&1 || true
   redis config set min-replicas-to-write 0 >/dev/null 2>&1 || true
+  redis client unpause >/dev/null 2>&1 || true
 }
 trap restore_redis EXIT
 
@@ -163,5 +164,27 @@ expect_fallback_fast noreplicas.example
 docker logs "$PROXY" 2>&1 | grep "failed to obtain lock" | grep -q NOREPLICAS
 
 redis config set min-replicas-to-write 0 >/dev/null
+
+echo "=== Redis connected but GET errors: issuance is refused ==="
+# A listed domain whose key has the wrong type: the connection is fine and
+# the certificate lookup finds nothing, but GET domain:<name> returns an
+# error. Allowing the domain on that error would start an ACME order.
+redis hset domain:wrongtype.example field 1 >/dev/null
+expect_fallback_fast wrongtype.example
+docker logs "$PROXY" 2>&1 | grep -q "allow_domain: redis error for wrongtype.example"
+
+echo "=== Redis connected but not answering: issuance is refused ==="
+redis set domain:paused.example 1 >/dev/null
+# Redis accepts connections but answers nothing for 8s. The certificate read
+# in the handshake times out after 2s, which also marks Redis down for 5s, so
+# allow_domain does not wait again: it cannot get a connection and logs that
+# rather than a GET error. Either way the domain is not allowed, though it is
+# listed, and the handshake ends well inside expect_fallback_fast's 10s.
+# redis-cli blocks while paused, so none is called until it has ended.
+redis client pause 8000 all >/dev/null
+expect_fallback_fast paused.example
+docker logs "$PROXY" 2>&1 | grep -q "allow_domain: cannot connect to redis for paused.example"
+wait_for_redis
+redis client unpause >/dev/null
 
 echo "all Redis outage checks passed"
