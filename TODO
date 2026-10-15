@@ -1,3 +1,16 @@
+App changes toward consolidated units and horizontal scaling (#2119), each useful on its own:
+- Remove the master: cron jobs take a per-run Redis lock (SET NX cron:<job>:<date>); scheduled posts and welcome/renewal emails move to a Redis due-time sorted set any process can claim; client init() watchers become locked periodic jobs; templates()/folders() startup builds idempotent + locked
+- Graceful drain on SIGTERM: stop accepting, finish in-flight, release locks, exit; /health returns 503 while draining
+- Fix green's heap creep (see below), the main crash cause
+- Purge: parallel, per-proxy timeout, one failure doesn't skip the rest, durable for a proxy that was down
+- Replace proper-lockfile folder lock with a Redis mutex; take it in git write/remove and template writeToFolder/removeFromFolder too (they skip it today)
+- Proxy: ~2s Redis socket timeouts; allow_domain fails open when GET errors, check err
+- Node listens on a Unix socket when configured
+- Serve the new template CDN URL format from Redis, not only local disk
+- Parallelize app/sync/rebuild.js
+- Webhook relay over Redis pub/sub so any process can serve webhooks.
+- Later: build queue (sync and dashboard writes enqueue per-blog builds, workers consume) so dashboard writes stop queueing behind builds
+
 From 22 Oct: delete snap-02793374b4e56ea7b, the pre-resize snapshot of the 15 Oct data volume shrink (its volume vol-07c767ac8b6aeab4f was deleted 15 Oct), and any DLM dailies of that volume
 Investigate slow creep of green's baseline heap (~40-80MB/day lowest heapUsed in [STATS], never resets until a V8 OOM crash; crashed 13+14 Oct 2026). Leak or unbounded cache? Compare heap snapshots taken hours apart
 - Spikes from heavy post builds (e.g. blog_825ed2a 'All paths', ~250MB) only crash it once the baseline has crept up
@@ -23,8 +36,6 @@ Add lifetime subscription to the billing interval page
 Implement liveline for stats streaming
 - https://benji.org/liveline
 
-Merge proxy and note containers into a single image which may be used as child processes
-- Does the airlock need to be a separate image or can we bake this in as well? 
 
 Add a tool which randomly samples, production markdown posts, and runs version of build and version B of build on it
 - Goal would be to identify regression in a new version of the build process 
