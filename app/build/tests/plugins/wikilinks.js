@@ -195,6 +195,75 @@ Heading Here
     this.syncAndCheck(files, entry, done);
   });
 
+  it("will read the titles once for every title link in a post", function (done) {
+    const Entries = require("models/entries");
+    const path = "/Links.md";
+
+    const files = [
+      { path: "/One.md", content: "Link: one\n# First post" },
+      { path: "/Two.md", content: "Link: two\n# Second post" },
+      { path: "/Three.md", content: "Link: three\nPage: yes\n# A page" },
+    ];
+
+    const entry = {
+      path,
+      html:
+        '<p><a href="/one" class="wikilink">First post</a> ' +
+        '<a href="/two" class="wikilink">Second post</a> ' +
+        '<a href="/three" class="wikilink">A page</a> ' +
+        '<a href="/one" class="wikilink">First post</a> ' +
+        '<a href="Missing" class="wikilink">Missing</a></p>',
+    };
+
+    this.syncAndCheck(files, [], (err) => {
+      if (err) return done.fail(err);
+
+      // Once for the post list and once for the page list, not once per link
+      const lists = spyOn(Entries, "getListIDs").and.callThrough();
+
+      this.syncAndCheck(
+        [
+          {
+            path,
+            content:
+              "[[First post]] [[second post]] [[A page]] [[First post]] [[Missing]]",
+          },
+        ],
+        entry,
+        (err) => {
+          if (err) return done.fail(err);
+          expect(lists.calls.allArgs().map((args) => args[1])).toEqual(["entries", "pages"]);
+          done();
+        }
+      );
+    });
+  });
+
+  it("will read the titles in batches", function (done) {
+    const Entry = require("models/entry");
+    const { titleIndex } = require("build/plugins/wikilinks/byTitle");
+
+    // More posts than byTitle reads at once (25)
+    const files = [];
+    for (let i = 0; i < 30; i++) {
+      files.push({ path: `/Post ${i}.md`, content: `Link: post-${i}\n# Post number ${i}` });
+    }
+
+    this.syncAndCheck(files, [], (err) => {
+      if (err) return done.fail(err);
+
+      const get = spyOn(Entry, "get").and.callThrough();
+
+      titleIndex(this.blog.id)().then((titles) => {
+        const batches = get.calls.allArgs().map((args) => args[1].length);
+        expect(Math.max(...batches)).toBeLessThanOrEqual(25);
+        expect(titles.length).toEqual(30);
+        expect(titles).toContain({ title: "Post number 7", url: "/post-7", path: "/Post 7.md" });
+        done();
+      }, done.fail);
+    });
+  });
+
   it("will support media embedding", async function (done) {
     await this.blog.write({
       path: "/_Image.png",

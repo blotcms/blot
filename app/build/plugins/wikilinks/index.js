@@ -75,6 +75,7 @@ function render($, callback, { blogID, path }) {
 
   const wikilinks = $(".wikilink[data-wikilink-marker='1']");
   let dependencies = [];
+  const titles = byTitle.titleIndex(blogID);
 
   eachOf(
     wikilinks,
@@ -122,7 +123,7 @@ function render($, callback, { blogID, path }) {
         byPath.bind(null, blogID, path, href, isLink),
         byFilename.bind(null, blogID, path, href, isLink),
         byURL.bind(null, blogID, href),
-        byTitle.bind(null, blogID, href),
+        byTitle.bind(null, titles, href),
         byHeadingAnchor.bind(null, $, href),
       ];
 
