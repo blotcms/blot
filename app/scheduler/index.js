@@ -4,6 +4,8 @@ var dailyUpdate = require("./daily");
 var email = require("helper/email");
 var clfdate = require("helper/clfdate");
 const scheduler = require("node-schedule");
+const lock = require("helper/lock");
+const client = require("models/client");
 var checkFeaturedSites = require("../documentation/featured/check");
 var config = require("config");
 var publishScheduledEntries = require("./publish-scheduled-entries");
@@ -27,15 +29,75 @@ const SCHEDULE_RETRY_MAX_MS = 60 * 60 * 1000;
 // The data disk is watched by percentage instead (free-disk-space.js).
 const MINIMUM_DISK_SPACE_IN_K = 2 * 1024 * 1024;
 
-let NOTIFIED_LOW_DISK_SPACE = false;
-let NOTIFIED_DATA_DISK_PERCENT = 0;
+// The warning emails are sent once per TTL across every process: each
+// container runs the per-minute check below, and lock.once in Redis decides
+// which one sends. Like the in-memory flags they replace, nothing resets when
+// the disk recovers: the keys just expire.
+const LOW_DISK_NOTIFIED_KEY = "notify:low-disk-space";
+const DATA_DISK_NOTIFIED_KEY = "notify:data-disk-percent:";
+const DISK_NOTIFY_TTL_MS = 24 * 60 * 60 * 1000;
+
+function sendLowDiskEmail(disks, headline) {
+  email.WARNING_LOW_DISK_SPACE(null, { disks, headline }, function (err) {
+    if (err) console.log(clfdate(), err);
+  });
+}
+
+// Emails about low disk space, at most once per DISK_NOTIFY_TTL_MS however
+// many processes call this. The data disk emails once per alert level
+// (90, 95, 99%), the other disks once for all of them. Never rejects.
+async function notifyLowDisk(disks) {
+  try {
+    const lowDisk = disks.some(
+      disk => disk.label !== "data" && disk.available_k < MINIMUM_DISK_SPACE_IN_K
+    );
+
+    if (lowDisk && (await lock.once(LOW_DISK_NOTIFIED_KEY, DISK_NOTIFY_TTL_MS))) {
+      sendLowDiskEmail(disks, "Warning: Blot's disk is low on space");
+    }
+
+    const alert = freeDiskSpace.dataDiskAlert(disks);
+
+    if (
+      alert &&
+      (await lock.once(DATA_DISK_NOTIFIED_KEY + alert.percent, DISK_NOTIFY_TTL_MS))
+    ) {
+      sendLowDiskEmail(disks, alert.headline);
+
+      // Having emailed for this level, a later reading at a lower one (the
+      // disk recovering a little) must not email again within the TTL.
+      const lower = freeDiskSpace.DATA_DISK_ALERTS.filter(
+        other => other.percent < alert.percent
+      );
+      if (lower.length) {
+        const multi = client.multi();
+        for (const other of lower) {
+          multi.set(DATA_DISK_NOTIFIED_KEY + other.percent, "1", { PX: DISK_NOTIFY_TTL_MS });
+        }
+        await multi.exec();
+      }
+    }
+  } catch (err) {
+    console.error(clfdate(), "Error checking whether to send low disk space email", err);
+  }
+}
+
+// The Redis host check measures "continuous" from the previous run, which may
+// have been in another process, so when it last ran is kept in Redis (its
+// alert state is at check-redis-host's STATE_KEY).
+const REDIS_HOST_CHECKED_AT_KEY = "blot:redis-host:checked-at";
+
+// If Redis is readable but refuses writes (OOM, MISCONF) the SET below fails
+// and the stored time goes stale, so the last completed check is also kept in
+// this process and the newer of the two is used.
+let redisHostCheckedAtInMemory = null;
 
 module.exports = function () {
   // Log useful system information, once per minute
   scheduler.scheduleJob("* * * * *", function () {
     // Detect any zombie processes
     zombies(function (err) {
-      if (err) throw err;
+      if (err) console.error(clfdate(), "Error checking for zombie processes", err);
     });
 
     freeDiskSpace(function (err, disks) {
@@ -52,33 +114,7 @@ module.exports = function () {
         disks.map(disk => disk.label + "=" + disk.available_human).join(", ")
       );
 
-      const lowDisk = disks.some(
-        disk => disk.label !== "data" && disk.available_k < MINIMUM_DISK_SPACE_IN_K
-      );
-
-      if (lowDisk && !NOTIFIED_LOW_DISK_SPACE) {
-        NOTIFIED_LOW_DISK_SPACE = true;
-        email.WARNING_LOW_DISK_SPACE(
-          null,
-          { disks, headline: "Warning: Blot's disk is low on space" },
-          function (err) {
-            if (err) console.log(clfdate(), err);
-          }
-        );
-      }
-
-      const alert = freeDiskSpace.dataDiskAlert(disks);
-
-      if (alert && alert.percent > NOTIFIED_DATA_DISK_PERCENT) {
-        NOTIFIED_DATA_DISK_PERCENT = alert.percent;
-        email.WARNING_LOW_DISK_SPACE(
-          null,
-          { disks, headline: alert.headline },
-          function (err) {
-            if (err) console.log(clfdate(), err);
-          }
-        );
-      }
+      notifyLowDisk(disks);
     });
 
     // Print most memory-intensive processes
@@ -184,13 +220,18 @@ module.exports = function () {
   });
 
   console.log(clfdate(), "Scheduled daily check of storage disk usage");
-  scheduler.scheduleJob({ hour: 10, minute: 0 }, function () {
+  // Checks one host's disk: scope "host" once BLOT_HOST_ID is set and there is
+  // more than one host.
+  lock.cron("disk-usage-report", { hour: 10, minute: 0 }, function () {
     console.log(clfdate(), "Scheduler: Checking available disk space");
 
     exec("df -h", function (err, stdout) {
-      if (err) throw err;
+      if (err) {
+        console.error(clfdate(), "Scheduler: Error checking available disk space", err);
+        return;
+      }
 
-      var disk = stdout.split("\n")[1].replace(/\s+/g, " ").split(" ");
+      var disk = (stdout.split("\n")[1] || "").replace(/\s+/g, " ").split(" ");
       var usage = disk[4];
       var available = disk[3];
 
@@ -234,7 +275,7 @@ module.exports = function () {
 
 
   console.log(clfdate(), "Scheduled daily subscription lifecycle processing");
-  scheduler.scheduleJob({ hour: 9, minute: 0 }, function () {
+  lock.cron("subscription-lifecycle", { hour: 9, minute: 0 }, function () {
     console.log(clfdate(), "Processing subscription lifecycle changes");
     subscriptionLifecycleJob(function (err) {
       if (err) console.log(clfdate(), "Error processing subscription lifecycle", err);
@@ -242,7 +283,7 @@ module.exports = function () {
   });
 
   console.log(clfdate(), "Scheduled daily check of suspected fraudulent users");
-  scheduler.scheduleJob({ hour: 11, minute: 0 }, async function () {
+  lock.cron("check-card-testers", { hour: 11, minute: 0 }, async function () {
     console.log(clfdate(), "Checking for potential fraudulent users");
 
     let customers;
@@ -261,7 +302,7 @@ module.exports = function () {
   });
 
   console.log(clfdate(), "Scheduled daily check of SSL certificates");
-  scheduler.scheduleJob({ hour: 13, minute: 0 }, async function () {
+  lock.cron("check-ssl-certificates", { hour: 13, minute: 0 }, async function () {
     console.log(clfdate(), "Checking SSL certificates");
 
     try {
@@ -286,9 +327,14 @@ module.exports = function () {
   // Two minutes after each of the Redis host's 5-minute samples. During a
   // Redis outage this only logs: /redis-health reports the outage itself.
   console.log(clfdate(), "Scheduled check of the Redis host's memory limits");
-  let redisHostCheckedAt = null;
-  scheduler.scheduleJob("2-59/5 * * * *", async function () {
+  lock.cron("check-redis-host", "2-59/5 * * * *", async function () {
     try {
+      const checkedAt = await client.get(REDIS_HOST_CHECKED_AT_KEY);
+      const stored = checkedAt === null ? null : Number(checkedAt);
+      const redisHostCheckedAt =
+        stored === null || Number.isNaN(stored)
+          ? redisHostCheckedAtInMemory
+          : Math.max(stored, redisHostCheckedAtInMemory || 0);
       const { sent, report } = await checkRedisHost({
         lastCheckAt: redisHostCheckedAt,
         sendEmail: (view) =>
@@ -298,7 +344,12 @@ module.exports = function () {
             )
           ),
       });
-      redisHostCheckedAt = report.now;
+      redisHostCheckedAtInMemory = report.now;
+      try {
+        await client.set(REDIS_HOST_CHECKED_AT_KEY, String(report.now));
+      } catch (err) {
+        console.log(clfdate(), "Error: Saving Redis host check time", err.message);
+      }
       if (sent) console.log(clfdate(), "Sent Redis host alert email");
     } catch (err) {
       if (isRedisUnavailableError(err)) {
@@ -312,9 +363,10 @@ module.exports = function () {
   // A push cut off by a crash or a deploy leaves its quarantine directory in
   // the bare repository, and git never removes it. The scheduler runs in the
   // container that serves git pushes (config.master, the green one) and sees
-  // the same git data directory.
+  // the same git data directory. Should become scope "host" once BLOT_HOST_ID
+  // is set and there is more than one host.
   console.log(clfdate(), "Scheduled daily sweep of stale git push quarantine directories");
-  scheduler.scheduleJob({ hour: 5, minute: 0 }, async function () {
+  lock.cron("sweep-git", { hour: 5, minute: 0 }, async function () {
     try {
       const { report, sent } = await sweepGit({
         sendEmail: (view) =>
@@ -341,9 +393,10 @@ module.exports = function () {
 
   // config.tmp_directory is on the host's instance store and shared by every
   // container, so it is pruned once, by the container that runs the scheduler
-  // (config.master).
+  // (config.master). Should become scope "host" once BLOT_HOST_ID is set and
+  // there is more than one host.
   console.log(clfdate(), "Scheduled daily prune of old files in the tmp directory");
-  scheduler.scheduleJob({ hour: 5, minute: 30 }, async function () {
+  lock.cron("prune-tmp", { hour: 5, minute: 30 }, async function () {
     try {
       const report = await pruneTmp();
 
@@ -361,7 +414,7 @@ module.exports = function () {
   });
 
   console.log(clfdate(), "Scheduled daily check of featured sites");
-  scheduler.scheduleJob({ hour: 8, minute: 0 }, function () {
+  lock.cron("check-featured-sites", { hour: 8, minute: 0 }, function () {
     console.log(clfdate(), "Checking featured sites");
     checkFeaturedSites(function (err) {
       if (err) {
@@ -374,10 +427,12 @@ module.exports = function () {
 
   // At some point I should check this doesnt consume too much memory
   console.log(clfdate(), "Scheduled daily update email");
-  scheduler.scheduleJob({ hour: 12, minute: 0 }, function () {
+  lock.cron("daily-update", { hour: 12, minute: 0 }, function () {
     console.log(clfdate(), "Generating daily update email...");
     dailyUpdate(function () {
       console.log(clfdate(), "Daily update email update was sent.");
     });
   });
 };
+
+module.exports.notifyLowDisk = notifyLowDisk;
