@@ -53,4 +53,36 @@ describe("flushCachePending", function () {
     await pending.remove(target, []);
     expect((await pending.list(target)).length).toBe(1);
   });
+
+  it("only lists entries recorded at or before the max score", async function () {
+    await pending.add(target, ["old.example"], 1000);
+    await pending.add(target, ["new.example"], 2000);
+
+    const entries = await pending.list(target, 1500);
+
+    expect(entries).toEqual([{ host: "old.example", score: 1000 }]);
+  });
+
+  it("limits the number of entries listed, oldest first", async function () {
+    await pending.add(target, ["new.example"], 2000);
+    await pending.add(target, ["old.example"], 1000);
+
+    const entries = await pending.list(target, "+inf", 1);
+
+    expect(entries).toEqual([{ host: "old.example", score: 1000 }]);
+  });
+
+  it("ignores an empty list of hosts", async function () {
+    await pending.add(target, []);
+
+    expect(await pending.list(target)).toEqual([]);
+  });
+
+  it("stores an explicit score exactly", async function () {
+    await pending.add(target, ["a.example"], 12345);
+
+    expect(await pending.list(target)).toEqual([
+      { host: "a.example", score: 12345 },
+    ]);
+  });
 });

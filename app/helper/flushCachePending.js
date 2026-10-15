@@ -1,7 +1,7 @@
-// Redis-backed record of hosts a reverse proxy failed to purge (see
+// Redis-backed record of hosts not yet purged from a reverse proxy (see
 // helper/flushCache). One sorted set per proxy URL: member = host, score =
-// when the failure was recorded. A later failure for the same host bumps the
-// score, so a retry that started before it does not delete it.
+// when the purge was recorded. Recording the same host again bumps the
+// score, so a purge that started before it does not delete it.
 
 const key = (target) => `flushCache:pending:${target}`;
 
@@ -19,16 +19,21 @@ return removed
 `;
 
 module.exports = (client) => ({
-  async add(target, hosts) {
-    const score = Date.now();
+  async add(target, hosts, score = Date.now()) {
+    if (!hosts.length) return;
+
     await client.zAdd(
       key(target),
       hosts.map((value) => ({ score, value }))
     );
   },
 
-  async list(target) {
-    const members = await client.zRangeWithScores(key(target), 0, -1);
+  // Entries recorded at or before maxScore, oldest first, at most count
+  async list(target, maxScore = "+inf", count = -1) {
+    const members = await client.zRangeWithScores(key(target), "-inf", maxScore, {
+      BY: "SCORE",
+      LIMIT: { offset: 0, count },
+    });
     return members.map(({ value, score }) => ({ host: value, score }));
   },
 

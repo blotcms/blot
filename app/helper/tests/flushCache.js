@@ -232,16 +232,18 @@ describe("flushCache", function () {
       const clock = { now: 1000 };
       return {
         store,
-        async add(target, hosts) {
+        async add(target, hosts, score) {
           store[target] = store[target] || {};
-          clock.now++;
-          hosts.forEach((host) => (store[target][host] = clock.now));
+          if (score === undefined) clock.now++;
+          const value = score === undefined ? clock.now : score;
+          hosts.forEach((host) => (store[target][host] = value));
         },
-        async list(target) {
-          return Object.entries(store[target] || {}).map(([host, score]) => ({
-            host,
-            score,
-          }));
+        async list(target, maxScore = Infinity, count = -1) {
+          const entries = Object.entries(store[target] || {})
+            .map(([host, score]) => ({ host, score }))
+            .filter(({ score }) => score <= maxScore)
+            .sort((a, b) => a.score - b.score);
+          return count >= 0 ? entries.slice(0, count) : entries;
         },
         async remove(target, entries) {
           entries.forEach(({ host, score }) => {
@@ -363,6 +365,7 @@ describe("flushCache", function () {
         requestsPerSecond: 100,
         pending,
         retryIntervalMs: 0, // drive retries by hand
+        retryAfterMs: 0,
       });
 
       try {
@@ -374,7 +377,8 @@ describe("flushCache", function () {
         "a.example",
         "b.example",
       ]);
-      expect(pending.store[healthy.url]).toBeUndefined();
+      // the healthy proxy accepted them, so its records were cleared
+      expect(pending.store[healthy.url]).toEqual({});
 
       // still down: the entries are kept
       await flush.retryPending();
@@ -386,6 +390,177 @@ describe("flushCache", function () {
 
       expect(proxy.purges.length).toBe(1);
       expect(pending.store[proxy.url]).toEqual({});
+    });
+
+    it("records hosts as pending before purging them", async function () {
+      const pending = memoryPending();
+      const seen = [];
+      let proxy;
+
+      proxy = startProxy((req, res) => {
+        seen.push(Object.keys(pending.store[proxy.url] || {}));
+        res.send("ok");
+      });
+
+      const flush = flushCache({
+        reverse_proxies: [proxy.url],
+        requestsPerSecond: 100,
+        pending,
+        retryIntervalMs: 0,
+      });
+
+      await flush("example.com");
+
+      expect(seen).toEqual([["example.com"]]);
+      expect(pending.store[proxy.url]).toEqual({});
+    });
+
+    it("a hung proxy does not slow purges to the others", async function () {
+      const hung = startProxy(() => {
+        /* never answers */
+      });
+      const healthy = startProxy((req, res) => res.send("ok"));
+
+      const flush = flushCache({
+        reverse_proxies: [hung.url, healthy.url],
+        requestsPerSecond: 100,
+        maxHostsPerPurge: 1,
+        timeoutMs: 1000,
+      });
+
+      const started = Date.now();
+      const flushes = ["a.example", "b.example", "c.example"].map((host) =>
+        flush(host).then(
+          () => "ok",
+          () => "failed"
+        )
+      );
+
+      while (healthy.purges.length < 3 && Date.now() - started < 4000) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      const elapsed = Date.now() - started;
+
+      expect(healthy.purges.length).toBe(3);
+      expect(elapsed).toBeLessThan(500);
+
+      // the hung proxy times out eventually
+      expect(await Promise.all(flushes)).toEqual(["failed", "failed", "failed"]);
+    }, 15000);
+
+    it("stops sending recorded hosts to a failing proxy", async function () {
+      const broken = startProxy((req, res) => res.status(500).send("error"));
+      const pending = memoryPending();
+
+      const flush = flushCache({
+        reverse_proxies: [broken.url],
+        requestsPerSecond: 100,
+        maxHostsPerPurge: 1,
+        pending,
+        retryIntervalMs: 0,
+      });
+
+      try {
+        await flush(["a.example", "b.example", "c.example"]);
+      } catch (e) {}
+
+      expect(broken.purges.length).toBe(1);
+      expect(Object.keys(pending.store[broken.url]).sort()).toEqual([
+        "a.example",
+        "b.example",
+        "c.example",
+      ]);
+    });
+
+    it("retries purges a process recorded but never sent", async function () {
+      const proxy = startProxy((req, res) => res.send("ok"));
+      const pending = memoryPending();
+
+      // a process which died after recording, before purging
+      await pending.add(proxy.url, ["a.example"]);
+
+      const flush = flushCache({
+        reverse_proxies: [proxy.url],
+        requestsPerSecond: 100,
+        pending,
+        retryIntervalMs: 0,
+        retryAfterMs: 0,
+      });
+
+      await flush.retryPending();
+
+      expect(proxy.purges).toEqual(["a.example"]);
+      expect(pending.store[proxy.url]).toEqual({});
+    });
+
+    it("does not retry entries newer than retryAfterMs", async function () {
+      const proxy = startProxy((req, res) => res.send("ok"));
+      const pending = memoryPending();
+
+      await pending.add(proxy.url, ["a.example"], Date.now());
+
+      const flush = flushCache({
+        reverse_proxies: [proxy.url],
+        requestsPerSecond: 100,
+        pending,
+        retryIntervalMs: 0,
+        retryAfterMs: 60000,
+      });
+
+      await flush.retryPending();
+
+      expect(proxy.purges).toEqual([]);
+      expect(Object.keys(pending.store[proxy.url])).toEqual(["a.example"]);
+    });
+
+    it("records each purge with its own score", async function () {
+      const proxy = startProxy((req, res) => res.send("ok"));
+      const pending = memoryPending();
+      const scores = [];
+      const add = pending.add;
+
+      pending.add = (target, hosts, score) => {
+        scores.push(score);
+        return add(target, hosts, score);
+      };
+
+      const flush = flushCache({
+        reverse_proxies: [proxy.url],
+        requestsPerSecond: 100,
+        pending,
+        retryIntervalMs: 0,
+      });
+
+      await Promise.all([flush("a.example"), flush("a.example")]);
+
+      expect(scores.length).toBe(2);
+      expect(scores[0]).not.toEqual(scores[1]);
+    });
+
+    it("records a failed purge again even if its record was removed", async function () {
+      const pending = memoryPending();
+      let proxyURL;
+
+      const proxy = startProxy((req, res) => {
+        // another purge's success clears the record while this one fails
+        delete pending.store[proxyURL]["a.example"];
+        res.status(500).send("error");
+      });
+      proxyURL = proxy.url;
+
+      const flush = flushCache({
+        reverse_proxies: [proxyURL],
+        requestsPerSecond: 100,
+        pending,
+        retryIntervalMs: 0,
+      });
+
+      try {
+        await flush("a.example");
+      } catch (e) {}
+
+      expect(Object.keys(pending.store[proxyURL])).toEqual(["a.example"]);
     });
 
     it("does not drop a purge which failed again while a retry was running", async function () {
@@ -405,6 +580,7 @@ describe("flushCache", function () {
         requestsPerSecond: 100,
         pending,
         retryIntervalMs: 0,
+        retryAfterMs: 0,
       });
 
       await flush.retryPending();
