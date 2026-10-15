@@ -38,6 +38,7 @@ Add rebuild button to each file on dashboard
 
 Rewrite node deploy to wait for image after all the init steps to speed up runs
 16 Oct: check Bunny's origin error statistics after /blog_* moved to the S3 origin on 15 Oct (rollback: disable edge rules 4 and 5); cdn.blot.site is a pull zone hostname but doesn't resolve in DNS: add a record or drop it
+Render benchmark skips with "No cached corpus": run benchmarks-corpus.yml (workflow_dispatch) once, probably needed since #2111 dropped data/static from the corpus
 backfill-assets.js --verify only counts missing/different/stale files: list the keys (like the odd keys), so a gap can be traced without a separate find + S3 listing
 
 Back up blot-storage-prod off AWS (Backblaze B2, hourly, no --delete): _avatars and _template_assets can't be regenerated
@@ -54,12 +55,9 @@ We get two emails one after the other and we should only get one
 
 Should we do a hybrid static build into s3 for blog HTML JS and CSS only?
 
-Data volume follow-ups (shrunk to gp3 on 9 Oct with config/host/data-volume/resize.sh; see the data-volume skill):
-- From 16 Oct: delete the 8 snapshots of the old data volume vol-0a2e04d301e025e60 (deleted 9 Oct): the pre-resize snapshot snap-0e4fdce70e58e0da6 (the rollback until then) and the 7 daily DLM ones, which the policy stopped managing when the volume lost its Name tag
-- After the S3 assets cutover deploys: delete data/static on the host, then shrink the data volume with resize.sh
+Data volume follow-ups (shrunk to gp3 on 9 Oct, again on 15 Oct after data/static moved to S3, with config/host/data-volume/resize.sh; see the data-volume skill):
+- From 22 Oct: delete snap-02793374b4e56ea7b, the pre-resize snapshot of the 15 Oct shrink (its volume vol-07c767ac8b6aeab4f was deleted 15 Oct), and any DLM dailies of that volume
 - Can we test my assumption that the ephemeral instance store hard disk is faster than EBS discs?
-
-disk alerts emails add 
 
 create skills which delegate cheap subagents to scan logs for issues:
 - proxy logs (focussed on error)

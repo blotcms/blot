@@ -95,3 +95,28 @@ Newest last. Times in UTC.
   mount-data-volume.sh; containers unaffected), then `finish` detached it.
   That sequence is now `host.sh release-old`, offered by `finish`.
 - Follow-up: delete the old volume and its snapshot from 16 Oct (TODO).
+
+### 2026-10-15 — second shrink, after generated assets moved to S3
+
+- What / why: #2111 made the storage bucket the only home of generated
+  assets, so data/static was deleted (about 60% of what the volume held; a
+  transient `systemd-run ... rm -rf`, minutes). Then shrunk to a gp3 volume
+  at about 85% used, with gp3's included IOPS and throughput (no
+  `--throughput`: the app never needed more). New volume
+  vol-0d6b1e4c0ff79d852, old vol-07c767ac8b6aeab4f, snapshot
+  snap-02793374b4e56ea7b. No drill: #2111 only changed printed text in the
+  scripts.
+- Timings: pass 1 about 40 min at ~118 MB/s (EBS byte balance bottomed out
+  around 75%), frozen copy 16s over ~1,900 shards, read-only window 59s.
+- Problems: the final copy printed `Terminated sleep "$budget"`: teardown
+  killed the watchdog's sleep before the watchdog, which could have flagged an
+  in-time copy as over budget (#2116). `finish` then refused to release the
+  old volume because chronyd (PrivateTmp, up since boot) had it in its own
+  namespace, and asked for another deploy, which can't help; its copy is a
+  slave of the host's mount and goes with the host's umount, so it is now a
+  `follower=` that doesn't block (#2117). Release and detach then went
+  cleanly.
+- Afterwards: the operator deleted the old volume the same day (the snapshot
+  is the rollback). Follow-up: delete that snapshot from 22 Oct (TODO). New
+  data-disk emails at 90/95/99% and a daily-email line (#2115) watch the
+  smaller margin; grow with `resize.sh grow`.
