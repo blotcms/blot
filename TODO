@@ -3,7 +3,6 @@ Publish Node container ports on loopback only: docker-proxy binds 8088-8090 on 0
 
 App changes toward consolidated units and horizontal scaling (#2119), each useful on its own:
 - Node listens on a Unix socket when configured
-- Serve the new template CDN URL format from Redis, not only local disk
 - Parallelize app/sync/rebuild.js
 - Later: build queue (sync and dashboard writes enqueue per-blog builds, workers consume) so dashboard writes stop queueing behind builds
 
@@ -93,7 +92,7 @@ Redis host follow-ups (from #2041, new host since 8 Oct):
 - From 15 Oct 2026: run config/redis/perf/fetch.sh redis blot and compare.js (a full day on the new host against the 8 Oct baseline), then uninstall the perf collectors: config/redis/perf/install.sh --uninstall redis blot
 - Lock heartbeat on its own RESP2 connection, no overlapping EXTENDs, per-call timeout; give the shared client a command timeout or TCP user timeout
 - Decide which app/sync/lock.js diagnostics to retire
-- Remaining dropped write errors: write Redis before deleting files (updateCdnManifest, template/drop); await set() in resetToDrive; Dropbox disconnect.js and _assign.js dropFromMenu check the wrong error; write order in Blog.create; the list-ghosts restore path; error paths for background resave and rebuild; a callback for the messenger's setStatus; make Entry.set atomic
+- Remaining dropped write errors: await set() in resetToDrive; Dropbox disconnect.js and _assign.js dropFromMenu check the wrong error; write order in Blog.create; the list-ghosts restore path; error paths for background resave and rebuild; a callback for the messenger's setStatus; make Entry.set atomic
 - Proxy: auto-ssl's lock and hook calls can reuse a timed-out Redis connection
 - Deploy log archive (scripts/deploy/index.js): docker logs -t, outside /tmp, more than 3 files, size-capped; let config/redis/perf/fetch.sh read it
 - Upgrade Redis (7 or Valkey), revisit AOF
@@ -586,9 +585,6 @@ Improve exporter:
 
 Blogs have huge numbers of archived templates – modify the tempalte archiver to only 'create' templates for sites using them, otherwise disappear them. work out how to clean up some of the many archived templates added to sites... (remove ones with zero changes?)
 
-Remove the legacy redis hash routing from cdn/index.js and key definition
-- also create new script to forcefully migrate the dangling hashes from redis to disk, if they exist
-
 Fix script to replace cssURL to handle blogs with invalid domains (it's breaking the migration)
 
 Replace existing cssURL and scriptURL and css_url and script_url properties in templates with new cdn helper
@@ -987,7 +983,6 @@ Ensure that overdue PayPal subscription webhooks map to notification emails
 
 Clean up CDN permanent storage:
 - Purge old docs CSS and JS from CDN storage cache
-- Purge old {{#cdn}} helper responses from /template/ route for blogs
 
 Make sure main server can hard restart without issue
 

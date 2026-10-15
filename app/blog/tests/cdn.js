@@ -544,6 +544,48 @@ describe("cdn template function", function () {
     });
   });
 
+  describe("template CDN route", function () {
+    it("serves rendered output from Redis with its content type", async function () {
+      await this.template({
+        "style.css": "body { color: red; }",
+        "entries.html": "{{#cdn}}/style.css{{/cdn}}",
+      });
+
+      const cdnURL = await this.text("/");
+      validate(cdnURL);
+
+      const res = await this.get(cdnURL);
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/css");
+      expect(res.headers.get("cache-control")).toBe(
+        "public, max-age=31536000, immutable"
+      );
+      expect(await res.text()).toBe("body{color:red}");
+    });
+
+    it("responds 404 for a hash which was never rendered", async function () {
+      const res = await this.get(
+        config.cdn.origin + "/template/ab/cd/" + "e".repeat(28) + "/style.css"
+      );
+
+      expect(res.status).toBe(404);
+    });
+
+    it("responds 404 for malformed template paths", async function () {
+      for (const path of [
+        "/template/zz/zz/abc/style.css",
+        "/template/ab/cd/" + "e".repeat(28),
+        "/template/style.css",
+        "/template/ab/cd/" + "e".repeat(28) + "/a/b.css",
+      ]) {
+        const res = await this.get(config.cdn.origin + path);
+
+        expect(res.status).toBe(404, path);
+      }
+    });
+  });
+
   describe("loadTemplate CDN manifest", function () {
     it("loads CDN manifest into template object", async function () {
       await this.template({

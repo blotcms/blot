@@ -294,7 +294,7 @@ When a view or metadata is saved, `util/updateCdnManifest` runs:
 3. Renders each target view via `blog/render/view`.
 4. Minifies CSS and JS outputs.
 5. Computes a hash over `{templateID}:{viewName}:{renderedContent}`.
-6. Stores the result both on disk under `{config.data_directory}/cdn/template/{h[0:2]}/{h[2:4]}/{h[4:]}/{basename}` and in Redis.
+6. Stores the result in Redis under `cdn:rendered:{hash}`; the CDN route serves it from there.
 7. Purges stale CDN URLs for changed or removed targets.
 8. Writes the updated `{target → hash}` manifest into `metadata.cdn`.
 

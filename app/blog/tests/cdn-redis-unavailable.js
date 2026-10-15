@@ -27,7 +27,7 @@ describe("cdn when redis is unavailable", function () {
       Promise.reject(new ClientOfflineError())
     );
 
-    const res = await fetch(origin + "/template/style." + hash + ".css");
+    const res = await fetch(origin + "/template/" + hash.slice(0, 2) + "/" + hash.slice(2, 4) + "/" + hash.slice(4) + "/style.css");
 
     expect(res.status).toBe(503);
     expect(res.headers.get("cache-control")).toBe("no-store");
@@ -40,7 +40,7 @@ describe("cdn when redis is unavailable", function () {
       )
     );
 
-    const res = await fetch(origin + "/template/style." + hash + ".css");
+    const res = await fetch(origin + "/template/" + hash.slice(0, 2) + "/" + hash.slice(2, 4) + "/" + hash.slice(4) + "/style.css");
 
     expect(res.status).toBe(503);
   });
@@ -48,7 +48,7 @@ describe("cdn when redis is unavailable", function () {
   it("still responds 404 for a template which does not exist", async function () {
     spyOn(client, "get").and.callFake(() => Promise.resolve(null));
 
-    const res = await fetch(origin + "/template/style." + hash + ".css");
+    const res = await fetch(origin + "/template/" + hash.slice(0, 2) + "/" + hash.slice(2, 4) + "/" + hash.slice(4) + "/style.css");
 
     expect(res.status).toBe(404);
   });

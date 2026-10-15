@@ -10,53 +10,15 @@ const generateCdnUrl = require("./generateCdnUrl");
 const { minifyCSS, minifyJS } = require("helper/minify");
 const purgeCdnUrls = require("helper/purgeCdnUrls");
 const path = require("path");
-const fs = require("fs-extra");
-const config = require("config");
 
 // Promisify callback-based functions
 const getMetadataAsync = promisify(getMetadata);
 const getAllViewsAsync = promisify(getAllViews);
 const getViewAsync = promisify(getView);
 const hsetAsync = client.hSet.bind(client);
-const delAsync = client.del.bind(client);
-const setAsync = client.set.bind(client);
 
 // Maximum size for rendered output (2MB)
 const MAX_RENDERED_OUTPUT_SIZE = 2 * 1024 * 1024;
-
-// Base directory for rendered output storage
-const RENDERED_OUTPUT_BASE_DIR = path.join(config.data_directory, "cdn", "template");
-
-
-function getRenderedOutputPath(hash, viewName) {
-  if (!hash || typeof hash !== "string" || hash.length < 4) {
-    throw new Error("Invalid hash: must be a string with at least 4 characters");
-  }
-  if (!viewName || typeof viewName !== "string") {
-    throw new Error("viewName must be a non-empty string");
-  }
-  // Use basename only for file storage (e.g., "header.html" from "partials/header.html")
-  // The full path is preserved in the URL via generateCdnUrl
-  const viewBaseName = path.basename(viewName);
-  const dir1 = hash.substring(0, 2);
-  const dir2 = hash.substring(2, 4);
-  const hashRemainder = hash.substring(4);
-  return path.join(RENDERED_OUTPUT_BASE_DIR, dir1, dir2, hashRemainder, viewBaseName);
-}
-
-async function writeRenderedOutputToDisk(hash, content, viewName) {
-  const filePath = getRenderedOutputPath(hash, viewName);
-  await fs.ensureDir(path.dirname(filePath));
-  await fs.writeFile(filePath, content, "utf8");
-}
-
-async function deleteRenderedOutputFromDisk(hash, viewName) {
-  const filePath = getRenderedOutputPath(hash, viewName);
-  await fs.remove(filePath).catch((err) => {
-    // Ignore ENOENT errors (file doesn't exist)
-    if (err.code !== "ENOENT") throw err;
-  });
-}
 
 function isValidTarget(target) {
   if (!target || typeof target !== "string") {
@@ -149,35 +111,32 @@ async function processTarget(
     contentToWrite = renderedOutputString;
   }
 
-  // Store rendered output on disk and in Redis (for backward compatibility during migration)
-  const renderedKey = key.renderedOutput(computedHash);
-  try {
-    // Write to disk (primary storage) with original view name
-    await writeRenderedOutputToDisk(computedHash, contentToWrite, target);
-
-    // Also write to Redis for backward compatibility during migration period
-    await setAsync(renderedKey, contentToWrite);
-  } catch (err) {
-    console.error(`Error storing rendered output for ${target}:`, err);
-    return null; // Don't create manifest entry if storage fails
-  }
-
-  return computedHash;
+  // Stored with the manifest that references it, see updateCdnManifest below
+  return { hash: computedHash, content: contentToWrite };
 }
+
+// Deletes a rendered output unless the template's saved manifest references
+// it. One step, so a save that makes the hash current again (it writes the
+// output and the manifest together) can't land between the check and the DEL.
+const DELETE_IF_UNREFERENCED = `
+if string.find(redis.call("HGET", KEYS[1], "cdn") or "", ARGV[1], 1, true) then return 0 end
+return redis.call("DEL", KEYS[2])`;
 
 /**
  * Clean up old rendered output and purge CDN URL
  */
-async function cleanupOldHash(target, oldHash) {
+async function cleanupOldHash(templateID, target, oldHash) {
   if (!oldHash || typeof oldHash !== 'string') return;
   
   try {
-    // Delete from disk using original view name
-    await deleteRenderedOutputFromDisk(oldHash, target);
-    
-    // Delete from Redis
-    const oldRenderedKey = key.renderedOutput(oldHash);
-    await delAsync(oldRenderedKey);
+    // A quick revert can make the old hash current again. Redis is the only
+    // copy, so deleting it then would 404 the live file.
+    const deleted = await client.eval(DELETE_IF_UNREFERENCED, {
+      keys: [key.metadata(templateID), key.renderedOutput(oldHash)],
+      arguments: [oldHash],
+    });
+
+    if (!deleted) return;
     
     // Background purge CDN URL from Bunny in background (not important)
     // if it fails, worst case we pay to store a stale file. the url used
@@ -236,7 +195,7 @@ module.exports = function updateCdnManifest(templateID, callback) {
         await hsetAsync(key.metadata(templateID), "cdn", JSON.stringify({}));
 
         for (const target in oldManifest) {
-          await cleanupOldHash(target, oldManifest[target]);
+          await cleanupOldHash(templateID, target, oldManifest[target]);
         }
 
         return callback(null, {});
@@ -259,6 +218,7 @@ module.exports = function updateCdnManifest(templateID, callback) {
 
       const sortedTargets = Array.from(allTargets).sort();
       const manifest = {};
+      const staleHashes = [];
       const inProgressManifest = Object.assign({}, oldManifest);
       metadata.cdn = inProgressManifest;
 
@@ -266,25 +226,37 @@ module.exports = function updateCdnManifest(templateID, callback) {
       for (const target of sortedTargets) {
         try {
           let manifestChanged = false;
-          const result = await processTarget(
+          const output = await processTarget(
             templateID,
             target
           );
+          const result = output && output.hash;
           if (result && typeof result === 'string') {
-            manifest[target] = result;
             const previousHash = inProgressManifest[target];
             inProgressManifest[target] = result;
-            if (previousHash !== result) {
-              manifestChanged = true;
+
+            // Write the output and the manifest that references it together,
+            // so a concurrent cleanup of this hash sees both or neither.
+            // If storage fails, keep the target out of the manifest.
+            try {
+              await client
+                .multi()
+                .set(key.renderedOutput(result), output.content)
+                .hSet(key.metadata(templateID), "cdn", JSON.stringify(inProgressManifest))
+                .exec();
+            } catch (err) {
+              if (previousHash === undefined) delete inProgressManifest[target];
+              else inProgressManifest[target] = previousHash;
+              throw err;
             }
+
+            manifest[target] = result;
 
             // Clean up old hash if it changed
             const oldHash = oldManifest[target];
             if (oldHash && oldHash !== result && typeof oldHash === 'string') {
-              // Run cleanup in background - don't await
-              cleanupOldHash(target, oldHash).catch(err => {
-                // Error already logged in cleanupOldHash, but catch to prevent unhandled rejection
-              });
+              // Cleaned up once the new manifest is saved, see below
+              staleHashes.push([target, oldHash]);
             }
           } else {
             if (Object.prototype.hasOwnProperty.call(inProgressManifest, target)) {
@@ -308,15 +280,20 @@ module.exports = function updateCdnManifest(templateID, callback) {
       // Clean up rendered outputs for targets that were removed entirely
       for (const target in oldManifest) {
         if (!manifest.hasOwnProperty(target)) {
-          // Run cleanup in background - don't await
-          cleanupOldHash(target, oldManifest[target]).catch(err => {
-            // Error already logged in cleanupOldHash, but catch to prevent unhandled rejection
-          });
+          staleHashes.push([target, oldManifest[target]]);
         }
       }
 
       // Save manifest to Redis
       await hsetAsync(key.metadata(templateID), "cdn", JSON.stringify(manifest));
+
+      // Run cleanup in background - don't await. It re-reads the saved
+      // manifest so it must start after the save above.
+      for (const [target, oldHash] of staleHashes) {
+        cleanupOldHash(templateID, target, oldHash).catch(err => {
+          // Error already logged in cleanupOldHash, but catch to prevent unhandled rejection
+        });
+      }
       
       callback(null, manifest);
     } catch (err) {
@@ -324,3 +301,5 @@ module.exports = function updateCdnManifest(templateID, callback) {
     }
   })();
 };
+
+module.exports.cleanupOldHash = cleanupOldHash;

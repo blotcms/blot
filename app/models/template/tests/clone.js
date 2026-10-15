@@ -194,13 +194,12 @@ describe("template", function () {
     });
   });
 
-  it("stores cloned template CDN files on disk with correct hashes", async function () {
-    const fs = require("fs-extra");
-    const path = require("path");
-    const config = require("config");
+  it("stores cloned template CDN output in Redis with correct hashes", async function () {
+    const client = require("models/client");
+    const key = require("../key");
     const sourceTemplate = await create(this.blog.id, "templatename", {});
 
-        // Install the template so the CDN manifest is generated
+    // Install the template so the CDN manifest is generated
     await this.blog.update({template: sourceTemplate.id});
 
     const viewName = "style.css";
@@ -212,55 +211,25 @@ describe("template", function () {
     });
 
     const sourceMetadata = await getMetadataAsync(sourceTemplate.id);
-    const sourceHash = sourceMetadata.cdn[viewName];
-    const viewBaseName = path.basename(viewName);
-
-     // Verify source template file also exists (different hash)
-    const sourceDir1 = sourceHash.substring(0, 2);
-    const sourceDir2 = sourceHash.substring(2, 4);
-    const sourceHashRemainder = sourceHash.substring(4);
-    const sourceFilePath = path.join(
-      config.data_directory,
-      "cdn",
-      "template",
-      sourceDir1,
-      sourceDir2,
-      sourceHashRemainder,
-      viewBaseName
-    );
-    expect(await fs.pathExists(sourceFilePath)).toBe(true);
+    const sourceKey = key.renderedOutput(sourceMetadata.cdn[viewName]);
+    expect(await client.get(sourceKey)).toBe(viewContent);
 
     // Clone the template
     const clonedTemplate = await create(this.blog.id, "templatenamecloned", {
       cloneFrom: sourceTemplate.id,
     });
 
-            // Install the template so the CDN manifest is generated
+    // Install the template so the CDN manifest is generated
     await this.blog.update({template: clonedTemplate.id});
 
     const clonedMetadata = await getMetadataAsync(clonedTemplate.id);
-    const clonedHash = clonedMetadata.cdn[viewName];
+    const clonedKey = key.renderedOutput(clonedMetadata.cdn[viewName]);
 
-    // Verify file exists on disk for cloned template
-    const dir1 = clonedHash.substring(0, 2);
-    const dir2 = clonedHash.substring(2, 4);
-    const hashRemainder = clonedHash.substring(4);
-    const filePath = path.join(
-      config.data_directory,
-      "cdn",
-      "template",
-      dir1,
-      dir2,
-      hashRemainder,
-      viewBaseName
-    );
-
-    expect(await fs.pathExists(filePath)).toBe(true);
-    const fileContent = await fs.readFile(filePath, "utf8");
-    expect(fileContent).toBe(viewContent);
+    expect(clonedKey).not.toBe(sourceKey);
+    expect(await client.get(clonedKey)).toBe(viewContent);
 
     // Previous hash not purged after installation switch
-    expect(await fs.pathExists(sourceFilePath)).toBe(true);
+    expect(await client.get(sourceKey)).toBe(viewContent);
   });
 
   it("preserves metadata except CDN manifest when cloning", async function () {

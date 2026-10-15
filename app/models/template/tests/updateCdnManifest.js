@@ -5,9 +5,6 @@ const createTemplate = require("../index").create;
 const key = require("../key");
 const client = require("models/client");
 const Blog = require("models/blog");
-const path = require("path");
-const fs = require("fs-extra");
-const config = require("config");
 const renderView = require("blog/render/view");
 
 const getAsync = client.get.bind(client);
@@ -15,17 +12,6 @@ const getMetadataAsync = promisify(getMetadata).bind(getMetadata);
 const setViewAsync = promisify(setView).bind(setView);
 const blogSetAsync = promisify(Blog.set).bind(Blog);
 const createTemplateAsync = promisify(createTemplate).bind(createTemplate);
-
-// Base directory for rendered output storage (same as in updateCdnManifest.js)
-const RENDERED_OUTPUT_BASE_DIR = path.join(config.data_directory, "cdn", "template");
-
-function getRenderedOutputPath(hash, viewName) {
-  const viewBaseName = path.basename(viewName);
-  const dir1 = hash.substring(0, 2);
-  const dir2 = hash.substring(2, 4);
-  const hashRemainder = hash.substring(4);
-  return path.join(RENDERED_OUTPUT_BASE_DIR, dir1, dir2, hashRemainder, viewBaseName);
-}
 
 describe("updateCdnManifest", function () {
   require("./setup")({ createTemplate: true });
@@ -150,6 +136,40 @@ describe("updateCdnManifest", function () {
     const newRenderedKey = key.renderedOutput(newHash);
     const newOutput = await getAsync(newRenderedKey);
     expect(newOutput).toBe("body{color:purple}");
+  });
+
+  it("keeps rendered output that the current manifest still points to", async function () {
+    const test = this;
+    const { cleanupOldHash } = require("../util/updateCdnManifest");
+
+    await setViewAsync(test.template.id, {
+      name: "entries.html",
+      content: "{{#cdn}}/style.css{{/cdn}}",
+    });
+
+    await setViewAsync(test.template.id, {
+      name: "style.css",
+      content: "body{color:teal}",
+    });
+
+    const metadata = await getMetadataAsync(test.template.id);
+    const currentHash = metadata.cdn["style.css"];
+    const renderedKey = key.renderedOutput(currentHash);
+
+    // A cleanup queued for a hash that a quick revert made current again
+    // must not delete it: Redis holds the only copy.
+    await cleanupOldHash(test.template.id, "style.css", currentHash);
+
+    expect(await getAsync(renderedKey)).toBe("body{color:teal}");
+
+    // A hash the manifest no longer uses is still deleted
+    await setViewAsync(test.template.id, {
+      name: "style.css",
+      content: "body{color:navy}",
+    });
+    await cleanupOldHash(test.template.id, "style.css", currentHash);
+
+    expect(await getAsync(renderedKey)).toBeNull();
   });
 
   it("keeps manifest entries for views with empty rendered output", async function () {
@@ -445,15 +465,10 @@ describe("updateCdnManifest", function () {
     const metadata1 = await getMetadataAsync(template.id);
     const oldHash = metadata1.cdn["style.css"];
     const oldRenderedKey = key.renderedOutput(oldHash);
-    const oldFilePath = getRenderedOutputPath(oldHash, "style.css");
 
     // Verify old hash exists in Redis
     const oldOutputRedis = await getAsync(oldRenderedKey);
     expect(oldOutputRedis).toBe("body{color:orange}");
-
-    // Verify old hash exists on disk
-    const oldOutputDisk = await fs.pathExists(oldFilePath);
-    expect(oldOutputDisk).toBe(true);
 
     // Uninstall template
     await blogSetAsync(test.blog.id, { template: "" });
@@ -473,10 +488,6 @@ describe("updateCdnManifest", function () {
     // Verify old hash is cleaned up from Redis
     const oldOutputRedisAfter = await getAsync(oldRenderedKey);
     expect(oldOutputRedisAfter).toBeNull();
-
-    // Verify old hash is cleaned up from disk
-    const oldOutputDiskAfter = await fs.pathExists(oldFilePath);
-    expect(oldOutputDiskAfter).toBe(false);
   });
 
   it("computes manifest when template becomes installed", async function () {
@@ -587,9 +598,9 @@ describe("updateCdnManifest", function () {
 
     // Get the hash that was created
     const metadata = await getMetadataAsync(template.id);
-    const filePath = getRenderedOutputPath(metadata.cdn[viewName], viewName);
+    const renderedKey = key.renderedOutput(metadata.cdn[viewName]);
 
-        expect((await fs.readFile(filePath, 'utf-8')).trim()).toEqual(minifiedContent);
+        expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
     });
 
     it("leaves invalid javascript alone", async function () {
@@ -615,9 +626,9 @@ describe("updateCdnManifest", function () {
       
     // Get the hash that was created
     const metadata = await getMetadataAsync(template.id);
-    const filePath = getRenderedOutputPath(metadata.cdn[viewName], viewName);
+    const renderedKey = key.renderedOutput(metadata.cdn[viewName]);
 
-      expect((await fs.readFile(filePath, 'utf-8')).trim()).toEqual(minifiedContent.trim());
+      expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent.trim());
 
     });
     
@@ -645,9 +656,9 @@ describe("updateCdnManifest", function () {
       
     // Get the hash that was created
     const metadata = await getMetadataAsync(template.id);
-    const filePath = getRenderedOutputPath(metadata.cdn[viewName], viewName);
+    const renderedKey = key.renderedOutput(metadata.cdn[viewName]);
 
-      expect((await fs.readFile(filePath, 'utf-8')).trim()).toEqual(minifiedContent);
+      expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
     });    
 
     it("minifies css", async function () {
@@ -681,9 +692,9 @@ describe("updateCdnManifest", function () {
 
     // Get the hash that was created
     const metadata = await getMetadataAsync(template.id);
-    const filePath = getRenderedOutputPath(metadata.cdn[viewName], viewName);
+    const renderedKey = key.renderedOutput(metadata.cdn[viewName]);
 
-      expect((await fs.readFile(filePath, 'utf-8')).trim()).toEqual(minifiedContent);
+      expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
     });
 
     it("leaves invalid css alone", async function () {
@@ -709,9 +720,9 @@ describe("updateCdnManifest", function () {
       
     // Get the hash that was created
     const metadata = await getMetadataAsync(template.id);
-    const filePath = getRenderedOutputPath(metadata.cdn[viewName], viewName);
+    const renderedKey = key.renderedOutput(metadata.cdn[viewName]);
 
-      expect((await fs.readFile(filePath, 'utf-8')).trim()).toEqual(minifiedContent);
+      expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
     });
 
     it("leaves empty css as-is", async function () {
@@ -737,8 +748,8 @@ describe("updateCdnManifest", function () {
       
     // Get the hash that was created
     const metadata = await getMetadataAsync(template.id);
-    const filePath = getRenderedOutputPath(metadata.cdn[viewName], viewName);
+    const renderedKey = key.renderedOutput(metadata.cdn[viewName]);
 
-      expect((await fs.readFile(filePath, 'utf-8')).trim()).toEqual(minifiedContent);
+      expect((await getAsync(renderedKey)).trim()).toEqual(minifiedContent);
     });
 });

@@ -7,20 +7,7 @@ describe("template", function () {
   var client = require("models/client");
   var Blog = require("models/blog");
   var key = require("../key");
-  var config = require("config");
-  var fs = require("fs-extra");
-  var path = require("path");
   var generateCdnUrl = require("../util/generateCdnUrl");
-
-  var renderedOutputBaseDir = path.join(config.data_directory, "cdn", "template");
-
-  function getRenderedOutputPath(hash, target) {
-    var basename = path.basename(target);
-    var dir1 = hash.substring(0, 2);
-    var dir2 = hash.substring(2, 4);
-    var hashRemainder = hash.substring(4);
-    return path.join(renderedOutputBaseDir, dir1, dir2, hashRemainder, basename);
-  }
 
   it("drops a template", function (done) {
     drop(this.blog.id, this.template.name, done);
@@ -114,7 +101,7 @@ describe("template", function () {
     });
   });
 
-  it("removes rendered output Redis keys and disk files from CDN manifest entries", function (done) {
+  it("removes rendered output Redis keys from CDN manifest entries", function (done) {
     var test = this;
     var manifest = {
       "assets/style.css": "a1b2c3d4e5f6a7b8",
@@ -125,15 +112,7 @@ describe("template", function () {
       Object.keys(manifest).map(function (target) {
         var hash = manifest[target];
         var renderedKey = key.renderedOutput(hash);
-        var filePath = getRenderedOutputPath(hash, target);
-        return fs
-          .ensureDir(path.dirname(filePath))
-          .then(function () {
-            return fs.writeFile(filePath, "rendered");
-          })
-          .then(function () {
-            return client.set(renderedKey, "rendered");
-          });
+        return client.set(renderedKey, "rendered");
       })
     )
       .then(function () {
@@ -157,16 +136,10 @@ describe("template", function () {
           Object.keys(manifest).map(function (target) {
             var hash = manifest[target];
             var renderedKey = key.renderedOutput(hash);
-            var filePath = getRenderedOutputPath(hash, target);
 
-            return Promise.all([
-              client.get(renderedKey).then(function (result) {
-                expect(result).toBeNull();
-              }),
-              fs.pathExists(filePath).then(function (exists) {
-                expect(exists).toBe(false);
-              }),
-            ]);
+            return client.get(renderedKey).then(function (result) {
+              expect(result).toBeNull();
+            });
           })
         );
       })
