@@ -195,7 +195,7 @@ describe("blog benchmarks", function () {
     if (isCorpusBuild) {
       // build-corpus.js only needs the sites built and their manifest info
       // (workload.tagsBySite/searchKeywordsBySite/hubPathBySite/
-      // filesPerSite) - it snapshots Redis + data/blogs + data/static
+      // filesPerSite) - it snapshots Redis + data/blogs
       // itself, so stop here rather than also rendering every page.
       global.__BLOT_BENCHMARK_RESULT = { corpus_build: true };
       global.__BLOT_CORPUS_WORKLOAD = workload;

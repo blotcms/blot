@@ -724,7 +724,7 @@ cmd_release_old() {
   precondition "$old is mounted in the host's namespace" [ "$M_HOST" = yes ]
   precondition "$old is still mounted in other mount namespaces (containers that were not recreated):
 $M_OTHERS
-Deploy (app and, if a proxy container is listed, the proxy), then try again" [ -z "$M_OTHERS" ]
+Deploy the app, then try again" [ -z "$M_OTHERS" ]
   precondition "$(data_mount_count) mounts at $DATA in the host's namespace, expected 2 (the new volume on top of the old one)" [ "$(data_mount_count)" = 2 ]
   precondition "$(read_marker "$DATA") is on top at $DATA, expected the current volume $cur" [ "$(read_marker "$DATA")" = "$cur" ]
   precondition "the volume mounted at $DATA is '$(mounted_volume)', not $cur" [ "$(mounted_volume)" = "$cur" ]

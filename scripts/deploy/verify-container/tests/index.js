@@ -70,6 +70,23 @@ describe("deploy verify-container", function () {
     }
   });
 
+  it("passes the storage bucket check against a reachable bucket and fails without one", async function () {
+    const config = require("config");
+    const check = checks.find((c) => c.name === "storage bucket reachable");
+
+    expect(await check.run({ config })).toContain(config.storage.bucket);
+
+    const bucket = config.storage.bucket;
+    config.storage.bucket = "";
+
+    try {
+      const error = await rejection(check.run({ config }));
+      expect(error && error.message).toMatch(/BLOT_STORAGE_BUCKET is not set/);
+    } finally {
+      config.storage.bucket = bucket;
+    }
+  });
+
   it("fails the release ID check on a mismatch", async function () {
     const releaseCheck = checks.find((c) => c.name === "release ID");
     const original = process.env.BLOT_RELEASE_ID;

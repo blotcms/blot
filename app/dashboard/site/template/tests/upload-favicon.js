@@ -4,14 +4,12 @@ describe("upload favicon", function () {
 
   const fs = require("fs-extra");
   const { join } = require("path");
-  const config = require("config");
   const sharp = require("sharp");
   const Template = require("models/template");
   const uploadFavicon = require("../save/upload-favicon");
 
-  const assetDir = function (blog) {
-    return join(config.blog_static_files_dir, blog.id, "_template_assets");
-  };
+  const storage = require("storage/assets");
+  const asset = (name) => "_template_assets/" + name;
 
   beforeEach(function (done) {
     const test = this;
@@ -72,7 +70,7 @@ describe("upload favicon", function () {
     );
     const saved = templates.find((t) => t.id === this.template.id);
     expect(saved.locals.favicon.prefix).toEqual(result.body.favicon.prefix);
-    expect(await fs.pathExists(join(assetDir(this.blog), `${result.body.favicon.prefix}.ico`))).toBe(true);
+    expect(await storage.exists(this.blog.id, asset(`${result.body.favicon.prefix}.ico`))).toBe(true);
   });
 
   it("falls back to a centered crop when the crop fields are blank", async function () {
@@ -92,7 +90,7 @@ describe("upload favicon", function () {
 
     expect(next).not.toHaveBeenCalled();
     expect(result.body).toEqual({ favicon });
-    expect(await fs.pathExists(join(assetDir(this.blog), `${favicon.prefix}.ico`))).toBe(true);
+    expect(await storage.exists(this.blog.id, asset(`${favicon.prefix}.ico`))).toBe(true);
   });
 
   it("removes the favicon and its assets only when the delete button is used", async function () {
@@ -103,7 +101,7 @@ describe("upload favicon", function () {
 
     expect(next).not.toHaveBeenCalled();
     expect(result.body).toEqual({ favicon: null });
-    expect(await fs.pathExists(join(assetDir(this.blog), `${favicon.prefix}.ico`))).toBe(false);
+    expect(await storage.exists(this.blog.id, asset(`${favicon.prefix}.ico`))).toBe(false);
 
     const templates = await new Promise((resolve, reject) =>
       Template.getTemplateList(this.blog.id, (err, list) => (err ? reject(err) : resolve(list)))
@@ -114,11 +112,11 @@ describe("upload favicon", function () {
   it("retains favicon assets when template references cannot be listed", async function () {
     const first = await run(await makeReq(this, { crop_x: "", crop_y: "", crop_size: "" }, { withFile: {} }));
     const favicon = first.result.body.favicon;
-    const path = join(assetDir(this.blog), `${favicon.prefix}.ico`);
+    const path = asset(`${favicon.prefix}.ico`);
     spyOn(Template, "getTemplateList").and.callFake((id, callback) => callback(new Error("redis unavailable")));
 
     await uploadFavicon.removeAssetsIfUnreferenced(this.blog, favicon);
 
-    expect(await fs.pathExists(path)).toBe(true);
+    expect(await storage.exists(this.blog.id, path)).toBe(true);
   });
 });

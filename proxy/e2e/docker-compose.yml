@@ -31,6 +31,13 @@ services:
       BLOT_HOST: ${BLOT_HOST:-localhost}
       BLOT_REDIS_HOST: "127.0.0.1"
       BLOT_PORT: "8081"
+      # Generated assets live only in the storage bucket; CI points these at
+      # the MinIO started by .github/actions/start-minio.
+      BLOT_STORAGE_BUCKET: ${BLOT_STORAGE_BUCKET}
+      BLOT_STORAGE_ENDPOINT: ${BLOT_STORAGE_ENDPOINT}
+      BLOT_STORAGE_REGION: ${BLOT_STORAGE_REGION}
+      BLOT_AWS_KEY: ${BLOT_AWS_KEY}
+      BLOT_AWS_SECRET: ${BLOT_AWS_SECRET}
     volumes:
       - ${BLOT_REPO:-../..}/app:/usr/src/app/app
       - ${BLOT_REPO:-../..}/config:/usr/src/app/config

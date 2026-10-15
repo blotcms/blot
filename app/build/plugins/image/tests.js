@@ -6,13 +6,13 @@ describe("image", function () {
   var fs = require("fs-extra");
   var localPath = require("helper/localPath");
   var config = require("config");
-  var join = require("path").join;
+  var assets = require("storage/assets");
   var crypto = require("crypto");
   var sharp = require("sharp");
 
-  afterEach(function () {
+  afterEach(async function () {
     if (!this.result) return;
-    verifyCachedImagesExist(extractCachedImagePaths(this.blog, this.result));
+    await verifyCachedImagesExist(this.blog, extractCachedImagePaths(this.blog, this.result));
   });
 
   it("returns a different cached image when source image is modified", function (done) {
@@ -51,16 +51,16 @@ describe("image", function () {
     render(test.blog, html, function (err, result) {
       if (err) return done.fail(err);
 
-      var path = extractCachedImagePaths(test.blog, result)[0];
+      assets.ensureLocal(test.blog.id, extractCachedImagePaths(test.blog, result)[0]).then(function (path) {
+        sharp(path).metadata(function (err, metadata) {
+          if (err) return done.fail(err);
 
-      sharp(path).metadata(function (err, metadata) {
-        if (err) return done.fail(err);
+          expect(metadata.icc).toBeDefined();
+          expect(metadata.icc).toContain('P3'); // Ensure it is preserved
 
-        expect(metadata.icc).toBeDefined();
-        expect(metadata.icc).toContain('P3'); // Ensure it is preserved
-
-        done();
-      });
+          done();
+        });
+      }, done.fail);
     });
   });
 
@@ -80,21 +80,21 @@ describe("image", function () {
       // does not resize or modify
       expect(result).toContain('width="450" height="338"');
 
-      var path = extractCachedImagePaths(test.blog, result)[0];
+      assets.read(test.blog.id, extractCachedImagePaths(test.blog, result)[0]).then(function (cached) {
+        var cachedContentHash = crypto
+          .createHash("sha1")
+          .update(cached)
+          .digest("hex");
 
-      var cachedContentHash = crypto
-        .createHash("sha1")
-        .update(fs.readFileSync(path))
-        .digest("hex");
+        var originalContentHash = crypto
+          .createHash("sha1")
+          .update(fs.readFileSync(__dirname + image))
+          .digest("hex");
 
-      var originalContentHash = crypto
-        .createHash("sha1")
-        .update(fs.readFileSync(__dirname + image))
-        .digest("hex");
-
-      expect(originalContentHash).toEqual(cachedContentHash);
-      test.result = result;
-      done();
+        expect(originalContentHash).toEqual(cachedContentHash);
+        test.result = result;
+        done();
+      }, done.fail);
     });
   });
 
@@ -129,23 +129,23 @@ describe("image", function () {
       render(test.blog, html, function (err, result) {
         if (err) return done.fail(err);
 
-        var image = extractCachedImagePaths(test.blog, result)[0];
+        assets.ensureLocal(test.blog.id, extractCachedImagePaths(test.blog, result)[0]).then(function (image) {
+          require("sharp")(image).metadata(function (err, cachedInfo) {
+            if (err) return done.fail(err);
 
-        require("sharp")(image).metadata(function (err, cachedInfo) {
-          if (err) return done.fail(err);
+            // Ensure cached image is smaller than 3000 x 3000 pixels
+            expect(cachedInfo.width <= 3000).toBe(true);
+            expect(cachedInfo.height <= 3000).toBe(true);
 
-          // Ensure cached image is smaller than 3000 x 3000 pixels
-          expect(cachedInfo.width <= 3000).toBe(true);
-          expect(cachedInfo.height <= 3000).toBe(true);
+            // Ensure cached image is same aspect ratio as original
+            expect(Math.floor(cachedInfo.height / cachedInfo.width)).toEqual(
+              Math.floor(originalInfo.height / originalInfo.width)
+            );
 
-          // Ensure cached image is same aspect ratio as original
-          expect(Math.floor(cachedInfo.height / cachedInfo.width)).toEqual(
-            Math.floor(originalInfo.height / originalInfo.width)
-          );
-
-          test.result = result;
-          done();
-        });
+            test.result = result;
+            done();
+          });
+        }, done.fail);
       });
     });
   });
@@ -238,37 +238,33 @@ describe("image", function () {
     });
   });
 
+  // The cached images' paths in the blog's asset directory, e.g.
+  // "_image_cache/{uuid}/name.jpg"
   function extractCachedImagePaths (blog, html) {
     var paths = [];
     var $ = cheerio.load(html, null, false);
 
     $("img").each(function () {
       var src = $(this).attr("src");
-      var path;
 
       if (src.indexOf(config.cdn.origin) === 0) {
         src = src.slice(config.cdn.origin.length);
-        path = join(config.blog_static_files_dir, src);
-      } else {
-        path = join(config.blog_static_files_dir, blog.id, src);
+
+        // /{blogID}/_image_cache/...
+        src = src.slice(src.indexOf("/", 1));
       }
 
-      paths.push(path);
+      paths.push(src.replace(/^\//, ""));
     });
 
     return paths;
   }
 
-  function verifyCachedImagesExist (imagePaths) {
-    imagePaths.forEach(function (path) {
-      try {
-        // Does the cached image exist on disk?
-        var stat = fs.statSync(path);
-        expect(stat.isFile()).toEqual(true);
-      } catch (e) {
-        return fail(e);
-      }
-    });
+  async function verifyCachedImagesExist (blog, imagePaths) {
+    for (var path of imagePaths) {
+      // Is the cached image in the bucket?
+      expect(await assets.exists(blog.id, path)).toEqual(true);
+    }
   }
 
   // Wrapper around dumb API for this plugin

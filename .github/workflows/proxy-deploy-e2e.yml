@@ -73,7 +73,6 @@ jobs:
             echo "PROXY_CACHE_DIR=$E2E_ROOT/cache"
             echo "PROXY_LOG_DIR=$E2E_ROOT/logs"
             echo "PROXY_CERT_DIR=$E2E_ROOT/certs"
-            echo "PROXY_BLOG_STATIC_DIR=$E2E_ROOT/blog-static"
             echo "PROXY_GLOBAL_STATIC_DIR=$E2E_ROOT/global-static"
           } >> "$GITHUB_ENV"
 

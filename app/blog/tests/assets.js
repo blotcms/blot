@@ -3,6 +3,7 @@ const cdn = require("../../cdn");
 describe("asset middleware", function () {
   const config = require("config");
   const fs = require("fs-extra");
+  const assets = require("storage/assets");
 
   require("./util/setup")();
 
@@ -92,10 +93,7 @@ describe("asset middleware", function () {
     for (const path of paths) {
       const content = global.test.fake.file();
       contents[path] = content;
-      await fs.outputFile(
-        config.blog_static_files_dir + "/" + this.blog.id + path,
-        content
-      );
+      await assets.write(this.blog.id, path, content);
     }
 
     for (const path of paths) {

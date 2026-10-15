@@ -19,7 +19,7 @@ HOSTIP="$(hostname -I | awk '{print $1}')"
 
 log() { printf '[setup] %s\n' "$*"; }
 
-mkdir -p "$E2E_ROOT/cache" "$E2E_ROOT/logs" "$E2E_ROOT/blog-static" "$E2E_ROOT/global-static"
+mkdir -p "$E2E_ROOT/cache" "$E2E_ROOT/logs" "$E2E_ROOT/global-static"
 
 # ---- certificate -------------------------------------------------------
 log "Generating a wildcard certificate for $BLOT_HOST and trusting its CA"

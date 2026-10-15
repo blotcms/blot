@@ -4,12 +4,12 @@ describe("upload template image", function () {
 
   const fs = require("fs-extra");
   const { join } = require("path");
-  const config = require("config");
+  const storage = require("storage/assets");
   const sharp = require("sharp");
   const Template = require("models/template");
   const uploadImage = require("../save/upload-image");
 
-  const assetDir = (blog) => join(config.blog_static_files_dir, blog.id, "_template_assets");
+  const ASSETS = "_template_assets";
   const update = (blog, slug, locals) => new Promise((resolve, reject) =>
     Template.update(blog.id, slug, { locals }, (error) => error ? reject(error) : resolve())
   );
@@ -78,18 +78,18 @@ describe("upload template image", function () {
     const original = (await run(this, "hero_image", {}, await makeFile(this.tmp, "shared.png"))).image;
     this.template.locals.footer_image = original;
     await update(this.blog, this.template.slug, this.template.locals);
-    const oldPath = join(assetDir(this.blog), decodeURIComponent(new URL(original.url).pathname.split("/").pop()));
+    const oldPath = ASSETS + "/" + decodeURIComponent(new URL(original.url).pathname.split("/").pop());
 
     await run(this, "hero_image", {}, await makeFile(this.tmp, "replacement.png"));
-    expect(await fs.pathExists(oldPath)).toBe(true);
+    expect(await storage.exists(this.blog.id, oldPath)).toBe(true);
 
     await run(this, "footer_image", { remove: "1" });
-    expect(await fs.pathExists(oldPath)).toBe(false);
+    expect(await storage.exists(this.blog.id, oldPath)).toBe(false);
   });
 
   it("retains old files when template references cannot be listed", async function () {
     const original = (await run(this, "hero_image", {}, await makeFile(this.tmp, "lookup.png"))).image;
-    const oldPath = join(assetDir(this.blog), decodeURIComponent(new URL(original.url).pathname.split("/").pop()));
+    const oldPath = ASSETS + "/" + decodeURIComponent(new URL(original.url).pathname.split("/").pop());
     let sibling;
     await new Promise((resolve, reject) => Template.create(
       this.blog.id,
@@ -109,12 +109,12 @@ describe("upload template image", function () {
 
     await uploadImage.removeAssetsIfUnreferenced({ blog: this.blog, template: this.template }, original);
 
-    expect(await fs.pathExists(oldPath)).toBe(true);
+    expect(await storage.exists(this.blog.id, oldPath)).toBe(true);
   });
 
   it("removes generated assets after their local template is dropped", async function () {
     const original = (await run(this, "hero_image", {}, await makeFile(this.tmp, "delete-template.png"))).image;
-    const oldPath = join(assetDir(this.blog), decodeURIComponent(new URL(original.url).pathname.split("/").pop()));
+    const oldPath = ASSETS + "/" + decodeURIComponent(new URL(original.url).pathname.split("/").pop());
     const imageLocals = Object.values(this.template.locals)
       .filter((value) => value && value.url)
       .map((value) => ({ ...value, thumbnails: { ...value.thumbnails } }));
@@ -126,7 +126,7 @@ describe("upload template image", function () {
     ));
     await uploadImage.removeTemplateAssetsIfUnreferenced({ blog: this.blog }, imageLocals);
 
-    expect(await fs.pathExists(oldPath)).toBe(false);
+    expect(await storage.exists(this.blog.id, oldPath)).toBe(false);
   });
 
   it("rolls back late metadata failures before removing generated files", async function () {
@@ -157,7 +157,7 @@ describe("upload template image", function () {
     expect(calls).toBe(2);
     const saved = (await list(this.blog)).find((template) => template.id === this.template.id);
     expect(saved.locals.hero_image).toEqual({});
-    const assets = await fs.readdir(assetDir(this.blog)).catch(() => []);
+    const assets = await storage.list(this.blog.id, ASSETS);
     expect(assets.filter((name) => name.startsWith("image-")).length).toBe(0);
   });
 
@@ -189,7 +189,7 @@ describe("upload template image", function () {
     expect(calls).toBe(2);
     const saved = (await list(this.blog)).find((template) => template.id === this.template.id);
     expect(saved.locals.hero_image.url).toMatch(/image-[a-f0-9-]+-original\.webp$/);
-    const assets = await fs.readdir(assetDir(this.blog));
+    const assets = await storage.list(this.blog.id, ASSETS);
     expect(assets.filter((name) => name.startsWith("image-")).length).toBe(5);
   });
 
@@ -217,7 +217,7 @@ describe("upload template image", function () {
     expect(calls).toBe(2);
     const saved = (await list(this.blog)).find((template) => template.id === this.template.id);
     expect(saved.locals.hero_image).toEqual({});
-    const assets = await fs.readdir(assetDir(this.blog)).catch(() => []);
+    const assets = await storage.list(this.blog.id, ASSETS);
     expect(assets.filter((name) => name.startsWith("image-")).length).toBe(0);
   });
 

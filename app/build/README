@@ -211,7 +211,7 @@ The `plugins.convert(blog, path, html, callback)` function runs all enabled plug
 
 The `config.pandoc.bin` configuration key determines whether Pandoc-dependent converters are available. Pandoc processes are spawned with a memory cap (`config.pandoc.maxmemory`) and a timeout (`config.pandoc.timeout`).
 
-Image operations use the `sharp` library. Thumbnail creation writes output to the blog's static files directory under `/_thumbnails/`. Image format conversions (HEIC, HEIF, TIFF, WebP, AVIF to PNG) write to `/_assets/`.
+Image operations use the `sharp` library. Thumbnail creation uploads its output to the blog's assets in the storage bucket (`storage/assets`) under `/_thumbnails/`. Image format conversions (HEIC, HEIF, TIFF, WebP, AVIF to PNG) go to `/_assets/`. Tools that need a local path (sharp, pandoc, puppeteer) write to a staging path (`assets.path()`, under the tmp directory) and `assets.commit()` uploads it and deletes the staged copy, so read an asset back with `assets.read`/`ensureLocal`, not from the staging path.
 
 The `helper/transformer` utility provides caching of expensive operations (image optimization, format conversion, thumbnail creation) keyed by file path.
 
@@ -222,7 +222,7 @@ The `helper/transformer` utility provides caching of expensive operations (image
 - **`models/entry.get`**: Called by the wikilinks plugin to embed linked Markdown entry content inline.
 - **`models/blog/util/converters`**: Normalizes per-blog converter preferences for `enabled.js`.
 - **`helper/transformer`**: Used by the image, img converter, and thumbnail subsystems to cache derived assets.
-- **`config.blog_static_files_dir`**: The root of the blog's static asset storage, used by converters and thumbnail creation.
+- **`storage/assets`**: The blog's asset storage (the storage bucket), used by converters and thumbnail creation.
 - **`config.cdn.origin`**: CDN base URL prepended to thumbnail paths.
 
 ## Testing

@@ -4,13 +4,13 @@ name: benchmarks-corpus
 # ------------------------
 # Builds the large, production-shaped corpus (default: 1000 sites, ~160k
 # posts, skewed distribution - see scripts/benchmarks/spec/util/workload.js)
-# ONCE, then snapshots it into three cache-able artifacts:
+# ONCE, then snapshots it into cache-able artifacts:
 #
 #   - a Redis dump (every entry/tag/index key)
 #   - data/blogs/ tarball (raw source + hard-linked media - small)
-#   - data/static/ tarball (derived/build output - the expensive part)
 #
-# and saves them to the Actions cache under a benchmark-corpus-v<version> key
+# (the images and thumbnails the build generates go to a throwaway MinIO and
+# aren't kept: the render benchmark never requests them) and saves them to the Actions cache under a benchmark-corpus-v<version> key
 # (CORPUS_SCHEMA_VERSION below), plus a 90-day artifact backup. This is the
 # ONLY workflow that writes that cache - benchmarks-render.yml only reads it.
 #
@@ -100,7 +100,6 @@ jobs:
           path: |
             .benchmarks/corpus/redis-dump.rdb
             .benchmarks/corpus/blogs.tar.gz
-            .benchmarks/corpus/static.tar.gz
             .benchmarks/corpus/manifest.json
           key: benchmark-corpus-v${{ env.CORPUS_SCHEMA_VERSION }}-${{ github.run_id }}
 
@@ -111,7 +110,6 @@ jobs:
           path: |
             .benchmarks/corpus/redis-dump.rdb
             .benchmarks/corpus/blogs.tar.gz
-            .benchmarks/corpus/static.tar.gz
             .benchmarks/corpus/manifest.json
           retention-days: 90
           if-no-files-found: error
@@ -122,11 +120,11 @@ jobs:
           {
             echo "## Corpus artifact sizes"
             echo ""
-            du -h .benchmarks/corpus/redis-dump.rdb .benchmarks/corpus/blogs.tar.gz .benchmarks/corpus/static.tar.gz 2>/dev/null | while read -r size file; do
+            du -h .benchmarks/corpus/redis-dump.rdb .benchmarks/corpus/blogs.tar.gz 2>/dev/null | while read -r size file; do
               echo "- \`$(basename "$file")\`: $size"
             done
             echo ""
-            TOTAL=$(du -ch .benchmarks/corpus/redis-dump.rdb .benchmarks/corpus/blogs.tar.gz .benchmarks/corpus/static.tar.gz 2>/dev/null | tail -1 | cut -f1)
+            TOTAL=$(du -ch .benchmarks/corpus/redis-dump.rdb .benchmarks/corpus/blogs.tar.gz 2>/dev/null | tail -1 | cut -f1)
             echo "- **total**: $TOTAL"
             echo ""
             echo "_Target: keep the combined total in the low single-digit GB range - the GitHub Actions cache cap is 10GB per repo, shared with every other cache._"

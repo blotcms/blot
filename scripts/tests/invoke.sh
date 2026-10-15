@@ -25,12 +25,14 @@ TEST_CONTAINER="test-runner-${BLOT_TEST_ID}"
 
 # Image names
 REDIS_IMAGE="redis:alpine"
-# MinIO stands in for S3 in app/storage/tests/s3.js. MinIO no longer publishes
-# images itself; this is a pinned build of the upstream release. Keep it in
-# step with .github/workflows/node.yml and scripts/development/docker-compose.yml
+# MinIO stands in for S3: generated assets live only in the storage bucket, so
+# every test run needs one. MinIO no longer publishes images itself; this is a pinned build of the upstream release. Keep it in
+# step with .github/actions/start-minio and scripts/development/docker-compose.yml
 MINIO_IMAGE="alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4"
 MINIO_USER="blot-test"
 MINIO_PASSWORD="blot-test-secret"
+# Created by the test runner (scripts/tests/util/bucket.js) when it starts
+STORAGE_BUCKET="blot-test-storage"
 TEST_IMAGE="blot-tests"
 
 # Paths (adjust as needed)
@@ -122,9 +124,11 @@ docker run --rm \
   -e DEBUG="$DEBUG" \
   -e BLOT_REDIS_HOST="redis" \
   -e BLOT_HOST="localhost" \
-  -e BLOT_TEST_S3_ENDPOINT="http://minio:9000" \
-  -e BLOT_TEST_S3_KEY="$MINIO_USER" \
-  -e BLOT_TEST_S3_SECRET="$MINIO_PASSWORD" \
+  -e BLOT_STORAGE_BUCKET="$STORAGE_BUCKET" \
+  -e BLOT_STORAGE_ENDPOINT="http://minio:9000" \
+  -e BLOT_STORAGE_REGION="us-east-1" \
+  -e BLOT_AWS_KEY="$MINIO_USER" \
+  -e BLOT_AWS_SECRET="$MINIO_PASSWORD" \
   -v "$APP_DIR:/usr/src/app/app" \
   -v "$TESTS_DIR:/usr/src/app/tests" \
   -v "$CONFIG_DIR:/usr/src/app/config" \

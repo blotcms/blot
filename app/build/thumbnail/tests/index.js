@@ -10,7 +10,7 @@ describe("thumbnail", function () {
   var localPath = require("helper/localPath");
   var fs = require("fs-extra");
   var sharp = require("sharp");
-  var config = require("config");
+  var assets = require("storage/assets");
 
   it("creates thumbnails", function (done) {
     var thumbnail = require("../index");
@@ -196,7 +196,7 @@ describe("thumbnail", function () {
       expect(result).toEqual(jasmine.any(Object));
       expect(result.small).toEqual(jasmine.any(Object));
 
-      const outputPath = config.blog_static_files_dir + "/" + this.blog.id + '/' + result.large.path;
+      const outputPath = await assets.ensureLocal(this.blog.id, result.large.path);
       const outputMetadata = await sharp(outputPath).metadata();
 
       expect(outputMetadata.icc).toBeDefined();

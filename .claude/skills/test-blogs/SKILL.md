@@ -114,12 +114,10 @@ not run `git remote -v`, `git config --list` or `set -x`.
    (with a bucket configured, each asset line also carries:)
      asset via=cdn disk=yes  s3=yes 18342B image/jpeg cache-control="public, max-age=31536000"  _image_cache/<uuid>/photo.jpg
    ```
-   `disk=` is `storage/assets.exists`; the `s3=` part appears only when the
-   storage bucket is configured and `storage/s3` exists (`s3=missing` is a
-   failure then). The script only exists on production after the next deploy
-   that includes it; before that, fall back to
-   `ssh blot ls -la /var/www/blot/data/static/<blogID>/<subdir>/...`
-   (blog ID from the `blog_...` segment of any CDN URL on the page).
+   `disk=` is `storage/assets.exists`, which since #2111 asks the bucket
+   (there is no `data/static` any more), so it agrees with `s3=`; either
+   being `missing` is a failure. The blog ID is the `blog_...` segment of any
+   CDN URL on the page.
 4. **S3 from the Mac** (once the bucket exists). Ask the operator for the
    bucket name; do not read the production env file:
    `AWS_PROFILE=blot AWS_REGION=us-west-2 aws s3api head-object --bucket <bucket> --key <blogID>/<relPath>`

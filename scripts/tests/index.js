@@ -282,6 +282,12 @@ registerGlobalTest();
   }
 
   if (!hasKeys) {
+    // Every build and upload writes to the storage bucket. This comes after
+    // the scan: the scan has to be sent while the Redis client still queues
+    // commands, before it has connected (app/models/redis.js), or a reconnect
+    // after a slow boot fails it with ClientOfflineError
+    await require("./util/bucket")();
+
     // if there are no keys, we need to run the tests
     jasmine.execute();
   } else {

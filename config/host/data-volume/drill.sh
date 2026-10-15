@@ -7,7 +7,7 @@
 # production: an 8 GiB XFS data volume mounted by mount-data-volume.sh, the
 # top-level directories filled with about 50,000 small files, two
 # "app" containers (one reading, one writing) that bind the data directory
-# with rslave, and a proxy container that binds only data/static.
+# with rslave.
 #
 #   launch     t4g.small, tagged Name=drill-data-volume and BlotDrill=true, with
 #              the data volume attached at /dev/sdf (tagged BlotDrill=true).
@@ -177,9 +177,8 @@ if [ ! -d "$DATA/static" ]; then
 fi
 
 # Two "app" containers bind the whole data directory with rslave, like
-# scripts/deploy/util/generateDockerCommand.js; the proxy binds only static,
-# with a plain -v, like the real proxy. The names matter: host.sh looks for
-# blot-container-*.
+# scripts/deploy/util/generateDockerCommand.js. The names matter: host.sh looks
+# for blot-container-*.
 D=/usr/src/app/data
 for n in blot-container-blue blot-container-green blot-proxy-drill; do docker rm -f "$n" > /dev/null 2>&1 || true; done
 docker run -d --name blot-container-blue --restart unless-stopped \
@@ -188,9 +187,6 @@ docker run -d --name blot-container-blue --restart unless-stopped \
 docker run -d --name blot-container-green --restart unless-stopped \
   --mount type=bind,source="$DATA",target="$D",bind-propagation=rslave alpine \
   sh -c 'while true; do cat /usr/src/app/data/static/3/img/f3.txt > /dev/null 2>&1 || echo "$(date +%T) cannot read"; echo "$(date +%s)" >> /usr/src/app/data/blogs/drill/writes.log || echo "$(date +%T) write failed"; sleep 0.2; done'
-docker run -d --name blot-proxy-drill --restart unless-stopped \
-  -v "$DATA/static:/data/static:ro" alpine \
-  sh -c 'while true; do cat /data/static/1/img/f1.txt > /dev/null 2>&1 || echo "$(date +%T) proxy cannot read"; sleep 1; done'
 docker ps --format '{{.Names}}'
 df -i "$DATA"
 EOF
@@ -239,8 +235,6 @@ Rehearse from the repo root (the key, if any, goes in SSH_OPTS):
   config/host/data-volume/resize.sh \$P --host $target grow 10
 Watch while it runs: ssh $target docker logs -f blot-container-blue (read errors),
 and blot-container-green (the writer; its writes.log is in data/blogs/drill).
-After the shrink the proxy keeps serving the old volume until it is recreated
-(docker rm -f blot-proxy-drill and run it again), like the real proxy.
 Clean up: $0 --profile $AWS_PROFILE_NAME --region $AWS_REGION teardown $instance
 EOF
 }

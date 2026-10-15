@@ -3,8 +3,7 @@ describe("create", function () {
   global.test.tmp();
 
   var create = require("build/thumbnail/create");
-  var config = require("config");
-  var fs = require("fs-extra");
+  var assets = require("storage/assets");
 
   // metadata should be at top of queue
   // then the images in the html if there are any
@@ -12,7 +11,7 @@ describe("create", function () {
   it("creates thumbnails", function (done) {
     var test = this;
     var path = __dirname + "/images/portrait.jpg";
-    var ratio, thumbnail, thumbnailPath;
+    var ratio;
 
     // {density: 2400} is only for svg images, but it doesn't
     // currently cause any trouble if we pass this for all formats
@@ -45,15 +44,18 @@ describe("create", function () {
         ).toEqual(ratio);
         expect(thumbnails.square.name).toEqual("square.jpg");
 
-        for (var size in thumbnails) {
-          thumbnail = thumbnails[size];
-          thumbnailPath =
-            config.blog_static_files_dir + "/" + test.blog.id + thumbnail.path;
+        // Each thumbnail was uploaded
+        Promise.all(
+          Object.keys(thumbnails).map(function (size) {
+            return assets.exists(test.blog.id, thumbnails[size].path);
+          })
+        ).then(function (found) {
+          found.forEach(function (exists) {
+            expect(exists).toBe(true);
+          });
 
-          expect(fs.statSync(thumbnailPath).isFile()).toBe(true);
-        }
-
-        done();
+          done();
+        }, done.fail);
       });
     });
   });
