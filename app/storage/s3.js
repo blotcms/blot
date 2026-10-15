@@ -137,10 +137,23 @@ async function upload(blogID, relPath, localFile) {
 
   for (let attempt = 1; attempt <= UPLOAD_ATTEMPTS; attempt++) {
     try {
-      const stat = await fs.stat(localFile);
+      // Open the file before anything else, so a file which isn't there
+      // fails here as a plain ENOENT (not inside the SDK, which may wrap it),
+      // and a concurrent unlink once it's open can't break the read
+      const handle = await fs.promises.open(localFile, "r");
+      let stat;
+      let body;
 
-      // Stream the file; it's never read into memory whole
-      const body = fs.createReadStream(localFile);
+      try {
+        stat = await handle.stat();
+
+        // Stream the file; it's never read into memory whole. The stream
+        // owns the handle and closes it when destroyed.
+        body = handle.createReadStream();
+      } catch (err) {
+        await handle.close().catch(function () {});
+        throw err;
+      }
 
       try {
         await client().send(
