@@ -1,6 +1,5 @@
 App changes toward consolidated units and horizontal scaling (#2119), each useful on its own:
 - Remove the master: cron jobs take a per-run Redis lock (SET NX cron:<job>:<date>); scheduled posts and welcome/renewal emails move to a Redis due-time sorted set any process can claim; client init() watchers become locked periodic jobs; templates()/folders() startup builds idempotent + locked
-- Graceful drain on SIGTERM: stop accepting, finish in-flight, release locks, exit; /health returns 503 while draining
 - Fix green's heap creep (see below), the main crash cause
 - Replace proper-lockfile folder lock with a Redis mutex; take it in git write/remove and template writeToFolder/removeFromFolder too (they skip it today)
 - Proxy: ~2s Redis socket timeouts; allow_domain fails open when GET errors, check err
@@ -8,6 +7,7 @@ App changes toward consolidated units and horizontal scaling (#2119), each usefu
 - Serve the new template CDN URL format from Redis, not only local disk
 - Parallelize app/sync/rebuild.js
 - Later: build queue (sync and dashboard writes enqueue per-blog builds, workers consume) so dashboard writes stop queueing behind builds
+- Upgrade the Redis server from 6.2 to 8.4+ for native compare-and-set (SET ... IFEQ, DELEX), then drop Lua: helper/lock extend/release become plain commands; helper/alarm claim/renew/complete need per-id claim keys to go native; also the legacy scripts in sync/lock.js, models/user/set.js, helper/flushCachePending.js, clients/icloud/database.js
 
 From 22 Oct: delete snap-02793374b4e56ea7b, the pre-resize snapshot of the 15 Oct data volume shrink (its volume vol-07c767ac8b6aeab4f was deleted 15 Oct), and any DLM dailies of that volume
 Investigate slow creep of green's baseline heap (~40-80MB/day lowest heapUsed in [STATS], never resets until a V8 OOM crash; crashed 13+14 Oct 2026). Leak or unbounded cache? Compare heap snapshots taken hours apart

@@ -3,7 +3,6 @@ var key = require("./key");
 var client = require("models/client");
 var validate = require("./validate");
 var generateId = require("./generateId");
-var scheduleSubscriptionEmail = require("./scheduleSubscriptionEmail");
 
 module.exports = function create (
   email,
@@ -66,11 +65,6 @@ module.exports = function create (
       // Retry if generated ID was in use
       if (results && (results[1] === false || results[1] === 0))
         return create(email, passwordHash, subscription, paypal, callback);
-
-      // Schedule a notifcation email for their subscription renewal
-      scheduleSubscriptionEmail(user.uid, function (err) {
-        if (err) console.log(err);
-      });
 
       return callback(null, user);
     } catch (err) {

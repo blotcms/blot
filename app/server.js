@@ -5,6 +5,7 @@ var blog = require("blog");
 var site = require("site");
 var trace = require("helper/trace");
 var clfdate = require("helper/clfdate");
+var drain = require("helper/drain");
 
 // Welcome to Blot. This is the Express application which listens on port 8080.
 // NGINX listens on port 80 in front of Express app and proxies requests to
@@ -38,6 +39,9 @@ server.set("trust proxy", 1);
 // middleware, which looks up the request's host in Redis (there is no blog
 // with the host 'localhost'), otherwise an outage of Redis makes every
 // container unhealthy. The proxy answers /health itself for public traffic.
+// While draining (SIGTERM, see helper/drain.js) it answers 503 so the deploy script
+// and Docker see the container is going away; public traffic is failed over
+// by closing the listener instead, since nginx does not retry on a 503.
 // If you remove this, change monit.rc too.
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 server.get("/health", function (req, res, next) {
@@ -47,7 +51,15 @@ server.get("/health", function (req, res, next) {
   if (req.path !== "/health" || !LOOPBACK_HOSTS.has(req.hostname)) return next();
   // do not cache response
   res.set("Cache-Control", "no-store");
+  if (drain.isDraining()) return res.status(503).send("Draining");
   res.send("OK");
+});
+
+// Once draining, tell keep-alive clients (nginx holds idle upstream
+// connections open) to close after this response so server.close() can finish.
+server.use(function (req, res, next) {
+  if (drain.isDraining()) res.set("Connection", "close");
+  next();
 });
 
 // Check if the database is healthy. Uses the shared client rather than

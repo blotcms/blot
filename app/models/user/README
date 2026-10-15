@@ -67,8 +67,8 @@ The module is consumed directly by the dashboard routes (sign-up, log-in, accoun
 
 | File | Description |
 |------|-------------|
-| `scheduleWelcomeEmail.js` | Schedules a welcome email to be sent 2 hours after account creation using `node-schedule`. If the scheduled time has already passed when called, the email is sent immediately. Skips scheduling if `welcomeEmailSent` is already `true`. Uses an in-process `Map` to track and cancel pending jobs. |
-| `scheduleSubscriptionEmail.js` | Schedules a subscription renewal or expiry notification email 8 days before the Stripe `current_period_end`. Only fires for annual subscriptions or the first monthly renewal. Skips scheduling if the notification date is already past. |
+| `scheduleWelcomeEmail.js` | Sets a Redis alarm (`helper/alarm`) for 2 hours after account creation; the alarm handler sends the welcome email once. Cancels the alarm if `welcomeEmailSent` is already `true`. |
+| `scheduleSubscriptionEmail.js` | Daily scan that sends subscription renewal or expiry emails to users within 8 days of the Stripe `current_period_end`. Only for annual subscriptions or the first monthly renewal. Deduped per user and billing period in Redis. |
 
 ### Internal Utilities
 
@@ -206,11 +206,11 @@ Mutates and returns `user` with derived display fields. Removes sensitive fields
 
 ### `scheduleWelcomeEmail(uid, callback)`
 
-Schedules a welcome email 2 hours after `user.created`. Sends immediately if the delay has elapsed. No-ops if `welcomeEmailSent` is already `true`.
+Sets a `helper/alarm` (`welcome-email`) for 2 hours after `user.created`; any process polling the alarm sends it, once (Redis marker `welcome-email:sent:<uid>`). Cancels the alarm if `welcomeEmailSent` is already `true`.
 
-### `scheduleSubscriptionEmail(uid, callback)`
+### `sendSubscriptionEmails()`
 
-Schedules a Stripe renewal/expiry notification 8 days before `current_period_end`. Applies only to annual subscriptions and the first monthly renewal. No-ops if the notification date is past.
+Daily scan (`lock.cron`, registered in the scheduler) that sends the Stripe renewal/expiry notification to every user within 8 days of `current_period_end`. Applies only to annual subscriptions and the first monthly renewal. Once per user per period (Redis marker `subscription-email:<uid>:<period end>`). `decide(user, now)` is the pure decision.
 
 ### `subscriptionTenure.getSubscriptionDurationMs(user, [now])`
 

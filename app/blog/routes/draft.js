@@ -2,6 +2,7 @@ const { getEntry } = require("../lib/models");
 const attachAdjacent = require("../lib/attachAdjacent");
 const drafts = require("sync/update/drafts");
 const redisSubscriber = require("helper/redisSubscriber");
+const drain = require("helper/drain");
 
 // (node:73631) TimeoutOverflowWarning: 1.7976931348623157e+308 does not fit into a 32-bit signed integer.
 // Timer duration was truncated to 2147483647.
@@ -166,8 +167,14 @@ module.exports = function register(blog) {
       },
     });
 
+    // EventSource clients reconnect, and nginx routes them to another container
+    const offDrain = drain.onStart(function () {
+      endResponse(res);
+    });
+
     function cleanup() {
       if (closed) return;
+      offDrain();
       closed = true;
       clearInterval(heartbeat);
       renderQueue.clear();
