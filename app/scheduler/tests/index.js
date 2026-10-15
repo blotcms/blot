@@ -18,6 +18,8 @@ describe("scheduler", function () {
     "prune-tmp",
     "check-featured-sites",
     "daily-update",
+    "subscription-emails",
+    "welcome-email-reconcile",
   ];
 
   describe("registering jobs", function () {

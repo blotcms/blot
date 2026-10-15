@@ -14,7 +14,7 @@ module.exports = {
   key: require("./key"),
   model: require("./model"),
   remove: require("./remove"),
-  scheduleSubscriptionEmail: require("./scheduleSubscriptionEmail"),
+  sendSubscriptionEmails: require("./scheduleSubscriptionEmail").scan,
   scheduleWelcomeEmail: require("./scheduleWelcomeEmail"),
   set: require("./set"),
   disable: require("./disable"),

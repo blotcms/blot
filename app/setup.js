@@ -89,6 +89,16 @@ async function runPostListenTasks() {
   }
 
   try {
+    // Any container may claim a due alarm, so every container polls
+    log("Starting welcome email alarm");
+    const welcomeEmailAlarm = require("models/user/scheduleWelcomeEmail").alarm;
+    welcomeEmailAlarm.start();
+    require("helper/drain").onStart(() => welcomeEmailAlarm.stop());
+  } catch (err) {
+    logError("Failed to start welcome email alarm", err);
+  }
+
+  try {
     if (config.master) {
       log("Starting scheduler asynchronously");
       scheduler();

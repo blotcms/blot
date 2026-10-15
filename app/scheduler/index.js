@@ -186,37 +186,21 @@ module.exports = function () {
     });
   })(0);
 
-  // Warn users about impending subscriptions
-  User.getAllIds(function (err, uids) {
-    if (err) {
-      console.error("Error fetching user ids for scheduling:", err);
-      return;
-    }
+  // Warn users about impending renewals and expiries. The scan looks at every
+  // user, and a Redis marker per user and billing period means each warning is
+  // sent once however many processes run it.
+  console.log(clfdate(), "Scheduled daily subscription renewal and expiry emails");
+  lock.cron("subscription-emails", { hour: 14, minute: 0 }, async function () {
+    const sent = await User.sendSubscriptionEmails();
+    console.log(clfdate(), "Sent", sent, "subscription renewal and expiry emails");
+  });
 
-    async.each(uids, User.scheduleSubscriptionEmail, function (err) {
-      if (err) {
-        console.error("Error scheduling subscription emails:", err);
-      } else {
-        console.log(clfdate(), "Scheduled emails for renewals and expiries!");
-      }
-    });
-
-    async.each(
-      uids,
-      function (uid, next) {
-        User.scheduleWelcomeEmail(uid, function (err) {
-          if (err) console.error("Error scheduling welcome email for", uid, err);
-          next();
-        });
-      },
-      function (err) {
-        if (err) {
-          console.error("Error scheduling welcome emails:", err);
-        } else {
-          console.log(clfdate(), "Scheduled welcome emails where needed!");
-        }
-      }
-    );
+  // Repair users whose welcome email alarm was never set (the sign-up route
+  // schedules it after the user is committed, and can fail)
+  console.log(clfdate(), "Scheduled daily welcome email alarm reconcile");
+  lock.cron("welcome-email-reconcile", { hour: 15, minute: 0 }, async function () {
+    const scheduled = await User.scheduleWelcomeEmail.reconcile({ days: 7 });
+    console.log(clfdate(), "Re-armed", scheduled, "welcome email alarms");
   });
 
   console.log(clfdate(), "Scheduled daily check of storage disk usage");

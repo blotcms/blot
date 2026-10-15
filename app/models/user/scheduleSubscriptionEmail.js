@@ -1,15 +1,21 @@
 var getById = require("./getById");
+var getAllIds = require("./getAllIds");
 var email = require("helper/email");
+var lock = require("helper/lock");
+var client = require("models/client");
 var debug = require("debug")("blot:user:scheduleSubscriptionEmail");
-const scheduler = require("node-schedule");
-const scheduledNotifications = new Map();
 
 // The number of days before a subscription is renewed or
 // expired to send an email notification to the customer.
 var DAYS_WARNING = 8;
 var SECONDS_IN_DAY = 24 * 60 * 60;
+var MS_IN_DAY = SECONDS_IN_DAY * 1000;
 var MIN_MONTH_SECONDS = 27 * SECONDS_IN_DAY;
 var MAX_MONTH_SECONDS = 32 * SECONDS_IN_DAY;
+
+// The warning goes out at most DAYS_WARNING days before the period ends, so
+// the marker outlives the period it guards by a wide margin
+var SENT_MARKER_TTL_MS = 40 * MS_IN_DAY;
 
 function roughlyOneMonth (seconds) {
   return seconds >= MIN_MONTH_SECONDS && seconds <= MAX_MONTH_SECONDS;
@@ -34,123 +40,143 @@ function isFirstMonthlyRenewal (subscription) {
   );
 }
 
-module.exports = function (uid, callback) {
-  var notificationDate;
+function sentKey (uid, periodEnd) {
+  return "subscription-email:" + uid + ":" + periodEnd;
+}
 
-  // Fetch the latest version of the user's subcription from the
-  // database to determine when we should notify them of a renewal.
-  getById(uid, function (err, user) {
-    if (err) return callback(err);
+// Short claim held while a send is in progress (longer than any send)
+var SENDING_CLAIM_TTL_MS = 10 * 60 * 1000;
 
-    // This user does not have a subscription through Stripe
-    if (!user || !user.subscription || !user.subscription.current_period_end)
-      return callback();
+function sendingKey (uid, periodEnd) {
+  return "subscription-email:sending:" + uid + ":" + periodEnd;
+}
 
-    // For monthly subscriptions, we only send a warning for the first renewal.
-    if (
-      user.subscription.plan &&
-      user.subscription.plan.interval === "month" &&
-      !isFirstMonthlyRenewal(user.subscription)
-    )
-      return callback();
+// Which email, if any, is this user due right now? Pure: returns
+// { name, periodEnd } where name is the helper/email method to call, or null.
+// A user is due from the warning date (the period end minus DAYS_WARNING)
+// until the period ends.
+function decide (user, now) {
+  if (now === undefined) now = Date.now();
 
-    // Stripe uses a seconds timestamp vs. JavaScript's ms
-    notificationDate = new Date(user.subscription.current_period_end * 1000);
+  // This user does not have a subscription through Stripe
+  if (!user || !user.subscription || !user.subscription.current_period_end)
+    return null;
 
-    // Subtract the number of days warning we'd like to give to user
-    // Right now we tell them a week in advance of a renewal or expiry
-    notificationDate.setDate(notificationDate.getDate() - DAYS_WARNING);
+  var subscription = user.subscription;
 
-    debug(user.uid, user.email, "needs to be notified on", notificationDate);
+  // For monthly subscriptions, we only send a warning for the first renewal.
+  if (
+    subscription.plan &&
+    subscription.plan.interval === "month" &&
+    !isFirstMonthlyRenewal(subscription)
+  )
+    return null;
 
-    const existing = scheduledNotifications.get(uid);
+  // Stripe uses a seconds timestamp vs. JavaScript's ms
+  var periodEnd = subscription.current_period_end;
+  var periodEndMs = periodEnd * 1000;
+  var warningMs = periodEndMs - DAYS_WARNING * MS_IN_DAY;
 
-    // When the server starts, we schedule a notification email for every user
-    // If they should have been notified in the past, we stop now since we
-    // don't want to email the user more than once.
-    if (notificationDate.getTime() < Date.now()) {
-      if (existing) {
-        existing.cancel();
-        scheduledNotifications.delete(uid);
-      }
+  if (now < warningMs || now >= periodEndMs) return null;
 
-      debug(user.email, "should already been notified on", notificationDate);
-      return callback();
-    }
+  if (subscription.cancel_at_period_end)
+    return { name: "UPCOMING_EXPIRY", periodEnd: periodEnd };
 
-    if (existing) {
-      existing.cancel();
-      scheduledNotifications.delete(uid);
-    }
+  if (subscription.status === "active") {
+    if (isFirstMonthlyRenewal(subscription))
+      return { name: "UPCOMING_MONTHLY_FIRST_RENEWAL", periodEnd: periodEnd };
 
-    const job = scheduler.scheduleJob(notificationDate, function () {
-      // We fetch the latest state of the user's subscription
-      // from the database in case the user's subscription
-      // has changed since the time the server started.
-      getById(uid, function (err, user) {
-        // No callback now, that was called long ago
-        if (!user || !user.subscription) {
-          debug(uid, "There is no user!");
-          return;
-        }
+    return { name: "UPCOMING_RENEWAL", periodEnd: periodEnd };
+  }
 
-        debug(user.id, user.email, "Time to notify the user!");
+  return null;
+}
 
-        if (user.subscription.cancel_at_period_end) {
-          debug(
-            user.uid,
-            user.email,
-            "Sending email about a subscription expiry..."
-          );
-          return email.UPCOMING_EXPIRY(uid);
-        }
-
-        if (user.subscription.status === "active") {
-          if (isFirstMonthlyRenewal(user.subscription)) {
-            debug(
-              user.uid,
-              user.email,
-              "Sending email about a first monthly subscription renewal..."
-            );
-            return email.UPCOMING_MONTHLY_FIRST_RENEWAL(uid);
-          }
-
-          debug(
-            user.uid,
-            user.email,
-            "Sending email about a subscription renewal..."
-          );
-          return email.UPCOMING_RENEWAL(uid);
-        }
-
-        console.error(
-          user.uid,
-          user.email,
-          "Not sure how to notify this user about their renewal!"
-        );
-      });
+function getUser (uid) {
+  return new Promise(function (resolve, reject) {
+    getById(uid, function (err, user) {
+      if (err) return reject(err);
+      resolve(user);
     });
-
-    if (job) {
-      scheduledNotifications.set(uid, job);
-
-      job.on("run", function () {
-        scheduledNotifications.delete(uid);
-      });
-
-      job.on("canceled", function () {
-        scheduledNotifications.delete(uid);
-      });
-    }
-
-    // Let the callee know the email is schedule
-    debug(user.uid, user.email, "scheduled warning email....");
-    console.log(
-      "Scheduled subscription email on",
-      notificationDate,
-      "for",
-      user.email
-    );
-    callback();
   });
+}
+
+function sendEmail (name, uid) {
+  return new Promise(function (resolve, reject) {
+    email[name](uid, {}, function (err) {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+}
+
+// Sends the user's warning email if they are due one and nobody has sent it
+// for this billing period. Resolves to the email name sent, or null. The
+// durable sent marker is set only after the send succeeds; a short sending
+// claim keeps concurrent runs from sending at the same time. If the send
+// fails the claim is removed so the next scan tries again. A crash between
+// the send and the durable marker can resend after the claim expires, which
+// is accepted: a duplicate warning beats a lost one.
+async function sendForUser (uid, now) {
+  var user = await getUser(uid);
+  var decision = decide(user, now);
+
+  if (!decision) return null;
+
+  var durable = sentKey(uid, decision.periodEnd);
+  var claim = sendingKey(uid, decision.periodEnd);
+
+  if (await client.exists(durable)) return null;
+
+  var won = await lock.once(claim, SENDING_CLAIM_TTL_MS);
+
+  if (!won) return null;
+
+  debug(uid, user.email, "Sending", decision.name);
+
+  try {
+    await sendEmail(decision.name, uid);
+  } catch (err) {
+    await client.del(claim);
+    throw err;
+  }
+
+  await client.set(durable, "1", { PX: SENT_MARKER_TTL_MS });
+  await client.del(claim);
+
+  return decision.name;
+}
+
+// Run daily. Looks at every user, so it needs no per-process timers, picks up
+// subscription changes made after sign-up, and is safe in any number of
+// processes. An error for one user doesn't stop the rest. Resolves to the
+// number of emails sent.
+async function scan (now) {
+  var uids = await new Promise(function (resolve, reject) {
+    getAllIds(function (err, uids) {
+      if (err) return reject(err);
+      resolve(uids);
+    });
+  });
+  var sent = 0;
+
+  for (var i = 0; i < uids.length; i++) {
+    try {
+      if (await sendForUser(uids[i], now)) sent++;
+    } catch (err) {
+      console.error("Error sending subscription email for", uids[i], err);
+    }
+  }
+
+  return sent;
+}
+
+module.exports = {
+  decide: decide,
+  sendForUser: sendForUser,
+  scan: scan,
+  sentKey: sentKey,
+  sendingKey: sendingKey,
+  SENDING_CLAIM_TTL_MS: SENDING_CLAIM_TTL_MS,
+  SENT_MARKER_TTL_MS: SENT_MARKER_TTL_MS
 };
