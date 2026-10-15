@@ -1,4 +1,3 @@
-const scheduler = require("node-schedule");
 const { promisify } = require("util");
 const Blog = require("models/blog");
 const Entries = require("models/entries");
@@ -7,6 +6,7 @@ const email = require("helper/email");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
 const syncReport = require("clients/util/syncReport");
+const scheduleExclusive = require("clients/util/scheduleExclusive");
 const getHealth = require("./getHealth");
 const { measure: measureEventLoop } = require("helper/eventLoopMonitor");
 const database = require("./database");
@@ -124,22 +124,12 @@ const walkWithLock = async (blogID, publish) => {
   }
 };
 
-let validationRunning = false;
-
+// Overlap between sweeps is prevented across processes by scheduleExclusive
 const runValidation = async () => {
-  if (validationRunning) {
-    console.log(clfdate(), "Google Drive: Validation still running, skipping");
-    return;
-  }
-
-  validationRunning = true;
-
   try {
     await validateAllBlogs();
   } catch (err) {
     console.error(clfdate(), "Google Drive: Sync validation failed", err);
-  } finally {
-    validationRunning = false;
   }
 };
 
@@ -264,7 +254,9 @@ const validateAllBlogs = async () => {
 module.exports = function scheduleValidation() {
   console.log(clfdate(), "Google Drive: Scheduling hourly sync validation");
   // :30 so it doesn't overlap Dropbox's :00 validation
-  scheduler.scheduleJob("30 * * * *", runValidation);
+  // One process runs each sweep; a sweep that outlasts the hour is not
+  // overlapped by the next one.
+  scheduleExclusive("google-drive-validation", "30 * * * *", runValidation);
 };
 
 // Exposed for tests

@@ -1,8 +1,9 @@
-const scheduler = require("node-schedule");
 const { promisify } = require("util");
 const Blog = require("models/blog");
 const Entries = require("models/entries");
 const clfdate = require("helper/clfdate");
+const scheduleExclusive = require("clients/util/scheduleExclusive");
+const onceAtStartup = require("clients/util/onceAtStartup");
 const email = require("helper/email");
 const syncReport = require("clients/util/syncReport");
 const resetToBlot = require("./sync/reset-to-blot");
@@ -123,23 +124,6 @@ const hasRecentSync = (account) => {
   return Date.now() - account.last_sync <= ONE_HOUR_IN_MS;
 };
 
-
-let validationRunning = false;
-
-const runValidation = async () => {
-  if (validationRunning) {
-    console.log(clfdate(), "Dropbox: Validation still running, skipping");
-    return;
-  }
-
-  validationRunning = true;
-
-  try {
-    await validateAllBlogs();
-  } finally {
-    validationRunning = false;
-  }
-};
 
 const validateAllBlogs = async () => {
   console.log(clfdate(), "Dropbox: Running hourly sync validation");
@@ -316,54 +300,56 @@ const resyncRecentSyncsOnStartup = async () => {
 
   if (!blogsToResync.length) return;
 
-  setImmediate(async () => {
-    for (const { blog, blogID } of blogsToResync) {
-      const publish = (...args) => {
-        console.log(clfdate(), "Dropbox:", blogID, ...args);
-      };
+  for (const { blog, blogID } of blogsToResync) {
+    const publish = (...args) => {
+      console.log(clfdate(), "Dropbox:", blogID, ...args);
+    };
 
-      try {
-        console.log(clfdate(), "Dropbox: Resyncing recent blog", blogID);
-        const summary = await resetToBlotWithLock(blogID, publish);
-        if (summary === TRANSFER_INCOMPLETE) {
-          console.log(
-            clfdate(),
-            "Dropbox: Skipping blog with incomplete transfer",
-            blogID
-          );
-          continue;
-        }
-        // Runs on every restart, so only log what Fix() repaired - the
-        // hourly sweep is what reports repairs to the operator.
-        const fixed = await fixBlog(blog);
-        const repaired = syncReport.summarize(fixed.report);
-        if (repaired) {
-          console.log(clfdate(), "Dropbox: Fix repaired", blogID, repaired);
-        }
-        await catchUpSync(blog);
-        console.log(clfdate(), "Dropbox: Resync complete for blog", blogID);
-      } catch (err) {
-        if (err.message === "Failed to acquire folder lock") {
-          console.log(clfdate(), "Dropbox: Skipping busy blog", blogID);
-          continue;
-        }
-        console.error(
+    try {
+      console.log(clfdate(), "Dropbox: Resyncing recent blog", blogID);
+      const summary = await resetToBlotWithLock(blogID, publish);
+      if (summary === TRANSFER_INCOMPLETE) {
+        console.log(
           clfdate(),
-          "Dropbox: Resync error for blog",
-          blogID,
-          err
+          "Dropbox: Skipping blog with incomplete transfer",
+          blogID
         );
+        continue;
       }
+      // Runs on every restart, so only log what Fix() repaired - the
+      // hourly sweep is what reports repairs to the operator.
+      const fixed = await fixBlog(blog);
+      const repaired = syncReport.summarize(fixed.report);
+      if (repaired) {
+        console.log(clfdate(), "Dropbox: Fix repaired", blogID, repaired);
+      }
+      await catchUpSync(blog);
+      console.log(clfdate(), "Dropbox: Resync complete for blog", blogID);
+    } catch (err) {
+      if (err.message === "Failed to acquire folder lock") {
+        console.log(clfdate(), "Dropbox: Skipping busy blog", blogID);
+        continue;
+      }
+      console.error(
+        clfdate(),
+        "Dropbox: Resync error for blog",
+        blogID,
+        err
+      );
     }
-  });
+  }
 };
 
 module.exports = async function init() {
   console.log(clfdate(), "Dropbox: Scheduling hourly sync validation");
-  scheduler.scheduleJob("0 * * * *", runValidation);
-  resyncRecentSyncsOnStartup().catch(function (err) {
-    console.error(clfdate(), "Dropbox: Startup resync failed", err);
-  });
+  // One process per hour runs the sweep, and a sweep that outlasts the hour
+  // is not overlapped by the next one (the "running" lock is cross-process).
+  scheduleExclusive("dropbox-validation", "0 * * * *", validateAllBlogs);
+
+  // Once per deploy across all processes, not once per process.
+  onceAtStartup("dropbox-resync-recent", resyncRecentSyncsOnStartup).catch(function (err) {
+      console.error(clfdate(), "Dropbox: Startup resync failed", err);
+    });
 };
 
 // Exposed for tests: both resyncRecentSyncsOnStartup and validateAllBlogs
