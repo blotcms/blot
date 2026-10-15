@@ -375,6 +375,8 @@ async function restartSetupProcesses() {
     return;
   }
 
+  const setups = [];
+
   for (const { blogID, account } of blogsToRestart) {
     console.log(
       clfdate(),
@@ -427,8 +429,26 @@ async function restartSetupProcesses() {
       continue;
     }
 
-    finishSetup(blog, drive, email, serviceAccountId);
+    setups.push({
+      blogID,
+      promise: finishSetup(blog, drive, email, serviceAccountId),
+    });
   }
+
+  // Resolve only once every setup has finished (they can poll for up to ~2h),
+  // so a startup one-off wrapping this isn't marked done early.
+  const results = await Promise.allSettled(setups.map((s) => s.promise));
+  results.forEach((result, i) => {
+    if (result.status === "rejected") {
+      console.log(
+        clfdate(),
+        "Google Drive Client",
+        "Setup failed for blog",
+        setups[i].blogID,
+        result.reason
+      );
+    }
+  });
 }
 
 module.exports = finishSetup;

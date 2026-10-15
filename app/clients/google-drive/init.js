@@ -1,65 +1,76 @@
 const config = require("config");
 const clfdate = require("helper/clfdate");
+const lock = require("helper/lock");
+const drain = require("helper/drain");
 const prefix = () => `${clfdate()} Google Drive client:`;
-const createDriveClient = require("./serviceAccount/createDriveClient");
 const createDriveActivityClient = require("./serviceAccount/createDriveActivityClient");
-const fetchStorageInfo = require("./serviceAccount/fetchStorageInfo");
-const watchChanges = require("./serviceAccount/watchChanges");
+const refreshServiceAccounts = require("./serviceAccount/refreshServiceAccounts");
 const pollDriveActivity = require("./serviceAccount/pollDriveActivity");
 const hotDocPoller = require("./serviceAccount/hotDocPoller");
 const { restartSetupProcesses } = require("./routes/setup");
 const scheduleValidation = require("./validate");
+const { exclusive, schedule } = require("clients/util/scheduleExclusive");
+const onceAtStartup = require("clients/util/onceAtStartup");
 
-const main = async (initial = false) => {
-  const serviceAccounts = config.google_drive.service_accounts;
+const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
 
-  if (!serviceAccounts || serviceAccounts.length === 0) {
+const getServiceAccounts = () => config.google_drive.service_accounts || [];
+
+// Run from one process every ten minutes (see refreshServiceAccounts), and
+// exclusive so a slow run isn't overlapped by the next.
+const refresh = exclusive(
+  "google-drive-service-accounts",
+  refreshServiceAccounts
+);
+
+// One process at a time polls each service account's drive activity. The
+// others wait on the lease and take over if the holder dies or stops.
+const startActivityPolling = () => {
+  const leases = getServiceAccounts().map(({ client_id: serviceAccountId }) =>
+    lock.lease(
+      "google-drive-activity:" + serviceAccountId,
+      async (signal) => {
+        const driveactivity = await createDriveActivityClient(serviceAccountId);
+        console.log(prefix(), "Set up polling for drive activity");
+        await pollDriveActivity(serviceAccountId, driveactivity, signal);
+      }
+    )
+  );
+
+  drain.onStart(() => Promise.all(leases.map((lease) => lease.stop())));
+
+  return leases;
+};
+
+module.exports = async () => {
+  if (getServiceAccounts().length === 0) {
     console.log(prefix(), "No service accounts found in the configuration.");
     return;
   }
 
-  // Re-watch for new folders for sites in the middle of the setup process
-  if (initial) {
-    restartSetupProcesses();
-  }
+  // Every ten minutes, in one process per run, to refresh the service account
+  // data and renew the changes.watch channel
+  schedule("google-drive-service-accounts", "*/10 * * * *", refresh);
 
-  if (initial) {
-    hotDocPoller.start();
-    scheduleValidation();
-  }
+  // Also at startup, so a fresh deploy doesn't wait up to ten minutes for its
+  // channel. A deploy starts several processes at once; the first in each
+  // ten minute window does it and the cron tick covers the rest.
+  const bucket = Math.floor(Date.now() / TEN_MINUTES_IN_MS);
+  lock
+    .once("google-drive-init:" + bucket, TEN_MINUTES_IN_MS)
+    .then((first) => first && refresh())
+    .catch((err) => console.error(prefix(), "Startup refresh failed", err));
 
-  for (const { client_id: serviceAccountId } of serviceAccounts) {
-    try {
-      const drive = await createDriveClient(serviceAccountId);
-      const driveactivity = await createDriveActivityClient(serviceAccountId);
+  // Re-watch for new folders for sites in the middle of the setup process.
+  // Once per deploy across all processes.
+  onceAtStartup("google-drive-restart-setup", () => restartSetupProcesses())
+    .catch((err) =>
+      console.error(prefix(), "Restarting setup processes failed", err)
+    );
 
-      console.log(prefix(), "Fetching storage usage of service account");
-      await fetchStorageInfo(serviceAccountId, drive);
-
-      await watchChanges(serviceAccountId, drive);
-
-      // We only want to set up polling once, when the service account is first initialized
-      if (initial) {
-        console.log(prefix(), "Set up polling for drive activity");
-        pollDriveActivity(serviceAccountId, driveactivity);
-      }
-
-      // Todo: also sync all sites that are using this service account
-
-      console.log(prefix(), "Service account is running successfully");
-    } catch (e) {
-      console.error(
-        "Google Drive client: error with configuration of serviceAccount"
-      );
-      console.error(e);
-    }
-  }
+  hotDocPoller.start();
+  scheduleValidation();
+  startActivityPolling();
 };
 
-module.exports = async () => {
-  main(true);
-  // we do this repeatedly every 10 minutes
-  // to refresh the service account data
-  // and renew the changes.watch channel
-  setInterval(main, 1000 * 60 * 10);
-};
+module.exports.refresh = refresh;

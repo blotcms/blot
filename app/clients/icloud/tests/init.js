@@ -16,6 +16,8 @@ describe("icloud init validateAllBlogs", function () {
     redis: require.resolve("models/client"),
     validateBlog: require.resolve("../sync/validateBlog"),
     init: require.resolve("../init"),
+    lockHelper: require.resolve("helper/lock"),
+    scheduleExclusive: require.resolve("clients/util/scheduleExclusive"),
   };
   const originals = {};
   const HOUR = 60 * 60 * 1000;
@@ -158,7 +160,22 @@ describe("icloud init validateAllBlogs", function () {
         callback();
       },
     });
-    // Both load the stubs above at require time
+    // In-memory stand-in for helper/lock: held keys reject with ELOCKED
+    const held = new Set();
+    stub("lockHelper", Object.assign(
+      async (key) => {
+        if (held.has(key)) {
+          const err = new Error("Lock is held: " + key);
+          err.code = "ELOCKED";
+          throw err;
+        }
+        held.add(key);
+        return { release: async () => held.delete(key) };
+      },
+      { cron: () => ({ cancel() {} }), once: async () => true }
+    ));
+    // All load the stubs above at require time
+    delete require.cache[paths.scheduleExclusive];
     delete require.cache[paths.validateBlog];
     delete require.cache[paths.init];
     return require("../init");

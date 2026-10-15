@@ -61,10 +61,8 @@ function load({
   };
 
   const stubs = {
-    "node-schedule": {
-      scheduleJob(cron, fn) {
-        calls.scheduled.push({ cron, fn });
-      },
+    "clients/util/scheduleExclusive": (name, cron, fn) => {
+      calls.scheduled.push({ name, cron, fn });
     },
     "helper/clfdate": () => "",
     "helper/email": {
@@ -178,6 +176,7 @@ describe("Google Drive hourly sync validation", function () {
     validate();
     expect(calls.scheduled.length).toBe(1);
     expect(calls.scheduled[0].cron).toBe("30 * * * *");
+    expect(calls.scheduled[0].name).toBe("google-drive-validation");
   });
 
   it("emails one digest with the changes the walk found", async function () {

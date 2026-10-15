@@ -5,7 +5,32 @@ const sync = require("clients/google-drive/sync");
 
 const prefix = () => `${clfdate()} Google Drive:`;
 
-module.exports = async (serviceAccountId, driveactivity) => {
+const POLL_EVERY_MS = 5000;
+
+// Resolves after ms, or as soon as the signal aborts
+const sleep = (ms, signal) =>
+  new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+
+    const timer = setTimeout(done, ms);
+
+    function done() {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    }
+
+    signal.addEventListener("abort", done, { once: true });
+  });
+
+// Polls every blog on the service account for Drive activity until the signal
+// aborts (see init.js, which runs this under a lease so only one process polls
+// each service account). Resolves once the loop has stopped.
+module.exports = async (
+  serviceAccountId,
+  driveactivity,
+  signal = new AbortController().signal
+) => {
   if (!serviceAccountId || !driveactivity) {
     throw new Error("Missing required arguments for pollDriveActivity");
   }
@@ -67,14 +92,14 @@ module.exports = async (serviceAccountId, driveactivity) => {
     }
   );
 
-  while (true) {
+  while (!signal.aborted) {
     try {
       // 1) Iterate over each blog. For each blog, queue the check in Bottleneck.
       await database.blog.iterateByServiceAccountId(
         serviceAccountId,
         async (blogID, account) => {
           const { folderId, latestDriveActivityTimestamp } = account;
-          if (!folderId) return;
+          if (!folderId || signal.aborted) return;
 
           try {
             await checkDriveActivity(
@@ -91,6 +116,6 @@ module.exports = async (serviceAccountId, driveactivity) => {
       console.error("Error during iterateByServiceAccountId:", err);
     }
     // wait 5 seconds and avoid blocking the event loop
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await sleep(POLL_EVERY_MS, signal);
   }
 };

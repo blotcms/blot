@@ -1,4 +1,3 @@
-const scheduler = require("node-schedule");
 const { promisify } = require("util");
 const Blog = require("models/blog");
 const clfdate = require("helper/clfdate");
@@ -13,6 +12,8 @@ const syncFromiCloud = require("./sync/fromiCloud");
 const syncToiCloud = require("./sync/toiCloud");
 const validateBlog = require("./sync/validateBlog");
 const syncReport = require("clients/util/syncReport");
+const { exclusive, schedule } = require("clients/util/scheduleExclusive");
+const onceAtStartup = require("clients/util/onceAtStartup");
 
 const getBlog = promisify(Blog.get);
 
@@ -123,24 +124,6 @@ const resyncRecentlySynced = async (options = {}) => {
 const hasRecentSync = (account) => {
   if (!account || typeof account.lastSync !== "number") return false;
   return Date.now() - account.lastSync <= ONE_HOUR_IN_MS;
-};
-
-let validationRunning = false;
-
-// The sweep is sequential and a slow macserver can stretch it past an hour.
-const runValidation = async () => {
-  if (validationRunning) {
-    console.log(clfdate(), "iCloud: Validation still running, skipping");
-    return;
-  }
-
-  validationRunning = true;
-
-  try {
-    await validateAllBlogs();
-  } finally {
-    validationRunning = false;
-  }
 };
 
 const validateAllBlogs = async () => {
@@ -304,9 +287,12 @@ const resyncAllConnected = async ({ notify = true } = {}) => {
   });
 };
 
-const init = async () => {
+// The sweep is sequential and a slow macserver can stretch it past an hour, so
+// a run is skipped if one is still going in any process.
+const runValidation = exclusive("icloud-validation", validateAllBlogs);
 
-  await database.iterate(async (blogID, account) => {
+const resumeInitialTransfers = () =>
+  database.iterate(async (blogID, account) => {
     if (!account.transferringToiCloud) {
       return;
     }
@@ -319,10 +305,19 @@ const init = async () => {
     }
   });
 
+const init = async () => {
   // At :45 because the Dropbox sweep runs at :00 and Google Drive's at :30,
-  // and all three share the Redis connection.
+  // and all three share the Redis connection. One process runs each sweep.
   console.log(clfdate(), "iCloud: Scheduling hourly sync validation");
-  scheduler.scheduleJob("45 * * * *", runValidation);
+  schedule("icloud-validation", "45 * * * *", runValidation);
+
+  // Resuming can take a long time, so the sweep is scheduled first. Once per
+  // deploy across all processes, not once per process.
+  try {
+    await onceAtStartup("icloud-resume-transfers", resumeInitialTransfers);
+  } catch (error) {
+    console.error(clfdate(), "iCloud: Error resuming initial transfers", error);
+  }
 
   // The daily full resync (resyncAllConnected) and the startup/"/started"
   // resync (resyncRecentlySynced) stay disabled: both walk every connected

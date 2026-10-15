@@ -308,24 +308,20 @@ describe("dropbox init", function () {
     });
 
     it("resyncRecentSyncsOnStartup completes without throwing", async function () {
-      // The actual resync work runs inside an un-awaited setImmediate (see
-      // resyncRecentSyncsOnStartup), so wait for resetToBlot to actually be
-      // called before asserting, rather than trusting the outer function's
-      // own promise to have done all the work.
+      // The returned promise only resolves once the per-blog work is done,
+      // so resetToBlot must already have been called when it does.
       let resolveCalled;
       const called = new Promise((resolve) => {
         resolveCalled = resolve;
       });
+      let wasCalled = false;
+      called.then(() => (wasCalled = true));
 
       const init = load(resolveCalled);
 
       await init.resyncRecentSyncsOnStartup();
-      await called;
-      // Let the rest of the (all-stubbed, no real I/O) promise chain after
-      // resetToBlot rejects - resetToBlotWithLock catching it, the loop's
-      // continue - actually run before the test ends.
       await new Promise((resolve) => setImmediate(resolve));
-      await new Promise((resolve) => setImmediate(resolve));
+      expect(wasCalled).toBe(true);
     });
   });
 
