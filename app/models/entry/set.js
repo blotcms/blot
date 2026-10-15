@@ -15,7 +15,7 @@ var Blog = require("models/blog");
 var rebuildDependencyGraph = require("./_rebuildDependencyGraph");
 var backlinksToUpdate = require("./_backlinksToUpdate");
 var updateTagList = require("models/tags").set;
-var addToSchedule = require("./_addToSchedule");
+var addToSchedule = require("./scheduled");
 var notifyDrafts = require("./_notifyDrafts");
 var assignToLists = require("./_assign");
 var { DELETED_ENTRY_TTL_SECONDS } = require("../entries/sweepExpiredDeleted");
@@ -45,6 +45,9 @@ module.exports = function set (blogID, path, updates, callback) {
     entry = entry || {};
 
     var previousPermalink = entry.permalink;
+
+    // So an entry that stops being scheduled (drafted, deleted) cancels its alarm
+    var wasScheduled = !!entry.scheduled;
 
     var previousInternalLinks = entry.internalLinks
       ? entry.internalLinks.slice()
@@ -190,7 +193,10 @@ module.exports = function set (blogID, path, updates, callback) {
               rebuildDependencyGraph.bind(this, blogID, entry, previousDependencies),
             ];
 
-            if (entry.scheduled)
+            // Arms the publication alarm, or cancels it when a scheduled entry
+            // becomes a draft or is deleted. Other saves skip the Redis round
+            // trip.
+            if (entry.scheduled || wasScheduled)
               queue.push(addToSchedule.bind(this, blogID, entry));
 
             if (entry.draft) queue.push(notifyDrafts.bind(this, blogID, entry));

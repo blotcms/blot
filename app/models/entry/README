@@ -23,7 +23,7 @@ All storage is backed by Redis. Entry data is serialised as JSON strings. Relati
 | `_assign.js` | Maintains the Redis sorted-set lists that group entries by type (entries, drafts, scheduled, pages, deleted, etc.). |
 | `_rebuildDependencyGraph.js` | Updates the reverse-dependency index when an entry's `dependencies` array changes. |
 | `_backlinksToUpdate.js` | Determines which other entries need their `backlinks` property updated after a save. |
-| `_addToSchedule.js` | Registers or cancels an in-process `node-schedule` job to publish a future-dated entry. |
+| `scheduled.js` | Sets or cancels the Redis alarm (`helper/alarm`) that publishes a future-dated entry. |
 | `_notifyDrafts.js` | Publishes a Redis Pub/Sub event to notify any active draft preview connections that the entry has been updated. |
 
 ---
@@ -129,7 +129,7 @@ Writes entry data and runs all side-effects. This is the primary write operation
 10. Validates the merged entry against `model.js` and writes it to Redis.
 11. Sets a 24-hour TTL on deleted entry keys; removes any TTL from live entry keys.
 12. Runs in parallel: tag list update, list assignment (`_assign`), dependency graph rebuild.
-13. If scheduled, registers a `node-schedule` job.
+13. Sets the publication alarm if scheduled, otherwise cancels any alarm for the path.
 14. If a draft, publishes a Redis Pub/Sub notification.
 15. Computes and applies backlink changes to linked entries (recursive `set` calls, one per changed entry).
 
@@ -210,11 +210,11 @@ Each backlink update is applied by a recursive call to `set` with only the `back
 
 ## Scheduled Publication
 
-Handled by `_addToSchedule.js`.
+Handled by `scheduled.js`.
 
-When an entry's `dateStamp` is in the future, `set` calls `_addToSchedule`, which registers a `node-schedule` job keyed by `{blogID}:{path}`. At the scheduled time, the job re-saves the entry with an empty update object (`{}`), which causes `set` to re-evaluate the `scheduled` flag (now false) and publish the entry. The blog's `cacheID` is also updated to invalidate rendered caches.
+Every `set` calls it: a scheduled entry sets an alarm (`helper/alarm`, name `scheduled-entries`) at its `dateStamp`, id `{blogID}:{path}`; any other save cancels the path's alarm, which covers a date moved to the past, a draft, a deletion and `drop`. Every process polls the alarm (started in `app/setup.js`), so publication does not depend on the process that saved the entry. When the alarm is due the handler re-reads the entry: if it is gone or no longer scheduled it stops; if its date moved later it re-arms; otherwise it re-saves the entry with an empty update (`{}`), so `set` re-evaluates the `scheduled` flag (now false), and bumps the blog's `cacheID`. Errors are left to the alarm, which retries after its lease. Delivery is at-least-once and the handler is idempotent.
 
-A new job replaces any existing job for the same key when an entry is re-saved with a changed `dateStamp`. Jobs are tracked in a module-level `Map` and removed from it when they fire or are cancelled. Scheduled jobs are in-process only and do not survive a server restart.
+`scripts/entry/backfill-scheduled-alarms.js` arms alarms for entries already in the scheduled lists.
 
 ---
 

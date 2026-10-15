@@ -6,7 +6,6 @@ describe("scheduler", function () {
   const User = require("models/user");
 
   const indexPath = require.resolve("../index");
-  const publishPath = require.resolve("../publish-scheduled-entries");
 
   const JOBS = [
     "disk-usage-report",
@@ -20,6 +19,7 @@ describe("scheduler", function () {
     "daily-update",
     "subscription-emails",
     "welcome-email-reconcile",
+    "scheduled-entries-reconcile",
   ];
 
   describe("registering jobs", function () {
@@ -38,15 +38,11 @@ describe("scheduler", function () {
 
       // Startup tasks: don't scan blogs or users
       spyOn(User, "getAllIds").and.callFake((callback) => callback(null, []));
-      require("../publish-scheduled-entries");
-      this.originalPublish = require.cache[publishPath].exports;
-      require.cache[publishPath].exports = (callback) => callback(null);
       delete require.cache[indexPath];
     });
 
     afterEach(function () {
       this.jobs.forEach((job) => job.cancel());
-      require.cache[publishPath].exports = this.originalPublish;
       delete require.cache[indexPath];
     });
 

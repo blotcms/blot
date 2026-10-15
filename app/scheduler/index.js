@@ -8,7 +8,6 @@ const lock = require("helper/lock");
 const client = require("models/client");
 var checkFeaturedSites = require("../documentation/featured/check");
 var config = require("config");
-var publishScheduledEntries = require("./publish-scheduled-entries");
 var { isRedisUnavailableError } = require("helper/redisUnavailable");
 const freeDiskSpace = require("./free-disk-space");
 const os = require("os");
@@ -21,9 +20,6 @@ const checkSSLCertificates = require("./check-ssl-certificates");
 const checkRedisHost = require("./check-redis-host");
 const sweepGit = require("./sweep-git");
 const pruneTmp = require("./prune-tmp");
-
-const SCHEDULE_RETRY_MS = 60 * 1000;
-const SCHEDULE_RETRY_MAX_MS = 60 * 60 * 1000;
 
 // If any other disk has less than 2GB of space, we should notify the admin.
 // The data disk is watched by percentage instead (free-disk-space.js).
@@ -164,27 +160,6 @@ module.exports = function () {
       );
     });
   });
-
-  // Bash the cache for scheduled posts. Don't crash the master (and loop on
-  // restart) if this fails at startup, e.g. because Redis is unavailable or
-  // rejecting writes: try again, or the entries stay scheduled until the next
-  // restart. Scheduling an entry twice is harmless (one job per entry path).
-  // An outage retries every minute; any other error backs off up to an hour,
-  // since each attempt scans every blog.
-  (function scheduleEntries(attempt) {
-    publishScheduledEntries(function (err) {
-      if (!err) {
-        return console.log(clfdate(), "Scheduled entries for future publication");
-      }
-      var delay = isRedisUnavailableError(err)
-        ? SCHEDULE_RETRY_MS
-        : Math.min(SCHEDULE_RETRY_MS * Math.pow(2, attempt), SCHEDULE_RETRY_MAX_MS);
-      console.error(clfdate(), "Error scheduling entries for future publication, retrying in " + delay / 1000 + "s", err);
-      setTimeout(function () {
-        scheduleEntries(attempt + 1);
-      }, delay);
-    });
-  })(0);
 
   // Warn users about impending renewals and expiries. The scan looks at every
   // user, and a Redis marker per user and billing period means each warning is
@@ -394,6 +369,26 @@ module.exports = function () {
       );
     } catch (err) {
       console.log(clfdate(), "Error: Pruning the tmp directory", err);
+    }
+  });
+
+  // Hourly safety net: re-arms any missing or wrong publication alarm
+  console.log(clfdate(), "Scheduled hourly reconcile of scheduled entry alarms");
+  lock.cron("scheduled-entries-reconcile", "20 * * * *", async function () {
+    try {
+      const counts = await require("models/entry/scheduled").reconcile();
+
+      if (counts.set || counts.failed)
+        console.log(
+          clfdate(),
+          "Scheduled entries: reconciled",
+          counts.blogs,
+          "blogs, set",
+          counts.set,
+          "alarms" + (counts.failed ? ", " + counts.failed + " blogs failed" : "")
+        );
+    } catch (err) {
+      console.log(clfdate(), "Error: Reconciling scheduled entry alarms", err);
     }
   });
 
