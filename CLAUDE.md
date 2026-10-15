@@ -13,3 +13,7 @@ Commit message trailers (e.g. `Co-Authored-By`) are unrelated to this and should
 # Local preview
 
 `https://local.blot` serves the main checkout, not agent worktrees. To show the operator a worktree's running code, use the `preview` skill (`scripts/development/preview.sh up <url-or-path>`) rather than asking them to check out the branch.
+
+# Redis
+
+Prefer plain commands and `multi()`/`exec()`. Use a Lua script (`client.eval`) only for an atomic compare-then-act that Redis 6.2 can't do natively (no `SET ... IFEQ`/`DELEX` until 8.4), and keep it minimal: a few lines, one decision. Avoid `WATCH` too. The maintainer dislikes both; existing larger Lua scripts are legacy, don't copy them.
