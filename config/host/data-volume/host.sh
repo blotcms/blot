@@ -471,7 +471,8 @@ cmd_final_copy() {
   start=$(date +%s)
   # A budget lets the caller keep the copy inside the read-only freeze's TTL.
   if [ "$budget" -gt 0 ]; then
-    ( sleep "$budget"; echo "error: the final copy ran past its ${budget}s budget; stopping it" >&2; touch "$work/over"; stop_rsyncs ) &
+    # A sleep that was killed (below) means the copy finished in time
+    ( sleep "$budget" || exit 0; echo "error: the final copy ran past its ${budget}s budget; stopping it" >&2; touch "$work/over"; stop_rsyncs ) &
     wd=$!
   fi
 
@@ -491,7 +492,16 @@ cmd_final_copy() {
     # recorded in $work/failed so the summary can name it.
     xargs -0 -n 1 -P "$FINAL_COPY_JOBS" -a "$work/list" bash -c 'shard_copy "$1"' _ || rc=$?
   fi
-  [ -z "$wd" ] || { pkill -P "$wd" 2> /dev/null || true; kill "$wd" 2> /dev/null || true; wait "$wd" 2> /dev/null || true; }
+  if [ -n "$wd" ]; then
+    # The watchdog goes before its sleep. The other way round it sees the
+    # sleep killed, prints "Terminated" and could go on to flag the copy as
+    # over budget before it is killed itself.
+    local sleeper
+    sleeper=$(pgrep -P "$wd" || true)
+    kill "$wd" 2> /dev/null || true
+    wait "$wd" 2> /dev/null || true
+    [ -z "$sleeper" ] || kill $sleeper 2> /dev/null || true
+  fi
   if [ -e "$work/over" ]; then die "over the ${budget}s budget"; fi
   if [ -s "$work/failed" ]; then echo "failed shards:" >&2; cat "$work/failed" >&2; fi
   [ "$rc" = 0 ] || die "the final copy failed (rsync exit $rc)"
