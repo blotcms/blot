@@ -37,6 +37,9 @@ Add rebuild button to each file on dashboard
 - Add json viewer to files on dashboard
 
 Rewrite node deploy to wait for image after all the init steps to speed up runs
+16 Oct: check Bunny's origin error statistics after /blog_* moved to the S3 origin on 15 Oct (rollback: disable edge rules 4 and 5); cdn.blot.site is a pull zone hostname but doesn't resolve in DNS: add a record or drop it
+backfill-assets.js --verify only counts missing/different/stale files: list the keys (like the odd keys), so a gap can be traced without a separate find + S3 listing
+
 Back up blot-storage-prod off AWS (Backblaze B2, hourly, no --delete): _avatars and _template_assets can't be regenerated
 
 Bunny: decide Volume vs Standard tier (more PoPs, faster first byte far from Volume PoPs) once we've run the numbers on cost and latency; also why cache HIT is low (Statistics: status codes, top uncached URLs)
