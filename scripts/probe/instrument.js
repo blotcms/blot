@@ -373,4 +373,5 @@ module.exports = {
   heapSpaces,
   measurePhases,
   trackRedis,
+  approxSize,
 };

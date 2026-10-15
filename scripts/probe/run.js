@@ -56,6 +56,10 @@ const WRAPPER_OPTIONS = {
   "heap-snapshot": { help: "write a heap snapshot when the heap nears its limit" },
   "cpu-prof": { help: "write a CPU profile (on a clean exit)" },
   "heap-prof": { help: "write a sampling heap profile (on a clean exit)" },
+  overlay: {
+    value: "FILES",
+    help: "comma-separated local files mounted over the image's copies, to try a change on production data before it is deployed",
+  },
   yes: { help: "skip the confirmation prompt" },
 };
 
@@ -70,6 +74,7 @@ function fromWrapperOptions(options, defaults = {}) {
     heapSnapshot: !!options["heap-snapshot"],
     cpuProf: !!options["cpu-prof"],
     heapProf: !!options["heap-prof"],
+    overlay: options.overlay ? options.overlay.split(",").filter(Boolean) : [],
     yes: !!options.yes,
   };
 }
@@ -94,6 +99,8 @@ function parseMemoryMB(value) {
 //   cpus          container CPU limit (default 1)
 //   release       image tag (a commit SHA) instead of yellow's current image
 //   yes           skip the confirmation prompt
+//   overlay       local files inside this repository, each mounted read-only
+//                 over the image's copy at the same path
 //   heapSnapshot  --heapsnapshot-near-heap-limit=1, written to /out
 //   cpuProf       --cpu-prof, written to /out
 //   heapProf      --heap-prof, written to /out
@@ -130,6 +137,7 @@ async function runProbe({
   airlock = false,
   mounts = [],
   env = {},
+  overlay = [],
 }) {
   if (!/^[a-z][a-z-]*$/.test(tool)) throw new Error(`Invalid tool name ${tool}`);
   const memoryMB = parseMemoryMB(memory);
@@ -174,7 +182,10 @@ async function runProbe({
   // Each script is uploaded under the run directory and mounted where it
   // sits in the repository, so `require("models/...")` (NODE_PATH) and
   // relative requires of the shared files both resolve inside the image.
-  const files = [script, ...SHARED_FILES].map((local, i) => {
+  for (const local of overlay) {
+    if (!fs.existsSync(local)) throw new Error(`--overlay ${local} doesn't exist`);
+  }
+  const files = [script, ...SHARED_FILES, ...overlay].map((local, i) => {
     const relative = path.relative(REPO_ROOT, path.resolve(local));
     if (relative.startsWith("..")) throw new Error(`${local} is outside the repository`);
     return {

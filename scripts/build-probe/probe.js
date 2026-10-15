@@ -87,8 +87,151 @@ let out;
 let phases;
 let snapshotTaken = false;
 let Blog, Entry, sync, build, folderPostSourceFolder, config;
+let redis, redisAtStart;
+
+// Steps inside a build, so a phase's heap peak can be pinned to the plugin
+// or lookup that was running: each plugin's prerender/render, the wikilink
+// lookups and the model reads they make. Keyed by step label, reset per
+// phase. A step's peak is the highest heap seen while it was running, by the
+// phase sampler (between event loop turns) or at its start and end; steps
+// that overlap (wikilinks resolves its links concurrently) share peaks.
+let steps = new Map();
+const activeSteps = new Map();
+
+function stepStats(label) {
+  if (!steps.has(label)) {
+    steps.set(label, { calls: 0, ms: 0, heapPeak: 0, maxConcurrent: 0, items: 0, itemBytes: 0 });
+  }
+  return steps.get(label);
+}
+
+function noteHeap(heapUsed) {
+  for (const label of activeSteps.keys()) {
+    const stats = stepStats(label);
+    stats.heapPeak = Math.max(stats.heapPeak, heapUsed);
+  }
+}
+
+// Wraps fn(...args, callback) so each call is counted as a step. measure, if
+// given, is passed the callback's arguments and returns { items, bytes } to
+// record what the step produced (e.g. entries loaded and their size).
+function stepped(label, fn, callbackIndex, measure) {
+  return function (...args) {
+    const index = callbackIndex === undefined ? args.length - 1 : callbackIndex;
+    const callback = args[index];
+    if (typeof callback !== "function" || !phases.current()) return fn.apply(this, args);
+
+    const stats = stepStats(label);
+    stats.calls++;
+    activeSteps.set(label, (activeSteps.get(label) || 0) + 1);
+    stats.maxConcurrent = Math.max(stats.maxConcurrent, activeSteps.get(label));
+    noteHeap(process.memoryUsage().heapUsed);
+    const started = instrument.now();
+    let finished = false;
+
+    args[index] = function (...results) {
+      if (!finished) {
+        finished = true;
+        noteHeap(process.memoryUsage().heapUsed);
+        stats.ms += instrument.now() - started;
+        const left = activeSteps.get(label) - 1;
+        if (left) activeSteps.set(label, left);
+        else activeSteps.delete(label);
+        if (measure) {
+          try {
+            const { items = 0, bytes = 0 } = measure(results) || {};
+            stats.items += items;
+            stats.itemBytes += bytes;
+          } catch (err) {}
+        }
+      }
+      return callback.apply(this, results);
+    };
+    return fn.apply(this, args);
+  };
+}
+
+// Replaces a module's export (or one of its properties) with a stepped
+// version. Done before the app is required, so modules that capture the
+// function at load time (wikilinks' lookups) get the wrapped one.
+function wrapModule(moduleName, key, label, callbackIndex, measure) {
+  const resolved = require.resolve(moduleName);
+  const exported = require(moduleName);
+  if (key) {
+    exported[key] = stepped(label, exported[key], callbackIndex, measure);
+  } else {
+    require.cache[resolved].exports = Object.assign(
+      stepped(label, exported, callbackIndex, measure),
+      exported
+    );
+  }
+}
+
+function countEntries(value) {
+  if (!value) return 0;
+  if (Array.isArray(value)) return value.length;
+  return Object.values(value).reduce((n, list) => n + (Array.isArray(list) ? list.length : 0), 0);
+}
+
+function instrumentBuild() {
+  // Lookups the wikilinks plugin tries in turn for each [[link]]. byTitle
+  // reads the blog's entry and page lists in full.
+  for (const lookup of ["byPath", "byFilename", "byURL", "byTitle", "byHeadingAnchor"]) {
+    wrapModule(`build/plugins/wikilinks/${lookup}`, null, `wikilinks.${lookup}`);
+  }
+
+  // Loaded lazily by the lookups above (circular with build), so wrapping
+  // the property they read at call time is enough. entries.get calls back
+  // (err, { entries: [...], pages: [...] }); Entry.get calls back (entry).
+  wrapModule("models/entries", "get", "models/entries.get", undefined, ([, response]) => ({
+    items: countEntries(response),
+    bytes: instrument.approxSize(response),
+  }));
+  wrapModule("models/entry", "get", "models/entry.get", undefined, ([entry]) => ({
+    items: countEntries(entry && [].concat(entry)),
+    bytes: instrument.approxSize(entry),
+  }));
+
+  // The plugins list holds these same objects and reads render/prerender
+  // at call time.
+  const pluginsDir = path.dirname(require.resolve("build/plugins"));
+  for (const name of require("fs").readdirSync(pluginsDir)) {
+    if (name.includes(".")) continue;
+    let plugin;
+    try {
+      plugin = require(`build/plugins/${name}`);
+    } catch (err) {
+      continue;
+    }
+    if (!plugin || typeof plugin !== "object") continue;
+    if (typeof plugin.render === "function") {
+      plugin.render = stepped(`plugin.${name}.render`, plugin.render, 1);
+    }
+    if (typeof plugin.prerender === "function") {
+      plugin.prerender = stepped(`plugin.${name}.prerender`, plugin.prerender, 1);
+    }
+  }
+}
+
+function stepSummary() {
+  return Object.fromEntries(
+    [...steps.entries()]
+      .sort((a, b) => b[1].heapPeak - a[1].heapPeak)
+      .map(([label, s]) => [
+        label,
+        {
+          calls: s.calls,
+          ms: Math.round(s.ms),
+          heapPeakMB: mb(s.heapPeak),
+          maxConcurrent: s.maxConcurrent,
+          ...(s.items || s.itemBytes ? { items: s.items, itemMB: mb(s.itemBytes) } : {}),
+        },
+      ])
+  );
+}
 
 function onSample(usage, label) {
+  noteHeap(usage.heapUsed);
   if (!options.snapshotAt || snapshotTaken || usage.heapUsed <= options.snapshotAt * 1024 * 1024) {
     return;
   }
@@ -104,8 +247,41 @@ function onSample(usage, label) {
   console.log(`[probe] wrote ${file}`);
 }
 
+function startPhase(label) {
+  steps = new Map();
+  activeSteps.clear();
+  if (redis) redisAtStart = JSON.parse(JSON.stringify(redis.totals));
+  phases.start(label);
+}
+
+function redisDelta() {
+  if (!redis || !redisAtStart) return undefined;
+  const before = redisAtStart.byCommand;
+  const byCommand = {};
+  for (const [name, c] of Object.entries(redis.totals.byCommand)) {
+    const b = before[name] || { count: 0, replyBytes: 0, ms: 0 };
+    if (c.count === b.count) continue;
+    byCommand[name] = { count: c.count - b.count, replyMB: mb(c.replyBytes - b.replyBytes) };
+  }
+  return {
+    commands: redis.totals.commands - redisAtStart.commands,
+    replyMB: mb(redis.totals.replyBytes - redisAtStart.replyBytes),
+    byCommand,
+  };
+}
+
 function endPhase(extra) {
-  const result = phases.end(extra);
+  const result = phases.end({ steps: stepSummary(), redis: redisDelta(), ...extra });
+  const top = Object.entries(result.steps || {}).slice(0, 6);
+  for (const [label, s] of top) {
+    console.log(
+      `[probe]   ${label}: calls ${s.calls} (max ${s.maxConcurrent} at once) ${s.ms}ms ` +
+        `heapPeak ${s.heapPeakMB}MB` + (s.items !== undefined ? ` loaded ${s.items} (${s.itemMB}MB)` : "")
+    );
+  }
+  if (result.redis) {
+    console.log(`[probe]   redis: ${result.redis.commands} commands, ${result.redis.replyMB}MB replies`);
+  }
   console.log(
     `[probe] ${result.label}: ${result.ms}ms heap ${result.heapBeforeMB}→peak ${result.heapPeakMB}MB ` +
       `(+${result.heapGrowthMB}, retained ${result.heapRetainedMB ?? "n/a"}) ` +
@@ -138,6 +314,9 @@ async function main() {
   out = instrument.output(parsed.options.out || "/out");
   phases = instrument.measurePhases(out, { onSample });
   if (!global.gc) console.log("[probe] run with --expose-gc for retained-memory figures");
+
+  redis = instrument.trackRedis();
+  instrumentBuild();
 
   // Loaded here rather than at the top, so the wrapper can require this
   // file for OPTIONS and checkOptions without the app.
@@ -191,7 +370,7 @@ async function main() {
 
 function buildOnly(blog, entryPath, tag) {
   return new Promise((resolve) => {
-    phases.start(`${tag} build ${entryPath}`);
+    startPhase(`${tag} build ${entryPath}`);
     build(blog, entryPath, function (err, entry) {
       // Ended first, so stringifying entry for its JSON size below isn't
       // charged to the phase's measured heap peak.
@@ -214,25 +393,25 @@ function buildOnly(blog, entryPath, tag) {
 // logs it and passes it back as { error } instead.
 function syncAndUpdate(blog, paths, tag) {
   return new Promise((resolve, reject) => {
-    phases.start(`${tag} acquire lock`);
+    startPhase(`${tag} acquire lock`);
     sync(blog.id, async function (err, folder, done) {
       endPhase({ error: errorMessage(err) });
       if (err) return reject(err);
 
       for (const entryPath of paths) {
-        phases.start(`${tag} update ${entryPath}`);
+        startPhase(`${tag} update ${entryPath}`);
         const updateErr = await new Promise((next) =>
           folder.update(entryPath, (err, status) => next(err || (status && status.error)))
         );
         endPhase({ error: errorMessage(updateErr) });
       }
 
-      phases.start(`${tag} finish sync`);
+      startPhase(`${tag} finish sync`);
       done(null, function (err) {
         endPhase({ error: errorMessage(err) });
         if (err) return reject(err);
         if (!options.settle) return resolve();
-        phases.start(`${tag} settle ${options.settle}s`);
+        startPhase(`${tag} settle ${options.settle}s`);
         setTimeout(() => {
           endPhase();
           resolve();

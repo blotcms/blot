@@ -10,11 +10,22 @@ npm run build-probe -- https://www.example.com/some-post
 npm run build-probe -- https://www.example.com/some-post --repeat 3 --heap-prof
 npm run build-probe -- "example.com:/Posts/2026-10 Index.md" --snapshot-at 500
 npm run build-probe -- https://www.example.com/some-post --mode sync --settle 10
+npm run build-probe -- https://www.example.com/some-post --overlay app/build/plugins/wikilinks/byTitle.js
 npm run build-probe -- --help
 ```
 
 A target is a post URL or `<blog>:<path>`, where `<blog>` is a blog ID, handle
 or domain. A folder post given by URL is rebuilt from its `+` source folder.
+
+`--overlay` mounts local files over the image's copies, so a fix can be tried
+on production data before it is deployed. In build mode nothing it builds is
+saved, but anything else the patched code does still happens for real.
+
+Each build phase also records the steps inside it (each plugin, each
+wikilink lookup, and the entry reads they make): calls, how many ran at
+once, time, the heap peak while they ran and, for entry reads, how many
+entries were loaded and their size. They're printed after each phase and
+saved under `steps`, with the phase's Redis totals under `redis`.
 
 ## Modes
 
