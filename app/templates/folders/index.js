@@ -9,6 +9,7 @@ const sync = require("sync");
 const { dirname } = require("path");
 const { promisify } = require("util");
 const fix = promisify(require("sync/fix"));
+const lock = require("helper/lock");
 const syncReport = require("clients/util/syncReport");
 
 const setupUser = require("./setupUser");
@@ -140,7 +141,7 @@ async function applyChanges(blog, changes) {
   });
 }
 
-async function main(options = {}) {
+async function build(options = {}) {
   let folders = await loadFoldersToBuild(DIR);
 
   if (options.templates !== undefined) {
@@ -186,6 +187,42 @@ async function main(options = {}) {
   });
 
   console.log("Dashboard:\n" + url);
+}
+
+// Like templates(), wait for the lock (retries with backoff, about 95s in
+// total) rather than skip: an overlapping invocation may have asked for a
+// different folder selection, and a slow Redis reply (ESLOW) doesn't mean
+// anyone else holds the lock. If it still can't be acquired, build anyway.
+// Folders are idempotent (hash compare), so a duplicate build is cheap and
+// better than a skipped one.
+async function main(options = {}) {
+  let held = null;
+
+  try {
+    held = await lock("templates:folders", {
+      ttl: 60 * 1000,
+      heartbeat: 10 * 1000,
+      retries: 7,
+      onCompromised: (err) =>
+        console.error("[templates:folders] lock compromised:", err.message),
+    });
+  } catch (e) {
+    console.error(
+      e.code === "ELOCKED"
+        ? "[templates:folders] lock still held after waiting, building anyway"
+        : "[templates:folders] lock unavailable, building anyway: " + e.message
+    );
+  }
+
+  try {
+    return await build(options);
+  } finally {
+    if (held) {
+      await held.release().catch((e) => {
+        console.error("[templates:folders] lock release failed:", e.message);
+      });
+    }
+  }
 }
 
 if (require.main === module) {

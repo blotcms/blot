@@ -50,6 +50,20 @@ jobs:
       - name: Detect changed templates
         id: detect
         run: |
+          # This workflow pushes its own "Updates screenshots of templates"
+          # commit with a token that triggers another run, and the PR diff
+          # below still contains whatever selected the templates, so without
+          # this a PR touching the folder builder screenshots itself forever
+          # (renders differ slightly every time). Skip runs whose head is a
+          # full run's commit (the exact subject below); a partial manual run
+          # commits "<subject>: <templates>", which is not skipped.
+          head_subject=$(git log -1 --format=%s "${{ github.event.pull_request.head.sha }}")
+          if [ "$head_subject" = "Updates screenshots of templates" ]; then
+            echo "Head commit is this workflow's own screenshot commit; skipping"
+            echo "templates=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           changed_files=$(mktemp)
           # Treat a move as a deletion and an addition. Rename detection would
           # report only the destination path, leaving previews which use the
@@ -367,6 +381,8 @@ jobs:
       # directory is emptied before a run, so committing a partial run would
       # publish a template gallery with missing images.
       - name: Commit changes
+        env:
+          INPUT_TEMPLATES: ${{ inputs.templates }}
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
@@ -374,6 +390,10 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Updates screenshots of templates"
+            subject="Updates screenshots of templates"
+            if [ -n "$INPUT_TEMPLATES" ]; then
+              subject="$subject: $INPUT_TEMPLATES"
+            fi
+            git commit -m "$subject"
             git push
           fi

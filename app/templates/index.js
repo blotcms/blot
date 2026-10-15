@@ -17,6 +17,7 @@ var TEMPLATES_DIRECTORY = require("path").resolve(__dirname + "/source");
 var TEMPLATES_OWNER = "SITE";
 
 const redisSubscriber = require("helper/redisSubscriber");
+const lock = require("helper/lock");
 
 var HIGHLIGHTER_THEMES = require("blog/static/syntax-highlighter");
 
@@ -61,32 +62,87 @@ if (require.main === module) {
   });
 }
 
+// Every process may call this at startup. Template.drop followed by a
+// rebuild isn't atomic, so a second process comparing mid-rebuild would see
+// missing views and rebuild too. The build pass therefore runs under a Redis
+// lock: a process that finds it held waits (retries with backoff, about 95s
+// in total) and then runs the pass anyway. By then the holder has finished,
+// every template compares unchanged and the pass is a cheap no-op, which
+// also guarantees the callback only fires once templates are built. If the
+// wait runs out we build anyway: a duplicate build beats none.
+const BUILD_LOCK_KEY = "templates:build";
+const BUILD_LOCK_OPTIONS = {
+  ttl: 60 * 1000,
+  heartbeat: 10 * 1000,
+  retries: 7,
+  onCompromised: function (err) {
+    console.error("[templates] build lock compromised:", err.message);
+  },
+};
+
 function main(options, callback) {
-  buildAll(TEMPLATES_DIRECTORY, options, function (err) {
+  buildLocked(options, function (err) {
     if (err) return callback(err);
 
-    checkForExtinctTemplates(TEMPLATES_DIRECTORY, function (err) {
-      if (err) return callback(err);
+    if (options.watch) {
+      debug("Built all templates.");
+      debug("Watching templates directory for changes");
+      watch(TEMPLATES_DIRECTORY);
 
-      if (options.watch) {
-        debug("Built all templates.");
-        debug("Watching templates directory for changes");
-        watch(TEMPLATES_DIRECTORY);
+      // Rebuilds templates when we load new states
+      // using scripts/state/info.js
+      redisSubscriber({
+        channel: "templates:rebuild",
+        onMessage: function () {
+          main({}, function () {});
+        },
+      });
+    }
 
-        // Rebuilds templates when we load new states
-        // using scripts/state/info.js
-        redisSubscriber({
-          channel: "templates:rebuild",
-          onMessage: function () {
-            main({}, function () {});
-          },
-        });
+    callback(null);
+  });
+}
 
-        callback(null);
-      } else {
-        callback(null);
+async function buildLocked(options, callback) {
+  let held = null;
+
+  try {
+    held = await lock(BUILD_LOCK_KEY, BUILD_LOCK_OPTIONS);
+  } catch (e) {
+    console.error(
+      e.code === "ELOCKED"
+        ? "[templates] build lock still held after waiting, building anyway"
+        : "[templates] build lock unavailable, building anyway: " + e.message
+    );
+  }
+
+  // buildPass can throw synchronously (e.g. an unreadable directory); every
+  // outcome must still release the lock and reach the callback exactly once.
+  let finished = false;
+  const finish = async function (err) {
+    if (finished) return;
+    finished = true;
+    if (held) {
+      try {
+        await held.release();
+      } catch (e) {
+        console.error("[templates] build lock release failed:", e.message);
       }
-    });
+    }
+    callback(err);
+  };
+
+  try {
+    buildPass(options, finish);
+  } catch (e) {
+    finish(e);
+  }
+}
+
+function buildPass(options, callback) {
+  buildAll(TEMPLATES_DIRECTORY, options, function (err) {
+    if (err) return callback(err);
+    checkForExtinctTemplates(TEMPLATES_DIRECTORY, callback);
   });
 }
 
