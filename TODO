@@ -3,6 +3,8 @@ Investigate slow creep of green's baseline heap (~40-80MB/day lowest heapUsed in
 
 How could we generate the directory tree structure used in the hypertext template sidebar on the Server in the template engine
 
+We should filter and only locally client-side cache redis keys with specific prefixes (this is a blunt tool right now and a large site with many entries would wipe the cache. we want to keep blog info keys super hot and ready) 
+
 Suppress new site admin notification for no subscription change (i.e. user deletes then adds back in a single site)
 
 PayPal end cancellation didn't fire native admin notification for cancellation jesse@xxx 
