@@ -416,8 +416,7 @@ redis_reachable() {
     || { log "the proxy cannot reach Redis at $REDIS_HOST:6379"; return 1; }
 }
 
-# The webhook route goes straight to the master upstream (PROXY_UPSTREAM_GREEN)
-# and no checked host exercises it, so probe every configured upstream.
+# No checked host exercises every upstream, so probe each one directly.
 upstreams_reachable() {
   local var default addr
   for var in BLUE:127.0.0.1:8088 GREEN:127.0.0.1:8089 YELLOW:127.0.0.1:8090; do

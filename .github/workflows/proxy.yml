@@ -85,7 +85,6 @@ jobs:
               grep -q "server 10.0.0.1:9089 weight=100;" $conf
               grep -q "server 10.0.0.2:9088 weight=100;" $conf
               grep -q "server 10.0.0.3:9090 weight=100;" $conf
-              grep -q "proxy_pass http://10.0.0.1:9089;" $conf
               if grep -q "\${PROXY_" $conf; then echo "unsubstituted placeholder"; exit 1; fi
               /usr/local/openresty/bin/openresty -t
             '

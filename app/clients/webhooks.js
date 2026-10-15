@@ -5,6 +5,8 @@ const fetch = require("node-fetch");
 const clfdate = require("helper/clfdate");
 const querystring = require("querystring");
 const bodyParser = require("body-parser");
+const client = require("models/client");
+const sse = require("helper/sse");
 
 const maxFileSize = config.webhooks.client_max_body_size;
 
@@ -17,38 +19,28 @@ Production code
 
 This section runs on the remote server and listens for incoming webhooks from clients. It forwards the webhooks to connected clients (i.e. me developing) in real-time.
 
+Incoming webhooks are published to a Redis channel and each connected client is subscribed to it, so the webhook and the client's stream can be served by different processes.
+
 */
 
-// In-memory map to store connected clients
-const subscribers = new Map();
+const CHANNEL = "webhooks:relay";
+const CHUNK_SIZE = 64 * 1024; // 64 KB
 
 const server = express.Router();
+
+const stream = sse({ channel: () => CHANNEL });
 
 server.get("/connect", function (req, res) {
   if (req.header("Authorization") !== config.webhooks.secret) {
     return res.status(403).send("Unauthorized");
   }
 
-  req.socket.setTimeout(2147483647);
-  res.writeHead(200, {
-    "X-Accel-Buffering": "no",
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-  });
-
-  res.write("\n");
-
-  // Add the client to the in-memory map
-  const clientId = Date.now() + Math.random();
-  subscribers.set(clientId, res);
-
-  console.log(clfdate(), `Client connected: ${clientId}. Total subscribers: ${subscribers.size}`);
-
+  console.log(clfdate(), "Webhooks client connected");
   req.on("close", function () {
-    subscribers.delete(clientId);
-    console.log(clfdate(), `Client disconnected: ${clientId}. Total subscribers: ${subscribers.size}`);
+    console.log(clfdate(), "Webhooks client disconnected");
   });
+
+  stream(req, res);
 });
 
 server.get("/clients/dropbox/authenticate", (req, res) => {
@@ -103,50 +95,43 @@ server.use(
       bodySize: body ? body.length : 0, // Include the size of the body
     };
 
-    const metadata = JSON.stringify(message);
-
-    console.log(clfdate(), "Webhooks publishing metadata", metadata);
-
-    // Broadcast metadata first
-    for (const [clientId, subscriber] of subscribers.entries()) {
-      try {
-        subscriber.write("\n");
-        subscriber.write("data: " + metadata + "\n\n");
-        console.log(clfdate(), "Delivered metadata to client", clientId);
-      } catch (err) {
-        console.error(clfdate(), `Error delivering metadata to client ${clientId}:`, err);
-        subscribers.delete(clientId);
-      }
-    }
-
-    // If there's a body, send it in chunks
-    if (body) {
-      const chunkSize = 64 * 1024; // 64 KB
-      const totalChunks = Math.ceil(body.length / chunkSize);
-
-      for (let i = 0; i < totalChunks; i++) {
-        const chunk = body.substring(i * chunkSize, (i + 1) * chunkSize);
-        const chunkMessage = JSON.stringify({
-          chunk,
-          requestId,
-          chunkIndex: i,
-          totalChunks,
-        });
-
-        for (const [clientId, subscriber] of subscribers.entries()) {
-          try {
-            subscriber.write("\n");
-            subscriber.write("data: " + chunkMessage + "\n\n");
-            console.log(clfdate(), `Delivered chunk ${i + 1}/${totalChunks} to client`, clientId);
-          } catch (err) {
-            console.error(clfdate(), `Error delivering chunk to client ${clientId}:`, err);
-            subscribers.delete(clientId);
-          }
-        }
-      }
-    }
+    publish(message, body).catch((err) => {
+      console.error(clfdate(), "Webhooks error publishing", requestId, err);
+    });
   }
 );
+
+async function publish(message, body) {
+  const metadata = JSON.stringify(message);
+
+  console.log(clfdate(), "Webhooks publishing metadata", metadata);
+
+  // Publish metadata first. PUBLISH returns the number of processes
+  // subscribed, so skip the body when no client is connected anywhere
+  const receivers = await client.publish(CHANNEL, metadata);
+
+  console.log(clfdate(), "Delivered metadata to", receivers, "processes");
+
+  if (!body || !receivers) return;
+
+  // Send the body in chunks so no single message is large. Commands on one
+  // connection are handled in order, so the chunks arrive in sequence
+  const totalChunks = Math.ceil(body.length / CHUNK_SIZE);
+
+  for (let i = 0; i < totalChunks; i++) {
+    await client.publish(
+      CHANNEL,
+      JSON.stringify({
+        chunk: body.substring(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE),
+        requestId: message.requestId,
+        chunkIndex: i,
+        totalChunks,
+      })
+    );
+  }
+
+  console.log(clfdate(), `Delivered ${totalChunks} chunks for`, message.requestId);
+}
 
 
 

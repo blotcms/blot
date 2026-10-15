@@ -130,7 +130,7 @@ server.use(vhost(config.host, site));
 // The Webhook forwarder
 // -------------
 // Forwards webhooks to development environment
-if (config.webhooks.server_host && config.master) {
+if (config.webhooks.server_host) {
   console.log(clfdate(), "Webhooks relay on", config.webhooks.server_host);
   server.use(vhost(config.webhooks.server_host, require("./clients/webhooks")));
 }

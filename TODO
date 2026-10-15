@@ -7,7 +7,6 @@ App changes toward consolidated units and horizontal scaling (#2119), each usefu
 - Node listens on a Unix socket when configured
 - Serve the new template CDN URL format from Redis, not only local disk
 - Parallelize app/sync/rebuild.js
-- Webhook relay over Redis pub/sub so any process can serve webhooks.
 - Later: build queue (sync and dashboard writes enqueue per-blog builds, workers consume) so dashboard writes stop queueing behind builds
 
 From 22 Oct: delete snap-02793374b4e56ea7b, the pre-resize snapshot of the 15 Oct data volume shrink (its volume vol-07c767ac8b6aeab4f was deleted 15 Oct), and any DLM dailies of that volume
