@@ -1,3 +1,8 @@
+Investigate Node closing upstream keepalive sockets early: Node's server.keepAliveTimeout defaults to 5s (unset in app/index.js) while the nginx upstreams keep idle connections up to 60s (keepalive 120, no keepalive_timeout). Likely fix: httpServer.keepAliveTimeout = 65s (above nginx's 60s)
+- Effect: nginx reopens connections often (each pays the docker-proxy tail, 3-35ms p95-p99 on new connections, measured 15 Oct) and can race a closing socket, giving sporadic 502s or backup retries
+- Measure first: TIME_WAIT sockets on 8088-8090 per minute vs upstream requests per minute
+- #2119's Unix sockets make new connections cheap and remove docker-proxy, its CPU/RSS and the 0.0.0.0 port exposure, but not the close race, so this fix is still needed
+
 Publish Node container ports on loopback only: docker-proxy binds 8088-8090 on 0.0.0.0 and :: (scripts/deploy/util/generateDockerCommand.js emits -p 808x:8080), but the proxy only connects to 127.0.0.1. Use -p 127.0.0.1:808x:8080
 - Measured 15 Oct: docker-proxy hop costs ~0.7% of Node CPU, +0.2ms median per new connection; not worth a dockerd restart (live-restore=false), Unix sockets come with #2119
 
