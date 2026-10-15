@@ -1,4 +1,5 @@
 const redisSubscriber = require("helper/redisSubscriber");
+const drain = require("helper/drain");
 
 // Some upstream proxies (e.g. the preview subdomain's nginx config) have a
 // read timeout well under a minute and will close an idle connection before
@@ -54,8 +55,14 @@ module.exports = function ({ channel }) {
       },
     });
 
+    // EventSource clients reconnect, and nginx routes them to another container
+    const offDrain = drain.onStart(function () {
+      endResponse(res);
+    });
+
     function cleanup() {
       if (closed) return;
+      offDrain();
       // Flip state before any asynchronous Redis teardown begins.
       closed = true;
       clearInterval(heartbeat);

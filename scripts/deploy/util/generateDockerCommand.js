@@ -212,6 +212,9 @@ async function generateDockerCommand(container, platform, commitHash) {
     // If the container stops, restart it unless explicitly stopped
     "--restart unless-stopped",
     `--name ${sanitizedName}`,
+    // Grace period between SIGTERM and SIGKILL on `docker stop`/`restart`;
+    // must stay above the app's drain timeout (app/helper/drain.js)
+    "--stop-timeout 30",
     `--platform ${platformOs}/${platformArch}`,
 
     // Log driver configuration

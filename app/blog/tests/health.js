@@ -3,6 +3,7 @@ describe("/health", function () {
   const Blog = require("models/blog");
   const { ClientOfflineError } = require("redis");
   const server = require("server");
+  const drain = require("helper/drain");
 
   let listener, origin;
 
@@ -30,5 +31,14 @@ describe("/health", function () {
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(await res.text()).toBe("OK");
     expect(Blog.get).not.toHaveBeenCalled();
+  });
+
+  it("answers 503 while draining", async function () {
+    spyOn(drain, "isDraining").and.returnValue(true);
+
+    const res = await fetch(origin + "/health");
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get("cache-control")).toBe("no-store");
   });
 });

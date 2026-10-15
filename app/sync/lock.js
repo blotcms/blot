@@ -135,6 +135,20 @@ function probe(lockKey, pendingForMs) {
     });
 }
 
+// Locks this process currently holds, so a graceful shutdown (helper/drain.js) can
+// wait for them and release them.
+const held = new Set();
+
+// Cleared by drain so a sync can't start once shutdown has begun: we would
+// either have to wait for it or kill it part way through.
+let acquiring = true;
+
+function drainError(lockKey) {
+  const err = new Error("Shutting down, not taking lock: " + lockKey);
+  err.code = "ELOCKED";
+  return err;
+}
+
 function key(blogID) {
   return "blog:" + blogID + ":folder-lock";
 }
@@ -159,6 +173,7 @@ async function lock(blogID, options = {}) {
   let acquired = false;
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0) await sleep(minTimeout * Math.pow(2, attempt - 1));
+    if (!acquiring) throw drainError(lockKey);
     acquired = await client.eval(ACQUIRE, {
       keys: [lockKey],
       arguments: [token, String(ttl)],
@@ -236,18 +251,29 @@ async function lock(blogID, options = {}) {
     }
     if (released || compromised) return;
     compromised = true;
+    held.delete(handle);
     clearInterval(timer);
     err.code = "ECOMPROMISED";
     onCompromised(err);
   }, heartbeat);
   timer.unref();
 
-  return {
+  const handle = {
     token,
-    async release() {
-      if (released) return;
-      released = true;
-      clearInterval(timer);
+    release() {
+      if (!releasing) releasing = doRelease();
+      return releasing;
+    },
+  };
+
+  let releasing = null;
+
+  // The handle stays in held until Redis has answered, so drain waits for a
+  // release that is still in flight rather than exiting before it lands.
+  async function doRelease() {
+    released = true;
+    clearInterval(timer);
+    try {
       const deleted = await client.eval(RELEASE, {
         keys: [lockKey],
         arguments: [token],
@@ -259,8 +285,19 @@ async function lock(blogID, options = {}) {
         onCompromised(err);
         throw err;
       }
-    },
-  };
+    } finally {
+      held.delete(handle);
+    }
+  }
+
+  // Drain began while we were acquiring: give it straight back
+  if (!acquiring) {
+    await handle.release().catch(() => {});
+    throw drainError(lockKey);
+  }
+
+  held.add(handle);
+  return handle;
 }
 
 // Reports who holds a lock and for how long it will live, for diagnostics.
@@ -284,4 +321,32 @@ async function heldSince(blogID) {
   return match ? Number(match[1]) : null;
 }
 
-module.exports = { lock, inspect, heldSince, key };
+function heldCount() {
+  return held.size;
+}
+
+// Called by drain just before exit so other containers needn't wait for the
+// TTL. An in-flight sync whose lock we release will be killed by the exit
+// straight after anyway.
+function stopAcquiring() {
+  acquiring = false;
+}
+
+function resumeAcquiring() {
+  acquiring = true;
+}
+
+function releaseAll() {
+  return Promise.allSettled([...held].map((h) => h.release()));
+}
+
+module.exports = {
+  lock,
+  inspect,
+  heldSince,
+  key,
+  heldCount,
+  releaseAll,
+  stopAcquiring,
+  resumeAcquiring,
+};

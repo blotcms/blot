@@ -1,6 +1,5 @@
 App changes toward consolidated units and horizontal scaling (#2119), each useful on its own:
 - Remove the master: cron jobs take a per-run Redis lock (SET NX cron:<job>:<date>); scheduled posts and welcome/renewal emails move to a Redis due-time sorted set any process can claim; client init() watchers become locked periodic jobs; templates()/folders() startup builds idempotent + locked
-- Graceful drain on SIGTERM: stop accepting, finish in-flight, release locks, exit; /health returns 503 while draining
 - Fix green's heap creep (see below), the main crash cause
 - Replace proper-lockfile folder lock with a Redis mutex; take it in git write/remove and template writeToFolder/removeFromFolder too (they skip it today)
 - Proxy: ~2s Redis socket timeouts; allow_domain fails open when GET errors, check err
