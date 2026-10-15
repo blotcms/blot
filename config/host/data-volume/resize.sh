@@ -728,7 +728,12 @@ cmd_finish() {
       echo "  npm run deploy-node     for the blot-container-* ones"
       return 0
     fi
-    # Only the host's own namespace has it, stacked under the new volume.
+    # Only the host's own namespace has it, stacked under the new volume, and
+    # maybe sandboxed services whose copies follow the host's (follower=).
+    if [ "$(field "$out" mounted_following)" != 0 ]; then
+      echo "The follower= namespaces above (sandboxed services) mount it as a slave of the host's mount,"
+      echo "so the host's umount takes it from them too; release-old checks that it did."
+    fi
     echo "Only the host itself still has it mounted, under the new volume. release-old unmounts both"
     echo "from the host and mounts the current volume again: no downtime, the containers keep running"
     echo "on their own copies; their link to the host's mounts comes back with the next app deploy."
@@ -738,7 +743,7 @@ cmd_finish() {
     # (A dry run released nothing: go on to show the detach.)
     if [ -z "$DRY_RUN" ]; then
       out=$(host old-volume-status "$old") || die "cannot check the old volume on the host"
-      if [ "$(field "$out" mounted)" = yes ]; then
+      if [ "$(field "$out" mounted)" = yes ] || [ "$(field "$out" mounted_elsewhere)" != 0 ] || [ "$(field "$out" mounted_following)" != 0 ]; then
         echo "$old is still mounted on $HOST after the release:"
         echo "$out" | sed 's/^/  /'
         return 0

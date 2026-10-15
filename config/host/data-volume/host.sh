@@ -98,11 +98,21 @@ data_mount_count() { awk -v d="$DATA" '$5 == d' /proc/self/mountinfo | wc -l | t
 # inherited when it was created: the old volume, stacked under the new one).
 # One process per namespace is enough; for a container it is the one docker
 # reports, so the name can be given.
+#
+# A service started with systemd sandboxing (PrivateTmp=, ProtectSystem=, e.g.
+# chronyd) has its own namespace too, but there the device is mounted at the
+# data directory as a slave of the host's own mount (master:N, N being the
+# host mount's shared:N), so the host's umount reaches it. Those go in
+# M_FOLLOWERS ("follower=<pid> <comm>") instead: they don't block a release,
+# but they must be gone after it.
 scan_mounts() {
-  local no=$1 host_ns map="" c row cpid cname d p ns seen=" " hit
+  local no=$1 host_ns map="" c row cpid cname d p ns seen=" " hit peers
   host_ns=$(readlink /proc/1/ns/mnt)
   if awk -v d="$no" '$3 == d {f = 1} END {exit !f}' /proc/1/mountinfo; then M_HOST=yes; else M_HOST=no; fi
+  # The host's peer groups at the data directory
+  peers=" $(awk -v m="$DATA" '$5 == m {for (i = 7; $i != "-"; i++) if ($i ~ /^shared:/) printf "%s ", substr($i, 8)}' /proc/1/mountinfo)"
   M_OTHERS=""
+  M_FOLLOWERS=""
   if have docker; then
     for c in $(docker ps -q 2> /dev/null || true); do
       row=$(docker inspect -f '{{.State.Pid}} {{.Name}}' "$c" 2> /dev/null || true)
@@ -120,6 +130,17 @@ scan_mounts() {
     [ -r "$d/mountinfo" ] || continue # the process just exited: another one in its namespace will do
     seen="$seen$ns "
     awk -v d="$no" '$3 == d {f = 1} END {exit !f}' "$d/mountinfo" 2> /dev/null || continue
+    # Every mount of the device there is a slave of the host's at the same place
+    if awk -v d="$no" -v m="$DATA" -v peers="$peers" '
+      $3 == d {
+        ok = 0
+        if ($5 == m) for (i = 7; $i != "-"; i++) if ($i ~ /^master:/ && index(peers, " " substr($i, 8) " ")) ok = 1
+        if (!ok) bad = 1
+      }
+      END {exit bad}' "$d/mountinfo" 2> /dev/null; then
+      M_FOLLOWERS="$M_FOLLOWERS""follower=$p $(tr -d '\n' < "$d/comm" 2> /dev/null || echo '?')"$'\n'
+      continue
+    fi
     hit=$(printf '%s' "$map" | awk -F'|' -v n="$ns" '$1 == n {print $2 "|" $3; exit}')
     if [ -n "$hit" ]; then
       cpid=${hit%%|*}; cname=${hit#*|}
@@ -129,6 +150,7 @@ scan_mounts() {
     fi
   done
   M_OTHERS=${M_OTHERS%$'\n'}
+  M_FOLLOWERS=${M_FOLLOWERS%$'\n'}
 }
 # findmnt -o <column> for the topmost mount at the data directory. Stacked
 # mounts (after a swap) print one line each; the last one is the one in use.
@@ -697,6 +719,8 @@ cmd_old_volume_status() {
   echo "mounted_host=$M_HOST"
   echo "mounted_elsewhere=$([ -z "$M_OTHERS" ] && echo 0 || echo "$M_OTHERS" | wc -l | tr -d ' ')"
   [ -z "$M_OTHERS" ] || echo "$M_OTHERS"
+  echo "mounted_following=$([ -z "$M_FOLLOWERS" ] && echo 0 || echo "$M_FOLLOWERS" | wc -l | tr -d ' ')"
+  [ -z "$M_FOLLOWERS" ] || echo "$M_FOLLOWERS"
 }
 
 # release-old
@@ -811,6 +835,12 @@ Deploy the app, then try again" [ -z "$M_OTHERS" ]
     [ "$got" = "$cur" ] || bad="$bad $c"
   done
   [ -z "$bad" ] || die "these containers do not see the current volume $cur:$bad (the host side is done: one shared mount of $cur)"
+  # The namespaces which followed the host's mounts should have lost it too
+  scan_mounts "$no_old"
+  if [ -n "$M_OTHERS$M_FOLLOWERS" ]; then
+    echo "$M_OTHERS$M_FOLLOWERS" >&2
+    die "the host side is done, but $old is still mounted in the namespaces above: do not detach it. Unmount it there with nsenter -t <pid> -m umount $DATA (twice if the new volume is stacked on it), or restart that service"
+  fi
   if [ "$(state_get old_volume)" = "$old" ]; then set_phase released; fi
   echo "released=yes"
   echo "old_volume=$old"
