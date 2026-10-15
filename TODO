@@ -1,3 +1,6 @@
+Publish Node container ports on loopback only: docker-proxy binds 8088-8090 on 0.0.0.0 and :: (scripts/deploy/util/generateDockerCommand.js emits -p 808x:8080), but the proxy only connects to 127.0.0.1. Use -p 127.0.0.1:808x:8080
+- Measured 15 Oct: docker-proxy hop costs ~0.7% of Node CPU, +0.2ms median per new connection; not worth a dockerd restart (live-restore=false), Unix sockets come with #2119
+
 App changes toward consolidated units and horizontal scaling (#2119), each useful on its own:
 - Remove the master: cron jobs take a per-run Redis lock (SET NX cron:<job>:<date>); scheduled posts and welcome/renewal emails move to a Redis due-time sorted set any process can claim; client init() watchers become locked periodic jobs; templates()/folders() startup builds idempotent + locked
 - Node listens on a Unix socket when configured
