@@ -26,7 +26,11 @@ function main(callback) {
     function (err, stdout) {
       if (err) return callback(err);
 
-      const zombie_pids = stdout.split("\n").filter((i) => !!i);
+      // A process started directly under the container's init (as the app
+      // is in proxy/e2e) is a child of PID 1 too: never count ourselves.
+      const zombie_pids = stdout
+        .split("\n")
+        .filter((i) => !!i && i.trim() !== String(process.pid));
 
       if (zombie_pids.length) {
         console.log(prefix(), `${zombie_pids.length} zombies found`);

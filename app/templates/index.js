@@ -68,8 +68,11 @@ if (require.main === module) {
 // lock: a process that finds it held waits (retries with backoff, about 95s
 // in total) and then runs the pass anyway. By then the holder has finished,
 // every template compares unchanged and the pass is a cheap no-op, which
-// also guarantees the callback only fires once templates are built. If the
-// wait runs out we build anyway: a duplicate build beats none.
+// also guarantees the callback only fires once templates are built. A rebuild
+// that changes templates can outlast the wait, so while the lock is still
+// held (its holder heartbeats it; a dead holder's lock expires) we keep
+// waiting rather than race it. Only if Redis can't take the lock at all do we
+// build unlocked: a duplicate build beats none.
 const BUILD_LOCK_KEY = "templates:build";
 const BUILD_LOCK_OPTIONS = {
   ttl: 60 * 1000,
@@ -106,14 +109,18 @@ function main(options, callback) {
 async function buildLocked(options, callback) {
   let held = null;
 
-  try {
-    held = await lock(BUILD_LOCK_KEY, BUILD_LOCK_OPTIONS);
-  } catch (e) {
-    console.error(
-      e.code === "ELOCKED"
-        ? "[templates] build lock still held after waiting, building anyway"
-        : "[templates] build lock unavailable, building anyway: " + e.message
-    );
+  while (!held) {
+    try {
+      held = await lock(BUILD_LOCK_KEY, BUILD_LOCK_OPTIONS);
+    } catch (e) {
+      if (e.code !== "ELOCKED") {
+        console.error(
+          "[templates] build lock unavailable, building anyway: " + e.message
+        );
+        break;
+      }
+      console.error("[templates] build lock still held, waiting again");
+    }
   }
 
   // buildPass can throw synchronously (e.g. an unreadable directory); every

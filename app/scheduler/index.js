@@ -320,9 +320,9 @@ module.exports = function () {
   });
 
   // A push cut off by a crash or a deploy leaves its quarantine directory in
-  // the bare repository, and git never removes it. The scheduler runs in the
-  // container that serves git pushes (config.master, the green one) and sees
-  // the same git data directory. Should become scope "host" once BLOT_HOST_ID
+  // the bare repository, and git never removes it. It runs once a day across
+  // all containers (lock.cron) and works from any of them because they share
+  // the host's git data directory. Should become scope "host" once BLOT_HOST_ID
   // is set and there is more than one host.
   console.log(clfdate(), "Scheduled daily sweep of stale git push quarantine directories");
   lock.cron("sweep-git", { hour: 5, minute: 0 }, async function () {
@@ -351,8 +351,8 @@ module.exports = function () {
   });
 
   // config.tmp_directory is on the host's instance store and shared by every
-  // container, so it is pruned once, by the container that runs the scheduler
-  // (config.master). Should become scope "host" once BLOT_HOST_ID is set and
+  // container, so it is pruned once a day by whichever container wins the
+  // lock.cron run. Should become scope "host" once BLOT_HOST_ID is set and
   // there is more than one host.
   console.log(clfdate(), "Scheduled daily prune of old files in the tmp directory");
   lock.cron("prune-tmp", { hour: 5, minute: 30 }, async function () {

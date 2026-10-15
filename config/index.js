@@ -59,7 +59,10 @@ module.exports = {
   // same BLOT_PURGE_TOKEN.
   purge_token: process.env.BLOT_PURGE_TOKEN,
   protocol: BLOT_PROTOCOL + "://",
-  master: process.env.CONTAINER_NAME === "blot-container-green",
+  // A worktree preview sidecar sharing the dev stack's Redis
+  // (scripts/development/worktrees.md); it skips the scheduler, sync clients
+  // and the start email.
+  preview: process.env.BLOT_PREVIEW === "true",
   // map 'blot-container-<container-name>' to 'container-name'
   container: (process.env.CONTAINER_NAME || "").split("-").slice(2).join("-"),
 

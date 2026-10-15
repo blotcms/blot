@@ -213,7 +213,7 @@ async function runProbe({
 
   const environment = {
     // config.container is the part after "blot-<x>-", so log lines are
-    // tagged [<tool>]; and config.master is false.
+    // tagged [<tool>].
     CONTAINER_NAME: `blot-probe-${tool}`,
     ...(/^[0-9a-f]{7,40}$/.test(releaseId) ? { BLOT_RELEASE_ID: releaseId } : {}),
     // Empty, so the env file can't override the flags given to node below.

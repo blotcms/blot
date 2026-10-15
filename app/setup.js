@@ -33,24 +33,20 @@ async function runPostListenTasks() {
 
   let templatesBuilt = false;
 
-  // Preview slots opt in with BLOT_BUILD_TEMPLATES so template source edits
-  // in a worktree rebuild (and overwrite the shared dev templates).
-  if (config.master || process.env.BLOT_BUILD_TEMPLATES === "true") {
-    log("Building templates after listen");
-    try {
-      await new Promise((resolve, reject) => {
-        templates(
-          { watch: config.environment === "development" },
-          (err) => (err ? reject(err) : resolve())
-        );
-      });
-      templatesBuilt = true;
-      log("Built templates after listen");
-    } catch (err) {
-      logError("Failed to build templates after listen", err);
-    }
-  } else {
-    log("Skipping template build after listen (not master)");
+  // Every process builds templates: the build takes a Redis lock and the
+  // losers find nothing to change. In development, preview slots overwrite
+  // the shared dev templates with their worktree's copy.
+  log("Building templates after listen");
+  try {
+    await new Promise((resolve, reject) => {
+      templates({ watch: config.environment === "development" }, (err) =>
+        err ? reject(err) : resolve()
+      );
+    });
+    templatesBuilt = true;
+    log("Built templates after listen");
+  } catch (err) {
+    logError("Failed to build templates after listen", err);
   }
 
   try {
@@ -71,10 +67,8 @@ async function runPostListenTasks() {
   }
 
   try {
-    if (config.master || process.env.BLOT_EVENT_LOOP_MONITOR === "true") {
-      log("Starting event loop monitor");
-      require("helper/eventLoopMonitor").start();
-    }
+    log("Starting event loop monitor");
+    require("helper/eventLoopMonitor").start();
   } catch (err) {
     logError("Failed to start event loop monitor", err);
   }
@@ -111,8 +105,10 @@ async function runPostListenTasks() {
     logError("Failed to start welcome email alarm", err);
   }
 
+  // Cron jobs and client jobs take Redis locks, so every container runs them.
+  // Worktree previews share the dev Redis and skip them.
   try {
-    if (config.master) {
+    if (!config.preview) {
       log("Starting scheduler asynchronously");
       scheduler();
     }
@@ -121,7 +117,7 @@ async function runPostListenTasks() {
   }
 
   try {
-    if (config.master) {
+    if (!config.preview) {
       const clients = Object.values(require("clients"));
       for (const { init, display_name } of clients) {
         if (init) {
@@ -162,7 +158,7 @@ async function runPostListenTasks() {
     logError("Failed to configure local blogs", err);
   }
 
-  if (config.master && config.environment === "production") {
+  if (config.environment === "production") {
     log("Building folders asynchronously");
 
     setImmediate(async () => {
@@ -266,15 +262,6 @@ function main(callback) {
           log("Created SSL key for redis");
           callback();
         })();
-      },
-
-      function (callback) {
-        if (config.master) {
-          log("Deferring template build until after listen");
-        } else {
-          log("Skipping template build (not master)");
-        }
-        callback();
       },
 
       async function () {

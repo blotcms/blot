@@ -89,8 +89,7 @@ capped at 8 requests in flight, and `--speed` at 4x. Keep replays short.
 too) and fails if no requests to yellow started in the window.
 
 The container's `CONTAINER_NAME` is `blot-probe-render-probe`, so its log lines
-are tagged `[render-probe]` and `config.master` is false. The probe never loads
-`app/setup.js`, so it starts no scheduled jobs and never flushes the
+are tagged `[render-probe]`. The probe never loads `app/setup.js`, so it starts no scheduled jobs and never flushes the
 render-time metric to Redis: its renders stay out of the daily numbers.
 
 ## Crash reports from the app containers

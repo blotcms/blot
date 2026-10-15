@@ -86,8 +86,8 @@ setup(async (err) => {
     }
 
     // Send an email notification if the server starts or restarts
-    // Worktree preview sidecars (scripts/development/preview.sh) are not master
-    if (config.master || config.environment !== "development") {
+    // Worktree preview sidecars (scripts/development/preview.sh) skip it
+    if (!config.preview) {
       serverStartEvent().then((event) =>
         email.SERVER_START(null, { container: config.container, event })
       );
