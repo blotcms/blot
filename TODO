@@ -37,9 +37,6 @@ Add rebuild button to each file on dashboard
 - Add json viewer to files on dashboard
 
 Rewrite node deploy to wait for image after all the init steps to speed up runs
-S3 assets (#2111 waits on this):
-- Bunny edge rules 4 and 5 (bucket origin, CORS) are in, gated on X-Blot-Origin: s3, checks passed 15 Oct: drop the test condition from both once #2112 is deployed and the backfill has uploaded the 12 missing files
-
 Back up blot-storage-prod off AWS (Backblaze B2, hourly, no --delete): _avatars and _template_assets can't be regenerated
 
 Bunny: decide Volume vs Standard tier (more PoPs, faster first byte far from Volume PoPs) once we've run the numbers on cost and latency; also why cache HIT is low (Statistics: status codes, top uncached URLs)

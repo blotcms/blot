@@ -151,3 +151,7 @@ Newest last. Add one dated entry per run.
 - Result: live after dbtest 6s, icloudtest 8s, drivetest 20s, gittest <15s. Each post's `_image_cache` image and `large` thumbnail returned 200 `image/png` `max-age=31536000` from cdn.blot.im. `ls` on prod found the cached image and all four thumbnail sizes in `data/static/<blogID>/`. Cleanup: gone after 5-28s.
 - Odd: TCC needed Full Disk Access on the bundled, versioned Claude Code `claude.app`, not Claude.app. The zsh shell has no `PIPESTATUS`, so push success is checked with `ls-remote`. `inspect.js` is not deployed yet, so verification used the `ls` fallback.
 
+### 2026-10-15 — image post served by Bunny straight from S3 (edge rules live)
+- Blogs / content: `skilltest-1792053452/post.md` + `photo.png` (492×507 PNG) on gittest.
+- Result: live after ~3s. The `_image_cache` image and `large` thumbnail returned 200 `image/png`, `public, max-age=31536000, immutable`, `Access-Control-Allow-Origin: *`, with `x-amz-request-id` and `perma-cache: MISS` / `cdn-cache: MISS` on first fetch, so Bunny pulled them from the bucket. `head-object` matched (uploaded 10s before the fetch). The proxy access log had no line for either asset. Cleanup: gone after ~3s.
+- Odd: none.
