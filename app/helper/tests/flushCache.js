@@ -392,6 +392,29 @@ describe("flushCache", function () {
       expect(pending.store[proxy.url]).toEqual({});
     });
 
+    it("retries a host recorded in the same millisecond when retryAfterMs is 0", async function () {
+      const proxy = startProxy((req, res) => res.send("ok"));
+      const pending = memoryPending();
+      const now = spyOn(Date, "now").and.returnValue(1792072076166);
+
+      const flush = flushCache({
+        reverse_proxies: [proxy.url],
+        requestsPerSecond: 100,
+        pending,
+        retryIntervalMs: 0,
+        retryAfterMs: 0,
+      });
+
+      // scores are the millisecond plus a fraction, e.g. 1792072076166.462
+      await pending.add(proxy.url, ["a.example"], 1792072076166.999);
+
+      await flush.retryPending();
+
+      expect(now).toHaveBeenCalled();
+      expect(proxy.purges.length).toBe(1);
+      expect(pending.store[proxy.url]).toEqual({});
+    });
+
     it("records hosts as pending before purging them", async function () {
       const pending = memoryPending();
       const seen = [];

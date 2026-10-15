@@ -229,9 +229,11 @@ module.exports = ({
           let entries;
 
           try {
+            // scores carry a sub-millisecond part, so the cutoff covers the
+            // whole millisecond: an entry recorded in it is old enough
             entries = await pending.list(
               target,
-              Date.now() - retryAfterMs,
+              Date.now() - retryAfterMs + 0.999,
               maxHostsPerRetry
             );
           } catch (error) {
