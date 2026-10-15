@@ -10,6 +10,7 @@ const drain = require("helper/drain");
 
 const DEPLOYMENT_MARKER_EXPIRATION_SECONDS = 90 * 24 * 60 * 60;
 const REQUEST_TIMEOUT_MS = 60 * 60 * 1000;
+const KEEP_ALIVE_TIMEOUT_MS = 65 * 1000;
 
 // The deploy sets --report-on-fatalerror (scripts/deploy/util/
 // generateDockerCommand.js), but Node won't create the report directory
@@ -106,4 +107,11 @@ setup(async (err) => {
   // It applies to every upload, the dashboard's too. headersTimeout is left
   // alone.
   httpServer.requestTimeout = REQUEST_TIMEOUT_MS;
+
+  // nginx keeps an idle upstream connection for 60s (its default
+  // keepalive_timeout) but Node closes one after 5s, so nginx kept reopening
+  // connections and could send a request on a socket Node was closing, which
+  // fails as a 502 or a retry to the backup. Outlasting nginx means nginx is
+  // always the side that closes an idle connection.
+  httpServer.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS;
 });
