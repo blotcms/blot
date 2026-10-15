@@ -168,9 +168,11 @@ volume, any resize in progress and each pass.
 
 ## Cost
 
-- gp3 includes 3000 IOPS and 125 MiB/s; extra throughput costs little, extra
-  IOPS more. A gp2 volume of this size has a similar baseline, so a gp3 volume
-  of the same speed costs less per GiB.
+- gp3 includes 3000 IOPS and 125 MiB/s, which is what a shrink creates unless
+  given `--iops` or `--throughput`. Leave them out: the app peaks around
+  1000 IOPS and briefly a little over 125 MB/s, and a copy pass runs at about
+  100-120 MB/s anyway, so paying for more buys little. Either can be raised
+  later online with `aws ec2 modify-volume`, like a grow.
 - The new volume's first DLM snapshot is a full copy and the old volume's last
   snapshots stay until they expire, so snapshot cost roughly doubles for about
   a week.

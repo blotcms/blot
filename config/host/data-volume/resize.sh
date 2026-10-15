@@ -38,6 +38,8 @@
 #                            change nothing (only /tmp/blot-data-volume/host.sh
 #                            is copied to the host, which the checks need)
 # shrink only: --type gp3|gp2 (default gp3), --iops N, --throughput MiBps (gp3).
+# Without --iops and --throughput a gp3 volume gets the included 3000 IOPS and
+# 125 MiB/s, which is enough (README, "Cost").
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 

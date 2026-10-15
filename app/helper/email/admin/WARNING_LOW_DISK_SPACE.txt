@@ -1,16 +1,15 @@
-Warning: Blot's disk is low on space
+{{{headline}}}
 
-One of the disks attached to Blot's server is running low on space:
+A disk attached to Blot's server is running low on space:
 
 {{#disks}}
-- **{{label}}** {{available_human}} available, {{used_human}} used {{mount}}
+- **{{label}}** {{available_human}} available, {{used_human}} used ({{used_percent}}%) {{mount}}
 {{/disks}}
 
-Resolve this now:
-
-1. [Open the AWS console](https://us-west-2.console.aws.amazon.com/ec2/home?region=us-west-2#Volumes:) and resize the relevant volume:
-2. Then ssh into the server and [expand the file system](https://docs.aws.amazon.com/ebs/latest/userguide/recognize-expanded-volume-linux.html):
+Resolve this now. For the data disk (/var/www/blot/data), grow its volume online from a checkout on your Mac; no freeze, nothing restarts (config/host/data-volume/README.md):
 
 ```
-sudo xfs_growfs /dev/nvme2n1
+config/host/data-volume/resize.sh grow <new-size-GiB>
 ```
+
+For any other disk, [resize its volume in the AWS console](https://us-west-2.console.aws.amazon.com/ec2/home?region=us-west-2#Volumes:), then ssh into the server and [expand the file system](https://docs.aws.amazon.com/ebs/latest/userguide/recognize-expanded-volume-linux.html).

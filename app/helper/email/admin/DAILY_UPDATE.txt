@@ -8,6 +8,8 @@ Response time: {{render_time}}
 
 {{{redis_server}}}
 
+{{{data_disk}}}
+
 Sync: {{sync_summary}}
 
 Newsletter subscribers: {{newsletter_subscribers}}

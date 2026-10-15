@@ -31,6 +31,11 @@ const main = callback => {
             mount: values.at(-1),
             label: LABELS[values.at(-1)],
             used_k: parseInt(values.at(2)),
+            // Rounded up, the way df's Use% column is
+            used_percent: Math.ceil(
+              (parseInt(values.at(2)) * 100) /
+                (parseInt(values.at(2)) + parseInt(values.at(3)))
+            ),
             used_human: prettySize(values.at(2)),
             available_k: parseInt(values.at(3)),
             available_human: prettySize(values.at(3))
@@ -45,7 +50,30 @@ const main = callback => {
   });
 };
 
+// The data disk is sized close to what it holds (config/host/data-volume) and
+// grows online in minutes, so it is watched by percentage. Lowest first: each
+// level emails once as usage reaches it.
+const DATA_DISK_ALERTS = [
+  { percent: 90, headline: "Blot's data disk is 90% full" },
+  { percent: 95, headline: "Warning: Blot's data disk is 95% full, grow it today" },
+  {
+    percent: 99,
+    headline: "URGENT: Blot's data disk is 99% full, grow it NOW before writes start failing"
+  }
+];
+
+// The highest alert level the data disk has reached, or null
+function dataDiskAlert(disks) {
+  const data = disks.find(disk => disk.label === "data");
+
+  if (!data) return null;
+
+  return DATA_DISK_ALERTS.filter(alert => data.used_percent >= alert.percent).pop() || null;
+}
+
 module.exports = main;
+module.exports.dataDiskAlert = dataDiskAlert;
+module.exports.DATA_DISK_ALERTS = DATA_DISK_ALERTS;
 
 if (require.main === module) {
   console.log("Checking free disk space...");

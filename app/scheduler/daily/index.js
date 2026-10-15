@@ -32,6 +32,8 @@ function main (callback) {
       require("./render-time"),
       log("Checking the Redis server"),
       require("./redis-server"),
+      log("Checking the data disk"),
+      require("./data-disk"),
       log("Finished daily update")
     ],
     function (fn, next) {
