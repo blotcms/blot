@@ -182,23 +182,38 @@ const loadPartials = async () => {
 
 // "Latest" sorting is driven by each template's most recent commit,
 // so it stays accurate without a value anyone has to remember to update.
+// Production images are built without .git, so CI writes the timestamps to
+// latest-commits.json (see build/latest-commits.js) before the image build.
+// Without that file (local development) we ask git, once per process.
 const REPO_ROOT = path.join(__dirname, "../../../");
+const LATEST_COMMITS_PATH = path.join(__dirname, "../latest-commits.json");
 
-const getLatestCommitTimestamp = (dir) => {
-  try {
-    const output = execFileSync(
-      "git",
-      ["log", "-1", "--format=%ct", "--", dir],
-      { cwd: REPO_ROOT, encoding: "utf8" }
-    ).trim();
+let latestCommits;
 
-    if (!output) return 0;
-    return parseInt(output, 10) * 1000;
-  } catch (e) {
-    // No .git directory (e.g. a production image built without history)
-    // or git isn't installed — fall back to "unknown", sorted last.
-    return 0;
+const getLatestCommitTimestamp = (slug) => {
+  if (!latestCommits) {
+    try {
+      latestCommits = fs.readJsonSync(LATEST_COMMITS_PATH);
+    } catch (e) {
+      latestCommits = {};
+    }
   }
+
+  if (latestCommits[slug] === undefined) {
+    try {
+      const output = execFileSync(
+        "git",
+        ["log", "-1", "--format=%ct", "--", path.join(templatesSourceDirectory, slug)],
+        { cwd: REPO_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+      ).trim();
+      latestCommits[slug] = output ? parseInt(output, 10) * 1000 : 0;
+    } catch (e) {
+      // No .git directory or git isn't installed - "unknown", sorted last.
+      latestCommits[slug] = 0;
+    }
+  }
+
+  return latestCommits[slug];
 };
 
 const formatUpdatedLabel = (msAgo) => {
@@ -228,9 +243,7 @@ const loadTemplates = async () => {
     if (!(await fs.pathExists(packagePath))) continue;
 
     const pkg = await fs.readJson(packagePath);
-    const latest_commit = getLatestCommitTimestamp(
-      path.join(templatesSourceDirectory, slug)
-    );
+    const latest_commit = getLatestCommitTimestamp(slug);
 
     templates.push({
       name: NAME_MAP[slug] || slug[0].toUpperCase() + slug.slice(1),

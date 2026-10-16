@@ -47,6 +47,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history so template "Latest" timestamps can be computed below
+          fetch-depth: 0
+
+      # The image is built without .git, so record each template's latest
+      # commit time now for the docs site to read at runtime.
+      - name: Record template commit times
+        run: node app/documentation/build/latest-commits.js
 
       - name: Login to GHCR
         uses: docker/login-action@v3
