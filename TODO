@@ -6,6 +6,8 @@ Build queue and worker process (#2119; one host for now, multi-host later). Goal
 - Makes steering background syncs to green unnecessary (16 Oct webhook-gating idea, not merged)
 - Multi-host later: blog folders and git repos on the local data volume are the blocker, not the queue
 
+Add a new template which just looks like finder on the index page
+
 Set aside 16 Oct (from the 15 Oct latency + deploy-error review):
 - Isolate slow sites: one site's CPU-heavy renders stall every blog on yellow's event loop (15 Oct 18:26-18:33, a client crawling nashp entries at 3-4 r/s under the 6 r/s per-IP limit; again 20:56). Options: per-host concurrency cap on upstream misses (worry: image-heavy pages), route known-heavy hosts to their own pool via map $host, or cut the render cost (nashp, #1806)
 - Find out why 5 internal /purge requests got 503 during the 09:06 15 Oct proxy swap
