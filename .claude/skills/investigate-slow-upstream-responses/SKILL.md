@@ -283,3 +283,24 @@ Entry template:
   `join-app-log.js`. TODO lines added for the Google Drive webhook ack and
   `mailto:` lookups.
 
+
+### 2026-10-15 — window 12:00–20:00 UTC (post-deploy health check)
+- Headline: 15:00–19:00 p95 was ~20x the quiet baseline, almost all in
+  short bursts. Other hosts' p95 outside the bursts was 0.053s (baseline
+  ~0.045s): 679 of their 690 requests over 1s were inside burst windows. The
+  many deploys that afternoon did not show up.
+- Cause: a single client (curl UA; its /24 also sends desktop browser traffic
+  to the same site, so probably the owner's own script) walking every entry of
+  the TODO "nashp (improve speed)" site at 3–4 req/s, which stays under the
+  6 r/s per-IP limit. Each uncached entry page is ~475KB and costs ≥0.5s of
+  render, so yellow's single event loop saturated. The worst burst,
+  18:26–18:33, hit ~1,190 distinct URLs (median st 1.3–3.7s for the crawler,
+  other hosts' p95 10–14s, p99 at the 15s read timeout), and ~770 blog
+  requests failed over to blue (yellow is max_fails=1). Smaller runs of the
+  same client at 15:00–15:19, 16:10, 16:50–17:09, 18:10 and 19:00 match every
+  other p95 bump.
+- 12:38: one IP sent ~2,000 `*.zip` backup-file probes to one blog in a
+  minute. 1,873 got 429s, but the burst let ~100 through: 76 404s, 28 504s,
+  2 502s and 53 limit_conn 503s. All the hour's 5xx came from this.
+- No app logs (containers redeployed 20:05). Not probed.
+- Follow-up: TODO line for a per-host upstream concurrency cap.
