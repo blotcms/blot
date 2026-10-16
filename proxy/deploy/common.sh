@@ -150,27 +150,10 @@ ensure_image() { # pull only when it is not already on the host
   docker image inspect "$1" >/dev/null 2>&1 || { log "Pulling $1"; docker pull "$1"; }
 }
 
-# The upstream address for a colour (BLUE, GREEN, YELLOW): PROXY_UPSTREAM_*
-# from the env file, else the host port the Node container publishes.
-upstream_addr() { # upstream_addr <COLOUR> <default>
-  local addr
-  addr="$(env_value "$ENV_FILE" "PROXY_UPSTREAM_$1")"
-  echo "${addr:-$2}"
-}
-
-UPSTREAMS="BLUE:127.0.0.1:8088 GREEN:127.0.0.1:8089 YELLOW:127.0.0.1:8090"
-
 # Arguments common to every real proxy container.
-# Host networking: the default upstreams are 127.0.0.1:8088-8090 and the Node
-# containers publish those ports on the host. Upstreams written unix:/run/blot/...
-# are the Node containers' sockets: bind-mounted with --mount so a missing
-# /run/blot fails the deploy rather than Docker creating it as root.
+# Host networking: the generated upstreams are 127.0.0.1:8088-8090 and the
+# Node containers publish those ports on the host.
 run_args() { # run_args <name>
-  local var addr unix=
-  for var in $UPSTREAMS; do
-    addr="$(upstream_addr "${var%%:*}" "${var#*:}")"
-    case "$addr" in unix:*) unix=1 ;; esac
-  done
   RUN_ARGS=(
     --name "$1"
     --network host
@@ -188,9 +171,6 @@ run_args() { # run_args <name>
     # which misses the Cache-Control/CORS headers `location /` sets.
     -v "$GLOBAL_STATIC_DIR":/var/www/blot/app/blog/static:ro
   )
-  if [ -n "$unix" ]; then
-    RUN_ARGS+=(--mount type=bind,source=/run/blot,target=/run/blot)
-  fi
 }
 
 # Render the image's config with this host's settings and have nginx parse it.
@@ -481,14 +461,12 @@ redis_reachable() {
 
 # No checked host exercises every upstream, so probe each one directly.
 upstreams_reachable() {
-  local var addr target=() # target: curl's arguments for the address
-  for var in $UPSTREAMS; do
-    addr="$(upstream_addr "${var%%:*}" "${var#*:}")"
-    case "$addr" in
-      unix:*) target=(--unix-socket "${addr#unix:}" http://localhost/health) ;;
-      *) target=("http://$addr/health") ;;
-    esac
-    [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "${target[@]}" || true)" = 200 ] \
+  local var default addr
+  for var in BLUE:127.0.0.1:8088 GREEN:127.0.0.1:8089 YELLOW:127.0.0.1:8090; do
+    default="${var#*:}"
+    addr="$(env_value "$ENV_FILE" "PROXY_UPSTREAM_${var%%:*}")"
+    addr="${addr:-$default}"
+    [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://$addr/health" || true)" = 200 ] \
       || { log "upstream $addr (PROXY_UPSTREAM_${var%%:*}) is not healthy"; return 1; }
   done
 }

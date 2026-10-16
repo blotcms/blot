@@ -47,16 +47,13 @@ serves any host:
 | `PROXY_PRIVATE_IP` | build-time `OPENRESTY_INSTANCE_PRIVATE_IP`, else `127.0.0.1` | address of the extra `:8077` cache-purge listener, for Node containers that cannot reach the host's `127.0.0.1:80` |
 | `PROXY_RESOLVER` | build-time `OPENRESTY_RESOLVER`, else `8.8.8.8 ipv6=off` | DNS resolver (`127.0.0.11` on a user-defined Docker network) |
 | `PROXY_ACME_CA` | build-time `ACME_CA`, else Let's Encrypt production | ACME directory for custom-domain certificates. Leave it alone in production: the deploy scripts refuse anything else in `proxy.env` |
-| `PROXY_UPSTREAM_GREEN` | `127.0.0.1:8089` (production: `unix:/run/blot/green.sock`) | the master Node (webhooks, `/clients`) |
-| `PROXY_UPSTREAM_BLUE` | `127.0.0.1:8088` (`unix:/run/blot/blue.sock`) | the dashboard Node, and failover for the others |
-| `PROXY_UPSTREAM_YELLOW` | `127.0.0.1:8090` (`unix:/run/blot/yellow.sock`) | the blog Node |
+| `PROXY_UPSTREAM_GREEN` | `127.0.0.1:8089` | the master Node (webhooks, `/clients`) |
+| `PROXY_UPSTREAM_BLUE` | `127.0.0.1:8088` | the dashboard Node, and failover for the others |
+| `PROXY_UPSTREAM_YELLOW` | `127.0.0.1:8090` | the blog Node |
 | `PROXY_FETCH_CDN_IPS` | `true` | fetch the Bunny edge list (exempt from rate limits) at start; `false` uses the list baked into the image |
 
 The upstream groups keep their weights and failover roles from
-`config/http.conf`; only where each Node is changes. A `unix:` upstream is a socket the Node
-container listens on in `/run/blot` (a failed connect is immediate, so nginx
-retries the backup); the deploy scripts bind-mount that directory into the
-proxy when any upstream is one. The Bunny
+`config/http.conf`; only where each Node is changes. The Bunny
 list is fetched on start and falls back to the baked-in one, so a running
 container does not pick up changes to it until it restarts.
 
