@@ -14,7 +14,7 @@ const LOCK_POLL_MS = 100;
 const RELEASE_TIMEOUT_MS = 2000;
 
 let draining = false;
-let httpServer = null;
+let httpServers = [];
 let promise = null;
 const listeners = new Set();
 
@@ -36,8 +36,9 @@ function onStart(fn) {
   };
 }
 
+// Call once per server (the TCP listener and the Unix socket one)
 function setServer(server) {
-  httpServer = server;
+  httpServers.push(server);
 }
 
 function start({ timeout = DRAIN_TIMEOUT_MS } = {}) {
@@ -63,15 +64,18 @@ async function run(timeout) {
   }
   listeners.clear();
 
-  const server = httpServer;
+  const servers = [...httpServers];
 
   // Closing the listener (rather than answering 503) is what makes nginx fail
   // over to the backup upstream: it does not retry on a 503, but does on a
   // refused connection.
   const closed = new Promise((resolve) => {
-    if (!server) return resolve();
-    server.close(() => resolve());
-    server.closeIdleConnections();
+    let pending = servers.length;
+    if (!pending) return resolve();
+    for (const server of servers) {
+      server.close(() => --pending === 0 && resolve());
+      server.closeIdleConnections();
+    }
   });
 
   const locksReleased = new Promise((resolve) => {
@@ -100,7 +104,7 @@ async function run(timeout) {
       "[DRAIN] timed out",
       `heldLocks=${lock.heldCount()}`
     );
-    if (server) server.closeAllConnections();
+    for (const server of servers) server.closeAllConnections();
   }
 
   let releaseTimer;
@@ -144,7 +148,7 @@ function install({ timeout = DRAIN_TIMEOUT_MS, exit = process.exit } = {}) {
 
 function _reset() {
   draining = false;
-  httpServer = null;
+  httpServers = [];
   promise = null;
   listeners.clear();
   lock.resumeAcquiring();

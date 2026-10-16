@@ -172,6 +172,17 @@ echo "logrotate deployment complete."
 #########################################################
 
 #########################################################
+# Begin tmpfiles deployment section
+#########################################################
+
+# /run/blot holds the app containers' Unix sockets; /run is a tmpfs, so
+# systemd-tmpfiles recreates it at boot. Creating it now is safe on a running host.
+echo "Installing tmpfiles.d/blot.conf on $PUBLIC_IP"
+scp -P "$SSH_PORT" -i "$SSH_KEY" "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/tmpfiles.d/blot.conf" ec2-user@$PUBLIC_IP:/tmp/blot-tmpfiles.conf
+ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo mv /tmp/blot-tmpfiles.conf /etc/tmpfiles.d/blot.conf && sudo chown root:root /etc/tmpfiles.d/blot.conf && sudo systemd-tmpfiles --create /etc/tmpfiles.d/blot.conf"
+#########################################################
+
+#########################################################
 # Begin .bashrc deployment section
 #########################################################
 

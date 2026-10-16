@@ -6,7 +6,11 @@ const MAX_PORT = 65535;
 
 const sshCommand = require("./sshCommand");
 
-module.exports = async function checkHealth(containerName, containerPort) {
+module.exports = async function checkHealth(
+  containerName,
+  containerPort,
+  containerSocket
+) {
   if (typeof containerName !== "string" || containerName.length === 0) {
     throw new Error("Container name must be a non-empty string.");
   }
@@ -75,6 +79,14 @@ module.exports = async function checkHealth(containerName, containerPort) {
 
         if (!reachable) {
           throw curlError;
+        }
+
+        // The proxy will connect over the socket, so it has to answer too.
+        // /health only answers Host: localhost, which curl sends here.
+        if (containerSocket) {
+          await sshCommand(
+            `curl --fail --max-time 10 --unix-socket ${containerSocket} http://localhost/health`
+          );
         }
 
         console.log(`Container is healthy and accessible.`);

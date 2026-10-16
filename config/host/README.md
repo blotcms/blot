@@ -25,6 +25,7 @@ the private key) and `PUBLIC_IP` (the host), and optionally `SSH_PORT`
 | `scripts/docker.service.d/20-data-volume.conf` | `/etc/systemd/system/docker.service.d/20-data-volume.conf` |
 | `fail2ban/filter.d/*.conf`, `fail2ban/jail.local` | `/etc/fail2ban/` (then restarts fail2ban) |
 | `logrotate/*` | `/etc/logrotate.d/` |
+| `tmpfiles.d/blot.conf` | `/etc/tmpfiles.d/blot.conf` (creates `/run/blot`) |
 | `.bashrc` | `/home/ec2-user/.bashrc` |
 
 It also turns off X11 forwarding in `sshd_config`. The systemd files are

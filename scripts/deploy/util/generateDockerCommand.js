@@ -6,6 +6,7 @@ const { INTERNAL_PORT } = CONSTANTS;
 const { DATA_DIRECTORY_ON_SERVER } = CONSTANTS;
 const { DATA_DIRECTORY_ON_CONTAINER } = CONSTANTS;
 const { TMP_DIRECTORY } = CONSTANTS;
+const { SOCKET_DIRECTORY } = CONSTANTS;
 const { ENV_FILE_ON_SERVER } = CONSTANTS;
 const { REGISTRY_URL } = CONSTANTS;
 const { LOG_MAX_SIZE, LOG_MAX_FILE, LOG_COMPRESS } = CONSTANTS;
@@ -126,6 +127,7 @@ async function generateDockerCommand(container, platform, commitHash) {
 
   const {
     name: containerName,
+    socket,
     port: containerPort,
     cpus,
     cpuShares,
@@ -262,6 +264,15 @@ async function generateDockerCommand(container, platform, commitHash) {
     // root disk, so a host without the instance store can't start a container.
     `--mount type=bind,source=${TMP_DIRECTORY},target=${TMP_DIRECTORY}`,
     `-e BLOT_TMP_DIRECTORY=${TMP_DIRECTORY}`,
+    // The socket the proxy connects to, alongside the published port (see
+    // SOCKET_DIRECTORY in ../constants.js). --mount fails on a missing source
+    // where -v would create it owned by root, which the app couldn't write to.
+    ...(socket
+      ? [
+          `--mount type=bind,source=${SOCKET_DIRECTORY},target=${SOCKET_DIRECTORY}`,
+          `-e BLOT_SOCKET=${socket}`,
+        ]
+      : []),
     `--memory=${memory}`,
     `--cpus=${cpuValue}`,
     ...(cpuShares !== undefined ? [`--cpu-shares=${cpuShares}`] : []),

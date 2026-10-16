@@ -70,6 +70,23 @@ describe("drain", function () {
     await done;
   });
 
+  it("closes every registered server", async function () {
+    await listen((req, res) => res.end("ok"));
+    const first = port;
+    const other = http.createServer((req, res) => res.end("ok"));
+    await new Promise((resolve) => other.listen(0, resolve));
+    const second = other.address().port;
+    drain.setServer(other);
+
+    await drain.start({ timeout: 1000 });
+
+    for (const p of [first, second]) {
+      port = p;
+      const err = await get(false).catch((err) => err);
+      expect(err.code).toBe("ECONNREFUSED");
+    }
+  });
+
   it("calls onStart listeners once", async function () {
     const fn = jasmine.createSpy("listener");
     const off = jasmine.createSpy("unsubscribed");

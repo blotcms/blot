@@ -9,6 +9,8 @@ const BLOT_DATA_DIRECTORY =
   process.env.BLOT_DATA_DIRECTORY || BLOT_DIRECTORY + "/data";
 const BLOT_HOST = process.env.BLOT_HOST || "localhost";
 const BLOT_PORT = process.env.BLOT_PORT || "8080";
+// Unix socket the server also listens on, for the reverse proxy; empty for none
+const BLOT_SOCKET = process.env.BLOT_SOCKET || "";
 const BLOT_PROTOCOL = process.env.BLOT_PROTOCOL || "https";
 const BLOT_IPV6 = process.env.BLOT_IPV6 || null;
 
@@ -96,6 +98,7 @@ module.exports = {
   ipv6: BLOT_IPV6,
 
   port: BLOT_PORT,
+  socket: BLOT_SOCKET,
   clients_port: 8888,
 
   redis: { port: 6379, host: process.env.BLOT_REDIS_HOST || "127.0.0.1" },

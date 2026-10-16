@@ -42,7 +42,17 @@ const blogsConfig = {
 const SERVING_CPU_SHARES = 2048;
 const BACKGROUND_CPU_SHARES = 512;
 
+// Each app container also listens on a Unix socket in this host directory,
+// bind-mounted at the same path into the app containers and the proxy
+// (app/helper/listen.js). Unlike the published port, a socket nobody is
+// listening on refuses a connection outright, so nginx can retry the backup
+// while a container drains or boots. /run is a tmpfs: the host recreates the
+// directory at boot (config/host/tmpfiles.d/blot.conf) and the deploy
+// ensures it exists.
+const SOCKET_DIRECTORY = "/run/blot";
+
 module.exports = {
+  SOCKET_DIRECTORY,
   REGISTRY_URL: "ghcr.io/blotcms/blot",
   PLATFORM_OS: "linux",
   // A single 512m file only held ~6 hours of yellow's logs, so the output
@@ -124,6 +134,7 @@ module.exports = {
     // failure rolls it back before green and yellow are touched.
     BLUE: {
       name: "blot-container-blue",
+      socket: `${SOCKET_DIRECTORY}/blue.sock`,
       port: 8088,
       verify: true,
       ...siteConfig,
@@ -133,6 +144,7 @@ module.exports = {
     // Site server (dashboard, brochure, sync folders)
     GREEN: {
       name: "blot-container-green",
+      socket: `${SOCKET_DIRECTORY}/green.sock`,
       port: 8089,
       ...siteConfig,
       cpuShares: BACKGROUND_CPU_SHARES,
@@ -141,6 +153,7 @@ module.exports = {
     // Blog server (previews, published blogs)
     YELLOW: {
       name: "blot-container-yellow",
+      socket: `${SOCKET_DIRECTORY}/yellow.sock`,
       port: 8090,
       ...blogsConfig,
       cpuShares: SERVING_CPU_SHARES,

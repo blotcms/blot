@@ -7,6 +7,7 @@ const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const setup = require("./setup");
 const server = require("./server");
 const drain = require("helper/drain");
+const listen = require("helper/listen");
 
 const DEPLOYMENT_MARKER_EXPIRATION_SECONDS = 90 * 24 * 60 * 60;
 const REQUEST_TIMEOUT_MS = 60 * 60 * 1000;
@@ -68,8 +69,31 @@ setup(async (err) => {
 
   console.log(clfdate(), "Finished setting up server");
 
+  // Applied to both the TCP and the Unix socket server.
+  const configure = (server) => {
+    // Node's default requestTimeout (300s) answers 408 to any request whose whole
+    // request, body included, takes longer than that to arrive. A large git push
+    // over a slow connection does (a ~700 MB push at 2 MB/s needs ~350s), so it
+    // was cut off while it was still making progress. nginx is in front of every
+    // request (10s header and body timeouts, 60s for git, and a body size cap),
+    // so a stalled or oversized request never gets this far; this only ends
+    // uploads which are still progressing, and an hour is long enough for one.
+    // It applies to every upload, the dashboard's too. headersTimeout is left
+    // alone.
+    server.requestTimeout = REQUEST_TIMEOUT_MS;
+
+    // nginx keeps an idle upstream connection for 60s (its default
+    // keepalive_timeout) but Node closes one after 5s, so nginx kept reopening
+    // connections and could send a request on a socket Node was closing, which
+    // fails as a 502 or a retry to the backup. Outlasting nginx means nginx is
+    // always the side that closes an idle connection.
+    server.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS;
+  };
+
+  const options = { port: config.port, socket: config.socket, configure };
+
   // Open the server to handle requests
-  const httpServer = server.listen(config.port, function () {
+  const httpServers = listen(server, options, function () {
     console.log(clfdate(), `Server listening`);
 
     // Run non-blocking setup tasks after the port is bound so startup isn't delayed.
@@ -95,23 +119,5 @@ setup(async (err) => {
     }
   });
 
-  drain.setServer(httpServer);
-
-  // Node's default requestTimeout (300s) answers 408 to any request whose whole
-  // request, body included, takes longer than that to arrive. A large git push
-  // over a slow connection does (a ~700 MB push at 2 MB/s needs ~350s), so it
-  // was cut off while it was still making progress. nginx is in front of every
-  // request (10s header and body timeouts, 60s for git, and a body size cap),
-  // so a stalled or oversized request never gets this far; this only ends
-  // uploads which are still progressing, and an hour is long enough for one.
-  // It applies to every upload, the dashboard's too. headersTimeout is left
-  // alone.
-  httpServer.requestTimeout = REQUEST_TIMEOUT_MS;
-
-  // nginx keeps an idle upstream connection for 60s (its default
-  // keepalive_timeout) but Node closes one after 5s, so nginx kept reopening
-  // connections and could send a request on a socket Node was closing, which
-  // fails as a 502 or a retry to the backup. Outlasting nginx means nginx is
-  // always the side that closes an idle connection.
-  httpServer.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS;
+  httpServers.forEach((s) => drain.setServer(s));
 });
