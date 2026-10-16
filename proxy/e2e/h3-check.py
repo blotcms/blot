@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fetch a URL over HTTP/3 (QUIC, UDP) and assert on the response.
 
-    h3-check.py <host> <port> <authority> [path]
+    h3-check.py <host> <port> <authority> [path] [sni]
 
 Needs `pip install aioquic`. The certificate is not verified (the CI proxy
 serves a self-signed placeholder). Prints the status and Alt-Svc and exits
@@ -29,11 +29,11 @@ class Client(QuicConnectionProtocol):
                 self.headers.set_result(dict(h3_event.headers))
 
 
-async def main(host, port, authority, path):
+async def main(host, port, authority, path, sni=None):
     config = QuicConfiguration(is_client=True, alpn_protocols=H3_ALPN, verify_mode=0)
     # SNI is the address, as with curl to an IP: a custom domain's certificate
     # would otherwise be looked up in Redis, which this job does not run.
-    config.server_name = host
+    config.server_name = sni or host
     async with connect(host, port, configuration=config, create_protocol=Client) as client:
         stream = client._quic.get_next_available_stream_id()
         client.h3.send_headers(stream, [
@@ -48,5 +48,5 @@ async def main(host, port, authority, path):
 
 
 if __name__ == "__main__":
-    ok = asyncio.run(main(sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else "/"))
+    ok = asyncio.run(main(sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else "/", sys.argv[5] if len(sys.argv) > 5 else None))
     sys.exit(0 if ok else 1)

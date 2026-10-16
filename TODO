@@ -119,7 +119,7 @@ Image cache and thumbnails name some files after a slug that is still percent-en
 Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - Check webhooks. SSE through the container, and that a known /blog_* asset on cdn. has Cache-Control 1y and no Blot-Upstream
 - After the next 03:46 logrotate: access.log/error.log still written after copytruncate, fail2ban counts still moving
-- After the next wildcard renewal (/home/ec2-user/renew-wildcard.log): container reloaded, served cert fingerprint matches /etc/ssl/private/letsencrypt-domain.pem
+- After the next wildcard renewal: the served cert fingerprint matches the Redis copy (blot:openresty:ssl:pem), with no proxy reload needed (the proxy re-reads Redis every 10 seconds; "wildcard cert:" lines in the proxy error log mean it fell back to the file). Once seen, `docker exec` reload in renew-wildcard-ssl.sh and the disk comparison in proxy/deploy/common.sh (served_cert_matches_disk) can go
 - Custom-domain certs renew inside the container: none within ~20 days of expiry apart from domains that no longer point at Blot; identify-expiring-certs cron restarts the container cleanly
 - Reboot the host once in a maintenance window: mount-instance-store mounts without reformatting, docker starts after it, the proxy comes back with cache/log mounts, :80/:443 answer
 - HTTP/3 is not advertised (no Alt-Svc on either stack); decide whether to open UDP 443 and make fail2ban bans cover UDP too
