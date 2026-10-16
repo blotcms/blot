@@ -71,10 +71,11 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
 - `check_docker_health.sh` restarts containers Docker reports as unhealthy. It
   is run from cron every minute (see its header); `deploy.sh` does not install
   that entry.
-- `identify-expiring-certs.sh` and `purge-expired-ssl.sh` are run by hand to
-  find and drop custom-domain certificates (see
-  `app/helper/email/admin/SSL_CERTIFICATE_ISSUES.txt`). Both restart the proxy
-  container and refuse to run if none is running.
+- Custom-domain certificates need nothing on the host: the proxy container
+  renews them and refuses to serve an expired one (see `proxy/README.md`).
+  `identify-expiring-certs.sh` and `purge-expired-ssl.sh`, which deleted
+  certificates from Redis and restarted the proxy, are gone; remove any cron
+  entry for them from the host.
 - `mount-instance-store.sh` mounts the NVMe instance store at
   `/var/instance-ssd` (logs, cache and the app's tmp directory) at boot, and
   creates `/var/instance-ssd/tmp` for the app containers (uid 1000), since a

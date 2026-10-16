@@ -302,6 +302,32 @@ custom_cert_domains() {
   printf '%s' "$keys" | sed '/^$/d' | sed -E 's/^ssl:(.*):latest$/\1/' | sort -u
 }
 
+# The proxy treats a stored certificate whose expiry has passed as missing
+# (get_cert in proxy/config/init.conf), so a domain that presents none (or, on
+# a swap, a different one, once the replacement issues a new certificate)
+# because its stored certificate had expired is not the replacement's fault.
+# expired_cert_domains lists such domains, from domain names on stdin. It is
+# called BEFORE the replacement starts (or, on a fresh start, before the
+# sweep), because the replacement's own handshakes can replace the stored
+# certificate. The expiry is read from the stored JSON with awk, as no JSON
+# tool is guaranteed on the host. One redis-cli session reads every key, one
+# reply line per key.
+expired_cert_domains() {
+  local domains
+  domains="$(sed '/^$/d')"
+  [ -n "$domains" ] || return 0
+  paste -d' ' <(printf '%s\n' "$domains") \
+    <(printf '%s\n' "$domains" | sed 's/^/get ssl:/; s/$/:latest/' | redis-cli -h "$REDIS_HOST" --raw 2>/dev/null \
+      | awk '{ if (match($0, /"expiry":[0-9]+/)) print substr($0, RSTART + 9, RLENGTH - 9); else print "-" }') \
+    | awk -v now="$(date +%s)" '$2 != "-" && $2 + 0 <= now { print $1 }'
+}
+
+# drop_expired: lines starting with a domain name on stdin, minus the domains
+# in $EXPIRED_CERTS (newline separated)
+drop_expired() {
+  awk -v list="${EXPIRED_CERTS:-}" 'BEGIN { n = split(list, a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") e[a[i]] = 1 } !($1 in e)'
+}
+
 # cert_sweep [port] -> sorted "<domain> <sha256 fingerprint | none>" lines
 cert_sweep() {
   local port="${1:-443}" domains
@@ -316,7 +342,7 @@ cert_sweep() {
 # now. (A domain with none before is not held against the replacement.)
 certs_unchanged() { # certs_unchanged <baseline> <now>
   local bad
-  bad=$(comm -23 <(printf '%s\n' "$1" | grep -v ' none$' | sort) <(printf '%s\n' "$2" | sort))
+  bad=$(comm -23 <(printf '%s\n' "$1" | grep -v ' none$' | sort) <(printf '%s\n' "$2" | sort) | drop_expired)
   [ -z "$bad" ] || {
     log "custom-domain certificates changed or went missing ($(printf '%s\n' "$bad" | wc -l | tr -d ' ')): first few, as they were:"
     printf '%s\n' "$bad" | head -5 | while read -r line; do log "  $line"; done
@@ -333,6 +359,7 @@ cert_baseline() {
   command -v redis-cli >/dev/null 2>&1 \
     || { log "redis-cli is not installed, so custom-domain certificates cannot be compared (PROXY_SKIP_CERT_SWEEP=1 to skip)"; return 1; }
   CERT_BASELINE="$(cert_sweep | sed '/^$/d')"
+  EXPIRED_CERTS="$(printf '%s\n' "$CERT_BASELINE" | awk '{ print $1 }' | expired_cert_domains)"
   local total served
   total=$(printf '%s\n' "$CERT_BASELINE" | sed '/^$/d' | wc -l | tr -d ' ')
   served=$(printf '%s\n' "$CERT_BASELINE" | sed '/^$/d' | grep -vc ' none$' || true)
@@ -351,6 +378,7 @@ certs_all_served() { # certs_all_served [port]
   command -v redis-cli >/dev/null 2>&1 \
     || { log "redis-cli is not installed, so custom-domain certificates cannot be checked (PROXY_SKIP_CERT_SWEEP=1 to skip)"; return 1; }
   local sweep total missing wildcard redis_wildcard
+  EXPIRED_CERTS="$(custom_cert_domains | expired_cert_domains)"
   sweep="$(cert_sweep "${1:-443}")" \
     || { log "cannot list the custom domains in Redis (SCAN failed), so their certificates cannot be checked"; return 1; }
   sweep="$(printf '%s\n' "$sweep" | sed '/^$/d')"
@@ -361,7 +389,7 @@ certs_all_served() { # certs_all_served [port]
   # Custom domains fall back to the disk file today, but neither wildcard
   # (disk, or the current one in Redis) is ever a custom domain's certificate.
   redis_wildcard=$(redis_wildcard_fingerprint)
-  missing="$(printf '%s\n' "$sweep" | awk -v w="$wildcard" -v r="$redis_wildcard" '$2 == "none" || (w != "" && $2 == w) || (r != "" && $2 == r) { print $1 }')"
+  missing="$(printf '%s\n' "$sweep" | awk -v w="$wildcard" -v r="$redis_wildcard" '$2 == "none" || (w != "" && $2 == w) || (r != "" && $2 == r) { print $1 }' | drop_expired)"
   if [ -n "$missing" ]; then
     log "no certificate of its own presented for $(printf '%s\n' "$missing" | wc -l | tr -d ' ') of $total custom domains in Redis: first few:"
     printf '%s\n' "$missing" | head -5 | while read -r line; do log "  $line"; done

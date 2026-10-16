@@ -467,6 +467,12 @@ jobs:
           CACHE_TTL: "5"
         run: bash proxy/e2e/redis-outage-checks.sh
 
+      - name: An expired certificate in Redis is not served
+        env:
+          CA_BUNDLE: pebble-ca.bundle.pem
+          CACHE_TTL: "5"
+        run: bash proxy/e2e/expired-cert-checks.sh
+
       - name: Logs
         if: always()
         run: |

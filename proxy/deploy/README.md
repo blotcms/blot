@@ -81,6 +81,10 @@ new container must present a certificate for every custom domain in Redis
 before it is made permanent; the first few domains without one are listed. A
 Redis with no custom domains passes.
 
+A domain whose stored certificate has expired is left out of both checks: the
+proxy treats an expired certificate as missing, so the replacement not
+presenting it is expected.
+
 The script refuses to go on if `redis-cli` is missing, or (on a swap) no
 certificate could be read from the running proxy. `PROXY_SKIP_CERT_SWEEP=1`
 skips both the comparison and the fresh-start check.

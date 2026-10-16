@@ -110,6 +110,19 @@ if [[ " $* " == *" scan "* ]]; then
   exit
 fi
 if [[ " $* " == *" get blot:openresty:ssl:pem "* ]]; then echo "${FAKE_REDIS_WILDCARD_PEM:-}"; exit; fi
+if [ "$*" = "-h 10.0.0.5 --raw" ]; then
+  # common.sh's expired_cert_domains: "get ssl:<domain>:latest" lines on stdin,
+  # one stored certificate JSON line back for each
+  while read -r _ key; do
+    d=${key#ssl:}; d=${d%:latest}
+    if [[ " ${FAKE_EXPIRED_DOMAINS:-} " == *" $d "* ]] && { [ -z "${FAKE_EXPIRED_ONLY_AT_BASELINE:-}" ] || [ ! -e "$FAKE/stopped" ]; }; then
+      echo '{"expiry":1}'
+    else
+      echo '{"expiry":99999999999}'
+    fi
+  done
+  exit
+fi
 echo "redis-cli $*" >> "$FAKE/calls"
 if [[ "$*" == *" exists "* ]]; then echo "${FAKE_KEY_EXISTS:-0}"; fi
 F
@@ -190,6 +203,16 @@ check "PROXY_SKIP_CERT_SWEEP=1 skips the comparison" '[ $RC = 0 ] && mentions "n
 
 reset container; FAKE_CUSTOM_FP_AFTER_STOP=B bluegreen
 check "a custom-domain certificate differs after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm blot-proxy-blue" && mentions "custom-domain certificates"'
+
+reset container; FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_EXPIRED_DOMAINS="a.custom.test b.custom.test" bluegreen
+check "a custom-domain certificate that has expired and is no longer served is not held against the swap" '[ $RC = 0 ]'
+
+# The replacement issues a new certificate for a domain whose stored one had
+# expired, so the fingerprint changes. Expiry is judged before the swap: the
+# fake Redis shows the fresh certificate afterwards, so a re-read then would
+# call the domain unexpired.
+reset container; FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_EXPIRED_DOMAINS="a.custom.test b.custom.test" FAKE_EXPIRED_ONLY_AT_BASELINE=1 bluegreen
+check "a certificate that expired and was reissued by the replacement is judged by its expiry before the swap" '[ $RC = 0 ]'
 
 echo "try-issuance.sh"
 
@@ -301,6 +324,9 @@ check "fresh start with no custom domains in Redis: nothing to serve, allowed" '
 
 reset none; FAKE_CUSTOM_FP_CONTAINER=A bluegreen
 check "fresh start where custom domains get the wildcard (auto-ssl fallback): refused, never made permanent" '[ $RC != 0 ] && mentions "no certificate of its own" && mentions "2 of 2" && called "docker rm -f blot-proxy-blue" && ! called "docker update"'
+
+reset none; FAKE_NO_CUSTOM_CERT=b.custom.test FAKE_EXPIRED_DOMAINS=b.custom.test bluegreen
+check "fresh start where the domain without a certificate has an expired one in Redis: allowed" '[ $RC = 0 ] && mentions "all 2 in Redis are being served"'
 
 reset none; FAKE_REDIS_WILDCARD_PEM=redis-wildcard FAKE_SERVED_FP=R FAKE_CUSTOM_FP_CONTAINER=R bluegreen
 check "fresh start where custom domains get the Redis wildcard: refused" '[ $RC != 0 ] && mentions "no certificate of its own" && mentions "2 of 2" && called "docker rm -f blot-proxy-blue" && ! called "docker update"'

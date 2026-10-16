@@ -137,6 +137,19 @@ start).
   down. `PROXY_AUTO_SSL_CACHE_TTL` (seconds) shortens the hour; it exists for
   the CI checks and is unset in production.
 
+- **Expired certificates**: lua-resty-auto-ssl 0.13.1 serves whatever is
+  stored for a domain without looking at its expiry, and only deletes a
+  certificate from Redis when a daily renewal fails after it has expired (its
+  in-memory copy then lingers for up to an hour). `get_cert` in
+  `config/init.conf` therefore treats a stored certificate whose `expiry` has
+  passed as missing: a domain still listed in Redis (`domain:<host>`) is
+  issued a new one, any other gets the fallback certificate, and the key is
+  left for renewal to delete. Deleting a certificate also drops this
+  container's cached copies. Nothing on the host needs to restart the proxy to
+  clear a stale certificate. The proxy still asks for an OCSP response on every
+  handshake (0.13.1 cannot be told not to); Let's Encrypt certificates no
+  longer name a responder, so this fails at once and is logged at notice level.
+
 ### Possible replacement for `lua-resty-auto-ssl` (to investigate)
 
 `lua-resty-auto-ssl` is effectively unmaintained, and its shell-out chain
