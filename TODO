@@ -1,3 +1,6 @@
+PayPal: User.extend lets any PayPal status override Stripe's pretty.*/isMonthly/totalFee, so a Stripe user with a historical PayPal record shows (and gets emailed) PayPal's plan - pick the current provider
+PayPal dashboard cancel: if the cancel POST fails in transport after PayPal applied it, reconcile by re-fetching (webhook repairs it meanwhile)
+PayPal cancellation email: if Mailgun fails after the Redis claim the email is lost (status already CANCELLED so retries skip it) - track pending/sent or release the claim on failure
 
 Add a new template which just looks like finder on the index page
 
@@ -33,8 +36,6 @@ Create infrastructure to curate an explore page (keep it hidden for now)
 Create skills to moderate /questions
 
 Suppress new site admin notification for no subscription change (i.e. user deletes then adds back in a single site)
-
-PayPal end cancellation didn't fire native admin notification for cancellation jesse@xxx 
 
 Add an arbritrary input: import this site which just emails me
 

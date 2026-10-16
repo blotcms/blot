@@ -19,5 +19,9 @@ module.exports = {
 
   paypal: function (subscriptionId) {
     return "paypal:" + subscriptionId;
+  },
+
+  paypalCancelEmail: function (uid, subscriptionId) {
+    return "user:" + uid + ":paypal_cancel_email:" + subscriptionId;
   }
 };

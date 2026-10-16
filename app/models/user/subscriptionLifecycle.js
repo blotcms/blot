@@ -167,6 +167,19 @@ function cancellationDetails(user, now) {
   };
 }
 
+// A subscription cancelled within 30 days of starting gets the first-period
+// cancellation email. PayPal's start_time wins, then Stripe's timestamps.
+function isFirstPeriod(user, now) {
+  now = now || Date.now();
+
+  var startMs =
+    toMs(user && user.paypal && user.paypal.start_time) ||
+    toMs(user && user.subscription && user.subscription.created) ||
+    toMs(user && user.subscription && user.subscription.current_period_start);
+
+  return Boolean(startMs && now - startMs <= ONE_MONTH_MS);
+}
+
 function deletionDue(user, now, graceMs) {
   now = now || Date.now();
   graceMs = typeof graceMs === "number" ? graceMs : ONE_MONTH_MS;
@@ -236,6 +249,7 @@ module.exports = {
   ONE_MONTH_MS: ONE_MONTH_MS,
   cancellationDetails: cancellationDetails,
   deletionDue: deletionDue,
+  isFirstPeriod: isFirstPeriod,
   overdueDetails: overdueDetails,
   paypalPeriodEndAtMs: paypalPeriodEndAtMs,
   shouldDisableFromPaypalSubscription: shouldDisableFromPaypalSubscription,

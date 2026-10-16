@@ -2,7 +2,7 @@
 
   <input type="hidden" name="_csrf" value="{{csrftoken}}">
 
-  <p>If you <b>cancel your subscription</b>, {{#blogs.length}} your site{{user.s}} will stop working and{{/blogs.length}} your account will permanently close on {{user.pretty.expiry}}. Until that date, you will be able to use your account.</p>
+  <p>If you <b>cancel your subscription</b>, {{#blogs.length}} your site{{user.s}} will stop working and{{/blogs.length}} your account will permanently close on {{user.pretty.expiry}}. Until that date, you will be able to use your account.{{#paypal}} PayPal will not take any further payments.{{/paypal}}</p>
 
   <p>If you would rather close your account immediately, consider <a href="/sites/account/subscription/delete">deleting your account</a> instead.</p>
 

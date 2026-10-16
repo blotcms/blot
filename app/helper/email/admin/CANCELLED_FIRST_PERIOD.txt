@@ -1,5 +1,5 @@
 User cancelled subscription in first period
 
-{{email}} used to pay {{pretty.price}} per {{subscription.plan.interval}} for {{pretty.amount}} site{{pretty.s}}
+{{email}} used to pay {{pretty.price}} per {{pretty.interval}} for {{pretty.amount}} site{{pretty.s}}
 
 Because they cancelled their subscription within the first month they were offered a refund.

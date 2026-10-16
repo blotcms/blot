@@ -301,4 +301,27 @@ describe("subscriptionLifecycle", function () {
       expect(details.phase).toEqual("deletion_flow");
     });
   });
+
+  describe("isFirstPeriod", function () {
+    var DAY = 24 * 60 * 60 * 1000;
+
+    it("is true within 30 days of the PayPal start", function () {
+      var paypal = { start_time: new Date(now - 5 * DAY).toISOString() };
+      expect(subscriptionLifecycle.isFirstPeriod({ paypal: paypal }, now)).toBe(true);
+    });
+
+    it("is false after 30 days", function () {
+      var paypal = { start_time: new Date(now - 40 * DAY).toISOString() };
+      expect(subscriptionLifecycle.isFirstPeriod({ paypal: paypal }, now)).toBe(false);
+    });
+
+    it("falls back to the Stripe created time", function () {
+      var created = Math.floor((now - 2 * DAY) / 1000);
+      expect(subscriptionLifecycle.isFirstPeriod({ subscription: { created: created } }, now)).toBe(true);
+    });
+
+    it("is false without a start time", function () {
+      expect(subscriptionLifecycle.isFirstPeriod({}, now)).toBe(false);
+    });
+  });
 });

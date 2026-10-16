@@ -1,3 +1,3 @@
 User cancelled subscription{{andDisabled}}
 
-{{email}} used to pay {{pretty.price}} per {{subscription.plan.interval}} for {{pretty.amount}} site{{pretty.s}}
+{{email}} used to pay {{pretty.price}} per {{pretty.interval}} for {{pretty.amount}} site{{pretty.s}}

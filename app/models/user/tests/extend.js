@@ -266,6 +266,7 @@ describe("user extend", function () {
       });
       extend(user);
       expect(user.willCancel).toBe(true);
+      expect(user.cancel_at_period_end).toBe(true);
     });
 
     it("sets isMonthly for monthly PayPal plan", function () {

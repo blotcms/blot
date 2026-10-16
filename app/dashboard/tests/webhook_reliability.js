@@ -2,6 +2,8 @@ const User = require("models/user");
 const config = require("config");
 const stripe = require("dashboard/webhooks/stripe_webhook");
 const paypal = require("dashboard/webhooks/paypal_webhook");
+const email = require("helper/email");
+const client = require("models/client");
 
 function route(router) {
   const layers = router.stack.find(layer => layer.route).route.stack;
@@ -153,5 +155,81 @@ describe("payment webhook delivery reliability", function () {
     } finally {
       jasmine.clock().uninstall();
     }
+  });
+
+  describe("PayPal cancellation email", function () {
+    const DAY = 24 * 60 * 60 * 1000;
+    let claimed, subscription;
+    const cancel = (overrides) => {
+      subscription = Object.assign({ id: "I-TEST", status: "CANCELLED",
+        start_time: new Date(Date.now() - 200 * DAY).toISOString(),
+        billing_info: { next_billing_time: new Date(Date.now() + 5 * DAY).toISOString() } },
+        overrides);
+    };
+    beforeEach(function () {
+      claimed = new Set();
+      user.paypal = { status: "ACTIVE" };
+      cancel();
+      global.fetch.and.callFake(async () => ({ ok: true, json: async () => subscription }));
+      spyOn(client, "set").and.callFake(async (k, v, options) =>
+        claimed.has(k) ? null : (claimed.add(k), "OK"));
+      ["CANCELLED", "CANCELLED_FIRST_PERIOD", "CLOSED", "ALREADY_CANCELLED"].forEach(name =>
+        spyOn(email, name));
+    });
+    afterEach(function () {
+      delete user.paypal;
+      user.isDisabled = false;
+    });
+    it("sends the cancellation email on the first CANCELLED transition", async function () {
+      await paypal.updateSubscription("I-TEST");
+      expect(email.CANCELLED).toHaveBeenCalledTimes(1);
+      expect(email.CANCELLED).toHaveBeenCalledWith("test-user");
+      expect(email.CANCELLED_FIRST_PERIOD).not.toHaveBeenCalled();
+      expect(client.set).toHaveBeenCalledWith(
+        "user:test-user:paypal_cancel_email:I-TEST", "1",
+        { NX: true, EX: 90 * DAY / 1000 });
+    });
+    it("sends the first-period variant within 30 days of the start", async function () {
+      cancel({ start_time: new Date(Date.now() - 3 * DAY).toISOString() });
+      await paypal.updateSubscription("I-TEST");
+      expect(email.CANCELLED_FIRST_PERIOD).toHaveBeenCalledTimes(1);
+      expect(email.CANCELLED_FIRST_PERIOD).toHaveBeenCalledWith("test-user");
+      expect(email.CANCELLED).not.toHaveBeenCalled();
+    });
+    it("sends it once when the update is retried or concurrent", async function () {
+      await Promise.all([paypal.updateSubscription("I-TEST"),
+        paypal.updateSubscription("I-TEST")]);
+      user.paypal = { status: "CANCELLED" };
+      await paypal.updateSubscription("I-TEST");
+      expect(email.CANCELLED).toHaveBeenCalledTimes(1);
+    });
+    it("does not send it when the status was already CANCELLED", async function () {
+      user.paypal = { status: "CANCELLED" };
+      await paypal.updateSubscription("I-TEST");
+      expect(client.set).not.toHaveBeenCalled();
+      expect(email.CANCELLED).not.toHaveBeenCalled();
+    });
+    it("sends CLOSED instead when the paid period has ended", async function () {
+      cancel({ billing_info: { next_billing_time: new Date(Date.now() - DAY).toISOString() } });
+      await paypal.updateSubscription("I-TEST");
+      expect(email.CLOSED).toHaveBeenCalledTimes(1);
+      expect(email.CLOSED).toHaveBeenCalledWith("test-user");
+      expect(email.CANCELLED).not.toHaveBeenCalled();
+      expect(client.set).not.toHaveBeenCalled();
+    });
+    it("sends ALREADY_CANCELLED instead for a disabled account", async function () {
+      user.isDisabled = true;
+      await paypal.updateSubscription("I-TEST");
+      expect(email.ALREADY_CANCELLED).toHaveBeenCalledTimes(1);
+      expect(email.ALREADY_CANCELLED).toHaveBeenCalledWith("test-user");
+      expect(email.CANCELLED).not.toHaveBeenCalled();
+      expect(client.set).not.toHaveBeenCalled();
+    });
+    it("does not email when the save fails", async function () {
+      User.set.and.callFake((id, updates, cb) => cb(new Error("down")));
+      await expectAsync(paypal.updateSubscription("I-TEST")).toBeRejected();
+      expect(client.set).not.toHaveBeenCalled();
+      expect(email.CANCELLED).not.toHaveBeenCalled();
+    });
   });
 });

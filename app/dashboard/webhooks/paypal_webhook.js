@@ -5,6 +5,8 @@ const User = require("models/user");
 const config = require("config");
 const clfdate = require("helper/clfdate");
 const email = require("helper/email");
+const client = require("models/client");
+const key = require("models/user/key");
 const subscriptionLifecycle = require("models/user/subscriptionLifecycle");
 
 const SUBSCRIPTION_EVENTS = [
@@ -16,6 +18,8 @@ const SUBSCRIPTION_EVENTS = [
   "BILLING.SUBSCRIPTION.UPDATED",
   "BILLING.SUBSCRIPTION.CREATED"
 ];
+
+const CANCEL_EMAIL_TTL_SECONDS = 90 * 24 * 60 * 60;
 
 const prefix = () => `${clfdate()} PayPal Webhook:`;
 
@@ -155,13 +159,33 @@ const updateSubscription = async subscriptionID => {
     // access in place until the paid period ends, so send it only with the
     // disable, and only after that write succeeds. A failed write returns
     // 503 and PayPal retries; emailing before the save would resend.
-    const done = err => {
+    // A cancellation that closes nothing gets the cancellation email instead,
+    // claimed in Redis so a retry or a concurrent caller sends it only once.
+    const done = async err => {
       if (err) return reject(err);
 
-      if (shouldDisable && !user.isDisabled && paypal.status === "CANCELLED")
-        email.CLOSED(user.uid);
-      else if (becameCancelled && user.isDisabled)
-        email.ALREADY_CANCELLED(user.uid);
+      try {
+        if (shouldDisable && !user.isDisabled && paypal.status === "CANCELLED")
+          email.CLOSED(user.uid);
+        else if (becameCancelled && user.isDisabled)
+          email.ALREADY_CANCELLED(user.uid);
+        else if (becameCancelled && !shouldDisable) {
+          const claimed = await client.set(
+            key.paypalCancelEmail(user.uid, subscriptionID),
+            "1",
+            { NX: true, EX: CANCEL_EMAIL_TTL_SECONDS }
+          );
+
+          if (claimed) {
+            if (subscriptionLifecycle.isFirstPeriod({ paypal }))
+              email.CANCELLED_FIRST_PERIOD(user.uid);
+            else email.CANCELLED(user.uid);
+          }
+        }
+      } catch (emailErr) {
+        // The save succeeded, so don't fail the webhook over a missed email.
+        console.log(prefix(), "cancellation email error", emailErr);
+      }
 
       resolve();
     };

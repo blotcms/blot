@@ -63,7 +63,12 @@ module.exports = function extend (user) {
   if (user.paypal && user.paypal.status) {
     if (user.paypal.status === "ACTIVE") user.isSubscribed = true;
 
-    if (user.paypal.status === "CANCELLED") user.willCancel = true;
+    // PayPal keeps a cancelled subscription running to the end of the paid
+    // period, like Stripe's cancel_at_period_end, so show the same notice.
+    if (user.paypal.status === "CANCELLED") {
+      user.willCancel = true;
+      user.cancel_at_period_end = true;
+    }
 
     if (
       subscriptionLifecycle.shouldDisableFromPaypalSubscription(user.paypal)
