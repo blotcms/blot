@@ -1,5 +1,6 @@
 const config = require("config");
 const redis = require("redis");
+const AllowlistClientSideCache = require("./redis-cache");
 const { markRedisClientError } = require("helper/redisUnavailable");
 
 const url = `redis://${config.redis.host}:${config.redis.port}`;
@@ -21,12 +22,16 @@ function reconnectStrategy(retries) {
   return Math.min(Math.pow(2, retries) * 50, 2000) + jitter;
 }
 
-function createRedisClient() {
-  const clientSideCache = new redis.BasicClientSideCache({
-    ttl: 0,
-    maxEntries: 3333,
-    evictPolicy: "LRU",
-  });
+// Pass { clientSideCache: false } for a client which never reads cacheable
+// keys (the pubsub subscriber), so Redis does not track anything for it.
+function createRedisClient({ clientSideCache: useCache = true } = {}) {
+  const clientSideCache = useCache
+    ? new AllowlistClientSideCache({
+        ttl: 0,
+        maxEntries: 3333,
+        evictPolicy: "LRU",
+      })
+    : undefined;
 
   const client = redis.createClient({
     url,
@@ -42,7 +47,7 @@ function createRedisClient() {
     clientSideCache,
   });
 
-  clientSideCaches.set(client, clientSideCache);
+  if (clientSideCache) clientSideCaches.set(client, clientSideCache);
   createRedisClient.failFastOnceReady(client);
 
   client.on("error", function (err) {
@@ -129,6 +134,8 @@ createRedisClient.getClientSideCacheStats = function (client) {
   // entryCount/maxEntries is the only signal for how full it actually is.
   stats.entryCount = clientSideCache.size();
   stats.maxEntries = clientSideCache.maxEntries;
+  // Cumulative hits/misses/bypass per key class, see models/redis-cache
+  stats.classStats = JSON.parse(JSON.stringify(clientSideCache.classStats));
   return stats;
 };
 

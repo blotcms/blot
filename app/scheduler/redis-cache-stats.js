@@ -16,6 +16,18 @@ module.exports = function () {
         "redis_cache_stats_error=cache_unavailable"
       );
     } else {
+      // Per key class, only for classes seen so far
+      const classCounts = [];
+      Object.keys(cacheStats.classStats || {}).forEach(function (name) {
+        const c = cacheStats.classStats[name];
+        if (!c.hits && !c.misses && !c.bypass) return;
+        classCounts.push(
+          "redis_cache_" + name + "_hits=" + c.hits,
+          "redis_cache_" + name + "_misses=" + c.misses,
+          "redis_cache_" + name + "_bypass=" + c.bypass
+        );
+      });
+
       console.log(
         clfdate(),
         "[STATS]",
@@ -36,7 +48,8 @@ module.exports = function () {
         // cache of large values can still be far bigger in memory than a
         // full cache of small ones.
         "redis_cache_entryCount=" + cacheStats.entryCount,
-        "redis_cache_maxEntries=" + cacheStats.maxEntries
+        "redis_cache_maxEntries=" + cacheStats.maxEntries,
+        ...classCounts
       );
     }
   } catch (err) {

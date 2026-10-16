@@ -32,8 +32,6 @@ Create infrastructure to curate an explore page (keep it hidden for now)
 
 Create skills to moderate /questions
 
-We should filter and only locally client-side cache redis keys with specific prefixes (this is a blunt tool right now and a large site with many entries would wipe the cache. we want to keep blog info keys super hot and ready) 
-
 Suppress new site admin notification for no subscription change (i.e. user deletes then adds back in a single site)
 
 PayPal end cancellation didn't fire native admin notification for cancellation jesse@xxx 

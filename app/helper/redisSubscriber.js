@@ -12,7 +12,8 @@ function getShared() {
   // A client which has been closed never comes back, so start again
   if (shared && shared.client.isOpen) return shared;
 
-  const client = createRedisClient();
+  // It only subscribes, so there is nothing to cache or track
+  const client = createRedisClient({ clientSideCache: false });
   const state = {
     client,
     // channel -> entry, see subscribe() below
