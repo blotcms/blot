@@ -171,7 +171,15 @@ docker stop --time "$DRAIN_TIMEOUT" "$OLD" >/dev/null
 log "Checking the site through $NEW"
 live_checks "$BASELINE" || die "checks failed after the swap to $NEW_IMAGE"
 
+# Remove the old colour for good. -f because it may be running again: the
+# per-minute health cron restarts a container that goes unhealthy while it
+# drains, and a plain `docker rm` then fails. Left running it would keep taking
+# a share of traffic on reuseport. Verify it is gone while the rollback still
+# applies: a failure here puts $OLD back and removes $NEW, and says so.
+docker rm -f "$OLD" >/dev/null 2>&1 || true
+if exists "$OLD" || running "$OLD"; then
+  die "could not remove $OLD after the swap: it may be serving alongside $NEW"
+fi
 STATE=committed
-docker rm "$OLD" >/dev/null 2>&1 || true
 log "Swapped $OLD -> $NEW"
 prune_old_images "$NEW_IMAGE" || true

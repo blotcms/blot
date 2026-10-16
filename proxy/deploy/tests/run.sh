@@ -53,8 +53,11 @@ case "$1" in
       if [ "$(cat "$FAKE/serving")" = baremetal ]; then rm -f "$R/$n"; else echo container > "$FAKE/serving"; fi
     fi ;;
   stop) n="${!#}"; rm -f "$R/$n"; touch "$FAKE/stopped"
+    # the health cron docker-restarts a draining container that went unhealthy
+    [ "$n" != "${FAKE_COMES_BACK:-}" ] || { touch "$R/$n"; exit 0; }
     [ -n "$(ls "$R" | grep '^blot-proxy-[bg]')" ] || echo none > "$FAKE/serving" ;;
-  rm) n="${!#}"; rm -f "$R/$n" "$FAKE/all/$n"
+  rm) n="${!#}"; [ "$n" != "${FAKE_RM_FAILS:-}" ] || exit 1
+    rm -f "$R/$n" "$FAKE/all/$n"
     [ -n "$(ls "$R" | grep '^blot-proxy-[bg]')" ] || { [ "$(cat "$FAKE/serving")" != container ] || echo none > "$FAKE/serving"; } ;;
   update) [ -z "${FAKE_UPDATE_FAILS:-}" ] || exit 1 ;;
   logs) cat "$FAKE/dlogs/${!#}" 2>/dev/null ;;
@@ -202,7 +205,7 @@ reset container; FAKE_CUSTOM_DOMAINS="" PROXY_SKIP_CERT_SWEEP=1 bluegreen
 check "PROXY_SKIP_CERT_SWEEP=1 skips the comparison" '[ $RC = 0 ] && mentions "not comparing"'
 
 reset container; FAKE_CUSTOM_FP_AFTER_STOP=B bluegreen
-check "a custom-domain certificate differs after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm blot-proxy-blue" && mentions "custom-domain certificates"'
+check "a custom-domain certificate differs after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm -f blot-proxy-blue" && mentions "custom-domain certificates"'
 
 reset container; FAKE_CUSTOM_FP_AFTER_STOP=B FAKE_EXPIRED_DOMAINS="a.custom.test b.custom.test" bluegreen
 check "a custom-domain certificate that has expired and is no longer served is not held against the swap" '[ $RC = 0 ]'
@@ -256,8 +259,8 @@ sed -i.bak '/^PROXY_RESOLVER=/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
 echo "blue-green.sh"
 
 reset container; bluegreen
-check "success: green starts, blue drains and is only removed afterwards" '[ $RC = 0 ] && before "docker start blot-proxy-green" "docker stop --time 30 blot-proxy-blue" && before "docker stop --time 30" "docker rm blot-proxy-blue"'
-check "success: green gets its restart policy before blue is removed" 'before "docker update --restart unless-stopped blot-proxy-green" "docker rm blot-proxy-blue" && serving container'
+check "success: green starts, blue drains and is only removed afterwards" '[ $RC = 0 ] && before "docker start blot-proxy-green" "docker stop --time 30 blot-proxy-blue" && before "docker stop --time 30" "docker rm -f blot-proxy-blue"'
+check "success: green gets its restart policy before blue is removed" 'before "docker update --restart unless-stopped blot-proxy-green" "docker rm -f blot-proxy-blue" && serving container'
 check "success: green also gets the CDN static mount and the fd ulimit" \
   'called "docker create --restart no --name blot-proxy-green --network host --cap-add SYS_NICE --ulimit nofile=65536:65536" \
    && called "-v /var/www/blot/app/blog/static:/var/www/blot/app/blog/static:ro"'
@@ -266,10 +269,10 @@ reset container; FAKE_UNHEALTHY=blot-proxy-green bluegreen
 check "new colour never healthy: old one is never stopped" '[ $RC != 0 ] && ! called "docker stop" && called "docker rm -f blot-proxy-green" && serving container'
 
 reset container; FAKE_FAIL_AFTER_STOP=1 bluegreen
-check "checks fail after the old one stops: old one restarted, new removed" '[ $RC != 0 ] && after_last "docker start blot-proxy-blue" "docker stop" && called "docker rm -f blot-proxy-green" && ! called "docker rm blot-proxy-blue"'
+check "checks fail after the old one stops: old one restarted, new removed" '[ $RC != 0 ] && after_last "docker start blot-proxy-blue" "docker stop" && called "docker rm -f blot-proxy-green" && ! called "docker rm -f blot-proxy-blue"'
 
 reset container; FAKE_UPDATE_FAILS=1 bluegreen
-check "restart policy cannot be set: the old one is never stopped, the new one is removed" '[ $RC != 0 ] && ! called "docker stop" && after_last "docker rm -f blot-proxy-green" "docker update" && ! called "docker rm blot-proxy-blue" && serving container'
+check "restart policy cannot be set: the old one is never stopped, the new one is removed" '[ $RC != 0 ] && ! called "docker stop" && after_last "docker rm -f blot-proxy-green" "docker update" && ! called "docker rm -f blot-proxy-blue" && serving container'
 
 reset container; bluegreen
 check "success: the new colour is restartable BEFORE the old one is stopped" '[ $RC = 0 ] && before "docker update --restart unless-stopped blot-proxy-green" "docker stop"'
@@ -347,13 +350,19 @@ if [ "$(id -u)" != 0 ]; then # root ignores file modes
 fi
 
 reset container; FAKE_REDIS_DOWN=1 bluegreen
-check "Redis unreachable after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm blot-proxy-blue"'
+check "Redis unreachable after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm -f blot-proxy-blue"'
 
 reset container; FAKE_UPSTREAM_DOWN=8089 bluegreen
-check "master upstream unreachable after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm blot-proxy-blue"'
+check "master upstream unreachable after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm -f blot-proxy-blue"'
 
 reset container; touch "$FAKE/running/blot-proxy-green" "$FAKE/all/blot-proxy-green"; bluegreen
 check "both colours running: refused, nothing touched" '[ $RC != 0 ] && ! called "docker create" && ! called "docker stop" && ! called "docker rm" && mentions "both running"'
+
+reset container; FAKE_COMES_BACK=blot-proxy-blue bluegreen
+check "old colour restarted by the health cron while draining: still removed, not left serving" '[ $RC = 0 ] && called "docker rm -f blot-proxy-blue" && ! [ -e "$FAKE/running/blot-proxy-blue" ] && [ -e "$FAKE/running/blot-proxy-green" ]'
+
+reset container; FAKE_RM_FAILS=blot-proxy-blue bluegreen
+check "old colour cannot be removed: fails loudly and rolls back to it" '[ $RC != 0 ] && mentions "could not remove blot-proxy-blue" && called "docker start blot-proxy-blue" && called "docker rm -f blot-proxy-green"'
 
 reset container; FAKE_PURGE_FAIL=1 bluegreen
 check "purge endpoint lost after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue"'

@@ -34,6 +34,10 @@ ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "rm -rf /home/ec2-user/script
 scp -P "$SSH_PORT" -i $SSH_KEY -r $SCRIPTS_DIRECTORY ec2-user@$PUBLIC_IP:/home/ec2-user/scripts
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "chmod +x /home/ec2-user/scripts/*"
 
+# cron runs the health check from /usr/local/bin, not ~/scripts
+echo "Installing check_docker_health.sh to /usr/local/bin on $PUBLIC_IP"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo install -m 755 /home/ec2-user/scripts/check_docker_health.sh /usr/local/bin/check_docker_health.sh"
+
 # Install (or update) the mount-instance-store unit and the docker.service
 # drop-in that gates on it, so docker cannot (re)start at boot against the
 # not-yet-mounted, empty /var/instance-ssd. Only installs files +

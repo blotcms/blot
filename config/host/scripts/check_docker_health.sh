@@ -3,7 +3,8 @@
 # container unhealthy, it never restarts it for that, so this runs from cron
 # every minute and appends to ~/docker-health-check.log.
 #
-# Install: cp to /usr/local/bin/check_docker_health.sh on the app host.
+# Install: `npm run deploy-host` copies it to /usr/local/bin/check_docker_health.sh
+# (the path cron runs); the copy in ~/scripts is not the one that runs.
 #
 # Before restarting, it logs the container's last health probes (with their
 # output and timing) and its memory use. Docker keeps only the last five
@@ -12,6 +13,15 @@
 
 # Get unhealthy containers
 unhealthy_containers=$(docker ps --format "{{.Names}}" --filter "health=unhealthy")
+
+# A proxy deploy (proxy/deploy/blue-green.sh) holds this lock for its whole run
+# and drains the old colour with `docker stop`, during which its healthcheck
+# goes unhealthy. Restarting it then brings the old colour back to life next to
+# the new one, so leave the proxy containers alone while the lock is held.
+PROXY_DEPLOY_LOCK="${PROXY_DEPLOY_LOCK:-/tmp/blot-proxy-deploy.lock}"
+if [ -e "$PROXY_DEPLOY_LOCK" ] && ! flock -n "$PROXY_DEPLOY_LOCK" true 2>/dev/null; then
+    unhealthy_containers=$(echo "$unhealthy_containers" | grep -v '^blot-proxy-')
+fi
 
 # If there are any unhealthy containers, restart them
 if [ ! -z "$unhealthy_containers" ]; then

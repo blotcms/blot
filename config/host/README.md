@@ -70,8 +70,10 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
   `/etc/cron.d/blot-wildcard-renewal`, `/etc/blot/wildcard-ssl-env.sh` and
   `/usr/local/bin/acme-nginx`; none of them is used any more.
 - `check_docker_health.sh` restarts containers Docker reports as unhealthy. It
-  is run from cron every minute (see its header); `deploy.sh` does not install
-  that entry.
+  is run from cron every minute as `/usr/local/bin/check_docker_health.sh`
+  (`deploy.sh` copies it there, but does not install the cron entry). It skips
+  `blot-proxy-*` while a proxy deploy holds its lock, so it cannot restart the
+  old colour while it drains.
 - Custom-domain certificates need nothing on the host: the proxy container
   renews them and refuses to serve an expired one (see `proxy/README.md`).
   `identify-expiring-certs.sh` and `purge-expired-ssl.sh`, which deleted
