@@ -59,18 +59,15 @@ containers without a restart. `deploy.sh` also removes the legacy
 
 The install paths are load-bearing: `mount-instance-store.service` hardcodes
 `/home/ec2-user/scripts/mount-instance-store.sh` (likewise
-`mount-data-volume.service` and `mount-data-volume.sh`), cron calls
-`/home/ec2-user/scripts/renew-wildcard-ssl.sh`.
+`mount-data-volume.service` and `mount-data-volume.sh`).
 
 ## Scripts and cron
 
-- `renew-wildcard-ssl.sh` renews the wildcard certificate, writes it to Redis
-  and reloads the proxy. It reads `/etc/blot/wildcard-ssl-env.sh` on the host.
-  It runs daily from `/etc/cron.d/blot-wildcard-renewal` (`0 1 * * * root
-  /home/ec2-user/scripts/renew-wildcard-ssl.sh >> /home/ec2-user/renew-wildcard.log`),
-  which was written by the old bare-metal `setup.sh` when the host was built
-  (see below), not by `deploy.sh`. It fails (non-zero exit, before it writes
-  to Redis) if no proxy container is running.
+- The wildcard certificate is not renewed from the host: the app's scheduler
+  does it (`app/scheduler/renew-wildcard-ssl.js`) and the proxy reads it from
+  Redis. A host built before then may still have the retired cron entry
+  `/etc/cron.d/blot-wildcard-renewal`, `/etc/blot/wildcard-ssl-env.sh` and
+  `/usr/local/bin/acme-nginx`; none of them is used any more.
 - `check_docker_health.sh` restarts containers Docker reports as unhealthy. It
   is run from cron every minute (see its header); `deploy.sh` does not install
   that entry.
@@ -95,11 +92,9 @@ and what still depends on it. `deploy.sh` does not install any of it.
 - Installed the `redis6` package (the host's `redis-cli`, which
   `proxy/deploy/common.sh` and `try-issuance.sh` need) and `nvme-cli` (used by
   `mount-instance-store.sh`).
-- Installed `cronie` and wrote `/etc/cron.d/blot-wildcard-renewal`, which runs
-  `/home/ec2-user/scripts/renew-wildcard-ssl.sh` daily at 01:00 as root, logging
-  to `/home/ec2-user/renew-wildcard.log`. **The container host still relies on
-  this**: nothing else renews the wildcard certificate, so a rebuilt host needs
-  `cronie` running and that file recreated by hand.
+- Installed `cronie` and wrote `/etc/cron.d/blot-wildcard-renewal`, which ran
+  `renew-wildcard-ssl.sh` daily. That job moved into the app's scheduler, so a
+  rebuilt host does not need the file.
 - Wrote the wildcard certificate and key from Redis (`blot:openresty:ssl:pem`
   and `blot:openresty:ssl:key`) to `/etc/ssl/private/letsencrypt-domain.pem` and
   `.key`, the directory the proxy container mounts read-only. On a rebuilt host

@@ -95,9 +95,12 @@ export BLOT_STORAGE_REGION=us-west-2
 # Only for a simulated S3 such as MinIO in development
 export BLOT_STORAGE_ENDPOINT=
 
-# AWS for controlling route 53 for wildcard SSL certficate
-export AWS_ACCESS_KEY_ID=
-export AWS_SECRET_ACCESS_KEY=
+# Route 53 hosted zone of BLOT_HOST, where the scheduler answers the DNS
+# challenge to renew the wildcard certificate (uses BLOT_AWS_KEY above). To try
+# it against Let's Encrypt staging set BLOT_ACME_DIRECTORY_URL to
+# https://acme-staging-v02.api.letsencrypt.org/directory
+export BLOT_WILDCARD_SSL_HOSTED_ZONE_ID=
+export BLOT_ACME_DIRECTORY_URL=
 
 # Mailgun for sending emails to customers
 export BLOT_MAILGUN_KEY=

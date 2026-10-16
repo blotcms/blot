@@ -31,7 +31,9 @@
   },
   "version": "0.0.0",
   "dependencies": {
+    "@aws-sdk/client-route-53": "3.1136.0",
     "@aws-sdk/client-s3": "3.1136.0",
+    "acme-client": "5.4.0",
     "archiver": "5.3.0",
     "async": "2.6.4",
     "bcryptjs": "2.4.3",

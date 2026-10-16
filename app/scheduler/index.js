@@ -17,6 +17,7 @@ const zombies = require("./zombies");
 const checkCardTesters = require("./check-card-testers");
 const subscriptionLifecycleJob = require("./subscription-lifecycle");
 const checkSSLCertificates = require("./check-ssl-certificates");
+const renewWildcardSSL = require("./renew-wildcard-ssl");
 const checkRedisHost = require("./check-redis-host");
 const sweepGit = require("./sweep-git");
 const pruneTmp = require("./prune-tmp");
@@ -257,6 +258,27 @@ module.exports = function () {
       console.log(clfdate(), "No suspected fraudulent users found");
     } else {
       email.SUSPECTED_FRAUD(null, { customers });
+    }
+  });
+
+  // Renews the wildcard certificate in Redis when it has under 30 days left;
+  // a failure is logged here and, if it persists, check-ssl-certificates below
+  // emails once the certificate is under 21 days.
+  console.log(clfdate(), "Scheduled daily renewal of the wildcard SSL certificate");
+  lock.cron("renew-wildcard-ssl", { hour: 1, minute: 0 }, async function () {
+    try {
+      const result = await renewWildcardSSL();
+
+      if (!result.renewed) {
+        console.log(
+          clfdate(),
+          "Wildcard SSL: certificate has",
+          result.daysLeft,
+          "days left, not renewing"
+        );
+      }
+    } catch (err) {
+      console.error(clfdate(), "Error: Renewing the wildcard SSL certificate", err);
     }
   });
 

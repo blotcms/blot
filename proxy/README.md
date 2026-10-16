@@ -96,7 +96,7 @@ start).
   a handshake that yields in `ssl_certificate_by_lua` breaks HTTP/3
   ([openresty#1049](https://github.com/openresty/openresty/issues/1049)).
   Writers should set the key and the chain together (`MSET`, as
-  `renew-wildcard-ssl.sh` does): the proxy reads both with one `MGET`, but a
+  `app/scheduler/renew-wildcard-ssl.js` does with one `multi()`): the proxy reads both with one `MGET`, but a
   pair written one after the other can be read half-updated. If
   lua-resty-openssl is installed the proxy also rejects a key that does not
   match the certificate. If Redis cannot be reached, answers slowly (500ms

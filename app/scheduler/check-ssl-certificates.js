@@ -5,8 +5,10 @@
 // only logs failures, so a certificate under 25 days has had about five failed
 // attempts. We warn long before the certificate expires and auto-ssl deletes it.
 //
-// The wildcard certificate for *.<host> is renewed by
-// config/host/scripts/renew-wildcard-ssl.sh, which writes it to Redis.
+// The wildcard certificate for *.<host> is renewed daily from 30 days left by
+// app/scheduler/renew-wildcard-ssl.js, which writes it to Redis; the proxy
+// reads it from there. So this alerts (below 21 days) after about nine failed
+// renewals, whose errors are in the app log.
 //
 // Print the report without sending email:
 //   NODE_PATH=app node app/scheduler/check-ssl-certificates.js

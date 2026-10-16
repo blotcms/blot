@@ -219,6 +219,17 @@ module.exports = {
     secret: process.env.BLOT_AWS_SECRET,
   },
 
+  // Renewal of the wildcard certificate for BLOT_HOST and *.BLOT_HOST
+  // (app/scheduler/renew-wildcard-ssl.js). It answers the ACME DNS-01
+  // challenge in this Route 53 hosted zone, using the credentials in aws above.
+  // Point the directory URL at Let's Encrypt staging to try it without limits.
+  wildcardSSL: {
+    hostedZoneId: process.env.BLOT_WILDCARD_SSL_HOSTED_ZONE_ID || "",
+    directoryUrl:
+      process.env.BLOT_ACME_DIRECTORY_URL ||
+      "https://acme-v02.api.letsencrypt.org/directory",
+  },
+
   // The S3 bucket behind app/storage. Today it holds generated per-blog
   // assets (app/storage/assets.js), their only home, keyed {blogID}/{path},
   // identical to the public CDN path. The app refuses to start without a

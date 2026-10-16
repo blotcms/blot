@@ -89,7 +89,7 @@ for round in 1 2; do
 done
 docker logs "$PROXY" 2>&1 | grep -q "cannot read certificate for $TEST_DOMAIN from redis"
 
-# A reload (as renew-wildcard-ssl.sh does) keeps the shared dicts
+# A reload keeps the shared dicts
 docker exec "$PROXY" /usr/local/openresty/bin/openresty -s reload
 sleep "$PAST_TTL"
 expect_issued_cert

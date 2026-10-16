@@ -11,6 +11,7 @@ describe("scheduler", function () {
     "disk-usage-report",
     "subscription-lifecycle",
     "check-card-testers",
+    "renew-wildcard-ssl",
     "check-ssl-certificates",
     "check-redis-host",
     "sweep-git",

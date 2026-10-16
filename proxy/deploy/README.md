@@ -55,16 +55,14 @@ connection) and the config's own `worker_rlimit_nofile 20480`
    user an ACL rather than making it world-readable:
    `sudo setfacl -m u:deploy:r /etc/blot/proxy.env`
    ([`setup-deploy-user.sh`](../../scripts/deploy/setup-deploy-user.sh) does this if the file already exists).
-3. **The certificate-renewal helpers.** The proxy serves the wildcard
-   certificate from Redis (within seconds of a renewal, no reload needed;
-   see [`../README.md`](../README.md)) and uses the file only as a fallback.
-   `config/host/scripts/renew-wildcard-ssl.sh` still reloads the container after renewing; install it with `npm run deploy-host`.
-   See [`config/host/README.md`](../../config/host/README.md) for the cron entry
-   that runs it, which the bare-metal setup wrote and `deploy.sh` does not.
+3. **The wildcard certificate** is renewed by the app's scheduler
+   (`app/scheduler/renew-wildcard-ssl.js`), not from the host. The proxy
+   serves it from Redis (within seconds of a renewal, no reload needed; see
+   [`../README.md`](../README.md)) and uses the file only as a fallback.
 4. Optionally run the scripts with `PROXY_CUSTOM_DOMAIN=<a real custom domain>` set:
    it adds a domain whose certificate comes from Redis to every before/after
    comparison. This is in addition to the sweep below, which always runs.
-5. `redis-cli` must be on the host (the renewal scripts already use it).
+5. `redis-cli` must be on the host.
 
 ## Custom-domain certificates
 

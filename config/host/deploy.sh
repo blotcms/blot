@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# Host setup for the production proxy host: the certificate and health-check
-# scripts in ./scripts, systemd ordering, fail2ban, logrotate, sshd and
+# Host setup for the production proxy host: the certificate-cleanup and
+# health-check scripts in ./scripts, systemd ordering, fail2ban, logrotate, sshd and
 # .bashrc. The proxy itself is a container: deploy it with
 # `npm run deploy-proxy` (scripts/deploy/proxy.sh). Run it with
 # `npm run deploy-host`; see README.md in this directory.
