@@ -2,7 +2,18 @@ describe("templates startup build locks", function () {
   const lock = require("helper/lock");
   const fsExtra = require("fs-extra");
   const Template = require("models/template");
+  const { dirname, resolve } = require("path");
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // fs-extra is shared by the whole process (the documentation watcher and
+  // build read directories too), so only fake reads of the templates source.
+  const SOURCE = resolve(dirname(require.resolve("templates")), "source");
+  const fakeSourceReaddir = (original, fake) =>
+    function (directory) {
+      if (resolve(String(directory)) !== SOURCE)
+        return original.apply(this, arguments);
+      return fake();
+    };
 
   describe("templates()", function () {
     let originalReaddirSync;
@@ -15,7 +26,7 @@ describe("templates startup build locks", function () {
 
       // No template directories, so the pass is a no-op that still reaches
       // checkForExtinctTemplates (which lists templates once per pass).
-      fsExtra.readdirSync = () => [];
+      fsExtra.readdirSync = fakeSourceReaddir(originalReaddirSync, () => []);
       getTemplateList = jasmine
         .createSpy("getTemplateList")
         .and.callFake((_owner, callback) => callback(null, []));
@@ -65,9 +76,9 @@ describe("templates startup build locks", function () {
     it("passes a synchronous build error to the callback once", async function () {
       const templates = require("templates");
       const original = fsExtra.readdirSync;
-      fsExtra.readdirSync = () => {
+      fsExtra.readdirSync = fakeSourceReaddir(original, () => {
         throw new Error("cannot read directory");
-      };
+      });
       let calls = 0;
 
       try {
