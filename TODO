@@ -16,7 +16,6 @@ Add a new template which just looks like finder on the index page
 
 Set aside 16 Oct (from the 15 Oct latency + deploy-error review):
 - Isolate slow sites: one site's CPU-heavy renders stall every blog on yellow's event loop (15 Oct 18:26-18:33, a client crawling nashp entries at 3-4 r/s under the 6 r/s per-IP limit; again 20:56). Options: per-host concurrency cap on upstream misses (worry: image-heavy pages), route known-heavy hosts to their own pool via map $host, or cut the render cost (nashp, #1806)
-- Find out why 5 internal /purge requests got 503 during the 09:06 15 Oct proxy swap
 - Find out what closes yellow's upstream connections after ~1s ("upstream prematurely closed", 502 at st~1.0s, no retry since it's past next_upstream_timeout 800ms) under load and during yellow's deploy stop
 
 Publish Node container ports on loopback only: docker-proxy binds 8088-8090 on 0.0.0.0 and :: (scripts/deploy/util/generateDockerCommand.js emits -p 808x:8080), but the proxy only connects to 127.0.0.1. Use -p 127.0.0.1:808x:8080
