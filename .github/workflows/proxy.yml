@@ -82,9 +82,9 @@ jobs:
               grep -q "Blot-Server. .eu. always" $conf
               grep -q "resolver 127.0.0.11;" $conf
               grep -q "listen 127.0.0.2:8077 reuseport;" $conf
-              grep -q "server 10.0.0.1:9089 weight=100;" $conf
-              grep -q "server 10.0.0.2:9088 weight=100;" $conf
-              grep -q "server 10.0.0.3:9090 weight=100;" $conf
+              grep -q "server 10.0.0.1:9089 weight=100 max_fails=0;" $conf
+              grep -q "server 10.0.0.2:9088 weight=100 max_fails=0;" $conf
+              grep -q "server 10.0.0.3:9090 weight=100 max_fails=0;" $conf
               if grep -q "\${PROXY_" $conf; then echo "unsubstituted placeholder"; exit 1; fi
               /usr/local/openresty/bin/openresty -t
             '
