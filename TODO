@@ -118,7 +118,7 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - Get proxy horizontally scalable and multi-region
 - Can we add modern compression to proxy?
 - Can the proxy remember bad urls and avoid repeatedly sending them to upstream?
-- container equivalent for fail2ban?
+- Replace host logrotate (config/host/logrotate/nginx-{access,error}: rotate 0 + copytruncate, i.e. truncate at 150M) with an ngx.timer in the proxy that truncates access.log/error.log over a size cap; check workers (ec2-user) can write the log files. fail2ban stays on the host
 - Tune proxy next upstream status code conditions to preserve zero-downtime-deployments but prevent expensive requests (timeout?)
 - Add support for IPv6 and tell [Raul](https://mail.google.com/mail/u/0/#inbox/167083384282a5df)
 - Verify that nginx config serves as many CDN static files as possible
