@@ -1,6 +1,8 @@
 
 Add a new template which just looks like finder on the index page
 
+Add to GitHub prs bright colored tags based on deployment if they are non-simple deploy node action
+
 Set aside 16 Oct (from the 15 Oct latency + deploy-error review):
 - Isolate slow sites: one site's CPU-heavy renders stall every blog on yellow's event loop (15 Oct 18:26-18:33, a client crawling nashp entries at 3-4 r/s under the 6 r/s per-IP limit; again 20:56). Options: per-host concurrency cap on upstream misses (worry: image-heavy pages), route known-heavy hosts to their own pool via map $host, or cut the render cost (nashp, #1806)
 - Confirm the 65s keepalive (a4c4fb482) fixed yellow's "upstream prematurely closed" 502s at st~1.0s (no retry, past next_upstream_timeout 800ms). Checked 16 Oct: 28 such 502s on 15 Oct, each ending at an event-loop stall, none on 16 Oct despite stalls continuing (504s at 02:51, 05:06, 15:33). Suspected cause: Node's 5s idle-socket timer fires during a stall and destroys a socket with a request already queued. Not proven: unknown which image ran 20:06 15 Oct to 14:38 16 Oct, and no Node-side log of the close. Close this once a heavy burst passes on the new image with no 502, or reproduce locally (old 5s timeout, block the loop ~1s on an idle keep-alive socket, send a request). Deploy stop: 14:38 16 Oct retried cleanly onto blue; 20:05 15 Oct gave two unretryable Dropbox-webhook POST 502s (docker-proxy accepts then drops); the Unix socket (#2119) should remove that
@@ -23,7 +25,6 @@ From 22 Oct: delete snap-02793374b4e56ea7b, the pre-resize snapshot of the 15 Oc
 
 Investigate slow creep of green's baseline heap (~40-80MB/day lowest heapUsed in [STATS], never resets until a V8 OOM crash; crashed 13+14 Oct 2026). Leak or unbounded cache? Compare heap snapshots taken hours apart
 - Spikes from heavy post builds (e.g. blog_825ed2a 'All paths', ~250MB) only crash it once the baseline has crept up
-
 
 How could we generate the directory tree structure used in the hypertext template sidebar on the Server in the template engine
 
@@ -82,6 +83,8 @@ We get two emails one after the other and we should only get one
 - User account has been closed after for late payments
 
 Should we do a hybrid static build into s3 for blog HTML JS and CSS only?
+
+Add a list of billing history / invoices to subscription page
 
 Data volume follow-ups (shrunk to gp3 on 9 Oct, again on 15 Oct after data/static moved to S3, with config/host/data-volume/resize.sh; see the data-volume skill):
 - Can we test my assumption that the ephemeral instance store hard disk is faster than EBS discs?
