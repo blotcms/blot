@@ -1,3 +1,9 @@
+Proxy deploy can leave the old colour running (16 Oct 2026): while blue-green.sh drains it (docker stop --time 30, openresty -s quit) its healthcheck goes unhealthy ~24s in, ec2-user's per-minute check_docker_health.sh (/usr/local/bin) docker-restarts it, and the later `docker rm "$OLD" || true` fails silently, so both colours serve on reuseport
+- blue-green.sh: once committed, remove the old colour with rm -f (or verify it's gone and fail loudly); keep the rollback path working
+- check_docker_health.sh: don't restart a container a deploy is stopping (e.g. skip blot-proxy-* while the proxy deploy lock is held); check the node deploy for the same exposure
+- The cron runs /usr/local/bin/check_docker_health.sh but deploy-host uploads it to ~/scripts: make sure the fix lands where the cron runs it
+- Test case in proxy/deploy/tests/run.sh: the old colour comes back during the checks
+
 Build queue and worker process (#2119; one host for now, multi-host later). Goal: the web Node process never runs syncs, builds or client background jobs, so dashboard and sites stay snappy and every unit is identical
 - Queue per blog, not per file: ZADD sync:pending NX <now> <blogID> collapses repeat webhooks (Dropbox sent ~19k on 15-16 Oct) to one entry. Workers BZPOPMIN, take the existing per-blog sync lock, and re-add with a short delay if it's held. This replaces the per-process pendingResyncs sets a deploy loses. Plain commands, no Lua
 - Web process only enqueues: Drive/Dropbox/iCloud webhooks, git post-receive, dashboard rebuild/resync. Flows that await a sync inline (Drive/Dropbox setup, resync) become enqueue + status updates
