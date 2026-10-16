@@ -89,6 +89,10 @@ if [ "${ALLOW_STDOUT_LOGS:-}" != "1" ]; then
     || die "$NEW_IMAGE logs to stdout, so fail2ban would see nothing. Build with LOG_TO_STDOUT=false (ALLOW_STDOUT_LOGS=1 to override)"
 fi
 
+# Before the new colour takes any traffic: a wrong or missing PROXY_UPSTREAM_*
+# (e.g. a unix: socket path) would otherwise only show after $OLD is stopped
+upstreams_reachable || die "an upstream in $ENV_FILE is not healthy: not deploying"
+
 if [ -n "$OLD" ]; then
   BASELINE=$(snapshot)
   all_ok "$BASELINE" || die "the site is not healthy before the deploy [$BASELINE]: not swapping"

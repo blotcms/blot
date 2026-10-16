@@ -353,7 +353,15 @@ reset container; FAKE_REDIS_DOWN=1 bluegreen
 check "Redis unreachable after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm -f blot-proxy-blue"'
 
 reset container; FAKE_UPSTREAM_DOWN=8089 bluegreen
-check "master upstream unreachable after the swap: rolled back" '[ $RC != 0 ] && called "docker start blot-proxy-blue" && ! called "docker rm -f blot-proxy-blue"'
+check "upstream unreachable: refused in preflight, before the new colour exists" '[ $RC != 0 ] && ! called "docker create" && ! called "docker stop"'
+
+reset container; bluegreen
+check "TCP upstreams (the default): /run/blot is not mounted into the proxy" '[ $RC = 0 ] && ! called "/run/blot"'
+
+reset container; cp "$T/proxy.env" "$T/proxy.env.tcp"
+printf 'PROXY_UPSTREAM_BLUE=unix:/run/blot/blue.sock\nPROXY_UPSTREAM_GREEN=unix:/run/blot/green.sock\nPROXY_UPSTREAM_YELLOW=unix:/run/blot/yellow.sock\n' >> "$T/proxy.env"
+bluegreen; cp "$T/proxy.env.tcp" "$T/proxy.env"
+check "unix: upstreams: /run/blot is bind-mounted and each socket is checked" '[ $RC = 0 ] && called "create.*--mount type=bind,source=/run/blot,target=/run/blot" && called "curl.*--unix-socket /run/blot/green.sock http://localhost/health"'
 
 reset container; touch "$FAKE/running/blot-proxy-green" "$FAKE/all/blot-proxy-green"; bluegreen
 check "both colours running: refused, nothing touched" '[ $RC != 0 ] && ! called "docker create" && ! called "docker stop" && ! called "docker rm" && mentions "both running"'
