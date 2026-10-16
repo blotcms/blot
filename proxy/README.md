@@ -79,9 +79,33 @@ on any change under `proxy/` (plus `package.json` and
 
 `lua-resty-auto-ssl` issues a certificate on the first HTTPS request for a
 custom blog domain and stores it in Redis (`storage_adapter = redis`). The
-wildcard `*.blot.im` / `blot.im` certificate is still a static file mounted
-over `/etc/ssl/private/letsencrypt-domain.{pem,key}` (the image ships a
-self-signed placeholder so OpenResty can start).
+wildcard `*.blot.im` / `blot.im` certificate is served from Redis (below),
+with a static file mounted over `/etc/ssl/private/letsencrypt-domain.{pem,key}`
+as the fallback (the image ships a self-signed placeholder so OpenResty can
+start).
+
+- **The wildcard certificate**: [`config/wildcard_cert.lua`](config/wildcard_cert.lua)
+  runs in `ssl_certificate_by_lua` (from a shared dict only, see below) on the wildcard server blocks and presents
+  the chain in `blot:openresty:ssl:pem` and the key in `blot:openresty:ssl:key`,
+  so a renewal that writes them takes effect with no reload. Redis is the
+  source of truth; the file is only used when Redis has nothing usable. One
+  worker (id 0) reads Redis from a timer every 10 seconds, so a renewal is served within
+  about ten seconds,
+  and publishes the validated chain and key to the `wildcard_cert` shared dict
+  as one value. Handshakes only read that dict and never touch Redis, because
+  a handshake that yields in `ssl_certificate_by_lua` breaks HTTP/3
+  ([openresty#1049](https://github.com/openresty/openresty/issues/1049)).
+  Writers should set the key and the chain together (`MSET`, as
+  `renew-wildcard-ssl.sh` does): the proxy reads both with one `MGET`, but a
+  pair written one after the other can be read half-updated. If
+  lua-resty-openssl is installed the proxy also rejects a key that does not
+  match the certificate. If Redis cannot be reached, answers slowly (500ms
+  timeouts), has no certificate or key, or has one that does not parse, the
+  proxy keeps serving the last copy read from Redis (the file if there is
+  none, or if Redis answered with no keys), logs one line per run of failures
+  (`wildcard cert: ...`), and tries again after ten seconds. A cached copy that OpenSSL then refuses is dropped, so handshakes
+  fall back to the file. Custom domains are unaffected; they use auto-ssl
+  below. Checked by [`e2e/wildcard-cert-checks.sh`](e2e/wildcard-cert-checks.sh).
 
 - **Which domains are allowed**: `allow_domain` in
   [`config/init.conf`](config/init.conf) returns true only if

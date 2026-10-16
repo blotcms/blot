@@ -70,7 +70,34 @@ done
 # We store the key and pem in redis so that the openresty reload script can fetch them
 echo "[`date -u +%Y-%m-%dT%T.%3NZ`] Beginning storage of key and pem in redis"
 
-cat /etc/ssl/private/letsencrypt-domain.key | redis-cli -h $BLOT_REDIS_HOST -x set 'blot:openresty:ssl:key'
-cat /etc/ssl/private/letsencrypt-domain.pem | redis-cli -h $BLOT_REDIS_HOST -x set 'blot:openresty:ssl:pem'
+# One MSET, so the proxy (which reads the key and the pem with one MGET) can
+# never see a new key next to the old pem. It is sent as RESP over
+# `redis-cli --pipe`, with the PEMs on stdin, so the private key never appears
+# in a process listing.
+resp_bulk_file() { # resp_bulk_file <file>
+  printf '$%s\r\n' "$(wc -c < "$1" | tr -d ' ')"
+  cat "$1"
+  printf '\r\n'
+}
+resp_bulk_string() { # resp_bulk_string <string>
+  printf '$%s\r\n%s\r\n' "${#1}" "$1"
+}
 
-redis-cli -h $BLOT_REDIS_HOST set 'blot:openresty:ssl:updated' $(date -u +%s)
+updated=$(date -u +%s)
+result=$(
+  {
+    printf '*7\r\n'
+    resp_bulk_string MSET
+    resp_bulk_string 'blot:openresty:ssl:key'
+    resp_bulk_file /etc/ssl/private/letsencrypt-domain.key
+    resp_bulk_string 'blot:openresty:ssl:pem'
+    resp_bulk_file /etc/ssl/private/letsencrypt-domain.pem
+    resp_bulk_string 'blot:openresty:ssl:updated'
+    resp_bulk_string "$updated"
+  } | redis-cli -h $BLOT_REDIS_HOST --pipe
+)
+echo "$result"
+echo "$result" | grep -q 'errors: 0, replies: 1' || {
+  echo "[`date -u +%Y-%m-%dT%T.%3NZ`] ERROR: storing the key and pem in redis failed" >&2
+  exit 1
+}
