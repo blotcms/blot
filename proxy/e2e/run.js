@@ -1,6 +1,6 @@
 // End-to-end checks that drive requests THROUGH the proxy container to the
 // Blot app container. No dependencies - plain node. Run by
-// .github/workflows/integration.yml after `docker compose up`.
+// .github/workflows/app-e2e.yml after `docker compose up`.
 //
 //   PROXY_ORIGIN   base URL of the proxy (default https://127.0.0.1)
 //   BLOT_HOST      Host header the proxy routes the site on (default localhost)
@@ -116,7 +116,30 @@ async function request(path, opts = {}, max = 5) {
   return res;
 }
 
+// The stack is up (compose waited for health checks) before the first check
+// runs, but "up" is not "answering through the proxy": wait a bounded time for
+// the site host to get a non-5xx answer via the proxy, then fail loudly, so a
+// stack that never became ready is one clear error rather than a wall of 502s.
+async function waitForUpstream(timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs;
+  let last = "no response";
+  while (Date.now() < deadline) {
+    try {
+      const res = await once("/");
+      if (res.status < 500) return true;
+      last = "status " + res.status;
+    } catch (err) {
+      last = err.message;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  console.log("  FAIL - upstream never became ready through the proxy ->", last);
+  return false;
+}
+
 (async function main() {
+  if (!(await waitForUpstream())) process.exit(1);
+
   // 1. The proxy answers its own health check.
   const health = await request("/health");
   check("proxy /health returns 200", health.status === 200, "got " + health.status);

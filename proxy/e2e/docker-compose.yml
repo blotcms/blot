@@ -2,7 +2,7 @@ name: blot-proxy-e2e
 
 # Brings up the proxy container in front of a real Blot app container so
 # proxy/e2e/run.js can drive requests through it. See
-# .github/workflows/integration.yml.
+# .github/workflows/app-e2e.yml.
 #
 # Everything runs on the host network so the proxy's hard-coded upstream
 # addresses (127.0.0.1:8088-8091) resolve with no extra plumbing. Meant for a
@@ -67,6 +67,15 @@ services:
         for p in 8088 8089 8090 8091; do
           socat TCP-LISTEN:$$p,fork,reuseaddr TCP:127.0.0.1:8081 &
         done; wait
+    # Ready once all four upstream ports accept connections, so the proxy
+    # never starts ahead of them.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - for p in 8088 8089 8090 8091; do nc -z 127.0.0.1 $$p || exit 1; done
+      interval: 1s
+      timeout: 3s
+      retries: 30
     depends_on:
       app:
         condition: service_healthy
@@ -85,6 +94,8 @@ services:
       - auto-ssl:/etc/resty-auto-ssl
     depends_on:
       app:
+        condition: service_healthy
+      upstream-mux:
         condition: service_healthy
 
 volumes:

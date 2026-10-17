@@ -7,9 +7,15 @@ on:
         description: "Optional commit hash or short code on master (defaults to the dispatched commit)"
         required: false
         default: ""
+      skip_checks:
+        description: "Deploy even if CI for the commit hasn't passed (emergencies only)"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
+  actions: read # To read CI results for the target commit
 
 env:
   REGISTRY_URL: ghcr.io/blotcms/blot
@@ -17,6 +23,9 @@ env:
   BLOT_DEPLOY_SSH_HOST: ${{ secrets.BLOT_DEPLOY_SSH_HOST }}
   BLOT_DEPLOY_SSH_PORT: ${{ secrets.BLOT_DEPLOY_SSH_PORT }}
 
+# Everything that doesn't depend on the image (checkout, SSH, Node, GHCR
+# login) runs first, so when the run is dispatched straight after a merge the
+# only thing left once build.yml publishes the image is the deploy itself.
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -24,17 +33,6 @@ jobs:
     environment: deploy
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          # Need full commit history so an older commit or short code can be
-          # resolved and verified against master. blob:none makes this a
-          # treeless partial clone: all commits/trees, but file contents are
-          # fetched on demand - this repo's blob history is multiple GB and
-          # the deploy only needs rev-parse / merge-base / a single checkout.
-          fetch-depth: 0
-          filter: blob:none
-
       - name: Check branch
         run: |
           if [ "${{ github.ref }}" != "refs/heads/master" ]; then
@@ -42,9 +40,20 @@ jobs:
             echo "Current branch: ${{ github.ref }}"
             exit 1
           fi
-          echo "✅ Branch check passed: running on master branch"
 
-      - name: Resolve target commit
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full commit history so an older commit or short code can be
+          # resolved and verified against master, but nothing else: tree:0
+          # fetches commits only, and the sparse checkout then pulls just the
+          # trees and blobs for scripts/deploy (the deploy script needs
+          # nothing but Node built-ins and git).
+          fetch-depth: 0
+          filter: tree:0
+          sparse-checkout: scripts/deploy
+
+      - name: Resolve and check out target commit
         id: resolve
         env:
           # Bind inputs to the environment so a dispatcher cannot inject
@@ -75,9 +84,42 @@ jobs:
             exit 1
           fi
 
+          git checkout --quiet --detach "$SHA"
+
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "custom=$CUSTOM" >> "$GITHUB_OUTPUT"
           echo "✅ Target commit: $SHA (custom=$CUSTOM)"
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BLOT_DEPLOY_SSH_KEY }}
+
+      - name: Configure and verify SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          cat >> ~/.ssh/config << EOF
+          Host blot
+            HostName ${BLOT_DEPLOY_SSH_HOST}
+            User deploy
+            Port ${BLOT_DEPLOY_SSH_PORT}
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            # scripts/deploy runs dozens of separate ssh commands; reuse one
+            # connection instead of a fresh handshake for each.
+            ControlMaster auto
+            ControlPath ~/.ssh/cm-%C
+            ControlPersist 30m
+          EOF
+          chmod 600 ~/.ssh/config
+          ssh blot "echo 'SSH connection successful'"
+
+      # No npm install: scripts/deploy only uses Node built-ins.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -86,6 +128,68 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Don't ship a commit whose CI failed. build.yml publishes the image only
+      # after its own checks, but node.yml (tests) is independent of it.
+      - name: Wait for CI on the target commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
+          CUSTOM: ${{ steps.resolve.outputs.custom }}
+          SKIP_CHECKS: ${{ github.event.inputs.skip_checks }}
+          REQUIRED: "node build"
+          OPTIONAL: ""
+        run: |
+          if [ "$SKIP_CHECKS" = "true" ]; then
+            echo "::warning::skip_checks is set - deploying $TARGET_SHA without waiting for CI to pass."
+            exit 0
+          fi
+
+          # Same bounds as the image wait: the dispatched commit's CI may
+          # still be running, a chosen older commit's should already be done.
+          if [ "$CUSTOM" = "true" ]; then
+            MAX_TRIES=12    # ~2 min
+          else
+            MAX_TRIES=150   # ~25 min
+          fi
+
+          for i in $(seq 1 "$MAX_TRIES"); do
+            # Latest attempt of each workflow's push run for this commit, as
+            # "name<TAB>status<TAB>conclusion<TAB>html_url". Tolerate an API
+            # blip: an empty result just means "not yet" and we poll again.
+            RUNS=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$TARGET_SHA&event=push&per_page=100" \
+              --jq '.workflow_runs | group_by(.name) | map(max_by(.run_attempt)) | .[] | [.name, .status, (.conclusion // ""), .html_url] | @tsv' || true)
+
+            PENDING=""
+            for NAME in $REQUIRED $OPTIONAL; do
+              ROW=$(printf '%s\n' "$RUNS" | awk -F'\t' -v n="$NAME" '$1 == n')
+              if [ -z "$ROW" ]; then
+                # Path-filtered workflows may legitimately not have run.
+                case " $OPTIONAL " in *" $NAME "*) ;; *) PENDING="$PENDING $NAME" ;; esac
+                continue
+              fi
+              STATUS=$(printf '%s' "$ROW" | cut -f2)
+              CONCLUSION=$(printf '%s' "$ROW" | cut -f3)
+              URL=$(printf '%s' "$ROW" | cut -f4)
+              if [ "$STATUS" != "completed" ]; then
+                PENDING="$PENDING $NAME"
+              elif [ "$CONCLUSION" != "success" ]; then
+                echo "❌ CI workflow '$NAME' concluded '$CONCLUSION' for $TARGET_SHA: $URL"
+                echo "   Fix it and re-run, or re-dispatch with skip_checks to deploy anyway (emergencies only)."
+                exit 1
+              fi
+            done
+
+            if [ -z "$PENDING" ]; then
+              echo "✅ CI passed for $TARGET_SHA"
+              exit 0
+            fi
+            echo "  waiting for CI:$PENDING ($i/$MAX_TRIES)..."; sleep 10
+          done
+
+          echo "❌ CI did not finish for $TARGET_SHA in time (still waiting for:$PENDING)."
+          echo "   Re-dispatch once it has passed, or use skip_checks to deploy anyway (emergencies only)."
+          exit 1
+
       - name: Wait for build images to be available
         env:
           TARGET_SHA: ${{ steps.resolve.outputs.sha }}
@@ -93,7 +197,7 @@ jobs:
         run: |
           IMAGE="${{ env.REGISTRY_URL }}:${TARGET_SHA}"
           AIRLOCK_IMAGE="${{ env.AIRLOCK_REGISTRY_URL }}:${TARGET_SHA}"
-          WAIT_INTERVAL=10
+          WAIT_INTERVAL=5
 
           # For the default (dispatched) commit the build workflow may still
           # be running, so wait up to 25 min. For an explicitly chosen commit
@@ -102,9 +206,9 @@ jobs:
           # commit never gets one. Fail fast with a clear reason instead of
           # polling 25 min for a tag that will never appear.
           if [ "$CUSTOM" = "true" ]; then
-            MAX_APP_TRIES=12   # ~2 min grace
+            MAX_APP_TRIES=24   # ~2 min grace
           else
-            MAX_APP_TRIES=150  # ~25 min
+            MAX_APP_TRIES=300  # ~25 min
           fi
 
           # The app image is required.
@@ -134,83 +238,24 @@ jobs:
           # not be able to hold up an app hotfix.
           echo "Waiting (best-effort) for airlock image: $AIRLOCK_IMAGE"
           AIRLOCK_AVAILABLE=false
-          for i in $(seq 1 30); do   # up to 5 min
+          for i in $(seq 1 60); do   # up to 5 min
             if docker manifest inspect "$AIRLOCK_IMAGE" > /dev/null 2>&1; then
               echo "✅ Airlock image found: $AIRLOCK_IMAGE"
               AIRLOCK_AVAILABLE=true
               break
             fi
-            echo "  not ready yet ($i/30)..."; sleep $WAIT_INTERVAL
+            echo "  not ready yet ($i/60)..."; sleep $WAIT_INTERVAL
           done
 
           if [ "$AIRLOCK_AVAILABLE" = false ]; then
             echo "::warning::Airlock image $AIRLOCK_IMAGE not available after the grace period - the deploy will run, but scripts/deploy will skip the airlock update for this commit (see deployAirlockIfNeeded). Re-deploy this commit once build-airlock succeeds."
           fi
 
-      # Keep the single checkout above, but switch the existing workspace to
-      # the requested commit before running the deploy script.
-      - name: Switch workspace to target commit
-        env:
-          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
-        run: git checkout --detach "$TARGET_SHA"
-
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.BLOT_DEPLOY_SSH_KEY }}
-
-      - name: Configure SSH alias
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          cat >> ~/.ssh/config << EOF
-          Host blot
-            HostName ${BLOT_DEPLOY_SSH_HOST}
-            User deploy
-            Port ${BLOT_DEPLOY_SSH_PORT}
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-          EOF
-          chmod 600 ~/.ssh/config
-
-      - name: Verify SSH connection
-        run: ssh blot "echo 'SSH connection successful'"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: "npm"
-          cache-dependency-path: ./package.json
-
-      - name: Cache Node modules and the Puppeteer browser
-        id: cache-node-modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            node_modules
-            ~/.cache/puppeteer
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-22-${{ hashFiles('package.json') }}
-
-      - name: Install dependencies
-        if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npm install
-
-      - name: Deploy via npm script
+      - name: Deploy
         env:
           TARGET_SHA: ${{ steps.resolve.outputs.sha }}
           # Skip branch check since we're in CI and may be checking out a specific commit
           SKIP_BRANCH_CHECK: true
-        run: npm run deploy-node -- "$TARGET_SHA"
-
-      - name: Deployment summary
-        if: success()
-        env:
-          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
         run: |
-          echo ""
-          echo "=========================================="
-          echo "Deployment Summary"
-          echo "=========================================="
-          echo "Commit SHA: ${TARGET_SHA}"
-          echo "Deployment completed successfully! 🚀"
+          node scripts/deploy "$TARGET_SHA"
+          echo "### Deployed \`${TARGET_SHA}\` 🚀" >> "$GITHUB_STEP_SUMMARY"
