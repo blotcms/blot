@@ -1,9 +1,22 @@
 Audit the ci change commits (d579ecb10b6eead21469168623d621c32d68dafb, 33cb82f55a70db99fcc22e2b3e469808dcb732c0, ddc402940265b3af067647a815b726a698230571) for soundness
+- why do some master commits get fewer runners? should we not be running everything every master commit? why or why not?
 
 Improve the speed of the node and proxy deploy github actions if at all possible
 - gate deploys on master being green?
 
+Add macserver deploy to github actions
+- Consider making the deploy via github much safer – how?
+  - remove ssh keys from deployment. maybe set up a minimal deployment agents on the servers? maybe autodeploy images with a given tag? 
+  - how do we add 2fa to deployment flow, require email confirmation somehow? onetimelink? assume github could 
+  - if github is owned are we owned? ideally not
+
 Check in on the redis client side caching change and then audit the in memory LRU caches for tuning the sizes of them
+- clicking down the list of templates in the template editor is now slower, can we analyze the LRU caching to optimize this part too?
+
+Is the status page just measuring the lru caches? how do we make it verify a cold request to get a real sense for system performance?
+
+Look into https://github.com/tobi/walgit for s3 backed git server
+- https://cursor.com/blog/git-at-any-scale
 
 How to reduce likelihood of downtime?
 - s3 for storage only (replicated?)
