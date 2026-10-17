@@ -1,3 +1,20 @@
+Audit the ci change commits (d579ecb10b6eead21469168623d621c32d68dafb, 33cb82f55a70db99fcc22e2b3e469808dcb732c0, ddc402940265b3af067647a815b726a698230571) for soundness
+
+Improve the speed of the node and proxy deploy github actions if at all possible
+- gate deploys on master being green?
+
+Check in on the redis client side caching change and then audit the in memory LRU caches for tuning the sizes of them
+
+How to reduce likelihood of downtime?
+- s3 for storage only (replicated?)
+- multi-region (dns level failover from one region?) with redis replica in another region
+- how to prevent dns issues?
+- are we well insulated from bunny failures (dns failover here too?)
+- are we well insulated from cloudflare failures (they do our DNS records or is it route53?)
+- are we as well insulated from most likely aws issues?
+
+Protect the master branch and avoid merging ci failing flows?
+
 PayPal: User.extend lets any PayPal status override Stripe's pretty.*/isMonthly/totalFee, so a Stripe user with a historical PayPal record shows (and gets emailed) PayPal's plan - pick the current provider
 PayPal dashboard cancel: if the cancel POST fails in transport after PayPal applied it, reconcile by re-fetching (webhook repairs it meanwhile)
 PayPal cancellation email: if Mailgun fails after the Redis claim the email is lost (status already CANCELLED so retries skip it) - track pending/sent or release the claim on failure
