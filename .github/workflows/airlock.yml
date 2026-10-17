@@ -39,9 +39,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - arch: amd64
-            platform: linux/amd64
-            runs-on: ubuntu-latest
           - arch: arm64
             platform: linux/arm64
             runs-on: ubuntu-24.04-arm
@@ -182,34 +179,15 @@ jobs:
           docker rm -f "$airlock_id" airlock_test_target airlock_test_control airlock_test_dns
           docker network rm airlock_test_network
 
-  manifest-airlock:
-    needs: build-airlock
-    runs-on: ubuntu-latest
-    # Nothing was pushed on a fork PR, so there is no manifest to assemble.
-    if: ${{ always() && needs.build-airlock.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    steps:
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Create and push multi-arch manifest
+      - name: Publish the manifest list
+        if: ${{ env.PUSH_IMAGES == 'true' }}
         run: |
           set -euo pipefail
-          IMAGE="ghcr.io/${{ github.repository_owner }}/blot-airlock"
-          SHA="${{ github.sha }}"
           docker buildx imagetools create \
-            -t "$IMAGE:$SHA" \
-            "$IMAGE:$SHA-amd64" \
-            "$IMAGE:$SHA-arm64"
-
+            -t "$AIRLOCK_IMAGE_NAME:${{ github.sha }}" \
+            "$AIRLOCK_IMAGE_NAME:${{ github.sha }}-arm64"
           if [ "${{ github.ref_name }}" = "master" ]; then
             docker buildx imagetools create \
-              -t "$IMAGE:latest" \
-              "$IMAGE:$SHA"
+              -t "$AIRLOCK_IMAGE_NAME:latest" \
+              "$AIRLOCK_IMAGE_NAME:${{ github.sha }}"
           fi

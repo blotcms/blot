@@ -12,7 +12,8 @@
 # flushed Redis.
 #
 # Env: LANES (JSON from plan.js --runner: [[{suite, part, files}, ...], ...]),
-# IMAGE_TAG, and the BLOT_STRIPE_* secrets. Writes coverage to ./.nyc_output,
+# IMAGE_TAG, and the BLOT_STRIPE_* secrets. With COVERAGE=1 the processes run
+# under nyc (master pushes; pull requests skip it for speed). Writes coverage to ./.nyc_output,
 # per-file seconds to ./.test-timings/<job>.json (for timings.json) and a
 # table to $GITHUB_STEP_SUMMARY. Exits non-zero if any process failed.
 set -uo pipefail
@@ -24,6 +25,10 @@ MINIO_IMAGE="alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:cf23643a6cf9ce159c
 # cap each process rather than hold the runner.
 PROCESS_TIMEOUT="${PROCESS_TIMEOUT:-12m}"
 NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/views-built/** --exclude=app/templates/source/**"
+
+# nyc instruments every app file as it loads, which slows the specs down
+RUN_TESTS="node scripts/tests"
+[ -n "${COVERAGE:-}" ] && RUN_TESTS="nyc --silent --no-clean $NYC_ARGS node scripts/tests"
 
 WORKSPACE="$(pwd)"
 # Field separator for the results. Not a tab: `read` folds runs of whitespace
@@ -94,7 +99,7 @@ run_process() {
     -v "$dir/.nyc_output:/usr/src/app/.nyc_output" \
     -v "$dir/meta:/lane" \
     "$IMAGE_TAG" \
-    sh -c "nyc --silent --no-clean $NYC_ARGS node scripts/tests '$suite' --files-from=/lane/$n.files" \
+    sh -c "$RUN_TESTS '$suite' --files-from=/lane/$n.files" \
     > "$log" 2>&1
   status=$?
   if [ "$status" = 124 ]; then

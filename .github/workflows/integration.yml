@@ -139,7 +139,8 @@ jobs:
         run: docker logs proxy || true
 
   app-e2e:
-    runs-on: ubuntu-latest
+    # arm64: the app image it pulls (node.yml's test-latest) is arm64 only
+    runs-on: ubuntu-24.04-arm
     needs: proxy-behaviour
     permissions:
       contents: read

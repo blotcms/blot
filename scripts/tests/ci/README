@@ -11,12 +11,19 @@ per-suite entries (keyed as written in TEST_SUITES) as a fallback for files
 it hasn't timed. Every test job computes the plan independently, so it only
 depends on files in the checkout - never anything fetched at run time.
 
-Refreshing timings.json, when a run's lanes finish far apart: every node run
-uploads the measured seconds per spec file as the `test-timings` artifact.
+Refreshing timings.json, when a run's lanes finish far apart: every test job
+uploads the seconds it measured per spec file as a `timings-<n>` artifact
+(master runs also merge them into `test-timings`, in coverage-report, which
+pull requests don't run). Use a pull request run, since those run without
+nyc, as CI does for most runs.
 
-  gh run download <run id> -n test-timings -D /tmp/test-timings
-  jq -S -s '.[0] * .[1]' scripts/tests/ci/timings.json /tmp/test-timings/timings.json > /tmp/t.json
+  gh run download <run id> -p 'timings-*' -D /tmp/test-timings
+  jq -S -s 'add | with_entries(.value |= (. * 10 | round / 10))' /tmp/test-timings/*/*.json > /tmp/new.json
+  jq -S -s '.[0] * .[1]' scripts/tests/ci/timings.json /tmp/new.json > /tmp/t.json
   mv /tmp/t.json scripts/tests/ci/timings.json
+
+`plan.js --check` (run by every test job) fails the job if a spec file isn't
+planned exactly once.
 
 Times measured with two lanes per 4-vCPU runner include some contention, which
 is fine: the plan only needs them in proportion.

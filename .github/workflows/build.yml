@@ -1,11 +1,9 @@
-# Builds the production app image, checks it starts healthy, and on master
-# publishes the multi-arch manifest deploy.yml waits for. The airlock image is
+# Builds the production app image, checks it starts healthy, and publishes the
+# manifest list deploy.yml waits for. The airlock image is
 # built by airlock.yml.
 #
-# Pull requests build arm64 only - production is arm64 (Graviton) and deploys
-# only ever use master commits - so a PR proves the image builds and starts on
-# the architecture that matters with one runner instead of three. Master
-# builds both architectures and assembles the manifest.
+# Production is arm64 (Graviton), so only arm64 is built, on one native runner,
+# which also publishes the :<sha> manifest list (and :latest on master).
 name: build
 
 on:
@@ -37,7 +35,10 @@ jobs:
   build:
     strategy:
       matrix:
-        include: ${{ fromJson(github.event_name == 'pull_request' && '[{"arch":"arm64","platform":"linux/arm64","runs-on":"ubuntu-24.04-arm"}]' || '[{"arch":"amd64","platform":"linux/amd64","runs-on":"ubuntu-latest"},{"arch":"arm64","platform":"linux/arm64","runs-on":"ubuntu-24.04-arm"}]') }}
+        include:
+          - arch: arm64
+            platform: linux/arm64
+            runs-on: ubuntu-24.04-arm
     runs-on: ${{ matrix.runs-on }}
 
     steps:
@@ -123,35 +124,18 @@ jobs:
           docker rm -f "$app_id" "$redis_container_id"
           docker network rm test_network
 
-  manifest:
-    needs: build
-    runs-on: ubuntu-latest
-    # Deploys only use master commits, and a PR builds one architecture.
-    if: ${{ always() && needs.build.result == 'success' && github.event_name != 'pull_request' }}
-    steps:
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Create and push multi-arch manifest
+      # Deploys look for ghcr.io/<owner>/blot:<sha> as a manifest list with an
+      # arm64 entry (scripts/deploy verifyImageManifest, deploy.yml). Production
+      # is arm64 only, so the list holds just the arm64 image.
+      - name: Publish the manifest list
+        if: ${{ env.PUSH_IMAGES == 'true' }}
         run: |
           set -euo pipefail
-          IMAGE="ghcr.io/${{ github.repository_owner }}/blot"
-          SHA="${{ github.sha }}"
           docker buildx imagetools create \
-            -t "$IMAGE:$SHA" \
-            "$IMAGE:$SHA-amd64" \
-            "$IMAGE:$SHA-arm64"
-
-          # Optional: tag branch and latest on default branch
+            -t "$IMAGE_NAME:${{ github.sha }}" \
+            "$IMAGE_NAME:${{ github.sha }}-arm64"
           if [ "${{ github.ref_name }}" = "master" ]; then
             docker buildx imagetools create \
-              -t "$IMAGE:latest" \
-              "$IMAGE:$SHA"
+              -t "$IMAGE_NAME:latest" \
+              "$IMAGE_NAME:${{ github.sha }}"
           fi

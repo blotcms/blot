@@ -26,25 +26,31 @@ module.exports = function setup(options) {
     },
   };
 
-  global.test.blog();
+  // { once: true } does all of this once per describe (beforeAll/afterAll)
+  // instead of for every spec, for specs that don't change the blog, the
+  // repo or the server.
+  var before = options.once ? beforeAll : beforeEach;
+  var after = options.once ? afterAll : afterEach;
+
+  global.test.blog({ once: options.once });
 
   // Sets up a temporary tmp folder and cleans it up after
-  global.test.tmp();
+  global.test.tmp({ once: options.once });
 
   // Increase individual spec timeout to 60 seconds
   global.test.timeout(60 * 1000); 
 
   // Set up a clean server for each test
-  beforeEach(server.start);
-  afterEach(server.close);
+  before(server.start);
+  after(server.close);
 
   // Expose methods for creating fake files, paths, etc.
-  beforeEach(function () {
+  before(function () {
     this.fake = global.test.fake;
   });
 
   // Clean a bare repo in app/clients/git/data if needed
-  afterEach(function (done) {
+  after(function (done) {
     // Each test creates a new bare repo in app/clients/git/data
     // Be careful cleaning this folder because it might contain
     // production data if the tests are accidentally run in prod.
@@ -54,12 +60,12 @@ module.exports = function setup(options) {
     fs.remove(dataDir + "/" + this.blog.handle + ".git", done);
   });
 
-  afterEach(function (done) {
+  after(function (done) {
     disconnect(this.blog.id, done);
   });
 
   if (options.setClientToGit !== false)
-    beforeEach(function (done) {
+    before(function (done) {
       var context = this;
 
       setClientToGit(this.user, this.blog, this.server.port, function (
@@ -74,7 +80,7 @@ module.exports = function setup(options) {
     });
 
   if (options.clone !== false)
-    beforeEach(function (done) {
+    before(function (done) {
       var context = this;
 
       require("simple-git")(this.tmp)

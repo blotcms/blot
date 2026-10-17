@@ -15,7 +15,10 @@
 //     within an even share of the work, else put where it finishes soonest. A
 //     lane runs one process per suite it was given, each costing
 //     PROCESS_OVERHEAD (container start, module loading).
-//  3. The lanes are dealt out to the jobs longest first, snaking, so jobs
+//  3. A local search then evens the lanes out: it moves a file from a lane to
+//     another, or swaps two files between lanes, whenever that makes both
+//     lanes shorter than the longer of the two was, until nothing helps.
+//  4. The lanes are dealt out to the jobs longest first, snaking, so jobs
 //     end at about the same time.
 //
 // Usage (TEST_SUITES in the environment):
@@ -23,6 +26,9 @@
 //     prints runner 3's lanes as JSON: [[{ suite, part, files }, ...], ...]
 //   node scripts/tests/ci/plan.js --runners=10 --lanes=2
 //     prints the whole plan, for reading
+//   node scripts/tests/ci/plan.js --runners=10 --lanes=2 --check
+//     checks every spec file is planned exactly once (exit 1 if not), and
+//     prints the spread of the estimated lane times
 //   node scripts/tests/ci/plan.js --suites
 //     prints the distinct suite paths (JSON), for node.yml's check that every
 //     spec file is run
@@ -81,6 +87,86 @@ function weighFiles(suite) {
   }));
 }
 
+// A lane's time after losing file `out` and gaining file `into` (either may
+// be null): the files' seconds plus PROCESS_OVERHEAD for each suite it ends
+// up running.
+function laneTime(lane, out, into) {
+  const per = new Map();
+  for (const [suite, files] of lane.bySuite)
+    per.set(suite, { n: files.length, seconds: files.reduce((sum, f) => sum + f.seconds, 0) });
+  if (out) {
+    const e = per.get(out.suite);
+    e.n--;
+    e.seconds -= out.seconds;
+  }
+  if (into) {
+    if (!per.has(into.suite)) per.set(into.suite, { n: 0, seconds: 0 });
+    const e = per.get(into.suite);
+    e.n++;
+    e.seconds += into.seconds;
+  }
+  let total = 0;
+  for (const e of per.values()) if (e.n > 0) total += PROCESS_OVERHEAD + e.seconds;
+  return total;
+}
+
+function take(lane, f) {
+  const files = lane.bySuite.get(f.suite);
+  files.splice(files.indexOf(f), 1);
+  if (!files.length) lane.bySuite.delete(f.suite);
+}
+
+function give(lane, f) {
+  if (!lane.bySuite.has(f.suite)) lane.bySuite.set(f.suite, []);
+  lane.bySuite.get(f.suite).push(f);
+}
+
+// Local search on the greedy placement: for the longest lane first, find the
+// move of one of its files to another lane, or swap with one of that lane's
+// files, that leaves both lanes shorter than it was (the best such, by the
+// longer of the two), and make it. Each change shortens a lane without
+// lengthening any beyond it, so the sorted lane times only ever decrease and
+// the search ends; MAX_STEPS is a backstop.
+const MAX_STEPS = 5000;
+function balance(lanes) {
+  for (const lane of lanes) lane.seconds = laneTime(lane);
+  for (let step = 0; step < MAX_STEPS; step++) {
+    let done = true;
+    const order = lanes
+      .map((lane, i) => ({ lane, i }))
+      .sort((a, b) => b.lane.seconds - a.lane.seconds || a.i - b.i);
+    for (const { lane } of order) {
+      let best = null;
+      const consider = (other, f, g, newLane, newOther) => {
+        const worst = Math.max(newLane, newOther);
+        if (worst >= lane.seconds - 1e-9) return;
+        if (!best || worst < best.worst - 1e-9) best = { other, f, g, newLane, newOther, worst };
+      };
+      for (const other of lanes) {
+        if (other === lane) continue;
+        for (const f of [...lane.bySuite.values()].flat()) {
+          consider(other, f, null, laneTime(lane, f, null), laneTime(other, null, f));
+          for (const g of [...other.bySuite.values()].flat())
+            consider(other, f, g, laneTime(lane, f, g), laneTime(other, g, f));
+        }
+      }
+      if (best) {
+        take(lane, best.f);
+        give(best.other, best.f);
+        if (best.g) {
+          take(best.other, best.g);
+          give(lane, best.g);
+        }
+        lane.seconds = laneTime(lane);
+        best.other.seconds = laneTime(best.other);
+        done = false;
+        break;
+      }
+    }
+    if (done) return;
+  }
+}
+
 function plan(suites, runners, lanesPerRunner) {
   const lanes = Array.from({ length: runners * lanesPerRunner }, () => ({
     seconds: 0,
@@ -118,9 +204,11 @@ function plan(suites, runners, lanesPerRunner) {
       for (const lane of lanes) if (!best || endOn(lane, f) < endOn(best, f)) best = lane;
     const end = endOn(best, f);
     if (!best.bySuite.has(f.suite)) best.bySuite.set(f.suite, []);
-    best.bySuite.get(f.suite).push(f.file);
+    best.bySuite.get(f.suite).push(f);
     best.seconds = end;
   }
+
+  balance(lanes);
 
   // Label each suite's processes "i/n" across all lanes, for the logs
   const partCount = {};
@@ -136,7 +224,12 @@ function plan(suites, runners, lanesPerRunner) {
         .map(([suite, laneFiles]) => {
           partIndex[suite] = (partIndex[suite] || 0) + 1;
           const part = `${partIndex[suite]}/${partCount[suite]}`;
-          return { name: `${suite} ${part}`, suite, part, files: laneFiles.sort() };
+          return {
+            name: `${suite} ${part}`,
+            suite,
+            part,
+            files: laneFiles.map((f) => f.file).sort(),
+          };
         }),
     }));
 
@@ -168,6 +261,33 @@ if (require.main === module) {
   if (!(runners >= 1) || !(lanes >= 1)) throw new Error("Pass --runners=N --lanes=N");
   const byRunner = plan(suites, runners, lanes);
 
+  if (flags.check) {
+    const seen = new Map();
+    const times = [];
+    for (const runnerLanes of byRunner)
+      for (const lane of runnerLanes) {
+        times.push(lane.seconds);
+        for (const item of lane.items)
+          for (const file of item.files) seen.set(file, (seen.get(file) || 0) + 1);
+      }
+    const expected = new Set(suites.flatMap((s) => weighFiles(s).map((f) => f.file)));
+    const problems = [
+      ...[...expected].filter((f) => !seen.has(f)).map((f) => `not planned: ${f}`),
+      ...[...seen].filter(([, n]) => n > 1).map(([f, n]) => `planned ${n} times: ${f}`),
+      ...[...seen.keys()].filter((f) => !expected.has(f)).map((f) => `unexpected: ${f}`),
+    ];
+    if (problems.length) {
+      console.error(problems.join("\n"));
+      process.exit(1);
+    }
+    const avg = times.reduce((a, b) => a + b, 0) / times.length;
+    console.log(
+      `${seen.size} spec files each planned once; ${times.length} lanes, ` +
+        `longest ~${Math.round(Math.max(...times))}s, average ~${Math.round(avg)}s`
+    );
+    process.exit(0);
+  }
+
   if (flags.runner) {
     const mine = byRunner[parseInt(flags.runner, 10) - 1] || [];
     console.log(
@@ -191,4 +311,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseSuites, plan };
+module.exports = { parseSuites, plan, weighFiles };

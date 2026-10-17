@@ -1,9 +1,9 @@
 # Unit tests, run against the Dockerfile's `dev` image with the working tree
 # bind mounted, so the image only changes when dependencies or system packages
-# do. setup-tests builds and pushes that image (tagged by a hash of what it is
+# do. The lint job builds and pushes that image (tagged by a hash of what it is
 # built from, scripts/tests/ci/image-tag.sh) only when it doesn't exist yet.
 #
-# The test jobs don't wait for setup-tests: the matrix is just the job
+# The test jobs don't wait for the lint job: the matrix is just the job
 # numbers, and every job works out its own share of the spec files
 # (scripts/tests/ci/plan.js) and pulls the image, waiting for it only on the
 # rare run that has to build it.
@@ -39,7 +39,7 @@ env:
   # parallel (scripts/tests/ci/run-lanes.sh), balanced by the seconds in
   # scripts/tests/ci/timings.json. Refresh that from a run's test-timings
   # artifact when the lanes drift apart (scripts/tests/ci/README).
-  TEST_LANES: 2
+  TEST_LANES: 3
   TEST_SUITES: |
     - app/blog
     - app/build
@@ -60,26 +60,24 @@ env:
     - scripts/deploy
 
 jobs:
-  # Builds and pushes the test image when nothing has pushed it yet, i.e. when
-  # Dockerfile, .dockerignore or package.json changed.
-  setup-tests:
-    runs-on: ubuntu-latest
+  # Static checks, folded into one job so they share a runner and checkout.
+  lint:
+    runs-on: ubuntu-24.04-arm
+    # Every file with describe()/it() must sit in a <suite>/tests/ directory
+    # (or be named tests.js) so the runner picks it up. The only exception is
+    # scripts/benchmarks/spec/build-render.spec.js: it is a Jasmine spec run
+    # by its own workflow (benchmarks.yml), never by the unit-test matrix.
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Builds and pushes the test image when nothing has pushed it yet, i.e.
+      # when Dockerfile, .dockerignore or package.json changed. (Here rather
+      # than in a job of its own: it's a few seconds when the image exists.
+      # The test jobs don't wait for this job, only for the image.)
       - name: Set image tag
-        id: set-image-tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # The four files that name the image, fetched from the API rather
-          # than checked out, so this needn't wait for (or narrow) a checkout
-          SRC="$RUNNER_TEMP/image-tag"
-          mkdir -p "$SRC/scripts/tests/ci"
-          for f in Dockerfile .dockerignore package.json scripts/tests/ci/image-tag.sh; do
-            gh api -H "Accept: application/vnd.github.raw" \
-              "repos/$GITHUB_REPOSITORY/contents/$f?ref=$GITHUB_SHA" > "$SRC/$f"
-          done
-          IMAGE_TAG=$(bash "$SRC/scripts/tests/ci/image-tag.sh")
-          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+        id: image-tag
+        run: echo "image_tag=$(bash scripts/tests/ci/image-tag.sh)" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -91,7 +89,7 @@ jobs:
       - name: Check if image exists
         id: check-image
         run: |
-          IMAGE_TAG="${{ steps.set-image-tag.outputs.image_tag }}"
+          IMAGE_TAG="${{ steps.image-tag.outputs.image_tag }}"
           if docker manifest inspect "$IMAGE_TAG" > /dev/null 2>&1; then
             echo "Image $IMAGE_TAG exists, skipping build"
             echo "image_exists=true" >> $GITHUB_OUTPUT
@@ -99,10 +97,6 @@ jobs:
             echo "Image $IMAGE_TAG does not exist, will build it"
             echo "image_exists=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Checkout code for build
-        if: steps.check-image.outputs.image_exists != 'true'
-        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         if: steps.check-image.outputs.image_exists != 'true'
@@ -112,7 +106,7 @@ jobs:
         if: steps.check-image.outputs.image_exists != 'true'
         uses: docker/build-push-action@v6
         with:
-          platforms: linux/amd64
+          platforms: linux/arm64
           target: dev
           context: .
           # Push zstd-compressed layers instead of gzip. Every test job pays a
@@ -123,25 +117,14 @@ jobs:
           # >= 23 to pull, which GitHub-hosted ubuntu images satisfy.
           outputs: type=image,push=true,compression=zstd,force-compression=true,oci-mediatypes=true
           cache-from: |
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:buildcache
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:${{ github.sha }}
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:buildcache,mode=max
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:buildcache-arm64
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:buildcache-arm64,mode=max
           tags: |
-            ${{ steps.set-image-tag.outputs.image_tag }}
+            ${{ steps.image-tag.outputs.image_tag }}
             ghcr.io/${{ github.repository_owner }}/blot:test-latest
 
-  # Static checks, folded into one job so they share a runner and checkout.
-  lint:
-    runs-on: ubuntu-latest
-    # Every file with describe()/it() must sit in a <suite>/tests/ directory
-    # (or be named tests.js) so the runner picks it up. The only exception is
-    # scripts/benchmarks/spec/build-render.spec.js: it is a Jasmine spec run
-    # by its own workflow (benchmarks.yml), never by the unit-test matrix.
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Find unused dependencies
+        if: always()
         # node-addon-api,node-gyp are required to build sharp
         run: npx depcheck --ignores=node-addon-api,node-gyp,depcheck,nyc,nodemon,blessed-contrib,fontkit,text-to-svg --skip-missing
 
@@ -220,7 +203,7 @@ jobs:
             echo "so they won't be picked up by the test runner within their respective test suites."
             echo ""
             echo "Please either move them into a <suite>/tests/ directory, rename"
-            echo "them to tests.js, or add their suite to TEST_SUITES in setup-tests"
+            echo "them to tests.js, or add their suite to TEST_SUITES in node.yml"
             echo "so the runner executes them."
             exit 1
           else
@@ -229,16 +212,16 @@ jobs:
                 
   test:
     name: test ${{ matrix.runner }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     # run-lanes.sh caps each test process at 12 minutes; this is the backstop,
-    # with room to wait for setup-tests to build the image.
+    # with room to wait for the lint job to build the image.
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
         # One entry per test job. plan.js reads the count from
         # strategy.job-total, so adding or removing one is all it takes.
-        runner: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        runner: [1, 2, 3, 4]
 
     steps:
       - name: Log in to GitHub Container Registry
@@ -265,11 +248,11 @@ jobs:
           IMAGE_TAG=$(bash "$SRC/scripts/tests/ci/image-tag.sh")
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
           nohup bash -c '
-            # On a run that changes dependencies setup-tests is still
+            # On a run that changes dependencies the lint job is still
             # building the image; wait for it to be pushed.
             for i in $(seq 1 180); do
               docker manifest inspect "$0" > /dev/null 2>&1 && break
-              [ "$i" = 1 ] && echo "Waiting for setup-tests to push $0"
+              [ "$i" = 1 ] && echo "Waiting for the lint job to push $0"
               sleep 10
             done
             docker pull -q "$0" &
@@ -284,6 +267,7 @@ jobs:
 
       - name: Plan
         run: |
+          node scripts/tests/ci/plan.js --runners=${{ strategy.job-total }} --lanes="$TEST_LANES" --check
           LANES=$(node scripts/tests/ci/plan.js --runners=${{ strategy.job-total }} --lanes="$TEST_LANES" --runner=${{ matrix.runner }})
           echo "LANES=$LANES" >> "$GITHUB_ENV"
           node scripts/tests/ci/plan.js --runners=${{ strategy.job-total }} --lanes="$TEST_LANES" | awk '/^runner ${{ matrix.runner }} /{p=1;print;next} /^runner /{p=0} p'
@@ -300,10 +284,12 @@ jobs:
           BLOT_STRIPE_SECRET: ${{ secrets.BLOT_STRIPE_SECRET }}
           BLOT_STRIPE_PRODUCT: ${{ secrets.BLOT_STRIPE_PRODUCT }}
           RUNNER_INDEX: ${{ matrix.runner }}
+          # Coverage is only collected on master; it slows the specs down
+          COVERAGE: ${{ github.event_name == 'push' && '1' || '' }}
         run: bash scripts/tests/ci/run-lanes.sh
 
       - name: Upload coverage
-        if: always()
+        if: always() && github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ matrix.runner }}
@@ -329,10 +315,11 @@ jobs:
           retention-days: 7
           overwrite: true
 
+  # Master only: pull requests run without coverage, and get no report.
   coverage-report:
     needs: test
-    if: always()
-    runs-on: ubuntu-latest
+    if: always() && github.event_name == 'push'
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
       actions: write # to read/write the coverage-baseline cache

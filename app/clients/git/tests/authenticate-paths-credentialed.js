@@ -1,10 +1,12 @@
 describe("git client authenticate (malformed paths with credentials)", function () {
-  // Sets up a clean test blog (this.blog) for each test,
-  // sets the blog's client to git (this.client), then creates
-  // a test server with the git client's routes exposed, then
-  // cleans everything up when each test has finished.
+  // Sets up a clean test blog (this.blog), sets the blog's client to git
+  // (this.client), then creates a test server with the git client's routes
+  // exposed, then cleans everything up when the specs have finished. Once
+  // for all the specs: each one sends a single request that must be
+  // rejected without touching any of it.
   require("./setup")({
     clone: false, // dont clone repo into tmp dir
+    once: true,
   });
 
   var fs = require("fs-extra");

@@ -117,19 +117,27 @@ module.exports = function registerGlobalTest() {
       }
     },
 
+    // { once: true } creates the user and blog once for the whole describe
+    // (beforeAll/afterAll) instead of for every spec, for specs that only
+    // read them.
     blog: function (options = {}) {
       var skipTeardown = options.skipTeardown === true;
+      var before = options.once ? beforeAll : beforeEach;
+      var after = options.once ? afterAll : afterEach;
 
-      beforeEach(require("./util/createUser"));
-      if (!skipTeardown) afterEach(require("./util/removeUser"));
+      before(require("./util/createUser"));
+      if (!skipTeardown) after(require("./util/removeUser"));
 
-      beforeEach(require("./util/createBlog"));
-      if (!skipTeardown) afterEach(require("./util/removeBlog"));
+      before(require("./util/createBlog"));
+      if (!skipTeardown) after(require("./util/removeBlog"));
     },
 
-    tmp: function () {
-      beforeEach(require("./util/createTmpDir"));
-      afterEach(require("./util/removeTmpDir"));
+    tmp: function (options = {}) {
+      var before = options.once ? beforeAll : beforeEach;
+      var after = options.once ? afterAll : afterEach;
+
+      before(require("./util/createTmpDir"));
+      after(require("./util/removeTmpDir"));
     },
   };
 };

@@ -3,17 +3,16 @@ name: benchmarks
 # What this workflow does
 # ----------------------
 # pull_request (once marked "ready for review", i.e. not draft)
-#   - runs the benchmark on amd64 only, a few times, and posts / updates a
+#   - runs the benchmark on arm64, a few times, and posts / updates a
 #     single sticky comment comparing the PR against the rolling master median
 #   - never fails the check: GitHub-hosted runners are too noisy to gate on
 #
 # push to master
-#   - runs the benchmark on amd64 + arm64, a few times each
+#   - runs the benchmark on arm64, a few times
 #   - appends the result to a per-arch rolling history (Actions cache, backed
 #     up as an artifact)
 #   - if the SAME metric has regressed for the last N consecutive master
-#     commits, opens a `benchmark-regression` issue (amd64 only for now;
-#     arm64 is detect-and-log until its noise profile is known)
+#     commits, opens a `benchmark-regression` issue
 #
 # workflow_dispatch
 #   - ad-hoc run with custom knobs; uploads an artifact, no comment, no issue
@@ -80,9 +79,12 @@ jobs:
     timeout-minutes: 90
     strategy:
       fail-fast: false
-      # master benchmarks both architectures (amd64 raises regression alerts);
-      # PRs and manual runs benchmark amd64 only.
-      matrix: ${{ fromJson(github.event_name == 'push' && '{"include":[{"arch":"amd64","runner":"ubuntu-24.04","alert":"--alert"},{"arch":"arm64","runner":"ubuntu-24.04-arm","alert":""}]}' || '{"include":[{"arch":"amd64","runner":"ubuntu-24.04","alert":""}]}') }}
+      # arm64 only, as production is; master runs raise regression alerts.
+      matrix:
+        include:
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            alert: ${{ github.event_name == 'push' && '--alert' || '' }}
 
     services:
       redis:
@@ -126,13 +128,12 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # node.yml publishes the amd64 dev image as blot:test-<hash of the files
+      # node.yml publishes the arm64 dev image as blot:test-<hash of the files
       # it is built from> (scripts/tests/ci/image-tag.sh). When it is
       # already there - any PR that doesn't touch dependencies - pulling it is
       # quicker than building and exporting our own.
       - name: Reuse test image
         id: reuse
-        if: matrix.arch == 'amd64'
         run: |
           IMAGE=$(bash scripts/tests/ci/image-tag.sh)
           if docker pull -q "$IMAGE"; then
@@ -152,11 +153,11 @@ jobs:
           target: dev
           load: true
           tags: blot-bench:latest
-          # Reuse node.yml's registry buildcache when it applies (amd64), plus a
+          # Reuse node.yml's registry buildcache when it applies (arm64), plus a
           # per-arch GHA layer cache so repeat runs on either arch stay fast.
           cache-from: |
             type=gha,scope=benchmarks-${{ matrix.arch }}
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:buildcache
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/blot:buildcache-arm64
           cache-to: type=gha,scope=benchmarks-${{ matrix.arch }},mode=max
 
       # Builds upload the images they cache to the storage bucket
