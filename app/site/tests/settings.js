@@ -1,110 +1,59 @@
-xdescribe("Blot dashboard settings", function () {
+describe("Blot dashboard settings", function () {
+  const fs = require("fs-extra");
+  const browser = require("./util/browser");
 
-    const fs = require('fs-extra');
+  global.test.site({ login: true });
 
-    require('./util/setup')({ login: true });
-    
-    it("lets you update the title of a site", async function () {
-        const page = this.page;
+  it("lets you update the title of a site", async function () {
+    const page = browser(this);
+    const handle = this.blog.handle;
 
-        await Promise.all([
-            page.waitForNavigation({ waitUntil: 'load' }),
-            page.click('a[href^="/sites/"]')
-        ]);
+    await page.goto("/sites");
+    await page.click('a[href^="/sites/"]');
 
-        console.log('clicking on settings:', 'a[href="/sites/' + this.blog.handle + '/title"]');
+    // click on the title settings link
+    await page.click('a[href="/sites/' + handle + '/title"]');
 
-        // click on the title setings link
-        await Promise.all([
-            page.waitForNavigation({ waitUntil: 'load' }),
-            page.click('a[href="/sites/' + this.blog.handle + '/title"]')
-        ]);
+    // enter a new title and submit the form
+    page.type("input[name=title]", "New title");
+    await page.click("[type=submit]");
 
-        // enter a new title, selecting all the text first
-        // before typing the new title
-        const input = await page.$('input[name=title]');
-        await input.click({ clickCount: 3 })
-        await input.type('New title');
-        
-        console.log('saving new title');
+    // go back to the dashboard
+    await page.click('a[href="/sites/' + handle + '"]');
 
-        // submit the form
-        await Promise.all([
-            page.waitForNavigation({ waitUntil: 'load' }),
-            page.click('[type=submit]')
-        ]);
-
-        console.log('going back to the dashboard');
-
-        // go back to the dashboard
-        await Promise.all([
-            page.waitForNavigation({ waitUntil: 'load' }),
-            page.click('a[href="/sites/' + this.blog.handle + '"]')
-        ]);
-
-        // the <title> of the page should be "New title - Blot"
-        expect(await page.title()).toEqual('New title - Blot');
-    });
-
-    it("lets you sync the folder using local folder", async function () {
-
-        const page = this.page;
-       
-        // go to the site overview page
-        await Promise.all([
-            page.waitForNavigation({ waitUntil: 'load' }),
-            page.click('a[href="/sites/' + this.blog.handle + '"]')
-        ]);
-
-        // go to the client settings page
-        await Promise.all([
-            page.waitForNavigation({ waitUntil: 'load' }),
-            page.click('a[href^="/sites/' + this.blog.handle + '/client"]')
-        ]);
-
-        // click on the button for the local folder client
-        // name="client"
-        await Promise.all([
-            page.waitForNavigation({ waitUntil: 'load' }),
-            page.click('button[name=client][value=local]')
-        ]);
-
-        // go to the site overview page
-        await Promise.all([
-            page.waitForNavigation({ waitUntil: 'load' }),
-            page.click('a[href="/sites/' + this.blog.handle + '"]')
-        ]);
-
-        // verify the client link now says 'Local Folder'
-        expect(await page.$eval('a[href^="/sites/' + this.blog.handle + '/client"] span.center', el => el.innerText.trim())).toEqual('Local folder');
-
-        // add some files to the blog's folder
-        const blogFolder = this.blogDirectory;
-
-        console.log('writing a test file to the blog folder:', blogFolder + '/test.txt');
-
-        await fs.outputFile(blogFolder + '/test.txt', 'test');
-
-        console.log('going to the folder page');
-
-        // go to the site overview page
-        await Promise.all([
-            page.waitForNavigation({ waitUntil: 'load' }),
-            page.click('a[href="/sites/' + this.blog.handle + '"]')
-        ]);
-
-        console.log('checking the folder page');
-
-        // refresh the folder page
-        await Promise.all([
-            page.waitForNavigation({ waitUntil: 'load' }),
-            page.click('a[href="/sites/' + this.blog.handle + '"]')
-        ]);
-
-        // verify that the new file is listed in the folder
-        expect(await page.$eval('table.directory-list', el => el.innerText.trim())).toContain('test.txt');
-
-        console.log('syncing the folder');
-    });
+    // the <title> of the page should be "New title - Blot"
+    expect(page.title).toEqual("New title - Blot");
   });
-  
+
+  it("lets you sync the folder using local folder", async function () {
+    const page = browser(this);
+    const handle = this.blog.handle;
+
+    // go to the site overview page
+    await page.goto("/sites");
+    await page.click('a[href="/sites/' + handle + '"]');
+
+    // go to the client settings page
+    await page.click('a[href^="/sites/' + handle + '/client"]');
+
+    // click on the button for the local folder client
+    await page.click("button[name=client][value=local]");
+
+    // go to the site overview page
+    await page.click('a[href="/sites/' + handle + '"]');
+
+    // verify the client link now says 'Local folder'
+    const client = page.$('a[href^="/sites/' + handle + '/client"] span.center');
+
+    expect(client.text().replace(/\s+/g, " ").trim()).toMatch(/^Local folder/);
+
+    // add some files to the blog's folder
+    await fs.outputFile(this.blogDirectory + "/test.txt", "test");
+
+    // refresh the site overview page
+    await page.goto("/sites/" + handle);
+
+    // verify that the new file is listed in the folder
+    expect(page.$("table.directory-list").text()).toContain("test.txt");
+  });
+});

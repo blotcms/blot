@@ -1,75 +1,45 @@
-xdescribe("Blot sign up", function () {
-  require('./util/setup')();
+describe("Blot sign up", function () {
+  const { promisify } = require("util");
+  const User = require("models/user");
+  const browser = require("./util/browser");
+
+  global.test.site();
+
+  const email = "sign-up-spec@example.com";
+
+  afterEach(async function () {
+    const user = await promisify(User.getByEmail)(email);
+
+    if (user) await promisify(User.remove)(user.uid);
+  });
 
   it("works", async function () {
-    const page = this.page;
+    const page = browser(this);
 
-    // get any console errors
-    page.on('console', msg => console.log('PAGE LOG:', msg.text()));
-   
-    // Listen for failed requests
-    page.on('requestfailed', request => {
-      console.log(`Failed to load: ${request.url()} - ${request.failure().errorText}`);
-    });
+    // Entering a card needs Stripe's script and Stripe's API, neither of
+    // which a test can use. Accounts that were paid for elsewhere sign up
+    // through a link with an access token instead, which skips only the
+    // payment form and goes through the same account and site creation.
+    const token = await promisify(User.generateAccessToken)({ uid: "sign-up" });
 
-    const card = {
-      number: '4242424242424242',
-      month: '12',
-      year: '28',
-      cvc: '123',
-      zip: '12345'
-    };
+    await page.goto("/sites/sign-up/paid/" + token);
+    page.type("input[name=email]", email);
+    await page.click("[type=submit]");
 
-    await page.goto(this.origin + '/sites/sign-up');
-
-    console.log('entering email');
-    await page.type('input[name=email]', 'test@gmail.com');
-    await page.keyboard.press("Tab");
-    console.log('entering card');
-    await page.keyboard.type(card.number, { delay: 50 })
-    console.log('entering month');
-    await page.keyboard.type(card.month, { delay: 50 })
-    console.log('entering year');
-    await page.keyboard.type(card.year, { delay: 50 })
-    console.log('entering cvc');
-    await page.keyboard.type(card.cvc, { delay: 50 })
-    console.log('entering zip');
-    await page.keyboard.type(card.zip, { delay: 50 })
-
-    console.log('submitting payment form');
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'load' }),
-      page.click('[type=submit]'),
-    ]);
-
-    console.log('checking page url');
-    expect(page.url()).toEqual(this.origin + '/sites/sign-up/create-account');
+    expect(page.url).toEqual(this.origin + "/sites/sign-up/create-account");
 
     // enter a password
-    console.log('entering password');
-    await page.type('input[name=password]', 'password');
+    page.type("input[name=password]", "password");
+    await page.click("[type=submit]");
 
-    // submit the form
-    console.log('submitting password form');
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'load' }),
-      page.click('[type=submit]'),
-    ]);
-
-    // wait for the create site page to load
-    expect(page.url()).toEqual(this.origin + '/sites/account/create-site');
+    // the create site page should load
+    expect(page.url).toEqual(this.origin + "/sites/account/create-site");
 
     // enter a title for the site
-    console.log('entering site title');
-    await page.type('input[name=title]', 'Test Site');
+    page.type("input[name=title]", "Test Site");
+    await page.click("[type=submit]");
 
-    console.log('submitting form to create site');
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'load' }),
-      page.click('[type=submit]'),
-    ]);
-
-    // wait for the sites page to load
-    expect(page.url()).toEqual(this.origin + '/sites/testsite/client');
+    // the client page of the new site should load
+    expect(page.url).toEqual(this.origin + "/sites/testsite/client");
   });
 });
