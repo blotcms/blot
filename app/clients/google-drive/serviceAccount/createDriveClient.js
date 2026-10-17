@@ -1,4 +1,4 @@
-const { google } = require("googleapis");
+const { drive, auth: googleAuth } = require("@googleapis/drive");
 const config = require("config");
 
 module.exports = async (serviceAccountId) => {
@@ -10,10 +10,10 @@ module.exports = async (serviceAccountId) => {
     throw new Error(`No credentials found for service account ${serviceAccountId}`);
   }
 
-  const auth = new google.auth.GoogleAuth({
+  const auth = new googleAuth.GoogleAuth({
     credentials,
     scopes: ['https://www.googleapis.com/auth/drive'],
   });
 
-  return google.drive({ version: 'v3', auth });
+  return drive({ version: 'v3', auth });
 }

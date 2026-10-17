@@ -1,5 +1,5 @@
 const config = require("config");
-const { google } = require("googleapis");
+const { drive: createDrive, auth: googleAuth } = require("@googleapis/drive");
 const database = require("clients/google-drive/database");
 
 const prefix = () => {
@@ -52,12 +52,12 @@ const deleteFile = async (drive, file) => {
 };
 
 const processServiceAccount = async (credentials) => {
-  const auth = new google.auth.GoogleAuth({
+  const auth = new googleAuth.GoogleAuth({
     credentials,
     scopes: ["https://www.googleapis.com/auth/drive"],
   });
 
-  const drive = google.drive({ version: "v3", auth });
+  const drive = createDrive({ version: "v3", auth });
 
   try {
     const res = await drive.about.get({

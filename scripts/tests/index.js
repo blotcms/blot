@@ -5,6 +5,7 @@ var client = require("models/client");
 var clfdate = require("helper/clfdate");
 var seedrandom = require("seedrandom");
 var registerGlobalTest = require("./register-global-test");
+var listSpecFiles = require("./util/listSpecFiles");
 var fs = require("fs");
 var path = require("path");
 var seed;
@@ -64,46 +65,7 @@ if (flags.shard) {
 // be carved out into its own matrix entry.
 const excludePrefixes = (flags.exclude ? String(flags.exclude).split(",") : [])
   .map((p) => p.trim())
-  .filter(Boolean)
-  .map((p) => path.relative(process.cwd(), path.resolve(process.cwd(), p)));
-
-function isExcluded(rel) {
-  return excludePrefixes.some(
-    (prefix) => rel === prefix || rel.startsWith(prefix + path.sep)
-  );
-}
-
-// Recursively list the spec files the runner would pick up under `rootDir`,
-// mirroring the spec_files globs above: any *.js inside a `tests/` directory
-// or any file named `tests.js`, excluding node_modules and --exclude paths.
-function listSpecFiles(rootDir) {
-  const out = [];
-  (function walk(dir) {
-    let entries;
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch (e) {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.name === "node_modules") continue;
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-      } else if (entry.isFile() && entry.name.endsWith(".js")) {
-        const rel = path.relative(process.cwd(), full);
-        const segments = rel.split(path.sep);
-        if (
-          (segments.includes("tests") || entry.name === "tests.js") &&
-          !isExcluded(rel)
-        ) {
-          out.push(rel);
-        }
-      }
-    }
-  })(rootDir);
-  return out.sort();
-}
+  .filter(Boolean);
 
 // Pass in a custom test glob for running only specific tests
 if (args[0]) {
@@ -148,8 +110,7 @@ if (targetIsFile && (shard || excludePrefixes.length > 0)) {
 // loadConfig() below.
 let shardFiles = null;
 if (!targetIsFile && (shard || excludePrefixes.length > 0)) {
-  const root = path.resolve(process.cwd(), args[0] || ".");
-  const filteredFiles = listSpecFiles(root);
+  const filteredFiles = listSpecFiles(args[0] || ".", excludePrefixes);
 
   if (shard) {
     shardFiles = filteredFiles.filter(
@@ -178,6 +139,23 @@ if (!targetIsFile && (shard || excludePrefixes.length > 0)) {
     );
   }
 
+  config.spec_dir = "";
+  config.spec_files = [];
+}
+
+// --files-from=FILE runs exactly the spec files listed in FILE, one per line
+// (relative to the project root). CI uses it to run the slice of a suite that
+// scripts/tests/ci/plan.js picked for a lane; it wins over --shard/--exclude.
+if (flags["files-from"]) {
+  shardFiles = fs
+    .readFileSync(flags["files-from"], "utf8")
+    .split("\n")
+    .map((f) => f.trim())
+    .filter(Boolean);
+  console.log(
+    clfdate(),
+    `Running ${shardFiles.length} spec files from ${flags["files-from"]}`
+  );
   config.spec_dir = "";
   config.spec_files = [];
 }
@@ -269,6 +247,54 @@ jasmine.addReporter({
 });
 
 registerGlobalTest();
+
+// BLOT_TEST_TIMINGS=FILE writes how long each spec file took, in seconds, as
+// JSON ({ "app/x/tests/y.js": 12.3 }), for scripts/tests/ci/plan.js to balance
+// CI lanes with. Jasmine 3.3 doesn't say which file a spec came from, so note
+// the file being loaded when each top-level suite is declared, and time
+// those suites (random order still runs a suite's specs together).
+if (process.env.BLOT_TEST_TIMINGS) {
+  const fileOfSuite = {};
+  const fileSeconds = {};
+  const suiteStart = {};
+  let loadingFile = null;
+  let depth = 0;
+
+  const describe = global.describe;
+  global.describe = function () {
+    depth++;
+    try {
+      const suite = describe.apply(this, arguments);
+      if (depth === 1 && loadingFile && suite) fileOfSuite[suite.id] = loadingFile;
+      return suite;
+    } finally {
+      depth--;
+    }
+  };
+
+  jasmine.loadSpecs = function () {
+    this.specFiles.forEach(function (file) {
+      loadingFile = path.relative(process.cwd(), file);
+      fileSeconds[loadingFile] = fileSeconds[loadingFile] || 0;
+      require(file);
+    });
+    loadingFile = null;
+  };
+
+  jasmine.addReporter({
+    suiteStarted: function (result) {
+      if (fileOfSuite[result.id]) suiteStart[result.id] = Date.now();
+    },
+    suiteDone: function (result) {
+      const file = fileOfSuite[result.id];
+      if (file && suiteStart[result.id])
+        fileSeconds[file] += (Date.now() - suiteStart[result.id]) / 1000;
+    },
+    jasmineDone: function () {
+      fs.writeFileSync(process.env.BLOT_TEST_TIMINGS, JSON.stringify(fileSeconds));
+    },
+  });
+}
 
 // get the number of keys in the database
 (async function ensureEmptyDatabase() {

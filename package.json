@@ -31,6 +31,9 @@
   },
   "version": "0.0.0",
   "dependencies": {
+    "@googleapis/docs": "3.4.0",
+    "@googleapis/drive": "12.1.0",
+    "@googleapis/driveactivity": "2.0.10",
     "@aws-sdk/client-route-53": "3.1136.0",
     "@aws-sdk/client-s3": "3.1136.0",
     "acme-client": "5.4.0",
@@ -56,7 +59,6 @@
     "fontkit": "1.8.1",
     "form-data": "^4.0.0",
     "fs-extra": "11.1.0",
-    "googleapis": "144.0.0",
     "he": "1.1.0",
     "highlight.js": "10.4.1",
     "http-auth": "3.2.3",

@@ -3,6 +3,7 @@ describe("replaceFolderLinks", function () {
 
   const config = require("config");
   const fs = require("fs-extra");
+  const localPath = require("helper/localPath");
   const cdnRegex = (path) =>
     new RegExp(
       `${config.cdn.origin}/folder/v-[a-f0-9]{8}/blog_[a-f0-9]+${path}`
@@ -63,10 +64,12 @@ describe("replaceFolderLinks", function () {
 
     const version = result.match(/v-[a-f0-9]{8}/)[0];
 
-    // wait one second to ensure the file is written at a different time
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
     await this.write({ path: "/test.jpg", content: "image 2" });
+
+    // The version is size+mtime and "image 1"/"image 2" are the same size, so
+    // push the mtime forward rather than waiting for the clock to tick
+    const later = new Date(Date.now() + 5000);
+    await fs.utimes(localPath(this.blog.id, "/test.jpg"), later, later);
 
     const result2 = await this.text("/");
 

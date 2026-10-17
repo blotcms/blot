@@ -118,6 +118,29 @@ RUN npm install --no-package-lock --omit=dev \
  && node -e "const s=require('sharp'); const v=s.versions.vips; if ('aom' in s.versions || v!==require('child_process').execSync('pkg-config --modversion vips-cpp').toString().trim()) { console.error('sharp not linked against system libvips, got '+v); process.exit(1) }" \
  && npm cache clean --force
 
+# Delete what can never be loaded at run time. node_modules is copied forward
+# into every published image and unpacked by every CI job, so file count
+# matters as much as bytes.
+#  - node-gyp and node-addon-api (installed --no-save above) and re2's own
+#    vendored C++ sources and node-gyp copy were only needed to compile; the
+#    built addons (sharp/src/build, re2/build) stay. The `require`s below fail
+#    the build if that ever stops being true.
+#  - documentation, type declarations (read only by the TypeScript compiler,
+#    which isn't installed), sourcemaps and changelogs. No .js/.json/.node/
+#    .mjs/.cjs is ever touched.
+# Prints the before/after numbers into the build log.
+RUN echo "node_modules before prune: $(find node_modules -type f | wc -l) files, $(du -sm node_modules | cut -f1)MB" \
+ && rm -rf node_modules/node-gyp node_modules/node-addon-api node_modules/re2/vendor node_modules/re2/node_modules \
+ && find node_modules -type f \( \
+      -name '*.md' -o -name '*.markdown' \
+      -o -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' \
+      -o -name '*.js.map' -o -name '*.mjs.map' -o -name '*.cjs.map' -o -name '*.css.map' -o -name '*.d.ts.map' \
+      -o -name 'CHANGELOG*' -o -name 'HISTORY*' -o -name 'CHANGES*' \
+      -o -name '*.tsbuildinfo' \
+    \) -delete \
+ && node -e "require('sharp'); require('re2')" \
+ && echo "node_modules after prune: $(find node_modules -type f | wc -l) files, $(du -sm node_modules | cut -f1)MB"
+
 ## Stage 3 (dev-deps) - THROWAWAY
 # Layers the devDependencies (jasmine, nyc, nock, faker, ...; all pure JS, no
 # native build) on top of the compiled prod modules. Still has the toolchain
@@ -132,6 +155,20 @@ RUN npm install --no-package-lock \
  && (cd node_modules/sharp && npm run build) \
  && node -e "const s=require('sharp'); const v=s.versions.vips; if ('aom' in s.versions || v!==require('child_process').execSync('pkg-config --modversion vips-cpp').toString().trim()) { console.error('sharp not linked against system libvips, got '+v); process.exit(1) }" \
  && npm cache clean --force
+
+# Same cleanup as in `deps` (see the comment there), now also covering the
+# devDependencies.
+RUN echo "node_modules before prune: $(find node_modules -type f | wc -l) files, $(du -sm node_modules | cut -f1)MB" \
+ && rm -rf node_modules/node-gyp node_modules/node-addon-api node_modules/re2/vendor node_modules/re2/node_modules \
+ && find node_modules -type f \( \
+      -name '*.md' -o -name '*.markdown' \
+      -o -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' \
+      -o -name '*.js.map' -o -name '*.mjs.map' -o -name '*.cjs.map' -o -name '*.css.map' -o -name '*.d.ts.map' \
+      -o -name 'CHANGELOG*' -o -name 'HISTORY*' -o -name 'CHANGES*' \
+      -o -name '*.tsbuildinfo' \
+    \) -delete \
+ && node -e "require('sharp'); require('re2')" \
+ && echo "node_modules after prune: $(find node_modules -type f | wc -l) files, $(du -sm node_modules | cut -f1)MB"
 
 ## Stage 4 (development)
 # The image the CI test matrix runs against. Source is NOT baked in - it's bind
@@ -152,7 +189,20 @@ RUN node -e "require('sharp'); console.log('sharp loads against libvips ' + requ
 # The test suite (app/site/tests) and scripts/development/translate launch a
 # local headless Chromium via Puppeteer. Production does not - it connects to
 # the airlock - so the browser and its font/nss deps live in this stage only.
-RUN apk add --no-cache chromium nss freetype harfbuzz ttf-freefont
+#
+# Alpine's chromium depends on mesa-gbm -> mesa -> llvm22-libs, which puts a
+# ~180MB libLLVM.so.22.1 (plus the 40MB libgallium software rasteriser that
+# links it) in the image. Chromium links only libgbm.so.1, which needs just
+# libdrm/expat; libgallium and libLLVM are dlopen()ed by Mesa's EGL/GBM/DRI
+# drivers, which headless Chromium doesn't use because it renders through its
+# own bundled ANGLE/SwiftShader (libEGL.so, libGLESv2.so, libvulkan.so.1 in
+# /usr/lib/chromium). Deleting them was checked: headless --screenshot and a
+# Puppeteer launch/setContent/screenshot work identically. The rm must be in the
+# same RUN as the install, otherwise the files stay in the earlier layer and the
+# image doesn't shrink. If a Chromium upgrade ever needs them, the symptom is a
+# launch failure in app/site/tests; drop this rm.
+RUN apk add --no-cache chromium nss freetype harfbuzz ttf-freefont \
+ && rm -rf /usr/lib/libLLVM* /usr/lib/libgallium-*.so /usr/lib/dri
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Configure git so the git client doesn't complain

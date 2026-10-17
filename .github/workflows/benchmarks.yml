@@ -74,33 +74,15 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  setup:
-    runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    outputs:
-      matrix: ${{ steps.matrix.outputs.value }}
-      iterations: ${{ steps.matrix.outputs.iterations }}
-    steps:
-      - id: matrix
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            echo 'value={"include":[{"arch":"amd64","runner":"ubuntu-24.04","alert":"--alert"},{"arch":"arm64","runner":"ubuntu-24.04-arm","alert":""}]}' >> "$GITHUB_OUTPUT"
-            echo "iterations=3" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo 'value={"include":[{"arch":"amd64","runner":"ubuntu-24.04","alert":""}]}' >> "$GITHUB_OUTPUT"
-            echo "iterations=${{ github.event.inputs.iterations }}" >> "$GITHUB_OUTPUT"
-          else
-            echo 'value={"include":[{"arch":"amd64","runner":"ubuntu-24.04","alert":""}]}' >> "$GITHUB_OUTPUT"
-            echo "iterations=2" >> "$GITHUB_OUTPUT"
-          fi
-
   benchmark:
-    needs: setup
     runs-on: ${{ matrix.runner }}
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     timeout-minutes: 90
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+      # master benchmarks both architectures (amd64 raises regression alerts);
+      # PRs and manual runs benchmark amd64 only.
+      matrix: ${{ fromJson(github.event_name == 'push' && '{"include":[{"arch":"amd64","runner":"ubuntu-24.04","alert":"--alert"},{"arch":"arm64","runner":"ubuntu-24.04-arm","alert":""}]}' || '{"include":[{"arch":"amd64","runner":"ubuntu-24.04","alert":""}]}') }}
 
     services:
       redis:
@@ -110,7 +92,7 @@ jobs:
 
     env:
       ARCH: ${{ matrix.arch }}
-      ITERATIONS: ${{ needs.setup.outputs.iterations }}
+      ITERATIONS: ${{ github.event_name == 'push' && '3' || github.event_name == 'workflow_dispatch' && github.event.inputs.iterations || '2' }}
       HISTORY_DIR: .benchmarks/history
       RESULT_FILE: .benchmarks/result-${{ matrix.arch }}.json
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -137,9 +119,6 @@ jobs:
             --status running \
             --sha "$HEAD_SHA"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -147,7 +126,26 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # node.yml publishes the amd64 dev image as blot:test-<hash of the files
+      # it is built from> (scripts/tests/ci/image-tag.sh). When it is
+      # already there - any PR that doesn't touch dependencies - pulling it is
+      # quicker than building and exporting our own.
+      - name: Reuse test image
+        id: reuse
+        if: matrix.arch == 'amd64'
+        run: |
+          IMAGE=$(bash scripts/tests/ci/image-tag.sh)
+          if docker pull -q "$IMAGE"; then
+            docker tag "$IMAGE" blot-bench:latest
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.reuse.outputs.hit != 'true'
+        uses: docker/setup-buildx-action@v3
+
       - name: Build benchmark image
+        if: steps.reuse.outputs.hit != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .

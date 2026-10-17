@@ -103,6 +103,7 @@ describe("screenshot plugin", function () {
   });
 
   afterEach(() => {
+    screenshot.configure({ minTime: screenshot.MIN_TIME_BETWEEN_OPS });
     for (const res of hangingResponses) res.end();
   });
 
@@ -165,6 +166,9 @@ describe("screenshot plugin", function () {
 
   it("handles browser restarts smoothly", async function () {
     const requests = 10; // Reduced number of requests for stability
+
+    // 10 requests at 800ms still run well past the restart at 2s
+    screenshot.configure({ minTime: 800 });
     const paths = Array.from(
       { length: requests },
       (_, i) => `${__dirname}/data/screenshot_${i}.png`
@@ -179,7 +183,7 @@ describe("screenshot plugin", function () {
     }, 2000);
 
     // Issue screenshot requests in parallel and await all to finish
-    // this should take ~10 seconds
+    // this should take ~8 seconds
     await Promise.all(paths.map((p) => screenshot(site, p)));
 
     // Cleanup
@@ -199,6 +203,9 @@ describe("screenshot plugin", function () {
 
   it("respects rate limiting", async function () {
     const requests = 10;
+
+    // Pacing stays comfortably above the 500ms average asserted below
+    screenshot.configure({ minTime: 800 });
     const paths = Array.from(
       { length: requests },
       (_, i) => `${__dirname}/data/screenshot_${i}.png`

@@ -1,0 +1,26 @@
+How CI runs the unit tests (.github/workflows/node.yml)
+
+Each test job (the `runner` list in node.yml) runs `plan.js --runner=N` to
+get its share of the spec files, then `run-lanes.sh`, which runs that share
+as TEST_LANES lanes in parallel, each with its own Redis, MinIO, network and
+copy of the working tree. A lane is a sequence of test runner processes
+(`node scripts/tests <suite> --files-from=...`), one per suite it was given.
+
+plan.js balances the lanes with timings.json: seconds per spec file, plus
+per-suite entries (keyed as written in TEST_SUITES) as a fallback for files
+it hasn't timed. Every test job computes the plan independently, so it only
+depends on files in the checkout - never anything fetched at run time.
+
+Refreshing timings.json, when a run's lanes finish far apart: every node run
+uploads the measured seconds per spec file as the `test-timings` artifact.
+
+  gh run download <run id> -n test-timings -D /tmp/test-timings
+  jq -S -s '.[0] * .[1]' scripts/tests/ci/timings.json /tmp/test-timings/timings.json > /tmp/t.json
+  mv /tmp/t.json scripts/tests/ci/timings.json
+
+Times measured with two lanes per 4-vCPU runner include some contention, which
+is fine: the plan only needs them in proportion.
+
+To reproduce one CI process locally, take the suite and file list from the
+job log and run them with `npm test <suite> -- --files-from=<file>`, or just
+run the whole suite with `npm test <suite>`.

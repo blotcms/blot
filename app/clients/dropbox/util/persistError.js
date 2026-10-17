@@ -1,4 +1,3 @@
-const database = require("../database");
 const { classify } = require("./classifyError");
 
 // Persist a Dropbox error onto the blog's account row when it is
@@ -11,5 +10,8 @@ module.exports = function persistError(blogID, err, source, callback) {
   const classified = classify(err, (err && err.dropboxSource) || source);
   if (!classified.persist) return callback(null);
 
-  database.setError(blogID, classified, callback);
+  // Required here, not at the top: ../database requires models/blog, which
+  // can load this module before ../database has assigned its exports, and a
+  // top-level require would then keep the empty placeholder object.
+  require("../database").setError(blogID, classified, callback);
 };

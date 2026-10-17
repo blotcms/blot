@@ -512,5 +512,6 @@ const screenshot = async (site, path, options = {}) => {
 
 module.exports = screenshot;
 module.exports.configure = configure;
+module.exports.MIN_TIME_BETWEEN_OPS = MIN_TIME_BETWEEN_OPS;
 module.exports.restart = restart;
 module.exports.shutdown = shutdown;

@@ -78,7 +78,7 @@ The setup process can be interrupted if the user changes their email or cancels 
 
 ### External
 
-- `googleapis` — Google Drive API v3 client library.
+- `@googleapis/drive`, `@googleapis/docs`, `@googleapis/driveactivity` — Google API clients (Drive v3, Docs v1, Drive Activity v2) and their shared `auth` (GoogleAuth).
 - `bottleneck` — Rate-limiting library for API calls.
 - `fs-extra` — Enhanced filesystem utilities.
 - `yauzl` — ZIP extraction for exported Google Docs.
