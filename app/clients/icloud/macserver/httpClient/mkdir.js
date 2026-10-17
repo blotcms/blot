@@ -31,8 +31,10 @@ export default async (...args) => {
 
   const pathBase64 = Buffer.from(path).toString("base64");
   
+  let response;
+
   try {
-    await fetch(`${remoteServer}/mkdir`, {
+    response = await fetch(`${remoteServer}/mkdir`, {
       method: "POST",
       headers: {
         Authorization, // Use the Authorization header
@@ -50,4 +52,7 @@ export default async (...args) => {
   }
 
   console.log(clfdate(), `Issuing external mkdir successful`);
+
+  // true if Blot created the directory, false if it already existed
+  return response.headers.get("directory-created") === "true";
 };

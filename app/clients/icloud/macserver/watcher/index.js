@@ -105,6 +105,62 @@ const startChokidarPruneLoop = () => {
 const startFsWatch = () => startFsWatchInternal(reconcileFsWatchEvent);
 const stopFsWatch = () => stopFsWatchInternal();
 
+// When a folder is renamed (or moved in) on iCloud, neither chokidar nor
+// fs.watch reliably report the files inside it, only the new directory. Once
+// Blot has created a directory, walk it and push its contents through the same
+// actions as watcher events. The walk runs outside the per-blog limiter (each
+// performAction schedules itself), so it cannot deadlock on nested scheduling.
+const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
+  let entries;
+
+  try {
+    entries = await fs.readdir(buildBlogPath(blogID, pathInBlogDirectory), {
+      withFileTypes: true,
+    });
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") return;
+    throw error;
+  }
+
+  for (const entry of entries) {
+    const childPath = `${pathInBlogDirectory}/${entry.name}`;
+    const isDirectory = entry.isDirectory();
+
+    if (!isDirectory && !entry.isFile()) continue;
+    if (shouldIgnore(childPath)) continue;
+    if (isEvictionSuppressed(blogID, childPath)) continue;
+
+    try {
+      if (!(await exactCaseViaRealpath(buildBlogPath(blogID, childPath)))) continue;
+
+      if (isDirectory) {
+        if (!hasRecentChokidarEvent(blogID, childPath, "mkdir")) {
+          await performAction(blogID, childPath, "mkdir");
+        }
+        await syncDirectoryContents(blogID, childPath);
+      } else if (!hasRecentChokidarEvent(blogID, childPath, "upload")) {
+        // if chokidar did report the file it is already being uploaded
+        console.log(clfdate(), `Directory contents: upload, blogID: ${blogID}, path: ${childPath}`);
+        await performAction(blogID, childPath, "upload");
+      }
+    } catch (error) {
+      // performAction has already requested a resync, carry on with the rest
+      console.error(clfdate(), `Error syncing directory contents (${blogID}, ${childPath}):`, error);
+    }
+  }
+};
+
+// performAction resolves true from mkdir only if Blot did not already have the
+// directory, so existing directories (fs.watch reports them whenever their
+// contents change) are not walked again.
+const mkdirAndSyncContents = async (blogID, pathInBlogDirectory) => {
+  const created = await performAction(blogID, pathInBlogDirectory, "mkdir");
+
+  if (created) {
+    await syncDirectoryContents(blogID, pathInBlogDirectory);
+  }
+};
+
 // Handle file events
 const handleFileEvent = async (event, blogID, filePath) => {
   try {
@@ -174,7 +230,7 @@ const handleFileEvent = async (event, blogID, filePath) => {
     } else if (event === "unlink" || event === "unlinkDir") {
       await performAction(blogID, pathInBlogDirectory, "remove");
     } else if (event === "addDir") {
-      await performAction(blogID, pathInBlogDirectory, "mkdir");
+      await mkdirAndSyncContents(blogID, pathInBlogDirectory);
     }
   } catch (error) {
     console.error(clfdate(), `Error handling file event (${event}, ${filePath}):`, error);
@@ -244,7 +300,11 @@ const reconcileFsWatchEvent = async (blogID, pathInBlogDirectory) => {
   }
 
   console.log(clfdate(), `FS Watch Event: ${action}, blogID: ${blogID}, path: ${pathInBlogDirectory}`);
-  await performAction(blogID, pathInBlogDirectory, action);
+  if (action === "mkdir") {
+    await mkdirAndSyncContents(blogID, pathInBlogDirectory);
+  } else {
+    await performAction(blogID, pathInBlogDirectory, action);
+  }
 };
 
 // Initializes the top-level watcher and starts disk monitoring

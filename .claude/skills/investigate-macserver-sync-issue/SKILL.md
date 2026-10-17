@@ -273,3 +273,17 @@ Entry template:
   waiting on the lock. The digest counted that as unsynced. Live edits are only excluded
   for downloads (by mtime). Removals and created dirs are never excluded.
 - Follow-up: fixed in the PR for this entry: the macserver's /readdir now returns directory mtimes, and removals and created dirs in a directory modified around the walk count as excluded.
+
+### 2026-10-16 20:45:00 and 22:12:49 UTC — watcher miss on folder rename (bug)
+
+- Alert: an `ICLOUD_SYNC_ISSUE` digest at 20:45 UTC (one blog, ~150 downloads, nothing excluded) and a dashboard Reset `RESYNC_FOUND_CHANGES` at 22:12:49 UTC (another blog, under 20 downloads). No resync was requested. The containers were recreated at 20:14 UTC, before both.
+- Key events (UTC; Mac -0700): 20:05:15–20:05:26, the first blog's owner made case-only renames of four sibling subfolders. 22:04:35, the second blog's owner renamed a subfolder to drop a leading underscore. In both cases the macserver logged only `FS Watch Event: mkdir` for the new directory and `remove` for the old one. It sent no upload for any child, though `brctl monitor` saw every file.
+- Cause: a renamed directory reaches the watcher as a single new directory. `reconcileFsWatchEvent` (and chokidar `addDir`) pushes only a `mkdir` and never lists the children. The old path's delete removes them from Blot, and they stay missing until a walk.
+- Follow-up: fixed in the PR for this entry. When Blot reports it created a directory (`directory-created` header on /mkdir), the watcher walks it and pushes its contents.
+
+### 2026-10-16 22:47:16 UTC resync request — lock contention from a bulk rename, then a hung resync (bug)
+
+- Alert: an `ICLOUD_SYNC_ISSUE` digest at 22:45 UTC, an `ICLOUD_RESYNC_ISSUE` at 23:05 UTC (reason: a remove failed after retries, plus 26 download failures in the walk), and a stuck lock in the 00:45 digest. Same blog each time: newly connected at 21:36:59 UTC, setup done at 21:50:28.
+- Key events (UTC): 22:41:38, a folder-mirroring tool renamed the blog's top-level folders, a burst of several hundred adds and removes. 22:45:15–22:47:22, the hourly walk held the lock, so the deletes got 423. 22:47:16, the first resync request. 22:47:22–23:05:23, resync on green (downloads of evicted PDFs timed out). 23:08:04, second resync on green. Its last line is 23:20:43 (`Downloading …`) and it never released the lock: still held at 06:15:56 on 17 Oct. Hourly walks logged `Skipping busy blog`. The macserver re-requested a resync about every 67s (~390 by 06:15) and every request was deduplicated.
+- Cause: (1) `sync/util/download.js` awaits `res.arrayBuffer()` after `rateLimitedFetchWithRetriesAndTimeout` has cleared its timer, so a stalled body hangs the sync forever while the lock heartbeat keeps it alive. (2) Blot's 10s fetch timeout is shorter than the macserver's 15s `brctl download` timeout, so evicted files are abandoned and re-requested.
+- Follow-up: green was restarted at 06:24:59 UTC on 17 Oct, which freed the lock; the blog synced again within a minute. Fixed in the PR for this entry: the fetch helper's `readBody` keeps the timeout armed through the body read, and /download gets 60s.

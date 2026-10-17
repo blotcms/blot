@@ -32,7 +32,10 @@ module.exports = async function (req, res) {
 
     if (directoryExists) {
       console.log(`Directory already exists at: ${pathOnDisk}`);
-      return res.status(200).send("Directory already exists");
+      return res
+        .status(200)
+        .set("directory-created", "false")
+        .send("Directory already exists");
     }
 
     // Establish sync lock to allow safe file operations
@@ -64,6 +67,7 @@ module.exports = async function (req, res) {
       console.log(`Directory successfully created: ${pathOnDisk}`);
       res
         .status(200)
+        .set("directory-created", String(!directoryExistsInLock))
         .send(`Directory successfully created for blogID: ${blogID}`);
     } finally {
       // Release the sync lock

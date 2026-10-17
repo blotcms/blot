@@ -45,7 +45,7 @@ describe("icloud monitorMacServerStats", function () {
     stub("scheduleExclusive", { schedule: () => ({ cancel() {} }) });
     stub("fetch", async () => {
       if (response instanceof Error) throw response;
-      return { json: async () => response };
+      return Buffer.from(JSON.stringify(response ?? null));
     });
     const record = (name) => (...args) => sent.push(name);
     stub("email", {

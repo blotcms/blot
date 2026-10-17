@@ -67,7 +67,8 @@ const performAction = async (blogID, pathInBlogDirectory, action) => {
 
   const limiter = getLimiterForBlogID(blogID);
 
-  await limiter.schedule(async () => {
+  // resolves to the result of the action; mkdir reports whether Blot created the directory
+  return limiter.schedule(async () => {
     try {
       if (action === "upload") {
         await withRetries(
@@ -80,7 +81,7 @@ const performAction = async (blogID, pathInBlogDirectory, action) => {
           () => remove(blogID, pathInBlogDirectory)
         );
       } else if (action === "mkdir") {
-        await withRetries(
+        return await withRetries(
           `mkdir ${blogID}/${pathInBlogDirectory}`,
           () => mkdir(blogID, pathInBlogDirectory)
         );

@@ -9,23 +9,39 @@ const limiter = new Bottleneck({
 
 // Timeout and retry logic using native fetch
 const fetchWithRetriesAndTimeout = async (url, options = {}) => {
-  // Destructure and set defaults for timeout and retries
-  const { timeout = 10000, retries = 3, ...fetchOptions } = options;
+  // Destructure and set defaults for timeout and retries. With readBody the
+  // promise resolves to the body as a Buffer instead of the response, and
+  // the timeout and retries cover reading the body: the timer restarts on
+  // each chunk, so a stalled body aborts the attempt (rather than hanging the
+  // caller after the headers arrived) while a slow but active one completes.
+  const { timeout = 10000, retries = 3, readBody = false, ...fetchOptions } = options;
     
   for (let attempt = 1; attempt <= retries; attempt++) {
     // Timeout logic
     const controller = new AbortController();
     const signal = controller.signal;
-    const timer = setTimeout(() => controller.abort(), timeout);
+    let timer = setTimeout(() => controller.abort(), timeout);
 
     try {
       const response = await fetch(url, { ...fetchOptions, signal });
 
-      clearTimeout(timer); // Clear the timeout if fetch is successful
-
       if (!response.ok) {
         throw new Error(`HTTP error: ${response.status} - ${response.statusText}`);
       }
+
+      if (readBody) {
+        // aborting the signal also aborts an in-progress body read
+        const chunks = [];
+        for await (const chunk of response.body) {
+          chunks.push(chunk);
+          clearTimeout(timer);
+          timer = setTimeout(() => controller.abort(), timeout);
+        }
+        clearTimeout(timer);
+        return Buffer.concat(chunks);
+      }
+
+      clearTimeout(timer); // Clear the timeout if fetch is successful
 
       return response; // Return the successful response
     } catch (error) {

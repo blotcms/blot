@@ -40,11 +40,14 @@ const check = async () => {
   // Redis errors in the notification state below must never look like an outage.
   try {
     // fetching stats
-    const res = await fetch(MAC_SERVER_ADDRESS + "/stats", {
+    // readBody keeps the timeout armed while the body is read, so a stalled
+    // reply fails the check instead of hanging it
+    const body = await fetch(MAC_SERVER_ADDRESS + "/stats", {
+      readBody: true,
       headers: { Authorization },
     });
 
-    stats = await res.json();
+    stats = JSON.parse(body.toString());
 
     if (!stats || !stats.disk_bytes_available || !stats.icloud_bytes_available) {
       throw new Error("No stats returned");

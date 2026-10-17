@@ -5,15 +5,20 @@ const localPath = require("helper/localPath");
 const fs = require("fs-extra");
 const fetch = require("../../util/rateLimitedFetchWithRetriesAndTimeout");
 
+const DOWNLOAD_TIMEOUT_MS = 60 * 1000;
+
 
 module.exports = async (blogID, path) => {
   const pathBase64 = Buffer.from(path).toString("base64");
-  const res = await fetch(MAC_SERVER_ADDRESS + "/download", {
+  // The macserver may first run `brctl download` for an evicted file (up to
+  // 15s), so allow longer than the default 10s. With readBody the timeout
+  // also applies between body chunks, so a stalled body is aborted and
+  // retried instead of hanging the sync (and its folder lock) forever.
+  const buffer = await fetch(MAC_SERVER_ADDRESS + "/download", {
+    timeout: DOWNLOAD_TIMEOUT_MS,
+    readBody: true,
     headers: { Authorization: MACSERVER_AUTH, blogID, pathBase64 },
   });
-
-  const arrayBuffer = await res.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
   const pathOnDisk = localPath(blogID, path);
   await fs.outputFile(pathOnDisk, buffer);
   return pathOnDisk;
