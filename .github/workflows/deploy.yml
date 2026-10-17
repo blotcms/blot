@@ -7,9 +7,15 @@ on:
         description: "Optional commit hash or short code on master (defaults to the dispatched commit)"
         required: false
         default: ""
+      skip_checks:
+        description: "Deploy even if CI for the commit hasn't passed (emergencies only)"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
+  actions: read # To read CI results for the target commit
 
 env:
   REGISTRY_URL: ghcr.io/blotcms/blot
@@ -121,6 +127,68 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Don't ship a commit whose CI failed. build.yml publishes the image only
+      # after its own checks, but node.yml (tests) is independent of it.
+      - name: Wait for CI on the target commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
+          CUSTOM: ${{ steps.resolve.outputs.custom }}
+          SKIP_CHECKS: ${{ github.event.inputs.skip_checks }}
+          REQUIRED: "node build"
+          OPTIONAL: ""
+        run: |
+          if [ "$SKIP_CHECKS" = "true" ]; then
+            echo "::warning::skip_checks is set - deploying $TARGET_SHA without waiting for CI to pass."
+            exit 0
+          fi
+
+          # Same bounds as the image wait: the dispatched commit's CI may
+          # still be running, a chosen older commit's should already be done.
+          if [ "$CUSTOM" = "true" ]; then
+            MAX_TRIES=12    # ~2 min
+          else
+            MAX_TRIES=150   # ~25 min
+          fi
+
+          for i in $(seq 1 "$MAX_TRIES"); do
+            # Latest attempt of each workflow's push run for this commit, as
+            # "name<TAB>status<TAB>conclusion<TAB>html_url". Tolerate an API
+            # blip: an empty result just means "not yet" and we poll again.
+            RUNS=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$TARGET_SHA&event=push&per_page=100" \
+              --jq '.workflow_runs | group_by(.name) | map(max_by(.run_attempt)) | .[] | [.name, .status, (.conclusion // ""), .html_url] | @tsv' || true)
+
+            PENDING=""
+            for NAME in $REQUIRED $OPTIONAL; do
+              ROW=$(printf '%s\n' "$RUNS" | awk -F'\t' -v n="$NAME" '$1 == n')
+              if [ -z "$ROW" ]; then
+                # Path-filtered workflows may legitimately not have run.
+                case " $OPTIONAL " in *" $NAME "*) ;; *) PENDING="$PENDING $NAME" ;; esac
+                continue
+              fi
+              STATUS=$(printf '%s' "$ROW" | cut -f2)
+              CONCLUSION=$(printf '%s' "$ROW" | cut -f3)
+              URL=$(printf '%s' "$ROW" | cut -f4)
+              if [ "$STATUS" != "completed" ]; then
+                PENDING="$PENDING $NAME"
+              elif [ "$CONCLUSION" != "success" ]; then
+                echo "❌ CI workflow '$NAME' concluded '$CONCLUSION' for $TARGET_SHA: $URL"
+                echo "   Fix it and re-run, or re-dispatch with skip_checks to deploy anyway (emergencies only)."
+                exit 1
+              fi
+            done
+
+            if [ -z "$PENDING" ]; then
+              echo "✅ CI passed for $TARGET_SHA"
+              exit 0
+            fi
+            echo "  waiting for CI:$PENDING ($i/$MAX_TRIES)..."; sleep 10
+          done
+
+          echo "❌ CI did not finish for $TARGET_SHA in time (still waiting for:$PENDING)."
+          echo "   Re-dispatch once it has passed, or use skip_checks to deploy anyway (emergencies only)."
+          exit 1
 
       - name: Wait for build images to be available
         env:

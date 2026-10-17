@@ -1,4 +1,4 @@
-# Builds the production app image, checks it starts healthy, and publishes the
+# Builds the production app image, checks it starts healthy (PRs), and publishes the
 # manifest list deploy.yml waits for. The airlock image is
 # built by airlock.yml.
 #
@@ -87,7 +87,12 @@ jobs:
             cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:cache-${{ matrix.arch }}
             cache-to: ${{ env.PUSH_IMAGES == 'true' && format('type=registry,ref={0}:cache-{1},mode=max', env.IMAGE_NAME, matrix.arch) || '' }}
 
+      # PRs only. The e2e tests run the dev target, so this is the one check
+      # that the prod target boots before merge. On master it would hold up
+      # the manifest list deploy.yml waits for, and scripts/deploy health-checks
+      # (and rolls back) the first container anyway.
       - name: Verify health check (${{ matrix.arch }})
+        if: ${{ github.event_name == 'pull_request' }}
         env:
           IMAGE: ${{ env.IMAGE_NAME }}:${{ github.sha }}-${{ matrix.arch }}
         run: |

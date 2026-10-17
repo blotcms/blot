@@ -43,7 +43,7 @@ ssh blot "
   until docker manifest inspect $IMAGE >/dev/null 2>&1; do
     [ \$(date +%s) -lt \$deadline ] || { echo 'No image $IMAGE after ${WAIT}s: is proxy-image.yml done for this commit?' >&2; exit 1; }
     echo 'Waiting for $IMAGE...'
-    sleep 15
+    sleep 5
   done
   echo 'Image found: $IMAGE'
 "

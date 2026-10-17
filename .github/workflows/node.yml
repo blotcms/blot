@@ -477,3 +477,21 @@ jobs:
             --pr "${{ github.event.pull_request.number }}" \
             --sha "$HEAD_SHA" \
             --status failed
+
+  # One stable check name for branch protection: the test matrix is named
+  # "test N" and N changes with the lane plan, so it can't be listed as a
+  # required check. This job passes only if every job it needs succeeded.
+  node-ok:
+    name: node ok
+    needs: [lint, test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every job to have succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: $RESULTS"
+          for r in $RESULTS; do
+            [ "$r" = "success" ] || { echo "❌ A required job did not succeed"; exit 1; }
+          done

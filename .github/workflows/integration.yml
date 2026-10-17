@@ -139,7 +139,7 @@ jobs:
         run: docker logs proxy || true
 
   app-e2e:
-    # arm64: the app image it pulls (node.yml's test-latest) is arm64 only
+    # arm64: the app image it pulls (node.yml's test image) is arm64 only
     runs-on: ubuntu-24.04-arm
     needs: proxy-behaviour
     permissions:
@@ -177,8 +177,24 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # This commit's content-hashed image (scripts/tests/ci/image-tag.sh), not
+      # test-latest: every node.yml run pushes that tag, so it can hold another
+      # PR's node_modules. node.yml builds the image only if it doesn't exist
+      # yet and this workflow doesn't wait for it, so poll for it.
       - name: Pull Blot app image
-        run: docker pull ghcr.io/blotcms/blot:test-latest
+        run: |
+          IMAGE=$(bash scripts/tests/ci/image-tag.sh)
+          for i in $(seq 1 180); do
+            docker manifest inspect "$IMAGE" > /dev/null 2>&1 && break
+            [ "$i" = 1 ] && echo "Waiting for node.yml to push $IMAGE"
+            sleep 5
+          done
+          if ! docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+            echo "::error::$IMAGE was not pushed within 15 minutes; did the node workflow's lint job fail?"
+            exit 1
+          fi
+          docker pull "$IMAGE"
+          echo "BLOT_APP_IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
       - uses: ./.github/actions/start-minio
 
