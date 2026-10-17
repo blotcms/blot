@@ -1,4 +1,4 @@
-Stabilise integration.yml app-e2e (drop continue-on-error), then drop its needs: proxy-behaviour and run it on every PR: ~90s, inside node.yml's ~156s. Point it at the PR's prod image (build.yml's :<sha>-arm64) to replace build.yml's PR health check
+Point app-e2e (.github/workflows/app-e2e.yml) at the PR's prod image (build.yml's :<sha>-arm64) to replace build.yml's PR health check
 
 Audit the ci change commits (d579ecb10b6eead21469168623d621c32d68dafb, 33cb82f55a70db99fcc22e2b3e469808dcb732c0, ddc402940265b3af067647a815b726a698230571) for soundness
 

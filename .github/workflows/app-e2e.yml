@@ -1,0 +1,139 @@
+name: app-e2e
+
+# A real round trip through the proxy container to a Blot app container (site +
+# dashboard sign in / sign out, plus a seeded blog rendering on its own vhost).
+#
+# Its own workflow so it runs on every PR and every push to master: GitHub's
+# path filters are per workflow, and integration.yml filters the rest of the
+# proxy suites. It builds its own proxy image and pulls the app image node.yml
+# pushes (the test image, by content hash).
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  BLOT_HOST: localhost
+  BLOT_REPO: ${{ github.workspace }}
+  # Skip the BunnyCDN edge-IP fetch so image builds stay hermetic. Local and
+  # deploy generates still fetch by default (see proxy/build/index.js).
+  FETCH_CDN_IPS: "false"
+
+jobs:
+  app-e2e:
+    # arm64: the app image it pulls (node.yml's test image) is arm64 only
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 21.7.3
+
+      - name: Install config generator dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/gendeps"
+          cd "$RUNNER_TEMP/gendeps"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+
+      - name: Generate proxy config (BLOT_HOST=localhost)
+        run: bash proxy/build/build.sh
+        env:
+          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+
+      - name: Build proxy image
+        run: docker build -f proxy/Dockerfile -t blot-proxy:e2e proxy/
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # This commit's content-hashed image (scripts/tests/ci/image-tag.sh), not
+      # test-latest: every node.yml run pushes that tag, so it can hold another
+      # PR's node_modules. node.yml builds the image only if it doesn't exist
+      # yet and this workflow doesn't wait for it, so poll for it.
+      - name: Pull Blot app image
+        run: |
+          IMAGE=$(bash scripts/tests/ci/image-tag.sh)
+          for i in $(seq 1 180); do
+            docker manifest inspect "$IMAGE" > /dev/null 2>&1 && break
+            [ "$i" = 1 ] && echo "Waiting for node.yml to push $IMAGE"
+            sleep 5
+          done
+          if ! docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+            echo "::error::$IMAGE was not pushed within 15 minutes; did the node workflow's lint job fail?"
+            exit 1
+          fi
+          docker pull "$IMAGE"
+          echo "BLOT_APP_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/start-minio
+
+      - name: Create the storage bucket
+        run: aws --endpoint-url "$BLOT_STORAGE_ENDPOINT" s3 mb "s3://$BLOT_STORAGE_BUCKET"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ env.BLOT_AWS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.BLOT_AWS_SECRET }}
+          AWS_DEFAULT_REGION: ${{ env.BLOT_STORAGE_REGION }}
+
+      - name: Start the stack
+        run: docker compose -f proxy/e2e/docker-compose.yml up -d --wait --wait-timeout 420
+
+      # /health answers before the app has finished starting up: it is still
+      # building the global templates and syncing blogs, which would race the
+      # seed scripts below (both build templates). The app prints this banner
+      # when it is done.
+      - name: Wait for the app to finish starting
+        run: |
+          for i in $(seq 1 120); do
+            docker compose -f proxy/e2e/docker-compose.yml logs --no-color app \
+              | grep -q "Visit your dashboard" && exit 0
+            sleep 1
+          done
+          echo "::error::the app did not finish starting within 2 minutes"
+          exit 1
+
+      - name: Seed a user
+        run: |
+          docker compose -f proxy/e2e/docker-compose.yml cp \
+            proxy/e2e/seed-user.js app:/tmp/seed-user.js
+          docker compose -f proxy/e2e/docker-compose.yml exec -T app \
+            node /tmp/seed-user.js e2e@example.com e2e-password
+
+      - name: Seed a blog
+        id: seed-blog
+        run: |
+          docker compose -f proxy/e2e/docker-compose.yml cp \
+            proxy/e2e/seed-blog.js app:/tmp/seed-blog.js
+          out=$(docker compose -f proxy/e2e/docker-compose.yml exec -T app \
+            node /tmp/seed-blog.js e2e@example.com e2eblog)
+          echo "$out"
+          json=$(echo "$out" | grep -o 'SEED_BLOG_RESULT=.*' | head -n1 | cut -d= -f2-)
+          host=$(printf '%s' "$json" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).host))')
+          test -n "$host"
+          echo "host=$host" >> "$GITHUB_OUTPUT"
+
+      - name: Run end-to-end checks
+        env:
+          PROXY_ORIGIN: https://127.0.0.1
+          E2E_EMAIL: e2e@example.com
+          E2E_PASSWORD: e2e-password
+          E2E_BLOG_HOST: ${{ steps.seed-blog.outputs.host }}
+        run: node proxy/e2e/run.js
+
+      - name: Stack logs
+        if: always()
+        run: docker compose -f proxy/e2e/docker-compose.yml logs --no-color --tail 300 || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f proxy/e2e/docker-compose.yml down -v || true
