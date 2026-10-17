@@ -3,6 +3,9 @@ Point app-e2e (.github/workflows/app-e2e.yml) at the PR's prod image (build.yml'
 Audit the ci change commits (d579ecb10b6eead21469168623d621c32d68dafb, 33cb82f55a70db99fcc22e2b3e469808dcb732c0, ddc402940265b3af067647a815b726a698230571) for soundness
 - why do some master commits get fewer runners? should we not be running everything every master commit? why or why not?
 
+A concurrent node and proxy deploy lead to this failure: https://github.com/blotcms/blot/actions/runs/39042182709/job/117423729308
+- make the proxy deploy tolerant of this (retry after x seconds)
+
 Add macserver deploy to github actions
 - Consider making the deploy via github much safer – how?
   - remove ssh keys from deployment. maybe set up a minimal deployment agents on the servers? maybe autodeploy images with a given tag? 
