@@ -10,11 +10,13 @@
 //                     uses, so render-time augment() later skips these
 //                     entries (entry.__augmented).
 //   shareEntries()    copies the containers and each Entry's own properties
-//                     but shares everything nested (tags, metadata,
-//                     thumbnail, backlinks, formatDate helpers). Those are
-//                     frozen by prepareCacheValue; nothing downstream writes
-//                     to them - loadView's list() only sets first/last/
-//                     position on the fresh copies, and Mustache only reads.
+//                     once per host, sets absoluteURL, freezes the copy and
+//                     shares it across requests; everything nested (tags,
+//                     metadata, thumbnail, backlinks, formatDate helpers) is
+//                     shared with the cached value, frozen by
+//                     prepareCacheValue. first/last/position were set by the
+//                     fill's own eachEntry walk, so loadView skips these
+//                     (./sharedValues.js), and Mustache only reads.
 //
 // Everything augment() derives from the request must be in the cache key
 // (augmentContext) or recomputed per request in shareEntries (absoluteURL).
@@ -23,6 +25,7 @@ const { LRUCache } = require("lru-cache");
 const augment = require("./augment");
 const backlinksFor = require("./backlinks");
 const eachEntry = require("./eachEntry");
+const sharedValues = require("./sharedValues");
 const ERROR = require("../error");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const projectEntryFields = require("../retrieve/helpers/projectEntryFields");
@@ -101,9 +104,36 @@ function warnIfTooLargeToCache(name, req, prepared, cache) {
   );
 }
 
+// Copying the catalog per request cost ~75ms plus GC on a ~1,200-entry blog,
+// on every hit. absoluteURL is the only request-dependent field, so build
+// the copy once per cached payload and blogURL, freeze it, and hand the same
+// one to every request on that host. A blog is reachable on a handful of
+// hosts (domain, www, handle subdomain, http/https); past MAX_HOSTS, copy
+// per request as before rather than grow without bound.
+const MAX_HOSTS = 8;
+const byPayload = new WeakMap();
+
 function shareEntries(value, blogURL) {
+  if (!value || typeof value !== "object") return value;
+
+  let byHost = byPayload.get(value);
+  if (!byHost) {
+    byHost = new Map();
+    byPayload.set(value, byHost);
+  }
+
+  let copy = byHost.get(blogURL);
+  if (!copy) {
+    copy = copyForHost(value, blogURL);
+    if (byHost.size < MAX_HOSTS) byHost.set(blogURL, copy);
+  }
+
+  return copy;
+}
+
+function copyForHost(value, blogURL) {
   if (Array.isArray(value)) {
-    return value.map((item) => shareEntries(item, blogURL));
+    return freezeShared(value.map((item) => copyForHost(item, blogURL)));
   }
 
   if (value instanceof EntryInstance) {
@@ -113,18 +143,23 @@ function shareEntries(value, blogURL) {
       entry.absoluteURL = augment.absoluteURL(blogURL, entry.url);
     }
 
-    return entry;
+    return freezeShared(entry);
   }
 
   if (value && typeof value === "object") {
     const copy = {};
     for (const key of Object.keys(value)) {
-      copy[key] = shareEntries(value[key], blogURL);
+      copy[key] = copyForHost(value[key], blogURL);
     }
-    return copy;
+    return freezeShared(copy);
   }
 
   return value;
+}
+
+function freezeShared(value) {
+  sharedValues.add(value);
+  return Object.freeze(value);
 }
 
 module.exports = {

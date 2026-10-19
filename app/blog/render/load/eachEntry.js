@@ -1,6 +1,7 @@
 const type = require("helper/type");
 const Entry = require("models/entry/instance");
 const list = require("./list");
+const sharedValues = require("./sharedValues");
 
 module.exports = async function eachEntry(locals, iterator) {
   const entries = [];
@@ -43,6 +44,12 @@ module.exports = async function eachEntry(locals, iterator) {
 
       // Partials never contain an entry
       if (key === "partials" && depth === 0) {
+        continue;
+      }
+
+      // A cached catalog shared across requests (allEntries, archives):
+      // frozen, already augmented and already listed when it was cached.
+      if (sharedValues.has(local)) {
         continue;
       }
 

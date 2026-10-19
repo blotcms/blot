@@ -423,9 +423,38 @@ describe("all_entries shared augmentation", function () {
 
     expect(first[0].__augmented).toBe(true);
     expect(first[0].tags[0].slug).toBe("foo");
-    expect(second[0]).not.toBe(first[0]);
-    expect(second[0].tags).toBe(first[0].tags);
+    expect(second).toBe(first);
+    expect(Object.isFrozen(second)).toBe(true);
+    expect(Object.isFrozen(second[0])).toBe(true);
     expect(Object.isFrozen(second[0].tags)).toBe(true);
+  });
+
+  it("gives each host its own shared copy", async function () {
+    const allEntries = loadAllEntries();
+    stubCatalog();
+
+    const apex = await allEntries(makeReq("https://example.com"), { locals: {} });
+    const www = await allEntries(makeReq("http://www.example.com"), { locals: {} });
+    const apexAgain = await allEntries(makeReq("https://example.com"), { locals: {} });
+
+    expect(www[0]).not.toBe(apex[0]);
+    expect(www[0].tags).toBe(apex[0].tags);
+    expect(apexAgain).toBe(apex);
+  });
+
+  it("keeps first/last/position from the fill when loadView skips the shared list", async function () {
+    const allEntries = loadAllEntries();
+    const loadView = require("../../load");
+    stubCatalog();
+
+    const req = makeReq();
+    const res = { locals: {} };
+    res.locals.allEntries = await allEntries(req, res);
+    await loadView(req, res);
+
+    expect(res.locals.allEntries[0].first).toBe(true);
+    expect(res.locals.allEntries[0].last).toBe(true);
+    expect(res.locals.allEntries[0].position).toBe(1);
   });
 
   it("computes absoluteURL for the host each request arrived on", async function () {
