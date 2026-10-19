@@ -3,7 +3,7 @@ const config = require("config");
 const storage = require("storage/assets");
 const express = require("express");
 const contentTypeFor = require("storage/contentType");
-const { join, basename, dirname } = require("path");
+const { join, basename, dirname, extname } = require("path");
 const { promisify } = require("util");
 const fs = require("fs-extra");
 const caseSensitivePath = promisify(require("helper/caseSensitivePath"));
@@ -12,13 +12,32 @@ const {
   GLOBAL_STATIC_SUBDIRECTORIES,
 } = require("../lib/staticPaths");
 const blogHosts = require("../lib/blogHosts");
+const cdnOrigin = require("../lib/cdnOrigin");
 const {
   htmlExtRegex,
   fileExtRegex,
+  encodeFolderPath,
+  versionedFolderPath,
 } = require("../render/replaceFolderLinks/shared");
 
 // Constants
 const LARGEST_POSSIBLE_MAXAGE = 86400000;
+
+// Folder files at least this big are redirected to the CDN instead of being
+// served from the app host, to keep large transfers off its bandwidth.
+const CDN_REDIRECT_MIN_SIZE = 256 * 1024;
+
+// Only types which are safe to serve from the CDN origin: never svg, html,
+// css, js, json, fonts or text, which a page could load same-origin or
+// which could run script there.
+const CDN_REDIRECT_EXTENSIONS = new Set(
+  (
+    "jpg jpeg png gif webp avif heic heif tif tiff bmp " +
+    "mp3 m4a wav ogg oga opus flac aac " +
+    "mp4 m4v mov webm mkv avi ogv " +
+    "pdf epub zip gz tgz tar rar 7z dmg doc docx ppt pptx xls xlsx odt"
+  ).split(" ")
+);
 
 // We always return 404 for requests which contain these patterns
 const BLOCKED_PATTERNS = [
@@ -88,6 +107,24 @@ assets.get("/layout.css", async (req, res, next) => {
 assets.use(BLOG_STATIC_PATHS, async (req, res, next) => {
   try {
     const relPath = req.baseUrl + decodeURIComponent(req.path);
+
+    // These names are unique and immutable, and the CDN reads the same
+    // bucket key ({blogID}/{relPath}), so there is no need to check the
+    // bucket first. A same-named file in the blog folder keeps the old
+    // bucket-then-folder lookup instead, since the bucket may not have it.
+    if (
+      canRedirectToCdn(req, relPath) &&
+      !(await fs.pathExists(
+        join(config.blog_folder_dir, req.blog.id, relPath)
+      ))
+    ) {
+      return redirectToCdn(
+        req,
+        res,
+        `/${req.blog.id}${encodeFolderPath(relPath)}`
+      );
+    }
+
     await storage.serve(req, res, req.blog.id, relPath, {
       maxAge: LARGEST_POSSIBLE_MAXAGE,
       immutable: true,
@@ -104,6 +141,7 @@ assets.use(async (req, res, next) => {
   const decodedPath = decodeURIComponent(req.path);
 
   async function sendFolderFile(path) {
+    if (await redirectLargeFolderFile(req, res, blogFolder, path)) return;
     await sendFile(path, { req, res });
     logSameSiteReferer(req);
   }
@@ -200,6 +238,46 @@ function logSameSiteReferer(req) {
   } catch (e) {
     // an unparseable Referer must not affect the response
   }
+}
+
+function canRedirectToCdn(req, path) {
+  return (
+    !req.preview &&
+    (req.method === "GET" || req.method === "HEAD") &&
+    // the CDN's express.static ignores dotfiles, so it would 404 these
+    !path.split("/").some((segment) => segment.startsWith(".")) &&
+    CDN_REDIRECT_EXTENSIONS.has(extname(path).slice(1).toLowerCase())
+  );
+}
+
+// no-cache for browsers, which should re-check; the proxy caches the 302
+// regardless, and is purged for the whole host whenever the folder changes.
+function redirectToCdn(req, res, cdnPath) {
+  res.set("Cache-Control", "no-cache");
+  res.redirect(302, cdnOrigin(req) + cdnPath);
+}
+
+// Sends a 302 to the CDN for a large file of a safe type, mirroring the URL
+// lookupFile builds. Resolves false when the file should be served here.
+async function redirectLargeFolderFile(req, res, blogFolder, path) {
+  if (!path.startsWith(blogFolder + "/")) return false;
+
+  // Only the part the CDN URL exposes, so dot directories above the blog
+  // folder (e.g. in the data directory's own path) don't matter.
+  const relPath = path.slice(blogFolder.length);
+  if (!canRedirectToCdn(req, relPath)) return false;
+
+  await assertNoSymlinks(blogFolder, path);
+  const stat = await fs.stat(path);
+
+  if (!stat.isFile() || stat.size < CDN_REDIRECT_MIN_SIZE) return false;
+
+  redirectToCdn(
+    req,
+    res,
+    "/folder/" + versionedFolderPath(req.blog.id, relPath, stat)
+  );
+  return true;
 }
 
 function withoutTrailingSlash(path) {

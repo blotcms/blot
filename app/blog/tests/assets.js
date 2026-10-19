@@ -97,11 +97,98 @@ describe("asset middleware", function () {
     }
 
     for (const path of paths) {
-      const res = await this.get(path);
+      let res = await this.get(path, { redirect: "manual" });
+      // Images are redirected to the CDN, which serves the same bucket key
+      if (res.status === 302) res = await this.fetch(res.headers.get("location"));
       expect(res.status).toEqual(200);
       const body = await res.text();
       expect(body).toEqual(contents[path]);
     }
+  });
+
+  describe("redirects to the CDN", function () {
+    const big = "x".repeat(300 * 1024);
+    const small = "x".repeat(1024);
+
+    async function writeAndGet(test, path, content, options) {
+      await test.write({ path, content });
+      return test.get(path, { redirect: "manual", ...options });
+    }
+
+    it("redirects large pdf and mp4 files, encoding the path", async function () {
+      for (const path of ["/Big Fête.pdf", "/Videos/clip.MP4"]) {
+        const res = await writeAndGet(this, path, big);
+        const stat = await fs.stat(config.blog_folder_dir + "/" + this.blog.id + path);
+        const version = require("helper/contentVersion").fromStat(stat);
+        const encoded = path.split("/").map(encodeURIComponent).join("/");
+
+        expect(res.status).toEqual(302);
+        expect(res.headers.get("cache-control")).toEqual("no-cache");
+        expect(res.headers.get("location")).toMatch(
+          new RegExp(
+            `^https?://[^/]+/folder/v-${version}/${this.blog.id}${encoded}$`
+          )
+        );
+      }
+    });
+
+    it("drops the query string and redirects HEAD requests", async function () {
+      const res = await writeAndGet(this, "/big.pdf", big, { method: "HEAD" });
+      expect(res.status).toEqual(302);
+
+      const withQuery = await this.get("/big.pdf?a=b", { redirect: "manual" });
+      expect(withQuery.headers.get("location")).not.toContain("?");
+    });
+
+    it("serves small files directly", async function () {
+      const res = await writeAndGet(this, "/small.pdf", small);
+      expect(res.status).toEqual(200);
+      expect(await res.text()).toEqual(small);
+    });
+
+    it("serves svg, css and html directly whatever the size", async function () {
+      for (const path of ["/big.svg", "/big.css", "/big.html", "/big.txt"]) {
+        const res = await writeAndGet(this, path, big);
+        expect(res.status).toEqual(200);
+      }
+    });
+
+    it("serves a blog-folder file under an asset prefix instead of redirecting", async function () {
+      await this.write({ path: "/_assets/hero.jpg", content: "folder-bytes" });
+      const res = await this.get("/_assets/hero.jpg", { redirect: "manual" });
+      expect(res.status).toEqual(200);
+      expect(await res.text()).toEqual("folder-bytes");
+    });
+
+    it("serves large files under a dot directory directly", async function () {
+      const res = await writeAndGet(this, "/.hidden/big.pdf", big);
+      expect(res.status).toEqual(200);
+    });
+
+    it("never redirects on a preview host", async function () {
+      // the preview host needs the blog's local template to exist
+      await this.template({ "entry.html": "{{{entry.html}}}" });
+      await this.write({ path: "/big.pdf", content: big });
+      const res = await this.fetch(
+        `${config.protocol}preview-of-my-local-on-${this.blog.handle}.${config.host}/big.pdf`,
+        { redirect: "manual" }
+      );
+      expect(res.status).toEqual(200);
+    });
+
+    it("redirects generated assets to their bucket path on the CDN", async function () {
+      await assets.write(this.blog.id, "/_image_cache/x y.jpg", "jpg-bytes");
+      const res = await this.get("/_image_cache/x%20y.jpg?v=1", { redirect: "manual" });
+
+      expect(res.status).toEqual(302);
+      expect(res.headers.get("cache-control")).toEqual("no-cache");
+      expect(res.headers.get("location")).toMatch(
+        new RegExp(`^https?://[^/]+/${this.blog.id}/_image_cache/x%20y\\.jpg$`)
+      );
+
+      const cdnRes = await this.fetch(res.headers.get("location"));
+      expect(await cdnRes.text()).toEqual("jpg-bytes");
+    });
   });
 
   it("sends a file in the global static folder", async function () {

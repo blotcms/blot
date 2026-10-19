@@ -76,7 +76,9 @@ SafeHop on.
 - **Origin.** Type Origin URL, `http://<origin IP>` (the app host's openresty); plain HTTP to the IP on purpose, to keep the origin hop as fast as possible.
   Host header `cdn.blot.im`, Forward host header off, Verify origin SSL off,
   Follow redirects off, no middleware.
-- **Caching.** Smart Cache on; cache expiration overridden to 1 year; browser
+- **Caching.** Smart Cache off, so every response is cached with the 1-year
+  override (with it on, m4a, mov and octet-stream files were never cached);
+  cache expiration overridden to 1 year; browser
   cache "match server"; query string sort on; vary cache by URL query string,
   limited to the `version` parameter (the only one CDN URLs use, as the
   fonts' cache-buster; no CDN route reads the query string, so other
@@ -99,6 +101,14 @@ SafeHop on.
      Yandex.
   3. "Disable Cache For Support Testing": request header `support: true`
      overrides the cache time to 0 s.
+  4-5. The storage bucket and CORS rules, described below.
+  6. "Never cache health check": Override Cache Time 0 and Bypass Perma-Cache
+     on `*://cdn.blot.im/health*`, because updown.io monitors that URL.
+
+Large folder files and generated assets (`/_image_cache/`, `/_assets/`, ...)
+requested on a blog host answer with a 302 to this CDN (see
+`app/blog/routes/assets.js`), so their bytes leave through Bunny, not the app
+host.
 
 The `cdn.` server block in `proxy/config/server.conf` answers whatever Bunny
 asks the app host for. It serves the app's global static files (fonts, icons,

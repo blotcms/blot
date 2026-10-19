@@ -12,6 +12,7 @@ const callOnce = require("helper/callOnce");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const config = require("config");
 const fromCloudflare = require("../lib/fromCloudflare");
+const cdnOrigin = require("../lib/cdnOrigin");
 const CACHE = config.cache;
 
 const CONTENT_TYPE = "Content-Type";
@@ -87,13 +88,7 @@ module.exports = function attachRenderView(req, res, _next) {
     // served over http and isn't behind Cloudflare - mirrors the existing
     // protocol-downgrade trick for the {{cdn}}/{{public}} helper case below.
     function resolveCdnOrigin() {
-      let cdnOrigin = config.cdn.origin;
-
-      if (req.protocol === "http" && cloudflare === false) {
-        cdnOrigin = cdnOrigin.split("https://").join("http://");
-      }
-
-      return cdnOrigin;
+      return cdnOrigin(req);
     }
 
     if (callback) callback = callOnce(callback);

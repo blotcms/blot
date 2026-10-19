@@ -1,5 +1,6 @@
 // Helpers shared by request-time link rewriting (html.js, css.js) and the
 // build-time folderAssets plugin, so the two can't drift apart.
+const contentVersion = require("helper/contentVersion");
 const htmlExtRegex = /\.html$/;
 const fileExtRegex = /[^/]*\.[^/]*$/;
 
@@ -49,6 +50,12 @@ const encodeFolderPath = (path) =>
     )
     .join("/");
 
+// The part of a folder CDN URL after /folder/: v-<version>/<blogID><path>,
+// for a path relative to the blog folder. Shared by lookupFile (page
+// renders) and the routes which redirect large files to the CDN.
+const versionedFolderPath = (blogID, path, stat) =>
+  `v-${contentVersion.fromStat(stat)}/${blogID}${encodeFolderPath(path)}`;
+
 // Decodes the path portion of a folder link. Split off any ?query and
 // #hash first, so an encoded '#' or '?' in a file name isn't mistaken for
 // one. A path that isn't valid percent-encoding (e.g. '/100% luck.jpg' in a
@@ -67,4 +74,5 @@ module.exports = {
   parseSrcset,
   encodeFolderPath,
   decodeFolderPath,
+  versionedFolderPath,
 };

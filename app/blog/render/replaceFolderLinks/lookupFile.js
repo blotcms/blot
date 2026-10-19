@@ -1,7 +1,6 @@
 const config = require("config");
 const fs = require("fs-extra");
 const hash = require("helper/hash");
-const contentVersion = require("helper/contentVersion");
 const { resolve, join } = require("path");
 const { promisify } = require("util");
 const caseSensitivePath = promisify(require("helper/caseSensitivePath"));
@@ -10,7 +9,11 @@ const {
   isReservedStaticPath,
 } = require("../../lib/staticPaths");
 const BLOT_CDN_TOKEN = require("./cdnToken");
-const { encodeFolderPath, decodeFolderPath } = require("./shared");
+const {
+  encodeFolderPath,
+  decodeFolderPath,
+  versionedFolderPath,
+} = require("./shared");
 
 class Cache {
   constructor() {
@@ -91,11 +94,9 @@ async function lookupFile(blogID, cacheID, value) {
       // This runs during a page render, so never read the file here: use
       // the cheap size+mtime token. Build-time links (folderAssets) get a
       // content hash instead.
-      const version = contentVersion.fromStat(stat);
-
       // we need to include the path in the result since if there is a case-sensitive
       // issue, the path will be different after resolution
-      result = `v-${version}/${blogID}${encodeFolderPath(path)}`;
+      result = versionedFolderPath(blogID, path, stat);
 
       pathCache.set(key, result);
     } catch (err) {
