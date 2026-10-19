@@ -12,9 +12,14 @@ describe("Blot configuration", function () {
   });
 
   var fetch = require("node-fetch");
-  var START_MESSAGE = "listening";
+  // The app builds templates once it is listening, under a Redis lock that
+  // only expires after 60s if the holder is killed mid-build. Killing the
+  // app before that finishes would leave the lock behind, and the next
+  // spec to build templates in this process would wait it out.
+  var START_MESSAGE = "Built templates after listen";
   var server;
   var stderr = "";
+  var stdout = "";
 
   beforeAll(function (done) {
     server = require("child_process").fork(__dirname + "/../../../app", {
@@ -26,11 +31,12 @@ describe("Blot configuration", function () {
       stderr += data.toString("utf8") + "\n";
     });
 
-    // Listen for listening message
+    // Wait for the app to be listening and to have built its templates
     server.stdout.on("data", function (data) {
-      // This is a bit of a flimsy check to see if the server is running
-      // there might be more than one message with listening in
-      if (data.toString("utf8").indexOf(START_MESSAGE) > -1) {
+      stdout += data.toString("utf8");
+
+      if (stdout.indexOf(START_MESSAGE) > -1) {
+        stdout = "";
         done();
       }
     });
