@@ -161,7 +161,11 @@ function FormatDate(dateStamp, zone) {
         text = "";
       }
 
-      return render(text);
+      // Return the formatted date as-is. Passing it back through render()
+      // made Mustache parse and cache every distinct date as a template,
+      // filling its process-wide template cache on a long list and evicting
+      // the real views and partials, which were then re-parsed every render.
+      return text;
     };
   };
 }

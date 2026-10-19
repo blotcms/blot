@@ -15,6 +15,23 @@ describe("augment", function () {
         expect(res.status).toEqual(200);
         expect(body.trim()).toEqual(new Date().getFullYear().toString());
     });
+
+    it("does not cache formatted dates as Mustache templates", async function () {
+        const Mustache = require('mustache');
+
+        await this.write({path: "/a.txt", content: "Date: 2025-01-03\n\nA"});
+        await this.write({path: "/b.txt", content: "Date: 2025-02-04\n\nB"});
+        await this.template({
+            'entries.html': '{{#allEntries}}{{#formatDate}}MMMM D, YYYY{{/formatDate}};{{/allEntries}}'
+        });
+
+        const body = await this.text('/');
+
+        expect(body).toContain('January 3, 2025;');
+        expect(body).toContain('February 4, 2025;');
+        expect(Mustache.templateCache.has('January 3, 2025')).toBe(false);
+        expect(Mustache.templateCache.has('February 4, 2025')).toBe(false);
+    });
     
     it("adds ratio property to thumbnails", async function () {
     
