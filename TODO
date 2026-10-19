@@ -10,6 +10,8 @@ Audit the ci change commits (d579ecb10b6eead21469168623d621c32d68dafb, 33cb82f55
 A concurrent node and proxy deploy lead to this failure: https://github.com/blotcms/blot/actions/runs/39042182709/job/117423729308
 - make the proxy deploy tolerant of this (retry after x seconds)
 
+Overdue sites should have their data exported, archived (download link in email) for up to a year after closure.
+
 Add macserver deploy to github actions
 - Consider making the deploy via github much safer – how?
   - remove ssh keys from deployment. maybe set up a minimal deployment agents on the servers? maybe autodeploy images with a given tag? 
