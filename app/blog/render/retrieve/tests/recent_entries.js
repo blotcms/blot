@@ -190,3 +190,63 @@ describe("recent_entries rendering", function () {
     expect(Entries.getRecent.calls.count()).toEqual(callsAfterFirst);
   });
 });
+
+describe("recent_entries feed length", function () {
+  const recentEntries = require("../recent_entries");
+  const Entries = require("models/entries");
+
+  function run(req) {
+    return new Promise((resolve, reject) => {
+      recentEntries(req, {}, (err, result) =>
+        err ? reject(err) : resolve(result)
+      );
+    });
+  }
+
+  function thirty() {
+    return Array.from({ length: 30 }, (_, i) => ({
+      id: "/" + i + ".txt",
+      title: "Entry " + i,
+    }));
+  }
+
+  async function entriesFor(viewName) {
+    recentEntries._clear();
+    if (!jasmine.isSpy(Entries.getRecent)) {
+      spyOn(Entries, "getRecent").and.callFake(function (blogID, options, callback) {
+        callback(thirty());
+      });
+    }
+    return run({
+      blog: { id: "blog-1", cacheID: "1" },
+      viewName,
+      retrieve: {},
+    });
+  }
+
+  it("gives feed.rss at most FEED_MAX_ENTRIES entries", async function () {
+    expect(recentEntries.FEED_MAX_ENTRIES).toBe(10);
+    const result = await entriesFor("feed.rss");
+    expect(result.length).toBe(10);
+    expect(result[0].id).toBe("/0.txt");
+  });
+
+  it("gives an HTML view all 30 entries", async function () {
+    expect((await entriesFor("sidebar.html")).length).toBe(30);
+  });
+
+  it("gives other xml views all 30 entries", async function () {
+    expect((await entriesFor("sitemap.xml")).length).toBe(30);
+    expect((await entriesFor("atom.xml")).length).toBe(30);
+  });
+
+  it("does not shrink the cached entries for later views", async function () {
+    await entriesFor("feed.rss");
+    const result = await run({
+      blog: { id: "blog-1", cacheID: "1" },
+      viewName: "index.html",
+      retrieve: {},
+    });
+    expect(result.length).toBe(30);
+  });
+});

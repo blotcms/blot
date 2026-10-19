@@ -9,6 +9,11 @@ const { Uncacheable } = require("../../lib/uncacheableFetch");
 
 const ALIASES = ["recentEntries", "recent_entries"];
 
+// The RSS feed view is fetched by pollers far more often than pages are, so
+// it carries fewer entries than the 30 other views get.
+const FEED_VIEW_NAME = "feed.rss";
+const FEED_MAX_ENTRIES = 10;
+
 const recentEntriesCache = new LRUCache({
   max: 1000,
   // 30 skinny entries per blog, but still byte-capped so a burst of
@@ -65,10 +70,18 @@ async function recentEntries(req, res) {
     prepared = e.payload;
   }
 
-  return projectEntryFields(cloneEntries(prepared.payload), req.retrieve, ALIASES);
+  let entries = prepared.payload;
+
+  // Slice at use: the cached payload is shared by every view of this blog.
+  if (req.viewName === FEED_VIEW_NAME && entries.length > FEED_MAX_ENTRIES) {
+    entries = entries.slice(0, FEED_MAX_ENTRIES);
+  }
+
+  return projectEntryFields(cloneEntries(entries), req.retrieve, ALIASES);
 }
 
 module.exports = asRetriever(recentEntries);
+module.exports.FEED_MAX_ENTRIES = FEED_MAX_ENTRIES;
 module.exports._createCacheKey = createCacheKey;
 module.exports._clear = function () {
   recentEntriesCache.clear();

@@ -144,6 +144,9 @@ module.exports = function attachRenderView(req, res, _next) {
 
       listingViews.ensureRetrieve(name, missingLocals);
 
+      // Lets retrievers (recent_entries) treat feed.rss differently
+      req.viewName = name;
+
       const foundLocals = await retrieve(req, res, missingLocals);
       extend(res.locals).and(foundLocals);
       listingViews.aliasLocals(name, req, res, foundLocals);
