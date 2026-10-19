@@ -1,4 +1,5 @@
 import { watch } from "../watcher/index.js";
+import { reviveLimiterForBlogID } from "../limiters.js";
 import clfdate from "../util/clfdate.js";
 
 export default async (req, res) => {
@@ -10,6 +11,12 @@ export default async (req, res) => {
   }
 
   try {
+    // Blot calls this once a (re)connected blog's initial transfer is done,
+    // so a limiter stopped by an earlier disconnect can run actions again.
+    // Only here: the internal watch() calls after a Blot write or an
+    // eviction must not revive a blog that was disconnected meanwhile.
+    reviveLimiterForBlogID(blogID);
+
     // watch the blog
     await watch(blogID);
   } catch (error) {

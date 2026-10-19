@@ -86,6 +86,18 @@ export default async (blogID, reason) => {
         );
         return;
       } catch (error) {
+        // Blot answers 400 when the blog is not connected to iCloud Drive
+        // (e.g. disconnected while actions were queued), which retrying
+        // cannot fix. 409 (setup incomplete), 423 (locked) and 5xx are
+        // deliberate "try again later" replies, so those keep retrying.
+        if (error.status === 400) {
+          console.log(
+            clfdate(),
+            `Resync not needed: blog ${blogID} is no longer connected`
+          );
+          return;
+        }
+
         const delayMs = Math.min(
           RESYNC_BASE_DELAY_MS * 2 ** (attempt - 1),
           RESYNC_MAX_DELAY_MS

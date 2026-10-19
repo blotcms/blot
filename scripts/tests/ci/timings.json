@@ -231,6 +231,7 @@
   "app/clients/icloud/tests/getHealth.js": 1.16,
   "app/clients/icloud/tests/init.js": 0.059,
   "app/clients/icloud/tests/isValidSharingLink.js": 0.003,
+  "app/clients/icloud/tests/macserverDisconnect.js": 5.2,
   "app/clients/icloud/tests/monitorMacServerStats.js": 0.009,
   "app/clients/icloud/tests/notificationCap.js": 0.01,
   "app/clients/icloud/tests/rateLimitedFetch.js": 0.943,

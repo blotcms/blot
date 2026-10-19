@@ -1,5 +1,5 @@
 import clfdate from "../util/clfdate.js";
-import { getLimiterForBlogID } from "../limiters.js";
+import { getLimiterForBlogID, isLimiterStoppedError } from "../limiters.js";
 import mkdir from "../httpClient/mkdir.js";
 import remove from "../httpClient/remove.js";
 import resync from "../httpClient/resync.js";
@@ -122,6 +122,12 @@ const performAction = async (blogID, pathInBlogDirectory, action) => {
       });
       throw error;
     }
+  }).catch((error) => {
+    // The blog was disconnected (or its folder deleted) while this action was
+    // queued. removeLimiterForBlogID logged how many were dropped; there is
+    // nothing to do and no point asking Blot for a resync.
+    if (isLimiterStoppedError(error)) return;
+    throw error;
   });
 };
 

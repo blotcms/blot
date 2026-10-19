@@ -25,7 +25,9 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
       clearTimeout(timer); // Clear the timeout if fetch is successful
 
       if (!response.ok) {
-        throw new Error(`HTTP error: ${response.status} - ${response.statusText}`);
+        const httpError = new Error(`HTTP error: ${response.status} - ${response.statusText}`);
+        httpError.status = response.status;
+        throw httpError;
       }
 
       return response; // Return the successful response
@@ -61,7 +63,10 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
 
       // If all retries fail, throw the error
       if (attempt === retries) {
-        throw new Error(`Request failed after ${retries} retries: ${error.message} ${url}`);
+        const finalError = new Error(`Request failed after ${retries} retries: ${error.message} ${url}`);
+        // lets callers tell an HTTP rejection (e.g. 400) from a network failure
+        finalError.status = error.status;
+        throw finalError;
       }
     }
   }
