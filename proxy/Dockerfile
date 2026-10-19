@@ -111,6 +111,7 @@ COPY build/data/latest/defaults.env /etc/openresty/defaults.env
 COPY build/data/latest/cdn-ips.conf /etc/openresty/cdn-ips.default.conf
 COPY build/data/latest/cacher.lua /etc/openresty/cacher.lua
 COPY build/data/latest/wildcard_cert.lua /etc/openresty/wildcard_cert.lua
+COPY build/data/latest/ban.lua /etc/openresty/ban.lua
 COPY build/data/latest/html /etc/openresty/html
 
 COPY render-config.sh /usr/local/bin/render-config

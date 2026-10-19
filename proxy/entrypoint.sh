@@ -38,6 +38,13 @@ if [[ "$(id -u)" == "0" ]]; then
     /etc/resty-auto-ssl/letsencrypt/accounts \
     /etc/resty-auto-ssl/letsencrypt/certs \
     /etc/resty-auto-ssl/letsencrypt/chains
+  # New and renewed custom-domain certificates get ECDSA (P-256) keys: the
+  # chain is about 1.5 KB smaller per full TLS handshake than with RSA 4096.
+  # dehydrated (via lua-resty-auto-ssl) sources letsencrypt/conf.d/*.sh. It is
+  # written on every start because /etc/resty-auto-ssl is a persistent volume,
+  # so a file baked into the image would never appear. Certificates already
+  # issued stay RSA until their next renewal.
+  echo 'KEY_ALGO="prime256v1"' > /etc/resty-auto-ssl/letsencrypt/conf.d/key-algo.sh
   chown -R ec2-user:ec2-user /etc/resty-auto-ssl
 fi
 

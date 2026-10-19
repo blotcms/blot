@@ -153,6 +153,36 @@ start).
   handshake (0.13.1 cannot be told not to); Let's Encrypt certificates no
   longer name a responder, so this fails at once and is logged at notice level.
 
+- **Key type**: `entrypoint.sh` writes `KEY_ALGO="prime256v1"` to
+  `/etc/resty-auto-ssl/letsencrypt/conf.d/key-algo.sh` on every start (the
+  directory is on a volume, so a file in the image would not show up), which
+  dehydrated reads. New and renewed custom-domain certificates are ECDSA, with
+  a shorter chain than RSA 4096; existing RSA ones keep working until their
+  renewal. Nothing in the config, `wildcard_cert.lua` or the scheduler checks
+  assumes a key type. The `*.blot.im` wildcard is issued by
+  `app/scheduler/renew-wildcard-ssl.js`, not by dehydrated, and is unchanged.
+
+### Scanner bans and TLS resumption
+
+`ban.lua` bans a client IP for an hour after three `444` responses within two
+minutes (the `444`s in `blot-blogs.conf` are for scanners; one alone may be a
+typo). It runs in the log phase of every server, and the ban is enforced in
+`ssl_client_hello_by_lua` (in `wildcard-ssl.conf`), which aborts the handshake
+before a certificate is chosen or sent, and in `rewrite_by_lua` for requests
+(plain HTTP, and HTTPS via Cloudflare, where the handshake only sees
+Cloudflare's address). Whitelisted IPs (the `$whitelist` geo in `http.conf`),
+loopback and private addresses are never banned. Bans live in the
+`banned_ips` shared dict, so they are per container and lost on restart;
+fail2ban (host) is the longer-lived layer. A `return` in a location (only
+`/health`) runs before the rewrite phase and is not blocked. The http-level
+`log_by_lua` is replaced in any location with its own (`reverse-proxy-cache.conf`
+has one); that is harmless, as those locations proxy upstream and never return
+444.
+
+`ssl_session_cache` is 100m and `ssl_session_timeout` 24h (`wildcard-ssl.conf`):
+a resumed handshake is about 250 bytes against about 5 KB for a full one.
+Session tickets stay off.
+
 ### Possible replacement for `lua-resty-auto-ssl` (to investigate)
 
 `lua-resty-auto-ssl` is effectively unmaintained, and its shell-out chain
@@ -261,8 +291,9 @@ and "Proxy container follow-ups". The main ones:
 - **`fail2ban` / `logrotate`** are host-level in [`config/host`](../config/host); the
   container logs to stdout/stderr by default (so `docker logs` works), but the
   production image is built with `LOG_TO_STDOUT=false` so the host's fail2ban
-  and logrotate can read the shared log directory, and the container has no
-  request-ban layer of its own.
+  and logrotate can read the shared log directory. The nginx-* jails ban with
+  a second `iptables-multiport` action for UDP so the ban covers UDP 443
+  (HTTP/3) too, without blocking ssh. The container has its own short-lived scanner ban (`ban.lua`, above).
 - **Replacing `lua-resty-auto-ssl`** (above).
 
 ## Tests
