@@ -1,10 +1,9 @@
 /var/instance-ssd/logs/access.log {
-    size 150M
+    daily
+    rotate 7
     missingok
     notifempty
     compress
     delaycompress
     copytruncate
-    rotate 0
-    daily
 }
