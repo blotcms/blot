@@ -1,5 +1,12 @@
 Check in on ec2 bandwidth egress after October 22nd and update billing breakdown on aws issue
 
+Internationalization inc currency
+
+Force renew all current ssl certs and switch wildcard to ecdsa cert to save bandwidth?
+
+Finish 2035 and move replaceFolderLinks off the render path
+- inspect the existing instrumentation
+
 On 23 Oct: check custom-domain certs issued since 19 Oct are ECDSA (#2163 set KEY_ALGO=prime256v1; RSA certs switch at renewal). Run: ssh -n blot "grep -ohE '^\S+ \S+ \S+ \S+ \S+ \S+ https://[^/ ]+' /var/instance-ssd/logs/access.log | sed 's|.*https://||' | grep -v 'blot\.im$' | sort -u" | while read d; do printf '%s ' "$d"; echo | openssl s_client -connect "$d:443" -servername "$d" 2>/dev/null | openssl x509 -noout -startdate -text 2>/dev/null | grep -E 'notBefore|Public Key Algorithm' | tr -s ' \n' ' '; echo; done | grep -E 'notBefore=Oct (19|2[0-9]) ' - every line should say id-ecPublicKey; if any say rsaEncryption, check that /etc/resty-auto-ssl/letsencrypt/conf.d/key-algo.sh exists in the proxy container.
 
 Consider a proxy-level throttle for unconditional feed polling: 429 + Retry-After for a repeat request without If-None-Match/If-Modified-Since from the same IP + feed within ~15 min (access-phase Lua, before the cache). Prototyped and dropped from #2162 as too complicated. Caveat: its 429s must not feed fail2ban's nginx-429 jail (lrs=PASSED vs limit_req's lrs=REJECTED in the access log).
@@ -12,7 +19,7 @@ Audit the ci change commits (d579ecb10b6eead21469168623d621c32d68dafb, 33cb82f55
 A concurrent node and proxy deploy lead to this failure: https://github.com/blotcms/blot/actions/runs/39042182709/job/117423729308
 - make the proxy deploy tolerant of this (retry after x seconds)
 
-Overdue sites should have their data exported, archived (download link in email) for up to a year after closure.
+Overdue sites should have their data exported, archived in s3 (download link in email) for up to a year after closure.
 
 Add macserver deploy to github actions
 - Consider making the deploy via github much safer – how?
@@ -27,6 +34,7 @@ Is the status page just measuring the lru caches? how do we make it verify a col
 
 Look into https://github.com/tobi/walgit for s3 backed git server
 - https://cursor.com/blog/git-at-any-scale
+- Investigate S3-backed Git hosting with incremental folder materialization. Prototype replacing Blot's EBS-backed Git repository storage with Walgit, a Git server using S3 as its source of truth and local disks as disposable caches, enabling cheaper storage and horizontal scaling across thousands of customer repositories. Run Walgit as a private service behind Blot's existing Express.js authentication (static username/password), without its UI, authentication, policies, or other unnecessary features. Build a Node.js materializer that incrementally synchronizes the master branch of each repository to ordinary files under a separate prefix in the same S3 bucket, uploading only changed files and deleting removed ones. Trigger materialization immediately after successful pushes, ideally reusing locally cached Git objects to minimize latency, with durable progress tracking, concurrency control, and automatic recovery from failures. Evaluate Git LFS support and benchmark cold pushes, S3 costs, and performance at scale. Consider a native Node.js implementation inspired by Walgit if maintaining the Rust service proves unnecessarily complex.
 
 How to reduce likelihood of downtime?
 - s3 for storage only (replicated?)
