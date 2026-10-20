@@ -1,11 +1,11 @@
 <div style="display:flex;min-height:80vh;gap:2em">
 	  {{> source-code-sidebar}}
-    <div style="width:calc(100vw - 670px);border:1px solid var(--border-color);border-radius: var(--border-radius);">
+    <div class="editor-container">
       {{> source-code-header}}
 
         <form method="post" action="{{{base}}}/source-code/{{view.name}}/delete"  method="post" class="dashboard-form" style="padding:2rem">
           <input type="hidden" name="_csrf" value="{{csrftoken}}" />
-          <p> If you delete <strong>{{view.name}}</strong>, Blot will permanently remove it. This cannot be undone. </p>
+          <p>Do you want to delete {{view.name}}? This file will be permanently deleted and cannot be recovered.</p>
           <div class="buttons">
             <button type="submit" class="red">
               Delete file

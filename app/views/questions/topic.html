@@ -3,31 +3,27 @@
 
 <div class="question-container">
   {{{body}}}
-    <div >
-      <br>
-      
-      <span class="minor">
-          <span date-from-now="{{ created_at }}">{{ time }}</span>, {{ reply_count }} {{#singular}}reply{{/singular
-          }}{{^singular}}replies{{/singular}}
-          {{#number_of_replies}}
-          · Last reply <span date-from-now="{{ last_reply_created_at }}">{{ last_reply_time }}</span>
-          {{/number_of_replies}}
-          </span>&nbsp;
-       {{#tags}}
-      <a
-        href="/questions/tagged/{{ slug }}"
-        class="tag-chip"
->
-        {{ tag }}
-      </a> &nbsp;
-      {{/tags}} 
-      <a href="/questions/{{ id }}/edit" class="minor">
-        
-        Edit question
-       </a>
+    <div class="question-meta">
+      {{#tags.length}}
+      <div class="question-tags">
+        {{#tags}}
+        <a href="/questions/tagged/{{ slug }}" class="tag-chip">{{ tag }}</a>
+        {{/tags}}
+      </div>
+      {{/tags.length}}
+      <div class="question-meta-line">
+        <span class="minor">
+          Asked <span date-from-now="{{ created_at }}">{{ time }}</span>
+        </span>
+        <a href="/questions/{{ id }}/edit" class="minor edit-content-link">
+          Edit
+        </a>
+      </div>
     </div>
   </div>
-</div>
+  <div class="question-reply-count">
+    {{ reply_count }} {{#singular}}reply{{/singular}}{{^singular}}replies{{/singular}}
+  </div>
 
 {{/topic}}
 
@@ -36,12 +32,14 @@
   {{#topics}}
   <div class="answer-container">
     {{{body}}}
-    <span class="minor"
-      >Answered <span date-from-now="{{ created_at }}">{{ time }}</span> ·
-    </span>
-    <a class="minor" href="/questions/{{ id }}/edit"
-      >Edit answer</a
-    >
+    <div class="answer-meta">
+      <span class="minor"
+        ><span date-from-now="{{ created_at }}">{{ time }}</span>
+      </span>
+      <a class="minor edit-content-link" href="/questions/{{ id }}/edit"
+        >Edit</a
+      >
+    </div>
   </div>
   {{/topics}}
   {{/topics.length}}
@@ -52,6 +50,7 @@
 
   <br />
   <div style="max-width: 637px">
+    <h2 class="reply-form-heading">Your reply</h2>
     <form
       method="POST"
       action="/questions/{{ topic.id }}/new"

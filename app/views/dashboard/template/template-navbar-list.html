@@ -1,7 +1,7 @@
 <div id="template-list" style="padding-top: 1rem">
   <section class="template-list-section">
     <div class="template-list-section__heading">
-      <h2>
+      <h2 class="template-list-title">
         Your templates
       </h2>
       <button
@@ -18,11 +18,11 @@
       </button>
     </div>
     <div>
-      <div class="template-row {{newSelected}}">
-        <a href="{{{dashboardBase}}}/template/new">
+      <div class="template-row template-row--create {{newSelected}}">
+        <a class="template-row__link" href="{{{dashboardBase}}}/template/new">
           <span
-            class="preview"
-            style="border:1px dashed #ccc;{{#newSelected}}border-color:var(--accent-color);{{/newSelected}}border-radius:3px;box-shadow: none;"
+            class="preview template-row__create-icon"
+            style="border-radius:3px;box-shadow: none;"
           >
           </span>
           <span class="template-row__name">Create template</span>

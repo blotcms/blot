@@ -8,7 +8,7 @@
 
   <h1><span class="icon-file{{#entry}}-check{{/entry}}"></span>{{name}}</h1>
  
-  <a href="{{{base}}}/folder-download{{{url}}}" target="_blank" class="template-button right-aligned file-helper">
+  <a href="{{{base}}}/folder-download{{{url}}}" target="_blank" class="template-button file-helper">
     Download file
     <span class="icon-download"></span>
   </a>
@@ -21,7 +21,7 @@
 
     <tr>
       <td>File URL:</td>
-      <td>https://{{{blog.pretty.url}}}{{{url}}} <button class="copy"><span class="icon-copy"></span> Copy</button></td>
+      <td><a href="https://{{{blog.pretty.url}}}{{{url}}}" target="_blank" rel="noopener noreferrer">https://{{{blog.pretty.url}}}{{{url}}}</a> <button class="copy" data-copy="https://{{{blog.pretty.url}}}{{{url}}}"><span class="icon-copy"></span> Copy</button></td>
     </tr>
 
     <tr>
@@ -56,16 +56,19 @@
   </p>
   {{/multi}}
   {{^multi}}
-  <p>
+  <div class="publishing-step">
     <i><span class="icon-small-check"></span></i>
     <b>File is a {{type}}</b>
+    <details>
+      <summary><span class="icon-support"></span> Explain</summary>
     {{#converter.img}}
-    To prevent this file becoming a {{type}}, start the file name with an underscore, move it into a folder that starts with an underscore, or <a href="{{{base}}}/sites/default/settings/images">disable image posts</a>.
+      <p>To prevent this file becoming a {{type}}, start the file name with an underscore, move it into a folder that starts with an underscore, or <a href="/sites/default/settings/images">disable image posts</a>.</p>
     {{/converter.img}}
     {{^converter.img}}
-    To prevent this file becoming a {{type}}, start the file name with an underscore or move it into a folder that starts with an underscore.
+      <p>To prevent this file becoming a {{type}}, start the file name with an underscore or move it into a folder that starts with an underscore.</p>
     {{/converter.img}}
-  </p>
+    </details>
+  </div>
   {{/multi}}
   {{#scheduled}}
   {{^draft}}
@@ -78,18 +81,18 @@
   {{/entry}}
   {{^entry}}
   <!-- File is not a post or page -->
-  <p><i><span class="icon-small-no-entry"></span></i><b>File is not a post or page</b>.
+  <p><i><span class="icon-small-no-entry"></span></i><b>File is not a post or page.</b>
     {{#ignored}}
     {{#tooLarge}}This file exceeds the {{postSizeLimit}} post size limit. It remains available as a file, but cannot become a post or page until it is reduced below the limit.{{/tooLarge}}
     {{#wrongType}}{{kind}} files are not a file type which can become a post or page.{{/wrongType}}
     {{#underscorePath}}It's inside a folder whose name starts with an underscore. {{/underscorePath}}
     {{#underscoreName}}It is ignored because its name starts with an underscore.{{/underscoreName}}
     {{#templateFile}}It's inside the Templates folder.{{/templateFile}}
-    {{#imageConverterDisabled}}Image posts are disabled in your site's image settings, so this image did not become a post or page. You can make this image become a post by enabling image posts on the <a href="{{{base}}}/sites/default/settings/images">image settings page</a>.{{/imageConverterDisabled}}
+    {{#imageConverterDisabled}}Image posts are disabled in your site's image settings, so this image did not become a post or page. You can make this image become a post by enabling image posts on the <a href="/sites/default/settings/images">image settings page</a>.{{/imageConverterDisabled}}
     {{/ignored}}
   </p>
   </div>
-  <div style="font-size: 14px;border-top: 1px solid #eeeeec;padding: 24px 36px">
+  <div style="font-size: 14px;{{^ignored}}border-top: 1px solid #eeeeec;{{/ignored}}padding: 24px 36px">
   {{#extension.pdf}}
   <!-- Embedding and linking PDF -->
   <p>Embed this PDF in another post:</p>
@@ -152,7 +155,7 @@
 
   <h1><a href="{{{blog.url}}}{{{url}}}" target="_blank"><span class="icon-website"></span>{{title}}</a></h1>
 
-  <a href="{{{blog.url}}}{{{url}}}" target="_blank" class="template-button right-aligned file-helper">
+  <a href="{{{blog.url}}}{{{url}}}" target="_blank" class="template-button file-helper">
     View {{type}}
     <span class="icon-zoom"></span>
   </a>
@@ -163,7 +166,7 @@
 
     <!-- Title -->
     <tr>
-     <td>{{Type}} title:</td>
+     <td>Title:</td>
      <td>{{title}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
@@ -223,7 +226,7 @@
 
    <!-- Post or page link -->
    <tr>
-    <td>{{Type}} link:</td>
+    <td>Link:</td>
     <td>{{{url}}} <button class="copy"><span class="icon-copy"></span> Copy</button>
       <details>
         <summary><span class="icon-support"></span> Explain</summary>
@@ -246,7 +249,7 @@
    <!-- Post or page URL -->
    <tr>
      <td>{{Type}} URL:</td>
-     <td>https://{{blog.pretty.url}}{{url}} <button class="copy"><span class="icon-copy"></span> Copy</button>
+     <td><a href="https://{{{blog.pretty.url}}}{{{url}}}" target="_blank" rel="noopener noreferrer">https://{{{blog.pretty.url}}}{{{url}}}</a> <button class="copy" data-copy="https://{{{blog.pretty.url}}}{{{url}}}"><span class="icon-copy"></span> Copy</button>
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>The public, permanent URL of this {{type}}. Use it if you want to add a link to this {{type}} from elsewhere.</p>
@@ -317,7 +320,7 @@
        <img class="file-thumbnail" height="{{height}}" width="{{width}}" src="{{{url}}}" />
        {{/thumbnail.small}}
        {{^thumbnail.small}}
-       --
+       <span class="file-stat-empty">--</span>
        {{/thumbnail.small}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
@@ -346,7 +349,7 @@
        {{#summary}}
        <pre>{{summary}}</pre>
        {{/summary}}
-       {{^summary}}--
+       {{^summary}}<span class="file-stat-empty">--</span>
        {{/summary}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
@@ -371,7 +374,7 @@
      <td>Tags:</td>
      <td>
        {{#tags}} {{tag}}{{^last}},{{/last}} {{/tags}}
-       {{^tags.length}}--{{/tags.length}}
+       {{^tags.length}}<span class="file-stat-empty">--</span>{{/tags.length}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>The tags associated with this post.</p>
@@ -384,7 +387,7 @@
      <td>Backlinks:</td>
      <td>
        {{#backlinks}} {{backlink}}{{^last}},{{/last}} {{/backlinks}}
-       {{^backlinks.length}}--{{/backlinks.length}}
+       {{^backlinks.length}}<span class="file-stat-empty">--</span>{{/backlinks.length}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>The backlinks to this post.</p>
@@ -397,7 +400,7 @@
      <td>Internal links:</td>
      <td>
        {{#internalLinks}} {{internalLink}}{{^last}},{{/last}} {{/internalLinks}}
-       {{^internalLinks.length}}--{{/internalLinks.length}}
+       {{^internalLinks.length}}<span class="file-stat-empty">--</span>{{/internalLinks.length}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>The internal links within this post.</p>
@@ -410,7 +413,7 @@
      <td>Dependencies:</td>
      <td>
        {{#dependencies}} {{dependency}}{{^last}},{{/last}} {{/dependencies}}
-       {{^dependencies.length}}--{{/dependencies.length}}
+       {{^dependencies.length}}<span class="file-stat-empty">--</span>{{/dependencies.length}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>The dependencies required for this post.</p>
@@ -432,7 +435,7 @@
          {{/metadata}}
        </table>
        {{/metadata.length}}
-       {{^metadata.length}}--
+       {{^metadata.length}}<span class="file-stat-empty">--</span>
        {{/metadata.length}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
@@ -455,7 +458,7 @@
          {{/exif}}
        </table>
        {{/exif.length}}
-       {{^exif.length}}--
+       {{^exif.length}}<span class="file-stat-empty">--</span>
        {{/exif.length}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>

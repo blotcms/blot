@@ -1,15 +1,10 @@
 <h1>{{^tag}}Questions {{/tag}}{{#tag}}{{ prettyTag }}{{/tag}}</h1>
 
-{{#tag}}
-<p style="color:var(--light-text-color);font-size:var(--small-font-size)">
-  {{paginator.topics_count}} questions tagged '{{prettyTag}}'
-  </p>
-{{/tag}}
 {{^tag}}
 {{> questions-toolbar}}
 {{/tag}}
 
-<div class="questions">
+<div class="questions{{#tag}} tagged-questions{{/tag}}">
 
   {{#topics}}
     {{> question-row}}  

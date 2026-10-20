@@ -7,6 +7,10 @@
   border-bottom: 1px solid var(--light-border-color);
 }
 
+.number-input:hover {
+  background-color: var(--light-background-color);
+}
+
 .number-input:last-child {
   border-bottom: none;
 }

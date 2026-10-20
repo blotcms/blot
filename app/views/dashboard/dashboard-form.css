@@ -1,5 +1,28 @@
-form.dashboard-form {
-  max-width: 448px;
+form.dashboard-form,
+.dashboard-form-panel {
+  box-sizing: border-box;
+  width: 66.6666vw;
+  min-width: min(448px, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
+}
+
+@media (max-width: 600px) {
+  form.dashboard-form,
+  .dashboard-form-panel {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+}
+
+.dashboard-form-panel {
+  flex-grow: 0;
+}
+
+.template-main form.dashboard-form {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
   
@@ -61,6 +84,11 @@ form.dashboard-form {
     margin-bottom: 4px;
     padding-top: 1rem;
     padding-bottom: .25rem;
+  }
+
+  form.dashboard-form .source-file-name-label {
+    margin-bottom: 0;
+    padding-bottom: 0;
   }
   
   form.dashboard-form select {

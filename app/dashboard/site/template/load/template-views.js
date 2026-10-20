@@ -26,7 +26,11 @@ module.exports = function (req, res, next) {
       if (req.params.viewSlug && view.name === req.params.viewSlug)
         view.selected = "selected";
       view.extension = {};
-      view.extension[view.name.split('.').pop()] = true;
+      var extension = view.name.split(".").pop().toLowerCase();
+      view.extension[extension] = true;
+      if (!["css", "html", "xml", "rss", "js", "json", "txt"].includes(extension)) {
+        view.extension.txt = true;
+      }
       view.isPackageJSON = view.name === "package.json";
     });
 

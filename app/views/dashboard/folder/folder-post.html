@@ -122,7 +122,7 @@
 
    <tr>
      <td>{{Type}} URL:</td>
-     <td>https://{{blog.pretty.url}}{{url}} <button class="copy"><span class="icon-copy"></span> Copy</button>
+     <td><a href="https://{{{blog.pretty.url}}}{{{url}}}" target="_blank" rel="noopener noreferrer">https://{{{blog.pretty.url}}}{{{url}}}</a> <button class="copy" data-copy="https://{{{blog.pretty.url}}}{{{url}}}"><span class="icon-copy"></span> Copy</button>
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>The public, permanent URL of this {{type}}.</p>
@@ -156,7 +156,7 @@
        {{#thumbnail.small}}
        <img class="file-thumbnail" height="{{height}}" width="{{width}}" src="{{{url}}}" />
        {{/thumbnail.small}}
-       {{^thumbnail.small}}--{{/thumbnail.small}}
+       {{^thumbnail.small}}<span class="file-stat-empty">--</span>{{/thumbnail.small}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>
@@ -171,7 +171,7 @@
      <td>Summary:</td>
      <td>
        {{#summary}}<pre>{{summary}}</pre>{{/summary}}
-       {{^summary}}--{{/summary}}
+       {{^summary}}<span class="file-stat-empty">--</span>{{/summary}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>The summary or excerpt of this {{type}}.</p>
@@ -193,7 +193,7 @@
      <td>Tags:</td>
      <td>
        {{#tags}} {{tag}}{{^last}},{{/last}} {{/tags}}
-       {{^tags.length}}--{{/tags.length}}
+       {{^tags.length}}<span class="file-stat-empty">--</span>{{/tags.length}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>Tags from every source file are combined.</p>
@@ -205,7 +205,7 @@
      <td>Backlinks:</td>
      <td>
        {{#backlinks}} {{backlink}}{{^last}},{{/last}} {{/backlinks}}
-       {{^backlinks.length}}--{{/backlinks.length}}
+       {{^backlinks.length}}<span class="file-stat-empty">--</span>{{/backlinks.length}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>The backlinks to this {{type}}.</p>
@@ -217,7 +217,7 @@
      <td>Internal links:</td>
      <td>
        {{#internalLinks}} {{internalLink}}{{^last}},{{/last}} {{/internalLinks}}
-       {{^internalLinks.length}}--{{/internalLinks.length}}
+       {{^internalLinks.length}}<span class="file-stat-empty">--</span>{{/internalLinks.length}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>The internal links within this {{type}}.</p>
@@ -229,7 +229,7 @@
      <td>Dependencies:</td>
      <td>
        {{#dependencies}} {{dependency}}{{^last}},{{/last}} {{/dependencies}}
-       {{^dependencies.length}}--{{/dependencies.length}}
+       {{^dependencies.length}}<span class="file-stat-empty">--</span>{{/dependencies.length}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>The files this {{type}} depends on, such as images referenced by its source files.</p>
@@ -250,7 +250,7 @@
          {{/metadata}}
        </table>
        {{/metadata.length}}
-       {{^metadata.length}}--{{/metadata.length}}
+       {{^metadata.length}}<span class="file-stat-empty">--</span>{{/metadata.length}}
        <details>
          <summary><span class="icon-support"></span> Explain</summary>
          <p>Metadata merged from every source file. Later files override earlier files for a repeated field.</p>

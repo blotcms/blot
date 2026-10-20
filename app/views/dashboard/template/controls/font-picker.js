@@ -37,11 +37,19 @@ function createFontPicker() {
     : "all";
   let activeContext = null;
   let hideTimer = null;
+  let transitionTimer = null;
 
   const cancelHide = () => {
     if (hideTimer) {
       clearTimeout(hideTimer);
       hideTimer = null;
+    }
+  };
+
+  const cancelTransition = () => {
+    if (transitionTimer) {
+      clearTimeout(transitionTimer);
+      transitionTimer = null;
     }
   };
 
@@ -103,29 +111,30 @@ function createFontPicker() {
 
   const hide = () => {
     cancelHide();
-    if (!activeContext) {
-      container.hidden = true;
-      container.classList.remove("is-visible");
-      container.setAttribute("aria-hidden", "true");
-      return;
-    }
-
     const context = activeContext;
     activeContext = null;
 
-    container.hidden = true;
     container.classList.remove("is-visible");
     container.setAttribute("aria-hidden", "true");
 
-    if (context.onHide) {
+    if (context && context.onHide) {
       context.onHide();
     }
+
+    cancelTransition();
+    transitionTimer = setTimeout(() => {
+      if (!activeContext && !container.classList.contains("is-visible")) {
+        container.hidden = true;
+      }
+      transitionTimer = null;
+    }, 180);
   };
 
   const show = (context) => {
     if (!context || !context.anchor) return;
 
     cancelHide();
+    cancelTransition();
 
     if (
       activeContext &&
@@ -137,12 +146,16 @@ function createFontPicker() {
 
     activeContext = context;
     container.hidden = false;
-    container.classList.add("is-visible");
     container.setAttribute("aria-hidden", "false");
     // highlightSelection(context.currentValue);
 
     requestAnimationFrame(() => {
       position(context.anchor);
+      requestAnimationFrame(() => {
+        if (activeContext === context) {
+          container.classList.add("is-visible");
+        }
+      });
     });
   };
 

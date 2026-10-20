@@ -16,6 +16,7 @@
   display: flex;
   box-sizing: border-box;
   width: auto!important;
+  transition: background-color 0.1s ease;
 }
 
 .buttons > *:hover {
@@ -43,14 +44,18 @@
   font-weight: 600;
 }
 
+.buttons > :first-child:not(:last-child):hover:not(.working):not(:disabled) {
+  background-color: #1a75e5;
+}
+
 
 .buttons .red {
   background: red;
   box-shadow: none;
 }
 
-.buttons .red:hover {
-  background: #ff2a2a;
+.buttons > :first-child.red:hover:not(.working):not(:disabled) {
+  background: #d50000;
 }
 
 .buttons .red:active {
@@ -65,6 +70,10 @@
   color: var(--medium-text-color);
   background-color: #ececec;
   line-height: 39px;
+}
+
+.buttons > :last-child:hover {
+  background-color: #dedede;
 }
 
 

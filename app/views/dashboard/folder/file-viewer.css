@@ -39,6 +39,10 @@
         height: auto;vertical-align: middle;box-shadow: 0 0 1px rgba(0,0,0,0.5);
   border: 0.3rem solid #ffffff;
   }
+
+  .file-stat-empty {
+    color: #c4c7cf;
+  }
   
   table.file-stat td {
     vertical-align: top;
@@ -92,6 +96,50 @@
     position: relative;
   }
 
+  .publishing-steps .publishing-step {
+    position: relative;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5em;
+    margin: 14px 0;
+  }
+
+  .publishing-steps .publishing-step > b {
+    display: inline;
+    margin: 0;
+  }
+
+  .publishing-steps .publishing-step details {
+    min-width: 0;
+    margin-left: 0.5rem;
+  }
+
+  .publishing-steps .publishing-step summary {
+    cursor: pointer;
+    list-style: none;
+    transition: color 0.15s ease;
+  }
+
+  .publishing-steps .publishing-step summary:hover {
+    color: var(--text-color);
+  }
+
+  .publishing-steps .publishing-step summary span {
+    transition: color 0.15s ease;
+  }
+
+  .publishing-steps .publishing-step summary::marker {
+    content: "";
+  }
+
+  .publishing-steps .publishing-step summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .publishing-steps .publishing-step details p {
+    margin: 6px 0 0;
+  }
+
   .publishing-steps i {
     position: absolute;
     border-radius: 1em;
@@ -126,14 +174,18 @@
     font-size: 13px;
     right: 0;
     color: var(--light-text-color);
+    transition: color 0.15s ease;
 
   }
 
   table.file-stat td details summary:hover {
-    color: var(--accent-color);
+    color: var(--text-color);
   }
 
-  table.file-stat td details summary span {margin-right: 0.15em;}
+  table.file-stat td details summary span {
+    margin-right: 0.15em;
+    transition: color 0.15s ease;
+  }
 
   table.file-stat td details > summary:first-of-type {
     list-style-type: none;
@@ -145,17 +197,27 @@ table.file-stat td details ::-webkit-details-marker {
 }
 
 a.template-button.file-helper {
-   background-color: transparent;
-   border:1px solid #eeeeec;
-  position: absolute;top:36px;right:36px;margin:0;
-  transition: background-color 0.2s;
+  display: inline-block;
+  background-color: transparent;
+  border: 1px solid #eeeeec;
+  position: static;
+  margin: -12px 0 12px;
+  transition: background-color 0.2s, color 0.15s ease;
 }
 
 a.template-button.file-helper:hover {
   background-color: var(--light-background-color);
+  color: var(--accent-color);
 }
 
-a.template-button.file-helper span {margin-left: 0.5em;}
+a.template-button.file-helper span {
+  margin-left: 0.5em;
+  transition: color 0.15s ease;
+}
+
+a.template-button.file-helper:hover span {
+  color: var(--accent-color);
+}
 
 .file-info {
   position:relative;z-index: 5;border:1px solid var(--border-color);padding-bottom: 12px;border-radius: var(--border-radius);padding:36px;

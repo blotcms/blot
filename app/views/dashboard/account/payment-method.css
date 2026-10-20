@@ -77,6 +77,10 @@
   display: inline;
 }
 
+.payment-method-row .payment-method-actions {
+  text-decoration: none;
+}
+
 .payment-method-note {
   color: var(--medium-text-color);
   font-size: 13px;

@@ -61,7 +61,7 @@
           <tr class="directory-row row-action-menu-row" data-directory-row="true">
             <td>
               <div class="directory-row__name-cell">
-                <a href="{{{base}}}/folder{{{url}}}" class="directory-row__link {{#directory}}directory{{/directory}} {{#entry}}entry{{/entry}}">
+                <a href="{{{base}}}/folder{{{url}}}" class="directory-row__link cover {{#directory}}directory{{/directory}} {{#entry}}entry{{/entry}}">
       
                 {{#directory}}
                 <span class="icon-folder{{#entry}}-check{{/entry}}"></span>
@@ -79,14 +79,20 @@
                 </a>
               </div>
             </td>
-            <td data-sort="{{unix}}">{{modified}}</td>
-            <td data-sort="{{#directory}}0{{/directory}}{{^directory}}{{bytes}}{{/directory}}">{{#directory}}--{{/directory}}{{^directory}}{{size}}{{/directory}}
+            <td data-sort="{{unix}}">
+              <a href="{{{base}}}/folder{{{url}}}" class="directory-row__link cover" aria-hidden="true" tabindex="-1"></a>
+              {{modified}}
+            </td>
+            <td data-sort="{{#directory}}0{{/directory}}{{^directory}}{{bytes}}{{/directory}}">
+              <a href="{{{base}}}/folder{{{url}}}" class="directory-row__link cover" aria-hidden="true" tabindex="-1"></a>
+              {{#directory}}--{{/directory}}{{^directory}}{{size}}{{/directory}}
               <button
               class="directory-row__menu-trigger row-action-menu__trigger"
               type="button"
               aria-haspopup="true"
               aria-expanded="false"
               data-url="{{{url}}}"
+              data-view-url="{{{base}}}/folder{{{url}}}"
               data-name="{{name}}"
               data-directory="{{#directory}}true{{/directory}}{{^directory}}false{{/directory}}"
               data-entry="{{#entry}}true{{/entry}}{{^entry}}false{{/entry}}"
@@ -130,6 +136,7 @@
 
         <div id="folder-file-action-menu" class="template-action-menu row-action-menu" aria-hidden="true">
           <ul>
+            <li><a data-menu-link="view" href="#">View file/folder</a></li>
             <li><a data-menu-link="download" href="#">Download</a></li>
             <li><a data-menu-link="remove" href="#">Remove</a></li>
           </ul>
@@ -216,6 +223,13 @@
               rowSelector: '.directory-row',
               triggerSelector: '.row-action-menu__trigger',
               linkMap: {
+                view: function (dataset) {
+                  var viewLink = folderFileActionMenu.querySelector('[data-menu-link="view"]');
+                  if (viewLink) {
+                    viewLink.textContent = dataset && dataset.directory === 'true' ? 'View folder' : 'View file';
+                  }
+                  return dataset && dataset.viewUrl ? dataset.viewUrl : null;
+                },
                 download: function (dataset) {
                   console.log('HERE download', dataset);
                   var downloadLink = folderFileActionMenu && folderFileActionMenu.querySelector('[data-menu-link="download"]');

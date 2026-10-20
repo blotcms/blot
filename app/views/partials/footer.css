@@ -2,7 +2,7 @@ footer {
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
-  max-width: 1060px;
+  max-width: none;
   margin: 0 auto;
   padding: var(--spacing) 0 0;
 }

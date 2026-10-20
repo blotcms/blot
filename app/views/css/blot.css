@@ -219,6 +219,7 @@ h1.import-method-title img {
   margin: 0 0 2.5rem;
   min-height: 250px;
   padding: 2rem;
+  width: 100%;
 }
 
 .sync-illustration-client {
@@ -1659,6 +1660,15 @@ ul.pill-navigation {
 
   .panel-link:hover {
     background-color: var(--light-background-color);
+    color: var(--accent-color);
+  }
+
+  .panel-link:hover span {
+    color: inherit;
+  }
+
+  .panel-link:hover svg {
+    fill: currentColor;
   }
 
   div > .panel-link:last-child {

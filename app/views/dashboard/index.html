@@ -39,6 +39,7 @@
 		<span style="padding:11px 0;display:block;font-weight: 400;color: var(--medium-text-color);">Account</span>
 	</div>
 
+	<!-- Account rows use the shared .line/.label/.center/.right layout in dashboard-line.css. -->
 	<div style="border-radius: 4px;border:1px solid var(--border-color);overflow: hidden;">
 		<a class="line" href="/sites/account/email">
 			<span class="label">Email</span>
@@ -49,7 +50,8 @@
 		{{#user.hasPassword}}
 		<a class="line" href="/sites/account/password">
 			<span class="label">Password</span>
-			<span class="center"><span class="link">Change password</span></span>
+			<span class="center">&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+			<span class="right">Edit</span>
 		</a>
 		{{/user.hasPassword}}
 		{{^user.hasPassword}}

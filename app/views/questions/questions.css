@@ -7,6 +7,10 @@
   transition: background-color 0.2s;
 }
 
+.tagged-questions > .question-row:first-child {
+  border-top-color: var(--border-color);
+}
+
 .question-row:hover {
   background-color: var(--light-background-color);
 }
@@ -14,6 +18,49 @@
 .question-container .html,
 .answer-container .html {
   background: none;
+}
+
+.question-meta,
+.answer-meta {
+  color: var(--light-text-color);
+  font-size: 12px;
+}
+
+.question-meta-line {
+  align-items: center;
+  display: flex;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  max-width: 600px;
+}
+
+.answer-meta {
+  align-items: center;
+  display: flex;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  max-width: 600px;
+}
+
+.question-reply-count {
+  color: var(--text-color);
+  font-size: 16px;
+  font-weight: 600;
+  margin: 3rem 0 2rem;
+  max-width: 600px;
+}
+
+.question-tags {
+  margin: 1.25rem 0;
+}
+
+.edit-content-link,
+.edit-content-link:visited {
+  color: var(--medium-text-color);
+}
+
+.edit-content-link:hover {
+  color: var(--accent-color);
 }
 
 .question-container pre,
@@ -62,6 +109,13 @@
   text-decoration: none;
   margin-right: 0.5em;
   color: var(--medium-text-color);
+  transition: background 0.1s, color 0.1s;
+  transition-timing-function: ease;
+}
+
+.filters a:hover {
+  color: var(--accent-color);
+  background-color: #e8ecf9;
 }
 
 .question-preview {
@@ -75,13 +129,18 @@
 }
 
 .tag-chip {
-  background: var(--light-background-color);
+  background: #f1f1f1;
   border-radius: 20px;
-  color: #5f5fff;
+  color: var(--medium-text-color);
   padding: 1px 11px;
   margin: 6px 0 0;
   display: inline-block;
-  font-size: 13px;
+  font-size: 11px;
+}
+
+.question-row .tag-chip {
+  position: relative;
+  z-index: 1;
 }
 
 .tag-chip:hover,
@@ -100,8 +159,13 @@ a.minor:hover {
   padding-top: 0;
 }
 
-.answers {
-  padding-left: calc(6 * var(--spacing));
+.answer-container {
+  margin-bottom: 1.5rem;
+  padding-top: 0;
+}
+
+.reply-form-heading {
+  border-bottom: 0;
 }
 
 .questions-toolbar {
@@ -118,8 +182,8 @@ a.minor:hover {
   padding-bottom: 24px;
 }
 
-.questions-toolbar .toggle-tabs {
-  margin-right: 1rem;
+.questions-toolbar .pill-navigation {
+  margin: 0 1rem 0 0;
 }
 
 .questions-toolbar .button-with-icon {
@@ -129,6 +193,7 @@ a.minor:hover {
 .questions-search {
   display: flex;
   flex-grow: 1;
+  max-width: 32rem;
   margin-right: 1em;
 }
 

@@ -38,9 +38,7 @@
 
   a.close-button {
     color:var(--accent-color);
-    position: absolute;top:1.85rem;right:4rem;
-    transform: scale(1.0);    
-    transition: transform 0.2s;
+    position: absolute;top:1.85rem;right:4rem;z-index: 10;
 }
 
 a.close-button > span {
@@ -55,13 +53,13 @@ a.close-button > span > svg {
     fill: currentColor
 }
 
-a.close-button:hover {
-    transform: scale(1.1);
-}
-
 a.close-button:hover > span,
 .template-button:hover {
     background-color: var(--light-background-color);
+}
+
+a.close-button:hover > span {
+  background-color: var(--medium-background-color);
 }
 
 .template-button {

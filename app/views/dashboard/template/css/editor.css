@@ -15,13 +15,25 @@
   --editor-save-button-icon-size: 8px;
   --editor-save-button-icon-margin: 0.75em;
   --editor-save-disabled-bg: #fafafa;
-  --editor-container-width: calc(100vw - 670px);
 }
 
 .CodeMirror {
   flex-grow: 1;
+  height: auto;
   min-height: var(--editor-codemirror-min-height);
   font-family: monospace;
+}
+
+.editor-container .CodeMirror-scroll {
+  box-sizing: border-box;
+  height: auto;
+  min-height: var(--editor-codemirror-min-height);
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+}
+
+.editor-container .CodeMirror-gutters {
+  min-height: var(--editor-codemirror-min-height);
 }
 
 .CodeMirror-gutters {
@@ -31,6 +43,7 @@
 
 .CodeMirror-linenumber {
   color: var(--light-text-color);
+  opacity: 0.65;
 }
 
 .CodeMirror-lines {
@@ -49,7 +62,6 @@
 .file-list .template-row.selected .template-row__link,
 .file-list .template-row__link.selected {
   color: var(--accent-color);
-  font-weight: 600;
 }
 
 .file-list .template-row__link {
@@ -64,6 +76,16 @@
 
 .file-list .template-row__link:hover,
 .file-list .template-row__link:focus-visible {
+  background-color: var(--light-background-color);
+}
+
+.file-list .template-row:hover {
+  background-color: var(--light-background-color);
+}
+
+.file-list .row-action-menu-row:hover .row-action-menu__trigger,
+.file-list .row-action-menu-row.menu-open .row-action-menu__trigger,
+.file-list .row-action-menu__trigger:focus-visible {
   background-color: var(--light-background-color);
 }
 
@@ -111,24 +133,9 @@
   color: var(--success-text-color);
   font-size: var(--editor-save-button-font-size);
   text-decoration: none;
-  text-align: left;
+  text-align: right;
   cursor: pointer;
   flex-grow: 1;
-}
-
-#save.button::before {
-  content: "";
-  display: inline-block;
-  width: 1em;
-  height: 1em;
-  margin-right: var(--editor-save-button-icon-margin);
-  border-radius: 50%;
-  font-size: var(--editor-save-button-icon-size);
-  background: var(--success-text-color);
-}
-
-#save.button.disabled::before {
-  background: #ddd;
 }
 
 #save.button.disabled {
@@ -139,7 +146,10 @@
 }
 
 .editor-container {
-  width: var(--editor-container-width);
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  box-sizing: border-box;
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
 }
@@ -149,3 +159,4 @@
   border-left: none;
   border-right: none;
 }
+

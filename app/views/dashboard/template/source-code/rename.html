@@ -5,8 +5,8 @@
 
         <form method="post" action="{{{base}}}/source-code/{{view.name}}/rename"  method="post" class="dashboard-form" style="padding:2rem">
           <input type="hidden" name="_csrf" value="{{csrftoken}}" />
-          <label>File name:</label><br>
-          <input type="text" name="name" value="{{view.name}}" /><br>
+          <label class="source-file-name-label">File name:</label>
+          <input type="text" name="name" value="{{view.name}}" />
           <div class="buttons">
             <button type="submit">
               Rename

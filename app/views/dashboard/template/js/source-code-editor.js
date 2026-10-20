@@ -206,6 +206,10 @@ function initializeSourceSidebarMenu() {
         var baseUrl = cleanBase(dataset);
         return baseUrl ? baseUrl + "/edit" : null;
       },
+      config: function (dataset) {
+        var baseUrl = cleanBase(dataset);
+        return baseUrl ? baseUrl + "/configure" : null;
+      },
       rename: function (dataset) {
         var baseUrl = cleanBase(dataset);
         var disabled = dataset.disableRename === "true";

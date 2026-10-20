@@ -161,6 +161,7 @@ Questions.get(
       });
 
       res.locals.breadcrumbs = res.locals.breadcrumbs.slice(0, 1);
+      res.locals.hidebreadcrumbs = true;
 
       res.locals.topics = questions;
 
