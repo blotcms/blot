@@ -44,3 +44,28 @@ operator to check the branch out; use a preview slot. Design and limits:
 6. When the task is finished or the operator is done, run
    `scripts/development/preview.sh down` to release the slot (`preview.sh ls`
    shows who holds each one).
+
+## Local Agentation feedback
+
+`npm start` enables the `scripts/development/agentation/` overlay, which adds a DOM annotation toolbar to local
+pages without changing application views. See `scripts/development/agentation/README.md` for
+startup, MCP registration, shutdown and persistence. A running HTTP server does
+not prove browser delivery: save a recognizable annotation and retrieve it using
+`agentation_get_all_pending`, checking its comment, URL and `elementPath`.
+
+Trace feedback from the hostname and path before editing a view:
+
+| Local URL | Router trace | Source to inspect |
+| --- | --- | --- |
+| `https://local.blot/` and brochure/docs paths | `app/server.js` dispatches the configured host to `app/site/index.js`; documentation is mounted at `/` and resolved by `app/documentation/index.js` | Homepage `app/views/index.html`; other brochure views under `app/views/` |
+| `https://local.blot/sites/...` | Site router mounts `app/dashboard/index.js`; `/:handle` dispatches to `app/dashboard/site/` | Mustache views under `app/views/dashboard/` |
+| `https://preview-of-<template>-on-<handle>.local.blot/...` | Server catch-all dispatches to `app/blog/index.js`, then `app/blog/middleware/vhosts.js`, then blog entry/view routes | Resolved `SITE:<template>` source under `app/templates/source/<template>/`; inspect its `package.json` view URL/partials overrides |
+| `https://preview-of-my-<template>-on-<handle>.local.blot/...` | Same catch-all and virtual-host middleware, resolving the owner from the blog | Resolved `<blogID>:<template>` fork and configured views; do not assume the built-in source is responsible |
+
+For a worktree slot, substitute its configured host (e.g. `a-local.blot`). Follow
+the middleware's actual template resolution and any view override. Search for
+the annotation's visible text, classes and DOM selector in the likely views and
+partials; a URL can render several partials and does not imply one source file.
+Read the applicable `AGENTS.md` before editing views or template source. Use
+`agentation_get_session` for full context, acknowledge feedback when beginning
+work and resolve it with a description of the completed change.

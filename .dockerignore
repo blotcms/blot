@@ -19,3 +19,6 @@ proxy/tests/data/
 # present for the test matrix - this only trims the prod build context.
 app/**/tests/
 app/**/benchmarks/
+
+# Agentation never enters the application image build context.
+scripts/development/agentation/

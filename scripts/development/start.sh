@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # hide '^C' glyph while running ----
+restore_tty() { :; }
 if [ -t 1 ]; then
   STTY_ORIG="$(stty -g)"
   stty -echoctl
   restore_tty() { stty "$STTY_ORIG" 2>/dev/null || true; }
-  trap restore_tty EXIT
 fi
 # --------------------------------------------------
 
@@ -17,6 +17,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd ../../ && pwd)"
 # Files
 SETUP="$DIR/scripts/development/proxy/setup.sh"
 COMPOSE_FILE="$DIR/scripts/development/docker-compose.yml"
+AGENTATION="$DIR/scripts/development/agentation/run.sh"
 FOLDER_SERVER="$DIR/scripts/development/open-folder-server.js"
 TOXIPROXY_SETUP="$DIR/scripts/development/setup-toxiproxy.sh"
 TOXIPROXY_ENABLE="$DIR/scripts/development/enable-toxiproxy-latency.sh"
@@ -47,6 +48,47 @@ run_with_timeout() {
   fi
 }
 
+FOLDER_PID=""
+LOGS_PID=""
+STACK_STARTED=0
+AGENTATION_ATTEMPTED=0
+SHUTTING_DOWN=0
+cleanup() {
+  (( SHUTTING_DOWN )) && return
+  SHUTTING_DOWN=1
+
+  if [ -n "$LOGS_PID" ]; then
+    kill "$LOGS_PID" 2>/dev/null || true
+    wait "$LOGS_PID" 2>/dev/null || true
+  fi
+
+  if [ "$STACK_STARTED" -eq 1 ]; then
+    # bounded silent Redis SAVE before teardown
+    if compose ps --services | grep -q '^redis$'; then
+      run_with_timeout 5 compose exec -T redis redis-cli SAVE >/dev/null 2>&1 || true
+    fi
+    if [ "$AGENTATION_ATTEMPTED" -eq 1 ]; then
+      echo "[start] Stopping Agentation"
+      BLOT_HOST="$BLOT_HOST" bash "$AGENTATION" down || true
+    fi
+    # Also remove any remaining project orphans; named volumes are retained.
+    compose down --remove-orphans --timeout 0 || true
+  fi
+
+  if [ -n "$FOLDER_PID" ] && kill -0 "$FOLDER_PID" 2>/dev/null; then
+    kill "$FOLDER_PID" 2>/dev/null || true
+    wait "$FOLDER_PID" 2>/dev/null || true
+  fi
+  restore_tty
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# Fail before TLS setup, background processes or Docker changes.
+echo "[start] Checking Agentation MCP registration"
+bash "$AGENTATION" check
+
 echo "[start] Running setup"
 bash "$SETUP" "$BLOT_HOST"
 
@@ -71,6 +113,7 @@ if [ "${BLOT_USE_TOXIPROXY:-true}" = "true" ]; then
   export BLOT_REDIS_HOST="${BLOT_REDIS_HOST:-toxiproxy}"
 fi
 
+STACK_STARTED=1
 compose up --build -d
 
 if [ "${BLOT_USE_TOXIPROXY:-true}" = "true" ]; then
@@ -79,6 +122,11 @@ if [ "${BLOT_USE_TOXIPROXY:-true}" = "true" ]; then
   # Keep startup fast until node-app reports capabilities.
   bash "$TOXIPROXY_DISABLE" >/dev/null 2>&1 || true
 fi
+
+echo "[start] Starting Agentation"
+# Include partial setup in error cleanup.
+AGENTATION_ATTEMPTED=1
+BLOT_HOST="$BLOT_HOST" bash "$AGENTATION" up
 
 # start logs in background to avoid 'exit status 130' noise on Ctrl-C
 if [ "${BLOT_USE_TOXIPROXY:-true}" = "true" ]; then
@@ -108,33 +156,6 @@ else
 fi
 LOGS_PID=$!
 
-SHUTTING_DOWN=0
-cleanup() {
-  (( SHUTTING_DOWN )) && return
-  SHUTTING_DOWN=1
-
-  # stop log follower quietly first
-  kill "$LOGS_PID" 2>/dev/null || true
-  wait "$LOGS_PID" 2>/dev/null || true
-
-  # bounded silent Redis SAVE before teardown
-  if compose ps --services | grep -q '^redis$'; then
-    run_with_timeout 5 compose exec -T redis redis-cli SAVE >/dev/null 2>&1 || true
-  fi
-
-  # hard, immediate shutdown
-  compose down --remove-orphans --timeout 0 || true
-
-  # stop aux server
-  if kill -0 "$FOLDER_PID" 2>/dev/null; then
-    kill "$FOLDER_PID" 2>/dev/null || true
-    wait "$FOLDER_PID" 2>/dev/null || true
-  fi
-}
-trap cleanup INT TERM
-
-# wait on logs; normal exit handled by trap
+# Normal exit, errors and signals all run cleanup via the EXIT trap.
 wait "$LOGS_PID" 2>/dev/null || true
-
-cleanup
 exit 0

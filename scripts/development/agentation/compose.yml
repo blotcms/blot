@@ -1,0 +1,30 @@
+# Use AFTER scripts/development/docker-compose.yml; paths resolve from that file.
+services:
+  agentation:
+    image: blot-agentation:local
+    init: true
+    build:
+      context: ./agentation
+    ports:
+      - "127.0.0.1:${AGENTATION_PORT:-8477}:8477"
+    volumes:
+      - agentation-state:/root/.agentation
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8477/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  nginx:
+    volumes:
+      # Overrides just the normal development nginx.conf mount.
+      - ./agentation/generated/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./agentation/nginx:/etc/nginx/agentation:ro
+      - ./agentation/generated/hosts.conf:/etc/nginx/agentation-hosts.conf:ro
+      - ./agentation/generated/dist:/srv/agentation:ro
+    depends_on:
+      agentation:
+        condition: service_healthy
+
+volumes:
+  agentation-state:
