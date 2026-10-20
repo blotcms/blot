@@ -4,13 +4,13 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/../../.." && pwd)"
 export BLOT_HOST="${BLOT_HOST:-local.blot}"
 BASE=(-f "$ROOT/scripts/development/docker-compose.yml")
-EXTRA=()
 # Optional machine-specific mounts/build secrets, kept outside tracked config.
-if [ -n "${AGENTATION_COMPOSE_OVERRIDE:-}" ]; then
-  EXTRA=(-f "$AGENTATION_COMPOSE_OVERRIDE")
-fi
 compose() {
-  docker compose "${BASE[@]}" -f "$DIR/compose.yml" "${EXTRA[@]}" "$@"
+  if [ -n "${AGENTATION_COMPOSE_OVERRIDE:-}" ]; then
+    docker compose "${BASE[@]}" -f "$DIR/compose.yml" -f "$AGENTATION_COMPOSE_OVERRIDE" "$@"
+  else
+    docker compose "${BASE[@]}" -f "$DIR/compose.yml" "$@"
+  fi
 }
 check_codex() {
   if ! command -v codex >/dev/null 2>&1; then
@@ -43,14 +43,24 @@ case "${1:-}" in
     ;;
   down)
     # Restore the original proxy mount, leaving the app and annotation volume.
-    docker compose "${BASE[@]}" "${EXTRA[@]}" up -d --no-deps --force-recreate nginx
+    if [ -n "${AGENTATION_COMPOSE_OVERRIDE:-}" ]; then
+      docker compose "${BASE[@]}" -f "$AGENTATION_COMPOSE_OVERRIDE" up -d --no-deps --force-recreate nginx
+    else
+      docker compose "${BASE[@]}" up -d --no-deps --force-recreate nginx
+    fi
     compose stop agentation
     ;;
   mcp)
     # No TTY, status banners or build output on MCP's stdout.
-    exec docker compose "${BASE[@]}" -f "$DIR/compose.yml" "${EXTRA[@]}" \
-      run --rm --no-deps -T --entrypoint /opt/agentation/node_modules/.bin/agentation-mcp \
-      agentation server --mcp-only --http-url http://agentation:8477
+    if [ -n "${AGENTATION_COMPOSE_OVERRIDE:-}" ]; then
+      exec docker compose "${BASE[@]}" -f "$DIR/compose.yml" -f "$AGENTATION_COMPOSE_OVERRIDE" \
+        run --rm --no-deps -T --entrypoint /opt/agentation/node_modules/.bin/agentation-mcp \
+        agentation server --mcp-only --http-url http://agentation:8477
+    else
+      exec docker compose "${BASE[@]}" -f "$DIR/compose.yml" \
+        run --rm --no-deps -T --entrypoint /opt/agentation/node_modules/.bin/agentation-mcp \
+        agentation server --mcp-only --http-url http://agentation:8477
+    fi
     ;;
   *) echo "Usage: $0 {check|up|down|mcp}" >&2; exit 1 ;;
 esac
