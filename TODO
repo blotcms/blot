@@ -2,6 +2,8 @@ Check in on ec2 bandwidth egress after October 22nd and update billing breakdown
 
 Internationalization inc currency
 
+In daily update email, make usage format consistently: 19% (stable, 22gb free) 
+
 Force renew all current ssl certs and switch wildcard to ecdsa cert to save bandwidth?
 
 Finish 2035 and move replaceFolderLinks off the render path
