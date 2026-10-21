@@ -1,6 +1,8 @@
 Check in on ec2 bandwidth egress after October 22nd and update billing breakdown on aws issue
 
-Internationalization inc currency
+Add multi-currency subscription signup with fixed, rounded market prices for EUR, GBP, JPY, CAD, AUD, and a catalog that can expand to more currencies. Keep the catalog as the source of truth and add idempotent scripts to create/reconcile Stripe Prices and PayPal plans, recording provider IDs without changing plans used by existing subscribers. Update signup to suggest a currency from geo-IP while letting customers choose, then select and verify the matching provider price server-side.
+
+Internationalize the dashboard and brochure site with a standard catalog-based i18n library (e.g. i18next), locale-aware formatting, and a translation workflow. For user templates, build a small compile step that turns localized source/catalogs into ordinary Mustache views, keeping templates portable and easy to extend with languages. Start with major European languages plus Chinese and Japanese; decide Simplified/Traditional Chinese scope and phase brochure content by priority.
 
 In daily update email, make usage format consistently: 19% (stable, 22gb free) 
 
