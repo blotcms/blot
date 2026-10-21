@@ -267,7 +267,9 @@ function main(callback) {
       async function () {
         // The docker build stage for production runs this script ahead of time
         if (config.environment !== "development") return;
+        log("Building documentation assets");
         await documentation({ watch: true });
+        log("Built documentation assets");
       },
 
     ],
