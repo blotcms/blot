@@ -3,6 +3,7 @@ const config = require("config");
 const yaml = require("yaml");
 const cheerio = require("cheerio");
 const mustache = require("mustache");
+const clfdate = require("helper/clfdate");
 
 const rootDirectory = config.blot_directory + "/app";
 const toolsDirectory = rootDirectory + "/views/how/tools";
@@ -29,7 +30,14 @@ const fetchIcon = async (link, name, icon) => {
   }
 
   // load the HTML at the link and determine the icon
+  console.log(clfdate(), "Documentation build: Fetching tool page", link);
   const response = await fetch(link);
+  console.log(
+    clfdate(),
+    "Documentation build: Received tool page response",
+    response.status,
+    link
+  );
 
   if (!response.ok) {
     console.log("Failed to fetch", link);
@@ -37,6 +45,7 @@ const fetchIcon = async (link, name, icon) => {
   }
 
   const html = await response.text();
+  console.log(clfdate(), "Documentation build: Read tool page response", link);
   const $ = cheerio.load(html);
 
   const { hostname, protocol } = new URL(link);
@@ -65,20 +74,28 @@ const fetchIcon = async (link, name, icon) => {
   }
 
   try {
-  const iconResponse = await fetch(icon);
+    console.log(clfdate(), "Documentation build: Fetching tool icon", icon);
+    const iconResponse = await fetch(icon);
+    console.log(
+      clfdate(),
+      "Documentation build: Received tool icon response",
+      iconResponse.status,
+      icon
+    );
 
-  if (!iconResponse.ok) {
-    console.log("Failed to fetch icon", icon);
-    return null;
-  }
+    if (!iconResponse.ok) {
+      console.log("Failed to fetch icon", icon);
+      return null;
+    }
 
-  const iconBuffer = await iconResponse.buffer();
-  const iconExtension = icon.split(".").pop().split("?")[0];
-  const iconPath = toolsDirectory + "/icons/" + name + "." + iconExtension;
+    const iconBuffer = await iconResponse.buffer();
+    console.log(clfdate(), "Documentation build: Read tool icon response", icon);
+    const iconExtension = icon.split(".").pop().split("?")[0];
+    const iconPath = toolsDirectory + "/icons/" + name + "." + iconExtension;
 
-  await fs.outputFile(iconPath, iconBuffer);
+    await fs.outputFile(iconPath, iconBuffer);
 
-  return "/icons/" + name + "." + iconExtension;
+    return "/icons/" + name + "." + iconExtension;
   } catch (e) {
     console.log("Failed to fetch icon", icon);
     return null;

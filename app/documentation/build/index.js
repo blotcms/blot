@@ -160,6 +160,7 @@ async function refreshDevelopmentCache() {
 const BUILD_LOCK_WAIT_MS = 50;
 const BUILD_LOCK_TIMEOUT_MS = 10 * 60 * 1000;
 const BUILD_LOCK_FRESH_MS = 1000;
+const BUILD_LOCK_LOG_INTERVAL_MS = 10 * 1000;
 
 function documentationBuildLockPath() {
   return join(config.tmp_directory, "documentation-build.lock");
@@ -209,8 +210,21 @@ async function readLockOwner(lockPath) {
 
 function releaseDocumentationBuildLock(lockPath) {
   return async function release() {
-    if ((await readLockOwner(lockPath)) !== currentLockToken()) return;
+    const ownerText = await readLockOwner(lockPath);
+    if (ownerText !== currentLockToken()) {
+      console.log(
+        clfdate(),
+        "Documentation build:",
+        "Leaving build lock owned by",
+        ownerText || "unknown",
+        lockPath
+      );
+      return;
+    }
+
+    console.log(clfdate(), "Documentation build:", "Releasing build lock", lockPath);
     await fs.remove(lockPath);
+    console.log(clfdate(), "Documentation build:", "Released build lock", lockPath);
   };
 }
 
@@ -219,7 +233,7 @@ function releaseDocumentationBuildLock(lockPath) {
 // out from under them. The exclusive claim file is the revalidation: only one
 // waiter creates it, and it adopts the directory only if the owner token is
 // still the dead one it observed.
-async function takeOverStaleLock(lockPath, observedToken) {
+async function takeOverStaleLock(lockPath, observedToken, observedStat) {
   const claimPath = join(lockPath, "claim");
   try {
     await fs.writeFile(claimPath, currentLockToken(), { flag: "wx" });
@@ -236,10 +250,21 @@ async function takeOverStaleLock(lockPath, observedToken) {
 
   try {
     const tokenNow = await readLockOwner(lockPath);
-    if (tokenNow !== observedToken || lockTokenIsLive(tokenNow)) return false;
+    const statNow = await fs.stat(lockPath).catch(() => null);
+    if (
+      !statNow ||
+      statNow.dev !== observedStat.dev ||
+      statNow.ino !== observedStat.ino ||
+      tokenNow !== observedToken ||
+      lockTokenIsLive(tokenNow)
+    ) {
+      return false;
+    }
     if (!tokenNow) {
-      const stat = await fs.stat(lockPath).catch(() => null);
-      if (stat && Date.now() - stat.mtimeMs < BUILD_LOCK_FRESH_MS) return false;
+      // Use the directory stat observed before creating the claim. Creating
+      // the claim itself updates the directory mtime and would otherwise make
+      // every empty stale lock look fresh forever.
+      if (Date.now() - observedStat.mtimeMs < BUILD_LOCK_FRESH_MS) return false;
     }
     await fs.writeFile(join(lockPath, "pid"), currentLockToken());
     return true;
@@ -250,6 +275,9 @@ async function takeOverStaleLock(lockPath, observedToken) {
 
 async function acquireDocumentationBuildLock() {
   const lockPath = documentationBuildLockPath();
+  const startedAt = Date.now();
+  let lastWaitLogAt = 0;
+  console.log(clfdate(), "Documentation build:", "Acquiring build lock", lockPath);
   await fs.ensureDir(config.tmp_directory);
   const deadline = Date.now() + BUILD_LOCK_TIMEOUT_MS;
 
@@ -258,6 +286,14 @@ async function acquireDocumentationBuildLock() {
       // mkdir is atomic, so two builders cannot both enter this section.
       await fs.mkdir(lockPath);
       await fs.writeFile(join(lockPath, "pid"), currentLockToken());
+      console.log(
+        clfdate(),
+        "Documentation build:",
+        "Acquired build lock after",
+        ((Date.now() - startedAt) / 1000).toFixed(1),
+        "seconds",
+        lockPath
+      );
       return releaseDocumentationBuildLock(lockPath);
     } catch (err) {
       if (err.code !== "EEXIST") throw err;
@@ -274,18 +310,53 @@ async function acquireDocumentationBuildLock() {
     const ownerText = await readLockOwner(lockPath);
     const freshEmpty = !ownerText && Date.now() - stat.mtimeMs < BUILD_LOCK_FRESH_MS;
     if (!lockTokenIsLive(ownerText) && !freshEmpty) {
-      if (await takeOverStaleLock(lockPath, ownerText)) {
+      if (await takeOverStaleLock(lockPath, ownerText, stat)) {
+        console.log(
+          clfdate(),
+          "Documentation build:",
+          "Reclaimed stale build lock after",
+          ((Date.now() - startedAt) / 1000).toFixed(1),
+          "seconds; previous owner was",
+          ownerText || "unknown",
+          lockPath
+        );
         return releaseDocumentationBuildLock(lockPath);
       }
     }
 
-    if (Date.now() > deadline) {
+    const now = Date.now();
+    if (now - lastWaitLogAt >= BUILD_LOCK_LOG_INTERVAL_MS) {
+      console.log(
+        clfdate(),
+        "Documentation build:",
+        "Waiting for build lock held by",
+        ownerText || "unknown",
+        "(pid live:",
+        lockTokenIsLive(ownerText),
+        ") for",
+        ((now - startedAt) / 1000).toFixed(1),
+        "seconds",
+        lockPath
+      );
+      lastWaitLogAt = now;
+    }
+
+    if (now > deadline) {
       const error = new Error(
         "Timed out waiting for the documentation build lock (holder " +
           (ownerText || "unknown") +
           ")"
       );
       error.code = "ELOCKED";
+      console.error(
+        clfdate(),
+        "Documentation build:",
+        error.message,
+        "after",
+        ((now - startedAt) / 1000).toFixed(1),
+        "seconds",
+        lockPath
+      );
       throw error;
     }
 
@@ -307,6 +378,37 @@ async function rebuildTools() {
   console.log("Rebuilding tools");
   await tools();
   await refreshDevelopmentCache();
+}
+
+async function logBuildStep(name, task) {
+  const startedAt = Date.now();
+  console.log(clfdate(), "Documentation build:", "Starting", name);
+
+  try {
+    const result = await task();
+    console.log(
+      clfdate(),
+      "Documentation build:",
+      "Finished",
+      name,
+      "in",
+      ((Date.now() - startedAt) / 1000).toFixed(1),
+      "seconds"
+    );
+    return result;
+  } catch (err) {
+    console.error(
+      clfdate(),
+      "Documentation build:",
+      "Failed",
+      name,
+      "after",
+      ((Date.now() - startedAt) / 1000).toFixed(1),
+      "seconds",
+      err
+    );
+    throw err;
+  }
 }
 
 const handle =
@@ -392,21 +494,35 @@ async function buildDocumentation({ watch = false, skipZip = false } = {}) {
 
   // Cache logic (development only)
   let hash = null;
-  
+
   if (config.environment === "development") {
-    hash = await computeViewsHash();
+    hash = await logBuildStep(
+      "hashing views and build scripts",
+      computeViewsHash
+    );
     const cacheRoot = join(config.tmp_directory, "documentation-cache");
     cacheDir = join(cacheRoot, hash, "views-built");
 
     // Try to restore from cache before expensive build steps
-    cacheRestored = await restoreFromCache(cacheDir);
+    cacheRestored = await logBuildStep("checking documentation cache", () =>
+      restoreFromCache(cacheDir)
+    );
+    console.log(
+      clfdate(),
+      "Documentation build:",
+      cacheRestored ? "Documentation cache hit" : "Documentation cache miss"
+    );
   }
 
   // we only reset the destination directory in production
   if (config.environment !== "development") {
-    await fs.emptyDir(DESTINATION_DIRECTORY);
+    await logBuildStep("clearing generated views", () =>
+      fs.emptyDir(DESTINATION_DIRECTORY)
+    );
   } else {
-    await fs.ensureDir(DESTINATION_DIRECTORY);
+    await logBuildStep("ensuring generated views directory", () =>
+      fs.ensureDir(DESTINATION_DIRECTORY)
+    );
   }
 
   // Tool pages are generated from a directory of source files, so a cache
@@ -414,16 +530,20 @@ async function buildDocumentation({ watch = false, skipZip = false } = {}) {
   // generated subtree after restoring a development cache before starting
   // the watcher. The rest of the documentation can still use the cache.
   if (cacheRestored) {
-    await rebuildTools();
+    await logBuildStep("rebuilding tool pages from cache", rebuildTools);
   }
 
   // Only run expensive build steps if cache was not restored
   if (!cacheRestored) {
-    if (!skipZip) await zip();
+    if (!skipZip) {
+      await logBuildStep("generating template ZIP files", zip);
+    }
 
-    await favicon(
-      join(SOURCE_DIRECTORY, "images/logo.svg"),
-      join(DESTINATION_DIRECTORY, "favicon.ico")
+    await logBuildStep("generating favicon", () =>
+      favicon(
+        join(SOURCE_DIRECTORY, "images/logo.svg"),
+        join(DESTINATION_DIRECTORY, "favicon.ico")
+      )
     );
 
     const paths = recursiveReadDir(SOURCE_DIRECTORY).map((path) =>
@@ -432,21 +552,27 @@ async function buildDocumentation({ watch = false, skipZip = false } = {}) {
 
     const initialHandler = handle(true, cacheDir);
 
-    await Promise.all(paths.map(initialHandler));
+    await logBuildStep(
+      `copying ${paths.length} documentation source files`,
+      () => Promise.all(paths.map(initialHandler))
+    );
 
-    await tools();
-    await templates();
+    await logBuildStep("building tool pages", tools);
+    await logBuildStep("building documentation template pages", templates);
 
-    await buildCSS();
+    await logBuildStep("building documentation and dashboard CSS", buildCSS);
 
-    await buildJS();
+    await logBuildStep(
+      "building documentation and dashboard JavaScript",
+      buildJS
+    );
 
     try {
       console.log(
         clfdate(),
         "Generating list of recent activity for the news page"
       );
-      await gitCommits();
+      await logBuildStep("generating recent activity list", gitCommits);
       console.log(
         clfdate(),
         "Generated list of recent activity for the news page"
@@ -459,7 +585,10 @@ async function buildDocumentation({ watch = false, skipZip = false } = {}) {
     }
 
     // Save to cache after full rebuild (development only)
-    await refreshDevelopmentCache();
+    await logBuildStep(
+      "saving documentation build cache",
+      refreshDevelopmentCache
+    );
   }
 
   console.log(
