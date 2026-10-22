@@ -47,9 +47,43 @@ sudo fail2ban-client set manual-permaban unbanip 203.0.113.0/24    # remove
 sudo fail2ban-client status manual-permaban                        # list
 ```
 
-When moving to a new host, copy `/var/lib/fail2ban/fail2ban.sqlite3` across
-before starting fail2ban (it restores active bans from it), or re-run the
-`banip` commands from the old host's `status` output.
+Moving to a new host: see [Moving to a new host](#moving-to-a-new-host).
+
+## Moving to a new host
+
+There is no bootstrap script: the host was built by hand (the old setup script
+is described at the end of this file), and `deploy.sh` only installs the files
+in the table above onto a host that already exists. This is the state that
+lives on the host and has to be carried across or recreated. Do it before
+pointing traffic at the new host.
+
+- **Permanent bans** (`manual-permaban`). The only fail2ban state worth keeping;
+  the nginx jails' bans last 30-60 minutes and `recidive` a week. On the old
+  host, list them, then on the new host (after `npm run deploy-host`) re-add
+  each one:
+
+  ```
+  sudo fail2ban-client status manual-permaban     # old host: "Banned IP list"
+  sudo fail2ban-client set manual-permaban banip <ip-or-cidr>   # new host, each
+  ```
+
+  Copying `/var/lib/fail2ban/fail2ban.sqlite3` also works, but fail2ban holds it
+  open: stop fail2ban on the old host first (or use `sqlite3 <db> ".backup
+  <copy>"`), put it in place on the new host before fail2ban first starts, and
+  keep the same fail2ban version. Re-running `banip` is simpler and doesn't
+  depend on either.
+- **`/etc/blot/data-volume`** and the `.blot-data-volume` marker on the data
+  volume (see above).
+- **Wildcard certificate** files in `/etc/ssl/private/` (`letsencrypt-domain.pem`
+  and `.key`), written from Redis; `blue-green.sh` won't start a proxy
+  container without them.
+- **Packages and cron:** `redis6` (for `redis-cli`), `nvme-cli`, `cronie`, and
+  the cron entry that runs `check_docker_health.sh` every minute (`deploy.sh`
+  copies the script but not the entry).
+- Then `npm run deploy-host`, the Deploy proxy and Deploy node workflows.
+
+Nothing in `proxy/` or the Node containers needs copying: custom-domain
+certificates are in Redis and the proxy cache refills itself.
 
 It also turns off X11 forwarding in `sshd_config`. The systemd files are
 installed and `daemon-reload`ed only: docker is not restarted, so the
