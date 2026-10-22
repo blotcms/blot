@@ -32,6 +32,7 @@ const {
   keepsErrorAfterDownload,
 } = require("../util/classifyError");
 const tagSource = require("../util/tagSource");
+const retryRequest = require("../util/retryRequest");
 const createClient = promisify((blogID, cb) =>
   require("../util/createClient")(blogID, (err, ...results) => cb(err, results))
 );
@@ -144,7 +145,7 @@ async function resetToBlotWithClient(
   if (account.folder_id) {
     const { result } = await tagSource(
       SOURCES.DELTA,
-      client.filesGetMetadata({ path: account.folder_id })
+      retryRequest(() => client.filesGetMetadata({ path: account.folder_id }), "filesGetMetadata")
     );
     const { path_display } = result;
     if (path_display) {
@@ -167,11 +168,15 @@ async function resetToBlotWithClient(
     result: { cursor },
   } = await tagSource(
     SOURCES.DELTA,
-    client.filesListFolderGetLatestCursor({
-      path: account.folder_id || "",
-      include_deleted: true,
-      recursive: true,
-    })
+    retryRequest(
+      () =>
+        client.filesListFolderGetLatestCursor({
+          path: account.folder_id || "",
+          include_deleted: true,
+          recursive: true,
+        }),
+      "filesListFolderGetLatestCursor"
+    )
   );
 
   // The cursor is fetched before the walk, so edits made during it are still
@@ -630,9 +635,13 @@ const remoteReaddir = async (client, dir) => {
   if (dir === "/") dir = "";
 
   do {
-    const { result } = cursor
-      ? await client.filesListFolderContinue({ cursor })
-      : await client.filesListFolder({ path: dir });
+    const { result } = await retryRequest(
+      () =>
+        cursor
+          ? client.filesListFolderContinue({ cursor })
+          : client.filesListFolder({ path: dir }),
+      "remoteReaddir"
+    );
     has_more = result.has_more;
     cursor = result.cursor;
     items = items.concat(
