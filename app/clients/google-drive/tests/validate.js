@@ -41,6 +41,7 @@ function load({
   accounts,
   blogs,
   walks = {},
+  walkErrors = {},
   locks = {},
   fixes = {},
   onWalk = {},
@@ -114,8 +115,9 @@ function load({
         get: async (blogID) => accounts[blogID],
       },
     },
-    "./sync/sync": async (blogID) => {
+    "./sync/sync": async (blogID, publish, update, options) => {
       calls.walked.push(blogID);
+      if (walkErrors[blogID] && options) options.onError(walkErrors[blogID]);
       if (onWalk[blogID]) onWalk[blogID]();
       const walk = walks[blogID];
       if (walk instanceof Error) throw walk;
@@ -300,6 +302,21 @@ describe("Google Drive hourly sync validation", function () {
       { phase: "walk", message: "walk failed (see logs)" },
     ]);
     expect(calls.emails[0].blogs[0].hasChanges).toBe(false);
+  });
+
+  it("reports why a walk failed", async function () {
+    const { validate, calls } = load({
+      accounts: { a: driveAccount() },
+      blogs: blogsFor("a"),
+      walks: { a: false },
+      walkErrors: { a: new Error("Insufficient permission on file") },
+    });
+
+    await validate.runValidation();
+
+    expect(calls.emails[0].blogs[0].errors).toEqual([
+      { phase: "walk", message: "Insufficient permission on file" },
+    ]);
   });
 
   it("reports a walk that throws, and still releases the lock", async function () {

@@ -102,7 +102,7 @@ const fixBlog = (blog) =>
 // Walks the blog's folder while holding its folder lock, so it can't race a
 // webhook sync. Resolves to sync's summary, false if the walk failed, or
 // NOT_ELIGIBLE.
-const walkWithLock = async (blogID, publish) => {
+const walkWithLock = async (blogID, publish, options) => {
   const { folder, done } = await establishSyncLock(blogID);
   let error = null;
 
@@ -111,7 +111,7 @@ const walkWithLock = async (blogID, publish) => {
     // may have waited for it: setup or a stored error can have started since.
     if (!isEligible(await database.blog.get(blogID))) return NOT_ELIGIBLE;
 
-    return await sync(blogID, publish, folder.update);
+    return await sync(blogID, publish, folder.update, options);
   } catch (err) {
     error = err;
     throw err;
@@ -171,8 +171,12 @@ const validateAllBlogs = async () => {
       const stopWalkMeasure = measureEventLoop();
       phase = "walk";
 
+      let walkError;
+
       try {
-        summary = await walkWithLock(blogID, publish);
+        summary = await walkWithLock(blogID, publish, {
+          onError: (err) => (walkError = err),
+        });
         logLag(blogID, "walk", entryCount, stopWalkMeasure());
       } catch (err) {
         stopWalkMeasure();
@@ -201,7 +205,9 @@ const validateAllBlogs = async () => {
       // changes". Don't run Fix() on a folder we couldn't read. If the
       // failure was the user trashing or unsharing the folder, sync.js has
       // stored that on the account and send() drops the blog by its health.
-      if (!summary) throw new Error("walk failed (see logs)");
+      if (!summary) {
+        throw new Error((walkError && walkError.message) || "walk failed (see logs)");
+      }
 
       // A walk that skipped files reports a walk error (and the changes it
       // did apply), and Fix() is skipped for it.
