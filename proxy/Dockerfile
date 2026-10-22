@@ -58,7 +58,52 @@ RUN git clone https://github.com/juce/sockproc.git /tmp/sockproc && \
     install -m 0755 /tmp/sockproc/sockproc /vendor/resty-auto-ssl/sockproc
 
 # ---------------------------------------------------------------------------
-# Stage 2: the proxy image
+# Stage 2: the Brotli filter, built as a dynamic module against the nginx
+# source bundled in the pinned OpenResty release. That copy carries OpenResty's
+# patches (some add struct fields), so the module is compiled against the same
+# headers as the binary it loads into. The OpenResty images ship no Brotli
+# support. The binary is already built --with-compat, so a --with-compat build
+# of the module loads into it.
+# ---------------------------------------------------------------------------
+FROM openresty/openresty:${OPENRESTY_TAG} AS brotli
+
+ARG OPENRESTY_VERSION=1.25.3.1
+ARG OPENRESTY_SHA256=32ec1a253a5a13250355a075fe65b7d63ec45c560bbe213350f0992a57cd79df
+ARG NGINX_VERSION=1.25.3
+ARG NGX_BROTLI_COMMIT=53e0fb55f250f48fe80c0ddbf6c0f7103cdbaae1
+
+RUN apk add --no-cache git cmake make gcc g++ musl-dev linux-headers \
+      pcre-dev zlib-dev openssl-dev
+
+WORKDIR /tmp/brotli-build
+
+RUN curl -fsSL -o openresty.tar.gz "https://openresty.org/download/openresty-${OPENRESTY_VERSION}.tar.gz" && \
+    echo "${OPENRESTY_SHA256}  openresty.tar.gz" | sha256sum -c - && \
+    tar xzf openresty.tar.gz
+
+# The module's brotli submodule is pinned by the commit's gitlink
+RUN git clone https://github.com/google/ngx_brotli.git && \
+    git -C ngx_brotli checkout --detach "${NGX_BROTLI_COMMIT}" && \
+    git -C ngx_brotli submodule update --init --recursive
+
+# The module links Brotli statically from deps/brotli/out; build the libraries
+# position-independent (the module is a shared object) and without
+# -march=native, so the image runs on any CPU of the target architecture.
+RUN mkdir ngx_brotli/deps/brotli/out && cd ngx_brotli/deps/brotli/out && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+      -DCMAKE_POSITION_INDEPENDENT_CODE=ON .. && \
+    cmake --build . --config Release --target brotlienc -j"$(nproc)"
+
+# Only the filter module is installed: brotli_static would need pre-compressed
+# .br files on disk, which nothing produces.
+RUN cd "openresty-${OPENRESTY_VERSION}/bundle/nginx-${NGINX_VERSION}" && \
+    ./configure --with-compat --add-dynamic-module=/tmp/brotli-build/ngx_brotli && \
+    make modules && \
+    mkdir -p /vendor/modules && \
+    cp objs/ngx_http_brotli_filter_module.so /vendor/modules/
+
+# ---------------------------------------------------------------------------
+# Stage 3: the proxy image
 # ---------------------------------------------------------------------------
 FROM openresty/openresty:${OPENRESTY_TAG}
 
@@ -69,6 +114,8 @@ RUN apk add --no-cache bash openssl gettext
 # Match the production convention (workers run as ec2-user)
 RUN addgroup -S ec2-user && adduser -S -u 1000 -G ec2-user ec2-user
 
+# Brotli filter module, loaded with load_module in proxy/config/initial.conf
+COPY --from=brotli /vendor/modules/ /usr/local/openresty/nginx/modules/
 COPY --from=deps /vendor/lualib/ /usr/local/openresty/lualib/
 # lua-resty-auto-ssl shells out to /usr/bin/resty-auto-ssl/start_sockproc,
 # which runs ./sockproc next to it.
