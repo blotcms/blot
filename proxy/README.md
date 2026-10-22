@@ -160,7 +160,8 @@ start).
   a shorter chain than RSA 4096; existing RSA ones keep working until their
   renewal. Nothing in the config, `wildcard_cert.lua` or the scheduler checks
   assumes a key type. The `*.blot.im` wildcard is issued by
-  `app/scheduler/renew-wildcard-ssl.js`, not by dehydrated, and is unchanged.
+  `app/scheduler/renew-wildcard-ssl.js`, not by dehydrated, and is also an
+  ECDSA P-256 certificate from its next renewal.
 
 ### Scanner bans and TLS resumption
 

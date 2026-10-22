@@ -6,7 +6,7 @@ Internationalize the dashboard and brochure site with a standard catalog-based i
 
 In daily update email, make usage format consistently: 19% (stable, 22gb free) 
 
-Force renew all current ssl certs and switch wildcard to ecdsa cert to save bandwidth?
+Force renew all current RSA custom-domain ssl certs to ECDSA to save bandwidth?
 
 Finish 2035 and move replaceFolderLinks off the render path
 - inspect the existing instrumentation

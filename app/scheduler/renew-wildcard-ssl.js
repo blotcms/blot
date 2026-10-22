@@ -181,10 +181,15 @@ async function issue({ acme, acmeClient, dns, host }) {
       }
     }
 
-    const [key, csr] = await acme.crypto.createCsr({
-      commonName: host,
-      altNames: names,
-    });
+    // ECDSA P-256: the handshake carries a much smaller certificate than RSA
+    const certificateKey = await acme.crypto.createPrivateEcdsaKey();
+    const [key, csr] = await acme.crypto.createCsr(
+      {
+        commonName: host,
+        altNames: names,
+      },
+      certificateKey
+    );
     const finalized = await acmeClient.finalizeOrder(order, csr);
     const pem = await acmeClient.getCertificate(finalized);
 
