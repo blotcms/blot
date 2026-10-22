@@ -1,28 +1,6 @@
-The “for the CDN” reason for gzip_vary on doesn’t really apply. I fetched a CSS file from cdn.blot.im with Accept-Encoding set to nothing, gzip, br and gzip, br. Every time, Bunny returned the same 146,851-byte uncompressed body with no Content-Encoding. So Bunny doesn’t appear to store compressed bodies from the origin. gzip_vary is harmless and correct, but the PR description gives the wrong reason for it.
-Side finding: Bunny is sending uncompressed CSS (and presumably JS and SVG) to every visitor. Turning on Bunny’s own gzip/Brotli setting would cut Bunny bandwidth, which is a separate win from the EC2 egress this PR targets.
-
-Investigate flaky spec "Blot dashboard settings lets you update the title of a site" (app/site/tests/settings.js): failed once in CI with "Lock was lost before release ... folder-lock" (ECOMPROMISED) from app/sync/lock.js, unrelated to the PR it failed on: https://github.com/blotcms/blot/actions/runs/39750297005/job/119728891014
-
 Add multi-currency subscription signup with fixed, rounded market prices for EUR, GBP, JPY, CAD, AUD, and a catalog that can expand to more currencies. Keep the catalog as the source of truth and add idempotent scripts to create/reconcile Stripe Prices and PayPal plans, recording provider IDs without changing plans used by existing subscribers. Update signup to suggest a currency from geo-IP while letting customers choose, then select and verify the matching provider price server-side.
 
 Internationalize the dashboard and brochure site with a standard catalog-based i18n library (e.g. i18next), locale-aware formatting, and a translation workflow. For user templates, build a small compile step that turns localized source/catalogs into ordinary Mustache views, keeping templates portable and easy to extend with languages. Start with major European languages plus Chinese and Japanese; decide Simplified/Traditional Chinese scope and phase brochure content by priority.
-
-In daily update email, make usage format consistently: 19% (stable, 22gb free) 
-
-Force renew all current RSA custom-domain ssl certs to ECDSA to save bandwidth?
-
-Finish 2035 and move replaceFolderLinks off the render path
-- inspect the existing instrumentation
-
-On 23 Oct: check custom-domain certs issued since 19 Oct are ECDSA (#2163 set KEY_ALGO=prime256v1; RSA certs switch at renewal). Run: ssh -n blot "grep -ohE '^\S+ \S+ \S+ \S+ \S+ \S+ https://[^/ ]+' /var/instance-ssd/logs/access.log | sed 's|.*https://||' | grep -v 'blot\.im$' | sort -u" | while read d; do printf '%s ' "$d"; echo | openssl s_client -connect "$d:443" -servername "$d" 2>/dev/null | openssl x509 -noout -startdate -text 2>/dev/null | grep -E 'notBefore|Public Key Algorithm' | tr -s ' \n' ' '; echo; done | grep -E 'notBefore=Oct (19|2[0-9]) ' - every line should say id-ecPublicKey; if any say rsaEncryption, check that /etc/resty-auto-ssl/letsencrypt/conf.d/key-algo.sh exists in the proxy container.
-
-Consider a proxy-level throttle for unconditional feed polling: 429 + Retry-After for a repeat request without If-None-Match/If-Modified-Since from the same IP + feed within ~15 min (access-phase Lua, before the cache). Prototyped and dropped from #2162 as too complicated. Caveat: its 429s must not feed fail2ban's nginx-429 jail (lrs=PASSED vs limit_req's lrs=REJECTED in the access log).
-
-Audit the ci change commits (d579ecb10b6eead21469168623d621c32d68dafb, 33cb82f55a70db99fcc22e2b3e469808dcb732c0, ddc402940265b3af067647a815b726a698230571) for soundness
-- why do some master commits get fewer runners? should we not be running everything every master commit? why or why not?
-
-A concurrent node and proxy deploy lead to this failure: https://github.com/blotcms/blot/actions/runs/39042182709/job/117423729308
-- make the proxy deploy tolerant of this (retry after x seconds)
 
 Overdue sites should have their data exported, archived in s3 (download link in email) for up to a year after closure.
 
@@ -48,7 +26,6 @@ How to reduce likelihood of downtime?
 - are we well insulated from bunny failures (dns failover here too?)
 - are we well insulated from cloudflare failures (they do our DNS records or is it route53?)
 - are we as well insulated from most likely aws issues?
-
 
 Add a new template which just looks like finder on the index page
 
@@ -89,7 +66,6 @@ Add lifetime subscription to the billing interval page
 
 Implement liveline for stats streaming
 - https://benji.org/liveline
-
 
 Add a tool which randomly samples, production markdown posts, and runs version of build and version B of build on it
 - Goal would be to identify regression in a new version of the build process 
