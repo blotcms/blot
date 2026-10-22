@@ -270,9 +270,24 @@ async function cancelPaypalSubscription (req, res, next) {
     );
 
     if (response.status !== 204) {
-      throw new Error(`PayPal cancel API error: ${response.status}`);
+      const rejected = new Error(`PayPal cancel API error: ${response.status}`);
+      // A 5xx is indeterminate: PayPal may have applied the cancel.
+      rejected.rejected = response.status < 500;
+      throw rejected;
     }
   } catch (err) {
+    // A transport failure may come after PayPal applied the cancel, so ask
+    // PayPal rather than report a failure for a subscription that is
+    // cancelled. Otherwise the webhook repairs it when PayPal reports it.
+    if (err.rejected) return next(err);
+
+    try {
+      const current = await paypal.updateSubscription(id);
+      if (current && current.status === "CANCELLED") return next();
+    } catch (fetchErr) {
+      console.log("PayPal cancel: reconcile after failure failed:", fetchErr);
+    }
+
     return next(err);
   }
 

@@ -159,7 +159,7 @@ describe("payment webhook delivery reliability", function () {
 
   describe("PayPal cancellation email", function () {
     const DAY = 24 * 60 * 60 * 1000;
-    let claimed, subscription;
+    let claimed, failed, subscription;
     const cancel = (overrides) => {
       subscription = Object.assign({ id: "I-TEST", status: "CANCELLED",
         start_time: new Date(Date.now() - 200 * DAY).toISOString(),
@@ -168,11 +168,17 @@ describe("payment webhook delivery reliability", function () {
     };
     beforeEach(function () {
       claimed = new Set();
+      failed = new Set();
       user.paypal = { status: "ACTIVE" };
       cancel();
       global.fetch.and.callFake(async () => ({ ok: true, json: async () => subscription }));
       spyOn(client, "set").and.callFake(async (k, v, options) =>
-        claimed.has(k) ? null : (claimed.add(k), "OK"));
+        options.NX && claimed.has(k) ? null : (claimed.add(k), "OK"));
+      spyOn(client, "getDel").and.callFake(async k => {
+        const had = failed.has(k);
+        failed.delete(k);
+        return had ? "failed" : null;
+      });
       ["CANCELLED", "CANCELLED_FIRST_PERIOD", "CLOSED", "ALREADY_CANCELLED"].forEach(name =>
         spyOn(email, name));
     });
@@ -183,7 +189,7 @@ describe("payment webhook delivery reliability", function () {
     it("sends the cancellation email on the first CANCELLED transition", async function () {
       await paypal.updateSubscription("I-TEST");
       expect(email.CANCELLED).toHaveBeenCalledTimes(1);
-      expect(email.CANCELLED).toHaveBeenCalledWith("test-user");
+      expect(email.CANCELLED).toHaveBeenCalledWith("test-user", {}, jasmine.any(Function));
       expect(email.CANCELLED_FIRST_PERIOD).not.toHaveBeenCalled();
       expect(client.set).toHaveBeenCalledWith(
         "user:test-user:paypal_cancel_email:I-TEST", "1",
@@ -193,7 +199,7 @@ describe("payment webhook delivery reliability", function () {
       cancel({ start_time: new Date(Date.now() - 3 * DAY).toISOString() });
       await paypal.updateSubscription("I-TEST");
       expect(email.CANCELLED_FIRST_PERIOD).toHaveBeenCalledTimes(1);
-      expect(email.CANCELLED_FIRST_PERIOD).toHaveBeenCalledWith("test-user");
+      expect(email.CANCELLED_FIRST_PERIOD).toHaveBeenCalledWith("test-user", {}, jasmine.any(Function));
       expect(email.CANCELLED).not.toHaveBeenCalled();
     });
     it("sends it once when the update is retried or concurrent", async function () {
@@ -202,6 +208,24 @@ describe("payment webhook delivery reliability", function () {
       user.paypal = { status: "CANCELLED" };
       await paypal.updateSubscription("I-TEST");
       expect(email.CANCELLED).toHaveBeenCalledTimes(1);
+    });
+    it("retries once on the next update after a failed send", async function () {
+      const K = "user:test-user:paypal_cancel_email:I-TEST";
+      const multi = { del: jasmine.createSpy("del"), set: jasmine.createSpy("set") };
+      multi.del.and.returnValue(multi);
+      multi.set.and.returnValue(multi);
+      multi.exec = () => { claimed.delete(K); failed.add(K + ":failed"); return Promise.resolve([]); };
+      spyOn(client, "multi").and.returnValue(multi);
+      email.CANCELLED.and.callFake((uid, locals, cb) => cb(new Error("mailgun")));
+      await paypal.updateSubscription("I-TEST");
+      await new Promise(r => setImmediate(r));
+      expect(multi.del).toHaveBeenCalledWith(K);
+      expect(multi.set).toHaveBeenCalledWith(K + ":failed", "1", { EX: 90 * DAY / 1000 });
+      email.CANCELLED.and.stub();
+      user.paypal = { status: "CANCELLED" };
+      await paypal.updateSubscription("I-TEST");
+      await paypal.updateSubscription("I-TEST");
+      expect(email.CANCELLED).toHaveBeenCalledTimes(2);
     });
     it("does not send it when the status was already CANCELLED", async function () {
       user.paypal = { status: "CANCELLED" };

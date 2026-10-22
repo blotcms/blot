@@ -46,7 +46,7 @@ function subscriptionUrl(req) {
 // subscribers are directed to manage their payment method on PayPal, since
 // Blot does not control billing for PayPal subscriptions.
 PaymentMethod.use(function (req, res, next) {
-  if (req.user.paypal && req.user.paypal.status) {
+  if (req.user.usesPaypal) {
     // The list page explains where to go instead; every mutating
     // action (add/remove/set default) is simply unavailable.
     if (req.method === "GET") return next();
@@ -65,7 +65,7 @@ PaymentMethod.use(function (req, res, next) {
 PaymentMethod.route("/")
 
   .get(function (req, res, next) {
-    if (req.user.paypal && req.user.paypal.status) {
+    if (req.user.usesPaypal) {
       return res.render("dashboard/account/payment-method", {
         breadcrumb: "Payment methods",
         title: "Payment methods",
