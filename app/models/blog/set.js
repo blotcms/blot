@@ -235,8 +235,11 @@ module.exports = function (blogID, blog, callback) {
           // Template views wrap links to the blog's own hosts in {{#cdn}}
           // when they render, so the CDN manifest must resolve the new
           // hosts' links too. Only the installed template has a manifest
-          // (updateCdnManifest keeps the others empty).
-          if (template && template.indexOf(blogID + ":") === 0)
+          // (updateCdnManifest keeps the others empty). A blog being created
+          // has no former handle and nothing to re-resolve, like
+          // rebuildEntriesOnNewHosts; regenerating anyway raced with a
+          // quick Blog.remove and recreated the template's metadata.
+          if (former.handle && template && template.indexOf(blogID + ":") === 0)
             updateCdnManifest(template, function (manifestErr) {
               if (manifestErr)
                 console.log("Blog.set", blogID, "Error updating template CDN manifest", manifestErr);
