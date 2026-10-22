@@ -56,6 +56,7 @@ const establishSyncLock = require("sync/establishSyncLock");
 const rebuildEntry = require("sync/update/rebuildEntry");
 const blogHosts = require("blog/lib/blogHosts");
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
+const { BLOG_STATIC_PATHS } = require("blog/lib/staticPaths");
 const {
   htmlExtRegex,
   fileExtRegex,
@@ -84,6 +85,12 @@ function isFolderPath(value) {
   if (value.charAt(0) !== "/" || value.startsWith("//")) return false;
 
   const pathPart = pathPartOf(value);
+
+  // Generated assets (/_image_cache/... for remote images Blot downloaded,
+  // thumbnails, ...) aren't folder files and are never baked, so an entry
+  // with them would match, and be rebuilt, on every run
+  if (BLOG_STATIC_PATHS.some((dir) => pathPart === dir || pathPart.startsWith(dir + "/")))
+    return false;
 
   if (htmlExtRegex.test(pathPart)) return false;
   if (!fileExtRegex.test(pathPart)) return false;

@@ -10,6 +10,7 @@ const caseSensitivePath = promisify(require("helper/caseSensitivePath"));
 const {
   GLOBAL_STATIC_DIR,
   GLOBAL_STATIC_SUBDIRECTORIES,
+  BLOG_STATIC_PATHS,
 } = require("../lib/staticPaths");
 const blogHosts = require("../lib/blogHosts");
 const cdnOrigin = require("../lib/cdnOrigin");
@@ -45,14 +46,6 @@ const BLOCKED_PATTERNS = [
   ".php", // blot does not support PHP
   "/.git", // avoid exposing git directories
   "\0", // null byte
-];
-
-const BLOG_STATIC_PATHS = [
-  "/_assets",
-  "/_avatars",
-  "/_bookmark_screenshots",
-  "/_image_cache",
-  "/_thumbnails",
 ];
 
 // Router setup
