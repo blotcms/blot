@@ -29,8 +29,16 @@ Log line format (space-separated, so `cut -d ' ' -fN` / `awk '{print $N}'` work)
    1        2         3      4              5             6      (7 is empty due to double space before cache=)
 ```
 
-Concretely: `$4` = status code, `$7` = full URL (scheme+host+path+query),
-`ip=`, `ua=`, `cache=` are grep/`grep -oE` targets, not fixed fields.
+Concretely: `$4` = status code, `$6` = `bytes_in:bytes_out`, `$7` = full URL
+(scheme+host+path+query), `ip=`, `ua=`, `cache=` are grep/`grep -oE` targets,
+not fixed fields.
+
+`cache=-` alone is ambiguous: read it with `up=`. `cache=- up=<address>` was
+proxied to Node at a location with no `proxy_cache` (`cdn.blot.im`, the
+dashboard, webhooks, SSE; Bunny is the cache for `cdn.blot.im`, so those are
+origin pulls, not routes missing a cache). `cache=- up=-` was answered by
+openresty itself (redirect, 444, `/health`, static file). A cache `HIT` also has
+`up=-` but says `cache=HIT`.
 
 **Always confirm with the user before running anything against production**,
 and stick to read-only commands. Clean up `/tmp/combined_access.log` on the
