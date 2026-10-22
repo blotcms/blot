@@ -365,15 +365,19 @@ reserved; `disk_backups` is left out when
 
 The daily email (`app/scheduler/daily/redis-server.js`) has one line from this
 and Redis itself:
-`**Redis:** memory 27% (resize in ~47 days), disk 21% (19 GB free), saved 3m ago, backed up 30m ago.`
-Memory is `used_memory` against `maxmemory`; the bracket is when it would reach
-70% of `maxmemory` at the rate it grew since the previous daily run (the daily
-job keeps its figures in `blot:redis-host:daily-snapshot`), or "stable" if it is
-flat or over a year away, and nothing on the first run. From 70% it says
-**resize now**, linking to "Increasing the Redis server size". Disk is the root
-disk from the sample; the `/backups` disk only appears when it is 80% full or
-not mounted. A failed save, a backup over 2 hours old or none recorded, and a
-missing or stale sample are called out in bold or in words.
+`Redis server: memory 27% (resize in ~47 days, 8 GB free), disk 21% (stable, 19 GB free), saved 3m ago, backed up 30m ago`
+Memory is `used_memory` against `maxmemory`; disk is the root disk from the
+sample. Each is `percent (trend, free space)`: the trend is when it would reach
+its limit (70% of `maxmemory`, 80% of the disk) at the rate it grew over the
+last week, or "stable" if it is flat or over a year away, and left out until
+there is an earlier reading. The daily job keeps the last 8 daily readings in
+`blot:redis-host:daily-memory-history` and `blot:redis-host:daily-disk-history`
+(the disk's are tagged with the host, so a replacement host starts afresh; see
+`app/scheduler/daily/trend.js`). At the limit it says **resize now**; for
+memory that links to "Increasing the Redis server size". The `/backups` disk
+only appears when it is 80% full or not mounted. A failed save, a backup over 2
+hours old or none recorded, and a missing or stale sample are called out in bold
+or in words.
 
 Each condition is emailed once when it starts and once when it clears, with
 what was sent kept in `blot:redis-host:alerts`. Emails are rate limited so a

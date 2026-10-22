@@ -20,12 +20,80 @@ describe("daily update data disk", function () {
   it("says how full the data disk is", function () {
     const line = dataDisk.line(disks(280, 50));
 
-    expect(line).toMatch(/^Data disk: 85% used, 50 GB free of 330 GB$/);
+    expect(line).toBe("Data disk: 85% (50 GB free)");
     expect(line).not.toContain("**");
   });
 
   it("is bold once the first alert level is reached", function () {
-    expect(dataDisk.line(disks(300, 30))).toMatch(/^\*\*Data disk: 91% used/);
+    expect(dataDisk.line(disks(300, 30))).toMatch(/^\*\*Data disk: 91% \(grow now, 30 GB free\)\*\*$/);
+  });
+
+  const DAY = 24 * 60 * 60 * 1000;
+  const NOW = Date.UTC(2026, 9, 22, 7, 0);
+  const point = (days, usedGB) => ({ time: NOW - days * DAY, used: usedGB * GB * 1024 });
+
+  it("says where the data disk is heading from the last week", function () {
+    // 90% of 330 GB is 297 GB: 17 GB to go at 1 GB a day
+    const growing = [point(7, 273), point(1, 279)];
+    expect(dataDisk.line(disks(280, 50), { history: growing, now: NOW })).toBe(
+      "Data disk: 85% (grow in ~17 days, 50 GB free)"
+    );
+
+    expect(dataDisk.line(disks(280, 50), { history: [point(7, 280)], now: NOW })).toBe(
+      "Data disk: 85% (stable, 50 GB free)"
+    );
+    expect(dataDisk.line(disks(280, 50), { history: [point(7, 290)], now: NOW })).toBe(
+      "Data disk: 85% (stable, 50 GB free)"
+    );
+  });
+
+  it("stores each day's reading and uses it the next day", function (done) {
+    const store = new Map();
+    const client = {
+      sendCommand: async ([command, key, value]) =>
+        command === "GET" ? store.get(key) || null : store.set(key, value) && "OK"
+    };
+    const run = now =>
+      new Promise(resolve =>
+        dataDisk((err, result) => resolve(result.data_disk), {
+          client,
+          now,
+          freeDiskSpace: callback => callback(null, disks(280, 50))
+        })
+      );
+
+    run(NOW - DAY)
+      .then(first => {
+        expect(first).toBe("Data disk: 85% (50 GB free)");
+        expect(JSON.parse(store.get(dataDisk.HISTORY_KEY))).toEqual([{ time: NOW - DAY, used: 280 * GB * 1024 }]);
+        return run(NOW);
+      })
+      .then(second => {
+        expect(second).toBe("Data disk: 85% (stable, 50 GB free)");
+        done();
+      });
+  });
+
+  it("still gives the line when Redis cannot be read", function (done) {
+    const client = {
+      sendCommand: async () => {
+        throw new Error("connection refused");
+      }
+    };
+
+    dataDisk(
+      (err, result) => {
+        expect(result.data_disk).toBe("Data disk: 85% (50 GB free)");
+        done();
+      },
+      { client, now: NOW, freeDiskSpace: callback => callback(null, disks(280, 50)) }
+    );
+  });
+
+  it("says to grow now whenever the alert level is reached, by the rounded percentage", function () {
+    // 89.1% is shown as 90%
+    const line = dataDisk.line(disks(294, 36), { history: [], now: NOW });
+    expect(line).toBe("**Data disk: 90% (grow now, 36 GB free)**");
   });
 
   it("picks the highest alert level reached", function () {
