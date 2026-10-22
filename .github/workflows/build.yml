@@ -1,4 +1,4 @@
-# Builds the production app image, checks it starts healthy (PRs), and publishes the
+# Builds the production app image, and publishes the
 # manifest list deploy.yml waits for. The airlock image is
 # built by airlock.yml.
 #
@@ -20,9 +20,8 @@ env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/blot
   # True for push builds and PRs from a branch of this repo; false for PRs
   # from a fork, whose GITHUB_TOKEN is read-only and cannot write to GHCR.
-  # Fork PRs still build the images and run the health checks locally
-  # (push: false, load: true) - they just skip the registry push, the
-  # registry cache export, and the manifest jobs.
+  # Fork PRs still build the images (push: false, load: true) - they just skip
+  # the registry push, the registry cache export, and the manifest list.
   PUSH_IMAGES: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
 
 # Superseded PR pushes are cancelled. Each master push gets its own group: a
@@ -86,48 +85,6 @@ jobs:
             tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}-${{ matrix.arch }}
             cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:cache-${{ matrix.arch }}
             cache-to: ${{ env.PUSH_IMAGES == 'true' && format('type=registry,ref={0}:cache-{1},mode=max', env.IMAGE_NAME, matrix.arch) || '' }}
-
-      # PRs only. The e2e tests run the dev target, so this is the one check
-      # that the prod target boots before merge. On master it would hold up
-      # the manifest list deploy.yml waits for, and scripts/deploy health-checks
-      # (and rolls back) the first container anyway.
-      - name: Verify health check (${{ matrix.arch }})
-        if: ${{ github.event_name == 'pull_request' }}
-        env:
-          IMAGE: ${{ env.IMAGE_NAME }}:${{ github.sha }}-${{ matrix.arch }}
-        run: |
-          set -euo pipefail
-          docker network create test_network
-
-          redis_container_id=$(docker run -d --name test_redis --network test_network redis:6.2.12)
-
-          timeout=30; interval=2; elapsed=0
-          until docker exec "$redis_container_id" redis-cli ping | grep -q PONG; do
-            if [ $elapsed -ge $timeout ]; then
-              echo "Redis not ready in $timeout s"
-              docker logs "$redis_container_id" || true
-              exit 1
-            fi
-            sleep $interval; elapsed=$((elapsed+interval))
-          done
-
-          # The app refuses to start without a storage bucket. Nothing is
-          # uploaded while it starts, so this one needn't exist.
-          app_id=$(docker run -d --network test_network -e BLOT_REDIS_HOST=test_redis \
-            -e BLOT_STORAGE_BUCKET=health-check -p 8080:8080 "$IMAGE")
-
-          timeout=60; interval=5; elapsed=0
-          until [ "$(docker inspect --format='{{json .State.Health.Status}}' "$app_id")" = '"healthy"' ]; do
-            if [ $elapsed -ge $timeout ]; then
-              echo "App health check failed"
-              docker logs "$app_id" || true
-              exit 1
-            fi
-            sleep $interval; elapsed=$((elapsed+interval))
-          done
-
-          docker rm -f "$app_id" "$redis_container_id"
-          docker network rm test_network
 
       # Deploys look for ghcr.io/<owner>/blot:<sha> as a manifest list with an
       # arm64 entry (scripts/deploy verifyImageManifest, deploy.yml). Production

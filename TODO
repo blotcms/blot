@@ -18,8 +18,6 @@ On 23 Oct: check custom-domain certs issued since 19 Oct are ECDSA (#2163 set KE
 
 Consider a proxy-level throttle for unconditional feed polling: 429 + Retry-After for a repeat request without If-None-Match/If-Modified-Since from the same IP + feed within ~15 min (access-phase Lua, before the cache). Prototyped and dropped from #2162 as too complicated. Caveat: its 429s must not feed fail2ban's nginx-429 jail (lrs=PASSED vs limit_req's lrs=REJECTED in the access log).
 
-Point app-e2e (.github/workflows/app-e2e.yml) at the PR's prod image (build.yml's :<sha>-arm64) to replace build.yml's PR health check
-
 Audit the ci change commits (d579ecb10b6eead21469168623d621c32d68dafb, 33cb82f55a70db99fcc22e2b3e469808dcb732c0, ddc402940265b3af067647a815b726a698230571) for soundness
 - why do some master commits get fewer runners? should we not be running everything every master commit? why or why not?
 

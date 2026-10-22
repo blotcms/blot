@@ -19,15 +19,11 @@ services:
       retries: 30
 
   app:
-    # The dev image ships node_modules only; the source is mounted in, exactly
-    # like .github/workflows/node.yml's test job. BLOT_REPO is the repo root
-    # (absolute in CI); it defaults to this file's ../.. for local use.
-    image: ${BLOT_APP_IMAGE:-ghcr.io/blotcms/blot:test-latest}
+    # The production image build.yml pushes for this commit, run as deployed:
+    # its own source, user, NODE_ENV and CMD. BLOT_APP_IMAGE is required.
+    image: ${BLOT_APP_IMAGE:?set BLOT_APP_IMAGE to the app image to test}
     network_mode: host
-    working_dir: /usr/src/app
-    command: ["node", "/usr/src/app/app/index.js"]
     environment:
-      NODE_ENV: development
       BLOT_HOST: ${BLOT_HOST:-localhost}
       BLOT_REDIS_HOST: "127.0.0.1"
       BLOT_PORT: "8081"
@@ -38,10 +34,6 @@ services:
       BLOT_STORAGE_REGION: ${BLOT_STORAGE_REGION}
       BLOT_AWS_KEY: ${BLOT_AWS_KEY}
       BLOT_AWS_SECRET: ${BLOT_AWS_SECRET}
-    volumes:
-      - ${BLOT_REPO:-../..}/app:/usr/src/app/app
-      - ${BLOT_REPO:-../..}/config:/usr/src/app/config
-      - ${BLOT_REPO:-../..}/scripts:/usr/src/app/scripts
     depends_on:
       redis:
         condition: service_healthy
