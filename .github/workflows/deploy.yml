@@ -23,6 +23,12 @@ env:
   BLOT_DEPLOY_SSH_HOST: ${{ secrets.BLOT_DEPLOY_SSH_HOST }}
   BLOT_DEPLOY_SSH_PORT: ${{ secrets.BLOT_DEPLOY_SSH_PORT }}
 
+# One production deploy at a time: a Deploy proxy that overlaps this one would
+# find an upstream mid-restart and refuse (or roll back). A queued run waits.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 # Everything that doesn't depend on the image (checkout, SSH, Node, GHCR
 # login) runs first, so when the run is dispatched straight after a merge the
 # only thing left once build.yml publishes the image is the deploy itself.

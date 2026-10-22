@@ -91,7 +91,7 @@ fi
 
 # Before the new colour takes any traffic: a wrong or missing PROXY_UPSTREAM_*
 # (e.g. a unix: socket path) would otherwise only show after $OLD is stopped
-upstreams_reachable || die "an upstream in $ENV_FILE is not healthy: not deploying"
+wait_upstreams_reachable "$UPSTREAM_WAIT" || die "an upstream in $ENV_FILE is not healthy: not deploying"
 
 if [ -n "$OLD" ]; then
   BASELINE=$(snapshot)

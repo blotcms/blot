@@ -23,6 +23,9 @@
 #   PROXY_REGISTRY_URL     ghcr.io/blotcms/blot-proxy  for a bare tag / commit SHA
 #   PROXY_HEALTH_TIMEOUT   60                   seconds to wait for a new container
 #   PROXY_DRAIN_TIMEOUT    30                   seconds an old container may drain
+#   PROXY_UPSTREAM_WAIT    180                  seconds the preflight keeps retrying an
+#                                               unhealthy upstream (a Node deploy
+#                                               restarting its container); 0 = one try
 #   PROXY_DEPLOY_LOCK      /tmp/blot-proxy-deploy.lock  held by every deploy script
 #   PROXY_SKIP_CERT_SWEEP  (unset)              1 skips the custom-domain certificate
 #                                               checks (see cert_baseline and
@@ -48,6 +51,7 @@ AUTOSSL_VOLUME="${PROXY_AUTOSSL_VOLUME:-blot-proxy-auto-ssl}"
 NODE_CONTAINER="${PROXY_NODE_CONTAINER:-blot-container-blue}"
 HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-60}"
 DRAIN_TIMEOUT="${PROXY_DRAIN_TIMEOUT:-30}"
+UPSTREAM_WAIT="${PROXY_UPSTREAM_WAIT:-180}"
 HEALTH_SOCK="/run/openresty/health.sock"
 LOCK_FILE="${PROXY_DEPLOY_LOCK:-/tmp/blot-proxy-deploy.lock}"
 SITE_IP="127.0.0.1"
@@ -490,6 +494,19 @@ upstreams_reachable() {
     esac
     [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "${target[@]}" || true)" = 200 ] \
       || { log "upstream $addr (PROXY_UPSTREAM_${var%%:*}) is not healthy"; return 1; }
+  done
+}
+
+# Preflight only: a Node deploy running at the same time restarts its
+# containers one at a time, so an upstream can be down for a minute or two.
+# Retry for up to <timeout> seconds before refusing. Not for use once the new
+# colour exists: there an unhealthy upstream must fail and roll back at once.
+wait_upstreams_reachable() { # wait_upstreams_reachable <timeout>
+  local deadline=$(( $(date +%s) + $1 ))
+  until upstreams_reachable; do
+    [ "$(date +%s)" -lt "$deadline" ] || return 1
+    log "Retrying in 10s (waiting up to ${1}s for a concurrent Node deploy to finish)"
+    nap 10
   done
 }
 

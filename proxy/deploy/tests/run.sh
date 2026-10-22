@@ -76,6 +76,10 @@ echo "curl $*" >> "$FAKE/calls"
 args="$*"
 if [[ "$args" == *"/health"* ]]; then
   if [ -n "${FAKE_UPSTREAM_DOWN:-}" ] && [[ "$args" == *":$FAKE_UPSTREAM_DOWN/"* ]]; then printf 000; exit 7; fi
+  if [ -n "${FAKE_UPSTREAM_FLAKY:-}" ] && [[ "$args" == *":$FAKE_UPSTREAM_FLAKY/"* ]]; then
+    n=$(cat "$FAKE/flaky" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE/flaky"
+    [ "$n" -ge 2 ] || { printf 000; exit 7; }
+  fi
   printf 200; exit 0
 fi
 port=443; [[ "$args" =~ :443:127.0.0.1:([0-9]+) ]] && port="${BASH_REMATCH[1]}"
@@ -169,7 +173,7 @@ export PATH="$T/bin:$PATH"
 
 export PROXY_ENV_FILE="$T/proxy.env" PROXY_CACHE_DIR="$T/cache" PROXY_LOG_DIR="$T/logs" \
   PROXY_CERT_DIR="$T/certs" PROXY_DEPLOY_LOCK="$T/lock" \
-  PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 PROXY_REHYDRATE_TIMEOUT=1 TMUX=fake # nap() is a no-op, so a refusal busy-waits out PROXY_HEALTH_TIMEOUT real seconds
+  PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 PROXY_REHYDRATE_TIMEOUT=1 PROXY_UPSTREAM_WAIT=0 TMUX=fake # nap() is a no-op, so a refusal busy-waits out PROXY_HEALTH_TIMEOUT real seconds
 
 pass=0; failed=0
 ok() { pass=$((pass + 1)); echo "  ok   $*"; }
@@ -194,6 +198,12 @@ serving() { [ "$(cat "$FAKE/serving")" = "$1" ]; }
 mentions() { grep -q -- "$1" "$T/out"; }
 
 echo "custom-domain certificates"
+
+reset container; FAKE_UPSTREAM_FLAKY=8089 PROXY_UPSTREAM_WAIT=60 bluegreen
+check "upstream down at first (concurrent Node deploy), healthy on retry: deploys" '[ $RC = 0 ] && called "docker create"'
+
+reset container; FAKE_UPSTREAM_FLAKY=8089 bluegreen
+check "upstream retry disabled (PROXY_UPSTREAM_WAIT=0): refused on the first miss" '[ $RC != 0 ] && ! called "docker create"'
 
 reset container; bluegreen
 check "success: the custom-domain certificates are recorded and still match after the swap" '[ $RC = 0 ] && mentions "2 of 2 in Redis are being served"'

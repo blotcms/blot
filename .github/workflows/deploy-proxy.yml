@@ -22,8 +22,9 @@ permissions:
   contents: read
   actions: read # To read CI results for the target commit
 
+# Shared with Deploy node (deploy.yml): see the comment there.
 concurrency:
-  group: deploy-proxy
+  group: deploy-production
   cancel-in-progress: false
 
 env:
