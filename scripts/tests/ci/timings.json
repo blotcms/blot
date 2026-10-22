@@ -1,9 +1,5 @@
 {
   "app/blog": 190,
-  "app/blog/render/replaceFolderLinks/tests/css.js": 10.295,
-  "app/blog/render/replaceFolderLinks/tests/html.js": 10.768,
-  "app/blog/render/replaceFolderLinks/tests/instrumentation.js": 0.013,
-  "app/blog/render/replaceFolderLinks/tests/stats.js": 0.013,
   "app/blog/render/replaceFolderLinks/tests/unwrapFolderLink.js": 0.005,
   "app/blog/render/retrieve/helpers/tests/fetchTaggedEntries.js": 0.005,
   "app/blog/render/retrieve/helpers/tests/getAllCached.js": 0.045,

@@ -277,8 +277,9 @@ function redirectToCdn(req, res, cdnPath) {
   res.redirect(302, cdnOrigin(req) + cdnPath);
 }
 
-// Sends a 302 to the CDN for a large file of a safe type, mirroring the URL
-// lookupFile builds. Resolves false when the file should be served here.
+// Sends a 302 to the CDN for a large file of a safe type, with a
+// size+mtime version in the URL. Resolves false when the file should be
+// served here.
 async function redirectLargeFolderFile(req, res, blogFolder, path) {
   if (!path.startsWith(blogFolder + "/")) return false;
 

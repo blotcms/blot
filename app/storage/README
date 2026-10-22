@@ -46,10 +46,10 @@ at sync/build time instead.
   built asynchronously at sync/build time and written before any visitor
   requests them — the "pay the cost at build time" model already works for
   this half of storage.
-- Two uncached per-request disk reads: `lookupFile.js`'s case-insensitive
-  lookups for template links (post links are baked at build time by
-  `build/plugins/folderAssets`), and `app/blog/render/retrieve/folder.js`'s
-  `fs.readdir` + `fs.stat` (§4c).
+- One uncached per-request disk read: `app/blog/render/retrieve/folder.js`'s
+  `fs.readdir` + `fs.stat` (§4c). Links in posts are baked at build time by
+  `build/plugins/folderAssets` and links in templates by the template's CDN
+  manifest, so rendering no longer looks files up.
 - The per-blog sync lock is a Redis mutex (`app/sync/lock.js`:
   token-checked `SET NX PX` with a heartbeat), so it works across multiple
   app hosts as is.
@@ -237,7 +237,7 @@ with `Last-Modified`.
 - `entry.updated` moves only when the entry's `contentHash` changes, so a
   reconnect, a full resync or the copy to S3 leaves it alone.
 - CDN version tokens hash content (`helper/contentVersion`; the ETag on
-  S3). Large files and render-time `lookupFile.js` use size+mtime, which
+  S3). Large files (the `routes/assets.js` redirect to the CDN) use size+mtime, which
   still changes whenever the file is rewritten.
 - Google Drive compares Drive's `modifiedTime` with an "applied" record in
   its client DB. iCloud and Dropbox compare content or provider hashes.
@@ -279,8 +279,8 @@ the storage layer, not raw S3 calls threaded through each client.
 **c. Request-time folder reads.**
 `app/blog/routes/assets.js` serves from the blog folder with case-folding
 and index.html/.html fallbacks; `app/cdn/index.js`'s `/folder/v-:version`
-route uses `express.static()` plus `assertNoSymlinks`; `lookupFile.js`
-remains live for templates; `retrieve/folder.js` still does an uncached
+route uses `express.static()` plus `assertNoSymlinks`; `retrieve/folder.js`
+still does an uncached
 `readdir`+`stat` per request. All of these need to move onto the storage
 layer (with either a local cache or measured-acceptable S3 latency) before
 `.folder` moves. Recommendation: measure real S3 latency/throughput first
@@ -308,7 +308,7 @@ check once the backend has no filesystem.
 
 **g. Case sensitivity.** S3 keys are case-sensitive, which removes a
 filesystem quirk rather than adding one. Case-insensitive resolution
-(today duplicated between `lookupFile.js` and `helper/caseSensitivePath.js`)
+(today `helper/caseSensitivePath.js`, used by `folderFile.js` and `routes/assets.js`)
 should consolidate into one storage-layer method, exposed explicitly
 (`store.folder.resolveCaseInsensitive(path)`) rather than built into
 `.read()`'s hot path — it's specifically a user-authored-link problem

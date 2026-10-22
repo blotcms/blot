@@ -233,10 +233,9 @@ function bake($, options) {
 }
 
 // Same-host absolute URLs are baked at build time too, so nothing about them
-// is left for request-time replaceFolderLinks (html.js/css.js) to do. The
-// host is stripped exactly as html.js does at request time, leaving a path
-// that is then treated like any other folder-relative link. Returns the
-// value unchanged if it isn't on one of the blog's hosts.
+// is left to do later. The host is stripped, leaving a path that is then
+// treated like any other folder-relative link. Returns the value unchanged
+// if it isn't on one of the blog's hosts.
 function stripOwnHost(ctx, value) {
   return stripHost(ctx.hostPatterns, value);
 }
@@ -301,8 +300,8 @@ async function bakeValue(ctx, value, resolveRelative) {
   // gone). Still record the dependency so the entry is rebuilt, and baked,
   // if the file (re)appears - regardless of whether another entry's HTML
   // we embedded had already dropped back to the plain path. Where the link
-  // was baked, drop back to the plain path so request-time resolution
-  // decides instead of keeping a URL for a now-missing versioned file.
+  // was baked, drop back to the plain path (which the origin serves)
+  // instead of keeping a URL for a now-missing versioned file.
   //
   // The path is decoded the way resolveBuildFile decodes it (baked links
   // hold an encoded path too), because the file which arrives is
@@ -350,9 +349,8 @@ async function rewriteSrcset(ctx, value) {
 // inside the blog's folder, per app/build/dependencies/index.js) into a
 // %%BLOT_CDN%%-prefixed, versioned URL. Returns { url, path } (path being
 // the case-corrected file path, for recording as a dependency), or null
-// (ENOENT) if there's no matching file - mirroring
-// app/blog/render/replaceFolderLinks/lookupFile.js's "leave untouched"
-// behavior.
+// (ENOENT) if there's no matching file, in which case the link is left
+// untouched.
 async function resolveBuildFile(ctx, value) {
   const { blogID, blogFolder } = ctx;
   const hashIndex = value.indexOf("#");
@@ -366,9 +364,9 @@ async function resolveBuildFile(ctx, value) {
   const query = rest.length ? `?${rest.join("?")}` : "";
   const pathFromValue = decodeFolderPath(encodedPath);
 
-  // Checked after percent-decoding (e.g. /f%6Fnts). Mirrors lookupFile.js: a
-  // file in the global static directory wins, otherwise the path is looked
-  // up in the blog's folder like any other.
+  // Checked after percent-decoding (e.g. /f%6Fnts). A file
+  // in the global static directory wins, otherwise the path is looked up in
+  // the blog's folder like any other.
   if (
     isReservedStaticPath(pathFromValue) &&
     (await globalStaticFileExists(ctx, pathFromValue))

@@ -5,10 +5,7 @@ describe("folder links in templates", function () {
   const crypto = require("crypto");
   const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 
-  // The version of a file's content, as baked into /folder/v-<version>/ URLs.
-  // The request-time pass (blog/render/replaceFolderLinks), which still runs
-  // after the render, versions by size and mtime instead, so a match here
-  // means the template's own manifest produced the URL before the pass ran.
+  // The version of a file's content, as in /folder/v-<version>/ URLs.
   const version = (content) =>
     crypto.createHash("sha1").update(content).digest("hex").slice(0, 8);
 
@@ -156,7 +153,7 @@ describe("folder links in templates", function () {
       return test.text(href);
     };
 
-    it("resolves a relative url() against the root, as the request-time pass does", async function () {
+    it("resolves a relative url() against the root, against the root, like any other link", async function () {
       await this.write({ path: "/img/a.png", content: "root" });
       await this.template(views, { views: { "style.css": { url: "/css/style.css" } } });
 
@@ -198,8 +195,8 @@ describe("folder links in templates", function () {
   it("leaves a link as written in a view the template can't wrap", async function () {
     await this.write({ path: "/a.png", content: "one" });
     // {{=<% %>=}} changes the delimiters, so a {{#cdn}} wrapper would
-    // render as literal text: the view is left alone, and only the
-    // request-time pass rewrites the link.
+    // render as literal text: the view is left alone and the link keeps its
+    // path, which the origin serves.
     await this.template({
       "entries.html": '{{=<% %>=}}<img src="/a.png">',
     });
@@ -207,7 +204,7 @@ describe("folder links in templates", function () {
     const body = await this.text("/");
 
     expect(body).not.toContain("{{#cdn}}");
-    expect(body).not.toContain(folderUrl(this.blog, "one", "/a.png"));
+    expect(body).toContain('<img src="/a.png">');
   });
 
   it("percent-encodes a path with a space in a view", async function () {

@@ -31,17 +31,16 @@ const {
 // and a value containing a tag is left alone (the one exception is a value
 // that starts with {{blog.url}}, followed by a literal path).
 //
-// The eligibility rules keep the semantics of the request-time folder-link
-// pass (blog/render/replaceFolderLinks) about which links are folder files:
+// Which links are folder files (the rules of the request-time folder-link pass
+// this replaced):
 //   - href, src, poster and each srcset candidate; CSS url(...) in CSS views,
 //     <style> blocks and style="" attributes
 //   - own-host absolute URLs are treated as paths; other hosts, data:, mailto:
 //     and other schemes, #fragments, paths ending in .html and paths whose
 //     last segment has no extension are skipped
-//   - relative links are resolved against "/", in HTML and CSS views alike,
-//     as the request-time pass does
+//   - relative links are resolved against "/", in HTML and CSS views alike
 //   - one addition: literal <meta content="/path/to/file.ext"> (og:image and
-//     friends), which the request-time pass never touches
+//     friends), which the old pass never covered
 //
 // Returns the original string (the same value) when nothing qualifies.
 
@@ -292,8 +291,7 @@ function scanCssUrl(ctx, i, to) {
     let after = k + 1;
     while (after < to && isSpace(src.charAt(after))) after++;
 
-    // not a well-formed url("...") - leave it alone, as the request-time
-    // pass's strict regex does
+    // not a well-formed url("...") - leave it alone
     if (src.charAt(after) !== ")") return k + 1;
 
     rewrite(ctx, valueStart, k, {});
@@ -473,8 +471,8 @@ function scanOpenTag(ctx, i, to) {
 }
 
 // Candidates are split at commas and each URL is its first whitespace
-// delimited token, exactly as the request-time pass's parseSrcset does. As
-// there, a srcset with an empty candidate (", /a.png 1x" or a trailing comma)
+// delimited token, as parseSrcset in
+// replaceFolderLinks/shared does. A srcset with an empty candidate (", /a.png 1x" or a trailing comma)
 // is malformed and left entirely alone.
 function scanSrcset(ctx, from, to) {
   const src = ctx.src;

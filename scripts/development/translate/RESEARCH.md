@@ -746,12 +746,13 @@ photoswipe), `documentation` (multi-level nav, TOC, breadcrumbs, i18n),
   - CDN manifests are **skipped for SITE templates** and for templates not
     currently installed on their owner blog.
   - `{{cdn}}` used as a plain variable yields the CDN origin (for `preconnect`).
-- **Folder-owned assets** (images the crawler downloads) are rewritten after
-  render by `app/blog/render/replaceFolderLinks/`:
-  - `html.js` (parse5) rewrites `href`, `src`, `poster`, `srcset`
-  - `css.js` rewrites `url(...)`
+- **Folder-owned assets** (images the crawler downloads) are resolved at build
+  time for entries (`app/build/plugins/folderAssets`) and through the
+  template's CDN manifest for views (`app/models/template/util/resolveFolderLinks`):
+  - the render no longer rewrites links (the old `replaceFolderLinks/html.js`
+    and `css.js` pass was removed)
   - target form: `<cdn.origin>/folder/v-<hash>/<blogID>/<path>`
-  - skipped for `req.preview` requests
+  - not applied for `req.preview` requests
 - **Global static** served to every blog: `/fonts`, `/icons`, `/katex`,
   `/plugins`, `/syntax-highlighter` (`app/blog/assets.js`, one-year cache).
   `app/blog/static/layout.css` provides the classes for the Markdown layout tags.

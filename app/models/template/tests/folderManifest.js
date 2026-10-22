@@ -300,7 +300,7 @@ describe("updateCdnManifest folder files", function () {
   });
 
   describe("relative links in CSS", function () {
-    it("resolves against the root, as the request-time pass does", async function () {
+    it("resolves against the root", async function () {
       await this.write({ path: "/img/a.png", content: "root" });
       await this.setView({
         name: "index.html",

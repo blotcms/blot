@@ -133,7 +133,7 @@ describe("folderAssets plugin", function () {
     });
   });
 
-  it("bakes a reserved global-static file from the global static directory, like lookupFile", function (done) {
+  it("bakes a reserved global-static file from the global static directory", function (done) {
     var path = "/Hello.txt";
     var contents =
       "![Icon](/icons/search.svg) ![Encoded](/ic%6Fns/search.svg?v=2#a)";

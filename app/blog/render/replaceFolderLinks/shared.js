@@ -1,5 +1,6 @@
-// Helpers shared by request-time link rewriting (html.js, css.js) and the
-// build-time folderAssets plugin, so the two can't drift apart.
+// Helpers shared by the build-time folderAssets plugin and the template
+// link wrapper (models/template/util/resolveFolderLinks), so the two can't
+// drift apart.
 const contentVersion = require("helper/contentVersion");
 const htmlExtRegex = /\.html$/;
 const fileExtRegex = /[^/]*\.[^/]*$/;
@@ -77,8 +78,8 @@ const encodeFolderPath = (path) =>
     .join("/");
 
 // The part of a folder CDN URL after /folder/: v-<version>/<blogID><path>,
-// for a path relative to the blog folder. Shared by lookupFile (page
-// renders) and the routes which redirect large files to the CDN.
+// for a path relative to the blog folder. Used by the routes which
+// redirect large files to the CDN.
 const versionedFolderPath = (blogID, path, stat) =>
   `v-${contentVersion.fromStat(stat)}/${blogID}${encodeFolderPath(path)}`;
 

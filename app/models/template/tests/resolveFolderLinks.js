@@ -58,7 +58,7 @@ describe("resolveFolderLinks", function () {
       );
     });
 
-    it("leaves a malformed srcset unchanged, as the request-time pass does", function () {
+    it("leaves a malformed srcset unchanged, ", function () {
       [
         '<img srcset=", /img.jpg 1x">',
         '<img srcset="/img.jpg 1x,">',
@@ -290,7 +290,7 @@ describe("resolveFolderLinks", function () {
       );
     });
 
-    it("wraps reserved global paths like the request-time pass does", function () {
+    it("wraps reserved global paths ", function () {
       expect(html('<link href="/fonts/x.css">')).toBe(
         `<link href="${wrap("/fonts/x.css")}">`
       );
