@@ -23,7 +23,7 @@ the private key) and `PUBLIC_IP` (the host), and optionally `SSH_PORT`
 | `scripts/docker.service.d/10-instance-store.conf` | `/etc/systemd/system/docker.service.d/10-instance-store.conf` |
 | `scripts/mount-data-volume.service` | `/etc/systemd/system/mount-data-volume.service` |
 | `scripts/docker.service.d/20-data-volume.conf` | `/etc/systemd/system/docker.service.d/20-data-volume.conf` |
-| `fail2ban/filter.d/*.conf`, `fail2ban/jail.local` | `/etc/fail2ban/` (then restarts fail2ban) |
+| `fail2ban/filter.d/*.conf`, `fail2ban/jail.local`, `fail2ban/fail2ban.local` | `/etc/fail2ban/` (then restarts fail2ban) |
 | `logrotate/*` | `/etc/logrotate.d/` |
 | `tmpfiles.d/blot.conf` | `/etc/tmpfiles.d/blot.conf` (creates `/run/blot`) |
 | `.bashrc` | `/home/ec2-user/.bashrc` |
@@ -32,6 +32,24 @@ The `nginx-*` fail2ban jails ban `http,https` over TCP and, with a second
 `iptables-multiport` action named `<jail>-udp`, over UDP too (HTTP/3 is UDP 443).
 They deliberately do not use `iptables-allports`, which would also lock a
 banned IP out of ssh.
+
+## Permanent bans
+
+The `manual-permaban` jail holds ranges we ban by hand and keep banned. Bans
+are dropped in the kernel (TCP and UDP 80/443), so a banned client costs no TLS
+handshake. The ranges are kept in fail2ban's database on the host
+(`/var/lib/fail2ban/fail2ban.sqlite3`), not in this repo, so they stay out of
+the public history.
+
+```
+sudo fail2ban-client set manual-permaban banip 203.0.113.0/24      # add
+sudo fail2ban-client set manual-permaban unbanip 203.0.113.0/24    # remove
+sudo fail2ban-client status manual-permaban                        # list
+```
+
+When moving to a new host, copy `/var/lib/fail2ban/fail2ban.sqlite3` across
+before starting fail2ban (it restores active bans from it), or re-run the
+`banip` commands from the old host's `status` output.
 
 It also turns off X11 forwarding in `sshd_config`. The systemd files are
 installed and `daemon-reload`ed only: docker is not restarted, so the

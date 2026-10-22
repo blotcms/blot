@@ -137,6 +137,11 @@ echo "Uploading jail.local to $PUBLIC_IP:/etc/fail2ban/jail.local"
 scp -P "$SSH_PORT" -i "$SSH_KEY" "$FAIL2BAN_LOCAL_DIR/jail.local" ec2-user@$PUBLIC_IP:/tmp/jail.local
 ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo mv /tmp/jail.local /etc/fail2ban/jail.local && sudo chown root:root /etc/fail2ban/jail.local"
 
+# Upload fail2ban.local
+echo "Uploading fail2ban.local to $PUBLIC_IP:/etc/fail2ban/fail2ban.local"
+scp -P "$SSH_PORT" -i "$SSH_KEY" "$FAIL2BAN_LOCAL_DIR/fail2ban.local" ec2-user@$PUBLIC_IP:/tmp/fail2ban.local
+ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo mv /tmp/fail2ban.local /etc/fail2ban/fail2ban.local && sudo chown root:root /etc/fail2ban/fail2ban.local"
+
 # Restart fail2ban
 echo "Restarting fail2ban on $PUBLIC_IP"
 ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo systemctl restart fail2ban"

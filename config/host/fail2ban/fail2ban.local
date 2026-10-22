@@ -1,0 +1,6 @@
+[Definition]
+# Keep ban records for ten years, not the default day. fail2ban restores
+# active bans from its database on restart (every deploy-host restarts it), and
+# purges records older than this, which would drop the one-week recidive bans
+# and the permanent manual-permaban ones.
+dbpurgeage = 3650d
