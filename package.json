@@ -95,7 +95,7 @@
     "tocbot": "^4.36.4",
     "turndown": "^7.2.4",
     "turndown-plugin-gfm": "^1.0.2",
-    "typeset": "0.2.9",
+    "typeset": "0.3.7",
     "uuid": "11.1.1",
     "vhost": "3.0.2",
     "yaml": "2.9.1",
