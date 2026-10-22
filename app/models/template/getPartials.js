@@ -4,6 +4,7 @@ var ensure = require("helper/ensure");
 var promisify = require("util").promisify;
 var parseTemplate = require("./parseTemplate");
 var mergeRetrieve = require("./util/mergeRetrieve");
+var { wrapFolderLinks } = require("./util/resolveFolderLinks");
 
 module.exports = function getPartials(
   blogID,
@@ -11,7 +12,8 @@ module.exports = function getPartials(
   partials,
   callback,
   contextMap,
-  parentContextPath
+  parentContextPath,
+  wrapOptions
 ) {
   try {
     ensure(blogID, "string")
@@ -92,6 +94,24 @@ module.exports = function getPartials(
     mergeRetrieve(target, deps);
   }
 
+  // A partial view's render source. getFullView passes wrapOptions when the
+  // rendering blog owns the template: literal folder links are then wrapped
+  // in {{#cdn}}, as in the view itself (util/resolveFolderLinks), and the
+  // targets merged into retrieve.cdn. The contextual parse below still reads
+  // the partial's own content.
+  function renderSource(view) {
+    if (!wrapOptions) return view.content;
+
+    var wrapped = wrapFolderLinks(
+      view.content,
+      Object.assign({ viewName: view.name, viewType: view.type }, wrapOptions)
+    );
+
+    if (wrapped.targets.length) mergeRetrieve(retrieve, { cdn: wrapped.targets });
+
+    return wrapped.content;
+  }
+
   function mergePartialContexts(viewContent, inheritedContexts) {
     var merged = {};
 
@@ -164,7 +184,7 @@ module.exports = function getPartials(
         if (partial.charAt(0) !== "/") {
           getView(templateID, partial, function (err, view) {
             if (view) {
-              allPartials[partial] = view.content;
+              allPartials[partial] = renderSource(view);
 
               inheritedContexts.forEach(function (contextPath) {
                 if (!contextPath) {

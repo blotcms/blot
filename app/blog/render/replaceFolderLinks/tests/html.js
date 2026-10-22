@@ -443,7 +443,9 @@ describe("replaceFolderLinks", function () {
   it("should use cached versions for repeated requests", async function () {
     await this.write({ path: "/cached.jpg", content: "image" });
     await this.template({
-      "entries.html": '<img src="/cached.jpg">',
+      // {{=...=}} views aren't wrapped in {{#cdn}} when the full view is
+      // assembled, so the link still reaches the request-time pass
+      "entries.html": '{{=<% %>=}}<img src="/cached.jpg">',
     });
 
     const filePath = this.blogDirectory + "/cached.jpg";
@@ -477,8 +479,10 @@ describe("replaceFolderLinks", function () {
   it("should use cached versions for different query strings", async function () {
     await this.write({ path: "/cached.jpg", content: "image" });
     await this.template({
-      "1.html": '<img src="/cached.jpg">',
-      "2.html": '<img src="/cached.jpg?cache=false">',
+      // {{=...=}} views aren't wrapped in {{#cdn}} when the full view is
+      // assembled, so the link still reaches the request-time pass
+      "1.html": '{{=<% %>=}}<img src="/cached.jpg">',
+      "2.html": '{{=<% %>=}}<img src="/cached.jpg?cache=false">',
     });
 
     const filePath = this.blogDirectory + "/cached.jpg";

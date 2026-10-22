@@ -14,6 +14,8 @@ const path = require("path");
 const fs = require("fs-extra");
 const config = require("config");
 const pathNormalizer = require("helper/pathNormalizer");
+const blogHosts = require("blog/lib/blogHosts");
+const { wrapFolderLinks } = require("./resolveFolderLinks");
 const { hashFolderFile } = require("blog/render/replaceFolderLinks/folderFile");
 const {
   GLOBAL_STATIC_DIR,
@@ -53,8 +55,13 @@ function isValidTarget(target) {
 }
 
 // A {{#cdn}} target can also be a file in the owner blog's folder, e.g.
-// {{#cdn}}/images/a.png{{/cdn}}. Targets that name a view stay views - a
-// template's own rendered output wins over a folder file of the same name.
+// {{#cdn}}/images/a.png{{/cdn}}, whether the author wrote it or the render
+// wraps a literal link (util/resolveFolderLinks). Targets that name a view
+// stay views - a template's own rendered output wins over a folder file of
+// the same name. Wrapped links never resolve to a view unless the author also
+// wrote that target: the author didn't ask for a snapshot of /feed.rss or
+// /script.js, they just linked to it, so those are only looked up in the
+// folder.
 //
 // A folder target's manifest entry is { path, version }: path is the file's
 // real (case-corrected) path, version a hash of its content, from which
@@ -84,7 +91,8 @@ async function viewExists(templateID, target) {
 // The {{#cdn}} targets the template's authors wrote, from the views'
 // retrieve.cdn: the ones which name a view, and the rest, which are folder
 // files. extraFolderTargets are further targets which are only ever looked up
-// in the folder, never as views, for another source of links.
+// in the folder, never as views: the literal links the render wraps (see
+// wrappedTargets).
 //
 // setView carries a view's previous retrieve.cdn forward (see
 // applyUserRetrieveOptions), so a target the author has since removed can
@@ -120,12 +128,36 @@ async function collectTargets(templateID, views, extraFolderTargets) {
   for (const target of Array.from(explicit).sort()) {
     if (await viewExists(templateID, target)) {
       viewTargets.push(target);
+      // the author's own target wins over the same one wrapped
+      folderTargets.delete(target);
     } else if (current.has(target)) {
       folderTargets.add(target);
     }
   }
 
   return { viewTargets, folderTargets };
+}
+
+// The targets getFullView and getPartials add when they wrap each view's
+// literal folder links for the owner blog: the same function, on the same
+// view.content, with the same hosts, so the manifest and the render agree.
+function wrappedTargets(views, hosts) {
+  const targets = new Set();
+
+  for (const viewName in views) {
+    const view = views[viewName];
+    if (!view) continue;
+
+    wrapFolderLinks(view.content, {
+      viewName: view.name || viewName,
+      viewType: view.type,
+      hosts,
+    }).targets.forEach((target) => {
+      if (isValidTarget(target)) targets.add(target);
+    });
+  }
+
+  return targets;
 }
 
 function normalizeDependency(filePath) {
@@ -376,11 +408,15 @@ module.exports = function updateCdnManifest(templateID, callback) {
         return callback(null, {});
       }
 
-      // Get all views and collect their CDN targets. Another source of folder
-      // targets would be passed to collectTargets as its third argument.
+      // Get all views and collect their CDN targets, including the literal
+      // folder links the render wraps in {{#cdn}}
       const views = await getAllViewsAsync(templateID);
       const { viewTargets: sortedTargets, folderTargets } =
-        await collectTargets(templateID, views);
+        await collectTargets(
+          templateID,
+          views,
+          wrappedTargets(views, blogHosts(blog))
+        );
 
       const manifest = {};
       const staleHashes = [];

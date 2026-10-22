@@ -94,7 +94,18 @@ const decodeFolderPath = (path) => {
   }
 };
 
+// A {{#cdn}} target the template parser and the manifest builder will accept
+// (no whitespace, backslash, NUL, braces, ".." segment or "//", and short
+// enough). Shared by models/template/util/resolveFolderLinks (which only
+// wraps safe links) and retrieve/cdn.js (which leaves unsafe targets exactly
+// as written).
+const isSafeCdnTarget = (target) =>
+  typeof target === "string" &&
+  target.length <= 255 &&
+  !/[\s\\\0{}]|\.\.|\/\//.test(target);
+
 module.exports = {
+  isSafeCdnTarget,
   htmlExtRegex,
   fileExtRegex,
   parseSrcset,

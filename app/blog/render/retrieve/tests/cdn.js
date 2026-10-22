@@ -206,6 +206,17 @@ describe("cdn", function () {
       });
     });
 
+    it("leaves a missing rooted path as written, query included", function (done) {
+      this.request.blog.url = "https://example.blot.im";
+
+      cdn(this.request, {}, function (err, lambda) {
+        expect(mustache.render("{{#cdn}}/images/b.png?v=1{{/cdn}}", { cdn: lambda })).toBe(
+          "/images/b.png?v=1"
+        );
+        done();
+      });
+    });
+
     it("leaves a missing view name and a protocol-relative link as written", function (done) {
       this.request.blog.url = "https://example.blot.im";
 

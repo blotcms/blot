@@ -37,6 +37,8 @@ module.exports = asRetriever(function (req, res) {
           if (folderFileUrl) return folderFileUrl;
         }
 
+        // Not in the manifest (e.g. the file doesn't exist, or it names a
+        // view): left as written
         return rendered;
       } catch (e) {
         return text;

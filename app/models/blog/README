@@ -153,6 +153,7 @@ Side effects triggered by specific changes:
 - `domain`: registers both the primary and backup (`www.`/apex) domain keys; removes former domain keys
 - `template` or `plugins`: forks the template if it references a site template (`SITE:` prefix), updates the CDN manifest, and busts the asset cache (`cacheID`, `cssURL`, `scriptURL`)
 - `menu`: busts the asset cache
+- `handle` or `domain`: busts the asset cache (the blog's own template views wrap links to its hosts in `{{#cdn}}` when they render, see `models/template/getFullView`), and in the background rebuilds entries and regenerates the installed template's CDN manifest for the new hosts
 - Any handle change with `client === "git"`: renames the Git repository
 
 ### `remove(blogID, callback)`

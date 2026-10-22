@@ -232,7 +232,9 @@ describe("replaceCssUrls", function () {
   it("should use cached versions for repeated requests", async function () {
     await this.write({ path: "/cached.jpg", content: "image" });
     await this.template({
-      "style.css": `.test { background: url(/cached.jpg); }`,
+      // {{=...=}} views aren't wrapped in {{#cdn}} when the full view is
+      // assembled, so the link still reaches the request-time pass
+      "style.css": `{{=<% %>=}}.test { background: url(/cached.jpg); }`,
     });
 
     const filePath = this.blogDirectory + "/cached.jpg";
