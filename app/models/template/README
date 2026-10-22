@@ -58,7 +58,7 @@ All state is stored in Redis. There is no relational database or document store 
 | `util/serialize.js` | Converts `object` and `array` typed fields in a model instance to JSON strings before writing to Redis hashes. |
 | `util/deserialize.js` | Converts JSON-stringified and boolean fields back to their native types after reading from Redis hashes, and drops the retired `isPublic` field. Other undeclared fields, including a view's legacy `type`, are kept. |
 | `util/generateCdnUrl.js` | Constructs a CDN URL for a rendered view asset given a view name and content hash. Uses a three-level directory structure derived from the first four characters of the hash. |
-| `util/updateCdnManifest.js` | Recomputes the CDN manifest for a template: renders each view that declares a `retrieve.cdn` target, hashes the output, stores the result on disk and in Redis, cleans up stale hashes, and writes the updated manifest into the template's metadata. Skips SITE-owned templates and templates not currently installed on their owner blog. |
+| `util/updateCdnManifest.js` | Recomputes the CDN manifest for a template: resolves `{{#cdn}}` targets that are files in the owner blog's folder, renders each view that is a `{{#cdn}}` target, hashes the output, stores the result on disk and in Redis, cleans up stale hashes, and writes the updated manifest into the template's metadata. Also maintains the reverse index of the folder files the template depends on. Skips SITE-owned templates and templates not currently installed on their owner blog. |
 | `util/forkSiteTemplate.js` | Creates a blog-owned copy of a SITE-owned template. If an existing fork already exists, it returns that fork's ID without duplicating. Handles name deduplication for repeated calls. |
 
 ### `tests/` subdirectory
@@ -87,7 +87,8 @@ Stored as a Redis hash at key `template:{id}:info`.
 | `localEditing` | boolean | Whether this template is managed from a folder on disk. |
 | `thumb` | string | URL or path to a thumbnail image. |
 | `locals` | object | Template-level custom locals injected into every view render. |
-| `cdn` | object | Map of view name to content hash for CDN-cached rendered assets. |
+| `cdn` | object | The CDN manifest: map of `{{#cdn}}` target to either a content hash string (a rendered view) or `{ path, version }` (a file in the owner blog's folder). |
+| `fileDependencies` | array | Lowercased folder paths the manifest depends on, found or not. Mirrors the reverse index, so stale entries can be removed. |
 
 Object and array fields are JSON-serialized before storage.
 
@@ -279,6 +280,8 @@ Defined in `key.js`:
 | `template:{id}:url:{url}` | string | View name associated with a specific URL |
 | `template:share:{shareID}` | string | Template ID associated with a share token |
 | `template:owned_by:{blogID}` | set | IDs of all templates owned by a blog |
+| `blog:{blogID}:template_dependents:{path}` | set | IDs of the blog's templates whose CDN manifest depends on a file in the blog's folder (`path` is normalized and lowercased). Read by `sync/update/rebuildDependents`. |
+| `blog:{blogID}:template_manifests_pending` | set | IDs of templates whose manifest must be regenerated at the end of the current sync. Drained by `sync/update/regenerateTemplateManifests`. |
 | `cdn:rendered:{hash}` | string | Rendered and optionally minified asset content (Redis, kept for backward compatibility alongside on-disk storage) |
 
 ---
@@ -299,6 +302,14 @@ When a view or metadata is saved, `util/updateCdnManifest` runs:
 8. Writes the updated `{target → hash}` manifest into `metadata.cdn`.
 
 The CDN URL format is `{cdn.origin}/template/{h[0:2]}/{h[2:4]}/{h[4:]}/{basename}`.
+
+### Folder files
+
+A `{{#cdn}}` target that doesn't name a view is looked up as a file in the owner blog's folder (case-insensitively, percent-decoded). Its manifest entry is `{ path, version }` - the file's real path and a hash of its content - and `blog/render/retrieve/cdn.js` renders it, through `blog/render/folderManifestUrl.js`, as `%%BLOT_CDN%%/folder/v-{version}/{blogID}{path}`, the same URL entries get when they are built (`%%BLOT_CDN%%` becomes the real CDN origin in `blog/render/middleware.js`). Reserved global paths (`/fonts`, `/icons`, ...) have no version and render as `%%BLOT_CDN%%{path}`. A view's entry is still a plain hash string, so older manifests stay valid; a target with no view and no file has no entry and renders as written. Folder files are resolved, and the manifest saved, before any view is rendered, so a stylesheet that links to an image gets a new hash when the image changes; rendered views keep their previous hash until they are re-rendered. Nothing wraps links in `{{#cdn}}` automatically: only targets the author wrote (`view.retrieve.cdn`) are collected.
+
+### Dependency index
+
+Every folder path a template's manifest looked at - including files that don't exist yet - is stored in `blog:{blogID}:template_dependents:{lowercased path}` (and in `metadata.fileDependencies`, to diff against next time). When a file changes, appears or is deleted, `sync/update/rebuildDependents` adds every template in that set to a per-blog pending set (`blog:{blogID}:template_manifests_pending`); `sync/index.js` regenerates each pending manifest once at the end of the sync, before its usual `cacheID` bump. The index is removed when a link goes away, when the template is no longer installed, and by `drop`; `clone` does not copy it.
 
 ---
 

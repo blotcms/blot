@@ -68,6 +68,10 @@ module.exports = function clone(fromID, toID, metadata, callback) {
         // and files are stored on disk with the correct hash
         delete metadata.cdn;
 
+        // Likewise the files the manifest depends on: the clone builds its own
+        // reverse-index entries when its manifest is generated
+        delete metadata.fileDependencies;
+
         setMetadata(toID, metadata, function (err) {
           if (err) return callback(err);
 
