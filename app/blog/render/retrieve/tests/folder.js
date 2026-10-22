@@ -71,4 +71,44 @@ describe("folder", function () {
 
     expect(result).toEqual([]);
   });
+
+  it("gives files a versioned CDN url and directories a plain url", async function () {
+    await this.write({ path: "/photo.jpg", content: "img" });
+    await this.write({ path: "/sub/b.txt", content: "World" });
+    await this.write({ path: "/page.html", content: "<p>hi</p>" });
+    await this.write({ path: "/README", content: "plain" });
+
+    const result = await run(this, {});
+    const byName = (name) => result.contents.find((item) => item.name === name);
+
+    expect(byName("photo.jpg").url).toMatch(
+      new RegExp("^%%BLOT_CDN%%/folder/v-[^/]+/" + this.blog.id + "/photo\\.jpg$")
+    );
+    expect(byName("sub").url).toEqual("/sub");
+    expect(byName("page.html").url).toEqual("/page.html");
+    expect(byName("README").url).toEqual("/README");
+    expect(byName("photo.jpg").path).toEqual("/photo.jpg");
+  });
+
+  it("renders file links pointing at the CDN and directory links plain", async function () {
+    await this.write({ path: "/photo.jpg", content: "img" });
+    await this.write({ path: "/sub/b.txt", content: "World" });
+    await this.template({
+      "entries.html":
+        "{{#folder}}{{#contents}}<a href=\"{{{url}}}\">{{name}}</a>{{/contents}}{{/folder}}",
+    });
+
+    const html = await this.text("/");
+    // middleware may downgrade the origin to http, so ignore the scheme
+    const cdn = require("config").cdn.origin.replace(/^https?:\/\//, "");
+    const escaped = cdn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    expect(html).toMatch(
+      new RegExp(
+        '<a href="https?://' + escaped + "/folder/v-[^/]+/" + this.blog.id + '/photo\\.jpg">photo.jpg</a>'
+      )
+    );
+    expect(html).toContain('<a href="/sub">sub</a>');
+    expect(html).not.toContain("%%BLOT_CDN%%");
+  });
 });
