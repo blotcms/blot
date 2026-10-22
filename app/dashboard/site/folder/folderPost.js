@@ -1,6 +1,7 @@
 const path = require("path");
 const basename = path.basename;
 const Entry = require("models/entry");
+const { unbakeMetadataValue } = require("build/plugins/folderAssets");
 const moment = require("moment");
 const fs = require("fs-extra");
 const localPath = require("helper/localPath");
@@ -150,7 +151,7 @@ function formatEntry(entry, blog) {
 
   entry.metadata = Object.keys(rawMetadata).map((key) => ({
     key,
-    value: rawMetadata[key],
+    value: unbakeMetadataValue(rawMetadata[key], blog.id),
   }));
 
   if (entry.scheduled) {

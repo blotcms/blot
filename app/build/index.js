@@ -16,6 +16,7 @@ var moment = require("moment");
 var enabledConverters = require("./converters/enabled");
 var pathNormalizer = require("helper/pathNormalizer");
 var bakeHTML = require("./plugins/folderAssets").bakeHTML;
+var bakeMetadata = require("./plugins/folderAssets").bakeMetadata;
 
 // Front matter can replace entry.body, teaser and teaserBody with markup the
 // author wrote, after the plugins ran, so folderAssets never saw it. Bake it
@@ -48,6 +49,24 @@ function bakeOverriddenMarkup(blog, entry, callback) {
       callback();
     }
   );
+}
+
+// Metadata is final once Prepare has run, and templates output values like
+// metadata.image in attributes, so bake the ones which link to a file in the
+// blog's folder (see bakeMetadata) and record those files as dependencies.
+function bakeEntryMetadata(blog, entry, callback) {
+  bakeMetadata(entry.metadata, {
+    blogID: blog.id,
+    handle: blog.handle,
+    domain: blog.domain,
+    path: entry.path,
+  }).then(function (result) {
+    entry.metadata = result.metadata;
+    entry.dependencies = Array.from(
+      new Set((entry.dependencies || []).concat(result.dependencies))
+    );
+    callback();
+  }, callback);
 }
 
 // This file cannot become a blog post because it is not
@@ -314,7 +333,11 @@ function buildWith(blog, path, multiInfo, callback) {
             bakeOverriddenMarkup(blog, entry, function (err) {
               if (err) return callback(err);
 
-              callback(null, entry);
+              bakeEntryMetadata(blog, entry, function (err) {
+                if (err) return callback(err);
+
+                callback(null, entry);
+              });
             });
           });
         });

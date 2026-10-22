@@ -3,6 +3,7 @@ const path = require("path");
 const basename = path.basename;
 const extname = path.extname;
 const Entry = require("models/entry");
+const { unbakeMetadataValue } = require("build/plugins/folderAssets");
 const IgnoredFiles = require("models/ignoredFiles");
 const moment = require("moment");
 const converters = require("build/converters");
@@ -202,7 +203,7 @@ module.exports = async function (blog, path) {
           }
 
           entry.metadata = Object.keys(rawMetadata).map((key) => {
-            return { key, value: rawMetadata[key] };
+            return { key, value: unbakeMetadataValue(rawMetadata[key], blogID) };
           });
 
           if (entry.exif && typeof entry.exif === "object") {
