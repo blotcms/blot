@@ -485,4 +485,60 @@ describe("resolveFolderLinks", function () {
       expect(result.targets).toEqual(parseTemplate(result.content).retrieve.cdn);
     });
   });
+
+
+  describe("mapFolderLocals", function () {
+    const mapFolderLocals = resolveFolderLinks.mapFolderLocals;
+    const swap = (target) => "CDN:" + target;
+
+    it("replaces folder links and leaves the original object untouched", function () {
+      const locals = { logo: "/img/a.png", title: "hello.world", n: 1 };
+      const result = mapFolderLocals(locals, hosts, swap);
+
+      expect(result).toEqual({ logo: "CDN:img/a.png", title: "hello.world", n: 1 });
+      expect(result).not.toBe(locals);
+      expect(locals.logo).toBe("/img/a.png");
+    });
+
+    it("walks nested objects and arrays without modifying them", function () {
+      const locals = {
+        site: { images: ["/a.png", "/b.png", "text"], other: { x: "/c.png" } },
+        keep: { y: "plain" },
+      };
+      const result = mapFolderLocals(locals, hosts, swap);
+
+      expect(result.site.images).toEqual(["CDN:a.png", "CDN:b.png", "text"]);
+      expect(Array.isArray(result.site.images)).toBe(true);
+      expect(result.site.other.x).toBe("CDN:c.png");
+      expect(result.keep).toBe(locals.keep);
+      expect(locals.site.images[0]).toBe("/a.png");
+      expect(locals.site.other.x).toBe("/c.png");
+    });
+
+    it("returns the same object when nothing matches or fn declines", function () {
+      const locals = { a: "text", b: { c: "https://other.com/a.png" } };
+
+      expect(mapFolderLocals(locals, hosts, swap)).toBe(locals);
+
+      const same = { a: "/a.png" };
+      expect(mapFolderLocals(same, hosts, () => null)).toBe(same);
+      expect(mapFolderLocals(same, hosts, () => undefined)).toBe(same);
+    });
+
+    it("skips values nested deeper than four levels", function () {
+      const locals = { a: { b: { c: { d: { e: "/a.png" } } } } };
+
+      expect(mapFolderLocals(locals, hosts, swap)).toBe(locals);
+    });
+
+    it("passes the target and the original value to fn", function () {
+      const calls = [];
+
+      mapFolderLocals({ a: "https://example.blot.im/a.png" }, hosts, (t, v) => {
+        calls.push([t, v]);
+      });
+
+      expect(calls).toEqual([["a.png", "https://example.blot.im/a.png"]]);
+    });
+  });
 });

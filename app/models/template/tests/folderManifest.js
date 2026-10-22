@@ -215,6 +215,90 @@ describe("updateCdnManifest folder files", function () {
     });
   });
 
+  describe("values which never pass through a view's text", function () {
+    const setMetadata = promisify(Template.setMetadata);
+
+    it("resolves a template local which links to a folder file", async function () {
+      await this.write({ path: "/img/logo.png", content: "one" });
+      await setMetadata(this.template.id, { locals: { logo: "/img/logo.png" } });
+      await updateCdnManifest(this.template.id);
+
+      expect((await this.manifest())["img/logo.png"]).toEqual({
+        path: "/img/logo.png",
+        version: version("one"),
+      });
+    });
+
+    it("resolves a nested local and an absolute link on the blog's own host", async function () {
+      await this.write({ path: "/img/a.png", content: "one" });
+      await this.write({ path: "/img/b.png", content: "two" });
+      await setMetadata(this.template.id, {
+        locals: {
+          site: { images: [`https://${this.blog.handle}.${config.host}/img/a.png`] },
+        },
+      });
+      await this.setView({
+        name: "index.html",
+        content: "<p></p>",
+        locals: { hero: "/img/b.png", title: "hello.world" },
+      });
+
+      const manifest = await this.manifest();
+
+      expect(manifest["img/a.png"].version).toBe(version("one"));
+      expect(manifest["img/b.png"].version).toBe(version("two"));
+      expect(Object.keys(manifest).sort()).toEqual(["img/a.png", "img/b.png"]);
+    });
+
+    it("resolves a literal {{#asset}} section", async function () {
+      await this.write({ path: "/img/a.png", content: "one" });
+      await this.write({ path: "/img/b.png", content: "two" });
+      await this.setView({
+        name: "index.html",
+        content:
+          "{{#asset}}/img/a.png{{/asset}} {{#asset}}img/b.png{{/asset}} {{#asset}}{{dynamic}}{{/asset}}",
+      });
+
+      const manifest = await this.manifest();
+
+      expect(manifest["img/a.png"].version).toBe(version("one"));
+      expect(manifest["img/b.png"].version).toBe(version("two"));
+    });
+
+    it("resolves a link in an inline package.json partial", async function () {
+      await this.write({ path: "/img/a.png", content: "one" });
+      await this.setView({
+        name: "index.html",
+        content: "{{> inline}}",
+        partials: { inline: '<img src="/img/a.png">' },
+      });
+
+      expect((await this.manifest())["img/a.png"].version).toBe(version("one"));
+    });
+
+    it("never turns any of them into a view", async function () {
+      await this.setView({ name: "feed.rss", content: "<rss></rss>" });
+      await this.setView({
+        name: "index.html",
+        content: "{{#asset}}/feed.rss{{/asset}}",
+        locals: { feed: "/feed.rss" },
+        partials: { inline: '<link href="/feed.rss">' },
+      });
+
+      expect((await this.manifest())["feed.rss"]).toBeUndefined();
+    });
+
+    it("depends on a file which doesn't exist yet", async function () {
+      await this.setView({
+        name: "index.html",
+        content: "<p></p>",
+        locals: { hero: "/img/later.png" },
+      });
+
+      expect(await this.dependents("/img/later.png")).toEqual([this.template.id]);
+    });
+  });
+
   describe("relative links in CSS", function () {
     it("resolves against the root, as the request-time pass does", async function () {
       await this.write({ path: "/img/a.png", content: "root" });

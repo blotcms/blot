@@ -1,6 +1,8 @@
 const BLOT_CDN_TOKEN = require("./replaceFolderLinks/cdnToken");
 const { folderUrl } = require("./replaceFolderLinks/folderFile");
 const { pathPartOf, encodeFolderPath } = require("./replaceFolderLinks/shared");
+const blogHosts = require("../lib/blogHosts");
+const { mapFolderLocals } = require("models/template/util/resolveFolderLinks");
 
 // The versioned CDN URL for a file in the blog's folder, from the template's
 // CDN manifest (see models/template/util/updateCdnManifest), or null if the
@@ -32,4 +34,22 @@ module.exports = function folderManifestUrl(req, target) {
   if (!entry.version) return BLOT_CDN_TOKEN + encodeFolderPath(entry.path) + suffix;
 
   return folderUrl(req.blog.id, entry.path, entry.version, suffix);
+};
+
+// Template locals with folder-link values ("logo": "/images/logo.png"), with
+// each value the manifest resolves swapped for its CDN URL. Returns a copy
+// (or the same object if nothing changed): template locals are cached and
+// shared between requests, so they're never modified in place.
+module.exports.locals = function folderManifestLocals(req, locals) {
+  if (!locals || typeof locals !== "object") return locals;
+  if (!req || req.preview || !req.template || !req.blog) return locals;
+
+  const manifest = req.template.cdn;
+
+  if (!manifest || typeof manifest !== "object" || !Object.keys(manifest).length)
+    return locals;
+
+  return mapFolderLocals(locals, blogHosts(req.blog), (target) =>
+    module.exports(req, target)
+  );
 };

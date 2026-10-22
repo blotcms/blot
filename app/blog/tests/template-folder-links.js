@@ -182,6 +182,19 @@ describe("folder links in templates", function () {
     });
   });
 
+  it("wraps folder links in inline package.json partials", async function () {
+    await this.write({ path: "/a.png", content: "one" });
+    await this.template(
+      { "entries.html": "{{> x}}" },
+      { views: { "entries.html": { partials: { x: '<img src="/a.png">' } } } }
+    );
+
+    const body = await this.text("/");
+
+    expect(body).toContain(folderUrl(this.blog, "one", "/a.png"));
+    expect(body).not.toContain(BLOT_CDN_TOKEN);
+  });
+
   it("leaves a link as written in a view the template can't wrap", async function () {
     await this.write({ path: "/a.png", content: "one" });
     // {{=<% %>=}} changes the delimiters, so a {{#cdn}} wrapper would
@@ -205,6 +218,112 @@ describe("folder links in templates", function () {
 
     expect(body).toBe(`<img src="${folderUrl(this.blog, "one", "/my%20pic.jpg")}">`);
     expect(await this.text(body.split('"')[1])).toBe("one");
+  });
+
+  describe("template locals", function () {
+    it("swaps a local which links to a folder file for its CDN URL", async function () {
+      await this.write({ path: "/img/a.png", content: "one" });
+      await this.template(
+        { "entries.html": '<img src="{{{logo}}}">' },
+        { locals: { logo: "/img/a.png" } }
+      );
+
+      expect(await this.text("/")).toBe(
+        `<img src="${folderUrl(this.blog, "one", "/img/a.png")}">`
+      );
+    });
+
+    it("gives the local a new URL when the file changes", async function () {
+      await this.write({ path: "/img/a.png", content: "one" });
+      await this.template(
+        { "entries.html": '<img src="{{{logo}}}">' },
+        { locals: { logo: "/img/a.png" } }
+      );
+
+      expect(await this.text("/")).toContain(
+        folderUrl(this.blog, "one", "/img/a.png")
+      );
+
+      await this.write({ path: "/img/a.png", content: "two" });
+
+      expect(await this.text("/")).toBe(
+        `<img src="${folderUrl(this.blog, "two", "/img/a.png")}">`
+      );
+    });
+
+    it("swaps a nested local", async function () {
+      await this.write({ path: "/img/a.png", content: "one" });
+      await this.template(
+        { "entries.html": '<img src="{{{site.logo}}}">' },
+        { locals: { site: { logo: "/img/a.png" } } }
+      );
+
+      expect(await this.text("/")).toBe(
+        `<img src="${folderUrl(this.blog, "one", "/img/a.png")}">`
+      );
+    });
+
+    it("swaps a local with an absolute link on the blog's own host", async function () {
+      await this.write({ path: "/img/a.png", content: "one" });
+      await this.template(
+        { "entries.html": '<img src="{{{logo}}}">' },
+        {
+          locals: {
+            logo: `https://${this.blog.handle}.${config.host}/img/a.png`,
+          },
+        }
+      );
+
+      expect(await this.text("/")).toBe(
+        `<img src="${folderUrl(this.blog, "one", "/img/a.png")}">`
+      );
+    });
+
+    it("leaves a local for a file that doesn't exist as written", async function () {
+      await this.template(
+        { "entries.html": '<img src="{{{logo}}}">' },
+        { locals: { logo: "/img/missing.png" } }
+      );
+
+      expect(await this.text("/")).toBe('<img src="/img/missing.png">');
+    });
+
+    it("leaves a local which isn't a link alone", async function () {
+      await this.write({ path: "/img/a.png", content: "one" });
+      await this.template(
+        { "entries.html": "<p>{{{greeting}}}</p>" },
+        { locals: { greeting: "hello.world", logo: "/img/a.png" } }
+      );
+
+      expect(await this.text("/")).toBe("<p>hello.world</p>");
+    });
+  });
+
+  describe("{{#asset}}", function () {
+    it("returns the CDN URL of a file in the folder", async function () {
+      await this.write({ path: "/img/a.png", content: "one" });
+      await this.template({
+        "entries.html": '<img src="{{#asset}}/img/a.png{{/asset}}">',
+      });
+
+      expect(await this.text("/")).toBe(
+        `<img src="${folderUrl(this.blog, "one", "/img/a.png")}">`
+      );
+    });
+
+    it("keeps the cache-busted URL for a template view", async function () {
+      await this.template({
+        "entries.html": '<link href="{{#asset}}/style.css{{/asset}}">',
+        "style.css": "a{color:red}",
+      });
+
+      const body = await this.text("/");
+
+      expect(body).toMatch(
+        /^<link href="\/style\.css\?cache=[^&"]*&amp;extension=\.css">$/
+      );
+      expect(body).not.toContain("/folder/v-");
+    });
   });
 
   describe("during a sync", function () {

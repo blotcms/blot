@@ -134,7 +134,7 @@ describe("getFullView folder links", function () {
       expect(response[RETRIEVE].cdn).toEqual(["logo.png"]);
     });
 
-    it("leaves inline package.json partials as they are", async function () {
+    it("wraps inline package.json partials", async function () {
       await this.setView({
         name: "index.html",
         content: "{{> inline}}",
@@ -142,6 +142,33 @@ describe("getFullView folder links", function () {
       });
 
       const response = await getFullView(this.blog.id, this.template.id, "index.html");
+
+      expect(response[PARTIALS].inline).toBe(`<img src="${wrap("/inline.png")}">`);
+      expect(response[RETRIEVE].cdn).toEqual(["inline.png"]);
+    });
+
+    it("wraps inline partials with the blog's hosts", async function () {
+      await this.setView({
+        name: "index.html",
+        content: "{{> inline}}",
+        partials: {
+          inline: `<img src="https://${this.blog.handle}.${config.host}/inline.png">`,
+        },
+      });
+
+      const response = await getFullView(this.blog.id, this.template.id, "index.html");
+
+      expect(response[PARTIALS].inline).toBe(`<img src="${wrap("/inline.png")}">`);
+    });
+
+    it("leaves inline partials as they are for any other blog", async function () {
+      await this.setView({
+        name: "index.html",
+        content: "{{> inline}}",
+        partials: { inline: '<img src="/inline.png">' },
+      });
+
+      const response = await getFullView("blog_somebodyelse", this.template.id, "index.html");
 
       expect(response[PARTIALS].inline).toBe('<img src="/inline.png">');
       expect(response[RETRIEVE].cdn).toBeUndefined();

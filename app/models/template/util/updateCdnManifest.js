@@ -15,7 +15,12 @@ const fs = require("fs-extra");
 const config = require("config");
 const pathNormalizer = require("helper/pathNormalizer");
 const blogHosts = require("blog/lib/blogHosts");
-const { wrapFolderLinks } = require("./resolveFolderLinks");
+const {
+  wrapFolderLinks,
+  wrapInlinePartial,
+  mapFolderLocals,
+  folderTarget,
+} = require("./resolveFolderLinks");
 const { hashFolderFile } = require("blog/render/replaceFolderLinks/folderFile");
 const {
   GLOBAL_STATIC_DIR,
@@ -91,8 +96,7 @@ async function viewExists(templateID, target) {
 // The {{#cdn}} targets the template's authors wrote, from the views'
 // retrieve.cdn: the ones which name a view, and the rest, which are folder
 // files. extraFolderTargets are further targets which are only ever looked up
-// in the folder, never as views: the literal links the render wraps (see
-// wrappedTargets).
+// in the folder, never as views (see the extraFolderTargets function below).
 //
 // setView carries a view's previous retrieve.cdn forward (see
 // applyUserRetrieveOptions), so a target the author has since removed can
@@ -138,11 +142,28 @@ async function collectTargets(templateID, views, extraFolderTargets) {
   return { viewTargets, folderTargets };
 }
 
-// The targets getFullView and getPartials add when they wrap each view's
-// literal folder links for the owner blog: the same function, on the same
-// view.content, with the same hosts, so the manifest and the render agree.
-function wrappedTargets(views, hosts) {
+// A literal {{#asset}}/path{{/asset}} section (see blog/render/retrieve/asset)
+const ASSET_SECTION = /\{\{#asset\}\}([^{}]+)\{\{\/asset\}\}/g;
+
+// Every target which is only ever looked up in the folder, never as a view,
+// gathered in one place:
+//
+// - the literal links getFullView and getPartials wrap in {{#cdn}} for each
+//   view (wrapFolderLinks) and for the inline partials in package.json
+//   (wrapInlinePartial): the same functions, on the same content, with the
+//   same hosts, so the manifest and the render agree;
+// - values which never pass through a view's text, so can't be wrapped:
+//   template and view locals ("logo": "/images/logo.png", swapped for the CDN
+//   URL at render time by blog/render/folderManifestUrl), and literal
+//   {{#asset}} sections (blog/render/retrieve/asset).
+function extraFolderTargets(metadata, views, hosts) {
   const targets = new Set();
+
+  const add = (target) => {
+    if (isValidTarget(target)) targets.add(target);
+  };
+
+  mapFolderLocals(metadata.locals, hosts, add);
 
   for (const viewName in views) {
     const view = views[viewName];
@@ -152,9 +173,28 @@ function wrappedTargets(views, hosts) {
       viewName: view.name || viewName,
       viewType: view.type,
       hosts,
-    }).targets.forEach((target) => {
-      if (isValidTarget(target)) targets.add(target);
-    });
+    }).targets.forEach(add);
+
+    mapFolderLocals(view.locals, hosts, add);
+
+    if (typeof view.content === "string" && view.content.indexOf("{{#asset}}") > -1) {
+      for (const match of view.content.matchAll(ASSET_SECTION)) {
+        const value = match[1].trim();
+        const target = folderTarget(
+          value.charAt(0) === "/" ? value : "/" + value,
+          []
+        );
+
+        if (target) add(target);
+      }
+    }
+
+    for (const name in view.partials || {}) {
+      const inline = view.partials[name];
+
+      if (typeof inline === "string" && inline)
+        wrapInlinePartial(inline, hosts).targets.forEach(add);
+    }
   }
 
   return targets;
@@ -409,13 +449,13 @@ module.exports = function updateCdnManifest(templateID, callback) {
       }
 
       // Get all views and collect their CDN targets, including the literal
-      // folder links the render wraps in {{#cdn}}
+      // folder links the render wraps in {{#cdn}}, locals and {{#asset}}
       const views = await getAllViewsAsync(templateID);
       const { viewTargets: sortedTargets, folderTargets } =
         await collectTargets(
           templateID,
           views,
-          wrappedTargets(views, blogHosts(blog))
+          extraFolderTargets(metadata, views, blogHosts(blog))
         );
 
       const manifest = {};

@@ -21,6 +21,7 @@ const CACHE_CONTROL = "Cache-Control";
 const replaceFolderLinks = require("./replaceFolderLinks/html");
 const replaceFolderLinksCSS = require("./replaceFolderLinks/css");
 const BLOT_CDN_TOKEN = require("./replaceFolderLinks/cdnToken");
+const folderManifestUrl = require("./folderManifestUrl");
 const renderTimeMetric = require("./renderTimeMetric");
 const folderLinkStats = require("./replaceFolderLinks/stats");
 const clfdate = require("helper/clfdate");
@@ -123,10 +124,12 @@ module.exports = function attachRenderView(req, res, _next) {
         !!(req.query && (req.query.debug || req.query.json));
       const query = Object.keys(req.query).length ? { query: req.query } : {};
 
+      // Locals whose value is a link to a folder file point at the CDN
+      // (see folderManifestUrl)
       extend(res.locals)
         .and(query)
-        .and(viewLocals)
-        .and(req.template.locals)
+        .and(folderManifestUrl.locals(req, viewLocals))
+        .and(folderManifestUrl.locals(req, req.template.locals))
         .and(blog.locals);
 
       // Templates may configure sorting as nested `sort: { by, direction }`.

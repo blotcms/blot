@@ -194,9 +194,13 @@ function encodeTarget(value) {
 // template text, so it only accepts rooted links: there is no page to
 // resolve a relative one against.
 function folderTarget(value, hosts) {
+  return folderTargetFor(hostPatterns(hosts), value);
+}
+
+function folderTargetFor(patterns, value) {
   if (typeof value !== "string" || value.length > 1024) return null;
 
-  const target = linkTarget({ depth: 0, patterns: hostPatterns(hosts) }, value, {
+  const target = linkTarget({ depth: 0, patterns }, value, {
     strictRoot: true,
   });
 
@@ -589,6 +593,13 @@ function wrapFolderLinks(content, options) {
   return { content: output, targets: Array.from(targets).sort() };
 }
 
+// An inline partial (a string in a view's partials, from package.json) has no
+// view name of its own, so it is wrapped as HTML. getPartials renders the
+// result and updateCdnManifest collects its targets with this same call.
+function wrapInlinePartial(content, hosts) {
+  return wrapFolderLinks(content, { viewName: "partial.html", hosts });
+}
+
 function mayContainFolderLinks(content) {
   return (
     typeof content === "string" &&
@@ -598,7 +609,56 @@ function mayContainFolderLinks(content) {
   );
 }
 
+// Walks template locals (package.json "locals", a view's own locals) and
+// calls fn(target, value) for every string value which is wholly a folder
+// link (see folderTarget). Returns a copy of locals with each such value
+// replaced by fn's return value (when it is a string), or locals itself if
+// nothing was replaced: updateCdnManifest uses it to collect targets, the
+// render to swap in CDN URLs (blog/render/folderManifestUrl). Bounded, since
+// locals are authored.
+const LOCALS_MAX_DEPTH = 4;
+const LOCALS_MAX_VALUES = 500;
+
+function mapFolderLocals(locals, hosts, fn) {
+  const patterns = hostPatterns(hosts);
+  let seen = 0;
+
+  function walk(value, depth) {
+    if (typeof value === "string") {
+      if (++seen > LOCALS_MAX_VALUES) return value;
+      if (value.indexOf(".") === -1) return value;
+
+      const target = folderTargetFor(patterns, value);
+      if (!target) return value;
+
+      const replacement = fn(target, value);
+      return typeof replacement === "string" ? replacement : value;
+    }
+
+    if (!value || typeof value !== "object" || depth >= LOCALS_MAX_DEPTH)
+      return value;
+
+    let copy = null;
+
+    for (const k of Object.keys(value)) {
+      const mapped = walk(value[k], depth + 1);
+
+      if (mapped !== value[k]) {
+        if (!copy)
+          copy = Array.isArray(value) ? value.slice() : Object.assign({}, value);
+        copy[k] = mapped;
+      }
+    }
+
+    return copy || value;
+  }
+
+  return walk(locals, 0);
+}
+
 module.exports = resolveFolderLinks;
 module.exports.wrapFolderLinks = wrapFolderLinks;
+module.exports.wrapInlinePartial = wrapInlinePartial;
 module.exports.mayContainFolderLinks = mayContainFolderLinks;
 module.exports.folderTarget = folderTarget;
+module.exports.mapFolderLocals = mapFolderLocals;

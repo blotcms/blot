@@ -4,7 +4,10 @@ var ensure = require("helper/ensure");
 var promisify = require("util").promisify;
 var parseTemplate = require("./parseTemplate");
 var mergeRetrieve = require("./util/mergeRetrieve");
-var { wrapFolderLinks } = require("./util/resolveFolderLinks");
+var {
+  wrapFolderLinks,
+  wrapInlinePartial,
+} = require("./util/resolveFolderLinks");
 
 module.exports = function getPartials(
   blogID,
@@ -30,8 +33,6 @@ module.exports = function getPartials(
   var Entry = require("../entry");
   var allPartials = {};
   var retrieve = {};
-
-  for (var i in partials) if (partials[i]) allPartials[i] = partials[i];
 
   Object.keys(partials || {}).forEach(function (partialName) {
     // Keep any previously-discovered usage contexts for this partial.
@@ -106,6 +107,26 @@ module.exports = function getPartials(
       view.content,
       Object.assign({ viewName: view.name, viewType: view.type }, wrapOptions)
     );
+
+    if (wrapped.targets.length) mergeRetrieve(retrieve, { cdn: wrapped.targets });
+
+    return wrapped.content;
+  }
+
+  // Inline partials (strings in a view's partials, from package.json) get
+  // the same treatment when the template is the blog's own. The manifest
+  // collects their targets with the same call (util/updateCdnManifest).
+  for (var i in partials) {
+    if (!partials[i]) continue;
+
+    allPartials[i] = partials[i];
+
+    if (wrapOptions && typeof partials[i] === "string")
+      allPartials[i] = wrapInline(partials[i]);
+  }
+
+  function wrapInline(content) {
+    var wrapped = wrapInlinePartial(content, wrapOptions.hosts);
 
     if (wrapped.targets.length) mergeRetrieve(retrieve, { cdn: wrapped.targets });
 
