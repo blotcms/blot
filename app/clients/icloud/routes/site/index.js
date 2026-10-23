@@ -16,12 +16,18 @@ site.use(express.json());
 site.use(express.raw({ type: "application/octet-stream", limit })); // For handling binary data
 
 // Ping endpoint
-const notifyServerStarted = notificationCap({ max: 2 });
+// Shared across processes (the count is in Redis). It resets after a day,
+// where it used to last until the process restarted.
+const notifyServerStarted = notificationCap({
+  name: "icloud-server-started",
+  max: 2,
+  resetAfterMs: 24 * 60 * 60 * 1000,
+});
 site.get("/started", async function (req, res) {
   res.sendStatus(200);
 
   try {
-    const result = notifyServerStarted(
+    const result = await notifyServerStarted(
       "started",
       () => email.ICLOUD_SERVER_STARTED(),
       () => email.ICLOUD_SERVER_PANIC()

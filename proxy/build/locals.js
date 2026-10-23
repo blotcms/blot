@@ -17,7 +17,7 @@
 //
 // PROXY_UPSTREAM_*: host:port of the Node containers. The upstream groups in
 // http.conf keep their weights and failover roles; only where each container
-// is changes. GREEN is the master (webhooks, /clients), BLUE serves the
+// is changes. GREEN handles sync, writes and webhooks (/clients), BLUE serves the
 // dashboard and is the failover for the others, YELLOW serves blogs.
 const placeholder = (name) => "${" + name + "}";
 

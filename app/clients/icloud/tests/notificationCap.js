@@ -1,64 +1,89 @@
 const notificationCap = require("../util/notificationCap");
+const client = require("models/client");
+const { randomUUID } = require("crypto");
 
 describe("notificationCap", function () {
-  let time, calls, notify;
+  let calls, name;
 
   const send = () => calls.push("send");
   const escalate = () => calls.push("escalate");
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const cap = (options) =>
+    notificationCap({ name, max: 1, resetAfterMs: 60 * 1000, ...options });
 
   beforeEach(function () {
-    time = 0;
     calls = [];
+    name = "test-" + randomUUID();
   });
 
-  it("sends up to max, escalates once, then suppresses", function () {
-    notify = notificationCap({ max: 2, now: () => time });
+  afterEach(async function () {
+    for (const key of await client.keys("notify-cap:" + name + ":*")) {
+      await client.del(key);
+    }
+  });
 
-    expect(notify("a", send, escalate)).toBe("sent");
-    expect(notify("a", send, escalate)).toBe("sent");
-    expect(notify("a", send, escalate)).toBe("escalated");
-    expect(notify("a", send, escalate)).toBe("suppressed");
-    expect(notify("a", send, escalate)).toBe("suppressed");
+  it("sends up to max, escalates once, then suppresses", async function () {
+    const notify = cap({ max: 2 });
+
+    expect(await notify("a", send, escalate)).toBe("sent");
+    expect(await notify("a", send, escalate)).toBe("sent");
+    expect(await notify("a", send, escalate)).toBe("escalated");
+    expect(await notify("a", send, escalate)).toBe("suppressed");
+    expect(await notify("a", send, escalate)).toBe("suppressed");
 
     expect(calls).toEqual(["send", "send", "escalate"]);
   });
 
-  it("suppresses without escalating when no escalate callback is given", function () {
-    notify = notificationCap({ max: 1, now: () => time });
+  it("suppresses without escalating when no escalate callback is given", async function () {
+    const notify = cap();
 
-    expect(notify("a", send)).toBe("sent");
-    expect(notify("a", send)).toBe("suppressed");
+    expect(await notify("a", send)).toBe("sent");
+    expect(await notify("a", send)).toBe("suppressed");
     expect(calls).toEqual(["send"]);
   });
 
-  it("counts each key separately", function () {
-    notify = notificationCap({ max: 1, now: () => time });
+  it("counts each key separately", async function () {
+    const notify = cap();
 
-    expect(notify("a", send)).toBe("sent");
-    expect(notify("b", send)).toBe("sent");
-    expect(notify("a", send)).toBe("suppressed");
+    expect(await notify("a", send)).toBe("sent");
+    expect(await notify("b", send)).toBe("sent");
+    expect(await notify("a", send)).toBe("suppressed");
     expect(calls).toEqual(["send", "send"]);
   });
 
-  it("never resets without resetAfterMs", function () {
-    notify = notificationCap({ max: 1, now: () => time });
+  it("is shared by separate caps with the same name, as processes are", async function () {
+    const first = cap();
+    const second = cap();
 
-    notify("a", send);
-    time = 365 * 24 * 60 * 60 * 1000;
-    expect(notify("a", send)).toBe("suppressed");
+    expect(await first("a", send, escalate)).toBe("sent");
+    expect(await second("a", send, escalate)).toBe("escalated");
+    expect(await first("a", send, escalate)).toBe("suppressed");
+    expect(calls).toEqual(["send", "escalate"]);
   });
 
-  it("starts counting again once resetAfterMs has passed, escalating again too", function () {
-    notify = notificationCap({ max: 1, resetAfterMs: 1000, now: () => time });
+  it("lets exactly max of many concurrent callers send", async function () {
+    const notify = cap({ max: 2 });
 
-    expect(notify("a", send, escalate)).toBe("sent");
-    time = 999;
-    expect(notify("a", send, escalate)).toBe("escalated");
-    expect(notify("a", send, escalate)).toBe("suppressed");
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => notify("a", send, escalate))
+    );
 
-    time = 1000;
-    expect(notify("a", send, escalate)).toBe("sent");
-    expect(notify("a", send, escalate)).toBe("escalated");
+    expect(results.filter((r) => r === "sent").length).toBe(2);
+    expect(results.filter((r) => r === "escalated").length).toBe(1);
+    expect(results.filter((r) => r === "suppressed").length).toBe(7);
+  });
+
+  it("starts counting again once resetAfterMs has passed, escalating again too", async function () {
+    // Long enough that a slow CI runner cannot expire the window mid-test
+    const notify = cap({ resetAfterMs: 1500 });
+
+    expect(await notify("a", send, escalate)).toBe("sent");
+    expect(await notify("a", send, escalate)).toBe("escalated");
+    expect(await notify("a", send, escalate)).toBe("suppressed");
+
+    await sleep(1700);
+    expect(await notify("a", send, escalate)).toBe("sent");
+    expect(await notify("a", send, escalate)).toBe("escalated");
     expect(calls).toEqual(["send", "escalate", "send", "escalate"]);
   });
 });
