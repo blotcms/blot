@@ -1,5 +1,6 @@
 const { promisify } = require("util");
 const Blog = require("models/blog");
+const email = require("helper/email");
 const User = require("models/user");
 const webhook = require("dashboard/webhooks/stripe_webhook");
 
@@ -114,6 +115,49 @@ describe("Stripe subscription webhooks", function () {
 
     const blog = await getBlog({ id: this.blog.id });
     expect(blog.isDisabled).toBe(false);
+  });
+
+  describe("overdue notifications", function () {
+    beforeEach(function () {
+      spyOn(email, "OVERDUE");
+    });
+
+    async function sendPastDueUpdate(test, cancelAtPeriodEnd) {
+      test.stripeClient.customers.retrieveSubscription.and.callFake(
+        (customerId, subscriptionId, callback) =>
+          callback(null, {
+            id: subscriptionId,
+            customer: customerId,
+            status: "past_due",
+            plan: { amount: 500, interval: "month" },
+            quantity: 1,
+            cancel_at_period_end: cancelAtPeriodEnd,
+          })
+      );
+
+      const response = await test.fetch("/", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type: "customer.subscription.updated",
+          data: {
+            object: { id: test.subscriptionId, customer: test.customerId },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(200);
+    }
+
+    it("sends the overdue email for a past_due subscription", async function () {
+      await sendPastDueUpdate(this, false);
+      expect(email.OVERDUE).toHaveBeenCalledWith(this.user.uid);
+    });
+
+    it("does not send the overdue email once the subscription is cancelled", async function () {
+      await sendPastDueUpdate(this, true);
+      expect(email.OVERDUE).not.toHaveBeenCalled();
+    });
   });
 
   it("disables the account on deleted event", async function () {
