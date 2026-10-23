@@ -105,6 +105,24 @@ async function runPostListenTasks() {
     logError("Failed to start welcome email alarm", err);
   }
 
+  try {
+    // Webhooks that arrived while their blog was syncing leave a follow-up
+    // sync which any container may run. Previews share the dev Redis and skip
+    // them, as they skip the clients.
+    if (!config.preview) {
+      log("Starting follow-up syncs");
+      const followUpSync = require("clients/util/followUpSync");
+      // Loads each client's routes, which create their follow-up syncs
+      require("clients");
+      followUpSync.startAll();
+      require("helper/drain").onStart(() => {
+        followUpSync.stopAll().catch((err) => logError("Failed to stop follow-up syncs", err));
+      });
+    }
+  } catch (err) {
+    logError("Failed to start follow-up syncs", err);
+  }
+
   // Cron jobs and client jobs take Redis locks, so every container runs them.
   // Worktree previews share the dev Redis and skip them.
   try {

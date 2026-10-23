@@ -22,7 +22,25 @@ var Express = require("express");
 var dashboard = Express.Router();
 var site = Express.Router();
 var clfdate = require("helper/clfdate");
+var followUpSync = require("clients/util/followUpSync");
 var host = require("config").host;
+
+// Syncs a blog after a push, or leaves a follow-up for any process to run
+// once a sync already running (here or in another container) has finished.
+// The blog's current handle is its repository's name: pushes to an old
+// handle are redirected before they get this far.
+var followUps = followUpSync("git", function (blogID) {
+  return new Promise(function (resolve, reject) {
+    Blog.get({ id: blogID }, function (err, blog) {
+      if (err) return reject(err);
+      if (!blog) return resolve();
+      sync(blogID, blog.handle, function (err) {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+  });
+});
 
 dashboard.get("/", function (req, res, next) {
   repos.exists(req.blog.handle + ".git", function (exists) {
@@ -170,8 +188,14 @@ function finishedAllSyncs(blogID) {
 // Used for testing purposes only to determine when a sync has finished
 // Redlock means we can't reliably determine this just by calling
 // Blot.sync();
-site.get("/syncs-finished/:blogID", function (req, res) {
-  res.send(finishedAllSyncs(req.params.blogID));
+// A follow-up still queued in Redis counts as a sync to come.
+site.get("/syncs-finished/:blogID", async function (req, res, next) {
+  try {
+    var blogID = req.params.blogID;
+    res.send(finishedAllSyncs(blogID) && !(await followUps.pending(blogID)));
+  } catch (err) {
+    next(err);
+  }
 });
 
 // Tags and fetches have no special handling: pushover accepts them when nobody
@@ -213,16 +237,18 @@ repos.on("push", function (push) {
     // Used for testing purposes only
     started(push.request.blog.id);
 
-    sync(push.request.blog.id, push.request.gitHandle, function (err) {
-      // Used for testing purposes only
-      finished(push.request.blog.id);
-
-      if (err) {
+    followUps.run(push.request.blog.id).then(
+      function () {
+        // Used for testing purposes only
+        finished(push.request.blog.id);
+        debug("Sync finished");
+      },
+      function (err) {
+        // Used for testing purposes only
+        finished(push.request.blog.id);
         debug(err);
-      } else {
-        debug("Sync completed successfully!");
       }
-    });
+    );
   });
 });
 

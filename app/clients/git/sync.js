@@ -92,14 +92,16 @@ module.exports = function sync (blogID, gitHandle, callback) {
         // Remove whitespace from stdout
         headBeforePull = headBeforePull.trim();
 
-        // Update the remote to ensure it's in sync
-        var bareRepoDirectory = bareRepo.directory(gitHandle);
-        git.remote(["set-url", "origin", bareRepoDirectory], function (err) {
+        // Update the remote to ensure it's in sync. During a handle change the
+        // new handle is saved before its bare repository is renamed, so a
+        // follow-up sync can see a handle with no repository yet: origin is
+        // then left at the old path (see bareRepo).
+        bareRepo.pointOriginAtBareRepo(git, gitHandle, function (err) {
 
           if (err) {
             folder.log("Error adding remote: " + err.message);
             debug(err);
-            return done(new Error(err), callback);
+            return done(err, callback);
           }
 
           // My goal is to update the working tree in the blog folder

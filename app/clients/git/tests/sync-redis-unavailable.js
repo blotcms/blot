@@ -61,7 +61,10 @@ describe("Git sync when Redis is unavailable", function () {
           }
         ),
       "./checkGitRepoExists": (path, cb) => cb(null),
-      "./bareRepo": { directory: (handle) => "/test-data/" + handle + ".git" },
+      "./bareRepo": {
+        pointOriginAtBareRepo: (git, handle, cb) =>
+          git.remote(["set-url", "origin", "/test-data/" + handle + ".git"], cb),
+      },
       "models/blog": {},
       "./validateTree": validateTree,
     };

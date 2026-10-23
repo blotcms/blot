@@ -5,15 +5,13 @@ const site = new express.Router();
 
 const sync = require("clients/google-drive/sync");
 const database = require("clients/google-drive/database");
+const followUpSync = require("clients/util/followUpSync");
 
-// Blogs with a sync running as a result of a webhook in this process
-const ongoingSyncs = new Set();
-
-// Blogs which received a webhook while a sync was already running. The running
-// sync may have already walked past the change which triggered the webhook, so
-// we re-run the sync once the current one finishes. Multiple webhooks during
-// one sync collapse into a single follow-up.
-const pendingResyncs = new Set();
+// Syncs a blog, or leaves a follow-up for any process to run once a sync
+// already running (here or in another container) has finished
+const followUps = followUpSync("google-drive", function (blogID) {
+  return sync(blogID, { rethrowLocked: true });
+});
 
 site
   .route("/webhook/changes.watch/:serviceAccountId")
@@ -62,44 +60,14 @@ async function syncBlogs(blogIDs) {
   // sync all blogs in parallel but if one errors don't stop the others
   await Promise.all(
     blogIDs.map(async (blogID) => {
-      // Blogs which are currently syncing get a follow-up sync queued
-      // instead of a second concurrent sync
-      if (ongoingSyncs.has(blogID)) {
-        if (!pendingResyncs.has(blogID)) {
-          console.log(
-            `${clfdate()} Google Drive client: Webhook received mid-sync, queueing follow-up sync ${blogID}`
-          );
-        }
-        pendingResyncs.add(blogID);
-        return;
-      }
-
-      ongoingSyncs.add(blogID);
-
+      console.log(`${clfdate()} Google Drive client: Syncing blog ${blogID}`);
       try {
-        console.log(`${clfdate()} Google Drive client: Syncing blog ${blogID}`);
-        await runSync(blogID);
-      } finally {
-        ongoingSyncs.delete(blogID);
+        await followUps.run(blogID);
+      } catch (e) {
+        console.error("Google Drive client:", e.message);
       }
     })
   );
-}
-
-async function runSync(blogID) {
-  try {
-    await sync(blogID);
-  } catch (e) {
-    console.error("Google Drive client:", e.message);
-  }
-
-  if (!pendingResyncs.has(blogID)) return;
-
-  pendingResyncs.delete(blogID);
-  console.log(
-    `${clfdate()} Google Drive client: Running follow-up sync for webhook received mid-sync ${blogID}`
-  );
-  return runSync(blogID);
 }
 
 module.exports = site;
