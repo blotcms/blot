@@ -18,3 +18,7 @@ Commit message trailers (e.g. `Co-Authored-By`) are unrelated to this and should
 # Redis
 
 Prefer plain commands and `multi()`/`exec()`. Use a Lua script (`client.eval`) only for an atomic compare-then-act that Redis 6.2 can't do natively (no `SET ... IFEQ`/`DELEX` until 8.4), and keep it minimal: a few lines, one decision. Avoid `WATCH` too. The maintainer dislikes both; existing larger Lua scripts are legacy, don't copy them.
+
+# CDN
+
+Bunny does not sit in front of blogs. Blog pages, on subdomains and custom domains, reach the openresty proxy directly, so the proxy sees every visitor's request. Bunny serves only `cdn.blot.im` URLs: static assets, blog CSS and JS, and folder files and generated assets that blog links point there (see `config/storage-bucket/README.md`).
