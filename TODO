@@ -58,6 +58,7 @@ App changes toward consolidated units and horizontal scaling (#2119), each usefu
   - Makes steering background syncs to green unnecessary (16 Oct webhook-gating idea, not merged)
   - Multi-host later: blog folders and git repos on the local data volume are the blocker, not the queue
 - Audit consolidated containers spawned subprocesses for memory max oom usage
+- Template editor writes (Template.writeToFolder/removeFromFolder via client.write/remove) take no folder lock and race with syncs; take the lock, or route them with the other folder writes to the worker
 
 Investigate slow creep of green's baseline heap (~40-80MB/day lowest heapUsed in [STATS], never resets until a V8 OOM crash; crashed 13+14 Oct 2026). Leak or unbounded cache? Compare heap snapshots taken hours apart
 - Spikes from heavy post builds (e.g. blog_825ed2a 'All paths', ~250MB) only crash it once the baseline has crept up
