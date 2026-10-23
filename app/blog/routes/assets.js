@@ -227,6 +227,9 @@ assets.use((err, req, res, next) => {
 //     path=<path> referer=<host><path>|-|invalid same_site=1|0
 function logFolderAsset(req, served) {
   try {
+    // Template editor previews never use CDN URLs, so their hits say nothing
+    if (req.preview) return;
+
     const originalPath = req.originalUrl.split("?")[0];
     const path = decodeURIComponent(originalPath);
     if (htmlExtRegex.test(path) || !fileExtRegex.test(path)) return;
@@ -239,7 +242,8 @@ function logFolderAsset(req, served) {
       try {
         const url = new URL(header);
         const host = url.hostname.toLowerCase();
-        referer = encodeURI(host + url.pathname);
+        // pathname is already percent-encoded
+        referer = host + url.pathname;
         sameSite = blogHosts(req.blog).includes(host) ? 1 : 0;
       } catch (e) {
         referer = "invalid";
@@ -251,7 +255,7 @@ function logFolderAsset(req, served) {
       `blog=${req.blog.id}`,
       `handle=${req.blog.handle}`,
       `served=${served}`,
-      `path=${encodeURI(originalPath)}`,
+      `path=${encodeURI(path)}`,
       `referer=${referer}`,
       `same_site=${sameSite}`
     );

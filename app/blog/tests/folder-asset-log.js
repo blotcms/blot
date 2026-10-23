@@ -46,6 +46,17 @@ describe("[folder-asset] log", function () {
     );
   });
 
+  it("percent-encodes a path and referer once", async function () {
+    await this.write({ path: "/Luke 15/a.png", content: "one" });
+    await this.get("/Luke%2015/a.png", {
+      headers: { Referer: `https://${ownHost(this.blog)}/Luke%2015/page.html` },
+    });
+
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toContain("path=/Luke%2015/a.png");
+    expect(lines[0]).toContain(`referer=${ownHost(this.blog)}/Luke%2015/page.html`);
+  });
+
   it("logs same_site=0 for a referer on another host", async function () {
     await this.write({ path: "/img/a.png", content: "one" });
     await this.get("/img/a.png", {
