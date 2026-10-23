@@ -187,6 +187,18 @@ describe("resolveFolderLinks", function () {
       );
     });
 
+    it("wraps a {{blogURL}} or {{siteURL}} prefix like {{blog.url}}", function () {
+      expect(html('<link rel="preload" href="{{{blogURL}}}/_Fonts/a.woff2">')).toBe(
+        `<link rel="preload" href="${wrap("/_Fonts/a.woff2")}">`
+      );
+      expect(html('<img src="{{siteURL}}/a.png">')).toBe(
+        `<img src="${wrap("/a.png")}">`
+      );
+      expect(html('<img src="{{blogURL}}/{{name}}.png">')).toBe(
+        '<img src="{{blogURL}}/{{name}}.png">'
+      );
+    });
+
     it("skips a {{blog.url}} prefix followed by more mustache or a non path", function () {
       const input =
         '<img src="{{blog.url}}/{{name}}.png"><img src="{{blog.url}}a.png"><img src="{{blog.url}}">';

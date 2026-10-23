@@ -29,7 +29,8 @@ const {
 // change. Everything outside an edited span is copied through byte for byte.
 // Mustache tags are opaque: nothing inside one is ever read as HTML or CSS,
 // and a value containing a tag is left alone (the one exception is a value
-// that starts with {{blog.url}}, followed by a literal path).
+// that starts with {{blog.url}}, {{blogURL}} or {{siteURL}}, followed by a
+// literal path).
 //
 // Which links are folder files (the rules of the request-time folder-link pass
 // this replaced):
@@ -52,8 +53,10 @@ const CANDIDATE = /(?:\b(?:href|src|poster|srcset|content|style)\s*=|url\s*\()/i
 // as written.
 const DELIMITER_CHANGE = /\{\{=/;
 
+// The tags which render as the blog's own origin: blog.url is its canonical
+// URL, blogURL (and its alias siteURL) the one the request came in on.
 const BLOG_URL_PREFIX =
-  /^(?:\{\{\{\s*blog\.url\s*\}\}\}|\{\{&?\s*blog\.url\s*\}\})/;
+  /^(?:\{\{\{\s*(?:blog\.url|blogURL|siteURL)\s*\}\}\}|\{\{&?\s*(?:blog\.url|blogURL|siteURL)\s*\}\})/;
 
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
@@ -135,7 +138,7 @@ function linkTarget(ctx, value, opts) {
   const blogUrl = BLOG_URL_PREFIX.exec(value);
 
   if (blogUrl) {
-    // {{blog.url}}/path/to/file.ext - the path after the tag is a literal
+    // {{blog.url}}/path/to/file.ext (or {{blogURL}}) - the path after the tag is a literal
     raw = value.slice(blogUrl[0].length);
 
     if (raw.charAt(0) !== "/" || raw.charAt(1) === "/") return null;
