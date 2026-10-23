@@ -21,7 +21,8 @@ What reaches the origin by design:
 - views that use `{{=` delimiters, which the wrapping skips;
 - links built from variables (`{{base}}/x.jpg`, `{{{someLocal}}}/x.jpg`),
   because no literal path exists to wrap (`{{blog.url}}/x.jpg` is wrapped;
-  entry metadata like `{{metadata.image}}` is baked at build time);
+  entry metadata like `{{metadata.image}}` is not baked, so it is a plain
+  path);
 - menu `<a href>`s to files, which are data, not template text;
 - relative links containing `..`;
 - large files 302'd to the CDN (`served=cdn-redirect`): fine, but each one

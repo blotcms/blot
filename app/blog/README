@@ -158,7 +158,7 @@ After retrievers run, `render/load/index.js` walks all locals to find `Entry` in
 
 Rendered HTML and CSS are not scanned for links to files in the blog's folder. A request-time pass used to do that after every render; it was removed once the work moved earlier, and the directory name is kept for the helpers that remain here.
 
-- Entry content is baked at build time (`build/plugins/folderAssets`: attributes, plus entry metadata values such as `og:image` paths, plus `bakeHTML` for markup set by front matter).
+- Entry content is baked at build time (`build/plugins/folderAssets`: attributes, plus `bakeHTML` for markup set by front matter). Entry metadata values are not baked, so templates can build URLs from them.
 - Literal links in a blog-owned template's views are wrapped in `{{#cdn}}` while the full view is assembled (`models/template/getFullView`, `models/template/util/resolveFolderLinks`), which the template's CDN manifest resolves to versioned folder URLs (see `app/models/template/README`). Inline `package.json` partials are wrapped when loaded (`models/template/getPartials.js`).
 - Template and view locals that are folder links (`"logo": "/img/a.png"`) are swapped for CDN URLs at render by `render/folderManifestUrl.js`, a pure in-memory lookup against the manifest. A literal `{{#asset}}` section looks the manifest up first (`render/retrieve/asset.js`).
 

@@ -37,7 +37,7 @@ function buildSearchText(entry) {
     entry.tags.join(" "),
     entry.path,
     stripBakedPrefix(entry.html),
-    stripBakedPrefix(Object.values(entry.metadata).join(" "))
+    Object.values(entry.metadata).join(" ")
   ].join(" ").toLowerCase();
 }
 
