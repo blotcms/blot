@@ -22,7 +22,7 @@ export BLOT_REDIS_HOST=127.0.0.1
 export BLOT_USER=
 
 # Use latest stable version which passes tests
-export BLOT_NODE_VERSION=22.14.0
+export BLOT_NODE_VERSION=22.23.4
 
 # result of which pandoc
 export BLOT_PANDOC_PATH=

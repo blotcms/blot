@@ -51,7 +51,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 21.7.3
+          node-version: 22.23.4
 
       # The `runner` context (RUNNER_TEMP) isn't available in a job-level
       # `env:` block, only in steps - so these are exported to $GITHUB_ENV

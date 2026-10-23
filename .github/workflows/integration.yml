@@ -52,7 +52,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 21.7.3
+          node-version: 22.23.4
 
       - name: Install config generator dependencies
         run: |
@@ -138,7 +138,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 21.7.3
+          node-version: 22.23.4
 
       - name: Install config generator dependencies
         run: |
@@ -409,7 +409,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 21.7.3
+          node-version: 22.23.4
 
       - name: Install config generator dependencies
         run: |
@@ -497,7 +497,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 21.7.3
+          node-version: 22.23.4
 
       - name: Install config generator dependencies
         run: |
