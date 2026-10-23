@@ -32,6 +32,11 @@ const staleFolderSettle = 3000;
 // folder, so we can fail fast instead of waiting out the timeout
 const askForAccessInterval = 2000;
 
+// After a setup times out, keep looking for the folder this long and log when
+// it turns up, to tell a share iCloud delivers late from one that never comes
+const lateArrivalWindow = 1000 * 60 * 10;
+const lateArrivalInterval = 5000;
+
 // Screen dumps and other detail from failed setups go to files here, not the
 // pm2 logs, so they can be purged on their own after a week
 const diagnosticsDirectory = join(homedir(), "setup-diagnostics");
@@ -117,6 +122,61 @@ function watchRename(oldName, newPath, blogID) {
   }
 }
 
+// Only logs: a late folder is left for the next setup's removeStaleFolders.
+// The next setup stops the watch, since a folder appearing after it starts
+// may be that setup's
+let stopLateArrivalWatch = null;
+
+function watchLateArrival(blogID, initialDirNames, outcome) {
+  const timedOutAt = Date.now();
+  const waited = () => Math.round((Date.now() - timedOutAt) / 1000);
+
+  const timer = setInterval(async () => {
+    try {
+      const dirs = await fs.readdir(iCloudDriveDirectory, {
+        withFileTypes: true,
+      });
+      const arrived = dirs
+        .filter((dir) => dir.isDirectory() && !initialDirNames.includes(dir.name))
+        .map((dir) => dir.name);
+
+      if (arrived.length) {
+        stop();
+        console.error(
+          clfdate(),
+          `LATE FOLDER for ${blogID} (${outcome}): ${arrived.join(", ")} appeared ${waited()}s after setup timed out, share: ${await shareInfo(
+            join(iCloudDriveDirectory, arrived[0])
+          )}`
+        );
+      } else if (Date.now() - timedOutAt > lateArrivalWindow) {
+        stop();
+        console.error(
+          clfdate(),
+          `No late folder for ${blogID} (${outcome}) ${waited()}s after setup timed out`
+        );
+      }
+    } catch (error) {
+      stop();
+      console.error(clfdate(), `Late folder check failed for ${blogID}`, error);
+    }
+  }, lateArrivalInterval);
+
+  const stop = () => {
+    clearInterval(timer);
+    if (stopLateArrivalWatch === stopFromNextSetup) stopLateArrivalWatch = null;
+  };
+
+  const stopFromNextSetup = () => {
+    stop();
+    console.log(
+      clfdate(),
+      `Stopped looking for a late folder for ${blogID} after ${waited()}s: another setup started`
+    );
+  };
+
+  stopLateArrivalWatch = stopFromNextSetup;
+}
+
 /**
  * Wait for a new top-level directory to appear, rename it, and notify the remote server.
  * Always leaves Finder tidy: after a failure the next setup would otherwise
@@ -157,6 +217,7 @@ async function setupFolder(blogID, sharingLink) {
     mark = Date.now();
   };
 
+  if (stopLateArrivalWatch) stopLateArrivalWatch();
   await pruneDiagnostics();
   await resetFinder();
   const removedDirNames = await removeStaleFolders();
@@ -293,6 +354,7 @@ async function setupFolder(blogID, sharingLink) {
 
   // One last look; the screen is recorded by setupBlog when this throws
   if (await dismissAskForAccess()) throw new Error(SETUP_ERRORS.NO_ACCESS);
+  watchLateArrival(blogID, initialDirNames, outcome);
   throw new Error(SETUP_ERRORS.TIMEOUT);
 }
 
