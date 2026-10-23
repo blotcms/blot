@@ -118,9 +118,6 @@ Should we do a hybrid static build into s3 for blog HTML JS and CSS only?
 
 Add a list of billing history / invoices to subscription page
 
-Data volume follow-ups (shrunk to gp3 on 9 Oct, again on 15 Oct after data/static moved to S3, with config/host/data-volume/resize.sh; see the data-volume skill):
-- Can we test my assumption that the ephemeral instance store hard disk is faster than EBS discs?
-
 create skills which delegate cheap subagents to scan logs for issues:
 - proxy logs (focussed on error)
 - node container logs

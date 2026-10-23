@@ -165,3 +165,10 @@ Entry template:
 - [folder-asset-origin] (old line, same-site only): ~0.2% of renders
 - Since last run: none of the migration has landed yet. #2035 is being split into smaller PRs; this run's job is the baseline
 - Next: wrap literal template links in {{#cdn}} (the template bucket), then locals/{{#asset}}
+
+### 2026-10-23 — 9h across blue/green/yellow (first night after the request-time pass was removed)
+- Served: origin ~46%, cdn-redirect ~17%, static ~37%
+- Referer: same-site ~69%, other site ~11%, none ~21%
+- Top causes: (1) bundled-theme CSS views linking `/plugins/katex/...` fonts, about a dozen blogs at identical volume, all `served=static` (global files, not folder files); (2) absolute own-host links in a custom template (font preloads); (3) a few blogs whose folder has a double-encoded path (`%25xx`), so the link never matches the CDN manifest; (4) a custom template with literal image/script links in a preview host's views; (5) a long tail of jpg/webp/json from entry bodies and data files on a few blogs. Origin hits are mostly images (~45%) and json (~25%).
+- Health: no restarts, no OOM kills, no fatal/unhandled errors in any app container.
+- Since last run: the pass is gone; no signs of broken pages or a restart storm. Next: absolute own-host links in templates, double-encoded folder paths, and whether katex fonts should be a CDN/static path.
