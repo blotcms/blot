@@ -24,6 +24,10 @@ const SETUP_ERRORS = {
     "Timed out waiting for iCloud to share the folder. Check the sharing link is valid and retry",
 };
 
+// How long to wait after removing stale folders before reading the initial
+// state, so a removal iCloud undoes straight away is seen
+const staleFolderSettle = 3000;
+
 // Look for the "Ask for Access" sheet every few seconds while waiting for the
 // folder, so we can fail fast instead of waiting out the timeout
 const askForAccessInterval = 2000;
@@ -155,7 +159,14 @@ async function setupFolder(blogID, sharingLink) {
 
   await pruneDiagnostics();
   await resetFinder();
-  await removeStaleFolders();
+  const removedDirNames = await removeStaleFolders();
+
+  // iCloud may not let go of a removed share and put the folder back. Give it
+  // a moment so one that comes back straight away is part of the initial
+  // state below rather than looking like the new folder
+  if (removedDirNames.length) {
+    await new Promise((resolve) => setTimeout(resolve, staleFolderSettle));
+  }
   lap("reset");
 
   // Get the initial state of the top-level directories
@@ -165,6 +176,16 @@ async function setupFolder(blogID, sharingLink) {
   const initialDirNames = initialDirs
     .filter((dir) => dir.isDirectory())
     .map((dir) => dir.name);
+
+  const returnedDirNames = removedDirNames.filter((name) =>
+    initialDirNames.includes(name)
+  );
+  if (returnedDirNames.length) {
+    console.error(
+      clfdate(),
+      `Removed folders came back: ${returnedDirNames.join(", ")}`
+    );
+  }
 
   const otherDirNames = initialDirNames.filter((name) => !name.startsWith("blog_"));
   console.log(
@@ -185,6 +206,7 @@ async function setupFolder(blogID, sharingLink) {
   const start = Date.now();
   mark = start;
   let lastAskForAccessCheck = start;
+  let loggedSkippedDirs = false;
 
   while (true && Date.now() - start < timeout) {
     // Get the current state of the top-level directories
@@ -196,9 +218,26 @@ async function setupFolder(blogID, sharingLink) {
       .map((dir) => dir.name);
 
     // Find any new directories by comparing initial state with the current state
-    const newDirs = currentDirNames.filter(
+    const appearedDirs = currentDirNames.filter(
       (dirName) => !initialDirNames.includes(dirName)
     );
+
+    // A folder with the name of one removed above may be that share coming
+    // back late, which belongs to another blog. Only take it if Finder showed
+    // the "Open" dialog for this link, i.e. this link was just accepted
+    const newDirs = appearedDirs.filter(
+      (dirName) => outcome === "OPENED" || !removedDirNames.includes(dirName)
+    );
+
+    if (newDirs.length < appearedDirs.length && !loggedSkippedDirs) {
+      loggedSkippedDirs = true;
+      console.error(
+        clfdate(),
+        `Not claiming removed folder that came back: ${appearedDirs
+          .filter((dirName) => !newDirs.includes(dirName))
+          .join(", ")}`
+      );
+    }
 
     if (newDirs.length > 0) {
       const newDirName = newDirs[0]; // Handle the first new directory found
@@ -410,30 +449,45 @@ async function resetFinder() {
 
 // A top-level folder that is not a blog_ folder is a shared folder that was
 // accepted but never renamed (a failed or timed out setup). Left in place it
-// stops a new share with the same name from looking like a new folder
+// stops a new share with the same name from looking like a new folder.
+// Returns the names it removed. A folder it can't read or remove is logged
+// and left, so one bad folder doesn't fail every setup after it
 async function removeStaleFolders() {
   const entries = await fs.readdir(iCloudDriveDirectory, {
     withFileTypes: true,
   });
+  const removed = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     if (entry.name.startsWith(".") || entry.name.startsWith("blog_")) continue;
 
     const path = join(iCloudDriveDirectory, entry.name);
-    const contents = await fs.readdir(path);
 
-    if (contents.length) {
+    try {
+      const contents = await fs.readdir(path);
+
+      if (contents.length) {
+        console.error(
+          clfdate(),
+          `Leaving unclaimed non-empty folder in iCloud Drive: ${entry.name}`
+        );
+        continue;
+      }
+
+      console.log(clfdate(), `Removing empty unclaimed folder: ${entry.name}`);
+      await fs.rmdir(path);
+      removed.push(entry.name);
+    } catch (error) {
       console.error(
         clfdate(),
-        `Leaving unclaimed non-empty folder in iCloud Drive: ${entry.name}`
+        `Failed to remove unclaimed folder: ${entry.name}`,
+        error
       );
-      continue;
     }
-
-    console.log(clfdate(), `Removing empty unclaimed folder: ${entry.name}`);
-    await fs.rmdir(path);
   }
+
+  return removed;
 }
 
 // Used the accessibility inspector to find the UI elements to interact with.
@@ -530,7 +584,7 @@ async function acceptSharingLink(sharingLink) {
       `AppleScript execution failed for sharing link: ${sharingLink}`,
       error
     );
-    await resetFinder();
+    // setupBlog records the screen and resets Finder
     throw error;
   }
 
@@ -546,7 +600,6 @@ async function acceptSharingLink(sharingLink) {
   );
 
   if (outcome.startsWith("ERROR")) {
-    await resetFinder();
     throw new Error(`AppleScript failed: ${outcome}`);
   }
 
@@ -564,6 +617,13 @@ export default async (req, res) => {
   if (!blogID) {
     console.error(clfdate(), "Missing blogID header for setup request");
     return res.status(400).send("Missing blogID header");
+  }
+
+  // blogID becomes a folder name and a file name, so allow only letters,
+  // numbers and underscores
+  if (!/^[a-zA-Z0-9_]+$/.test(blogID)) {
+    console.error(clfdate(), `Invalid blogID for setup request: ${blogID}`);
+    return res.status(400).send("Invalid blogID");
   }
 
   if (!sharingLink) {
