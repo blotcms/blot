@@ -2,8 +2,6 @@
 
 - Fix bug with Documentation template and the setting 'Adds zoom to large images' and [tell customer](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbgJMGTSPcnwTNxVJVPZZnrhJB)
 
-- Improve post navigation on Portfolio template within tagged collections and tell [Questioner](https://blot.im/questions/1894)
-
 - Links template:
   Navigation:
   - [ ] Add dropdown support to navigation
