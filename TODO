@@ -95,7 +95,11 @@ Add a tool which randomly samples, production markdown posts, and runs version o
 Add transfer site flow to blot from one user account to another, somewhere in settings?
 - for designers and develeopers to transfer a site to their client after building it
 
-Add site per customer stat to daily update
+Improve daily update email:
+- Add site per customer stat to daily update
+- Add daily aws cost to email update
+  - Set up AWS cost anomaly detection
+
 
 Open source as content marketing
 - Close my GitHub account 
@@ -131,7 +135,6 @@ Redis host follow-ups (from #2041, new host since 8 Oct):
 - Remaining dropped write errors: await set() in resetToDrive; Dropbox disconnect.js and _assign.js dropFromMenu check the wrong error; write order in Blog.create; the list-ghosts restore path; error paths for background resave and rebuild; a callback for the messenger's setStatus; make Entry.set atomic
 - Proxy: auto-ssl's lock and hook calls can reuse a timed-out Redis connection
 - Deploy log archive (scripts/deploy/index.js): docker logs -t, outside /tmp, more than 3 files, size-capped; let config/redis/perf/fetch.sh read it
-- Upgrade Redis (7 or Valkey), revisit AOF
 - Offsite Redis backups (e.g. Backblaze B2) alongside S3, so a lost AWS account or region doesn't take the backups with it: upload from config/redis/bin/backup.sh, and let launch.sh/restore.sh restore from B2 too (#2041)
 - Consider dropping Redis client-side caching (CLIENT TRACKING) in favour of the app's in-process LRU caches: on prod 10 clients have tracking on and the server's tracking table sits at its 1M-key cap (tracking-table-max-keys), so Redis is constantly evicting entries and sending invalidations
 
@@ -174,8 +177,6 @@ archives and all_entries in the template engine should be bounded to a maximum o
 
 Maybe horizontal scaling involves redis replicas in other aws regions?
 - s3 multi region replication?
-
-Add aws billing info to daily update
 
 Add client status to status page (check api)
 
@@ -641,9 +642,6 @@ Add GitHub deploy button for macserver
 
 Add GitHub deploy button for openresty 
 
-Set up AWS cost anomaly detection
-- add daily aws cost to email update
-
 ---
 
 Add support for 2FA (Two factor authentication) then tell [Luke](https://mail.google.com/mail/u/0/#inbox/163993b0f8499ab3), [Max](https://mail.google.com/mail/u/0/#inbox/1641e9bd104c5b77), [Chaz](https://mail.google.com/mail/u/0/#inbox/165b726aa900158a), [Prathamesh](https://mail.google.com/mail/u/0/#inbox/FMfcgzGqQmWhhpCVSlbhdvlvWdmdtJWQ) and [Tom](https://mail.google.com/mail/u/0/#inbox/FMfcgxwDqnpZncgBDbDskMZdPMXkgGCN).
@@ -666,8 +664,6 @@ Inbox
 - don't delete custom domain, though (maybe add property redirectDomain ?)
 
 Think about how to improve the efficieny of the app/views/js/sync_status.js response from the server when loading the new contents of `.live-updates`. perhaps we could intercept send requests and use cheerio to filter out everything except the live update div? or some other method? and once we do that we could then leverage etags for improved performance too
-
-Add screenshot feature to macserver:
 
 Reach out to include Blot on textbundle website
 
@@ -839,14 +835,8 @@ Reduce service provider risk:
   - ideally all this should involved is changing some DNS records
 - test plan to transition off AWS
 
-Implement mac server screenshot endpoint
-- We should use the helper/transformer to speed up screenshot re-generation
-
 Update redis client for improved performance
 - perhaps to ioredis?
-
-Update redis server to version 8
-- take advantage of full text search? or switch to postgres?
 
 Move folder lock location to instance ssd for improved reliability and performance (non-networked drive...) – could be inside the cache
 
@@ -985,9 +975,6 @@ Add Generative tree for account page
 Add {{#posts-without-:tag}} and [tell steve](https://mail.google.com/mail/u/0/#inbox/FMfcgzGxSRHnwcVVlqvwLFzwRQbsqsnK)
 
 ---
-
-Add aws cost usage and forecast to daily update email
-- https://docs.aws.amazon.com/cli/latest/reference/ce/get-cost-and-usage.html
 
 Ensure that overdue PayPal subscription webhooks map to notification emails
 
