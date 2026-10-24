@@ -5,6 +5,9 @@
 		"page_size": 100,
 		"page_size_range": [1, 100],
 		"sort_by": "id",
+		"sort_by_options": ["id"],
+		"sort_order": "asc",
+		"collapse_navigation_by_default": true,
 		"spacing": 1,
 		"spacing_range": [0, 4],
 		"background_color": "#fff",
@@ -52,6 +55,12 @@
 		"entries.html": {
 			"partials": {
 				"title": "{{{title}}}"
+			}
+		},
+		"pagination.html": {
+			"url": "/pagination/:page",
+			"locals": {
+				"page_size": 100
 			}
 		},
 		"archives.html": {

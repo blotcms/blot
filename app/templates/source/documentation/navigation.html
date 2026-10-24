@@ -12,10 +12,8 @@
       <!-- Left Column: High-Level Navigation -->
       <div class="column">
         <div class="navigation">
-          <ul class="sidebar">
-            {{#posts}}
-            <li data-path="{{{path}}}"><a class="{{active}}" href="{{{url}}}">{{title}}</a></li>
-            {{/posts}}
+          <ul class="sidebar" data-sort-by="{{sort_by}}" data-sort-order="{{sort_order}}">
+            {{> pagination}}
           </ul>   
       </div>
       </div>
