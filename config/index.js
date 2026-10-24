@@ -11,6 +11,8 @@ const BLOT_HOST = process.env.BLOT_HOST || "localhost";
 const BLOT_PORT = process.env.BLOT_PORT || "8080";
 // Unix socket the server also listens on, for the reverse proxy; empty for none
 const BLOT_SOCKET = process.env.BLOT_SOCKET || "";
+// Set by helper/workerChild on the worker it forks: it serves on a socket only
+const BLOT_WORKER_CHILD = process.env.BLOT_WORKER_CHILD === "true";
 const BLOT_PROTOCOL = process.env.BLOT_PROTOCOL || "https";
 const BLOT_IPV6 = process.env.BLOT_IPV6 || null;
 
@@ -65,8 +67,17 @@ module.exports = {
   // (scripts/development/worktrees.md); it skips the scheduler, sync clients
   // and the start email.
   preview: process.env.BLOT_PREVIEW === "true",
-  // map 'blot-container-<container-name>' to 'container-name'
-  container: (process.env.CONTAINER_NAME || "").split("-").slice(2).join("-"),
+  // map 'blot-container-<container-name>' to 'container-name'; a forked
+  // worker child shares its parent's CONTAINER_NAME, so gets a suffix
+  container:
+    (process.env.CONTAINER_NAME || "").split("-").slice(2).join("-") +
+    (BLOT_WORKER_CHILD ? "-worker" : ""),
+  worker_child: BLOT_WORKER_CHILD,
+  // The socket for a worker child to serve on: set, the process forks one
+  // (see helper/workerChild) and supervises it
+  worker_socket: process.env.BLOT_WORKER_SOCKET || "",
+  // The forked worker's --max-old-space-size in MB, or Node's default
+  worker_max_old_space_size: parseInt(process.env.BLOT_WORKER_MAX_OLD_SPACE_SIZE) || null,
 
   webhooks: {
     client_max_body_size: 1e8, // 100MB

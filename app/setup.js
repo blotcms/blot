@@ -156,6 +156,11 @@ async function runPostListenTasks() {
     logError("Failed while initializing clients", err);
   }
 
+  // A forked worker child (helper/workerChild) leaves the rest to its parent,
+  // which has done it already: a child crash-looping on restart would
+  // otherwise flush the proxy caches and call Bunny each time
+  if (config.worker_child) return;
+
   try {
     if (templatesBuilt) {
       log("Flushing caches after template rebuild");
@@ -224,6 +229,9 @@ function main(callback) {
       },
 
       async function () {
+        // The parent of a forked worker child has cleared it
+        if (config.worker_child) return;
+
         const featuredDir = path.join(config.data_directory, "featured");
         const featuredFile = path.join(featuredDir, "featured.json");
 

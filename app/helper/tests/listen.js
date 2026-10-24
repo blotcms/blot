@@ -59,6 +59,13 @@ describe("listen", function () {
     expect(fs.existsSync(socket)).toBe(false);
   });
 
+  it("only listens on the socket without a port", async function () {
+    await start({ port: null });
+
+    expect(servers.length).toBe(1);
+    expect(await get(socket)).toBe("ok");
+  });
+
   it("applies configure to each server", async function () {
     const configure = jasmine.createSpy("configure");
     await start({ configure });

@@ -8,6 +8,7 @@ const setup = require("./setup");
 const server = require("./server");
 const drain = require("helper/drain");
 const listen = require("helper/listen");
+const workerChild = require("helper/workerChild");
 
 const DEPLOYMENT_MARKER_EXPIRATION_SECONDS = 90 * 24 * 60 * 60;
 const REQUEST_TIMEOUT_MS = 60 * 60 * 1000;
@@ -63,6 +64,29 @@ async function serverStartEvent() {
 // Installed before setup so a SIGTERM during startup also exits cleanly
 drain.install();
 
+if (config.worker_child) {
+  // Under memory pressure the kernel should kill this worker, not the web
+  // process that forked it (and would fork it again). Raising our own score
+  // needs no privilege; outside Linux there is no such file.
+  try {
+    fs.writeFileSync("/proc/self/oom_score_adj", "1000");
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      console.error(clfdate(), "Could not raise oom_score_adj", err.message);
+    }
+  }
+
+  // The parent is gone (it crashed or was killed), so nothing will restart
+  // or stop us: drain and exit rather than linger without it
+  process.on("disconnect", function () {
+    console.log(clfdate(), "[WORKER] Parent disconnected, draining");
+    drain.start().then(
+      () => process.exit(0),
+      () => process.exit(1)
+    );
+  });
+}
+
 console.log(clfdate(), `Starting server env=${config.environment}`);
 setup(async (err) => {
   if (err) throw err;
@@ -90,7 +114,12 @@ setup(async (err) => {
     server.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS;
   };
 
-  const options = { port: config.port, socket: config.socket, configure };
+  // A forked worker serves on its socket alone: the parent has the port
+  const options = {
+    port: config.worker_child ? null : config.port,
+    socket: config.socket,
+    configure,
+  };
 
   // Open the server to handle requests
   const httpServers = listen(server, options, function () {
@@ -110,9 +139,23 @@ setup(async (err) => {
         );
     }
 
+    // A process given a socket for one forks a worker child and keeps it
+    // running, and stops it when draining (see helper/workerChild)
+    // (not when a SIGTERM during startup has begun the drain already)
+    if (config.worker_socket && !config.worker_child && !drain.isDraining()) {
+      const worker = workerChild({
+        script: __filename,
+        socket: config.worker_socket,
+        maxOldSpaceSize: config.worker_max_old_space_size,
+        drainTimeoutMs: drain.DRAIN_TIMEOUT_MS,
+      });
+      drain.onStart(() => worker.stop());
+    }
+
     // Send an email notification if the server starts or restarts
-    // Worktree preview sidecars (scripts/development/preview.sh) skip it
-    if (!config.preview) {
+    // Worktree preview sidecars (scripts/development/preview.sh) and forked
+    // workers (their parent sends one) skip it
+    if (!config.preview && !config.worker_child) {
       serverStartEvent().then((event) =>
         email.SERVER_START(null, { container: config.container, event })
       );
