@@ -122,8 +122,6 @@ Create skills which delegate cheap subagents to scan logs for issues:
 - proxy logs (focussed on error)
 - node container logs
 
-The dashboard needs more feedback as the macserver goes through iCloud setup: it would be useful to echo that the invite link is valid, we're waiting for the new folder, then that step can wait up to a minute while so the user understands what's happening?  the google drive client has a step based system
-
 Upgrade the Stripe integration (low priority): the stripe npm package is 6.36.0 (2019) and the account's default API version is 2011-11-17, except app/models/user/syncPaymentMethods.js, which pins 2020-08-27. Move to a current stripe-node and pin one explicit API version on every client, after checking the webhook handler (app/dashboard/webhooks/stripe_webhook.js), subscription create/cancel/pay and card update against the API changelog. Upgrade the account default in the Dashboard only once the code no longer relies on it.
 
 Redis host follow-ups (from #2041, new host since 8 Oct):
@@ -195,8 +193,6 @@ Add macserver deploy to github actions
   - how do we add 2fa to deployment flow, require email confirmation somehow? onetimelink? assume github could 
   - if github is owned are we owned? ideally not
 
-When you re-connect to Dropbox or Google Drive, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
-
 Can the status page avoid the LRU caches somehow and fully work redis? Maybe we synthesise a route somehow? Thoughts?
 
 hypertext template on indexes:
@@ -211,15 +207,6 @@ Make sync logs more useful, surface recent changes on dashboard. Group multiple 
 
 Excercise the backlinks with big entries / many backlinks in the benchmarks somewhere
 
-Fix Google Drive sync outage caused by Google account suspesion
-- Future fix to Google Drive client needs to never use the service account to create files (ask the user to handle the initial transfer)
-- Revert 1958
-- Create simple config option to disable a given client when something like the Google Drive issue happens. Make it clear on the dashboard and docs that it's not working.
-- Add google drive kill switch (when platform goes down, etc.)
-
-We need a plan for the suspension of the iCloud user as well... is the code resilient to data loss in this scenario?
-- Add icloud kill switch (when platform goes down, etc.)
-
 How do we think about a shared asset library across templates? 
 - e.g. shared favicons
 - can we unwind some of the complete delete favion on template delete, etc. code?
@@ -228,10 +215,6 @@ Decide whether or not to revert the preset system – should it only be used for
 
 Test script for point-in-time restoration of specific blog folders at specific time (e.g. 2 days ago)
 - test npm run restore-folder
-
-iCloud server should periodically:
-- quit safari (some error flow during auth sometimes opens it)
-- close all system UI prompts (sometimes we get error for maybe accessing a revoked folder?)
 
 Under templates index
 - Clicking on file in folder pulls up post on preview site ?
@@ -298,6 +281,12 @@ Fix benchmark build-corpus action issue
 ---
 
 Improve Google Drive sync
+- Fix Google Drive sync outage caused by Google account suspesion
+  - Future fix to Google Drive client needs to never use the service account to create files (ask the user to handle the initial transfer)
+  - Revert 1958
+  - Create simple config option to disable a given client when something like the Google Drive issue happens. Make it clear on the dashboard and docs that it's not working.
+  - Add google drive kill switch (when platform goes down, etc.)
+- When you re-connect to Google Drive, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
 - Fix bug with shared drive folders for [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBkLKSVzvjZLRSCpRJwcKBPlf)
 - Fix bug with Google Docs when disconnecting a site from Google Drive on Blot then reconnecting the site to Google Drive. We need to work out how to handle this (Google Docs are not real files)
 - Improve sync efficieny with option to target a specific folder or file first (Track ids in database) and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBspgLdtHcrTZqRcPTJFNzBbd) maybe use touch metadata method to force syncs periodically for hot files?
@@ -325,6 +314,7 @@ Improve Google Drive sync
   - Start with recently changed files and dirs first
 
 Improve Dropbox sync
+- When you re-connect to Dropbox, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
 - Bug: removing a directory in Dropbox resync only updates the directory path; child entries wait for Fix
 - Bug: Dropbox validation's catch-up sync restores last_sync from outside sync() after releasing the lock, so it can clobber a webhook sync's stamp; teach sync() not to stamp last_sync for catch-up instead
 - Sync verification should instrument the sync/fix function to also report errors where the folder doesn't match the database.
@@ -333,6 +323,7 @@ Improve Dropbox sync
   - Bug: handle a sync lock failure on second blog when migrating an app folder
 - Bug: retry transient Dropbox API errors with exponential backoff while surfacing hard failures for manual intervention.
 - Bug: re-use iCloud resolve case-conflicts function (maybe move into sync?) to ensure blogs with case-sensitive file conflicts are properly initialized on Dropbox
+- Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
 - Bug: Switch uploads >150 MB to the Dropbox upload session API with chunked transfer and resumable checkpoints
 - Bug: run reset-to-blot when sync fails / errors
 - Bug: ensure you can move the folder in full-folder permission mode
@@ -382,9 +373,15 @@ Improve git sync
 - Rate limit authentication route?
 
 Improve iCloud sync
+- The dashboard needs more feedback as the macserver goes through iCloud setup: it would be useful to echo that the invite link is valid, we're waiting for the new folder, then that step can wait up to a minute while so the user understands what's happening?  the google drive client has a step based system
+- We need a plan for the suspension of the iCloud user as well... is the code resilient to data loss in this scenario?
+  - Add icloud kill switch (when platform goes down, etc.)
 - iCloud: the hourly integrity check is back; once it has run cleanly for a while, decide whether to re-enable the daily resync (resyncAllConnected) and the startup/`/started` resync (resyncRecentlySynced), still disabled from these commits
   - 0043d91b36621ecd6aef2bcc263f51f209924792
   - 98dc9405c883825917de8e436ec620f60adaf975
+- iCloud server should periodically:
+  - quit safari (some error flow during auth sometimes opens it)
+  - close all system UI prompts (sometimes we get error for maybe accessing a revoked folder?)
 - iCloud macserver: the new-directory walk (#2147) is gated on /mkdir's directory-created header, so it is skipped if a child upload/mkdir created the folder on Blot first (some children reported, siblings missed). Decide the walk from something other than whether Blot already had the directory
 - iCloud macserver: a disk-usage eviction during the new-directory walk marks the blog eviction-suppressed and the walk skips everything left; pause and restart the walk instead
 - Sync no-progress watchdog: app/sync/lock.js renews a folder lock for as long as the process lives, so any hung sync holds a blog's lock until a container restart (7h+ on 16 Oct, #2147). Track the sync's last progress (file processed / status update) and, after N minutes with none, stop renewing and fail the sync so the lock expires and the next resync or hourly check can run
@@ -492,8 +489,6 @@ Fix bug with blockquotes and tell [Kerim](https://mail.google.com/mail/u/0/#inbo
 Fix bug with indented code in pre tags and tell [Michael](https://mail.google.com/mail/u/0/#inbox/166704e2c0187e5c)
 
 Fix bug with nested Markdown and tell [Martin](https://mail.google.com/mail/u/0/#inbox/FMfcgxwDqnhgBjBSKzvtclvqcFcMptMR):
-
-Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
 
 Fix bug with Google Drive client and [Stephen's large blog](https://mail.google.com/mail/u/0/#inbox/QgrcJHsBsbkNkMkkkMmLWBxRfnGnWPVwLHl)
   - It also seems like server crashes when a massive google drive folder is synced, with a directory containing 6772 items
