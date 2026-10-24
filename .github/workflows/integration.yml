@@ -95,6 +95,27 @@ jobs:
           PROXY_HTTPS: https://127.0.0.1:8443
         run: bash proxy/e2e/checks.sh
 
+      # What a client sees through the cached locations, request kind by
+      # request kind, against the same image: starts its own rm-* containers
+      # (ports 18120-18139), each with a stub upstream, and removes them.
+      # Behaviour that looks wrong today is asserted and labelled KNOWN.
+      - name: Request matrix
+        run: node proxy/e2e/request-matrix.js
+
+      # The proxy of the base ref (origin/master) and this tree's side by side,
+      # the same ~770 requests to both (miss, hit, purge, refill, Node down,
+      # Node back): status, decoded body and headers must match unless a rule
+      # in parity-checks.js explains the difference. Builds the baseline image
+      # itself, from a worktree of origin/master. Containers pa-*, ports
+      # 18090-18093.
+      - name: Parity with origin/master
+        env:
+          PARITY_GENDEPS: ${{ runner.temp }}/gendeps
+          PARITY_TREE_IMAGE: blot-proxy:e2e
+        run: |
+          git fetch --no-tags --depth=1 origin '+refs/heads/master:refs/remotes/origin/master'
+          node proxy/e2e/parity-checks.js
+
       # HTTP/3 over UDP: a real QUIC handshake and request, for the site and
       # for a custom domain (the default server, which owns the reuseport
       # QUIC socket).
