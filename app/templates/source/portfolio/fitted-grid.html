@@ -9,9 +9,31 @@
     width:calc({{thumbnail.large.width}}px*{{thumbnail_size}}/{{thumbnail.large.height}});
     flex-grow:calc({{thumbnail.large.width}}*{{thumbnail_size}}/{{thumbnail.large.height}})">
     <i style="padding-bottom:{{thumbnail.large.ratio}}"></i>
-    <img src="{{{thumbnail.large.url}}}" alt="{{title}}" class="pre-loaded" onload="this.className+=' loaded';" />
+    <img
+      src="{{{thumbnail.large.url}}}"
+      srcset="
+        {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+        {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+        {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+      "
+      sizes="calc({{thumbnail.large.width}}px * {{thumbnail_size}} / {{thumbnail.large.height}})"
+      width="{{thumbnail.large.width}}"
+      height="{{thumbnail.large.height}}"
+      alt="{{title}}"
+      class="pre-loaded"
+      onload="this.className+=' loaded';" />
     <noscript>  
-    <img src="{{{thumbnail.large.url}}}">
+    <img
+      src="{{{thumbnail.large.url}}}"
+      srcset="
+        {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+        {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+        {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+      "
+      sizes="calc({{thumbnail.large.width}}px * {{thumbnail_size}} / {{thumbnail.large.height}})"
+      width="{{thumbnail.large.width}}"
+      height="{{thumbnail.large.height}}"
+      alt="{{title}}">
     </noscript>
     {{#show_title}}
     <span class="title">{{title}}</span>

@@ -16,7 +16,15 @@
   <span class="w-third db fr">
     <span class="ml3 db thumbnail-frame" style="max-height:10rem;overflow:hidden;">
     {{#thumbnail.medium}}
-    <img style="width:100%;vertical-align:bottom" src="{{{url}}}">
+    <img
+      style="width:100%;vertical-align:bottom"
+      src="{{{url}}}"
+      srcset="
+        {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+        {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+        {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+      "
+      sizes="33vw">
     {{/thumbnail.medium}}
     </span>
    </span>
@@ -33,7 +41,15 @@
   <span class="w-two-thirds db fr">
     <span class="db thumbnail-frame" style="max-height:14rem;overflow:hidden;">
     {{#thumbnail.large}}
-    <img style="width:100%;vertical-align:bottom" src="{{{url}}}">
+    <img
+      style="width:100%;vertical-align:bottom"
+      src="{{{url}}}"
+      srcset="
+        {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+        {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+        {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+      "
+      sizes="67vw">
     {{/thumbnail.large}}
     </span>
    </span>
