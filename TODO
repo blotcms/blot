@@ -148,7 +148,6 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - http://www.blot.im/ returns 404: confirm intended
 - app/blog/static has no copy on the host, so those cdn. files fall through to Node: export them from the Node image on deploy, or accept
 - cdn. responses carry Cache-Control twice (expires 1y + add_header), as on bare metal
-- Purges during a blue/green overlap reach only one container (shared SO_REUSEPORT on :8077)
 - Use the proxy container in local development instead of the nginx:alpine in scripts/development/proxy, so local.blot runs the production proxy config
 - Does proxy container deploy check for enough free memory and disk on host before proceeding?
 - Does proxy container deploy work in paralell with node container deploy with nothing breaking?
@@ -159,10 +158,6 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - Tune proxy next upstream status code conditions to preserve zero-downtime-deployments but prevent expensive requests (timeout?)
 - Add support for IPv6 and tell [Raul](https://mail.google.com/mail/u/0/#inbox/167083384282a5df)
 - Verify that nginx config serves as many CDN static files as possible
-- Investigate whether openrestycache can be modified to pre-compress gzip responses
-  - can we use https://nginx.org/en/docs/http/ngx_http_gzip_static_module.html#gzip_static
-  - should we just be using varnish?
-- Can I use proxy_store instead of openrestycache?
 - Re-set up html minification using html-terser?
 - Get blot proxy communicating with node process via unix socket
 

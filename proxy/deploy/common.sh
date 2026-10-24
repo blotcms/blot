@@ -10,7 +10,11 @@
 #
 #   PROXY_ENV_FILE         /etc/blot/proxy.env  docker --env-file for the proxy
 #                                               (see proxy.env.example)
-#   PROXY_CACHE_DIR        /var/instance-ssd/cache  the proxy's disk cache
+#   PROXY_CACHE_DIR        /var/instance-ssd/cache  the proxy_cache directory
+#                                               older images (with cacher.lua) use
+#   PROXY_DISK_CACHE_DIR   /var/instance-ssd/disk-cache  the directory images with
+#                                               diskcache.lua use; the two formats
+#                                               never share one (see cache_dir_for)
 #   PROXY_LOG_DIR          /var/instance-ssd/logs   fail2ban and logrotate
 #                                               read the access log here
 #   PROXY_CERT_DIR         /etc/ssl/private     wildcard cert + key (read-only)
@@ -44,6 +48,7 @@
 
 ENV_FILE="${PROXY_ENV_FILE:-/etc/blot/proxy.env}"
 CACHE_DIR="${PROXY_CACHE_DIR:-/var/instance-ssd/cache}"
+DISK_CACHE_DIR="${PROXY_DISK_CACHE_DIR:-/var/instance-ssd/disk-cache}"
 LOG_DIR="${PROXY_LOG_DIR:-/var/instance-ssd/logs}"
 CERT_DIR="${PROXY_CERT_DIR:-/etc/ssl/private}"
 GLOBAL_STATIC_DIR="${PROXY_GLOBAL_STATIC_DIR:-/var/www/blot/app/blog/static}"
@@ -164,12 +169,83 @@ upstream_addr() { # upstream_addr <COLOUR> <default>
 
 UPSTREAMS="BLUE:127.0.0.1:8088 GREEN:127.0.0.1:8089 YELLOW:127.0.0.1:8090"
 
+# Which on-disk cache format an image writes at /var/cache/openresty: `legacy`
+# (nginx proxy_cache, indexed by cacher.lua) if it has /etc/openresty/cacher.lua,
+# which every image from before the disk cache has, else `disk` (diskcache.lua).
+image_cache_kind() { # image_cache_kind <image>
+  if docker run --rm --entrypoint test "$1" -e /etc/openresty/cacher.lua >/dev/null 2>&1; then
+    echo legacy
+  else
+    echo disk
+  fi
+}
+
+# The host directory holding a kind's cache. The formats must not share one:
+# nginx's cache loader in a legacy image deletes diskcache files, and the disk
+# cache's sweeper never sees proxy_cache's, so each kind has its own.
+cache_dir_for() { # cache_dir_for <legacy|disk>
+  if [ "$1" = legacy ]; then echo "$CACHE_DIR"; else echo "$DISK_CACHE_DIR"; fi
+}
+
+# Empty a cache directory without waiting for millions of files to be deleted:
+# move every top-level entry (a cache has few: its shard directories) into
+# .trash/<timestamp>/, which is instant on one filesystem, then delete that in
+# a detached container so the deploy carries on. The files belong to uid 1000
+# (the nginx worker), so both containers run as root, from <image> only because
+# it is already on the host and has sh and rm.
+reset_cache_dir() { # reset_cache_dir <host dir> <image>
+  local dir="$1" image="$2" trash
+  trash=".trash/$(date -u +%Y%m%dT%H%M%SZ)-$$"
+  log "Emptying $dir (moving its contents to $dir/$trash, deleted in the background)"
+  docker run --rm --user 0 --entrypoint sh -v "$dir":/cache "$image" -c '
+    set -e; cd /cache; mkdir -p "$1"
+    for e in .[!.]* ..?* *; do
+      { [ -e "$e" ] || [ -L "$e" ]; } && [ "$e" != .trash ] && mv "$e" "$1/"
+    done
+    exit 0' sh "$trash" >/dev/null || return 1
+  # all of .trash, so what an interrupted earlier reset left goes too
+  docker run -d --rm --user 0 --entrypoint sh -v "$dir":/cache "$image" -c 'rm -rf /cache/.trash' >/dev/null || true
+}
+
+# The hosts a cache directory holds pages for, one per line: a disk cache has a
+# directory per host (<a>/<bc>/<host>), a legacy cache files that carry
+# "KEY: <scheme>://<host><uri>". Read by a container, as the files belong to
+# uid 1000.
+cached_hosts() { # cached_hosts <legacy|disk> <host dir> <image>
+  local script
+  if [ "$1" = disk ]; then
+    script='find /cache -mindepth 3 -maxdepth 3 -type d -not -path "/cache/.trash/*" -printf "%f\n"'
+  else
+    script='find /cache -type f -not -path "/cache/.trash/*" -exec grep -ah -m1 "^KEY: " {} + | sed -E "s#^KEY: [a-z]+://([^/?]+).*#\1#"'
+  fi
+  docker run --rm --user 0 --entrypoint sh -v "$2":/cache:ro "$3" -c "$script" | sort -u
+}
+
+# Purge the hosts on stdin through the proxy now serving (the internal listener
+# on 127.0.0.1:80, which a host-network container shares with the host).
+purge_hosts() {
+  local token host args=() n=0
+  token="$(env_value "$ENV_FILE" BLOT_PURGE_TOKEN)"
+  while read -r host; do
+    [ -n "$host" ] || continue
+    args+=(--data-urlencode "host=$host"); n=$((n + 1))
+    if [ "${#args[@]}" -ge 100 ]; then
+      curl -fsS -o /dev/null --retry 3 --retry-delay 1 --retry-all-errors --max-time 15 -G ${token:+-H "X-Blot-Purge-Token: $token"} "${args[@]}" "http://127.0.0.1/purge" || return 1
+      args=()
+    fi
+  done
+  if [ "${#args[@]}" -gt 0 ]; then
+    curl -fsS -o /dev/null --retry 3 --retry-delay 1 --retry-all-errors --max-time 15 -G ${token:+-H "X-Blot-Purge-Token: $token"} "${args[@]}" "http://127.0.0.1/purge" || return 1
+  fi
+  log "Purged $n host(s)"
+}
+
 # Arguments common to every real proxy container.
 # Host networking: the default upstreams are 127.0.0.1:8088-8090 and the Node
 # containers publish those ports on the host. Upstreams written unix:/run/blot/...
 # are the Node containers' sockets: bind-mounted with --mount so a missing
 # /run/blot fails the deploy rather than Docker creating it as root.
-run_args() { # run_args <name>
+run_args() { # run_args <name> <legacy|disk>: the cache directory for that image kind
   local var addr unix=
   for var in $UPSTREAMS; do
     addr="$(upstream_addr "${var%%:*}" "${var#*:}")"
@@ -182,7 +258,7 @@ run_args() { # run_args <name>
     --ulimit "nofile=$NOFILE:$NOFILE"
     --log-driver json-file --log-opt max-size=512m --log-opt max-file=1
     --env-file "$ENV_FILE"
-    -v "$CACHE_DIR":/var/cache/openresty
+    -v "$(cache_dir_for "$2")":/var/cache/openresty
     -v "$LOG_DIR":/var/log/openresty
     -v "$AUTOSSL_VOLUME":/etc/resty-auto-ssl
     -v "$CERT_DIR":/etc/ssl/private:ro
