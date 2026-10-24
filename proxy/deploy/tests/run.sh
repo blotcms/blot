@@ -29,6 +29,7 @@ case "$1" in
   ps) if [[ "$*" == *" -a "* ]]; then ls "$FAKE/all" 2>/dev/null; else ls "$R"; fi; exit 0 ;;
   run)
     if [[ " $* " == *" -d "* ]]; then n=$(name_arg "$@"); touch "$R/$n" "$FAKE/all/$n" 2>/dev/null || { mkdir -p "$FAKE/all"; touch "$R/$n" "$FAKE/all/$n"; }; exit 0; fi
+    if [[ " $* " == *" drop-overlap "* ]]; then [ -z "${FAKE_DROP_FAILS:-}" ]; exit; fi
     if [[ "$*" == *"openresty -t"* ]]; then [ -z "${FAKE_VALIDATE_FAIL:-}" ] || { echo "nginx: [emerg] bad"; exit 1; }; exit 0; fi
     if [[ "$*" == *"access_log"* ]]; then [ -z "${FAKE_STDOUT_LOGS:-}" ]; exit; fi ;;
   create) [ -z "${FAKE_CREATE_FAILS:-}" ] || exit 1; n=$(name_arg "$@"); mkdir -p "$FAKE/all"; touch "$FAKE/all/$n" ;;
@@ -289,9 +290,15 @@ check "success: the new colour is restartable BEFORE the old one is stopped" '[ 
 
 reset none; FAKE_UNIT_ENABLED=1 bluegreen
 check "fresh start while the bare-metal unit is still enabled: refused" '[ $RC != 0 ] && ! called "docker create" && mentions "systemctl disable --now openresty"'
-
 reset none; bluegreen
-check "fresh start (nothing running): the container is checked, then made permanent" '[ $RC = 0 ] && ! called "docker stop" && before "docker start blot-proxy-blue" "docker update --restart unless-stopped blot-proxy-blue" && serving container'
+reset container; bluegreen
+check "swap: the cache files the old colour wrote meanwhile are dropped by a root container of the new image, after the old colour stops" '[ $RC = 0 ] && before "docker stop" "drop-overlap" && called "run --rm --user 0 --entrypoint sh -v $PROXY_CACHE_DIR:/cache img:2" && before "drop-overlap" "docker rm -f blot-proxy-blue"'
+reset container; FAKE_DROP_FAILS=1 bluegreen
+check "swap: a failed drop only warns" '[ $RC = 0 ] && mentions "WARNING: could not drop the cache files" && called "docker rm -f blot-proxy-blue"'
+reset container; FAKE_CUSTOM_FP_AFTER_STOP=B bluegreen
+check "rolled-back swap: dropped again before the old colour is started" '[ $RC != 0 ] && [ "$(grep -c drop-overlap "$FAKE/calls")" = 2 ] && [ "$(grep -n drop-overlap "$FAKE/calls" | tail -1 | cut -d: -f1)" -lt "$(grep -n "docker start blot-proxy-blue" "$FAKE/calls" | tail -1 | cut -d: -f1)" ]'
+reset none; bluegreen
+check "fresh start (nothing running): the container is checked, then made permanent" '[ $RC = 0 ] && ! called "docker stop" && ! called drop-overlap && before "docker start blot-proxy-blue" "docker update --restart unless-stopped blot-proxy-blue" && serving container'
 
 reset none; FAKE_UNHEALTHY=blot-proxy-blue bluegreen
 check "fresh start whose container never becomes healthy: removed, nothing left" '[ $RC != 0 ] && called "docker rm -f blot-proxy-blue" && ! called "docker update"'

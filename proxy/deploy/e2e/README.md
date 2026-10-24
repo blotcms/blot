@@ -22,6 +22,93 @@ with the bare-metal stand-in this harness used to need.)
   (`blot-container-blue`, the purge probe target), and writes the
   `proxy.env` files the scenarios use.
 
+## Swapping an image under load
+
+`proxy-swap-load-e2e` (same workflow, own job) runs `swap-load.sh`: one image
+swapped for another by the real `blue-green.sh`, against real Docker, Redis and
+a stub upstream, while a load generator never stops. Every proxy deploy is
+rehearsed this way, so a change that would drop, reset, corrupt or leave stale a
+request during a deploy shows up here first. By default both images are built
+from the checkout, differing only by a label (`local.sh` and the job build
+them with `build-image.sh`); a PR that changes how a deploy has to go, such as a
+different cache, points `IMAGE_A` at the old build instead.
+
+1. fresh start with image A, cache warmed;
+2. A -> B;
+3. B -> A (the rollback);
+4. A -> B again;
+5. B -> B, which must keep the warm cache (the first request after is a HIT);
+6. a B -> A swap that fails after B was stopped (Redis is down for the whole
+   deploy, so the post-swap checks fail), with the pages changing and the
+   proxy being told while B is stopped. B must be put back and must not serve a
+   page that changed.
+
+`swap-load.sh` runs `blue-green.sh` as a user in the docker group with no sudo, as the
+Deploy proxy workflow's `deploy` user is (`DEPLOY_AS_ROOT=1` to run it as the
+caller), so a deploy step that needs root on the cache files (uid 1000) fails
+here; `drop_overlap_cache` deletes them through a root container instead.
+
+Each swap runs with `swap-load.js load`: 24 workers sending cached pages
+(identity, gzip and brotli), HEAD, conditional GETs, `Range` requests, a 2.5 MB
+file, a slow fill, uncached GETs, POSTs of up to 24 MB, 6-second event
+streams, and a purge about every 500 ms, as Node sends them. The upstream
+(`swap-load-stub.js`) answers with a body that is a function of host, path and
+the host's generation, which a "content change" bumps (`swap-load-lib.js`), so
+every response is rebuilt and compared byte for byte, and must be from a
+generation no older than the last purge that had finished when the request was
+sent. A swap fails on any connection error, any status other than 2xx/304,
+any wrong body, any event stream that is cut, any purge that cannot be
+delivered, and any stale page outside the window below.
+
+After each swap, with the load stopped, every page of every host must be the
+upstream's current generation, and a purge must work (HIT, change and purge,
+MISS of the new generation, HIT).
+
+Things the load generator does not hide, all printed in the summary:
+
+- A reused keep-alive connection that is reset before any response byte, at
+  the moment the old container closes its idle connections, is retried on a new
+  connection like any HTTP client retries a GET (`requests reset on an idle
+  kept-alive connection and retried`).
+- While both containers are up (from the new one starting to the old one
+  stopping, about two seconds) a purge reaches only one of them, the limitation
+  documented in `blue-green.sh`: each keeps its list of what to delete in its own
+  memory, so a page one cached after the other rebuilt its list is unknown to the
+  other. A page purged in that window can be served until the old container
+  stops. These are counted apart (`stale answers while both containers were up`)
+  and tolerated only inside that window.
+
+### `net.ipv4.tcp_migrate_req` is a host kernel setting
+
+When a container stops it closes its listening sockets (both colours share
+:80/:443 with `SO_REUSEPORT`), and a connection that has finished its
+handshake in that socket's queue but has not been accepted is reset. On a kernel
+before 5.14, or one with `net.ipv4.tcp_migrate_req=0` (the default), a swap can
+reset a connection or two at a few hundred new connections a second (measured:
+49 resets in 65,000 requests over 10 swaps at ~1000 a second; none in 10 swaps
+with the setting at 1). That is a property of the host's kernel configuration,
+not of the deploy scripts, and **production may not have it set**: the zero
+failed requests the CI job asserts depends on it.
+
+`swap-load.sh` therefore sets it to 1 (so that CI does not flake), and with
+`TCP_MIGRATE_REQ=0` leaves the host alone and instead **reports** how many new
+connections were reset before a response byte, per swap and in total, without
+failing on them. Run that way on a host, it tells how many requests a deploy
+there would lose.
+
+### Running it
+
+`local.sh` builds both images and runs it all in a privileged Linux container
+with a Docker daemon of its own (it works on a Mac with Docker Desktop, where
+`--network host` and bind mounts behave differently); `TCP_MIGRATE_REQ=0
+bash proxy/deploy/e2e/local.sh` for the resets. On a Linux host with Docker and
+sudo, build the images with `build-image.sh` and run `setup.sh` (with
+`STUB_JS=$PWD/proxy/deploy/e2e/swap-load-stub.js`) and `swap-load.sh` the way the
+job does. `build-image.sh` adds the whole address space to the image's
+rate-limit whitelist (the load generator is one client); the two images have
+different repository names because `blue-green.sh` removes the other tags of the
+repository it deployed.
+
 ## Why no Pebble
 
 `blue-green.sh` refuses to run unless `redis-cli` is installed and can read a
