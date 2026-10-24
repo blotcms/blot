@@ -657,13 +657,6 @@ Compute 'words' text property for each entry (unique words, sorted possibly?) to
 
 Identify areas of the codebase which need resource limits to be more secure, e.g. max file size for the image converter, max file size for the docx converter. look across the codebase and create a series of implementation tasks for the most pressing
 
-Modify slowest function to aggregate by upstream response time
-- amend daily update:
-- send daily report of slowest URLs 
-- send daily report of biggest URLs and bandwidth
-
-Build out simple discover page with links to publish in daily email
-
 Add photo/pictures/pics/images grid to tagged page of blog template and photos subfolder to default folder.
 
 Add plugin to generate anchor links next to headings automatically and tell [Peter](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTzTSGBNGZrJghtTNGNKvdzlg)
