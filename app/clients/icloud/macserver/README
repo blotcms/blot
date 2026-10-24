@@ -1,5 +1,14 @@
 # Guide for Setting Up and Running Your Application with PM2
 
+Set up a VNC tunnel (port 5900 not public):
+ssh -N remote-vnc
+
+Connect from development mac:
+open vnc://127.0.0.1:5901
+
+ssh macserver
+
+
 ### Step 1: Create an `.env` File
 
 Create a `.env` file to store your environment variables:
