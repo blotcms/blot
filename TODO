@@ -286,6 +286,8 @@ Improve Google Drive sync
   - Revert 1958
   - Create simple config option to disable a given client when something like the Google Drive issue happens. Make it clear on the dashboard and docs that it's not working.
   - Add google drive kill switch (when platform goes down, etc.)
+- Fix bug with Google Drive client and [Stephen's large blog](https://mail.google.com/mail/u/0/#inbox/QgrcJHsBsbkNkMkkkMmLWBxRfnGnWPVwLHl)
+  - It also seems like server crashes when a massive google drive folder is synced, with a directory containing 6772 items
 - When you re-connect to Google Drive, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
 - Fix bug with shared drive folders for [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBkLKSVzvjZLRSCpRJwcKBPlf)
 - Fix bug with Google Docs when disconnecting a site from Google Drive on Blot then reconnecting the site to Google Drive. We need to work out how to handle this (Google Docs are not real files)
@@ -489,9 +491,6 @@ Fix bug with blockquotes and tell [Kerim](https://mail.google.com/mail/u/0/#inbo
 Fix bug with indented code in pre tags and tell [Michael](https://mail.google.com/mail/u/0/#inbox/166704e2c0187e5c)
 
 Fix bug with nested Markdown and tell [Martin](https://mail.google.com/mail/u/0/#inbox/FMfcgxwDqnhgBjBSKzvtclvqcFcMptMR):
-
-Fix bug with Google Drive client and [Stephen's large blog](https://mail.google.com/mail/u/0/#inbox/QgrcJHsBsbkNkMkkkMmLWBxRfnGnWPVwLHl)
-  - It also seems like server crashes when a massive google drive folder is synced, with a directory containing 6772 items
 
 Fix bug accessibility issue with menu links reordering and tell [Grace](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbfBpBkKCLVRWBGxzDDDkhSXfl)
 
@@ -939,8 +938,6 @@ Add global site search of:
 - questions
 - templates
 
-Add an option to use the date modified property of the file, rather than the date created property as the publish date. This would be especially useful for the Dropbox client, which nukes the original file creation date but preserves the client modified data. This should be opt in because it could lead to misleading behaviour where an old file is dragged into your folder and is published way deep in your archives. Tell [Dirt](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZTMSlvtWcHcckPtWlJljHVPdH)
-
 Improvements to local folder experience
 - Interpolate fonts based on an ID (a la web template editor)
 - Interpolate syntax highlighting based on an ID
@@ -1016,8 +1013,6 @@ When a post is deleted, we should remove everything except the created time?
 Create a queue for purging cache, group requests together to prevent stampede
 
 Prevent overzealous purging of cache for syncs in which the folder does not change
-
-Add WebDav support
 
 Improve paypal integration:
 - [ ] Get create new blog working
@@ -1117,10 +1112,6 @@ Investigate migrating from Redis to SQLite per-blog database
 - Assess performance implications (memory usage, query speed, connection management)
 
 Can Blot blogs be federated? Respond to [Nigel](https://mail.google.com/mail/u/0/#inbox/FMfcgzGrbRWfcBdwKdRZxsBKjKDwrkTp) once I do some research on this
-
----
-
-Support larger files on DB client and tell [Marco](https://mail.google.com/mail/u/0/#inbox/FMfcgzGqQmWjKnmPrwKSXMdZNmlqmtss)
 
 ---
 
@@ -1322,6 +1313,7 @@ Write new clients to sync blog folders
 - Proton Drive
   - Tell [Ted](https://mail.google.com/mail/u/0/#search/proton+drive/FMfcgzQVxlMmFdqvrMHgfsFRfRDHLFTh)
   - Tell [Francois](https://mail.google.com/mail/u/0/#inbox/FMfcgzQZVJvWMbgrxGpRlLvKXsSPTtDr)
+- WebDav
 
 ---
 
