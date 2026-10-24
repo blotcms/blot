@@ -52,13 +52,10 @@ Publish Node container ports on loopback only: docker-proxy binds 8088-8090 on 0
 
 App changes toward consolidated units and horizontal scaling (#2119), each useful on its own:
 - Parallelize app/sync/rebuild.js
-- Build queue and worker process (#2119; one host for now, multi-host later). Goal: the web Node process never runs syncs, builds or client background jobs, so dashboard and sites stay snappy and every unit is identical
-  - Queue per blog, not per file: ZADD sync:pending NX <now> <blogID> collapses repeat webhooks (Dropbox sent ~19k on 15-16 Oct) to one entry. Workers BZPOPMIN, take the existing per-blog sync lock, and re-add with a short delay if it's held. This replaces the per-process pendingResyncs sets a deploy loses. Plain commands, no Lua
-  - Web process only enqueues: Drive/Dropbox/iCloud webhooks, git post-receive, dashboard rebuild/resync. Flows that await a sync inline (Drive/Dropbox setup, resync) become enqueue + status updates
-  - Worker child process (spawned by the container entrypoint today, one process in the consolidated unit later) consumes the queue and runs what init() and the scheduler start now: Drive activity/hot-doc pollers, validation sweeps, crons, still coordinated by leases and cron locks. Nice it, keep concurrency below the unit's CPUs, give it its own heap cap and a higher oom_score_adj so an OOM kills the worker, not web
-  - Deploy drain: worker finishes its current sync or re-adds the blog, so the queue survives a unit swap
-  - Makes steering background syncs to green unnecessary (16 Oct webhook-gating idea, not merged)
-  - Multi-host later: blog folders and git repos on the local data volume are the blocker, not the queue
+- Worker child per unit (#2119): a process given BLOT_WORKER_SOCKET forks and supervises a worker child serving on that socket (helper/workerChild). Background jobs stay in every process, shared out by Redis locks and leases. Left for the units:
+  - Proxy: send today's blot_node routes (webhooks, /clients, non-GET /sites, import, Dropbox OAuth, cdn, webhooks relay) to the unit's worker socket, the other unit's worker as backup; everything else to the web process
+  - Deploy: health-check the worker socket too, and set BLOT_WORKER_MAX_OLD_SPACE_SIZE out of the unit's memory budget
+  - Multi-host later: blog folders and git repos on the local data volume are the blocker
 - Audit consolidated containers spawned subprocesses for memory max oom usage
 - Template editor writes (Template.writeToFolder/removeFromFolder via client.write/remove) take no folder lock and race with syncs; take the lock, or route them with the other folder writes to the worker
 
