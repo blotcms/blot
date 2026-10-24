@@ -4,7 +4,7 @@
   {{#entry}}
 
   <div class="top">
-    <a class="close" style="float:right" href="/" onclick="return lastIndexPage()"></a>
+    <a class="close" style="float:right" href="/" onclick="return closeEntry()"></a>
     <a class="right" data-previous style="margin-left:0;{{^previous}}visibility:hidden{{/previous}}" href="{{{previous.url}}}"> </a>
     <a class="left" data-next style="{{^next}}visibility:hidden{{/next}}" href="{{{next.url}}}"></a>
 
@@ -45,7 +45,7 @@
       })
     </script>
     <div class="side right-side" style="">
-      <a class="close" href="/" onclick="return lastIndexPage()"></a>
+      <a class="close" href="/" onclick="return closeEntry()"></a>
       <a class="right-toolbar" style="{{^previous}}visibility:hidden{{/previous}}" href="{{{previous.url}}}"> </a>
       <a class="close" href="/" style="visibility:hidden"></a>
     </div>

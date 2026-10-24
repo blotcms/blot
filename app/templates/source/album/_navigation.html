@@ -32,7 +32,7 @@
     <a {{#next}}href="{{{next.url}}}"{{/next}}>&larr; </a>
     <a {{#previous}}href="{{{previous.url}}}"{{/previous}}> &rarr;</a>
     <span class="spacer"></span>
-    <a href="/">✕ Close</a>
+    <a href="/" onclick="return closeEntry()">✕ Close</a>
     {{/page}}
     {{/entry}}
   </nav>
