@@ -6,9 +6,7 @@
   Navigation:
   - [ ] Add dropdown support to navigation
   Entry page:
-  - [ ] Close button should go 'back'
   - [ ] Add layout CSS
-  - [ ] Next / prev should respect tag collections
   - [ ] Add exif info
   - [ ] Add backlinks
 

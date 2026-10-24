@@ -21,18 +21,18 @@
     {{^infinite_scroll}}
     <span class="spacer"></span>
     <span class="tabular-numerals"><span id="current-page">{{current}}</span> of {{total}}</span>
-    <a class="previous-page" {{#previous}}href="/page/{{previous}}"{{/previous}}>&larr; </a>
-    <a class="next-page" {{#next}}href="/page/{{next}}"{{/next}}> &rarr;</a>
+    <a class="previous-page collection-previous" {{#previous}}href="/page/{{previous}}"{{/previous}}>&larr; </a>
+    <a class="next-page collection-next" {{#next}}href="/page/{{next}}"{{/next}}> &rarr;</a>
     {{/infinite_scroll}}
     {{/pagination}}
 
     {{#entry}}
     {{^page}}
     <span class="spacer"></span>
-    <a {{#next}}href="{{{next.url}}}"{{/next}}>&larr; </a>
-    <a {{#previous}}href="{{{previous.url}}}"{{/previous}}> &rarr;</a>
+    <a class="entry-next" {{#next}}href="{{{next.url}}}"{{/next}}>&larr; </a>
+    <a class="entry-previous" {{#previous}}href="{{{previous.url}}}"{{/previous}}> &rarr;</a>
     <span class="spacer"></span>
-    <a href="/" onclick="return closeEntry()">✕ Close</a>
+    <a class="entry-close" href="/" onclick="return closeEntry()">✕ Close</a>
     {{/page}}
     {{/entry}}
   </nav>

@@ -27,8 +27,8 @@
       {{#pagination}}Page {{current}} of {{total}} {{/pagination}}
   {{^pagination}}All {{entries.length}} posts{{/pagination}}
     </a>
-      <a class="upper opac" style="{{^previous}}opacity:0.25{{/previous}}" {{#previous}}href="/page/{{previous}}"{{/previous}}>← PREVIOUS</a>
-      <a class="upper opac" style="{{^next}}opacity:0.25;{{/next}}margin-left:0.7rem" {{#next}}href="/page/{{next}}"{{/next}}>NEXT →</a>
+      <a class="upper opac collection-previous" style="{{^previous}}opacity:0.25{{/previous}}" {{#previous}}href="{{#slug}}/tagged/{{slug}}{{/slug}}/page/{{previous}}"{{/previous}}>← PREVIOUS</a>
+      <a class="upper opac collection-next" style="{{^next}}opacity:0.25;{{/next}}margin-left:0.7rem" {{#next}}href="{{#slug}}/tagged/{{slug}}{{/slug}}/page/{{next}}"{{/next}}>NEXT →</a>
     </div>
   </div>
   {{/infinite_scroll}}

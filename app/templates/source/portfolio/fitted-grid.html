@@ -3,7 +3,7 @@
 
   <!-- These posts have photos -->
   {{#thumbnail.large.url}}
-  <a class="post photo" href="{{{url}}}" style="
+  <a class="post photo collection-entry" href="{{{url}}}" style="
     max-width:{{thumbnail.large.width}}px;
     max-height:{{thumbnail.large.height}}px;
     width:calc({{thumbnail.large.width}}px*{{thumbnail_size}}/{{thumbnail.large.height}});
@@ -43,7 +43,7 @@
 
   <!-- These posts do not have photos -->
   {{^thumbnail.large.url}}
-  <a class="post text" href="{{{url}}}" style="flex-grow:{{thumbnail_size}}">
+  <a class="post text collection-entry" href="{{{url}}}" style="flex-grow:{{thumbnail_size}}">
     <span class="title">{{title}}</span>
     {{#date}}<span class="date">{{date}}</span>{{/date}}
   </a>
