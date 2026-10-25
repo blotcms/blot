@@ -5,6 +5,9 @@
   "scripts": {
     "build": "node build.mjs"
   },
+  "engines": {
+    "node": "^24.22.1"
+  },
   "dependencies": {
     "agentation": "3.1.2",
     "agentation-mcp": "1.3.2",

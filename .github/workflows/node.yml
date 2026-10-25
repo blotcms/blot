@@ -71,6 +71,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+
       # Builds and pushes the test image when nothing has pushed it yet, i.e.
       # when Dockerfile, .dockerignore or package.json changed. (Here rather
       # than in a job of its own: it's a few seconds when the image exists.
@@ -265,6 +270,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+
       - name: Plan
         run: |
           node scripts/tests/ci/plan.js --runners=${{ strategy.job-total }} --lanes="$TEST_LANES" --check
@@ -338,6 +348,11 @@ jobs:
             /app/**/*.js
             /scripts/coverage/
           sparse-checkout-cone-mode: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
 
       - name: Download coverage from every job
         uses: actions/download-artifact@v4
