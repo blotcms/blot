@@ -19,7 +19,7 @@ HOSTIP="$(hostname -I | awk '{print $1}')"
 
 log() { printf '[setup] %s\n' "$*"; }
 
-mkdir -p "$E2E_ROOT/cache" "$E2E_ROOT/logs" "$E2E_ROOT/global-static"
+mkdir -p "$E2E_ROOT/cache" "$E2E_ROOT/disk-cache" "$E2E_ROOT/logs" "$E2E_ROOT/global-static"
 
 # ---- certificate -------------------------------------------------------
 log "Generating a wildcard certificate for $BLOT_HOST and trusting its CA"
@@ -33,10 +33,17 @@ bash "$HERE/gen-certs.sh" "$BLOT_HOST" "$PROXY_CERT_DIR"
 # rehydrates ("rehydrate: complete files=0") just as well. Seed BEFORE chowning
 # to 1000: the runner user (not uid 1000) cannot write into the directory
 # afterwards.
+#
+# The image built from this branch uses the disk cache, so it mounts
+# PROXY_DISK_CACHE_DIR (PROXY_CACHE_DIR is the legacy proxy_cache directory,
+# created too so both exist as on the host). The seeded disk cache files stand
+# for a cache left by an image of another kind: the fresh start in the workflow
+# must empty them (blue-green.sh's reset_cache_dir).
 for f in warm-1 warm-2 warm-3; do
   echo "seeded by proxy/deploy/e2e" > "$PROXY_CACHE_DIR/$f"
+  echo "seeded by proxy/deploy/e2e" > "$PROXY_DISK_CACHE_DIR/$f"
 done
-sudo chown -R 1000:1000 "$PROXY_CACHE_DIR" "$PROXY_LOG_DIR"
+sudo chown -R 1000:1000 "$PROXY_CACHE_DIR" "$PROXY_DISK_CACHE_DIR" "$PROXY_LOG_DIR"
 
 # ---- proxy.env ------------------------------------------------------------
 # PROXY_FETCH_CDN_IPS=false: the containers use the Bunny edge list baked into the
@@ -81,12 +88,13 @@ done
 # ---- stub upstream (8088-8090, bound to every interface) -----------------
 # STUB_BIND=0.0.0.0, as real production Node containers are (docker -p
 # publishes to every interface by default). STUB_JS replaces the stub, as the
-# swap-under-load job does (swap-load.sh); the file it needs next to it is
-# mounted either way.
+# swap-under-load job (swap-load.sh) and the legacy <-> disk transition job
+# (transition.sh) do; the files they need next to them are mounted either way.
 log "Starting the stub upstream"
 docker run -d --name blot-e2e-stub --network host -e STUB_BIND=0.0.0.0 \
   -v "${STUB_JS:-$REPO_ROOT/proxy/e2e/stub-upstream.js}":/s.js:ro \
   -v "$HERE/swap-load-lib.js":/swap-load-lib.js:ro \
+  -v "$HERE/transition-lib.js":/transition-lib.js:ro \
   node:22-alpine node /s.js >/dev/null
 for i in $(seq 1 30); do
   curl -sf -o /dev/null http://127.0.0.1:8088/ && break

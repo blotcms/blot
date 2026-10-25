@@ -95,6 +95,12 @@ jobs:
           PROXY_HTTPS: https://127.0.0.1:8443
         run: bash proxy/e2e/checks.sh
 
+      # The disk cache (proxy/config/diskcache.lua, proxy/evict.sh) against the
+      # real image: starts its own dc-* proxy containers on ports 18080-18084,
+      # two of them sharing a cache volume, and removes them afterwards.
+      - name: Disk cache checks
+        run: node proxy/e2e/diskcache-checks.js
+
       # What a client sees through the cached locations, request kind by
       # request kind, against the same image: starts its own rm-* containers
       # (ports 18120-18139), each with a stub upstream, and removes them.
@@ -107,8 +113,10 @@ jobs:
       # Node back): status, decoded body and headers must match unless a rule
       # in parity-checks.js explains the difference. Builds the baseline image
       # itself, from a worktree of origin/master. Containers pa-*, ports
-      # 18090-18093.
+      # 18090-18093. Pull requests only: on a push to master both sides are
+      # the same code.
       - name: Parity with origin/master
+        if: github.event_name == 'pull_request'
         env:
           PARITY_GENDEPS: ${{ runner.temp }}/gendeps
           PARITY_TREE_IMAGE: blot-proxy:e2e

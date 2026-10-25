@@ -13,6 +13,11 @@
 # against the stub upstream, then a swap that fails halfway
 # (proxy/deploy/e2e/swap-load.sh). Every proxy deploy is rehearsed this way.
 #
+# The proxy-transition-e2e job is the first production deploy of the disk
+# cache: a swap from an image with the old nginx proxy_cache + cacher.lua to
+# one with diskcache.lua, its rollback, and a redeploy of the same kind, under
+# load (proxy/deploy/e2e/transition.sh).
+#
 # No `branches: [master]` filter on the pull_request trigger: this workflow
 # is meant to run on a PR based on another feature branch (a stacked PR), not
 # only ones based on master. The push trigger IS filtered to master, so a
@@ -75,6 +80,7 @@ jobs:
             # scenarios below (see proxy/deploy/e2e/setup.sh, which writes it).
             echo "PROXY_ENV_FILE_BAD=$E2E_ROOT/proxy-unroutable-private-ip.env"
             echo "PROXY_CACHE_DIR=$E2E_ROOT/cache"
+            echo "PROXY_DISK_CACHE_DIR=$E2E_ROOT/disk-cache"
             echo "PROXY_LOG_DIR=$E2E_ROOT/logs"
             echo "PROXY_CERT_DIR=$E2E_ROOT/certs"
             echo "PROXY_GLOBAL_STATIC_DIR=$E2E_ROOT/global-static"
@@ -113,12 +119,15 @@ jobs:
           [ "$(docker inspect -f '{{.State.Running}}' blot-proxy-blue)" = true ]
           code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
           [ "$code" = 200 ]
+          # a fresh start empties the cache directory of the image's kind (the
+          # files are deleted in the background, so only the top level is checked)
+          [ ! -e "$PROXY_DISK_CACHE_DIR/warm-1" ]
 
       # ---- 2. blue-green: no failed requests during the swap --------------
       # HTTPS with --connect-to (same technique https_status() in common.sh
       # uses, already proven above against the container). A plain-HTTP request to 127.0.0.1 with only a Host header
       # (tried first) got 404 for every attempt, not just during the swap:
-      # server.conf's internal purge/inspect server also `listen`s on
+      # server.conf's internal purge server also `listen`s on
       # `127.0.0.1:80` (plain HTTP only, no `:443`), a more specific bind
       # than the vhosts' `listen 80`, so nginx sends a connection that
       # literally targets 127.0.0.1 there regardless of Host header - not a
@@ -271,6 +280,7 @@ jobs:
             echo "PROXY_ENV_FILE=$E2E_ROOT/proxy.env"
             echo "PROXY_ENV_FILE_BAD=$E2E_ROOT/proxy-unroutable-private-ip.env"
             echo "PROXY_CACHE_DIR=$E2E_ROOT/cache"
+            echo "PROXY_DISK_CACHE_DIR=$E2E_ROOT/disk-cache"
             echo "PROXY_LOG_DIR=$E2E_ROOT/logs"
             echo "PROXY_CERT_DIR=$E2E_ROOT/certs"
             echo "PROXY_GLOBAL_STATIC_DIR=$E2E_ROOT/global-static"
@@ -306,5 +316,87 @@ jobs:
           echo "=== $PROXY_LOG_DIR/error.log (tail) ==="
           sudo tail -n 100 "$PROXY_LOG_DIR/error.log" 2>&1 || true
           for f in "$E2E_ROOT"/swap-load/*.log "$E2E_ROOT"/swap-load/*.err; do
+            echo "=== $f ==="; tail -n 40 "$f" 2>&1 || true
+          done
+
+  # blue-green.sh between the two kinds of image the first disk cache deploy
+  # swaps (see proxy/deploy/e2e/transition.sh): legacy -> disk, disk -> legacy
+  # (the rollback), legacy -> disk again over the stale directory an older
+  # blue-green.sh would leave, and disk -> disk, each while a load generator
+  # sends cached, uncached, large, Range, POST and event-stream requests and a
+  # purge every 500 ms, and checks every response against what the stub
+  # upstream would have served. Any failed, reset or wrong response, or a page
+  # older than the last purge, fails the job.
+  proxy-transition-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BLOT_HOST: blot.im
+      PROXY_CANARY_HOST: preview-of-wireframe-on-david.blot.im
+      PROXY_AUTOSSL_VOLUME: blot-e2e-auto-ssl
+      PROXY_NODE_CONTAINER: blot-container-blue
+      PROXY_SKIP_CERT_SWEEP: "1" # see proxy/deploy/e2e/README.md
+      IMAGE_LEGACY: blot-proxy-tr-legacy:e2e
+      IMAGE_DISK: blot-proxy-tr-disk:e2e
+      # The last master commit with cacher.lua, the image the host runs when
+      # the disk cache is first deployed and the one a rollback goes back to.
+      # Pinned, since master stops having it once this lands.
+      LEGACY_REF: 7368606660c85dc33b11b5eaa39178d386bf6b3d
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.LEGACY_REF }}
+          path: legacy-src
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.4
+
+      - name: Compute harness paths
+        run: |
+          E2E_ROOT="$RUNNER_TEMP/proxy-e2e"
+          {
+            echo "E2E_ROOT=$E2E_ROOT"
+            echo "PROXY_ENV_FILE=$E2E_ROOT/proxy.env"
+            echo "PROXY_ENV_FILE_BAD=$E2E_ROOT/proxy-unroutable-private-ip.env"
+            echo "PROXY_CACHE_DIR=$E2E_ROOT/cache"
+            echo "PROXY_DISK_CACHE_DIR=$E2E_ROOT/disk-cache"
+            echo "PROXY_LOG_DIR=$E2E_ROOT/logs"
+            echo "PROXY_CERT_DIR=$E2E_ROOT/certs"
+            echo "PROXY_GLOBAL_STATIC_DIR=$E2E_ROOT/global-static"
+          } >> "$GITHUB_ENV"
+
+      - name: Install config generator dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/gendeps"
+          cd "$RUNNER_TEMP/gendeps"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+          echo "GENDEPS_MODULES=$RUNNER_TEMP/gendeps/node_modules" >> "$GITHUB_ENV"
+
+      - name: Build the legacy image (pinned commit) and the disk cache image (this checkout)
+        run: |
+          bash proxy/deploy/e2e/build-image.sh legacy-src "$IMAGE_LEGACY"
+          bash proxy/deploy/e2e/build-image.sh . "$IMAGE_DISK"
+
+      - name: Set up the harness (Redis, stub upstream, fake Node container, certs)
+        run: bash proxy/deploy/e2e/setup.sh
+        env:
+          STUB_JS: ${{ github.workspace }}/proxy/deploy/e2e/transition-stub.js
+
+      - name: Legacy to disk, back, and again, under load
+        run: bash proxy/deploy/e2e/transition.sh
+
+      - name: Logs
+        if: always()
+        run: |
+          for c in blot-proxy-blue blot-proxy-green blot-e2e-stub blot-e2e-redis; do
+            echo "=== $c ==="; docker logs --tail 100 "$c" 2>&1 || true
+          done
+          echo "=== $PROXY_LOG_DIR/error.log (tail) ==="
+          sudo tail -n 100 "$PROXY_LOG_DIR/error.log" 2>&1 || true
+          for f in "$E2E_ROOT"/transition/*.log "$E2E_ROOT"/transition/*.err; do
             echo "=== $f ==="; tail -n 40 "$f" 2>&1 || true
           done
