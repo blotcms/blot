@@ -47,7 +47,7 @@ if (fs.existsSync(cdnFile)) {
 }
 
 const LINE =
-  /^\[([^\]]+)\] \S+ (\d+) \S+ (\d+):(\d+) (\S+)\s+cache=(\S*) ip=(\S+) .*? ua=(.*)$/;
+  /^\[([^\]]+)\] \S+ (\d+) \S+ (\d+):(\d+) (\S+)\s+cache=(\S*) ip=(\S+) .*? ua=(.*?)(?: ae=.*)?$/;
 
 function isPrivate(ip) {
   return (
