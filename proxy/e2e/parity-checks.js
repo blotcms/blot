@@ -710,7 +710,16 @@ function diff(spec, ra, rb) {
 // On master this is empty: the working tree is compared with itself as it was
 // in origin/master, and must show 0 differences. A proxy PR that changes what
 // a client sees lists each change here, so the review is of the list.
-const INTENDED = [];
+const INTENDED = [{
+  id: "disable-http3",
+  class: "intended",
+  reason: "Clear cached HTTP/3 routes while QUIC is disabled pending OpenResty security fixes.",
+  match: (c, d) => d.kind === "header" && d.name === "alt-svc" &&
+    header(c.ra, "alt-svc").length > 0 &&
+    header(c.ra, "alt-svc").length === header(c.rb, "alt-svc").length &&
+    header(c.ra, "alt-svc").every((v) => v === 'h3=":443"; ma=86400') &&
+    header(c.rb, "alt-svc").every((v) => v === "clear"),
+}];
 
 // ---- the run ------------------------------------------------------------
 

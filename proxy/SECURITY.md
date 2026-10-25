@@ -14,8 +14,8 @@ Upgrade OpenResty 1.25.3.1 (nginx 1.25.3) to the
 image digest. Brotli uses the matching checksummed OpenResty source archive,
 including its nginx patches, rather than unpatched nginx headers.
 
-**High priority:** HTTP/3 is publicly enabled by `listen 443 quic` in
-`config/server.conf`. The six 2024 QUIC advisories apply, including two rated
+**High priority:** the old configuration publicly enabled HTTP/3 with
+`listen 443 quic` in `config/server.conf`. The six 2024 QUIC advisories apply, including two rated
 major by nginx; crafted sessions can crash workers, with additional corruption
 or disclosure risks. The memory-disclosure case requires an MTU above 4096.
 See the [February](https://mailman.nginx.org/pipermail/nginx-announce/2024/NW6MNW34VZ6HDIHH5YFBIJYZJN7FGNAV.html)
@@ -23,15 +23,17 @@ and [May](https://mailman.nginx.org/pipermail/nginx-announce/2024/GMY32CSHFH6VFT
 advisories. This release fixes those issues and the older HTTP/3 address-spoofing
 issue.
 
-**This upgrade is not complete security remediation.** The current OpenResty
-release still bundles nginx 1.31.1. In particular,
-[CVE-2026-42530](https://www.cve.org/CVERecord?id=CVE-2026-42530) introduces a
-QUIC use-after-free relative to 1.25.3, and
-[CVE-2026-95101](https://www.cve.org/CVERecord?id=CVE-2026-95101) remains relevant:
-ordinary proxy locations inherit `proxy_request_buffering on` (only the huge
-upload locations turn it off). Before production rollout, obtain a patched
-OpenResty build or separately disable HTTP/3 pending remediation. Passing e2e
-tests does not establish that these vulnerabilities are fixed.
+**Mitigation in this PR:** disable HTTP/3 until OpenResty supplies the fixes.
+The current release still bundles nginx 1.31.1, which is in range for
+[CVE-2026-42530](https://www.cve.org/CVERecord?id=CVE-2026-42530) (QUIC
+use-after-free, introduced relative to 1.25.3) and
+[CVE-2026-95101](https://www.cve.org/CVERecord?id=CVE-2026-95101) (request-body
+injection with the default request buffering). All six public servers now
+have no QUIC listener and send `Alt-Svc: clear` where server headers apply,
+expiring clients' cached HTTP/3 advertisements. HTTP/2 and HTTP/1.1 stay enabled.
+The base binary still includes HTTP/3; disabling the listener removes the
+reachable path without claiming the vulnerable code is patched. Track a
+patched release and re-enable checks in the task at the top of `TODO`.
 
 ## Advisory applicability
 
@@ -40,11 +42,11 @@ all thirty; module availability alone does not establish exploitability.
 The base image includes HTTP/2, HTTP/3, MP4, DAV, slice, charset and SSL support;
 the effective configuration determines exposure.
 
-| CVE(s) | Checked-in configuration | nginx 1.31.1 |
+| CVE(s) | Configuration review / mitigation | nginx 1.31.1 |
 | --- | --- | --- |
-| 2024-24989, 2024-24990, 2024-31079, 2024-32760, 2024-34161, 2024-35200 | Public QUIC listeners; MTU condition for 34161 as above. | Fixed |
-| 2026-40460 | Public QUIC listeners. | Fixed |
-| 2026-95101 | QUIC and default request buffering on ordinary locations. | Still in range; fix in 1.31.7 |
+| 2024-24989, 2024-24990, 2024-31079, 2024-32760, 2024-34161, 2024-35200 | Old public QUIC listeners; MTU condition for 34161 as above. | Fixed |
+| 2026-40460 | Old public QUIC listeners. | Fixed |
+| 2026-95101 | Default request buffering on ordinary locations; QUIC now disabled. | Still in range; fix in 1.31.7 |
 | 2024-7347, 2026-27784, 2026-32647 | MP4 module compiled, but no `mp4` directive. MIME types and ordinary file serving do not activate MP4 processing. | Fixed |
 | 2025-23419 | TLS 1.3 and shared session cache enabled, but no `ssl_verify_client` authentication to bypass. | Fixed |
 | 2026-40701 | Resolver enabled; no `ssl_verify_client` or `ssl_ocsp` validation. `ssl_stapling off`. | Fixed |
@@ -57,7 +59,7 @@ the effective configuration determines exposure.
 | 2026-15176 | No `alias` or `$request_filename` expressions. | Still in range; fix in 1.31.7 |
 | 2026-97629 | `ssl_session_tickets off`. | Still in range; fix in 1.31.7 |
 | 2026-97205 | No `aio`; default is off. | Still in range; fix in 1.31.7 |
-| 2026-42533 | Regex map `$bad_bot` enabled; condition-specific script/capture exposure is not ruled out by this review. | Still in range; fix in 1.31.3 |
+| 2026-42533 | Regex map `$bad_bot` has constant outputs, read only in a standalone `if`; no capture-before-map-output expression or volatile maps. The only `$1` substitution is a separate location redirect. No matching prerequisite identified. | Still in range; fix in 1.31.3 |
 | 2026-60005 | No `slice` directive. | Still in range; fix in 1.31.3 |
 | 2026-56434 | No `ssi on`. | Still in range; fix in 1.31.3 |
 | 2026-42055 | HTTP/1.1 upstreams; no `proxy_http_version 2` or `grpc_pass`, and no enlarged header buffers/disabled header validation. | Still in range; fix in 1.31.2 |
@@ -65,7 +67,7 @@ the effective configuration determines exposure.
 
 Additional ranges that **exclude 1.25.3**:
 
-- 2026-42530: nginx 1.31.0–1.31.1; exposed QUIC path introduced by this upgrade;
+- 2026-42530: nginx 1.31.0–1.31.1; QUIC now disabled to prevent exposure;
   fixed in 1.31.2.
 - 2026-90439: nginx 1.29.2–1.31.5, with OpenSSL <= 3.5.0 required by the
   [vendor record](https://www.cve.org/CVERecord?id=CVE-2026-90439). Both pinned
@@ -94,8 +96,11 @@ The `proxy/**` change triggers the existing GitHub workflows:
   generated config, and check container health/runtime substitutions.
 - `proxy-image`: build/check and publish the production arm64 image to GHCR.
 - `integration`: routing, compression/Brotli, disk cache, request matrix and
-  parity, HTTP/3, wildcard certificates, ACME/sockproc, Redis outages, graceful
-  proxy handover and Node swaps.
+  parity, wildcard certificates, ACME/sockproc, Redis outages, graceful
+  proxy handover and Node swaps. Protocol checks assert no QUIC configuration
+  or live UDP 443 listener, no HTTP/3 advertisements, and successful HTTP/1.1
+  and HTTP/2 requests across all public vhosts, repeated with the Redis
+  wildcard certificate. Parity permits only the expected Alt-Svc change.
 - `app-e2e` and `proxy-deploy-e2e`: real application requests and deployment
   exercises on GitHub runners.
 
