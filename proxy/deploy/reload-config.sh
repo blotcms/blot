@@ -18,13 +18,12 @@
 #
 #   docker run ... \
 #     -v /host/openresty/conf:/usr/local/openresty/nginx/conf \
-#     -v /host/openresty/cacher.lua:/etc/openresty/cacher.lua \
 #     -v /host/openresty/html:/etc/openresty/html \
 #     ...
 #
-# cacher.lua / html change rarely; if they did, copy them to their own mounts
-# too (this script reports when they differ). For an IMAGE change (new base
-# image, new Lua deps, Dockerfile edits) use proxy/deploy/blue-green.sh.
+# html changes rarely; if it did, copy it to its own mount too (this script
+# reports when it differs). For an IMAGE change (new base image, new Lua deps,
+# Dockerfile edits) use proxy/deploy/blue-green.sh.
 set -euo pipefail
 
 CONTAINER="${1:?usage: reload-config.sh <container-name> <host-conf-dir>}"
@@ -47,9 +46,9 @@ bash "$SCRIPT_DIR/../build/build.sh"
 echo "Installing $GEN/openresty.conf -> $CONF_DIR/nginx.conf.template"
 cp "$GEN/openresty.conf" "$CONF_DIR/nginx.conf.template"
 echo "NOTE: this installs the config template only. If your change touched"
-echo "      cacher.lua or html/, copy $GEN/{cacher.lua,html} to their own"
-echo "      bind-mounts too. The runtime values (PROXY_* variables) are the"
-echo "      container's own environment; changing them needs a new container."
+echo "      html/, copy $GEN/html to its own bind-mount too. The runtime"
+echo "      values (PROXY_* variables) are the container's own environment;"
+echo "      changing them needs a new container."
 
 echo "Rendering nginx.conf inside $CONTAINER"
 docker exec "$CONTAINER" /usr/local/bin/render-config

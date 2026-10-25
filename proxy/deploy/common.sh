@@ -10,11 +10,8 @@
 #
 #   PROXY_ENV_FILE         /etc/blot/proxy.env  docker --env-file for the proxy
 #                                               (see proxy.env.example)
-#   PROXY_CACHE_DIR        /var/instance-ssd/cache  the proxy_cache directory
-#                                               older images (with cacher.lua) use
-#   PROXY_DISK_CACHE_DIR   /var/instance-ssd/disk-cache  the directory images with
-#                                               diskcache.lua use; the two formats
-#                                               never share one (see cache_dir_for)
+#   PROXY_DISK_CACHE_DIR   /var/instance-ssd/disk-cache  the disk cache every
+#                                               proxy container on the host shares
 #   PROXY_LOG_DIR          /var/instance-ssd/logs   fail2ban and logrotate
 #                                               read the access log here
 #   PROXY_CERT_DIR         /etc/ssl/private     wildcard cert + key (read-only)
@@ -40,14 +37,10 @@
 #                                               10000 (proxy/config/initial.conf)
 #                                               needs ~20000 plus cache/log fds;
 #                                               this leaves headroom above that
-#   PROXY_REHYDRATE_TIMEOUT 120                 seconds a new container may take to
-#                                               rebuild its purge index (see
-#                                               wait_rehydrated; ~2.5s in production)
 #
 # PROXY_DEPLOY_SLEEP replaces `sleep` (the tests set it to a no-op).
 
 ENV_FILE="${PROXY_ENV_FILE:-/etc/blot/proxy.env}"
-CACHE_DIR="${PROXY_CACHE_DIR:-/var/instance-ssd/cache}"
 DISK_CACHE_DIR="${PROXY_DISK_CACHE_DIR:-/var/instance-ssd/disk-cache}"
 LOG_DIR="${PROXY_LOG_DIR:-/var/instance-ssd/logs}"
 CERT_DIR="${PROXY_CERT_DIR:-/etc/ssl/private}"
@@ -69,7 +62,6 @@ PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
 # the same reason. 65536 leaves real headroom above both - a root dockerd
 # allows it.
 NOFILE="${PROXY_NOFILE:-65536}"
-REHYDRATE_TIMEOUT="${PROXY_REHYDRATE_TIMEOUT:-120}"
 
 # Never fail because the terminal went away: a deploy ignores SIGPIPE and
 # must still be able to finish and roll back with nobody watching.
@@ -79,7 +71,7 @@ nap() { ${PROXY_DEPLOY_SLEEP:-sleep} "$1"; }
 
 # Commands which need root (systemctl). `sudo -n` fails rather than prompting,
 # and the `deploy` user GitHub runs as has no sudo, so under it this always
-# fails: its only caller is blue-green.sh's fresh-start check for a legacy
+# fails: its only caller is blue-green.sh's fresh-start check for a bare-metal
 # openresty unit, which then passes without having checked.
 sys() {
   if [ "$(id -u)" = 0 ]; then "$@"; else sudo -n "$@"; fi
@@ -116,7 +108,7 @@ load_env() {
   REDIS_HOST="$(env_value "$ENV_FILE" PROXY_REDIS_HOST)"
   [ -n "$REDIS_HOST" ] || die "PROXY_REDIS_HOST is not set in $ENV_FILE"
   # Same for the purge listener: an empty address renders `listen :8077`, which
-  # binds the unauthenticated /purge, /inspect and /rehydrate on every interface.
+  # binds the unauthenticated /purge and /inspect on every interface.
   [ -n "$(env_value "$ENV_FILE" PROXY_PRIVATE_IP)" ] || die "PROXY_PRIVATE_IP is not set in $ENV_FILE"
   CANARY_HOST="${PROXY_CANARY_HOST:-preview-of-wireframe-on-david.$BLOT_HOST}"
   # Any other PROXY_* setting left empty overrides the image's default with
@@ -169,24 +161,6 @@ upstream_addr() { # upstream_addr <COLOUR> <default>
 
 UPSTREAMS="BLUE:127.0.0.1:8088 GREEN:127.0.0.1:8089 YELLOW:127.0.0.1:8090"
 
-# Which on-disk cache format an image writes at /var/cache/openresty: `legacy`
-# (nginx proxy_cache, indexed by cacher.lua) if it has /etc/openresty/cacher.lua,
-# which every image from before the disk cache has, else `disk` (diskcache.lua).
-image_cache_kind() { # image_cache_kind <image>
-  if docker run --rm --entrypoint test "$1" -e /etc/openresty/cacher.lua >/dev/null 2>&1; then
-    echo legacy
-  else
-    echo disk
-  fi
-}
-
-# The host directory holding a kind's cache. The formats must not share one:
-# nginx's cache loader in a legacy image deletes diskcache files, and the disk
-# cache's sweeper never sees proxy_cache's, so each kind has its own.
-cache_dir_for() { # cache_dir_for <legacy|disk>
-  if [ "$1" = legacy ]; then echo "$CACHE_DIR"; else echo "$DISK_CACHE_DIR"; fi
-}
-
 # Empty a cache directory without waiting for millions of files to be deleted:
 # move every top-level entry (a cache has few: its shard directories) into
 # .trash/<timestamp>/, which is instant on one filesystem, then delete that in
@@ -207,45 +181,12 @@ reset_cache_dir() { # reset_cache_dir <host dir> <image>
   docker run -d --rm --user 0 --entrypoint sh -v "$dir":/cache "$image" -c 'rm -rf /cache/.trash' >/dev/null || true
 }
 
-# The hosts a cache directory holds pages for, one per line: a disk cache has a
-# directory per host (<a>/<bc>/<host>), a legacy cache files that carry
-# "KEY: <scheme>://<host><uri>". Read by a container, as the files belong to
-# uid 1000.
-cached_hosts() { # cached_hosts <legacy|disk> <host dir> <image>
-  local script
-  if [ "$1" = disk ]; then
-    script='find /cache -mindepth 3 -maxdepth 3 -type d -not -path "/cache/.trash/*" -printf "%f\n"'
-  else
-    script='find /cache -type f -not -path "/cache/.trash/*" -exec grep -ah -m1 "^KEY: " {} + | sed -E "s#^KEY: [a-z]+://([^/?]+).*#\1#"'
-  fi
-  docker run --rm --user 0 --entrypoint sh -v "$2":/cache:ro "$3" -c "$script" | sort -u
-}
-
-# Purge the hosts on stdin through the proxy now serving (the internal listener
-# on 127.0.0.1:80, which a host-network container shares with the host).
-purge_hosts() {
-  local token host args=() n=0
-  token="$(env_value "$ENV_FILE" BLOT_PURGE_TOKEN)"
-  while read -r host; do
-    [ -n "$host" ] || continue
-    args+=(--data-urlencode "host=$host"); n=$((n + 1))
-    if [ "${#args[@]}" -ge 100 ]; then
-      curl -fsS -o /dev/null --retry 3 --retry-delay 1 --retry-all-errors --max-time 15 -G ${token:+-H "X-Blot-Purge-Token: $token"} "${args[@]}" "http://127.0.0.1/purge" || return 1
-      args=()
-    fi
-  done
-  if [ "${#args[@]}" -gt 0 ]; then
-    curl -fsS -o /dev/null --retry 3 --retry-delay 1 --retry-all-errors --max-time 15 -G ${token:+-H "X-Blot-Purge-Token: $token"} "${args[@]}" "http://127.0.0.1/purge" || return 1
-  fi
-  log "Purged $n host(s)"
-}
-
 # Arguments common to every real proxy container.
 # Host networking: the default upstreams are 127.0.0.1:8088-8090 and the Node
 # containers publish those ports on the host. Upstreams written unix:/run/blot/...
 # are the Node containers' sockets: bind-mounted with --mount so a missing
 # /run/blot fails the deploy rather than Docker creating it as root.
-run_args() { # run_args <name> <legacy|disk>: the cache directory for that image kind
+run_args() { # run_args <name>
   local var addr unix=
   for var in $UPSTREAMS; do
     addr="$(upstream_addr "${var%%:*}" "${var#*:}")"
@@ -258,7 +199,7 @@ run_args() { # run_args <name> <legacy|disk>: the cache directory for that image
     --ulimit "nofile=$NOFILE:$NOFILE"
     --log-driver json-file --log-opt max-size=512m --log-opt max-file=1
     --env-file "$ENV_FILE"
-    -v "$(cache_dir_for "$2")":/var/cache/openresty
+    -v "$DISK_CACHE_DIR":/var/cache/openresty
     -v "$LOG_DIR":/var/log/openresty
     -v "$AUTOSSL_VOLUME":/etc/resty-auto-ssl
     -v "$CERT_DIR":/etc/ssl/private:ro
@@ -308,42 +249,6 @@ wait_healthy() { # wait_healthy <name> <timeout>
   while ! healthy "$1"; do
     running "$1" || return 1
     [ "$(date +%s)" -lt "$deadline" ] || return 1
-    nap 1
-  done
-}
-
-# Worker 0 rebuilds the purge index (cacher.lua build_index) once nginx starts
-# listening, and logs "rehydrate: complete files=... hosts=..." when it
-# finishes, or "[error] ... rehydrate: <reason>" (e.g. cannot read a file, or
-# "increase lua_shared_dict cacher_dictionary") if it gives up. Until it
-# completes every /purge answers 503, so a proxy that never gets there serves
-# stale pages indefinitely. Wait for one or the other, up to <timeout> seconds.
-#
-# Where the line goes: the image writes error.log to the shared $LOG_DIR (also
-# written by the other colour during a swap), or to stderr (`docker logs`) with
-# ALLOW_STDOUT_LOGS=1. Both are read. In the shared file only lines stamped at
-# or after the container's start time count: the old colour's own "complete"
-# line is older, and container pids cannot tell the two apart (each container
-# has its own pid namespace, so both log as 1#1 / 7#7).
-wait_rehydrated() { # wait_rehydrated <name> <timeout>
-  local deadline=$(( $(date +%s) + $2 )) started text
-  started="$(docker inspect -f '{{.State.StartedAt}}' "$1" 2>/dev/null || true)"
-  started="${started%%.*}"; started="${started%Z}"    # 2026-10-08T12:34:56
-  started="${started//-//}"; started="${started/T/ }" # 2026/10/08 12:34:56 (nginx's stamp)
-  [ -n "$started" ] || { log "cannot read when $1 started"; return 1; }
-  while true; do
-    text="$( { tail -n 5000 "$LOG_DIR/error.log" 2>/dev/null \
-                 | awk -v start="$started" 'substr($0, 1, 19) >= start'
-               docker logs "$1" 2>&1; } || true)"
-    # here-strings, not a pipe: grep -q exiting early would SIGPIPE printf and
-    # fail the pipeline under pipefail
-    if grep -q '\[error\].*rehydrate:' <<< "$text"; then
-      log "$1 failed to rebuild its purge index: $(grep -m1 '\[error\].*rehydrate:' <<< "$text")"
-      return 1
-    fi
-    ! grep -q 'rehydrate: complete' <<< "$text" || return 0
-    running "$1" || { log "$1 stopped before its purge index was rebuilt"; return 1; }
-    [ "$(date +%s)" -lt "$deadline" ] || { log "$1 did not log \"rehydrate: complete\" in ${2}s"; return 1; }
     nap 1
   done
 }

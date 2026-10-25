@@ -18,10 +18,10 @@
 # streams, and a purge about every 500 ms. Every response is checked against
 # what the stub upstream would have served (swap-load-lib.js); a swap must
 # produce no connection error, no non-2xx/304, no wrong body, no cut event
-# stream and no page older than the last finished purge, except in the window
-# in which both containers are up (blue-green.sh's documented limitation), where
-# stale answers are counted and printed. After each swap, with the load stopped,
-# every page must be the upstream's current generation and a purge must work.
+# stream and no page older than the last finished purge (both containers share
+# one cache directory, so a purge reaches both). After each swap, with the load
+# stopped, every page must be the upstream's current generation and a purge must
+# work.
 #
 # Needs what proxy-deploy-e2e.yml's proxy-swap-load-e2e job sets up: the
 # harness from setup.sh (STUB_JS=swap-load-stub.js) and two images, which may be
@@ -38,7 +38,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
-: "${IMAGE_A:?}" "${IMAGE_B:?}" "${E2E_ROOT:?}" "${PROXY_CACHE_DIR:?}" "${BLOT_HOST:?}"
+: "${IMAGE_A:?}" "${IMAGE_B:?}" "${E2E_ROOT:?}" "${PROXY_DISK_CACHE_DIR:?}" "${BLOT_HOST:?}"
 
 WORK="$E2E_ROOT/swap-load"
 rm -rf "$WORK"; mkdir -p "$WORK"
@@ -105,29 +105,20 @@ else
 fi
 MIGRATE="$(cat /proc/sys/net/ipv4/tcp_migrate_req 2>/dev/null || echo unknown)"
 
-TOTAL_REQUESTS=0 TOTAL_STALE=0 TOTAL_RESETS=0 SUMMARY=""
-log_ms() { # log_ms <blue-green.sh log> <text of a line>: that line's time, in epoch milliseconds
-  local t; t=$(grep -m1 "$2" "$1" | sed -E 's/^\[([0-9:]+)\].*/\1/')
-  [ -n "$t" ] || { echo 0; return; }
-  echo $(( $(date -u -d "$(date -u +%F) $t" +%s) * 1000 ))
-}
+TOTAL_REQUESTS=0 TOTAL_RESETS=0 SUMMARY=""
 # A deploy made while a request is mid-flight: start the load, wait for it to
 # be running, run blue-green.sh, keep the load going for a few seconds more,
 # stop it and read its verdict.
 #   swap_under_load <name> <image>
 swap_under_load() {
   local name="$1" image="$2" load_pid load_rc=0 bg_rc=0
-  : > "$WORK/marks"; rm -f "$WORK/ready"
-  MARKS="$WORK/marks" ALLOW_OVERLAP_STALE=1 READY_FILE="$WORK/ready" node "$HERE/swap-load.js" load > "$WORK/$name.json" 2> "$WORK/$name.err" &
+  rm -f "$WORK/ready"
+  READY_FILE="$WORK/ready" node "$HERE/swap-load.js" load > "$WORK/$name.json" 2> "$WORK/$name.err" &
   load_pid=$!
   for _ in $(seq 1 60); do [ -e "$WORK/ready" ] && break; sleep 0.5; done
   [ -e "$WORK/ready" ] || fail "the load generator did not start"
   sleep 5
   run_bg "$image" 2>&1 | tee "$WORK/$name.log" || bg_rc=${PIPESTATUS[0]}
-  # both containers were up from when the new one started to when the old one
-  # had stopped (the log's one-second stamps, so the generator allows a margin)
-  echo "start $(log_ms "$WORK/$name.log" 'Starting blot-proxy-')" >> "$WORK/marks"
-  echo "end $(log_ms "$WORK/$name.log" 'Checking the site through')" >> "$WORK/marks"
   sleep 5
   kill -TERM "$load_pid"
   wait "$load_pid" || load_rc=$?
@@ -136,13 +127,13 @@ swap_under_load() {
     const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
     console.log(`[${process.argv[2]}] ${s.requests} requests in ${s.seconds}s (${JSON.stringify(s.byKind)}),`,
       `${s.sse} event streams, ${s.purges} purges (${s.purgeRetries} retried), ${s.keepAliveRetries} requests reset on an idle kept-alive connection and retried,`, `cache: ${JSON.stringify(s.cache)},`, `slowest ${s.maxMs} ms`);
-    console.log(`[${process.argv[2]}] problems:`, JSON.stringify(s.counts), `stale answers while both containers were up: ${s.staleInOverlap}, new connections reset before any response byte: ${s.handshakeResets}`);
+    console.log(`[${process.argv[2]}] problems:`, JSON.stringify(s.counts), `new connections reset before any response byte: ${s.handshakeResets}`);
     if (s.problems) console.log(JSON.stringify(s.problems, null, 1));
     process.exit(s.requests >= 400 && s.purges >= 5 ? 0 : 3);' "$WORK/$name.json" "$name" || { [ "$?" = 3 ] && fail "$name: too few requests or purges for the run to mean anything"; }
-  local n stale resets
-  read -r n stale resets < <(node -e 'const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log(s.requests, s.staleInOverlap, s.handshakeResets)' "$WORK/$name.json")
-  TOTAL_REQUESTS=$(( TOTAL_REQUESTS + n )); TOTAL_STALE=$(( TOTAL_STALE + stale )); TOTAL_RESETS=$(( TOTAL_RESETS + resets ))
-  SUMMARY="$SUMMARY$(printf '\n  %-12s %6s requests, %3s stale in the overlap window, %2s connection resets' "$name" "$n" "$stale" "$resets")"
+  local n resets
+  read -r n resets < <(node -e 'const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log(s.requests, s.handshakeResets)' "$WORK/$name.json")
+  TOTAL_REQUESTS=$(( TOTAL_REQUESTS + n )); TOTAL_RESETS=$(( TOTAL_RESETS + resets ))
+  SUMMARY="$SUMMARY$(printf '\n  %-12s %6s requests, %2s connection resets' "$name" "$n" "$resets")"
   [ "$bg_rc" = 0 ] || fail "$name: blue-green.sh exited $bg_rc"
   [ "$load_rc" = 0 ] || fail "$name: the load generator saw failed or wrong responses (above)"
 }
@@ -232,7 +223,7 @@ FILL_STALE=0
 FILL_FILE="$WORK/fill.txt" T check-fill ov | tee "$WORK/check-fill.txt" || FILL_STALE=$?
 T purge-works "b6.$BLOT_HOST"
 
-say "passed: $TOTAL_REQUESTS requests across five swaps, none failed or wrong; $TOTAL_STALE stale answers, all while both containers were up; $TOTAL_RESETS new connections reset before a response byte (net.ipv4.tcp_migrate_req=$MIGRATE); a failed swap put the old container back"
+say "passed: $TOTAL_REQUESTS requests across five swaps, none failed, wrong or stale; $TOTAL_RESETS new connections reset before a response byte (net.ipv4.tcp_migrate_req=$MIGRATE); a failed swap put the old container back"
 printf 'per swap:%s\n' "$SUMMARY"
 if [ "$FILL_STALE" != 0 ]; then
   say "FINDING: the container put back after the failed swap serves pages that changed while it was stopped"
