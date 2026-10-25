@@ -205,4 +205,33 @@ for status in "${FILTER_STATUSES[@]}"; do
   fi
 done
 
+echo "== whitelisted peers (wl=1) are ignored =="
+# The proxy logs wl=1 for the macserver and Bunny edges, whose ip= is never
+# the real client. Take a real generated line per filter (it carries wl=0),
+# flip it to wl=1, and check the filter matches the first and ignores the second.
+wl_log="$(mktemp)"
+for status in "${FILTER_STATUSES[@]}"; do
+  filter="$FILTER_DIR/nginx-$status.conf"
+  line="$(grep -m1 -E "^\[[^]]*\] [a-f0-9]+ $status " "$ACCESS_LOG")"
+  case "$line" in
+    *" wl=0 ref="*) ;;
+    *)
+      echo "FAIL - no generated $status line in $ACCESS_LOG carrying ' wl=0 ref=' (is wl= in log_format access_log_format?)" >&2
+      fail=1
+      continue
+      ;;
+  esac
+  printf '%s\n%s\n' "$line" "${line/ wl=0 ref=/ wl=1 ref=}" > "$wl_log"
+  out="$(fail2ban-regex "$wl_log" "$filter" 2>&1)"
+  matched="$(printf '%s\n' "$out" | grep -oE '[0-9]+ matched' | grep -oE '^[0-9]+')"
+  ignored="$(printf '%s\n' "$out" | grep -oE '[0-9]+ ignored' | grep -oE '^[0-9]+')"
+  echo "-- nginx-$status.conf: wl=0 line + wl=1 line -> matched=${matched:-<none>} ignored=${ignored:-<none>}"
+  if [ "$matched" != 1 ] || [ "$ignored" != 1 ]; then
+    echo "FAIL - nginx-$status.conf should match the wl=0 line and ignore the wl=1 line (want matched=1 ignored=1)" >&2
+    printf '%s\n' "$out" >&2
+    fail=1
+  fi
+done
+rm -f "$wl_log"
+
 exit $fail

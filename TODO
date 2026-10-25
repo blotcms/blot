@@ -1,4 +1,3 @@
-- fail2ban's ignoreip doesn't include Bunny's edge IPs (the cdn-ips.conf list), so the nginx-403/404 jails could ban an edge that relays a burst of errors on cdn.blot.im
 - Fix the asset URLs on cdn.blot.im that 404 hundreds of times a week:
   - [ ] A template's CSS emits an unrendered `{{{config.cdn.origin}}}` in its plex-mono font URLs (/template/e9/1d/…)
   - [ ] /fonts/baskervville/400(-italic).otf and .ttf are referenced but missing
