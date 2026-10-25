@@ -352,11 +352,7 @@ async function processTarget(
   }
 
   // Stored with the manifest that references it, see updateCdnManifest below
-  return {
-    hash: computedHash,
-    content: contentToWrite,
-    name: path.basename(target),
-  };
+  return { hash: computedHash, content: contentToWrite };
 }
 
 // Deletes a rendered output unless the template's saved manifest references
@@ -364,7 +360,7 @@ async function processTarget(
 // output and the manifest together) can't land between the check and the DEL.
 const DELETE_IF_UNREFERENCED = `
 if string.find(redis.call("HGET", KEYS[1], "cdn") or "", ARGV[1], 1, true) then return 0 end
-return redis.call("DEL", KEYS[2], KEYS[3])`;
+return redis.call("DEL", KEYS[2])`;
 
 /**
  * Clean up old rendered output and purge CDN URL
@@ -376,7 +372,7 @@ async function cleanupOldHash(templateID, target, oldHash) {
     // A quick revert can make the old hash current again. Redis is the only
     // copy, so deleting it then would 404 the live file.
     const deleted = await client.eval(DELETE_IF_UNREFERENCED, {
-      keys: [key.metadata(templateID), key.renderedOutput(oldHash), key.renderedOutputName(oldHash)],
+      keys: [key.metadata(templateID), key.renderedOutput(oldHash)],
       arguments: [oldHash],
     });
 
@@ -528,7 +524,6 @@ module.exports = function updateCdnManifest(templateID, callback) {
               await client
                 .multi()
                 .set(key.renderedOutput(result), output.content)
-                .set(key.renderedOutputName(result), output.name)
                 .hSet(key.metadata(templateID), "cdn", JSON.stringify(inProgressManifest))
                 .exec();
             } catch (err) {

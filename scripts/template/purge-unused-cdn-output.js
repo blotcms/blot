@@ -151,11 +151,7 @@ async function main() {
 
   const hashes = Array.from(deleted.keys());
   for (let i = 0; i < hashes.length; i += 500) {
-    await client.del(
-      hashes
-        .slice(i, i + 500)
-        .flatMap((hash) => [key.renderedOutput(hash), key.renderedOutputName(hash)])
-    );
+    await client.del(hashes.slice(i, i + 500).map((hash) => key.renderedOutput(hash)));
   }
   console.log(`Deleted ${hashes.length} cdn:rendered keys`);
 

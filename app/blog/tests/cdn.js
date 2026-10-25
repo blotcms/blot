@@ -564,58 +564,21 @@ describe("cdn template function", function () {
       expect(await res.text()).toBe("body{color:red}");
     });
 
-    it("responds 404 for the same hash under a different name", async function () {
+    it("responds 404 for a .map next to a stylesheet or script", async function () {
       await this.template({
         "style.css": "body { color: red; }",
-        "entries.html": "{{#cdn}}/style.css{{/cdn}}",
-      });
-
-      const cdnURL = await this.text("/");
-      validate(cdnURL);
-
-      const other = cdnURL.replace(/style\.css$/, "other.css");
-      expect(other).not.toBe(cdnURL);
-      expect((await this.get(other)).status).toBe(404);
-      expect((await this.get(cdnURL + ".map")).status).toBe(404);
-      expect((await this.get(cdnURL)).status).toBe(200);
-    });
-
-    it("responds 404 for a .map next to a script", async function () {
-      await this.template({
         "script.js": "console.log(1);",
-        "entries.html": "{{#cdn}}/script.js{{/cdn}}",
+        "entries.html": "{{#cdn}}/style.css{{/cdn}} {{#cdn}}/script.js{{/cdn}}",
       });
 
-      const cdnURL = await this.text("/");
-      validate(cdnURL);
+      const [cssURL, jsURL] = (await this.text("/")).split(" ");
+      validate(cssURL);
+      validate(jsURL);
 
-      expect((await this.get(cdnURL)).status).toBe(200);
-      expect((await this.get(cdnURL + ".map")).status).toBe(404);
-    });
-
-    it("serves output with no recorded name under any name", async function () {
-      const client = require("models/client");
-      const key = require("models/template/key");
-
-      await this.template({
-        "style.css": "body { color: red; }",
-        "entries.html": "{{#cdn}}/style.css{{/cdn}}",
-      });
-
-      const cdnURL = await this.text("/");
-      validate(cdnURL);
-
-      const hash = new URL(cdnURL).pathname
-        .split("/")
-        .slice(2, 5)
-        .join("");
-
-      // Output written before names were recorded
-      await client.del(key.renderedOutputName(hash));
-
-      const res = await this.get(cdnURL.replace(/style\.css$/, "other.css"));
-      expect(res.status).toBe(200);
-      expect(await res.text()).toBe("body{color:red}");
+      expect((await this.get(cssURL)).status).toBe(200);
+      expect((await this.get(jsURL)).status).toBe(200);
+      expect((await this.get(cssURL + ".map")).status).toBe(404);
+      expect((await this.get(jsURL + ".MAP")).status).toBe(404);
     });
 
     it("responds 404 for a hash which was never rendered", async function () {
