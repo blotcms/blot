@@ -46,7 +46,7 @@ different cache, points `IMAGE_A` at the old build instead.
 `swap-load.sh` runs `blue-green.sh` as a user in the docker group with no sudo, as the
 Deploy proxy workflow's `deploy` user is (`DEPLOY_AS_ROOT=1` to run it as the
 caller), so a deploy step that needs root on the cache files (uid 1000) fails
-here; `drop_overlap_cache` deletes them through a root container instead.
+here; emptying the cache directory on a fresh start goes through a container.
 
 Each swap runs with `swap-load.js load`: 24 workers sending cached pages
 (identity, gzip and brotli), HEAD, conditional GETs, `Range` requests, a 2.5 MB
@@ -58,25 +58,19 @@ every response is rebuilt and compared byte for byte, and must be from a
 generation no older than the last purge that had finished when the request was
 sent. A swap fails on any connection error, any status other than 2xx/304,
 any wrong body, any event stream that is cut, any purge that cannot be
-delivered, and any stale page outside the window below.
+delivered, and any stale page (both containers share one cache directory, so a
+purge reaches both and no stale answer is excused).
 
 After each swap, with the load stopped, every page of every host must be the
 upstream's current generation, and a purge must work (HIT, change and purge,
 MISS of the new generation, HIT).
 
-Things the load generator does not hide, all printed in the summary:
+Something the load generator does not hide, printed in the summary:
 
 - A reused keep-alive connection that is reset before any response byte, at
   the moment the old container closes its idle connections, is retried on a new
   connection like any HTTP client retries a GET (`requests reset on an idle
   kept-alive connection and retried`).
-- While both containers are up (from the new one starting to the old one
-  stopping, about two seconds) a purge reaches only one of them, the limitation
-  documented in `blue-green.sh`: each keeps its list of what to delete in its own
-  memory, so a page one cached after the other rebuilt its list is unknown to the
-  other. A page purged in that window can be served until the old container
-  stops. These are counted apart (`stale answers while both containers were up`)
-  and tolerated only inside that window.
 
 ### `net.ipv4.tcp_migrate_req` is a host kernel setting
 
