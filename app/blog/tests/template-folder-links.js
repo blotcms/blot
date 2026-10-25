@@ -162,6 +162,18 @@ describe("folder links in templates", function () {
       );
     });
 
+    it("resolves a url() that climbs with .. against the blog root", async function () {
+      await this.write({ path: "/Type/a.woff2", content: "font" });
+      await this.template(
+        { ...views, "style.css": "@font-face{src:url(../Type/a.woff2) format('woff2')}" },
+        { views: { "style.css": { url: "/style.css" } } }
+      );
+
+      expect(await css(this)).toContain(
+        folderUrl(this.blog, "font", "/Type/a.woff2")
+      );
+    });
+
     it("gives the stylesheet a new URL when an image changes", async function () {
       await this.write({ path: "/img/a.png", content: "one" });
       await this.template(views);

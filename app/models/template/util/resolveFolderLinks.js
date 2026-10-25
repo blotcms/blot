@@ -128,7 +128,7 @@ function consumeTag(ctx, i, track) {
 // ---------------------------------------------------------------------------
 
 // Returns the {{#cdn}} target to wrap the value in, or null to leave it alone.
-// opts.strictRoot only accepts links that are already rooted (<meta content>).
+// opts.css marks a CSS url() value. opts.strictRoot only accepts links that are already rooted (<meta content>).
 function linkTarget(ctx, value, opts) {
   if (ctx.depth > 0) return null;
   if (!value || value !== value.trim()) return null;
@@ -162,10 +162,17 @@ function linkTarget(ctx, value, opts) {
   // A relative link stays relative inside the section: the manifest is keyed
   // without a leading slash, so it resolves against "/" just as a rooted one
   // does, and a miss is left as written. A leading "./" changes nothing and
-  // is dropped; ".." can't be kept as written, so such a link is left alone.
+  // is dropped. ".." can't be kept as written: in HTML there is no fixed
+  // base URL to climb from, so the link is left alone, but a CSS url() is
+  // relative to the stylesheet, which is served from the blog root (as it is
+  // from the CDN, where ".." would climb out of the template), so it resolves
+  // against "/" like a rooted link, clamped at the blog root.
   if (pathPart.charAt(0) !== "/") {
     pathPart = pathPart.replace(/^(?:\.\/)+/, "");
-    if (/(?:^|\/)\.{1,2}(?:\/|$)/.test(pathPart)) return null;
+    if (/(?:^|\/)\.{1,2}(?:\/|$)/.test(pathPart)) {
+      if (!opts.css) return null;
+      pathPart = posix.resolve("/", pathPart);
+    }
   }
 
   const path =
@@ -297,7 +304,7 @@ function scanCssUrl(ctx, i, to) {
     // not a well-formed url("...") - leave it alone
     if (src.charAt(after) !== ")") return k + 1;
 
-    rewrite(ctx, valueStart, k, {});
+    rewrite(ctx, valueStart, k, { css: true });
 
     return after + 1;
   }
@@ -318,7 +325,7 @@ function scanCssUrl(ctx, i, to) {
   let valueEnd = k;
   while (valueEnd > valueStart && isSpace(src.charAt(valueEnd - 1))) valueEnd--;
 
-  rewrite(ctx, valueStart, valueEnd, {});
+  rewrite(ctx, valueStart, valueEnd, { css: true });
 
   return k + 1;
 }
