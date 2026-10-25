@@ -104,6 +104,19 @@ SafeHop on.
   4-5. The storage bucket and CORS rules, described below.
   6. "Never cache health check": Override Cache Time 0 and Bypass Perma-Cache
      on `*://cdn.blot.im/health*`, because updown.io monitors that URL.
+  7. "Block unknown paths on cdn blot im": Block Request (Bunny answers 403, the
+     origin never sees it) for any `cdn.blot.im` URL not on an allowlist, so
+     scanner probes (`/.env`, `/.git`, `/api`, ...) stop reaching Node. The
+     allowlist mirrors `app/cdn/index.js` plus the top level of
+     `app/blog/static`: `/`, `/health`, `/favicon.ico`, `/robots.txt`,
+     `/fonts/`, `/icons/`, `/katex/`, `/plugins/`, `/syntax-highlighter/`,
+     `/html2canvas.min.js`, `/layout.css`, `/documentation/v-`, `/folder/v-`,
+     `/template/`, `/blog_`. **A new top-level path on the CDN must be added
+     to this rule or Bunny will 403 it.** Bunny allows 5 patterns per
+     condition, so the allowlist is split over several "match none"
+     conditions; `*` matches across `/`, so every pattern names the host (a
+     host-less `*/fonts/*` would let `/.env/fonts/x` through). Rollback: switch
+     the rule off.
 
 Large folder files and generated assets (`/_image_cache/`, `/_assets/`, ...)
 requested on a blog host answer with a 302 to this CDN (see
