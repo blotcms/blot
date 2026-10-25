@@ -117,7 +117,7 @@ async function startProxy(c) {
   docker(...args, IMAGE);
 
   // the stub shares the proxy's network namespace, as in the CI job
-  docker("run", "-d", "--name", c.name + "-stub", "--network", "container:" + c.name, "-v", `${STUB}:/s.js:ro`, "node:22-alpine", "node", "/s.js");
+  docker("run", "-d", "--name", c.name + "-stub", "--network", "container:" + c.name, "-v", `${STUB}:/s.js:ro`, "node:24.22.1-alpine", "node", "/s.js");
 
   const stubUp = await waitFor(() => {
     try {

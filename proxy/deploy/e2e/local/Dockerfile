@@ -3,9 +3,14 @@
 # are not ext4). It holds its own Docker daemon, so the proxy containers use
 # --network host in THIS container's network namespace and bind-mount
 # directories of its own filesystem, as on a GitHub runner. See local.sh.
+FROM node:24.22.1-bookworm-slim AS node
+
 FROM ubuntu:24.04
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       docker.io iptables iproute2 ca-certificates curl redis-tools openssl \
-      util-linux sudo nodejs hostname procps git \
+      util-linux sudo libatomic1 libstdc++6 hostname procps git \
  && rm -rf /var/lib/apt/lists/*
+
+# Use the project's Node runtime instead of Ubuntu's distro version.
+COPY --from=node /usr/local/ /usr/local/

@@ -20,7 +20,7 @@ create() { # <colour> <port>
     -v "$ROOT/app/helper/listen.js:/app/helper/listen.js:ro" \
     --health-cmd 'wget -qO- http://127.0.0.1:8080/health' \
     --health-interval 2s --health-start-period 60s \
-    node:22-alpine node /app.js >/dev/null
+    node:24.22.1-alpine node /app.js >/dev/null
 }
 
 wait_healthy() { # <colour>

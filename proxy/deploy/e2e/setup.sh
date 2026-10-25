@@ -86,7 +86,7 @@ log "Starting the stub upstream"
 docker run -d --name blot-e2e-stub --network host -e STUB_BIND=0.0.0.0 \
   -v "${STUB_JS:-$REPO_ROOT/proxy/e2e/stub-upstream.js}":/s.js:ro \
   -v "$HERE/swap-load-lib.js":/swap-load-lib.js:ro \
-  node:22-alpine node /s.js >/dev/null
+  node:24.22.1-alpine node /s.js >/dev/null
 for i in $(seq 1 30); do
   curl -sf -o /dev/null http://127.0.0.1:8088/ && break
   sleep 1
@@ -97,10 +97,10 @@ done
 # purge_reachable() (proxy/deploy/common.sh) docker execs into
 # $PROXY_NODE_CONTAINER and runs `node -e ...` against
 # BLOT_REVERSE_PROXY_URLS, so this needs BLOT_REVERSE_PROXY_URLS in its own
-# env and a `node` binary - node:22-alpine has both.
+# env and a `node` binary - node:24.22.1-alpine has both.
 log "Starting the fake Node container ($PROXY_NODE_CONTAINER)"
 docker run -d --name "$PROXY_NODE_CONTAINER" --network host \
   -e BLOT_REVERSE_PROXY_URLS="http://127.0.0.1:8077" \
-  node:22-alpine sleep infinity >/dev/null
+  node:24.22.1-alpine sleep infinity >/dev/null
 
 log "Harness is up: Redis, stub upstream and $PROXY_NODE_CONTAINER running; no proxy container yet"
