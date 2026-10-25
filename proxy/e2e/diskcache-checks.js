@@ -772,6 +772,14 @@ async function nodeHeaders() {
   check("two Link headers on the hit", count(h, "link") === 2, String(count(h, "link")));
   check("two X-Dup headers on the hit", count(h, "x-dup") === 2, String(count(h, "x-dup")));
 
+  // A hit whose body is gone once its .meta was read (a refill, an eviction or
+  // a purge in between) falls through to a fill: Node's headers only, not the
+  // stored ones as well
+  const gone = entry(A, host, "/p/dup");
+  sh(A, `rm -f ${CACHE}/${hostDir(host)}/${gone.body}`);
+  const f = await req(A, host, "/p/dup");
+  check("body gone after its .meta: a MISS, the stored headers not sent as well", cacheStatus(f) === "MISS" && count(f, "link") === 2 && count(f, "x-dup") === 2 && count(f, "blot-cache") === 1, `${cacheStatus(f)} link=${count(f, "link")} x-dup=${count(f, "x-dup")} blot-cache=${count(f, "blot-cache")}`);
+
   // No Content-Type from Node: none on the hit (nginx would otherwise add its default)
   m = await req(A, host, "/p/no-content-type");
   await settle();
