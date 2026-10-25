@@ -94,27 +94,29 @@ RUN mkdir ngx_brotli/deps/brotli/out && cd ngx_brotli/deps/brotli/out && \
       -DCMAKE_POSITION_INDEPENDENT_CODE=ON .. && \
     cmake --build . --config Release --target brotlienc -j"$(nproc)"
 
-# Only the filter module is installed: brotli_static would need pre-compressed
-# .br files on disk, which nothing produces.
+# The filter module compresses responses on the fly; the static module serves
+# the .br copies diskcache.lua makes of cached bodies.
 RUN cd "openresty-${OPENRESTY_VERSION}/bundle/nginx-${NGINX_VERSION}" && \
     ./configure --with-compat --add-dynamic-module=/tmp/brotli-build/ngx_brotli && \
     make modules && \
     mkdir -p /vendor/modules && \
-    cp objs/ngx_http_brotli_filter_module.so /vendor/modules/
+    cp objs/ngx_http_brotli_filter_module.so objs/ngx_http_brotli_static_module.so /vendor/modules/
 
 # ---------------------------------------------------------------------------
 # Stage 3: the proxy image
 # ---------------------------------------------------------------------------
 FROM openresty/openresty:${OPENRESTY_TAG}
 
+# brotli is the CLI diskcache.lua compresses stored bodies with, and
+# findutils the GNU find (-printf) its sweeper, evict.sh, lists the cache with.
 # gettext provides envsubst, which render-config.sh uses to fill in the
 # runtime placeholders in the generated config
-RUN apk add --no-cache bash openssl gettext
+RUN apk add --no-cache bash openssl gettext brotli findutils
 
 # Match the production convention (workers run as ec2-user)
 RUN addgroup -S ec2-user && adduser -S -u 1000 -G ec2-user ec2-user
 
-# Brotli filter module, loaded with load_module in proxy/config/initial.conf
+# Brotli filter and static modules, loaded with load_module in proxy/config/initial.conf
 COPY --from=brotli /vendor/modules/ /usr/local/openresty/nginx/modules/
 COPY --from=deps /vendor/lualib/ /usr/local/openresty/lualib/
 # lua-resty-auto-ssl shells out to /usr/bin/resty-auto-ssl/start_sockproc,
@@ -156,13 +158,14 @@ RUN openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
 COPY build/data/latest/openresty.conf /usr/local/openresty/nginx/conf/nginx.conf.template
 COPY build/data/latest/defaults.env /etc/openresty/defaults.env
 COPY build/data/latest/cdn-ips.conf /etc/openresty/cdn-ips.default.conf
-COPY build/data/latest/cacher.lua /etc/openresty/cacher.lua
 COPY build/data/latest/wildcard_cert.lua /etc/openresty/wildcard_cert.lua
 COPY build/data/latest/ban.lua /etc/openresty/ban.lua
+COPY build/data/latest/diskcache.lua /etc/openresty/diskcache.lua
 COPY build/data/latest/html /etc/openresty/html
 
 COPY render-config.sh /usr/local/bin/render-config
-RUN chmod +x /usr/local/bin/render-config
+COPY evict.sh /usr/local/bin/diskcache-evict
+RUN chmod +x /usr/local/bin/render-config /usr/local/bin/diskcache-evict
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
