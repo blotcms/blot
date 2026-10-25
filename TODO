@@ -86,7 +86,6 @@ Add transfer site flow to blot from one user account to another, somewhere in se
 - for designers and develeopers to transfer a site to their client after building it
 
 Improve daily update email:
-- Add site per customer stat to daily update
 - Add daily aws cost to email update
   - Set up AWS cost anomaly detection
 

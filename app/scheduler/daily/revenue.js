@@ -62,6 +62,7 @@ function main (callback) {
           Math.floor(Math.floor(annual_recurring_revenue / 12) / 100) * 100
         ),
         total_customers,
+        sites_per_customer: (total_customers ? total_active_blogs / total_customers : 0).toFixed(2),
         total_active_blogs: prettyNumber(total_active_blogs)
       });
     });
