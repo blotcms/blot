@@ -50,6 +50,11 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+
       # The image is built without .git, so record each template's latest
       # commit time now for the docs site to read at runtime.
       - name: Record template commit times

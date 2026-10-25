@@ -5,7 +5,7 @@
 # compile native npm modules - those live in the throwaway `deps` stage and
 # never reach a published image. Keeping them out of `base` shrinks both the
 # `dev` test image (pulled by all ~17 CI matrix jobs) and the `prod` image.
-FROM node:22.23.4-alpine AS base
+FROM node:24.22.1-alpine AS base
 
 ARG PANDOC_VERSION=3.6.1
 # sharp 0.35 needs libvips >= 8.18.6 but the Alpine release this base image is

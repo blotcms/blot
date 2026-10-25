@@ -53,7 +53,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24.22.1
 
       # build-corpus.js is the host-side orchestrator (it shells out to
       # `docker run` itself for the actual corpus build) and `require`s

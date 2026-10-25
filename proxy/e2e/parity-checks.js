@@ -148,7 +148,7 @@ async function startProxy(c) {
 }
 
 function startStub(c) {
-  docker("run", "-d", "--name", c.name + "-stub", "--network", "container:" + c.name, "-e", "STUB_PARITY=1", "-v", `${STUB}:/s.js:ro`, "node:22-alpine", "node", "/s.js");
+  docker("run", "-d", "--name", c.name + "-stub", "--network", "container:" + c.name, "-e", "STUB_PARITY=1", "-v", `${STUB}:/s.js:ro`, "node:24.22.1-alpine", "node", "/s.js");
 }
 
 async function waitStub(c) {

@@ -92,7 +92,7 @@ cat > "$WORK/cdn-ips.conf" <<'WL'
 WL
 
 docker run -d --name "$REDIS" --network "$NET" redis:7-alpine >/dev/null
-docker run -d --name "$STUB" --network "$NET" -v "$BENCH/stub.js:/stub.js:ro" node:20-alpine node /stub.js >/dev/null
+docker run -d --name "$STUB" --network "$NET" -v "$BENCH/stub.js:/stub.js:ro" node:24.22.1-alpine node /stub.js >/dev/null
 docker run -d --name "$WRK" --network "$NET" "$WRK_IMAGE" sleep infinity >/dev/null
 sleep 2
 docker logs "$STUB" 2>&1 | head -2

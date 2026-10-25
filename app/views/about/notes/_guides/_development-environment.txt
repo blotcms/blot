@@ -5,8 +5,8 @@ This is a short guide to installing Blot on your machine. I develop Blot on OSX 
 ## Prerequisites
 
 - [nvm](https://github.com/creationix/nvm) - Read the [installation guide](https://github.com/creationix/nvm/blob/master/README.md)
-  - [node](https://nodejs.org/en/) (use version ```8.12.0``` per [package.json](/package.json), installed using nvm)
-  - [npm](https://www.npmjs.com) (use version ```6.4.1```, installed using nvm)
+  - [node](https://nodejs.org/en/) (use version ```24.22.1``` per [package.json](/package.json), installed using nvm)
+  - [npm](https://www.npmjs.com) (use the version bundled with Node.js, installed using nvm)
 - [redis](https://redis.io/) - Read the [installation guide](http://jasdeep.ca/2012/05/installing-redis-on-mac-os-x/)
 - [git](https://git-scm.com) - Read the [installation guide](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
 
@@ -22,6 +22,8 @@ Install the dependencies once you're into the repo's root directory:
 
 ```sh
 cd Blot
+nvm install
+nvm use
 npm install
 ```
 

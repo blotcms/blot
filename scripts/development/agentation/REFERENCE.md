@@ -1,7 +1,7 @@
 # Local Agentation
 
 Toolbar and MCP server for Blot's server-rendered pages, enabled by `npm start`.
-Requires Codex CLI, Node 22+ on the host, and Docker Compose v2. Run from the main
+Requires Codex CLI, Node 24.22.1 (LTS) on the host, and Docker Compose v2. Run from the main
 checkout, whose proxy also serves worktree preview slots.
 
 ## Start and stop

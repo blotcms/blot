@@ -108,7 +108,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24.22.1
 
       # Flip the sticky comment to a loading state straight away, before the
       # (slow) image build, so the PR shows the run is in flight.

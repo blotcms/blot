@@ -34,7 +34,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.23.4
+          node-version: 24.22.1
 
       # The repo has no committed package-lock.json, so `npm ci` / cache: npm
       # are not usable, and `npm install` in the repo root would build the
