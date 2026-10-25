@@ -232,6 +232,34 @@ for status in "${FILTER_STATUSES[@]}"; do
     fail=1
   fi
 done
+
+# Harder cases, built from the same real line: a whitelisted request whose URL
+# has a query string must still be ignored, and a non-whitelisted request
+# whose User-Agent imitates the wl=1 field sequence must still match.
+for status in "${FILTER_STATUSES[@]}"; do
+  filter="$FILTER_DIR/nginx-$status.conf"
+  line="$(grep -m1 -E "^\[[^]]*\] [a-f0-9]+ $status " "$ACCESS_LOG")"
+  case "$line" in *" wl=0 ref="*) ;; *) continue ;; esac  # reported above
+  wl1="${line/ wl=0 ref=/ wl=1 ref=}"
+  query="${wl1/  cache=/?version=1&extension=css  cache=}"
+  fake="${line%% ae=*} cache=- ip=1.2.3.4 st=0.1 lrs=- up=x conn=1 cr=1 tls=. wl=1 ref=- ae=gzip"
+  for case_name in query fake; do
+    if [ "$case_name" = query ]; then
+      printf '%s\n' "$query" > "$wl_log"; want_matched=0; want_ignored=1
+    else
+      printf '%s\n' "$fake" > "$wl_log"; want_matched=1; want_ignored=0
+    fi
+    out="$(fail2ban-regex "$wl_log" "$filter" 2>&1)"
+    matched="$(printf '%s\n' "$out" | grep -oE '[0-9]+ matched' | grep -oE '^[0-9]+')"
+    ignored="$(printf '%s\n' "$out" | grep -oE '[0-9]+ ignored' | grep -oE '^[0-9]+')"
+    echo "-- nginx-$status.conf ($case_name): matched=${matched:-<none>} ignored=${ignored:-<none>}"
+    if [ "$matched" != "$want_matched" ] || [ "$ignored" != "$want_ignored" ]; then
+      echo "FAIL - nginx-$status.conf ($case_name) want matched=$want_matched ignored=$want_ignored" >&2
+      printf '%s\n' "$out" >&2
+      fail=1
+    fi
+  done
+done
 rm -f "$wl_log"
 
 exit $fail
