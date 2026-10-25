@@ -272,8 +272,9 @@ function initializeCollectionNavigation() {
   // pull it earlier), so find it in the current listing before using the order.
   if (state.cacheID !== cacheID) {
     var url = state.listings[page].url;
+    var before = state.listings[page].previous;
     findEntry(url, path, "next", 3).then(function (found) {
-      return found || findEntry(url, path, "previous", 2);
+      return found || (before && findEntry(before, path, "previous", 1));
     }).then(function (found) {
       if (!found) return;
       var fresh = { cacheID: cacheID, listings: [found] };
@@ -307,10 +308,12 @@ function followCollection(state, page, index) {
 
     var loaded = state.listings[page + step];
     if (loaded) return Promise.resolve(edge(loaded, step));
+    // No link means the last page. Search is a single page of the model's
+    // capped results, which are the whole collection.
     if (!pageLink) return Promise.resolve(null);
 
     return loadListing(pageLink).then(function (fetched) {
-      if (!fetched) return null;
+      if (!fetched) throw new Error("No entries on collection page");
       state.listings[step > 0 ? "push" : "unshift"](fetched);
       writeCollection(state);
       return edge(fetched, step);

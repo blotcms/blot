@@ -61,9 +61,11 @@ function pathOf(url) {
 }
 
 // Infinite scroll listings are runs of /page/N pages, so work out the pages on
-// either side by number. Anything else (tags, search) is unknown.
+// either side by number. Search results are one unpaginated page (the model's
+// capped result set), so they are the whole collection. Anything else is unknown.
 function infinitePagination(doc, url, live) {
   var path = pathOf(url);
+  if (path === "/search") return { next: null, previous: null };
   var match = path && (path === "/" ? ["", "", ""] : path.match(/^((?:\/tagged\/[^\/]+)?)(?:\/page\/(\d+))?$/));
   if (!match) return { unknown: true };
   var base = window.location.origin + match[1] + "/page/";
@@ -160,8 +162,9 @@ function initializeCollectionNavigation() {
   // pull it earlier), so find it in the current listing before using the order.
   if (state.cacheID !== cacheID) {
     var url = state.listings[page].url;
+    var before = state.listings[page].previous;
     findEntry(url, path, "next", 3).then(function (found) {
-      return found || findEntry(url, path, "previous", 2);
+      return found || (before && findEntry(before, path, "previous", 1));
     }).then(function (found) {
       if (!found) return;
       var fresh = { cacheID: cacheID, listings: [found] };
@@ -199,7 +202,7 @@ function followCollection(state, page, index) {
     if (!pageLink) return Promise.resolve(null);
 
     return loadListing(pageLink).then(function (fetched) {
-      if (!fetched) return null;
+      if (!fetched) throw new Error("No entries on collection page");
       state.listings[step > 0 ? "push" : "unshift"](fetched);
       writeCollection(state);
       return edge(fetched, step);
