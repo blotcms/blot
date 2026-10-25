@@ -1,4 +1,5 @@
-const puppeteer = require("puppeteer");
+// Puppeteer 25 is ESM; load it when the first browser is acquired.
+let puppeteer;
 const { dirname } = require("path");
 const fs = require("fs-extra");
 const Bottleneck = require("bottleneck");
@@ -156,6 +157,8 @@ async function acquireAirlockLock() {
 }
 
 async function launch() {
+  puppeteer = await import("puppeteer");
+
   if (REMOTE_BROWSER_URL) {
     console.log(prefix(), "Connecting to airlock browser");
 
@@ -167,7 +170,7 @@ async function launch() {
   console.log(prefix(), "Launching browser");
 
   const instance = await puppeteer.launch({
-    headless: "new",
+    headless: true,
     devtools: false,
     args: BROWSER_ARGS,
     ignoreDefaultArgs: ["--disable-extensions"],

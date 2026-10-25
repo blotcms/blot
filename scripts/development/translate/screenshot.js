@@ -22,7 +22,6 @@
 // Behaviour is modelled on app/helper/screenshot rather than imported from it —
 // that module's args.js is tuned for the Alpine container's Chromium.
 
-const puppeteer = require("puppeteer");
 const fs = require("fs-extra");
 const { dirname } = require("path");
 
@@ -47,8 +46,9 @@ let browser = null;
 async function getBrowser() {
   if (browser) return browser;
 
+  const puppeteer = await import("puppeteer");
   browser = await puppeteer.launch({
-    headless: "new",
+    headless: true,
     // The development site uses a mkcert certificate. It is trusted system-wide
     // only where `mkcert -install` has run, and Chromium keeps its own store, so
     // do not let a certificate warning masquerade as a broken page.

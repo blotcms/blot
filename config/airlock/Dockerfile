@@ -24,7 +24,9 @@
 # See config/airlock/README.md for the full rationale, deploy steps, and the
 # known user-controlled fetches this container does NOT yet cover.
 
-FROM alpine:3.20
+# Chromium is in community, which is supported only until the next stable
+# Alpine release. Revisit this pin when that release ships.
+FROM alpine:3.24
 
 RUN apk add --no-cache \
     chromium \
