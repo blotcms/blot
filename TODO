@@ -1,3 +1,5 @@
+Track OpenResty releases so we can re-enable HTTP/3: require fixes or documented backports for CVE-2026-42530 (QUIC use-after-free; nginx fix 1.31.2) and CVE-2026-95101 (HTTP/3 request-body injection; nginx fix 1.31.7), and review all newer nginx HTTP/3 advisories. Verify the actual bundled nginx/OpenSSL versions and patch coverage, update the pinned image digest and matching Brotli source/checksum, restore QUIC listeners and Alt-Svc advertisements, then rebuild on GitHub and pass proxy e2e checks for site/custom-domain HTTP/3 and wildcard certificates from Redis before deployment. See proxy/SECURITY.md and PR #2225.
+
 Check the access log for the Accept-Encoding of feed requests (/feed.rss etc.): if most are gzip-only, store gzip -9 copies too (gzip_static), since those hits still compress on the fly, use the new log line paramater for accept encoding
 
 Fix bug with Documentation template and the setting 'Adds zoom to large images' and [tell customer](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbgJMGTSPcnwTNxVJVPZZnrhJB)
@@ -50,8 +52,6 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 ---
 
 Bump the airlock image off Alpine 3.20 (EOL 2026-04-01) in config/airlock/Dockerfile to a supported release. Its Chromium renders untrusted pages for bookmark screenshots, so it needs current security patches; check the Chromium version still matches the puppeteer pin.
-
-Upgrade OpenResty from 1.25.3.1 (proxy/Dockerfile, bundled nginx 1.25.3) to the current 1.31.x release. nginx 1.25.3 is in the Vulnerable range of ~30 nginx.org advisories; check which affect modules we enable (HTTP/2, HTTP/3, mp4, resolver, etc.) to judge urgency, then rebuild the proxy image and run the proxy e2e tests.
 
 ---
 
