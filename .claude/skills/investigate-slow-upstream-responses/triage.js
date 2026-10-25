@@ -46,7 +46,7 @@ const INHERENT = [
 ];
 
 const LINE =
-  /^\[(\d+)\/(\w+)\/(\d+):(\d+):(\d+):(\d+) [^\]]+\] (\S+) (\d+) (\S+) \S+ (\S+)\s+cache=(\S*) ip=(\S+) st=(.*?) lrs=\S* up=(.*?)(?: conn=.*?)? ua=(.*?)(?: ae=[^ ]*)?$/;
+  /^\[(\d+)\/(\w+)\/(\d+):(\d+):(\d+):(\d+) [^\]]+\] (\S+) (\d+) (\S+) \S+ (\S+)\s+cache=(\S*) ip=(\S+) st=(.*?) lrs=\S* up=(.*?)(?: conn=.*?)? ua=(.*?)(?: ae=.*)?$/;
 const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
 
 function parseArgs(argv) {
