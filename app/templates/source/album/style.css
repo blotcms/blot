@@ -183,7 +183,7 @@ header {
 
 {{#hide_dates}}
 .post .date,
-#hyperlist .date {
+.archives .date {
   display: none
 }
 {{/hide_dates}}

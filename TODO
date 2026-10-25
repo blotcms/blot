@@ -7,21 +7,7 @@
   - [ ] Remove proxy/deploy/e2e/transition.* and the proxy-transition-e2e job (LEGACY_REF pin); swap-load-lib.js/-stub.js are then the only copies
   - [ ] Delete /var/instance-ssd/cache on the proxy host
 
-- Fix bugs with documentation template and tell [Ray](https://blot.im/questions/3233)
-
-- Fix bug with Documentation template and the setting 'Adds zoom to large images' and [tell customer](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbgJMGTSPcnwTNxVJVPZZnrhJB)
-
-- Improve post navigation on Portfolio template within tagged collections and tell [Questioner](https://blot.im/questions/1894)
-
-- Links template:
-  Navigation:
-  - [ ] Add dropdown support to navigation
-  Entry page:
-  - [ ] Close button should go 'back'
-  - [ ] Add layout CSS
-  - [ ] Next / prev should respect tag collections
-  - [ ] Add exif info
-  - [ ] Add backlinks
+Fix bug with Documentation template and the setting 'Adds zoom to large images' and [tell customer](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbgJMGTSPcnwTNxVJVPZZnrhJB)
 
 ---
 

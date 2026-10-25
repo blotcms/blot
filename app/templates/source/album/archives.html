@@ -1,60 +1,106 @@
 {{> header}}
 
+{{#sticky_navigation}}
+<div style="height: calc({{spacing}}rem + 1.4em)"></div>
+{{/sticky_navigation}}
 
 <style type="text/css">
-  
-    body, html {height: 100%;overflow: hidden;}
+  .archives {
+    padding: 0 {{spacing}}rem;
+  }
 
-    #hyperlist {
-      display: block;
-      position: absolute;
-      top: calc(1 * ({{spacing}}rem + 1.4em));
-      right: 0;
-      left: 0;
-    }
+  .archives a {
+    display: flex;
+    align-items: center;
+    min-height: 64px;
+    padding: 0 calc({{spacing}}rem * 0.25);
+  }
 
+  .archives a .thumbnail {
+    width: 64px;
+    height: 64px;
+    flex-shrink: 0;
+  }
 
-    #hyperlist a {
-            text-decoration: none;
-            padding: 0 calc({{spacing}}*0.25rem);
-      color: inherit;
-      box-sizing:border-box;
-    }
+  .archives a .thumbnail img {
+    max-width: 64px;
+    max-height: 64px;
+  }
 
-    #hyperlist > a {
-      padding: 0 {{spacing}}rem;
-      display: flex;
-      width: 100%;
-      height: 64px;
-      margin: 0;
-    }
+  .archives a .title {
+    flex-grow: 1;
+    margin: 0 calc({{spacing}}rem * 0.5);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
-    #hyperlist > a:hover {opacity: 0.75}
-    #hyperlist > a:hover .title {text-decoration: underline;}
-    #hyperlist > a:active {opacity: 0.5}
-    
-    #hyperlist > a .thumbnail {width: 64px;height:64px;}
-    #hyperlist > a .title {flex-grow: 1;margin:0 calc({{spacing}}rem*0.5);white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
-    #hyperlist > a .date {flex-shrink: 0;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
-    {{#hide_dates}}
-    #hyperlist > a .date {display: none}
-    {{/hide_dates}}
+  .archives a .date {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
 
-#hyperlist > a .thumbnail img {
-  max-width: 64px;max-height: 64px;width:auto;height: auto;
-}
+  .archives a:hover .title {
+    text-decoration: underline;
+  }
 
-input[type=radio] {display: none;}
-.filter {list-style-type: none;padding: 0;display: flex;}
-.filter label {cursor: pointer;padding:{{spacing}}rem;margin:{{spacing}}rem;background:rgba({{#rgb}}{{text_color}}{{/rgb}},0.06)}
+  .archives a:active {
+    opacity: 0.5;
+  }
+
+  .archives-search {
+    padding: 0 {{spacing}}rem;
+  }
 </style>
 
-<div style="position: absolute;top:calc({{spacing}}rem + 1.4em);left: 0;right: 0;  
-padding: 0 {{spacing}}rem;    
-box-sizing: border-box;
-width: 100vw">
-  {{#show_search}}{{> search_form}}{{/show_search}}
-  </div>
-    <div id="hyperlist"></div>
-    <script type="text/javascript" src="{{#asset}}/archive.js{{/asset}}"></script>
+{{#show_search}}
+<div class="archives-search">
+  {{> search_form}}
+</div>
+{{/show_search}}
+
+<div class="archives">
+  {{#archives}}
+  {{#months}}
+  {{#entries}}
+  <a class="collection-entry" href="{{{url}}}">
+    <span class="thumbnail">
+      {{#thumbnail.small.url}}
+      <img
+        class="pre-loaded"
+        onload="this.className='loaded'"
+        loading="lazy"
+        alt="{{title}}"
+        width="{{thumbnail.small.width}}"
+        height="{{thumbnail.small.height}}"
+        srcset="
+          {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+          {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+          {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+        "
+        sizes="64px"
+        src="{{{thumbnail.small.url}}}" />
+      <noscript>
+        <img
+          alt="{{title}}"
+          width="{{thumbnail.small.width}}"
+          height="{{thumbnail.small.height}}"
+          srcset="
+            {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+            {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+            {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+          "
+          sizes="64px"
+          src="{{{thumbnail.small.url}}}" />
+      </noscript>
+      {{/thumbnail.small.url}}
+    </span>
+    <span class="title">{{title}}</span>
+    {{^hide_dates}}<span class="date">{{date}}</span>{{/hide_dates}}
+  </a>
+  {{/entries}}
+  {{/months}}
+  {{/archives}}
+</div>
+
 {{> footer}}

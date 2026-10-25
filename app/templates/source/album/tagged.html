@@ -10,18 +10,14 @@
 {{> grid_bookshelf}}
 {{/is.grid_layout.bookshelf}}
 
-{{#is.grid_layout.fitted}}
-{{> grid_fitted}}
-{{/is.grid_layout.fitted}}
-
 {{#pagination}}
 <div class="pagination">
   {{#previous}}
-  <a href="/tagged/{{slug}}/page/{{previous}}">&larr; Previous</a>
+  <a class="collection-previous" href="/tagged/{{slug}}/page/{{previous}}">&larr; Previous</a>
   {{/previous}}
   Page {{current}} of {{total}}
   {{#next}}
-  <a href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>
+  <a class="collection-next" href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>
   {{/next}}
 </div>
 {{/pagination}}

@@ -1,60 +1,94 @@
 {{> header}}
 
+{{#sticky_navigation}}
+<div style="height: calc({{spacing}}rem + 1.4em)"></div>
+{{/sticky_navigation}}
+
 {{> search_form}}
 
 <style type="text/css">
-    body, html {height: 100%;overflow: hidden;}
+  .archives {
+    padding: 0 {{spacing}}rem;
+  }
 
-    #hyperlist a {
-            text-decoration: none;
-            padding: 0 calc({{spacing}}*0.25rem);
-      color: inherit;
-      box-sizing:border-box;
-      display: block;
-    }
+  .archives a {
+    display: flex;
+    align-items: center;
+    min-height: 64px;
+    padding: 0 calc({{spacing}}rem * 0.25);
+  }
 
-    #hyperlist > a {
-      padding: 0 {{spacing}}rem;
-      display: flex;
-      width: 100%;
-      height: 80px;
-      margin: 0;
-    }
+  .archives a .thumbnail {
+    width: 64px;
+    height: 64px;
+    flex-shrink: 0;
+  }
 
-    #hyperlist > a:hover {opacity: 0.75}
-    #hyperlist > a:hover .title {text-decoration: underline;}
-    #hyperlist > a:active {opacity: 0.5}
-    
-    #hyperlist > a .thumbnail {width: 80px;height:80px;}
-    #hyperlist > a .title {flex-grow: 1;margin:0 calc({{spacing}}rem*0.5);white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
-    #hyperlist > a .date {flex-shrink: 0;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
-    {{#hide_dates}}
-    #hyperlist > a .date {display: none}
-    {{/hide_dates}}
+  .archives a .thumbnail img {
+    max-width: 64px;
+    max-height: 64px;
+  }
 
-#hyperlist > a .thumbnail img {
-  max-width: 80px;max-height: 80px;width:auto;height: auto;
-}
+  .archives a .title {
+    flex-grow: 1;
+    margin: 0 calc({{spacing}}rem * 0.5);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
-input[type=radio] {display: none;}
-.filter {list-style-type: none;padding: 0;display: flex;}
-.filter label {cursor: pointer;padding:{{spacing}}rem;margin:{{spacing}}rem;background:rgba({{#rgb}}{{text_color}}{{/rgb}},0.06)}
+  .archives a .date {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .archives a:hover .title {
+    text-decoration: underline;
+  }
+
+  .archives a:active {
+    opacity: 0.5;
+  }
 </style>
 
-
-    <div id="hyperlist" class="container">
-        {{#entries}}
-        <a href="{{{url}}}">
-            <span class="thumbnail">
-          <img src="{{{thumbnail.small.url}}}" class="pre-loaded" onload="this.className+=' loaded';" />
-          <noscript>  
-          <img src="{{{thumbnail.small.url}}}">
-          </noscript>
-      </span>
-      <span class="title">{{title}}</span>
-      {{^hide_dates}}{{#date}}<span class="date">{{date}}</span>{{/date}}{{/hide_dates}}
-        </a>
-        {{/entries}}
-        </div>
+<div class="archives">
+  {{#entries}}
+  <a class="collection-entry" href="{{{url}}}">
+    <span class="thumbnail">
+      {{#thumbnail.small.url}}
+      <img
+        class="pre-loaded"
+        onload="this.className='loaded'"
+        loading="lazy"
+        alt="{{title}}"
+        width="{{thumbnail.small.width}}"
+        height="{{thumbnail.small.height}}"
+        srcset="
+          {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+          {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+          {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+        "
+        sizes="64px"
+        src="{{{thumbnail.small.url}}}" />
+      <noscript>
+        <img
+          alt="{{title}}"
+          width="{{thumbnail.small.width}}"
+          height="{{thumbnail.small.height}}"
+          srcset="
+            {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+            {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+            {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+          "
+          sizes="64px"
+          src="{{{thumbnail.small.url}}}" />
+      </noscript>
+      {{/thumbnail.small.url}}
+    </span>
+    <span class="title">{{title}}</span>
+    {{^hide_dates}}<span class="date">{{date}}</span>{{/hide_dates}}
+  </a>
+  {{/entries}}
+</div>
 
 {{> footer}}

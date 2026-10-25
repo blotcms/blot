@@ -132,19 +132,183 @@ function stopPreloading() {
 
 // end of instant.page
 
-// Close an entry by returning to its referrer, or the index page if opened directly.
+// Keep the collection an entry was opened from so its arrows stay within it.
+// The chronological prev/next hrefs are only ever replaced once we know better.
+var collectionKey = "portfolioCollection";
+var cacheID = "{{cacheID}}";
+var closeURL;
+var closeDepth = 0;
 
 var articles = [{{#all_entries}}'{{{url}}}'{{^last}},{{/last}}{{/all_entries}}];
+
+// Close by walking back through the history entries pushed since the listing,
+// so the browser restores the listing exactly as it was left.
 function closeEntry() {
-  if (document.referrer) {
-    window.history.back();
+  if (closeDepth && closeDepth < window.history.length) {
+    window.history.go(-closeDepth);
   } else {
-    window.location.href = '/';
+    window.location.href = closeURL || '/';
   }
   return false;
 }
 
+// Each entry page remembers how many history entries sit between it and the
+// listing. A page opened from the listing is one deep, and one reached with an
+// arrow is one deeper than the page it was left from. The depth is handed over
+// through sessionStorage, and kept in history.state so back, forward and
+// reload see the same value.
+var depthKey = "collectionDepth";
 
+function handOverDepth(link, depth) {
+  try {
+    sessionStorage.setItem(depthKey, JSON.stringify({ path: pathOf(link.href), depth: depth }));
+  } catch (e) {}
+}
+
+function takeDepth() {
+  var saved = window.history.state && window.history.state.closeDepth;
+  if (saved) return saved;
+  try {
+    var handed = JSON.parse(sessionStorage.getItem(depthKey));
+    sessionStorage.removeItem(depthKey);
+    return handed && handed.path === pathOf(window.location.href) ? handed.depth : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+document.addEventListener("click", function (e) {
+  var link = e.target.closest("a.entry-next, a.entry-previous");
+  if (link && closeDepth) handOverDepth(link, closeDepth + 1);
+}, true);
+
+function pathOf(url) {
+  try {
+    var u = new URL(url, window.location.href);
+    return u.origin === window.location.origin ? u.pathname.replace(/\/+$/, "") || "/" : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function parseListing(doc, url) {
+  var entries = [];
+  doc.querySelectorAll("a.collection-entry").forEach(function (a) {
+    var path = pathOf(a.href);
+    if (path && entries.indexOf(path) === -1) entries.push(path);
+  });
+  if (!entries.length) return null;
+
+  function pagination(selector) {
+    var a = doc.querySelector(selector);
+    return a && a.getAttribute("href") ? a.href : null;
+  }
+
+  return {
+    url: url.split("#")[0],
+    entries: entries,
+    next: pagination("a.collection-next"),
+    previous: pagination("a.collection-previous")
+  };
+}
+
+function readCollection() {
+  try {
+    var state = JSON.parse(sessionStorage.getItem(collectionKey));
+    return state && state.cacheID === cacheID ? state : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeCollection(state) {
+  try {
+    sessionStorage.setItem(collectionKey, JSON.stringify(state));
+  } catch (e) {}
+}
+
+// Record the order shown by the listing before following one of its entries.
+document.addEventListener("click", function (e) {
+  var entryLink = e.target.closest("a.collection-entry");
+  if (!entryLink) return;
+  handOverDepth(entryLink, 1);
+  var listing = parseListing(document, window.location.href);
+  if (listing) writeCollection({ cacheID: cacheID, listings: [listing] });
+}, true);
+
+function initializeCollectionNavigation() {
+  var state = readCollection();
+  // Only trust the collection when arriving from elsewhere on this site.
+  if (!state || !pathOf(document.referrer)) return;
+
+  var path = pathOf(window.location.href);
+  var page = -1, index = -1;
+  for (var n = 0; n < state.listings.length && index < 0; n++) {
+    page = n;
+    index = state.listings[n].entries.indexOf(path);
+  }
+  if (index < 0) return;
+
+  closeDepth = takeDepth();
+  if (closeDepth) window.history.replaceState({ closeDepth: closeDepth }, "");
+
+  var listing = state.listings[page];
+  closeURL = listing.url;
+  document.querySelectorAll("a.entry-close").forEach(function (a) {
+    a.href = closeURL;
+  });
+
+  function edge(l, step) {
+    return l.entries[step > 0 ? 0 : l.entries.length - 1];
+  }
+
+  // Resolves to the neighbour's path, null at the end of the collection, and
+  // rejects when unsure (so the chronological link stays).
+  function neighbor(direction) {
+    // entry.next is the newer entry, so it sits earlier in the listing; the
+    // listing's own "next" page is the older one.
+    var step = direction === "next" ? -1 : 1;
+    var pageLink = listing[direction === "next" ? "previous" : "next"];
+    if (listing.entries[index + step]) return Promise.resolve(listing.entries[index + step]);
+
+    var loaded = state.listings[page + step];
+    if (loaded) return Promise.resolve(edge(loaded, step));
+    if (!pageLink) return Promise.resolve(null);
+
+    return fetch(pageLink, { credentials: "same-origin" }).then(function (res) {
+      if (!res.ok) throw new Error("Could not load collection page");
+      return res.text().then(function (html) {
+        var doc = new DOMParser().parseFromString(html, "text/html");
+        var fetched = parseListing(doc, res.url);
+        if (!fetched) return null;
+        state.listings[step > 0 ? "push" : "unshift"](fetched);
+        writeCollection(state);
+        return edge(fetched, step);
+      });
+    });
+  }
+
+  [["a.entry-previous", "previous"], ["a.entry-next", "next"]].forEach(function (pair) {
+    var link = document.querySelector(pair[0]);
+    if (!link) return;
+    neighbor(pair[1]).then(function (target) {
+      if (target) {
+        link.href = window.location.origin + target;
+      } else {
+        link.removeAttribute("href");
+        link.setAttribute("aria-disabled", "true");
+      }
+    }, function () {});
+  });
+}
+
+initializeCollectionNavigation();
+
+document.addEventListener("keydown", function (e) {
+  var selector = { 37: "a.entry-next", 39: "a.entry-previous" }[e.keyCode];
+  var link = selector && document.querySelector(selector);
+  if (link && link.href) link.click();
+});
 
 var candidates = sessionStorage.getItem("randomPostCandidates");
 
