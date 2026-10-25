@@ -87,6 +87,12 @@ narrow what's already covered:
 - `config/host/fail2ban/jail.local` — IP-banning jails keyed off
   404/403/429/444 rates. Complementary to path blocks, not a substitute.
 
+Probes on `cdn.blot.im` are blocked at Bunny by an allowlist edge rule (see
+the Bunny section of `config/storage-bucket/README.md`). Don't add proxy
+403/444 rules for that host: `ip=` there is a Bunny edge, and fail2ban would
+ban it. Any `cdn.blot.im` 404 in the origin log is on an allowlisted path, so
+it is a broken asset URL, not a scanner.
+
 For each candidate pattern, grep its current count and check whether it's
 already caught by an existing regex (e.g. anything ending in `.php` is
 already 403'd by the generic extension rule — no need for a `shell.php`-
