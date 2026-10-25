@@ -1,6 +1,6 @@
 Daily update for {{date}}
 
-Sites: {{total_active_blogs}} sites, {{total_customers}} customers
+Sites: {{total_active_blogs}} sites, {{total_customers}} customers, {{sites_per_customer}} sites per customer
 
 Revenue: {{annual_recurring_revenue}}, {{paypal_percentage}} through PayPal, {{annual_percentage}} pay annually
 
