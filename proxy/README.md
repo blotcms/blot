@@ -292,8 +292,9 @@ root-owned); it does **not** recurse into the cache.
 
 Reproducibility relies on pinning, because the upstream toolchain has drifted:
 
-- Base image `openresty/openresty:1.25.3.1-alpine-fat` — newer `alpine-fat`
-  tags ship GCC 14, which will not compile `sockproc`.
+- Base image `openresty/openresty:1.31.1.1-alpine-fat`, pinned by its
+  multi-architecture digest in `Dockerfile`. The local `sockproc` signal-handler
+  patch supports modern compilers without dropping the upstream warning checks.
 - Lua modules (`lua-resty-auto-ssl` 0.13.1, `lua-resty-http` 0.17.2,
   `shell-games` 1.1.0) are fetched as checksummed `.src.rock` archives from
   luarocks.org rather than via the images' bundled `luarocks`, whose remote
