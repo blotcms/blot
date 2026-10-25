@@ -50,6 +50,9 @@ describe("updateCdnManifest", function () {
 
     expect(renderedOutput).toBeDefined();
     expect(renderedOutput).toBe("body{color:red}");
+
+    // The basename it was published under, which the CDN route checks
+    expect(await getAsync(key.renderedOutputName(hash))).toBe("style.css");
   });
 
   it("regenerates manifest hashes after cache-busting to avoid stale full-view cache", async function () {
@@ -131,6 +134,7 @@ describe("updateCdnManifest", function () {
       oldOutputAfter = await getAsync(oldRenderedKey);
     }
     expect(oldOutputAfter).toBeNull();
+    expect(await getAsync(key.renderedOutputName(oldHash))).toBeNull();
 
     // Verify new rendered output exists
     const newRenderedKey = key.renderedOutput(newHash);

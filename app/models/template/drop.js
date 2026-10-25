@@ -42,6 +42,7 @@ module.exports = function drop(owner, templateName, callback) {
       }
 
       multi.del(key.renderedOutput(hash));
+      multi.del(key.renderedOutputName(hash));
     }
 
     // The template no longer depends on any files in its blog's folder

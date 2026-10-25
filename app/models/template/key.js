@@ -42,6 +42,15 @@ module.exports = {
     return "cdn:rendered:" + hash;
   },
 
+  // The basename an output was published under (the last segment of its
+  // /template/... CDN URL), written in the same multi() as renderedOutput and
+  // deleted with it. The CDN route 404s any other name. Outputs written
+  // before this key existed have none and are served under any name until the
+  // manifest is regenerated.
+  renderedOutputName: function renderedOutputName(hash) {
+    return "cdn:rendered-name:" + hash;
+  },
+
   // Reverse index of the files in a blog's folder that templates link to
   // through {{#cdn}} (see util/updateCdnManifest): a SET of the IDs of the
   // blog's templates whose CDN manifest depends on the file, read by

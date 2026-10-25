@@ -75,14 +75,26 @@ cdn.get("/template/:d1/:d2/:rest/:name", async (req, res, next) => {
     return res.sendStatus(404);
   }
 
-  // The name only picks the Content-Type, but a view basename never holds these
+  // A view basename never holds these
   if (/[\/\\\0]/.test(name) || name.startsWith("..")) return res.sendStatus(404);
 
+  // We never publish source maps, but browsers with devtools open ask for
+  // script.js.map next to every script
+  if (/\.map$/i.test(name)) return res.sendStatus(404);
+
   try {
-    const output = await client.get(key.renderedOutput(d1 + d2 + rest));
+    const hash = d1 + d2 + rest;
+    const [output, publishedName] = await Promise.all([
+      client.get(key.renderedOutput(hash)),
+      client.get(key.renderedOutputName(hash)),
+    ]);
 
     // null means a miss, but an empty string is a valid stored value
     if (output == null) return res.sendStatus(404);
+
+    // Only the name the output was published under. Outputs from before the
+    // name was recorded have none, and are served under any name
+    if (publishedName != null && publishedName !== name) return res.sendStatus(404);
 
     res.set("Cache-Control", "public, max-age=31536000, immutable");
     res.set("Content-Type", getContentType(name));
