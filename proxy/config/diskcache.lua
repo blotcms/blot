@@ -662,7 +662,10 @@ function diskcache.log(self)
         return
     end
 
-    fill.file:close()
+    -- writes are buffered: the last of them can fail only here
+    if not fill.file:close() and not fill.not_modified then
+        fill.failed = true
+    end
     fill.file = nil
 
     if fill.not_modified then
