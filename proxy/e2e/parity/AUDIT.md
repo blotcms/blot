@@ -81,16 +81,3 @@ Tests: **RM** = `request-matrix.js` (section number), **CH** = `checks.sh`,
    purpose (tested: RM 10).
 4. A response with `X-Accel-Buffering: no` (Node's SSE helper) is **not** stored.
    No such route is behind the cache today.
-
-# The disk cache against the old cache
-
-`proxy/e2e/parity-checks.js` sends the same requests to the origin/master image
-(nginx `proxy_cache` + `cacher.lua`) and to this tree (`diskcache.lua`), through
-miss, hit, hit (brotli copies exist), purge + refill, Node stopped and Node back.
-Each accepted difference is a rule with a reason in `INTENDED` there (class
-*intended* = the design, *harmless* = not designed but not observable in
-practice): `range-on-hit`, `preconditions-on-hit`, `head-does-not-fill`,
-`head-forwarded`, `head-hit-content-length`, `head-error-vary`,
-`precondition-failed-headers`, `unsatisfiable-range-stored`,
-`set-cookie-not-replayed`, `vary-dropped-on-hit`, `accept-ranges-on-range-miss`,
-`accept-ranges-on-hit`, `empty-body-not-compressed`. Anything else fails the run.
