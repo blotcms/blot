@@ -11,7 +11,7 @@ DEPLOY="$HERE/.."
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 export FAKE="$T/fake"
-mkdir -p "$T/bin" "$T/certs" "$T/cache" "$T/logs" "$FAKE"
+mkdir -p "$T/bin" "$T/certs" "$T/cache" "$T/disk-cache" "$T/logs" "$FAKE"
 echo cert > "$T/certs/letsencrypt-domain.pem"; echo key > "$T/certs/letsencrypt-domain.key"
 printf 'BLOT_HOST=blot.test\nPROXY_REDIS_HOST=10.0.0.5\nPROXY_PRIVATE_IP=10.0.0.9\n' > "$T/proxy.env"
 
@@ -28,8 +28,19 @@ case "$1" in
   network) echo 172.17.0.1 ;;
   ps) if [[ "$*" == *" -a "* ]]; then ls "$FAKE/all" 2>/dev/null; else ls "$R"; fi; exit 0 ;;
   run)
-    if [[ " $* " == *" -d "* ]]; then n=$(name_arg "$@"); touch "$R/$n" "$FAKE/all/$n" 2>/dev/null || { mkdir -p "$FAKE/all"; touch "$R/$n" "$FAKE/all/$n"; }; exit 0; fi
+    # image_cache_kind: only images listed in FAKE_LEGACY_IMAGES have cacher.lua
+    if [[ "$*" == *"--entrypoint test"* ]]; then
+      while [ $# -gt 0 ]; do [ "$1" = test ] && { img="$2"; break; }; shift; done
+      [[ " ${FAKE_LEGACY_IMAGES:-} " == *" $img "* ]]; exit
+    fi
     if [[ " $* " == *" drop-overlap "* ]]; then [ -z "${FAKE_DROP_FAILS:-}" ]; exit; fi
+    # reset_cache_dir: the foreground container moves the entries aside, the
+    # detached one deletes them
+    if [[ "$*" == *"--entrypoint sh"* ]]; then
+      [ -z "${FAKE_RESET_FAILS:-}" ] || exit 1
+      exit 0
+    fi
+    if [[ " $* " == *" -d "* ]]; then n=$(name_arg "$@"); touch "$R/$n" "$FAKE/all/$n" 2>/dev/null || { mkdir -p "$FAKE/all"; touch "$R/$n" "$FAKE/all/$n"; }; exit 0; fi
     if [[ "$*" == *"openresty -t"* ]]; then [ -z "${FAKE_VALIDATE_FAIL:-}" ] || { echo "nginx: [emerg] bad"; exit 1; }; exit 0; fi
     if [[ "$*" == *"access_log"* ]]; then [ -z "${FAKE_STDOUT_LOGS:-}" ]; exit; fi ;;
   create) [ -z "${FAKE_CREATE_FAILS:-}" ] || exit 1; n=$(name_arg "$@"); mkdir -p "$FAKE/all"; touch "$FAKE/all/$n" ;;
@@ -62,7 +73,8 @@ case "$1" in
     [ -n "$(ls "$R" | grep '^blot-proxy-[bg]')" ] || { [ "$(cat "$FAKE/serving")" != container ] || echo none > "$FAKE/serving"; } ;;
   update) [ -z "${FAKE_UPDATE_FAILS:-}" ] || exit 1 ;;
   logs) cat "$FAKE/dlogs/${!#}" 2>/dev/null ;;
-  inspect) cat "$FAKE/started/${!#}" 2>/dev/null ;;
+  inspect) if [[ "$*" == *Config.Image* ]]; then echo "${FAKE_OLD_IMAGE:-img:old}"; exit 0; fi
+    cat "$FAKE/started/${!#}" 2>/dev/null ;;
   exec)
     n="$2"
     if [[ "$*" == *"--unix-socket"* ]]; then [ -e "$R/$n" ] && [ "$n" != "${FAKE_UNHEALTHY:-}" ]; exit; fi
@@ -172,7 +184,7 @@ F
 chmod +x "$T"/bin/*
 export PATH="$T/bin:$PATH"
 
-export PROXY_ENV_FILE="$T/proxy.env" PROXY_CACHE_DIR="$T/cache" PROXY_LOG_DIR="$T/logs" \
+export PROXY_ENV_FILE="$T/proxy.env" PROXY_CACHE_DIR="$T/cache" PROXY_DISK_CACHE_DIR="$T/disk-cache" PROXY_LOG_DIR="$T/logs" \
   PROXY_CERT_DIR="$T/certs" PROXY_DEPLOY_LOCK="$T/lock" \
   PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 PROXY_REHYDRATE_TIMEOUT=1 PROXY_UPSTREAM_WAIT=0 TMUX=fake # nap() is a no-op, so a refusal busy-waits out PROXY_HEALTH_TIMEOUT real seconds
 
@@ -291,12 +303,16 @@ check "success: the new colour is restartable BEFORE the old one is stopped" '[ 
 reset none; FAKE_UNIT_ENABLED=1 bluegreen
 check "fresh start while the bare-metal unit is still enabled: refused" '[ $RC != 0 ] && ! called "docker create" && mentions "systemctl disable --now openresty"'
 reset none; bluegreen
-reset container; bluegreen
+# drop_overlap_cache is for legacy -> legacy swaps (disk cache images share one
+# directory), so both images are legacy here
+reset container; FAKE_LEGACY_IMAGES="img:old img:2" bluegreen
 check "swap: the cache files the old colour wrote meanwhile are dropped by a root container of the new image, after the old colour stops" '[ $RC = 0 ] && before "docker stop" "drop-overlap" && called "run --rm --user 0 --entrypoint sh -v $PROXY_CACHE_DIR:/cache img:2" && before "drop-overlap" "docker rm -f blot-proxy-blue"'
-reset container; FAKE_DROP_FAILS=1 bluegreen
+reset container; FAKE_LEGACY_IMAGES="img:old img:2" FAKE_DROP_FAILS=1 bluegreen
 check "swap: a failed drop only warns" '[ $RC = 0 ] && mentions "WARNING: could not drop the cache files" && called "docker rm -f blot-proxy-blue"'
-reset container; FAKE_CUSTOM_FP_AFTER_STOP=B bluegreen
+reset container; FAKE_LEGACY_IMAGES="img:old img:2" FAKE_CUSTOM_FP_AFTER_STOP=B bluegreen
 check "rolled-back swap: dropped again before the old colour is started" '[ $RC != 0 ] && [ "$(grep -c drop-overlap "$FAKE/calls")" = 2 ] && [ "$(grep -n drop-overlap "$FAKE/calls" | tail -1 | cut -d: -f1)" -lt "$(grep -n "docker start blot-proxy-blue" "$FAKE/calls" | tail -1 | cut -d: -f1)" ]'
+reset container; bluegreen
+check "disk -> disk swap: nothing dropped (one shared directory, a purge reaches both)" '[ $RC = 0 ] && ! called drop-overlap'
 reset none; bluegreen
 check "fresh start (nothing running): the container is checked, then made permanent" '[ $RC = 0 ] && ! called "docker stop" && ! called drop-overlap && before "docker start blot-proxy-blue" "docker update --restart unless-stopped blot-proxy-blue" && serving container'
 
@@ -308,25 +324,81 @@ check "fresh start whose site checks fail: removed, never made permanent" '[ $RC
 
 echo "purge index (rehydrate)"
 
-reset none; FAKE_REHYDRATE_ERROR=1 bluegreen
+reset none; FAKE_LEGACY_IMAGES=img:2 FAKE_REHYDRATE_ERROR=1 bluegreen
 check "fresh start whose purge index fails to rebuild: refused, container removed, never made permanent" '[ $RC != 0 ] && mentions "purge index" && called "docker rm -f blot-proxy-blue" && ! called "docker update"'
 
-reset none; FAKE_NO_REHYDRATE=1 bluegreen
+reset none; FAKE_LEGACY_IMAGES=img:2 FAKE_NO_REHYDRATE=1 bluegreen
 check "fresh start whose purge index never finishes: refused, container removed" '[ $RC != 0 ] && mentions "rehydrate: complete" && called "docker rm -f blot-proxy-blue" && ! called "docker update"'
 
-reset none; ALLOW_STDOUT_LOGS=1 FAKE_STDOUT_LOGS=1 FAKE_REHYDRATE_VIA_LOGS_ONLY=1 bluegreen
+reset none; FAKE_LEGACY_IMAGES=img:2 ALLOW_STDOUT_LOGS=1 FAKE_STDOUT_LOGS=1 FAKE_REHYDRATE_VIA_LOGS_ONLY=1 bluegreen
 check "fresh start: the line is accepted from docker logs too (ALLOW_STDOUT_LOGS=1 image)" '[ $RC = 0 ]'
 
-reset container; FAKE_REHYDRATE_ERROR=1 bluegreen
+reset container; FAKE_LEGACY_IMAGES=img:2 FAKE_REHYDRATE_ERROR=1 bluegreen
 check "swap whose new colour fails to rebuild its purge index: old one never stopped, new one removed" '[ $RC != 0 ] && ! called "docker stop" && called "docker rm -f blot-proxy-green" && serving container'
 
 reset container; mkdir -p "$PROXY_LOG_DIR"; echo "2000/01/01 00:00:00 [notice] 1#1: *1 rehydrate: complete files=1 hosts=1 unparsed=0 seconds=1" > "$PROXY_LOG_DIR/error.log"
-FAKE_NO_REHYDRATE=1 bluegreen
+FAKE_LEGACY_IMAGES=img:2 FAKE_NO_REHYDRATE=1 bluegreen
 check "swap: the old colour's earlier 'complete' line does not count for the new one" '[ $RC != 0 ] && ! called "docker stop" && called "docker rm -f blot-proxy-green"'
 
 reset container; mkdir -p "$PROXY_LOG_DIR"; echo "2000/01/01 00:00:00 [error] 1#1: *1 rehydrate: could not add to index" > "$PROXY_LOG_DIR/error.log"
-bluegreen
+FAKE_LEGACY_IMAGES=img:2 bluegreen
 check "swap: an old rehydrate error from before the new colour started is ignored" '[ $RC = 0 ]'
+
+echo "cache directories"
+
+# img:1 is the old colour's image (FAKE_OLD_IMAGE, default img:old) and img:2 the
+# new one. FAKE_LEGACY_IMAGES lists the images that have cacher.lua.
+reset_in() { grep -q -- "run --rm --user 0 --entrypoint sh -v $1:/cache" "$FAKE/calls"; }
+reset_of() { line "run --rm --user 0 --entrypoint sh -v $1:/cache"; }
+mounted() { called "create .*-v $1:/var/cache/openresty"; }
+
+reset container; FAKE_OLD_IMAGE=img:1 FAKE_LEGACY_IMAGES=img:1 bluegreen
+check "legacy -> disk: the disk directory is emptied before the new colour starts, and mounted" \
+  '[ $RC = 0 ] && reset_in "$T/disk-cache" && [ "$(reset_of "$T/disk-cache")" -lt "$(line "docker create")" ] && mounted "$T/disk-cache" && ! mounted "$T/cache"'
+check "legacy -> disk: the legacy directory is emptied only after the old colour is removed" \
+  'reset_in "$T/cache" && after_last "run --rm --user 0 --entrypoint sh -v $T/cache:/cache" "docker rm -f blot-proxy-blue"'
+check "legacy -> disk: the background delete runs detached" 'called "docker run -d --rm --user 0 --entrypoint sh -v $T/cache:/cache" && called "docker run -d --rm --user 0 --entrypoint sh -v $T/disk-cache:/cache"'
+check "legacy -> disk: does not wait for a purge index" '[ $RC = 0 ] && ! mentions "rebuild its purge index"'
+
+reset container; FAKE_OLD_IMAGE=img:1 bluegreen
+check "disk -> disk (a normal deploy): nothing is emptied, the warm cache is kept, the disk directory is mounted" \
+  '[ $RC = 0 ] && ! called "--entrypoint sh" && mounted "$T/disk-cache" && ! mounted "$T/cache"'
+
+reset container; FAKE_OLD_IMAGE=img:1 FAKE_LEGACY_IMAGES="img:2" bluegreen
+check "disk -> legacy (rollback): the legacy directory is emptied before start, the disk one after the swap, and the purge index is awaited" \
+  '[ $RC = 0 ] && [ "$(reset_of "$T/cache")" -lt "$(line "docker create")" ] && after_last "run --rm --user 0 --entrypoint sh -v $T/disk-cache:/cache" "docker rm -f blot-proxy-blue" && mounted "$T/cache" && ! mounted "$T/disk-cache" && mentions "rebuild its purge index"'
+
+reset container; FAKE_OLD_IMAGE=img:1 FAKE_LEGACY_IMAGES=img:1 bluegreen
+check "legacy -> disk: once the old colour is gone, the pages the disk colour cached meanwhile are listed to be purged" \
+  '[ $RC = 0 ] && after_last "run --rm --user 0 --entrypoint sh -v $T/disk-cache:/cache:ro" "docker rm -f blot-proxy-blue"'
+reset container; FAKE_OLD_IMAGE=img:1 FAKE_LEGACY_IMAGES="img:1 img:2" bluegreen
+check "legacy -> legacy: no cache page is listed to be purged" '[ $RC = 0 ] && ! called ":/cache:ro"'
+
+reset container; FAKE_OLD_IMAGE=img:1 FAKE_LEGACY_IMAGES="img:1 img:2" bluegreen
+check "legacy -> legacy: nothing is emptied (only the overlap files are dropped)" '[ $RC = 0 ] && ! called "rm -rf /cache/.trash" && mounted "$T/cache"'
+
+reset container; FAKE_OLD_IMAGE=img:1 FAKE_LEGACY_IMAGES=img:1 FAKE_FAIL_AFTER_STOP=1 bluegreen
+check "failed legacy -> disk swap after the old colour was stopped: the legacy directory is emptied before it is started again (purges since went to the disk colour)" \
+  '[ $RC != 0 ] && called "docker start blot-proxy-blue" && [ "$(reset_of "$T/cache")" -lt "$(line "docker start blot-proxy-blue")" ]'
+
+reset container; FAKE_OLD_IMAGE=img:1 FAKE_LEGACY_IMAGES=img:1 FAKE_UNHEALTHY=blot-proxy-green bluegreen
+check "legacy -> disk where the new colour never becomes healthy: the legacy directory is not emptied" '[ $RC != 0 ] && ! reset_in "$T/cache"'
+
+reset none; bluegreen
+check "fresh start with a disk image: the disk directory is emptied first and mounted" \
+  '[ $RC = 0 ] && [ "$(reset_of "$T/disk-cache")" -lt "$(line "docker create")" ] && mounted "$T/disk-cache" && ! reset_in "$T/cache"'
+
+reset none; FAKE_LEGACY_IMAGES=img:2 bluegreen
+check "fresh start with a legacy image: the legacy directory is emptied first and mounted" \
+  '[ $RC = 0 ] && [ "$(reset_of "$T/cache")" -lt "$(line "docker create")" ] && mounted "$T/cache" && ! reset_in "$T/disk-cache"'
+
+reset container; FAKE_OLD_IMAGE=img:1 FAKE_LEGACY_IMAGES=img:1 FAKE_RESET_FAILS=1 bluegreen
+check "the new kind's directory cannot be emptied: refused before the new colour exists" '[ $RC != 0 ] && ! called "docker create" && ! called "docker stop"'
+
+reset container; rmdir "$T/disk-cache"; bluegreen
+check "the cache directory for the image's kind is missing: refused, with the command to create it" \
+  '[ $RC != 0 ] && ! called "docker create" && mentions "sudo install -d -o 1000 -g 1000 $T/disk-cache"'
+mkdir -p "$T/disk-cache"
 
 echo "certificates on a fresh start"
 

@@ -552,13 +552,15 @@ section("6 HEAD", async () => {
   check("HEAD on a miss: 200, no body, Content-Length of the page", h1.status === 200 && h1.body.length === 0 && cache(h1) === "MISS" && /^text\/html/.test(h1.headers["content-type"]) && parseInt(h1.headers["content-length"] || "0", 10) > 0, `${h1.status} ${cache(h1)} cl=${h1.headers["content-length"]}`);
   const before = asked(A, p);
   const g1 = await get(A, host, p);
-  check("HEAD on a miss fills the entry: the following GET is a HIT with the whole body, Node not asked again", g1.status === 200 && cache(g1) === "HIT" && g1.body.length === parseInt(h1.headers["content-length"], 10) && asked(A, p) === before, `${cache(g1)} len ${g1.body.length} cl ${h1.headers["content-length"]}`);
+  // disk cache: a HEAD is passed to Node as a HEAD and fills nothing (parity rule head-does-not-fill)
+  check("HEAD on a miss fills nothing: the following GET is a MISS with the whole body, Node asked again", g1.status === 200 && cache(g1) === "MISS" && g1.body.length === parseInt(h1.headers["content-length"], 10) && asked(A, p) === before + 1, `${cache(g1)} len ${g1.body.length} cl ${h1.headers["content-length"]}`);
   const h2 = await get(A, host, p, { method: "HEAD" });
   check("HEAD on a hit: HIT, no body, same Content-Length and Content-Type", h2.status === 200 && cache(h2) === "HIT" && h2.body.length === 0 && h2.headers["content-length"] === String(g1.body.length) && h2.headers["content-type"] === g1.headers["content-type"]);
   const n404 = asked(A, "/p/status/404");
   const nf1 = await get(A, host, "/p/status/404", { method: "HEAD" });
   const nf2 = await get(A, host, "/p/status/404");
-  check("HEAD of a 404 is cached for the GET after it", nf1.status === 404 && nf2.status === 404 && cache(nf2) === "HIT" && asked(A, "/p/status/404") - n404 === 1, `${nf1.status}/${nf2.status} ${cache(nf2)} asked ${asked(A, "/p/status/404") - n404}`);
+  // disk cache: parity rule head-does-not-fill
+  check("HEAD of a 404 is not cached: the GET after it is a MISS", nf1.status === 404 && nf2.status === 404 && cache(nf2) === "MISS" && asked(A, "/p/status/404") - n404 === 2, `${nf1.status}/${nf2.status} ${cache(nf2)} asked ${asked(A, "/p/status/404") - n404}`);
   const rd = await get(A, host, "/p/status/301", { method: "HEAD" });
   check("HEAD of a redirect: 301 with Location", rd.status === 301 && rd.headers.location === "/p/target");
   const hs = await get(A, host, "/p/status/500", { method: "HEAD" });
@@ -569,7 +571,8 @@ section("6 HEAD", async () => {
   check("HEAD with Accept-Encoding: br of a compressible file says Content-Encoding: br", hc.status === 200 && hc.headers["content-encoding"] === "br" && hc.body.length === 0, `${hc.headers["content-encoding"]}`);
   const hp = await get(A, SITE, "/s6/head", { method: "HEAD", tls: true });
   const hg = await get(A, SITE, "/s6/head", { tls: true });
-  check("site: HEAD fills, the GET after is a HIT", hp.status === 200 && cache(hg) === "HIT");
+  // disk cache: parity rule head-does-not-fill
+  check("site: HEAD fills nothing, the GET after is a MISS", hp.status === 200 && cache(hg) === "MISS", String(cache(hg)));
 });
 
 section("7 conditional GETs", async () => {
@@ -632,7 +635,8 @@ section("8 Range", async () => {
   const f1 = await get(A, host, page, { headers: { Range: "bytes=0-99" } });
   check("KNOWN: a first Range request on a page Node sends without Accept-Ranges gets the whole body (200), not a 206", f1.status === 200 && f1.body.length > 500 && !f1.headers["content-range"], `${f1.status} ${f1.body.length} ${f1.headers["content-range"]}`);
   const h1 = await get(A, host, page, { headers: { Range: "bytes=0-99" } });
-  check("Range on a hit of a page without Accept-Ranges: 200 whole body, no Accept-Ranges", h1.status === 200 && h1.body.length > 500 && !h1.headers["accept-ranges"], `${h1.status} ${h1.body.length} ${h1.headers["accept-ranges"]}`);
+  // disk cache: the static module serves a hit and honours Range (parity rule range-on-hit)
+  check("Range on a hit of a page without Accept-Ranges: 206 with those bytes", h1.status === 206 && h1.body.length === 100 && h1.headers["content-range"] === `bytes 0-99/${f1.body.length}`, `${h1.status} ${h1.body.length} ${h1.headers["content-range"]}`);
   check("those Range requests asked Node once for the page", asked(A, page) === 1, String(asked(A, page)));
 
   // a file Node answers with Accept-Ranges (folder files)
@@ -648,7 +652,8 @@ section("8 Range", async () => {
   const firstBad = await get(A, "s8d.localhost", bin, { headers: { Range: "bytes=99999999-" } });
   check("first request, range past the end: 416", firstBad.status === 416, `${firstBad.status} ${firstBad.headers["content-range"]}`);
   const firstBad2 = await get(A, "s8d.localhost", bin);
-  check("the 416 stored nothing: the full request after it is a MISS", cache(firstBad2) === "MISS", String(cache(firstBad2)));
+  // disk cache: the fill stores the whole file behind the 416 (parity rule unsatisfiable-range-stored)
+  check("the 416 stored the file: the full request after it is a HIT with the whole file", cache(firstBad2) === "HIT" && firstBad2.body.length === 10000, `${cache(firstBad2)} ${firstBad2.body.length}`);
 
   // on a hit
   const hit = await get(A, "s8a.localhost", bin);
@@ -687,7 +692,8 @@ section("8 Range", async () => {
   check("Range on a hit of a CSS file without Accept-Ranges from Node: the whole body, 200", c1.status === 200 && decode(c1).length > 500, `${c1.status} ${c1.headers["content-encoding"]}`);
   await get(A, host, "/large");
   const b1 = await get(A, host, "/large", { headers: { Range: "bytes=1048576-1048675" } });
-  check("a range into a 3 MB entry that Node sent without Accept-Ranges: the whole body, 200", b1.status === 200 && b1.body.length === 3 * 1024 * 1024, `${b1.status} ${b1.body.length}`);
+  // disk cache: parity rule range-on-hit
+  check("a range into a 3 MB entry that Node sent without Accept-Ranges: 206 with those bytes", b1.status === 206 && b1.body.length === 100 && b1.headers["content-range"] === `bytes 1048576-1048675/${3 * 1024 * 1024}`, `${b1.status} ${b1.body.length} ${b1.headers["content-range"]}`);
 });
 
 section("9 Accept-Encoding", async () => {
@@ -759,7 +765,8 @@ section("10 Vary and the headers Node sends", async () => {
   const v1 = await get(A, host, "/p/vary", { headers: { Cookie: "a=1", "Accept-Language": "en" } });
   const v2 = await get(A, host, "/p/vary", { headers: { Cookie: "a=2", "Accept-Language": "fr" } });
   check("Vary: Cookie, Accept-Language from Node is ignored: another cookie and language get the HIT, Node asked once", cache(v1) === "MISS" && cache(v2) === "HIT" && asked(A, "/p/vary") === 1 && same(v1, v2), `${cache(v1)}/${cache(v2)}`);
-  check("Node's Vary is passed on to the client (with Accept-Encoding added), though the entry is shared", v1.headers.vary === "Accept-Encoding, Cookie, Accept-Language" && v2.headers.vary === v1.headers.vary, `${v1.headers.vary} / ${v2.headers.vary}`);
+  // disk cache: a hit drops Node's Vary, since one copy is served to everyone (parity rule vary-dropped-on-hit)
+  check("Node's Vary is passed on to the client on the miss (with Accept-Encoding added); the hit says Vary: Accept-Encoding only", v1.headers.vary === "Accept-Encoding, Cookie, Accept-Language" && v2.headers.vary === "Accept-Encoding", `${v1.headers.vary} / ${v2.headers.vary}`);
 
   // Cache-Control / Expires from Node
   const cc = await get(A, host, "/p/cache-control");
@@ -793,12 +800,14 @@ section("10 Vary and the headers Node sends", async () => {
   // Set-Cookie
   const sc1 = await get(A, host, "/p/set-cookie");
   const sc2 = await get(A, host, "/p/set-cookie", { headers: { Cookie: "other=1" } });
-  check("KNOWN: Set-Cookie from Node is stored with the entry and replayed on every hit, to every visitor", rawValues(sc1, "set-cookie").length === 2 && cache(sc2) === "HIT" && rawValues(sc1, "set-cookie").join("|") === rawValues(sc2, "set-cookie").join("|"), `${rawValues(sc1, "set-cookie")} // ${rawValues(sc2, "set-cookie")}`);
+  // disk cache: no longer KNOWN, a hit does not replay the filler's cookies (parity rule set-cookie-not-replayed)
+  check("Set-Cookie from Node reaches the visitor of the miss and is not replayed on a hit", rawValues(sc1, "set-cookie").length === 2 && cache(sc2) === "HIT" && rawValues(sc2, "set-cookie").length === 0, `${rawValues(sc1, "set-cookie")} // ${rawValues(sc2, "set-cookie")}`);
   const q1 = await get(A, SITE, "/questions/replies", { tls: true });
   const q2 = await get(A, SITE, "/questions/replies", { tls: true });
   const q3 = await get(A, SITE, "/questions/replies", { tls: true, headers: { Cookie: "__Host-csrf=mine" } });
   const t = (r) => (r.headers["set-cookie"] || []).join(";");
-  check("KNOWN: site /questions/<word> pages set __Host-csrf and every later visitor is handed the first visitor's token", /__Host-csrf=token\d+/.test(t(q1)) && t(q1) === t(q2) && t(q1) === t(q3) && cache(q3) === "HIT" && asked(A, "/questions/replies") === 1, `${t(q1)} | ${t(q2)} | ${t(q3)}`);
+  // disk cache: no longer KNOWN (parity rule set-cookie-not-replayed)
+  check("site /questions/<word> pages set __Host-csrf for the visitor of the miss; later visitors are not handed that token", /__Host-csrf=token\d+/.test(t(q1)) && t(q2) === "" && t(q3) === "" && cache(q3) === "HIT" && asked(A, "/questions/replies") === 1, `${t(q1)} | ${t(q2)} | ${t(q3)}`);
 
   // repeated headers
   const d1 = await get(A, host, "/p/dup");

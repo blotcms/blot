@@ -5,7 +5,6 @@ const mustache = require("mustache");
 const os = require("os");
 const { basename, resolve } = require("path");
 const fs = require("fs-extra");
-const { cache_directory } = require("config");
 
 function openrestyIdentity() {
   // os.userInfo() throws when the running uid has no /etc/passwd entry (some
@@ -27,8 +26,8 @@ function openrestyIdentity() {
   return { username, group };
 }
 
-const CACHER_DIRECTORY = resolve(__dirname + "/../../");
-const DATA_DIRECTORY = CACHER_DIRECTORY + "/tests/data";
+const PROXY_DIRECTORY = resolve(__dirname + "/../../");
+const DATA_DIRECTORY = PROXY_DIRECTORY + "/tests/data";
 
 const config = {
   openresty: {
@@ -39,40 +38,7 @@ const config = {
   }
 };
 
-const inspectCache = require("./inspect-cache");
-
-const ERROR_LOG = DATA_DIRECTORY + "/error.log";
-
-const logSize = async () => {
-  try {
-    return (await fs.stat(ERROR_LOG)).size;
-  } catch (e) {
-    return 0;
-  }
-};
-
-// cacher.lua rebuilds its index in the background once nginx is up. Resolve
-// when it logs that the rebuild which started after `offset` is complete.
-const waitForIndex = async (offset) => {
-  const deadline = Date.now() + 30 * 1000;
-
-  while (Date.now() < deadline) {
-    try {
-      const log = await fs.readFile(ERROR_LOG);
-      if (log.subarray(offset).toString().includes("rehydrate: complete")) {
-        return;
-      }
-    } catch (e) {}
-
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-
-  throw new Error("cacher index was not rebuilt");
-};
-
-const startOpenresty = async (pathToConf, origin, { waitForIndex: wait = true } = {}) => {
-  const offset = await logSize();
-
+const startOpenresty = async (pathToConf, origin) => {
   try {
     const output = child_process.execSync(
       __dirname + "/start-openresty.sh " + pathToConf
@@ -88,8 +54,6 @@ const startOpenresty = async (pathToConf, origin, { waitForIndex: wait = true } 
 
   while (!connected) {
     try {
-      // this will not be cached
-      //   console.log("Checking " + origin + "/health");
       // this seems to hang sometimes, set a timeout of 1 second
       await fetch(origin + "/health", { timeout: 1000 });
       connected = true;
@@ -97,8 +61,6 @@ const startOpenresty = async (pathToConf, origin, { waitForIndex: wait = true } 
       //   console.log("Openresty not started yet");
     }
   }
-
-  if (wait) await waitForIndex(offset);
 };
 
 const stopOpenresty = async () => {
@@ -108,7 +70,10 @@ const stopOpenresty = async () => {
   } catch (e) {}
 };
 
-module.exports = configFile => {
+// Options:
+//   upstream: a function({ port }) resolving to a server, instead of the
+//     stub in upstream-server.js
+module.exports = (configFile, { upstream = server } = {}) => {
   beforeEach(async function () {
     await fs.emptyDir(DATA_DIRECTORY);
 
@@ -116,37 +81,25 @@ module.exports = configFile => {
 
     this.origin = origin;
 
-    const cache_directory = DATA_DIRECTORY + "/cache";
-    const configInput = CACHER_DIRECTORY + "/tests/" + configFile;
+    const configInput = PROXY_DIRECTORY + "/tests/" + configFile;
     const configPath = DATA_DIRECTORY + "/" + basename(configFile);
-
-    this.cache_directory = cache_directory;
 
     const identity = openrestyIdentity();
     const result = mustache.render(await fs.readFile(configInput, "utf8"), {
       ...config,
       user: identity.username,
       group: identity.group,
-      lua_directory: CACHER_DIRECTORY + "/config",
-      data_directory: DATA_DIRECTORY,
-      cache_directory
+      lua_directory: PROXY_DIRECTORY + "/config",
+      data_directory: DATA_DIRECTORY
     });
 
     await fs.outputFile(configPath, result, "utf8");
-
-    await fs.mkdir(DATA_DIRECTORY + "/cache");
 
     await stopOpenresty();
 
     await startOpenresty(configPath, this.origin);
 
-    this.server = await server({ port: config.node.port });
-
-    this.inspectCache = ({ verbose = false, host = null } = {}) =>
-      inspectCache(origin + "/inspect", cache_directory, host, verbose);
-
-    this.logSize = logSize;
-    this.waitForIndex = waitForIndex;
+    this.server = await upstream({ port: config.node.port });
 
     this.reloadOpenresty = async () => {
       child_process.execSync(
@@ -154,7 +107,7 @@ module.exports = configFile => {
       );
     };
 
-    this.restartOpenresty = async (options) => {
+    this.restartOpenresty = async () => {
       // get the pid of the current openresty process
       const masterpid = () =>
         child_process
@@ -167,7 +120,7 @@ module.exports = configFile => {
       const pidBefore = masterpid();
 
       await stopOpenresty();
-      await startOpenresty(configPath, origin, options);
+      await startOpenresty(configPath, origin);
 
       // check that the pid has changed
       const pidAfter = masterpid();
@@ -183,37 +136,6 @@ module.exports = configFile => {
       if (pidBefore === pidAfter) {
         throw new Error("Openresty did not restart");
       }
-    };
-
-    this.listCache = async function listCache ({ watch = true } = {}) {
-      const files = [];
-
-      // With use_temp_path=off nginx writes in-progress responses to a
-      // numbered temp file inside this same tree before renaming it to its
-      // final 32-char md5 hash name; skip temp files so a listCache() call
-      // racing an in-flight write can't return partial/garbled content.
-      const CACHE_FILENAME = /^[0-9a-f]{32}$/;
-
-      const list = async function (dir) {
-        const stat = await fs.stat(dir);
-        if (stat.isDirectory()) {
-          const children = await fs.readdir(dir);
-          for (const child of children) {
-            await list(dir + "/" + child);
-          }
-        } else if (CACHE_FILENAME.test(basename(dir))) {
-          files.push(dir);
-        }
-      };
-
-      await list(cache_directory);
-
-      // wait for the cache to be populated
-      while (files.length === 0 && watch) {
-        await list(cache_directory);
-      }
-
-      return files;
     };
   });
 

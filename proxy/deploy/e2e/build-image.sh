@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Build a proxy image from a source tree (the checkout, or another commit's),
-# the way the workflows do, plus one change for the swap-load test: the
-# rate-limit whitelist (the Bunny edge list in
+# the way the workflows do, plus one change for the swap-load and transition
+# tests: the rate-limit whitelist (the Bunny edge list in
 # proxy/build/data/latest/cdn-ips.conf, which http.conf turns into "no
 # per-client limits") also covers every address, because the load generator
 # sends hundreds of requests a second from one.

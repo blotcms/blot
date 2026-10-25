@@ -13,8 +13,9 @@ const PORTS = (process.env.STUB_PORTS || "8088,8089,8090,8091")
 // 0.0.0.0, as production Node containers (published with docker -p) are.
 const BIND = process.env.STUB_BIND || "127.0.0.1";
 
-// Requests seen per path, for proxy/e2e/request-matrix.js to tell whether
-// the proxy asked Node again. Read with /__count?path=/some/path.
+// Requests seen per path, for proxy/e2e/request-matrix.js and
+// diskcache-checks.js to tell whether the proxy asked Node again. Read with
+// /__count?path=/some/path.
 const counts = {};
 
 // A deterministic ~3 MB body (not compressible as a type, see /large)
@@ -268,7 +269,7 @@ const handler = (req, res) => {
   }
   counts[url.pathname] = (counts[url.pathname] || 0) + 1;
 
-  // --- routes for proxy/e2e/request-matrix.js ---
+  // --- routes for proxy/e2e/request-matrix.js and diskcache-checks.js ---
   if (url.pathname === "/etag-page") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", ETag: '"node-etag-1"' });
     res.end("<html><body>" + "an etagged page ".repeat(60) + "</body></html>");
