@@ -18,6 +18,7 @@ on:
     paths:
       - ".github/workflows/airlock.yml"
       - "config/airlock/**"
+      - "package.json"
 
 permissions:
   contents: read
@@ -47,6 +48,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.4
+
+      # Use the app's pinned CDP client without downloading a second browser
+      # or compiling unrelated native modules.
+      - name: Install dependencies for the browser compatibility check
+        run: npm install --omit=dev --ignore-scripts --no-audit --no-fund
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -102,13 +113,13 @@ jobs:
           # target, so a pass here means the filter did something, not
           # that the address was already dead.
           docker run -d --name airlock_test_target --network airlock_test_network \
-            alpine:3.20 sh -c 'while true; do nc -l -p 80; done'
+            alpine:3.24 sh -c 'while true; do nc -l -p 80; done'
 
           target_ip=$(docker inspect --format='{{(index .NetworkSettings.Networks "airlock_test_network").IPAddress}}' airlock_test_target)
           echo "Target container is at $target_ip"
 
           docker run -d --name airlock_test_control --network airlock_test_network \
-            alpine:3.20 sleep 300
+            alpine:3.24 sleep 300
 
           echo "Sanity check: an unfiltered sibling container CAN reach the target..."
           docker exec airlock_test_control sh -c "nc -z -w3 $target_ip 80"
@@ -126,7 +137,7 @@ jobs:
           # forward can only succeed via the `meta skuid 0 udp/tcp dport 53`
           # rules in egress.nft; drop those and this step goes red.
           docker run -d --name airlock_test_dns --network airlock_test_network \
-            alpine:3.20 sh -c 'apk add --no-cache dnsmasq >/dev/null && exec dnsmasq -k --no-resolv --server=1.1.1.1 --server=8.8.8.8'
+            alpine:3.24 sh -c 'apk add --no-cache dnsmasq >/dev/null && exec dnsmasq -k --no-resolv --server=1.1.1.1 --server=8.8.8.8'
           dns_ip=$(docker inspect --format='{{(index .NetworkSettings.Networks "airlock_test_network").IPAddress}}' airlock_test_dns)
           echo "Sibling resolver (in the blocked range) is at $dns_ip"
           for i in $(seq 1 20); do
@@ -135,7 +146,8 @@ jobs:
             sleep 1
           done
 
-          airlock_id=$(docker run -d --network airlock_test_network --cap-add=NET_ADMIN --dns "$dns_ip" "$IMAGE")
+          airlock_id=$(docker run -d --network airlock_test_network --cap-add=NET_ADMIN --dns "$dns_ip" \
+            -p 127.0.0.1:9222:9222 "$IMAGE")
 
           timeout=30; interval=2; elapsed=0
           until [ "$(docker inspect --format='{{json .State.Health.Status}}' "$airlock_id")" = '"healthy"' ]; do
@@ -175,6 +187,42 @@ jobs:
           echo "Checking the public internet is reachable, direct and via the proxy..."
           docker exec "$airlock_id" sh -c 'curl -m8 -sSf -o /dev/null https://example.com'
           docker exec "$airlock_id" sh -c 'curl -m8 -sSf -x http://127.0.0.1:8888 -o /dev/null https://example.com'
+
+          # Exercise the nginx HTTP/WebSocket front with the app's Puppeteer
+          # pin. Allow Chromium patch updates, but require a matching major
+          # and a real screenshot before publishing the deployable manifest.
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import * as puppeteer from 'puppeteer';
+
+          const browser = await puppeteer.connect({
+            browserURL: 'http://127.0.0.1:9222',
+            protocolTimeout: 15000,
+          });
+          let context;
+          try {
+            const version = await browser.version();
+            const expected = puppeteer.PUPPETEER_REVISIONS.chrome;
+            console.log(`Airlock: ${version}; Puppeteer targets Chrome ${expected}`);
+            assert.equal(version.split('/')[1].split('.')[0], expected.split('.')[0],
+              'Update the Puppeteer pin to match the airlock Chromium major');
+            context = await browser.createBrowserContext();
+            const page = await context.newPage();
+            await page.setViewport({ width: 400, height: 300 });
+            await page.setRequestInterception(true);
+            page.on('request', request => request.continue());
+            await page.goto('data:text/html,<h1>Airlock screenshot</h1>', {
+              waitUntil: 'load', timeout: 15000,
+            });
+            assert.equal(await page.$eval('h1', element => element.textContent),
+              'Airlock screenshot');
+            const png = Buffer.from(await page.screenshot({ type: 'png' }));
+            assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+          } finally {
+            try { await context?.close(); }
+            finally { await browser.disconnect(); }
+          }
+          NODE
 
           docker rm -f "$airlock_id" airlock_test_target airlock_test_control airlock_test_dns
           docker network rm airlock_test_network

@@ -400,11 +400,16 @@ they look different in the logs - only one is a security regression:
   user input and is left on a locally-launched Chromium; don't set
   `BLOT_AIRLOCK_BROWSER_URL` for that job.
 * **Chromium/Puppeteer version drift.** `package.json` pins `puppeteer`;
-  `alpine:3.20`'s `chromium` apk floats with the base image and is a
-  different release train. The Dockerfile records the version it shipped
-  with in `/etc/airlock/chromium-version` (also logged at container start)
-  precisely so a drift shows up there before it shows up as bookmark
-  screenshots silently failing in production after an image rebuild.
+  `alpine:3.24`'s `chromium` apk floats to receive security updates. As of
+  2026-10-25, it ships Chromium 155.0.8059.84, matching Puppeteer 25.15.0's
+  [supported Chrome version](https://pptr.dev/supported-browsers). The airlock
+  GitHub Actions workflow checks the browser major against Puppeteer's target
+  and captures a PNG through the nginx DevTools front before publishing the
+  manifest. Changes to `package.json` also run that workflow. The image
+  records its exact version in `/etc/airlock/chromium-version` and logs it at
+  startup. Chromium is in Alpine's `community` repository, whose
+  [support ends at the next stable Alpine release](https://alpinelinux.org/releases/);
+  update the base image and Puppeteer together when that release ships.
 * In production, `config/index.js` only **warns** (`console.warn`, on
   startup) if `BLOT_AIRLOCK_BROWSER_URL` / `BLOT_AIRLOCK_PROXY_URL` are
   unset - it does not refuse to start. A hard startup failure was rejected
