@@ -1,8 +1,12 @@
-- Check the access log for the Accept-Encoding of feed requests (/feed.rss etc.): if most are gzip-only, store gzip -9 copies too (gzip_static), since those hits still compress on the fly
+Check the access log for the Accept-Encoding of feed requests (/feed.rss etc.): if most are gzip-only, store gzip -9 copies too (gzip_static), since those hits still compress on the fly, use the new log line paramater for accept encoding
 
 Fix bug with Documentation template and the setting 'Adds zoom to large images' and [tell customer](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbgJMGTSPcnwTNxVJVPZZnrhJB)
 
 There are a few 'your domain is almost set up' sites in featured sites, fix!
+
+Does proxy/ send and recieve etags nicely? Can we precompute these for compressed resonses?
+
+Can we exploring filling the disk_cache from node? use background task to do this for other pages by cache ID?
 
 ---
 
