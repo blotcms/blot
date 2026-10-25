@@ -1,5 +1,7 @@
 Fix bug with Documentation template and the setting 'Adds zoom to large images' and [tell customer](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbgJMGTSPcnwTNxVJVPZZnrhJB)
 
+There are a few 'your domain is almost set up' sites in featured sites, fix!
+
 ---
 
 Bump the airlock image off Alpine 3.20 (EOL 2026-04-01) in config/airlock/Dockerfile to a supported release. Its Chromium renders untrusted pages for bookmark screenshots, so it needs current security patches; check the Chromium version still matches the puppeteer pin.
