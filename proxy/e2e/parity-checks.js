@@ -707,103 +707,10 @@ function diff(spec, ra, rb) {
 //     match: (c, d) => ...,         // c = ctx, d = the difference (not for whole)
 //   },
 //
-// The disk cache (proxy/config/diskcache.lua) replaces nginx proxy_cache +
-// cacher.lua, so the baseline is the old cache and these are its differences.
-const isHit = (r) => header(r, "blot-cache")[0] === "HIT";
-const isMiss = (r) => header(r, "blot-cache")[0] === "MISS";
-const tokens = (v) =>
-  (v || "")
-    .toLowerCase()
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
-
-const INTENDED = [
-  // --- whole comparisons
-  {
-    id: "range-on-hit",
-    class: "intended",
-    whole: true,
-    reason: "a hit honours Range (206, 416) because the static module serves it; the baseline sent the whole body (200) unless Node answered with Accept-Ranges",
-    match: (c) => reqHeader(c.spec, "range") !== undefined && c.ra.status === 200 && header(c.ra, "content-range").length === 0 && isHit(c.rb) && [206, 416].includes(c.rb.status),
-  },
-  {
-    id: "preconditions-on-hit",
-    class: "harmless",
-    whole: true,
-    reason: "a hit evaluates If-Match and If-Unmodified-Since (412, RFC 9110); the baseline ignored them. No browser sends either on a GET",
-    match: (c) => (reqHeader(c.spec, "if-match") !== undefined || reqHeader(c.spec, "if-unmodified-since") !== undefined) && c.ra.status === 200 && c.rb.status === 412,
-  },
-  {
-    id: "head-does-not-fill",
-    class: "intended",
-    whole: true,
-    reason: "a HEAD is sent to Node as a HEAD and never fills the cache; the baseline converted it to a GET and cached the answer, so a later request, or a HEAD with Node down, was a HIT there",
-    match: (c) => (c.spec.method === "HEAD" || c.spec.afterHead) && isHit(c.ra) && !isHit(c.rb),
-  },
-  {
-    id: "head-forwarded",
-    class: "intended",
-    reason: "a HEAD miss is forwarded to Node as HEAD; the baseline sent GET (proxy_cache_convert_head), so a Content-Length that depends on the method differs, here only because the stub echoes the method",
-    match: (c, d) => c.spec.method === "HEAD" && isMiss(c.ra) && isMiss(c.rb) && d.name === "content-length",
-  },
-  {
-    id: "head-hit-content-length",
-    class: "harmless",
-    reason: "a HEAD hit sends the Content-Length of the page; the baseline sent none",
-    match: (c, d) => c.spec.method === "HEAD" && d.name === "content-length" && d.a === "(absent)" && /^\d+$/.test(d.b) && isHit(c.ra) && isHit(c.rb),
-  },
-  {
-    id: "head-error-vary",
-    class: "harmless",
-    reason: "the baseline adds Vary: Accept-Encoding to a HEAD answer for a cached 404 or redirect, which has no body to compress; the branch does not",
-    match: (c, d) => c.spec.method === "HEAD" && d.name === "vary" && c.ra.status !== 200 && tokens(d.a).every((t) => t === "accept-encoding") && d.b === "(absent)",
-  },
-  {
-    id: "precondition-failed-headers",
-    class: "harmless",
-    reason: "nginx's own 412 for If-Match / If-Unmodified-Since carries Blot-Cache in the baseline and Vary in the branch",
-    match: (c, d) => c.ra.status === 412 && c.rb.status === 412 && (d.name === "blot-cache" || d.name === "vary"),
-  },
-  {
-    id: "unsatisfiable-range-stored",
-    class: "harmless",
-    whole: true,
-    reason: "a first request whose range is past the end of a file Node serves with Accept-Ranges: the baseline answered nginx's 416 page and stored nothing, so every such request went to Node (and got the offline page while Node was down); the branch answers an empty 416, stores the whole file, and later requests are hits",
-    match: (c) => reqHeader(c.spec, "range") !== undefined && c.rb.status === 416 && (c.ra.status === 416 || (!isHit(c.ra) && c.ra.status >= 500)),
-  },
-  // --- single headers
-  {
-    id: "set-cookie-not-replayed",
-    class: "intended",
-    reason: "a hit does not replay the Set-Cookie of whoever filled the entry (the baseline sent one visitor's cookies to every later visitor)",
-    match: (c, d) => d.name === "set-cookie" && isHit(c.rb) && d.b === "(absent)",
-  },
-  {
-    id: "vary-dropped-on-hit",
-    class: "intended",
-    reason: "a hit sends Vary: Accept-Encoding only; Node's own Vary is dropped, since the cache ignores it and serves one copy to everyone",
-    match: (c, d) => d.name === "vary" && isHit(c.rb) && tokens(d.b).every((t) => t === "accept-encoding"),
-  },
-  {
-    id: "accept-ranges-on-range-miss",
-    class: "harmless",
-    reason: "a first request answered 206 keeps Node's Accept-Ranges: bytes; the baseline's range filter dropped it. Correct either way, and every hit sends it",
-    match: (c, d) => d.name === "accept-ranges" && d.a === "(absent)" && d.b === "bytes" && c.rb.status === 206 && reqHeader(c.spec, "range") !== undefined,
-  },
-  {
-    id: "accept-ranges-on-hit",
-    class: "intended",
-    reason: "a hit sends Accept-Ranges: bytes, since it honours Range",
-    match: (c, d) => d.name === "accept-ranges" && isHit(c.rb) && d.a === "(absent)" && d.b === "bytes",
-  },
-  {
-    id: "empty-body-not-compressed",
-    class: "harmless",
-    reason: "the baseline labels an empty 200 body Content-Encoding: br or gzip (a valid empty stream); the branch sends it plain",
-    match: (c, d) => d.name === "content-encoding" && decode(c.ra).length === 0 && d.b === "(absent)",
-  },
-];
+// On master this is empty: the working tree is compared with itself as it was
+// in origin/master, and must show 0 differences. A proxy PR that changes what
+// a client sees lists each change here, so the review is of the list.
+const INTENDED = [];
 
 // ---- the run ------------------------------------------------------------
 
@@ -884,7 +791,6 @@ async function main() {
   buildImages();
   const specs = corpus();
   console.log(`corpus: ${specs.length} requests`);
-  COUNT_EXPLAINED = new Set(specs.filter((x) => x.group === "head" || x.group === "stream-cached" || x.group === "first-request").map((x) => x.path.split("?")[0]));
 
   try {
     await Promise.all([startProxy(M), startProxy(B)]);

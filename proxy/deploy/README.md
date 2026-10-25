@@ -23,8 +23,8 @@ The scripts read the host's settings from `/etc/blot/proxy.env`
 ([`proxy.env.example`](proxy.env.example)) and share [`common.sh`](common.sh).
 Paths default to the ones the bare-metal OpenResty used, which the host still has (`/var/instance-ssd/logs`,
 `/etc/ssl/private`, and the `cdn.` static
-directory `/var/www/blot/app/blog/static`), plus the two cache directories
-below (`/var/instance-ssd/cache` and `/var/instance-ssd/disk-cache`),
+directory `/var/www/blot/app/blog/static`), plus the cache directory
+below (`/var/instance-ssd/disk-cache`),
 so a redeploy keeps the warm cache and
 the app's own `cdn.` files are served from disk (with the `Cache-Control`/CORS headers of
 `location /`) instead of falling through to Node. Per-blog assets are not on
@@ -92,64 +92,24 @@ The script refuses to go on if `redis-cli` is missing, or (on a swap) no
 certificate could be read from the running proxy. `PROXY_SKIP_CERT_SWEEP=1`
 skips both the comparison and the fresh-start check.
 
-## Cache directories
+## Cache directory
 
-There are two cache formats, so two host directories, and each image uses one:
-
-| Directory (setting) | Used by |
-| --- | --- |
-| `/var/instance-ssd/disk-cache` (`PROXY_DISK_CACHE_DIR`) | images with `diskcache.lua` |
-| `/var/instance-ssd/cache` (`PROXY_CACHE_DIR`) | older images, which have `/etc/openresty/cacher.lua` (nginx `proxy_cache`) |
-
-`blue-green.sh` asks the image which kind it is and mounts that directory at
-`/var/cache/openresty`. The directory must exist and belong to uid 1000
-(`mount-instance-store.sh` creates the disk cache one at boot; otherwise
+Every image keeps its cache (`diskcache.lua`) in one host directory,
+`/var/instance-ssd/disk-cache` (`PROXY_DISK_CACHE_DIR`), which `blue-green.sh`
+mounts at `/var/cache/openresty`. It must exist and belong to uid 1000
+(`mount-instance-store.sh` creates it at boot; otherwise
 `sudo install -d -o 1000 -g 1000 <dir>`).
 
-The two formats must not share a directory: an old image's cache loader
-deletes disk cache files, and the disk cache's sweeper never sees
-`proxy_cache`'s files. And a cache only receives purges while its kind of image
-is running, so after a switch the other kind's directory is stale. So:
-
-- A normal deploy (same kind on both sides) touches nothing and keeps the warm
-  cache.
-- When the kind changes, or on a fresh start, the new image's directory is
-  emptied **before** the new container starts, since it missed every purge
-  since it was last in use.
-- After a successful swap that changed the kind, the old kind's directory is
-  emptied once the old container is removed. It stops getting purges now, and
-  `npm run deploy-proxy -- <older-commit>` runs the *current* `blue-green.sh`,
-  but the GitHub workflow runs the target commit's own, which may not reset
-  anything: either way a rollback must find the directory empty, not stale. It
-  also frees the space.
-- While both colours of different kinds are up (a couple of seconds) they do
-  not share a cache and a purge reaches only one of them, so the new colour can
-  hold a page it never got the purge for. Once the old colour is gone,
-  `blue-green.sh` purges every host the new colour's directory has pages for
-  (what it cached meanwhile, seconds' worth). Until then the old colour can
-  still serve such a page, for as long as both are up.
-- A swap that fails *before* the old container was stopped leaves its directory
-  alone. One that fails *after* (the old container is started again) empties
-  the old kind's directory first: every purge since it was stopped reached the
-  other kind, so the old cache is stale.
-
-`proxy/deploy/e2e/transition.sh` runs all of this with real images under load
-(see `proxy/deploy/e2e/README.md`).
-
-Emptying moves every top-level entry into `.trash/<timestamp>/` (instant: a
-cache has a few shard directories) and deletes that in a detached container, so
-the deploy does not wait for millions of files to go.
-
-Legacy images only: after a new container is healthy, `blue-green.sh` waits up to
-`PROXY_REHYDRATE_TIMEOUT` (default 120s; about 2.5s in production) for it to log
-`rehydrate: complete` while rebuilding its purge index from the cache, and
-fails on a `[error] ... rehydrate:` line. Until it completes every `/purge`
-returns 503. On a swap this happens before the old container is stopped; on
-a fresh start before the container is made permanent. Either way a failure
-removes the new container. During a swap both containers write the same
-`error.log`, so only lines stamped at or after the new container's start time
-are read (plus `docker logs`, for an `ALLOW_STDOUT_LOGS=1` image). Disk cache
-images have no index to rebuild and are not waited for.
+- A swap touches nothing and keeps the warm cache. The old and the new colour
+  share the directory, so a purge reaching either one purges both, and a swap
+  that fails after the old container was stopped needs no cleanup before it
+  is started again.
+- On a fresh start (nothing running) the directory is emptied **before** the
+  container starts, since it missed every purge since it was last in use. The
+  files belong to uid 1000 and the deploy user has no sudo, so a container does
+  it: it moves every top-level entry into `.trash/<timestamp>/` (instant: a
+  cache has a few shard directories) and deletes that in a detached container,
+  so the deploy does not wait for millions of files to go.
 
 ## Trying issuance against a real ACME server
 
@@ -200,14 +160,6 @@ or run the Deploy proxy workflow with that commit.
 
 ## Known gaps
 
-- **Purge during a blue/green overlap (legacy images only).** Node purges each
-  proxy independently and retries ones that were down (#1936), but the two
-  containers share `127.0.0.1` and the private address, so for the few seconds
-  both listen a purge is accepted by only one of them, which counts as
-  delivered. `cacher.lua` tracks keys in per-process memory, so keys the other
-  cached in that window are not purged. Disk cache images have no such gap:
-  both containers share one cache directory, so a purge reaching either one
-  purges both. Deploy when few edits are happening if either image is legacy.
 - **`:8999` ACME hook** during the overlap (see the root `TODO`).
 - The container has no `fail2ban` of its own; it relies on the host's reading
   the shared log directory (hence the log-mode guard above).

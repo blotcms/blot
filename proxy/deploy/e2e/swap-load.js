@@ -28,7 +28,6 @@
 // internal listener on 127.0.0.1:8077, the way Node sends them. Environment:
 // STUB_URL (http://127.0.0.1:8090), PROXY_HOST (127.0.0.1), PURGE_URL
 // (http://127.0.0.1:8077), BLOT_HOST (blot.im), PURGE_MS (500), WORKERS (24),
-// MARKS (a file the driver appends "start <ms>" / "end <ms>" lines to),
 // ALLOW_RESETS (1: a new connection reset before any response byte is counted
 // and reported, not a failure; see isHandshakeReset), FILL_FILE.
 //
@@ -51,7 +50,6 @@ const STUB_URL = process.env.STUB_URL || "http://127.0.0.1:8090";
 const PURGE_URL = process.env.PURGE_URL || "http://127.0.0.1:8077";
 const PURGE_MS = parseInt(process.env.PURGE_MS || "500", 10);
 const WORKERS = parseInt(process.env.WORKERS || "24", 10);
-const MARKS = process.env.MARKS || "";
 const UA = "Mozilla/5.0 (compatible; swap-load-e2e)";
 
 const BLOG_HOSTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => `b${i}.${BLOT_HOST}`);
@@ -191,10 +189,8 @@ async function load() {
   };
   const problems = { error: [], status: [], wrong: [], stale: [], sse: [], purge: [], reset: [] };
   const counts = { error: 0, status: 0, wrong: 0, stale: 0, sse: 0, purge: 0, reset: 0 };
-  const staleTimes = [];
   const problem = (type, detail) => {
     counts[type]++;
-    if (type === "stale") staleTimes.push(Date.now());
     if (problems[type].length < 15) problems[type].push({ at: Date.now(), ...detail });
   };
   let stopping = false;
@@ -467,29 +463,11 @@ async function load() {
   });
   await Promise.all(tasks);
 
-  // A page older than a purge that had finished, while both containers were
-  // up: the limitation documented in blue-green.sh. A purge reaches one of the
-  // two containers, each keeps the list of what to delete in its own memory,
-  // and a page one of them cached after the other rebuilt its list is unknown
-  // to the other. The driver marks that window (from when the new container
-  // started until the old one had stopped); a stale answer inside it is counted
-  // apart, one outside it is a failure like any other. ALLOW_OVERLAP_STALE=1
-  // tolerates those.
-  let marks = [];
-  try {
-    marks = fs.readFileSync(MARKS, "utf8").trim().split("\n").filter(Boolean).map((l) => l.split(" "));
-  } catch (e) {}
-  const windows = [];
-  for (let i = 0; i + 1 < marks.length; i += 2) windows.push([parseInt(marks[i][1], 10), parseInt(marks[i + 1][1], 10)]);
-  const inWindow = (t) => windows.some(([a, b]) => t >= a - 1500 && t <= b + 1500);
-  const staleInWindow = process.env.ALLOW_OVERLAP_STALE === "1" ? staleTimes.filter(inWindow).length : 0;
-  counts.stale -= staleInWindow;
-
   const resets = counts.reset;
   if (ALLOW_RESETS) counts.reset = 0;
   const failures = counts.error + counts.status + counts.wrong + counts.stale + counts.sse + counts.purge + counts.reset;
   stats.keepAliveRetries = races.keepAliveRetries;
-  const summary = { ...stats, seconds: Math.round((Date.now() - stats.startedAt) / 1000), counts, staleInOverlap: staleInWindow, handshakeResets: resets, problems: failures || staleInWindow || resets ? problems : undefined };
+  const summary = { ...stats, seconds: Math.round((Date.now() - stats.startedAt) / 1000), counts, handshakeResets: resets, problems: failures || resets ? problems : undefined };
   console.log(JSON.stringify(summary, null, 1));
   process.exit(failures ? 1 : 0);
 }

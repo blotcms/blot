@@ -4,15 +4,7 @@
   - [ ] /fonts/baskervville/400(-italic).otf and .ttf are referenced but missing
   - [ ] /documentation/v-…/documentation.min.js.map: a sourceMappingURL with no published map
   - [ ] /template/46/a1/images/banner.jpg is referenced but missing
-
-- After #2204 (proxy disk cache) is merged:
-  - [ ] Empty `INTENDED` and the `COUNT_EXPLAINED` line in proxy/e2e/parity-checks.js, and drop the closing section of proxy/e2e/parity/AUDIT.md, so parity guards the next proxy PR at 0 differences against master
-  - [ ] proxy/deploy/e2e/swap-load.sh: stop tolerating stale pages while both containers are up (no ALLOW_OVERLAP_STALE/MARKS); disk cache containers share one directory, so none should be served
-  - [ ] Check the access log for the Accept-Encoding of feed requests (/feed.rss etc.): if most are gzip-only, store gzip -9 copies too (gzip_static), since those hits still compress on the fly
-- Once the disk cache has run in production long enough that a rollback to proxy_cache is off the table:
-  - [ ] Remove legacy cache support from proxy/deploy (cache kinds, the rehydrate wait, drop_overlap_cache, PROXY_CACHE_DIR) and its tests in proxy/deploy/tests/run.sh
-  - [ ] Remove proxy/deploy/e2e/transition.* and the proxy-transition-e2e job (LEGACY_REF pin); swap-load-lib.js/-stub.js are then the only copies
-  - [ ] Delete /var/instance-ssd/cache on the proxy host
+- Check the access log for the Accept-Encoding of feed requests (/feed.rss etc.): if most are gzip-only, store gzip -9 copies too (gzip_static), since those hits still compress on the fly
 
 Fix bug with Documentation template and the setting 'Adds zoom to large images' and [tell customer](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbgJMGTSPcnwTNxVJVPZZnrhJB)
 
