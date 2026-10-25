@@ -78,6 +78,10 @@ cdn.get("/template/:d1/:d2/:rest/:name", async (req, res, next) => {
   // The name only picks the Content-Type, but a view basename never holds these
   if (/[\/\\\0]/.test(name) || name.startsWith("..")) return res.sendStatus(404);
 
+  // We never publish source maps; devtools request them and would otherwise
+  // get the asset itself with a 200 that Bunny caches for a year
+  if (/\.map$/i.test(name)) return res.sendStatus(404);
+
   try {
     const output = await client.get(key.renderedOutput(d1 + d2 + rest));
 
