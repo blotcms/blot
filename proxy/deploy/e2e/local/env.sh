@@ -8,7 +8,6 @@ export PROXY_SKIP_CERT_SWEEP=1
 export E2E_ROOT=/tmp/proxy-e2e
 export PROXY_ENV_FILE=$E2E_ROOT/proxy.env
 export PROXY_ENV_FILE_BAD=$E2E_ROOT/proxy-unroutable-private-ip.env
-export PROXY_CACHE_DIR=$E2E_ROOT/cache
 export PROXY_DISK_CACHE_DIR=$E2E_ROOT/disk-cache
 export PROXY_LOG_DIR=$E2E_ROOT/logs
 export PROXY_CERT_DIR=$E2E_ROOT/certs

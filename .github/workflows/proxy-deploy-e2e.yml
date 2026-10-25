@@ -79,7 +79,6 @@ jobs:
             # PROXY_PRIVATE_IP, for the deterministic forced-failure
             # scenarios below (see proxy/deploy/e2e/setup.sh, which writes it).
             echo "PROXY_ENV_FILE_BAD=$E2E_ROOT/proxy-unroutable-private-ip.env"
-            echo "PROXY_CACHE_DIR=$E2E_ROOT/cache"
             echo "PROXY_DISK_CACHE_DIR=$E2E_ROOT/disk-cache"
             echo "PROXY_LOG_DIR=$E2E_ROOT/logs"
             echo "PROXY_CERT_DIR=$E2E_ROOT/certs"
@@ -119,7 +118,7 @@ jobs:
           [ "$(docker inspect -f '{{.State.Running}}' blot-proxy-blue)" = true ]
           code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
           [ "$code" = 200 ]
-          # a fresh start empties the cache directory of the image's kind (the
+          # a fresh start empties the cache directory (the
           # files are deleted in the background, so only the top level is checked)
           [ ! -e "$PROXY_DISK_CACHE_DIR/warm-1" ]
 

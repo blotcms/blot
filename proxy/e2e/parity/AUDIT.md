@@ -9,9 +9,9 @@ default server, same `blot-blogs.conf` plus `auto-ssl.conf`), **site** = `blot.i
 **preview** = `preview-*.blot.im`, **cdn**, **webhooks**.
 
 Cache = `location /` of `blot-blogs.conf` or `blot-site.conf` (both include
-`reverse-proxy-cache.conf`): nginx `proxy_cache` keyed on
-`$scheme://$host$request_uri`, with `cacher.lua` keeping a per-host index for
-`/purge`. `limit_except GET HEAD` (403 for other methods) and the rate limits
+`reverse-proxy-cache.conf`): the disk cache (`diskcache.lua`), keyed on
+`$scheme://$host$request_uri`, with a directory per host so `/purge` can delete
+one. `limit_except GET HEAD` (403 for other methods) and the rate limits
 apply there.
 
 Tests: **RM** = `request-matrix.js` (section number), **CH** = `checks.sh`,
@@ -68,7 +68,7 @@ Tests: **RM** = `request-matrix.js` (section number), **CH** = `checks.sh`,
 | `preview-*`: template editor preview of a blog, including `/__blot/preview/reload` SSE | `/` of the preview server (`reverse-proxy-preview.conf`, 5x limits) | no | P:preview (http, https) | SSE here relies on Node's `X-Accel-Buffering: no`;  |
 | `cdn.`: app static files from disk, everything else (folder files, `/blog_*`, generated assets) to Node | `/` try_files, `@cdn_node` (`reverse-proxy.conf`) | no (Bunny caches) | CH, P:cdn | Range and conditional headers go through to Node |
 | `webhooks.`: relay `/connect` SSE and webhook POSTs | `/` (no cache, 24 h) | no | none (needs the auto-ssl certificate) | |
-| `127.0.0.1:80` / `:8077`: `/purge` | purge server | n/a | RM purge | `/inspect` and `/rehydrate` exist; `proxy/deploy/blue-green.sh` waits for "rehydrate: complete" |
+| `127.0.0.1:80` / `:8077`: `/purge` | purge server | n/a | RM purge | `/inspect` exists |
 | Unix socket health | `= /health` | no | RM | |
 | `blot.im` on port 80 | 301 to https | no | CH | |
 

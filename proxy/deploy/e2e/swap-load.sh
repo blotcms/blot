@@ -37,7 +37,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
-: "${IMAGE_A:?}" "${IMAGE_B:?}" "${E2E_ROOT:?}" "${PROXY_CACHE_DIR:?}" "${BLOT_HOST:?}"
+: "${IMAGE_A:?}" "${IMAGE_B:?}" "${E2E_ROOT:?}" "${PROXY_DISK_CACHE_DIR:?}" "${BLOT_HOST:?}"
 
 WORK="$E2E_ROOT/swap-load"
 rm -rf "$WORK"; mkdir -p "$WORK"
