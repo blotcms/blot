@@ -1,80 +1,32 @@
 # Update the version of Node
 
-The most important step is to make sure you run Blot's test suite against the new version of node to catch any obvious breaking changes.
+Blot uses [Node.js 24.22.1 (LTS)](https://nodejs.org/blog/release/v24.22.1). Run the test suite on GitHub against a new Node version before merging an upgrade.
 
-First, work out the version of node you'd like to use. I do this by visiting [the official website](https://nodejs.org/en/) and selecting the LTS (long term support) version recommended for most users.
+## In the repository
 
-The rest of the guide assumes this version happens to be ```18.15.0```.
+Keep the version in `.nvmrc`, the `Dockerfile` base image, GitHub Actions `node-version` settings (including the screenshot matrix), `config/environment.sh` and `config/node/scripts/setup-ec2-user.sh` aligned. Update the Node images used by development tooling, proxy benchmarks and proxy test helpers too, including the deploy e2e runner.
+
+Update the `engines.node` requirement in the root `package.json`, the iCloud macserver package and the Agentation package. Keep Agentation's root package metadata in `package-lock.json` in sync; dependency engine requirements belong to those dependencies and do not need changing.
+
+Commit and push to a branch, open a pull request, and wait for GitHub's builds and tests to pass.
 
 ## In development
 
-First we need to make two changes to the codebase. Update the node version in .github/workflows/tests.yml:
+From the repository root with nvm loaded:
 
-```
-  node-version: [18.15.0]
-```
-
-And edit ```BLOT_NODE_VERSION``` in ```config/environment.sh```. Commit and push to a new branch, wait for tests to run on continuous integration server.
-
-To get the new version of node locally, install the version of node you'd like to use:
-
-```
-nvm install 18.15.0
+```sh
+nvm install
+nvm use
 ```
 
-Reinstall the node modules against the new version:
+These commands read `.nvmrc`. If you use another version manager, select the version pinned there. Use the npm bundled with Node.js.
 
-```
-npm ci
-```
-
-Then edit ```/etc/blot/environment.sh``` and re-source those environment variables in any open sessions. Use the new version as the default for other projects too:
-
-```
-nvm alias default 18.15.0
-```
+Restart development with `npm start` so Docker Compose rebuilds the app and Agentation images. For dependencies installed directly on the host, run `npm install` under the new Node version to rebuild native modules. The root package does not track a lockfile.
 
 ## In production
 
-```
-edit BLOT_NODE_VERSION in /etc/blot/environment.sh
-```
+The app runs in Docker. Merge only after GitHub checks pass, then use the normal app deployment process to publish and deploy the image built with the new Node version.
 
-To get the new version of node locally, install the version of node you'd like to use:
+The iCloud macserver runs directly on macOS and needs a separate runtime upgrade on each Mac. Follow `app/clients/icloud/macserver/README` to install the pinned Node version, reinstall PM2, update the app interpreter and regenerate PM2's startup configuration before deploying.
 
-```
-nvm install 18.15.0
-```
-
-Reinstall the node modules against the new version:
-
-```
-npm ci
-```
-
-Restart the production server:
-
-```
-sudo stop blot && sudo start blot
-```
-
-Here's the production checklist for the PR:
-
-```
-- [ ] Edit BLOT_NODE_VERSION to 18.15.0 in `/etc/blot/environment.sh`
-- [ ] nvm install 18.15.0
-- [ ] npm ci
-- [ ] sudo stop blot && sudo start blot
-```
-
-## In the past, I have needed to update other tools when increasing the node version.
-
-The native module sharp required a few changes when upgrading from 12 to 16, specifically updating python:
-
-https://techviewleo.com/how-to-install-python-on-amazon-linux/
-
-and also updated gcc following this guide:
-
-https://stackoverflow.com/a/48796814
-
-And I updated python
+For any legacy host using `BLOT_NODE_VERSION` outside Docker, update `/etc/blot/environment.sh`, install the matching Node version with nvm, reinstall dependencies under it and restart that host's service.

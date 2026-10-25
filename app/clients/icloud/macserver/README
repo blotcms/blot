@@ -78,7 +78,13 @@ sysctl kern.maxfiles kern.maxfilesperproc
 
 #### 1. Install Node.js
 
-Ensure Node.js is installed on your system. You can download it from the website
+Use Node.js 24.22.1 (LTS), matching the repository's `.nvmrc`. From the repository root with nvm loaded:
+
+    nvm install
+    nvm use
+    nvm alias default 24.22.1
+
+The deploy scripts select this version with `nvm use` before installing dependencies or restarting the service. Install it on each Mac before deploying.
 
 #### 2. Install PM2
 Install PM2 globally using npm:
@@ -108,6 +114,13 @@ Copy and run the command provided by PM2 (it will include `sudo` and some enviro
 Save the current PM2 process list so it persists across reboots:
 
     pm2 save
+
+When upgrading an existing Mac, reinstall PM2 under the new Node version (`npm install -g pm2`), then run `pm2 update`. Restart macserver with the new interpreter and save it:
+
+    pm2 restart macserver --interpreter "$(command -v node)" --update-env
+    pm2 save
+
+Regenerate PM2's startup configuration with `pm2 unstartup` followed by `pm2 startup` in the GUI session, following the commands PM2 prints, so reboots use the new Node installation too.
 
 After completing this setup, PM2 will start automatically when the GUI session is ready. You can still observe and manage the GUI-based PM2 processes via SSH.
 

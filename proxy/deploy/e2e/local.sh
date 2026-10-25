@@ -51,10 +51,10 @@ echo "== images"
 bash "$HERE/build-image.sh" "$SCRATCH/src" "$IMAGE_A"
 bash "$HERE/build-image.sh" "$SCRATCH/src" "$IMAGE_B" --label e2e.variant=b
 IMAGES="$IMAGE_A $IMAGE_B"
-docker pull -q node:22-alpine >/dev/null; docker pull -q redis:7-alpine >/dev/null
+docker pull -q node:24.22.1-alpine >/dev/null; docker pull -q redis:7-alpine >/dev/null
 mkdir -p "$SCRATCH/images"
 # shellcheck disable=SC2086
-docker save -o "$SCRATCH/images/images.tar" $IMAGES node:22-alpine redis:7-alpine
+docker save -o "$SCRATCH/images/images.tar" $IMAGES node:24.22.1-alpine redis:7-alpine
 
 echo "== runner"
 docker build -q -t "blot-${P}deploy-e2e-runner" "$HERE/local" >/dev/null

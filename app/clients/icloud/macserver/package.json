@@ -9,6 +9,9 @@
   },
   "author": "",
   "license": "UNLICENSED",
+  "engines": {
+    "node": "^24.22.1"
+  },
   "dependencies": {
     "bottleneck": "2.19.5",
     "chokidar": "5.0.0",

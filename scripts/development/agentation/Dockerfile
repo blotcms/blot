@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:22-alpine
+FROM node:24.22.1-alpine
 WORKDIR /opt/agentation
 COPY package.json package-lock.json ./
 # SQLite may need a native build on platforms without a prebuilt binary.
