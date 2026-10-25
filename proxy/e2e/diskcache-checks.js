@@ -774,10 +774,14 @@ async function nodeHeaders() {
 
   // A hit whose body is gone once its .meta was read (a refill, an eviction or
   // a purge in between) falls through to a fill: Node's headers only, not the
-  // stored ones as well
-  const gone = entry(A, host, "/p/dup");
+  // stored ones as well. An entry never served as a hit, so no worker's
+  // open_file_cache still holds the deleted body open (that would be a correct
+  // HIT).
+  await req(A, host, "/p/dup?gone");
+  await waitFor(() => entry(A, host, "/p/dup?gone").meta);
+  const gone = entry(A, host, "/p/dup?gone");
   sh(A, `rm -f ${CACHE}/${hostDir(host)}/${gone.body}`);
-  const f = await req(A, host, "/p/dup");
+  const f = await req(A, host, "/p/dup?gone");
   check("body gone after its .meta: a MISS, the stored headers not sent as well", cacheStatus(f) === "MISS" && count(f, "link") === 2 && count(f, "x-dup") === 2 && count(f, "blot-cache") === 1, `${cacheStatus(f)} link=${count(f, "link")} x-dup=${count(f, "x-dup")} blot-cache=${count(f, "blot-cache")}`);
 
   // No Content-Type from Node: none on the hit (nginx would otherwise add its default)
