@@ -25,8 +25,8 @@
 #      the file fail2ban reads, and the site and canary blog answer today.
 #   2. Start the new colour (restart policy `no`), wait for its health. If
 #      that fails, or the script is interrupted, it is removed and the old one
-#      is untouched. With no old colour (a fresh start) the same site checks as step
-#      4 run before it is made permanent, plus a check that it presents a
+#      is untouched. With no old colour (a fresh start) the same site checks as
+#      step 4 run before it is made permanent, plus a check that it presents a
 #      certificate for every custom domain in Redis.
 #   3. Stop the old colour, but do not remove it.
 #   4. Check the site as the outside world sees it: same status codes as
@@ -128,8 +128,8 @@ swap_rollback() {
     swapping)
       log "Swap interrupted or failed (exit $status): putting $OLD back and removing $NEW"
       # $NEW may be the only proxy answering if $OLD cannot come back, so it is
-      # removed only once $OLD is up and healthy. The cache directory is shared, so
-      # every purge since $OLD was stopped reached it too.
+      # removed only once $OLD is up and healthy. The cache directory is shared,
+      # so every purge since $OLD was stopped reached it too.
       if docker start "$OLD" >/dev/null 2>&1 && wait_healthy "$OLD" "$HEALTH_TIMEOUT"; then
         docker logs --tail 50 "$NEW" >&2 || true
         docker rm -f "$NEW" >/dev/null 2>&1 || true

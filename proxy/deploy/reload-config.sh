@@ -22,8 +22,8 @@
 #     ...
 #
 # html changes rarely; if it did, copy it to its own mount too (this script
-# reports when it differs). For an IMAGE change (new base
-# image, new Lua deps, Dockerfile edits) use proxy/deploy/blue-green.sh.
+# reports when it differs). For an IMAGE change (new base image, new Lua deps,
+# Dockerfile edits) use proxy/deploy/blue-green.sh.
 set -euo pipefail
 
 CONTAINER="${1:?usage: reload-config.sh <container-name> <host-conf-dir>}"
@@ -47,7 +47,8 @@ echo "Installing $GEN/openresty.conf -> $CONF_DIR/nginx.conf.template"
 cp "$GEN/openresty.conf" "$CONF_DIR/nginx.conf.template"
 echo "NOTE: this installs the config template only. If your change touched"
 echo "      html/, copy $GEN/html to its own bind-mount too. The runtime"
-echo "      values (PROXY_* variables) are the container's own environment; changing them needs a new container."
+echo "      values (PROXY_* variables) are the container's own environment;"
+echo "      changing them needs a new container."
 
 echo "Rendering nginx.conf inside $CONTAINER"
 docker exec "$CONTAINER" /usr/local/bin/render-config

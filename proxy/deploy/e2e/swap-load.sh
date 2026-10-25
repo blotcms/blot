@@ -19,8 +19,9 @@
 # what the stub upstream would have served (swap-load-lib.js); a swap must
 # produce no connection error, no non-2xx/304, no wrong body, no cut event
 # stream and no page older than the last finished purge (both containers share
-# one cache directory, so a purge reaches both). After each swap, with the load stopped,
-# every page must be the upstream's current generation and a purge must work.
+# one cache directory, so a purge reaches both). After each swap, with the load
+# stopped, every page must be the upstream's current generation and a purge must
+# work.
 #
 # Needs what proxy-deploy-e2e.yml's proxy-swap-load-e2e job sets up: the
 # harness from setup.sh (STUB_JS=swap-load-stub.js) and two images, which may be
