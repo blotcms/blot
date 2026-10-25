@@ -69,4 +69,44 @@ describe("injectLocals", function () {
     expect(locals.heading).toEqual({ id: "geist" });
     expect(locals.page_size).toEqual(20);
   });
+
+  describe("stale font styles stored in template metadata", function () {
+    const stale =
+      "@font-face{font-family:'Plex Mono';src:url({{{config.cdn.origin}}}/fonts/plex-mono/thin.eot?version=1&extension=.eot);src:url({{{config.cdn.origin}}}/fonts/plex-mono/thin.ttf?version=1&extension=.ttf) format('truetype')}";
+
+    it("re-renders a stale verbatim copy of the old registry CSS", function () {
+      const locals = {
+        font: { id: "plex-mono", name: "Plex Mono", styles: stale },
+      };
+
+      injectLocals(locals);
+
+      expect(locals.font.styles).not.toContain("{{");
+      expect(locals.font.styles).not.toMatch(/\.(eot|ttf|otf)\b/);
+      expect(locals.font.styles).toContain("woff2");
+    });
+
+    it("refresh-font-styles reports changes, unknown fonts, and is idempotent", function () {
+      const { refreshLocals } = require("../../../../scripts/template/refresh-font-styles");
+      const locals = {
+        font: { id: "plex-mono", name: "Plex Mono", styles: stale },
+        title_font: { id: "not-a-real-font", styles: "x" },
+        page_size: 20,
+      };
+      const original = JSON.stringify(locals);
+
+      const first = refreshLocals(locals);
+
+      expect(JSON.stringify(locals)).toEqual(original); // input untouched
+      expect(first.changed).toBe(true);
+      expect(first.locals.font.styles).not.toContain("{{");
+      expect(first.unknown).toEqual([
+        { key: "title_font", fontID: "not-a-real-font" },
+      ]);
+      expect(first.unrendered).toEqual([]);
+
+      const second = refreshLocals(first.locals);
+      expect(second.changed).toBe(false);
+    });
+  });
 });
