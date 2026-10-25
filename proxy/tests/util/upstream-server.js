@@ -2,8 +2,7 @@ const express = require("express");
 const app = express();
 
 // A 1x1 transparent PNG. Kept inline so the upstream stub has no native
-// dependency (the cacher specs only need a small binary body to prove the
-// cache is byte-safe).
+// dependency.
 const PNG_1x1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
   "base64"

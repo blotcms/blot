@@ -11,7 +11,7 @@ back, deploy an older image.
 
 | Path | Purpose |
 | --- | --- |
-| `config/` | The nginx config as mustache templates (`server.conf` includes the others as partials) plus `cacher.lua`. Edit these. |
+| `config/` | The nginx config as mustache templates (`server.conf` includes the others as partials) plus `diskcache.lua`, the cache. Edit these. |
 | `html/` | Error pages served when an upstream is offline. |
 | `build/index.js` | Renders `config/server.conf` + partials into a single `openresty.conf`, with the locals from [`build/locals.js`](build/locals.js). `tests/locals.js` fails if a template reads a variable that `locals.js` leaves undefined. |
 | `build/build.sh` | Wrapper that runs `build/index.js` with the container's paths. Run this before `docker build`. |
@@ -19,7 +19,8 @@ back, deploy an older image.
 | `Dockerfile` | Two-stage build: vendors the Lua deps, then assembles the image. |
 | `entrypoint.sh` | Fixes volume ownership, optionally trusts a test ACME CA, then starts OpenResty with a SIGTERM drain (`openresty -s quit`). |
 | `deploy/` | `blue-green.sh` (image swap via SO_REUSEPORT + drain, per-container health socket, requires a real cert mount) (and `reload-config.sh`, which needs a bind-mounted conf dir the production scripts do not use). They are run on the host; see [`deploy/README.md`](deploy/README.md) for the checks each script makes. |
-| `tests/` | Cache (`cacher.lua`) behaviour specs and a check that every variable the config reads has a value. Run as the `proxy` suite in the `node` workflow's test matrix. |
+| `evict.sh` | The cache sweeper, run hourly by `diskcache.lua` (see "Cache" below). |
+| `tests/` | Specs for the scanner ban and push limits, and a check that every variable the config reads has a value. Run as the `proxy` suite in the `node` workflow's test matrix. |
 | `e2e/` | Full-stack checks driven through the built image (stub upstream + a real Blot app container + Pebble for certs). Run by the `integration` workflow. |
 
 ## Build and run locally
@@ -233,6 +234,23 @@ The container runs with `--network host` (the generated upstreams are
     differs, so first-issuance for a brand-new domain can be briefly flaky
     *while a deploy is in progress*. Tracked in `TODO`.
 
+### Cache
+
+The cache is `config/diskcache.lua`: a shared on-disk cache under the cache
+directory (`/var/cache/openresty`), with no index to rebuild, so containers
+sharing the directory share the cache and a restart keeps it warm.
+
+- Hits are served with sendfile. Misses go to the upstream through
+  `@diskcache_fill`, which stores the response as it streams to the client.
+- A purge writes a marker file for the host and renames the host's directory
+  into `.trash`, which is emptied in the background. A fill that started
+  before the purge sees the marker and discards its entry.
+- Worker 0 makes brotli copies (`<body>.br`) of an entry's body after its
+  first hit; `brotli_static` serves them to clients that accept `br`.
+- `evict.sh` is the sweeper. It runs hourly, one sweep at a time (it holds a
+  `flock`), and evicts the least recently read entries when the cache is over
+  200 GB or the filesystem is over 90% full.
+
 ### Cache purging
 
 Node purges each proxy in `BLOT_REVERSE_PROXY_URLS` independently
@@ -244,9 +262,8 @@ them, so a proxy that was restarting during a purge does not keep serving
 stale pages from its warm cache.
 
 Set `BLOT_PURGE_TOKEN` on both Node and the proxy to require an
-`X-Blot-Purge-Token` header on the internal `/purge`, `/inspect` and
-`/rehydrate` endpoints. With it unset the endpoints are open, as before. To
-enable it, set it on Node first (an unauthenticated proxy ignores the header),
+`X-Blot-Purge-Token` header on the internal `/purge` endpoint. With it unset
+the endpoint is open, as before. To enable it, set it on Node first (an unauthenticated proxy ignores the header),
 then on the proxies.
 
 Run with persistent volumes:
@@ -260,7 +277,7 @@ docker run -d --network host --cap-add SYS_NICE \
   blot-proxy
 ```
 
-- **`blot-proxy-cache`** keeps the proxy cache warm across a redeploy.
+- **`blot-proxy-cache`** keeps the cache warm across a redeploy.
 - **`blot-proxy-auto-ssl`** keeps the dehydrated ACME account / hook state, so
   a redeploy does not re-register with the ACME server. The issued
   certificates themselves live in **Redis** (`storage_adapter = redis`), which
@@ -300,10 +317,10 @@ and "Proxy container follow-ups". The main ones:
 ## Tests
 
 - **`proxy` suite** (`.github/workflows/node.yml` test matrix) runs
-  `proxy/tests/*.js` inside the Blot dev image, spinning up OpenResty against
-  `config/cacher.lua` - the `cacher.lua` behaviour specs (`basic`, `gzip`,
-  `inspect`, `lru_purge`, `rehydrate`, `startup`, plus `coverage` for per-host keys,
-  method/health cacheability, binary bodies and argument validation).
+  `proxy/tests/*.js` inside the Blot dev image: the scanner ban (`ban`,
+  spinning up OpenResty against `config/ban.lua`), the push limits, the body
+  limit on auth routes and the locals check. The cache and the `/purge` token
+  check are tested against the built image by the `integration` workflow.
 - **`integration` workflow** (`.github/workflows/integration.yml`):
   - `proxy/e2e/checks.sh` drives the built image against
     `proxy/e2e/stub-upstream.js` - Host-based routing (site over HTTPS, blogs
