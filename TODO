@@ -1,3 +1,10 @@
+- Block the scanner probes that reach Node on cdn.blot.im (~8k 404s a day: /.env*, /@fs, /.git, /.ssh, /api, /config, /dashboard, /admin, /auth, /app) in the proxy's block rules, so nginx answers them with a 403 like the other probes (see the nginx-log-review skill)
+- Fix the asset URLs on cdn.blot.im that 404 hundreds of times a week:
+  - [ ] A template's CSS emits an unrendered `{{{config.cdn.origin}}}` in its plex-mono font URLs (/template/e9/1d/…)
+  - [ ] /fonts/baskervville/400(-italic).otf and .ttf are referenced but missing
+  - [ ] /documentation/v-…/documentation.min.js.map: a sourceMappingURL with no published map
+  - [ ] /template/46/a1/images/banner.jpg is referenced but missing
+
 - After #2204 (proxy disk cache) is merged:
   - [ ] Empty `INTENDED` and the `COUNT_EXPLAINED` line in proxy/e2e/parity-checks.js, and drop the closing section of proxy/e2e/parity/AUDIT.md, so parity guards the next proxy PR at 0 differences against master
   - [ ] proxy/deploy/e2e/swap-load.sh: stop tolerating stale pages while both containers are up (no ALLOW_OVERLAP_STALE/MARKS); disk cache containers share one directory, so none should be served
