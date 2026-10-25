@@ -1,9 +1,9 @@
-# Pinned for reproducible builds. 1.25.3.1 is the newest alpine-fat tag whose
-# toolchain still compiles the sockproc helper (GCC 14 in later tags does not).
+# Pin the release and multi-architecture image digest for reproducible builds.
+# Keep the Brotli source version and checksum below in sync with this image.
 # Lua dependencies are fetched as version-pinned, checksummed .src.rock archives
 # from luarocks.org rather than installed with the luarocks bundled in these
 # images, whose remote manifest no longer loads.
-ARG OPENRESTY_TAG=1.25.3.1-alpine-fat
+ARG OPENRESTY_TAG=1.31.1.1-alpine-fat@sha256:32d74c9cb9190e28d07915dbe79d97439d9bbc151b5aff68b7727aa3bb55cce1
 
 # ---------------------------------------------------------------------------
 # Stage 1: assemble the Lua dependencies the generated config loads
@@ -51,9 +51,13 @@ RUN curl -fsSL -o /vendor/resty-auto-ssl/dehydrated \
 
 # sockproc - used by lua-resty-auto-ssl to shell out during cert issuance.
 # Pinned to the commit lua-resty-auto-ssl's own Makefile uses.
+# Give its SIGCHLD handler an explicit prototype for modern C compilers;
+# keep the upstream Makefile's -Wall -Werror checks.
 ARG SOCKPROC_COMMIT=92aba736027bb5d96e190b71555857ac5bb6b2be
+COPY patches/sockproc-sigchld.patch /tmp/sockproc-sigchld.patch
 RUN git clone https://github.com/juce/sockproc.git /tmp/sockproc && \
     git -C /tmp/sockproc checkout --detach "${SOCKPROC_COMMIT}" && \
+    git -C /tmp/sockproc apply /tmp/sockproc-sigchld.patch && \
     make -C /tmp/sockproc && \
     install -m 0755 /tmp/sockproc/sockproc /vendor/resty-auto-ssl/sockproc
 
@@ -67,9 +71,9 @@ RUN git clone https://github.com/juce/sockproc.git /tmp/sockproc && \
 # ---------------------------------------------------------------------------
 FROM openresty/openresty:${OPENRESTY_TAG} AS brotli
 
-ARG OPENRESTY_VERSION=1.25.3.1
-ARG OPENRESTY_SHA256=32ec1a253a5a13250355a075fe65b7d63ec45c560bbe213350f0992a57cd79df
-ARG NGINX_VERSION=1.25.3
+ARG OPENRESTY_VERSION=1.31.1.1
+ARG OPENRESTY_SHA256=65b78baadd3f0984055de89bf13f4a1932e5bfe9c31932037a134ea2b1a0ce42
+ARG NGINX_VERSION=1.31.1
 ARG NGX_BROTLI_COMMIT=53e0fb55f250f48fe80c0ddbf6c0f7103cdbaae1
 
 RUN apk add --no-cache git cmake make gcc g++ musl-dev linux-headers \
