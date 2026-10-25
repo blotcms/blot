@@ -319,8 +319,23 @@ describe("resolveFolderLinks", function () {
       const input = '<img src="../../../../a.jpg">';
 
       expect(html(input)).toBe(input);
+    });
+
+    it("resolves a CSS url() that climbs with .. against the root", function () {
       expect(css("a{background:url(../../../../a.jpg)}")).toBe(
-        "a{background:url(../../../../a.jpg)}"
+        `a{background:url(${wrap("/a.jpg")})}`
+      );
+      expect(
+        css("@font-face{src:url('../Type/x.woff2') format('woff2')}")
+      ).toBe(`@font-face{src:url('${wrap("/Type/x.woff2")}') format('woff2')}`);
+      expect(css('a{background:url("../../etc/passwd")}')).toBe(
+        'a{background:url("../../etc/passwd")}'
+      );
+    });
+
+    it("resolves .. in a style attribute but not in an HTML link", function () {
+      expect(html('<p style="background:url(../a.png)"><img src="../a.png">')).toBe(
+        `<p style="background:url(${wrap("/a.png")})"><img src="../a.png">`
       );
     });
 
@@ -341,11 +356,11 @@ describe("resolveFolderLinks", function () {
       );
     });
 
-    it("keeps relative CSS links relative, dropping a leading ./", function () {
+    it("keeps relative CSS links relative, dropping a leading ./ and resolving ..", function () {
       expect(
         css("a{background:url(img/a.png)} b{background:url(../img/b.png)} c{background:url(./c.png?v=1)}")
       ).toBe(
-        `a{background:url(${wrap("img/a.png")})} b{background:url(../img/b.png)} c{background:url(${wrap("c.png?v=1")})}`
+        `a{background:url(${wrap("img/a.png")})} b{background:url(${wrap("/img/b.png")})} c{background:url(${wrap("c.png?v=1")})}`
       );
     });
   });

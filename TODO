@@ -3,7 +3,6 @@
   - [ ] A template's CSS emits an unrendered `{{{config.cdn.origin}}}` in its plex-mono font URLs (/template/e9/1d/…)
   - [ ] /fonts/baskervville/400(-italic).otf and .ttf are referenced but missing
   - [ ] /documentation/v-…/documentation.min.js.map: a sourceMappingURL with no published map
-  - [ ] /template/46/a1/images/banner.jpg is referenced but missing
 - Check the access log for the Accept-Encoding of feed requests (/feed.rss etc.): if most are gzip-only, store gzip -9 copies too (gzip_static), since those hits still compress on the fly
 
 Fix bug with Documentation template and the setting 'Adds zoom to large images' and [tell customer](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbgJMGTSPcnwTNxVJVPZZnrhJB)
