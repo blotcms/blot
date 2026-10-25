@@ -113,8 +113,10 @@ jobs:
       # Node back): status, decoded body and headers must match unless a rule
       # in parity-checks.js explains the difference. Builds the baseline image
       # itself, from a worktree of origin/master. Containers pa-*, ports
-      # 18090-18093.
+      # 18090-18093. Pull requests only: on a push to master both sides are
+      # the same code.
       - name: Parity with origin/master
+        if: github.event_name == 'pull_request'
         env:
           PARITY_GENDEPS: ${{ runner.temp }}/gendeps
           PARITY_TREE_IMAGE: blot-proxy:e2e
