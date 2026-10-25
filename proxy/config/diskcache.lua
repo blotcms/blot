@@ -378,6 +378,17 @@ end
 -- access_by_lua in @diskcache_fill: wait for a fill of the same key in
 -- progress and serve that, or let the request through to Node and record it
 function diskcache.fill(self)
+    -- A hit whose body went (a refill, an eviction or a purge) after
+    -- diskcache:access read its .meta: try_files fell through to here, with
+    -- the stored headers already set. Node's answer replaces them.
+    if ngx.var.diskcache_path ~= "/.none" then
+        ngx.var.diskcache_path = "/.none"
+
+        for name in pairs(ngx.resp.get_headers(100, true)) do
+            ngx.header[name] = nil
+        end
+    end
+
     -- HEAD has no body to store
     if ngx.req.get_method() ~= "GET" then
         ngx.ctx.diskcache = { skip = true }
