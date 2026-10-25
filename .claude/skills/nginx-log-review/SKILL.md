@@ -25,13 +25,15 @@ ssh blot "cat /var/instance-ssd/logs/access.log-$(date -d yesterday +%Y%m%d) /va
 Log line format (space-separated, so `cut -d ' ' -fN` / `awk '{print $N}'` work):
 
 ```
-[time] request_id status request_time bytes_in:bytes_out url  cache=X ip=X st=X lrs=X up=X conn=X cr=X tls=X ref=X ua=X ae=X
+[time] request_id status request_time bytes_in:bytes_out url  cache=X ip=X st=X lrs=X up=X conn=X cr=X tls=X wl=X ref=X ua=X ae=X
    1        2         3      4              5             6      (7 is empty due to double space before cache=)
 ```
 
 Concretely: `$4` = status code, `$6` = `bytes_in:bytes_out`, `$7` = full URL
 (scheme+host+path+query), `ip=`, `ua=`, `cache=` are grep/`grep -oE` targets,
-not fixed fields.
+not fixed fields. `wl=1` means the peer is whitelisted (a Bunny edge or the
+macserver, per the proxy's `geo $whitelist`), so `ip=` is not a real client and
+fail2ban ignores the line; `wl=0` is everyone else.
 
 `cache=-` alone is ambiguous: read it with `up=`. `cache=- up=<address>` was
 proxied to Node at a location with no `proxy_cache` (`cdn.blot.im`, the
