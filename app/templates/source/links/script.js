@@ -65,9 +65,11 @@ function pathOf(url) {
 }
 
 // Infinite scroll listings are runs of /page/N pages, so work out the pages on
-// either side by number. Anything else (tags, search) is unknown.
+// either side by number. Search results are one unpaginated page (the model's
+// capped result set), so they are the whole collection. Anything else is unknown.
 function infinitePagination(doc, url, live) {
   var path = pathOf(url);
+  if (path === "/search") return { next: null, previous: null };
   var match = path && (path === "/" ? ["", "", ""] : path.match(/^((?:\/tagged\/[^\/]+)?)(?:\/page\/(\d+))?$/));
   if (!match) return { unknown: true };
   var base = window.location.origin + match[1] + "/page/";
@@ -106,8 +108,7 @@ function parseListing(doc, url, live) {
 
 function readCollection() {
   try {
-    var state = JSON.parse(sessionStorage.getItem(collectionKey));
-    return state && state.cacheID === cacheID ? state : null;
+    return JSON.parse(sessionStorage.getItem(collectionKey));
   } catch (e) {
     return null;
   }
@@ -128,10 +129,30 @@ document.addEventListener("click", function (e) {
   if (listing) writeCollection({ cacheID: cacheID, listings: [listing] });
 }, true);
 
+function loadListing(url) {
+  return fetch(url, { credentials: "same-origin", cache: "no-cache" }).then(function (res) {
+    if (!res.ok) throw new Error("Could not load collection page");
+    return res.text().then(function (html) {
+      return parseListing(new DOMParser().parseFromString(html, "text/html"), res.url);
+    });
+  });
+}
+
+// Follow a listing's pagination links, up to hops pages, until it has the entry.
+function findEntry(url, path, direction, hops) {
+  return loadListing(url).then(function (listing) {
+    if (!listing || listing.entries.indexOf(path) > -1) return listing;
+    return hops && listing[direction] ? findEntry(listing[direction], path, direction, hops - 1) : null;
+  });
+}
+
 function initializeCollectionNavigation() {
   var state = readCollection();
   // Only trust the collection when arriving from elsewhere on this site.
   if (!state || !pathOf(document.referrer)) return;
+
+  closeDepth = takeDepth();
+  if (closeDepth) window.history.replaceState({ closeDepth: closeDepth }, "");
 
   var path = pathOf(window.location.href);
   var page = -1, index = -1;
@@ -141,9 +162,25 @@ function initializeCollectionNavigation() {
   }
   if (index < 0) return;
 
-  closeDepth = takeDepth();
-  if (closeDepth) window.history.replaceState({ closeDepth: closeDepth }, "");
+  // A publish changes cacheID and can push the entry onto a later page (or
+  // pull it earlier), so find it in the current listing before using the order.
+  if (state.cacheID !== cacheID) {
+    var url = state.listings[page].url;
+    var before = state.listings[page].previous;
+    findEntry(url, path, "next", 3).then(function (found) {
+      return found || (before && findEntry(before, path, "previous", 1));
+    }).then(function (found) {
+      if (!found) return;
+      var fresh = { cacheID: cacheID, listings: [found] };
+      writeCollection(fresh);
+      followCollection(fresh, 0, found.entries.indexOf(path));
+    }, function () {});
+    return;
+  }
+  followCollection(state, page, index);
+}
 
+function followCollection(state, page, index) {
   var listing = state.listings[page];
   closeURL = listing.url;
   document.querySelectorAll("a.entry-close").forEach(function (a) {
@@ -168,16 +205,11 @@ function initializeCollectionNavigation() {
     if (listing.unknown) return Promise.reject();
     if (!pageLink) return Promise.resolve(null);
 
-    return fetch(pageLink, { credentials: "same-origin" }).then(function (res) {
-      if (!res.ok) throw new Error("Could not load collection page");
-      return res.text().then(function (html) {
-        var doc = new DOMParser().parseFromString(html, "text/html");
-        var fetched = parseListing(doc, res.url);
-        if (!fetched) return null;
-        state.listings[step > 0 ? "push" : "unshift"](fetched);
-        writeCollection(state);
-        return edge(fetched, step);
-      });
+    return loadListing(pageLink).then(function (fetched) {
+      if (!fetched) throw new Error("No entries on collection page");
+      state.listings[step > 0 ? "push" : "unshift"](fetched);
+      writeCollection(state);
+      return edge(fetched, step);
     });
   }
 
