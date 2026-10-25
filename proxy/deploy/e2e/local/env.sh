@@ -1,5 +1,4 @@
-# The variables proxy-deploy-e2e.yml's proxy-swap-load-e2e and
-# proxy-transition-e2e jobs set, for entry.sh
+# The variables proxy-deploy-e2e.yml's proxy-swap-load-e2e job sets, for entry.sh
 export BLOT_HOST=blot.im
 export PROXY_CANARY_HOST=preview-of-wireframe-on-david.blot.im
 export PROXY_AUTOSSL_VOLUME=blot-e2e-auto-ssl

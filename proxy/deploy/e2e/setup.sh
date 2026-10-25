@@ -80,13 +80,12 @@ done
 # ---- stub upstream (8088-8090, bound to every interface) -----------------
 # STUB_BIND=0.0.0.0, as real production Node containers are (docker -p
 # publishes to every interface by default). STUB_JS replaces the stub, as the
-# swap-under-load job (swap-load.sh) and the legacy <-> disk transition job
-# (transition.sh) do; the files they need next to them are mounted either way.
+# swap-under-load job (swap-load.sh) does; the file it needs next to it is
+# mounted either way.
 log "Starting the stub upstream"
 docker run -d --name blot-e2e-stub --network host -e STUB_BIND=0.0.0.0 \
   -v "${STUB_JS:-$REPO_ROOT/proxy/e2e/stub-upstream.js}":/s.js:ro \
   -v "$HERE/swap-load-lib.js":/swap-load-lib.js:ro \
-  -v "$HERE/transition-lib.js":/transition-lib.js:ro \
   node:22-alpine node /s.js >/dev/null
 for i in $(seq 1 30); do
   curl -sf -o /dev/null http://127.0.0.1:8088/ && break
