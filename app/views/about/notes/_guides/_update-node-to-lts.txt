@@ -6,7 +6,7 @@ Blot uses [Node.js 24.22.1 (LTS)](https://nodejs.org/blog/release/v24.22.1). Run
 
 Keep the version in `.nvmrc`, the `Dockerfile` base image, GitHub Actions `node-version` settings (including the screenshot matrix), `config/environment.sh` and `config/node/scripts/setup-ec2-user.sh` aligned. Update the Node images used by development tooling, proxy benchmarks and proxy test helpers too, including the deploy e2e runner.
 
-Update the `engines.node` requirement in the root `package.json`, the iCloud macserver package and the Agentation package. Keep Agentation's root package metadata in `package-lock.json` in sync; dependency engine requirements belong to those dependencies and do not need changing.
+Update the `engines.node` requirement in the root `package.json` and the Agentation package. Keep Agentation's root package metadata in `package-lock.json` in sync; dependency engine requirements belong to those dependencies and do not need changing.
 
 Commit and push to a branch, open a pull request, and wait for GitHub's builds and tests to pass.
 
@@ -27,6 +27,6 @@ Restart development with `npm start` so Docker Compose rebuilds the app and Agen
 
 The app runs in Docker. Merge only after GitHub checks pass, then use the normal app deployment process to publish and deploy the image built with the new Node version.
 
-The iCloud macserver runs directly on macOS and needs a separate runtime upgrade on each Mac. Follow `app/clients/icloud/macserver/README` to install the pinned Node version, reinstall PM2, update the app interpreter and regenerate PM2's startup configuration before deploying.
+The iCloud macserver runs directly on macOS and manages its Node version separately. Its runtime, package requirements and PM2 deployment setup are outside this upgrade.
 
 For any legacy host using `BLOT_NODE_VERSION` outside Docker, update `/etc/blot/environment.sh`, install the matching Node version with nvm, reinstall dependencies under it and restart that host's service.
