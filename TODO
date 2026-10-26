@@ -1,16 +1,21 @@
-Track OpenResty releases so we can re-enable HTTP/3: require fixes or documented backports for CVE-2026-42530 (QUIC use-after-free; nginx fix 1.31.2) and CVE-2026-95101 (HTTP/3 request-body injection; nginx fix 1.31.7), and review all newer nginx HTTP/3 advisories. Verify the actual bundled nginx/OpenSSL versions and patch coverage, update the pinned image digest and matching Brotli source/checksum, restore QUIC listeners and Alt-Svc advertisements, then rebuild on GitHub and pass proxy e2e checks for site/custom-domain HTTP/3 and wildcard certificates from Redis before deployment. See proxy/SECURITY.md and PR #2225.
+Finish container consolidation -> finish host consolidation (buy reserved instance) -> finish s3 migration (close out ebs)
 
-Check the access log for the Accept-Encoding of feed requests (/feed.rss etc.): if most are gzip-only, store gzip -9 copies too (gzip_static), since those hits still compress on the fly, use the new log line paramater for accept encoding
+---
 
 Fix bug with Documentation template and the setting 'Adds zoom to large images' and [tell customer](https://mail.google.com/mail/u/0/#inbox/FMfcgzQbgJMGTSPcnwTNxVJVPZZnrhJB)
 
 There are a few 'your domain is almost set up' sites in featured sites, fix!
 
-Does proxy/ send and recieve etags nicely? Can we precompute these for compressed resonses?
+Track OpenResty releases so we can re-enable HTTP/3: require fixes or documented backports for CVE-2026-42530 (QUIC use-after-free; nginx fix 1.31.2) and CVE-2026-95101 (HTTP/3 request-body injection; nginx fix 1.31.7), and review all newer nginx HTTP/3 advisories. Verify the actual bundled nginx/OpenSSL versions and patch coverage, update the pinned image digest and matching Brotli source/checksum, restore QUIC listeners and Alt-Svc advertisements, then rebuild on GitHub and pass proxy e2e checks for site/custom-domain HTTP/3 and wildcard certificates from Redis before deployment. See proxy/SECURITY.md and PR #2225.
 
-Can we exploring filling the disk_cache from node? use background task to do this for other pages by cache ID? When everything is in memory in the node renderer, why not?
+Proxy follow ups:
+- Can we modify the proxy disk_cache to key requests off blogID in some way? SO we could also cache preview subdomains and purge them efficiently?
+- Does proxy/ send and recieve etags nicely? Can we precompute these for compressed resonses?
+- Can we exploring filling the disk_cache from node? use background task to do this for other pages by cache ID? When everything is in memory in the node renderer, why not?
+- Are the nvme disk settings on the host tuned for max performance?
 
-Are the nvme disk settings on the host tuned for max performance?
+Analyze the new log line paramater for accept encoding to determine if we should precompress gzip or not:
+- Check the access log for the Accept-Encoding of feed requests (/feed.rss etc.): if most are gzip-only, store gzip -9 copies too (gzip_static), since those hits still compress on the fly, 
 
 Redis host follow-ups (from #2041, new host since 8 Oct):
 - From 15 Oct 2026: run config/redis/perf/fetch.sh redis blot and compare.js (a full day on the new host against the 8 Oct baseline), then uninstall the perf collectors: config/redis/perf/install.sh --uninstall redis blot
@@ -21,6 +26,7 @@ Redis host follow-ups (from #2041, new host since 8 Oct):
 - Deploy log archive (scripts/deploy/index.js): docker logs -t, outside /tmp, more than 3 files, size-capped; let config/redis/perf/fetch.sh read it
 - Offsite Redis backups (e.g. Backblaze B2) alongside S3, so a lost AWS account or region doesn't take the backups with it: upload from config/redis/bin/backup.sh, and let launch.sh/restore.sh restore from B2 too (#2041)
 - Consider dropping Redis client-side caching (CLIENT TRACKING) in favour of the app's in-process LRU caches: on prod 10 clients have tracking on and the server's tracking table sits at its 1M-key cap (tracking-table-max-keys), so Redis is constantly evicting entries and sending invalidations
+- Upgrade the Redis server from 6.2 to 8.4+ for native compare-and-set (SET ... IFEQ, DELEX), then drop Lua: helper/lock extend/release become plain commands; helper/alarm claim/renew/complete need per-id claim keys to go native; also the legacy scripts in sync/lock.js, models/user/set.js, helper/flushCachePending.js, clients/icloud/database.js
 
 Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - Stored custom-domain certs without an `expiry` field (legacy records) bypass the proxy's expired-cert check in init.conf get_cert: fall back to the PEM notAfter, or migrate the records
@@ -47,12 +53,6 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - Re-set up html minification using html-terser?
 - Get blot proxy communicating with node process via unix socket
 
-
-
----
-
-Bump the airlock image off Alpine 3.20 (EOL 2026-04-01) in config/airlock/Dockerfile to a supported release. Its Chromium renders untrusted pages for bookmark screenshots, so it needs current security patches; check the Chromium version still matches the puppeteer pin.
-
 ---
 
 Finish the container consolidation:
@@ -65,10 +65,22 @@ Finish the container consolidation:
 Finish the host consolidation
 - should we use unix sockets for communication with redis?
 
+How to reduce likelihood of downtime?
+- s3 for storage only (replicated?)
+- multi-region (dns level failover from one region?) with redis replica in another region
+- how to prevent dns issues?
+- are we well insulated from bunny failures (dns failover here too?)
+- are we well insulated from cloudflare failures (they do our DNS records or is it route53?)
+- are we as well insulated from most likely aws issues?
+
+
 ---
 
 Finish move to s3
 - Harden app against s3 unavailable
+- Implement an abstract blog storage mechanism that will simulatenously make it possible to:
+- implement folder storage limits (include generated files in this amount?)
+- implement s3 storage for folder files
 
 Look into https://github.com/tobi/walgit for s3 backed git server
 - https://cursor.com/blog/git-at-any-scale
@@ -85,18 +97,12 @@ Turn the airlock into a sandbox: run Node inside it so the whole "fetch or recei
 Investigate slow creep of green's baseline heap (~40-80MB/day lowest heapUsed in [STATS], never resets until a V8 OOM crash; crashed 13+14 Oct 2026). Leak or unbounded cache? Compare heap snapshots taken hours apart
 - Spikes from heavy post builds (e.g. blog_825ed2a 'All paths', ~250MB) only crash it once the baseline has crept up
 
-Check in on the redis client side caching change and then audit the in memory LRU caches for tuning the sizes of them
-- clicking down the list of templates in the template editor is now slower, can we analyze the LRU caching to optimize this part too?
-
-Is the status page just measuring the lru caches? how do we make it verify a cold request to get a real sense for system performance?
-
-How to reduce likelihood of downtime?
-- s3 for storage only (replicated?)
-- multi-region (dns level failover from one region?) with redis replica in another region
-- how to prevent dns issues?
-- are we well insulated from bunny failures (dns failover here too?)
-- are we well insulated from cloudflare failures (they do our DNS records or is it route53?)
-- are we as well insulated from most likely aws issues?
+Now we have many LRU caches in app/blog we need to gather data in production to rigorously determine the most effective relative sizes for the caches (include the mustache template cache in this)
+- Maybe move all LRU caching into app/models and simplify app/blog?
+- Maybe remove redis client side caching and instead implement LRU caching more aggressively in the models?
+- Check in on the redis client side caching change and then audit the in memory LRU caches for tuning the sizes of them
+  - clicking down the list of templates in the template editor is now slower, can we analyze the LRU caching to optimize this part too?
+- Is the status page just measuring the lru caches? how do we make it verify a cold request to get a real sense for system performance?
 
 Add a new template which just looks like finder on the index page
 
@@ -137,8 +143,6 @@ Add rebuild button to each file on dashboard
 - Add json viewer to files on dashboard
 
 Render benchmark skips with "No cached corpus": run benchmarks-corpus.yml (workflow_dispatch) once, probably needed since #2111 dropped data/static from the corpus
-
-Upgrade the Redis server from 6.2 to 8.4+ for native compare-and-set (SET ... IFEQ, DELEX), then drop Lua: helper/lock extend/release become plain commands; helper/alarm claim/renew/complete need per-id claim keys to go native; also the legacy scripts in sync/lock.js, models/user/set.js, helper/flushCachePending.js, clients/icloud/database.js
 
 Back up blot-storage-prod off AWS (Backblaze B2, hourly, no --delete): _avatars and _template_assets can't be regenerated
 
@@ -222,9 +226,6 @@ Perform caching and header audit of site and templates
 - Check logs and headers via curl
 - Identify optimizations
 
-12 factor screenshot as api
-- use macserver  (docker container?)
-
 Make sure next bill amount is in all billing emails to customers
 
 Explain on the about page the websites started out as files in a folder. But they had to be HTML. Blot makes other file types possible too.
@@ -238,10 +239,6 @@ Add clear bill change info to new blog flow
 Rebuild all sites to bake in folder CDN urls
 
 Why is Ross' template so slow to install? It takes a few seconds. Let's speed it up.
-
-Now we have many LRU caches in app/blog we need to gather data in production to rigorously determine the most effective relative sizes for the caches (include the mustache template cache in this)
-- Maybe move all LRU caching into app/models and simplify app/blog?
-- Maybe remove redis client side caching and instead implement LRU caching more aggressively in the models?
 
 Improve about section
 - Restructure /about into current principles and clearly dated working notes.
@@ -260,10 +257,6 @@ Fix performance bugs on various sites:
 - blot.im /questions pages 250-750ms, mostly I/O (elu 0.2-0.4), incl. 302s from /questions/:id/edit
 - using additional req trace logging and more possible LRU caching
 - do we need a seperate incrementally updated index of skinny entry properties, e.g. title url etc for rendering archives / allEntries?
-
-Implement an abstract blog storage mechanism that will simulatenously make it possible to:
-- implement folder storage limits (include generated files in this amount?)
-- implement s3 storage for folder files
 
 Fix benchmark build-corpus action issue
 
@@ -418,7 +411,7 @@ Fix bug with huge draft crashing the sync server
 - Chunk large drafts into multiple messages to avoid memory issues? 
 
 Fix bug with overdue subscription payment form not working
-- Possible bug introduced by recent stripe upgrade
+- Possible bug introduced by recent stripe upgrade?
 - Migrate [Stripe library to v7](https://github.com/stripe/stripe-node/wiki/Migration-guide-for-v7)
 
 Fix bugs with custom domain setup
