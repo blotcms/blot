@@ -176,8 +176,27 @@
   transition: none;
 }
 
-.sidebar button {
+.sidebar button,
+.sidebar a.folder-label {
   font-weight: 500;
+}
+
+/* Folders backed by an index page: linked label plus a separate caret toggle */
+.sidebar li.has-index {
+  position: relative;
+}
+
+.sidebar li.has-index > a.folder-label {
+  padding-left: 18px;
+}
+
+.sidebar li.has-index > button.folder-toggle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: calc(1.3em + 12px);
+  padding: 0;
 }
 
 /* Caret icon before buttons (closed state rotated -90deg) */
@@ -206,7 +225,7 @@
   padding-bottom: 4px;
 }
 /* Vertical guide line for submenu items */
-.sidebar .submenu a:before {
+.sidebar .submenu a:not(.folder-label):before {
   content: "";
   position: absolute;
   top: 0;
@@ -216,11 +235,11 @@
   background-color: var(--border-color);
 }
 
-.sidebar .submenu a:hover:before {
+.sidebar .submenu a:not(.folder-label):hover:before {
   background-color: var(--text-color);
 }
 
-.sidebar .submenu a.active:before {
+.sidebar .submenu a:not(.folder-label).active:before {
   background-color: var(--link-color);
 }
 

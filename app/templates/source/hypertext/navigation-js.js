@@ -4,7 +4,7 @@ const COLLAPSE_NAVIGATION_BY_DEFAULT = {{#collapse_navigation_by_default}}true{{
 
 function sidebarCacheKey(root) {
   return (
-    "sidebarState:v3:" +
+    "sidebarState:v4:" +
     document.querySelector('meta[name="blot-cache-id"]')?.content +
     ":sort:" +
     (root?.dataset.sortBy || "id") +
@@ -257,6 +257,7 @@ class SidebarNavigation {
     }
   }
 
+  // Folders keep their own name; an index file only supplies the link.
   applyFolderTitles() {
     if (!this.root) return;
     const indexName = /^(?:\d+[.\s_-]+)?(index|overview)$/i;
@@ -273,9 +274,31 @@ class SidebarNavigation {
         return indexName.test(basename(li.getAttribute("data-path") || ""));
       });
       if (!indexLi) return;
-      const title = indexLi.querySelector(":scope > a")?.textContent?.trim();
+      const indexLink = indexLi.querySelector(":scope > a");
       const label = folder.querySelector(":scope > .folder-label");
-      if (title && label) label.textContent = title;
+      if (!label) return;
+      if (!indexLink) return;
+
+      // Promote the index entry: the folder label links to it and a separate
+      // button toggles the folder. The index row itself is dropped from the
+      // submenu; its data-path moves to the link so cache staleness checks
+      // still see it.
+      const link = document.createElement("a");
+      link.className = "folder-label";
+      link.href = indexLink.getAttribute("href") || indexLink.href;
+      link.textContent = label.textContent;
+      const path = indexLi.getAttribute("data-path");
+      if (path) link.setAttribute("data-path", path);
+      label.replaceWith(link);
+
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "folder-toggle";
+      toggle.setAttribute("aria-label", "Toggle " + link.textContent);
+      link.after(toggle);
+
+      folder.classList.add("has-index");
+      indexLi.remove();
     });
   }
 
@@ -344,6 +367,11 @@ class SidebarNavigation {
     this.root.querySelectorAll("li.folder").forEach((li) => this.setFolder(li, false));
     const active = this.root.querySelector("a.active");
     if (!active) return;
+    // An active index page lives on its folder's own label
+    if (active.classList.contains("folder-label")) {
+      const own = active.closest("li.folder");
+      if (own) this.setFolder(own, true);
+    }
     let ul = active.closest("ul");
     while (ul && ul !== this.root) {
       const folder = ul.parentElement?.closest("li.folder");
@@ -356,14 +384,30 @@ class SidebarNavigation {
   // ------- events -------
   _bindEvents() {
     this.root.addEventListener("click", (e) => {
-      const btn = e.target.closest("button.folder-label");
+      const link = e.target.closest("a.folder-label");
+      if (link && this.root.contains(link)) {
+        const folder = link.closest("li.folder");
+        if (!folder) return;
+        if (link.classList.contains("active")) {
+          // Already on the index page: act as a toggle, don't re-navigate
+          e.preventDefault();
+          e.stopPropagation();
+          this.toggleFolder(folder);
+        } else {
+          this.setFolder(folder, true);
+          this._saveCache();
+        }
+        return;
+      }
+
+      const btn = e.target.closest("button.folder-label, button.folder-toggle");
       if (!btn || !this.root.contains(btn)) return;
       const folder = btn.closest("li.folder");
       if (folder) this.toggleFolder(folder);
     });
 
     this.root.addEventListener("keydown", (e) => {
-      const btn = e.target.closest("button.folder-label");
+      const btn = e.target.closest("button.folder-label, button.folder-toggle");
       if (!btn) return;
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
