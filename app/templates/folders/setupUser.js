@@ -4,7 +4,7 @@ const User = require("models/user");
 const getUserByEmail = promisify(User.getByEmail);
 const createUser = promisify(User.create);
 const generateAccessToken = promisify(User.generateAccessToken);
-const FOLDER_ACCOUNT_EMAIL = config.admin.email || "folders@example.com";
+const FOLDER_ACCOUNT_EMAIL = config.admin.email || "example@example.com";
 const format = require("url").format;
 
 module.exports = async function setupUser() {
