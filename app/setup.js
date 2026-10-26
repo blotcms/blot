@@ -232,13 +232,21 @@ function main(callback) {
         // The parent of a forked worker child has cleared it
         if (config.worker_child) return;
 
-        const featuredDir = path.join(config.data_directory, "featured");
-        const featuredFile = path.join(featuredDir, "featured.json");
+        // In development, drop the cached copy so edits to the seed list show.
+        if (config.environment === "development") {
+          await fs.remove(path.join(config.data_directory, "featured", "featured.json"));
+          return;
+        }
 
-        log("Clearing featured cache file");
-        await fs.ensureDir(featuredDir);
-        await fs.remove(featuredFile);
-        log("Cleared featured cache file");
+        // Elsewhere keep the previously filtered featured.json rather than
+        // clearing it: the seed list is unfiltered, so sites that have since
+        // left Blot ('your domain is almost set up') would show until the
+        // filter finished. Re-filter from the seed in the background.
+
+        log("Refreshing featured sites in the background");
+        require("documentation/featured/check")()
+          .then(() => log("Refreshed featured sites"))
+          .catch((err) => log("Error refreshing featured sites", err));
       },
 
       async function () {

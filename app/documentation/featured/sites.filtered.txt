@@ -1,5 +1,5 @@
 zacharykeeting.com Zachary Keeting, artist
-blog.andrewjanjigian.com Andrew Janjigian, photographer
+www.wordloaf.org Andrew Janjigian, photographer
 keywords.oxus.net Kerim Friedman, anthropologist
 discombobulated.co.nz Jessica Nickelsen, writer
 blog.aurynn.com Aurynn Shaw, software engineer
@@ -24,7 +24,6 @@ tellyou.today Neale Stokes, librarian
 poetry.bencallahan.com Ben Callahan, poet
 spittingdog.net Dave Haysom, translator
 reillybrennan.com Reilly Brennan, venture capitalist
-sidenote.ridwansanusi.com Ridwan Sanusi, designer
 max.engineer Max Chernyak, software engineer
 oliviaastawood.com Olivia Wood, writer
 www.nitinpai.in Nitin Pai, think-tank director
@@ -56,7 +55,6 @@ merissalombardo.com Merissa Lombardo, production designer
 alyssabrocato.com Alyssa Brocato, cinematographer
 shaileshchitnis.com Shailesh Chitnis, journalist
 elenarazlogova.net Elena Razlogova, historian
-kristinemorgan.com Kristine Morgan, writer
 maggiewangphotography.com Maggie Wang, academic
 chuckpearson.blog Chuck Pearson, designer
 garywebbracing.com Gary Webb, racing driver
