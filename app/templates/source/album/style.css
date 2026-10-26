@@ -4,6 +4,32 @@ on the services page of the dashboard */
 {{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
+/* Highlight.js supplies the palette; this template controls code layout and type. */
+pre code.hljs {
+  display: block;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+code.hljs {
+  margin: 0;
+  padding: 0;
+}
+/* The repeated class gives this template reset priority over theme token styles. */
+pre code.hljs.hljs,
+pre code.hljs.hljs * {
+  font-weight: inherit;
+  font-style: inherit;
+  opacity: 1;
+  text-decoration: inherit;
+}
+pre code.hljs.hljs * {
+  display: inline;
+  width: auto;
+}
+
 
 /* Colors */
 hr {
@@ -60,7 +86,12 @@ body{
   padding-left:{{spacing}}rem;
 }
 
-.caption {display:block;font-size: {{font.font_size}}px;margin: 0.5em 0 0.5em 0}
+.caption {
+  display: block;
+  margin: 0.75em 0 0.5em;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
+  font-size: 0.875em;
+}
 /* Styles */
 
 html,
@@ -457,6 +488,50 @@ a.next-page {
   -webkit-font-smoothing: auto;
 }
 
+.entry-title {
+  margin: 0 0 1.25em;
+  text-align: left;
+}
+
+.entry-title h1 {
+  margin: 0;
+  font-size: 1.75em;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.entry-title[data-entry-path$=".jpg" i],
+.entry-title[data-entry-path$=".jpeg" i],
+.entry-title[data-entry-path$=".png" i],
+.entry-title[data-entry-path$=".gif" i],
+.entry-title[data-entry-path$=".tiff" i],
+.entry-title[data-entry-path$=".webp" i],
+.entry-title[data-entry-path$=".avif" i],
+.entry-title[data-entry-path$=".heic" i],
+.entry-title[data-entry-path$=".heif" i] {
+  display: none;
+}
+
+.entry .body:not(:has(img)) {
+  flex: 0 1 68ch;
+  min-width: 0;
+  max-width: 68ch;
+  margin: 0 auto;
+  text-align: left;
+  font-size: 1.125em;
+  line-height: 1.65;
+}
+
+.entry .body:has(.wide) {
+  flex: 0 1 68ch;
+  min-width: 0;
+  max-width: 68ch;
+  margin: 0 auto;
+  text-align: left;
+  font-size: 1.125em;
+  line-height: 1.65;
+}
+
 .body ul, .body ol {
   padding-left: 2.8em
 }
@@ -536,7 +611,7 @@ hr {
 }
 
 .entry img {
-  max-height: calc(100vh - 3rem);
+  max-height: calc(100vh - {{font.line_height}}em - 5rem);
   max-width: 100%;
   width: auto;
   height: auto;
@@ -641,6 +716,10 @@ the absolutely positioned stuff is off the viewport.
     width: 150%;
   }
 
+  .entry .body:has(.wide) .wide:not(.left):not(.right) {
+    margin-left: -25%;
+  }
+
   .wide.left,
   .wide.right {
     width: 125%;
@@ -667,6 +746,23 @@ the absolutely positioned stuff is off the viewport.
 
   .right.margin {
     right: -33%;
+  }
+}
+
+@media screen and (max-width: 700px) {
+  .margin,
+  .inside {
+    width: 25%;
+  }
+
+  .margin.left,
+  .inside.left {
+    padding-right: 1rem;
+  }
+
+  .margin.right,
+  .inside.right {
+    padding-left: 1rem;
   }
 }
 

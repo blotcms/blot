@@ -5,98 +5,182 @@
 {{/sticky_navigation}}
 
 <style type="text/css">
+  .archive-search {
+    display: flex;
+    align-items: center;
+    margin: 2rem {{spacing}}rem {{spacing}}rem;
+  }
+
+  .archive-search form {
+    display: flex;
+    width: 100%;
+    margin: 0;
+    border-radius: 4px;
+    transition: box-shadow ease-in-out 0.15s;
+  }
+
+  .archive-search form:focus-within {
+    box-shadow: 0 0 0 2px rgba({{#rgb}}{{link_color}}{{/rgb}}, 0.25);
+  }
+
+  .archive-search input:focus {
+    outline: none;
+  }
+
+  .archive-search input {
+    display: block;
+    box-sizing: border-box;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.2);
+    border-radius: 4px;
+    background-color: {{background_color}};
+    background-image: none;
+    color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.5);
+    font-size: 1rem;
+    line-height: 1.5;
+    transition: border-color ease-in-out 0.15s, box-shadow ease-in-out 0.15s;
+  }
+
+  .archive-search input[type="text"] {
+    min-width: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+    box-shadow: inset 0 1px 1px rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.075);
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .archive-search input[type="submit"] {
+    flex-grow: 1;
+    flex-shrink: 1;
+    max-width: 100px;
+    font-weight: 500;
+    text-align: center;
+    border-left: none;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.8);
+    cursor: pointer;
+  }
+
+  @media (max-width: 600px) {
+    .archive-search form {
+      width: 100%;
+    }
+  }
+
   .archives {
-    padding: 0 {{spacing}}rem;
+    display: flex;
+    flex-wrap: wrap;
   }
 
   .archives a {
+    box-sizing: border-box;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    min-height: 64px;
-    padding: 0 calc({{spacing}}rem * 0.25);
+    width: 220px;
+    padding: 1.3rem;
+    color: inherit;
+    font-size: 0.8rem;
+    text-align: center;
+    text-decoration: none;
   }
 
   .archives a .thumbnail {
-    width: 64px;
-    height: 64px;
-    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    width: 80px;
+    height: 80px;
   }
 
-  .archives a .thumbnail img {
-    max-width: 64px;
-    max-height: 64px;
+  .archives a .thumbnail-empty {
+    box-sizing: border-box;
+    height: 80px;
+    background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04);
   }
 
   .archives a .title {
-    flex-grow: 1;
-    margin: 0 calc({{spacing}}rem * 0.5);
+    display: block;
+    max-height: calc(1 * {{font.line_height}}em);
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
-  .archives a .date {
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
-
-  .archives a:hover .title {
-    text-decoration: underline;
-  }
-
-  .archives a:active {
+  .archives a span.date {
+    display: block;
     opacity: 0.5;
   }
 
-  .archives-search {
-    padding: 0 {{spacing}}rem;
+  .archives a:hover {
+    opacity: 0.8;
   }
+
+  .archives a:active {
+    opacity: 0.7;
+  }
+
+  .archives a img {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+  }
+
+  {{#hide_dates}}
+  .archives .date {
+    display: none;
+  }
+  {{/hide_dates}}
 </style>
 
-{{#show_search}}
-<div class="archives-search">
-  {{> search_form}}
+<div class="archive-search">
+  <form action="/search">
+    <input type="text" name="q" placeholder="Search the archives...">
+    <input type="submit" value="Search">
+  </form>
 </div>
-{{/show_search}}
 
 <div class="archives">
   {{#archives}}
   {{#months}}
   {{#entries}}
   <a class="collection-entry" href="{{{url}}}">
-    <span class="thumbnail">
+    <span class="thumbnail{{^thumbnail.small.url}} thumbnail-empty{{/thumbnail.small.url}}">
       {{#thumbnail.small.url}}
       <img
-        class="pre-loaded"
-        onload="this.className='loaded'"
         loading="lazy"
-        alt="{{title}}"
-        width="{{thumbnail.small.width}}"
-        height="{{thumbnail.small.height}}"
+        src="{{{thumbnail.small.url}}}"
         srcset="
           {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
           {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
           {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
         "
-        sizes="64px"
-        src="{{{thumbnail.small.url}}}" />
+        sizes="80px"
+        width="{{thumbnail.small.width}}"
+        height="{{thumbnail.small.height}}"
+        alt="{{title}}"
+        class="pre-loaded"
+        onload="this.className+=' loaded';" />
       <noscript>
         <img
-          alt="{{title}}"
-          width="{{thumbnail.small.width}}"
-          height="{{thumbnail.small.height}}"
+          loading="lazy"
+          src="{{{thumbnail.small.url}}}"
           srcset="
             {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
             {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
             {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
           "
-          sizes="64px"
-          src="{{{thumbnail.small.url}}}" />
+          sizes="80px"
+          width="{{thumbnail.small.width}}"
+          height="{{thumbnail.small.height}}"
+          alt="{{title}}">
       </noscript>
       {{/thumbnail.small.url}}
     </span>
-    <span class="title">{{title}}</span>
-    {{^hide_dates}}<span class="date">{{date}}</span>{{/hide_dates}}
+    <span>
+      <span class="title">{{title}}</span>
+      {{#date}}<span class="date">{{date}}</span>{{/date}}
+    </span>
   </a>
   {{/entries}}
   {{/months}}
