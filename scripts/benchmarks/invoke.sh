@@ -49,6 +49,7 @@ BENCH_ENV=(
   -e BLOT_HOST="localhost"
   -e BLOT_PROTOCOL="https"
   -e NODE_PATH="app"
+  -e NODE_OPTIONS="--max-old-space-size=256"
 )
 
 cleanup() {
