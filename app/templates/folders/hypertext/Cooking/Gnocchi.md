@@ -12,4 +12,4 @@
 2. Melt butter with sage until nutty brown.
 3. Toss gnocchi in brown butter. Season and plate.
 
-![](https://upload.wikimedia.org/wikipedia/commons/7/74/By_Carlos_Barretta_stk_001385_%288023753249%29.jpg)
+![](_By_Carlos_Barretta_stk_001385__8023753249_.jpg)
