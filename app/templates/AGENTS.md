@@ -16,6 +16,7 @@ When working from an isolated git worktree, any request to “preview,” “sho
 - Treat CSS order as functional. Before moving rules, preserve specificity and base-before-override relationships.
 - For CSS reorganization, use this order where practical: layout, typography, navigation, branding, content, controls, plugins.
 - Keep comments concise and customer-facing; explain only non-obvious calculations, conditional rules, or extension boundaries.
+- Highlight.js themes supply the code palette (foreground, background, and token colors); templates own code typography and layout. After the last `{{{syntax_highlighter.styles}}}` insertion, include the shared reset used by the other syntax-highlighting templates. It resets highlighted block display, overflow, spacing, wrapping, and token typography/layout without changing colors or backgrounds. Put template-specific code-block rules after the reset. Do not make `.hljs` backgrounds transparent to defeat the selected theme, and do not edit generated files under `app/blog/static/syntax-highlighter/themes/` for template-specific layout.
 - When a task names one template file, inspect and edit only that file unless a dependency is required.
 - After source changes, wait for the watcher, then smoke-test the applicable live/default preview homepage plus Archives and Search. Check computed typography and horizontal overflow; use Docker logs only when the preview reveals a sync or rebuild problem.
 - Finish with a scoped `git diff --check` and status check; preserve unrelated working-tree changes.
@@ -29,6 +30,8 @@ The album template uses this pattern in both `album/_grid_square.html` and `albu
 Other thumbnail views now use the same pattern: `gallery/_item.html` (`thumbnail_size` square), `links/_post.html` and `links/search.html` (responsive grid columns), `studio/entries.html` and `studio/tagged.html` (responsive grid columns), `fieldnotes/related.html` (350px image slot), and `magazine/entry_line.html` (one-third and two-thirds columns). Their existing CSS, image styles, and fallback URLs are preserved; `sizes` describes their current layout so the browser can select among generated variants without changing the rendered dimensions.
 
 Use responsive candidates for displayed thumbnails, not social preview metadata or full-size entry images. When a template has a `<noscript>` image, keep its `srcset` and `sizes` in sync with the primary image.
+
+For images in long index, archive, search, tag, or related-item lists, add `loading="lazy"` so the browser can defer thumbnails outside the viewport. This applies to the repeated thumbnails in the album, portfolio, gallery, links, studio, organization list, and fieldnotes related-items views. Do not lazy-load a hero, featured image, or other image expected to be the page's main above-the-fold image. Keep `loading` on both the primary image and any `<noscript>` fallback. `width` and `height` (or an aspect-ratio wrapper) should still reserve the image's space while it loads. Native `loading` does not apply to CSS background images.
 
 ## Contextual navigation
 
