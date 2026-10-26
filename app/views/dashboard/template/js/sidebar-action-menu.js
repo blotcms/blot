@@ -36,6 +36,7 @@ function initSidebarActionMenu(options) {
 
     menuElement.classList.remove("is-open");
     menuElement.setAttribute("aria-hidden", "true");
+    menuElement.style.top = "0px";
 
     if (activeRow) {
       activeRow.classList.remove("menu-open");
