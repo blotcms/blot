@@ -19,6 +19,7 @@
           {{#thumbnail.medium}}
           <span style="width:100%;display:block;height:0;padding-bottom:{{ratio}};margin: 0 0 1em 0;">
             <img
+              loading="lazy"
               src="{{{url}}}"
               srcset="
                 {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
