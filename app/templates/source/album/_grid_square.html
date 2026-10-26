@@ -135,12 +135,13 @@
   {{#entries}}
   <a
     href="{{{url}}}"
-    class="post collection-entry {{#thumbnail.medium}}zoomable{{/thumbnail.medium}} {{^thumbnail.medium}}no-thumbnail{{/thumbnail.medium}}">
+    class="post collection-entry {{^thumbnail.medium}}no-thumbnail{{/thumbnail.medium}}">
     <span class="thumbnail">
       <span class="container">
         {{#thumbnail.medium}}
         <img
           class="pre-loaded"
+          loading="lazy"
           onload="this.className='loaded'"
           alt="{{ title }}"
           width="{{thumbnail.large.width}}"
@@ -165,6 +166,7 @@
           />
         <noscript>
           <img
+            loading="lazy"
             alt="{{ title }}"
             width="{{thumbnail.large.width}}"
             height="{{thumbnail.large.height}}"  
@@ -185,7 +187,7 @@
               margin: 0.65em 1.3rem;
               box-sizing: border-box;
               overflow: hidden;
-              color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.5);
+              color: {{link_color}};
               font-size: 23px;
             ">
             {{ title }}
