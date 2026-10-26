@@ -10,6 +10,7 @@
     flex-grow:calc({{thumbnail.large.width}}*{{thumbnail_size}}/{{thumbnail.large.height}})">
     <i style="padding-bottom:{{thumbnail.large.ratio}}"></i>
     <img
+      loading="lazy"
       src="{{{thumbnail.large.url}}}"
       srcset="
         {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
@@ -24,6 +25,7 @@
       onload="this.className+=' loaded';" />
     <noscript>  
     <img
+      loading="lazy"
       src="{{{thumbnail.large.url}}}"
       srcset="
         {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,

@@ -22,7 +22,19 @@
           <div class="card border-0 mb-4 box-shadow">
             {{#thumbnail.large.url}}
             <a href="{{{url}}}">
-              <div class="entry-hero-thumb" style="background-image: url({{{thumbnail.large.url}}});"></div>
+              <div class="entry-hero-thumb">
+                <img
+                  src="{{{thumbnail.large.url}}}"
+                  srcset="
+                    {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+                    {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+                    {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+                  "
+                  sizes="(max-width: 575px) calc(100vw - 30px), (max-width: 767px) 510px, (max-width: 991px) 330px, (max-width: 1199px) 450px, 540px"
+                  width="{{thumbnail.large.width}}"
+                  height="{{thumbnail.large.height}}"
+                  alt="{{title}}">
+              </div>
             </a>
             {{/thumbnail.large.url}}
             <div class="card-body px-0 pb-0 d-flex flex-column align-items-start">
@@ -64,7 +76,20 @@
             {{#thumbnail.large.url}}
             <div class="col-md-4 entry-list-thumb">
               <a href="{{{url}}}" class="w-100">
-                <div class="entry-list-thumb-image" style="background-image: url({{{thumbnail.large.url}}});"></div>
+                <div class="entry-list-thumb-image">
+                  <img
+                    loading="lazy"
+                    src="{{{thumbnail.large.url}}}"
+                    srcset="
+                      {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+                      {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+                      {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+                    "
+                    sizes="(max-width: 767px) calc(100vw - 30px), 22vw"
+                    width="{{thumbnail.large.width}}"
+                    height="{{thumbnail.large.height}}"
+                    alt="{{title}}">
+                </div>
               </a>
             </div>
             {{/thumbnail.large.url}}
@@ -109,7 +134,20 @@
               <a href="{{{url}}}" class="btn btn-dark">Read More</a>
             </div>
             {{#thumbnail.large.url}}
-            <div class="col-md-6 d-none d-md-block pr-0 jumbotron-home-image" style="background-size:cover;background-image:url({{{thumbnail.large.url}}});"></div>
+            <div class="col-md-6 d-none d-md-block pr-0 jumbotron-home-image">
+              <img
+                loading="lazy"
+                src="{{{thumbnail.large.url}}}"
+                srcset="
+                  {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+                  {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+                  {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+                "
+                sizes="(max-width: 991px) 360px, (max-width: 1199px) 480px, 570px"
+                width="{{thumbnail.large.width}}"
+                height="{{thumbnail.large.height}}"
+                alt="{{title}}">
+            </div>
             {{/thumbnail.large.url}}
           </div>
         </div>
@@ -154,7 +192,19 @@
             {{#thumbnail.large.url}}
             <div class="col-md-3 pr-0 text-right entry-list-thumb">
               <a href="{{{url}}}">
-                <img class="w-100" src="{{{thumbnail.large.url}}}" alt="{{title}}">
+                <img
+                  class="w-100"
+                  loading="lazy"
+                  src="{{{thumbnail.large.url}}}"
+                  srcset="
+                    {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+                    {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+                    {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+                  "
+                  sizes="(max-width: 767px) calc(100vw - 30px), 17vw"
+                  width="{{thumbnail.large.width}}"
+                  height="{{thumbnail.large.height}}"
+                  alt="{{title}}">
               </a>
             </div>
             {{/thumbnail.large.url}}

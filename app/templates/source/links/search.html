@@ -24,6 +24,7 @@
     <span style="top:0;left:0;right:0;bottom:0;position:absolute;display:flex;align-items:center">
       {{#thumbnail.medium}}
       <img
+        loading="lazy"
         src="{{{url}}}"
         srcset="
           {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,

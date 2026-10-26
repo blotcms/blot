@@ -14070,16 +14070,21 @@ div.a2a_full_footer {
 
 .entry-hero-thumb {
   height: 200px;
-  background-size: cover;
-  background-repeat: no-repeat;
-  background-position: center;
+  overflow: hidden;
+}
+
+.entry-hero-thumb img,
+.entry-list-thumb-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
 }
 
 .entry-list-thumb-image {
   height: 80px;
-  background-size: cover;
-  background-repeat: no-repeat;
-  background-position: center;
+  overflow: hidden;
 }
 
 .jumbotron-home .lead {
@@ -14102,6 +14107,17 @@ div.a2a_full_footer {
 
   .jumbotron-home-image {
     min-height: 280px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .jumbotron-home-image img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
   }
 }
 

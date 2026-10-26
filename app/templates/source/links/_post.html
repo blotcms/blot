@@ -3,6 +3,7 @@
     <span class="container">
       {{#thumbnail.medium}}
       <img
+        loading="lazy"
         src="{{{url}}}"
         srcset="
           {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
@@ -14,6 +15,7 @@
         onload="this.className+=' fadeIn';" />
       <noscript>  
       <img
+        loading="lazy"
         src="{{{url}}}"
         srcset="
           {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
