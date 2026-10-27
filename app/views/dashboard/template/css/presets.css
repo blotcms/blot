@@ -166,6 +166,7 @@ button.preset-tile {
 
 .preset-font-sample .font-specimen {
   display: block;
+  color: transparent;
   width: auto;
   height: 1.4rem;
   max-width: 100%;
