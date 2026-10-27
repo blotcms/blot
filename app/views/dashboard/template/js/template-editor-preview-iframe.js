@@ -120,6 +120,8 @@ if (previewIframeContainer) {
 
   var storedPath = readStoredPath();
   var pathname = URL.parse(iframe.getAttribute("src")).pathname;
+  // The page the visitor is on in the preview, with its query string
+  var currentPath = storedPath || pathname;
 
   if (storedPath && storedPath !== pathname) {
     iframe.setAttribute("src", previewOrigin + storedPath);
@@ -133,13 +135,102 @@ if (previewIframeContainer) {
   // all HTML pages rendered on preview subdomains.
   var receiveMessage = function receiveMessage(e) {
     if (e.origin !== previewOrigin) return;
+
+    if (e.data && typeof e.data === "object") {
+      return receivePreviewEvent(e);
+    }
+
     if (typeof e.data !== "string" || e.data.indexOf("iframe:") !== 0) return;
 
     var path = normalizePath(e.data.slice("iframe:".length));
 
     updatePreviewLink(path);
     writeStoredPath(path);
+    currentPath = path || currentPath;
   };
+
+  // Refreshing the preview: rather than reload the page in front of the
+  // visitor, which shows it half styled until its stylesheets and fonts have
+  // arrived, load the new one in a second iframe beside it and swap it in
+  // once it has loaded. The old page stays on screen until then. Scroll
+  // position lives on .iframe-scroll, not in the iframe, so it is kept.
+  var SWAP_DEBOUNCE_MS = 100;
+  // A page says it is ready when its fonts have loaded. One which does not
+  // (the error page) is shown this long after it loads, and none is held
+  // back longer than the timeout.
+  var SWAP_LOAD_GRACE_MS = 1500;
+  var SWAP_TIMEOUT_MS = 5000;
+  var pendingFrame = null;
+  var debounceTimer = null;
+  var timeoutTimer = null;
+
+  var swapIn = function swapIn(next) {
+    if (pendingFrame !== next) return;
+    clearTimeout(timeoutTimer);
+    pendingFrame = null;
+
+    var previous = iframe;
+    previous.removeAttribute("id");
+    previous.parentNode.removeChild(previous);
+
+    next.id = "full_size_preview";
+    next.style.visibility = "";
+    iframe = next;
+  };
+
+  var startSwap = function startSwap() {
+    if (pendingFrame) {
+      clearTimeout(timeoutTimer);
+      pendingFrame.parentNode.removeChild(pendingFrame);
+      pendingFrame = null;
+    }
+
+    var next = iframe.cloneNode(false);
+    next.removeAttribute("id");
+    // Hidden, not display: none, so it still lays out and loads its fonts
+    next.style.visibility = "hidden";
+    next.setAttribute("src", previewOrigin + currentPath);
+    next.addEventListener("load", function () {
+      setTimeout(function () {
+        swapIn(next);
+      }, SWAP_LOAD_GRACE_MS);
+    });
+
+    pendingFrame = next;
+    timeoutTimer = setTimeout(function () {
+      swapIn(next);
+    }, SWAP_TIMEOUT_MS);
+    iframe.parentNode.appendChild(next);
+  };
+
+  // A save sends two triggers, the editor's own and the server's message
+  // through the page, so bursts become one swap
+  var scheduleSwap = function scheduleSwap() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(startSwap, SWAP_DEBOUNCE_MS);
+  };
+
+  function receivePreviewEvent(e) {
+    var fromPending = pendingFrame && e.source === pendingFrame.contentWindow;
+
+    if (e.data.type === "preview:ready") {
+      if (fromPending) swapIn(pendingFrame);
+      return;
+    }
+
+    if (e.data.type !== "preview:changed") return;
+
+    // Tell the page we will refresh it, or it reloads itself
+    e.source.postMessage({ type: "preview:ack" }, previewOrigin);
+
+    // The page still loading is replaced by the swap its twin on screen starts
+    if (fromPending || typeof e.data.path !== "string") return;
+
+    currentPath = normalizePath(e.data.path) || currentPath;
+    scheduleSwap();
+  }
+
+  document.addEventListener("template-preview:refresh", scheduleSwap);
 
   window.addEventListener("message", receiveMessage, false);
 

@@ -11,7 +11,7 @@ Array.from(document.querySelectorAll('form.number-input')).forEach(function(form
 			body.append("_csrf", form.querySelector('input[name="_csrf"]').value);
 			
 			fetch(window.location.href, { method: "post", body }).then(function (response) {
-				document.getElementById("full_size_preview").src += "";
+				document.dispatchEvent(new CustomEvent("template-preview:refresh"));
 			});
 
 			event.preventDefault();
