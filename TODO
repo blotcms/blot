@@ -9,6 +9,8 @@ To check: updown.io check `wplo`, 48h Apdex heatmap, hover cells for "N failed",
 
 Finish container consolidation -> finish host consolidation (buy reserved instance) -> finish s3 migration (close out ebs)
 
+Set up Redis redundancy using a primary on the main server, a replica on the Frankfurt server, and three Redis Sentinel instances (main, Frankfurt, Mac) for automatic failover with quorum 2. Configure Node.js to discover the current primary via Sentinel. When the original main server recovers, it should rejoin as a replica; restore it as primary through a controlled manual failback using SENTINEL FAILOVER.
+
 ---
 
 Track OpenResty releases so we can re-enable HTTP/3: require fixes or documented backports for CVE-2026-42530 (QUIC use-after-free; nginx fix 1.31.2) and CVE-2026-95101 (HTTP/3 request-body injection; nginx fix 1.31.7), and review all newer nginx HTTP/3 advisories. Verify the actual bundled nginx/OpenSSL versions and patch coverage, update the pinned image digest and matching Brotli source/checksum, restore QUIC listeners and Alt-Svc advertisements, then rebuild on GitHub and pass proxy e2e checks for site/custom-domain HTTP/3 and wildcard certificates from Redis before deployment. See proxy/SECURITY.md and PR #2225.
