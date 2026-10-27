@@ -2,7 +2,7 @@ const getAllCached = require("./helpers/getAllCached");
 const yieldToEventLoop = require("./helpers/yieldToEventLoop");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
-const LRUCache = require("lru-cache").LRUCache;
+const { createRenderCache } = require("../../lib/cacheMetrics");
 const { prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
 const fetchCached = require("../../lib/fetchCached");
@@ -21,7 +21,7 @@ const ALIASES = getAllCached.ALIASES.allEntries;
 // never has to pay to store (or re-store) every entry's full html/body/
 // summary, and a hit skips both the deep clone and augment() for every entry
 // (see render/load/augmentedEntries.js).
-const allEntriesCache = new LRUCache({
+const allEntriesCache = createRenderCache("allEntries", {
   max: 200,
   maxSize: 100 * 1024 * 1024,
   sizeCalculation: (value) => value.size,

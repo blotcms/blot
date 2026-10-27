@@ -1,7 +1,7 @@
 const { getRecent } = require("../../lib/models");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
-const LRUCache = require("lru-cache").LRUCache;
+const { createRenderCache } = require("../../lib/cacheMetrics");
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
 const fetchCached = require("../../lib/fetchCached");
@@ -14,7 +14,7 @@ const ALIASES = ["recentEntries", "recent_entries"];
 const FEED_VIEW_NAME = "feed.rss";
 const FEED_MAX_ENTRIES = 10;
 
-const recentEntriesCache = new LRUCache({
+const recentEntriesCache = createRenderCache("recentEntries", {
   max: 1000,
   // 30 skinny entries per blog, but still byte-capped so a burst of
   // distinct blogs cannot fill the process by item count alone.
