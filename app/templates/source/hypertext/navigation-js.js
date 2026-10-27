@@ -388,6 +388,8 @@ class SidebarNavigation {
       if (link && this.root.contains(link)) {
         const folder = link.closest("li.folder");
         if (!folder) return;
+        // Leave new-tab/window clicks to the browser
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
         if (link.classList.contains("active")) {
           // Already on the index page: act as a toggle, don't re-navigate
           e.preventDefault();
