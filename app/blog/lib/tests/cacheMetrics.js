@@ -2,12 +2,13 @@ const cacheMetrics = require("../cacheMetrics");
 const fetchCached = require("../fetchCached");
 
 describe("render cache metrics", function () {
-  function build(options = {}) {
+  // A key named "big" is over the 100 byte cap
+  function build() {
     return cacheMetrics.createRenderCache("test", {
       max: 2,
-      fetchMethod: async (key) => ({ size: 1, value: key }),
+      fetchMethod: async (key) => ({ size: key === "big" ? 200 : 1 }),
       sizeCalculation: (value) => value.size,
-      maxSize: options.maxSize || 100,
+      maxSize: 100,
     });
   }
 
@@ -41,9 +42,9 @@ describe("render cache metrics", function () {
   });
 
   it("counts a fill the cache did not keep", async function () {
-    const cache = build({ maxSize: 0.5 });
+    const cache = build();
 
-    await fetchCached(cache, "test", null, "a");
+    await fetchCached(cache, "test", null, "big");
 
     expect(cacheMetrics.read(cache).uncachedFills).toBe(1);
   });
