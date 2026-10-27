@@ -1031,6 +1031,23 @@
     "styles": "@font-face{font-family:Selavy;font-style:normal;font-weight:400;src:url('{{{config.cdn.origin}}}/fonts/selavy/400.woff2?version=087635&extension=.woff2') format('woff2'),url('{{{config.cdn.origin}}}/fonts/selavy/400.woff?version=125856&extension=.woff') format('woff')}.pull-double{margin-left:-.325em}.push-double{margin-right:.325em}.pull-single{margin-left:-.208em}.push-single{margin-right:.208em}.push-double,.push-single{display:inline-block}"
   },
   {
+    "name": "Server Mono",
+    "id": "server-mono",
+    "specimen": {
+      "hash": "98a21e0a",
+      "width": 498.96,
+      "height": 79.2
+    },
+    "stack": "'Server Mono'",
+    "tags": [
+      "mono"
+    ],
+    "line_height": 1.4,
+    "line_width": 40,
+    "font_size": 16,
+    "styles": "@font-face{font-family:'Server Mono';font-style:normal;font-weight:400;src:url('{{{config.cdn.origin}}}/fonts/server-mono/regular.woff2?version=26b9e2&extension=.woff2') format('woff2'),url('{{{config.cdn.origin}}}/fonts/server-mono/regular.woff?version=040594&extension=.woff') format('woff')}@font-face{font-family:'Server Mono';font-style:italic;font-weight:400;src:url('{{{config.cdn.origin}}}/fonts/server-mono/oblique.woff2?version=50e95f&extension=.woff2') format('woff2'),url('{{{config.cdn.origin}}}/fonts/server-mono/oblique.woff?version=d06843&extension=.woff') format('woff')}.pull-double{margin-left:-.63em}.push-double{margin-right:.63em}.pull-single{margin-left:-.63em}.push-single{margin-right:.63em}.push-double,.push-single{display:inline-block}"
+  },
+  {
     "name": "Sorts Mill Goudy",
     "id": "sorts-mill-goudy",
     "specimen": {
