@@ -26,12 +26,12 @@
     <span data-font-picker-label>
       {{#value}}
       {{#name}}
-        {{#svg}}
-          {{{svg}}}
-        {{/svg}}
-        {{^svg}}
+        {{#specimenURL}}
+          <img class="font-specimen" src="{{{specimenURL}}}" width="{{specimenWidth}}" height="{{specimenHeight}}" alt="{{name}}" loading="lazy" decoding="async">
+        {{/specimenURL}}
+        {{^specimenURL}}
           <span style="font-family: {{stack}};">{{name}}</span>
-        {{/svg}}
+        {{/specimenURL}}
       {{/name}}
       {{^name}}Select a font{{/name}}
       {{/value}}

@@ -2,6 +2,7 @@ const Express = require("express");
 const fonts = new Express.Router();
 const config = require("config");
 const Mustache = require("mustache");
+const specimen = require("blog/static/fonts/specimen");
 
 const FONTS = require("blog/static/fonts").map(font => {
   font.styles = Mustache.render(font.styles, {
@@ -9,7 +10,7 @@ const FONTS = require("blog/static/fonts").map(font => {
       cdn: { origin: config.cdn.origin }
     }
   });
-  return font;
+  return { ...font, ...specimen(font) };
 });
 
 module.exports = function (req, res, next) {

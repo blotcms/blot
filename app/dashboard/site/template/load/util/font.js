@@ -1,5 +1,6 @@
 const desnake = require("./desnake");
 const FONTS = require("blog/static/fonts");
+const specimen = require("blog/static/fonts/specimen");
 
 module.exports = (key, value) => {
   return {
@@ -12,17 +13,17 @@ module.exports = (key, value) => {
         tagsString: option.tags.join(" "),
         selected: value.id && option.id === value.id ? "selected" : "",
         name: option.name,
-        svg: option.svg,
+        ...specimen(option),
         stack: option.stack,
         id: option.id
       };
     }),
     font_size: value.font_size || 16,
     line_height: value.line_height || 1.4,
-    value: {
-      ...(FONTS.find(({ id }) => id === value.id) || {}),
-      ...value
-    },
+    value: (() => {
+      const found = FONTS.find(({ id }) => id === value.id);
+      return { ...(found || {}), ...specimen(found), ...value };
+    })(),
     label: key ? desnake(key).replace(/ font$/i, "") : ""
   };
 };
