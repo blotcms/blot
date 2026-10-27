@@ -176,8 +176,23 @@
   transition: none;
 }
 
-.sidebar button {
+.sidebar button,
+.sidebar a.folder-label {
   font-weight: 500;
+}
+
+/* Folders backed by an index page: linked label plus a separate caret toggle */
+.sidebar li.has-index {
+  position: relative;
+}
+
+.sidebar li.has-index > button.folder-toggle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: calc(1.3em + 12px);
+  padding: 0;
 }
 
 /* Caret icon before buttons (closed state rotated -90deg) */
@@ -196,17 +211,17 @@
 }
 
 /* Rotate caret when the parent submenu is expanded */
-.sidebar [aria-expanded="true"] > button::before {
+.sidebar button[aria-expanded="true"]::before {
   transform: rotate(90deg);
   transition: transform 0.1s ease;
 }
 
-.sidebar .submenu a {
+.sidebar .submenu li:not(.folder) > a {
   padding-top: 4px;
   padding-bottom: 4px;
 }
 /* Vertical guide line for submenu items */
-.sidebar .submenu a:before {
+.sidebar .submenu li:not(.folder) > a:before {
   content: "";
   position: absolute;
   top: 0;
@@ -216,11 +231,11 @@
   background-color: var(--border-color);
 }
 
-.sidebar .submenu a:hover:before {
+.sidebar .submenu li:not(.folder) > a:hover:before {
   background-color: var(--text-color);
 }
 
-.sidebar .submenu a.active:before {
+.sidebar .submenu li:not(.folder) > a.active:before {
   background-color: var(--link-color);
 }
 

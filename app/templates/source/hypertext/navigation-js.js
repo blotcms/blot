@@ -1,10 +1,8 @@
-// Map folder [Eg] to 'Eg'
-const STRIP_TAG_TOKENS = true;
 const COLLAPSE_NAVIGATION_BY_DEFAULT = {{#collapse_navigation_by_default}}true{{/collapse_navigation_by_default}}{{^collapse_navigation_by_default}}false{{/collapse_navigation_by_default}};
 
 function sidebarCacheKey(root) {
   return (
-    "sidebarState:v3:" +
+    "sidebarState:v5:" +
     document.querySelector('meta[name="blot-cache-id"]')?.content +
     ":sort:" +
     (root?.dataset.sortBy || "id") +
@@ -18,7 +16,6 @@ class SidebarNavigation {
     this.root = document.querySelector(".sidebar");
     if (!this.root) return;
     this.cacheKey = sidebarCacheKey(this.root);
-    this.maxPages = 100;
   }
 
   // ------- cache -------
@@ -31,18 +28,7 @@ class SidebarNavigation {
     }
   }
   _saveCache() {
-    try {
-      localStorage.setItem(this.cacheKey, this.root.innerHTML);
-    } catch (err) {
-      console.warn("Sidebar cache write failed:", err);
-    }
-  }
-  _clearCache() {
-    try {
-      localStorage.removeItem(this.cacheKey);
-    } catch (err) {
-      console.warn("Sidebar cache clear failed:", err);
-    }
+    SidebarNavigation.saveCache(this.root);
   }
 
   _normalizePathname(pathname) {
@@ -83,8 +69,19 @@ class SidebarNavigation {
         console.warn("Invalid sidebar href:", err);
         return;
       }
-      link.classList.toggle("active", linkPath === currentPath);
+      const isActive = linkPath === currentPath;
+      link.classList.toggle("active", isActive);
+      if (isActive) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
     });
+  }
+
+  // Called by the page transitioner after a client-side navigation
+  update() {
+    if (!this.root) return;
+    this.syncActiveFromLocation();
+    this.revealActive();
+    this._saveCache();
   }
 
   // ------- pagination -------
@@ -115,9 +112,7 @@ class SidebarNavigation {
 
     const seen = new Set();
     let token = hasMore ? "1" : null;
-    let guard = 0;
     while (token) {
-      if (++guard > this.maxPages) break;
       if (seen.has(token)) break;
       seen.add(token);
 
@@ -151,8 +146,6 @@ class SidebarNavigation {
         break;
       }
     }
-
-    this.items = Array.from(this.root.querySelectorAll(":scope > li"));
   }
 
   // ------- build -------
@@ -166,11 +159,8 @@ class SidebarNavigation {
     const postItems = allLis.filter((li) => !li.hasAttribute("data-menu"));
 
     // collect hrefs from menu items (normalize to handle trailing slash variations)
-    const normalizeHref = (href) => {
-      if (!href) return "";
-      // remove trailing slash for comparison (except for root "/")
-      return href === "/" ? "/" : href.replace(/\/$/, "");
-    };
+    const normalizeHref = (href) =>
+      href ? this._normalizePathname(href) : "";
 
     const getHref = (li) => {
       const a = li.querySelector(":scope > a");
@@ -195,13 +185,9 @@ class SidebarNavigation {
     const byPath = new Map();
     byPath.set("", { el: this.root, submenu: this.root });
 
-    const segTitle = (s) => {
-      let out = s.replace(/[-_]/g, " ");
-      if (typeof STRIP_TAG_TOKENS !== "undefined" && STRIP_TAG_TOKENS) {
-        out = out.replace(/\[([^\]]+)\]/g, "$1"); // remove surrounding [ ]
-      }
-      return out;
-    };
+    // Map folder [Eg] to 'Eg'
+    const segTitle = (s) =>
+      s.replace(/[-_]/g, " ").replace(/\[([^\]]+)\]/g, "$1");
 
     const ensureFolder = (folderPath) => {
       if (byPath.has(folderPath)) return byPath.get(folderPath);
@@ -209,11 +195,11 @@ class SidebarNavigation {
       const li = document.createElement("li");
       li.className = "folder has-submenu";
       li.dataset.folder = folderPath;
-      li.setAttribute("aria-expanded", "false");
 
       const label = document.createElement("button");
       label.type = "button";
       label.className = "folder-label";
+      label.setAttribute("aria-expanded", "false");
       label.textContent = segTitle(seg);
       li.appendChild(label);
 
@@ -247,7 +233,7 @@ class SidebarNavigation {
       parentNode.submenu.appendChild(li);
     });
 
-    this.applyFolderTitles();
+    this.linkFoldersToIndex();
     this.sortTree(this.root);
 
     // append menu items flat, in original order
@@ -257,25 +243,76 @@ class SidebarNavigation {
     }
   }
 
-  applyFolderTitles() {
+  // A folder containing an index/overview entry links to it. The folder keeps
+  // its own name; the index file only supplies the link.
+  linkFoldersToIndex() {
     if (!this.root) return;
-    const indexName = /^(?:\d+[.\s_-]+)?(index|overview)$/i;
+    const indexName = /^(?:(\d+)[.\s_-]+)?(index|overview)$/i;
     const basename = (filePath) => {
       const last = (filePath || "").split("/").filter(Boolean).at(-1) || "";
       return last.replace(/\.[^.]+$/, "");
     };
 
+    // Several candidates: prefer "index" over "overview", then the lowest
+    // number, then unnumbered, then path, so the choice doesn't depend on the
+    // order pages arrived in.
+    const rank = (li) => {
+      const path = li.getAttribute("data-path") || "";
+      const m = indexName.exec(basename(path));
+      if (!m) return null;
+      return [
+        m[2].toLowerCase() === "index" ? 0 : 1,
+        m[1] === undefined ? Infinity : parseInt(m[1], 10),
+        path,
+      ];
+    };
+    const compare = (a, b) => {
+      for (let i = 0; i < 3; i++) {
+        if (a[i] < b[i]) return -1;
+        if (a[i] > b[i]) return 1;
+      }
+      return 0;
+    };
+
     this.root.querySelectorAll("li.folder").forEach((folder) => {
       const submenu = folder.querySelector(":scope > ul.submenu");
-      if (!submenu) return;
-      const indexLi = Array.from(submenu.children).find((li) => {
-        if (li.classList.contains("folder")) return false;
-        return indexName.test(basename(li.getAttribute("data-path") || ""));
-      });
-      if (!indexLi) return;
-      const title = indexLi.querySelector(":scope > a")?.textContent?.trim();
       const label = folder.querySelector(":scope > .folder-label");
-      if (title && label) label.textContent = title;
+      if (!submenu || !label) return;
+
+      let indexLi = null;
+      let best = null;
+      for (const li of submenu.children) {
+        if (li.classList.contains("folder")) continue;
+        const r = rank(li);
+        if (r && (!best || compare(r, best) < 0)) [indexLi, best] = [li, r];
+      }
+      const indexLink = indexLi?.querySelector(":scope > a");
+      if (!indexLink) return;
+
+      // Promote the index entry: reuse its link as the folder label and drop
+      // its row from the submenu. Its data-path moves to the link so cache
+      // staleness checks still see it.
+      indexLink.className = "folder-label";
+      indexLink.textContent = label.textContent;
+      const path = indexLi.getAttribute("data-path");
+      if (path) indexLink.setAttribute("data-path", path);
+      label.replaceWith(indexLink);
+      indexLi.remove();
+      folder.classList.add("has-index");
+
+      // An index with nothing else beside it leaves nothing to expand: keep
+      // the folder as a plain link with no toggle or submenu.
+      if (!submenu.children.length) {
+        submenu.remove();
+        return;
+      }
+
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "folder-toggle";
+      toggle.setAttribute("aria-label", "Toggle " + indexLink.textContent);
+      toggle.setAttribute("aria-expanded", "false");
+      indexLink.after(toggle);
     });
   }
 
@@ -323,53 +360,69 @@ class SidebarNavigation {
   }
 
   // ------- toggle -------
+  // Expanded state lives on the folder's button and its submenu's hidden flag
   setFolder(li, open) {
-    li.setAttribute("aria-expanded", open ? "true" : "false");
+    li.querySelector(":scope > button")?.setAttribute(
+      "aria-expanded",
+      open ? "true" : "false"
+    );
     const submenu = li.querySelector(":scope > ul.submenu");
     if (submenu) submenu.hidden = !open;
   }
   toggleFolder(li) {
-    const open = li.getAttribute("aria-expanded") === "true";
-    this.setFolder(li, !open);
+    const submenu = li.querySelector(":scope > ul.submenu");
+    if (!submenu) return;
+    this.setFolder(li, submenu.hidden);
     this._saveCache();
   }
 
-  // ------- default expand -------
-  expandToActiveIfAny() {
-    if (!this.root) return;
-    if (!COLLAPSE_NAVIGATION_BY_DEFAULT) {
-      this.root.querySelectorAll("li.folder").forEach((li) => this.setFolder(li, true));
-      return;
-    }
-    this.root.querySelectorAll("li.folder").forEach((li) => this.setFolder(li, false));
+  // ------- expand -------
+  // Applied to a freshly built tree only; a cached tree keeps whatever the
+  // visitor last opened or closed.
+  applyDefaultExpansion() {
+    this.root
+      .querySelectorAll("li.folder")
+      .forEach((li) => this.setFolder(li, !COLLAPSE_NAVIGATION_BY_DEFAULT));
+  }
+
+  // Open every folder above the active page (an active index page sits on its
+  // own folder's label, so that folder opens too).
+  revealActive() {
     const active = this.root.querySelector("a.active");
-    if (!active) return;
-    let ul = active.closest("ul");
-    while (ul && ul !== this.root) {
-      const folder = ul.parentElement?.closest("li.folder");
-      if (!folder) break;
+    let folder = active?.closest("li.folder");
+    while (folder) {
       this.setFolder(folder, true);
-      ul = folder.parentElement?.closest("ul");
+      folder = folder.parentElement?.closest("li.folder");
     }
   }
 
   // ------- events -------
   _bindEvents() {
     this.root.addEventListener("click", (e) => {
-      const btn = e.target.closest("button.folder-label");
+      const link = e.target.closest("a.folder-label");
+      if (link && this.root.contains(link)) {
+        const folder = link.closest("li.folder");
+        if (!folder || !folder.querySelector(":scope > ul.submenu")) return;
+        // Leave new-tab/window clicks to the browser
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
+        if (link.classList.contains("active")) {
+          // Already on the index page: act as a toggle, don't re-navigate.
+          // stopPropagation is needed as well as preventDefault: the page
+          // transitioner listens on document and ignores defaultPrevented.
+          e.preventDefault();
+          e.stopPropagation();
+          this.toggleFolder(folder);
+        } else {
+          this.setFolder(folder, true);
+          this._saveCache();
+        }
+        return;
+      }
+
+      const btn = e.target.closest("button.folder-label, button.folder-toggle");
       if (!btn || !this.root.contains(btn)) return;
       const folder = btn.closest("li.folder");
       if (folder) this.toggleFolder(folder);
-    });
-
-    this.root.addEventListener("keydown", (e) => {
-      const btn = e.target.closest("button.folder-label");
-      if (!btn) return;
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        const folder = btn.closest("li.folder");
-        if (folder) this.toggleFolder(folder);
-      }
     });
   }
 
@@ -382,32 +435,26 @@ class SidebarNavigation {
 
     if (cached && !this._cacheIsStale(serverHTML, cached)) {
       this.root.innerHTML = cached;
-      this.syncActiveFromLocation();
-      this.expandToActiveIfAny();
-      this._bindEvents();
-      this.root.classList.add("initialized");
-      this._saveCache();
-      return;
+    } else {
+      await this.loadAllPages();
+      this.build();
+      this.applyDefaultExpansion();
     }
 
-    if (cached) this._clearCache();
-
-    await this.loadAllPages();
-    this.build();
     this.syncActiveFromLocation();
-    this.expandToActiveIfAny();
+    this.revealActive();
     this._bindEvents();
     this.root.classList.add("initialized");
     this._saveCache();
+    SidebarNavigation.instance = this;
   }
 
-  static saveCache() {
+  static saveCache(root = document.querySelector(".sidebar")) {
+    if (!root) return;
     try {
-      const sidebar = document.querySelector(".sidebar");
-      if (!sidebar) return;
-      localStorage.setItem(sidebarCacheKey(sidebar), sidebar.innerHTML);
+      localStorage.setItem(sidebarCacheKey(root), root.innerHTML);
     } catch (err) {
-      console.warn("Sidebar cache save failed:", err);
+      console.warn("Sidebar cache write failed:", err);
     }
   }
 }
