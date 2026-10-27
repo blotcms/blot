@@ -3,7 +3,38 @@ const redisClient = require("models/client");
 const getClientSideCacheStats =
   require("models/redis").getClientSideCacheStats;
 
+// The server's side of client-side caching: keys it tracks for any client.
+// It can sit near tracking-table-max-keys with far more keys than the live
+// clients cache (Redis keeps keys for clients which have since disconnected
+// until they are written or trimmed), and at the cap it evicts entries and
+// sends invalidations. sendCommand keeps INFO off the client-side cache.
+async function logTrackingStats() {
+  try {
+    const info = await redisClient.sendCommand(["INFO", "stats"]);
+    const field = (name) => {
+      const match = new RegExp("^" + name + ":(\\d+)", "m").exec(info);
+      return match ? match[1] : "unknown";
+    };
+
+    console.log(
+      clfdate(),
+      "[STATS]",
+      "redis_tracking_total_keys=" + field("tracking_total_keys"),
+      "redis_tracking_total_items=" + field("tracking_total_items")
+    );
+  } catch (err) {
+    console.error(
+      clfdate(),
+      "[STATS]",
+      "redis_tracking_stats_error=info_failed",
+      "error=" + JSON.stringify(err && err.message ? err.message : String(err))
+    );
+  }
+}
+
 module.exports = function () {
+  logTrackingStats();
+
   // These metrics are cumulative for this process's Redis cache lifetime.
   // Reading them does not reset the cache's counters.
   try {

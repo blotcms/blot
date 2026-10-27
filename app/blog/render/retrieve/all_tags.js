@@ -4,7 +4,7 @@ const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
 const fetchCached = require("../../lib/fetchCached");
 const { compactTags, expandTags } = require("./helpers/compactTags");
-const LRUCache = require("lru-cache").LRUCache;
+const { createRenderCache } = require("../../lib/cacheMetrics");
 const asRetriever = require("../../lib/asRetriever");
 
 async function loadAllTags(blogID, pathPrefix, log) {
@@ -44,7 +44,7 @@ async function loadAllTags(blogID, pathPrefix, log) {
 // Tag entries are IDs (or nulls for the no-path-prefix count-only branch),
 // never full entry bodies, so there's no heavy-field concern here - the
 // whole payload is safe to cache as-is.
-const allTagsCache = new LRUCache({
+const allTagsCache = createRenderCache("allTags", {
   max: 1000,
   maxSize: 50 * 1024 * 1024,
   sizeCalculation: (value) => value.size,

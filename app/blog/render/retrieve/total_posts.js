@@ -1,11 +1,11 @@
 const { getTotal } = require("../../lib/models");
 const asRetriever = require("../../lib/asRetriever");
-const LRUCache = require("lru-cache").LRUCache;
+const { createRenderCache } = require("../../lib/cacheMetrics");
 const { prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
 const fetchCached = require("../../lib/fetchCached");
 
-const totalPostsCache = new LRUCache({
+const totalPostsCache = createRenderCache("totalPosts", {
   max: 10000,
   // Values are numbers (a few bytes each); the byte cap is just for
   // consistency with the other retrieve-path caches.

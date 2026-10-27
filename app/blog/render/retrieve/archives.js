@@ -5,7 +5,7 @@ const projectEntryFields = require("./helpers/projectEntryFields");
 const moment = require("moment");
 require("moment-timezone");
 const asRetriever = require("../../lib/asRetriever");
-const LRUCache = require("lru-cache").LRUCache;
+const { createRenderCache } = require("../../lib/cacheMetrics");
 const { prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
 const fetchCached = require("../../lib/fetchCached");
@@ -25,7 +25,7 @@ const ALIASES = getAllCached.ALIASES.archives;
 // grouping work, the deep clone and augment() for every entry (see
 // render/load/augmentedEntries.js), and don't pay to store entry bodies a
 // sitemap/archive view never reads.
-const archivesCache = new LRUCache({
+const archivesCache = createRenderCache("archives", {
   max: 200,
   maxSize: 100 * 1024 * 1024,
   sizeCalculation: (value) => value.size,

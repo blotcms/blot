@@ -1,7 +1,7 @@
 const { getPage } = require("../../lib/models");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const asRetriever = require("../../lib/asRetriever");
-const LRUCache = require("lru-cache").LRUCache;
+const { createRenderCache } = require("../../lib/cacheMetrics");
 const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
 const fetchCached = require("../../lib/fetchCached");
@@ -9,7 +9,7 @@ const { Uncacheable } = require("../../lib/uncacheableFetch");
 
 const ALIASES = ["latestEntry", "latest_entry"];
 
-const latestEntryCache = new LRUCache({
+const latestEntryCache = createRenderCache("latestEntry", {
   max: 1000,
   // One full entry (including html) per blog; byte-cap so a few large
   // posts cannot dominate the process by item count alone.

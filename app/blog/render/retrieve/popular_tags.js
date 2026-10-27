@@ -3,11 +3,11 @@ const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
 const fetchCached = require("../../lib/fetchCached");
 const { compactTags, expandTags } = require("./helpers/compactTags");
-const LRUCache = require("lru-cache").LRUCache;
+const { createRenderCache } = require("../../lib/cacheMetrics");
 const asRetriever = require("../../lib/asRetriever");
 
 // Safe cache key includes blog/cache identity and query pagination options.
-const popularTagsCache = new LRUCache({
+const popularTagsCache = createRenderCache("popularTags", {
   max: 1000,
   // Bound by bytes too, for consistency with the other render-path caches.
   maxSize: 5 * 1024 * 1024,
