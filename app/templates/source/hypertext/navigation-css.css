@@ -186,10 +186,6 @@
   position: relative;
 }
 
-.sidebar li.has-index > a.folder-label {
-  padding-left: 18px;
-}
-
 .sidebar li.has-index > button.folder-toggle {
   position: absolute;
   top: 0;
@@ -215,7 +211,7 @@
 }
 
 /* Rotate caret when the parent submenu is expanded */
-.sidebar [aria-expanded="true"] > button::before {
+.sidebar button[aria-expanded="true"]::before {
   transform: rotate(90deg);
   transition: transform 0.1s ease;
 }

@@ -232,26 +232,10 @@ class PageTransitioner {
         oldScript.parentNode.replaceChild(newScript, oldScript);
       });
 
-      const targetUrl = new URL(displayUrl, window.location.href);
-      const normalize = (pathname) =>
-        !pathname || pathname === "/" ? "/" : pathname.replace(/\/+$/, "") || "/";
-
-      document.querySelectorAll(".sidebar a").forEach((link) => {
-        let isActive = false;
-        try {
-          const linkUrl = new URL(link.href, window.location.href);
-          isActive =
-            normalize(linkUrl.pathname) === normalize(targetUrl.pathname);
-        } catch (err) {
-          console.warn("Invalid sidebar href:", err);
-        }
-        link.classList.toggle("active", isActive);
-      });
-
       try {
-        window.SidebarNavigation?.saveCache?.();
+        window.SidebarNavigation?.instance?.update();
       } catch (err) {
-        console.warn("Sidebar cache save failed:", err);
+        console.warn("Sidebar update failed:", err);
       }
 
       this.scrollToHash(hash);
