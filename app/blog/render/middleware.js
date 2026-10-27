@@ -22,6 +22,31 @@ const BLOT_CDN_TOKEN = require("./replaceFolderLinks/cdnToken");
 const folderManifestUrl = require("./folderManifestUrl");
 const renderTimeMetric = require("./renderTimeMetric");
 
+// Injected at the end of preview pages, see below. Embedded in the template
+// editor, it tells the editor the preview is out of date and waits for the
+// editor to load the new one beside this page and swap it in, so the page you
+// see never reloads in front of you. Anywhere else (a preview opened in its
+// own tab, an editor which does not answer) it reloads itself. Once its fonts
+// have loaded it tells the editor it is ready to be shown.
+const PREVIEW_SCRIPT = `<script>(function () {
+  var embedded = window.parent !== window;
+  window.addEventListener("load", function () {
+    var fonts = document.fonts ? document.fonts.ready : Promise.resolve();
+    fonts.then(function () {
+      if (embedded) window.parent.postMessage({ type: "preview:ready" }, "*");
+    });
+  });
+  new EventSource("/__blot/preview/reload").onmessage = function () {
+    if (!embedded) return window.location.reload();
+    var acknowledged = false;
+    window.addEventListener("message", function (event) {
+      if (event.source === window.parent && event.data && event.data.type === "preview:ack") acknowledged = true;
+    });
+    window.parent.postMessage({ type: "preview:changed", path: window.location.pathname + window.location.search }, "*");
+    setTimeout(function () { if (!acknowledged) window.location.reload(); }, 300);
+  };
+})();</script>`;
+
 const cacheDuration = "public, max-age=31536000";
 const JS = "text/javascript";
 const STYLE = "text/css";
@@ -198,14 +223,10 @@ module.exports = function attachRenderView(req, res, _next) {
             "<script>window.onload = function() {window.top.postMessage('iframe:' +  window.location.pathname, '*');};</script></body>"
           );
 
-        // Reload the preview when rendered output changes: folder sync, or a
+        // Refresh the preview when rendered output changes: folder sync, or a
         // template editor save of package.json locals. See
         // helper/publishPreviewReload.js and blog/routes/preview-reload.js.
-        output = output
-          .split("</body>")
-          .join(
-            "<script>new EventSource('/__blot/preview/reload').onmessage = function() { window.location.reload(); };</script></body>"
-          );
+        output = output.split("</body>").join(PREVIEW_SCRIPT + "</body>");
       }
 
       // Only cache JavaScript and CSS if the request is not to a preview

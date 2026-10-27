@@ -8,12 +8,10 @@ const withAjax = (url) => {
   }
 };
 
+// Handled by template-editor-preview-iframe.js, which swaps in a fresh copy
+// of the page the visitor is on
 const refreshTemplatePreview = () => {
-  const previewFrame = document.getElementById("full_size_preview");
-
-  if (previewFrame) {
-    previewFrame.src += "";
-  }
+  document.dispatchEvent(new CustomEvent("template-preview:refresh"));
 };
 
 const refreshSyntaxHighlighterPreview = () => {
