@@ -1,0 +1,10 @@
+{
+  "name": "Server Mono",
+  "tags": [
+    "mono"
+  ],
+  "stack": "'Server Mono'",
+  "line_height": 1.4,
+  "line_width": 40,
+  "font_size": 16
+}
