@@ -291,14 +291,22 @@ class SidebarNavigation {
       if (path) link.setAttribute("data-path", path);
       label.replaceWith(link);
 
+      folder.classList.add("has-index");
+      indexLi.remove();
+
+      // An index with nothing else beside it leaves nothing to expand: keep
+      // the folder as a plain link with no toggle or submenu.
+      if (!submenu.children.length) {
+        submenu.remove();
+        folder.removeAttribute("aria-expanded");
+        return;
+      }
+
       const toggle = document.createElement("button");
       toggle.type = "button";
       toggle.className = "folder-toggle";
       toggle.setAttribute("aria-label", "Toggle " + link.textContent);
       link.after(toggle);
-
-      folder.classList.add("has-index");
-      indexLi.remove();
     });
   }
 
@@ -387,7 +395,7 @@ class SidebarNavigation {
       const link = e.target.closest("a.folder-label");
       if (link && this.root.contains(link)) {
         const folder = link.closest("li.folder");
-        if (!folder) return;
+        if (!folder || !folder.querySelector(":scope > ul.submenu")) return;
         // Leave new-tab/window clicks to the browser
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
         if (link.classList.contains("active")) {
