@@ -144,6 +144,16 @@ if (previewIframeContainer) {
 
     var path = normalizePath(e.data.slice("iframe:".length));
 
+    // The visitor followed a link in the page on screen while a refresh was
+    // loading the page they were on: that refresh would undo the navigation
+    if (
+      pendingFrame &&
+      e.source === iframe.contentWindow &&
+      path !== pendingPath.split("?")[0]
+    ) {
+      cancelSwap();
+    }
+
     updatePreviewLink(path);
     writeStoredPath(path);
     currentPath = path || currentPath;
@@ -161,8 +171,17 @@ if (previewIframeContainer) {
   var SWAP_LOAD_GRACE_MS = 1500;
   var SWAP_TIMEOUT_MS = 5000;
   var pendingFrame = null;
+  // The page the pending frame is loading, with its query string
+  var pendingPath = "";
   var debounceTimer = null;
   var timeoutTimer = null;
+
+  var cancelSwap = function cancelSwap() {
+    if (!pendingFrame) return;
+    clearTimeout(timeoutTimer);
+    pendingFrame.parentNode.removeChild(pendingFrame);
+    pendingFrame = null;
+  };
 
   var swapIn = function swapIn(next) {
     if (pendingFrame !== next) return;
@@ -173,23 +192,30 @@ if (previewIframeContainer) {
     previous.removeAttribute("id");
     previous.parentNode.removeChild(previous);
 
+    // The visitor may have switched between desktop and mobile while it
+    // loaded, which only ever updated the frame on screen
+    next.setAttribute("width", previous.getAttribute("width"));
+    next.setAttribute("height", previous.getAttribute("height"));
+    next.classList.toggle("mobile", previous.classList.contains("mobile"));
+
     next.id = "full_size_preview";
     next.style.visibility = "";
     iframe = next;
+
+    // A refresh before the first page finished loading removes the frame
+    // whose load dismisses the loading overlay
+    previewIframeContainer.classList.add("loaded");
   };
 
   var startSwap = function startSwap() {
-    if (pendingFrame) {
-      clearTimeout(timeoutTimer);
-      pendingFrame.parentNode.removeChild(pendingFrame);
-      pendingFrame = null;
-    }
+    cancelSwap();
 
     var next = iframe.cloneNode(false);
     next.removeAttribute("id");
     // Hidden, not display: none, so it still lays out and loads its fonts
     next.style.visibility = "hidden";
-    next.setAttribute("src", previewOrigin + currentPath);
+    pendingPath = currentPath;
+    next.setAttribute("src", previewOrigin + pendingPath);
     next.addEventListener("load", function () {
       setTimeout(function () {
         swapIn(next);
