@@ -146,7 +146,7 @@ body {
 .archives a:hover {opacity: 0.5}
 
 
-/* NAVIGATION */ 
+/* NAVIGATION */
 
 header > a {
   white-space: nowrap;
@@ -173,18 +173,18 @@ header {
   {{/is.navigation_alignment.center}}
   position: relative;
   padding: calc({{spacing}}rem/2) calc({{spacing}}rem);
+  {{#is.navigation_alignment.right}}
+  {{^collapse_navigation_by_default}}
+  padding-right: calc({{spacing}}rem + 2.8em);
+  {{/collapse_navigation_by_default}}
+  {{/is.navigation_alignment.right}}
   {{^sticky_navigation}}
   position: relative;
   z-index: 1;
   {{/sticky_navigation}}
   {{#sticky_navigation}}
   position: fixed;
-  {{#is.navigation_position.top}}
   top: 0;
-  {{/is.navigation_position.top}}
-  {{#is.navigation_position.bottom}}
-  bottom: 0;
-  {{/is.navigation_position.bottom}}
   {{#is.navigation_alignment.justified}}
   left:0;
   right:0;
@@ -203,14 +203,20 @@ header {
   {{/sticky_navigation}}
 }
 
-{{#is.navigation_position.bottom}}
-{{^sticky_navigation}}
-header {
-  order: 1;
-  margin-top: auto;
+{{#is.navigation_alignment.center}}
+{{^collapse_navigation_by_default}}
+#hidden-toggle:not(:checked)~header nav::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 50vw;
+  z-index: 1;
+  background: {{background_color}};
 }
-{{/sticky_navigation}}
-{{/is.navigation_position.bottom}}
+{{/collapse_navigation_by_default}}
+{{/is.navigation_alignment.center}}
 
 {{#hide_dates}}
 .post .date,
@@ -258,6 +264,16 @@ header a:active {
 nav {
   background: {{background_color}};
   position: relative;
+  {{#is.navigation_alignment.left}}
+  {{^collapse_navigation_by_default}}
+  flex-grow: 1;
+  {{/collapse_navigation_by_default}}
+  {{/is.navigation_alignment.left}}
+  {{#is.navigation_alignment.right}}
+  {{^collapse_navigation_by_default}}
+  margin-right: -2.8em;
+  {{/collapse_navigation_by_default}}
+  {{/is.navigation_alignment.right}}
   {{#collapse_navigation_by_default}}
   width: 100%;
   {{/collapse_navigation_by_default}}
@@ -290,7 +306,7 @@ nav a:not([href]) {
 }
 
 #toggle {
-  display: none;
+  display: block;
   position: absolute;
   top: calc({{spacing}}rem/2);
   right:  {{spacing}}rem;
@@ -300,6 +316,12 @@ nav a:not([href]) {
   width: 1.4em;
   height: 1.4em;
 }
+
+{{#collapse_navigation_by_default}}
+header {
+  padding-right: calc({{spacing}}rem + 2.8em);
+}
+{{/collapse_navigation_by_default}}
 
 
 #hidden-toggle {
@@ -319,6 +341,40 @@ nav a:not([href]) {
   display: block;
   margin-left: 0
 }
+
+{{#is.navigation_alignment.right}}
+#hidden-toggle:checked~header nav {
+  text-align: right;
+}
+
+#hidden-toggle:checked~header nav .spacer {
+  display: none;
+}
+
+#hidden-toggle:checked~header nav a {
+  margin-right: 0;
+}
+{{/is.navigation_alignment.right}}
+
+{{#is.navigation_alignment.left}}
+#hidden-toggle:checked~header nav .spacer {
+  display: none;
+}
+{{/is.navigation_alignment.left}}
+
+{{#is.navigation_alignment.center}}
+#hidden-toggle:checked~header nav {
+  text-align: center;
+}
+
+#hidden-toggle:checked~header nav .spacer {
+  display: none;
+}
+
+#hidden-toggle:checked~header nav a {
+  margin-right: 0;
+}
+{{/is.navigation_alignment.center}}
 
 #hidden-toggle:checked~header .hamburger-inner:after {
   bottom: 0;
@@ -393,14 +449,10 @@ font-feature-settings: 'tnum';
 
     .yield.flex {display: block}
 
-  #toggle {
-    display: block;
-  }
-
   {{#is.navigation_alignment.right}}
-  header {
-    justify-content: flex-start;
-    padding-right: calc({{spacing}}rem + 2.8em);
+  #hidden-toggle:checked~header > a:first-child {
+    flex-basis: 100%;
+    justify-content: flex-end;
   }
   {{/is.navigation_alignment.right}}
 
@@ -417,13 +469,25 @@ a.next-page {
   text-decoration: none;
 }
 
-  
+
 .edge a:hover {
   text-decoration: underline
 }
 
 .entry {
   display: flex;
+  align-items: flex-start;
+}
+
+.entry[data-entry-path$=".jpg" i],
+.entry[data-entry-path$=".jpeg" i],
+.entry[data-entry-path$=".png" i],
+.entry[data-entry-path$=".gif" i],
+.entry[data-entry-path$=".tiff" i],
+.entry[data-entry-path$=".webp" i],
+.entry[data-entry-path$=".avif" i],
+.entry[data-entry-path$=".heic" i],
+.entry[data-entry-path$=".heif" i] {
   align-items: center;
 }
 
@@ -475,11 +539,8 @@ a.next-page {
 .entry.page {
   padding-top: 3rem;
   margin-top: 0;
-  margin-left: 25%;
-}
-
-@media screen and (max-width: 500px) {
-  .entry.page {margin-left: 0}
+  margin-left: 0;
+  align-items: flex-start;
 }
 
 .entry .body {
@@ -584,7 +645,7 @@ pre, code {
 
 
 .entry.page .body>* {
-  max-width: {{max_width}}px;
+  max-width: 800px;
 }
 
 hr {
@@ -805,6 +866,420 @@ img.zoom-img {
 .zoom-overlay-open .zoom-overlay {
   filter: "alpha(opacity=100)";
   opacity: 1;
+}
+
+
+/* Album entry grid */
+  {{#sticky_navigation}}
+  .yield > h1.tagged-title,
+  .posts {
+    padding-top: calc({{spacing}}rem + 1.4em);
+  }
+  .posts.tagged-list {
+    padding-top: 0;
+  }
+  {{/sticky_navigation}}
+
+  .posts {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .posts .post {
+    position: relative;
+    padding: 0.8rem;
+    width: 25%;
+    cursor: zoom-in;
+    box-sizing: border-box;
+    font-size: 13px;
+    color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.45);
+    text-decoration: none;
+    text-align: center;
+  }
+
+  {{#is.thumbnail_size}}
+    {{#small}}
+    .posts .post {width: 33.3333%;}
+    @media screen and (min-width: 540px) {.posts .post {width: 25%;}}
+    @media screen and (min-width: 800px) {.posts .post {width: 20%;}}
+    @media screen and (min-width: 1000px) {.posts .post {width: 16.666667%;}}
+    @media screen and (min-width: 1200px) {.posts .post {width: 14.285714%;}}
+    {{/small}}
+    {{#medium}}
+    .posts .post {width: 50%;}
+    @media screen and (min-width: 540px) {.posts .post {width: 33.3333%;}}
+    @media screen and (min-width: 800px) {.posts .post {width: 33.3333%;}}
+    @media screen and (min-width: 1000px) {.posts .post {width: 25%;}}
+    @media screen and (min-width: 1200px) {.posts .post {width: 20%;}}
+    {{/medium}}
+    {{#large}}
+    .posts .post {width: 100%;}
+    @media screen and (min-width: 540px) {.posts .post {width: 100%;}}
+    @media screen and (min-width: 800px) {.posts .post {width: 50%;}}
+    @media screen and (min-width: 1000px) {.posts .post {width: 50%;}}
+    @media screen and (min-width: 1200px) {.posts .post {width: 33.3333%;}}
+    {{/large}}
+    {{#huge}}
+    .posts .post {width: 100%;}
+    {{/huge}}
+  {{/is.thumbnail_size}}
+
+  .posts .post .thumbnail .container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .posts.bookshelf .post .thumbnail .container {
+    align-items: flex-end;
+  }
+
+  .posts .post .date {
+    visibility: hidden;
+    display: block;
+  }
+
+  .posts .post .thumbnail {
+    box-sizing: border-box;
+    width: 100%;
+    height: 0;
+    padding-bottom: 100%;
+    display: block;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .posts .post .thumbnail:after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 1px solid transparent;
+  }
+
+  .posts .post:active,
+  .posts .opac:active {
+    opacity: 0.7;
+  }
+
+  .posts .post img {
+    max-width: 100%;
+    max-height: 100%;
+    height: auto;
+    margin: 0 auto;
+  }
+
+  .posts .post.no-thumbnail .thumbnail:after {
+    border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, .15);
+  }
+
+  .posts.bookshelf .post.no-thumbnail .thumbnail:after {
+    border-width: 2px;
+  }
+
+  .posts .post.no-thumbnail:hover .thumbnail:after {
+    border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.4);
+  }
+
+  .posts .post.no-thumbnail .thumbnail {
+    color: rgba({{#rgb}}{{text_color}}{{/rgb}}, .4);
+    text-align: center;
+  }
+
+  .posts .post.no-thumbnail .date {
+    display: block;
+  }
+
+  .posts .pre-loaded {
+    visibility: hidden;
+    opacity: 0;
+    will-change: opacity;
+    transition: opacity 0.3s, visibility 0.3s;
+  }
+
+  .posts .loaded {
+    visibility: visible;
+    opacity: 1;
+    transition: opacity 0.3s, visibility 0.3s;
+  }
+
+.posts .post.no-thumbnail .no-thumbnail-content {
+  width: 100%;
+}
+
+.posts .post.no-thumbnail .no-thumbnail-title {
+  display: block;
+  margin: 0.65em 1.3rem;
+  box-sizing: border-box;
+  overflow: hidden;
+  color: {{link_color}};
+  font-size: 23px;
+}
+
+.posts .post .date {
+  font-size: 13px;
+}
+
+{{#hide_dates}}
+.posts .post .date,
+.posts .post.no-thumbnail .date,
+.archives .date {
+  display: none;
+}
+{{/hide_dates}}
+
+/* Archive and search pages */
+{{#sticky_navigation}}
+.archive-spacer {
+  height: calc({{spacing}}rem + 1.4em);
+}
+{{/sticky_navigation}}
+
+  .archive-search {
+    display: flex;
+    align-items: center;
+    margin: 2rem {{spacing}}rem {{spacing}}rem;
+  }
+
+  .archive-search form {
+    display: flex;
+    width: 100%;
+    margin: 0;
+    border-radius: 4px;
+    transition: box-shadow ease-in-out 0.15s;
+  }
+
+  .archive-search form:focus-within {
+    box-shadow: 0 0 0 2px rgba({{#rgb}}{{link_color}}{{/rgb}}, 0.25);
+  }
+
+  .archive-search input:focus {
+    outline: none;
+  }
+
+  .archive-search input {
+    display: block;
+    box-sizing: border-box;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.2);
+    border-radius: 4px;
+    background-color: {{background_color}};
+    background-image: none;
+    color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.5);
+    font-size: 1rem;
+    line-height: 1.5;
+    transition: border-color ease-in-out 0.15s, box-shadow ease-in-out 0.15s;
+  }
+
+  .archive-search input[type="text"] {
+    min-width: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+    box-shadow: inset 0 1px 1px rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.075);
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    color: {{text_color}};
+  }
+
+  .archive-search input[type="text"]::placeholder {
+    color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.35);
+  }
+
+  .archive-search input[type="submit"] {
+    flex-grow: 1;
+    flex-shrink: 1;
+    max-width: 100px;
+    font-weight: 500;
+    text-align: center;
+    border-left: none;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.8);
+    cursor: pointer;
+  }
+
+  .archives {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .archives a {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 220px;
+    padding: 1.3rem;
+    color: inherit;
+    font-size: 0.8rem;
+    text-align: center;
+    text-decoration: none;
+  }
+
+  .archive-list a:visited {
+    color: inherit;
+  }
+
+  .archives a .thumbnail {
+    display: flex;
+    align-items: center;
+    width: 80px;
+    height: 80px;
+  }
+
+  .archives a .thumbnail-empty {
+    box-sizing: border-box;
+    height: 80px;
+    background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04);
+  }
+
+  .archives a .title {
+    display: block;
+    max-height: calc(1 * {{font.line_height}}em);
+    overflow: hidden;
+  }
+
+  .archives a span.date {
+    display: block;
+    opacity: 0.5;
+  }
+
+  .archives a:hover {
+    opacity: 0.8;
+  }
+
+  .archives a:active {
+    opacity: 0.7;
+  }
+
+  .archives a img {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+  }
+
+  {{#hide_dates}}
+  .archives .date {
+    display: none;
+  }
+  {{/hide_dates}}
+
+{{#hide_dates}}
+.archives a span.date {
+  display: none;
+}
+{{/hide_dates}}
+
+/* Navigation search form */
+
+
+#searchForm {width: 100%; margin: 0; display: flex; position: relative; align-self: normal;}
+#searchForm input {
+  padding-left: 0rem;
+  padding-right: 2.7rem;
+  font: inherit;
+  font-size: {{font.font_size}}px;
+  border: none;
+  line-height: inherit;
+}
+
+#searchForm input[type="text"] {
+  flex-grow: 1;
+  color: {{text_color}};
+  background: url('/icons/search.svg') no-repeat 1rem center;
+  background-size: 0.95rem;
+  background-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.03);
+  border-radius: 3rem;
+  cursor: text;
+  padding: 0.333rem 1.3rem 0.3333rem 2.6rem;
+  flex-grow: 1;
+  font-size: inherit;
+}
+
+#searchForm input:focus,
+.pag a[href]:focus {
+  outline: none;
+  background-color: transparent;
+  border:1px solid {{link_color}};
+}
+
+.menu a[href="/search"] {
+  display: none;
+}
+
+#searchForm ::placeholder {
+  /* Most modern browsers support this now. */
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, .35);
+}
+
+#dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: {{background_color}};
+  z-index: 1;
+  box-shadow: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.05) 0px 0px 0px 1px, rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.05) 0px 3px 6px, rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1) 0px 9px 24px;
+  margin-top: 1px
+}
+
+#dropdown a {
+  display: block;
+  padding: 1rem 1.3rem 1rem 1.3rem;
+  overflow: hidden;
+  border-bottom: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.08);
+  color: {{text_color}};
+  font-size: {{font.font_size}}px;
+  text-decoration: none;
+}
+
+/*#dropdown a:last-of-type {
+    border-bottom: none;
+}
+ */
+#dropdown a:focus {
+  outline: none;
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.06);
+}
+
+#dropdown a .thumbnail {
+  vertical-align: middle;
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  margin: 0 0.65rem 0 0;
+}
+
+#dropdown img {
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  width: auto;
+  vertical-align: middle;
+}
+
+#dropdown .date,
+#results .title {
+  height: 1.3rem;
+  overflow: hidden;
+}
+
+#dropdown .date {
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, .4);
+  flex-shrink: 0;
+}
+
+
+.search-suggestion {
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, .4);
 }
 
 /*# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJzb3VyY2VzIjpbIi4uL2Nzcy96b29tLmNzcyJdLCJuYW1lcyI6W10sIm1hcHBpbmdzIjoiQUFBQTtFQUNFLGdCQUFnQjtDQUNqQjtBQUNEOztFQUVFLG1CQUFtQjtFQUNuQixhQUFhO0VBQ2Isc0JBQXNCO0NBQ3ZCO0FBQ0Q7RUFDRSxpQkFBaUI7Q0FDbEI7QUFDRDtFQUNFLGlCQUFpQjtFQUNqQixhQUFhO0VBQ2IsaUJBQWlCO0VBQ2pCLGdCQUFnQjtFQUNoQixPQUFPO0VBQ1AsUUFBUTtFQUNSLFNBQVM7RUFDVCxVQUFVO0VBQ1YsMkJBQTJCO0VBQzNCLFdBQVc7RUFDWCwrQkFBK0I7Q0FDaEM7QUFDRDtFQUNFLDZCQUE2QjtFQUM3QixXQUFXO0NBQ1oiLCJmaWxlIjoiem9vbS5jc3MiLCJzb3VyY2VzQ29udGVudCI6WyJpbWdbZGF0YS1hY3Rpb249XCJ6b29tXCJdIHtcbiAgY3Vyc29yOiB6b29tLWluO1xufVxuLnpvb20taW1nLFxuLnpvb20taW1nLXdyYXAge1xuICBwb3NpdGlvbjogcmVsYXRpdmU7XG4gIHotaW5kZXg6IDY2NjtcbiAgdHJhbnNpdGlvbjogYWxsIDMwMG1zO1xufVxuaW1nLnpvb20taW1nIHtcbiAgY3Vyc29yOiB6b29tLW91dDtcbn1cbi56b29tLW92ZXJsYXkge1xuICBjdXJzb3I6IHpvb20tb3V0O1xuICB6LWluZGV4OiA0MjA7XG4gIGJhY2tncm91bmQ6ICNmZmY7XG4gIHBvc2l0aW9uOiBmaXhlZDtcbiAgdG9wOiAwO1xuICBsZWZ0OiAwO1xuICByaWdodDogMDtcbiAgYm90dG9tOiAwO1xuICBmaWx0ZXI6IFwiYWxwaGEob3BhY2l0eT0wKVwiO1xuICBvcGFjaXR5OiAwO1xuICB0cmFuc2l0aW9uOiAgICAgIG9wYWNpdHkgMzAwbXM7XG59XG4uem9vbS1vdmVybGF5LW9wZW4gLnpvb20tb3ZlcmxheSB7XG4gIGZpbHRlcjogXCJhbHBoYShvcGFjaXR5PTEwMClcIjtcbiAgb3BhY2l0eTogMTtcbn1cbiJdfQ== */
