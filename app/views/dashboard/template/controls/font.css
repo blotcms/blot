@@ -81,10 +81,14 @@
   opacity: 0.7;
 }
 
+/* While a specimen loads the browser draws its alt text, the font's name,
+   at the image's own font size, clipped to the image's height. Transparent
+   keeps the name for screen readers and draws nothing until the image. */
 .font-picker-trigger .font-specimen {
   height: 1.5em;
   width: auto;
   display: block;
+  color: transparent;
 }
 
 .font-picker-trigger [data-font-picker-label] {
@@ -185,5 +189,6 @@
   display: block;
   height: 1em;
   width: auto;
+  color: transparent;
   font-size: var(--font-option-font-size);
 }
