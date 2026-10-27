@@ -15,6 +15,7 @@
 // without one (tests, non-HTTP renders) can leave it out.
 const filling = new WeakMap();
 const cacheMetrics = require("./cacheMetrics");
+const { Uncacheable } = require("./uncacheableFetch");
 
 function fetchCached(cache, name, log, key, options) {
   let keys = filling.get(cache);
@@ -36,9 +37,16 @@ function fetchCached(cache, name, log, key, options) {
           cached: cache.has(key),
         });
       },
-      () => {
+      (err) => {
         keys.delete(key);
-        cacheMetrics.fill(cache, key, 0, { failed: true });
+        const elapsed = performance.now() - startedAt;
+        // Uncacheable is a finished fill whose value was deliberately not
+        // stored (e.g. an empty blog): its callers unwrap the payload
+        if (err instanceof Uncacheable) {
+          cacheMetrics.fill(cache, key, elapsed, { cached: false });
+        } else {
+          cacheMetrics.fill(cache, key, 0, { failed: true });
+        }
       }
     );
   }

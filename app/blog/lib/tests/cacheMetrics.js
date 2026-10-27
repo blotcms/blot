@@ -49,6 +49,23 @@ describe("render cache metrics", function () {
     expect(cacheMetrics.read(cache).uncachedFills).toBe(1);
   });
 
+  it("counts an Uncacheable result as an uncached fill, not a failure", async function () {
+    const { Uncacheable } = require("../uncacheableFetch");
+    const cache = cacheMetrics.createRenderCache("test", {
+      max: 2,
+      fetchMethod: async () => {
+        throw new Uncacheable([]);
+      },
+    });
+
+    await fetchCached(cache, "test", null, "a").catch(() => {});
+
+    const counters = cacheMetrics.read(cache);
+    expect(counters.fills).toBe(1);
+    expect(counters.uncachedFills).toBe(1);
+    expect(counters.failedFills).toBe(0);
+  });
+
   it("ignores caches it did not build", async function () {
     expect(cacheMetrics.read({})).toBe(null);
     expect(() => cacheMetrics.count({}, "hit")).not.toThrow();
