@@ -15,8 +15,8 @@
 			{{#disabled}}disabled{{/disabled}}
 		>
 			{{#samples}}
-			{{#svg}}<span class="preset-font-sample">{{{svg}}}</span>{{/svg}}
-			{{^svg}}<span class="preset-font-sample" style="font-family: {{stack}};">{{name}}</span>{{/svg}}
+			{{#specimenURL}}<span class="preset-font-sample"><img class="font-specimen" src="{{{specimenURL}}}" width="{{specimenWidth}}" height="{{specimenHeight}}" alt="{{name}}" loading="lazy" decoding="async"></span>{{/specimenURL}}
+			{{^specimenURL}}<span class="preset-font-sample" style="font-family: {{stack}};">{{name}}</span>{{/specimenURL}}
 			{{/samples}}
 			{{#error}}<span class="preset-error">{{error}}</span>{{/error}}
 		</button>
@@ -31,8 +31,8 @@
 		{{#hidden}}hidden{{/hidden}}
 	>
 		{{#samples}}
-		{{#svg}}<span class="preset-font-sample">{{{svg}}}</span>{{/svg}}
-		{{^svg}}<span class="preset-font-sample" style="font-family: {{stack}};">{{name}}</span>{{/svg}}
+		{{#specimenURL}}<span class="preset-font-sample"><img class="font-specimen" src="{{{specimenURL}}}" width="{{specimenWidth}}" height="{{specimenHeight}}" alt="{{name}}" loading="lazy" decoding="async"></span>{{/specimenURL}}
+		{{^specimenURL}}<span class="preset-font-sample" style="font-family: {{stack}};">{{name}}</span>{{/specimenURL}}
 		{{/samples}}
 		<span class="preset-caption">{{label}}</span>
 	</div>

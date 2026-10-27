@@ -81,8 +81,9 @@
   opacity: 0.7;
 }
 
-.font-picker-trigger svg {
+.font-picker-trigger .font-specimen {
   height: 1.5em;
+  width: auto;
   display: block;
 }
 
@@ -180,8 +181,9 @@
   background: var(--font-option-selected-bg);
 }
 
-.template-font-picker__option svg {
+.template-font-picker__option .font-specimen {
   display: block;
   height: 1em;
+  width: auto;
   font-size: var(--font-option-font-size);
 }

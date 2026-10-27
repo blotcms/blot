@@ -8,22 +8,23 @@
     #font-list > div {
     border-top: 1px solid var(--border-color);}
     
-    #font-list svg {
-    height:3em;
-}
-    #font-list svg path {
-        stroke: var(--text-color);
-        fill: var(--text-color);
+    /* The specimen is a mask over a block of the text color, so the font's
+       name follows the theme, which an <img> of the SVG would not */
+    #font-list .font-specimen {
+        height: 3em;
+        background: var(--text-color);
+        -webkit-mask: var(--specimen) left center / contain no-repeat;
+        mask: var(--specimen) left center / contain no-repeat;
     }
 </style>
 <br><br>
 <div id="font-list">
 {{#fonts}}
-{{#svg}}
+{{#specimenURL}}
 <div style="margin-bottom:1em;padding-bottom:1em">
-    <div style="max-width: 600px;overflow: hidden;">{{{svg}}}</div>
+    <div style="max-width: 600px;overflow: hidden;"><div class="font-specimen" role="img" aria-label="{{name}}" style="--specimen: url('{{{specimenURL}}}'); width: calc(3em * {{specimenWidth}} / {{specimenHeight}})"></div></div>
     <div style="margin-top:-0.5em; var(--small-font-size);color:var(--light-text-color)">{{name}}</div> 
 </div>
-{{/svg}}
+{{/specimenURL}}
     {{/fonts}}
 </div>

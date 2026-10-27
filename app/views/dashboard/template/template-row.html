@@ -5,7 +5,7 @@
   data-is-mine="{{#isMine}}true{{/isMine}}{{^isMine}}false{{/isMine}}"
   data-is-mirror="{{#isMirror}}true{{/isMirror}}{{^isMirror}}false{{/isMirror}}"
 >
-  <a href="{{{editURL}}}" class="template-row__link">
+  <a href="{{{editURL}}}" class="template-row__link" data-preview-origin="{{{previewMenuURL}}}">
     {{#localEditing}}
     <span class="template-row__folder-icon" aria-hidden="true">
       <span class="icon-folder"></span>
