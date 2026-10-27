@@ -17,11 +17,6 @@
       "right",
       "center"
     ],
-    "navigation_position": "top",
-    "navigation_position_options": [
-      "top",
-      "bottom"
-    ],
     "thumbnail_size": "medium",
     "thumbnail_size_options": [
       "small",
@@ -59,11 +54,6 @@
     },
     "profile_image": {},
     "show_search": false,
-    "max_width": 800,
-    "max_width_range": [
-      400,
-      1200
-    ],
     "demo_folder": "sergey"
   },
   "views": {

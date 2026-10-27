@@ -21,6 +21,12 @@ When working from an isolated git worktree, any request to “preview,” “sho
 - After source changes, wait for the watcher, then smoke-test the applicable live/default preview homepage plus Archives and Search. Check computed typography and horizontal overflow; use Docker logs only when the preview reveals a sync or rebuild problem.
 - Finish with a scoped `git diff --check` and status check; preserve unrelated working-tree changes.
 
+## Responsive navigation in pure CSS
+
+The Album template uses a checkbox and label for its CSS-only menu. The header flex-wraps but clips to one row while closed; the hamburger sits behind an opaque nav background and is revealed when the nav wraps. Checking the box expands the header. Preserve this structure when changing navigation styles.
+
+The background mask depends on alignment: justified nav naturally reaches the hamburger; left-aligned nav grows to fill its row; right-aligned nav reserves the toggle width in the header and offsets the nav background into that space; centered nav uses a trailing `nav::after` background extension so it stays centered and moves with the nav when wrapping. Disable the centered extension while the menu is open so the close icon remains visible. In the expanded menu, hide the spacer; keep links left-aligned, right-aligned, or centered to match the selected alignment.
+
 ## Responsive thumbnails
 
 Use `srcset` with width descriptors when a template displays a generated thumbnail at a size that can differ from the available thumbnail sizes. Include the small, medium, and large URLs with their actual pixel widths. Add a `sizes` value that describes the image's rendered CSS width so the browser can choose an appropriate candidate for the viewport and device pixel ratio. Keep a regular `src` as the fallback, and mirror the responsive attributes in a `<noscript>` image when that fallback is present.

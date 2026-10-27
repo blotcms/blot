@@ -4,12 +4,7 @@
   <div style="flex-grow:1" class="entry {{#entry.page}}page{{/entry.page}}" data-entry-path="{{entry.path}}">
     <div class="body {{^entry.page}}post{{/entry.page}}" style="position:relative">
       <div class="entry-title" data-entry-path="{{entry.path}}">
-        {{#entry.titleTag}}
         {{{entry.titleTag}}}
-        {{/entry.titleTag}}
-        {{^entry.titleTag}}
-        <h1>{{entry.title}}</h1>
-        {{/entry.titleTag}}
       </div>
       {{{entry.body}}}
       {{> pluginHTML}}

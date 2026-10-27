@@ -1,14 +1,87 @@
 {{> header}}
 
-<h1>{{ tag }}</h1>
+<h1 class="tagged-title">{{ tag }}</h1>
 
-{{#is.grid_layout.square}}
-{{> grid_square}}
-{{/is.grid_layout.square}}
-
-{{#is.grid_layout.bookshelf}}
-{{> grid_bookshelf}}
-{{/is.grid_layout.bookshelf}}
+<div class="posts tagged-list {{#is.grid_layout.bookshelf}}bookshelf{{/is.grid_layout.bookshelf}}">
+  {{#entries}}
+  <a href="{{{url}}}" class="post collection-entry {{^thumbnail.medium}}no-thumbnail{{/thumbnail.medium}}">
+    <span class="thumbnail">
+      <span class="container">
+        {{#thumbnail.medium}}
+        <img
+          class="pre-loaded"
+          loading="lazy"
+          onload="this.className='loaded'"
+          alt="{{title}}"
+          width="{{thumbnail.large.width}}"
+          height="{{thumbnail.large.height}}"
+          srcset="
+            {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+            {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+            {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+          "
+          src="{{{thumbnail.large.url}}}"
+          {{#is.thumbnail_size}}
+          {{#small}}
+          sizes="(max-width: 540px) 33vw, (max-width: 800px) 25vw, (max-width: 1000px) 20vw, (max-width: 1200px) 16vw, 14vw"
+          {{/small}}
+          {{#medium}}
+          sizes="(max-width: 540px) 50vw, (max-width: 800px) 33.3333vw, (max-width: 1000px) 33.3333vw, (max-width: 1200px) 25vw, 20vw"
+          {{/medium}}
+          {{#large}}
+          sizes="(max-width: 540px) 100vw, (max-width: 800px) 100vw, (max-width: 1200px) 50vw, 33.3333vw"
+          {{/large}}
+          {{#huge}}
+          sizes="100vw"
+          {{/huge}}
+          {{/is.thumbnail_size}}
+        />
+        <noscript>
+          <img
+            loading="lazy"
+            alt="{{title}}"
+            width="{{thumbnail.large.width}}"
+            height="{{thumbnail.large.height}}"
+            srcset="
+              {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+              {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+              {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+            "
+            src="{{{thumbnail.large.url}}}"
+            {{#is.thumbnail_size}}
+            {{#small}}
+            sizes="(max-width: 540px) 33vw, (max-width: 800px) 25vw, (max-width: 1000px) 20vw, (max-width: 1200px) 16vw, 14vw"
+            {{/small}}
+            {{#medium}}
+            sizes="(max-width: 540px) 50vw, (max-width: 800px) 33.3333vw, (max-width: 1000px) 33.3333vw, (max-width: 1200px) 25vw, 20vw"
+            {{/medium}}
+            {{#large}}
+            sizes="(max-width: 540px) 100vw, (max-width: 800px) 100vw, (max-width: 1200px) 50vw, 33.3333vw"
+            {{/large}}
+            {{#huge}}
+            sizes="100vw"
+            {{/huge}}
+            {{/is.thumbnail_size}}
+          />
+        </noscript>
+        {{/thumbnail.medium}}
+        {{^thumbnail.medium}}
+        <span class="no-thumbnail-content">
+          <span class="no-thumbnail-title">
+            {{title}}
+          </span>
+          {{^hide_dates}}
+          {{#date}}
+          <span class="date">Added <span date-from-now="{{dateStamp}}">{{date}}</span></span>
+          {{/date}}
+          {{/hide_dates}}
+        </span>
+        {{/thumbnail.medium}}
+      </span>
+    </span>
+  </a>
+  {{/entries}}
+</div>
 
 {{#pagination}}
 <div class="pagination">
