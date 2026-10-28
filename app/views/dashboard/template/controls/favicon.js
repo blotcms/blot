@@ -10,7 +10,11 @@ if (form) {
 
   input.addEventListener("change", () => {
     const file = input.files && input.files[0];
-    if (!file) return;
+    if (!file) {
+      cropper.clear();
+      loadError.hidden = true;
+      return;
+    }
     if (objectURL) URL.revokeObjectURL(objectURL);
     objectURL = URL.createObjectURL(file);
     loadError.hidden = true;

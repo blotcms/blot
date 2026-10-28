@@ -2,8 +2,6 @@ module.exports = function createFaviconCropper(root, fieldsRoot = root) {
   const cropper = root.querySelector("[data-favicon-cropper]");
   const image = root.querySelector("[data-favicon-image]");
   const selection = root.querySelector("[data-favicon-selection]");
-  const previews = root.querySelector("[data-favicon-previews]");
-  const previewImages = Array.from(previews.querySelectorAll("img"));
   const fields = {
     x: fieldsRoot.querySelector("[data-favicon-crop-x]"),
     y: fieldsRoot.querySelector("[data-favicon-crop-y]"),
@@ -15,24 +13,6 @@ module.exports = function createFaviconCropper(root, fieldsRoot = root) {
   const limit = (value, min, max) => Math.min(max, Math.max(min, value));
   const percent = (value) => Math.round(value * 100);
   const dimensions = () => ({ width: image.clientWidth, height: image.clientHeight });
-
-  const renderPreviews = () => {
-    if (!crop || !image.naturalWidth || !image.clientWidth) return;
-    const scale = image.naturalWidth / image.clientWidth;
-    for (const preview of previewImages) {
-      const size = Number(preview.dataset.faviconPreview) || 32;
-      const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = size;
-      const context = canvas.getContext("2d");
-      context.imageSmoothingEnabled = size > 32;
-      try {
-        context.drawImage(image, crop.left * scale, crop.top * scale, crop.side * scale, crop.side * scale, 0, 0, size, size);
-        preview.src = canvas.toDataURL("image/png");
-      } catch (_) {
-        preview.src = image.src;
-      }
-    }
-  };
 
   const writeCrop = () => {
     const { width, height } = dimensions();
@@ -47,7 +27,6 @@ module.exports = function createFaviconCropper(root, fieldsRoot = root) {
       "aria-valuetext",
       `Crop position: ${percent(fields.x.value)}% from the left, ${percent(fields.y.value)}% from the top; size: ${percent(fields.size.value)}% of the shorter image edge.`
     );
-    renderPreviews();
   };
 
   const point = (event) => {
@@ -71,7 +50,6 @@ module.exports = function createFaviconCropper(root, fieldsRoot = root) {
         crop = { left: (width - side) / 2, top: (height - side) / 2, side };
         const square = image.naturalWidth === image.naturalHeight;
         cropper.hidden = square && options.hideSquareCrop;
-        previews.hidden = false;
         writeCrop();
         resolve({ square });
       });
@@ -120,5 +98,12 @@ module.exports = function createFaviconCropper(root, fieldsRoot = root) {
     writeCrop();
   });
 
-  return { load, focus: () => selection.focus() };
+  const clear = () => {
+    cropper.hidden = true;
+    image.removeAttribute("src");
+    crop = null;
+    fields.x.value = fields.y.value = fields.size.value = "";
+  };
+
+  return { load, clear, focus: () => selection.focus() };
 };
