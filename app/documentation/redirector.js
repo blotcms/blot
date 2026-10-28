@@ -26,10 +26,11 @@ const internal = {
   "/how/files/layout-tags": "/how/formatting/layout-tags",
   "/how/posts": "/how/files",
   "/about/contact": "/contact",
+  "/about/programming": "/about/engineering",
   "/about/notes/business/unlimited-bandwidth":
     "/about/notes/business/principles",
   "/about/notes/business/technique": "/about/notes/business/tools",
-  "/about/notes/programming/technique": "/about/notes/programming/tools",
+  "/about/notes/programming/technique": "/about/engineering/tools",
   "/about/notes/design/technique": "/about/notes/design/tools",
   "/about/notes/business/project-management": "/about/notes/business/tools",
   "/about/notes/design/aesthetic": "/about/notes/design/principles",
