@@ -34,6 +34,8 @@
 .favicon-cropper__handle--w { top: 50%; left: 0; transform: translate(-50%, -50%); cursor: ew-resize; }
 .photo-cropper[hidden] { display: none; }
 .photo-cropper { display: grid; grid-template-columns: minmax(0, 320px) minmax(240px, 1fr); align-items: center; gap: 2rem; margin: 1.5rem 0; }
+.photo-cropper--no-preview { grid-template-columns: minmax(0, 1fr); }
+.photo-cropper__stage[hidden] { display: none; }
 .photo-cropper__stage { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; background: #f5f5f5; cursor: grab; touch-action: none; user-select: none; }
 .photo-cropper__stage.is-dragging { cursor: grabbing; }
 .photo-cropper__stage:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 3px; }

@@ -267,6 +267,42 @@ describe("upload template image", function () {
       expect(await storage.exists(this.blog.id, assetName(changed))).toBe(true);
     });
 
+    it("starts from the stored square for photos saved before shapes existed", async function () {
+      const { image } = await run(this, "profile_image", {}, await makeFile(this.tmp, "me.png", 200, 200));
+      delete this.template.locals.profile_image.mask;
+      await update(this.blog, this.template.slug, this.template.locals);
+      const read = spyOn(storage, "read").and.callThrough();
+
+      await run(this, "profile_image", { update_mask: "1", photo_shape: "circle" });
+
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(read.calls.argsFor(0)[1]).toBe(assetName(image.thumbnails.square));
+    });
+
+    it("keeps the new square when the metadata rollback cannot be confirmed", async function () {
+      const { image } = await run(this, "profile_image", { photo_shape: "square" }, await makeFile(this.tmp, "me.png", 200, 200));
+      const realUpdate = Template.update;
+      let calls = 0;
+      spyOn(Template, "update").and.callFake((id, slug, updates, callback) => {
+        calls += 1;
+        if (calls === 1) return realUpdate(id, slug, updates, (error) => callback(error || new Error("manifest unavailable")));
+        callback(new Error("rollback unavailable"));
+      });
+      const req = {
+        blog: this.blog, template: this.template,
+        params: { templateSlug: this.template.slug, key: "profile_image" },
+        files: {}, body: { update_mask: "1", photo_shape: "circle" }, query: { ajax: "1" },
+      };
+      const next = jasmine.createSpy("next");
+
+      await uploadImage(req, { locals: { images: [{ key: "profile_image" }] } }, next);
+
+      expect(next).toHaveBeenCalledWith(jasmine.objectContaining({ message: "manifest unavailable", rollbackConfirmed: false }));
+      const names = (await storage.list(this.blog.id, ASSETS)).filter((name) => name.endsWith("-square.webp"));
+      expect(names.length).toBe(2);
+      expect(names).toContain(assetName(image.thumbnails.square).split("/").pop());
+    });
+
     it("leaves everything alone when the shape is unchanged", async function () {
       const { image } = await run(this, "profile_image", { photo_shape: "circle" }, await makeFile(this.tmp, "me.png", 200, 200));
       expect((await run(this, "profile_image", { update_mask: "1", photo_shape: "circle" })).image).toEqual(image);

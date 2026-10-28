@@ -32,10 +32,12 @@ async function saveProfileImageFavicon(req, file, source) {
   });
 }
 
+const nameFromURL = (assetURL) => basename(decodeURIComponent(new URL(assetURL, "http://local").pathname));
+
 function filenames(value) {
   if (!value || !value.url) return [];
   return [value.url, ...Object.values(value.thumbnails || {}).map((item) => item.url)]
-    .map((assetURL) => basename(decodeURIComponent(new URL(assetURL, "http://local").pathname)))
+    .map(nameFromURL)
     .filter((name) => /^image-[a-f0-9-]+-(original|small|medium|large|square)\.webp$/.test(name));
 }
 
@@ -133,18 +135,22 @@ async function persistLocal(req, key, value, previous, hadPrevious) {
   try {
     await operations.update(req.blog, req.template.slug || req.params.templateSlug, req.template.locals);
   } catch (error) {
-    if (await rollbackLocal(req, key, previous, hadPrevious) && (!previous || previous.url !== (value && value.url))) {
-      await removeAssets(req.blog, value);
-    }
+    const restored = await rollbackLocal(req, key, previous, hadPrevious);
+    if (restored && (!previous || previous.url !== (value && value.url))) await removeAssets(req.blog, value);
+    // Callers may only delete files the failed save introduced once the
+    // previous metadata is confirmed back in place.
+    error.rollbackConfirmed = restored;
     return error;
   }
 
   try {
     await operations.sync(req.blog, req.template);
   } catch (error) {
-    if (await rollbackLocal(req, key, previous, hadPrevious) && (!previous || previous.url !== (value && value.url))) {
-      await removeAssets(req.blog, value);
-    }
+    const restored = await rollbackLocal(req, key, previous, hadPrevious);
+    if (restored && (!previous || previous.url !== (value && value.url))) await removeAssets(req.blog, value);
+    // Callers may only delete files the failed save introduced once the
+    // previous metadata is confirmed back in place.
+    error.rollbackConfirmed = restored;
     return error;
   }
 
@@ -205,12 +211,15 @@ module.exports = async function uploadImage(req, res, next) {
         : res.message(req.body.redirect || res.locals.base, "No changes");
     }
 
-    // Templates use thumbnails.square as is, so a new shape needs a new square
-    // rendered from the stored original.
+    // Templates use thumbnails.square as is, so a new shape needs a new square.
+    // Photos saved with a mask have their crop applied to the original. Older
+    // photos only have the crop in their (unmasked) square, so start from that
+    // to keep the framing the user chose.
+    const legacy = previous.mask === undefined && previous.thumbnails && previous.thumbnails.square;
     let square;
     try {
-      const original = await assets.read(req.blog.id, assetPath(basename(decodeURIComponent(new URL(previous.url, "http://local").pathname))));
-      square = await generateSquare(original, directory(req.blog), mask);
+      const source = await assets.read(req.blog.id, assetPath(nameFromURL(legacy ? previous.thumbnails.square.url : previous.url)));
+      square = await generateSquare(source, directory(req.blog), mask);
       await assets.commit(req.blog.id, assetPath(square.name));
     } catch (error) {
       if (square) await assets.remove(req.blog.id, assetPath(square.name)).catch(() => {});
@@ -224,7 +233,7 @@ module.exports = async function uploadImage(req, res, next) {
     };
     const error = await persistLocal(req, key, updated, previous, hadPrevious);
     if (error) {
-      await assets.remove(req.blog.id, assetPath(square.name)).catch(() => {});
+      if (error.rollbackConfirmed) await assets.remove(req.blog.id, assetPath(square.name)).catch(() => {});
       return next(error);
     }
     if (previous.thumbnails && previous.thumbnails.square) {

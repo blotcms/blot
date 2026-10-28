@@ -12,6 +12,7 @@ function initializePhotoCrop(form) {
   const outsideImage = form.querySelector("[data-crop-image-outside]");
   const cropMask = form.querySelector("[data-photo-crop-mask]");
   const zoomInput = form.querySelector("[data-photo-zoom]");
+  const noPreviewNotice = form.querySelector("[data-photo-no-preview]");
   const shapeInputs = form.querySelectorAll("[data-photo-shape]");
   const zoomOut = form.querySelector("[data-photo-zoom-out]");
   const zoomIn = form.querySelector("[data-photo-zoom-in]");
@@ -226,6 +227,14 @@ function initializePhotoCrop(form) {
     const selected = form.querySelector("[data-photo-shape]:checked");
     cropper.dataset.shape = selected ? selected.value : "square";
   };
+  // The server accepts formats browsers can't decode (e.g. TIFF). Without a
+  // preview there is nothing to position, but the shape and Save controls stay
+  // so the photo can still be uploaded.
+  const setPreviewAvailable = (available) => {
+    stage.hidden = !available;
+    cropper.classList.toggle("photo-cropper--no-preview", !available);
+    if (noPreviewNotice) noPreviewNotice.hidden = available;
+  };
   const loadFile = (file) => {
     stopPhysics();
     pointers.clear();
@@ -247,6 +256,7 @@ function initializePhotoCrop(form) {
     objectURL = URL.createObjectURL(file);
     const selectedURL = objectURL;
     cropper.hidden = false;
+    setPreviewAvailable(true);
     outsideImage.src = selectedURL;
     image.onload = () => {
       if (objectURL !== selectedURL) return;
@@ -254,7 +264,7 @@ function initializePhotoCrop(form) {
         if (objectURL !== selectedURL) return;
         const { width, height } = stageSize();
         if (!width || !height || !image.naturalWidth || !image.naturalHeight) {
-          cropper.hidden = true;
+          setPreviewAvailable(false);
           return;
         }
         const fit = Math.max(width / image.naturalWidth, height / image.naturalHeight);
@@ -274,7 +284,7 @@ function initializePhotoCrop(form) {
       });
     };
     image.onerror = () => {
-      if (objectURL === selectedURL) cropper.hidden = true;
+      if (objectURL === selectedURL) setPreviewAvailable(false);
     };
     image.src = selectedURL;
   };
