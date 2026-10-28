@@ -1,14 +1,14 @@
 <div class="sidebar">
 
-  <a href="/" title="The homepage of {{title}}" class="logo {{#profile_image.thumbnails.square.url}}hasAvatar{{/profile_image.thumbnails.square.url}}{{^profile_image.thumbnails.square.url}}{{#avatar}}hasAvatar{{/avatar}}{{/profile_image.thumbnails.square.url}}">
-    {{#profile_image.thumbnails.square}}
-    <img width="42" height="42" src="{{{url}}}" class="avatar round">
-    {{/profile_image.thumbnails.square}}
-    {{^profile_image.thumbnails.square.url}}
+  <a href="/" title="The homepage of {{title}}" class="logo {{#profile_image.thumbnails.small.url}}hasAvatar{{/profile_image.thumbnails.small.url}}{{^profile_image.thumbnails.small.url}}{{#avatar}}hasAvatar{{/avatar}}{{/profile_image.thumbnails.small.url}}">
+    {{#profile_image.thumbnails.small}}
+    <img width="42" height="42" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="50px" class="avatar round">
+    {{/profile_image.thumbnails.small}}
+    {{^profile_image.thumbnails.small.url}}
     {{#avatar}}
     <img width="42" height="42" src="{{{avatar}}}" class="avatar {{#roundAvatar}}round{{/roundAvatar}}">
     {{/avatar}}
-    {{/profile_image.thumbnails.square.url}}
+    {{/profile_image.thumbnails.small.url}}
     <span class="site-title">{{title}}</span>
   </a>
 

@@ -1,7 +1,7 @@
 <header class="site-header">
   <input type="checkbox" id="site-nav-toggle" class="site-nav-toggle-input" aria-label="Toggle navigation" aria-controls="site-menu" />
   <div class="site-header-bar">
-    <h1 class="site-title"><a href="/">{{#profile_image.thumbnails.square}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" alt="" class="site-logo">{{/profile_image.thumbnails.square}}{{title}}</a></h1>
+    <h1 class="site-title"><a href="/">{{#profile_image.thumbnails.small}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="24px" alt="" class="site-logo">{{/profile_image.thumbnails.small}}{{title}}</a></h1>
     <label for="site-nav-toggle" class="site-menu-toggle">menu</label>
   </div>
   <nav id="site-menu" class="site-nav" aria-label="Main menu">
