@@ -1,14 +1,14 @@
 <div class="sidebar">
 
-  <a href="/" title="The homepage of {{title}}" class="logo {{#profile_image.thumbnails.small.url}}hasAvatar{{/profile_image.thumbnails.small.url}}{{^profile_image.thumbnails.small.url}}{{#avatar}}hasAvatar{{/avatar}}{{/profile_image.thumbnails.small.url}}">
-    {{#profile_image.thumbnails.small}}
-    <img width="42" height="42" src="{{{url}}}" data-profile-image srcset="{{{profile_image.srcset}}}" sizes="50px" class="avatar{{^profile_image.mask}} round{{/profile_image.mask}}">
-    {{/profile_image.thumbnails.small}}
-    {{^profile_image.thumbnails.small.url}}
+  <a href="/" title="The homepage of {{title}}" class="logo {{#profile_image.thumbnails.square.url}}hasAvatar{{/profile_image.thumbnails.square.url}}{{^profile_image.thumbnails.square.url}}{{#avatar}}hasAvatar{{/avatar}}{{/profile_image.thumbnails.square.url}}">
+    {{#profile_image.thumbnails.square}}
+    <img width="42" height="42" src="{{{url}}}" class="avatar round">
+    {{/profile_image.thumbnails.square}}
+    {{^profile_image.thumbnails.square.url}}
     {{#avatar}}
     <img width="42" height="42" src="{{{avatar}}}" class="avatar {{#roundAvatar}}round{{/roundAvatar}}">
     {{/avatar}}
-    {{/profile_image.thumbnails.small.url}}
+    {{/profile_image.thumbnails.square.url}}
     <span class="site-title">{{title}}</span>
   </a>
 

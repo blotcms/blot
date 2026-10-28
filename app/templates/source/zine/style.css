@@ -405,9 +405,3 @@ input[type="submit"] {
 }
 
 {{> plugin}}
-
-/* The profile photo's shape is saved as a mask; clip the responsive image to it */
-{{#profile_image.clip_path}}
-img[data-profile-image] { clip-path: {{{profile_image.clip_path}}}; }
-{{/profile_image.clip_path}}
-img[data-profile-image] { object-fit: cover; }

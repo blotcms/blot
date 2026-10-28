@@ -158,9 +158,9 @@ hr {width: 100%;border: none;border-bottom: 1px solid rgba({{#rgb}}{{text_color}
 
 .avatar {
   width:36px;
-  {{#roundAvatar}}{{^profile_image.mask}}
+  {{#roundAvatar}}
   border-radius:50%;
-  {{/profile_image.mask}}{{/roundAvatar}}
+  {{/roundAvatar}}
   vertical-align: middle;
   margin-right: 0.75em;
 }
@@ -236,9 +236,3 @@ pre, code {
     margin: 0 1.25em 2em;
   }
 }
-
-/* The profile photo's shape is saved as a mask; clip the responsive image to it */
-{{#profile_image.clip_path}}
-img[data-profile-image] { clip-path: {{{profile_image.clip_path}}}; }
-{{/profile_image.clip_path}}
-img[data-profile-image] { object-fit: cover; }

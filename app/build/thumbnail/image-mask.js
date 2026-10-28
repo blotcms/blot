@@ -1,8 +1,8 @@
 const sharp = require("sharp");
 
-// Geometry on a 1000 x 1000 grid, shared by the favicon mask and the
-// dashboard's shape picker icons. Templates and the dashboard previews clip
-// with CSS instead (CLIP_PATHS below).
+// Geometry on a 1000 x 1000 grid, shared by the server-side mask, the
+// dashboard's shape picker icons and (as `clip-path`s in favicon.css) the
+// dashboard previews. Keep favicon.css's --mask-* values in step.
 const SQUIRCLE_POINTS = 512;
 const squirclePath = () => {
   const points = [];
@@ -13,27 +13,6 @@ const squirclePath = () => {
     points.push(`${i === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`);
   }
   return `${points.join(" ")} Z`;
-};
-
-// `clip-path` values for the same shapes, for CSS-masked images. The dashboard
-// repeats them as --mask-* in favicon.css; a spec keeps the two in step.
-const CLIP_POINTS = 96;
-const squircleClip = () => {
-  const points = [];
-  for (let i = 0; i < CLIP_POINTS; i += 1) {
-    const angle = (Math.PI * 2 * i) / CLIP_POINTS;
-    const x = 50 + 50 * Math.sign(Math.cos(angle)) * Math.sqrt(Math.abs(Math.cos(angle)));
-    const y = 50 + 50 * Math.sign(Math.sin(angle)) * Math.sqrt(Math.abs(Math.sin(angle)));
-    points.push(`${x.toFixed(2)}% ${y.toFixed(2)}%`);
-  }
-  return `polygon(${points.join(", ")})`;
-};
-const CLIP_PATHS = {
-  circle: "circle(50%)",
-  "rounded-square": "inset(0 round 20%)",
-  squircle: squircleClip(),
-  hexagon: "polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%)",
-  arch: "inset(0 round 50% 50% 0 0)",
 };
 
 const SHAPES = [
@@ -75,4 +54,4 @@ function shapeIcon(shape) {
   return `<svg viewBox="-40 -40 1080 1080" aria-hidden="true">${BY_VALUE.get(shape).geometry}</svg>`;
 }
 
-module.exports = { CLIP_PATHS, SHAPES, normalizeShape, applyShape, shapeIcon };
+module.exports = { SHAPES, normalizeShape, applyShape, shapeIcon };

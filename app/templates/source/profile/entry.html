@@ -127,8 +127,8 @@
     {{/entry}}
     <section id="post-meta" class="clearfix">
       <a href="/">
-    {{#profile_image.thumbnails.small}}<img class="avatar{{#profile_image.mask}} masked{{/profile_image.mask}}" width="{{width}}" height="{{height}}" src="{{{url}}}" data-profile-image srcset="{{{profile_image.srcset}}}" sizes="36px">{{/profile_image.thumbnails.small}}
-    {{^profile_image.thumbnails.small.url}}{{#avatar}}<img class="avatar" src="{{{avatar}}}">{{/avatar}}{{/profile_image.thumbnails.small.url}}
+    {{#profile_image.thumbnails.square}}<img class="avatar{{#profile_image.mask}} masked{{/profile_image.mask}}" width="{{width}}" height="{{height}}" src="{{{url}}}">{{/profile_image.thumbnails.square}}
+    {{^profile_image.thumbnails.square.url}}{{#avatar}}<img class="avatar" src="{{{avatar}}}">{{/avatar}}{{/profile_image.thumbnails.square.url}}
     <div>
       <span class="dark">{{#author}}{{author}}{{/author}}{{^author}}{{title}}{{/author}}</span>
       {{#description}}<span>{{description}}</span>{{/description}}

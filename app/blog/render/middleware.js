@@ -19,7 +19,6 @@ const CONTENT_TYPE = "Content-Type";
 const CACHE_CONTROL = "Cache-Control";
 
 const BLOT_CDN_TOKEN = require("./replaceFolderLinks/cdnToken");
-const profileImage = require("./profileImage");
 const folderManifestUrl = require("./folderManifestUrl");
 const renderTimeMetric = require("./renderTimeMetric");
 
@@ -117,10 +116,6 @@ module.exports = function attachRenderView(req, res, _next) {
         .and(folderManifestUrl.locals(req, viewLocals))
         .and(folderManifestUrl.locals(req, req.template.locals))
         .and(blog.locals);
-      // Assigned, not merged: profile_image may be the cached template local
-      if (res.locals.profile_image) {
-        Object.assign(res.locals, profileImage.locals({ profile_image: res.locals.profile_image }));
-      }
 
       // Templates may configure sorting as nested `sort: { by, direction }`.
       // Expose the resolved selection as flat sort_by / sort_order so views
