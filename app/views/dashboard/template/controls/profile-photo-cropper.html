@@ -1,0 +1,23 @@
+<div class="photo-cropper" hidden data-photo-cropper>
+  <div class="photo-cropper__stage" data-photo-crop-stage role="group" tabindex="0" aria-label="Photo crop area. Drag to reposition. Use arrow keys to move the photo, plus and minus to zoom, or zero to reset.">
+    <img class="photo-cropper__outside-image" alt="" aria-hidden="true" data-crop-image-outside />
+    <div class="photo-cropper__mask" data-photo-crop-mask>
+      <img alt="Photo crop preview" data-crop-image />
+    </div>
+    <div class="photo-cropper__frame" aria-hidden="true"></div>
+  </div>
+  <div class="photo-cropper__controls">
+    <h3>Adjust photo</h3>
+    <p>Drag to reposition. Scroll or pinch to zoom.</p>
+    {{> profile-photo-shape-options}}
+    <div class="photo-cropper__zoom">
+      <button type="button" data-photo-zoom-out aria-label="Zoom out">−</button>
+      <input type="range" min="100" max="400" value="105" step="1" aria-label="Zoom photo" data-photo-zoom />
+      <button type="button" data-photo-zoom-in aria-label="Zoom in">+</button>
+    </div>
+    <div class="buttons photo-upload-actions" data-file-drop-actions hidden>
+      <button type="submit">Save photo</button>
+      <a href="{{{base}}}">Cancel</a>
+    </div>
+  </div>
+</div>

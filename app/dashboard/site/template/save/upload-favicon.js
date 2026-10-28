@@ -84,10 +84,10 @@ async function deleteFavicon(blog, template, slug) {
 // which needs the same generate/persist/rollback behavior but isn't itself
 // an Express request - calling this directly keeps that call site from
 // depending on req/res internals it doesn't otherwise need.
-async function createFavicon(blog, template, slug, filePath, cropBox, { onFileProcessed, source } = {}) {
+async function createFavicon(blog, template, slug, filePath, cropBox, { onFileProcessed, source, shape } = {}) {
   const previous = template.locals.favicon;
 
-  const created = await generate(filePath, faviconDirectory(blog), cropBox, { source });
+  const created = await generate(filePath, faviconDirectory(blog), cropBox, { source, shape });
   // generate() wrote the files to the local directory
   try {
     await Promise.all(assetPaths(blog, created).map((path) => assets.commit(blog.id, path)));

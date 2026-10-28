@@ -1,28 +1,65 @@
 {{> template-settings-back}}
 
-<form method="post" action="{{{base}}}/favicon" enctype="multipart/form-data" class="dashboard-form favicon-form" data-favicon-form>
-  <input type="hidden" name="_csrf" value="{{csrftoken}}" />
-  <input type="hidden" name="redirect" value="{{{base}}}/favicon" />
-  <input type="hidden" name="crop_x" value="" data-favicon-crop-x />
-  <input type="hidden" name="crop_y" value="" data-favicon-crop-y />
-  <input type="hidden" name="crop_size" value="" data-favicon-crop-size />
+<div class="settings-group">
+  <h2 class="template-heading">Favicon</h2>
+  <div class="favicon-form__body">
+    <p class="favicon-form__help">Your favicon appears in the browser toolbar next to your site's title.</p>
+    {{#favicon}}
+    <div class="favicon-current">
+      <div class="favicon-current__tab" role="img" aria-label="Site tab preview: {{siteTitle}}">
+        <img class="favicon-current__preview" width="32" height="32" src="{{{png32}}}" alt="" />
+        <span class="favicon-current__title">{{siteTitle}}</span>
+      </div>
+      <form method="post" action="{{{base}}}/favicon" class="dashboard-form favicon-current__actions">
+        <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+        <input type="hidden" name="redirect" value="{{{base}}}/favicon" />
+        <div class="buttons">
+          <button type="submit" class="red" name="remove" value="1">Delete favicon</button>
+          <a href="{{{base}}}">Cancel</a>
+        </div>
+      </form>
+    </div>
+    <hr class="photo-upload-divider" />
+    {{/favicon}}
 
-  <div class="settings-group">
-    <h2 class="template-heading">Favicon</h2>
-    <div class="favicon-form__body">
-      <p class="favicon-form__help">Choose an image, then position the square over the part that should appear in your site icon.</p>
+    <form method="post" action="{{{base}}}/favicon" enctype="multipart/form-data" class="dashboard-form favicon-form" data-favicon-form>
+      <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+      <input type="hidden" name="redirect" value="{{{base}}}/favicon" />
+      <input type="hidden" name="crop_x" value="" data-favicon-crop-x />
+      <input type="hidden" name="crop_y" value="" data-favicon-crop-y />
+      <input type="hidden" name="crop_size" value="" data-favicon-crop-size />
 
-      <label class="favicon-form__file">
-        <span>Select an image</span>
-        <input type="file" name="favicon" accept="image/*,.svg" data-favicon-input />
-      </label>
+      <div class="file-drop" data-file-drop>
+        <input class="file-drop__input" type="file" id="favicon-upload" name="favicon" accept="image/*,.svg" data-favicon-input aria-label="Choose a favicon" />
+        <label class="file-drop__empty" data-file-drop-empty for="favicon-upload">
+          <svg class="file-drop__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M7 18a4.5 4.5 0 0 1 .3-9 5.5 5.5 0 0 1 10.7 1.5A3.5 3.5 0 0 1 17.5 18H7z" stroke-linejoin="round"/>
+            <path d="M12 15V9M9.5 11.5 12 9l2.5 2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="file-drop__title">{{#favicon}}Upload a different favicon{{/favicon}}{{^favicon}}Upload a favicon{{/favicon}}</span>
+          <span class="file-drop__action">Drag and drop an image, or <span class="file-drop__choose">choose a file</span>.</span>
+        </label>
+        <div class="file-drop__selected" data-file-drop-selected hidden>
+          <span class="file-drop__selected-label">Selected favicon</span>
+          <div class="file-drop__chip">
+            <svg class="file-drop__file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
+            </svg>
+            <span class="file-drop__name" data-file-drop-name></span>
+            <button type="button" class="file-drop__clear" data-file-drop-clear aria-label="Remove selected favicon">
+              <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <p class="favicon-form__help" role="alert" hidden data-favicon-load-error>The selected image could not be previewed. Please choose another image.</p>
-
       {{> favicon-crop-ui}}
 
-      {{#favicon}}
-      <button type="submit" name="remove" value="1">Delete favicon</button>
-      {{/favicon}}
-      {{> form-footer}}
-    </div>
+      <div class="buttons photo-upload-actions" data-file-drop-actions hidden>
+        <button type="submit">Save favicon</button>
+        <a href="{{{base}}}">Cancel</a>
+      </div>
+    </form>
   </div>
+</div>

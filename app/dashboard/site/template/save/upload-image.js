@@ -10,7 +10,7 @@ const { createFavicon } = require("./upload-favicon");
 const writeChangeToFolder = require("./writeChangeToFolder");
 const previewReload = require("helper/publishPreviewReload");
 const { isAjaxRequest } = require("./ajax-response");
-const { generate, MAX_PIXELS } = require("../../../../build/thumbnail/template-image");
+const { generate, MAX_PIXELS, normalizeShape } = require("../../../../build/thumbnail/template-image");
 
 const ASSETS = "_template_assets";
 const directory = (blog) => assets.path(blog.id, ASSETS);
@@ -25,14 +25,10 @@ async function saveProfileImageFavicon(req, file, source) {
   const templateSlug = req.templateFork
     ? req.template.id.split(":").slice(1).join(":")
     : req.params.templateSlug;
-  const cropBox = {
-    x: req.body.favicon_crop_x,
-    y: req.body.favicon_crop_y,
-    size: req.body.favicon_crop_size,
-  };
-  return createFavicon(req.blog, req.template, templateSlug, file.path, cropBox, {
+  return createFavicon(req.blog, req.template, templateSlug, file.path, {}, {
     onFileProcessed: () => cleanupFiles({ favicon: file }),
     source,
+    shape: req.body.photo_shape,
   });
 }
 
@@ -40,7 +36,7 @@ function filenames(value) {
   if (!value || !value.url) return [];
   return [value.url, ...Object.values(value.thumbnails || {}).map((item) => item.url)]
     .map((assetURL) => basename(decodeURIComponent(new URL(assetURL, "http://local").pathname)))
-    .filter((name) => /^image-[a-f0-9-]+-(original|small|medium|large|square)\.webp$/.test(name));
+    .filter((name) => /^image-[a-f0-9-]+-(original|small|medium|large|square)\.(webp|png)$/.test(name));
 }
 
 function getTemplatesStrictly(blogID) {
@@ -137,14 +133,18 @@ async function persistLocal(req, key, value, previous, hadPrevious) {
   try {
     await operations.update(req.blog, req.template.slug || req.params.templateSlug, req.template.locals);
   } catch (error) {
-    if (await rollbackLocal(req, key, previous, hadPrevious)) await removeAssets(req.blog, value);
+    if (await rollbackLocal(req, key, previous, hadPrevious) && (!previous || previous.url !== (value && value.url))) {
+      await removeAssets(req.blog, value);
+    }
     return error;
   }
 
   try {
     await operations.sync(req.blog, req.template);
   } catch (error) {
-    if (await rollbackLocal(req, key, previous, hadPrevious)) await removeAssets(req.blog, value);
+    if (await rollbackLocal(req, key, previous, hadPrevious) && (!previous || previous.url !== (value && value.url))) {
+      await removeAssets(req.blog, value);
+    }
     return error;
   }
 
@@ -166,14 +166,24 @@ module.exports = async function uploadImage(req, res, next) {
   const previous = locals[key];
   const file = first(req.files);
   const remove = req.body.remove === "1";
-  const wantsFavicon = key === "profile_image" && res.locals.favicon_supported &&
-    (!locals.favicon || req.body.use_favicon === "1");
+  const maskOnly = req.body.update_mask === "1" && key === "profile_image" && (!file || !file.size);
+  const wantsFavicon = key === "profile_image" && res.locals.favicon_supported && !locals.favicon;
 
-  if (!remove && (!file || !file.size)) {
+  if (!remove && !maskOnly && (!file || !file.size)) {
     await cleanupFiles(req.files);
     return isAjaxRequest(req)
       ? res.json({ image: previous || null })
       : res.message(req.body.redirect || res.locals.base, previous && previous.url ? "No changes" : "Choose an image");
+  }
+
+  let mask;
+  if (key === "profile_image") {
+    try {
+      mask = normalizeShape(req.body.photo_shape);
+    } catch (error) {
+      await cleanupFiles(req.files);
+      return next(error);
+    }
   }
 
   if (remove) {
@@ -187,6 +197,23 @@ module.exports = async function uploadImage(req, res, next) {
       : res.message(req.body.redirect || res.locals.base, "Removed image");
   }
 
+  if (maskOnly) {
+    if (previous.mask === mask) {
+      await cleanupFiles(req.files);
+      return isAjaxRequest(req)
+        ? res.json({ image: previous })
+        : res.message(req.body.redirect || res.locals.base, "No changes");
+    }
+
+    const updated = { ...previous, mask };
+    const error = await persistLocal(req, key, updated, previous, hadPrevious);
+    if (error) return next(error);
+    previewReload.publish(req.blog.id);
+    return isAjaxRequest(req)
+      ? res.json({ image: updated })
+      : res.message(req.body.redirect || res.locals.base, "Updated photo mask");
+  }
+
   // wantsFavicon also derives a separately-cropped favicon from this same
   // file below; sharing one decoded sharp() source across both avoids
   // reading and decoding the upload from disk twice.
@@ -197,7 +224,8 @@ module.exports = async function uploadImage(req, res, next) {
     made = await generate(file.path, directory(req.blog), {
       x: req.body.crop_x,
       y: req.body.crop_y,
-      size: req.body.crop_size,
+      width: req.body.crop_width,
+      height: req.body.crop_height,
     }, { source });
     // generate() wrote the derivatives to the local directory
     await commitGenerated(req.blog, made);
@@ -213,6 +241,7 @@ module.exports = async function uploadImage(req, res, next) {
     height: made.original.height,
     thumbnails: {},
   };
+  if (mask) image.mask = mask;
   for (const [name, item] of Object.entries(made.thumbnails)) {
     image.thumbnails[name] = {
       url: url(req.blog, item.name),

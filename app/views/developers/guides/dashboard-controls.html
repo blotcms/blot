@@ -47,7 +47,7 @@
     "profile_image": {}
   }
 }</code></pre>
-<p>After upload, the value contains the original&rsquo;s oriented dimensions and four derivatives. <code>small</code>, <code>medium</code>, and <code>large</code> fit proportionally within 160, 640, and 1200 pixels without upscaling. <code>square</code> is a 160-pixel crop using the selected focal area, or an entropy-based crop when no selection is submitted. Animated images use their first frame.</p>
+<p>After upload, the value contains the original&rsquo;s oriented dimensions and four derivatives. An optional rectangular crop applies to the original and its derivatives. <code>small</code>, <code>medium</code>, and <code>large</code> fit proportionally within 160, 640, and 1200 pixels without upscaling. <code>square</code> is a 160-pixel entropy-based crop of the selected image area. Animated images use their first frame.</p>
 <pre class="json" data-file="package.json"><code>{
   "url": "…", "width": 1200, "height": 800,
   "thumbnails": {

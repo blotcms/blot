@@ -1,21 +1,82 @@
 {{> template-settings-back}}
-<form method="post" action="{{{base}}}/images/{{image.key}}" enctype="multipart/form-data" class="dashboard-form favicon-form" data-image-crop-form{{#image.isProfileImage}} data-photo-form data-favicon-supported="{{#favicon_supported}}true{{/favicon_supported}}{{^favicon_supported}}false{{/favicon_supported}}" data-has-favicon="{{#favicon}}true{{/favicon}}{{^favicon}}false{{/favicon}}"{{/image.isProfileImage}}>
+
+{{#image.isProfileImage}}
+<div class="settings-group">
+  <h2 class="template-heading">Photo</h2>
+  <div class="favicon-form__body">
+    {{#image.value}}
+    <p><img src="{{{url}}}" data-profile-mask="{{mask}}" data-profile-mask-preview alt="Current {{image.label}}" /></p>
+    <form method="post" action="{{{base}}}/images/{{image.key}}" enctype="multipart/form-data" class="dashboard-form photo-delete-form" data-photo-mask-form>
+      <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+      <input type="hidden" name="redirect" value="{{{base}}}/images/{{image.key}}" />
+      <input type="hidden" name="update_mask" value="1" />
+      {{> profile-photo-shape-options}}
+      <p class="error photo-mask-error" role="alert" data-photo-mask-error hidden></p>
+      <div class="buttons">
+        <button type="submit" class="red" name="remove" value="1">Delete photo</button>
+        <a href="{{{base}}}">Cancel</a>
+      </div>
+    </form>
+    <hr class="photo-upload-divider" />
+    {{/image.value}}
+
+    <form method="post" action="{{{base}}}/images/{{image.key}}" enctype="multipart/form-data" class="dashboard-form favicon-form" data-photo-crop-form>
+      <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+      <input type="hidden" name="redirect" value="{{{base}}}/images/{{image.key}}" />
+      <input type="hidden" name="crop_x" value="" data-crop-x />
+      <input type="hidden" name="crop_y" value="" data-crop-y />
+      <input type="hidden" name="crop_width" value="" data-crop-width />
+      <input type="hidden" name="crop_height" value="" data-crop-height />
+      <div class="file-drop" data-file-drop>
+        <input class="file-drop__input" type="file" id="profile-image-upload" name="image" accept="image/*" data-crop-input aria-label="Choose a photo" />
+        <label class="file-drop__empty" data-file-drop-empty for="profile-image-upload">
+          <svg class="file-drop__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M7 18a4.5 4.5 0 0 1 .3-9 5.5 5.5 0 0 1 10.7 1.5A3.5 3.5 0 0 1 17.5 18H7z" stroke-linejoin="round"/>
+            <path d="M12 15V9M9.5 11.5 12 9l2.5 2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="file-drop__title">{{#image.value}}Upload a different photo{{/image.value}}{{^image.value}}Upload a photo{{/image.value}}</span>
+          <span class="file-drop__action">Drag and drop an image, or <span class="file-drop__choose">choose a file</span>.</span>
+        </label>
+        <div class="file-drop__selected" data-file-drop-selected hidden>
+          <span class="file-drop__selected-label">Selected photo</span>
+          <div class="file-drop__chip">
+            <svg class="file-drop__file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
+            </svg>
+            <span class="file-drop__name" data-file-drop-name></span>
+            <button type="button" class="file-drop__clear" data-file-drop-clear aria-label="Remove selected photo">
+              <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {{> profile-photo-cropper}}
+    </form>
+  </div>
+</div>
+{{/image.isProfileImage}}
+
+{{^image.isProfileImage}}
+<form method="post" action="{{{base}}}/images/{{image.key}}" enctype="multipart/form-data" class="dashboard-form favicon-form" data-image-crop-form>
   <input type="hidden" name="_csrf" value="{{csrftoken}}" />
   <input type="hidden" name="redirect" value="{{{base}}}/images/{{image.key}}" />
-  <input type="hidden" name="crop_x" value="" data-crop-x /><input type="hidden" name="crop_y" value="" data-crop-y /><input type="hidden" name="crop_size" value="" data-crop-size />
-  {{#image.isProfileImage}}
-  <input type="hidden" name="use_favicon" value="0" data-photo-use-favicon />
-  <input type="hidden" name="favicon_crop_x" value="" data-favicon-crop-x />
-  <input type="hidden" name="favicon_crop_y" value="" data-favicon-crop-y />
-  <input type="hidden" name="favicon_crop_size" value="" data-favicon-crop-size />
-  {{/image.isProfileImage}}
-  <div class="settings-group"><h2 class="template-heading">{{image.label}}</h2><div class="favicon-form__body">
-    {{#image.value}}<p><img src="{{{url}}}" style="max-width:100%;max-height:320px" alt="Current {{image.label}}" /></p><p>{{width}} × {{height}} pixels</p>{{/image.value}}
-    <p class="favicon-form__help">Select an image to {{#image.value}}replace it{{/image.value}}{{^image.value}}upload it{{/image.value}}. The optional square selection chooses the focal area of the square thumbnail; other versions remain proportional.</p>
-    <label class="favicon-form__file"><span>Select an image</span><input type="file" name="image" accept="image/*" data-crop-input{{#image.isProfileImage}} data-photo-input{{/image.isProfileImage}} /></label>
-    <div class="favicon-cropper" hidden data-cropper><div class="favicon-cropper__image"><img alt="Choose the square thumbnail area" data-crop-image /><div class="favicon-cropper__selection" role="slider" tabindex="0" aria-label="Square thumbnail crop" aria-valuemin="0" aria-valuemax="100" data-crop-selection></div></div><p class="favicon-form__help">Optional: drag the square to set the square thumbnail. Use the arrow keys to reposition it, or Shift and the arrow keys to resize it. Without this selection, Blot uses an entropy-based crop.</p></div>
-    {{#image.value}}<button type="submit" name="remove" value="1">Delete image</button>{{/image.value}}
-    {{> form-footer}}
-  </div></div>
-  {{#image.isProfileImage}}{{> photo-favicon-dialog}}{{/image.isProfileImage}}
+  <input type="hidden" name="crop_x" value="" data-crop-x />
+  <input type="hidden" name="crop_y" value="" data-crop-y />
+  <input type="hidden" name="crop_width" value="" data-crop-width />
+  <input type="hidden" name="crop_height" value="" data-crop-height />
+  <div class="settings-group">
+    <h2 class="template-heading">{{image.label}}</h2>
+    <div class="favicon-form__body">
+      {{#image.value}}<p><img src="{{{url}}}" alt="Current {{image.label}}" /></p>{{/image.value}}
+      <label class="favicon-form__file"><span>Select an image</span><input type="file" name="image" accept="image/*" data-crop-input /></label>
+      {{> image-cropper}}
+      {{#image.value}}<button type="submit" name="remove" value="1">Delete image</button>{{/image.value}}
+      <div class="buttons">
+        <button type="submit">Save changes</button>
+        <a href="{{{base}}}">Cancel</a>
+      </div>
+    </div>
+  </div>
 </form>
+{{/image.isProfileImage}}

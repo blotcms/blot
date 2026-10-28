@@ -4,6 +4,7 @@ const { join } = require("path");
 const sharp = require("sharp");
 const toIco = require("to-ico");
 const { v4: uuid } = require("uuid");
+const { normalizeShape, shapeMask } = require("../../../../build/thumbnail/image-mask");
 
 const ICO_SIZES = [16, 32, 48];
 const PNG_SIZES = { png16: 16, png32: 32, appleTouch: 180 };
@@ -81,7 +82,8 @@ function cropFor(metadata, crop) {
 // `source`, when passed, is a sharp() instance already opened on sourcePath
 // (e.g. by a profile-photo upload that also generates thumbnails from the
 // same file) - cloning it avoids decoding the same file from disk twice.
-async function generate(sourcePath, outputDirectory, crop, { source: input } = {}) {
+async function generate(sourcePath, outputDirectory, crop, { source: input, shape: requestedShape } = {}) {
+  const shape = normalizeShape(requestedShape);
   let metadata;
   try {
     metadata = await (input ? input.clone() : sharp(sourcePath, { pages: 1 })).metadata();
@@ -100,13 +102,20 @@ async function generate(sourcePath, outputDirectory, crop, { source: input } = {
     // guarantees 4-channel input: to-ico@1.1.5 mis-encodes 24-bit PNGs (e.g. a
     // straight RGB JPEG upload) into a malformed ICO otherwise.
     const source = (input ? input.clone() : sharp(sourcePath, { pages: 1 })).rotate().ensureAlpha().extract(extraction).png();
-    const icoBuffers = await Promise.all(
-      ICO_SIZES.map((size) => source.clone().resize(size, size).png().toBuffer())
-    );
+    const render = async (size) => {
+      const { data, info } = await source.clone().resize(size, size).png().toBuffer({ resolveWithObject: true });
+      if (shape === "square") return data;
+      return sharp(data)
+        .ensureAlpha()
+        .composite([{ input: shapeMask(info.width, info.height, shape), blend: "dest-in" }])
+        .png()
+        .toBuffer();
+    };
+    const icoBuffers = await Promise.all(ICO_SIZES.map(render));
     await fs.writeFile(join(workDirectory, `${prefix}.ico`), await toIco(icoBuffers));
-    await Promise.all(Object.entries(PNG_SIZES).map(([name, size]) =>
-      source.clone().resize(size, size).png().toFile(join(workDirectory, `${prefix}-${size}.png`))
-    ));
+    await Promise.all(Object.entries(PNG_SIZES).map(async ([name, size]) => {
+      await fs.writeFile(join(workDirectory, `${prefix}-${size}.png`), await render(size));
+    }));
 
     await fs.ensureDir(outputDirectory);
     await Promise.all([

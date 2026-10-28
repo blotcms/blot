@@ -15,7 +15,8 @@ describe("template image crop controls", function () {
     const fields = {
       x: { value: "" },
       y: { value: "" },
-      size: { value: "" },
+      width: { value: "" },
+      height: { value: "" },
     };
     const form = {
       dataset: {},
@@ -27,7 +28,8 @@ describe("template image crop controls", function () {
           "[data-crop-selection]": selection,
           "[data-crop-x]": fields.x,
           "[data-crop-y]": fields.y,
-          "[data-crop-size]": fields.size,
+          "[data-crop-width]": fields.width,
+          "[data-crop-height]": fields.height,
         }[selector];
       },
     };
@@ -42,14 +44,16 @@ describe("template image crop controls", function () {
       listeners["input:change"]();
       fields.x.value = "0.25";
       fields.y.value = "0.1";
-      fields.size.value = "0.5";
+      fields.width.value = "0.5";
+      fields.height.value = "0.4";
 
       input.files = [{}];
       listeners["input:change"]();
 
       expect(fields.x.value).toBe("");
       expect(fields.y.value).toBe("");
-      expect(fields.size.value).toBe("");
+      expect(fields.width.value).toBe("");
+      expect(fields.height.value).toBe("");
       expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:first");
     } finally {
       global.window = originalWindow;

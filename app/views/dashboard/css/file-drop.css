@@ -33,6 +33,18 @@
   box-sizing: border-box;
 }
 
+/* Dashboard form labels receive their own display and padding rules. Keep
+   the dropzone label's centered stack when it lives inside one of those forms. */
+form.dashboard-form .file-drop__empty {
+  display: flex;
+  margin: 0;
+  padding: 2rem 1.5rem;
+}
+
+form.dashboard-form .file-drop__empty[hidden] {
+  display: none;
+}
+
 .file-drop.is-dragover .file-drop__empty {
   background: var(--medium-background-color);
 }

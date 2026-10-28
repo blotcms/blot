@@ -9,9 +9,26 @@ const persistTemplateUpdate = require("./save/persist-template-update");
 const removeTemplateAssetsIfUnreferenced = require("./save/upload-image").removeTemplateAssetsIfUnreferenced;
 const loadFavicon = require("./load/favicon");
 const syntaxHighlighterPreview = require("./syntax-highlighter-preview");
+const photoMaskOptions = require("./load/photo-mask-options");
+const { isAjaxRequest } = require("./save/ajax-response");
 
 function loadFaviconForProfileImage(req, res, next) {
   return req.params.key === "profile_image" ? loadFavicon(req, res, next) : next();
+}
+
+function handleImageUploadError(error, req, res, next) {
+  if (req.params.key !== "profile_image") return next(error);
+
+  console.error("Profile photo upload failed", {
+    blog: req.blog && req.blog.id,
+    template: req.params.templateSlug,
+    error: error && (error.stack || error.message || error),
+  });
+
+  const redirect = (req.body && req.body.redirect) || `${res.locals.base}/images/${req.params.key}`;
+  const message = "We couldn't save your photo. Please try again.";
+  if (isAjaxRequest(req)) return res.status(400).json({ error: message });
+  return res.message(redirect, new Error(message));
 }
 
 // /template/default and /template/default/... redirect to the installed template's slug
@@ -196,6 +213,11 @@ TemplateEditor.route("/:templateSlug/images/:key")
     res.locals.image = res.locals.images.find((item) => item.key === req.params.key);
     if (!res.locals.image) return next();
     res.locals.image.isProfileImage = res.locals.image.key === "profile_image";
+    if (res.locals.image.isProfileImage) {
+      res.locals.image.maskOptions = photoMaskOptions(
+        res.locals.image.value && res.locals.image.value.mask
+      );
+    }
     res.locals.title = `${res.locals.image.label} - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
     res.render("dashboard/template/controls/image-form");
@@ -205,12 +227,14 @@ TemplateEditor.route("/:templateSlug/images/:key")
     loadFaviconForProfileImage,
     require("./save/preflight-image"),
     require("./save/fork-if-needed"),
-    require("./save/upload-image")
+    require("./save/upload-image"),
+    handleImageUploadError
   );
 
 TemplateEditor.route("/:templateSlug/favicon")
   .get(require("./load/favicon"), function (req, res) {
     res.locals.title = `Favicon - ${req.template.displayName}`;
+    res.locals.siteTitle = req.blog.title;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
     res.render("dashboard/template/controls/favicon-form");
   })
