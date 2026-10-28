@@ -1,13 +1,13 @@
 <div class="site-title">
   <a href="/" title="Index of {{title}}" class="light index-link">
-    {{#profile_image.thumbnails.square}}
-    <span style="display:inline-block;width:1.25em;height:1.25em;margin-right:0.5em;flex-shrink:0;background: url({{{url}}}) no-repeat center center;background-size: cover;"></span>
-    {{/profile_image.thumbnails.square}}
-    {{^profile_image.thumbnails.square.url}}
+    {{#profile_image.thumbnails.small}}
+    <img src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="20px" width="{{width}}" height="{{height}}" alt="" style="display:inline-block;width:1.25em;height:1.25em;margin-right:0.5em;flex-shrink:0;object-fit:cover;">
+    {{/profile_image.thumbnails.small}}
+    {{^profile_image.thumbnails.small.url}}
     {{#avatar}}
     <span style="display:inline-block;width:1.25em;height:1.25em;margin-right:0.5em;flex-shrink:0;background: url({{{avatar_url}}}) no-repeat center center;background-size: cover;"></span>
     {{/avatar}}
-    {{/profile_image.thumbnails.square.url}}
+    {{/profile_image.thumbnails.small.url}}
     {{title}}
   </a>
 </div>
