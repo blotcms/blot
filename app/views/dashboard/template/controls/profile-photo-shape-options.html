@@ -1,0 +1,9 @@
+<fieldset class="photo-cropper__shape">
+  <legend>Shape</legend>
+  {{#image.maskOptions}}
+  <label>
+    <input type="radio" name="photo_shape" value="{{value}}" {{#selected}}checked{{/selected}} data-photo-shape aria-label="{{label}}" title="{{label}}" />
+    {{{icon}}}
+  </label>
+  {{/image.maskOptions}}
+</fieldset>

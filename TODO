@@ -1058,9 +1058,6 @@ Improvements to sync/reset scripts:
 
 ---
 
-Add profile photo cropping/masking tool
-- include circle, oval, and other shapes (e.g. https://www.jayceeday.com)
-
 Add way to escape commas in tags and [tell questioner](https://blot.im/questions/1431)
   
 ---

@@ -10,7 +10,7 @@ const { createFavicon } = require("./upload-favicon");
 const writeChangeToFolder = require("./writeChangeToFolder");
 const previewReload = require("helper/publishPreviewReload");
 const { isAjaxRequest } = require("./ajax-response");
-const { generate, MAX_PIXELS } = require("../../../../build/thumbnail/template-image");
+const { generate, generateSquare, MAX_PIXELS, normalizeShape } = require("../../../../build/thumbnail/template-image");
 
 const ASSETS = "_template_assets";
 const directory = (blog) => assets.path(blog.id, ASSETS);
@@ -25,21 +25,19 @@ async function saveProfileImageFavicon(req, file, source) {
   const templateSlug = req.templateFork
     ? req.template.id.split(":").slice(1).join(":")
     : req.params.templateSlug;
-  const cropBox = {
-    x: req.body.favicon_crop_x,
-    y: req.body.favicon_crop_y,
-    size: req.body.favicon_crop_size,
-  };
-  return createFavicon(req.blog, req.template, templateSlug, file.path, cropBox, {
+  return createFavicon(req.blog, req.template, templateSlug, file.path, {}, {
     onFileProcessed: () => cleanupFiles({ favicon: file }),
     source,
+    shape: req.body.photo_shape,
   });
 }
+
+const nameFromURL = (assetURL) => basename(decodeURIComponent(new URL(assetURL, "http://local").pathname));
 
 function filenames(value) {
   if (!value || !value.url) return [];
   return [value.url, ...Object.values(value.thumbnails || {}).map((item) => item.url)]
-    .map((assetURL) => basename(decodeURIComponent(new URL(assetURL, "http://local").pathname)))
+    .map(nameFromURL)
     .filter((name) => /^image-[a-f0-9-]+-(original|small|medium|large|square)\.webp$/.test(name));
 }
 
@@ -82,14 +80,14 @@ async function removeAssetsIfUnreferenced(req, old) {
   // The current template must be included: two locals in one template can
   // deliberately share an uploaded image. By the time cleanup runs, the
   // changed local has already been persisted with its replacement value.
-  const referenced = list.some((template) =>
-    Object.values(template.locals || {}).some((value) => value && value.url === old.url)
-  );
-  if (!referenced) {
-    await Promise.all(names.map((name) =>
-      assets.remove(req.blog.id, assetPath(name)).catch(() => {})
-    ));
-  }
+  // Files are checked one by one because a forked template may still use an
+  // image's original and other sizes after a shape change replaced its square.
+  const referenced = new Set(list.flatMap((template) =>
+    Object.values(template.locals || {}).flatMap(filenames)
+  ));
+  await Promise.all(names.filter((name) => !referenced.has(name)).map((name) =>
+    assets.remove(req.blog.id, assetPath(name)).catch(() => {})
+  ));
 }
 
 async function removeTemplateAssetsIfUnreferenced(req, images) {
@@ -137,14 +135,22 @@ async function persistLocal(req, key, value, previous, hadPrevious) {
   try {
     await operations.update(req.blog, req.template.slug || req.params.templateSlug, req.template.locals);
   } catch (error) {
-    if (await rollbackLocal(req, key, previous, hadPrevious)) await removeAssets(req.blog, value);
+    const restored = await rollbackLocal(req, key, previous, hadPrevious);
+    if (restored && (!previous || previous.url !== (value && value.url))) await removeAssets(req.blog, value);
+    // Callers may only delete files the failed save introduced once the
+    // previous metadata is confirmed back in place.
+    error.rollbackConfirmed = restored;
     return error;
   }
 
   try {
     await operations.sync(req.blog, req.template);
   } catch (error) {
-    if (await rollbackLocal(req, key, previous, hadPrevious)) await removeAssets(req.blog, value);
+    const restored = await rollbackLocal(req, key, previous, hadPrevious);
+    if (restored && (!previous || previous.url !== (value && value.url))) await removeAssets(req.blog, value);
+    // Callers may only delete files the failed save introduced once the
+    // previous metadata is confirmed back in place.
+    error.rollbackConfirmed = restored;
     return error;
   }
 
@@ -166,14 +172,24 @@ module.exports = async function uploadImage(req, res, next) {
   const previous = locals[key];
   const file = first(req.files);
   const remove = req.body.remove === "1";
-  const wantsFavicon = key === "profile_image" && res.locals.favicon_supported &&
-    (!locals.favicon || req.body.use_favicon === "1");
+  const maskOnly = req.body.update_mask === "1" && key === "profile_image" && (!file || !file.size);
+  const wantsFavicon = key === "profile_image" && res.locals.favicon_supported && !locals.favicon;
 
-  if (!remove && (!file || !file.size)) {
+  if (!remove && !maskOnly && (!file || !file.size)) {
     await cleanupFiles(req.files);
     return isAjaxRequest(req)
       ? res.json({ image: previous || null })
       : res.message(req.body.redirect || res.locals.base, previous && previous.url ? "No changes" : "Choose an image");
+  }
+
+  let mask;
+  if (key === "profile_image") {
+    try {
+      mask = normalizeShape(req.body.photo_shape);
+    } catch (error) {
+      await cleanupFiles(req.files);
+      return next(error);
+    }
   }
 
   if (remove) {
@@ -187,6 +203,48 @@ module.exports = async function uploadImage(req, res, next) {
       : res.message(req.body.redirect || res.locals.base, "Removed image");
   }
 
+  if (maskOnly) {
+    if (previous.mask === mask) {
+      await cleanupFiles(req.files);
+      return isAjaxRequest(req)
+        ? res.json({ image: previous })
+        : res.message(req.body.redirect || res.locals.base, "No changes");
+    }
+
+    // Templates use thumbnails.square as is, so a new shape needs a new square.
+    // Photos saved with a mask have their crop applied to the original. Older
+    // photos only have the crop in their (unmasked) square, so start from that
+    // to keep the framing the user chose.
+    const legacy = previous.mask === undefined && previous.thumbnails && previous.thumbnails.square;
+    let square;
+    try {
+      const source = await assets.read(req.blog.id, assetPath(nameFromURL(legacy ? previous.thumbnails.square.url : previous.url)));
+      square = await generateSquare(source, directory(req.blog), mask);
+      await assets.commit(req.blog.id, assetPath(square.name));
+    } catch (error) {
+      if (square) await assets.remove(req.blog.id, assetPath(square.name)).catch(() => {});
+      return next(error);
+    }
+
+    const updated = {
+      ...previous,
+      mask,
+      thumbnails: { ...previous.thumbnails, square: { url: url(req.blog, square.name), width: square.width, height: square.height } },
+    };
+    const error = await persistLocal(req, key, updated, previous, hadPrevious);
+    if (error) {
+      if (error.rollbackConfirmed) await assets.remove(req.blog.id, assetPath(square.name)).catch(() => {});
+      return next(error);
+    }
+    if (previous.thumbnails && previous.thumbnails.square) {
+      await removeAssetsIfUnreferenced(req, { url: previous.url, thumbnails: { square: previous.thumbnails.square } });
+    }
+    previewReload.publish(req.blog.id);
+    return isAjaxRequest(req)
+      ? res.json({ image: updated })
+      : res.message(req.body.redirect || res.locals.base, "Updated photo shape");
+  }
+
   // wantsFavicon also derives a separately-cropped favicon from this same
   // file below; sharing one decoded sharp() source across both avoids
   // reading and decoding the upload from disk twice.
@@ -197,8 +255,9 @@ module.exports = async function uploadImage(req, res, next) {
     made = await generate(file.path, directory(req.blog), {
       x: req.body.crop_x,
       y: req.body.crop_y,
-      size: req.body.crop_size,
-    }, { source });
+      width: req.body.crop_width,
+      height: req.body.crop_height,
+    }, { source, shape: mask });
     // generate() wrote the derivatives to the local directory
     await commitGenerated(req.blog, made);
     if (!wantsFavicon) await cleanupFiles(req.files);
@@ -213,6 +272,7 @@ module.exports = async function uploadImage(req, res, next) {
     height: made.original.height,
     thumbnails: {},
   };
+  if (mask) image.mask = mask;
   for (const [name, item] of Object.entries(made.thumbnails)) {
     image.thumbnails[name] = {
       url: url(req.blog, item.name),

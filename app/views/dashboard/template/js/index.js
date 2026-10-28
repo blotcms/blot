@@ -13,6 +13,6 @@ require('../controls/date.js');
 require('../controls/upload.js');
 require('../controls/favicon.js');
 require('../controls/image-crop.js');
-require('../controls/photo-favicon.js');
+require('../controls/profile-photo-crop.js');
 require('./menu-links.js')
 require('./presets.js')

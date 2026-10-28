@@ -46,7 +46,7 @@
 <header class="h-card">
 {{#profile_image.thumbnails.square}}
 <a href="/">
-<img id="avatar" class="u-photo" width="{{width}}" height="{{height}}" src="{{{url}}}" alt="">
+<img id="avatar" class="u-photo{{#profile_image.mask}} masked{{/profile_image.mask}}" width="{{width}}" height="{{height}}" src="{{{url}}}" alt="">
 </a>
 {{/profile_image.thumbnails.square}}
 {{^profile_image.thumbnails.square.url}}

@@ -1,6 +1,6 @@
 const cleanupFiles = require("./cleanup-files");
 const { isAjaxRequest } = require("./ajax-response");
-const { validate } = require("../../../../build/thumbnail/template-image");
+const { validate, normalizeShape } = require("../../../../build/thumbnail/template-image");
 
 const first = (files) => Array.isArray(files && files.image)
   ? files.image[0]
@@ -21,6 +21,25 @@ module.exports = async function preflightImage(req, res, next) {
   const old = req.template.locals[declaration.key];
   const file = first(req.files);
   const remove = req.body.remove === "1";
+  const updateMask = req.body.update_mask === "1" && declaration.key === "profile_image" && (!file || !file.size);
+
+  if (!remove && updateMask) {
+    if (!old || !old.url) {
+      await cleanupFiles(req.files);
+      const error = new Error("Upload a profile photo before changing its shape");
+      error.status = 400;
+      return next(error);
+    }
+
+    try {
+      normalizeShape(req.body.photo_shape);
+    } catch (error) {
+      await cleanupFiles(req.files);
+      return next(error);
+    }
+
+    return next();
+  }
 
   // Do not fork a SITE template for a request that cannot change anything.
   if (!remove && (!file || !file.size)) {
@@ -38,8 +57,9 @@ module.exports = async function preflightImage(req, res, next) {
       await validate(file.path, {
         x: req.body.crop_x,
         y: req.body.crop_y,
-        size: req.body.crop_size,
-      });
+        width: req.body.crop_width,
+        height: req.body.crop_height,
+      }, req.body.photo_shape);
     } catch (error) {
       await cleanupFiles(req.files);
       return next(error);

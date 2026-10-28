@@ -4,6 +4,8 @@ document.querySelectorAll("[data-file-drop]").forEach(function (root) {
   const selected = root.querySelector("[data-file-drop-selected]");
   const nameNode = root.querySelector("[data-file-drop-name]");
   const clear = root.querySelector("[data-file-drop-clear]");
+  const form = root.closest("form");
+  const actions = form && form.querySelector("[data-file-drop-actions]");
 
   if (!input || !empty || !selected || !nameNode) return;
 
@@ -25,23 +27,29 @@ document.querySelectorAll("[data-file-drop]").forEach(function (root) {
       selected.hidden = true;
       nameNode.textContent = "";
     }
+
+    if (actions) actions.hidden = !file;
   }
 
   function setFiles(fileList) {
     if (!fileList || !fileList.length) {
       input.value = "";
       sync();
+      input.dispatchEvent(new Event("change", { bubbles: true }));
       return;
     }
 
+    let assigned = false;
     try {
       const transfer = new DataTransfer();
       transfer.items.add(fileList[0]);
       input.files = transfer.files;
+      assigned = true;
     } catch (e) {
       // DataTransfer assignment unsupported; rely on native input change only
     }
 
+    if (assigned) input.dispatchEvent(new Event("change", { bubbles: true }));
     sync();
   }
 
@@ -53,6 +61,7 @@ document.querySelectorAll("[data-file-drop]").forEach(function (root) {
       event.stopPropagation();
       input.value = "";
       sync();
+      input.dispatchEvent(new Event("change", { bubbles: true }));
     });
   }
 
