@@ -1,5 +1,5 @@
 const { getEntry, getPage } = require("../../lib/models");
-const { createRenderCache } = require("../../lib/cacheMetrics");
+const { createRenderCache, timeClone } = require("../../lib/cacheMetrics");
 const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const getTemplateSortOptions = require("blog/sortOptions");
@@ -164,7 +164,9 @@ async function posts(req, res) {
     context: { blogID, tags, options, offset, pageSize, req, log },
   });
 
-  const responsePayload = clonePosts(prepared.payload);
+  const responsePayload = timeClone(postsCache, () =>
+    clonePosts(prepared.payload)
+  );
 
   res.locals.pagination = responsePayload.pagination;
   return responsePayload.entries;

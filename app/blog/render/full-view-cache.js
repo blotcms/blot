@@ -2,7 +2,7 @@ const { getFullView } = require("../lib/models");
 const { cloneDeep, prepareCacheValue } = require("../lib/clone");
 const cacheStats = require("../lib/cacheStats");
 const fetchCached = require("../lib/fetchCached");
-const { createRenderCache } = require("../lib/cacheMetrics");
+const { createRenderCache, timeClone } = require("../lib/cacheMetrics");
 
 // This cache is safe because the key includes blog/template/view identity,
 // plus blog.cacheID which changes whenever render-relevant blog data changes.
@@ -51,7 +51,7 @@ async function getCachedFullView(options) {
     context: { blogID: blog.id, templateID: template.id, viewName },
   });
 
-  return cloneDeep(prepared.payload);
+  return timeClone(fullViewCache, () => cloneDeep(prepared.payload));
 }
 
 module.exports = getCachedFullView;

@@ -21,6 +21,17 @@ const caches = [
   require("blog/render/retrieve/total_posts")._stats,
 ];
 
+// The evictIdle and hitAge counters are bucketed by time: under 1s, 1m, 10m,
+// 1h, and 1h or more, logged as five numbers joined with "/". missGhost counts
+// misses on keys the cache had evicted (more room might have helped) against
+// missCold, any other miss. uncachedBy is "reason:count" pairs.
+function uncachedBy(reasons) {
+  return Object.entries(reasons)
+    .filter(([, n]) => n)
+    .map(([reason, n]) => reason + ":" + n)
+    .join(",") || "none";
+}
+
 module.exports = function () {
   try {
     const mem = process.memoryUsage();
@@ -59,6 +70,18 @@ module.exports = function () {
               "render_cache_fillMs=" + Math.round(c.fillMs),
               "render_cache_fillMaxMs=" + Math.round(c.fillMaxMs),
               "render_cache_slowFills=" + c.slowFills,
+              "render_cache_uncachedBy=" + uncachedBy(c.uncachedBy),
+              "render_cache_missGhost=" + c.missGhost,
+              "render_cache_missCold=" + c.missCold,
+              "render_cache_missGhostBytes=" + c.missGhostBytes,
+              "render_cache_evictedHit=" + c.evictedHit,
+              "render_cache_evictedNeverHit=" + c.evictedNeverHit,
+              "render_cache_evictedBytes=" + c.evictedBytes,
+              "render_cache_evictIdle=" + c.evictIdle.join("/"),
+              "render_cache_hitAge=" + c.hitAge.join("/"),
+              "render_cache_clones=" + c.clones,
+              "render_cache_cloneMs=" + Math.round(c.cloneMs),
+              "render_cache_cloneMaxMs=" + Math.round(c.cloneMaxMs),
             ]
           : [])
       );
