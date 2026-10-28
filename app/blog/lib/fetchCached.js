@@ -23,7 +23,7 @@ function fetchCached(cache, name, log, key, options) {
 
   const outcome = cache.has(key) ? "hit" : keys.has(key) ? "inflight" : "miss";
   if (typeof log === "function") log(name, "cache", outcome);
-  cacheMetrics.count(cache, outcome);
+  cacheMetrics.count(cache, outcome, key);
 
   const startedAt = performance.now();
   const fetching = cache.fetch(key, options);
@@ -31,10 +31,11 @@ function fetchCached(cache, name, log, key, options) {
   if (outcome === "miss") {
     keys.add(key);
     fetching.then(
-      () => {
+      (value) => {
         keys.delete(key);
         cacheMetrics.fill(cache, key, performance.now() - startedAt, {
           cached: cache.has(key),
+          value,
         });
       },
       (err) => {
@@ -43,7 +44,11 @@ function fetchCached(cache, name, log, key, options) {
         // Uncacheable is a finished fill whose value was deliberately not
         // stored (e.g. an empty blog): its callers unwrap the payload
         if (err instanceof Uncacheable) {
-          cacheMetrics.fill(cache, key, elapsed, { cached: false });
+          cacheMetrics.fill(cache, key, elapsed, {
+            cached: false,
+            reason: "uncacheable",
+            value: err.payload,
+          });
         } else {
           cacheMetrics.fill(cache, key, 0, { failed: true });
         }
