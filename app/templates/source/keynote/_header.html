@@ -6,6 +6,6 @@
     {{/menu}}
   </nav>
 
-  <a id="title" href="/" title="The homepage of {{title}}">{{#profile_image.thumbnails.square}}<img width="{{width}}" height="{{height}}" class="avatar" src="{{{url}}}" alt="">{{/profile_image.thumbnails.square}}{{^profile_image.thumbnails.square.url}}{{#avatar}}<img class="avatar" src="{{{avatar}}}" alt="">{{/avatar}}{{/profile_image.thumbnails.square.url}}{{title}}</a>
+  <a id="title" href="/" title="The homepage of {{title}}">{{#profile_image.thumbnails.small}}<img width="{{width}}" height="{{height}}" class="avatar" src="{{{url}}}" data-profile-image srcset="{{{profile_image.srcset}}}" sizes="36px" alt="">{{/profile_image.thumbnails.small}}{{^profile_image.thumbnails.small.url}}{{#avatar}}<img class="avatar" src="{{{avatar}}}" alt="">{{/avatar}}{{/profile_image.thumbnails.small.url}}{{title}}</a>
 
 </div>

@@ -732,3 +732,9 @@ body.position-right .nav:last-of-type > a:first-of-type {
   width: auto;
   height: auto;
 }
+
+/* The profile photo's shape is saved as a mask; clip the responsive image to it */
+{{#profile_image.clip_path}}
+img[data-profile-image] { clip-path: {{{profile_image.clip_path}}}; }
+{{/profile_image.clip_path}}
+img[data-profile-image] { object-fit: cover; }

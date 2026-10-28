@@ -10,7 +10,7 @@ const { createFavicon } = require("./upload-favicon");
 const writeChangeToFolder = require("./writeChangeToFolder");
 const previewReload = require("helper/publishPreviewReload");
 const { isAjaxRequest } = require("./ajax-response");
-const { generate, generateSquare, MAX_PIXELS, normalizeShape } = require("../../../../build/thumbnail/template-image");
+const { generate, MAX_PIXELS, normalizeShape } = require("../../../../build/thumbnail/template-image");
 
 const ASSETS = "_template_assets";
 const directory = (blog) => assets.path(blog.id, ASSETS);
@@ -135,22 +135,18 @@ async function persistLocal(req, key, value, previous, hadPrevious) {
   try {
     await operations.update(req.blog, req.template.slug || req.params.templateSlug, req.template.locals);
   } catch (error) {
-    const restored = await rollbackLocal(req, key, previous, hadPrevious);
-    if (restored && (!previous || previous.url !== (value && value.url))) await removeAssets(req.blog, value);
-    // Callers may only delete files the failed save introduced once the
-    // previous metadata is confirmed back in place.
-    error.rollbackConfirmed = restored;
+    if (await rollbackLocal(req, key, previous, hadPrevious) && (!previous || previous.url !== (value && value.url))) {
+      await removeAssets(req.blog, value);
+    }
     return error;
   }
 
   try {
     await operations.sync(req.blog, req.template);
   } catch (error) {
-    const restored = await rollbackLocal(req, key, previous, hadPrevious);
-    if (restored && (!previous || previous.url !== (value && value.url))) await removeAssets(req.blog, value);
-    // Callers may only delete files the failed save introduced once the
-    // previous metadata is confirmed back in place.
-    error.rollbackConfirmed = restored;
+    if (await rollbackLocal(req, key, previous, hadPrevious) && (!previous || previous.url !== (value && value.url))) {
+      await removeAssets(req.blog, value);
+    }
     return error;
   }
 
@@ -211,34 +207,11 @@ module.exports = async function uploadImage(req, res, next) {
         : res.message(req.body.redirect || res.locals.base, "No changes");
     }
 
-    // Templates use thumbnails.square as is, so a new shape needs a new square.
-    // Photos saved with a mask have their crop applied to the original. Older
-    // photos only have the crop in their (unmasked) square, so start from that
-    // to keep the framing the user chose.
-    const legacy = previous.mask === undefined && previous.thumbnails && previous.thumbnails.square;
-    let square;
-    try {
-      const source = await assets.read(req.blog.id, assetPath(nameFromURL(legacy ? previous.thumbnails.square.url : previous.url)));
-      square = await generateSquare(source, directory(req.blog), mask);
-      await assets.commit(req.blog.id, assetPath(square.name));
-    } catch (error) {
-      if (square) await assets.remove(req.blog.id, assetPath(square.name)).catch(() => {});
-      return next(error);
-    }
-
-    const updated = {
-      ...previous,
-      mask,
-      thumbnails: { ...previous.thumbnails, square: { url: url(req.blog, square.name), width: square.width, height: square.height } },
-    };
+    // The shape is only stored: templates clip the responsive thumbnails with
+    // CSS, so no image needs to be re-rendered.
+    const updated = { ...previous, mask };
     const error = await persistLocal(req, key, updated, previous, hadPrevious);
-    if (error) {
-      if (error.rollbackConfirmed) await assets.remove(req.blog.id, assetPath(square.name)).catch(() => {});
-      return next(error);
-    }
-    if (previous.thumbnails && previous.thumbnails.square) {
-      await removeAssetsIfUnreferenced(req, { url: previous.url, thumbnails: { square: previous.thumbnails.square } });
-    }
+    if (error) return next(error);
     previewReload.publish(req.blog.id);
     return isAjaxRequest(req)
       ? res.json({ image: updated })
@@ -257,7 +230,7 @@ module.exports = async function uploadImage(req, res, next) {
       y: req.body.crop_y,
       width: req.body.crop_width,
       height: req.body.crop_height,
-    }, { source, shape: mask });
+    }, { source });
     // generate() wrote the derivatives to the local directory
     await commitGenerated(req.blog, made);
     if (!wantsFavicon) await cleanupFiles(req.files);

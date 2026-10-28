@@ -1,5 +1,5 @@
 <header class="site-header">
-  <a href="/" title="{{title}}" class="logo">{{#profile_image.thumbnails.square}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" alt="{{title}}">{{/profile_image.thumbnails.square}}{{title}}</a>
+  <a href="/" title="{{title}}" class="logo">{{#profile_image.thumbnails.small}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" data-profile-image srcset="{{{profile_image.srcset}}}" sizes="40px" alt="{{title}}">{{/profile_image.thumbnails.small}}{{title}}</a>
   <nav class="nav">
     {{#menu}}
     <a href="{{{url}}}" title="{{label}}">{{label}}</a>
