@@ -10,7 +10,7 @@ const { createFavicon } = require("./upload-favicon");
 const writeChangeToFolder = require("./writeChangeToFolder");
 const previewReload = require("helper/publishPreviewReload");
 const { isAjaxRequest } = require("./ajax-response");
-const { generate, MAX_PIXELS, normalizeShape } = require("../../../../build/thumbnail/template-image");
+const { generate, generateSquare, MAX_PIXELS, normalizeShape } = require("../../../../build/thumbnail/template-image");
 
 const ASSETS = "_template_assets";
 const directory = (blog) => assets.path(blog.id, ASSETS);
@@ -36,7 +36,7 @@ function filenames(value) {
   if (!value || !value.url) return [];
   return [value.url, ...Object.values(value.thumbnails || {}).map((item) => item.url)]
     .map((assetURL) => basename(decodeURIComponent(new URL(assetURL, "http://local").pathname)))
-    .filter((name) => /^image-[a-f0-9-]+-(original|small|medium|large|square)\.(webp|png)$/.test(name));
+    .filter((name) => /^image-[a-f0-9-]+-(original|small|medium|large|square)\.webp$/.test(name));
 }
 
 function getTemplatesStrictly(blogID) {
@@ -78,14 +78,14 @@ async function removeAssetsIfUnreferenced(req, old) {
   // The current template must be included: two locals in one template can
   // deliberately share an uploaded image. By the time cleanup runs, the
   // changed local has already been persisted with its replacement value.
-  const referenced = list.some((template) =>
-    Object.values(template.locals || {}).some((value) => value && value.url === old.url)
-  );
-  if (!referenced) {
-    await Promise.all(names.map((name) =>
-      assets.remove(req.blog.id, assetPath(name)).catch(() => {})
-    ));
-  }
+  // Files are checked one by one because a forked template may still use an
+  // image's original and other sizes after a shape change replaced its square.
+  const referenced = new Set(list.flatMap((template) =>
+    Object.values(template.locals || {}).flatMap(filenames)
+  ));
+  await Promise.all(names.filter((name) => !referenced.has(name)).map((name) =>
+    assets.remove(req.blog.id, assetPath(name)).catch(() => {})
+  ));
 }
 
 async function removeTemplateAssetsIfUnreferenced(req, images) {
@@ -205,13 +205,35 @@ module.exports = async function uploadImage(req, res, next) {
         : res.message(req.body.redirect || res.locals.base, "No changes");
     }
 
-    const updated = { ...previous, mask };
+    // Templates use thumbnails.square as is, so a new shape needs a new square
+    // rendered from the stored original.
+    let square;
+    try {
+      const original = await assets.read(req.blog.id, assetPath(basename(decodeURIComponent(new URL(previous.url, "http://local").pathname))));
+      square = await generateSquare(original, directory(req.blog), mask);
+      await assets.commit(req.blog.id, assetPath(square.name));
+    } catch (error) {
+      if (square) await assets.remove(req.blog.id, assetPath(square.name)).catch(() => {});
+      return next(error);
+    }
+
+    const updated = {
+      ...previous,
+      mask,
+      thumbnails: { ...previous.thumbnails, square: { url: url(req.blog, square.name), width: square.width, height: square.height } },
+    };
     const error = await persistLocal(req, key, updated, previous, hadPrevious);
-    if (error) return next(error);
+    if (error) {
+      await assets.remove(req.blog.id, assetPath(square.name)).catch(() => {});
+      return next(error);
+    }
+    if (previous.thumbnails && previous.thumbnails.square) {
+      await removeAssetsIfUnreferenced(req, { url: previous.url, thumbnails: { square: previous.thumbnails.square } });
+    }
     previewReload.publish(req.blog.id);
     return isAjaxRequest(req)
       ? res.json({ image: updated })
-      : res.message(req.body.redirect || res.locals.base, "Updated photo mask");
+      : res.message(req.body.redirect || res.locals.base, "Updated photo shape");
   }
 
   // wantsFavicon also derives a separately-cropped favicon from this same
@@ -226,7 +248,7 @@ module.exports = async function uploadImage(req, res, next) {
       y: req.body.crop_y,
       width: req.body.crop_width,
       height: req.body.crop_height,
-    }, { source });
+    }, { source, shape: mask });
     // generate() wrote the derivatives to the local directory
     await commitGenerated(req.blog, made);
     if (!wantsFavicon) await cleanupFiles(req.files);

@@ -4,45 +4,13 @@ const { join } = require("path");
 const sharp = require("sharp");
 const { v4: uuid } = require("uuid");
 const { THUMBNAILS } = require("./config");
-const { normalizeShape } = require("./image-mask");
+const { normalizeShape, applyShape } = require("./image-mask");
+const { parseCrop, orientedDimensions: dimensions } = require("./crop");
 
 const MAX_PIXELS = 100 * 1000 * 1000;
 const SUPPORTED = new Set(["jpeg", "png", "webp", "gif", "tiff", "avif", "svg"]);
 
 function invalid(message) { const error = new Error(message); error.status = 400; return error; }
-function dimensions(metadata) {
-  const swap = metadata.orientation >= 5 && metadata.orientation <= 8;
-  return { width: swap ? metadata.height : metadata.width, height: swap ? metadata.width : metadata.height };
-}
-function parseCrop(value, width, height) {
-  if (!value || [value.x, value.y, value.width, value.height].some((v) => v === "" || v == null)) return null;
-  const x = Number(value.x);
-  const y = Number(value.y);
-  const cropWidth = Number(value.width);
-  const cropHeight = Number(value.height);
-  if (
-    ![x, y, cropWidth, cropHeight].every(Number.isFinite) ||
-    x < 0 || y < 0 || cropWidth <= 0 || cropHeight <= 0 ||
-    x > 1 || y > 1 || cropWidth > 1 || cropHeight > 1 ||
-    x + cropWidth > 1 || y + cropHeight > 1
-  ) {
-    throw invalid("The selected image crop is invalid");
-  }
-  const extraction = {
-    left: Math.floor(x * width),
-    top: Math.floor(y * height),
-    width: Math.floor(cropWidth * width),
-    height: Math.floor(cropHeight * height),
-  };
-  if (
-    !extraction.width || !extraction.height ||
-    extraction.left + extraction.width > width || extraction.top + extraction.height > height
-  ) {
-    throw invalid("The selected image crop is outside the image");
-  }
-  return extraction;
-}
-
 async function validate(sourcePath, crop, shape) {
   normalizeShape(shape);
   let metadata;
@@ -70,13 +38,31 @@ async function validate(sourcePath, crop, shape) {
   return { width: oriented.width, height: oriented.height, format: metadata.format };
 }
 
+// Resizes `operation` to a thumbnail at `destination`. Non-square shapes are
+// cleared to transparent, so templates can use the thumbnail as is.
+async function renderThumbnail(operation, options, destination, shape) {
+  const resized = operation.resize(options.size, options.size, {
+    fit: options.crop ? "cover" : "inside",
+    withoutEnlargement: !options.crop,
+    position: sharp.strategy.entropy,
+  });
+  if (shape === "square") {
+    const info = await resized.webp().toFile(destination);
+    return { width: info.width, height: info.height };
+  }
+  const { data, info } = await resized.png().toBuffer({ resolveWithObject: true });
+  const out = await applyShape(data, info.width, info.height, shape).webp().toFile(destination);
+  return { width: out.width, height: out.height };
+}
+
 // Decode one page deliberately: animated uploads have a deterministic first
 // frame. This mirrors the existing thumbnail pipeline's non-animated output.
 //
 // `source`, when passed, is a sharp() instance already opened on sourcePath
 // (e.g. by a caller that also needs to derive a favicon from the same
 // upload) - cloning it avoids decoding the same file from disk twice.
-async function generate(sourcePath, outputDirectory, crop, { source } = {}) {
+async function generate(sourcePath, outputDirectory, crop, { source, shape: requestedShape } = {}) {
+  const shape = normalizeShape(requestedShape);
   let metadata;
   try {
     metadata = await (source ? source.clone() : sharp(sourcePath, { pages: 1, limitInputPixels: MAX_PIXELS })).metadata();
@@ -97,13 +83,8 @@ async function generate(sourcePath, outputDirectory, crop, { source } = {}) {
     const originalInfo = await base.clone().webp().toFile(join(temporary, names.original));
     const results = {};
     await Promise.all(Object.entries(THUMBNAILS).map(async ([name, options]) => {
-      let operation = base.clone();
-      const fit = options.crop ? "cover" : "inside";
-      const info = await operation.resize(options.size, options.size, {
-        fit, withoutEnlargement: name !== "square",
-        position: sharp.strategy.entropy,
-      }).webp().toFile(join(temporary, names[name]));
-      results[name] = { name: names[name], width: info.width, height: info.height };
+      results[name] = await renderThumbnail(base.clone(), options, join(temporary, names[name]), name === "square" ? shape : "square");
+      results[name].name = names[name];
     }));
     await fs.ensureDir(outputDirectory);
     for (const name of Object.values(names)) {
@@ -118,4 +99,14 @@ async function generate(sourcePath, outputDirectory, crop, { source } = {}) {
   } finally { await fs.remove(temporary); }
 }
 
-module.exports = { generate, validate, MAX_PIXELS, parseCrop, normalizeShape };
+// Re-renders just the square thumbnail from an already stored (and already
+// cropped) original, for when the photo's shape changes without a new upload.
+async function generateSquare(original, outputDirectory, requestedShape) {
+  const shape = normalizeShape(requestedShape);
+  const name = `image-${uuid()}-square.webp`;
+  await fs.ensureDir(outputDirectory);
+  const info = await renderThumbnail(sharp(original, { pages: 1, limitInputPixels: MAX_PIXELS }), THUMBNAILS.square, join(outputDirectory, name), shape);
+  return { name, ...info };
+}
+
+module.exports = { generate, generateSquare, validate, MAX_PIXELS, parseCrop, normalizeShape };

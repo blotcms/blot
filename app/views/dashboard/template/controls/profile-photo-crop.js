@@ -29,12 +29,6 @@ function initializePhotoCrop(form) {
   const INITIAL_ZOOM = 1.05;
   const limit = (value, min, max) => Math.min(max, Math.max(min, value));
   const pointers = new Map();
-  const squircleClip = `polygon(${Array.from({ length: 256 }, (_, index) => {
-    const angle = (Math.PI * 2 * index) / 256;
-    const x = 50 + 50 * Math.sign(Math.cos(angle)) * Math.sqrt(Math.abs(Math.cos(angle)));
-    const y = 50 + 50 * Math.sign(Math.sin(angle)) * Math.sqrt(Math.abs(Math.sin(angle)));
-    return `${x.toFixed(3)}% ${y.toFixed(3)}%`;
-  }).join(", ")})`;
   let state;
   let gesture;
   let objectURL;
@@ -231,10 +225,6 @@ function initializePhotoCrop(form) {
   const updateShape = () => {
     const selected = form.querySelector("[data-photo-shape]:checked");
     cropper.dataset.shape = selected ? selected.value : "square";
-    const frame = cropper.querySelector(".photo-cropper__frame");
-    const clipPath = selected && selected.value === "squircle" ? squircleClip : "";
-    cropMask.style.clipPath = clipPath;
-    if (frame) frame.style.clipPath = clipPath;
   };
   const loadFile = (file) => {
     stopPhysics();

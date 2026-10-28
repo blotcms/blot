@@ -231,4 +231,45 @@ describe("upload template image", function () {
     await uploadImage(req, res, next);
     expect(next).toHaveBeenCalledWith(jasmine.objectContaining({ status: 404 }));
   });
+
+  describe("profile photo shapes", function () {
+    const assetName = (image) => ASSETS + "/" + decodeURIComponent(new URL(image.url).pathname.split("/").pop());
+    const cornerAlpha = async (blog, image) => {
+      const { data, info } = await sharp(await storage.read(blog.id, assetName(image))).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      return data[3 + 0 * info.channels];
+    };
+
+    beforeEach(async function () {
+      this.template.locals.profile_image = {};
+      await update(this.blog, this.template.slug, this.template.locals);
+    });
+
+    it("masks the square thumbnail and stores the shape", async function () {
+      const { image } = await run(this, "profile_image", { photo_shape: "circle" }, await makeFile(this.tmp, "me.png", 200, 200));
+
+      expect(image.mask).toBe("circle");
+      expect(await cornerAlpha(this.blog, image.thumbnails.square)).toBe(0);
+      expect(await storage.exists(this.blog.id, assetName(image.thumbnails.small))).toBe(true);
+    });
+
+    it("re-renders only the square when the shape changes without a new upload", async function () {
+      const { image } = await run(this, "profile_image", { photo_shape: "square" }, await makeFile(this.tmp, "me.png", 200, 200));
+      expect(await cornerAlpha(this.blog, image.thumbnails.square)).toBe(255);
+
+      const changed = (await run(this, "profile_image", { update_mask: "1", photo_shape: "hexagon" })).image;
+
+      expect(changed.mask).toBe("hexagon");
+      expect(changed.url).toBe(image.url);
+      expect(changed.thumbnails.small).toEqual(image.thumbnails.small);
+      expect(changed.thumbnails.square.url).not.toBe(image.thumbnails.square.url);
+      expect(await cornerAlpha(this.blog, changed.thumbnails.square)).toBe(0);
+      expect(await storage.exists(this.blog.id, assetName(image.thumbnails.square))).toBe(false);
+      expect(await storage.exists(this.blog.id, assetName(changed))).toBe(true);
+    });
+
+    it("leaves everything alone when the shape is unchanged", async function () {
+      const { image } = await run(this, "profile_image", { photo_shape: "circle" }, await makeFile(this.tmp, "me.png", 200, 200));
+      expect((await run(this, "profile_image", { update_mask: "1", photo_shape: "circle" })).image).toEqual(image);
+    });
+  });
 });
