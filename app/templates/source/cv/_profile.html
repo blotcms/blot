@@ -1,4 +1,13 @@
 {{#title}}
+{{#profile_image.thumbnails.small}}
+<p><img src="{{{url}}}"
+    srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}"
+    sizes="92px"
+    width="{{width}}" height="{{height}}" alt="{{title}}"></p>
+{{/profile_image.thumbnails.small}}
+{{^profile_image.thumbnails.small.url}}
+<p><span class="profile-image-placeholder" aria-hidden="true"></span></p>
+{{/profile_image.thumbnails.small.url}}
 <h1><a href="/">{{{title}}}</a></h1>
 {{#bio}}<p>{{bio}}</p>{{/bio}}
 <ul class="profile-links">
