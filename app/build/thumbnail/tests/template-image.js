@@ -34,11 +34,11 @@ describe("template image thumbnails", function () {
     }
   });
 
-  it("validates normalized crop coordinates", function () {
-    expect(parseCrop({ x: "0.25", y: "0", size: "0.5" }, 400, 200)).toEqual({
-      left: 100, top: 0, width: 100, height: 100,
+  it("validates normalized rectangular crop coordinates", function () {
+    expect(parseCrop({ x: "0.25", y: "0.1", width: "0.5", height: "0.4" }, 400, 200)).toEqual({
+      left: 100, top: 20, width: 200, height: 80,
     });
-    expect(() => parseCrop({ x: "0.9", y: "0", size: "0.5" }, 400, 200)).toThrowError(/outside/);
+    expect(() => parseCrop({ x: "0.9", y: "0", width: "0.5", height: "0.5" }, 400, 200)).toThrowError(/invalid/);
   });
 
   it("removes already-published derivatives when publication fails", async function () {

@@ -857,6 +857,13 @@ footer #wrapper {
   border-radius: 50%;
 }
 
+/* A saved photo shape is already part of the image; don't round it again. */
+.profile #avatar.masked,
+#post-meta img.avatar.masked {
+  border-radius: 0;
+  box-shadow: none;
+}
+
 /* Others */
 
 .dates {
