@@ -9,6 +9,7 @@ function initializeCrop(form) {
   const image = form.querySelector("[data-crop-image]");
   const selection = form.querySelector("[data-crop-selection]");
   const handles = form.querySelector("[data-crop-handles]");
+  const imageWrap = form.querySelector("[data-crop-frame]");
   const fields = {
     x: form.querySelector("[data-crop-x]"),
     y: form.querySelector("[data-crop-y]"),
@@ -121,10 +122,9 @@ function initializeCrop(form) {
       start: point(event),
       crop,
     };
-    cropper.querySelector(".favicon-cropper__image").setPointerCapture(event.pointerId);
+    imageWrap.setPointerCapture(event.pointerId);
   };
 
-  const imageWrap = cropper.querySelector(".favicon-cropper__image");
   imageWrap.addEventListener("pointerdown", beginDrag);
   imageWrap.addEventListener("pointermove", (event) => {
     if (!drag) return;

@@ -25,6 +25,7 @@ describe("template image crop controls", function () {
           "[data-crop-input]": input,
           "[data-cropper]": { hidden: true },
           "[data-crop-image]": { clientWidth: 100, clientHeight: 50 },
+          "[data-crop-frame]": { addEventListener() {} },
           "[data-crop-selection]": selection,
           "[data-crop-x]": fields.x,
           "[data-crop-y]": fields.y,
