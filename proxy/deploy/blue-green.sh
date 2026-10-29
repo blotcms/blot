@@ -342,6 +342,11 @@ replace_unit() {
   local u="$1" name other prev
   name="$(unit_name "$u")"; other="$(unit_name "$(other_unit "$u")")"; prev="$name-previous"
   if running "$name" && [ "$(container_image_id "$name")" = "$NEW_IMAGE_ID" ] && healthy "$name"; then
+    # The unit is current, but its airlock may not be (an earlier run found no
+    # airlock image for this commit, or was cut off): bring it to the target.
+    if [ "$DEPLOY_KIND" = unit ]; then
+      ensure_airlock "$u" || die "the airlock for $name did not come up"
+    fi
     log "$name already runs $NEW_IMAGE and is healthy: nothing to do"
     return 0
   fi

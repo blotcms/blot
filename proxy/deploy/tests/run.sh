@@ -659,6 +659,10 @@ reset units; up blot-blue "$UNIT_IMG"; up blot-green "$UNIT_IMG"; up blot-blue-a
 check "steady, same image already deployed: nothing is stopped, created or replaced" \
   '[ $RC = 0 ] && [ "$(stopped_count)" = 0 ] && ! called "docker create" && ! called "docker run -d" && mentions "nothing to do"'
 
+reset units; up blot-blue "$UNIT_IMG"; up blot-green "$UNIT_IMG"; unitdeploy
+check "steady, the units are current but their airlocks are not: the airlocks are replaced, the units left alone" \
+  '[ $RC = 0 ] && [ "$(stopped_count)" = 0 ] && ! called "docker create" && [ "$(cat "$FAKE/image/blot-blue-airlock")" = "$AIRLOCK_NEW" ] && [ "$(cat "$FAKE/image/blot-green-airlock")" = "$AIRLOCK_NEW" ]'
+
 reset units; FAKE_NODE_A_UNHEALTHY=blot-blue unitdeploy
 check "steady, node-a of the new blue never healthy: the new unit is removed BEFORE the old one starts (they share sockets), green untouched" \
   '[ $RC != 0 ] && before "docker rm -f blot-blue$" "docker start blot-blue-previous" && called "docker start blot-blue-previous" && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_OLD" ] && ! called "docker stop --time 30 blot-green"'
