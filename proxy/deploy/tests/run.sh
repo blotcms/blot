@@ -21,7 +21,8 @@ echo "docker $*" >> "$FAKE/calls"
 R="$FAKE/running"; mkdir -p "$R"
 name_arg() { while [ $# -gt 0 ]; do [ "$1" = --name ] && { echo "$2"; return; }; shift; done; }
 case "$1" in
-  image) [ -z "${FAKE_NO_AIRLOCK_IMAGE:-}" ] || [[ "${!#}" != *blot-airlock:* ]] || exit 1
+  image) if [[ "$*" == *Labels* ]]; then [[ "${!#}" =~ :[0-9a-f]{40}$ ]] && echo unit; exit 0; fi   # the unit images are the ones tagged with a commit
+    [ -z "${FAKE_NO_AIRLOCK_IMAGE:-}" ] || [[ "${!#}" != *blot-airlock:* ]] || exit 1
     if [[ "$*" == *"{{.Id}}"* ]]; then echo "${!#}"; fi; exit 0 ;;
   images) for i in ${FAKE_IMAGES-}; do [[ "$i" == "$2":* ]] && echo "$i"; done; exit 0 ;;
   rmi) [[ " ${FAKE_IMAGE_IN_USE:-} " != *" ${!#} "* ]]; exit ;;
@@ -57,7 +58,8 @@ case "$1" in
     [ -n "$(ls "$R" | grep -E '^blot-(proxy-)?(blue|green)(-previous)?$')" ] || { [ "$(cat "$FAKE/serving")" != container ] || echo none > "$FAKE/serving"; } ;;
   update) [ -z "${FAKE_UPDATE_FAILS:-}" ] || exit 1 ;;
   logs) cat "$FAKE/dlogs/${!#}" 2>/dev/null ;;
-  inspect) if [[ "$*" == *"State.Running"* ]]; then echo "${FAKE_HEALTH_OF_OTHER:-healthy}"; exit 0; fi
+  inspect) if [[ "$*" == *Labels* ]]; then [[ "$(cat "$FAKE/image/${!#}" 2>/dev/null)" =~ :[0-9a-f]{40}$ ]] && echo unit; exit 0; fi
+    if [[ "$*" == *"State.Running"* ]]; then echo "${FAKE_HEALTH_OF_OTHER:-healthy}"; exit 0; fi
     if [[ "$*" == *"Health.Status"* ]]; then if [ "${!#}" = "${FAKE_AIRLOCK_UNHEALTHY:-}" ]; then echo unhealthy; else echo healthy; fi; exit 0; fi
     if [[ "$*" == *"{{.Image}}"* || "$*" == *"{{.Config.Image}}"* ]]; then cat "$FAKE/image/${!#}" 2>/dev/null; exit 0; fi
     cat "$FAKE/started/${!#}" 2>/dev/null ;;
@@ -185,8 +187,8 @@ export PROXY_ENV_FILE="$T/proxy.env" PROXY_DISK_CACHE_DIR="$T/disk-cache" PROXY_
 # directories are this test's.
 SHA_NEW=0123456789abcdef0123456789abcdef01234567
 SHA_OLD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-UNIT_IMG="ghcr.io/blotcms/blot-unit:$SHA_NEW"
-UNIT_OLD="ghcr.io/blotcms/blot-unit:$SHA_OLD"
+UNIT_IMG="ghcr.io/blotcms/blot:$SHA_NEW"
+UNIT_OLD="ghcr.io/blotcms/blot:$SHA_OLD"
 AIRLOCK_NEW="ghcr.io/blotcms/blot-airlock:$SHA_NEW"
 AIRLOCK_OLD="ghcr.io/blotcms/blot-airlock:$SHA_OLD"
 mkdir -p "$T/data" "$T/tmp" "$T/run-blot"

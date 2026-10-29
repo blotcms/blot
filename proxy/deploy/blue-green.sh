@@ -10,7 +10,7 @@
 # new image the same way (reload-config.sh needs a bind-mounted conf dir, which
 # these scripts' containers do not have).
 #
-# The image is a unit (ghcr.io/blotcms/blot-unit: OpenResty, node-a and node-b
+# The image is a unit (ghcr.io/blotcms/blot, labelled im.blot.kind=unit: OpenResty, node-a and node-b
 # in one container, #2119) or, for a rollback from units, a proxy alone
 # (ghcr.io/blotcms/blot-proxy, PROXY_DEPLOY_KIND=proxy): see common.sh. A unit
 # differs in four ways, everything else below being the same:
@@ -95,6 +95,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/common.sh"
 
 NEW_IMAGE="$(resolve_image "$NEW_IMAGE")"
+# on the host first: the kind is read from its label
+ensure_image "$NEW_IMAGE"
 DEPLOY_KIND="$(deploy_kind "$NEW_IMAGE")"
 RELEASE_ID="$(release_id "$NEW_IMAGE")"
 load_env

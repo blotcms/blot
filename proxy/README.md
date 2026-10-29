@@ -330,7 +330,7 @@ OpenResty and the files in this image, which `COPY --from` the proxy image
 built for the same commit (`PROXY_IMAGE`) rather than compiling OpenResty
 again. [`unit-image.yml`](../.github/workflows/unit-image.yml) builds it after
 the proxy image, boots it with [`unit/smoke.sh`](unit/smoke.sh) and publishes
-`ghcr.io/<owner>/blot-unit:<sha>`. Nothing deploys it yet.
+`ghcr.io/<owner>/blot:<sha>` (the Node-only image is now `blot:prod-<sha>-arm64`, CI only). The Deploy workflow deploys it.
 
 - **User.** One user at uid 1000, `ec2-user` (the Node image's `node` user,
   renamed), for the app and for OpenResty's workers. As in this image, the

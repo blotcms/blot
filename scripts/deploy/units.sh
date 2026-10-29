@@ -51,7 +51,7 @@ else
   WAIT="${UNIT_IMAGE_WAIT:-${PROXY_IMAGE_WAIT:-1500}}"
 fi
 if [ "$KIND" = unit ]; then
-  IMAGE="ghcr.io/blotcms/blot-unit:$SHA"
+  IMAGE="ghcr.io/blotcms/blot:$SHA"
 else
   IMAGE="ghcr.io/blotcms/blot-proxy:$SHA"
 fi
