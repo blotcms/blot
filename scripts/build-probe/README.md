@@ -2,7 +2,7 @@
 
 Rebuilds posts on production in a throwaway container while measuring memory,
 to find which post (and which phase of rebuilding it) makes the heap spike -
-e.g. green crashing with a V8 out-of-memory error during a sync - without
+e.g. node-b crashing with a V8 out-of-memory error during a sync - without
 risking the live containers.
 
 ```
@@ -63,15 +63,15 @@ to the launcher shared by the production probes,
 [render-probe's README](../render-probe/README.md#how-it-runs) for what it
 checks and how it cleans up. For build-probe the container:
 
-- runs the same image and secrets as the app containers (yellow's current
-  image, unless `--release`) and shares Redis with them;
+- runs the same image and secrets as the app containers (the image blot-blue
+  is running, `ghcr.io/blotcms/blot:<sha>`, unless `--release`) and shares Redis with them;
 - mounts the data directory **read-write**, since builds write to it, and the
   host's tmp directory (`/var/instance-ssd/tmp`) read-write, as the app
   containers do;
 - is attached to the airlock network, since builds fetch remote images and
   take screenshots through it;
 - has its own memory limit (default 2g: room for a heap snapshot on top of a
-  full heap), heap limit (default 750MB, as green) and one CPU, so a spike
+  full heap), heap limit (default 750MB, as node-b) and one CPU, so a spike
   here can't get a live container OOM-killed or starve it;
 - runs node with `--expose-gc`, so each phase starts from a collected heap and
   reports what it retained. In build mode, also with
