@@ -9,10 +9,12 @@ Objects are keyed `{blogID}/{path}` at the bucket root, the same as the
 asset's public CDN path (`https://cdn.blot.im/{blogID}/{path}`), so the CDN
 fetches `blog_*` straight from the bucket. Assets are a blog's top-level `_`
 directories (`{blogID}/_thumbnails/...`); the rest of `{blogID}/` is reserved
-for later content (`folder/` for the blog's folder, possibly `git/`), which the
+for later content (`folder/` for the blog's folder), which the
 assets code never lists, backfills or deletes. The bucket allows public
 `s3:GetObject` on `blog_*` keys, which covers all of it because blog content is
-public by design, and nothing else public: no listing, no writes.
+public by design, and nothing else public: no listing, no writes. Git client
+repos will live under the top-level `git/{blogID}/` prefix, outside `blog_*`,
+so they stay private ([#2259](https://github.com/blotcms/blot/issues/2259)).
 
 Tools that need a local path (sharp, pandoc, puppeteer) write to a staging
 directory under the app's tmp directory, `{tmp}/storage-assets-staging/
