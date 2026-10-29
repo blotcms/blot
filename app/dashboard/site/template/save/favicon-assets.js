@@ -55,7 +55,10 @@ async function generate(sourcePath, outputDirectory, crop, { source: input, shap
     // straight RGB JPEG upload) into a malformed ICO otherwise.
     const source = (input ? input.clone() : sharp(sourcePath, { pages: 1 })).rotate().ensureAlpha().extract(extraction).png();
     const render = async (size) => {
-      const { data, info } = await source.clone().resize(size, size).png().toBuffer({ resolveWithObject: true });
+      const { data, info } = await source.clone().resize(size, size, {
+        fit: "cover",
+        position: sharp.strategy.entropy,
+      }).png().toBuffer({ resolveWithObject: true });
       return applyShape(data, info.width, info.height, shape).png().toBuffer();
     };
     const icoBuffers = await Promise.all(ICO_SIZES.map(render));

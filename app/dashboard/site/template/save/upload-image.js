@@ -22,11 +22,11 @@ const update = (blog, slug, locals) => new Promise((resolve, reject) => Template
 const sync = (blog, template) => new Promise((resolve, reject) => writeChangeToFolder(blog, template, {}, (error) => error ? reject(error) : resolve()));
 const operations = { update, sync };
 
-async function saveProfileImageFavicon(req, file, source) {
+async function saveProfileImageFavicon(req, file, source, crop) {
   const templateSlug = req.templateFork
     ? req.template.id.split(":").slice(1).join(":")
     : req.params.templateSlug;
-  return createFavicon(req.blog, req.template, templateSlug, file.path, {}, {
+  return createFavicon(req.blog, req.template, templateSlug, file.path, crop, {
     onFileProcessed: () => cleanupFiles({ favicon: file }),
     source,
     shape: req.body.photo_shape,
@@ -293,7 +293,7 @@ module.exports = async function uploadImage(req, res, next) {
   await removeAssetsIfUnreferenced(req, previous);
   if (wantsFavicon) {
     try {
-      await saveProfileImageFavicon(req, file, source);
+      await saveProfileImageFavicon(req, file, source, cropFields);
     } catch (error) {
       await cleanupFiles({ favicon: file });
       previewReload.publish(req.blog.id);

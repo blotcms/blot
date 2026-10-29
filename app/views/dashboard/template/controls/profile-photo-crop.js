@@ -3,13 +3,22 @@ function initializePhotoCrop(form) {
 
   const input = form.querySelector("[data-crop-input]");
   const cropper = form.querySelector("[data-photo-cropper]");
+  const uploadArea = form.querySelector("[data-photo-upload-area]");
+  const cancelButton = form.querySelector("[data-photo-crop-cancel]");
   const stage = form.querySelector("[data-photo-crop-stage]");
   const image = form.querySelector("[data-crop-image]");
   const outsideImage = form.querySelector("[data-crop-image-outside]");
   const cropMask = form.querySelector("[data-photo-crop-mask]");
+  const maskName = form.querySelector("[data-photo-mask-name]");
   const zoomInput = form.querySelector("[data-photo-zoom]");
   const noPreviewNotice = form.querySelector("[data-photo-no-preview]");
   const shapeInputs = form.querySelectorAll("[data-photo-shape]");
+  const organicRefresh = form.querySelector("[data-organic-mask-refresh]");
+  const organicInput = form.querySelector("[data-organic-mask-input]");
+  const organicIcon = form.querySelector("[data-organic-mask-icon]");
+  const organicIconTemplates = new Map(
+    [...form.querySelectorAll("[data-organic-mask-icon-template]")].map((template) => [template.dataset.organicMaskIconTemplate, template])
+  );
   const zoomOut = form.querySelector("[data-photo-zoom-out]");
   const zoomIn = form.querySelector("[data-photo-zoom-in]");
   const fields = {
@@ -67,6 +76,7 @@ function initializePhotoCrop(form) {
       fields.height.value = Math.min(fraction(height / renderedHeight), 1 - cropY);
     }
     zoomInput.value = String(Math.round(state.zoom * 100));
+    zoomInput.style.setProperty("--zoom-progress", `${((state.zoom - MIN_ZOOM) / (MAX_ZOOM - MIN_ZOOM)) * 100}%`);
     zoomInput.setAttribute("aria-valuetext", `${Math.round(state.zoom * 100)}%`);
     if (zoomOut) zoomOut.disabled = state.zoom <= MIN_ZOOM;
     if (zoomIn) zoomIn.disabled = state.zoom >= MAX_ZOOM;
@@ -225,7 +235,35 @@ function initializePhotoCrop(form) {
   const updateShape = () => {
     const selected = form.querySelector("[data-photo-shape]:checked");
     cropper.dataset.shape = selected ? selected.value : "square";
+    const organicIcon = selected && organicIconTemplates.get(selected.value);
+    if (organicIcon) {
+      cropMask.style.clipPath = organicIcon.dataset.organicMaskClip;
+      if (maskName) {
+        maskName.textContent = organicIcon.dataset.organicMaskName;
+        maskName.hidden = false;
+      }
+    } else {
+      cropMask.style.removeProperty("clip-path");
+      if (maskName) {
+        maskName.textContent = "";
+        maskName.hidden = true;
+      }
+    }
   };
+  if (organicRefresh && organicInput && organicIcon && organicIconTemplates.size > 1) {
+    organicRefresh.addEventListener("click", () => {
+      const shapes = [...organicIconTemplates.keys()];
+      const currentIndex = shapes.indexOf(organicInput.value);
+      const nextShape = shapes[(currentIndex + 1) % shapes.length];
+      const nextIcon = organicIconTemplates.get(nextShape);
+      organicInput.value = nextShape;
+      organicInput.checked = true;
+      organicInput.setAttribute("aria-label", `Organic mask: ${nextIcon.dataset.organicMaskLabel}`);
+      organicInput.title = `Organic mask: ${nextIcon.dataset.organicMaskLabel}`;
+      organicIcon.replaceChildren(nextIcon.content.cloneNode(true));
+      updateShape();
+    });
+  }
   // The server accepts formats browsers can't decode (e.g. TIFF). Without a
   // preview there is nothing to position, but the shape and Save controls stay
   // so the photo can still be uploaded.
@@ -326,6 +364,17 @@ function initializePhotoCrop(form) {
   };
 
   input.addEventListener("change", () => loadFile(input.files && input.files[0]));
+  const syncUploadArea = () => {
+    if (uploadArea) uploadArea.hidden = Boolean(input.files && input.files.length);
+  };
+  input.addEventListener("change", syncUploadArea);
+  if (cancelButton) {
+    cancelButton.addEventListener("click", () => {
+      input.value = "";
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
+  syncUploadArea();
   if (input.files && input.files[0]) loadFile(input.files[0]);
   else if (sourceURL) showSaved();
 
@@ -373,8 +422,8 @@ function initializePhotoCrop(form) {
   });
 
   zoomInput.addEventListener("input", () => setZoom(Number(zoomInput.value) / 100));
-  if (zoomOut) zoomOut.addEventListener("click", () => setZoom(state && state.zoom - 0.1));
-  if (zoomIn) zoomIn.addEventListener("click", () => setZoom(state && state.zoom + 0.1));
+  if (zoomOut) zoomOut.addEventListener("click", () => setZoom(state && state.zoom - 0.25));
+  if (zoomIn) zoomIn.addEventListener("click", () => setZoom(state && state.zoom + 0.25));
   shapeInputs.forEach((input) => input.addEventListener("change", updateShape));
   updateShape();
 
