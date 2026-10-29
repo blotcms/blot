@@ -1,15 +1,26 @@
 {{> head}}
 
 
-<div class="header subpage">
-    <a href="/">
-    {{> /Profile.txt}}
-    </a>
-</div>
+<div class="entry-page" data-entry-url="{{entry.url}}">
+    <div class="header subpage">
+        {{> profile}}
+    </div>
 
-<div class="fade-in entry">
+    {{#recent_entries.length}}
+    <h2 class="section-nav">
+        {{#menu}}<a href="{{{url}}}" class="{{#active}}selected{{/active}}">{{label}}</a>{{/menu}}
+    </h2>
+    {{/recent_entries.length}}
 
-{{{entry.html}}}
+    {{^recent_entries.length}}
+    <h2 class="section-nav">
+        {{#menu}}<a href="{{{url}}}" class="{{#active}}selected{{/active}}">{{label}}</a>{{/menu}}
+    </h2>
+    {{/recent_entries.length}}
+
+    <div class="fade-in entry">
+        {{{entry.html}}}
+    </div>
 </div>
 
 {{> footer}}

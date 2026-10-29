@@ -13,10 +13,10 @@
     "hide_dates": false,
     "date_display": "MMM D",
     "syntax_highlighter": {
-      "id": "arduino-light"
+      "id": "google-light"
     },
     "syntax_highlighter_font": {
-      "id": "system-mono"
+      "id": "ia-writer"
     },
     "font": {
       "id": "system-sans",
@@ -24,6 +24,10 @@
       "font_size": 15
     },
     "profile_image": {},
+    "bio": "Mathematician and computer scientist",
+    "profile_email": "",
+    "profile_linkedin": "",
+    "profile_github": "",
     "navigation_alignment": "left",
     "navigation_alignment_options": ["left", "center"],
     "demo_folder": "clara"
@@ -61,7 +65,15 @@
         "description": ""
       }
     },
+    "archives.html": {
+      "url": "/archives",
+      "partials": {
+        "title": "Archives - {{{title}}}",
+        "description": "All entries on {{{title}}}"
+      }
+    },
     "search.html": {
+      "url": "/search",
       "partials": {
         "title": "Search - {{{title}}}",
         "description": "Search everything on {{{title}}}"

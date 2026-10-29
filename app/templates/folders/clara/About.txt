@@ -1,4 +1,6 @@
 Page: yes
+Link: /
+Title: About
 
 I specialize in developing mathematical models and computational tools to solve complex problems in data science and artificial intelligence. 
 
