@@ -85,8 +85,8 @@ the terminal only.
 ```bash
 ssh blot "docker exec blot-container-green node -v"     # and blue, yellow
 ssh blot "cat /etc/os-release; uname -r; docker version --format '{{.Server.Version}}'"
-ssh blot "docker ps --format '{{.Names}}'"              # find the proxy container name
-ssh blot "docker exec <proxy-container> openresty -v"
+ssh blot "docker ps --format '{{.Names}}'"              # the proxies are blot-blue and blot-green
+ssh blot "docker exec blot-blue openresty -v"           # and blot-green
 ssh redis "cat /etc/os-release; redis6-server --version; dnf -q check-update --security | head"
 ssh macserver "node -v; sw_vers"
 ```

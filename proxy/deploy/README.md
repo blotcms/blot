@@ -15,7 +15,7 @@ copies this directory to `~/proxy-deploy` on the host and runs
 
 | Script | When |
 | --- | --- |
-| [`blue-green.sh`](blue-green.sh) | Every image change. Container to container, zero-downtime. With no proxy container running it starts the first one instead (no overlap, so a few seconds without a proxy if something else was serving). |
+| [`blue-green.sh`](blue-green.sh) | Every image change. Replaces the two always-running proxies, `blot-blue` then `blot-green`, one at a time while the other carries the traffic (see "Two proxies" below). Moves a host with the single proxy of before (`blot-proxy-blue`/`blot-proxy-green`) to the two, and starts both on a host with no proxy (no overlap, so a few seconds without a proxy if something else was serving). |
 | [`try-issuance.sh`](try-issuance.sh) | Before an image change. Issues a Let's Encrypt **staging** certificate through the image for a throwaway domain, changing nothing that serves traffic. |
 | [`reload-config.sh`](reload-config.sh) | Not for these containers: it needs the conf directory bind-mounted, which `blue-green.sh` does not do. Ship config changes as a new image. |
 
@@ -92,6 +92,49 @@ The script refuses to go on if `redis-cli` is missing, or (on a swap) no
 certificate could be read from the running proxy. `PROXY_SKIP_CERT_SWEEP=1`
 skips both the comparison and the fresh-start check.
 
+## Two proxies
+
+`blot-blue` and `blot-green` are always running, from the same image, both
+`--network host` and sharing `:80`/`:443` with `reuseport`. The names are final
+(the Node containers will move into them in a later stage). `blue-green.sh`
+looks at what is running and does one of:
+
+- **steady** (both units up): for blue, then green: refuse unless the other
+  unit is running and healthy (its health socket answers); skip a unit that
+  already runs this image and is healthy (a re-run is a no-op); otherwise
+  `docker stop --time 30` it, rename it `blot-<unit>-previous`, create and start
+  the new one, wait for its health socket, run the site checks, give it its
+  restart policy and remove `-previous`. Any failure removes the new
+  container, starts `-previous` again and renames it back, and the deploy stops
+  without touching the other unit. If the old one will not come back healthy
+  the new one is left running if it is healthy, with a loud warning.
+- **partial** (one unit up): the missing one is started first, beside the
+  running one, and checked; then as steady.
+- **legacy** (one `blot-proxy-<colour>` up, no unit): both units are started
+  beside it and checked, then the legacy proxy is stopped, the site checked
+  again and the legacy container removed. A failure removes what was started
+  and leaves the legacy proxy running.
+- **fresh** (nothing up): the cache directory is emptied, then blue and green
+  are started, each checked (200 with the right certificate, every custom
+  domain with its own certificate) before it is made permanent.
+
+A new container has restart policy `no` until its checks pass. The site checks
+go to the host's `:443`, which either unit may answer, so what proves the new
+container is its own health socket; stopping the old unit first means the
+checks are answered by the new one and the other, already healthy, unit.
+
+`docker ps --filter name=` is a substring regex: `name=blot-blue` also matches
+`blot-blue-previous` and `name=blot-` matches every `blot-container-*`. The
+scripts compare whole names; use `--filter 'name=^blot-blue$'` by hand.
+
+A deploy never stops a unit whose other is unhealthy, so with green unhealthy it
+refuses to replace blue: restart the unhealthy one first (`docker restart
+blot-green`; the health cron does it within a minute), then deploy.
+
+A killed deploy can leave `blot-<unit>-previous`. If its unit is running and
+healthy the next deploy removes it; if not, it refuses and prints the three
+commands that put the old one back.
+
 ## Cache directory
 
 Every image keeps its cache (`diskcache.lua`) in one host directory,
@@ -100,10 +143,10 @@ mounts at `/var/cache/openresty`. It must exist and belong to uid 1000
 (`mount-instance-store.sh` creates it at boot; otherwise
 `sudo install -d -o 1000 -g 1000 <dir>`).
 
-- A swap touches nothing and keeps the warm cache. The old and the new colour
-  share the directory, so a purge reaching either one purges both, and a swap
-  that fails after the old container was stopped needs no cleanup before it
-  is started again.
+- A deploy touches nothing and keeps the warm cache. Both units (and a
+  replacement) share the directory, so a purge reaching any one purges all, and
+  a replacement that fails after the old container was stopped needs no cleanup
+  before it is started again.
 - On a fresh start (nothing running) the directory is emptied **before** the
   container starts, since it missed every purge since it was last in use. The
   files belong to uid 1000 and the deploy user has no sudo, so a container does
@@ -146,11 +189,14 @@ back on any failed check. That script is deleted, and the bare-metal install
 has since been removed from the host.
 
 On a host with no proxy container running (a rebuilt host, or after the
-container was removed), `blue-green.sh` starts the first one. It also refuses
+containers were removed), `blue-green.sh` starts both units. It also refuses
 while a legacy `openresty` systemd unit is active or enabled, which would
 conflict with the container for `:80`/`:443`.
 
-To roll back, redeploy an older image:
+Before the two units production ran one proxy,
+alternately `blot-proxy-blue` and `blot-proxy-green`.
+
+To roll back, redeploy an older image (both units are replaced in turn):
 
 ```sh
 npm run deploy-proxy -- <older-commit>

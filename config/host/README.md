@@ -129,8 +129,9 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
 - `check_docker_health.sh` restarts containers Docker reports as unhealthy. It
   is run from cron every minute as `/usr/local/bin/check_docker_health.sh`
   (`deploy.sh` copies it there, but does not install the cron entry). It skips
-  `blot-proxy-*` while a proxy deploy holds its lock, so it cannot restart the
-  old colour while it drains.
+  `blot-blue`, `blot-green` and `blot-<unit>-previous` (whole names, so the Node
+  containers are still restarted) while a proxy deploy holds its lock, so it
+  cannot restart the unit that is draining.
 - Custom-domain certificates need nothing on the host: the proxy container
   renews them and refuses to serve an expired one (see `proxy/README.md`).
   `identify-expiring-certs.sh` and `purge-expired-ssl.sh`, which deleted
