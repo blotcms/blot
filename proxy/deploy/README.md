@@ -1,15 +1,19 @@
-# Deploying the proxy container
+# Deploying the units
 
-Production runs the proxy as a container (cut over from bare-metal OpenResty
-on 8 Oct 2026, #1941; the bare-metal install has since been removed). Deploy a new image with the **Deploy proxy** workflow
-(`.github/workflows/deploy-proxy.yml`, manual), or from a checkout:
+Production runs two units, `blot-blue` and `blot-green` (#2119): each one
+container holding OpenResty and the Node app (node-a, and node-b which it forks),
+built from the `unit` target of the root Dockerfile (`ghcr.io/blotcms/blot-unit`).
+Before them the containers held OpenResty alone, in front of the
+`blot-container-*` Node containers (the proxy has been a container since
+8 Oct 2026, #1941). Deploy a new image with the **Deploy** workflow
+(`.github/workflows/deploy.yml`, manual), or from a checkout:
 
 ```sh
-npm run deploy-proxy             # master's tip, waiting for its image
-npm run deploy-proxy -- <commit>
+npm run deploy-units             # master's tip, waiting for its image
+npm run deploy-units -- <commit>
 ```
 
-Both run [`scripts/deploy/proxy.sh`](../../scripts/deploy/proxy.sh), which
+Both run [`scripts/deploy/units.sh`](../../scripts/deploy/units.sh), which
 copies this directory to `~/proxy-deploy` on the host and runs
 `blue-green.sh` there. The scripts below all run **on the production host**:
 
@@ -36,6 +40,57 @@ connection) and the config's own `worker_rlimit_nofile 20480`
 (`proxy/config/initial.conf`).
 `bash tests/run.sh` exercises both scripts against fake `docker`/`systemctl` (CI runs it), and the `proxy-deploy-e2e` workflow runs `blue-green.sh` against real Docker ([`e2e/`](e2e/README.md)).
 
+## Units, and the cutover
+
+`blue-green.sh` deploys a unit image the way it deploys a proxy image (the
+sections below describe the flow) and adds, for a unit:
+
+- the Node containers' arguments: `/etc/blot/secrets.env` then `proxy.env` as
+  env files (a key set differently in the two is refused before anything is
+  touched), `BLOT_UNIT`, the data directory with `rslave`, the tmp directory,
+  `/run/blot`, `BLOT_RELEASE_ID`, `NODE_OPTIONS` (node-a's heap and the crash
+  report) and `BLOT_WORKER_MAX_OLD_SPACE_SIZE` (node-b), the memory and cpu
+  limits, `--stop-timeout`. The numbers are in `scripts/deploy/constants.js`
+  (`UNIT`), which `scripts/deploy/units.sh` writes to `unit-settings.env` beside
+  these scripts;
+- no TCP port: node-a serves on its socket alone (two units on the host network
+  would both want 8080), so everything talks to the sockets;
+- its own airlock, `blot-<unit>-airlock`, replaced just before the unit and
+  published on 127.0.0.1 at the unit's own ports (a unit on the host network
+  cannot join `blotnet`; see `config/airlock/README.md`);
+- health: the proxy's health socket, node-a and node-b `/health` on their sockets;
+- blue, deployed first, runs `scripts/deploy/verify-container` before green is
+  touched; a failure rolls blue back and leaves green alone;
+- at the end, the old Node containers and `blot-airlock` are stopped if they are
+  running.
+
+**The cutover is the first run of a unit image.** Production starts with
+proxy-only `blot-blue` and `blot-green` and the running `blot-container-blue`,
+`-green` and `-yellow` and `blot-airlock`. The run replaces blue with a unit
+(green, still proxy-only, keeps routing to the old Node containers, which the
+checks go on requiring while it does; the new blue's backups, green's sockets,
+do not exist yet, which is fine), checks it, runs the canary, then replaces
+green the same way (a proxy-only peer counts as healthy for the "other unit must
+be healthy" rule). Only when both are healthy units and the checks pass are the
+old containers stopped with `docker stop --time 30`, stopped and not removed. A
+run that is cut off can simply be run again: a unit already on the image is
+skipped, and the stop step does nothing once the old containers are stopped.
+
+### Rolling back the cutover
+
+Until the old containers are removed (`docker rm blot-container-blue
+blot-container-green blot-container-yellow blot-airlock`, once the units have
+run well for a while), by hand:
+
+1. `docker start blot-airlock blot-container-yellow blot-container-green blot-container-blue`,
+   and wait for them to be healthy (`docker ps`).
+2. Put the proxy-only image back in both containers:
+   `scripts/deploy/units.sh --proxy-only <commit>` from a checkout on master
+   (the commit whose `blot-proxy` image you want; the previous deploy's is fine).
+   It is the same blue-then-green swap, with `PROXY_DEPLOY_KIND=proxy`.
+
+The Deploy workflow always deploys units, and **Deploy proxy** now fails.
+
 ## Setting up a host
 
 1. **An image.** `.github/workflows/proxy-image.yml` publishes
@@ -53,7 +108,7 @@ connection) and the config's own `worker_rlimit_nofile 20480`
    because Node purges the cache from a Docker bridge that cannot see the
    host's `127.0.0.1`. The scripts read the value from the running Node
    container, so recreate the Node containers (a normal deploy) after editing it.
-   GitHub's Deploy proxy workflow runs the scripts as the `deploy` user, which
+   GitHub's Deploy workflow runs the scripts as the `deploy` user, which
    must be able to read the file. It can hold `BLOT_PURGE_TOKEN`, so grant that
    user an ACL rather than making it world-readable:
    `sudo setfacl -m u:deploy:r /etc/blot/proxy.env`
@@ -199,10 +254,10 @@ alternately `blot-proxy-blue` and `blot-proxy-green`.
 To roll back, redeploy an older image (both units are replaced in turn):
 
 ```sh
-npm run deploy-proxy -- <older-commit>
+npm run deploy-units -- <older-commit>
 ```
 
-or run the Deploy proxy workflow with that commit.
+or run the Deploy workflow with that commit.
 
 ## Known gaps
 
