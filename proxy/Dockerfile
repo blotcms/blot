@@ -323,7 +323,9 @@ COPY build/data/latest/html /etc/openresty/html
 
 COPY render-config.sh /usr/local/bin/render-config
 COPY evict.sh /usr/local/bin/diskcache-evict
-RUN chmod +x /usr/local/bin/render-config /usr/local/bin/diskcache-evict
+# What entrypoint.sh, and the unit image's supervisor, run before OpenResty
+COPY start.sh /usr/local/bin/proxy-start
+RUN chmod +x /usr/local/bin/render-config /usr/local/bin/diskcache-evict /usr/local/bin/proxy-start
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

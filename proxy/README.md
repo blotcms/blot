@@ -54,10 +54,18 @@ serves any host:
 | `PROXY_UPSTREAM_GREEN` | `127.0.0.1:8089` (production: `unix:/run/blot/green.sock`) | the Node that handles sync, writes and webhooks (`/clients`) |
 | `PROXY_UPSTREAM_BLUE` | `127.0.0.1:8088` (`unix:/run/blot/blue.sock`) | the dashboard Node, and failover for the others |
 | `PROXY_UPSTREAM_YELLOW` | `127.0.0.1:8090` (`unix:/run/blot/yellow.sock`) | the blog Node |
+| `PROXY_UPSTREAM_MODE` | `containers` | `containers`: the three Node containers above. `unit`: this container also runs its own two Node processes (the [unit image](#the-unit-image)) and the next four are used instead |
+| `PROXY_UNIT_MAIN` | `unix:/run/blot/blue-a.sock` | unit mode: this unit's main Node process (blogs, dashboard reads) |
+| `PROXY_UNIT_WORKER` | `unix:/run/blot/blue-b.sock` | unit mode: this unit's worker child (`/clients`, webhooks, dashboard writes) |
+| `PROXY_PEER_MAIN` | `unix:/run/blot/green-a.sock` | unit mode: the other unit's main process, `backup` for the two upstreams above |
+| `PROXY_PEER_WORKER` | `unix:/run/blot/green-b.sock` | unit mode: the other unit's worker child, `backup` for `/clients` |
 | `PROXY_FETCH_CDN_IPS` | `true` | fetch the Bunny edge list (exempt from rate limits) at start; `false` uses the list baked into the image |
 
-The upstream groups keep their weights and failover roles from
-`config/http.conf`; only where each Node is changes. A `unix:` upstream is a socket the Node
+The upstream groups keep their names, weights and failover roles from
+`config/http.conf`; only where each Node is changes. In unit mode `blot_node`
+is the unit's worker with the other unit's worker as `backup`, and
+`blot_blogs_node` and `blot_dashboard_node` are the unit's main process with the
+other unit's as `backup`; `render-config.sh` picks the servers from the mode. A `unix:` upstream is a socket the Node
 container listens on in `/run/blot` (a failed connect is immediate, so nginx
 retries the backup); the deploy scripts bind-mount that directory into the
 proxy when any upstream is one. The Bunny
@@ -310,6 +318,39 @@ docker run -d --network host --cap-add SYS_NICE \
 
 `entrypoint.sh` chowns the volume roots to `ec2-user` on boot (they mount
 root-owned); it does **not** recurse into the cache.
+
+## The unit image
+
+[#2119](https://github.com/blotcms/blot/issues/2119) replaces the proxy
+container and the three Node containers with two identical units, `blot-blue`
+and `blot-green`, each one container running OpenResty, node-a (the Node main
+process) and node-b (the worker child node-a forks, `helper/workerChild`). The
+image is the `unit` target of the root `Dockerfile`: the `prod` app image plus
+OpenResty and the files in this image, which `COPY --from` the proxy image
+built for the same commit (`PROXY_IMAGE`) rather than compiling OpenResty
+again. [`unit-image.yml`](../.github/workflows/unit-image.yml) builds it after
+the proxy image, boots it with [`unit/smoke.sh`](unit/smoke.sh) and publishes
+`ghcr.io/<owner>/blot-unit:<sha>`. Nothing deploys it yet.
+
+- **User.** One user at uid 1000, `ec2-user` (the Node image's `node` user,
+  renamed), for the app and for OpenResty's workers. As in this image, the
+  OpenResty master runs as root to bind 80 and 443; node-a is started with
+  `su-exec`.
+- **Supervisor.** [`unit/supervisor.sh`](unit/supervisor.sh) runs under tini.
+  It starts OpenResty with [`start.sh`](start.sh) (`proxy-start`, the part of
+  `entrypoint.sh` that prepares the container) and node-a. If node-a exits it
+  is started again after 1s, doubling to 30s, reset once it has run for 60s,
+  without touching OpenResty. If OpenResty exits the container exits non-zero.
+  On SIGTERM, SIGQUIT or SIGINT it runs `openresty -s quit`, sends node-a
+  SIGTERM (which drains it and node-b), waits for both and exits 0.
+- **Config.** `BLOT_UNIT` (`blue` or `green`) is required. The supervisor
+  derives the rest from it, unless set: node-a and node-b serve on
+  `/run/blot/<unit>-a.sock` and `<unit>-b.sock`, and the proxy runs in
+  `PROXY_UPSTREAM_MODE=unit` with those as `PROXY_UNIT_MAIN` and
+  `PROXY_UNIT_WORKER` and the other unit's as `PROXY_PEER_MAIN` and
+  `PROXY_PEER_WORKER` (see [Runtime settings](#runtime-settings)).
+- **Health.** The `HEALTHCHECK` ([`unit/healthcheck.sh`](unit/healthcheck.sh))
+  needs both the health socket and node-a's `/health`.
 
 ## Pinned dependencies
 

@@ -21,6 +21,8 @@ on:
     branches: [master]
     paths:
       - ".github/workflows/proxy-image.yml"
+      # the unit image takes OpenResty from this image (unit-image.yml)
+      - ".github/workflows/unit-image.yml"
       - "proxy/**"
       - "Dockerfile"
       - "scripts/security/check-base-image.js"

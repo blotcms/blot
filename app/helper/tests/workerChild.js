@@ -59,7 +59,16 @@ describe("workerChild", function () {
     expect(env.BLOT_WORKER_SOCKET).toBe("");
     expect(env.CONTAINER_NAME).toBe("blot-container-a");
     expect(env.BLOT_DRAIN_TIMEOUT_MS).toBe("22000");
+    expect(env.BLOT_CACHE_SCALE).toBe("0.1");
     expect(execArgv).toContain("--max-old-space-size=900");
+  });
+
+  it("takes the child's render cache scale from the environment", function () {
+    start({
+      env: { BLOT_CACHE_SCALE: "1", BLOT_WORKER_CACHE_SCALE: "0.5" },
+    });
+
+    expect(forks[0].options.env.BLOT_CACHE_SCALE).toBe("0.5");
   });
 
   it("forks it again after it exits, backing off", async function () {
