@@ -18,6 +18,7 @@
 // cached value, which a hit still pays).
 const LRUCache = require("lru-cache").LRUCache;
 const clfdate = require("helper/clfdate");
+const config = require("config");
 
 // A fill this slow is logged on its own line, with the blog it was for
 const SLOW_FILL_MS = 250;
@@ -60,6 +61,20 @@ function sizeOf(cache, value) {
   }
 }
 
+// BLOT_CACHE_SCALE shrinks (or grows) every cache's caps in this process, e.g.
+// for the worker child, which barely renders. An entry cap never drops below
+// 10 or a byte cap below 256KB.
+function scaled(options, scale = config.cache_scale) {
+  if (scale === 1) return options;
+
+  const result = { ...options };
+  if (result.max) result.max = Math.max(10, Math.round(result.max * scale));
+  if (result.maxSize) {
+    result.maxSize = Math.max(256 * 1024, Math.round(result.maxSize * scale));
+  }
+  return result;
+}
+
 function createRenderCache(name, options) {
   const counters = {
     name,
@@ -98,7 +113,7 @@ function createRenderCache(name, options) {
   const ghosts = new Map();
 
   const cache = new LRUCache({
-    ...options,
+    ...scaled(options),
     dispose: function (value, key, reason) {
       const meta = entries.get(key);
       entries.delete(key);
@@ -238,6 +253,7 @@ function read(cache) {
 
 module.exports = {
   createRenderCache,
+  scaled,
   count,
   fill,
   read,

@@ -141,9 +141,24 @@ describe("proxy config locals", function () {
     collect(JSON.stringify(locals.container({ env: {}, config })));
 
     expect(used.size).toBeGreaterThan(0);
-    expect(Array.from(used).sort()).toEqual(
-      Object.keys(locals.runtimeDefaults({})).sort()
+
+    const defaults = Object.keys(locals.runtimeDefaults({}));
+    expect(Array.from(used).filter((name) => !defaults.includes(name))).toEqual(
+      []
     );
+
+    // What no template reads are the inputs render-config.sh derives the
+    // upstream groups' servers from
+    expect(defaults.filter((name) => !used.has(name)).sort()).toEqual([
+      "PROXY_PEER_MAIN",
+      "PROXY_PEER_WORKER",
+      "PROXY_UNIT_MAIN",
+      "PROXY_UNIT_WORKER",
+      "PROXY_UPSTREAM_BLUE",
+      "PROXY_UPSTREAM_GREEN",
+      "PROXY_UPSTREAM_MODE",
+      "PROXY_UPSTREAM_YELLOW",
+    ]);
   });
 
   it("needs no environment: the host-specific values are runtime settings", function () {

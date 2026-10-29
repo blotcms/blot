@@ -16,6 +16,12 @@
 #   PROXY_UPSTREAM_GREEN   host:port of the Node that handles sync, writes and webhooks (/clients)
 #   PROXY_UPSTREAM_BLUE    host:port of the dashboard Node / failover
 #   PROXY_UPSTREAM_YELLOW  host:port of the blog Node
+#   PROXY_UPSTREAM_MODE    containers (default: the three Node containers above) or
+#                          unit (this container's own Node processes, below)
+#   PROXY_UNIT_MAIN        unit mode: this unit's main Node process (blogs, dashboard reads)
+#   PROXY_UNIT_WORKER      unit mode: this unit's worker child (/clients, writes, webhooks)
+#   PROXY_PEER_MAIN        unit mode: the other unit's main process, as backup
+#   PROXY_PEER_WORKER      unit mode: the other unit's worker child, as backup
 #
 # PROXY_FETCH_CDN_IPS=false skips fetching the Bunny edge list at start and
 # uses the list baked into the image.
@@ -35,6 +41,27 @@ while IFS='=' read -r name value; do
     export "$name=$value"
   fi
 done < "$DEFAULTS"
+
+# The primary and backup server of each upstream group in http.conf, from the
+# mode. Set here, never taken from the environment.
+case "$PROXY_UPSTREAM_MODE" in
+  containers)
+    PROXY_NODE_PRIMARY="$PROXY_UPSTREAM_GREEN";      PROXY_NODE_BACKUP="$PROXY_UPSTREAM_BLUE"
+    PROXY_BLOGS_PRIMARY="$PROXY_UPSTREAM_YELLOW";    PROXY_BLOGS_BACKUP="$PROXY_UPSTREAM_BLUE"
+    PROXY_DASHBOARD_PRIMARY="$PROXY_UPSTREAM_BLUE";  PROXY_DASHBOARD_BACKUP="$PROXY_UPSTREAM_GREEN"
+    ;;
+  unit)
+    PROXY_NODE_PRIMARY="$PROXY_UNIT_WORKER";         PROXY_NODE_BACKUP="$PROXY_PEER_WORKER"
+    PROXY_BLOGS_PRIMARY="$PROXY_UNIT_MAIN";          PROXY_BLOGS_BACKUP="$PROXY_PEER_MAIN"
+    PROXY_DASHBOARD_PRIMARY="$PROXY_UNIT_MAIN";      PROXY_DASHBOARD_BACKUP="$PROXY_PEER_MAIN"
+    ;;
+  *)
+    echo "render-config: PROXY_UPSTREAM_MODE must be containers or unit, not '$PROXY_UPSTREAM_MODE'" >&2
+    exit 1
+    ;;
+esac
+export PROXY_NODE_PRIMARY PROXY_NODE_BACKUP PROXY_BLOGS_PRIMARY PROXY_BLOGS_BACKUP \
+  PROXY_DASHBOARD_PRIMARY PROXY_DASHBOARD_BACKUP
 
 # Only these are substituted, so nginx's own $variables are left alone
 vars=""

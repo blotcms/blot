@@ -20,6 +20,9 @@ const MIN_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30 * 1000;
 const STABLE_MS = 60 * 1000;
 const DRAIN_MARGIN_MS = 3000;
+// The child barely renders, so its in-memory render caches get a tenth of the
+// usual caps (config.cache_scale) unless BLOT_WORKER_CACHE_SCALE says otherwise
+const DEFAULT_CACHE_SCALE = "0.1";
 
 module.exports = function workerChild({
   script,
@@ -46,6 +49,7 @@ module.exports = function workerChild({
     BLOT_WORKER_CHILD: "true",
     BLOT_SOCKET: socket,
     BLOT_WORKER_SOCKET: "",
+    BLOT_CACHE_SCALE: env.BLOT_WORKER_CACHE_SCALE || DEFAULT_CACHE_SCALE,
   });
 
   if (drainTimeoutMs) {
