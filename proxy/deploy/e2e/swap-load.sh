@@ -53,7 +53,7 @@ say() { printf '\n=== %s\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
 # blue-green.sh runs in production as a user that is in the docker group and has
-# no sudo (the GitHub Deploy proxy workflow's `deploy` user), so it must not
+# no sudo (the GitHub Deploy workflow's `deploy` user), so it must not
 # need root for anything: anything it does to files of uid 1000 (the cache) has
 # to go through a container. This runs it as such a user (DEPLOY_AS_ROOT=1: as
 # the caller).

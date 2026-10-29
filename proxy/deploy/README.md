@@ -76,20 +76,17 @@ old containers stopped with `docker stop --time 30`, stopped and not removed. A
 run that is cut off can simply be run again: a unit already on the image is
 skipped, and the stop step does nothing once the old containers are stopped.
 
-### Rolling back the cutover
+### Rolling back the cutover (no longer possible)
 
-Until the old containers are removed (`docker rm blot-container-blue
-blot-container-green blot-container-yellow blot-airlock`, once the units have
-run well for a while), by hand:
+The way back to the three Node containers was removed with them (#2119, PR 7):
+`render-config.sh` only knows the unit upstreams, and `scripts/deploy/index.js`
+(the old Node deploy) is gone. The old containers are stopped, not removed, on
+a host that cut over, but the proxy no longer routes to them, and
+`scripts/deploy/units.sh --proxy-only` deploys a proxy-only image that routes
+to the units' sockets, not to them. The way back from a bad unit image is an
+older unit image, `npm run deploy-units -- <commit>`.
 
-1. `docker start blot-airlock blot-container-yellow blot-container-green blot-container-blue`,
-   and wait for them to be healthy (`docker ps`).
-2. Put the proxy-only image back in both containers:
-   `scripts/deploy/units.sh --proxy-only <commit>` from a checkout on master
-   (the commit whose `blot-proxy` image you want; the previous deploy's is fine).
-   It is the same blue-then-green swap, with `PROXY_DEPLOY_KIND=proxy`.
-
-The Deploy workflow always deploys units, and **Deploy proxy** now fails.
+The Deploy workflow always deploys units; the **Deploy proxy** workflow is gone.
 
 ## Setting up a host
 
@@ -100,14 +97,14 @@ The Deploy workflow always deploys units, and **Deploy proxy** now fails.
    ban layer of its own; `blue-green.sh` refuses an image that logs to stdout).
    It builds every push to master. Pass the SHA to a script;
    anything containing `/` or `:` is used as a full image reference.
-2. **`/etc/blot/proxy.env`** from the example. `PROXY_UPSTREAM_*` should be the Node containers' `unix:/run/blot/<colour>.sock` (the Node containers' colours; the proxies are blot-blue and blot-green)
-   sockets (the example shows them); the scripts then mount `/run/blot` into the
-   proxy and check each socket before and after the swap. `PROXY_PRIVATE_IP` and
+2. **`/etc/blot/proxy.env`** from the example. `PROXY_UPSTREAM_*` are read only while the old Node containers still run (before the
+   cutover), so leave them unset on a host that has cut over. The units' sockets come
+   from the settings the scripts write; `/run/blot` is mounted into the proxy and each
+   socket is checked before and after the swap. `PROXY_PRIVATE_IP` and
    `PROXY_REDIS_HOST` (both required, the scripts refuse empty values) must be the host's private IP and Redis host, and `BLOT_REVERSE_PROXY_URLS`
    in `/etc/blot/secrets.env` must point at `http://<PROXY_PRIVATE_IP>:8077`,
    because Node purges the cache from a Docker bridge that cannot see the
-   host's `127.0.0.1`. The scripts read the value from the running Node
-   container, so recreate the Node containers (a normal deploy) after editing it.
+   host's `127.0.0.1`. The units read these at start, so redeploy after editing them.
    GitHub's Deploy workflow runs the scripts as the `deploy` user, which
    must be able to read the file. It can hold `BLOT_PURGE_TOKEN`, so grant that
    user an ACL rather than making it world-readable:
@@ -150,8 +147,8 @@ skips both the comparison and the fresh-start check.
 ## Two proxies
 
 `blot-blue` and `blot-green` are always running, from the same image, both
-`--network host` and sharing `:80`/`:443` with `reuseport`. The names are final
-(the Node containers will move into them in a later stage). `blue-green.sh`
+`--network host` and sharing `:80`/`:443` with `reuseport`. The names are final.
+`blue-green.sh`
 looks at what is running and does one of:
 
 - **steady** (both units up): for blue, then green: refuse unless the other
@@ -179,7 +176,7 @@ container is its own health socket; stopping the old unit first means the
 checks are answered by the new one and the other, already healthy, unit.
 
 `docker ps --filter name=` is a substring regex: `name=blot-blue` also matches
-`blot-blue-previous` and `name=blot-` matches every `blot-container-*`. The
+`blot-blue-previous` and `name=blot-` matches every container whose name starts with `blot-`. The
 scripts compare whole names; use `--filter 'name=^blot-blue$'` by hand.
 
 A deploy never stops a unit whose other is unhealthy, so with green unhealthy it

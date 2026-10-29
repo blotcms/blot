@@ -51,7 +51,7 @@ different cache, points `IMAGE_A` at the old build instead.
    must be the container it was, and nothing may serve a page that changed.
 
 `swap-load.sh` runs `blue-green.sh` as a user in the docker group with no sudo, as the
-Deploy proxy workflow's `deploy` user is (`DEPLOY_AS_ROOT=1` to run it as the
+Deploy workflow's `deploy` user is (`DEPLOY_AS_ROOT=1` to run it as the
 caller), so a deploy step that needs root on the cache files (uid 1000) fails
 here; emptying the cache directory on a fresh start goes through a container.
 
