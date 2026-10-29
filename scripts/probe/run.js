@@ -37,9 +37,9 @@ const execFileAsync = promisify(execFile);
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
 // The unit that runs the probes' default image (blot-blue's), and its image
-// (proxy/deploy/common.sh names it blot-unit:<sha>).
+// (ghcr.io/blotcms/blot:<sha>, the unit image).
 const UNIT_CONTAINER = "blot-blue";
-const UNIT_IMAGE = "ghcr.io/blotcms/blot-unit";
+const UNIT_IMAGE = "ghcr.io/blotcms/blot";
 // The probe joins that unit's airlock on blotnet (the unit's own airlock is
 // published on the host only, so a container on bridge cannot reach it).
 const AIRLOCK_ENV = {
