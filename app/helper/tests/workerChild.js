@@ -144,7 +144,8 @@ describe("workerChild", function () {
     start({ onExit });
 
     forks[0].emit("exit", null, "SIGKILL");
-    expect(onExit).toHaveBeenCalledOnceWith("Exited pid=1000 code=null signal=SIGKILL");
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(onExit).toHaveBeenCalledWith("Exited pid=1000 code=null signal=SIGKILL");
 
     await wait(40);
     await supervisor.stop();
