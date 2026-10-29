@@ -64,6 +64,9 @@ case "$1" in
     if [[ "$*" == *"{{.Image}}"* || "$*" == *"{{.Config.Image}}"* ]]; then cat "$FAKE/image/${!#}" 2>/dev/null; exit 0; fi
     cat "$FAKE/started/${!#}" 2>/dev/null ;;
   exec)
+    # skip docker exec's own options (--user, -e ...) so $2 is the container again
+    shift; while [[ "${1:-}" == -* ]]; do case "$1" in --user|-u|-e|-w) shift 2 ;; *) shift ;; esac; done
+    set -- exec "$@"
     n="$2"
     if [[ "$*" == *verify-container* ]]; then [ -z "${FAKE_VERIFY_FAIL:-}" ] || { echo "FAIL fake check"; exit 1; }; echo "PASS fake"; exit 0; fi
     if [[ "$*" == *"--unix-socket"* ]]; then
@@ -588,7 +591,7 @@ check "cutover: blue's airlock, then blue is replaced, checked and verified, all
 check "cutover: the old Node containers and blot-airlock are stopped only after both units are replaced, and not removed" \
   'before "docker rm -f blot-green-previous" "docker stop --time 30 blot-container-blue" && called "docker stop --time 30 blot-container-green" && called "docker stop --time 30 blot-container-yellow" && called "docker stop --time 30 blot-airlock" && ! called "docker rm -f blot-container" && ! called "docker rm -f blot-airlock$" && ! gone blot-container-blue && ! gone blot-airlock && ! running_now blot-container-blue && ! running_now blot-airlock'
 check "cutover: both units and their airlocks run, the units on the new image, and blue was verified once" \
-  'running_now blot-blue && running_now blot-green && running_now blot-blue-airlock && running_now blot-green-airlock && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ] && [ "$(grep -c verify-container "$FAKE/calls")" = 1 ] && called "exec blot-blue node /usr/src/app/scripts/deploy/verify-container/index.js $SHA_NEW"'
+  'running_now blot-blue && running_now blot-green && running_now blot-blue-airlock && running_now blot-green-airlock && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ] && [ "$(grep -c verify-container "$FAKE/calls")" = 1 ] && called "exec --user 1000:1000 -e HOME=/home/node blot-blue node /usr/src/app/scripts/deploy/verify-container/index.js $SHA_NEW"'
 check "cutover: the old blot-airlock is stopped last, the units each keep their own" \
   'before "docker stop --time 30 blot-container-yellow" "docker stop --time 30 blot-airlock"'
 check "cutover: a unit gets both env files (secrets.env first), its name, sockets, memory, heaps, release and mounts" \

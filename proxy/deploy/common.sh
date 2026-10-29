@@ -552,11 +552,13 @@ wait_healthy() { # wait_healthy <name> <timeout>
 # The deploy-time checks of the app itself, run inside the unit
 # (scripts/deploy/verify-container): Redis, the data volume, the storage bucket,
 # the airlock, a canary blog and the dashboard log-in page rendered by this
-# container's own node-a. Blue runs them before green is touched.
+# container's own node-a. Blue runs them before green is touched. As the app
+# user, uid 1000 (the image ends USER root, for OpenResty's master): run as
+# root the writable checks would pass on root-owned directories.
 verify_unit() { # verify_unit <name>
   local out
   log "Verifying $1 (scripts/deploy/verify-container)"
-  if ! out="$(timeout 90 docker exec "$1" node /usr/src/app/scripts/deploy/verify-container/index.js "$RELEASE_ID" 2>&1)"; then
+  if ! out="$(timeout 90 docker exec --user 1000:1000 -e HOME=/home/node "$1" node /usr/src/app/scripts/deploy/verify-container/index.js "$RELEASE_ID" 2>&1)"; then
     printf '%s\n' "$out" >&2
     return 1
   fi
