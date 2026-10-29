@@ -5,9 +5,12 @@ const sharp = require("sharp");
 const { v4: uuid } = require("uuid");
 const { THUMBNAILS } = require("./config");
 const { normalizeShape, applyShape } = require("./image-mask");
-const { parseCrop, orientedDimensions: dimensions } = require("./crop");
+const { parseCrop, normalizedCrop, orientedDimensions: dimensions } = require("./crop");
 
 const MAX_PIXELS = 100 * 1000 * 1000;
+// The stored source of an editable image (a profile photo) is shrunk to this
+// many pixels on its longer side; thumbnails and later re-crops start from it.
+const SOURCE_MAX = 2000;
 const SUPPORTED = new Set(["jpeg", "png", "webp", "gif", "tiff", "avif", "svg"]);
 
 function invalid(message) { const error = new Error(message); error.status = 400; return error; }
@@ -71,7 +74,11 @@ async function renderThumbnails(base, names, directory, shape) {
 // `source`, when passed, is a sharp() instance already opened on sourcePath
 // (e.g. by a caller that also needs to derive a favicon from the same
 // upload) - cloning it avoids decoding the same file from disk twice.
-async function generate(sourcePath, outputDirectory, crop, { source, shape: requestedShape } = {}) {
+//
+// With `editable`, the stored original is the whole image (shrunk to SOURCE_MAX)
+// and the crop only applies to the thumbnails, so the crop can be changed later
+// with regenerate(). Otherwise the original is the cropped image.
+async function generate(sourcePath, outputDirectory, crop, { source, shape: requestedShape, editable } = {}) {
   const shape = normalizeShape(requestedShape);
   let metadata;
   try {
@@ -88,9 +95,22 @@ async function generate(sourcePath, outputDirectory, crop, { source, shape: requ
   Object.keys(THUMBNAILS).forEach((name) => { names[name] = `${prefix}-${name}.webp`; });
   try {
     const orientedSource = (source ? source.clone() : sharp(sourcePath, { pages: 1, limitInputPixels: MAX_PIXELS })).rotate().keepIccProfile();
-    const selected = parseCrop(crop, oriented.width, oriented.height);
-    const base = selected ? orientedSource.extract(selected) : orientedSource;
-    const originalInfo = await base.clone().webp().toFile(join(temporary, names.original));
+    let base;
+    let originalInfo;
+    if (editable) {
+      const stored = await orientedSource.clone()
+        .resize(SOURCE_MAX, SOURCE_MAX, { fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 90 }).toBuffer({ resolveWithObject: true });
+      await fs.writeFile(join(temporary, names.original), stored.data);
+      originalInfo = stored.info;
+      const selected = parseCrop(crop, stored.info.width, stored.info.height);
+      const whole = sharp(stored.data);
+      base = selected ? whole.extract(selected) : whole;
+    } else {
+      const selected = parseCrop(crop, oriented.width, oriented.height);
+      base = selected ? orientedSource.extract(selected) : orientedSource;
+      originalInfo = await base.clone().webp().toFile(join(temporary, names.original));
+    }
     const results = await renderThumbnails(base, names, temporary, shape);
     await fs.ensureDir(outputDirectory);
     for (const name of Object.values(names)) {
@@ -98,16 +118,16 @@ async function generate(sourcePath, outputDirectory, crop, { source, shape: requ
       await fs.move(join(temporary, name), destination);
       published.push(destination);
     }
-    return { prefix, original: { name: names.original, width: originalInfo.width, height: originalInfo.height }, thumbnails: results };
+    return { prefix, original: { name: names.original, width: originalInfo.width, height: originalInfo.height }, crop: editable ? normalizedCrop(crop) : null, thumbnails: results };
   } catch (error) {
     await Promise.all(published.map((path) => fs.remove(path).catch(() => {})));
     throw error;
   } finally { await fs.remove(temporary); }
 }
 
-// Re-renders the thumbnails from an already stored (and already cropped,
-// unmasked) original, for when the photo's shape changes without a new upload.
-async function regenerate(original, outputDirectory, requestedShape) {
+// Re-renders the thumbnails of an editable image from its stored source, for
+// when its crop or shape changes without a new upload.
+async function regenerate(sourceBuffer, outputDirectory, crop, requestedShape) {
   const shape = normalizeShape(requestedShape);
   const prefix = `image-${uuid()}`;
   const names = {};
@@ -115,7 +135,11 @@ async function regenerate(original, outputDirectory, requestedShape) {
   const temporary = await fs.mkdtemp(join(os.tmpdir(), "blot-template-image-"));
   const published = [];
   try {
-    const thumbnails = await renderThumbnails(sharp(original, { pages: 1, limitInputPixels: MAX_PIXELS }), names, temporary, shape);
+    const whole = sharp(sourceBuffer, { pages: 1, limitInputPixels: MAX_PIXELS });
+    const metadata = await whole.clone().metadata();
+    const selected = parseCrop(crop, metadata.width, metadata.height);
+    const base = selected ? whole.extract(selected) : whole;
+    const thumbnails = await renderThumbnails(base, names, temporary, shape);
     await fs.ensureDir(outputDirectory);
     for (const name of Object.values(names)) {
       const destination = join(outputDirectory, name);
@@ -129,4 +153,4 @@ async function regenerate(original, outputDirectory, requestedShape) {
   } finally { await fs.remove(temporary); }
 }
 
-module.exports = { generate, regenerate, validate, MAX_PIXELS, parseCrop, normalizeShape };
+module.exports = { generate, regenerate, validate, MAX_PIXELS, SOURCE_MAX, parseCrop, normalizeShape };

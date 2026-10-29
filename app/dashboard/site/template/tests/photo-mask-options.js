@@ -2,8 +2,8 @@ const photoMaskOptions = require("../load/photo-mask-options");
 
 describe("photo mask options", function () {
   it("selects the saved shape", function () {
-    const selected = photoMaskOptions("hexagon").filter((option) => option.selected);
-    expect(selected.map((option) => option.value)).toEqual(["hexagon"]);
+    const selected = photoMaskOptions("pebble").filter((option) => option.selected);
+    expect(selected.map((option) => option.value)).toEqual(["pebble"]);
   });
 
   it("falls back to square for missing or unknown shapes", function () {

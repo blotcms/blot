@@ -16,9 +16,14 @@
       <input type="range" min="100" max="400" value="105" step="1" aria-label="Zoom photo" data-photo-zoom />
       <button type="button" data-photo-zoom-in aria-label="Zoom in">+</button>
     </div>
-    <div class="buttons photo-upload-actions" data-file-drop-actions hidden>
+    <div class="buttons photo-upload-actions">
       <button type="submit">Save photo</button>
       <a href="{{{base}}}">Cancel</a>
     </div>
+    {{#image.value.url}}
+    <div class="buttons photo-delete-actions">
+      <button type="submit" class="red" name="remove" value="1">Delete photo</button>
+    </div>
+    {{/image.value.url}}
   </div>
 </div>

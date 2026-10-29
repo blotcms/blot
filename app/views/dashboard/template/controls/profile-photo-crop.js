@@ -1,7 +1,3 @@
-const ajax = require("../js/ajax.js");
-const withAjax = ajax.withAjax;
-const handleAjaxSaveResponse = ajax.handleAjaxSaveResponse;
-
 function initializePhotoCrop(form) {
   if (!form || form.dataset.photoCropReady) return;
 
@@ -44,7 +40,8 @@ function initializePhotoCrop(form) {
       minY: height - state.baseHeight * state.zoom,
     };
   };
-  const write = () => {
+  // `persist` false leaves the submitted crop fields alone (restoring a saved crop)
+  const write = (persist = true) => {
     if (!state) return;
     const { width, height } = stageSize();
     const renderedWidth = state.baseWidth * state.zoom;
@@ -63,10 +60,12 @@ function initializePhotoCrop(form) {
     outsideImage.style.width = `${state.baseWidth}px`;
     outsideImage.style.height = `${state.baseHeight}px`;
     outsideImage.style.transform = `translate3d(${state.x}px, ${state.y}px, 0) scale(${state.zoom})`;
-    fields.x.value = cropX;
-    fields.y.value = cropY;
-    fields.width.value = Math.min(fraction(width / renderedWidth), 1 - cropX);
-    fields.height.value = Math.min(fraction(height / renderedHeight), 1 - cropY);
+    if (persist) {
+      fields.x.value = cropX;
+      fields.y.value = cropY;
+      fields.width.value = Math.min(fraction(width / renderedWidth), 1 - cropX);
+      fields.height.value = Math.min(fraction(height / renderedHeight), 1 - cropY);
+    }
     zoomInput.value = String(Math.round(state.zoom * 100));
     zoomInput.setAttribute("aria-valuetext", `${Math.round(state.zoom * 100)}%`);
     if (zoomOut) zoomOut.disabled = state.zoom <= MIN_ZOOM;
@@ -235,33 +234,32 @@ function initializePhotoCrop(form) {
     cropper.classList.toggle("photo-cropper--no-preview", !available);
     if (noPreviewNotice) noPreviewNotice.hidden = available;
   };
-  const loadFile = (file) => {
+  // The saved photo and its crop come from the server-rendered form
+  const sourceURL = form.dataset.sourceUrl || "";
+  const initialCrop = (() => {
+    const values = [fields.x, fields.y, fields.width, fields.height].map((field) => (field.value === "" ? NaN : Number(field.value)));
+    return values.every(Number.isFinite) && values[2] > 0 && values[3] > 0
+      ? { x: values[0], y: values[1], width: values[2], height: values[3] }
+      : null;
+  })();
+  let shownURL;
+
+  // Shows `url` in the stage. With `saved`, positions it on that crop instead
+  // of the default framing and leaves the crop fields as submitted.
+  const show = (url, saved) => {
     stopPhysics();
     pointers.clear();
     gesture = null;
     state = null;
-    fields.x.value = fields.y.value = fields.width.value = fields.height.value = "";
     zoomInput.value = String(INITIAL_ZOOM * 100);
-    if (objectURL) URL.revokeObjectURL(objectURL);
-    objectURL = null;
-
-    if (!file) {
-      cropper.hidden = true;
-      image.removeAttribute("src");
-      outsideImage.removeAttribute("src");
-      fields.x.value = fields.y.value = fields.width.value = fields.height.value = "";
-      return;
-    }
-
-    objectURL = URL.createObjectURL(file);
-    const selectedURL = objectURL;
+    shownURL = url;
     cropper.hidden = false;
     setPreviewAvailable(true);
-    outsideImage.src = selectedURL;
+    outsideImage.src = url;
     image.onload = () => {
-      if (objectURL !== selectedURL) return;
+      if (shownURL !== url) return;
       requestAnimationFrame(() => {
-        if (objectURL !== selectedURL) return;
+        if (shownURL !== url) return;
         const { width, height } = stageSize();
         if (!width || !height || !image.naturalWidth || !image.naturalHeight) {
           setPreviewAvailable(false);
@@ -275,22 +273,61 @@ function initializePhotoCrop(form) {
           x: 0,
           y: 0,
         };
-        state.x = (width - state.baseWidth * state.zoom) / 2;
-        state.y = (height - state.baseHeight * state.zoom) / 2;
+        if (saved) {
+          state.zoom = limit(Math.min(width / (state.baseWidth * saved.width), height / (state.baseHeight * saved.height)), MIN_ZOOM, MAX_ZOOM);
+          state.x = -saved.x * state.baseWidth * state.zoom;
+          state.y = -saved.y * state.baseHeight * state.zoom;
+        } else {
+          state.x = (width - state.baseWidth * state.zoom) / 2;
+          state.y = (height - state.baseHeight * state.zoom) / 2;
+        }
         previousSize = { width, height };
         applyBounds();
-        write();
+        write(!saved);
         stage.focus({ preventScroll: true });
       });
     };
     image.onerror = () => {
-      if (objectURL === selectedURL) setPreviewAvailable(false);
+      if (shownURL === url) setPreviewAvailable(false);
     };
-    image.src = selectedURL;
+    image.src = url;
+  };
+
+  const showSaved = () => {
+    fields.x.value = initialCrop ? initialCrop.x : "";
+    fields.y.value = initialCrop ? initialCrop.y : "";
+    fields.width.value = initialCrop ? initialCrop.width : "";
+    fields.height.value = initialCrop ? initialCrop.height : "";
+    show(sourceURL, initialCrop);
+  };
+
+  // A chosen file replaces the saved photo; clearing it goes back to the saved
+  // photo (if there is one) and its crop.
+  const loadFile = (file) => {
+    if (objectURL) URL.revokeObjectURL(objectURL);
+    objectURL = null;
+    fields.x.value = fields.y.value = fields.width.value = fields.height.value = "";
+
+    if (file) {
+      objectURL = URL.createObjectURL(file);
+      show(objectURL, null);
+    } else if (sourceURL) {
+      showSaved();
+    } else {
+      stopPhysics();
+      pointers.clear();
+      gesture = null;
+      state = null;
+      shownURL = null;
+      cropper.hidden = true;
+      image.removeAttribute("src");
+      outsideImage.removeAttribute("src");
+    }
   };
 
   input.addEventListener("change", () => loadFile(input.files && input.files[0]));
   if (input.files && input.files[0]) loadFile(input.files[0]);
+  else if (sourceURL) showSaved();
 
   stage.addEventListener("pointerdown", (event) => {
     if (!state || event.button !== 0) return;
@@ -369,59 +406,8 @@ function initializePhotoCrop(form) {
   }, { once: true });
 }
 
-function initializeSavedPhotoMask() {
-  const form = document.querySelector("[data-photo-mask-form]");
-  const preview = document.querySelector("[data-profile-mask-preview]");
-  if (!form || !preview) return;
-
-  const errorNotice = form.querySelector("[data-photo-mask-error]");
-  const shapeInputs = form.querySelectorAll("[data-photo-shape]");
-  let savedMask = preview.dataset.profileMask || "square";
-  let changeNumber = 0;
-  let saveQueue = Promise.resolve();
-
-  form.addEventListener("change", (event) => {
-    if (!event.target.matches("[data-photo-shape]")) return;
-
-    const selectedMask = event.target.value;
-    const thisChange = ++changeNumber;
-    preview.dataset.profileMask = selectedMask;
-    if (errorNotice) errorNotice.hidden = true;
-
-    saveQueue = saveQueue.catch(() => {}).then(async () => {
-      // If another shape was chosen while a save was in flight, save only the
-      // latest choice after the active request has finished.
-      if (thisChange !== changeNumber) return;
-
-      const response = await fetch(withAjax(form.action), {
-        method: "POST",
-        body: new FormData(form),
-        credentials: "same-origin",
-      });
-      if (!response.ok) {
-        const result = await response.json().catch(() => null);
-        throw new Error(result && result.error || "We couldn't save your photo. Please try again.");
-      }
-
-      savedMask = selectedMask;
-      handleAjaxSaveResponse(response);
-    }).catch((error) => {
-      if (thisChange !== changeNumber) return;
-
-      const fallback = [...shapeInputs].find((input) => input.value === savedMask);
-      if (fallback) fallback.checked = true;
-      preview.dataset.profileMask = savedMask;
-      if (errorNotice) {
-        errorNotice.textContent = error.message || "We couldn't save your photo. Please try again.";
-        errorNotice.hidden = false;
-      }
-    });
-  });
-}
-
 module.exports = initializePhotoCrop;
 
 if (typeof document !== "undefined") {
   initializePhotoCrop(document.querySelector("[data-photo-crop-form]"));
-  initializeSavedPhotoMask();
 }

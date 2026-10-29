@@ -1,5 +1,7 @@
 const sharp = require("sharp");
-const { SHAPES, normalizeShape, applyShape } = require("../image-mask");
+const fs = require("fs");
+const path = require("path");
+const { SHAPES, CLIP_PATHS, normalizeShape, applyShape } = require("../image-mask");
 
 describe("profile photo shapes", function () {
   it("defaults to square and rejects unknown shapes", function () {
@@ -19,5 +21,20 @@ describe("profile photo shapes", function () {
   it("leaves every shape renderable", async function () {
     const data = await sharp({ create: { width: 32, height: 32, channels: 3, background: "#00f" } }).png().toBuffer();
     for (const { value } of SHAPES) await applyShape(data, 32, 32, value).png().toBuffer();
+  });
+
+  it("has no hexagon, and offers organic blobs", function () {
+    const values = SHAPES.map((shape) => shape.value);
+    expect(values).not.toContain("hexagon");
+    expect(values).toEqual(jasmine.arrayContaining(["blob", "pebble", "cloud"]));
+  });
+
+  it("keeps the dashboard's --mask-* previews in step with the shapes", function () {
+    const css = fs.readFileSync(path.join(__dirname, "../../../views/dashboard/template/controls/favicon.css"), "utf8");
+    for (const [shape, clip] of Object.entries(CLIP_PATHS)) {
+      expect(css).toContain(`--mask-${shape}: ${clip};`);
+      expect(css).toContain(`[data-profile-mask="${shape}"] { clip-path: var(--mask-${shape}); }`);
+    }
+    expect(css).not.toContain("--mask-hexagon");
   });
 });
