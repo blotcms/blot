@@ -7,9 +7,9 @@
 #   scp -r proxy/deploy blot:~/proxy-deploy
 #
 # blue-green.sh deploys one of two kinds of image, which deploy_kind decides
-# from the image's name:
+# from the image's im.blot.kind label (set in the Dockerfile's `unit` stage):
 #
-#   unit    ghcr.io/blotcms/blot-unit:<sha>, OpenResty and Node in one container
+#   unit    ghcr.io/blotcms/blot:<sha>, OpenResty and Node in one container
 #           (#2119). What production runs.
 #   proxy   ghcr.io/blotcms/blot-proxy:<sha>, OpenResty alone, in front of the
 #           blot-container-* Node containers. What production ran before the
@@ -20,7 +20,7 @@
 #   PROXY_ENV_FILE         /etc/blot/proxy.env  docker --env-file for the proxy
 #                                               (see proxy.env.example); for a
 #                                               unit it comes after secrets.env
-#   PROXY_DEPLOY_KIND      (from the image)     unit or proxy: see above
+#   PROXY_DEPLOY_KIND      (from the label)     unit or proxy: see above
 #   PROXY_UNIT_SETTINGS    unit-settings.env next to this file  the unit's memory,
 #                                               paths and airlock ports, written
 #                                               from scripts/deploy/constants.js
@@ -42,7 +42,7 @@
 #   PROXY_CANARY_HOST      preview-of-wireframe-on-david.<BLOT_HOST>
 #   PROXY_REGISTRY_URL     ghcr.io/blotcms/blot-proxy  for a bare tag / commit SHA
 #                                               of a proxy image
-#   PROXY_UNIT_REGISTRY_URL ghcr.io/blotcms/blot-unit  for a bare tag / commit SHA
+#   PROXY_UNIT_REGISTRY_URL ghcr.io/blotcms/blot  for a bare tag / commit SHA
 #   PROXY_HEALTH_TIMEOUT   60 (unit: 180)       seconds to wait for a new container
 #   PROXY_DRAIN_TIMEOUT    30                   seconds an old container may drain
 #   PROXY_UPSTREAM_WAIT    180                  seconds the preflight keeps retrying an
@@ -221,17 +221,19 @@ load_unit_settings() {
 # A bare tag or commit SHA means the image CI publishes
 # (.github/workflows/proxy-image.yml, unit-image.yml); anything with a / or : is used as given.
 PROXY_REGISTRY_URL="${PROXY_REGISTRY_URL:-ghcr.io/blotcms/blot-proxy}"
-UNIT_REGISTRY_URL="${PROXY_UNIT_REGISTRY_URL:-ghcr.io/blotcms/blot-unit}"
+UNIT_REGISTRY_URL="${PROXY_UNIT_REGISTRY_URL:-ghcr.io/blotcms/blot}"
 resolve_image() {
   local registry="$UNIT_REGISTRY_URL"
   [ "${PROXY_DEPLOY_KIND:-}" != proxy ] || registry="$PROXY_REGISTRY_URL"
   case "$1" in */*|*:*) echo "$1" ;; *) echo "$registry:$1" ;; esac
 }
 
-# unit or proxy: what kind of container an image makes (see the top). By name,
-# so a locally built image is a unit if it is called blot-unit.
+# unit or proxy: what kind of container an image makes (see the top). The
+# `unit` stage of the root Dockerfile labels its image im.blot.kind=unit; the
+# proxy image has no such label. The image has to be on the host.
+KIND_LABEL='{{index .Config.Labels "im.blot.kind"}}'
 image_is_unit() { # image_is_unit <image>
-  case "$1" in blot-unit:*|blot-unit@*|*/blot-unit:*|*/blot-unit@*) return 0 ;; *) return 1 ;; esac
+  [ "$(docker image inspect -f "$KIND_LABEL" "$1" 2>/dev/null)" = unit ]
 }
 deploy_kind() { # deploy_kind <image>
   case "${PROXY_DEPLOY_KIND:-}" in
@@ -243,9 +245,10 @@ deploy_kind() { # deploy_kind <image>
 }
 
 # Is this container a unit (OpenResty and Node) rather than a proxy alone?
-# During the cutover blot-blue is one and blot-green the other.
+# During the cutover blot-blue is one and blot-green the other. A container
+# carries its image's labels.
 container_is_unit() { # container_is_unit <name>
-  image_is_unit "$(docker inspect -f '{{.Config.Image}}' "$1" 2>/dev/null)"
+  [ "$(docker inspect -f "$KIND_LABEL" "$1" 2>/dev/null)" = unit ]
 }
 
 # The commit a unit image was built from, which is its tag: the app's
@@ -547,11 +550,13 @@ wait_healthy() { # wait_healthy <name> <timeout>
 # The deploy-time checks of the app itself, run inside the unit
 # (scripts/deploy/verify-container): Redis, the data volume, the storage bucket,
 # the airlock, a canary blog and the dashboard log-in page rendered by this
-# container's own node-a. Blue runs them before green is touched.
+# container's own node-a. Blue runs them before green is touched. As the app
+# user, uid 1000 (the image ends USER root, for OpenResty's master): run as
+# root the writable checks would pass on root-owned directories.
 verify_unit() { # verify_unit <name>
   local out
   log "Verifying $1 (scripts/deploy/verify-container)"
-  if ! out="$(timeout 90 docker exec "$1" node /usr/src/app/scripts/deploy/verify-container/index.js "$RELEASE_ID" 2>&1)"; then
+  if ! out="$(timeout 90 docker exec --user 1000:1000 -e HOME=/home/node "$1" node /usr/src/app/scripts/deploy/verify-container/index.js "$RELEASE_ID" 2>&1)"; then
     printf '%s\n' "$out" >&2
     return 1
   fi

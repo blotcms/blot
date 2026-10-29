@@ -73,9 +73,13 @@ app_containers() {
 }
 
 req() {
-    local c logs=()
-    for c in $(app_containers); do logs+=(<(docker logs "$c" 2>&1)); done
-    grep -h --line-buffered "$1" <(tail -n 1000000 $LOGS/error.log $LOGS/access.log) "${logs[@]}"
+    # one stream into grep: process substitutions kept in an array are closed
+    # by the time grep runs
+    local c
+    {
+        tail -n 1000000 $LOGS/error.log $LOGS/access.log
+        for c in $(app_containers); do docker logs "$c" 2>&1; done
+    } | grep -h --line-buffered "$1"
 }
 
 live() {

@@ -2,7 +2,7 @@
 
 Production runs two units, `blot-blue` and `blot-green` (#2119): each one
 container holding OpenResty and the Node app (node-a, and node-b which it forks),
-built from the `unit` target of the root Dockerfile (`ghcr.io/blotcms/blot-unit`).
+built from the `unit` target of the root Dockerfile (`ghcr.io/blotcms/blot`, labelled `im.blot.kind=unit`).
 Before them the containers held OpenResty alone, in front of the
 `blot-container-*` Node containers (the proxy has been a container since
 8 Oct 2026, #1941). Deploy a new image with the **Deploy** workflow

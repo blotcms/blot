@@ -13,6 +13,7 @@
 ARG BASE=blot-proxy:e2e
 FROM ${BASE}
 ARG BREAK=
+LABEL im.blot.kind=unit
 ENV STUB_BREAK=${BREAK}
 COPY stub-node.js /usr/src/app/stub-node.js
 COPY verify.js /usr/src/app/scripts/deploy/verify-container/index.js

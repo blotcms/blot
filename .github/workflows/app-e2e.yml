@@ -60,11 +60,11 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # build.yml pushes this commit's prod image once it has built it, and this
+      # build.yml pushes this commit's prod image (blot:prod-<sha>-arm64) once it has built it, and this
       # workflow doesn't wait for it, so poll for it.
       - name: Pull Blot app image
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/blot:${{ github.sha }}-arm64"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/blot:prod-${{ github.sha }}-arm64"
           for i in $(seq 1 240); do
             docker manifest inspect "$IMAGE" > /dev/null 2>&1 && break
             [ "$i" = 1 ] && echo "Waiting for build.yml to push $IMAGE"
