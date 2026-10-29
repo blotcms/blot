@@ -70,7 +70,7 @@ Array.from(document.querySelectorAll("[data-number-stepper]")).forEach((input) =
         track.append(newDigit, oldDigit);
         track.style.transform = "translateY(-1em)";
         digitWindow.append(track);
-        value.append(window);
+        value.append(digitWindow);
         track.getBoundingClientRect();
         requestAnimationFrame(() => {
           track.style.transform = "translateY(0)";
@@ -78,7 +78,7 @@ Array.from(document.querySelectorAll("[data-number-stepper]")).forEach((input) =
       } else {
         track.append(oldDigit, newDigit);
         digitWindow.append(track);
-        value.append(window);
+        value.append(digitWindow);
         track.getBoundingClientRect();
         requestAnimationFrame(() => {
           track.style.transform = "translateY(-1em)";
