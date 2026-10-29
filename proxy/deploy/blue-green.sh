@@ -454,4 +454,10 @@ esac
 
 retire_old_nodes
 prune_old_images "$NEW_IMAGE" || true
+if [ "$DEPLOY_KIND" = unit ]; then
+  # superseded airlock images too: the units' airlocks keep the one they run,
+  # and rmi refuses any image a container (the stopped blot-airlock too) uses
+  airlock_in_use="$(docker inspect -f '{{.Config.Image}}' "$(airlock_name blue)" 2>/dev/null || true)"
+  [ -z "$airlock_in_use" ] || prune_old_images "$airlock_in_use" || true
+fi
 log "Done: $(unit_name blue) and $(unit_name green) run $NEW_IMAGE"
