@@ -212,6 +212,26 @@ swap_back() {
     fi
     return
   fi
+  if container_is_unit "$prev"; then
+    # Two units of one name share /run/blot/<unit>-a.sock and -b.sock: the new
+    # one's Node would answer the old one's readiness check, and each unlinks the
+    # other's socket when it starts. So the new one goes first. The other unit is
+    # healthy (replace_unit checked), so a moment without this one is fine.
+    log "Removing the new $name, then putting $prev back (they would share sockets)"
+    if exists "$name"; then
+      docker stop --time "$DRAIN_TIMEOUT" "$name" >/dev/null 2>&1 || true
+      remove_container "$name"
+    fi
+    if docker start "$prev" >/dev/null 2>&1 && wait_healthy "$prev" "$HEALTH_TIMEOUT"; then
+      docker rename "$prev" "$name" >/dev/null 2>&1 \
+        || log "WARNING: could not rename $prev back to $name: it is running as $prev, sort it out by hand"
+    else
+      log "WARNING: $prev did not come back healthy. Leaving it stopped as $name, and the other unit serving: sort it out by hand"
+      docker stop --time "$DRAIN_TIMEOUT" "$prev" >/dev/null 2>&1 || true
+      docker rename "$prev" "$name" >/dev/null 2>&1 || true
+    fi
+    return
+  fi
   log "Putting $prev back and removing the new $name"
   # The new one may be the only unit answering if the old one cannot come back,
   # so it is removed only once the old one is up and healthy (it is started
