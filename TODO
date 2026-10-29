@@ -9,7 +9,7 @@ Tune the render LRU caches once #2233 has run on prod for a day (it adds `render
 
 ---
 
-Finish host consolidation (buy reserved instance) -> finish s3 migration (close out ebs)
+Finish host consolidation (buy reserved instance, #2107)
 
 Set up Redis redundancy using a primary on the main server, a replica on the Frankfurt server, and three Redis Sentinel instances (main, Frankfurt, Mac) for automatic failover with quorum 2. Configure Node.js to discover the current primary via Sentinel. When the original main server recovers, it should rejoin as a replica; restore it as primary through a controlled manual failback using SENTINEL FAILOVER.
 
@@ -73,7 +73,6 @@ Finish the host consolidation
 - should we use unix sockets for communication with redis?
 
 How to reduce likelihood of downtime?
-- s3 for storage only (replicated?)
 - multi-region (dns level failover from one region?) with redis replica in another region
 - how to prevent dns issues?
 - are we well insulated from bunny failures (dns failover here too?)
@@ -83,11 +82,9 @@ How to reduce likelihood of downtime?
 
 ---
 
-Finish move to s3
-- Harden app against s3 unavailable
-- Implement an abstract blog storage mechanism that will simulatenously make it possible to:
-- implement folder storage limits (include generated files in this amount?)
-- implement s3 storage for folder files
+Harden app against S3 being unavailable (generated assets today, blog folders once #2258 lands)
+
+Implement folder storage limits (include generated files in this amount?). #2258's Redis index keeps the per-blog byte totals to enforce them from.
 
 Bump katex to >= 0.18.2 (low, prototype pollution Dependabot alert). The simple-git alert is covered by #2259 (git repos to S3), which replaces simple-git.
 
@@ -176,7 +173,6 @@ archives and all_entries in the template engine should be bounded to a maximum o
 - separately we should investigate other parts of the code which perform unbounded work 
 
 Maybe horizontal scaling involves redis replicas in other aws regions?
-- s3 multi region replication?
 
 Add client status to status page (check api)
 
@@ -238,9 +234,9 @@ Make sure next bill amount is in all billing emails to customers
 
 Explain on the about page the websites started out as files in a folder. But they had to be HTML. Blot makes other file types possible too.
 
-Get node container horizontally scalable and multi-region
-- finish app/storage module with s3
-- solve git storage problem 
+Get node container horizontally scalable and multi-region (#1932)
+- blog folders to S3 (#2258)
+- git repos to S3 (#2259)
 
 Add clear bill change info to new blog flow
 
@@ -857,26 +853,6 @@ Testing:
 - [ ] how can we test the 'reload-server' script?
 - [ ] how can we test the 'scheduler' functions? we ran into error where it was running twice
 
-Move from EBS to s3
-- Extend app/storage (assets are done) with helpers for blog folders (`config.blog_folder_dir`) that could eventually migrate them onto s3
-- Lower costs using s3 instead of EBS disks for blog folders
-- Goal is cost reduction and improved scalability
-  - should lower storage costs + transfer from $200/month to $20/month
-  - no more charges for unused GB disk space
-  - lower cost of S3 vs EBS
-  - no issue of 'running out of space' which has taken down service multiple times
-- General considerations:
-  - what s3 category to use? standard? 1 zone express? latency is important for some use-cases, e.g. blog folder
-  - do we re-organize how files are stored? one bucket per site?
-  - make sure s3 versioning is disabled?
-  - how to back up? maybe have a special bucket for blog folder data? everything else is downstream of the folder
-- Come up with plan for blog files directory
- - abstract write / read from blog directory
- - we probably need a caching layer using instance SSD as LRU cache of say 10GB
-  - when we rebuild all files on a site, we'll probably want to download all the folder? or maybe just have a SSD LRU caching layer built in that can adapt.
- - Once this is done, the nginx + node server is 'stateless' and could be replicated easily across aws regions
- - We could combine this with the containerization of openresty
-
 Resolve bad links (e.g. incorrect case) in files at build-time rather than run-time so we can avoid the expensive disk lookups in blog/assets.js
 
 Add a highlevel function which clients can expose to open a file (e.g. link to dropbox.com or google drive)?
@@ -920,10 +896,7 @@ Surface Blot client sync errors on dashboard
 
 Preserve single line breaks in Word Docs for poetry and [tell Isabel](https://mail.google.com/mail/u/0/#inbox/FMfcgzQcpKhwFRpStFNWhztKGPqQJfsq) and [tell Paul](https://mail.google.com/mail/u/0/#inbox/FMfcgzGxTNzPZwwxJPTDlBBBcnbpPcJJ)
 
-Think about migrating to s3 for blog data storage
-- Purge thumbnails and cached images which are no longer in use
-- Abstract methods which read, write and readdir the blog folder? static files folder?
-- What about pointing the CDN to an s3 bucket then redirecting to upstream for 404?
+Purge thumbnails and cached images which are no longer in use
     
 For broken embedded images, attempt to resolve based on a shortest path approach, as in, traverse the folder and attempt to find an image with a matching name
 - Tell [Ellane](https://mail.google.com/mail/u/0/#inbox/QgrcJHsbgZwttcPcXCvTnzchwRZxCNXhQgq)
@@ -1007,9 +980,6 @@ Adjust title generator so h2 titles within the file dont become the title of the
 Server improvements:
 - Copy the cron tab into the new server setup script
 - Add more stringent checks to scripts which mount instance storage and external volumes
-- Understand why the server gets so slow when we switch from SSD ebs to HDD ebs
-- it would be ideal to use HDD for bulk of blog storage, and take advantage of the local SSD for high performance operations
-  - Investigate use of aws s3 sync for backing up ebs volume rather than snapshots
 - Test reboot for all servers 
 
 Add support for proxying particular analytics files and tell [questioner](https://blot.im/questions/2025)
@@ -1024,7 +994,6 @@ Add support for activitypub and tell
 Methods to improve server performance
 - consider expanding the replication of the perma_cache across more regions
 - consider switching to more expensive CDN type (i.e. not volume)
-- switch to more expensive EBS for disk of server
 
 ---
 
