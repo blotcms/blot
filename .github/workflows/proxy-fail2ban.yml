@@ -5,7 +5,7 @@ name: proxy-fail2ban
 # mount, see proxy/deploy/common.sh) still bans on the container's access
 # log the way it did on bare metal.
 #
-# Builds the proxy image exactly as .github/workflows/proxy-image.yml does
+# Builds the proxy image as .github/workflows/unit-image.yml builds its OpenResty stage
 # (file logging, LOG_TO_STDOUT=false) with the log dir bind-mounted from the
 # runner, sends requests through a stub upstream that should each produce a
 # 403 / 404 / 429 / 444, and runs the real `fail2ban-regex` against the
@@ -68,7 +68,7 @@ jobs:
           npm init -y >/dev/null
           npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
 
-      # Same as proxy-image.yml: production-shaped logging, so this exercises
+      # Same as unit-image.yml: production-shaped logging, so this exercises
       # the log path host fail2ban actually reads.
       - name: Generate proxy config (file logging, as production)
         run: bash proxy/build/build.sh

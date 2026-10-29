@@ -222,7 +222,7 @@ load_unit_settings() {
 }
 
 # A bare tag or commit SHA means the image CI publishes
-# (.github/workflows/proxy-image.yml, unit-image.yml); anything with a / or : is used as given.
+# (.github/workflows/unit-image.yml); anything with a / or : is used as given.
 PROXY_REGISTRY_URL="${PROXY_REGISTRY_URL:-ghcr.io/blotcms/blot-proxy}"
 UNIT_REGISTRY_URL="${PROXY_UNIT_REGISTRY_URL:-ghcr.io/blotcms/blot}"
 resolve_image() {

@@ -94,7 +94,8 @@ The `proxy/**` change triggers the existing GitHub workflows:
 
 - `proxy`: rebuild, assert the OpenResty release, log `openresty -V`, parse the
   generated config, and check container health/runtime substitutions.
-- `proxy-image`: build/check and publish the production arm64 image to GHCR.
+- `unit-image`: build the production arm64 unit image (OpenResty included),
+  check OpenResty in it and publish it to GHCR.
 - `integration`: routing, compression/Brotli, disk cache, request matrix and
   parity, wildcard certificates, ACME/sockproc, Redis outages, graceful
   proxy handover and Node swaps. Protocol checks assert no QUIC configuration

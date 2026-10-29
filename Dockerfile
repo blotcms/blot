@@ -1,10 +1,6 @@
 # Keep NODE_BASE identical to the one in proxy/Dockerfile (the proxy image is
 # built on the same base); scripts/security/check-base-image.js checks it.
 ARG NODE_BASE=node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
-# The proxy image built for the same commit (proxy/Dockerfile, built on the same
-# NODE_BASE), which the `unit` stage takes OpenResty and the proxy's files from
-# rather than compiling it again. Only that stage uses it.
-ARG PROXY_IMAGE=blot-proxy
 ## Stage 1 (base)
 # Runtime-only foundation shared by every downstream stage. It carries the
 # things that must exist at *run* time (git, tini, pandoc, the libvips and
@@ -273,8 +269,12 @@ CMD ["node", "/usr/src/app/app/index.js"]
 # One container holding OpenResty and the Node app, run as one of two units
 # (#2119): the `prod` stage plus the proxy's runtime, started by a supervisor
 # (proxy/unit/supervisor.sh) under tini. Built and tested in CI by
-# .github/workflows/unit-image.yml; nothing deploys it yet.
-FROM ${PROXY_IMAGE} AS proxy
+# .github/workflows/unit-image.yml.
+# proxy/Dockerfile, built on the same NODE_BASE: the `unit` stage takes OpenResty
+# and the proxy's files from it. CI builds it in the same build (the bake file
+# supplies it as the blot-proxy context); locally it is the image tagged
+# blot-proxy.
+FROM blot-proxy AS proxy
 
 FROM prod AS unit
 
