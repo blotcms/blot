@@ -82,18 +82,20 @@ at sync/build time instead.
     generated assets (`.assets`). Keys are identical to their public CDN paths
     (`cdn.blot.im/{blogID}/...`).
   - `{blogID}/folder/...`: the blog's folder content (`.folder`, Phase 2).
-  - later possibly `{blogID}/git/...` for the git client repo (Phase 3).
+  - Git client repos are not under `{blogID}/`: every `blog_*` key is
+    public-read, so they live under the private top-level `git/{blogID}/`
+    prefix (Phase 3).
 
   **The assets scope is exactly a blog's top-level directories whose names
   start with `_`.** `storage/assets` enforces it: a relPath whose first
   segment doesn't start with `_` is rejected (a CDN request for
   `/{blogID}/folder/...` is a 404), and the whole-scope operations (`walk`,
   `list` of the blog root, `removeAll`, the backfill and its `--verify`) only
-  look at the `{blogID}/_*/` prefixes, never at `folder/`, `git/` or anything
-  else under `{blogID}/`. `folder/` and `git/` are reserved names under each
+  look at the `{blogID}/_*/` prefixes, never at `folder/` or anything
+  else under `{blogID}/`. `folder/` is a reserved name under each
   blog prefix; nothing else may be written at a blog's top level without an
-  underscore. Blog IDs are always `blog_<uuid>`, so nothing else belongs at
-  the bucket's top level.
+  underscore. Blog IDs are always `blog_<uuid>`; the only other top-level
+  prefix is the private `git/` (Phase 3), which is never public.
 
   Storage class is set per object at write time rather than via
   prefix-filtered lifecycle rules. The whole bucket is public-read for
@@ -369,13 +371,16 @@ should consolidate into one storage-layer method, exposed explicitly
   per-object using the existing sync-completion pub/sub (`app/sync/index.js`'s
   `blog:{blogID}:preview:reload` broadcast), extended to carry which paths
   changed.
-- **Phase 3 — git client repos.** Bare repos live in
-  `{blot_directory}/data/git/{handle}.git` (`app/clients/git/dataDir.js`),
-  separate from blog folders. Git needs a real filesystem, so store each
-  repo in object storage as one bundle or packed archive. Restore it onto
-  the SSD when a push arrives, then upload it again, all under the
-  existing per-blog lock. mtime doesn't matter to git. If the archive goes in
-  the bucket it belongs under `{blogID}/git/`.
+- **Phase 3 — git client repos.** Planned in
+  [#2259](https://github.com/blotcms/blot/issues/2259). Bare repos live in
+  `{blot_directory}/data/git/{handle}.git` (`app/clients/git/dataDir.js`)
+  today. They move to a walgit-style store: immutable packs plus a small
+  manifest under the private `git/{blogID}/` prefix, with the SSD caching
+  refs, pack indexes and commits/trees, and blobs fetched on demand, so a
+  repo can be larger than the SSD. No whole-repo archive and no S3
+  filesystem mount. A push is acknowledged once its pack is in S3, under the
+  per-blog lock, and the blog folder is materialized from the repo with no
+  live `.git` in it.
 - **Quotas** — decouple from the storage-layer build-out. Maintain a
   per-blog byte counter in `app/sync/update` (which already sees every
   changed path), backed by periodic `du`/`ListObjects` reconciliation to
