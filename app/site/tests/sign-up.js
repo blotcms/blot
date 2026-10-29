@@ -40,6 +40,6 @@ describe("Blot sign up", function () {
     await page.click("[type=submit]");
 
     // the client page of the new site should load
-    expect(page.url).toEqual(this.origin + "/sites/testsite/client");
+    expect(page.url).toEqual(this.origin + "/sites/testsite/settings/folder");
   });
 });

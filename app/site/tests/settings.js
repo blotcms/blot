@@ -34,12 +34,9 @@ describe("Blot dashboard settings", function () {
     const page = browser(this);
     const handle = this.blog.handle;
 
-    // go to the site overview page
-    await page.goto("/sites");
-    await page.click('a[href="/sites/' + handle + '"]');
-
-    // go to the client settings page
-    await page.click('a[href^="/sites/' + handle + '/client"]');
+    // go to the client settings page (the overview only links to it once a
+    // client is connected)
+    await page.goto("/sites/" + handle + "/settings/folder");
 
     // click on the button for the local folder client
     await page.click("button[name=client][value=local]");
@@ -48,9 +45,9 @@ describe("Blot dashboard settings", function () {
     await page.click('a[href="/sites/' + handle + '"]');
 
     // verify the client link now says 'Local folder'
-    const client = page.$('a[href^="/sites/' + handle + '/client"] span.center');
+    const client = page.$(".site-dashboard-status");
 
-    expect(client.text().replace(/\s+/g, " ").trim()).toMatch(/^Local folder/);
+    expect(client.attr("data-sync-source")).toEqual("Local folder");
 
     // add some files to the blog's folder
     await fs.outputFile(this.blogDirectory + "/test.txt", "test");
