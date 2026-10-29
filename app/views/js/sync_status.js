@@ -9,6 +9,7 @@ var pendingWhileHidden = false;
 var evtSource = null;
 var shouldReload = false;
 var lastRawMessage = null;
+var adoptFetchedStatus = false;
 var PROGRESS_MESSAGE_RE = /^\((\d+)\/(\d+)\)\s*(.*)$/;
 
 function q(sel) {
@@ -172,6 +173,18 @@ function loadFolder(callback) {
         var parser = new DOMParser();
         var xml = parser.parseFromString(xhr.responseText, "text/html");
 
+        // After a reconnect the status we last heard is stale, and renders
+        // use it in preference to the fetched text, so adopt the fetched one.
+        var fetchedStatusText = null;
+        if (adoptFetchedStatus) {
+          adoptFetchedStatus = false;
+          var fetchedStatus = xml.querySelector(".sync-status-text");
+          if (fetchedStatus) {
+            fetchedStatusText = fetchedStatus.textContent.trim();
+            lastRawMessage = fetchedStatusText;
+          }
+        }
+
         var currentNode = q(".live-updates");
         var newNode = xml.querySelector(".live-updates");
 
@@ -246,6 +259,15 @@ function loadFolder(callback) {
         } catch (e) {
           console.error(e);
         }
+
+        // Outside .live-updates the swaps above leave the status text alone
+        if (fetchedStatusText !== null) {
+          try {
+            renderSyncStatusMessage(fetchedStatusText);
+          } catch (e) {
+            console.error(e);
+          }
+        }
       } else {
         console.error("Failed to load folder:", xhr.status);
       }
@@ -277,7 +299,10 @@ function attachSSE() {
   // The first open is skipped: the page was just rendered.
   var hasOpened = false;
   evtSource.onopen = function () {
-    if (hasOpened) scheduleLoad();
+    if (hasOpened) {
+      adoptFetchedStatus = true;
+      scheduleLoad();
+    }
     hasOpened = true;
   };
 
