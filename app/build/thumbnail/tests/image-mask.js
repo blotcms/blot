@@ -31,8 +31,10 @@ describe("profile photo shapes", function () {
 
   it("keeps the dashboard's --mask-* previews in step with the shapes", function () {
     const css = fs.readFileSync(path.join(__dirname, "../../../views/dashboard/template/controls/favicon.css"), "utf8");
+    // Rounding can print a tiny negative as "-0.00%" on one platform and "0.00%" on another.
+    const unsigned = (text) => text.replace(/-0\.00%/g, "0.00%");
     for (const [shape, clip] of Object.entries(CLIP_PATHS)) {
-      expect(css).toContain(`--mask-${shape}: ${clip};`);
+      expect(unsigned(css)).toContain(unsigned(`--mask-${shape}: ${clip};`));
       expect(css).toContain(`[data-profile-mask="${shape}"] { clip-path: var(--mask-${shape}); }`);
     }
     expect(css).not.toContain("--mask-hexagon");
