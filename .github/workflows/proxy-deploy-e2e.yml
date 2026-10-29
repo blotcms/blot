@@ -66,6 +66,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Before any listener exists: the kernel reads the setting when a reuseport
+      # group is created (the first proxy to bind :443), so setting it later, as
+      # deploy-under-load.sh does, does not cover a group that already exists. With
+      # it, closing a listener hands its queued connections to the other one
+      # instead of resetting them (kernel 5.14+).
+      - name: Let a closing reuseport listener hand its queued connections over
+        run: |
+          sudo sysctl -w net.ipv4.tcp_migrate_req=1
+          cat /proc/sys/net/ipv4/tcp_migrate_req
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24.22.1
@@ -316,6 +326,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Before any listener exists: the kernel reads the setting when a reuseport
+      # group is created (the first proxy to bind :443), so setting it later, as
+      # deploy-under-load.sh does, does not cover a group that already exists. With
+      # it, closing a listener hands its queued connections to the other one
+      # instead of resetting them (kernel 5.14+).
+      - name: Let a closing reuseport listener hand its queued connections over
+        run: |
+          sudo sysctl -w net.ipv4.tcp_migrate_req=1
+          cat /proc/sys/net/ipv4/tcp_migrate_req
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24.22.1
@@ -395,6 +415,16 @@ jobs:
       UNIT_BROKEN: c.test/blot-unit:e2e
     steps:
       - uses: actions/checkout@v4
+
+      # Before any listener exists: the kernel reads the setting when a reuseport
+      # group is created (the first proxy to bind :443), so setting it later, as
+      # deploy-under-load.sh does, does not cover a group that already exists. With
+      # it, closing a listener hands its queued connections to the other one
+      # instead of resetting them (kernel 5.14+).
+      - name: Let a closing reuseport listener hand its queued connections over
+        run: |
+          sudo sysctl -w net.ipv4.tcp_migrate_req=1
+          cat /proc/sys/net/ipv4/tcp_migrate_req
 
       - uses: actions/setup-node@v4
         with:
