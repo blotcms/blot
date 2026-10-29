@@ -1,7 +1,7 @@
 # Builds the unit image (Dockerfile target `unit`: the app, OpenResty and the
 # proxy's files in one container, #2119) and publishes it to GHCR as
 # ghcr.io/<owner>/blot-unit:<commit sha>, after boot-testing it with
-# proxy/unit/smoke.sh. Nothing deploys it yet.
+# proxy/unit/smoke.sh. The Deploy workflow deploys it (scripts/deploy/units.sh).
 #
 # Its own workflow because it needs two images that other workflows build: it
 # takes OpenResty from the proxy image for the same commit (proxy-image.yml)

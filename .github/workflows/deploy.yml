@@ -1,4 +1,4 @@
-name: Deploy node
+name: Deploy
 
 on:
   workflow_dispatch:
@@ -18,13 +18,17 @@ permissions:
   actions: read # To read CI results for the target commit
 
 env:
-  REGISTRY_URL: ghcr.io/blotcms/blot
+  REGISTRY_URL: ghcr.io/blotcms/blot-unit
   AIRLOCK_REGISTRY_URL: ghcr.io/blotcms/blot-airlock
   BLOT_DEPLOY_SSH_HOST: ${{ secrets.BLOT_DEPLOY_SSH_HOST }}
   BLOT_DEPLOY_SSH_PORT: ${{ secrets.BLOT_DEPLOY_SSH_PORT }}
 
-# One production deploy at a time: a Deploy proxy that overlaps this one would
-# find an upstream mid-restart and refuse (or roll back). A queued run waits.
+# Deploys the two units, blot-blue then blot-green (scripts/deploy/units.sh and
+# proxy/deploy/blue-green.sh; each unit is OpenResty and Node in one container,
+# #2119). The first run on a host that still has the proxy-only containers and
+# the blot-container-* Node containers is the cutover (proxy/deploy/README.md).
+#
+# One production deploy at a time. A queued run waits.
 concurrency:
   group: deploy-production
   cancel-in-progress: false
@@ -53,11 +57,13 @@ jobs:
           # Full commit history so an older commit or short code can be
           # resolved and verified against master, but nothing else: tree:0
           # fetches commits only, and the sparse checkout then pulls just the
-          # trees and blobs for scripts/deploy (the deploy script needs
-          # nothing but Node built-ins and git).
+          # trees and blobs for scripts/deploy and proxy/deploy (the deploy
+          # scripts need nothing but Node built-ins, bash and ssh).
           fetch-depth: 0
           filter: tree:0
-          sparse-checkout: scripts/deploy
+          sparse-checkout: |
+            scripts/deploy
+            proxy/deploy
 
       - name: Resolve and check out target commit
         id: resolve
@@ -142,8 +148,8 @@ jobs:
           TARGET_SHA: ${{ steps.resolve.outputs.sha }}
           CUSTOM: ${{ steps.resolve.outputs.custom }}
           SKIP_CHECKS: ${{ github.event.inputs.skip_checks }}
-          REQUIRED: "node build app-e2e integration"
-          OPTIONAL: ""
+          REQUIRED: "node build app-e2e integration proxy-image unit-image"
+          OPTIONAL: "proxy proxy-fail2ban .github/workflows/proxy-deploy-e2e.yml"
         run: |
           if [ "$SKIP_CHECKS" = "true" ]; then
             echo "::warning::skip_checks is set - deploying $TARGET_SHA without waiting for CI to pass."
@@ -254,7 +260,7 @@ jobs:
           done
 
           if [ "$AIRLOCK_AVAILABLE" = false ]; then
-            echo "::warning::Airlock image $AIRLOCK_IMAGE not available after the grace period - the deploy will run, but scripts/deploy will skip the airlock update for this commit (see deployAirlockIfNeeded). Re-deploy this commit once build-airlock succeeds."
+            echo "::warning::Airlock image $AIRLOCK_IMAGE not available after the grace period - the deploy will run and keep the airlock images the units already have (ensure_airlock in proxy/deploy/common.sh). Re-deploy this commit once build-airlock succeeds."
           fi
 
       - name: Deploy
@@ -262,6 +268,19 @@ jobs:
           TARGET_SHA: ${{ steps.resolve.outputs.sha }}
           # Skip branch check since we're in CI and may be checking out a specific commit
           SKIP_BRANCH_CHECK: true
+          # units.sh waits for the image: 25 min for the dispatched commit,
+          # 2 for a chosen one (as the wait above)
+          UNIT_IMAGE_WAIT: ${{ steps.resolve.outputs.custom == 'true' && '120' || '1500' }}
         run: |
-          node scripts/deploy "$TARGET_SHA"
+          set -o pipefail
+          scripts/deploy/units.sh "$TARGET_SHA" 2>&1 | tee deploy.log
           echo "### Deployed \`${TARGET_SHA}\` 🚀" >> "$GITHUB_STEP_SUMMARY"
+
+      # A failed swap whose old container would not come back keeps the new
+      # one running and says so; make that visible on the run page.
+      - name: Surface a rollback warning
+        if: failure()
+        run: |
+          if [ -f deploy.log ] && grep -q 'WARNING:' deploy.log; then
+            echo "::error::$(grep 'WARNING:' deploy.log | tail -1)"
+          fi
