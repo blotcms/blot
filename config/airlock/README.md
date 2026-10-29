@@ -157,16 +157,19 @@ real-host) deploy plumbing couldn't take down blue/green/yellow:
   are gone. Nothing about the airlock container or network itself changed
   for this PR.
 
-## Production (implemented in `scripts/deploy`)
+## Production
 
-Everything below already runs as part of `npm run deploy-node` (see
-[`scripts/deploy/index.js`](../../scripts/deploy/index.js),
-[`constants.js`](../../scripts/deploy/constants.js) and
-[`generateAirlockCommand.js`](../../scripts/deploy/util/generateAirlockCommand.js)).
+The single airlock described below was deployed by `npm run deploy-node`, which
+was removed with the three Node containers (#2119, PR 7). Each unit now has its
+own airlock, `blot-blue-airlock` and `blot-green-airlock`, on `blotnet`,
+deployed with the unit by `proxy/deploy/common.sh` (settings from
+[`constants.js`](../../scripts/deploy/constants.js) via `units.sh`). The steps
+below still describe how the airlock is wired; the function names are the old
+deploy's (`deployAirlockIfNeeded()`, `connectToAirlockNetwork()`).
+
 Every step is **non-fatal to the app deploy**: a problem deploying or
-connecting the airlock is logged but never fails, blocks, or rolls back
-blue/green/yellow - see the comment above `deployAirlockIfNeeded` in
-`index.js`. The airlock itself *does* get rolled back on a bad deploy (see
+connecting the airlock is logged but never fails, blocks, or rolls back the
+app containers. The airlock itself *does* get rolled back on a bad deploy (see
 step 2) - "non-fatal" only ever means "can't take the app deploy down with
 it".
 
@@ -303,7 +306,7 @@ it.
 
 ## Verifying
 
-Run these against a real deployed `blot-airlock` (a real host, where
+Run these against a real deployed unit airlock (`blot-blue-airlock`) (a real host, where
 `169.254.169.254` is a real, live metadata service and `10.0.0.1` may well
 be a real address on your VPC - unlike in CI, where neither is routable at
 all and would "fail" identically whether or not the filter is doing
@@ -315,18 +318,18 @@ HTTP response, which is a fail, not a "no output" pass:
 
 ```sh
 # metadata + private ranges are unreachable from inside the container
-docker exec blot-airlock sh -c 'curl -fm3 -sS http://169.254.169.254/ ; echo exit=$?'
-docker exec blot-airlock sh -c 'curl -fm3 -sS http://10.0.0.1/       ; echo exit=$?'
+docker exec blot-blue-airlock sh -c 'curl -fm3 -sS http://169.254.169.254/ ; echo exit=$?'
+docker exec blot-blue-airlock sh -c 'curl -fm3 -sS http://10.0.0.1/       ; echo exit=$?'
 # the public internet still works
-docker exec blot-airlock sh -c 'curl -m5 -sS -o /dev/null -w "%{http_code}\n" https://example.com'
+docker exec blot-blue-airlock sh -c 'curl -m5 -sS -o /dev/null -w "%{http_code}\n" https://example.com'
 # the proxy path works end to end
-docker exec blot-airlock sh -c 'curl -m5 -sS -x http://127.0.0.1:8888 -o /dev/null -w "%{http_code}\n" https://example.com'
+docker exec blot-blue-airlock sh -c 'curl -m5 -sS -x http://127.0.0.1:8888 -o /dev/null -w "%{http_code}\n" https://example.com'
 # the container's own DevTools endpoint is NOT reachable through the proxy
 # (this is the loopback confinement above - it must fail, not return 200,
 # and -f matters here too: tinyproxy answers with its own valid HTTP error
 # page when it can't reach an upstream, which -sS alone would count as a
 # "successful" response)
-docker exec blot-airlock sh -c 'curl -fm3 -sS -x http://127.0.0.1:8888 http://127.0.0.1:9221/json/version ; echo exit=$?'
+docker exec blot-blue-airlock sh -c 'curl -fm3 -sS -x http://127.0.0.1:8888 http://127.0.0.1:9221/json/version ; echo exit=$?'
 ```
 
 The Jasmine spec [`app/build/plugins/linkScreenshot/tests.js`](../../app/build/plugins/linkScreenshot/tests.js)
@@ -346,7 +349,7 @@ they look different in the logs - only one is a security regression:
   protection**. `config/index.js`'s startup warning catches this:
 
   ```sh
-  ssh blot "docker logs blot-container-green 2>&1 | grep 'BLOT_AIRLOCK_BROWSER_URL'"
+  ssh blot "docker logs blot-green 2>&1 | grep 'BLOT_AIRLOCK_BROWSER_URL'"
   ```
 
 * **The env vars are set but the airlock isn't reachable** (most likely

@@ -8,7 +8,7 @@ set -euo pipefail
 #   npm run fork [blog identifier]
 
 LOCAL_CONTAINER="${BLOT_LOCAL_CONTAINER:-blot-node-app-1}"
-PROD_CONTAINER="blot-container-blue"
+PROD_CONTAINER="blot-blue"
 PROD_BLOGS_DIR="/var/www/blot/data/blogs"
 
 # Local blog folders live in ./data/blogs of the checkout running the Docker

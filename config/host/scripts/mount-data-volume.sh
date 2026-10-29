@@ -106,7 +106,7 @@ if ! marker_matches; then
 fi
 
 # App containers bind the data directory with bind-propagation=rslave (see
-# scripts/deploy/util/generateDockerCommand.js) so a mount made here reaches
+# proxy/deploy/common.sh) so a mount made here reaches
 # them without a restart. Docker only allows that if the host mount is shared.
 mount --make-shared "$DATA_DIRECTORY"
 echo "$DATA_DIRECTORY is mounted and shared."

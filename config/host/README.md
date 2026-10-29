@@ -1,7 +1,7 @@
 # Proxy host setup
 
-Setup for the production proxy host (the EC2 instance that runs the proxy
-container and the Node containers). The proxy itself is not installed from
+Setup for the production proxy host (the EC2 instance that runs the two units,
+`blot-blue` and `blot-green`: OpenResty and Node in one container each). The proxy itself is not installed from
 here: deploy it with `npm run deploy-units` or the Deploy workflow (see
 [`proxy/deploy/README.md`](../../proxy/deploy/README.md)).
 
@@ -80,9 +80,9 @@ pointing traffic at the new host.
 - **Packages and cron:** `redis6` (for `redis-cli`), `nvme-cli`, `cronie`, and
   the cron entry that runs `check_docker_health.sh` every minute (`deploy.sh`
   copies the script but not the entry).
-- Then `npm run deploy-host`, the Deploy proxy and Deploy node workflows.
+- Then `npm run deploy-host` and the Deploy workflow.
 
-Nothing in `proxy/` or the Node containers needs copying: custom-domain
+Nothing in `proxy/` or the units needs copying: custom-domain
 certificates are in Redis and the proxy cache refills itself.
 
 It also turns off X11 forwarding in `sshd_config`. The systemd files are
@@ -129,8 +129,8 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
 - `check_docker_health.sh` restarts containers Docker reports as unhealthy. It
   is run from cron every minute as `/usr/local/bin/check_docker_health.sh`
   (`deploy.sh` copies it there, but does not install the cron entry). It skips
-  `blot-blue`, `blot-green` and `blot-<unit>-previous` (whole names, so the Node
-  containers are still restarted) while a proxy deploy holds its lock, so it
+  `blot-blue`, `blot-green` and `blot-<unit>-previous` (whole names, so the
+  airlocks are still restarted) while a proxy deploy holds its lock, so it
   cannot restart the unit that is draining.
 - Custom-domain certificates need nothing on the host: the proxy container
   renews them and refuses to serve an expired one (see `proxy/README.md`).

@@ -21,10 +21,10 @@ cd /var/www/blot
 
 LOGS=/var/instance-ssd/logs
 
-# Memory and CPU of the running proxy containers, blot-blue and blot-green (or
-# the single blot-proxy-<colour> before the move to two); the proxy no longer
-# runs on the host. Whole names: a name= filter is a substring match and would
-# also take blot-blue-previous and, for blot-, every blot-container-*.
+# Memory and CPU of the running units, blot-blue and blot-green (or the single
+# blot-proxy-<colour> before the move to two); the proxy no longer runs on the
+# host. Whole names: a name= filter is a substring match and would also take
+# blot-blue-previous.
 nginx-stats() {
   local proxies
   proxies=$(docker ps --filter 'name=^blot-(proxy-)?(blue|green)$' --format '{{.Names}}')
@@ -67,10 +67,9 @@ question() {
 }
 
 # The running app containers: the units, blot-blue and blot-green (OpenResty and
-# Node, whose lines are labelled blue/node-a, blue/node-b ...), and the old
-# blot-container-* ones while they are still running (PR 7 removes those).
+# Node, whose lines are labelled blue/node-a, blue/node-b ...).
 app_containers() {
-    docker ps --format '{{.Names}}' | grep -E '^(blot-(blue|green)|blot-container-.*)$'
+    docker ps --format '{{.Names}}' | grep -E '^blot-(blue|green)$'
 }
 
 req() {
@@ -106,11 +105,11 @@ live() {
 # logs [-f] [name]: the app containers' logs. name is blue or green (a unit),
 # or the process label a SERVER_START email gives, blue/node-a or blue/node-b
 # (the whole unit's log: node-a and node-b share it, and their lines are
-# labelled), or yellow (an old blot-container-*). With no name, all of them.
+# labelled). With no name, all of them.
 logs_container() {
     case "${1%%/*}" in
-        blue|green) if docker inspect "blot-${1%%/*}" >/dev/null 2>&1 && ! docker inspect "blot-container-${1%%/*}" -f "{{.State.Running}}" 2>/dev/null | grep -q true; then echo "blot-${1%%/*}"; else echo "blot-container-${1%%/*}"; fi ;;
-        *) echo "blot-container-${1%%/*}" ;;
+        blue|green) echo "blot-${1%%/*}" ;;
+        *) echo "logs: name is blue or green (a unit)" >&2; return 1 ;;
     esac
 }
 
