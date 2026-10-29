@@ -223,7 +223,12 @@ function releaseDocumentationBuildLock(lockPath) {
     }
 
     console.log(clfdate(), "Documentation build:", "Releasing build lock", lockPath);
-    await fs.remove(lockPath);
+    // Move the lock aside before deleting it. A waiter that read the owner as
+    // empty mid-removal can otherwise write its claim file into the directory
+    // being removed, and the removal's rmdir fails with ENOTEMPTY.
+    const releasingPath = lockPath + ".releasing-" + process.pid + "-" + Date.now();
+    await fs.rename(lockPath, releasingPath);
+    await fs.remove(releasingPath);
     console.log(clfdate(), "Documentation build:", "Released build lock", lockPath);
   };
 }
@@ -238,6 +243,8 @@ async function takeOverStaleLock(lockPath, observedToken, observedStat) {
   try {
     await fs.writeFile(claimPath, currentLockToken(), { flag: "wx" });
   } catch (err) {
+    // ENOENT: the owner released the lock between our observation and now.
+    if (err.code === "ENOENT") return false;
     if (err.code !== "EEXIST") throw err;
     const claimStat = await fs.stat(claimPath).catch(() => null);
     const claimToken = String(await fs.readFile(claimPath, "utf8").catch(() => "")).trim();
