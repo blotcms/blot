@@ -429,6 +429,44 @@ var writeChangeToFolder = require("../../../dashboard/site/template/save/writeCh
     );
     expect((await folderLock.inspect(this.blog.id)).held).toBeFalsy();
   });
+
+  it("does not lock again inside a request that already holds the lock", async function () {
+    var folderLock = require("sync/lock");
+    var { holdForRequest } = require("../withFolderLock");
+    var { promisify } = require("util");
+    var EventEmitter = require("events");
+    var blogID = this.blog.id;
+    var templateID = this.template.id;
+    var res = new EventEmitter();
+
+    await promisify(setView)(this.template.id, {
+      name: "post.html",
+      content: "<h1>Held</h1>",
+    });
+
+    // Written inside the hold, the lock is already ours so this must not
+    // wait for it (which would never be released) or release it early
+    await new Promise(function (resolve, reject) {
+      holdForRequest({ blog: { id: blogID } }, res, function (err) {
+        if (err) return reject(err);
+
+        writeToFolder(blogID, templateID, function (err) {
+          if (err) return reject(err);
+          folderLock.inspect(blogID).then(function (state) {
+            expect(state.held).toEqual(true);
+            res.emit("finish");
+            resolve();
+          }, reject);
+        });
+      });
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(fs.readFileSync(getTemplatePath(this, "post.html"), "utf-8")).toEqual(
+      "<h1>Held</h1>"
+    );
+    expect((await folderLock.inspect(blogID)).held).toBeFalsy();
+  });
 });
 
 function getTemplateDir(test) {
