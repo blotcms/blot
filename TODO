@@ -4,7 +4,7 @@ Tune the render LRU caches once #2233 has run on prod for a day (it adds `render
 
 ---
 
-Finish container consolidation -> finish host consolidation (buy reserved instance) -> finish s3 migration (close out ebs)
+Finish host consolidation (buy reserved instance) -> finish s3 migration (close out ebs)
 
 Set up Redis redundancy using a primary on the main server, a replica on the Frankfurt server, and three Redis Sentinel instances (main, Frankfurt, Mac) for automatic failover with quorum 2. Configure Node.js to discover the current primary via Sentinel. When the original main server recovers, it should rejoin as a replica; restore it as primary through a controlled manual failback using SENTINEL FAILOVER.
 
@@ -46,7 +46,6 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 - cdn. responses carry Cache-Control twice (expires 1y + add_header), as on bare metal
 - Use the proxy container in local development instead of the nginx:alpine in scripts/development/proxy, so local.blot runs the production proxy config
 - Does proxy container deploy check for enough free memory and disk on host before proceeding?
-- Does proxy container deploy work in paralell with node container deploy with nothing breaking?
 - Get proxy horizontally scalable and multi-region
 - Can we add modern compression to proxy? (brotli is in; zstd is not)
 - Can the proxy remember bad urls and avoid repeatedly sending them to upstream?
