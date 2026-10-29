@@ -1,32 +1,26 @@
 #!/usr/bin/env bash
 #
-# Shared by blue-green.sh, try-issuance.sh and reload-config.sh. Source it, do
-# not run it. Everything here runs ON the production host (copy proxy/deploy/
-# across, or run it in place from a checkout):
+# Shared by blue-green.sh and try-issuance.sh. Source it, do not run it.
+# Everything here runs ON the production host (copy proxy/deploy/ across, or
+# run it in place from a checkout):
 #
 #   scp -r proxy/deploy blot:~/proxy-deploy
 #
-# blue-green.sh deploys one of two kinds of image, which deploy_kind decides
-# from the image's im.blot.kind label (set in the Dockerfile's `unit` stage):
-#
-#   unit    ghcr.io/blotcms/blot:<sha>, OpenResty and Node in one container
-#           (#2119). What production runs.
-#   proxy   ghcr.io/blotcms/blot-proxy:<sha>, OpenResty alone, in front of the
-#           blot-container-* Node containers. What production ran before the
-#           units, and what a rollback from them deploys (PROXY_DEPLOY_KIND=proxy).
+# blue-green.sh deploys a unit: ghcr.io/blotcms/blot:<sha>, OpenResty and Node
+# in one container (#2119), which the `unit` stage of the root Dockerfile
+# labels im.blot.kind=unit.
 #
 # Settings come from the environment, with these defaults for production:
 #
 #   PROXY_ENV_FILE         /etc/blot/proxy.env  docker --env-file for the proxy
-#                                               (see proxy.env.example); for a
-#                                               unit it comes after secrets.env
-#   PROXY_DEPLOY_KIND      (from the label)     unit or proxy: see above
+#                                               (see proxy.env.example); it comes
+#                                               after secrets.env
 #   PROXY_UNIT_SETTINGS    unit-settings.env next to this file  the unit's memory,
 #                                               paths and airlock ports, written
 #                                               from scripts/deploy/constants.js
 #                                               by scripts/deploy/unit-settings.js
 #                                               (units.sh copies it across)
-#   PROXY_AIRLOCK_IMAGE    (blot-airlock:<sha>) the airlock image for a unit, if not
+#   PROXY_AIRLOCK_IMAGE    (blot-airlock:<sha>) the airlock image, if not
 #                                               the one published for the commit
 #   PROXY_DISK_CACHE_DIR   /var/instance-ssd/disk-cache  the disk cache every
 #                                               proxy container on the host shares
@@ -36,18 +30,11 @@
 #   PROXY_GLOBAL_STATIC_DIR /var/www/blot/app/blog/static  the app's own static
 #                                               assets, read-only (see run_args())
 #   PROXY_AUTOSSL_VOLUME   blot-proxy-auto-ssl  dehydrated account state
-#   PROXY_NODE_CONTAINER   blot-container-blue  a Node container to purge from (a
-#                                               proxy deploy; a unit purges from itself)
-#   PROXY_PURGE_URLS       (read from that container's environment)  comma separated
+#   PROXY_PURGE_URLS       (read from the unit's environment)  comma separated
 #   PROXY_CANARY_HOST      preview-of-wireframe-on-david.<BLOT_HOST>
-#   PROXY_REGISTRY_URL     ghcr.io/blotcms/blot-proxy  for a bare tag / commit SHA
-#                                               of a proxy image
 #   PROXY_UNIT_REGISTRY_URL ghcr.io/blotcms/blot  for a bare tag / commit SHA
-#   PROXY_HEALTH_TIMEOUT   60 (unit: 180)       seconds to wait for a new container
+#   PROXY_HEALTH_TIMEOUT   60 (a deploy: 180)   seconds to wait for a new container
 #   PROXY_DRAIN_TIMEOUT    30                   seconds an old container may drain
-#   PROXY_UPSTREAM_WAIT    180                  seconds the preflight keeps retrying an
-#                                               unhealthy upstream (a Node deploy
-#                                               restarting its container); 0 = one try
 #   PROXY_DEPLOY_LOCK      /tmp/blot-proxy-deploy.lock  held by every deploy script
 #   PROXY_SKIP_CERT_SWEEP  (unset)              1 skips the custom-domain certificate
 #                                               checks (see cert_baseline and
@@ -67,10 +54,8 @@ LOG_DIR="${PROXY_LOG_DIR:-/var/instance-ssd/logs}"
 CERT_DIR="${PROXY_CERT_DIR:-/etc/ssl/private}"
 GLOBAL_STATIC_DIR="${PROXY_GLOBAL_STATIC_DIR:-/var/www/blot/app/blog/static}"
 AUTOSSL_VOLUME="${PROXY_AUTOSSL_VOLUME:-blot-proxy-auto-ssl}"
-NODE_CONTAINER="${PROXY_NODE_CONTAINER:-blot-container-blue}"
 HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-60}"
 DRAIN_TIMEOUT="${PROXY_DRAIN_TIMEOUT:-30}"
-UPSTREAM_WAIT="${PROXY_UPSTREAM_WAIT:-180}"
 AIRLOCK_HEALTH_TIMEOUT="${PROXY_AIRLOCK_HEALTH_TIMEOUT:-60}"
 HEALTH_SOCK="/run/openresty/health.sock"
 LOCK_FILE="${PROXY_DEPLOY_LOCK:-/tmp/blot-proxy-deploy.lock}"
@@ -85,12 +70,9 @@ PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
 # allows it.
 NOFILE="${PROXY_NOFILE:-65536}"
 
-# unit or proxy: set by blue-green.sh from the image it deploys; the other
-# scripts that source this file deal in proxies
-DEPLOY_KIND="${DEPLOY_KIND:-proxy}"
 RELEASE_ID="${RELEASE_ID:-unknown}"
-# The container live_checks asks whether the purge endpoint is reachable from:
-# the unit being checked, or the Node container of a proxy-only deploy
+# The unit live_checks asks whether the purge endpoint is reachable from: the
+# one being checked
 PURGE_CONTAINER="${PURGE_CONTAINER:-}"
 
 COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -98,9 +80,6 @@ UNIT_SETTINGS="${PROXY_UNIT_SETTINGS:-$COMMON_DIR/unit-settings.env}"
 # Where each unit's Node processes serve (<unit>-a.sock, <unit>-b.sock), on the
 # host and in the container; the settings file says the same.
 SOCKET_DIRECTORY=/run/blot
-# The Node containers and the airlock that a unit replaces: stopped, not
-# removed, when the units are healthy, and kept as the way back.
-OLD_NODES="blot-container-blue blot-container-green blot-container-yellow"
 
 # Never fail because the terminal went away: a deploy ignores SIGPIPE and
 # must still be able to finish and roll back with nobody watching.
@@ -132,22 +111,17 @@ acquire_lock() {
 }
 
 # Exact names only: `docker ps --filter name=blot-blue` is a substring regex
-# that also matches blot-blue-previous (and name=blot- matches every
-# blot-container-* Node container), so these list the names and grep -x them.
+# that also matches blot-blue-previous, so these list the names and grep -x them.
 running() { docker ps --format '{{.Names}}' | grep -qx "$1"; }
 exists() { docker ps -a --format '{{.Names}}' | grep -qx "$1"; }
 
-# The two proxies that are always running: blot-blue and blot-green (their
-# final names). Before them there was one proxy, alternately named
-# blot-proxy-blue and blot-proxy-green; blue-green.sh moves a host from one to
-# the other. A unit being replaced is kept, stopped, as blot-<unit>-previous.
+# The two units that are always running: blot-blue and blot-green. A unit being
+# replaced is kept, stopped, as blot-<unit>-previous.
 UNITS="blue green"
-LEGACY_PROXIES="blot-proxy-blue blot-proxy-green"
 unit_name() { echo "blot-$1"; }
 other_unit() { if [ "$1" = blue ]; then echo green; else echo blue; fi; }
-# blue or green, from any proxy container name (blot-blue, blot-blue-previous,
-# blot-proxy-green)
-unit_of() { local n="${1#blot-}"; n="${n#proxy-}"; echo "${n%%-*}"; }
+# blue or green, from any unit container name (blot-blue, blot-blue-previous)
+unit_of() { local n="${1#blot-}"; echo "${n%%-*}"; }
 
 env_value() { # env_value <file> <NAME> - last assignment, quotes and `export` stripped
   grep -E "^(export )?$2=" "$1" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d "'\""
@@ -197,9 +171,9 @@ env_conflicts() { # env_conflicts <first file> <second file>
   ' "$1" "$2" | sort -u
 }
 
-# For a unit: the settings file (the numbers in scripts/deploy/constants.js),
-# the two env files, and the host directories the container mounts. Before
-# anything is stopped.
+# The settings file (the numbers in scripts/deploy/constants.js), the two env
+# files, and the host directories the container mounts. Before anything is
+# stopped.
 load_unit_settings() {
   [ -r "$UNIT_SETTINGS" ] \
     || die "cannot read $UNIT_SETTINGS: deploy a unit with scripts/deploy/units.sh, which writes it from scripts/deploy/constants.js (or: node scripts/deploy/unit-settings.js > proxy/deploy/unit-settings.env)"
@@ -214,44 +188,25 @@ load_unit_settings() {
   for d in "$DATA_DIRECTORY_ON_SERVER" "$TMP_DIRECTORY" "$SOCKET_DIRECTORY"; do
     [ -d "$d" ] || die "$d does not exist on this host (a unit mounts it)"
   done
-  # a unit's default is the longer of these: Node has to start as well
+  # the longer of the two defaults: Node has to start as well
   HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-180}"
-  # and a unit drains OpenResty and then node-a, so it is given the unit's
-  # stop timeout (also its --stop-timeout) to stop
+  # and a unit drains OpenResty and then node-a, so it is given its stop
+  # timeout (also its --stop-timeout) to stop
   DRAIN_TIMEOUT="${PROXY_DRAIN_TIMEOUT:-$UNIT_STOP_TIMEOUT}"
 }
 
 # A bare tag or commit SHA means the image CI publishes
 # (.github/workflows/unit-image.yml); anything with a / or : is used as given.
-PROXY_REGISTRY_URL="${PROXY_REGISTRY_URL:-ghcr.io/blotcms/blot-proxy}"
 UNIT_REGISTRY_URL="${PROXY_UNIT_REGISTRY_URL:-ghcr.io/blotcms/blot}"
 resolve_image() {
-  local registry="$UNIT_REGISTRY_URL"
-  [ "${PROXY_DEPLOY_KIND:-}" != proxy ] || registry="$PROXY_REGISTRY_URL"
-  case "$1" in */*|*:*) echo "$1" ;; *) echo "$registry:$1" ;; esac
+  case "$1" in */*|*:*) echo "$1" ;; *) echo "$UNIT_REGISTRY_URL:$1" ;; esac
 }
 
-# unit or proxy: what kind of container an image makes (see the top). The
-# `unit` stage of the root Dockerfile labels its image im.blot.kind=unit; the
-# proxy image has no such label. The image has to be on the host.
-KIND_LABEL='{{index .Config.Labels "im.blot.kind"}}'
+# Is this image a unit? The `unit` stage of the root Dockerfile labels its image
+# im.blot.kind=unit, and blue-green.sh refuses any other: an image without Node
+# would replace units that carry it. The image has to be on the host.
 image_is_unit() { # image_is_unit <image>
-  [ "$(docker image inspect -f "$KIND_LABEL" "$1" 2>/dev/null)" = unit ]
-}
-deploy_kind() { # deploy_kind <image>
-  case "${PROXY_DEPLOY_KIND:-}" in
-    unit|proxy) echo "$PROXY_DEPLOY_KIND"; return ;;
-    "") ;;
-    *) die "PROXY_DEPLOY_KIND must be unit or proxy, not '$PROXY_DEPLOY_KIND'" ;;
-  esac
-  if image_is_unit "$1"; then echo unit; else echo proxy; fi
-}
-
-# Is this container a unit (OpenResty and Node) rather than a proxy alone?
-# During the cutover blot-blue is one and blot-green the other. A container
-# carries its image's labels.
-container_is_unit() { # container_is_unit <name>
-  [ "$(docker inspect -f "$KIND_LABEL" "$1" 2>/dev/null)" = unit ]
+  [ "$(docker image inspect -f '{{index .Config.Labels "im.blot.kind"}}' "$1" 2>/dev/null)" = unit ]
 }
 
 # The commit a unit image was built from, which is its tag: the app's
@@ -284,16 +239,6 @@ ensure_image() { # pull only when it is not already on the host
   docker image inspect "$1" >/dev/null 2>&1 || { log "Pulling $1"; docker pull "$1"; }
 }
 
-# The upstream address for a Node container (BLUE, GREEN, YELLOW): PROXY_UPSTREAM_*
-# from the env file, else the host port the Node container publishes.
-upstream_addr() { # upstream_addr <COLOUR> <default>
-  local addr
-  addr="$(env_value "$ENV_FILE" "PROXY_UPSTREAM_$1")"
-  echo "${addr:-$2}"
-}
-
-UPSTREAMS="BLUE:127.0.0.1:8088 GREEN:127.0.0.1:8089 YELLOW:127.0.0.1:8090"
-
 # Empty a cache directory without waiting for millions of files to be deleted:
 # move every top-level entry (a cache has few: its shard directories) into
 # .trash/<timestamp>/, which is instant on one filesystem, then delete that in
@@ -314,58 +259,20 @@ reset_cache_dir() { # reset_cache_dir <host dir> <image>
   docker run -d --rm --user 0 --entrypoint sh -v "$dir":/cache "$image" -c 'rm -rf /cache/.trash' >/dev/null || true
 }
 
-# Arguments common to every real proxy container.
-# Host networking: the default upstreams are 127.0.0.1:8088-8090 and the Node
-# containers publish those ports on the host. Upstreams written unix:/run/blot/...
-# are the Node containers' sockets: bind-mounted with --mount so a missing
-# /run/blot fails the deploy rather than Docker creating it as root.
-run_args() { # run_args <name>
-  if [ "$DEPLOY_KIND" = unit ]; then unit_run_args "$1"; return; fi
-  local var addr unix=
-  for var in $UPSTREAMS; do
-    addr="$(upstream_addr "${var%%:*}" "${var#*:}")"
-    case "$addr" in unix:*) unix=1 ;; esac
-  done
-  RUN_ARGS=(
-    --name "$1"
-    --network host
-    --cap-add SYS_NICE
-    --ulimit "nofile=$NOFILE:$NOFILE"
-    --log-driver json-file --log-opt max-size=512m --log-opt max-file=1
-    --env-file "$ENV_FILE"
-    # blue or green, logged as unit= on every access log line. After the env
-    # file so it wins; the file is shared by both units.
-    -e "PROXY_UNIT=$(unit_of "$1")"
-    -v "$DISK_CACHE_DIR":/var/cache/openresty
-    -v "$LOG_DIR":/var/log/openresty
-    -v "$AUTOSSL_VOLUME":/etc/resty-auto-ssl
-    -v "$CERT_DIR":/etc/ssl/private:ro
-    # Mounted at the path the image defaults to (GLOBAL_STATIC_FILES_DIR in
-    # proxy/build/locals.js), so `try_files` on cdn.<host> finds the app's
-    # own static files on disk instead of falling through to @cdn_node,
-    # which misses the Cache-Control/CORS headers `location /` sets.
-    -v "$GLOBAL_STATIC_DIR":/var/www/blot/app/blog/static:ro
-  )
-  if [ -n "$unix" ]; then
-    RUN_ARGS+=(--mount type=bind,source=/run/blot,target=/run/blot)
-  fi
-}
-
-# Arguments for a unit: what run_args gives a proxy, plus everything the Node
-# containers had (the old Node deploy, removed in PR 7), from the
-# settings file. Host networking changes four things for the Node side:
+# Arguments for a unit container, from the settings file. Host networking, so
+# OpenResty shares :80/:443 with the other unit (reuseport), and for the Node side:
 #   - no published port: node-a serves on its socket alone (config/index.js),
 #     so two units never both want 8080
 #   - no blotnet: the airlock is reached on 127.0.0.1 at this unit's own ports
 #     (ensure_airlock)
 #   - the host's Redis, DNS and purge listener (BLOT_REVERSE_PROXY_URLS, the
-#     private address of the host) are reached directly, as the proxy always did
+#     private address of the host) are reached directly
 #   - the container shares the host's loopback, so nothing else may bind the
 #     ports above
-# The env files: secrets.env (what the Node containers got), then proxy.env,
+# The env files: secrets.env (what Node gets), then proxy.env,
 # then the -e settings below, each overriding the one before; load_unit_settings
 # refuses a key the two files set differently.
-unit_run_args() { # unit_run_args <name>
+run_args() { # run_args <name>
   local name="$1" unit upper var browser_port proxy_port
   unit="$(unit_of "$name")"
   upper="$(printf '%s' "$unit" | tr '[:lower:]' '[:upper:]')"
@@ -428,19 +335,17 @@ airlock_healthy() { # airlock_healthy <name>
 }
 
 # The airlock image to run: the one built for this commit, else (a commit whose
-# airlock build did not publish) the one this unit's airlock, or the single
-# blot-airlock of before, already runs. Fails if there is none.
+# airlock build did not publish) the one this unit's airlock already runs. Fails
+# if there is none.
 airlock_image() { # airlock_image <airlock name>
-  local want="${PROXY_AIRLOCK_IMAGE:-$AIRLOCK_REGISTRY:$RELEASE_ID}" c img
+  local want="${PROXY_AIRLOCK_IMAGE:-$AIRLOCK_REGISTRY:$RELEASE_ID}" img
   if docker image inspect "$want" >/dev/null 2>&1 || docker pull "$want" >/dev/null 2>&1; then
     echo "$want"; return 0
   fi
-  for c in "$1" "$AIRLOCK_LEGACY_NAME"; do
-    if exists "$c"; then
-      img="$(docker inspect -f '{{.Config.Image}}' "$c" 2>/dev/null)"
-      [ -z "$img" ] || { echo "$img"; return 0; }
-    fi
-  done
+  if exists "$1"; then
+    img="$(docker inspect -f '{{.Config.Image}}' "$1" 2>/dev/null)"
+    [ -z "$img" ] || { echo "$img"; return 0; }
+  fi
   return 1
 }
 
@@ -527,23 +432,25 @@ image_logs_to_file() { # image_logs_to_file <image>
     -c 'render-config >/dev/null && grep -Eq "^[[:space:]]*access_log /var/log/openresty/access.log" /usr/local/openresty/nginx/conf/nginx.conf'
 }
 
-# The container answers on a per-container Unix socket, so the other proxy
-# (they share :80/:443 with reuseport) cannot answer for it. A unit also has to
-# have node-a and node-b answering /health on their sockets (the image's own
-# HEALTHCHECK leaves node-b out, because node-a restarts it; a deploy wants it
-# up). The check follows the container, not the deploy: during the cutover one
-# unit is a proxy alone and the other is not.
+# The container answers on a per-container Unix socket, so the other unit
+# (they share :80/:443 with reuseport) cannot answer for it.
+proxy_answers() { # proxy_answers <name>
+  docker exec "$1" curl -fsS -o /dev/null --unix-socket "$HEALTH_SOCK" http://localhost/health >/dev/null 2>&1
+}
+
+# A unit is healthy only when its proxy, node-a and node-b all answer /health
+# on their sockets (the image's own HEALTHCHECK leaves node-b out, because
+# node-a restarts it; a deploy wants it up).
 healthy() { # healthy <name>
-  docker exec "$1" curl -fsS -o /dev/null --unix-socket "$HEALTH_SOCK" http://localhost/health >/dev/null 2>&1 || return 1
-  container_is_unit "$1" || return 0
+  proxy_answers "$1" || return 1
   local unit; unit="$(unit_of "$1")"
   docker exec "$1" curl -fsS -o /dev/null --unix-socket "$SOCKET_DIRECTORY/$unit-a.sock" http://localhost/health >/dev/null 2>&1 \
     && docker exec "$1" curl -fsS -o /dev/null --unix-socket "$SOCKET_DIRECTORY/$unit-b.sock" http://localhost/health >/dev/null 2>&1
 }
 
-wait_healthy() { # wait_healthy <name> <timeout>
+wait_healthy() { # wait_healthy <name> <timeout> [check function, default healthy]
   local deadline=$(( $(date +%s) + $2 ))
-  while ! healthy "$1"; do
+  while ! "${3:-healthy}" "$1"; do
     running "$1" || return 1
     [ "$(date +%s)" -lt "$deadline" ] || return 1
     nap 1
@@ -743,23 +650,21 @@ served_cert_matches_wildcard() { # served_cert_matches_wildcard [port]
 purge_urls() {
   # From the running container, not the secrets file: the file may have been
   # edited since the container was created, and the app uses what it started with.
-  local urls="${PROXY_PURGE_URLS:-$(docker exec "${PURGE_CONTAINER:-$NODE_CONTAINER}" printenv BLOT_REVERSE_PROXY_URLS 2>/dev/null || true)}"
+  local urls="${PROXY_PURGE_URLS:-$(docker exec "$PURGE_CONTAINER" printenv BLOT_REVERSE_PROXY_URLS 2>/dev/null || true)}"
   echo "$urls" | tr ',' '\n' | sed '/^$/d'
 }
 
-# Blot purges the proxy cache from inside a Node container. A Node container
-# on a Docker bridge cannot see the host's 127.0.0.1, so it purges the
-# listener on the host's private address (:8077); a unit is on the host network
-# and uses the same URLs. The probe sends the Node
-# container's own BLOT_PURGE_TOKEN (as the app does) to the listener's root: an
+# Blot purges the proxy cache from inside its Node process, at the listener on
+# the host's private address (:8077). The probe sends the unit's own
+# BLOT_PURGE_TOKEN (as the app does) to the listener's root: an
 # authorised request gets the listener's 404, an unreachable address or a
 # rejected token (403, a token mismatch between Node and the proxy) fails.
 purge_reachable() {
   local url urls
   urls="$(purge_urls)"
-  [ -n "$urls" ] || { log "${PURGE_CONTAINER:-$NODE_CONTAINER} has no BLOT_REVERSE_PROXY_URLS (recreate it after editing secrets.env, or set PROXY_PURGE_URLS)"; return 1; }
+  [ -n "$urls" ] || { log "$PURGE_CONTAINER has no BLOT_REVERSE_PROXY_URLS (recreate it after editing secrets.env, or set PROXY_PURGE_URLS)"; return 1; }
   while read -r url; do
-    docker exec "${PURGE_CONTAINER:-$NODE_CONTAINER}" node -e '
+    docker exec "$PURGE_CONTAINER" node -e '
       const u = new URL(process.argv[1]);
       require(u.protocol === "https:" ? "https" : "http")
         .get(u, { timeout: 5000, headers: process.env.BLOT_PURGE_TOKEN
@@ -767,7 +672,7 @@ purge_reachable() {
           (r) => { r.resume(); process.exit(r.statusCode === 404 || r.statusCode === 200 ? 0 : 1); })
         .on("timeout", function () { this.destroy(); process.exit(1); })
         .on("error", () => process.exit(1));
-    ' "$url" || { log "purge endpoint $url is not reachable from ${PURGE_CONTAINER:-$NODE_CONTAINER}, or rejects its BLOT_PURGE_TOKEN"; return 1; }
+    ' "$url" || { log "purge endpoint $url is not reachable from $PURGE_CONTAINER, or rejects its BLOT_PURGE_TOKEN"; return 1; }
   done <<< "$urls"
 }
 
@@ -779,35 +684,12 @@ redis_reachable() {
     || { log "the proxy cannot reach Redis at $REDIS_HOST:6379"; return 1; }
 }
 
-# No checked host exercises every upstream, so probe each one directly.
-#
-# The upstreams are the Node containers (PROXY_UPSTREAM_*) while any proxy in
-# front of them runs: a proxy deploy always, and a unit deploy during the
-# cutover, when the proxy-only unit still routes to them. A running unit's own
-# node-a and node-b sockets are probed too.
+# No checked host exercises every Node process, so probe the node-a and node-b
+# sockets of each running unit directly.
 upstreams_reachable() {
-  local var addr u n target=() # target: curl's arguments for the address
-  local containers=1 unit_sockets=
-  if [ "$DEPLOY_KIND" = unit ]; then
-    containers=
-    for u in $UNITS; do
-      n="$(unit_name "$u")"
-      running "$n" || continue
-      if container_is_unit "$n"; then unit_sockets="$unit_sockets $u"; else containers=1; fi
-    done
-  fi
-  if [ -n "$containers" ]; then
-    for var in $UPSTREAMS; do
-      addr="$(upstream_addr "${var%%:*}" "${var#*:}")"
-      case "$addr" in
-        unix:*) target=(--unix-socket "${addr#unix:}" http://localhost/health) ;;
-        *) target=("http://$addr/health") ;;
-      esac
-      [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "${target[@]}" || true)" = 200 ] \
-        || { log "upstream $addr (PROXY_UPSTREAM_${var%%:*}) is not healthy"; return 1; }
-    done
-  fi
-  for u in $unit_sockets; do
+  local u addr
+  for u in $UNITS; do
+    running "$(unit_name "$u")" || continue
     for addr in "$SOCKET_DIRECTORY/$u-a.sock" "$SOCKET_DIRECTORY/$u-b.sock"; do
       [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --unix-socket "$addr" http://localhost/health || true)" = 200 ] \
         || { log "$u's Node socket $addr is not healthy"; return 1; }
@@ -815,24 +697,11 @@ upstreams_reachable() {
   done
 }
 
-# Preflight only: a Node deploy running at the same time restarts its
-# containers one at a time, so an upstream can be down for a minute or two.
-# Retry for up to <timeout> seconds before refusing. Not for use once the new
-# container exists: there an unhealthy upstream must fail and roll back at once.
-wait_upstreams_reachable() { # wait_upstreams_reachable <timeout>
-  local deadline=$(( $(date +%s) + $1 ))
-  until upstreams_reachable; do
-    [ "$(date +%s)" -lt "$deadline" ] || return 1
-    log "Retrying in 10s (waiting up to ${1}s for a concurrent Node deploy to finish)"
-    nap 10
-  done
-}
-
 # Every checked host answers as it did before ($1, from snapshot; empty = no
 # baseline, so every host must answer 200), the certificate served is the one
 # on disk, every custom-domain certificate is the one served before
 # (CERT_BASELINE, when set), Node can still reach the purge endpoint, and
-# Redis and every upstream are reachable.
+# Redis and every running unit's Node sockets are reachable.
 live_checks() { # live_checks <expected-snapshot | ""> [port]
   local got
   got=$(snapshot "${2:-443}")

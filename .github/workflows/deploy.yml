@@ -25,8 +25,7 @@ env:
 
 # Deploys the two units, blot-blue then blot-green (scripts/deploy/units.sh and
 # proxy/deploy/blue-green.sh; each unit is OpenResty and Node in one container,
-# #2119). The first run on a host that still has the proxy-only containers and
-# the blot-container-* Node containers is the cutover (proxy/deploy/README.md).
+# #2119).
 #
 # One production deploy at a time. A queued run waits.
 concurrency:

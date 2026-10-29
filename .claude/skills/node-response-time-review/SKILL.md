@@ -65,7 +65,7 @@ deploy/restart limits how far back `--since` can usefully go:
 
 ```bash
 ssh blot "docker ps --format '{{.Names}}\t{{.Status}}'"
-for c in blot-blue blot-green; do   # the units (before the cutover: blot-container-{blue,green,yellow})
+for c in blot-blue blot-green; do   # the units
   ssh blot "docker logs --since 6h $c 2>&1"
 done > /tmp/app_logs_combined.txt
 ```

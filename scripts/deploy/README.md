@@ -203,7 +203,7 @@ Before using the GitHub Actions deployment workflow, ensure you have:
 
 ### How to Deploy
 
-The app runs as two units, `blot-blue` and `blot-green`, deployed with `npm run deploy-units` or the Deploy workflow (see [proxy/deploy/README.md](../../proxy/deploy/README.md)). The old per-container Node deploy (`npm run deploy-node`) was removed with the three-container setup.
+The app runs as two units, `blot-blue` and `blot-green`, deployed with `npm run deploy-units` or the Deploy workflow (see [proxy/deploy/README.md](../../proxy/deploy/README.md)).
 
 #### Via GitHub UI
 
