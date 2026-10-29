@@ -2,6 +2,21 @@ const cacheMetrics = require("../cacheMetrics");
 const fetchCached = require("../fetchCached");
 
 describe("render cache metrics", function () {
+  it("scales the caps of a cache, with a floor", function () {
+    const options = { max: 1000, maxSize: 100 * 1024 * 1024, ttl: 5 };
+
+    expect(cacheMetrics.scaled(options, 1)).toBe(options);
+    expect(cacheMetrics.scaled(options, 0.1)).toEqual({
+      max: 100,
+      maxSize: 10 * 1024 * 1024,
+      ttl: 5,
+    });
+    expect(cacheMetrics.scaled({ max: 200, maxSize: 1024 * 1024 }, 0.01)).toEqual({
+      max: 10,
+      maxSize: 256 * 1024,
+    });
+  });
+
   // A key named "big" is over the 100 byte cap
   function build() {
     return cacheMetrics.createRenderCache("test", {

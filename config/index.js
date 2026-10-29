@@ -13,6 +13,9 @@ const BLOT_PORT = process.env.BLOT_PORT || "8080";
 const BLOT_SOCKET = process.env.BLOT_SOCKET || "";
 // Set by helper/workerChild on the worker it forks: it serves on a socket only
 const BLOT_WORKER_CHILD = process.env.BLOT_WORKER_CHILD === "true";
+// Which unit (blue or green) this process runs in, when it shares a container
+// with a proxy and a second Node process (#2119); empty otherwise
+const BLOT_UNIT = process.env.BLOT_UNIT || "";
 const BLOT_PROTOCOL = process.env.BLOT_PROTOCOL || "https";
 const BLOT_IPV6 = process.env.BLOT_IPV6 || null;
 
@@ -67,16 +70,24 @@ module.exports = {
   // (scripts/development/worktrees.md); it skips the scheduler, sync clients
   // and the start email.
   preview: process.env.BLOT_PREVIEW === "true",
-  // map 'blot-container-<container-name>' to 'container-name'; a forked
-  // worker child shares its parent's CONTAINER_NAME, so gets a suffix
-  container:
-    (process.env.CONTAINER_NAME || "").split("-").slice(2).join("-") +
-    (BLOT_WORKER_CHILD ? "-worker" : ""),
+  // The label for this process in logs, alerts and the per-process Redis
+  // keys. In a unit, <unit>/node-a for the main process and <unit>/node-b for
+  // the worker child it forks. Otherwise map 'blot-container-<container-name>'
+  // to 'container-name'; a forked worker child shares its parent's
+  // CONTAINER_NAME, so gets a suffix.
+  container: BLOT_UNIT
+    ? BLOT_UNIT + (BLOT_WORKER_CHILD ? "/node-b" : "/node-a")
+    : (process.env.CONTAINER_NAME || "").split("-").slice(2).join("-") +
+      (BLOT_WORKER_CHILD ? "-worker" : ""),
   worker_child: BLOT_WORKER_CHILD,
   // The socket for a worker child to serve on: set, the process forks one
   // (see helper/workerChild) and supervises it
   worker_socket: process.env.BLOT_WORKER_SOCKET || "",
   // The forked worker's --max-old-space-size in MB, or Node's default
+  // Multiplies the byte and entry caps of the in-memory render caches
+  // (blog/lib/cacheMetrics); 1 when unset. A forked worker child gets a small
+  // one unless BLOT_WORKER_CACHE_SCALE says otherwise (helper/workerChild).
+  cache_scale: parseFloat(process.env.BLOT_CACHE_SCALE) || 1,
   worker_max_old_space_size: parseInt(process.env.BLOT_WORKER_MAX_OLD_SPACE_SIZE) || null,
 
   webhooks: {
