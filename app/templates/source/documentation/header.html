@@ -5,7 +5,7 @@
     ><span class="icon-dots"></span
   ></label>
   <div class="index-link">
-    <a href="/">{{#profile_image.thumbnails.square}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" alt="" class="site-logo">{{/profile_image.thumbnails.square}}{{title}}</a>
+    <a href="/">{{#profile_image.thumbnails.small}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="24px" alt="" class="site-logo">{{/profile_image.thumbnails.small}}{{title}}</a>
   </div>
 
   <ul class="nav-links menubar">

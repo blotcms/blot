@@ -4,7 +4,7 @@
 
   <div class="navigation">
 
-    <a href="/" class="index-link">{{#profile_image.thumbnails.square}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" alt="{{title}}" class="site-logo">{{/profile_image.thumbnails.square}}{{^profile_image.thumbnails.square.url}}{{title}}{{/profile_image.thumbnails.square.url}}</a>
+    <a href="/" class="index-link">{{#profile_image.thumbnails.small}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="24px" alt="{{title}}" class="site-logo">{{/profile_image.thumbnails.small}}{{^profile_image.thumbnails.small.url}}{{title}}{{/profile_image.thumbnails.small.url}}</a>
 
     <div class="shrink">
       {{#is.in_navigation.recent_posts}}

@@ -25,7 +25,7 @@
       <line x1="4" y1="6" x2="20" y2="6"></line>
       <line x1="4" y1="18" x2="20" y2="18"></line></svg>
     </label>
-  <a href="/">{{#profile_image.thumbnails.square}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" alt="" class="site-logo">{{/profile_image.thumbnails.square}}{{title}}</a>
+  <a href="/">{{#profile_image.thumbnails.small}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="24px" alt="" class="site-logo">{{/profile_image.thumbnails.small}}{{title}}</a>
 </div>
 
 <div class="column-container">
@@ -33,17 +33,17 @@
       <div class="navigation">
         <a href="/">
           <h2>
-            {{#profile_image.thumbnails.square}}
-            <img width="{{width}}" height="{{height}}" src="{{{url}}}" class="avatar" title="{{title}}" />
-            {{/profile_image.thumbnails.square}}
-            {{^profile_image.thumbnails.square.url}}
+            {{#profile_image.thumbnails.small}}
+            <img width="{{width}}" height="{{height}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="24px" class="avatar" title="{{title}}" />
+            {{/profile_image.thumbnails.small}}
+            {{^profile_image.thumbnails.small.url}}
             {{#avatar}}
             <img width="16" height="16" src="{{{avatar}}}" class="avatar" title="{{title}}" />
             {{/avatar}}
             {{^avatar}}
             <span style="display: inline-block;width:8px;"></span>
             {{/avatar}}
-            {{/profile_image.thumbnails.square.url}}
+            {{/profile_image.thumbnails.small.url}}
             {{title}}
           </h2>
         </a>

@@ -158,9 +158,9 @@ hr {width: 100%;border: none;border-bottom: 1px solid rgba({{#rgb}}{{text_color}
 
 .avatar {
   width:36px;
-  {{#roundAvatar}}
+  {{#roundAvatar}}{{^profile_image.mask}}
   border-radius:50%;
-  {{/roundAvatar}}
+  {{/profile_image.mask}}{{/roundAvatar}}
   vertical-align: middle;
   margin-right: 0.75em;
 }

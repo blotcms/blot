@@ -44,18 +44,18 @@
 <div class="profile">
 <section id="wrapper">
 <header class="h-card">
-{{#profile_image.thumbnails.square}}
+{{#profile_image.thumbnails.small}}
 <a href="/">
-<img id="avatar" class="u-photo{{#profile_image.mask}} masked{{/profile_image.mask}}" width="{{width}}" height="{{height}}" src="{{{url}}}" alt="">
+<img id="avatar" class="u-photo{{#profile_image.mask}} masked{{/profile_image.mask}}" width="{{width}}" height="{{height}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="80px" alt="">
 </a>
-{{/profile_image.thumbnails.square}}
-{{^profile_image.thumbnails.square.url}}
+{{/profile_image.thumbnails.small}}
+{{^profile_image.thumbnails.small.url}}
 {{#avatar}}
 <a href="/">
 <img id="avatar" class="u-photo" src="{{{avatar}}}" alt="">
 </a>
 {{/avatar}}
-{{/profile_image.thumbnails.square.url}}
+{{/profile_image.thumbnails.small.url}}
 <h1 class="p-name"><a class="u-url" href="/" rel="me">{{title}}</a></h1>
 {{#description}}
 <h4 class="p-role">{{description}}</h4>

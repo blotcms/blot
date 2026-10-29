@@ -55,6 +55,16 @@ async function renderThumbnail(operation, options, destination, shape) {
   return { width: out.width, height: out.height };
 }
 
+// Every thumbnail is cut to `shape`, so templates can use any of them as is.
+async function renderThumbnails(base, names, directory, shape) {
+  const results = {};
+  await Promise.all(Object.entries(THUMBNAILS).map(async ([name, options]) => {
+    results[name] = await renderThumbnail(base.clone(), options, join(directory, names[name]), shape);
+    results[name].name = names[name];
+  }));
+  return results;
+}
+
 // Decode one page deliberately: animated uploads have a deterministic first
 // frame. This mirrors the existing thumbnail pipeline's non-animated output.
 //
@@ -81,11 +91,7 @@ async function generate(sourcePath, outputDirectory, crop, { source, shape: requ
     const selected = parseCrop(crop, oriented.width, oriented.height);
     const base = selected ? orientedSource.extract(selected) : orientedSource;
     const originalInfo = await base.clone().webp().toFile(join(temporary, names.original));
-    const results = {};
-    await Promise.all(Object.entries(THUMBNAILS).map(async ([name, options]) => {
-      results[name] = await renderThumbnail(base.clone(), options, join(temporary, names[name]), name === "square" ? shape : "square");
-      results[name].name = names[name];
-    }));
+    const results = await renderThumbnails(base, names, temporary, shape);
     await fs.ensureDir(outputDirectory);
     for (const name of Object.values(names)) {
       const destination = join(outputDirectory, name);
@@ -99,14 +105,28 @@ async function generate(sourcePath, outputDirectory, crop, { source, shape: requ
   } finally { await fs.remove(temporary); }
 }
 
-// Re-renders just the square thumbnail from an already stored (and already
-// cropped) original, for when the photo's shape changes without a new upload.
-async function generateSquare(original, outputDirectory, requestedShape) {
+// Re-renders the thumbnails from an already stored (and already cropped,
+// unmasked) original, for when the photo's shape changes without a new upload.
+async function regenerate(original, outputDirectory, requestedShape) {
   const shape = normalizeShape(requestedShape);
-  const name = `image-${uuid()}-square.webp`;
-  await fs.ensureDir(outputDirectory);
-  const info = await renderThumbnail(sharp(original, { pages: 1, limitInputPixels: MAX_PIXELS }), THUMBNAILS.square, join(outputDirectory, name), shape);
-  return { name, ...info };
+  const prefix = `image-${uuid()}`;
+  const names = {};
+  Object.keys(THUMBNAILS).forEach((name) => { names[name] = `${prefix}-${name}.webp`; });
+  const temporary = await fs.mkdtemp(join(os.tmpdir(), "blot-template-image-"));
+  const published = [];
+  try {
+    const thumbnails = await renderThumbnails(sharp(original, { pages: 1, limitInputPixels: MAX_PIXELS }), names, temporary, shape);
+    await fs.ensureDir(outputDirectory);
+    for (const name of Object.values(names)) {
+      const destination = join(outputDirectory, name);
+      await fs.move(join(temporary, name), destination);
+      published.push(destination);
+    }
+    return { thumbnails };
+  } catch (error) {
+    await Promise.all(published.map((path) => fs.remove(path).catch(() => {})));
+    throw error;
+  } finally { await fs.remove(temporary); }
 }
 
-module.exports = { generate, generateSquare, validate, MAX_PIXELS, parseCrop, normalizeShape };
+module.exports = { generate, regenerate, validate, MAX_PIXELS, parseCrop, normalizeShape };

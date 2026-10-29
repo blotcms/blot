@@ -1,6 +1,6 @@
 <header>
 
-<a href="/" title="Home" class="site-title {{#is_active}}/{{/is_active}}">{{#profile_image.thumbnails.square}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" alt="" class="site-logo">{{/profile_image.thumbnails.square}}<strong>{{title}}</strong></a>
+<a href="/" title="Home" class="site-title {{#is_active}}/{{/is_active}}">{{#profile_image.thumbnails.small}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="24px" alt="" class="site-logo">{{/profile_image.thumbnails.small}}<strong>{{title}}</strong></a>
 
 {{#show_tags_in_navigation}}
 <nav class="tags">
