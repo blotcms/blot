@@ -49,6 +49,8 @@ serves any host:
 | `PROXY_PRIVATE_IP` | build-time `OPENRESTY_INSTANCE_PRIVATE_IP`, else `127.0.0.1` | address of the extra `:8077` cache-purge listener, for Node containers that cannot reach the host's `127.0.0.1:80` |
 | `PROXY_RESOLVER` | build-time `OPENRESTY_RESOLVER`, else `8.8.8.8 ipv6=off` | DNS resolver (`127.0.0.11` on a user-defined Docker network) |
 | `PROXY_ACME_CA` | build-time `ACME_CA`, else Let's Encrypt production | ACME directory for custom-domain certificates. Leave it alone in production: the deploy scripts refuse anything else in `proxy.env` |
+| `PROXY_ACME_HOOK_SECRET` | unset: each instance generates its own (a warning is logged) | the secret dehydrated's hook calls carry to the `:8999` hook server. Set it to the same long random string on every instance: they share `:8999` (`reuseport`), so a call can reach either. Read by `init.conf` (never written into `nginx.conf`) |
+| `PROXY_UNIT` | `-` | `blue` or `green`: logged as the last field of every access log line (`unit=`). The deploy scripts set it from the container name |
 | `PROXY_UPSTREAM_GREEN` | `127.0.0.1:8089` (production: `unix:/run/blot/green.sock`) | the Node that handles sync, writes and webhooks (`/clients`) |
 | `PROXY_UPSTREAM_BLUE` | `127.0.0.1:8088` (`unix:/run/blot/blue.sock`) | the dashboard Node, and failover for the others |
 | `PROXY_UPSTREAM_YELLOW` | `127.0.0.1:8090` (`unix:/run/blot/yellow.sock`) | the blog Node |
@@ -231,10 +233,22 @@ The container runs with `--network host` (the generated upstreams are
   requests drain first. It refuses to run without `PROXY_CERT_MOUNT` (the
   image ships only a self-signed placeholder). The `zero-downtime` job in the
   `integration` workflow exercises the handover under load.
-  - *Known limitation*: during the seconds-long overlap the kernel can route
-    a `:8999` ACME hook request to the other instance, whose hook secret
-    differs, so first-issuance for a brand-new domain can be briefly flaky
-    *while a deploy is in progress*. Tracked in `TODO`.
+  - *Hook secret*: the `:8999` ACME hook server is shared by the instances
+    through `reuseport`, so dehydrated's hook call can land on the other one.
+    That works only if both hold the same secret, which they do when
+    `PROXY_ACME_HOOK_SECRET` is set in `proxy.env`. Without it each instance
+    generates its own and first issuance for a brand-new domain can fail
+    while two are running (a warning is logged at start and by the deploy).
+  - *Draining*: `worker_shutdown_timeout 10s` (`config/initial.conf`) ends
+    any connection still open 10 seconds after the quit, inside the 30 second
+    `docker stop` above.
+  - *Renewal and issuance across instances*: challenge tokens are stored in
+    Redis, so Let's Encrypt's validation request can reach either instance.
+    Each instance has its own daily renewal timer; `config/init.conf` makes
+    the first to start a pass (an `NX` key in Redis, `ssl:renewal-pass-lock`)
+    the only one to run it, because auto-ssl's own per-domain lock is not
+    atomic. Access log lines end with `unit=blue` or `unit=green`; the error
+    log has no such tag.
 
 ### Cache
 

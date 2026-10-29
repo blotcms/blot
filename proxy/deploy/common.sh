@@ -116,6 +116,10 @@ load_env() {
   local empty
   empty="$(grep -E "^(export )?PROXY_[A-Z_]+=[\"']*$" "$ENV_FILE" | cut -d= -f1 | tr '\n' ' ' || true)"
   [ -z "$empty" ] || die "$ENV_FILE sets $empty to nothing, which overrides the image's default with an empty value: give it a value or remove the line"
+  # Without a shared hook secret each instance generates its own, which is
+  # fine for one proxy but fails an ACME hook call that lands on the other of
+  # two. Not fatal: a deploy before the variable is set has to work.
+  [ -n "$(env_value "$ENV_FILE" PROXY_ACME_HOOK_SECRET)" ] || log "WARNING: PROXY_ACME_HOOK_SECRET is not set in $ENV_FILE: each proxy generates its own ACME hook secret, so two running at once can fail certificate issuance (see proxy.env.example)"
   # A staging (or test) ACME directory left in the env file would have every
   # new custom domain issued a certificate no browser trusts.
   local ca
@@ -199,6 +203,9 @@ run_args() { # run_args <name>
     --ulimit "nofile=$NOFILE:$NOFILE"
     --log-driver json-file --log-opt max-size=512m --log-opt max-file=1
     --env-file "$ENV_FILE"
+    # blue or green, logged as unit= on every access log line. After the env
+    # file so it wins; the file is shared by both colours.
+    -e "PROXY_UNIT=${1#blot-proxy-}"
     -v "$DISK_CACHE_DIR":/var/cache/openresty
     -v "$LOG_DIR":/var/log/openresty
     -v "$AUTOSSL_VOLUME":/etc/resty-auto-ssl

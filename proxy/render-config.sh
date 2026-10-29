@@ -12,6 +12,7 @@
 #   PROXY_REDIS_HOST       Redis for certificates and the domain allowlist
 #   PROXY_SERVER_LABEL     the Blot-Server response header
 #   PROXY_RESOLVER         DNS resolver, e.g. "127.0.0.11" or "8.8.8.8 ipv6=off"
+#   PROXY_UNIT             blue or green: logged as unit= in the access log ("-" if unset)
 #   PROXY_UPSTREAM_GREEN   host:port of the Node that handles sync, writes and webhooks (/clients)
 #   PROXY_UPSTREAM_BLUE    host:port of the dashboard Node / failover
 #   PROXY_UPSTREAM_YELLOW  host:port of the blog Node
