@@ -45,7 +45,7 @@ connection) and the config's own `worker_rlimit_nofile 20480`
    ban layer of its own; `blue-green.sh` refuses an image that logs to stdout).
    It builds every push to master. Pass the SHA to a script;
    anything containing `/` or `:` is used as a full image reference.
-2. **`/etc/blot/proxy.env`** from the example. `PROXY_UPSTREAM_*` should be the Node containers' `unix:/run/blot/<colour>.sock`
+2. **`/etc/blot/proxy.env`** from the example. `PROXY_UPSTREAM_*` should be the Node containers' `unix:/run/blot/<colour>.sock` (the Node containers' colours; the proxies are blot-blue and blot-green)
    sockets (the example shows them); the scripts then mount `/run/blot` into the
    proxy and check each socket before and after the swap. `PROXY_PRIVATE_IP` and
    `PROXY_REDIS_HOST` (both required, the scripts refuse empty values) must be the host's private IP and Redis host, and `BLOT_REVERSE_PROXY_URLS`

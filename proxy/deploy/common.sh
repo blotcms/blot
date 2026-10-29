@@ -175,7 +175,7 @@ ensure_image() { # pull only when it is not already on the host
   docker image inspect "$1" >/dev/null 2>&1 || { log "Pulling $1"; docker pull "$1"; }
 }
 
-# The upstream address for a colour (BLUE, GREEN, YELLOW): PROXY_UPSTREAM_*
+# The upstream address for a Node container (BLUE, GREEN, YELLOW): PROXY_UPSTREAM_*
 # from the env file, else the host port the Node container publishes.
 upstream_addr() { # upstream_addr <COLOUR> <default>
   local addr
