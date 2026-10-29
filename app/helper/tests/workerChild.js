@@ -139,6 +139,30 @@ describe("workerChild", function () {
     expect(supervisor.pid).toBe(null);
   });
 
+  it("calls onExit for a child that dies, not for one it stops", async function () {
+    const onExit = jasmine.createSpy("onExit");
+    start({ onExit });
+
+    forks[0].emit("exit", null, "SIGKILL");
+    expect(onExit).toHaveBeenCalledOnceWith("Exited pid=1000 code=null signal=SIGKILL");
+
+    await wait(40);
+    await supervisor.stop();
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it("forks it again even if onExit throws", async function () {
+    start({
+      onExit: function () {
+        throw new Error("no mail");
+      },
+    });
+
+    forks[0].emit("exit", 1, null);
+    await wait(40);
+    expect(forks.length).toBe(2);
+  });
+
   it("forks nothing more once stopped, even while a restart is pending", async function () {
     start();
 

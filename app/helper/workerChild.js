@@ -15,7 +15,9 @@ const clfdate = require("helper/clfdate");
 // child has run for stableMs. stop() sends it SIGTERM, which the child
 // handles with its own drain (helper/drain), and resolves once it has
 // exited. Its drain timeout is shorter than the parent's, so it is done
-// before the parent's drain gives up waiting.
+// before the parent's drain gives up waiting. onExit(reason) is called for
+// every child that ends without stop() having been called, before it is
+// forked again.
 const MIN_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30 * 1000;
 const STABLE_MS = 60 * 1000;
@@ -34,6 +36,7 @@ module.exports = function workerChild({
   minBackoffMs = MIN_BACKOFF_MS,
   maxBackoffMs = MAX_BACKOFF_MS,
   stableMs = STABLE_MS,
+  onExit = null,
 }) {
   if (!script) throw new TypeError("workerChild: script is required");
   if (!socket) throw new TypeError("workerChild: socket is required");
@@ -79,6 +82,13 @@ module.exports = function workerChild({
       if (Date.now() - startedAt >= stableMs) backoffMs = minBackoffMs;
 
       log(reason, "restarting in " + backoffMs + "ms");
+      if (onExit) {
+        try {
+          onExit(reason);
+        } catch (err) {
+          log("onExit threw", err.message);
+        }
+      }
 
       restartTimer = setTimeout(start, backoffMs);
       backoffMs = Math.min(backoffMs * 2, maxBackoffMs);
