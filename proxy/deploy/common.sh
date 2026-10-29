@@ -77,7 +77,7 @@ sys() {
   if [ "$(id -u)" = 0 ]; then "$@"; else sudo -n "$@"; fi
 }
 
-# One deploy at a time on this host: two scripts would pick the same colours
+# One deploy at a time on this host: two scripts would stop and rename each other's units
 # and remove each other's containers. Held (fd 9) until the script exits.
 # Deploys run as different users (ec2-user from a Mac, deploy from GitHub), and
 # fs.protected_regular refuses a creating open of another user's file in /tmp,
@@ -92,8 +92,23 @@ acquire_lock() {
   flock -n 9 || die "another proxy deploy is already running on this host (lock $LOCK_FILE)"
 }
 
+# Exact names only: `docker ps --filter name=blot-blue` is a substring regex
+# that also matches blot-blue-previous (and name=blot- matches every
+# blot-container-* Node container), so these list the names and grep -x them.
 running() { docker ps --format '{{.Names}}' | grep -qx "$1"; }
 exists() { docker ps -a --format '{{.Names}}' | grep -qx "$1"; }
+
+# The two proxies that are always running: blot-blue and blot-green (their
+# final names). Before them there was one proxy, alternately named
+# blot-proxy-blue and blot-proxy-green; blue-green.sh moves a host from one to
+# the other. A unit being replaced is kept, stopped, as blot-<unit>-previous.
+UNITS="blue green"
+LEGACY_PROXIES="blot-proxy-blue blot-proxy-green"
+unit_name() { echo "blot-$1"; }
+other_unit() { if [ "$1" = blue ]; then echo green; else echo blue; fi; }
+# blue or green, from any proxy container name (blot-blue, blot-blue-previous,
+# blot-proxy-green)
+unit_of() { local n="${1#blot-}"; n="${n#proxy-}"; echo "${n%%-*}"; }
 
 env_value() { # env_value <file> <NAME> - last assignment, quotes and `export` stripped
   grep -E "^(export )?$2=" "$1" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d "'\""
@@ -151,11 +166,16 @@ prune_old_images() { # prune_old_images <image just deployed>
   return 0
 }
 
+# What a container was created from, and what an image is, as ids: a tag that was
+# pulled again names a different image than the container runs.
+container_image_id() { docker inspect -f '{{.Image}}' "$1" 2>/dev/null; }
+image_id() { docker image inspect -f '{{.Id}}' "$1" 2>/dev/null; }
+
 ensure_image() { # pull only when it is not already on the host
   docker image inspect "$1" >/dev/null 2>&1 || { log "Pulling $1"; docker pull "$1"; }
 }
 
-# The upstream address for a colour (BLUE, GREEN, YELLOW): PROXY_UPSTREAM_*
+# The upstream address for a Node container (BLUE, GREEN, YELLOW): PROXY_UPSTREAM_*
 # from the env file, else the host port the Node container publishes.
 upstream_addr() { # upstream_addr <COLOUR> <default>
   local addr
@@ -204,8 +224,8 @@ run_args() { # run_args <name>
     --log-driver json-file --log-opt max-size=512m --log-opt max-file=1
     --env-file "$ENV_FILE"
     # blue or green, logged as unit= on every access log line. After the env
-    # file so it wins; the file is shared by both colours.
-    -e "PROXY_UNIT=${1#blot-proxy-}"
+    # file so it wins; the file is shared by both units.
+    -e "PROXY_UNIT=$(unit_of "$1")"
     -v "$DISK_CACHE_DIR":/var/cache/openresty
     -v "$LOG_DIR":/var/log/openresty
     -v "$AUTOSSL_VOLUME":/etc/resty-auto-ssl
@@ -245,8 +265,8 @@ image_logs_to_file() { # image_logs_to_file <image>
     -c 'render-config >/dev/null && grep -Eq "^[[:space:]]*access_log /var/log/openresty/access.log" /usr/local/openresty/nginx/conf/nginx.conf'
 }
 
-# The container answers on a per-container Unix socket, so during a blue/green
-# overlap the other container cannot answer for it.
+# The container answers on a per-container Unix socket, so the other proxy
+# (they share :80/:443 with reuseport) cannot answer for it.
 healthy() { # healthy <name>
   docker exec "$1" curl -fsS -o /dev/null --unix-socket "$HEALTH_SOCK" http://localhost/health >/dev/null 2>&1
 }
@@ -488,7 +508,7 @@ upstreams_reachable() {
 # Preflight only: a Node deploy running at the same time restarts its
 # containers one at a time, so an upstream can be down for a minute or two.
 # Retry for up to <timeout> seconds before refusing. Not for use once the new
-# colour exists: there an unhealthy upstream must fail and roll back at once.
+# container exists: there an unhealthy upstream must fail and roll back at once.
 wait_upstreams_reachable() { # wait_upstreams_reachable <timeout>
   local deadline=$(( $(date +%s) + $1 ))
   until upstreams_reachable; do
