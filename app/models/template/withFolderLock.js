@@ -105,29 +105,36 @@ function busyError(err) {
 // time the request fails before anything has been changed.
 function holdForRequest(req, res, next) {
   const blogID = req.blog.id;
+  const hold = { blogID, released: false };
+  let release = null;
+  let closed = false;
+
+  function finish() {
+    closed = true;
+    if (!release) return;
+    const done = release;
+    release = null;
+    hold.released = true;
+    done().catch(function (err) {
+      console.error(
+        clfdate(),
+        "[TEMPLATE]",
+        blogID,
+        "failed to release folder lock",
+        err.message
+      );
+    });
+  }
+
+  // Listen before waiting: the client may give up while the lock is busy
+  res.on("finish", finish);
+  res.on("close", finish);
 
   acquire(blogID).then(
-    function (release) {
-      const hold = { blogID, released: false };
-      let done = false;
-
-      function finish() {
-        if (done) return;
-        done = true;
-        hold.released = true;
-        release().catch(function (err) {
-          console.error(
-            clfdate(),
-            "[TEMPLATE]",
-            blogID,
-            "failed to release folder lock",
-            err.message
-          );
-        });
-      }
-
-      res.on("finish", finish);
-      res.on("close", finish);
+    function (acquired) {
+      release = acquired;
+      // Nobody is left to respond to, so don't hold the lock for nothing
+      if (closed) return finish();
       requestHold.run(hold, next);
     },
     function (err) {

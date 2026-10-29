@@ -10,6 +10,7 @@ var evtSource = null;
 var shouldReload = false;
 var lastRawMessage = null;
 var adoptFetchedStatus = false;
+var messageCount = 0;
 var PROGRESS_MESSAGE_RE = /^\((\d+)\/(\d+)\)\s*(.*)$/;
 
 function q(sel) {
@@ -166,6 +167,7 @@ function runLoad() {
 
 function loadFolder(callback) {
   var xhr = new XMLHttpRequest();
+  var messagesAtStart = messageCount;
 
   xhr.onreadystatechange = function () {
     if (xhr.readyState === 4) {
@@ -176,10 +178,12 @@ function loadFolder(callback) {
         // After a reconnect the status we last heard is stale, and renders
         // use it in preference to the fetched text, so adopt the fetched one.
         var fetchedStatusText = null;
+        // A stream message that arrived after this fetch began is newer than
+        // the fetched snapshot, so keep it.
         if (adoptFetchedStatus) {
           adoptFetchedStatus = false;
           var fetchedStatus = xml.querySelector(".sync-status-text");
-          if (fetchedStatus) {
+          if (fetchedStatus && messageCount === messagesAtStart) {
             fetchedStatusText = fetchedStatus.textContent.trim();
             lastRawMessage = fetchedStatusText;
           }
@@ -308,6 +312,7 @@ function attachSSE() {
 
   evtSource.onmessage = function (event) {
     var message = event.data || "";
+    messageCount++;
 
     renderSyncStatusMessage(message);
 

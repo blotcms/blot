@@ -430,6 +430,29 @@ var writeChangeToFolder = require("../../../dashboard/site/template/save/writeCh
     expect((await folderLock.inspect(this.blog.id)).held).toBeFalsy();
   });
 
+  it("releases the lock if the client left while the request waited for it", async function () {
+    var folderLock = require("sync/lock");
+    var { holdForRequest } = require("../withFolderLock");
+    var EventEmitter = require("events");
+    var blogID = this.blog.id;
+    var res = new EventEmitter();
+    var nextCalled = false;
+
+    var held = await folderLock.lock(blogID, { ttl: 10000 });
+
+    holdForRequest({ blog: { id: blogID } }, res, function () {
+      nextCalled = true;
+    });
+
+    // Client cancels while waiting, then the lock frees up
+    res.emit("close");
+    await held.release();
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    expect(nextCalled).toEqual(false);
+    expect((await folderLock.inspect(blogID)).held).toBeFalsy();
+  });
+
   it("does not lock again inside a request that already holds the lock", async function () {
     var folderLock = require("sync/lock");
     var { holdForRequest } = require("../withFolderLock");
