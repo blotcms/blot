@@ -14,16 +14,20 @@
   }
   
   .sidebar li {
+    position: relative;
     margin: 0;
     padding: 0;
-    cursor: pointer;
   }
   
-  .sidebar a {
+  .sidebar a,
+  .sidebar button {
     display: block;
     padding: 6px 12px;
     text-decoration: none;
-    transition: background-color 0.2s;
+    font: inherit;
+    color: inherit;
+    border: 0;
+    background: none;
   }
   
   .sidebar a:hover {
@@ -35,34 +39,49 @@
     font-weight: 500;
   }
 
-  .sidebar [data-depth] > a {
+  .sidebar > li > a,
+  .sidebar > li > .folder-label {
     font-weight: 500;
   }
-  
-  .sidebar [data-depth] {
-    padding-left: calc((var(--depth) - 1) * 1.5rem);
-    font-size: calc(1em - ((var(--depth) - 1) * 0.05em));
-    color: hsl(0, 0%, calc(20% + ((var(--depth) - 1) * 20%)));
+
+  .sidebar .folder-label {
+    width: 100%;
+    padding-right: 2.5rem;
+    text-align: left;
+  }
+
+  .sidebar button.folder-label {
+    cursor: pointer;
+  }
+
+  .sidebar .folder-toggle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .sidebar .folder-toggle::before {
+    content: "›";
+    display: inline-block;
+    transition: transform 0.2s ease;
+  }
+
+  .sidebar li[aria-expanded="true"] > .folder-toggle::before {
+    transform: rotate(90deg);
   }
   
   .sidebar .submenu {
-    height: 0;
-    overflow: hidden;
-    transition: height 0.3s ease-out;
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 1rem;
   }
-  
-  .sidebar .submenu.expanded {
-    height: auto;
-  }
-  
-  .sidebar .has-submenu > a::after {
-    content: "›";
-    float: right;
-    transition: transform 0.3s;
-  }
-  
-  .sidebar .has-submenu.expanded > a::after {
-    transform: rotate(90deg);
+
+  .sidebar .submenu[hidden] {
+    display: none;
   }
   
   

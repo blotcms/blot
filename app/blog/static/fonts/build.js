@@ -224,11 +224,21 @@ function generateSVG(directory, text) {
   // $("svg").removeAttr("width");
   // $("svg").removeAttr("height");
 
-  const result = `<?xml version="1.0" encoding="UTF-8"?>\n` + $.html();
+  // Just the <svg>, not the <html><body> cheerio wraps it in: the file is
+  // served as an image, so it must be a standalone SVG document
+  const result = `<?xml version="1.0" encoding="UTF-8"?>\n${$.html(
+    $("svg")
+  )}\n`;
 
   fs.outputFileSync(`${directory}/text.svg`, result, "utf8");
 
-  return result;
+  // The dashboard's font picker shows the file in an <img> and needs its
+  // size to reserve the space before it loads; the hash busts the cache
+  return {
+    hash: hash(result).slice(0, 8),
+    width: Math.round(width * 100) / 100,
+    height: Math.round(height * 100) / 100,
+  };
 }
 
 function printCandidates() {
@@ -469,7 +479,7 @@ async function main() {
 
       let styles = "";
 
-      const svg = generateSVG(`${__dirname}/${id}`, name);
+      const specimen = generateSVG(`${__dirname}/${id}`, name);
 
       try {
         const minimize = new MinifyCSS({ level: 2 });
@@ -483,7 +493,7 @@ async function main() {
       return {
         name,
         id,
-        svg,
+        specimen,
         stack,
         tags,
         line_height,

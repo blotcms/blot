@@ -4,6 +4,10 @@ var ensure = require("helper/ensure");
 var promisify = require("util").promisify;
 var parseTemplate = require("./parseTemplate");
 var mergeRetrieve = require("./util/mergeRetrieve");
+var {
+  wrapFolderLinks,
+  wrapInlinePartial,
+} = require("./util/resolveFolderLinks");
 
 module.exports = function getPartials(
   blogID,
@@ -11,7 +15,8 @@ module.exports = function getPartials(
   partials,
   callback,
   contextMap,
-  parentContextPath
+  parentContextPath,
+  wrapOptions
 ) {
   try {
     ensure(blogID, "string")
@@ -28,8 +33,6 @@ module.exports = function getPartials(
   var Entry = require("../entry");
   var allPartials = {};
   var retrieve = {};
-
-  for (var i in partials) if (partials[i]) allPartials[i] = partials[i];
 
   Object.keys(partials || {}).forEach(function (partialName) {
     // Keep any previously-discovered usage contexts for this partial.
@@ -90,6 +93,44 @@ module.exports = function getPartials(
     });
 
     mergeRetrieve(target, deps);
+  }
+
+  // A partial view's render source. getFullView passes wrapOptions when the
+  // rendering blog owns the template: literal folder links are then wrapped
+  // in {{#cdn}}, as in the view itself (util/resolveFolderLinks), and the
+  // targets merged into retrieve.cdn. The contextual parse below still reads
+  // the partial's own content.
+  function renderSource(view) {
+    if (!wrapOptions) return view.content;
+
+    var wrapped = wrapFolderLinks(
+      view.content,
+      Object.assign({ viewName: view.name, viewType: view.type }, wrapOptions)
+    );
+
+    if (wrapped.targets.length) mergeRetrieve(retrieve, { cdn: wrapped.targets });
+
+    return wrapped.content;
+  }
+
+  // Inline partials (strings in a view's partials, from package.json) get
+  // the same treatment when the template is the blog's own. The manifest
+  // collects their targets with the same call (util/updateCdnManifest).
+  for (var i in partials) {
+    if (!partials[i]) continue;
+
+    allPartials[i] = partials[i];
+
+    if (wrapOptions && typeof partials[i] === "string")
+      allPartials[i] = wrapInline(partials[i]);
+  }
+
+  function wrapInline(content) {
+    var wrapped = wrapInlinePartial(content, wrapOptions.hosts);
+
+    if (wrapped.targets.length) mergeRetrieve(retrieve, { cdn: wrapped.targets });
+
+    return wrapped.content;
   }
 
   function mergePartialContexts(viewContent, inheritedContexts) {
@@ -164,7 +205,7 @@ module.exports = function getPartials(
         if (partial.charAt(0) !== "/") {
           getView(templateID, partial, function (err, view) {
             if (view) {
-              allPartials[partial] = view.content;
+              allPartials[partial] = renderSource(view);
 
               inheritedContexts.forEach(function (contextPath) {
                 if (!contextPath) {

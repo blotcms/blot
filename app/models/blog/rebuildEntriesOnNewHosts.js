@@ -8,9 +8,8 @@ const clfdate = require("helper/clfdate");
 // so rebuild just those, found by scanning their stored HTML for the host.
 //
 // Blog.set calls this after it has saved, without waiting for it: scanning
-// every entry of a large blog is slow and nothing depends on the result (the
-// request-time rewrite in blog/render/replaceFolderLinks still covers these
-// links until the rebuild finishes). It never throws or calls back; the
+// every entry of a large blog is slow and nothing depends on the result (until
+// the rebuild finishes these links keep the raw URL, which the origin serves). It never throws or calls back; the
 // promise it returns always resolves, and only exists so a spec can wait.
 //
 // `former` is the blog as it was before the change.

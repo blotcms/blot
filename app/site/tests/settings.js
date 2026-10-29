@@ -2,6 +2,11 @@ describe("Blot dashboard settings", function () {
   const fs = require("fs-extra");
   const browser = require("./util/browser");
 
+  // Removing a local-client blog waits for the watcher sync's folder lock.
+  // During process startup a contended lock retries after 11s, so teardown
+  // can legitimately exceed Jasmine's default 5s even after a quick sync.
+  global.test.timeout(20 * 1000);
+
   global.test.site({ login: true });
 
   it("lets you update the title of a site", async function () {

@@ -31,10 +31,12 @@ const transformDriveItems = require("./util/transformDriveItems");
 const SHORTCUT = "application/vnd.google-apps.shortcut";
 
 // Resolves to a summary of what changed (truthy) when the walk finishes, or
-// false when it fails part way through or the folder lookup fails.
+// false when it fails part way through or the folder lookup fails. In that
+// case options.onError, if given, receives the error that caused it.
 module.exports = async function sync(blogID, publish, update, options = {}) {
   publish = publish || function () {};
   update = update || function () {};
+  const onError = options.onError || function () {};
 
   // Files Drive modified after this moment may just be edits that landed
   // mid-walk, not changes we failed to sync. Callers hold the folder lock,
@@ -111,6 +113,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     // metadata we failed to load.
     publish("Sync failed", err.message);
     console.error("Google Drive folder lookup failed", err);
+    onError(err);
     return false;
   }
 
@@ -393,6 +396,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   } catch (err) {
     if (lastMigrated !== migrationCursor) await setMigrationCursor(lastMigrated);
     publish("Sync failed", err.message);
+    onError(err);
     return false;
   }
 };

@@ -20,9 +20,10 @@ const resyncDedupRegistry = new Map();
 
 // The macserver can request a resync every few seconds while a user is
 // moving folders around, so cap the admin email to one per blog per hour.
-// The resync itself still runs every time. Per-process, like the guard above.
+// The resync itself still runs every time. The cap is shared across processes.
 // (A resync only emails at all when it found something, see below.)
 const notifyResyncRequested = notificationCap({
+  name: "icloud-resync-requested",
   max: 1,
   resetAfterMs: 60 * 60 * 1000,
 });
@@ -34,10 +35,17 @@ const MAX_REASON_LENGTH = 500;
 // shape syncReport.send expects, adding the macserver's reason: its own
 // description of what failed (eg. "upload for Posts/x.md failed after
 // retries"), which older macserver versions don't send.
-const resyncReportSender = (blogID, reason) => (err, locals, callback) => {
-  const result = notifyResyncRequested(blogID, () =>
-    email.ICLOUD_RESYNC_ISSUE(null, Object.assign({}, locals, { reason }), callback)
-  );
+const resyncReportSender = (blogID, reason) => async (err, locals, callback) => {
+  let result;
+
+  try {
+    result = await notifyResyncRequested(blogID, () =>
+      email.ICLOUD_RESYNC_ISSUE(null, Object.assign({}, locals, { reason }), callback)
+    );
+  } catch (e) {
+    // syncReport logs the failure and won't remember the issue as reported
+    return callback(e);
+  }
 
   if (result === "suppressed") {
     console.log("Resync report suppressed", { blogID });

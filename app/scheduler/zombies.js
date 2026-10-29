@@ -3,6 +3,23 @@ const exec = require("child_process").exec;
 const email = require("helper/email");
 const async = require("async");
 const clfdate = require("helper/clfdate");
+const lock = require("helper/lock");
+
+// Every process runs this check each minute and each container has its own
+// ps, so the reaping is per process. The email is sent once per TTL however
+// many processes find zombies.
+const ZOMBIE_NOTIFIED_KEY = "notify:zombie-process";
+const ZOMBIE_NOTIFY_TTL_MS = 60 * 60 * 1000;
+
+async function notifyZombies() {
+  try {
+    if (await lock.once(ZOMBIE_NOTIFIED_KEY, ZOMBIE_NOTIFY_TTL_MS)) {
+      email.ZOMBIE_PROCESS();
+    }
+  } catch (err) {
+    console.error(clfdate(), "Zombies: error sending zombie process email", err);
+  }
+}
 
 if (require.main === module) {
   main(function (err) {
@@ -34,7 +51,7 @@ function main(callback) {
 
       if (zombie_pids.length) {
         console.log(prefix(), `${zombie_pids.length} zombies found`);
-        email.ZOMBIE_PROCESS();
+        notifyZombies();
       } else {
         console.log(prefix(), `none found`);
       }

@@ -43,6 +43,7 @@
 
 .row-action-menu {
   position: absolute;
+  top: 0;
   right: var(--row-action-menu-right);
   z-index: 20;
   min-width: var(--row-action-menu-width);

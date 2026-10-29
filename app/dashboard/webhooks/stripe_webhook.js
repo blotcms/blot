@@ -254,7 +254,14 @@ function update_subscription(customer_id, subscription, callback) {
     if (subscription.status === "canceled" && !user.isDisabled)
       email.CLOSED(user.uid);
 
-    if (subscription.status === "past_due" && !subscription.pause_collection)
+    // A customer who has already cancelled still gets Stripe's retries of the
+    // unpaid renewal invoice, each of which can report past_due; they have
+    // been told their cancellation went through, so don't chase them.
+    if (
+      subscription.status === "past_due" &&
+      !subscription.pause_collection &&
+      !subscription.cancel_at_period_end
+    )
       email.OVERDUE(user.uid);
 
     if (

@@ -58,6 +58,8 @@ echo "caching + compression (blog traffic)"
 expect_match "first hit is a MISS" "$(hdr -H 'Host: someblog.example' "$HTTP/cache-me")" "Blot-Cache: MISS"
 expect_match "second hit is a HIT" "$(hdr -H 'Host: someblog.example' "$HTTP/cache-me")" "Blot-Cache: HIT"
 expect_match "gzip negotiated"     "$(hdr -H 'Host: someblog.example' -H 'Accept-Encoding: gzip' "$HTTP/compress-me")" "Content-Encoding: gzip"
+expect_match "brotli preferred when offered" "$(hdr -H 'Host: someblog.example' -H 'Accept-Encoding: gzip, br' "$HTTP/compress-me")" "Content-Encoding: br"
+expect_match "compressed responses Vary on Accept-Encoding" "$(hdr -H 'Host: someblog.example' -H 'Accept-Encoding: gzip, br' "$HTTP/compress-me")" "Vary: Accept-Encoding"
 
 echo "upstream 503 (Node cannot reach Redis) passes through"
 expect "503 status preserved" \

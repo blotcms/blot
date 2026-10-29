@@ -252,6 +252,31 @@ describe("user extend", function () {
       expect(user.isSubscribed).toBe(true);
     });
 
+    it("keeps a Stripe customer's plan over a historical PayPal record", function () {
+      var user = createUser({
+        subscription: {
+          customer: "cus_1",
+          status: "active",
+          quantity: 2,
+          plan: { amount: 400, interval: "month" },
+          current_period_end: Math.floor(Date.now() / 1000) + 86400
+        },
+        paypal: {
+          status: "CANCELLED",
+          plan_id: testPlans.yearly_44,
+          quantity: "1",
+          billing_info: {
+            last_payment: { time: new Date(Date.now() - 86400000).toISOString() }
+          }
+        }
+      });
+      extend(user);
+      expect(user.isMonthly).toBe(true);
+      expect(user.totalFee).toBe(800);
+      expect(user.pretty.amount).toBe(2);
+      expect(user.willCancel).toBeUndefined();
+    });
+
     it("sets willCancel for CANCELLED paypal status", function () {
       var user = createUser({
         subscription: {},

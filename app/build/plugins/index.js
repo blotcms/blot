@@ -10,6 +10,24 @@ var time = require("helper/time");
 var async = require("async");
 var _ = require("lodash");
 const bluesky = require("./bluesky");
+const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
+const { GLOBAL_STATIC_SUBDIRECTORIES } = require("blog/lib/staticPaths");
+
+// A plugin's public.css is appended to a blog's stylesheet by {{{appCSS}}},
+// after the template has been wrapped for the CDN, so its links to Blot's own
+// static files (the KaTeX fonts) would reach the origin. Point them at the
+// CDN, which serves the same paths, through the token the render middleware
+// swaps for the real origin.
+const GLOBAL_STATIC_URL = new RegExp(
+  "url\\((\\s*['\"]?)(" +
+    GLOBAL_STATIC_SUBDIRECTORIES.join("|") +
+    ")/",
+  "g"
+);
+
+function cdnGlobalStaticUrls (css) {
+  return css.replace(GLOBAL_STATIC_URL, "url($1" + BLOT_CDN_TOKEN + "$2/");
+}
 
 // Wait 10 minutes to go to next plugin
 var TIMEOUT = 10 * 60 * 1000;
@@ -258,7 +276,7 @@ function loadPlugins (plugins) {
     // HTML to be appended to every full entry
     plugin.formHTML = read(name, "form.html");
     plugin.publicJS = read(name, "public.js");
-    plugin.publicCSS = read(name, "public.css");
+    plugin.publicCSS = cdnGlobalStaticUrls(read(name, "public.css"));
     plugin.entryHTML = read(name, "entry.html");
 
     // Store this plugin for internal use

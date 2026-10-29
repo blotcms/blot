@@ -81,7 +81,7 @@ explicitly asked.
   day *before* its date. If you need pm2 itself, use `zsh -lc 'pm2 …'`.
 - `brctl monitor event` lines name the iCloud users who own or edited a
   shared item. That is personal data: fine in chat, never in the log below.
-- prod: `ssh blot`, containers `blot-container-{blue,green,yellow}` (see
+- prod: `ssh blot`, containers `blot-{blue,green}` (see
   `investigate-production-container-restarts`). Macserver HTTP requests can
   land on any container, so grep all three. Docker logs are lost when a
   deploy recreates a container, so if the alert is older than the
@@ -131,7 +131,7 @@ classifying anything as a bug.
    `brctl download` of an evicted file — or `Failed to read file:`).
 3. **Check the server side** for the same window:
    ```
-   ssh blot "for c in blue green yellow; do echo == \$c; docker logs blot-container-\$c --timestamps 2>&1 | grep '<blog12>' | tail -150; done"
+   ssh blot "for c in blue green; do echo == \$c; docker logs blot-\$c --timestamps 2>&1 | grep '<blog12>' | tail -150; done"
    ```
    Several server lines don't carry the blog ID (`Error in /upload:`,
    `Syncing folder:`, `Failed to sync folder tree`), so also grep those
@@ -287,3 +287,25 @@ Entry template:
 - Key events (UTC): 22:41:38, a folder-mirroring tool renamed the blog's top-level folders, a burst of several hundred adds and removes. 22:45:15–22:47:22, the hourly walk held the lock, so the deletes got 423. 22:47:16, the first resync request. 22:47:22–23:05:23, resync on green (downloads of evicted PDFs timed out). 23:08:04, second resync on green. Its last line is 23:20:43 (`Downloading …`) and it never released the lock: still held at 06:15:56 on 17 Oct. Hourly walks logged `Skipping busy blog`. The macserver re-requested a resync about every 67s (~390 by 06:15) and every request was deduplicated.
 - Cause: (1) `sync/util/download.js` awaits `res.arrayBuffer()` after `rateLimitedFetchWithRetriesAndTimeout` has cleared its timer, so a stalled body hangs the sync forever while the lock heartbeat keeps it alive. (2) Blot's 10s fetch timeout is shorter than the macserver's 15s `brctl download` timeout, so evicted files are abandoned and re-requested.
 - Follow-up: green was restarted at 06:24:59 UTC on 17 Oct, which freed the lock; the blog synced again within a minute. Fixed in the PR for this entry: the fetch helper's `readBody` keeps the timeout armed through the body read, and /download gets 60s.
+
+### 2026-10-22 15:40:35 UTC — initial transfer to iCloud aborted by a slow /readdir (bug)
+
+- Alert / trigger: a customer email, "error moving to iCloud Drive", sent 15:47 UTC. No admin email. The blog (~800 files, many images) had just been switched to iCloud; containers green.
+- Key events (UTC; Mac -0700): 15:39:12 setup started, macserver accepted the sharing link at 15:39:18. 15:39:19 `Transferring files to iCloud` (first pass of `initialTransfer`, which swallows errors). 15:40:35 the macserver's own 30s directory listing timed out (`Refusing to serve unconfirmed (possibly partial) listing`) and Blot's `/readdir` fetch gave up after 3 tries of 10s: the first pass logged `Sync failed` and ended early, partially transferred. 15:40:35 `Verifying transfer` (second pass, `abortOnError`) resumed uploading, then hit another failed `/readdir` at 15:41:24: `Error in initialTransfer`. The account was marked `TRANSFER_INCOMPLETE` and the watcher's uploads got 409s (setup incomplete) from 15:41:37. 15:53:25 the blog was disconnected (the customer's retry or cancel), leaving the account record deleted.
+- Cause: during the burst of uploaded files (thousands of `brctl monitor` events per minute) the macserver's plain `ls` on freshly created directories stalled for ~35-40s and then answered by itself, both times just after Blot had given up (3 x 10s, with the retries stacking duplicate `ls` calls on the same directory). The first stall exceeded the macserver's own 30s exec timeout (503, `Refusing to serve unconfirmed listing`); the second ended without one. Folder size was not the factor. That was the only `Command timed out` in ~4 weeks of retained macserver logs, the iCloud daemons were idle afterwards, and the unified log had nothing for the window. The first pass swallowed the first failure; the verify pass aborts on the first failed listing. A Blot wait over ~40s would have succeeded.
+- Follow-up: line added to the root `TODO`.
+
+
+### 2026-10-29 04:29:32 UTC resync request — iCloud replaced a fresh write with an empty cloud version (bug)
+
+- Alert: one `ICLOUD_RESYNC_ISSUE` email (1 download), reason: an upload of a draft `.preview.html` failed after retries. Mac time is -0700, container green.
+- Key events (UTC): 04:27:40 the owner pressed Rebuild; the rebuild held the folder lock until 04:35:35. 04:28:14 Blot wrote one draft preview to the Mac (the other previews were fine). 04:28:16 `brctl` showed a `Zero KB … not downloaded` cloud entry for it, then `server edit to download`. 04:28:23 the watcher's echo found the file not downloaded, ran `brctl download`, and got a 0-byte file. From then every echo upload differed from Blot's good copy, so it needed the lock and got 423 until the resync (first request 04:29:32, acknowledged 04:35:59). The resync, with iCloud as source of truth, downloaded the empty file over Blot's good copy.
+- Cause: the macserver's `fs.outputFile` creates the file empty before the contents land (about 2s for this one). iCloud registered that empty file as a cloud version that won over the local write. The lock contention was only the symptom.
+- Follow-up: fixed in the PR for this entry: `routes/upload.js` writes to a temp file on the same volume and renames it into place, then checks the size. The affected file stays empty on both sides until it is rewritten (re-save the draft or rebuild).
+
+### 2026-10-29 15:00:00 UTC iCloud server down — transient quota failure reported as an outage (bug)
+
+- Alert: one `ICLOUD_SERVER_DOWN` email for the 15:00 UTC (08:00:00 Mac, -0700) minutely `/stats` check. No recovery was needed: the 15:01 check passed. Mac up 57 days, pm2 process healthy.
+- Key events (Mac time): 08:00:00 `GET /stats` answered, but `brctl.quota()` failed with a CloudKit `Network Failure` (NSURLErrorDomain -1005, "The network connection was lost"), so the reply carried `icloud_bytes_available: null`. 08:01:00 and every check after: normal. First quota error in the retained macserver error logs.
+- Cause: not an outage. `monitorMacServerStats.check` throws "No stats returned" when `icloud_bytes_available` is falsy, and treats that as the server being down.
+- Follow-up: fixed in the PR for this entry: a null quota is logged (`Mac server could not report iCloud quota`) and skips the quota checks; only a failed `/stats` or one without disk space counts as down.

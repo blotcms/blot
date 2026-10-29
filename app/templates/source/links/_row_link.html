@@ -1,5 +1,5 @@
 <tr>
-  <td style="padding-right:0"> <a href="{{{url}}}">
+  <td style="padding-right:0"> <a class="collection-entry" href="{{{url}}}">
 <span style="display:inline-block;width:1em;height:1em;flex-shrink:0">{{#thumbnail.square}}
 <img src="{{{url}}}" style="max-width:1em;max-height:1em;width:auto;height:auto" class="fadeMe" onload="this.className+=' fadeIn';" />
       <noscript>  
@@ -7,8 +7,8 @@
       </noscript>
 
   {{/thumbnail.square}}</span> </a></td>
-  {{^hide_dates}}<td><a href="{{{url}}}" style="display:block">{{#formatDate}}MMM YYYY{{/formatDate}}</a></td>{{/hide_dates}}
+  {{^hide_dates}}<td><a class="collection-entry" href="{{{url}}}" style="display:block">{{#formatDate}}MMM YYYY{{/formatDate}}</a></td>{{/hide_dates}}
 
-  <td style="min-width:20em"><a href="{{{url}}}" style="display:block">{{title}}</a></td>
+  <td style="min-width:20em"><a class="collection-entry" href="{{{url}}}" style="display:block">{{title}}</a></td>
   <td>{{#tags}}<a href="/tagged/{{slug}}">{{tag}}</a> {{/tags}}</td>
 </tr>

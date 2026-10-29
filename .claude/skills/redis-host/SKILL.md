@@ -291,12 +291,12 @@ pruning stopped.
 Useful with any of the above, to see whether clients are affected:
 
 ```
-ssh blot 'docker logs --since 1h blot-container-green 2>&1 | grep -c "\[LOCK COMPROMISED\]"'
-ssh blot 'docker logs --since 1h blot-container-green 2>&1 | grep -E "\[LOCK\] slow heartbeat|Error saving file in database" | tail -n 20'
+ssh blot 'docker logs --since 1h blot-green 2>&1 | grep -c "\[LOCK COMPROMISED\]"'
+ssh blot 'docker logs --since 1h blot-green 2>&1 | grep -E "\[LOCK\] slow heartbeat|Error saving file in database" | tail -n 20'
 ssh blot 'grep -o "st=[0-9][0-9.]*" /var/instance-ssd/logs/access.log | tail -n 20000 | cut -d= -f2 | sort -n | awk "{a[NR]=\$1} END {print \"p50\", a[int(NR*.5)], \"p95\", a[int(NR*.95)]}"'
 ```
 
-Run the first two for each container that matters (blue, green, yellow).
+Run the first two for each unit that matters (blot-blue, blot-green).
 `st=` is nginx's upstream time in seconds; most blog renders take about 10ms,
 so a p95 well past 100ms during the alert, or `slow heartbeat` lines with a
 large `roundTrip`, means clients felt it. Container logs only go back to the

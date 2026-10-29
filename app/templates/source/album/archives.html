@@ -1,60 +1,61 @@
 {{> header}}
 
+{{#sticky_navigation}}
+<div class="archive-spacer"></div>
+{{/sticky_navigation}}
 
-<style type="text/css">
-  
-    body, html {height: 100%;overflow: hidden;}
+<div class="archive-search">
+  <form action="/search">
+    <input type="text" name="q" placeholder="Search the archives...">
+    <input type="submit" value="Search">
+  </form>
+</div>
 
-    #hyperlist {
-      display: block;
-      position: absolute;
-      top: calc(1 * ({{spacing}}rem + 1.4em));
-      right: 0;
-      left: 0;
-    }
+<div class="archives archive-list">
+  {{#archives}}
+  {{#months}}
+  {{#entries}}
+  <a class="collection-entry" href="{{{url}}}">
+    <span class="thumbnail{{^thumbnail.small.url}} thumbnail-empty{{/thumbnail.small.url}}">
+      {{#thumbnail.small.url}}
+      <img
+        loading="lazy"
+        src="{{{thumbnail.small.url}}}"
+        srcset="
+          {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+          {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+          {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+        "
+        sizes="80px"
+        width="{{thumbnail.small.width}}"
+        height="{{thumbnail.small.height}}"
+        alt="{{title}}"
+        class="pre-loaded"
+        onload="this.className+=' loaded';" />
+      <noscript>
+        <img
+          loading="lazy"
+          src="{{{thumbnail.small.url}}}"
+          srcset="
+            {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+            {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+            {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+          "
+          sizes="80px"
+          width="{{thumbnail.small.width}}"
+          height="{{thumbnail.small.height}}"
+          alt="{{title}}">
+      </noscript>
+      {{/thumbnail.small.url}}
+    </span>
+    <span>
+      <span class="title">{{title}}</span>
+      {{#date}}<span class="date">{{date}}</span>{{/date}}
+    </span>
+  </a>
+  {{/entries}}
+  {{/months}}
+  {{/archives}}
+</div>
 
-
-    #hyperlist a {
-            text-decoration: none;
-            padding: 0 calc({{spacing}}*0.25rem);
-      color: inherit;
-      box-sizing:border-box;
-    }
-
-    #hyperlist > a {
-      padding: 0 {{spacing}}rem;
-      display: flex;
-      width: 100%;
-      height: 64px;
-      margin: 0;
-    }
-
-    #hyperlist > a:hover {opacity: 0.75}
-    #hyperlist > a:hover .title {text-decoration: underline;}
-    #hyperlist > a:active {opacity: 0.5}
-    
-    #hyperlist > a .thumbnail {width: 64px;height:64px;}
-    #hyperlist > a .title {flex-grow: 1;margin:0 calc({{spacing}}rem*0.5);white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
-    #hyperlist > a .date {flex-shrink: 0;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
-    {{#hide_dates}}
-    #hyperlist > a .date {display: none}
-    {{/hide_dates}}
-
-#hyperlist > a .thumbnail img {
-  max-width: 64px;max-height: 64px;width:auto;height: auto;
-}
-
-input[type=radio] {display: none;}
-.filter {list-style-type: none;padding: 0;display: flex;}
-.filter label {cursor: pointer;padding:{{spacing}}rem;margin:{{spacing}}rem;background:rgba({{#rgb}}{{text_color}}{{/rgb}},0.06)}
-</style>
-
-<div style="position: absolute;top:calc({{spacing}}rem + 1.4em);left: 0;right: 0;  
-padding: 0 {{spacing}}rem;    
-box-sizing: border-box;
-width: 100vw">
-  {{#show_search}}{{> search_form}}{{/show_search}}
-  </div>
-    <div id="hyperlist"></div>
-    <script type="text/javascript" src="{{#asset}}/archive.js{{/asset}}"></script>
 {{> footer}}

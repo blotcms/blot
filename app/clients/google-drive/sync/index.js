@@ -2,7 +2,10 @@ const clfdate = require("helper/clfdate");
 const establishSyncLock = require("sync/establishSyncLock");
 const database = require("../database");
 
-module.exports = async function (blogID) {
+// With rethrowLocked, a folder lock held by another sync rejects with sync's
+// "Failed to acquire folder lock" error instead of resolving false, for
+// callers that queue a follow-up (see clients/util/followUpSync).
+module.exports = async function (blogID, { rethrowLocked = false } = {}) {
 
   const sync = require("./sync.js");
 
@@ -35,6 +38,7 @@ module.exports = async function (blogID) {
       await done();
     }
   } catch (err) {
+    if (rethrowLocked && err.message === "Failed to acquire folder lock") throw err;
     console.log(clfdate(), "Google Drive Sync:", "Sync init failed", err);
     return false;
   }

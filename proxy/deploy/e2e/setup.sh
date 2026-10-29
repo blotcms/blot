@@ -2,12 +2,12 @@
 #
 # Brings up everything proxy/deploy/blue-green.sh expects to find on the
 # production host, using real Docker, so .github/workflows/proxy-deploy-e2e.yml
-# can run the actual script unmodified. Assumes blot-proxy:e2e is already built
+# can run the actual script unmodified. Assumes the images are already built
 # (see the workflow) and that this shell's env already has E2E_ROOT set (the
 # workflow exports it, along with the PROXY_* variables below, so later steps
 # see the same values without re-sourcing this file).
 #
-# BLOT_HOST=blot.im. Every proxy container runs --network host and so shares
+# BLOT_HOST=blot.im. Every unit runs --network host and so shares
 # the runner's loopback; PROXY_REDIS_HOST is the runner's own interface IP, as
 # it is routable from every --network host container and from this shell.
 set -euo pipefail
@@ -19,7 +19,7 @@ HOSTIP="$(hostname -I | awk '{print $1}')"
 
 log() { printf '[setup] %s\n' "$*"; }
 
-mkdir -p "$E2E_ROOT/cache" "$E2E_ROOT/logs" "$E2E_ROOT/global-static"
+mkdir -p "$E2E_ROOT/disk-cache" "$E2E_ROOT/logs" "$E2E_ROOT/global-static"
 
 # ---- certificate -------------------------------------------------------
 log "Generating a wildcard certificate for $BLOT_HOST and trusting its CA"
@@ -28,25 +28,39 @@ bash "$HERE/gen-certs.sh" "$BLOT_HOST" "$PROXY_CERT_DIR"
 # ---- cache/log ownership -------------------------------------------------
 # The image's worker runs as ec2-user (uid 1000, see proxy/Dockerfile), so the
 # cache and log directories it mounts must be writable by that uid. Seed a
-# couple of cache files so the rehydrate walk (proxy/config/cacher.lua
-# build_index) has something to count, though an empty, writable directory
-# rehydrates ("rehydrate: complete files=0") just as well. Seed BEFORE chowning
-# to 1000: the runner user (not uid 1000) cannot write into the directory
-# afterwards.
+# couple of cache files, which stand for what a cache left behind holds: the
+# fresh start in the workflow must empty them (blue-green.sh's
+# reset_cache_dir). Seed BEFORE chowning to 1000: the runner user (not uid
+# 1000) cannot write into the directory afterwards.
 for f in warm-1 warm-2 warm-3; do
-  echo "seeded by proxy/deploy/e2e" > "$PROXY_CACHE_DIR/$f"
+  echo "seeded by proxy/deploy/e2e" > "$PROXY_DISK_CACHE_DIR/$f"
 done
-sudo chown -R 1000:1000 "$PROXY_CACHE_DIR" "$PROXY_LOG_DIR"
+sudo chown -R 1000:1000 "$PROXY_DISK_CACHE_DIR" "$PROXY_LOG_DIR"
 
 # ---- proxy.env ------------------------------------------------------------
+# PROXY_FETCH_CDN_IPS=false: the containers use the Bunny edge list baked into the
+# image instead of fetching it at every start, so a run does not depend on
+# bunnycdn.com and the load generator can be whitelisted in it (see
+# build-image.sh).
 # PROXY_REDIS_HOST is $HOSTIP rather than 127.0.0.1; both are reachable from
 # every --network host container and from this shell, so one value works
 # everywhere.
+# The upstreams point at the stub on 8088-8090: worker (sync, writes,
+# /clients) on 8089, main (blogs, the dashboard) on 8090, and 8088 as the
+# backup for both. The stand-in units serve from their own sockets instead
+# (unit/supervisor.sh) unless E2E_UPSTREAMS_FROM_ENV is set, as the
+# swap-under-load job does so that its stub answers.
 cat > "$PROXY_ENV_FILE" <<EOF
 BLOT_HOST=$BLOT_HOST
 PROXY_REDIS_HOST=$HOSTIP
 PROXY_PRIVATE_IP=127.0.0.1
+PROXY_FETCH_CDN_IPS=false
+PROXY_UNIT_MAIN=127.0.0.1:8090
+PROXY_UNIT_WORKER=127.0.0.1:8089
+PROXY_PEER_MAIN=127.0.0.1:8088
+PROXY_PEER_WORKER=127.0.0.1:8088
 EOF
+[ -z "${E2E_UPSTREAMS_FROM_ENV:-}" ] || echo "E2E_UPSTREAMS_FROM_ENV=1" >> "$PROXY_ENV_FILE"
 
 # A second env file, identical except for PROXY_PRIVATE_IP, for the
 # deterministic forced-failure scenarios in the workflow: 198.51.100.7 is
@@ -75,25 +89,18 @@ done
 
 # ---- stub upstream (8088-8090, bound to every interface) -----------------
 # STUB_BIND=0.0.0.0, as real production Node containers are (docker -p
-# publishes to every interface by default).
+# publishes to every interface by default). STUB_JS replaces the stub, as the
+# swap-under-load job (swap-load.sh) does; the file it needs next to it is
+# mounted either way.
 log "Starting the stub upstream"
 docker run -d --name blot-e2e-stub --network host -e STUB_BIND=0.0.0.0 \
-  -v "$REPO_ROOT/proxy/e2e/stub-upstream.js":/s.js:ro \
-  node:22-alpine node /s.js >/dev/null
+  -v "${STUB_JS:-$REPO_ROOT/proxy/e2e/stub-upstream.js}":/s.js:ro \
+  -v "$HERE/swap-load-lib.js":/swap-load-lib.js:ro \
+  node:24.22.1-alpine node /s.js >/dev/null
 for i in $(seq 1 30); do
   curl -sf -o /dev/null http://127.0.0.1:8088/ && break
   sleep 1
   [ "$i" -lt 30 ] || { echo "stub upstream never came up" >&2; docker logs blot-e2e-stub; exit 1; }
 done
 
-# ---- fake Node container (purge probe target) ------------------------------
-# purge_reachable() (proxy/deploy/common.sh) docker execs into
-# $PROXY_NODE_CONTAINER and runs `node -e ...` against
-# BLOT_REVERSE_PROXY_URLS, so this needs BLOT_REVERSE_PROXY_URLS in its own
-# env and a `node` binary - node:22-alpine has both.
-log "Starting the fake Node container ($PROXY_NODE_CONTAINER)"
-docker run -d --name "$PROXY_NODE_CONTAINER" --network host \
-  -e BLOT_REVERSE_PROXY_URLS="http://127.0.0.1:8077" \
-  node:22-alpine sleep infinity >/dev/null
-
-log "Harness is up: Redis, stub upstream and $PROXY_NODE_CONTAINER running; no proxy container yet"
+log "Harness is up: Redis and the stub upstream running; no unit yet"

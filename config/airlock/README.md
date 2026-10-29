@@ -76,6 +76,24 @@ The DevTools endpoint and the proxy are **unauthenticated**. Network scope is
 the access control: keep `airlock` on a Docker network shared **only** with the
 Blot app containers. Nothing about `airlock` should be published to the host.
 
+**Units (#2119).** The exception is the per-unit airlocks. Each unit
+(`blot-blue`, `blot-green`) runs on the host network, which cannot join
+`blotnet` or resolve its names, so it has its own airlock, `blot-blue-airlock`
+and `blot-green-airlock`, deployed with it by `proxy/deploy/blue-green.sh`.
+They stay on `blotnet` (for Docker's DNS) and publish their two ports on
+**127.0.0.1 only**, at a distinct host port per unit (`AIRLOCK.units` in
+`scripts/deploy/constants.js`, 19222/18888 for blue and 19223/18889 for green);
+the unit's `BLOT_AIRLOCK_BROWSER_URL` and `BLOT_AIRLOCK_PROXY_URL` point at
+them. The egress boundary does not change: `egress.nft` is in the airlock's
+own network namespace and rejects by the real destination of each connection,
+whoever the client is, and tinyproxy's client ACL already allows the bridge
+gateway address that a published port presents. What does change is *who may
+use* the airlock: nothing on a Docker network is a client any more, but any
+process on the host can reach a loopback port, the proxy in each unit and
+the host's shell users included. They could drive the airlock's browser, which
+can still only reach public addresses. Treat the host's loopback as inside the
+trust boundary, as it is for the Redis and purge listeners.
+
 `airlock` itself only ever holds a rendered screenshot or a downloaded asset
 in `/tmp` and `/home/airlock/profile` — no secrets, no data mount, no cloud
 identity.
@@ -114,46 +132,17 @@ docker compose -f scripts/development/docker-compose.yml up
 
 Comment out the two `BLOT_AIRLOCK_*` lines to bypass it.
 
-## Rollout history
+## Production
 
-This landed in two PRs on purpose, so a mistake in the (untestable-without-a-
-real-host) deploy plumbing couldn't take down blue/green/yellow:
+Each unit has its own airlock, `blot-blue-airlock` and `blot-green-airlock`, on
+`blotnet`, deployed with the unit by `proxy/deploy/common.sh` (`ensure_airlock`;
+settings from [`constants.js`](../../scripts/deploy/constants.js) via
+`units.sh`). A problem with an airlock never goes unnoticed by a deploy: the
+unit is not created if its airlock does not come up.
 
-* **The infrastructure PR** built and deployed the `airlock`
-  image/container/network in production and connected the app containers to
-  it, but didn't route any real traffic through it yet -
-  `helper/screenshot`/`helper/transformer/download` still fetched directly.
-  A temporary post-boot probe (`app/helper/airlock/probe.js`, since deleted)
-  opened a real connection to the deployed airlock, took a real screenshot
-  through it, made a real fetch through its proxy, and confirmed the
-  metadata address was blocked on both paths - logging the result so a few
-  days of production deploys gave a real signal, not just a local one,
-  before anything depended on it.
-* **This PR is the cutover**, made once that probe had been green in
-  production for a while: `generateDockerCommand.js` now sets the real
-  `BLOT_AIRLOCK_BROWSER_URL`/`BLOT_AIRLOCK_PROXY_URL` (mechanically the same
-  way the temporary `BLOT_AIRLOCK_PROBE_*` vars were set before), and the
-  probe module, its call site in `app/setup.js`, and `config.airlockProbe`
-  are gone. Nothing about the airlock container or network itself changed
-  for this PR.
-
-## Production (implemented in `scripts/deploy`)
-
-Everything below already runs as part of `npm run deploy-node` (see
-[`scripts/deploy/index.js`](../../scripts/deploy/index.js),
-[`constants.js`](../../scripts/deploy/constants.js) and
-[`generateAirlockCommand.js`](../../scripts/deploy/util/generateAirlockCommand.js)).
-Every step is **non-fatal to the app deploy**: a problem deploying or
-connecting the airlock is logged but never fails, blocks, or rolls back
-blue/green/yellow - see the comment above `deployAirlockIfNeeded` in
-`index.js`. The airlock itself *does* get rolled back on a bad deploy (see
-step 2) - "non-fatal" only ever means "can't take the app deploy down with
-it".
-
-1. **Build & push.** `.github/workflows/build.yml` has a second matrix job,
-   `build-airlock`, alongside the app's `build` job: builds `config/airlock`
-   per-arch, pushes `ghcr.io/blotcms/blot-airlock:<sha>-<arch>`, then
-   `manifest-airlock` creates the multi-arch `<sha>` (and `latest` on
+1. **Build & push.** `build-airlock` in `.github/workflows/build.yml` builds
+   `config/airlock` per-arch, pushes `ghcr.io/blotcms/blot-airlock:<sha>-<arch>`,
+   then `manifest-airlock` creates the multi-arch `<sha>` (and `latest` on
    master) tag - same shape as the app image. It also runs a "Verify egress
    filter" step, so a regression in `egress.nft`/`entrypoint.sh` fails the
    build - **not** the same commands as this file's own Verifying section
@@ -168,60 +157,27 @@ it".
 
    [`deploy.yml`](../../.github/workflows/deploy.yml)'s own
    `wait-for-build` job waits for **both** the app and airlock manifests
-   for the target commit before deploying anything - not just the app
-   one. `deployAirlockIfNeeded()` treats a missing airlock manifest as a
-   non-fatal skip *for that run*, and nothing else ever retries it, so
-   deploying while `build-airlock` is still running (or has failed on its
-   own) would otherwise ship the app image for a commit whose airlock
-   update silently never happened.
+   for the target commit before deploying anything. A commit whose airlock
+   image never published still deploys: each airlock keeps running the image
+   it has.
 
-2. **Network + sidecar.** `deployAirlockIfNeeded()` runs before the
-   blue/green/yellow loop: creates the `blotnet` Docker network if it
-   doesn't exist, and pulls/(re)starts `blot-airlock` if it isn't already
-   running the target commit's image **and** healthy - both conditions, not
-   just the image tag, since a container that's merely present with the
-   right tag but stopped or wedged unhealthy would otherwise be mistaken
-   for "already deployed" and left broken until some later commit happened
-   to change the tag. If deploying the new image fails (bad build, failed
-   health check), it rolls back to whatever image was running before -
-   mirroring the rollback `main()` already does for blue/green/yellow, so a
-   bad airlock build can't leave nothing running at all.
+2. **Network + sidecar.** Before a unit is created, `ensure_airlock` creates
+   the `blotnet` Docker network if it doesn't exist, and pulls/(re)starts the
+   unit's airlock if it isn't already running the target commit's image
+   **and** healthy - both conditions, not just the image tag, since a
+   container that's merely present with the right tag but stopped or wedged
+   unhealthy would otherwise be mistaken for "already deployed" and left
+   broken until some later commit happened to change the tag. The unit it
+   serves is stopped (or new) at that moment, and the other unit has its own
+   airlock, so nothing is mid-screenshot. If the new image fails (bad build,
+   failed health check), the image that was running before is started again.
 
-3. **Connecting app containers.** Deliberately **not** `--network blotnet`
-   on the app containers - that would move them off the default `bridge`
-   network entirely, changing their gateway from `172.17.0.1` to `blotnet`'s
-   gateway, which could silently break a hardcoded `BLOT_REDIS_HOST` or
-   `BLOT_REVERSE_PROXY_URLS` on the live host (neither is visible from this
-   repo). Instead, each app container is created stopped (`docker create`),
-   `connectToAirlockNetwork()` runs `docker network connect blotnet
-   <container>`, and only then is it started (`docker start`) - so the app
-   process starts up with `blotnet` already in place and opens its Redis
-   connections once, against the final network shape.
+3. **Reaching it.** The unit is on the host network, so it reaches its airlock
+   on `127.0.0.1` at its own ports: `BLOT_AIRLOCK_BROWSER_URL` and
+   `BLOT_AIRLOCK_PROXY_URL` are set by `run_args` in `proxy/deploy/common.sh`
+   (see "Configuration" above).
 
-   This attach step used to run *after* `docker run`, on the
-   already-running container. Connecting a network to a running container
-   reprograms its routing table and drops in-flight conntrack entries: it
-   was tearing down the app's established connections to the off-box Redis
-   instance a few seconds into every deploy, which node-redis surfaced as an
-   unhandled `read ETIMEDOUT` `error` event that crash-restarted each
-   container exactly once per deploy. The restart "fixed" it only because
-   the restarted container came up already attached to both networks - which
-   is now what a first start does too.
-
-   `connectToAirlockNetwork()` checks `blotnet`'s membership first and only
-   connects if the container isn't already a member - Docker's supported way
-   to give a container a *second* network interface. Checking membership
-   first (rather than attempting the connect and swallowing "already exists"
-   with `|| true`) means a genuine attach failure - a missing network, a
-   renamed container - surfaces in the deploy log instead of looking
-   identical to success. The container keeps its original bridge network and
-   gateway untouched, and gains the ability to resolve and reach
-   `blot-airlock` via `blotnet`'s embedded DNS.
-   `generateDockerCommand.js` sets `BLOT_AIRLOCK_BROWSER_URL` /
-   `BLOT_AIRLOCK_PROXY_URL` to `http://blot-airlock:9222` / `:8888` on
-   every app container - see "Configuration" above.
-
-4. **Harden the instance metadata service** while you're here — defence in
+4. **Harden the instance metadata service** while you're here - defence in
    depth for any other fetch in the app, independent of all of this:
 
    ```sh
@@ -283,7 +239,7 @@ it.
 
 ## Verifying
 
-Run these against a real deployed `blot-airlock` (a real host, where
+Run these against a real deployed unit airlock (`blot-blue-airlock`) (a real host, where
 `169.254.169.254` is a real, live metadata service and `10.0.0.1` may well
 be a real address on your VPC - unlike in CI, where neither is routable at
 all and would "fail" identically whether or not the filter is doing
@@ -295,18 +251,18 @@ HTTP response, which is a fail, not a "no output" pass:
 
 ```sh
 # metadata + private ranges are unreachable from inside the container
-docker exec blot-airlock sh -c 'curl -fm3 -sS http://169.254.169.254/ ; echo exit=$?'
-docker exec blot-airlock sh -c 'curl -fm3 -sS http://10.0.0.1/       ; echo exit=$?'
+docker exec blot-blue-airlock sh -c 'curl -fm3 -sS http://169.254.169.254/ ; echo exit=$?'
+docker exec blot-blue-airlock sh -c 'curl -fm3 -sS http://10.0.0.1/       ; echo exit=$?'
 # the public internet still works
-docker exec blot-airlock sh -c 'curl -m5 -sS -o /dev/null -w "%{http_code}\n" https://example.com'
+docker exec blot-blue-airlock sh -c 'curl -m5 -sS -o /dev/null -w "%{http_code}\n" https://example.com'
 # the proxy path works end to end
-docker exec blot-airlock sh -c 'curl -m5 -sS -x http://127.0.0.1:8888 -o /dev/null -w "%{http_code}\n" https://example.com'
+docker exec blot-blue-airlock sh -c 'curl -m5 -sS -x http://127.0.0.1:8888 -o /dev/null -w "%{http_code}\n" https://example.com'
 # the container's own DevTools endpoint is NOT reachable through the proxy
 # (this is the loopback confinement above - it must fail, not return 200,
 # and -f matters here too: tinyproxy answers with its own valid HTTP error
 # page when it can't reach an upstream, which -sS alone would count as a
 # "successful" response)
-docker exec blot-airlock sh -c 'curl -fm3 -sS -x http://127.0.0.1:8888 http://127.0.0.1:9221/json/version ; echo exit=$?'
+docker exec blot-blue-airlock sh -c 'curl -fm3 -sS -x http://127.0.0.1:8888 http://127.0.0.1:9221/json/version ; echo exit=$?'
 ```
 
 The Jasmine spec [`app/build/plugins/linkScreenshot/tests.js`](../../app/build/plugins/linkScreenshot/tests.js)
@@ -326,13 +282,13 @@ they look different in the logs - only one is a security regression:
   protection**. `config/index.js`'s startup warning catches this:
 
   ```sh
-  ssh blot "docker logs blot-container-green 2>&1 | grep 'BLOT_AIRLOCK_BROWSER_URL'"
+  ssh blot "docker logs blot-green 2>&1 | grep 'BLOT_AIRLOCK_BROWSER_URL'"
   ```
 
-* **The env vars are set but the airlock isn't reachable** (most likely
-  `docker network connect blotnet <container>` didn't happen or didn't take
-  for that container - check the `Connecting … to blotnet` line in the
-  deploy log). This is *not* a security regression - there's no fallback to
+* **The env vars are set but the airlock isn't reachable** (most likely the
+  unit's airlock is down or unhealthy - `docker ps` for
+  `blot-<unit>-airlock`, and the `ensure_airlock` lines in the deploy log).
+  This is *not* a security regression - there's no fallback to
   an unprotected fetch, the connection attempt itself just fails - but
   screenshots/downloads on that container fail outright until it's
   redeployed or reconnected. Look for `helper/screenshot`'s own
@@ -342,12 +298,11 @@ they look different in the logs - only one is a security regression:
 
 ## Limitations
 
-* **Only one screenshot at a time, across the whole fleet, when airlock
-  mode is on.** Chromium deadlocks in `Page.captureScreenshot` if two tabs
+* **Only one screenshot at a time per airlock when airlock mode is on.** Chromium deadlocks in `Page.captureScreenshot` if two tabs
   of the *same instance* capture at once - `helper/screenshot`'s own
   Bottleneck limiter already prevents that within one process, but it can't
-  stop blue, green and yellow from each independently taking a screenshot
-  against the one shared airlock Chromium at the same time. Fixed with a
+  stop a unit's node-a and node-b from each independently taking a screenshot
+  against the one airlock Chromium at the same time. Fixed with a
   cross-container mutex: a Redis lock keyed by the airlock's URL (the same
   mutex `app/sync` uses for blog folders). It only
   activates when `BLOT_AIRLOCK_BROWSER_URL` is set - in launch mode every
@@ -400,11 +355,16 @@ they look different in the logs - only one is a security regression:
   user input and is left on a locally-launched Chromium; don't set
   `BLOT_AIRLOCK_BROWSER_URL` for that job.
 * **Chromium/Puppeteer version drift.** `package.json` pins `puppeteer`;
-  `alpine:3.20`'s `chromium` apk floats with the base image and is a
-  different release train. The Dockerfile records the version it shipped
-  with in `/etc/airlock/chromium-version` (also logged at container start)
-  precisely so a drift shows up there before it shows up as bookmark
-  screenshots silently failing in production after an image rebuild.
+  `alpine:3.24`'s `chromium` apk floats to receive security updates. As of
+  2026-10-25, it ships Chromium 155.0.8059.84, matching Puppeteer 25.15.0's
+  [supported Chrome version](https://pptr.dev/supported-browsers). The airlock
+  GitHub Actions workflow checks the browser major against Puppeteer's target
+  and captures a PNG through the nginx DevTools front before publishing the
+  manifest. Changes to `package.json` also run that workflow. The image
+  records its exact version in `/etc/airlock/chromium-version` and logs it at
+  startup. Chromium is in Alpine's `community` repository, whose
+  [support ends at the next stable Alpine release](https://alpinelinux.org/releases/);
+  update the base image and Puppeteer together when that release ships.
 * In production, `config/index.js` only **warns** (`console.warn`, on
   startup) if `BLOT_AIRLOCK_BROWSER_URL` / `BLOT_AIRLOCK_PROXY_URL` are
   unset - it does not refuse to start. A hard startup failure was rejected

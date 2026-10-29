@@ -2,9 +2,12 @@ const fs = require("fs");
 const vm = require("vm");
 
 // Loads routes/site.js with its dependencies stubbed and returns the handler
-// for POST /webhook/changes.watch/:serviceAccountId
-function load({ blogIDs, sync, lookupError }) {
+// for POST /webhook/changes.watch/:serviceAccountId. Follow-ups for blogs
+// already syncing are covered in clients/util/tests/followUpSync.js; here
+// run stands in for followUps.run.
+function load({ blogIDs, sync = jasmine.createSpy("sync"), run, lookupError }) {
   let handler;
+  let syncBlog;
   const route = {
     post: function (fn) {
       handler = fn;
@@ -25,6 +28,12 @@ function load({ blogIDs, sync, lookupError }) {
         if (name === "helper/clfdate") return () => "[date]";
         if (name === "express") return { Router: function () { return router; } };
         if (name === "clients/google-drive/sync") return sync;
+        if (name === "clients/util/followUpSync") {
+          return function (followUpName, fn) {
+            syncBlog = fn;
+            return { run };
+          };
+        }
         if (name === "clients/google-drive/database") {
           return {
             blog: {
@@ -40,87 +49,61 @@ function load({ blogIDs, sync, lookupError }) {
     }
   );
 
-  return function deliver() {
+  function deliver() {
     const res = { sendStatus: jasmine.createSpy("sendStatus") };
     const next = jasmine.createSpy("next");
     handler({ params: { serviceAccountId: "account" } }, res, next);
     return { res, next };
-  };
+  }
+
+  deliver.syncBlog = (blogID) => syncBlog(blogID);
+  return deliver;
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 10));
 
 describe("google drive changes.watch webhook", function () {
   it("replies 200 before any sync has finished", async function () {
-    const sync = jasmine.createSpy("sync").and.returnValue(new Promise(() => {}));
-    const deliver = load({ blogIDs: ["blog_a"], sync });
+    const run = jasmine.createSpy("run").and.returnValue(new Promise(() => {}));
+    const deliver = load({ blogIDs: ["blog_a"], run });
 
     const { res } = deliver();
     await flush();
 
     expect(res.sendStatus).toHaveBeenCalledWith(200);
-    expect(sync).toHaveBeenCalledWith("blog_a");
+    expect(run).toHaveBeenCalledWith("blog_a");
   });
 
   it("passes a blog lookup failure to next instead of replying 200", async function () {
-    const sync = jasmine.createSpy("sync");
+    const run = jasmine.createSpy("run");
     const lookupError = new Error("redis down");
-    const deliver = load({ blogIDs: ["blog_a"], sync, lookupError });
+    const deliver = load({ blogIDs: ["blog_a"], run, lookupError });
 
     const { res, next } = deliver();
     await flush();
 
     expect(next).toHaveBeenCalledWith(lookupError);
     expect(res.sendStatus).not.toHaveBeenCalled();
-    expect(sync).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
   });
 
-  it("collapses deliveries during a sync into one follow-up sync", async function () {
-    const releases = [];
-    const sync = jasmine.createSpy("sync").and.callFake(
-      () => new Promise((resolve) => releases.push(resolve))
-    );
-    const deliver = load({ blogIDs: ["blog_a"], sync });
-
-    deliver();
-    await flush();
-    expect(sync).toHaveBeenCalledTimes(1);
-
-    deliver();
-    deliver();
-    deliver();
-    await flush();
-    // No second concurrent sync was started
-    expect(sync).toHaveBeenCalledTimes(1);
-
-    releases[0]();
-    await flush();
-    // Exactly one follow-up sync, however many deliveries arrived
-    expect(sync).toHaveBeenCalledTimes(2);
-
-    releases[1]();
-    await flush();
-    expect(sync).toHaveBeenCalledTimes(2);
-
-    // Nothing is left pending or marked as ongoing
-    deliver();
-    await flush();
-    expect(sync).toHaveBeenCalledTimes(3);
-  });
-
-  it("keeps blogs isolated and clears the ongoing marker on failure", async function () {
-    const sync = jasmine.createSpy("sync").and.callFake(async (blogID) => {
+  it("keeps blogs isolated when one fails", async function () {
+    const run = jasmine.createSpy("run").and.callFake(async (blogID) => {
       if (blogID === "blog_a") throw new Error("boom");
     });
-    const deliver = load({ blogIDs: ["blog_a", "blog_b"], sync });
+    const deliver = load({ blogIDs: ["blog_a", "blog_b"], run });
 
     deliver();
     await flush();
-    expect(sync.calls.allArgs()).toEqual([["blog_a"], ["blog_b"]]);
+    expect(run.calls.allArgs()).toEqual([["blog_a"], ["blog_b"]]);
+  });
 
-    // blog_a failed but can be synced by the next delivery
-    deliver();
-    await flush();
-    expect(sync).toHaveBeenCalledTimes(4);
+  it("asks sync to reject when the folder is locked, so a follow-up is queued", async function () {
+    const sync = jasmine.createSpy("sync").and.returnValue(Promise.resolve({}));
+    const deliver = load({ blogIDs: [], sync, run: jasmine.createSpy("run") });
+
+    await deliver.syncBlog("blog_a");
+
+    expect(sync).toHaveBeenCalledWith("blog_a", { rethrowLocked: true });
   });
 });

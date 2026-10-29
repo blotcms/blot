@@ -1,29 +1,31 @@
-# Deploying the proxy container
+# Deploying the units
 
-Production runs the proxy as a container (cut over from bare-metal OpenResty
-on 8 Oct 2026, #1941; the bare-metal install has since been removed). Deploy a new image with the **Deploy proxy** workflow
-(`.github/workflows/deploy-proxy.yml`, manual), or from a checkout:
+Production runs two units, `blot-blue` and `blot-green` (#2119): each one
+container holding OpenResty and the Node app (node-a, and node-b which it forks),
+built from the `unit` target of the root Dockerfile (`ghcr.io/blotcms/blot`, labelled `im.blot.kind=unit`).
+Deploy a new image with the **Deploy** workflow
+(`.github/workflows/deploy.yml`, manual), or from a checkout:
 
 ```sh
-npm run deploy-proxy             # master's tip, waiting for its image
-npm run deploy-proxy -- <commit>
+npm run deploy-units             # master's tip, waiting for its image
+npm run deploy-units -- <commit>
 ```
 
-Both run [`scripts/deploy/proxy.sh`](../../scripts/deploy/proxy.sh), which
+Both run [`scripts/deploy/units.sh`](../../scripts/deploy/units.sh), which
 copies this directory to `~/proxy-deploy` on the host and runs
 `blue-green.sh` there. The scripts below all run **on the production host**:
 
 | Script | When |
 | --- | --- |
-| [`blue-green.sh`](blue-green.sh) | Every image change. Container to container, zero-downtime. With no proxy container running it starts the first one instead (no overlap, so a few seconds without a proxy if something else was serving). |
+| [`blue-green.sh`](blue-green.sh) | Every image change. Replaces the two always-running units, `blot-blue` then `blot-green`, one at a time while the other carries the traffic (see "Two units" below), and starts both on a host with none running (no overlap, so a few seconds without a proxy if something else was serving). Refuses an image without the `im.blot.kind=unit` label. |
 | [`try-issuance.sh`](try-issuance.sh) | Before an image change. Issues a Let's Encrypt **staging** certificate through the image for a throwaway domain, changing nothing that serves traffic. |
-| [`reload-config.sh`](reload-config.sh) | Not for these containers: it needs the conf directory bind-mounted, which `blue-green.sh` does not do. Ship config changes as a new image. |
 
 The scripts read the host's settings from `/etc/blot/proxy.env`
 ([`proxy.env.example`](proxy.env.example)) and share [`common.sh`](common.sh).
-Paths default to the ones the bare-metal OpenResty used, which the host still has (`/var/instance-ssd/cache`,
-`/var/instance-ssd/logs`, `/etc/ssl/private`, and the `cdn.` static
-directory `/var/www/blot/app/blog/static`),
+Paths default to the ones the bare-metal OpenResty used, which the host still has (`/var/instance-ssd/logs`,
+`/etc/ssl/private`, and the `cdn.` static
+directory `/var/www/blot/app/blog/static`), plus the cache directory
+below (`/var/instance-ssd/disk-cache`),
 so a redeploy keeps the warm cache and
 the app's own `cdn.` files are served from disk (with the `Cache-Control`/CORS headers of
 `location /`) instead of falling through to Node. Per-blog assets are not on
@@ -33,26 +35,50 @@ and the app serves as a fallback. Containers also get
 ~20000 fds `worker_connections 10000` can need (two fds per proxied
 connection) and the config's own `worker_rlimit_nofile 20480`
 (`proxy/config/initial.conf`).
-`bash tests/run.sh` exercises both scripts against fake `docker`/`systemctl` (CI runs it), and the `proxy-deploy-e2e` workflow runs `blue-green.sh` against real Docker ([`e2e/`](e2e/README.md)).
+`bash tests/run.sh` exercises both scripts against fake `docker`/`systemctl` (CI runs it), and the `proxy-deploy-e2e` workflow runs `blue-green.sh` against real Docker, with stand-in units ([`e2e/`](e2e/README.md)).
+
+## Units
+
+`blue-green.sh` deploys a unit image (the sections below describe the flow). A
+unit gets:
+
+- these arguments: `/etc/blot/secrets.env` then `proxy.env` as
+  env files (a key set differently in the two is refused before anything is
+  touched), `BLOT_UNIT`, the data directory with `rslave`, the tmp directory,
+  `/run/blot`, `BLOT_RELEASE_ID`, `NODE_OPTIONS` (node-a's heap and the crash
+  report) and `BLOT_WORKER_MAX_OLD_SPACE_SIZE` (node-b), the memory and cpu
+  limits, `--stop-timeout`. The numbers are in `scripts/deploy/constants.js`
+  (`UNIT`), which `scripts/deploy/units.sh` writes to `unit-settings.env` beside
+  these scripts;
+- no TCP port: node-a serves on its socket alone (two units on the host network
+  would both want 8080), so everything talks to the sockets;
+- its own airlock, `blot-<unit>-airlock`, replaced just before the unit and
+  published on 127.0.0.1 at the unit's own ports (a unit on the host network
+  cannot join `blotnet`; see `config/airlock/README.md`);
+- health: the proxy's health socket, node-a and node-b `/health` on their sockets;
+- blue, deployed first, runs `scripts/deploy/verify-container` before green is
+  touched; a failure rolls blue back and leaves green alone;
+
+The way back from a bad unit image is an older unit image, `npm run deploy-units
+-- <commit>`: both units are replaced in turn.
 
 ## Setting up a host
 
-1. **An image.** `.github/workflows/proxy-image.yml` publishes
-   `ghcr.io/blotcms/blot-proxy:<sha>` (multi-arch, built with
+1. **An image.** `.github/workflows/unit-image.yml` publishes
+   `ghcr.io/blotcms/blot:<sha>` (arm64, with OpenResty built into it with
    `LOG_TO_STDOUT=false` because `fail2ban`, `logrotate` and the `.bashrc`
    helpers read `/var/instance-ssd/logs/access.log` and the container has no
    ban layer of its own; `blue-green.sh` refuses an image that logs to stdout).
    It builds every push to master. Pass the SHA to a script;
    anything containing `/` or `:` is used as a full image reference.
-2. **`/etc/blot/proxy.env`** from the example. `PROXY_UPSTREAM_*` should be the Node containers' `unix:/run/blot/<colour>.sock`
-   sockets (the example shows them); the scripts then mount `/run/blot` into the
-   proxy and check each socket before and after the swap. `PROXY_PRIVATE_IP` and
+2. **`/etc/blot/proxy.env`** from the example. The units' sockets come
+   from the settings the scripts write; `/run/blot` is mounted into each unit and each
+   socket is checked before and after the swap. `PROXY_PRIVATE_IP` and
    `PROXY_REDIS_HOST` (both required, the scripts refuse empty values) must be the host's private IP and Redis host, and `BLOT_REVERSE_PROXY_URLS`
    in `/etc/blot/secrets.env` must point at `http://<PROXY_PRIVATE_IP>:8077`,
    because Node purges the cache from a Docker bridge that cannot see the
-   host's `127.0.0.1`. The scripts read the value from the running Node
-   container, so recreate the Node containers (a normal deploy) after editing it.
-   GitHub's Deploy proxy workflow runs the scripts as the `deploy` user, which
+   host's `127.0.0.1`. The units read these at start, so redeploy after editing them.
+   GitHub's Deploy workflow runs the scripts as the `deploy` user, which
    must be able to read the file. It can hold `BLOT_PURGE_TOKEN`, so grant that
    user an ACL rather than making it world-readable:
    `sudo setfacl -m u:deploy:r /etc/blot/proxy.env`
@@ -91,17 +117,65 @@ The script refuses to go on if `redis-cli` is missing, or (on a swap) no
 certificate could be read from the running proxy. `PROXY_SKIP_CERT_SWEEP=1`
 skips both the comparison and the fresh-start check.
 
-## Purge index
+## Two units
 
-After a new container is healthy, `blue-green.sh` waits up to
-`PROXY_REHYDRATE_TIMEOUT` (default 120s; about 2.5s in production) for it to log
-`rehydrate: complete` while rebuilding its purge index from the cache, and
-fails on a `[error] ... rehydrate:` line. Until it completes every `/purge`
-returns 503. On a swap this happens before the old container is stopped; on
-a fresh start before the container is made permanent. Either way a failure
-removes the new container. During a swap both containers write the same
-`error.log`, so only lines stamped at or after the new container's start time
-are read (plus `docker logs`, for an `ALLOW_STDOUT_LOGS=1` image).
+`blot-blue` and `blot-green` are always running, from the same image, both
+`--network host` and sharing `:80`/`:443` with `reuseport`. The names are final.
+`blue-green.sh`
+looks at what is running and does one of:
+
+- **steady** (both units up): for blue, then green: refuse unless the other
+  unit is running and healthy (its health socket answers); skip a unit that
+  already runs this image and is healthy (a re-run is a no-op); otherwise
+  `docker stop --time 40` it (the unit's stop timeout: it drains OpenResty and
+  then node-a), rename it `blot-<unit>-previous`, create and start
+  the new one, wait for its health socket, run the site checks, give it its
+  restart policy and remove `-previous`. Any failure removes the new
+  container first (the two would share sockets), starts `-previous` again and
+  renames it back, and the deploy stops without touching the other unit. If the
+  old one will not come back healthy it is left stopped under its name, with a
+  loud warning, and the other unit keeps serving.
+- **partial** (one unit up): the missing one is started first, beside the
+  running one, and checked; then as steady.
+- **fresh** (nothing up): the cache directory is emptied, then blue and green
+  are started, each checked (200 with the right certificate, every custom
+  domain with its own certificate) before it is made permanent.
+
+A new container has restart policy `no` until its checks pass. The site checks
+go to the host's `:443`, which either unit may answer, so what proves the new
+container is its own health socket; stopping the old unit first means the
+checks are answered by the new one and the other, already healthy, unit.
+
+`docker ps --filter name=` is a substring regex: `name=blot-blue` also matches
+`blot-blue-previous` and `name=blot-` matches every container whose name starts with `blot-`. The
+scripts compare whole names; use `--filter 'name=^blot-blue$'` by hand.
+
+A deploy never stops a unit whose other is unhealthy, so with green unhealthy it
+refuses to replace blue: restart the unhealthy one first (`docker restart
+blot-green`; the health cron does it within a minute), then deploy.
+
+A killed deploy can leave `blot-<unit>-previous`. If its unit is running and
+healthy the next deploy removes it; if not, it refuses and prints the three
+commands that put the old one back.
+
+## Cache directory
+
+Every image keeps its cache (`diskcache.lua`) in one host directory,
+`/var/instance-ssd/disk-cache` (`PROXY_DISK_CACHE_DIR`), which `blue-green.sh`
+mounts at `/var/cache/openresty`. It must exist and belong to uid 1000
+(`mount-instance-store.sh` creates it at boot; otherwise
+`sudo install -d -o 1000 -g 1000 <dir>`).
+
+- A deploy touches nothing and keeps the warm cache. Both units (and a
+  replacement) share the directory, so a purge reaching any one purges all, and
+  a replacement that fails after the old container was stopped needs no cleanup
+  before it is started again.
+- On a fresh start (nothing running) the directory is emptied **before** the
+  container starts, since it missed every purge since it was last in use. The
+  files belong to uid 1000 and the deploy user has no sudo, so a container does
+  it: it moves every top-level entry into `.trash/<timestamp>/` (instant: a
+  cache has a few shard directories) and deletes that in a detached container,
+  so the deploy does not wait for millions of files to go.
 
 ## Trying issuance against a real ACME server
 
@@ -138,26 +212,20 @@ back on any failed check. That script is deleted, and the bare-metal install
 has since been removed from the host.
 
 On a host with no proxy container running (a rebuilt host, or after the
-container was removed), `blue-green.sh` starts the first one. It also refuses
+containers were removed), `blue-green.sh` starts both units. It also refuses
 while a legacy `openresty` systemd unit is active or enabled, which would
 conflict with the container for `:80`/`:443`.
 
-To roll back, redeploy an older image:
+To roll back, redeploy an older image (both units are replaced in turn):
 
 ```sh
-npm run deploy-proxy -- <older-commit>
+npm run deploy-units -- <older-commit>
 ```
 
-or run the Deploy proxy workflow with that commit.
+or run the Deploy workflow with that commit.
 
 ## Known gaps
 
-- **Purge during a blue/green overlap.** Node now purges each proxy
-  independently and retries ones that were down (#1936), but the two
-  containers share `127.0.0.1` and the private address, so for the few seconds
-  both listen a purge is accepted by only one of them, which counts as
-  delivered. `cacher.lua` tracks keys in per-process memory, so keys the other
-  cached in that window are not purged. Deploy when few edits are happening.
-- **`:8999` ACME hook** during the overlap (see the root `TODO`).
+- **`:8999` ACME hook** during the overlap, until `PROXY_ACME_HOOK_SECRET` is set in `proxy.env` (the deploy logs a warning while it is not): see `proxy/README.md`.
 - The container has no `fail2ban` of its own; it relies on the host's reading
   the shared log directory (hence the log-mode guard above).

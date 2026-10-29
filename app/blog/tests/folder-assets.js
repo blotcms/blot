@@ -94,7 +94,7 @@ describe("build-time baked folder links", function () {
 
     const stored = await (await this.get("/late?json=true")).json();
 
-    // baked into the stored entry, not just resolved at request time
+    // baked into the stored entry
     expect(stored.entry.html).toContain(`/folder/${version}/`);
   });
 

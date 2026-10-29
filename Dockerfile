@@ -1,3 +1,6 @@
+# Keep NODE_BASE identical to the one in proxy/Dockerfile (the proxy image is
+# built on the same base); scripts/security/check-base-image.js checks it.
+ARG NODE_BASE=node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
 ## Stage 1 (base)
 # Runtime-only foundation shared by every downstream stage. It carries the
 # things that must exist at *run* time (git, tini, pandoc, the libvips and
@@ -5,7 +8,7 @@
 # compile native npm modules - those live in the throwaway `deps` stage and
 # never reach a published image. Keeping them out of `base` shrinks both the
 # `dev` test image (pulled by all ~17 CI matrix jobs) and the `prod` image.
-FROM node:22-alpine AS base
+FROM ${NODE_BASE} AS base
 
 ARG PANDOC_VERSION=3.6.1
 # sharp 0.35 needs libvips >= 8.18.6 but the Alpine release this base image is
@@ -210,7 +213,7 @@ RUN git config --global --add safe.directory /usr/src/app \
  && git config --global user.email "you@example.com" \
  && git config --global user.name "Your Name"
 
-# OpenResty is spawned by the proxy (cacher) tests in proxy/tests via `openresty -c ...`.
+# OpenResty is spawned by the proxy tests (the scanner ban) in proxy/tests via `openresty -c ...`.
 # Alpine's community package installs the binary at /usr/lib/nginx/bin/openresty,
 # which start-openresty.sh already probes for. procps provides the `ps` used when
 # restarting OpenResty between specs; the /var dirs are nginx's compiled-in
@@ -239,7 +242,7 @@ COPY ./scripts ./scripts
 COPY --chown=1000:1000 ./app ./app
 COPY ./TODO ./TODO
 
-## Stage 6 (default, production)
+## Stage 6 (production)
 # The final production stage
 FROM source AS prod
 
@@ -261,3 +264,62 @@ RUN git config --global user.email "you@example.com" && git config --global user
 RUN node app/documentation/build
 
 CMD ["node", "/usr/src/app/app/index.js"]
+
+## Stage 7 (unit; build it with --target, the app image is --target prod)
+# One container holding OpenResty and the Node app, run as one of two units
+# (#2119): the `prod` stage plus the proxy's runtime, started by a supervisor
+# (proxy/unit/supervisor.sh) under tini. Built and tested in CI by
+# .github/workflows/unit-image.yml.
+# proxy/Dockerfile, built on the same NODE_BASE: the `unit` stage takes OpenResty
+# and the proxy's files from it. CI builds it in the same build (the bake file
+# supplies it as the blot-proxy context); locally it is the image tagged
+# blot-proxy.
+FROM blot-proxy AS proxy
+
+FROM prod AS unit
+
+# proxy/deploy/blue-green.sh refuses to deploy an image without this label
+LABEL im.blot.kind=unit
+
+USER root
+
+# The runtime packages of the proxy image (see proxy/Dockerfile for why each),
+# and su-exec, which starts Node as the app user: OpenResty's master stays root
+# to bind 80 and 443, as in the proxy image, and drops its workers to ec2-user
+RUN apk add --no-cache bash openssl gettext brotli findutils libgcc zlib su-exec
+
+# One user at uid 1000 for the app and the proxy's workers (the generated
+# config's `user` directive names ec2-user). Keep the node user's home, which
+# holds the git config set above.
+RUN deluser node \
+ && addgroup -g 1000 ec2-user \
+ && adduser -S -u 1000 -G ec2-user -h /home/node -H ec2-user
+
+COPY --from=proxy /usr/local/openresty /usr/local/openresty
+COPY --from=proxy /usr/bin/resty-auto-ssl /usr/bin/resty-auto-ssl
+COPY --from=proxy /etc/openresty /etc/openresty
+# The placeholder certificate, which a deploy mounts over
+COPY --from=proxy /etc/ssl/private /etc/ssl/private
+COPY --from=proxy /usr/local/bin/render-config /usr/local/bin/diskcache-evict /usr/local/bin/proxy-start /usr/local/bin/
+ENV PATH=$PATH:/usr/local/openresty/luajit/bin:/usr/local/openresty/nginx/sbin:/usr/local/openresty/bin
+
+# Directories the generated config and lua-resty-auto-ssl write to, and
+# /run/blot, where each unit's Node processes serve on Unix sockets
+RUN mkdir -p /etc/resty-auto-ssl/storage /etc/resty-auto-ssl/letsencrypt/conf \
+    /var/log/openresty /var/cache/openresty /run/openresty /run/blot \
+ && chmod 755 /etc/resty-auto-ssl \
+ && chown -R ec2-user:ec2-user /etc/resty-auto-ssl /var/log/openresty /var/cache/openresty /run/blot
+
+COPY proxy/unit/supervisor.sh /usr/local/bin/unit-supervisor
+COPY proxy/unit/healthcheck.sh /usr/local/bin/unit-healthcheck
+RUN chmod +x /usr/local/bin/unit-supervisor /usr/local/bin/unit-healthcheck
+
+# Both halves: OpenResty's health socket and Node's /health on its own socket.
+# The start period covers the app's start-up, as for `prod`.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=120s --start-interval=5s --retries=3 \
+  CMD ["/usr/local/bin/unit-healthcheck"]
+
+EXPOSE 80 443
+
+# tini (the base image's entrypoint) is PID 1; it runs the supervisor
+CMD ["/usr/local/bin/unit-supervisor"]

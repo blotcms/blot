@@ -36,7 +36,7 @@ notes.param("section", function (req, res, next) {
 
 notes.param("article", function (req, res, next) {
   res.locals.toc = TOC.map(section => {
-    section.isSelected = false;
+    section.isSelected = req.params.section === section.id ? "selected" : false;
     section.items = section.items.map(article => {
       article.isSelected = req.params.article === article.id ? "selected" : false;
       return article;
@@ -109,7 +109,7 @@ const SORTING_MAP = {
 notes.get("/:section/:article", function (req, res, next) {
 
   res.locals.toc = TOC.map(section => {
-    section.isSelected = false;
+    section.isSelected = req.params.section === section.id ? "selected" : false;
 
     if (section.items) {
       section.items = section.items.map(article => {

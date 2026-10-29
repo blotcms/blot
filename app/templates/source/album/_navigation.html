@@ -1,6 +1,6 @@
 <input type="checkbox" name="hidden-toggle" id="hidden-toggle">
 <header>
-  <a href="/" class="site-title">{{#profile_image.thumbnails.square}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" alt="" class="site-logo">{{/profile_image.thumbnails.square}}{{title}}</a>
+  <a href="/" class="site-title">{{#profile_image.thumbnails.small}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="24px" alt="" class="site-logo">{{/profile_image.thumbnails.small}}{{title}}</a>
   <label id="toggle" for="hidden-toggle">
     <span class="hamburger-box">
           <span class="hamburger-inner"></span>
@@ -21,18 +21,18 @@
     {{^infinite_scroll}}
     <span class="spacer"></span>
     <span class="tabular-numerals"><span id="current-page">{{current}}</span> of {{total}}</span>
-    <a class="previous-page" {{#previous}}href="/page/{{previous}}"{{/previous}}>&larr; </a>
-    <a class="next-page" {{#next}}href="/page/{{next}}"{{/next}}> &rarr;</a>
+    <a class="previous-page collection-previous" {{#previous}}href="/page/{{previous}}"{{/previous}}>&larr; </a>
+    <a class="next-page collection-next" {{#next}}href="/page/{{next}}"{{/next}}> &rarr;</a>
     {{/infinite_scroll}}
     {{/pagination}}
 
     {{#entry}}
     {{^page}}
     <span class="spacer"></span>
-    <a {{#next}}href="{{{next.url}}}"{{/next}}>&larr; </a>
-    <a {{#previous}}href="{{{previous.url}}}"{{/previous}}> &rarr;</a>
+    <a class="entry-next" {{#next}}href="{{{next.url}}}"{{/next}}>&larr; </a>
+    <a class="entry-previous" {{#previous}}href="{{{previous.url}}}"{{/previous}}> &rarr;</a>
     <span class="spacer"></span>
-    <a href="/">✕ Close</a>
+    <a class="entry-close" href="/" onclick="return closeEntry()">✕ Close</a>
     {{/page}}
     {{/entry}}
   </nav>

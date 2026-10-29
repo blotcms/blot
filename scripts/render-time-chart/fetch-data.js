@@ -2,7 +2,16 @@ const { execFile } = require("child_process");
 const { promisify } = require("util");
 const execFileAsync = promisify(execFile);
 
-const CONTAINERS = ["blue", "green", "yellow"];
+// The deploy containers, then the processes of the two units (config.container)
+const CONTAINERS = [
+  "blue",
+  "green",
+  "yellow",
+  "blue/node-a",
+  "blue/node-b",
+  "green/node-a",
+  "green/node-b",
+];
 
 // Must match app/blog/render/renderTimeMetric.js's DAILY_HISTORY_KEY. Not
 // imported directly - this script has no reason to load the app's require
@@ -30,7 +39,7 @@ function parseSections(output) {
   let current = null;
 
   for (const line of output.split("\n")) {
-    const marker = line.match(/^==(\w+)==$/);
+    const marker = line.match(/^==([\w/-]+)==$/);
     if (marker) {
       current = marker[1];
       sections[current] = [];

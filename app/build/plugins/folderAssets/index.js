@@ -3,9 +3,6 @@ const fs = require("fs-extra");
 const async = require("async");
 const cheerio = require("cheerio");
 const { join, resolve, posix } = require("path");
-const { promisify } = require("util");
-const contentVersion = require("helper/contentVersion");
-const caseSensitivePath = promisify(require("helper/caseSensitivePath"));
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 const unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
 const {
@@ -14,9 +11,16 @@ const {
 } = require("blog/lib/staticPaths");
 const blogHosts = require("blog/lib/blogHosts");
 const {
+  hashFolderFile,
+  folderUrl,
+} = require("blog/render/replaceFolderLinks/folderFile");
+const {
   htmlExtRegex,
   fileExtRegex,
   parseSrcset,
+  hostPatterns: toHostPatterns,
+  stripOwnHost: stripHost,
+  pathPartOf,
   encodeFolderPath,
   decodeFolderPath,
 } = require("blog/render/replaceFolderLinks/shared");
@@ -78,28 +82,34 @@ async function bakeHTML(html, options) {
   return { html: changed ? $.html() : html, dependencies };
 }
 
-function bake($, options) {
+function makeContext(options) {
   const blogID = options.blogID;
   const blogFolder = join(config.blog_folder_dir, blogID);
-  const dependencies = new Set();
   // Absolute URLs on one of the blog's own hosts (https://blog.example.com/
   // photo.jpg) are baked like relative links; see stripOwnHost.
-  const hostPatterns = blogHosts({
-    handle: options.handle,
-    domain: options.domain,
-  }).map((host) => new RegExp(`^(?:https?:)?//${escapeRegex(host)}(?=[/?#]|$)`, "i"));
+  const hostPatterns = toHostPatterns(
+    blogHosts({
+      handle: options.handle,
+      domain: options.domain,
+    })
+  );
   // Resolved path -> Promise<{ path, version }>, so a file referenced
   // several times in one entry (src and srcset) is only read and hashed once.
-  const ctx = {
+  return {
     blogID,
     blogFolder,
-    dependencies,
+    dependencies: new Set(),
     hostPatterns,
     entryPath: options.path,
     files: new Map(),
     globalFiles: new Map(),
     changed: false,
   };
+}
+
+function bake($, options) {
+  const ctx = makeContext(options);
+  const dependencies = ctx.dependencies;
   const tasks = [];
 
   $("[href], [src], [poster], [srcset]").each(function () {
@@ -145,20 +155,12 @@ function bake($, options) {
   });
 }
 
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 // Same-host absolute URLs are baked at build time too, so nothing about them
-// is left for request-time replaceFolderLinks (html.js/css.js) to do. The
-// host is stripped exactly as html.js does at request time, leaving a path
-// that is then treated like any other folder-relative link. Returns the
-// value unchanged if it isn't on one of the blog's hosts.
+// is left to do later. The host is stripped, leaving a path that is then
+// treated like any other folder-relative link. Returns the value unchanged
+// if it isn't on one of the blog's hosts.
 function stripOwnHost(ctx, value) {
-  for (const pattern of ctx.hostPatterns) {
-    if (pattern.test(value)) return value.replace(pattern, "") || "/";
-  }
-  return value;
+  return stripHost(ctx.hostPatterns, value);
 }
 
 function resolveAgainstEntry(ctx, value) {
@@ -174,11 +176,6 @@ function resolveAgainstEntry(ctx, value) {
   if (!pathPart) return value;
 
   return posix.resolve(posix.dirname(ctx.entryPath), pathPart) + suffix;
-}
-
-function pathPartOf(value) {
-  const cutIndex = value.search(/[#?]/);
-  return cutIndex === -1 ? value : value.slice(0, cutIndex);
 }
 
 function isEligible(value) {
@@ -226,8 +223,8 @@ async function bakeValue(ctx, value, resolveRelative) {
   // gone). Still record the dependency so the entry is rebuilt, and baked,
   // if the file (re)appears - regardless of whether another entry's HTML
   // we embedded had already dropped back to the plain path. Where the link
-  // was baked, drop back to the plain path so request-time resolution
-  // decides instead of keeping a URL for a now-missing versioned file.
+  // was baked, drop back to the plain path (which the origin serves)
+  // instead of keeping a URL for a now-missing versioned file.
   //
   // The path is decoded the way resolveBuildFile decodes it (baked links
   // hold an encoded path too), because the file which arrives is
@@ -275,9 +272,8 @@ async function rewriteSrcset(ctx, value) {
 // inside the blog's folder, per app/build/dependencies/index.js) into a
 // %%BLOT_CDN%%-prefixed, versioned URL. Returns { url, path } (path being
 // the case-corrected file path, for recording as a dependency), or null
-// (ENOENT) if there's no matching file - mirroring
-// app/blog/render/replaceFolderLinks/lookupFile.js's "leave untouched"
-// behavior.
+// (ENOENT) if there's no matching file, in which case the link is left
+// untouched.
 async function resolveBuildFile(ctx, value) {
   const { blogID, blogFolder } = ctx;
   const hashIndex = value.indexOf("#");
@@ -291,9 +287,9 @@ async function resolveBuildFile(ctx, value) {
   const query = rest.length ? `?${rest.join("?")}` : "";
   const pathFromValue = decodeFolderPath(encodedPath);
 
-  // Checked after percent-decoding (e.g. /f%6Fnts). Mirrors lookupFile.js: a
-  // file in the global static directory wins, otherwise the path is looked
-  // up in the blog's folder like any other.
+  // Checked after percent-decoding (e.g. /f%6Fnts). A file
+  // in the global static directory wins, otherwise the path is looked up in
+  // the blog's folder like any other.
   if (
     isReservedStaticPath(pathFromValue) &&
     (await globalStaticFileExists(ctx, pathFromValue))
@@ -318,7 +314,7 @@ async function resolveBuildFile(ctx, value) {
   const { path: resolvedPath, version } = file;
 
   return {
-    url: `${BLOT_CDN_TOKEN}/folder/v-${version}/${blogID}${encodeFolderPath(resolvedPath)}${query}${hash_}`,
+    url: folderUrl(blogID, resolvedPath, version, query + hash_),
     path: resolvedPath,
   };
 }
@@ -342,44 +338,6 @@ function globalStaticFileExists(ctx, path) {
   }
 
   return ctx.globalFiles.get(normalized);
-}
-
-// Returns { path, version } for a file in the blog folder, or null if it
-// doesn't exist. path is the case-corrected path.
-//
-// The version token is a hash of the file's content (helper/contentVersion),
-// not its mtime/ctime: blog folders are moving from local disk to S3, which
-// can't set a file's Last-Modified and has no ctime, but does hand back a
-// content-derived ETag for free on every PUT. Until storage reads switch
-// over, local disk pays the cost of hashing on each build (contentVersion
-// falls back to a size+mtime token above its size cap instead).
-async function hashFolderFile(blogFolder, path) {
-  let stat, resolvedPath;
-
-  try {
-    ({ stat, path: resolvedPath } = await getStat(blogFolder, path));
-  } catch (err) {
-    return null;
-  }
-
-  return {
-    path: resolvedPath,
-    version: await contentVersion(join(blogFolder, resolvedPath), stat),
-  };
-}
-
-async function getStat(blogFolder, path) {
-  const filePath = join(blogFolder, path);
-
-  try {
-    const stat = await fs.stat(filePath);
-    return { stat, path };
-  } catch (e) {}
-
-  const resolvedPath = await caseSensitivePath(blogFolder, path);
-  const resolvedRelativePath = resolvedPath.slice(blogFolder.length);
-  const stat = await fs.stat(resolvedPath);
-  return { stat, path: resolvedRelativePath };
 }
 
 module.exports = {

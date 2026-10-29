@@ -5,10 +5,19 @@ const {
   DAILY_HISTORY_KEY,
 } = require("blog/render/renderTimeMetric");
 
-// Mirrors the three deploy containers in scripts/deploy (blue/green/yellow).
+// Mirrors the three deploy containers in scripts/deploy (blue/green/yellow),
+// then the processes of the two units (config.container, #2119).
 // A container that never served traffic in the last 24h simply has no
 // list in Redis, which is fine - lRange on a missing key returns [].
-const CONTAINERS = ["blue", "green", "yellow"];
+const CONTAINERS = [
+  "blue",
+  "green",
+  "yellow",
+  "blue/node-a",
+  "blue/node-b",
+  "green/node-a",
+  "green/node-b",
+];
 
 // One entry appended per daily run: today's p50/p95/p99 averages. Used both
 // for the email's p95 trailing-average comparison (last HISTORY_DAYS entries)

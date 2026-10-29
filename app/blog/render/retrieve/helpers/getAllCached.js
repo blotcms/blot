@@ -11,7 +11,8 @@
 // cached copy is keyed on the heavy fields it kept. A request served by a
 // copy that kept more than it needs strips the rest from its clone; one that
 // needs a field no cached copy kept refetches.
-const LRUCache = require("lru-cache").LRUCache;
+const cacheMetrics = require("../../../lib/cacheMetrics");
+const { createRenderCache } = cacheMetrics;
 const { getAll } = require("../../../lib/models");
 const { cloneDeep, prepareCacheValue } = require("../../../lib/clone");
 const cacheStats = require("../../../lib/cacheStats");
@@ -27,7 +28,7 @@ const ALIASES = {
   archives: ["archives"],
 };
 
-const entriesCache = new LRUCache({
+const entriesCache = createRenderCache("entries", {
   max: 200,
   // Byte-capped like the posts/popular_tags caches: a single large blog's
   // full catalog must not evict every other blog sharing this process.
@@ -97,8 +98,11 @@ function createCacheKey(blog, keep) {
   });
 }
 
+// The per-request copy, which every lookup pays whether or not it hit
 function cloneEntries(value) {
-  return cloneDeep(value, { preserveEntryInstances: true });
+  return cacheMetrics.timeClone(entriesCache, () =>
+    cloneDeep(value, { preserveEntryInstances: true })
+  );
 }
 
 // Deletes, in place, the heavy fields not in `keep`.
@@ -139,6 +143,7 @@ async function getAllCached(blog, options) {
       const cached = entriesCache.get(candidate);
       if (cached) {
         log("entries cache hit");
+        cacheMetrics.count(entriesCache, "hit", candidate);
         return stripHeavyFields(cloneEntries(cached.payload), keep);
       }
     }
@@ -147,6 +152,7 @@ async function getAllCached(blog, options) {
   for (const candidate of wider) {
     if (inflight.has(candidate)) {
       log("entries cache inflight");
+      cacheMetrics.count(entriesCache, "inflight");
       return stripHeavyFields(
         cloneEntries(await inflight.get(candidate)),
         keep
@@ -155,7 +161,12 @@ async function getAllCached(blog, options) {
   }
 
   log(bypassCache ? "entries cache bypass" : "entries cache miss");
+  cacheMetrics.count(entriesCache, bypassCache ? "bypass" : "miss", key);
 
+  const startedAt = performance.now();
+  // What the fill produced and why it was not stored, for the fill's metrics
+  let filled;
+  let notStoredBecause;
   const promise = getAll(blog && blog.id).then(async (entries) => {
     // The last batch of entries was just parsed; don't also clone and size
     // the whole catalog in the same tick.
@@ -167,6 +178,7 @@ async function getAllCached(blog, options) {
       preserveEntryInstances: true,
     });
     const immutableCopy = prepared.payload;
+    filled = prepared;
     // Entries.getAll can still resolve [] on other transient failures
     // rather than rejecting - see
     // models/entries/index.js's getRange. Caching that [] would look
@@ -179,6 +191,9 @@ async function getAllCached(blog, options) {
     const covered = wider.some(
       (candidate) => candidate !== key && entriesCache.has(candidate)
     );
+    if (immutableCopy.length === 0) notStoredBecause = "empty";
+    else if (covered) notStoredBecause = "covered";
+
     if (!bypassCache && immutableCopy.length > 0 && !covered) {
       entriesCache.set(key, prepared);
 
@@ -195,7 +210,16 @@ async function getAllCached(blog, options) {
   inflight.set(key, promise);
 
   try {
-    return cloneEntries(await promise);
+    const entries = await promise;
+    cacheMetrics.fill(entriesCache, key, performance.now() - startedAt, {
+      cached: bypassCache ? undefined : entriesCache.has(key),
+      reason: notStoredBecause,
+      value: filled,
+    });
+    return cloneEntries(entries);
+  } catch (err) {
+    cacheMetrics.fill(entriesCache, key, 0, { failed: true });
+    throw err;
   } finally {
     inflight.delete(key);
   }

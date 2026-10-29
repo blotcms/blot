@@ -26,7 +26,14 @@ const fs = require("fs");
 const zlib = require("zlib");
 const readline = require("readline");
 
-const UPSTREAMS = { "8088": "blue", "8089": "green", "8090": "yellow" };
+// Upstreams in the access log: the old containers' ports (before the units),
+// then the units' Node sockets (up=unix:/run/blot/<unit>-<a|b>.sock). The
+// socket paths are matched after the split on ":" below.
+const UPSTREAMS = {
+  "8088": "blue", "8089": "green", "8090": "yellow",
+  "/run/blot/blue-a.sock": "blue/node-a", "/run/blot/blue-b.sock": "blue/node-b",
+  "/run/blot/green-a.sock": "green/node-a", "/run/blot/green-b.sock": "green/node-b",
+};
 
 // Slow by design. Matched against host + path (no scheme, no query).
 const LONG_LIVED = [
@@ -46,7 +53,7 @@ const INHERENT = [
 ];
 
 const LINE =
-  /^\[(\d+)\/(\w+)\/(\d+):(\d+):(\d+):(\d+) [^\]]+\] (\S+) (\d+) (\S+) \S+ (\S+)\s+cache=(\S*) ip=(\S+) st=(.*?) lrs=\S* up=(.*?)(?: conn=.*?)? ua=(.*)$/;
+  /^\[(\d+)\/(\w+)\/(\d+):(\d+):(\d+):(\d+) [^\]]+\] (\S+) (\d+) (\S+) \S+ (\S+)\s+cache=(\S*) ip=(\S+) st=(.*?) lrs=\S* up=(.*?)(?: conn=.*?)? ua=(.*?)(?: ae=.*)?$/;
 const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
 
 function parseArgs(argv) {

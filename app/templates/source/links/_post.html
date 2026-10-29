@@ -1,10 +1,28 @@
-<a href="{{{url}}}" class="post {{#thumbnail.medium}}zoomable{{/thumbnail.medium}} {{^thumbnail.medium}}no-thumbnail{{/thumbnail.medium}}">
+<a href="{{{url}}}" class="post collection-entry {{#thumbnail.medium}}zoomable{{/thumbnail.medium}} {{^thumbnail.medium}}no-thumbnail{{/thumbnail.medium}}">
   <span class="thumbnail">
     <span class="container">
       {{#thumbnail.medium}}
-      <img src="{{{url}}}" class="fadeMe" onload="this.className+=' fadeIn';" />
+      <img
+        loading="lazy"
+        src="{{{url}}}"
+        srcset="
+          {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+          {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+          {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+        "
+        sizes="(max-width: 500px) 100vw, (max-width: 900px) calc(100vw / min(2, {{columns}})), (max-width: 1200px) calc(100vw / min(3, {{columns}})), calc(100vw / {{columns}})"
+        class="fadeMe"
+        onload="this.className+=' fadeIn';" />
       <noscript>  
-      <img src="{{{url}}}">
+      <img
+        loading="lazy"
+        src="{{{url}}}"
+        srcset="
+          {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+          {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+          {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+        "
+        sizes="(max-width: 500px) 100vw, (max-width: 900px) calc(100vw / min(2, {{columns}})), (max-width: 1200px) calc(100vw / min(3, {{columns}})), calc(100vw / {{columns}})" />
       </noscript>
       {{/thumbnail.medium}}
       {{^thumbnail.medium}}

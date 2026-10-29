@@ -133,7 +133,7 @@ describe("folderAssets plugin", function () {
     });
   });
 
-  it("bakes a reserved global-static file from the global static directory, like lookupFile", function (done) {
+  it("bakes a reserved global-static file from the global static directory", function (done) {
     var path = "/Hello.txt";
     var contents =
       "![Icon](/icons/search.svg) ![Encoded](/ic%6Fns/search.svg?v=2#a)";
@@ -442,6 +442,22 @@ describe("folderAssets plugin", function () {
       expect(entry.dependencies).toContain("/my pic.jpg");
       expect(entry.dependencies).toContain("/gone pic.jpg");
       done();
+    });
+  });
+  describe("entry metadata", function () {
+    it("is left as written, so templates can build URLs from it", function (done) {
+      fs.outputFileSync(this.blogDirectory + "/cover.jpg", "cover");
+      fs.outputFileSync(
+        this.blogDirectory + "/Hello.txt",
+        "Image: /cover.jpg\n\nBody"
+      );
+
+      build(this.blog, "/Hello.txt", function (err, entry) {
+        if (err) return done.fail(err);
+
+        expect(entry.metadata.Image).toEqual("/cover.jpg");
+        done();
+      });
     });
   });
 });

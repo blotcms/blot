@@ -317,6 +317,43 @@ table {
   overflow-x: auto;
 }
 
+.about-content table {
+  max-width: none;
+  table-layout: auto;
+}
+
+.about-content table th:nth-child(1),
+.about-content table td:nth-child(1) {
+  width: 25%;
+}
+
+.about-content table th:nth-child(3),
+.about-content table td:nth-child(3) {
+  width: 1%;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.about-content table td:nth-child(2) {
+  padding-bottom: 1.5em;
+}
+
+.about-content .recommended-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  margin-top: 0.8em;
+  color: #248a3d;
+  font-size: 0.8em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.about-content .recommended-pill .icon-checkbox {
+  top: 0;
+  color: #248a3d;
+}
+
 
     table .light {margin: 0 6px 0 8px;color:var(--light-text-color)}
     table pre {margin-top: 0;margin-bottom: 0}

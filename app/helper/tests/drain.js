@@ -100,6 +100,32 @@ describe("drain", function () {
     expect(off).not.toHaveBeenCalled();
   });
 
+  it("waits for a promise an onStart listener returns", async function () {
+    let finished = false;
+    drain.onStart(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => {
+            finished = true;
+            resolve();
+          }, 100)
+        )
+    );
+
+    await drain.start({ timeout: 1000 });
+
+    expect(finished).toBe(true);
+  });
+
+  it("stops waiting for a listener's promise at the timeout", async function () {
+    drain.onStart(() => new Promise(() => {}));
+
+    const startedAt = Date.now();
+    await drain.start({ timeout: 200 });
+
+    expect(Date.now() - startedAt).toBeLessThan(2000);
+  });
+
   it("gives up after the timeout and closes stuck connections", async function () {
     await listen(() => {});
     get(false).catch(() => {});

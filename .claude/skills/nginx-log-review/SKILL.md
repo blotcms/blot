@@ -25,12 +25,22 @@ ssh blot "cat /var/instance-ssd/logs/access.log-$(date -d yesterday +%Y%m%d) /va
 Log line format (space-separated, so `cut -d ' ' -fN` / `awk '{print $N}'` work):
 
 ```
-[time] request_id status request_time bytes_in:bytes_out url  cache=X ip=X st=X lrs=X up=X conn=X cr=X tls=X ref=X ua=X
+[time] request_id status request_time bytes_in:bytes_out url  cache=X ip=X st=X lrs=X up=X conn=X cr=X tls=X wl=X ref=X ua=X ae=X unit=X
    1        2         3      4              5             6      (7 is empty due to double space before cache=)
 ```
 
-Concretely: `$4` = status code, `$7` = full URL (scheme+host+path+query),
-`ip=`, `ua=`, `cache=` are grep/`grep -oE` targets, not fixed fields.
+Concretely: `$4` = status code, `$6` = `bytes_in:bytes_out`, `$7` = full URL
+(scheme+host+path+query), `ip=`, `ua=`, `cache=` are grep/`grep -oE` targets,
+not fixed fields. `wl=1` means the peer is whitelisted (a Bunny edge or the
+macserver, per the proxy's `geo $whitelist`), so `ip=` is not a real client and
+fail2ban ignores the line; `wl=0` is everyone else.
+
+`cache=-` alone is ambiguous: read it with `up=`. `cache=- up=<address>` was
+proxied to Node at a location with no `proxy_cache` (`cdn.blot.im`, the
+dashboard, webhooks, SSE; Bunny is the cache for `cdn.blot.im`, so those are
+origin pulls, not routes missing a cache). `cache=- up=-` was answered by
+openresty itself (redirect, 444, `/health`, static file). A cache `HIT` also has
+`up=-` but says `cache=HIT`.
 
 **Always confirm with the user before running anything against production**,
 and stick to read-only commands. Clean up `/tmp/combined_access.log` on the
@@ -70,7 +80,7 @@ narrow what's already covered:
 - `proxy/config/blot-blogs.conf` — path/extension-based `location`
   blocks (`.env`, `.git`, wp-*, php extensions, sensitive JSON files, etc.)
   This is the production config: it ships in the proxy image, deployed with
-  `npm run deploy-proxy` or the Deploy proxy workflow.
+  `npm run deploy-units` or the Deploy workflow.
 - `proxy/config/server.conf` — the `$bad_bot` user-agent map
   (`restrict-bot-uas.conf` returns 403 for matches). Scanner traffic
   usually spoofs a real browser UA, so this rarely helps for the paths
@@ -78,6 +88,12 @@ narrow what's already covered:
   a UA-based rule would work.
 - `config/host/fail2ban/jail.local` — IP-banning jails keyed off
   404/403/429/444 rates. Complementary to path blocks, not a substitute.
+
+Probes on `cdn.blot.im` are blocked at Bunny by an allowlist edge rule (see
+the Bunny section of `config/storage-bucket/README.md`). Don't add proxy
+403/444 rules for that host: `ip=` there is a Bunny edge, and fail2ban would
+ban it. Any `cdn.blot.im` 404 in the origin log is on an allowlisted path, so
+it is a broken asset URL, not a scanner.
 
 For each candidate pattern, grep its current count and check whether it's
 already caught by an existing regex (e.g. anything ending in `.php` is
@@ -161,7 +177,7 @@ elaborate local Docker setups.
   IP-based blocking would or wouldn't help (Cloudflare-fronted domains
   usually mean it wouldn't).
 - The rule only reaches production when a new proxy image is deployed
-  (Deploy proxy workflow / `npm run deploy-proxy`, see
+  (Deploy workflow / `npm run deploy-units`, see
   `proxy/deploy/README.md`); mention that in the PR.
 - If the log review surfaces something that **isn't** an openresty block —
   e.g. an app/template bug generating a pathological amount of traffic, a

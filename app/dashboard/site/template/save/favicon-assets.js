@@ -4,6 +4,8 @@ const { join } = require("path");
 const sharp = require("sharp");
 const toIco = require("to-ico");
 const { v4: uuid } = require("uuid");
+const { normalizeShape, applyShape } = require("../../../../build/thumbnail/image-mask");
+const { parseCrop, orientedDimensions } = require("../../../../build/thumbnail/crop");
 
 const ICO_SIZES = [16, 32, 48];
 const PNG_SIZES = { png16: 16, png32: 32, appleTouch: 180 };
@@ -15,73 +17,25 @@ function badRequest(message) {
   return error;
 }
 
-// A crop is only usable when all three coordinates are present and numeric.
-// The form always submits the hidden crop_* fields, so when the client script
-// did not run (or could not preview the image) they arrive as empty strings -
-// treat that as "no crop" so the centered-square fallback below can run.
-function parseCrop(crop) {
-  if (!crop) return null;
-  const x = Number(crop.x);
-  const y = Number(crop.y);
-  const size = Number(crop.size);
-  if (
-    crop.x === undefined || crop.x === null || crop.x === "" ||
-    crop.y === undefined || crop.y === null || crop.y === "" ||
-    crop.size === undefined || crop.size === null || crop.size === "" ||
-    ![x, y, size].every(Number.isFinite)
-  ) {
-    return null;
-  }
-  return { x, y, size };
-}
-
-// Dimensions as the browser (and the cropper) sees them, i.e. after any EXIF
-// orientation has been applied. Orientations 5-8 rotate the image a quarter
-// turn, so width and height are swapped relative to the stored pixels.
-function orientedDimensions(metadata) {
-  const swap = metadata.orientation && metadata.orientation >= 5;
-  return {
-    width: swap ? metadata.height : metadata.width,
-    height: swap ? metadata.width : metadata.height,
-  };
-}
-
 function cropFor(metadata, crop) {
   const { width, height } = orientedDimensions(metadata);
   if (!width || !height || width * height > MAX_PIXELS) {
     throw badRequest("Please choose a reasonably sized image");
   }
 
-  const parsed = parseCrop(crop);
-  const fallbackSize = Math.min(width, height);
-  if (!parsed) {
-    return {
-      left: Math.floor((width - fallbackSize) / 2),
-      top: Math.floor((height - fallbackSize) / 2),
-      width: fallbackSize,
-      height: fallbackSize,
-    };
-  }
+  // No (or blank) crop means the largest centered square.
+  const parsed = parseCrop(crop, width, height, "favicon");
+  if (parsed) return parsed;
 
-  const { x, y, size } = parsed;
-  if (x < 0 || y < 0 || size <= 0 || x > 1 || y > 1 || size > 1) {
-    throw badRequest("The selected favicon crop is invalid");
-  }
-
-  const left = Math.floor(x * width);
-  const top = Math.floor(y * height);
-  const side = Math.floor(size * Math.min(width, height));
-  if (side < 1 || left + side > width || top + side > height) {
-    throw badRequest("The selected favicon crop is outside the image");
-  }
-
-  return { left, top, width: side, height: side };
+  const side = Math.min(width, height);
+  return { left: Math.floor((width - side) / 2), top: Math.floor((height - side) / 2), width: side, height: side };
 }
 
 // `source`, when passed, is a sharp() instance already opened on sourcePath
 // (e.g. by a profile-photo upload that also generates thumbnails from the
 // same file) - cloning it avoids decoding the same file from disk twice.
-async function generate(sourcePath, outputDirectory, crop, { source: input } = {}) {
+async function generate(sourcePath, outputDirectory, crop, { source: input, shape: requestedShape } = {}) {
+  const shape = normalizeShape(requestedShape);
   let metadata;
   try {
     metadata = await (input ? input.clone() : sharp(sourcePath, { pages: 1 })).metadata();
@@ -100,13 +54,18 @@ async function generate(sourcePath, outputDirectory, crop, { source: input } = {
     // guarantees 4-channel input: to-ico@1.1.5 mis-encodes 24-bit PNGs (e.g. a
     // straight RGB JPEG upload) into a malformed ICO otherwise.
     const source = (input ? input.clone() : sharp(sourcePath, { pages: 1 })).rotate().ensureAlpha().extract(extraction).png();
-    const icoBuffers = await Promise.all(
-      ICO_SIZES.map((size) => source.clone().resize(size, size).png().toBuffer())
-    );
+    const render = async (size) => {
+      const { data, info } = await source.clone().resize(size, size, {
+        fit: "cover",
+        position: sharp.strategy.entropy,
+      }).png().toBuffer({ resolveWithObject: true });
+      return applyShape(data, info.width, info.height, shape).png().toBuffer();
+    };
+    const icoBuffers = await Promise.all(ICO_SIZES.map(render));
     await fs.writeFile(join(workDirectory, `${prefix}.ico`), await toIco(icoBuffers));
-    await Promise.all(Object.entries(PNG_SIZES).map(([name, size]) =>
-      source.clone().resize(size, size).png().toFile(join(workDirectory, `${prefix}-${size}.png`))
-    ));
+    await Promise.all(Object.entries(PNG_SIZES).map(async ([name, size]) => {
+      await fs.writeFile(join(workDirectory, `${prefix}-${size}.png`), await render(size));
+    }));
 
     await fs.ensureDir(outputDirectory);
     await Promise.all([

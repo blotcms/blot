@@ -1,0 +1,165 @@
+# Builds the unit image (Dockerfile target `unit`: the app, OpenResty and the
+# proxy's files in one container, #2119) and publishes it to GHCR as
+# ghcr.io/<owner>/blot:<commit sha>, after checking OpenResty in it and
+# boot-testing it with proxy/unit/smoke.sh. The Deploy workflow deploys it
+# (scripts/deploy/units.sh).
+#
+# OpenResty is built in the same build (docker-bake.hcl: the proxy target from
+# proxy/Dockerfile, which the unit stage copies from), on the layers cached
+# under blot:cache-proxy-arm64, and the app on the layers build.yml cached.
+# arm64 only, as the other images (production is Graviton).
+name: unit-image
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/unit-image.yml"
+      - "docker-bake.hcl"
+      - "proxy/**"
+      - "Dockerfile"
+      - "scripts/security/check-base-image.js"
+      - "package.json"
+      - "app/config.js"
+      - "config/index.js"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/blot
+  APP_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/blot
+
+# Superseded PR pushes are cancelled; each master push keeps its own run
+concurrency:
+  group: unit-image-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04-arm
+    # A fork PR's token cannot write to GHCR
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # As build.yml: the docs site reads each template's latest commit
+          # time, recorded below, because the image is built without .git
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+
+      - name: Record template commit times
+        run: node app/documentation/build/latest-commits.js
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      # The proxy image is production-shaped: file logging (LOG_TO_STDOUT=false,
+      # so fail2ban and logrotate on the host keep working) and BLOT_HOST=blot.im.
+      # Host specific settings are runtime values; see proxy/README.md.
+      - name: Check the proxy and app images share a base
+        run: node scripts/security/check-base-image.js
+
+      - name: Install config generator dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/gendeps"
+          cd "$RUNNER_TEMP/gendeps"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+
+      - name: Generate proxy config
+        run: bash proxy/build/build.sh
+        env:
+          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+          BLOT_HOST: blot.im
+          LOG_TO_STDOUT: "false"
+
+      - name: Build and push the unit image
+        uses: Wandalen/wretry.action@v3
+        with:
+          action: docker/bake-action@v6
+          attempt_limit: 2
+          attempt_delay: 10000
+          with: |
+            # The checkout, not the Git context: the proxy's generated config
+            # (proxy/build/data) is untracked
+            source: .
+            files: docker-bake.hcl
+            targets: unit
+            set: |
+              unit.output=type=registry
+              unit.tags=${{ env.IMAGE_NAME }}:${{ github.sha }}-arm64
+              unit.cache-from=type=registry,ref=${{ env.IMAGE_NAME }}:cache-arm64
+              proxy.cache-from=type=registry,ref=${{ env.IMAGE_NAME }}:cache-proxy-arm64
+              proxy.cache-to=type=registry,ref=${{ env.IMAGE_NAME }}:cache-proxy-arm64,mode=max
+
+      # What the deploy scripts require of OpenResty in the image, checked on
+      # the image itself: the config renders and parses, the access log goes to
+      # the file the host's fail2ban reads, and the tools that issue
+      # custom-domain certificates are present and trust the public CAs (the
+      # cert-issuance job in integration.yml points curl at Pebble's CA only,
+      # so it never exercises the image's own CA bundle).
+      - name: Check OpenResty in the image
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE_NAME:${{ github.sha }}-arm64" >/dev/null
+          docker run --rm --entrypoint bash -e PROXY_FETCH_CDN_IPS=false \
+            "$IMAGE_NAME:${{ github.sha }}-arm64" -c '
+              set -e
+              render-config
+              /usr/local/openresty/bin/openresty -t
+              grep -Eq "^[[:space:]]*access_log /var/log/openresty/access.log" /usr/local/openresty/nginx/conf/nginx.conf
+              test -x /usr/bin/resty-auto-ssl/dehydrated
+              test -x /usr/bin/resty-auto-ssl/sockproc
+              /usr/bin/resty-auto-ssl/dehydrated --version
+              test -z "${CURL_CA_BUNDLE:-}${SSL_CERT_FILE:-}"
+              curl -fsS -o /dev/null https://acme-staging-v02.api.letsencrypt.org/directory
+              curl -fsS -o /dev/null https://acme-v02.api.letsencrypt.org/directory
+            '
+
+      - uses: ./.github/actions/start-minio
+
+      - name: Start Redis
+        run: |
+          docker run -d --name redis --network host redis:6.2.12-alpine
+          for i in $(seq 1 30); do
+            docker exec redis redis-cli ping > /dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          echo "Redis did not become ready"
+          exit 1
+
+      - name: Create the storage bucket
+        run: aws --endpoint-url "$BLOT_STORAGE_ENDPOINT" s3 mb "s3://$BLOT_STORAGE_BUCKET"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ env.BLOT_AWS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.BLOT_AWS_SECRET }}
+          AWS_DEFAULT_REGION: ${{ env.BLOT_STORAGE_REGION }}
+
+      - name: Boot the unit image
+        run: proxy/unit/smoke.sh "$IMAGE_NAME:${{ github.sha }}-arm64"
+
+      - name: Unit logs
+        if: always()
+        run: docker logs --tail 300 blot-unit-smoke || true
+
+      - name: Publish the manifest list
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            -t "$IMAGE_NAME:${{ github.sha }}" \
+            "$IMAGE_NAME:${{ github.sha }}-arm64"

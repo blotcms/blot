@@ -8,6 +8,7 @@ const setup = require("./setup");
 const server = require("./server");
 const drain = require("helper/drain");
 const listen = require("helper/listen");
+const workerChild = require("helper/workerChild");
 
 const DEPLOYMENT_MARKER_EXPIRATION_SECONDS = 90 * 24 * 60 * 60;
 const REQUEST_TIMEOUT_MS = 60 * 60 * 1000;
@@ -37,6 +38,25 @@ function releaseId() {
   return process.env.BLOT_RELEASE_ID || process.env.GIT_SHA;
 }
 
+// The worker child sends no start email of its own, so this process sends
+// one when the child dies and is forked again, at most every ten minutes so a
+// crash loop sends one rather than one per restart
+function workerExitEmail() {
+  const label = config.container.endsWith("/node-a")
+    ? config.container.slice(0, -1) + "b"
+    : config.container + "-worker";
+  let lastSent = 0;
+
+  return function (reason) {
+    if (config.preview || Date.now() - lastSent < 10 * 60 * 1000) return;
+    lastSent = Date.now();
+    email.SERVER_START(null, {
+      container: label,
+      event: "restarted (" + reason + ")",
+    });
+  };
+}
+
 async function serverStartEvent() {
   const id = releaseId();
 
@@ -62,6 +82,29 @@ async function serverStartEvent() {
 
 // Installed before setup so a SIGTERM during startup also exits cleanly
 drain.install();
+
+if (config.worker_child) {
+  // Under memory pressure the kernel should kill this worker, not the web
+  // process that forked it (and would fork it again). Raising our own score
+  // needs no privilege; outside Linux there is no such file.
+  try {
+    fs.writeFileSync("/proc/self/oom_score_adj", "1000");
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      console.error(clfdate(), "Could not raise oom_score_adj", err.message);
+    }
+  }
+
+  // The parent is gone (it crashed or was killed), so nothing will restart
+  // or stop us: drain and exit rather than linger without it
+  process.on("disconnect", function () {
+    console.log(clfdate(), "[WORKER] Parent disconnected, draining");
+    drain.start().then(
+      () => process.exit(0),
+      () => process.exit(1)
+    );
+  });
+}
 
 console.log(clfdate(), `Starting server env=${config.environment}`);
 setup(async (err) => {
@@ -90,7 +133,12 @@ setup(async (err) => {
     server.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS;
   };
 
-  const options = { port: config.port, socket: config.socket, configure };
+  // A forked worker serves on its socket alone: the parent has the port
+  const options = {
+    port: config.worker_child ? null : config.port,
+    socket: config.socket,
+    configure,
+  };
 
   // Open the server to handle requests
   const httpServers = listen(server, options, function () {
@@ -110,9 +158,24 @@ setup(async (err) => {
         );
     }
 
+    // A process given a socket for one forks a worker child and keeps it
+    // running, and stops it when draining (see helper/workerChild)
+    // (not when a SIGTERM during startup has begun the drain already)
+    if (config.worker_socket && !config.worker_child && !drain.isDraining()) {
+      const worker = workerChild({
+        script: __filename,
+        socket: config.worker_socket,
+        maxOldSpaceSize: config.worker_max_old_space_size,
+        drainTimeoutMs: drain.DRAIN_TIMEOUT_MS,
+        onExit: workerExitEmail(),
+      });
+      drain.onStart(() => worker.stop());
+    }
+
     // Send an email notification if the server starts or restarts
-    // Worktree preview sidecars (scripts/development/preview.sh) skip it
-    if (!config.preview) {
+    // Worktree preview sidecars (scripts/development/preview.sh) and forked
+    // workers (their parent emails when one dies: workerExitEmail) skip it
+    if (!config.preview && !config.worker_child) {
       serverStartEvent().then((event) =>
         email.SERVER_START(null, { container: config.container, event })
       );

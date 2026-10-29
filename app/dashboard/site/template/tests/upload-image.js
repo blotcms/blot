@@ -231,4 +231,70 @@ describe("upload template image", function () {
     await uploadImage(req, res, next);
     expect(next).toHaveBeenCalledWith(jasmine.objectContaining({ status: 404 }));
   });
+
+  describe("profile photo shapes", function () {
+    const assetName = (image) => ASSETS + "/" + decodeURIComponent(new URL(image.url).pathname.split("/").pop());
+    const cornerAlpha = async (blog, image) => {
+      const { data } = await sharp(await storage.read(blog.id, assetName(image))).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      return data[3];
+    };
+
+    beforeEach(async function () {
+      this.template.locals.profile_image = {};
+      await update(this.blog, this.template.slug, this.template.locals);
+    });
+
+    it("cuts every thumbnail to the shape and leaves the original whole", async function () {
+      const { image } = await run(this, "profile_image", { photo_shape: "circle" }, await makeFile(this.tmp, "me.png", 200, 200));
+
+      expect(image.mask).toBe("circle");
+      for (const name of ["small", "medium", "large", "square"]) {
+        expect(await cornerAlpha(this.blog, image.thumbnails[name])).toBe(0);
+      }
+      expect(await cornerAlpha(this.blog, image)).toBe(255);
+    });
+
+    it("keeps the whole photo, shrunk to 2000px, and the crop that was chosen", async function () {
+      const crop = { crop_x: "0.25", crop_y: "0", crop_width: "0.5", crop_height: "1" };
+      const { image } = await run(this, "profile_image", { photo_shape: "square", ...crop }, await makeFile(this.tmp, "wide.png", 2400, 1200));
+
+      expect([image.width, image.height]).toEqual([2000, 1000]);
+      expect(image.crop).toEqual({ x: 0.25, y: 0, width: 0.5, height: 1 });
+      expect(image.thumbnails.large.width).toBe(1000);
+    });
+
+    it("re-renders the thumbnails when the shape changes without a new upload", async function () {
+      const { image } = await run(this, "profile_image", { photo_shape: "square" }, await makeFile(this.tmp, "me.png", 200, 200));
+      expect(await cornerAlpha(this.blog, image.thumbnails.small)).toBe(255);
+
+      const changed = (await run(this, "profile_image", { update_mask: "1", photo_shape: "blob" })).image;
+
+      expect(changed.mask).toBe("blob");
+      expect(changed.url).toBe(image.url);
+      for (const name of ["small", "medium", "large", "square"]) {
+        expect(changed.thumbnails[name].url).not.toBe(image.thumbnails[name].url);
+        expect(await cornerAlpha(this.blog, changed.thumbnails[name])).toBe(0);
+        expect(await storage.exists(this.blog.id, assetName(image.thumbnails[name]))).toBe(false);
+      }
+      expect(await storage.exists(this.blog.id, assetName(changed))).toBe(true);
+    });
+
+    it("re-crops from the stored photo and keeps the saved crop when none is sent", async function () {
+      const { image } = await run(this, "profile_image", { photo_shape: "square", crop_x: "0", crop_y: "0", crop_width: "0.5", crop_height: "1" }, await makeFile(this.tmp, "wide.png", 400, 200));
+
+      const recropped = (await run(this, "profile_image", { update_mask: "1", photo_shape: "square", crop_x: "0.5", crop_y: "0", crop_width: "0.5", crop_height: "1" })).image;
+      expect(recropped.url).toBe(image.url);
+      expect(recropped.crop).toEqual({ x: 0.5, y: 0, width: 0.5, height: 1 });
+      expect(recropped.thumbnails.large.url).not.toBe(image.thumbnails.large.url);
+
+      const shapeOnly = (await run(this, "profile_image", { update_mask: "1", photo_shape: "circle" })).image;
+      expect(shapeOnly.crop).toEqual(recropped.crop);
+    });
+
+    it("leaves everything alone when neither the shape nor the crop changed", async function () {
+      const body = { photo_shape: "circle", crop_x: "0", crop_y: "0", crop_width: "1", crop_height: "1" };
+      const { image } = await run(this, "profile_image", body, await makeFile(this.tmp, "me.png", 200, 200));
+      expect((await run(this, "profile_image", { update_mask: "1", ...body })).image).toEqual(image);
+    });
+  });
 });

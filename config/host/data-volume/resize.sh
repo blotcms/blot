@@ -24,7 +24,7 @@
 # Options:
 #   --host SSH_HOST          the app host (default blot)
 #   --profile NAME           AWS CLI profile (default blot)   --region NAME (default us-west-2)
-#   --container NAME         the container read-only.js runs in (default blot-container-blue)
+#   --container NAME         the container read-only.js runs in (default blot-blue, a unit)
 #   --lock-wait SECONDS      how long to wait for held folder locks to drain (default 120)
 #   --grace SECONDS          how long to wait after the freeze starts before
 #                            looking at the folder locks (default 15)
@@ -46,7 +46,7 @@ set -euo pipefail
 HOST=blot
 AWS_PROFILE_NAME=blot
 AWS_REGION=${AWS_REGION:-us-west-2}
-CONTAINER=blot-container-blue
+CONTAINER=blot-blue
 LOCK_WAIT=120
 GRACE=15
 # A live pass is one rsync walking the whole tree; the frozen pass walks it in
@@ -501,7 +501,7 @@ step_freeze_and_swap() {
   local t_on t_off out deadline budget snap_tags
   say "4. Freeze, final copy and swap"
   if [ "$DRILL" = yes ]; then
-    echo "Drill host: the blot-container-* containers are paused instead of using read-only.js."
+    echo "Drill host: the units (blot-blue and blot-green) are paused instead of using read-only.js."
   fi
   echo "The app will refuse writes (dashboard and client edits get a 503) for about $(fmt_duration "${LAST_DUR:-0}") or less:"
   echo "the last live pass took that long, and the frozen pass runs in parallel."
@@ -515,7 +515,7 @@ step_freeze_and_swap() {
   # failure, die or Ctrl-C.
   t_on=$(date +%s)
   if [ -n "$DRY_RUN" ]; then
-    if [ "$DRILL" = yes ]; then echo "would run: docker pause (the blot-container-* containers)"; else echo "would run: docker exec $CONTAINER node scripts/read-only.js on --ttl $FREEZE_TTL --reason 'data volume resize'"; fi
+    if [ "$DRILL" = yes ]; then echo "would run: docker pause (blot-blue and blot-green)"; else echo "would run: docker exec $CONTAINER node scripts/read-only.js on --ttl $FREEZE_TTL --reason 'data volume resize'"; fi
     if [ "$DRILL" != yes ]; then echo "would wait ${GRACE}s, then until lockedBlogs is empty (up to ${LOCK_WAIT}s)"; fi
     host_do freeze-disk 30
     host_do final-copy $((FREEZE_TTL - 90))
@@ -602,7 +602,7 @@ step_retag() {
   say "Next"
   cat << EOF
  1. The next app deploy recreates the containers on the new volume:
-      npm run deploy-node
+      npm run deploy-units
  2. The old volume ($REPLACED_VOL) stays mounted underneath the new one until the
     app deploy has recreated every container. Then finish releases
     the host's own mount of it (no reboot, no downtime) and detaches it:
@@ -640,7 +640,7 @@ cmd_shrink() {
     found=1
     [ "${line#*=}" = rslave ] || die "${line%%=*} binds the data directory with '${line#*=}', not rslave: deploy the rslave change first (a deploy recreates the containers)"
   done
-  [ "$found" = 1 ] || die "no running blot-container-* on $HOST"
+  [ "$found" = 1 ] || die "no running blot-blue or blot-green on $HOST"
   if [ "$DRILL" != yes ]; then
     out=$(ro status) || die "'node scripts/read-only.js status' does not work in $CONTAINER: deploy the read-only freeze first"
     # A freeze that is already on belongs to someone else unless it is ours
@@ -725,7 +725,7 @@ cmd_finish() {
       # A container keeps the mounts it was created with, the old volume under
       # the new one, until it is recreated.
       echo "Containers still hold it (the holder= lines above). A deploy recreates them; run finish again after:"
-      echo "  npm run deploy-node     for the blot-container-* ones"
+      echo "  npm run deploy-units    for blot-blue and blot-green"
       return 0
     fi
     # Only the host's own namespace has it, stacked under the new volume, and

@@ -4,8 +4,8 @@ name: blot-proxy-e2e
 # proxy/e2e/run.js can drive requests through it. See
 # .github/workflows/app-e2e.yml.
 #
-# Everything runs on the host network so the proxy's hard-coded upstream
-# addresses (127.0.0.1:8088-8091) resolve with no extra plumbing. Meant for a
+# Everything runs on the host network so the proxy's upstream addresses
+# (127.0.0.1:8088-8090, set on the proxy below) resolve with no extra plumbing. Meant for a
 # CI runner, not a shared machine (it binds :80 and :443).
 
 services:
@@ -19,15 +19,11 @@ services:
       retries: 30
 
   app:
-    # The dev image ships node_modules only; the source is mounted in, exactly
-    # like .github/workflows/node.yml's test job. BLOT_REPO is the repo root
-    # (absolute in CI); it defaults to this file's ../.. for local use.
-    image: ${BLOT_APP_IMAGE:-ghcr.io/blotcms/blot:test-latest}
+    # The production image build.yml pushes for this commit, run as deployed:
+    # its own source, user, NODE_ENV and CMD. BLOT_APP_IMAGE is required.
+    image: ${BLOT_APP_IMAGE:?set BLOT_APP_IMAGE to the app image to test}
     network_mode: host
-    working_dir: /usr/src/app
-    command: ["node", "/usr/src/app/app/index.js"]
     environment:
-      NODE_ENV: development
       BLOT_HOST: ${BLOT_HOST:-localhost}
       BLOT_REDIS_HOST: "127.0.0.1"
       BLOT_PORT: "8081"
@@ -38,10 +34,6 @@ services:
       BLOT_STORAGE_REGION: ${BLOT_STORAGE_REGION}
       BLOT_AWS_KEY: ${BLOT_AWS_KEY}
       BLOT_AWS_SECRET: ${BLOT_AWS_SECRET}
-    volumes:
-      - ${BLOT_REPO:-../..}/app:/usr/src/app/app
-      - ${BLOT_REPO:-../..}/config:/usr/src/app/config
-      - ${BLOT_REPO:-../..}/scripts:/usr/src/app/scripts
     depends_on:
       redis:
         condition: service_healthy
@@ -54,9 +46,8 @@ services:
       retries: 90
       start_period: 60s
 
-  # The generated proxy config has four hard-coded upstream addresses
-  # (127.0.0.1:8088-8091 - blue/green/yellow/purple). Point all of them at
-  # the single app instance on :8081.
+  # The proxy's upstreams are set on the proxy below (unit mode): 8088-8090 here.
+  # Point all four ports (8088-8091) at the single app instance on :8081.
   upstream-mux:
     image: alpine/socat
     network_mode: host
@@ -85,6 +76,12 @@ services:
     network_mode: host
     environment:
       BLOT_HOST: ${BLOT_HOST:-localhost}
+      # Unit mode: worker on 8089, main (blogs, dashboard) on 8090, the
+      # backup for both on 8088.
+      PROXY_UNIT_MAIN: "127.0.0.1:8090"
+      PROXY_UNIT_WORKER: "127.0.0.1:8089"
+      PROXY_PEER_MAIN: "127.0.0.1:8088"
+      PROXY_PEER_WORKER: "127.0.0.1:8088"
     # Persistent volumes for the proxy cache and the lua-resty-auto-ssl /
     # dehydrated working files, so recreating the container does not
     # cold-start the cache or lose issuance state. entrypoint.sh chowns both

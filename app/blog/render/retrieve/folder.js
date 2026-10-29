@@ -4,6 +4,13 @@ const localPath = require("helper/localPath");
 const alphanum = require("helper/alphanum");
 const { getEntry } = require("../../lib/models");
 const asRetriever = require("../../lib/asRetriever");
+const BLOT_CDN_TOKEN = require("../replaceFolderLinks/cdnToken");
+const {
+  htmlExtRegex,
+  fileExtRegex,
+  encodeFolderPath,
+  versionedFolderPath,
+} = require("../replaceFolderLinks/shared");
 
 const CONCURRENCY = 5;
 
@@ -24,6 +31,23 @@ async function mapLimit(items, limit, iterator) {
   }
   await Promise.all(workers);
   return results;
+}
+
+// The href templates should use for an item. Links to files go straight to the
+// versioned CDN URL (reusing the stat already taken); `path` would hit the
+// app's origin folder route instead. Directories are pages, and dotfile
+// segments, .html and extensionless files aren't served from the CDN, so
+// those get the plain encoded path.
+function itemURL(blogID, path, stat) {
+  const cdnable =
+    stat.isFile() &&
+    !path.split("/").some((segment) => segment[0] === ".") &&
+    !htmlExtRegex.test(path) &&
+    fileExtRegex.test(path);
+
+  if (!cdnable) return encodeFolderPath(path);
+
+  return BLOT_CDN_TOKEN + "/folder/" + versionedFolderPath(blogID, path, stat);
 }
 
 async function folder(req, res) {
@@ -65,6 +89,7 @@ async function folder(req, res) {
         name: name,
         path: fullPathToItem,
         pathURI: encodeURIComponent(fullPathToItem),
+        url: itemURL(req.blog.id, fullPathToItem, stat),
         isDirectory: stat.isDirectory(),
         isFile: stat.isFile(),
         entry: entry,

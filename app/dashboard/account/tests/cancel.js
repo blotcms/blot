@@ -89,6 +89,34 @@ describe("dashboard subscription cancel", function () {
     expect(paypal.updateSubscription).not.toHaveBeenCalled();
   });
 
+  it("reconciles by re-fetching when the cancel request fails in transport", async function () {
+    fetch.and.returnValue(Promise.reject(new Error("socket hang up")));
+    paypal.updateSubscription.and.returnValue(Promise.resolve({ status: "CANCELLED" }));
+
+    const result = await post(paypalUser("ACTIVE"));
+
+    expect(paypal.updateSubscription).toHaveBeenCalledWith("I-TEST");
+    expect(result.err).toBeUndefined();
+  });
+
+  it("reconciles after an indeterminate 5xx from PayPal", async function () {
+    fetch.and.returnValue(Promise.resolve({ status: 502 }));
+    paypal.updateSubscription.and.returnValue(Promise.resolve({ status: "CANCELLED" }));
+
+    const result = await post(paypalUser("ACTIVE"));
+
+    expect(result.err).toBeUndefined();
+  });
+
+  it("still fails when a transport failure left the subscription active", async function () {
+    fetch.and.returnValue(Promise.reject(new Error("socket hang up")));
+    paypal.updateSubscription.and.returnValue(Promise.resolve({ status: "ACTIVE" }));
+
+    const result = await post(paypalUser("ACTIVE"));
+
+    expect(result.err).toBeDefined();
+  });
+
   it("still succeeds when the re-fetch fails after PayPal cancelled", async function () {
     spyOn(console, "log");
     paypal.updateSubscription.and.returnValue(Promise.reject(new Error("boom")));

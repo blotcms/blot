@@ -3,7 +3,18 @@
   <a class="full" href="{{{url}}}"></a>
 
   {{#thumbnail.small}}
-  <img class="thumb" src="{{{url}}}" width="{{width}}" height="{{height}}"/>
+  <img
+    class="thumb"
+    loading="lazy"
+    src="{{{url}}}"
+    srcset="
+      {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+      {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+      {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+    "
+    sizes="{{thumbnail_size}}px"
+    width="{{width}}"
+    height="{{height}}"/>
   {{/thumbnail.small}}
 
   {{^thumbnail.small}}

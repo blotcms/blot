@@ -6,25 +6,25 @@
       "host": "zacharykeeting.com",
       "name": "Zachary Keeting",
       "bio": "artist",
-      "tenure": 235113540300,
+      "tenure": 238372093670,
       "tenure_label": "7 years ago",
       "image": "/images/featured/zacharykeeting.com.jpg"
     },
     {
-      "link": "https://blog.andrewjanjigian.com",
-      "host": "blog.andrewjanjigian.com",
+      "link": "https://www.wordloaf.org",
+      "host": "www.wordloaf.org",
       "name": "Andrew Janjigian",
       "bio": "photographer",
-      "tenure": 250244230790,
+      "tenure": 253502936493,
       "tenure_label": "8 years ago",
-      "image": "/images/featured/blog.andrewjanjigian.com.jpg"
+      "image": "/images/featured/www.wordloaf.org.jpg"
     },
     {
       "link": "https://keywords.oxus.net",
       "host": "keywords.oxus.net",
       "name": "Kerim Friedman",
       "bio": "anthropologist",
-      "tenure": 252535138129,
+      "tenure": 255793692234,
       "tenure_label": "8 years ago",
       "image": "/images/featured/keywords.oxus.net.jpg"
     },
@@ -33,7 +33,7 @@
       "host": "discombobulated.co.nz",
       "name": "Jessica Nickelsen",
       "bio": "writer",
-      "tenure": 260222638963,
+      "tenure": 263481192898,
       "tenure_label": "8 years ago",
       "image": "/images/featured/discombobulated.co.nz.jpg"
     },
@@ -42,7 +42,7 @@
       "host": "blog.aurynn.com",
       "name": "Aurynn Shaw",
       "bio": "software engineer",
-      "tenure": 317147304958,
+      "tenure": 320405858233,
       "tenure_label": "10 years ago",
       "image": "/images/featured/blog.aurynn.com.jpg"
     },
@@ -51,7 +51,7 @@
       "host": "iiiiiiiii.in",
       "name": "Ishtaarth Dalmia",
       "bio": "writer",
-      "tenure": 349370371633,
+      "tenure": 352628925566,
       "tenure_label": "11 years ago",
       "image": "/images/featured/iiiiiiiii.in.jpg"
     },
@@ -60,7 +60,7 @@
       "host": "www.failuretolerated.com",
       "name": "Sean McCoy",
       "bio": "game designer",
-      "tenure": 287638380303,
+      "tenure": 290896933899,
       "tenure_label": "9 years ago",
       "image": "/images/featured/www.failuretolerated.com.jpg"
     },
@@ -69,7 +69,7 @@
       "host": "vaughntan.org",
       "name": "Vaughn Tan",
       "bio": "writer",
-      "tenure": 243464564359,
+      "tenure": 246723510455,
       "tenure_label": "7 years ago",
       "image": "/images/featured/vaughntan.org.jpg"
     },
@@ -78,7 +78,7 @@
       "host": "eli.li",
       "name": "Eli Mellen",
       "bio": "software engineer",
-      "tenure": 209065201652,
+      "tenure": 212323755233,
       "tenure_label": "6 years ago",
       "image": "/images/featured/eli.li.jpg"
     },
@@ -87,7 +87,7 @@
       "host": "paul.af",
       "name": "Paul Esch-Laurent",
       "bio": "software engineer",
-      "tenure": 260384175124,
+      "tenure": 263642728400,
       "tenure_label": "8 years ago",
       "image": "/images/featured/paul.af.jpg"
     },
@@ -96,7 +96,7 @@
       "host": "www.chrbutler.com",
       "name": "Christopher Butler",
       "bio": "designer",
-      "tenure": 336269405457,
+      "tenure": 339527959067,
       "tenure_label": "10 years ago",
       "image": "/images/featured/www.chrbutler.com.jpg"
     },
@@ -105,7 +105,7 @@
       "host": "benlog.net",
       "name": "Ben Greenberg",
       "bio": "journalist",
-      "tenure": 357722500792,
+      "tenure": 360981054428,
       "tenure_label": "11 years ago",
       "image": "/images/featured/benlog.net.jpg"
     },
@@ -114,7 +114,7 @@
       "host": "www.letterspace.org",
       "name": "Robert van Vliet",
       "bio": "writer",
-      "tenure": 52206022125,
+      "tenure": 55464575899,
       "tenure_label": "1 year ago",
       "image": "/images/featured/www.letterspace.org.jpg"
     },
@@ -123,7 +123,7 @@
       "host": "inhab.it",
       "name": "Wil Turner",
       "bio": "writer",
-      "tenure": 256866560477,
+      "tenure": 260125115900,
       "tenure_label": "8 years ago",
       "image": "/images/featured/inhab.it.jpg"
     },
@@ -132,8 +132,8 @@
       "host": "www.skellis.net",
       "name": "Simon Ellis",
       "bio": "artist",
-      "tenure": 215396236790,
-      "tenure_label": "6 years ago",
+      "tenure": 218654790066,
+      "tenure_label": "7 years ago",
       "image": "/images/featured/www.skellis.net.jpg"
     },
     {
@@ -141,7 +141,7 @@
       "host": "ianamurray.work",
       "name": "Iana Murray",
       "bio": "journalist",
-      "tenure": 208854153159,
+      "tenure": 212112706233,
       "tenure_label": "6 years ago",
       "image": "/images/featured/ianamurray.work.jpg"
     },
@@ -150,7 +150,7 @@
       "host": "www.dustinsenos.com",
       "name": "Dustin Senos",
       "bio": "designer",
-      "tenure": 224378341496,
+      "tenure": 227637288017,
       "tenure_label": "7 years ago",
       "image": "/images/featured/www.dustinsenos.com.jpg"
     },
@@ -159,7 +159,7 @@
       "host": "theocasciani.page",
       "name": "Théo Casciani",
       "bio": "writer",
-      "tenure": 205050711818,
+      "tenure": 208309265066,
       "tenure_label": "6 years ago",
       "image": "/images/featured/theocasciani.page.jpg"
     },
@@ -168,7 +168,7 @@
       "host": "www.emilycass.org",
       "name": "Emily Cass",
       "bio": "architect",
-      "tenure": 237016289125,
+      "tenure": 240274842566,
       "tenure_label": "7 years ago",
       "image": "/images/featured/www.emilycass.org.jpg"
     },
@@ -177,7 +177,7 @@
       "host": "jessytuddenham.com",
       "name": "Jessy Tuddenham",
       "bio": "dancer",
-      "tenure": 206596902478,
+      "tenure": 209855456067,
       "tenure_label": "6 years ago",
       "image": "/images/featured/jessytuddenham.com.jpg"
     },
@@ -186,7 +186,7 @@
       "host": "bnjmnmddn.com",
       "name": "Benjamin Madden",
       "bio": "academic",
-      "tenure": 231368493819,
+      "tenure": 234627047399,
       "tenure_label": "7 years ago",
       "image": "/images/featured/bnjmnmddn.com.jpg"
     },
@@ -195,7 +195,7 @@
       "host": "www.jsoliday.com",
       "name": "J. Soliday",
       "bio": "musician",
-      "tenure": 239423302139,
+      "tenure": 242681855899,
       "tenure_label": "7 years ago",
       "image": "/images/featured/www.jsoliday.com.jpg"
     },
@@ -204,7 +204,7 @@
       "host": "tellyou.today",
       "name": "Neale Stokes",
       "bio": "librarian",
-      "tenure": 231298522290,
+      "tenure": 234557075733,
       "tenure_label": "7 years ago",
       "image": "/images/featured/tellyou.today.jpg"
     },
@@ -213,7 +213,7 @@
       "host": "poetry.bencallahan.com",
       "name": "Ben Callahan",
       "bio": "poet",
-      "tenure": 178682937790,
+      "tenure": 181941491400,
       "tenure_label": "5 years ago",
       "image": "/images/featured/poetry.bencallahan.com.jpg"
     },
@@ -222,7 +222,7 @@
       "host": "spittingdog.net",
       "name": "Dave Haysom",
       "bio": "translator",
-      "tenure": 195318429123,
+      "tenure": 198576982736,
       "tenure_label": "6 years ago",
       "image": "/images/featured/spittingdog.net.jpg"
     },
@@ -231,25 +231,16 @@
       "host": "reillybrennan.com",
       "name": "Reilly Brennan",
       "bio": "venture capitalist",
-      "tenure": 199215646460,
+      "tenure": 202474199899,
       "tenure_label": "6 years ago",
       "image": "/images/featured/reillybrennan.com.jpg"
-    },
-    {
-      "link": "https://sidenote.ridwansanusi.com",
-      "host": "sidenote.ridwansanusi.com",
-      "name": "Ridwan Sanusi",
-      "bio": "designer",
-      "tenure": 230482938800,
-      "tenure_label": "7 years ago",
-      "image": "/images/featured/sidenote.ridwansanusi.com.jpg"
     },
     {
       "link": "https://max.engineer",
       "host": "max.engineer",
       "name": "Max Chernyak",
       "bio": "software engineer",
-      "tenure": 208493255960,
+      "tenure": 211751809400,
       "tenure_label": "6 years ago",
       "image": "/images/featured/max.engineer.jpg"
     },
@@ -258,7 +249,7 @@
       "host": "oliviaastawood.com",
       "name": "Olivia Wood",
       "bio": "writer",
-      "tenure": 177631438627,
+      "tenure": 180889991763,
       "tenure_label": "5 years ago",
       "image": "/images/featured/oliviaastawood.com.jpg"
     },
@@ -267,7 +258,7 @@
       "host": "www.nitinpai.in",
       "name": "Nitin Pai",
       "bio": "think-tank director",
-      "tenure": 165911747458,
+      "tenure": 169170302899,
       "tenure_label": "5 years ago",
       "image": "/images/featured/www.nitinpai.in.jpg"
     },
@@ -276,7 +267,7 @@
       "host": "jeankapsa.com",
       "name": "Jean Kapsa",
       "bio": "pianist",
-      "tenure": 106960868123,
+      "tenure": 110219421399,
       "tenure_label": "3 years ago",
       "image": "/images/featured/jeankapsa.com.jpg"
     },
@@ -285,7 +276,7 @@
       "host": "www.declad.com",
       "name": "Lewis Martin",
       "bio": "architect",
-      "tenure": 140087328457,
+      "tenure": 143345881565,
       "tenure_label": "4 years ago",
       "image": "/images/featured/www.declad.com.jpg"
     },
@@ -294,7 +285,7 @@
       "host": "notesof.com",
       "name": "Thibault Michel",
       "bio": "designer",
-      "tenure": 169248559793,
+      "tenure": 172507112899,
       "tenure_label": "5 years ago",
       "image": "/images/featured/notesof.com.jpg"
     },
@@ -303,7 +294,7 @@
       "host": "meredithgran.com",
       "name": "Meredith Gran",
       "bio": "cartoonist",
-      "tenure": 62826898292,
+      "tenure": 66085451399,
       "tenure_label": "2 years ago",
       "image": "/images/featured/meredithgran.com.jpg"
     },
@@ -312,7 +303,7 @@
       "host": "ellanew.com",
       "name": "Ellane W",
       "bio": "designer",
-      "tenure": 64862614124,
+      "tenure": 68121168566,
       "tenure_label": "2 years ago",
       "image": "/images/featured/ellanew.com.jpg"
     },
@@ -321,7 +312,7 @@
       "host": "alongtheray.com",
       "name": "Raymond Hines",
       "bio": "writer",
-      "tenure": 137963911802,
+      "tenure": 141222464733,
       "tenure_label": "4 years ago",
       "image": "/images/featured/alongtheray.com.jpg"
     },
@@ -330,7 +321,7 @@
       "host": "matthiaszeeb.net",
       "name": "Matthias Zeeb",
       "bio": "economist",
-      "tenure": 57058826154,
+      "tenure": 60317379400,
       "tenure_label": "1 year ago",
       "image": "/images/featured/matthiaszeeb.net.jpg"
     },
@@ -339,7 +330,7 @@
       "host": "simonuvarov.com",
       "name": "Simon Uvarov",
       "bio": "software engineer",
-      "tenure": 145541023459,
+      "tenure": 148799576734,
       "tenure_label": "4 years ago",
       "image": "/images/featured/simonuvarov.com.jpg"
     },
@@ -348,7 +339,7 @@
       "host": "erinkissane.com",
       "name": "Erin Kissane",
       "bio": "writer",
-      "tenure": 108777360803,
+      "tenure": 112035914234,
       "tenure_label": "3 years ago",
       "image": "/images/featured/erinkissane.com.jpg"
     },
@@ -357,7 +348,7 @@
       "host": "nonaneva.com",
       "name": "ノナネヷ",
       "bio": "artist",
-      "tenure": 114711453293,
+      "tenure": 117970007084,
       "tenure_label": "3 years ago",
       "image": "/images/featured/nonaneva.com.jpg"
     },
@@ -366,7 +357,7 @@
       "host": "ilovewasting.ink",
       "name": "Peter Orosz",
       "bio": "writer",
-      "tenure": 161587216643,
+      "tenure": 164845769595,
       "tenure_label": "5 years ago",
       "image": "/images/featured/ilovewasting.ink.jpg"
     },
@@ -375,7 +366,7 @@
       "host": "vesikar.com",
       "name": "Yash Vesikar",
       "bio": "computer scientist",
-      "tenure": 51993431464,
+      "tenure": 55251985232,
       "tenure_label": "1 year ago",
       "image": "/images/featured/vesikar.com.jpg"
     },
@@ -384,7 +375,7 @@
       "host": "words.studiopallister.com",
       "name": "James Pallister",
       "bio": "writer",
-      "tenure": 249206180124,
+      "tenure": 252464733568,
       "tenure_label": "8 years ago",
       "image": "/images/featured/words.studiopallister.com.jpg"
     },
@@ -393,7 +384,7 @@
       "host": "www.gillianrosselli.com",
       "name": "Gillian Rosselli",
       "bio": "artist",
-      "tenure": 115282529625,
+      "tenure": 118541082925,
       "tenure_label": "3 years ago",
       "image": "/images/featured/www.gillianrosselli.com.jpg"
     },
@@ -402,7 +393,7 @@
       "host": "www.caitlinmrivers.com",
       "name": "Caitlin Rivers",
       "bio": "epidemiologist",
-      "tenure": 85739435461,
+      "tenure": 88997989733,
       "tenure_label": "2 years ago",
       "image": "/images/featured/www.caitlinmrivers.com.jpg"
     },
@@ -411,7 +402,7 @@
       "host": "www.audunberdal.no",
       "name": "Audun Berdal",
       "bio": "designer",
-      "tenure": 54349637128,
+      "tenure": 57608190233,
       "tenure_label": "1 year ago",
       "image": "/images/featured/www.audunberdal.no.jpg"
     },
@@ -420,8 +411,8 @@
       "host": "www.amirsharif.com",
       "name": "Amir Sharif",
       "bio": "software engineer",
-      "tenure": 122943702459,
-      "tenure_label": "3 years ago",
+      "tenure": 126202255899,
+      "tenure_label": "4 years ago",
       "image": "/images/featured/www.amirsharif.com.jpg"
     },
     {
@@ -429,8 +420,8 @@
       "host": "www.hayalpozanti.com",
       "name": "Hayal Pozanti",
       "bio": "artist",
-      "tenure": 123136987793,
-      "tenure_label": "3 years ago",
+      "tenure": 126395541235,
+      "tenure_label": "4 years ago",
       "image": "/images/featured/www.hayalpozanti.com.jpg"
     },
     {
@@ -438,7 +429,7 @@
       "host": "www.rossrichardson.com",
       "name": "Ross Richardson",
       "bio": "cinematographer",
-      "tenure": 116988216124,
+      "tenure": 120246769566,
       "tenure_label": "3 years ago",
       "image": "/images/featured/www.rossrichardson.com.jpg"
     },
@@ -447,7 +438,7 @@
       "host": "alineleynen.com",
       "name": "Aline Leynen",
       "bio": "jeweller",
-      "tenure": 46431539289,
+      "tenure": 49690093067,
       "tenure_label": "1 year ago",
       "image": "/images/featured/alineleynen.com.jpg"
     },
@@ -456,7 +447,7 @@
       "host": "robinschoenbaechler.com",
       "name": "Robin Schoenbaechler",
       "bio": "designer",
-      "tenure": 81056330790,
+      "tenure": 84314884234,
       "tenure_label": "2 years ago",
       "image": "/images/featured/robinschoenbaechler.com.jpg"
     },
@@ -465,8 +456,8 @@
       "host": "www.stephgreen.co.uk",
       "name": "Steph Green",
       "bio": "writer",
-      "tenure": 30284252143,
-      "tenure_label": "this year",
+      "tenure": 33542805566,
+      "tenure_label": "1 year ago",
       "image": "/images/featured/www.stephgreen.co.uk.jpg"
     },
     {
@@ -474,7 +465,7 @@
       "host": "davidelitompkins.com",
       "name": "David Eli Tompkins",
       "bio": "painter",
-      "tenure": 35861037486,
+      "tenure": 39119590899,
       "tenure_label": "1 year ago",
       "image": "/images/featured/davidelitompkins.com.jpg"
     },
@@ -483,7 +474,7 @@
       "host": "tormodotterjohansen.se",
       "name": "Tormod Johansen",
       "bio": "academic",
-      "tenure": 166585405790,
+      "tenure": 169843959235,
       "tenure_label": "5 years ago",
       "image": "/images/featured/tormodotterjohansen.se.jpg"
     },
@@ -492,7 +483,7 @@
       "host": "merissalombardo.com",
       "name": "Merissa Lombardo",
       "bio": "production designer",
-      "tenure": 14639527968,
+      "tenure": 17898081400,
       "tenure_label": "this year",
       "image": "/images/featured/merissalombardo.com.jpg"
     },
@@ -501,7 +492,7 @@
       "host": "alyssabrocato.com",
       "name": "Alyssa Brocato",
       "bio": "cinematographer",
-      "tenure": 142823599461,
+      "tenure": 146082152899,
       "tenure_label": "4 years ago",
       "image": "/images/featured/alyssabrocato.com.jpg"
     },
@@ -510,7 +501,7 @@
       "host": "shaileshchitnis.com",
       "name": "Shailesh Chitnis",
       "bio": "journalist",
-      "tenure": 50293578806,
+      "tenure": 53552132233,
       "tenure_label": "1 year ago",
       "image": "/images/featured/shaileshchitnis.com.jpg"
     },
@@ -519,25 +510,16 @@
       "host": "elenarazlogova.net",
       "name": "Elena Razlogova",
       "bio": "historian",
-      "tenure": 67673662125,
+      "tenure": 70932215572,
       "tenure_label": "2 years ago",
       "image": "/images/featured/elenarazlogova.net.jpg"
-    },
-    {
-      "link": "https://kristinemorgan.com",
-      "host": "kristinemorgan.com",
-      "name": "Kristine Morgan",
-      "bio": "writer",
-      "tenure": 105499046800,
-      "tenure_label": "3 years ago",
-      "image": "/images/featured/kristinemorgan.com.jpg"
     },
     {
       "link": "https://maggiewangphotography.com",
       "host": "maggiewangphotography.com",
       "name": "Maggie Wang",
       "bio": "academic",
-      "tenure": 38514646628,
+      "tenure": 41773199900,
       "tenure_label": "1 year ago",
       "image": "/images/featured/maggiewangphotography.com.jpg"
     },
@@ -546,7 +528,7 @@
       "host": "chuckpearson.blog",
       "name": "Chuck Pearson",
       "bio": "designer",
-      "tenure": 38267218960,
+      "tenure": 41525772398,
       "tenure_label": "1 year ago",
       "image": "/images/featured/chuckpearson.blog.jpg"
     },
@@ -555,8 +537,8 @@
       "host": "garywebbracing.com",
       "name": "Gary Webb",
       "bio": "racing driver",
-      "tenure": 186345706295,
-      "tenure_label": "5 years ago",
+      "tenure": 189604652017,
+      "tenure_label": "6 years ago",
       "image": "/images/featured/garywebbracing.com.jpg"
     },
     {
@@ -564,7 +546,7 @@
       "host": "vichhika.com",
       "name": "Vichhika Tep",
       "bio": "designer",
-      "tenure": 22654563488,
+      "tenure": 25913116900,
       "tenure_label": "this year",
       "image": "/images/featured/vichhika.com.jpg"
     },
@@ -573,7 +555,7 @@
       "host": "koalanguage.org",
       "name": "Juliet Birch",
       "bio": "linguist",
-      "tenure": 4054688628,
+      "tenure": 7313634351,
       "tenure_label": "this year",
       "image": "/images/featured/koalanguage.org.jpg"
     }

@@ -65,14 +65,16 @@ deploy/restart limits how far back `--since` can usefully go:
 
 ```bash
 ssh blot "docker ps --format '{{.Names}}\t{{.Status}}'"
-for c in blue green yellow; do
-  ssh blot "docker logs --since 6h blot-container-$c 2>&1"
+for c in blot-blue blot-green; do   # the units
+  ssh blot "docker logs --since 6h $c 2>&1"
 done > /tmp/app_logs_combined.txt
 ```
 
 Completed-request lines look like:
-`[12/Sep/2026:09:29:23 +0000] [yellow] <request-id> 200 0.013 https://www.example.com/path`
-— fields: `$3`=`[color]`, `$4`=request id, `$5`=status, `$6`=render time
+`[12/Sep/2026:09:29:23 +0000] [blue/node-a] <request-id> 200 0.013 https://www.example.com/path`
+(a unit's process: `blue/node-a` serves blogs and dashboard reads, `blue/node-b`
+the webhooks and writes; the old containers were `[yellow]` etc.)
+— fields: `$3`=`[label]`, `$4`=request id, `$5`=status, `$6`=render time
 (seconds), `$7`=url. A request that hangs past nginx's timeout never gets
 this line — instead you'll see `<request-id> Connection closed by client
 <url>` once nginx gives up. That's itself a strong signal: search for it
@@ -84,7 +86,7 @@ requests are too slow to even produce a normal timing line.
 ```bash
 awk '
 {
-  if ($3 ~ /^\[(blue|green|yellow)\]$/ && $5 ~ /^[0-9]+$/ && $6 ~ /^[0-9]+\.[0-9]+$/ && $7 ~ /^https?:\/\//) {
+  if ($3 ~ /^\[(blue|green|yellow)(\/node-[ab])?\]$/ && $5 ~ /^[0-9]+$/ && $6 ~ /^[0-9]+\.[0-9]+$/ && $7 ~ /^https?:\/\//) {
     t = $6 + 0; url = $7;
     n = split(url, u, "/"); domain = u[3];
     if (domain == "") next;

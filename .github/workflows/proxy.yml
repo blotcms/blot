@@ -34,7 +34,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 21.7.3
+          node-version: 24.22.1
 
       # The repo has no committed package-lock.json, so `npm ci` / cache: npm
       # are not usable, and `npm install` in the repo root would build the
@@ -57,6 +57,11 @@ jobs:
       - name: Build proxy image
         run: docker build -f proxy/Dockerfile -t blot-proxy:ci proxy/
 
+      - name: Check OpenResty release and record build options
+        run: |
+          docker run --rm --entrypoint openresty blot-proxy:ci -V 2>&1 | tee openresty-version.txt
+          grep -Fq 'nginx version: openresty/1.31.1.1' openresty-version.txt
+
       - name: Validate generated OpenResty config
         # The image holds a template; render it (as the entrypoint does) first
         run: |
@@ -71,9 +76,10 @@ jobs:
             -e PROXY_SERVER_LABEL=eu \
             -e PROXY_RESOLVER=127.0.0.11 \
             -e PROXY_PRIVATE_IP=127.0.0.2 \
-            -e PROXY_UPSTREAM_GREEN=10.0.0.1:9089 \
-            -e PROXY_UPSTREAM_BLUE=10.0.0.2:9088 \
-            -e PROXY_UPSTREAM_YELLOW=10.0.0.3:9090 \
+            -e PROXY_UNIT_WORKER=10.0.0.1:9089 \
+            -e PROXY_PEER_WORKER=10.0.0.2:9088 \
+            -e PROXY_UNIT_MAIN=10.0.0.3:9090 \
+            -e PROXY_PEER_MAIN=10.0.0.4:9091 \
             blot-proxy:ci -c '
               set -e
               render-config
@@ -83,8 +89,9 @@ jobs:
               grep -q "resolver 127.0.0.11;" $conf
               grep -q "listen 127.0.0.2:8077 reuseport;" $conf
               grep -q "server 10.0.0.1:9089 weight=100 max_fails=0;" $conf
-              grep -q "server 10.0.0.2:9088 weight=100 max_fails=0;" $conf
+              grep -q "server 10.0.0.2:9088 backup max_fails=0;" $conf
               grep -q "server 10.0.0.3:9090 weight=100 max_fails=0;" $conf
+              grep -q "server 10.0.0.4:9091 backup max_fails=0;" $conf
               if grep -q "\${PROXY_" $conf; then echo "unsubstituted placeholder"; exit 1; fi
               /usr/local/openresty/bin/openresty -t
             '

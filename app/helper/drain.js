@@ -5,7 +5,7 @@ const lock = require("sync/lock");
 // in-flight requests and syncs finish, release folder locks, then exit.
 //
 // This must stay under the containers' --stop-timeout (30s, see
-// scripts/deploy/util/generateDockerCommand.js), after which Docker SIGKILLs.
+// proxy/deploy/common.sh), after which Docker SIGKILLs.
 const DRAIN_TIMEOUT_MS = parseInt(process.env.BLOT_DRAIN_TIMEOUT_MS) || 25000;
 const LOCK_POLL_MS = 100;
 
@@ -23,8 +23,9 @@ function isDraining() {
 }
 
 // Registers fn to run when draining begins (used to end long-lived SSE
-// responses, which would otherwise hold server.close() open). Returns an
-// unsubscribe function.
+// responses, which would otherwise hold server.close() open). If fn returns a
+// promise, the drain also waits for it, within the timeout (a forked worker
+// child exiting, see helper/workerChild). Returns an unsubscribe function.
 function onStart(fn) {
   if (draining) {
     setImmediate(fn);
@@ -55,9 +56,17 @@ async function run(timeout) {
   // No new syncs from here on, so once held locks reach zero they stay there
   lock.stopAcquiring();
 
+  const waits = [];
   for (const fn of [...listeners]) {
     try {
-      fn();
+      const result = fn();
+      if (result && typeof result.then === "function") {
+        waits.push(
+          Promise.resolve(result).catch((err) =>
+            console.error(clfdate(), "[DRAIN] listener error", err)
+          )
+        );
+      }
     } catch (err) {
       console.error(clfdate(), "[DRAIN] listener error", err);
     }
@@ -93,7 +102,7 @@ async function run(timeout) {
   });
 
   const didTimeOut = await Promise.race([
-    Promise.all([closed, locksReleased]).then(() => false),
+    Promise.all([closed, locksReleased, ...waits]).then(() => false),
     timedOut,
   ]);
   clearTimeout(timer);

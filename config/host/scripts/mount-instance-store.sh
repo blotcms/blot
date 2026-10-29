@@ -15,15 +15,17 @@ set -e
 
 
 # The app's tmp directory (BLOT_TMP_DIRECTORY, see scripts/deploy/constants.js)
-# is bind-mounted into the app containers. A stop/start of the instance wipes
-# the disk, and the containers run as uid 1000, not root, so recreate it on
+# is bind-mounted into the app containers, and proxy/deploy/blue-green.sh
+# mounts /var/instance-ssd/disk-cache into the proxy (PROXY_DISK_CACHE_DIR; the
+# deploy user has no sudo to create it). A stop/start of the instance wipes
+# the disk, and the containers run as uid 1000, not root, so recreate them on
 # every run, owned by them. install -d is idempotent.
 ensure_tmp() {
-  install -d -o 1000 -g 1000 /var/instance-ssd/tmp
+  install -d -o 1000 -g 1000 /var/instance-ssd/tmp /var/instance-ssd/disk-cache
 }
 
 # Already mounted (e.g. this ran once already, or the unit is re-run):
-# nothing to do but make sure tmp exists.
+# nothing to do but make sure tmp and disk-cache exist.
 if mountpoint -q /var/instance-ssd; then
   echo "/var/instance-ssd is already mounted."
   ensure_tmp
@@ -52,8 +54,8 @@ if ! blkid "$EPHEMERAL_DISK" >/dev/null 2>&1; then
 fi
 
 # If you change the cache directory, make sure to update
-# the cache_directory default in proxy/build/locals.js and PROXY_CACHE_DIR in
-# proxy/deploy/common.sh
+# the cache_directory default in proxy/build/locals.js and
+# PROXY_DISK_CACHE_DIR in proxy/deploy/common.sh
 mkdir -p /var/instance-ssd
 
 mount "$EPHEMERAL_DISK" /var/instance-ssd

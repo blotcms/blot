@@ -4,6 +4,23 @@ const handleAjaxSaveResponse = ajax.handleAjaxSaveResponse;
 
 // select inputs
 document.querySelectorAll('form.select:not(.syntax-highlighter)').forEach(function(form){
+	const select = form.querySelector('select');
+	form.addEventListener('click', (event) => {
+		if (!select || event.target === select || select.contains(event.target)) return;
+
+		event.preventDefault();
+		if (typeof select.showPicker === 'function') {
+			try {
+				select.showPicker();
+				return;
+			} catch {
+				// Fall back to the native click for browsers that expose but cannot use showPicker.
+			}
+		}
+		select.focus();
+		select.click();
+	});
+
 	form.querySelectorAll('select').forEach(function(node){
 	  node.addEventListener('change',  (event) => {
 

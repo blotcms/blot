@@ -2,22 +2,19 @@
 {{> head}}
 
 <div class="header">
-{{> /Profile.txt}}
+{{> profile}}
 </div>
 
-{{#recent_entries.length}}
-<h2 class="section-nav">
-<a href="/" class="selected">About</a>
-<a href="/writing">Writing</a>
-</h2>
-{{/recent_entries.length}}
-
+<div class="subheading-column fade-in entry-list">
+<h2>Recent entries</h2>
+{{#recent_entries}}
+<h3 class="date-heading">{{#formatDate}}{{date_display}}{{/formatDate}}</h3>
+<p><a href="{{{url}}}">{{title}}</a></p>
+{{#summary}}<p>{{summary}}</p>{{/summary}}
+{{/recent_entries}}
 {{^recent_entries.length}}
-<h2 class="section-nav">About</h2>
+<p>No entries yet.</p>
 {{/recent_entries.length}}
-
-<div class="subheading-column fade-in arrow-after-link">
-{{> /About.txt}}
 </div>
 
 {{> footer}}

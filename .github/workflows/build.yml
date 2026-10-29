@@ -1,9 +1,10 @@
-# Builds the production app image, checks it starts healthy (PRs), and publishes the
-# manifest list deploy.yml waits for. The airlock image is
-# built by airlock.yml.
+# Builds the Node app image (the `prod` stage) and pushes it as
+# ghcr.io/<owner>/blot:prod-<sha>-arm64, for app-e2e. It is no longer what is
+# deployed: ghcr.io/<owner>/blot:<sha> is the unit image, published by
+# unit-image.yml, which builds on this one's layer cache (blot:cache-arm64). The
+# airlock image is built by airlock.yml.
 #
-# Production is arm64 (Graviton), so only arm64 is built, on one native runner,
-# which also publishes the :<sha> manifest list (and :latest on master).
+# Production is arm64 (Graviton), so only arm64 is built, on one native runner.
 name: build
 
 on:
@@ -20,9 +21,8 @@ env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/blot
   # True for push builds and PRs from a branch of this repo; false for PRs
   # from a fork, whose GITHUB_TOKEN is read-only and cannot write to GHCR.
-  # Fork PRs still build the images and run the health checks locally
-  # (push: false, load: true) - they just skip the registry push, the
-  # registry cache export, and the manifest jobs.
+  # Fork PRs still build the images (push: false, load: true) - they just skip
+  # the registry push and the registry cache export.
   PUSH_IMAGES: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
 
 # Superseded PR pushes are cancelled. Each master push gets its own group: a
@@ -50,6 +50,11 @@ jobs:
           # file contents, and the history's blobs are several GB.
           fetch-depth: 0
           filter: blob:none
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
 
       # The image is built without .git, so record each template's latest
       # commit time now for the docs site to read at runtime.
@@ -83,64 +88,6 @@ jobs:
             platforms: ${{ matrix.platform }}
             push: ${{ env.PUSH_IMAGES == 'true' }}
             load: ${{ env.PUSH_IMAGES != 'true' }}
-            tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}-${{ matrix.arch }}
+            tags: ${{ env.IMAGE_NAME }}:prod-${{ github.sha }}-${{ matrix.arch }}
             cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:cache-${{ matrix.arch }}
             cache-to: ${{ env.PUSH_IMAGES == 'true' && format('type=registry,ref={0}:cache-{1},mode=max', env.IMAGE_NAME, matrix.arch) || '' }}
-
-      # PRs only. The e2e tests run the dev target, so this is the one check
-      # that the prod target boots before merge. On master it would hold up
-      # the manifest list deploy.yml waits for, and scripts/deploy health-checks
-      # (and rolls back) the first container anyway.
-      - name: Verify health check (${{ matrix.arch }})
-        if: ${{ github.event_name == 'pull_request' }}
-        env:
-          IMAGE: ${{ env.IMAGE_NAME }}:${{ github.sha }}-${{ matrix.arch }}
-        run: |
-          set -euo pipefail
-          docker network create test_network
-
-          redis_container_id=$(docker run -d --name test_redis --network test_network redis:6.2.12)
-
-          timeout=30; interval=2; elapsed=0
-          until docker exec "$redis_container_id" redis-cli ping | grep -q PONG; do
-            if [ $elapsed -ge $timeout ]; then
-              echo "Redis not ready in $timeout s"
-              docker logs "$redis_container_id" || true
-              exit 1
-            fi
-            sleep $interval; elapsed=$((elapsed+interval))
-          done
-
-          # The app refuses to start without a storage bucket. Nothing is
-          # uploaded while it starts, so this one needn't exist.
-          app_id=$(docker run -d --network test_network -e BLOT_REDIS_HOST=test_redis \
-            -e BLOT_STORAGE_BUCKET=health-check -p 8080:8080 "$IMAGE")
-
-          timeout=60; interval=5; elapsed=0
-          until [ "$(docker inspect --format='{{json .State.Health.Status}}' "$app_id")" = '"healthy"' ]; do
-            if [ $elapsed -ge $timeout ]; then
-              echo "App health check failed"
-              docker logs "$app_id" || true
-              exit 1
-            fi
-            sleep $interval; elapsed=$((elapsed+interval))
-          done
-
-          docker rm -f "$app_id" "$redis_container_id"
-          docker network rm test_network
-
-      # Deploys look for ghcr.io/<owner>/blot:<sha> as a manifest list with an
-      # arm64 entry (scripts/deploy verifyImageManifest, deploy.yml). Production
-      # is arm64 only, so the list holds just the arm64 image.
-      - name: Publish the manifest list
-        if: ${{ env.PUSH_IMAGES == 'true' }}
-        run: |
-          set -euo pipefail
-          docker buildx imagetools create \
-            -t "$IMAGE_NAME:${{ github.sha }}" \
-            "$IMAGE_NAME:${{ github.sha }}-arm64"
-          if [ "${{ github.ref_name }}" = "master" ]; then
-            docker buildx imagetools create \
-              -t "$IMAGE_NAME:latest" \
-              "$IMAGE_NAME:${{ github.sha }}"
-          fi

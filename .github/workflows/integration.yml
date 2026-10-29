@@ -12,10 +12,6 @@ name: integration
 #                    stopped, READONLY or NOREPLICAS.
 #  zero-downtime   : a blue/green handover (SO_REUSEPORT + graceful drain)
 #                    serves every request while the old container is stopped.
-#  node-swap       : a rolling redeploy of the Node containers (stop, rm,
-#                    create, start, blue/green/yellow) under load through the
-#                    proxy, over the Unix sockets like production; any
-#                    dropped or failed request fails the job.
 
 # Pull requests only run it when something it covers changed (the paths
 # below); every push to master runs it. The real-app round trip through the
@@ -52,7 +48,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 21.7.3
+          node-version: 24.22.1
 
       - name: Install config generator dependencies
         run: |
@@ -77,13 +73,14 @@ jobs:
           # instead of falling through to the stub upstream.
           mkdir -p "$RUNNER_TEMP/global-static"
           echo -n "served from disk" > "$RUNNER_TEMP/global-static/cdn-test.txt"
-          docker run -d --name proxy -p 8080:80 -p 8443:443 -p 8443:443/udp \
+          docker run -d --name proxy -p 8080:80 -p 8443:443 \
             -e BLOT_HOST=localhost \
+            -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -v "$RUNNER_TEMP/global-static":/var/www/blot/app/blog/static:ro \
             blot-proxy:e2e
           docker run -d --name stub --network container:proxy \
             -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" \
-            node:22-alpine node /s.js
+            node:24.22.1-alpine node /s.js
           for i in $(seq 1 30); do
             docker exec proxy sh -c 'wget -qO- -T1 http://127.0.0.1:8090/ >/dev/null 2>&1' && break
             sleep 1
@@ -95,16 +92,40 @@ jobs:
           PROXY_HTTPS: https://127.0.0.1:8443
         run: bash proxy/e2e/checks.sh
 
-      # HTTP/3 over UDP: a real QUIC handshake and request, for the site and
-      # for a custom domain (the default server, which owns the reuseport
-      # QUIC socket).
-      - name: HTTP/3 checks
+      # The base image still includes HTTP/3, but the generated config must
+      # expose no QUIC listener. Check live UDP sockets and HTTP/1.1 + HTTP/2
+      # on every public vhost, including clearing cached Alt-Svc routes.
+      - name: HTTP/3 disabled; HTTP/1.1 and HTTP/2 available
+        run: node proxy/e2e/http3-disabled-checks.js
+
+      # The disk cache (proxy/config/diskcache.lua, proxy/evict.sh) against the
+      # real image: starts its own dc-* proxy containers on ports 18080-18084,
+      # two of them sharing a cache volume, and removes them afterwards.
+      - name: Disk cache checks
+        run: node proxy/e2e/diskcache-checks.js
+
+      # What a client sees through the cached locations, request kind by
+      # request kind, against the same image: starts its own rm-* containers
+      # (ports 18120-18139), each with a stub upstream, and removes them.
+      # Behaviour that looks wrong today is asserted and labelled KNOWN.
+      - name: Request matrix
+        run: node proxy/e2e/request-matrix.js
+
+      # The proxy of the base ref (origin/master) and this tree's side by side,
+      # the same ~770 requests to both (miss, hit, purge, refill, Node down,
+      # Node back): status, decoded body and headers must match unless a rule
+      # in parity-checks.js explains the difference. Builds the baseline image
+      # itself, from a worktree of origin/master. Containers pa-*, ports
+      # 18090-18093. Pull requests only: on a push to master both sides are
+      # the same code.
+      - name: Parity with origin/master
+        if: github.event_name == 'pull_request'
+        env:
+          PARITY_GENDEPS: ${{ runner.temp }}/gendeps
+          PARITY_TREE_IMAGE: blot-proxy:e2e
         run: |
-          set -eux
-          python3 -m venv "$RUNNER_TEMP/h3"
-          "$RUNNER_TEMP/h3/bin/pip" install --quiet aioquic
-          "$RUNNER_TEMP/h3/bin/python" proxy/e2e/h3-check.py 127.0.0.1 8443 localhost /
-          "$RUNNER_TEMP/h3/bin/python" proxy/e2e/h3-check.py 127.0.0.1 8443 someblog.example /
+          git fetch --no-tags --depth=1 origin '+refs/heads/master:refs/remotes/origin/master'
+          node proxy/e2e/parity-checks.js
 
       # The wildcard certificate comes from Redis when it is there, else from
       # the file. Starts a Redis in the proxy's network namespace, which the
@@ -114,12 +135,10 @@ jobs:
           PROXY_HTTPS_HOST: 127.0.0.1:8443
         run: bash proxy/e2e/wildcard-cert-checks.sh
 
-      # The wildcard certificate set from Redis must also complete a QUIC
-      # handshake (the script above leaves the last one cached, Redis stopped).
-      - name: HTTP/3 with the wildcard certificate from Redis
-        run: |
-          set -eux
-          "$RUNNER_TEMP/h3/bin/python" proxy/e2e/h3-check.py 127.0.0.1 8443 anything.localhost / anything.localhost
+      # Repeat after loading the wildcard certificate from Redis. HTTP/3
+      # must remain disabled while HTTP/1.1 and HTTP/2 still serve that cert.
+      - name: Protocol checks with the wildcard certificate from Redis
+        run: node proxy/e2e/http3-disabled-checks.js anything.localhost
 
       - name: Proxy logs
         if: always()
@@ -138,7 +157,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 21.7.3
+          node-version: 24.22.1
 
       - name: Install config generator dependencies
         run: |
@@ -217,7 +236,7 @@ jobs:
           set -eux
           docker exec redis redis-cli set "domain:$TEST_DOMAIN" 1
           docker run -d --name stub --network host \
-            -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" node:22-alpine node /s.js
+            -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" node:24.22.1-alpine node /s.js
           for i in $(seq 1 30); do
             curl -sf -o /dev/null http://127.0.0.1:8088/ && break
             sleep 1
@@ -229,6 +248,7 @@ jobs:
           docker volume create blot-acme-storage
           docker run -d --name proxy --network host --cap-add SYS_NICE \
             -e BLOT_HOST=localhost \
+            -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -e PROXY_ACME_CA=https://127.0.0.1:14000/dir \
             -e ACME_CA_CERT=/pebble-ca.pem \
             -v "$PWD/pebble.minica.pem:/pebble-ca.pem:ro" \
@@ -304,6 +324,7 @@ jobs:
           docker rm -f proxy
           docker run -d --name proxy --network host --cap-add SYS_NICE \
             -e BLOT_HOST=localhost \
+            -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -e PROXY_ACME_CA=https://127.0.0.1:14000/dir \
             -e ACME_CA_CERT=/pebble-ca.pem \
             -v "$PWD/pebble.minica.pem:/pebble-ca.pem:ro" \
@@ -362,6 +383,7 @@ jobs:
           docker rm -f proxy
           docker run -d --name proxy --network host --cap-add SYS_NICE \
             -e BLOT_HOST=localhost \
+            -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -e PROXY_ACME_CA=https://127.0.0.1:14000/dir \
             -e ACME_CA_CERT=/pebble-ca.pem \
             -e PROXY_AUTO_SSL_CACHE_TTL=5 \
@@ -409,7 +431,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 21.7.3
+          node-version: 24.22.1
 
       - name: Install config generator dependencies
         run: |
@@ -435,14 +457,14 @@ jobs:
           echo "HOSTIP=$HOSTIP" >> "$GITHUB_ENV"
 
           docker run -d --name stub --network host \
-            -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" node:22-alpine node /s.js
+            -v "$PWD/proxy/e2e/stub-upstream.js:/s.js" node:24.22.1-alpine node /s.js
           for i in $(seq 1 30); do
             curl -sf -o /dev/null http://127.0.0.1:8088/ && break; sleep 1
           done
 
           start_proxy() {
             docker run -d --name "$1" --network host --cap-add SYS_NICE \
-              -e BLOT_HOST=localhost blot-proxy:zd
+              -e BLOT_HOST=localhost -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 blot-proxy:zd
             for i in $(seq 1 30); do
               [ "$(docker inspect -f '{{.State.Health.Status}}' "$1")" = healthy ] && return 0
               sleep 2
@@ -488,44 +510,3 @@ jobs:
       - name: Tear down
         if: always()
         run: docker rm -f zd-a zd-b stub 2>/dev/null || true
-
-  node-swap:
-    runs-on: ubuntu-latest
-    needs: proxy-behaviour
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 21.7.3
-
-      - name: Install config generator dependencies
-        run: |
-          mkdir -p "$RUNNER_TEMP/gendeps"
-          cd "$RUNNER_TEMP/gendeps"
-          npm init -y >/dev/null
-          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
-
-      - name: Generate proxy config (BLOT_HOST=localhost)
-        run: bash proxy/build/build.sh
-        env:
-          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
-
-      - name: Build proxy image
-        run: docker build -f proxy/Dockerfile -t blot-proxy:ns proxy/
-
-      - name: Rolling swap under load
-        run: bash proxy/e2e/node-swap/run.sh
-        env:
-          PROXY_IMAGE: blot-proxy:ns
-
-      - name: Logs
-        if: always()
-        run: |
-          for c in ns-proxy blot-container-blue blot-container-green blot-container-yellow; do
-            echo "=== $c ==="; docker logs --tail 80 "$c" 2>&1 || true
-          done
-
-      - name: Tear down
-        if: always()
-        run: docker rm -f ns-proxy blot-container-blue blot-container-green blot-container-yellow 2>/dev/null || true

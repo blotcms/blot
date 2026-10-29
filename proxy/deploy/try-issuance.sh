@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Issue a certificate through the proxy image from Let's Encrypt STAGING, for a
+# Issue a certificate through the unit image's OpenResty from Let's Encrypt STAGING, for a
 # throwaway domain, without touching what is serving. Run it on the production
 # host, before a blue-green deploy:
 #
@@ -67,15 +67,21 @@ redis-cli -h "$REDIS_HOST" set "domain:$DOMAIN" 1 >/dev/null
 
 log "Starting $NAME from $IMAGE with PROXY_ACME_CA=$STAGING_CA"
 # -e comes after --env-file, so it wins. No auto-ssl, cache or log volumes.
-docker run -d --name "$NAME" --cap-add SYS_NICE \
+# The unit image's own entrypoint needs BLOT_UNIT and starts Node, so this runs
+# OpenResty alone, as the unit's supervisor does (--init for tini, and the
+# health check without the Node half).
+docker run -d --name "$NAME" --cap-add SYS_NICE --init \
+  --entrypoint /usr/local/bin/proxy-start \
+  --health-cmd 'curl -fsS -o /dev/null --unix-socket /run/openresty/health.sock http://localhost/health' \
+  --health-interval 2s --health-start-period 0s \
   --env-file "$ENV_FILE" \
   -e PROXY_ACME_CA="$STAGING_CA" \
   -e PROXY_FETCH_CDN_IPS=false \
   -e PROXY_PRIVATE_IP=127.0.0.1 \
   -p "127.0.0.1:$PORT:443" \
   -v "$CERT_DIR":/etc/ssl/private:ro \
-  "$IMAGE" >/dev/null
-wait_healthy "$NAME" "$HEALTH_TIMEOUT" \
+  "$IMAGE" /usr/local/openresty/bin/openresty -g "daemon off;" >/dev/null
+wait_healthy "$NAME" "$HEALTH_TIMEOUT" proxy_answers \
   || { docker logs --tail 50 "$NAME" >&2 || true; die "$NAME did not become healthy"; }
 
 issuer=""

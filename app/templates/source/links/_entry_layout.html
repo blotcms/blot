@@ -4,9 +4,9 @@
   {{#entry}}
 
   <div class="top">
-    <a class="close" style="float:right" href="/" onclick="return lastIndexPage()"></a>
-    <a class="right" data-previous style="margin-left:0;{{^previous}}visibility:hidden{{/previous}}" href="{{{previous.url}}}"> </a>
-    <a class="left" data-next style="{{^next}}visibility:hidden{{/next}}" href="{{{next.url}}}"></a>
+    <a class="close entry-close" style="float:right" href="/" onclick="return closeEntry()"></a>
+    <a class="right entry-previous" style="margin-left:0;{{^previous}}visibility:hidden{{/previous}}" href="{{{previous.url}}}"> </a>
+    <a class="left entry-next" style="{{^next}}visibility:hidden{{/next}}" href="{{{next.url}}}"></a>
 
   </div>
 
@@ -14,7 +14,7 @@
   <div class="main" style="display:flex;">
     <div class="side" style="">
       <a class="close" href="/" style="visibility:hidden"></a>
-      <a class="left-toolbar" style="{{^next}}visibility:hidden{{/next}}" href="{{{next.url}}}"></a>
+      <a class="left-toolbar entry-next" style="{{^next}}visibility:hidden{{/next}}" href="{{{next.url}}}"></a>
       <a class="close" href="/" style="visibility:hidden"></a>
     </div>
     <div class="entry" style="flex-grow:1;
@@ -45,8 +45,8 @@
       })
     </script>
     <div class="side right-side" style="">
-      <a class="close" href="/" onclick="return lastIndexPage()"></a>
-      <a class="right-toolbar" style="{{^previous}}visibility:hidden{{/previous}}" href="{{{previous.url}}}"> </a>
+      <a class="close entry-close" href="/" onclick="return closeEntry()"></a>
+      <a class="right-toolbar entry-previous" style="{{^previous}}visibility:hidden{{/previous}}" href="{{{previous.url}}}"> </a>
       <a class="close" href="/" style="visibility:hidden"></a>
     </div>
   </div>

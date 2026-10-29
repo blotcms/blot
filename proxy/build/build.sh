@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Generates the OpenResty configuration for the proxy container into
-# proxy/build/data/latest/ (openresty.conf, cacher.lua, html/).
+# proxy/build/data/latest/ (openresty.conf, diskcache.lua, html/).
 #
 # Run this before `docker build proxy/`. CI runs the same script in
 # .github/workflows/proxy.yml so there is a single source of truth for the

@@ -27,6 +27,11 @@ function stringifyManifest(manifest) {
   return JSON.stringify(normalizeManifest(manifest));
 }
 
+// A view's entry is its content hash; a folder file's is { path, version }
+function describeEntry(entry) {
+  return entry && typeof entry === "object" ? JSON.stringify(entry) : entry;
+}
+
 function describeChanges(oldManifest, newManifest) {
   const oldKeys = new Set(Object.keys(oldManifest));
   const newKeys = new Set(Object.keys(newManifest));
@@ -37,7 +42,7 @@ function describeChanges(oldManifest, newManifest) {
   newKeys.forEach((key) => {
     if (!oldKeys.has(key)) {
       added.push(key);
-    } else if (oldManifest[key] !== newManifest[key]) {
+    } else if (describeEntry(oldManifest[key]) !== describeEntry(newManifest[key])) {
       modified.push(key);
     }
   });
@@ -52,14 +57,14 @@ function describeChanges(oldManifest, newManifest) {
 
   if (added.length) {
     messages.push(
-      `Added: ${added.map((key) => `${key} -> ${newManifest[key]}`).join(", ")}`
+      `Added: ${added.map((key) => `${key} -> ${describeEntry(newManifest[key])}`).join(", ")}`
     );
   }
 
   if (removed.length) {
     messages.push(
       `Removed: ${removed
-        .map((key) => `${key} -> ${oldManifest[key]}`)
+        .map((key) => `${key} -> ${describeEntry(oldManifest[key])}`)
         .join(", ")}`
     );
   }
@@ -67,7 +72,7 @@ function describeChanges(oldManifest, newManifest) {
   if (modified.length) {
     messages.push(
       `Modified: ${modified
-        .map((key) => `${key} ${oldManifest[key]} -> ${newManifest[key]}`)
+        .map((key) => `${key} ${describeEntry(oldManifest[key])} -> ${describeEntry(newManifest[key])}`)
         .join(", ")}`
     );
   }

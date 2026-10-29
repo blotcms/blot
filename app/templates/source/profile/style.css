@@ -3,6 +3,32 @@
 {{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
+/* Highlight.js supplies the palette; this template controls code layout and type. */
+pre code.hljs {
+  display: block;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+code.hljs {
+  margin: 0;
+  padding: 0;
+}
+/* The repeated class gives this template reset priority over theme token styles. */
+pre code.hljs.hljs,
+pre code.hljs.hljs * {
+  font-weight: inherit;
+  font-style: inherit;
+  opacity: 1;
+  text-decoration: inherit;
+}
+pre code.hljs.hljs * {
+  display: inline;
+  width: auto;
+}
+
 
 :root {
   --background-color: {{background_color}};
@@ -829,6 +855,13 @@ footer #wrapper {
   margin-right: 15px;
   box-shadow: 0 0 0 3px var(--background-color), 0 0 0 4px var(--border-color);
   border-radius: 50%;
+}
+
+/* A saved photo shape is already part of the image; don't round it again. */
+.profile #avatar.masked,
+#post-meta img.avatar.masked {
+  border-radius: 0;
+  box-shadow: none;
 }
 
 /* Others */

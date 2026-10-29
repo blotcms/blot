@@ -1,5 +1,4 @@
 :root {
-  --font-picker-width: 264px;
   --font-picker-height: 340px;
   --font-picker-trigger-padding: 0.5rem 1em;
   --font-option-font-size: 1.2em;
@@ -81,9 +80,14 @@
   opacity: 0.7;
 }
 
-.font-picker-trigger svg {
+/* While a specimen loads the browser draws its alt text, the font's name,
+   at the image's own font size, clipped to the image's height. Transparent
+   keeps the name for screen readers and draws nothing until the image. */
+.font-picker-trigger .font-specimen {
   height: 1.5em;
+  width: auto;
   display: block;
+  color: transparent;
 }
 
 .font-picker-trigger [data-font-picker-label] {
@@ -99,18 +103,32 @@
   z-index: 1000;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
+  width: max-content;
   margin-top: 0;
   margin-left: -1px;
   opacity: 0;
   transform: translateY(-8px);
   pointer-events: none;
   transition: opacity 0.16s ease, transform 0.16s ease;
-  border: 1px solid var(--border-color);
-  border-radius: 0 0 var(--border-radius) var(--border-radius);
+  border: 1px solid #ddd;
+  border-radius: var(--border-radius);
   overflow: hidden;
   background: var(--font-picker-bg);
   box-shadow: 0 0.5em 1.5em rgba(0, 0, 0, 0.12);
   user-select: none;
+}
+
+.template-font-picker.has-more-options::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 16px;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0), #fff);
+  pointer-events: none;
 }
 
 .template-font-picker.is-visible {
@@ -125,16 +143,19 @@
 
 .template-font-picker__filters {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  width: max-content;
   padding: 0.3em 0.5em;
   border-bottom: 1px solid var(--border-color);
   font-size: var(--font-filter-font-size);
 }
 
 .template-font-picker__filter {
+  flex: none;
   border: none;
   border-radius: var(--font-filter-border-radius);
   padding: 0.15em 0.5em;
+  white-space: nowrap;
   cursor: pointer;
   color: var(--light-text-color);
   background: transparent;
@@ -146,14 +167,20 @@
 
 .template-font-picker__filter.is-active {
   color: var(--accent-color);
-  background: var(--light-background-color);
+  background: #f2f2f2;
 }
 
 .template-font-picker__options {
-  width: var(--font-picker-width);
+  width: 100%;
+  box-sizing: border-box;
   height: var(--font-picker-height);
   overflow-x: hidden;
-  overflow-y: scroll;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.template-font-picker__options::-webkit-scrollbar {
+  display: none;
 }
 
 .template-font-picker__option {
@@ -180,8 +207,10 @@
   background: var(--font-option-selected-bg);
 }
 
-.template-font-picker__option svg {
+.template-font-picker__option .font-specimen {
   display: block;
   height: 1em;
+  width: auto;
+  color: transparent;
   font-size: var(--font-option-font-size);
 }

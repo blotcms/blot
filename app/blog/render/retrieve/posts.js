@@ -1,5 +1,5 @@
 const { getEntry, getPage } = require("../../lib/models");
-const LRUCache = require("lru-cache").LRUCache;
+const { createRenderCache, timeClone } = require("../../lib/cacheMetrics");
 const fetchTaggedEntries = require("./helpers/fetchTaggedEntries");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const getTemplateSortOptions = require("blog/sortOptions");
@@ -13,7 +13,7 @@ const {
 } = require("../../lib/pagination");
 const { sortEntries } = getTemplateSortOptions;
 
-const postsCache = new LRUCache({
+const postsCache = createRenderCache("posts", {
   max: 1000,
   // Bound by bytes, not just item count: a single tag-heavy blog paginating
   // through hundreds of distinct tags can otherwise fill all 1000 slots with
@@ -164,7 +164,9 @@ async function posts(req, res) {
     context: { blogID, tags, options, offset, pageSize, req, log },
   });
 
-  const responsePayload = clonePosts(prepared.payload);
+  const responsePayload = timeClone(postsCache, () =>
+    clonePosts(prepared.payload)
+  );
 
   res.locals.pagination = responsePayload.pagination;
   return responsePayload.entries;

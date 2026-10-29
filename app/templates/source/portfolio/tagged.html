@@ -9,10 +9,10 @@
   <div class="pagination">
     <span>Page {{current}} of {{total}}</span>
     <span class="spacer"></span>
-    <a {{#previous}}href="/tagged/{{slug}}/page/{{previous}}"{{/previous}}>
+    <a class="collection-previous" {{#previous}}href="/tagged/{{slug}}/page/{{previous}}"{{/previous}}>
       <span class="icon-holder margin-right">&larr;</span>Previous
     </a>
-    <a {{#next}}href="/tagged/{{slug}}/page/{{next}}"{{/next}}>
+    <a class="collection-next" {{#next}}href="/tagged/{{slug}}/page/{{next}}"{{/next}}>
       Next<span class="icon-holder margin-left"><span>&rarr;</span></span>
     </a>
 

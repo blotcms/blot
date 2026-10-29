@@ -105,6 +105,24 @@ async function runPostListenTasks() {
     logError("Failed to start welcome email alarm", err);
   }
 
+  try {
+    // Webhooks that arrived while their blog was syncing leave a follow-up
+    // sync which any container may run. Previews share the dev Redis and skip
+    // them, as they skip the clients.
+    if (!config.preview) {
+      log("Starting follow-up syncs");
+      const followUpSync = require("clients/util/followUpSync");
+      // Loads each client's routes, which create their follow-up syncs
+      require("clients");
+      followUpSync.startAll();
+      require("helper/drain").onStart(() => {
+        followUpSync.stopAll().catch((err) => logError("Failed to stop follow-up syncs", err));
+      });
+    }
+  } catch (err) {
+    logError("Failed to start follow-up syncs", err);
+  }
+
   // Cron jobs and client jobs take Redis locks, so every container runs them.
   // Worktree previews share the dev Redis and skip them.
   try {
@@ -137,6 +155,11 @@ async function runPostListenTasks() {
   } catch (err) {
     logError("Failed while initializing clients", err);
   }
+
+  // A forked worker child (helper/workerChild) leaves the rest to its parent,
+  // which has done it already: a child crash-looping on restart would
+  // otherwise flush the proxy caches and call Bunny each time
+  if (config.worker_child) return;
 
   try {
     if (templatesBuilt) {
@@ -206,13 +229,24 @@ function main(callback) {
       },
 
       async function () {
-        const featuredDir = path.join(config.data_directory, "featured");
-        const featuredFile = path.join(featuredDir, "featured.json");
+        // The parent of a forked worker child has cleared it
+        if (config.worker_child) return;
 
-        log("Clearing featured cache file");
-        await fs.ensureDir(featuredDir);
-        await fs.remove(featuredFile);
-        log("Cleared featured cache file");
+        // In development, drop the cached copy so edits to the seed list show.
+        if (config.environment === "development") {
+          await fs.remove(path.join(config.data_directory, "featured", "featured.json"));
+          return;
+        }
+
+        // Elsewhere keep the previously filtered featured.json rather than
+        // clearing it: the seed list is unfiltered, so sites that have since
+        // left Blot ('your domain is almost set up') would show until the
+        // filter finished. Re-filter from the seed in the background.
+
+        log("Refreshing featured sites in the background");
+        require("documentation/featured/check")()
+          .then(() => log("Refreshed featured sites"))
+          .catch((err) => log("Error refreshing featured sites", err));
       },
 
       async function () {

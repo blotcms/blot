@@ -14,6 +14,8 @@
 // log is req.log, or anything else that takes the same arguments; callers
 // without one (tests, non-HTTP renders) can leave it out.
 const filling = new WeakMap();
+const cacheMetrics = require("./cacheMetrics");
+const { Uncacheable } = require("./uncacheableFetch");
 
 function fetchCached(cache, name, log, key, options) {
   let keys = filling.get(cache);
@@ -21,13 +23,37 @@ function fetchCached(cache, name, log, key, options) {
 
   const outcome = cache.has(key) ? "hit" : keys.has(key) ? "inflight" : "miss";
   if (typeof log === "function") log(name, "cache", outcome);
+  cacheMetrics.count(cache, outcome, key);
 
+  const startedAt = performance.now();
   const fetching = cache.fetch(key, options);
 
   if (outcome === "miss") {
     keys.add(key);
-    const done = () => keys.delete(key);
-    fetching.then(done, done);
+    fetching.then(
+      (value) => {
+        keys.delete(key);
+        cacheMetrics.fill(cache, key, performance.now() - startedAt, {
+          cached: cache.has(key),
+          value,
+        });
+      },
+      (err) => {
+        keys.delete(key);
+        const elapsed = performance.now() - startedAt;
+        // Uncacheable is a finished fill whose value was deliberately not
+        // stored (e.g. an empty blog): its callers unwrap the payload
+        if (err instanceof Uncacheable) {
+          cacheMetrics.fill(cache, key, elapsed, {
+            cached: false,
+            reason: "uncacheable",
+            value: err.payload,
+          });
+        } else {
+          cacheMetrics.fill(cache, key, 0, { failed: true });
+        }
+      }
+    );
   }
 
   return fetching;

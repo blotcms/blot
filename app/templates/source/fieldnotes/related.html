@@ -12,7 +12,14 @@
 		data-position="0"
 		><img
 			class="jp-relatedposts-post-img"
+			loading="lazy"
 			src="{{{thumbnail.medium.url}}}"
+			srcset="
+				{{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+				{{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+				{{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+			"
+			sizes="(max-width: 388px) 90vw, 350px"
 			width="350"
 			alt="{{title}}"
 	/></a>

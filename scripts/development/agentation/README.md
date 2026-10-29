@@ -11,7 +11,7 @@ npm start
 `npm start` checks `codex mcp list --json`, then starts Agentation automatically.
 Missing, disabled, or stale registrations stop startup with the command to fix them;
 rerun registration after moving the checkout or updating from the old script path.
-Requires Codex CLI, Docker Compose v2 and Node 22+.
+Requires Codex CLI, Docker Compose v2 and Node 24.22.1 (LTS).
 
 In the browser, expand the toolbar, select an element and save a note. Ask Codex
 to call `agentation_get_all_pending`, or `agentation_watch_annotations` for ongoing

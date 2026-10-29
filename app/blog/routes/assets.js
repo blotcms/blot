@@ -10,6 +10,7 @@ const caseSensitivePath = promisify(require("helper/caseSensitivePath"));
 const {
   GLOBAL_STATIC_DIR,
   GLOBAL_STATIC_SUBDIRECTORIES,
+  BLOG_STATIC_PATHS,
 } = require("../lib/staticPaths");
 const blogHosts = require("../lib/blogHosts");
 const cdnOrigin = require("../lib/cdnOrigin");
@@ -47,14 +48,6 @@ const BLOCKED_PATTERNS = [
   "\0", // null byte
 ];
 
-const BLOG_STATIC_PATHS = [
-  "/_assets",
-  "/_avatars",
-  "/_bookmark_screenshots",
-  "/_image_cache",
-  "/_thumbnails",
-];
-
 // Router setup
 const assets = express.Router();
 
@@ -74,7 +67,14 @@ assets.use((req, res, next) => {
 
 // Global static files
 GLOBAL_STATIC_SUBDIRECTORIES.forEach((dir) => {
-  assets.use(dir, express.static(GLOBAL_STATIC_DIR + dir, { maxAge: "1y" }));
+  assets.use(
+    dir,
+    express.static(GLOBAL_STATIC_DIR + dir, {
+      maxAge: "1y",
+      // only called when a static file is actually sent
+      setHeaders: (res) => logFolderAsset(res.req, "static"),
+    })
+  );
 });
 
 assets.get("/html2canvas.min.js", async (req, res, next) => {
@@ -141,9 +141,12 @@ assets.use(async (req, res, next) => {
   const decodedPath = decodeURIComponent(req.path);
 
   async function sendFolderFile(path) {
-    if (await redirectLargeFolderFile(req, res, blogFolder, path)) return;
+    if (await redirectLargeFolderFile(req, res, blogFolder, path)) {
+      logFolderAsset(req, "cdn-redirect");
+      return;
+    }
     await sendFile(path, { req, res });
-    logSameSiteReferer(req);
+    logFolderAsset(req, "origin");
   }
 
   try {
@@ -212,31 +215,52 @@ assets.use((err, req, res, next) => {
   next(err);
 });
 
-// A blog-folder file was fetched from one of the blog's own pages, i.e. a
-// link there points at the origin instead of the CDN. Only logged so we can
-// find out where such links still come from. Pages (the .html fallbacks
-// above, extensionless paths) are skipped: navigating between them is
-// expected, and the folder-link passes never rewrite them either.
-function logSameSiteReferer(req) {
+// Logs every file served here from the blog folder, or from Blot's global
+// static directory, with how it was served and the page that linked to it.
+// The folder-link rewrite only covers the links it finds, so this is how we
+// see which ones still reach the origin: a template or entry that wasn't
+// baked, a link built from a variable, a relative link. Pages (the .html
+// fallbacks above, extensionless paths) are skipped: navigating between them
+// is expected, and the folder-link passes never rewrite them either.
+//
+//   [folder-asset] blog=<id> handle=<h> served=origin|cdn-redirect|static
+//     path=<path> referer=<host><path>|-|invalid same_site=1|0
+function logFolderAsset(req, served) {
   try {
-    const path = decodeURIComponent(req.path);
+    // Template editor previews never use CDN URLs, so their hits say nothing
+    if (req.preview) return;
+
+    const originalPath = req.originalUrl.split("?")[0];
+    const path = decodeURIComponent(originalPath);
     if (htmlExtRegex.test(path) || !fileExtRegex.test(path)) return;
 
-    const referer = req.get("referer");
-    if (!referer) return;
+    let referer = "-";
+    let sameSite = 0;
+    const header = req.get("referer");
 
-    const url = new URL(referer);
-    if (!blogHosts(req.blog).includes(url.hostname.toLowerCase())) return;
+    if (header) {
+      try {
+        const url = new URL(header);
+        const host = url.hostname.toLowerCase();
+        // pathname is already percent-encoded
+        referer = host + url.pathname;
+        sameSite = blogHosts(req.blog).includes(host) ? 1 : 0;
+      } catch (e) {
+        referer = "invalid";
+      }
+    }
 
     req.log(
-      "[folder-asset-origin]",
+      "[folder-asset]",
       `blog=${req.blog.id}`,
       `handle=${req.blog.handle}`,
-      `path=${encodeURI(req.originalUrl.split("?")[0])}`,
-      `referer_path=${encodeURI(url.pathname)}`
+      `served=${served}`,
+      `path=${encodeURI(path)}`,
+      `referer=${referer}`,
+      `same_site=${sameSite}`
     );
   } catch (e) {
-    // an unparseable Referer must not affect the response
+    // logging must not affect the response
   }
 }
 
@@ -257,8 +281,9 @@ function redirectToCdn(req, res, cdnPath) {
   res.redirect(302, cdnOrigin(req) + cdnPath);
 }
 
-// Sends a 302 to the CDN for a large file of a safe type, mirroring the URL
-// lookupFile builds. Resolves false when the file should be served here.
+// Sends a 302 to the CDN for a large file of a safe type, with a
+// size+mtime version in the URL. Resolves false when the file should be
+// served here.
 async function redirectLargeFolderFile(req, res, blogFolder, path) {
   if (!path.startsWith(blogFolder + "/")) return false;
 

@@ -159,6 +159,68 @@ describe("dropbox resetToBlot", function () {
     expect(saved.some((values) => "cursor" in values)).toEqual(false);
   });
 
+  describe("transient Dropbox errors", function () {
+    const retryRequest = require("../util/retryRequest");
+    const originalDelays = retryRequest.delays;
+
+    beforeEach(function () {
+      retryRequest.delays = [1, 1];
+    });
+
+    afterEach(function () {
+      retryRequest.delays = originalDelays;
+    });
+
+    // Make filesListFolder fail with a 500 `failures` times before working
+    function failListFolder(failures) {
+      const inner = require.cache[createClientPath].exports;
+      const state = { calls: 0 };
+      require.cache[createClientPath].exports = function (id, callback) {
+        inner(id, (err, client, ...rest) => {
+          const real = client.filesListFolder;
+          client.filesListFolder = async (args) => {
+            if (++state.calls <= failures)
+              throw Object.assign(new Error("Response failed with a 500 code"), {
+                status: 500,
+              });
+            return real(args);
+          };
+          callback(err, client, ...rest);
+        });
+      };
+      delete require.cache[resetPath];
+      state.resetToBlot = require("../sync/reset-to-blot");
+      return state;
+    }
+
+    it("does not abort the walk when list_folder 500s once", async function () {
+      load({ "/": [file("a.txt")] });
+      const state = failListFolder(1);
+
+      const summary = await state.resetToBlot(blogID, () => {}, async () => {});
+
+      expect(summary.downloaded).toEqual(1);
+      expect(state.calls).toEqual(2);
+      expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(true);
+    });
+
+    it("still throws when list_folder keeps returning 500", async function () {
+      load({ "/": [file("a.txt")] });
+      const state = failListFolder(Infinity);
+
+      let error;
+      try {
+        await state.resetToBlot(blogID, () => {}, async () => {});
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error.status).toEqual(500);
+      expect(state.calls).toEqual(3);
+      expect(saved.some((values) => "cursor" in values)).toEqual(false);
+    });
+  });
+
   describe("changes made in Dropbox during the walk", function () {
     const countChanges = require("clients/util/countChanges");
     const deleted = (path_lower) => ({ ".tag": "deleted", path_lower });

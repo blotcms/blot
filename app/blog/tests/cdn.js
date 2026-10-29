@@ -564,6 +564,23 @@ describe("cdn template function", function () {
       expect(await res.text()).toBe("body{color:red}");
     });
 
+    it("responds 404 for a .map next to a stylesheet or script", async function () {
+      await this.template({
+        "style.css": "body { color: red; }",
+        "script.js": "console.log(1);",
+        "entries.html": "{{#cdn}}/style.css{{/cdn}} {{#cdn}}/script.js{{/cdn}}",
+      });
+
+      const [cssURL, jsURL] = (await this.text("/")).split(" ");
+      validate(cssURL);
+      validate(jsURL);
+
+      expect((await this.get(cssURL)).status).toBe(200);
+      expect((await this.get(jsURL)).status).toBe(200);
+      expect((await this.get(cssURL + ".map")).status).toBe(404);
+      expect((await this.get(jsURL + ".MAP")).status).toBe(404);
+    });
+
     it("responds 404 for a hash which was never rendered", async function () {
       const res = await this.get(
         config.cdn.origin + "/template/ab/cd/" + "e".repeat(28) + "/style.css"

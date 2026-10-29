@@ -25,12 +25,36 @@
   {{#archives}}
   {{#months}}
   {{#entries}}
-  <a href="{{{url}}}">
+  <a class="collection-entry" href="{{{url}}}">
     <span class="thumbnail">
     {{#thumbnail.small.url}}
-        <img loading="lazy" src="{{{thumbnail.small.url}}}" class="pre-loaded" onload="this.className+=' loaded';" />
+        <img
+          loading="lazy"
+          src="{{{thumbnail.small.url}}}"
+          srcset="
+            {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+            {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+            {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+          "
+          sizes="80px"
+          width="{{thumbnail.small.width}}"
+          height="{{thumbnail.small.height}}"
+          alt="{{title}}"
+          class="pre-loaded"
+          onload="this.className+=' loaded';" />
       <noscript>  
-      <img loading="lazy" src="{{{thumbnail.small.url}}}">
+      <img
+        loading="lazy"
+        src="{{{thumbnail.small.url}}}"
+        srcset="
+          {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+          {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+          {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+        "
+        sizes="80px"
+        width="{{thumbnail.small.width}}"
+        height="{{thumbnail.small.height}}"
+        alt="{{title}}">
       </noscript>
     {{/thumbnail.small.url}}
     </span>

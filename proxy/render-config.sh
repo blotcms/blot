@@ -2,7 +2,7 @@
 #
 # Turn the generated nginx.conf.template into nginx.conf, and write the Bunny
 # CDN edge list, from the container's environment. Run by entrypoint.sh on
-# every start and by proxy/deploy/reload-config.sh before a reload.
+# every start.
 #
 # The template carries ${PROXY_*} placeholders (proxy/build/locals.js).
 # For each one, the value is, in order: the container's environment, then
@@ -12,9 +12,12 @@
 #   PROXY_REDIS_HOST       Redis for certificates and the domain allowlist
 #   PROXY_SERVER_LABEL     the Blot-Server response header
 #   PROXY_RESOLVER         DNS resolver, e.g. "127.0.0.11" or "8.8.8.8 ipv6=off"
-#   PROXY_UPSTREAM_GREEN   host:port of the master Node (webhooks, /clients)
-#   PROXY_UPSTREAM_BLUE    host:port of the dashboard Node / failover
-#   PROXY_UPSTREAM_YELLOW  host:port of the blog Node
+#   PROXY_UNIT             blue or green: logged as unit= in the access log ("-" if unset)
+#   PROXY_UPSTREAM_MODE    unit (the only mode): this container's own Node processes, below
+#   PROXY_UNIT_MAIN        this unit's main Node process (blogs, dashboard reads)
+#   PROXY_UNIT_WORKER      this unit's worker child (/clients, writes, webhooks)
+#   PROXY_PEER_MAIN        the other unit's main process, as backup
+#   PROXY_PEER_WORKER      the other unit's worker child, as backup
 #
 # PROXY_FETCH_CDN_IPS=false skips fetching the Bunny edge list at start and
 # uses the list baked into the image.
@@ -34,6 +37,18 @@ while IFS='=' read -r name value; do
     export "$name=$value"
   fi
 done < "$DEFAULTS"
+
+# The primary and backup server of each upstream group in http.conf. Set here,
+# never taken from the environment.
+if [[ "$PROXY_UPSTREAM_MODE" != unit ]]; then
+  echo "render-config: PROXY_UPSTREAM_MODE must be unit, not '$PROXY_UPSTREAM_MODE'" >&2
+  exit 1
+fi
+PROXY_NODE_PRIMARY="$PROXY_UNIT_WORKER";         PROXY_NODE_BACKUP="$PROXY_PEER_WORKER"
+PROXY_BLOGS_PRIMARY="$PROXY_UNIT_MAIN";          PROXY_BLOGS_BACKUP="$PROXY_PEER_MAIN"
+PROXY_DASHBOARD_PRIMARY="$PROXY_UNIT_MAIN";      PROXY_DASHBOARD_BACKUP="$PROXY_PEER_MAIN"
+export PROXY_NODE_PRIMARY PROXY_NODE_BACKUP PROXY_BLOGS_PRIMARY PROXY_BLOGS_BACKUP \
+  PROXY_DASHBOARD_PRIMARY PROXY_DASHBOARD_BACKUP
 
 # Only these are substituted, so nginx's own $variables are left alone
 vars=""

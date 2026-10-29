@@ -169,17 +169,36 @@ const updateSubscription = async subscriptionID => {
           email.CLOSED(user.uid);
         else if (becameCancelled && user.isDisabled)
           email.ALREADY_CANCELLED(user.uid);
-        else if (becameCancelled && !shouldDisable) {
-          const claimed = await client.set(
-            key.paypalCancelEmail(user.uid, subscriptionID),
-            "1",
-            { NX: true, EX: CANCEL_EMAIL_TTL_SECONDS }
-          );
+        else if (!shouldDisable && paypal.status === "CANCELLED") {
+          const claimKey = key.paypalCancelEmail(user.uid, subscriptionID);
 
-          if (claimed) {
-            if (subscriptionLifecycle.isFirstPeriod({ paypal }))
-              email.CANCELLED_FIRST_PERIOD(user.uid);
-            else email.CANCELLED(user.uid);
+          // A failed send releases its claim and leaves this marker; GETDEL
+          // hands that retry to exactly one caller, and never touches a
+          // live claim.
+          const failedKey = claimKey + ":failed";
+          const retry = !becameCancelled && Boolean(await client.getDel(failedKey));
+
+          if (
+            (becameCancelled || retry) &&
+            (await client.set(claimKey, "1", {
+              NX: true,
+              EX: CANCEL_EMAIL_TTL_SECONDS
+            }))
+          ) {
+            const send = subscriptionLifecycle.isFirstPeriod({ paypal })
+              ? email.CANCELLED_FIRST_PERIOD
+              : email.CANCELLED;
+
+            send(user.uid, {}, sendErr => {
+              if (!sendErr) return;
+              console.log(prefix(), "cancellation email failed", sendErr);
+              client
+                .multi()
+                .del(claimKey)
+                .set(failedKey, "1", { EX: CANCEL_EMAIL_TTL_SECONDS })
+                .exec()
+                .catch(() => {});
+            });
           }
         }
       } catch (emailErr) {
@@ -187,7 +206,7 @@ const updateSubscription = async subscriptionID => {
         console.log(prefix(), "cancellation email error", emailErr);
       }
 
-      resolve();
+      resolve(paypal);
     };
 
     if (shouldDisable && !user.isDisabled) return User.disable(user, updates, done);

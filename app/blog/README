@@ -61,7 +61,7 @@ Requests pass through the following middleware in order, as assembled in `index.
 
 1. **`middleware/vhosts.js`** — Extracts a blog handle from a Blot subdomain or a custom domain from the `Host` header. Awaits `Blog.get()` to load the blog record. Applies redirects for `www` canonicalization, handle changes, subdomain-to-custom-domain redirects, and HTTP-to-HTTPS enforcement. Sets `req.blog`. Detects preview subdomains (e.g. `preview-of-diary-on-news.blot.im`) and sets `req.preview = true` and a preview `blog.template` when appropriate.
 
-2. **`render/middleware.js`** — Attaches async `res.renderView(viewName, next, callback)` to the response object. This function encapsulates the entire rendering pipeline (view fetch, local retrieval, Mustache rendering, CDN link rewriting). All subsequent route handlers call `res.renderView()` to produce output.
+2. **`render/middleware.js`** — Attaches async `res.renderView(viewName, next, callback)` to the response object. This function encapsulates the entire rendering pipeline (view fetch, local retrieval, Mustache rendering, CDN token swap). All subsequent route handlers call `res.renderView()` to produce output.
 
 3. **`middleware/loadTemplate.js`** — Awaits `Template.getMetadata()` for `req.blog.template`. Attaches `req.template` with the template's `locals`, `id`, and `cdn` manifest. In preview mode, renders a template-error page if the template has parse errors.
 
@@ -92,7 +92,7 @@ Attaches `res.renderView(viewName, next, callback)` to the response. When called
 3. Calls `render/retrieve/index.js` to fetch any named locals declared as required by the view.
 4. Calls `render/load/index.js` to augment every entry object found in `res.locals`.
 5. Calls `render/main.js` to execute the final `Mustache.render()` of the view and its partials. String values on `res.locals` (including entry HTML) are data, not templates: tags inside post content or other locals are left as-is.
-6. For HTML responses, calls `render/replaceFolderLinks/html.js` to rewrite relative asset URLs to CDN URLs. For CSS responses, calls `render/replaceFolderLinks/css.js`.
+6. Swaps the `%%BLOT_CDN%%` token in the output for the real CDN origin. The output is not otherwise rewritten: links to files in the blog's folder were already turned into CDN URLs at build time (entries) or by the template's CDN manifest (views).
 7. Sends the output with appropriate `Content-Type` and `Last-Modified` headers. Sets a one-year `Cache-Control` for JS and CSS views when caching is enabled and the request is not a preview.
 
 #### Public render-context inspection
@@ -154,15 +154,20 @@ After retrievers run, `render/load/index.js` walks all locals to find `Entry` in
 
 `list.js` decorates any array of objects with `first`, `last`, `penultimate`, and `position` (1-based) properties.
 
-### `render/replaceFolderLinks/`
+### `render/replaceFolderLinks/` and `render/folderManifestUrl.js`
 
-After Mustache rendering, asset URLs in HTML and CSS output that point to files in the blog's folder are rewritten to CDN URLs.
+Rendered HTML and CSS are not scanned for links to files in the blog's folder. A request-time pass used to do that after every render; it was removed once the work moved earlier, and the directory name is kept for the helpers that remain here.
 
-Entry content is already baked at build time (`build/plugins/folderAssets`, plus `bakeHTML` for markup set by front matter), so this pass is only still needed for template output and for entries built before that existed. See the DEPRECATION NOTE in `html.js` for exactly what is covered where.
+- Entry content is baked at build time (`build/plugins/folderAssets`: attributes, plus `bakeHTML` for markup set by front matter). Entry metadata values are not baked, so templates can build URLs from them.
+- Literal links in a blog-owned template's views are wrapped in `{{#cdn}}` while the full view is assembled (`models/template/getFullView`, `models/template/util/resolveFolderLinks`), which the template's CDN manifest resolves to versioned folder URLs (see `app/models/template/README`). Inline `package.json` partials are wrapped when loaded (`models/template/getPartials.js`).
+- Template and view locals that are folder links (`"logo": "/img/a.png"`) are swapped for CDN URLs at render by `render/folderManifestUrl.js`, a pure in-memory lookup against the manifest. A literal `{{#asset}}` section looks the manifest up first (`render/retrieve/asset.js`).
 
-- `html.js` — Uses `parse5` to parse the HTML DOM and processes `href`, `src`, `poster`, and `srcset` attributes. Skips data URLs, `.html` files, and external URLs not matching the blog's hosts.
-- `css.js` — Uses a regex to find `url(...)` expressions in CSS and rewrites matching paths.
-- `lookupFile.js` — Resolves a path relative to the blog's folder. Returns a CDN URL of the form `cdn.origin/folder/v-{hash}/{blogID}/{path}` where the version hash is derived from the file's size and mtime (`helper/contentVersion`'s `fromStat`), never its ctime; it runs during a render, so it never reads the file. Build-time links (`build/plugins/folderAssets`) use a content hash instead. Results are cached in a 5,000-entry LRU-style map keyed by a hash of `blogID:cacheID:path`. Also handles paths under global static directories (`/fonts`, `/icons`, `/katex`, `/plugins`, `/syntax-highlighter`).
+Anything not baked (a link assembled from variables, a view that changes delimiters with `{{=`, a template SITE view, a relative link in a stylesheet, an entry built before baking existed, a menu `<a href>`) keeps its plain path and is served by `routes/assets.js` from the origin.
+
+- `cdnToken.js` — The `%%BLOT_CDN%%` sentinel.
+- `folderFile.js` — Resolves a blog-folder file to its real path and content-hash version, for versioned folder CDN URLs (`cdn.origin/folder/v-{hash}/{blogID}/{path}`). `routes/assets.js` uses a size+mtime version (`helper/contentVersion`'s `fromStat`) where reading the file would be too costly.
+- `shared.js` — Link eligibility and path helpers shared by the build plugin and the template wrapper.
+- `unwrapFolderLink.js` — Recovers the original path from an already-baked CDN URL.
 
 ## Route Handlers
 
@@ -277,9 +282,9 @@ The `static/` directory contains global assets served to all blogs under paths s
 | `models/404` | `error.js` |
 | `build/plugins` | `entry.js`, `render/retrieve/plugin.js`, `render/retrieve/app_css.js`, `render/retrieve/app_js.js` |
 | `sync/update/drafts` | `draft.js` |
-| `helper/caseSensitivePath` | `assets.js`, `render/replaceFolderLinks/lookupFile.js` |
+| `helper/caseSensitivePath` | `assets.js`, `render/replaceFolderLinks/folderFile.js` |
 | `helper/ensure` | `render/middleware.js`, `render/main.js`, `render/retrieve/index.js` |
-| `config` | `vhosts.js`, `assets.js`, `render/middleware.js`, `render/replaceFolderLinks/lookupFile.js`, `render/retrieve/cdn.js` |
+| `config` | `vhosts.js`, `assets.js`, `render/middleware.js`, `render/retrieve/cdn.js` |
 
 ### External
 
@@ -287,13 +292,12 @@ The `static/` directory contains global assets served to all blogs under paths s
 |---|---|
 | `express` | Router and static file serving |
 | `mustache` | Template rendering |
-| `parse5` | HTML parsing for CDN link rewriting |
 | `cheerio` | HTML manipulation in `absolute_urls.js` and `encode_xml.js` |
 | `moment` / `moment-timezone` | Date formatting in augment and retrieve functions |
 | `lru-cache` | In-process LRU caches for full view and popular tags |
 | *(none — blog no longer depends on the `async` npm package)* | Native `async`/`await` and `Promise.all` |
 | `mime-types` | Content-Type detection in `assets.js` |
-| `fs-extra` | File system access in `assets.js` and `lookupFile.js` |
+| `fs-extra` | File system access in `assets.js` |
 
 ## Configuration
 
@@ -302,7 +306,7 @@ The blog module reads the following values from `config`:
 - `config.host` — Used to identify Blot subdomains and to construct subdomain URLs.
 - `config.protocol` — Used to construct absolute redirect URLs.
 - `config.cache` — When truthy, enables one-year `Cache-Control` headers for JS and CSS view responses.
-- `config.cdn.origin` — CDN base URL used by `lookupFile.js` and `cdn.js`.
+- `config.cdn.origin` — CDN base URL used by `cdn.js`.
 - `config.blog_folder_dir` — Base path for blog file folders on disk.
 - `config.storage` — The storage bucket (`storage/assets`) that holds processed blog static assets.
 - `config.blot_directory` — Absolute path to the Blot application root, used to locate `app/blog/static`.

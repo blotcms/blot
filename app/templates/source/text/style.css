@@ -5,6 +5,32 @@
 {{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
+/* Highlight.js supplies the palette; this template controls code layout and type. */
+pre code.hljs {
+  display: block;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+code.hljs {
+  margin: 0;
+  padding: 0;
+}
+/* The repeated class gives this template reset priority over theme token styles. */
+pre code.hljs.hljs,
+pre code.hljs.hljs * {
+  font-weight: inherit;
+  font-style: inherit;
+  opacity: 1;
+  text-decoration: inherit;
+}
+pre code.hljs.hljs * {
+  display: inline;
+  width: auto;
+}
+
 
 :root {
   --sidebar-width: 0px;
@@ -512,6 +538,7 @@ font-feature-settings: 'tnum';
 
 .container {
   box-sizing:border-box;
+  position: relative;
   max-width: {{max_width}}px;  
   padding-left: 1em;
   padding-right: 1em;
@@ -547,8 +574,20 @@ border-radius: 4px;padding:0.75em 1.25em;font-size:0.9em}
   position: absolute;
   box-sizing: border-box;
   width: 33%;
+}
+
+.margin.right{
   left: 100%;
+  right: auto;
   padding-left: 2em;
+}
+
+.margin.left {
+  right: 100%;
+  left: auto;
+  padding-left: 0;
+  padding-right: 2em;
+  text-align: right;
 }
 
 .margin blockquote {margin: 3px 0;padding: 3px 6px;font-size: .875em;line-height:18px;}
@@ -576,18 +615,30 @@ border-radius: 4px;padding:0.75em 1.25em;font-size:0.9em}
 
 .wide img {display: block;margin-left: auto;margin-right: auto;}
 
-@media screen and (max-width: 1146px) {
-  .wide {
-    margin-left: -2em;
-  }
-}
-
 .wide.left, .wide.right {
   width: calc(100vw - var(--scrollbar-width) - var(--sidebar-width) - 2em);
   margin-left: min(-2em, calc((100vw - var(--scrollbar-width) - var(--sidebar-width) - {{max_width}}px) * -0.5));
   margin-right: -25%;
   float: none;
   overflow: auto; /* collapse internal margins */
+}
+
+@media screen and (max-width: 1146px) {
+  .margin,
+  .margin.right,
+  .margin.left {
+    position: relative;
+    display: block;
+    top: auto;
+    left: auto;
+    right: auto;
+    bottom: auto;
+  }
+
+  .margin.right {float: right;}
+  .margin.left {text-align: left;float: left;}
+
+  .wide, .wide.left, .wide.right {width: 100%;margin: 0;}
 }
 
 .column {

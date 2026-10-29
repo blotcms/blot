@@ -7,6 +7,7 @@
 // never stores a separate selected-preset value.
 
 const FONTS = require("blog/static/fonts");
+const specimen = require("blog/static/fonts/specimen");
 const { isPlainObject, ownKeys, normalizeColor, presetMatches } = require("./preset-utils");
 
 const FONT_BY_ID = new Map();
@@ -55,7 +56,7 @@ function fontPreview(key, patch, locals) {
   return {
     key,
     name: (font && font.name) || id || "Unknown font",
-    svg: (font && font.svg) || "",
+    ...specimen(font),
     stack: (font && font.stack) || "sans-serif",
   };
 }

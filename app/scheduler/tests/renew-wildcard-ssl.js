@@ -112,7 +112,11 @@ describe("scheduler renew-wildcard-ssl", function () {
       },
       crypto: {
         createPrivateKey: async () => Buffer.from("ACCOUNT-KEY"),
-        createCsr: async (data) => [Buffer.from(KEY), Buffer.from("CSR:" + data.altNames)],
+        createPrivateEcdsaKey: async () => Buffer.from("ECDSA-KEY"),
+        createCsr: async (data, key) => [
+          Buffer.from(KEY),
+          Buffer.from("CSR:" + data.altNames + ":" + key),
+        ],
       },
     };
 
@@ -233,6 +237,15 @@ describe("scheduler renew-wildcard-ssl", function () {
         set[2],
       ]);
       expect(events.find((e) => e[0] === "createOrder")[1]).toEqual(["*.blot.test", "blot.test"]);
+    });
+
+    it("requests the certificate with an ECDSA key", async function () {
+      const { events, dns, acme } = fakes();
+
+      await renew({ client: fakeRedis(), dns, acme, host: HOST, now: NOW });
+
+      const finalize = events.find((e) => e[0] === "finalizeOrder");
+      expect(String(finalize[1])).toContain(":ECDSA-KEY");
     });
 
     it("uses Let's Encrypt production unless the config says otherwise", async function () {

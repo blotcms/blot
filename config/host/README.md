@@ -1,8 +1,8 @@
 # Proxy host setup
 
-Setup for the production proxy host (the EC2 instance that runs the proxy
-container and the Node containers). The proxy itself is not installed from
-here: deploy it with `npm run deploy-proxy` or the Deploy proxy workflow (see
+Setup for the production proxy host (the EC2 instance that runs the two units,
+`blot-blue` and `blot-green`: OpenResty and Node in one container each). The proxy itself is not installed from
+here: deploy it with `npm run deploy-units` or the Deploy workflow (see
 [`proxy/deploy/README.md`](../../proxy/deploy/README.md)).
 
 ```
@@ -23,7 +23,7 @@ the private key) and `PUBLIC_IP` (the host), and optionally `SSH_PORT`
 | `scripts/docker.service.d/10-instance-store.conf` | `/etc/systemd/system/docker.service.d/10-instance-store.conf` |
 | `scripts/mount-data-volume.service` | `/etc/systemd/system/mount-data-volume.service` |
 | `scripts/docker.service.d/20-data-volume.conf` | `/etc/systemd/system/docker.service.d/20-data-volume.conf` |
-| `fail2ban/filter.d/*.conf`, `fail2ban/jail.local` | `/etc/fail2ban/` (then restarts fail2ban) |
+| `fail2ban/filter.d/*.conf`, `fail2ban/jail.local`, `fail2ban/fail2ban.local` | `/etc/fail2ban/` (then restarts fail2ban) |
 | `logrotate/*` | `/etc/logrotate.d/` |
 | `tmpfiles.d/blot.conf` | `/etc/tmpfiles.d/blot.conf` (creates `/run/blot`) |
 | `.bashrc` | `/home/ec2-user/.bashrc` |
@@ -32,6 +32,58 @@ The `nginx-*` fail2ban jails ban `http,https` over TCP and, with a second
 `iptables-multiport` action named `<jail>-udp`, over UDP too (HTTP/3 is UDP 443).
 They deliberately do not use `iptables-allports`, which would also lock a
 banned IP out of ssh.
+
+## Permanent bans
+
+The `manual-permaban` jail holds ranges we ban by hand and keep banned. Bans
+are dropped in the kernel (TCP and UDP 80/443), so a banned client costs no TLS
+handshake. The ranges are kept in fail2ban's database on the host
+(`/var/lib/fail2ban/fail2ban.sqlite3`), not in this repo, so they stay out of
+the public history.
+
+```
+sudo fail2ban-client set manual-permaban banip 203.0.113.0/24      # add
+sudo fail2ban-client set manual-permaban unbanip 203.0.113.0/24    # remove
+sudo fail2ban-client status manual-permaban                        # list
+```
+
+Moving to a new host: see [Moving to a new host](#moving-to-a-new-host).
+
+## Moving to a new host
+
+There is no bootstrap script: the host was built by hand (the old setup script
+is described at the end of this file), and `deploy.sh` only installs the files
+in the table above onto a host that already exists. This is the state that
+lives on the host and has to be carried across or recreated. Do it before
+pointing traffic at the new host.
+
+- **Permanent bans** (`manual-permaban`). The only fail2ban state worth keeping;
+  the nginx jails' bans last 30-60 minutes and `recidive` a week. On the old
+  host, list them, then on the new host (after `npm run deploy-host`) re-add
+  each one:
+
+  ```
+  sudo fail2ban-client status manual-permaban     # old host: "Banned IP list"
+  sudo fail2ban-client set manual-permaban banip <ip-or-cidr>   # new host, each
+  ```
+
+  Copying `/var/lib/fail2ban/fail2ban.sqlite3` also works, but fail2ban holds it
+  open: stop fail2ban on the old host first (or use `sqlite3 <db> ".backup
+  <copy>"`), put it in place on the new host before fail2ban first starts, and
+  keep the same fail2ban version. Re-running `banip` is simpler and doesn't
+  depend on either.
+- **`/etc/blot/data-volume`** and the `.blot-data-volume` marker on the data
+  volume (see above).
+- **Wildcard certificate** files in `/etc/ssl/private/` (`letsencrypt-domain.pem`
+  and `.key`), written from Redis; `blue-green.sh` won't start a proxy
+  container without them.
+- **Packages and cron:** `redis6` (for `redis-cli`), `nvme-cli`, `cronie`, and
+  the cron entry that runs `check_docker_health.sh` every minute (`deploy.sh`
+  copies the script but not the entry).
+- Then `npm run deploy-host` and the Deploy workflow.
+
+Nothing in `proxy/` or the units needs copying: custom-domain
+certificates are in Redis and the proxy cache refills itself.
 
 It also turns off X11 forwarding in `sshd_config`. The systemd files are
 installed and `daemon-reload`ed only: docker is not restarted, so the
@@ -77,8 +129,9 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
 - `check_docker_health.sh` restarts containers Docker reports as unhealthy. It
   is run from cron every minute as `/usr/local/bin/check_docker_health.sh`
   (`deploy.sh` copies it there, but does not install the cron entry). It skips
-  `blot-proxy-*` while a proxy deploy holds its lock, so it cannot restart the
-  old colour while it drains.
+  `blot-blue`, `blot-green` and `blot-<unit>-previous` (whole names, so the
+  airlocks are still restarted) while a proxy deploy holds its lock, so it
+  cannot restart the unit that is draining.
 - Custom-domain certificates need nothing on the host: the proxy container
   renews them and refuses to serve an expired one (see `proxy/README.md`).
   `identify-expiring-certs.sh` and `purge-expired-ssl.sh`, which deleted
@@ -86,7 +139,8 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
   entry for them from the host.
 - `mount-instance-store.sh` mounts the NVMe instance store at
   `/var/instance-ssd` (logs, cache and the app's tmp directory) at boot, and
-  creates `/var/instance-ssd/tmp` for the app containers (uid 1000), since a
+  creates `/var/instance-ssd/tmp` for the app containers and
+  `/var/instance-ssd/disk-cache` for the proxy's disk cache (both uid 1000), since a
   stop/start of the instance wipes the disk.
 - `mount-data-volume.sh` mounts the EBS data volume at `/var/www/blot/data` at
   boot (see above).
@@ -118,4 +172,4 @@ systemd unit and its `openresty.service.d` drop-in, `/usr/local/openresty` and
 `/etc/resty-auto-ssl`), so there is no host rollback. The auto-ssl state now
 lives in the `blot-proxy-auto-ssl` Docker volume, and customer certificates in
 Redis (`ssl:<domain>:latest`). To roll the proxy back, redeploy an older image:
-`npm run deploy-proxy -- <older commit>`.
+`npm run deploy-units -- <older commit>`.

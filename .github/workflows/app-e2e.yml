@@ -5,8 +5,9 @@ name: app-e2e
 #
 # Its own workflow so it runs on every PR and every push to master: GitHub's
 # path filters are per workflow, and integration.yml filters the rest of the
-# proxy suites. It builds its own proxy image and pulls the app image node.yml
-# pushes (the test image, by content hash).
+# proxy suites. It builds its own proxy image and runs the production app image
+# build.yml pushes for the commit (:<sha>-arm64) - the bytes deploy.yml ships -
+# so it also stands in for a boot check of the prod target.
 
 on:
   push:
@@ -23,8 +24,10 @@ env:
 
 jobs:
   app-e2e:
-    # arm64: the app image it pulls (node.yml's test image) is arm64 only
+    # arm64: the app image it pulls (build.yml's) is arm64 only
     runs-on: ubuntu-24.04-arm
+    # A fork PR's build.yml can't push the image to GHCR, so there is none to run.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     permissions:
       contents: read
       packages: read
@@ -33,7 +36,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 21.7.3
+          node-version: 24.22.1
 
       - name: Install config generator dependencies
         run: |
@@ -57,20 +60,18 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # This commit's content-hashed image (scripts/tests/ci/image-tag.sh), not
-      # test-latest: every node.yml run pushes that tag, so it can hold another
-      # PR's node_modules. node.yml builds the image only if it doesn't exist
-      # yet and this workflow doesn't wait for it, so poll for it.
+      # build.yml pushes this commit's prod image (blot:prod-<sha>-arm64) once it has built it, and this
+      # workflow doesn't wait for it, so poll for it.
       - name: Pull Blot app image
         run: |
-          IMAGE=$(bash scripts/tests/ci/image-tag.sh)
-          for i in $(seq 1 180); do
+          IMAGE="ghcr.io/${{ github.repository_owner }}/blot:prod-${{ github.sha }}-arm64"
+          for i in $(seq 1 240); do
             docker manifest inspect "$IMAGE" > /dev/null 2>&1 && break
-            [ "$i" = 1 ] && echo "Waiting for node.yml to push $IMAGE"
+            [ "$i" = 1 ] && echo "Waiting for build.yml to push $IMAGE"
             sleep 5
           done
           if ! docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
-            echo "::error::$IMAGE was not pushed within 15 minutes; did the node workflow's lint job fail?"
+            echo "::error::$IMAGE was not pushed within 20 minutes; did the build workflow fail?"
             exit 1
           fi
           docker pull "$IMAGE"
@@ -89,14 +90,14 @@ jobs:
         run: docker compose -f proxy/e2e/docker-compose.yml up -d --wait --wait-timeout 420
 
       # /health answers before the app has finished starting up: it is still
-      # building the global templates and syncing blogs, which would race the
-      # seed scripts below (both build templates). The app prints this banner
-      # when it is done.
+      # building the global templates and the folder templates, which would race
+      # the seed scripts below (both build templates). The production app logs
+      # one of these lines when the folder build is done.
       - name: Wait for the app to finish starting
         run: |
           for i in $(seq 1 120); do
             docker compose -f proxy/e2e/docker-compose.yml logs --no-color app \
-              | grep -q "Visit your dashboard" && exit 0
+              | grep -qE "Built folders asynchronously|Error building folders" && exit 0
             sleep 1
           done
           echo "::error::the app did not finish starting within 2 minutes"

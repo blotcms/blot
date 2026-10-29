@@ -18,7 +18,15 @@
           {{#show_thumbnails}}
           {{#thumbnail.medium}}
           <span style="width:100%;display:block;height:0;padding-bottom:{{ratio}};margin: 0 0 1em 0;">
-            <img src="{{{url}}}"/>
+            <img
+              loading="lazy"
+              src="{{{url}}}"
+              srcset="
+                {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+                {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+                {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+              "
+              sizes="(max-width: 600px) 100vw, (max-width: 700px) 50vw, (max-width: 900px) calc(100vw / min(3, {{grid_columns}})), (max-width: 1200px) calc(100vw / min(4, {{grid_columns}})), calc(min(100vw, {{max_width}}px) / {{grid_columns}})"/>
           </span>
           {{/thumbnail.medium}}
           {{/show_thumbnails}}

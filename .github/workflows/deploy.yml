@@ -1,4 +1,4 @@
-name: Deploy node
+name: Deploy
 
 on:
   workflow_dispatch:
@@ -23,13 +23,22 @@ env:
   BLOT_DEPLOY_SSH_HOST: ${{ secrets.BLOT_DEPLOY_SSH_HOST }}
   BLOT_DEPLOY_SSH_PORT: ${{ secrets.BLOT_DEPLOY_SSH_PORT }}
 
+# Deploys the two units, blot-blue then blot-green (scripts/deploy/units.sh and
+# proxy/deploy/blue-green.sh; each unit is OpenResty and Node in one container,
+# #2119).
+#
+# One production deploy at a time. A queued run waits.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 # Everything that doesn't depend on the image (checkout, SSH, Node, GHCR
 # login) runs first, so when the run is dispatched straight after a merge the
 # only thing left once build.yml publishes the image is the deploy itself.
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
     environment: deploy
 
     steps:
@@ -47,11 +56,13 @@ jobs:
           # Full commit history so an older commit or short code can be
           # resolved and verified against master, but nothing else: tree:0
           # fetches commits only, and the sparse checkout then pulls just the
-          # trees and blobs for scripts/deploy (the deploy script needs
-          # nothing but Node built-ins and git).
+          # trees and blobs for scripts/deploy and proxy/deploy (the deploy
+          # scripts need nothing but Node built-ins, bash and ssh).
           fetch-depth: 0
           filter: tree:0
-          sparse-checkout: scripts/deploy
+          sparse-checkout: |
+            scripts/deploy
+            proxy/deploy
 
       - name: Resolve and check out target commit
         id: resolve
@@ -119,7 +130,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: 24.22.1
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -136,8 +147,8 @@ jobs:
           TARGET_SHA: ${{ steps.resolve.outputs.sha }}
           CUSTOM: ${{ steps.resolve.outputs.custom }}
           SKIP_CHECKS: ${{ github.event.inputs.skip_checks }}
-          REQUIRED: "node build"
-          OPTIONAL: ""
+          REQUIRED: "node build app-e2e integration unit-image"
+          OPTIONAL: "proxy proxy-fail2ban .github/workflows/proxy-deploy-e2e.yml"
         run: |
           if [ "$SKIP_CHECKS" = "true" ]; then
             echo "::warning::skip_checks is set - deploying $TARGET_SHA without waiting for CI to pass."
@@ -149,7 +160,7 @@ jobs:
           if [ "$CUSTOM" = "true" ]; then
             MAX_TRIES=12    # ~2 min
           else
-            MAX_TRIES=150   # ~25 min
+            MAX_TRIES=240   # ~40 min: app-e2e alone may wait 20 min for the image
           fi
 
           for i in $(seq 1 "$MAX_TRIES"); do
@@ -233,9 +244,9 @@ jobs:
           # with the app build and is usually a little slower (Alpine +
           # Chromium + the verify step), so give it a bounded grace window
           # once the app image is up - but do NOT let it block the deploy:
-          # deployAirlockIfNeeded() in scripts/deploy already skips a missing
-          # airlock manifest non-fatally, and an airlock build failure must
-          # not be able to hold up an app hotfix.
+          # the unit deploy (proxy/deploy/common.sh) falls back to the airlock
+          # image already running when there is none for this commit, and an
+          # airlock build failure must not be able to hold up an app hotfix.
           echo "Waiting (best-effort) for airlock image: $AIRLOCK_IMAGE"
           AIRLOCK_AVAILABLE=false
           for i in $(seq 1 60); do   # up to 5 min
@@ -248,7 +259,7 @@ jobs:
           done
 
           if [ "$AIRLOCK_AVAILABLE" = false ]; then
-            echo "::warning::Airlock image $AIRLOCK_IMAGE not available after the grace period - the deploy will run, but scripts/deploy will skip the airlock update for this commit (see deployAirlockIfNeeded). Re-deploy this commit once build-airlock succeeds."
+            echo "::warning::Airlock image $AIRLOCK_IMAGE not available after the grace period - the deploy will run and keep the airlock images the units already have (ensure_airlock in proxy/deploy/common.sh). Re-deploy this commit once build-airlock succeeds."
           fi
 
       - name: Deploy
@@ -256,6 +267,19 @@ jobs:
           TARGET_SHA: ${{ steps.resolve.outputs.sha }}
           # Skip branch check since we're in CI and may be checking out a specific commit
           SKIP_BRANCH_CHECK: true
+          # units.sh waits for the image: 25 min for the dispatched commit,
+          # 2 for a chosen one (as the wait above)
+          UNIT_IMAGE_WAIT: ${{ steps.resolve.outputs.custom == 'true' && '120' || '1500' }}
         run: |
-          node scripts/deploy "$TARGET_SHA"
+          set -o pipefail
+          scripts/deploy/units.sh "$TARGET_SHA" 2>&1 | tee deploy.log
           echo "### Deployed \`${TARGET_SHA}\` 🚀" >> "$GITHUB_STEP_SUMMARY"
+
+      # A failed swap whose old container would not come back keeps the new
+      # one running and says so; make that visible on the run page.
+      - name: Surface a rollback warning
+        if: failure()
+        run: |
+          if [ -f deploy.log ] && grep -q 'WARNING:' deploy.log; then
+            echo "::error::$(grep 'WARNING:' deploy.log | tail -1)"
+          fi

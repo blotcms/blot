@@ -56,34 +56,31 @@ Code
 
 I’ve been using the following fish alias `fzl` (“fuzzy list”) to run `fzf` (“fuzzy find”) in the current directory with a `bat` preview. It’s just a couple of light tweaks to the examples listed in the `fzf` [readme](https://github.com/junegunn/fzf#preview-window).
 
-`~/.config/fish/functions/fzl.fish`:
+```js
+function fzl() {
+  // Debian uses `batcat` instead of `bat`
+  const bat = commandExists("batcat") ? "batcat" : "bat";
 
-    function fzl
-        # `bat` is aliased to `batcat` on Debian
-        if type -q batcat
-            set -f bat_command "batcat"
-        else
-            set -f bat_command "bat"
-        end
-    
-        # Set the overall width of the `bat` preview to
-        # 50% the width of the current terminal
-        set -l bat_width $(math ceil $COLUMNS x 0.5)
-    
-        # My preferred `bat` options
-        set -f bat_command \
-            $bat_command \
-            --style numbers \
-            --color always \
-            --italic-text always \
-            --wrap auto \
-            --terminal-width $bat_width
-    
-        fzf \
-            --preview "$bat_command {}" \
-            --preview-window right,$bat_width,nowrap
-    end
-    
+  // Preview occupies 50% of the terminal width
+  const batWidth = Math.ceil(terminal.columns * 0.5);
+
+  // Configure bat
+  const batCommand = [
+    bat,
+    "--style numbers",
+    "--color always",
+    "--italic-text always",
+    "--wrap auto",
+    `--terminal-width ${batWidth}`
+  ].join(" ");
+
+  // Launch fzf with a file preview
+  exec("fzf", {
+    preview: `${batCommand} {}`,
+    previewWindow: `right,${batWidth},nowrap`
+  });
+}
+```
 
 Example below.
 
@@ -92,46 +89,47 @@ Python example
 
 [https://github.com/maxkapur/cronjobs/blob/main/backup\_nextcloud\_contacts.py](https://github.com/maxkapur/cronjobs/blob/main/backup_nextcloud_contacts.py)
 
-    def get_connection_parameters():
-        parser = ArgumentParser(
-            description="Create backups of Nextcloud calendar and contacts files"
-        )
-        parser.add_argument(
-            "url", help="Nextcloud base URL (https://nextcloud.example.com)"
-        )
-        parser.add_argument("username", help="Nextcloud username (admin)")
-        parser.add_argument(
-            "keyfile", help="Path to file containing password (~/nextcloud_key)"
-        )
-        args = parser.parse_args()
-    
-        # Enforce HTTPS and allow some typical variants
-        url = "https://" + args.url.rstrip("/").lstrip("http://").lstrip("https://")
-        username = args.username
-    
-        with open(args.keyfile) as file:
-            password = file.read()
-            file.close()
-    
-        return url, username, password
-    
-    def raise_an_error():
-        x = 5
-        if x > 4:
-            raise ValueError(f"{x = } > 4")
-    
-    class ClassExample:
-        """A docstring.
-    
-        Has multiple lines.
-        """
-    
-        def some_method(self, x: int) -> None:
-            "Docstring."
-    
-            # Print it
-            print(x)
-    
+```python
+def get_connection_parameters():
+    parser = ArgumentParser(
+        description="Create backups of Nextcloud calendar and contacts files"
+    )
+    parser.add_argument(
+        "url", help="Nextcloud base URL (https://nextcloud.example.com)"
+    )
+    parser.add_argument("username", help="Nextcloud username (admin)")
+    parser.add_argument(
+        "keyfile", help="Path to file containing password (~/nextcloud_key)"
+    )
+    args = parser.parse_args()
+
+    # Enforce HTTPS and allow some typical variants
+    url = "https://" + args.url.rstrip("/").lstrip("http://").lstrip("https://")
+    username = args.username
+
+    with open(args.keyfile) as file:
+        password = file.read()
+        file.close()
+
+    return url, username, password
+
+def raise_an_error():
+    x = 5
+    if x > 4:
+        raise ValueError(f"{x = } > 4")
+
+class ClassExample:
+    """A docstring.
+
+    Has multiple lines.
+    """
+
+    def some_method(self, x: int) -> None:
+        "Docstring."
+
+        # Print it
+        print(x)
+```
 
 Julia example
 

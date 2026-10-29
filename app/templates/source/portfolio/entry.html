@@ -3,7 +3,7 @@
 <div class="entry align-{{navigation_alignment}}">
   
   <div class="nav">
-    <a href="/" onclick="return lastIndexPage()">
+    <a class="entry-close" href="/" onclick="return closeEntry()">
       <svg viewBox="0 0 36 36">
         <line x1="10" y1="10" x2="26" y2="26"></line>
         <line x1="26" y1="10" x2="10" y2="26"></line>
@@ -12,7 +12,7 @@
     {{#show_adjacent_posts}}
     {{^entry.page}}
     <div>
-      <a {{#entry.previous}}href="{{entry.previous.url}}"{{/entry.previous}}>
+      <a class="entry-next" {{#entry.next}}href="{{entry.next.url}}"{{/entry.next}}>
         <svg viewBox="0 0 36 36">
           <line x1="18" y1="18" x2="26" y2="10"></line>
           <line x1="18" y1="18" x2="26" y2="26"></line>
@@ -29,34 +29,11 @@
     {{{html}}}
     {{> pluginHTML}}
   
-    {{#show_adjacent_posts}}
-    <script type="text/javascript">
-
-document.onkeydown = checkKey;
-
-function checkKey(e) {
-
-    e = e || window.event;
-
-    var nextURL = "{{{entry.next.url}}}";
-    var previousURL = "{{{entry.previous.url}}}";
-    
-    if (previousURL && e.keyCode == '37') {
-      window.location = previousURL
-    }
-
-     if (nextURL && e.keyCode == '39') {
-      window.location = nextURL
-    }
-
-}
-    </script>
-    {{/show_adjacent_posts}}
   {{/entry}}
   </div>
 
   <div class="nav">
-    <a href="/" onclick="return lastIndexPage()">
+    <a class="entry-close" href="/" onclick="return closeEntry()">
       <svg viewBox="0 0 36 36">
         <line x1="10" y1="10" x2="26" y2="26"></line>
         <line x1="26" y1="10" x2="10" y2="26"></line>
@@ -65,7 +42,7 @@ function checkKey(e) {
     {{#show_adjacent_posts}}
     {{^entry.page}}
     <div>
-      <a {{#entry.next}}href="{{entry.next.url}}"{{/entry.next}} >
+      <a class="entry-previous" {{#entry.previous}}href="{{entry.previous.url}}"{{/entry.previous}} >
         <svg viewBox="0 0 36 36">
           <line x1="10" y1="10" x2="18" y2="18"></line>
           <line x1="10" y1="26" x2="18" y2="18"></line>

@@ -18,52 +18,38 @@ const CACHE = config.cache;
 const CONTENT_TYPE = "Content-Type";
 const CACHE_CONTROL = "Cache-Control";
 
-const replaceFolderLinks = require("./replaceFolderLinks/html");
-const replaceFolderLinksCSS = require("./replaceFolderLinks/css");
 const BLOT_CDN_TOKEN = require("./replaceFolderLinks/cdnToken");
+const folderManifestUrl = require("./folderManifestUrl");
 const renderTimeMetric = require("./renderTimeMetric");
-const folderLinkStats = require("./replaceFolderLinks/stats");
-const clfdate = require("helper/clfdate");
+
+// Injected at the end of preview pages, see below. Embedded in the template
+// editor, it tells the editor the preview is out of date and waits for the
+// editor to load the new one beside this page and swap it in, so the page you
+// see never reloads in front of you. Anywhere else (a preview opened in its
+// own tab, an editor which does not answer) it reloads itself. Once its fonts
+// have loaded it tells the editor it is ready to be shown.
+const PREVIEW_SCRIPT = `<script>(function () {
+  var embedded = window.parent !== window;
+  window.addEventListener("load", function () {
+    var fonts = document.fonts ? document.fonts.ready : Promise.resolve();
+    fonts.then(function () {
+      if (embedded) window.parent.postMessage({ type: "preview:ready" }, "*");
+    });
+  });
+  new EventSource("/__blot/preview/reload").onmessage = function () {
+    if (!embedded) return window.location.reload();
+    var acknowledged = false;
+    window.addEventListener("message", function (event) {
+      if (event.source === window.parent && event.data && event.data.type === "preview:ack") acknowledged = true;
+    });
+    window.parent.postMessage({ type: "preview:changed", path: window.location.pathname + window.location.search }, "*");
+    setTimeout(function () { if (!acknowledged) window.location.reload(); }, 300);
+  };
+})();</script>`;
 
 const cacheDuration = "public, max-age=31536000";
 const JS = "text/javascript";
 const STYLE = "text/css";
-
-// Measures what the request-time folder-link pass still rewrites (see
-// replaceFolderLinks/stats.js): times it, and when it rewrote something or
-// hit a missing file, logs one line attributing each link to the template,
-// entry or metadata it came from. Instrumentation only: it must never change
-// the output or fail the render.
-async function measureFolderLinks(req, res, name, kind, pass, output, source) {
-  const stats = folderLinkStats.createStats(kind);
-  const startedAt = process.hrtime.bigint();
-  const replaced = await pass(req.blog, output, req.log, stats);
-  const ms = Number(process.hrtime.bigint() - startedAt) / 1e6;
-
-  try {
-    const summary = folderLinkStats.summarize(stats, {
-      blogID: req.blog.id,
-      ms,
-      view: source.view,
-      partials: source.partials,
-      locals: res.locals,
-    });
-
-    if (summary.rewrites || summary.enoent) {
-      req.log(
-        folderLinkStats.formatLine(summary, {
-          handle: req.blog.handle,
-          templateID: req.template.id,
-          view: name,
-        })
-      );
-    }
-  } catch (err) {
-    console.error(clfdate(), "[folder-links] Failed to record stats", err);
-  }
-
-  return replaced;
-}
 
 module.exports = function attachRenderView(req, res, _next) {
   res.renderView = render;
@@ -123,10 +109,12 @@ module.exports = function attachRenderView(req, res, _next) {
         !!(req.query && (req.query.debug || req.query.json));
       const query = Object.keys(req.query).length ? { query: req.query } : {};
 
+      // Locals whose value is a link to a folder file point at the CDN
+      // (see folderManifestUrl)
       extend(res.locals)
         .and(query)
-        .and(viewLocals)
-        .and(req.template.locals)
+        .and(folderManifestUrl.locals(req, viewLocals))
+        .and(folderManifestUrl.locals(req, req.template.locals))
         .and(blog.locals);
 
       // Templates may configure sorting as nested `sort: { by, direction }`.
@@ -208,20 +196,6 @@ module.exports = function attachRenderView(req, res, _next) {
           .join(config.cdn.origin.split("https://").join("http://"));
       }
 
-      if (viewType === "text/html" && !req.preview) {
-        req.log("Replacing folder links with CDN links");
-        output = await measureFolderLinks(
-          req, res, name, "html", replaceFolderLinks, output, { view, partials }
-        );
-        req.log("Replaced folder links with CDN links");
-      } else if (viewType === STYLE && !req.preview) {
-        req.log("Replacing folder links with CDN links");
-        output = await measureFolderLinks(
-          req, res, name, "css", replaceFolderLinksCSS, output, { view, partials }
-        );
-        req.log("Replaced folder links with CDN links");
-      }
-
       // Resolve the %%BLOT_CDN%% token baked into build-time-baked entry
       // HTML (see app/build/plugins/folderAssets) into the real CDN
       // origin. This must run unconditionally - for both the callback path
@@ -249,14 +223,10 @@ module.exports = function attachRenderView(req, res, _next) {
             "<script>window.onload = function() {window.top.postMessage('iframe:' +  window.location.pathname, '*');};</script></body>"
           );
 
-        // Reload the preview when rendered output changes: folder sync, or a
+        // Refresh the preview when rendered output changes: folder sync, or a
         // template editor save of package.json locals. See
         // helper/publishPreviewReload.js and blog/routes/preview-reload.js.
-        output = output
-          .split("</body>")
-          .join(
-            "<script>new EventSource('/__blot/preview/reload').onmessage = function() { window.location.reload(); };</script></body>"
-          );
+        output = output.split("</body>").join(PREVIEW_SCRIPT + "</body>");
       }
 
       // Only cache JavaScript and CSS if the request is not to a preview

@@ -96,3 +96,21 @@ banaction = iptables-allports
 bantime = 1w
 findtime = 1d
 maxretry = 3
+
+# Standing bans we add by hand, for abusive ranges that rate limits and the
+# nginx-* jails don't catch (e.g. a hosting provider scraping slowly with
+# rotating user agents). Nothing is ever matched into it: it has no log, so it
+# only holds what `fail2ban-client set manual-permaban banip <ip-or-cidr>`
+# puts there. The bans are kept in fail2ban's database on the host, not in this
+# repo, so the list of banned ranges is not public. Dropped in the kernel, so a
+# banned client costs no TLS handshake. See README.md in this directory.
+[manual-permaban]
+enabled = true
+filter = manual-permaban
+logpath = /dev/null
+backend = polling
+port = http,https
+bantime = -1
+banaction = iptables-multiport
+action = %(action_)s
+         iptables-multiport[name=%(__name__)s-udp, port="http,https", protocol=udp]

@@ -62,9 +62,8 @@ module.exports = async function savePhoto(req, res, next) {
   const hasUpload = Boolean(uploaded && uploaded.size);
   const hasFavicon = Boolean(req.template.locals && req.template.locals.favicon);
   const canSaveFavicon = Boolean(res.locals.favicon_supported && hasUpload);
-  // New favicons are generated automatically from the center square crop of
-  // the uploaded photo. Replacing an existing favicon remains opt-in.
-  const wantsFavicon = canSaveFavicon && (!hasFavicon || req.body.use_favicon === "1");
+  // The first uploaded photo supplies a favicon only when the template has none.
+  const wantsFavicon = canSaveFavicon && !hasFavicon;
   let photoPath = `${req.baseUrl}/${req.params.templateSlug}/photo`;
   let avatarWriteStarted = false;
   let avatarChanged = false;
@@ -96,7 +95,7 @@ module.exports = async function savePhoto(req, res, next) {
           req.template,
           faviconTemplateSlug,
           uploaded.path,
-          { x: req.body.crop_x, y: req.body.crop_y, size: req.body.crop_size },
+          {},
           { onFileProcessed: () => cleanupFiles({ favicon: uploaded }) }
         );
         if (req.templateFork) photoPath = `${req.baseUrl}/${faviconTemplateSlug}/photo`;

@@ -2,7 +2,7 @@
 
 Renders blog pages on production in a throwaway container with extra
 instrumentation, to diagnose a render that stalls or crashes an app container
-(e.g. yellow restarting on an uncached `/archives`) without risking the live
+(e.g. node-a restarting on an uncached `/archives`) without risking the live
 ones.
 
 ```
@@ -20,7 +20,7 @@ npm run render-probe -- --help
 container to the launcher shared by the production probes,
 [`scripts/probe/run.js`](../probe/run.js). That:
 
-- uses yellow's current image (`--release <sha>` for another; it says first if
+- uses the image blot-blue is running (`ghcr.io/blotcms/blot:<sha>`; `--release <sha>` for another; it says first if
   that image isn't on the host and would be pulled, which can take GBs);
 - refuses to start unless the host has more memory available than the
   container's limit plus 512MB, and free disk for the output of at least twice
@@ -86,7 +86,7 @@ Rendering only reads from Redis, but a cold render of a large blog is heavy
 on the shared, live Redis: `--concurrency` and a replay's `--max-inflight` are
 capped at 8 requests in flight, and `--speed` at 4x. Keep replays short.
 `--replay` reads a file from `/var/instance-ssd/logs` (gzipped rotated logs
-too) and fails if no requests to yellow started in the window.
+too) and fails if no requests to node-a started in the window.
 
 The container's `CONTAINER_NAME` is `blot-probe-render-probe`, so its log lines
 are tagged `[render-probe]`. The probe never loads `app/setup.js`, so it starts no scheduled jobs and never flushes the

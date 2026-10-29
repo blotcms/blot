@@ -39,6 +39,9 @@ sync/
     rebuildDependents.js    Rebuilds all entries that declared a dependency on the
                             changed path. Reads the dependency set from Redis and calls
                             build + Entry.set for each dependent.
+    regenerateTemplateManifests.js
+                            Regenerates the CDN manifest of each template marked as
+                            pending by rebuildDependents, once, at the end of a sync.
     drafts.js               Classifies a path as a draft, a preview file, or neither.
                             Computes preview file paths. Exposes route constants used by
                             the dashboard SSE stream.
@@ -160,6 +163,8 @@ Runs in series: `Ignored.drop` → `Entry.drop` → `rebuildDependents`. If the 
 ### `update/rebuildDependents.js`
 
 Reads the Redis set at `Entry.key.dependents(blogID, path)`. For each dependent path, retrieves the entry, calls `build`, and calls `Entry.set(..., false)` (the `false` suppresses scheduled-post side effects).
+
+It then reads the set at `Template.key.templateDependents(blogID, path)` (the path is lowercased): the blog's templates whose CDN manifest resolves that file. They are only added to the blog's pending set (`Template.key.templateManifestsPending`); regenerating a manifest re-hashes every folder file it uses, so `sync/index.js` drains the set once, after `buildFromFolder` and before the lock is released, via `update/regenerateTemplateManifests` (one `updateCdnManifest` per template, errors logged; a template whose regeneration failed is put back in the set for the next sync). The blog's `cacheID` is bumped by the sync's usual end-of-sync bump. The set lives in Redis so a sync that dies part way leaves its templates for the next one.
 
 ### `update/drafts.js`
 

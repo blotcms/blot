@@ -5,7 +5,7 @@
 
 BLOT_DIRECTORY=/var/www/blot
 NVM_URL=https://raw.githubusercontent.com/creationix/nvm/v0.32.1/install.sh
-NODE_VERSION=22.14.0
+NODE_VERSION=24.22.1
 SCRIPTS_DIRECTORY=/home/ec2-user/node/scripts
 
 if [ ! -d "$SCRIPTS_DIRECTORY" ]; then

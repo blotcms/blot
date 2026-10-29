@@ -1,5 +1,238 @@
 {{{app_js}}}
 
+// Keep the collection an entry was opened from so its arrows stay within it.
+// The chronological prev/next hrefs are only ever replaced once we know better.
+var collectionKey = "collectionNavigation";
+var cacheID = "{{cacheID}}";
+var infiniteScroll = {{#infinite_scroll}}true{{/infinite_scroll}}{{^infinite_scroll}}false{{/infinite_scroll}};
+var closeURL;
+var closeDepth = 0;
+var infiniteEnded = false;
+var firstPage = parseInt((window.location.pathname.match(/\/page\/(\d+)/) || [0, 1])[1], 10);
+
+// Close by walking back through the history entries pushed since the listing,
+// so the browser restores the listing exactly as it was left.
+function closeEntry() {
+  if (closeDepth && closeDepth < window.history.length) {
+    window.history.go(-closeDepth);
+  } else {
+    window.location.href = closeURL || '/';
+  }
+  return false;
+}
+
+// Each entry page remembers how many history entries sit between it and the
+// listing. A page opened from the listing is one deep, and one reached with an
+// arrow is one deeper than the page it was left from. The depth is handed over
+// through sessionStorage, and kept in history.state so back, forward and
+// reload see the same value.
+var depthKey = "collectionDepth";
+
+function handOverDepth(link, depth) {
+  try {
+    sessionStorage.setItem(depthKey, JSON.stringify({ path: pathOf(link.href), depth: depth }));
+  } catch (e) {}
+}
+
+function takeDepth() {
+  var saved = window.history.state && window.history.state.closeDepth;
+  if (saved) return saved;
+  try {
+    var handed = JSON.parse(sessionStorage.getItem(depthKey));
+    sessionStorage.removeItem(depthKey);
+    return handed && handed.path === pathOf(window.location.href) ? handed.depth : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+document.addEventListener("click", function (e) {
+  var link = e.target.closest("a.entry-next, a.entry-previous");
+  if (link && closeDepth) handOverDepth(link, closeDepth + 1);
+}, true);
+
+function pathOf(url) {
+  try {
+    var u = new URL(url, window.location.href);
+    return u.origin === window.location.origin ? u.pathname.replace(/\/+$/, "") || "/" : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Infinite scroll listings are runs of /page/N pages, so work out the pages on
+// either side by number. Search results are one unpaginated page (the model's
+// capped result set), so they are the whole collection. Anything else is unknown.
+function infinitePagination(doc, url, live) {
+  var path = pathOf(url);
+  if (path === "/search") return { next: null, previous: null };
+  var match = path && (path === "/" ? ["", "", ""] : path.match(/^((?:\/tagged\/[^\/]+)?)(?:\/page\/(\d+))?$/));
+  if (!match) return { unknown: true };
+  var base = window.location.origin + match[1] + "/page/";
+
+  var first = live ? firstPage : parseInt(match[2] || 1, 10);
+  var last = live && typeof infScroll !== "undefined" ? infScroll.pageIndex : first;
+  var ended = live ? infiniteEnded : !doc.querySelector("a.collection-next[href]");
+  return {
+    next: ended ? null : base + (last + 1),
+    previous: first > 1 ? base + (first - 1) : null
+  };
+}
+
+function parseListing(doc, url, live) {
+  var entries = [];
+  doc.querySelectorAll("a.collection-entry").forEach(function (a) {
+    var path = pathOf(a.href);
+    if (path && entries.indexOf(path) === -1) entries.push(path);
+  });
+  if (!entries.length) return null;
+
+  function pagination(selector) {
+    var a = doc.querySelector(selector);
+    return a && a.getAttribute("href") ? a.href : null;
+  }
+
+  var listing = {
+    url: url.split("#")[0],
+    entries: entries,
+    next: pagination("a.collection-next"),
+    previous: pagination("a.collection-previous")
+  };
+  if (infiniteScroll) Object.assign(listing, infinitePagination(doc, url, live));
+  return listing;
+}
+
+function readCollection() {
+  try {
+    return JSON.parse(sessionStorage.getItem(collectionKey));
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeCollection(state) {
+  try {
+    sessionStorage.setItem(collectionKey, JSON.stringify(state));
+  } catch (e) {}
+}
+
+// Record the order shown by the listing before following one of its entries.
+document.addEventListener("click", function (e) {
+  var entryLink = e.target.closest("a.collection-entry");
+  if (!entryLink) return;
+  handOverDepth(entryLink, 1);
+  var listing = parseListing(document, window.location.href, true);
+  if (listing) writeCollection({ cacheID: cacheID, listings: [listing] });
+}, true);
+
+function loadListing(url) {
+  return fetch(url, { credentials: "same-origin", cache: "no-cache" }).then(function (res) {
+    if (!res.ok) throw new Error("Could not load collection page");
+    return res.text().then(function (html) {
+      return parseListing(new DOMParser().parseFromString(html, "text/html"), res.url);
+    });
+  });
+}
+
+// Follow a listing's pagination links, up to hops pages, until it has the entry.
+function findEntry(url, path, direction, hops) {
+  return loadListing(url).then(function (listing) {
+    if (!listing || listing.entries.indexOf(path) > -1) return listing;
+    return hops && listing[direction] ? findEntry(listing[direction], path, direction, hops - 1) : null;
+  });
+}
+
+function initializeCollectionNavigation() {
+  var state = readCollection();
+  // Only trust the collection when arriving from elsewhere on this site.
+  if (!state || !pathOf(document.referrer)) return;
+
+  closeDepth = takeDepth();
+  if (closeDepth) window.history.replaceState({ closeDepth: closeDepth }, "");
+
+  var path = pathOf(window.location.href);
+  var page = -1, index = -1;
+  for (var n = 0; n < state.listings.length && index < 0; n++) {
+    page = n;
+    index = state.listings[n].entries.indexOf(path);
+  }
+  if (index < 0) return;
+
+  // A publish changes cacheID and can push the entry onto a later page (or
+  // pull it earlier), so find it in the current listing before using the order.
+  if (state.cacheID !== cacheID) {
+    var url = state.listings[page].url;
+    var before = state.listings[page].previous;
+    findEntry(url, path, "next", 3).then(function (found) {
+      return found || (before && findEntry(before, path, "previous", 1));
+    }).then(function (found) {
+      if (!found) return;
+      var fresh = { cacheID: cacheID, listings: [found] };
+      writeCollection(fresh);
+      followCollection(fresh, 0, found.entries.indexOf(path));
+    }, function () {});
+    return;
+  }
+  followCollection(state, page, index);
+}
+
+function followCollection(state, page, index) {
+  var listing = state.listings[page];
+  closeURL = listing.url;
+  document.querySelectorAll("a.entry-close").forEach(function (a) {
+    a.href = closeURL;
+  });
+
+  function edge(l, step) {
+    return l.entries[step > 0 ? 0 : l.entries.length - 1];
+  }
+
+  // Resolves to the neighbour's path, null at the end of the collection, and
+  // rejects when unsure (so the chronological link stays).
+  function neighbor(direction) {
+    // entry.next is the newer entry, so it sits earlier in the listing; the
+    // listing's own "next" page is the older one.
+    var step = direction === "next" ? -1 : 1;
+    var pageLink = listing[direction === "next" ? "previous" : "next"];
+    if (listing.entries[index + step]) return Promise.resolve(listing.entries[index + step]);
+
+    var loaded = state.listings[page + step];
+    if (loaded) return Promise.resolve(edge(loaded, step));
+    if (listing.unknown) return Promise.reject();
+    if (!pageLink) return Promise.resolve(null);
+
+    return loadListing(pageLink).then(function (fetched) {
+      if (!fetched) throw new Error("No entries on collection page");
+      state.listings[step > 0 ? "push" : "unshift"](fetched);
+      writeCollection(state);
+      return edge(fetched, step);
+    });
+  }
+
+  ["previous", "next"].forEach(function (direction) {
+    var links = document.querySelectorAll("a.entry-" + direction);
+    if (!links.length) return;
+    neighbor(direction).then(function (target) {
+      links.forEach(function (link) {
+        if (target) {
+          link.href = window.location.origin + target;
+        } else {
+          link.removeAttribute("href");
+          link.setAttribute("aria-disabled", "true");
+        }
+      });
+    }, function () {});
+  });
+}
+
+initializeCollectionNavigation();
+
+document.addEventListener("keydown", function (e) {
+  var selector = { 37: "a.entry-next", 39: "a.entry-previous" }[e.keyCode];
+  var link = selector && document.querySelector(selector);
+  if (link && link.href) link.click();
+});
+
 document.querySelectorAll('.page img').forEach(function(el){
   el.setAttribute('data-action', 'zoom');
 });
@@ -9,21 +242,7 @@ document.querySelectorAll('.page img').forEach(function(el){
 +function(){"use strict";function e(e){var t=e.getBoundingClientRect(),n=window.pageYOffset||document.documentElement.scrollTop||document.body.scrollTop||0,o=window.pageXOffset||document.documentElement.scrollLeft||document.body.scrollLeft||0;return{top:t.top+n,left:t.left+o}}var t=80,n=function(){function n(){var e=document.createElement("img");e.onload=function(){d=Number(e.height),l=Number(e.width),o()},e.src=m.currentSrc||m.src}function o(){f=document.createElement("div"),f.className="zoom-img-wrap",f.style.position="absolute",f.style.top=e(m).top+"px",f.style.left=e(m).left+"px",v=m.cloneNode(),v.style.visibility="hidden",m.style.width=m.offsetWidth+"px",m.parentNode.replaceChild(v,m),document.body.appendChild(f),f.appendChild(m),m.classList.add("zoom-img"),m.setAttribute("data-action","zoom-out"),c=document.createElement("div"),c.className="zoom-overlay",document.body.appendChild(c),i(),r()}function i(){m.offsetWidth;var e=l,n=d,o=e/m.width,i=window.innerHeight-t,r=window.innerWidth-t,s=e/n,a=r/i;u=e<r&&n<i?o:s<a?i/n*o:r/e*o}function r(){m.offsetWidth;var t=e(m),n=window.pageYOffset,o=n+window.innerHeight/2,i=window.innerWidth/2,r=t.top+m.height/2,s=t.left+m.width/2,a=Math.round(o-r),d=Math.round(i-s),l="scale("+u+")",c="translate("+d+"px, "+a+"px) translateZ(0)";m.style.webkitTransform=l,m.style.msTransform=l,m.style.transform=l,f.style.webkitTransform=c,f.style.msTransform=c,f.style.transform=c,document.body.classList.add("zoom-overlay-open")}function s(){if(document.body.classList.remove("zoom-overlay-open"),document.body.classList.add("zoom-overlay-transitioning"),m.style.webkitTransform="",m.style.msTransform="",m.style.transform="",f.style.webkitTransform="",f.style.msTransform="",f.style.transform="",!1 in document.body.style)return a();f.addEventListener("transitionend",a),f.addEventListener("webkitTransitionEnd",a)}function a(){m.removeEventListener("transitionend",a),m.removeEventListener("webkitTransitionEnd",a),f&&f.parentNode&&(m.classList.remove("zoom-img"),m.style.width="",m.setAttribute("data-action","zoom"),v.parentNode.replaceChild(m,v),f.parentNode.removeChild(f),c.parentNode.removeChild(c),document.body.classList.remove("zoom-overlay-transitioning"))}var d=null,l=null,c=null,u=null,m=null,f=null,v=null;return function(e){return m=e,{zoomImage:n,close:s,dispose:a}}}();(function(){function e(){document.body.addEventListener("click",function(e){"zoom"===e.target.getAttribute("data-action")&&"IMG"===e.target.tagName&&t(e)})}function t(e){if(e.stopPropagation(),!document.body.classList.contains("zoom-overlay-open")){if(e.metaKey||e.ctrlKey)return o();i({forceDispose:!0}),m=n(e.target),m.zoomImage(),r()}}function o(){window.open(event.target.getAttribute("data-original")||event.target.currentSrc||event.target.src,"_blank")}function i(e){e=e||{forceDispose:!1},m&&(m[e.forceDispose?"dispose":"close"](),s(),m=null)}function r(){window.addEventListener("scroll",a),document.addEventListener("click",l),document.addEventListener("keyup",d),document.addEventListener("touchstart",c),document.addEventListener("touchend",l)}function s(){window.removeEventListener("scroll",a),document.removeEventListener("keyup",d),document.removeEventListener("click",l),document.removeEventListener("touchstart",c),document.removeEventListener("touchend",l)}function a(e){null===f&&(f=window.pageYOffset);var t=f-window.pageYOffset;Math.abs(t)>=40&&i()}function d(e){27==e.keyCode&&i()}function l(e){e.stopPropagation(),e.preventDefault(),i()}function c(e){v=e.touches[0].pageY,e.target.addEventListener("touchmove",u)}function u(e){Math.abs(e.touches[0].pageY-v)<=10||(i(),e.target.removeEventListener("touchmove",u))}var m=null,f=null,v=null;return{listen:e}})().listen()}();
 //# sourceMappingURL=/dist/zoom-vanilla.min.js.map
 
-/*
-
-Close button on entry page
---------------------------
-
-Purpose of this script is to allow the close button on the
-entry page to behave like the browser back button. It works
-out how far back in your navigation history you'd need to
-go to. It sort of simulates a popover 'Close' button, if the
-entry were a modal window in a slideshow. You can go to the
-next or previous entry but then still return to the last index
-page. Why bother doing this? When you press back, your browser
-will return you to the old scroll offset with great speed.
-
-*/
+// Close an entry by returning to its referrer, or the index page if opened directly.
 
 
 {{#infinite_scroll}}
@@ -98,12 +317,15 @@ let infScroll = new InfiniteScroll( '.posts', {
   // Logs events and state changes to the console.
 })
 
+infScroll.on( 'last', function() { infiniteEnded = true; });
+
 infScroll.on( 'history', function( title, path ) {
   const pageNumber = parseInt(path.split('/').pop()) || 1;
   const current = document.getElementById('current-page');
   if (current) current.innerHTML = pageNumber;
+  const base = path.replace(/\/page\/\d+\/?$/, '').replace(/\/$/, '');
   const next = document.querySelector('.next-page');
-  if (next) next.href = '/page/' + (pageNumber+1);
+  if (next) next.href = base + '/page/' + (pageNumber+1);
   const previous = document.querySelector('.previous-page');
   if (previous) previous.href = '/page/'  + (pageNumber-1);
 });

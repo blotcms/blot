@@ -295,7 +295,7 @@ else
   # $(...) or quotes) can't be interpreted by the remote login shell -
   # base64 output never contains characters that are special to it.
   IDENTIFIER_B64=$(printf '%s' "$IDENTIFIER" | base64 | tr -d '\n')
-  INFO_OUTPUT=$(ssh "$BLOT_HOST" "docker exec blot-container-blue node /usr/src/app/scripts/info \"\$(printf '%s' '$IDENTIFIER_B64' | base64 -d)\"") || true
+  INFO_OUTPUT=$(ssh "$BLOT_HOST" "docker exec blot-blue node /usr/src/app/scripts/info \"\$(printf '%s' '$IDENTIFIER_B64' | base64 -d)\"") || true
 
   # scripts/info prints a direct "Found blog_... client=..." line when the
   # identifier matches one specific blog (a URL, handle, or blog id), and

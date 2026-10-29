@@ -6,7 +6,7 @@ const { cloneDeep, prepareCacheValue } = require("../../lib/clone");
 const cacheStats = require("../../lib/cacheStats");
 const fetchCached = require("../../lib/fetchCached");
 const { Uncacheable } = require("../../lib/uncacheableFetch");
-const LRUCache = require("lru-cache").LRUCache;
+const { createRenderCache, timeClone } = require("../../lib/cacheMetrics");
 const { normalizePathPrefix } = require("helper/pathPrefix");
 const {
   normalizePageNumber,
@@ -21,7 +21,7 @@ const { sortEntries } = getTemplateSortOptions;
 // tagged_page_size || page_size. Official /tagged/:tag pages never go
 // through posts.js, so sharing storage would still miss this path and
 // would collide on the different payload shape.
-const taggedCache = new LRUCache({
+const taggedCache = createRenderCache("tagged", {
   max: 1000,
   // Bound by bytes, not just item count: official /tagged/:tag pages
   // return a full page of entries, and a slug-heavy blog paginating
@@ -154,7 +154,7 @@ async function tagged(req, res) {
     prepared = e.payload;
   }
 
-  const payload = cloneTagged(prepared.payload);
+  const payload = timeClone(taggedCache, () => cloneTagged(prepared.payload));
 
   res.locals.pagination = res.locals.pagination || payload.pagination || {};
 
@@ -162,7 +162,9 @@ async function tagged(req, res) {
   // Preserve Entry prototypes so render-time augmentation
   // (date/formatDate/absoluteURL/tags helpers) still applies -
   // see render/load/eachEntry.js.
-  const entries = cloneDeep(payload.entries, { preserveEntryInstances: true });
+  const entries = timeClone(taggedCache, () =>
+    cloneDeep(payload.entries, { preserveEntryInstances: true })
+  );
   projectEntryFields(entries, req.retrieve, ["tagged", "entries"]);
 
   return { ...payload, entries };

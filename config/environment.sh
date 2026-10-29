@@ -21,8 +21,8 @@ export BLOT_REDIS_HOST=127.0.0.1
 # Name of linux user who runs the blot server
 export BLOT_USER=
 
-# Use latest stable version which passes tests
-export BLOT_NODE_VERSION=22.14.0
+# Project Node.js LTS version (also pinned in .nvmrc and Dockerfile)
+export BLOT_NODE_VERSION=24.22.1
 
 # result of which pandoc
 export BLOT_PANDOC_PATH=

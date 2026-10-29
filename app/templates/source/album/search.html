@@ -1,60 +1,57 @@
 {{> header}}
 
-{{> search_form}}
+{{#sticky_navigation}}
+<div class="archive-spacer"></div>
+{{/sticky_navigation}}
 
-<style type="text/css">
-    body, html {height: 100%;overflow: hidden;}
+<div class="archive-search">
+  <form action="/search">
+    <input type="text" name="q" value="{{query}}" placeholder="Search the archives..." {{#query}}autofocus{{/query}}>
+    <input type="submit" value="Search">
+  </form>
+</div>
 
-    #hyperlist a {
-            text-decoration: none;
-            padding: 0 calc({{spacing}}*0.25rem);
-      color: inherit;
-      box-sizing:border-box;
-      display: block;
-    }
-
-    #hyperlist > a {
-      padding: 0 {{spacing}}rem;
-      display: flex;
-      width: 100%;
-      height: 80px;
-      margin: 0;
-    }
-
-    #hyperlist > a:hover {opacity: 0.75}
-    #hyperlist > a:hover .title {text-decoration: underline;}
-    #hyperlist > a:active {opacity: 0.5}
-    
-    #hyperlist > a .thumbnail {width: 80px;height:80px;}
-    #hyperlist > a .title {flex-grow: 1;margin:0 calc({{spacing}}rem*0.5);white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
-    #hyperlist > a .date {flex-shrink: 0;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
-    {{#hide_dates}}
-    #hyperlist > a .date {display: none}
-    {{/hide_dates}}
-
-#hyperlist > a .thumbnail img {
-  max-width: 80px;max-height: 80px;width:auto;height: auto;
-}
-
-input[type=radio] {display: none;}
-.filter {list-style-type: none;padding: 0;display: flex;}
-.filter label {cursor: pointer;padding:{{spacing}}rem;margin:{{spacing}}rem;background:rgba({{#rgb}}{{text_color}}{{/rgb}},0.06)}
-</style>
-
-
-    <div id="hyperlist" class="container">
-        {{#entries}}
-        <a href="{{{url}}}">
-            <span class="thumbnail">
-          <img src="{{{thumbnail.small.url}}}" class="pre-loaded" onload="this.className+=' loaded';" />
-          <noscript>  
-          <img src="{{{thumbnail.small.url}}}">
-          </noscript>
-      </span>
+<div class="archives">
+  {{#entries}}
+  <a class="collection-entry" href="{{{url}}}">
+    <span class="thumbnail{{^thumbnail.small.url}} thumbnail-empty{{/thumbnail.small.url}}">
+      {{#thumbnail.small.url}}
+      <img
+        loading="lazy"
+        src="{{{thumbnail.small.url}}}"
+        srcset="
+          {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+          {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+          {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+        "
+        sizes="80px"
+        width="{{thumbnail.small.width}}"
+        height="{{thumbnail.small.height}}"
+        alt="{{title}}"
+        class="pre-loaded"
+        onload="this.className+=' loaded';" />
+      <noscript>
+        <img
+          loading="lazy"
+          src="{{{thumbnail.small.url}}}"
+          srcset="
+            {{{thumbnail.small.url}}} {{thumbnail.small.width}}w,
+            {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w,
+            {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
+          "
+          sizes="80px"
+          width="{{thumbnail.small.width}}"
+          height="{{thumbnail.small.height}}"
+          alt="{{title}}">
+      </noscript>
+      {{/thumbnail.small.url}}
+    </span>
+    <span>
       <span class="title">{{title}}</span>
-      {{^hide_dates}}{{#date}}<span class="date">{{date}}</span>{{/date}}{{/hide_dates}}
-        </a>
-        {{/entries}}
-        </div>
+      {{#date}}<span class="date">{{date}}</span>{{/date}}
+    </span>
+  </a>
+  {{/entries}}
+</div>
 
 {{> footer}}

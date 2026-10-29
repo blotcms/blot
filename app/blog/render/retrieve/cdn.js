@@ -1,5 +1,6 @@
 const config = require("config");
 const generateCdnUrl = require("models/template/util/generateCdnUrl");
+const folderManifestUrl = require("../folderManifestUrl");
 const asRetriever = require("../../lib/asRetriever");
 
 module.exports = asRetriever(function (req, res) {
@@ -24,12 +25,20 @@ module.exports = asRetriever(function (req, res) {
           templateID &&
           Object.prototype.hasOwnProperty.call(manifest, renderedNormalized)
         ) {
-          return generateCdnUrl(
-            renderedNormalized,
-            manifest[renderedNormalized]
-          );
+          const entry = manifest[renderedNormalized];
+
+          // A rendered view: the manifest value is its content hash
+          if (typeof entry === "string") {
+            return generateCdnUrl(renderedNormalized, entry);
+          }
+
+          // A file in the blog's folder (see updateCdnManifest)
+          const folderFileUrl = folderManifestUrl(req, renderedNormalized);
+          if (folderFileUrl) return folderFileUrl;
         }
 
+        // Not in the manifest (e.g. the file doesn't exist, or it names a
+        // view): left as written
         return rendered;
       } catch (e) {
         return text;

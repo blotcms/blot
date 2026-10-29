@@ -12,4 +12,5 @@ module.exports = {
   thumb: "string",
   locals: "object",
   cdn: "object",
+  fileDependencies: "array",
 };

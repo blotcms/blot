@@ -1,8 +1,8 @@
 # Containerised OpenResty proxy
 
 The OpenResty reverse proxy that fronts Blot. Production has run it from this
-image since 8 Oct 2026 (#1941), deployed with `npm run deploy-proxy` or the
-Deploy proxy workflow (see [`deploy/README.md`](deploy/README.md)). The
+image since 8 Oct 2026 (#1941), deployed with `npm run deploy-units` or the
+Deploy workflow (see [`deploy/README.md`](deploy/README.md)). The
 nginx config and Lua in `config/` are the only copy. The bare-metal OpenResty
 install that preceded the container has been removed from the host; to roll
 back, deploy an older image.
@@ -11,15 +11,17 @@ back, deploy an older image.
 
 | Path | Purpose |
 | --- | --- |
-| `config/` | The nginx config as mustache templates (`server.conf` includes the others as partials) plus `cacher.lua`. Edit these. |
+| `config/` | The nginx config as mustache templates (`server.conf` includes the others as partials) plus `diskcache.lua`, the cache. Edit these. |
 | `html/` | Error pages served when an upstream is offline. |
 | `build/index.js` | Renders `config/server.conf` + partials into a single `openresty.conf`, with the locals from [`build/locals.js`](build/locals.js). `tests/locals.js` fails if a template reads a variable that `locals.js` leaves undefined. |
 | `build/build.sh` | Wrapper that runs `build/index.js` with the container's paths. Run this before `docker build`. |
 | `build/data/latest/` | Generated output (git-ignored). |
-| `Dockerfile` | Two-stage build: vendors the Lua deps, then assembles the image. |
+| `Dockerfile` | Three-stage build: vendors the Lua deps, builds the Brotli modules, then assembles the image. |
+| `SECURITY.md` | OpenResty/nginx upgrade assessment, enabled features, and remaining advisory exposure. |
 | `entrypoint.sh` | Fixes volume ownership, optionally trusts a test ACME CA, then starts OpenResty with a SIGTERM drain (`openresty -s quit`). |
-| `deploy/` | `blue-green.sh` (image swap via SO_REUSEPORT + drain, per-container health socket, requires a real cert mount) (and `reload-config.sh`, which needs a bind-mounted conf dir the production scripts do not use). They are run on the host; see [`deploy/README.md`](deploy/README.md) for the checks each script makes. |
-| `tests/` | Cache (`cacher.lua`) behaviour specs and a check that every variable the config reads has a value. Run as the `proxy` suite in the `node` workflow's test matrix. |
+| `deploy/` | `blue-green.sh` (replaces the two always-running proxy units one at a time via SO_REUSEPORT + drain, per-container health socket, requires a real cert mount). They are run on the host; see [`deploy/README.md`](deploy/README.md) for the checks each script makes. |
+| `evict.sh` | The cache sweeper, run hourly by `diskcache.lua` (see "Cache" below). |
+| `tests/` | Specs for the scanner ban and push limits, and a check that every variable the config reads has a value. Run as the `proxy` suite in the `node` workflow's test matrix. |
 | `e2e/` | Full-stack checks driven through the built image (stub upstream + a real Blot app container + Pebble for certs). Run by the `integration` workflow. |
 
 ## Build and run locally
@@ -47,13 +49,20 @@ serves any host:
 | `PROXY_PRIVATE_IP` | build-time `OPENRESTY_INSTANCE_PRIVATE_IP`, else `127.0.0.1` | address of the extra `:8077` cache-purge listener, for Node containers that cannot reach the host's `127.0.0.1:80` |
 | `PROXY_RESOLVER` | build-time `OPENRESTY_RESOLVER`, else `8.8.8.8 ipv6=off` | DNS resolver (`127.0.0.11` on a user-defined Docker network) |
 | `PROXY_ACME_CA` | build-time `ACME_CA`, else Let's Encrypt production | ACME directory for custom-domain certificates. Leave it alone in production: the deploy scripts refuse anything else in `proxy.env` |
-| `PROXY_UPSTREAM_GREEN` | `127.0.0.1:8089` (production: `unix:/run/blot/green.sock`) | the master Node (webhooks, `/clients`) |
-| `PROXY_UPSTREAM_BLUE` | `127.0.0.1:8088` (`unix:/run/blot/blue.sock`) | the dashboard Node, and failover for the others |
-| `PROXY_UPSTREAM_YELLOW` | `127.0.0.1:8090` (`unix:/run/blot/yellow.sock`) | the blog Node |
+| `PROXY_ACME_HOOK_SECRET` | unset: each instance generates its own (a warning is logged) | the secret dehydrated's hook calls carry to the `:8999` hook server. Set it to the same long random string on every instance: they share `:8999` (`reuseport`), so a call can reach either. Read by `init.conf` (never written into `nginx.conf`) |
+| `PROXY_UNIT` | `-` | `blue` or `green`: logged as the last field of every access log line (`unit=`). The deploy script sets it from the container name (`blot-blue` is `blue`) |
+| `PROXY_UPSTREAM_MODE` | `unit` | the only mode: this container runs its own two Node processes (the [unit image](#the-unit-image)), at the four addresses below |
+| `PROXY_UNIT_MAIN` | `unix:/run/blot/blue-a.sock` | this unit's main Node process (blogs, dashboard reads) |
+| `PROXY_UNIT_WORKER` | `unix:/run/blot/blue-b.sock` | this unit's worker child (`/clients`, webhooks, dashboard writes) |
+| `PROXY_PEER_MAIN` | `unix:/run/blot/green-a.sock` | the other unit's main process, `backup` for the two upstreams above |
+| `PROXY_PEER_WORKER` | `unix:/run/blot/green-b.sock` | the other unit's worker child, `backup` for `/clients` |
 | `PROXY_FETCH_CDN_IPS` | `true` | fetch the Bunny edge list (exempt from rate limits) at start; `false` uses the list baked into the image |
 
-The upstream groups keep their weights and failover roles from
-`config/http.conf`; only where each Node is changes. A `unix:` upstream is a socket the Node
+The upstream groups keep their names, weights and failover roles from
+`config/http.conf`; only where each Node is changes. `blot_node`
+is the unit's worker with the other unit's worker as `backup`, and
+`blot_blogs_node` and `blot_dashboard_node` are the unit's main process with the
+other unit's as `backup`; `render-config.sh` picks the servers. A `unix:` upstream is a socket the Node
 container listens on in `/run/blot` (a failed connect is immediate, so nginx
 retries the backup); the deploy scripts bind-mount that directory into the
 proxy when any upstream is one. The Bunny
@@ -67,9 +76,10 @@ when running `build.sh` to change the domain the config is built for.
 list baked into the image as a fallback); CI sets `FETCH_CDN_IPS=false` so image
 builds do not depend on that API.
 
-HTTP/3 (QUIC) is served on UDP `:443` as on bare-metal, so the host firewall and
-security group must allow UDP 443 as well as TCP. `-p 443:443/udp` when not
-using `--network host`.
+HTTP/3 (QUIC) is temporarily disabled pending OpenResty security fixes (see
+[`SECURITY.md`](SECURITY.md) and the task at the top of `TODO`). There are no
+QUIC listeners; public server blocks send `Alt-Svc: clear` to expire cached
+HTTP/3 routes. HTTPS continues over HTTP/2 and HTTP/1.1 on TCP 443.
 
 `--cap-add SYS_NICE` avoids a harmless `setpriority(-20) failed` alert from
 `worker_priority` in an unprivileged container.
@@ -160,7 +170,8 @@ start).
   a shorter chain than RSA 4096; existing RSA ones keep working until their
   renewal. Nothing in the config, `wildcard_cert.lua` or the scheduler checks
   assumes a key type. The `*.blot.im` wildcard is issued by
-  `app/scheduler/renew-wildcard-ssl.js`, not by dehydrated, and is unchanged.
+  `app/scheduler/renew-wildcard-ssl.js`, not by dehydrated, and is also an
+  ECDSA P-256 certificate from its next renewal.
 
 ### Scanner bans and TLS resumption
 
@@ -209,28 +220,62 @@ why issuance can be flaky during a blue/green overlap. Options worth a spike
 ## Deployment
 
 The container runs with `--network host` (the generated upstreams are
-`127.0.0.1:8088-8091`). Two kinds of change:
+the units' Unix sockets in `/run/blot`). Two kinds of change:
 
 - **Config-only** (a `.conf` edit): ship it as a new image like any other
-  change. [`deploy/reload-config.sh`](deploy/reload-config.sh) can reload a
-  container whose conf directory is bind-mounted, but the production
-  containers do not mount one.
+  change.
 - **Image change** (base image, Lua deps, Dockerfile): use
-  [`deploy/blue-green.sh`](deploy/blue-green.sh). The generated config sets
-  `reuseport` on the single default server for `:80` and `:443` (and on the
-  loopback-only `:80` / `:8999` helpers), so the new container joins the
-  listening group before the old one leaves it. The script waits for the new
-  container to answer its **own per-container health socket**
-  (`/run/openresty/health.sock` - not a reuseport TCP port the old container
-  could answer for it), then `docker stop --time 30` the old one -
-  `entrypoint.sh` traps SIGTERM and runs `openresty -s quit`, so in-flight
-  requests drain first. It refuses to run without `PROXY_CERT_MOUNT` (the
-  image ships only a self-signed placeholder). The `zero-downtime` job in the
+  [`deploy/blue-green.sh`](deploy/blue-green.sh). Two proxy containers always
+  run, `blot-blue` and `blot-green`; the generated config sets `reuseport` on
+  the single default server for `:80` and `:443` (and on the loopback-only
+  `:80` / `:8999` helpers), so both listen on the same ports and the kernel
+  gives new connections to whichever are up: if one dies the other takes
+  every new connection. A deploy replaces them one at a time, blue first: it
+  refuses unless the other is running and healthy, `docker stop --time 30`
+  the unit (`entrypoint.sh` traps SIGTERM and runs `openresty -s quit`, so
+  in-flight requests drain first, while the other carries the traffic), keeps
+  it stopped as `blot-<unit>-previous`, starts the new one under the unit's
+  name and waits for it to answer its **own per-container health socket**
+  (`/run/openresty/health.sock` - not a reuseport TCP port the other
+  container could answer for it). Only when the site checks pass is the
+  previous container removed; otherwise it is put back and the deploy stops
+  before the other unit is touched. A host missing one unit gets it started
+  first. It refuses to run without `PROXY_CERT_MOUNT` (the image
+  ships only a self-signed placeholder). The `zero-downtime` job in the
   `integration` workflow exercises the handover under load.
-  - *Known limitation*: during the seconds-long overlap the kernel can route
-    a `:8999` ACME hook request to the other instance, whose hook secret
-    differs, so first-issuance for a brand-new domain can be briefly flaky
-    *while a deploy is in progress*. Tracked in `TODO`.
+  - *Hook secret*: the `:8999` ACME hook server is shared by the instances
+    through `reuseport`, so dehydrated's hook call can land on the other one.
+    That works only if both hold the same secret, which they do when
+    `PROXY_ACME_HOOK_SECRET` is set in `proxy.env`. Without it each instance
+    generates its own and first issuance for a brand-new domain can fail
+    while two are running (a warning is logged at start and by the deploy).
+  - *Draining*: `worker_shutdown_timeout 10s` (`config/initial.conf`) ends
+    any connection still open 10 seconds after the quit, inside the 30 second
+    `docker stop` above.
+  - *Renewal and issuance across instances*: challenge tokens are stored in
+    Redis, so Let's Encrypt's validation request can reach either instance.
+    Each instance has its own daily renewal timer; `config/init.conf` makes
+    the first to start a pass (an `NX` key in Redis, `ssl:renewal-pass-lock`)
+    the only one to run it, because auto-ssl's own per-domain lock is not
+    atomic. Access log lines end with `unit=blue` or `unit=green`; the error
+    log has no such tag.
+
+### Cache
+
+The cache is `config/diskcache.lua`: a shared on-disk cache under the cache
+directory (`/var/cache/openresty`), with no index to rebuild, so containers
+sharing the directory share the cache and a restart keeps it warm.
+
+- Hits are served with sendfile. Misses go to the upstream through
+  `@diskcache_fill`, which stores the response as it streams to the client.
+- A purge writes a marker file for the host and renames the host's directory
+  into `.trash`, which is emptied in the background. A fill that started
+  before the purge sees the marker and discards its entry.
+- Worker 0 makes brotli copies (`<body>.br`) of an entry's body after its
+  first hit; `brotli_static` serves them to clients that accept `br`.
+- `evict.sh` is the sweeper. It runs hourly, one sweep at a time (it holds a
+  `flock`), and evicts the least recently read entries when the cache is over
+  200 GB or the filesystem is over 90% full.
 
 ### Cache purging
 
@@ -243,9 +288,8 @@ them, so a proxy that was restarting during a purge does not keep serving
 stale pages from its warm cache.
 
 Set `BLOT_PURGE_TOKEN` on both Node and the proxy to require an
-`X-Blot-Purge-Token` header on the internal `/purge`, `/inspect` and
-`/rehydrate` endpoints. With it unset the endpoints are open, as before. To
-enable it, set it on Node first (an unauthenticated proxy ignores the header),
+`X-Blot-Purge-Token` header on the internal `/purge` endpoint. With it unset
+the endpoint is open, as before. To enable it, set it on Node first (an unauthenticated proxy ignores the header),
 then on the proxies.
 
 Run with persistent volumes:
@@ -259,7 +303,7 @@ docker run -d --network host --cap-add SYS_NICE \
   blot-proxy
 ```
 
-- **`blot-proxy-cache`** keeps the proxy cache warm across a redeploy.
+- **`blot-proxy-cache`** keeps the cache warm across a redeploy.
 - **`blot-proxy-auto-ssl`** keeps the dehydrated ACME account / hook state, so
   a redeploy does not re-register with the ACME server. The issued
   certificates themselves live in **Redis** (`storage_adapter = redis`), which
@@ -268,12 +312,62 @@ docker run -d --network host --cap-add SYS_NICE \
 `entrypoint.sh` chowns the volume roots to `ec2-user` on boot (they mount
 root-owned); it does **not** recurse into the cache.
 
+## The unit image
+
+[#2119](https://github.com/blotcms/blot/issues/2119) replaces the proxy
+container and the three Node containers it fronted with two identical units, `blot-blue`
+and `blot-green`, each one container running OpenResty, node-a (the Node main
+process) and node-b (the worker child node-a forks, `helper/workerChild`). The
+image is the `unit` target of the root `Dockerfile`: the `prod` app image plus
+OpenResty and the files in this image, which `COPY --from` this image's
+Dockerfile (the root `Dockerfile` names it `blot-proxy`). [`unit-image.yml`](../.github/workflows/unit-image.yml)
+builds both in one `docker buildx bake unit` ([`docker-bake.hcl`](../docker-bake.hcl)
+makes the proxy build the `blot-proxy` context, so no proxy image is published),
+checks OpenResty in the result, boots it with [`unit/smoke.sh`](unit/smoke.sh) and publishes
+`ghcr.io/<owner>/blot:<sha>` (the Node-only image is now `blot:prod-<sha>-arm64`, CI only). The Deploy workflow deploys it.
+
+To build it locally, generate the config and build this image as `blot-proxy`
+(see "Build and run locally"), then `docker build --target unit .` from the
+repository root, or `docker buildx bake unit` to build both as CI does.
+
+- **User.** One user at uid 1000, `ec2-user` (the Node image's `node` user,
+  renamed), for the app and for OpenResty's workers. As in this image, the
+  OpenResty master runs as root to bind 80 and 443; node-a is started with
+  `su-exec`.
+- **Supervisor.** [`unit/supervisor.sh`](unit/supervisor.sh) runs under tini.
+  It starts OpenResty with [`start.sh`](start.sh) (`proxy-start`, the part of
+  `entrypoint.sh` that prepares the container) and node-a. If node-a exits it
+  is started again after 1s, doubling to 30s, reset once it has run for 60s,
+  without touching OpenResty. If OpenResty exits the container exits non-zero.
+  On SIGTERM, SIGQUIT or SIGINT it runs `openresty -s quit`, sends node-a
+  SIGTERM (which drains it and node-b), waits for both and exits 0.
+- **Config.** `BLOT_UNIT` (`blue` or `green`) is required. The supervisor
+  derives the rest from it, unless set: node-a and node-b serve on
+  `/run/blot/<unit>-a.sock` and `<unit>-b.sock`, and the proxy runs in
+  `PROXY_UPSTREAM_MODE=unit` with those as `PROXY_UNIT_MAIN` and
+  `PROXY_UNIT_WORKER` and the other unit's as `PROXY_PEER_MAIN` and
+  `PROXY_PEER_WORKER` (see [Runtime settings](#runtime-settings)).
+- **Health.** The `HEALTHCHECK` ([`unit/healthcheck.sh`](unit/healthcheck.sh))
+  needs both the health socket and node-a's `/health`.
+
 ## Pinned dependencies
 
 Reproducibility relies on pinning, because the upstream toolchain has drifted:
 
-- Base image `openresty/openresty:1.25.3.1-alpine-fat` — newer `alpine-fat`
-  tags ship GCC 14, which will not compile `sockproc`.
+- Base image: the same `node:24.22.1-alpine` as the Node app, pinned by
+  multi-architecture digest in the `NODE_BASE` argument of both `Dockerfile`s
+  (`scripts/security/check-base-image.js` fails CI if they differ). OpenResty
+  1.31.1.1 is compiled on it in the Dockerfile's `openresty` stage with the
+  configure flags and bundled OpenSSL and PCRE2 of the official
+  `openresty/openresty:alpine` image (docker-openresty `alpine/Dockerfile`),
+  each download checked against a sha256. The `-fat` extras (perl, `resty`,
+  `opm`, `restydoc`, luarocks, wget, unzip, outils-md5, the build packages) are
+  not installed; nothing here uses them. The geoip, image_filter and xslt
+  dynamic modules are built as in the official image but their libraries are
+  not installed, so they cannot be loaded without adding gd, geoip and libxslt.
+  The workers run as `ec2-user` (uid 1000), the base's `node` user renamed. The
+  local `sockproc` signal-handler patch supports modern compilers without
+  dropping the upstream warning checks.
 - Lua modules (`lua-resty-auto-ssl` 0.13.1, `lua-resty-http` 0.17.2,
   `shell-games` 1.1.0) are fetched as checksummed `.src.rock` archives from
   luarocks.org rather than via the images' bundled `luarocks`, whose remote
@@ -299,10 +393,10 @@ and "Proxy container follow-ups". The main ones:
 ## Tests
 
 - **`proxy` suite** (`.github/workflows/node.yml` test matrix) runs
-  `proxy/tests/*.js` inside the Blot dev image, spinning up OpenResty against
-  `config/cacher.lua` - the `cacher.lua` behaviour specs (`basic`, `gzip`,
-  `inspect`, `lru_purge`, `rehydrate`, `startup`, plus `coverage` for per-host keys,
-  method/health cacheability, binary bodies and argument validation).
+  `proxy/tests/*.js` inside the Blot dev image: the scanner ban (`ban`,
+  spinning up OpenResty against `config/ban.lua`), the push limits, the body
+  limit on auth routes and the locals check. The cache and the `/purge` token
+  check are tested against the built image by the `integration` workflow.
 - **`integration` workflow** (`.github/workflows/integration.yml`):
   - `proxy/e2e/checks.sh` drives the built image against
     `proxy/e2e/stub-upstream.js` - Host-based routing (site over HTTPS, blogs
@@ -315,7 +409,7 @@ and "Proxy container follow-ups". The main ones:
     renders, a seeded user signs in / reaches the dashboard / signs out, and a
     seeded blog (`proxy/e2e/seed-blog.js`) renders on its own vhost with the
     proxy cache going MISS then HIT.
-  - `proxy-behaviour` also makes real HTTP/3 requests (`proxy/e2e/h3-check.py`, aioquic) for the site and for a custom domain.
+  - `proxy-behaviour` checks that the rendered config and live UDP sockets expose no QUIC listener, and that HTTP/1.1 and HTTP/2 still serve every public vhost without advertising HTTP/3. It repeats the checks with the wildcard certificate from Redis. `proxy/e2e/h3-check.py` is retained for re-enabling HTTP/3 after the security fixes.
   - `cert-issuance` issues a real custom-domain certificate through the proxy
     against a Pebble ACME server, checks it persists across a container
     recreate, and checks that a Redis which stops answering neither stalls the
