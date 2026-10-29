@@ -119,7 +119,7 @@ function stubUp(c) {
 }
 
 async function startProxy(c) {
-  const args = ["run", "-d", "--name", c.name, "-p", `${c.http}:80`, "-p", `${c.https}:443`, "-e", "BLOT_HOST=localhost", "-v", `${c.volume}:${CACHE}`];
+  const args = ["run", "-d", "--name", c.name, "-p", `${c.http}:80`, "-p", `${c.https}:443`, "-e", "BLOT_HOST=localhost", "-e", "PROXY_UNIT_MAIN=127.0.0.1:8090", "-e", "PROXY_UNIT_WORKER=127.0.0.1:8089", "-e", "PROXY_PEER_MAIN=127.0.0.1:8088", "-e", "PROXY_PEER_WORKER=127.0.0.1:8088", "-v", `${c.volume}:${CACHE}`];
   for (const e of c.env || []) args.push("-e", e);
   docker(...args, IMAGE);
 

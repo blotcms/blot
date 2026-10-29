@@ -16,11 +16,11 @@ const {
   OUT,
 } = require("../probe/run");
 const { OPTIONS: PROBE_OPTIONS, checkOptions } = require("./probe");
-const { CONTAINERS } = require("../deploy/constants");
+const { UNIT } = require("../deploy/constants");
 
-// As green, the container that crashed; 2g leaves room for a heap snapshot
+// As node-b, the sync process that crashed; 2g leaves room for a heap snapshot
 // on top of a full heap.
-const DEFAULTS = { memory: "2g", oldSpace: CONTAINERS.GREEN.maxOldSpaceSize, cpus: 1 };
+const DEFAULTS = { memory: "2g", oldSpace: UNIT.nodeBMaxOldSpaceSize, cpus: 1 };
 
 // --out is the launcher's: results always come back to data/build-probe.
 const { out, ...probeOptions } = PROBE_OPTIONS;
@@ -37,7 +37,7 @@ A target is a post URL or <blog>:<path>, where <blog> is a blog ID, handle or do
 Probe options:
 ${formatOptions(probeOptions)}
 
-Wrapper options (defaults: --memory ${DEFAULTS.memory}, --max-old-space ${DEFAULTS.oldSpace} as green):
+Wrapper options (defaults: --memory ${DEFAULTS.memory}, --max-old-space ${DEFAULTS.oldSpace} as node-b):
 ${formatOptions(WRAPPER_OPTIONS)}`);
 }
 

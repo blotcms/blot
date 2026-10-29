@@ -1,17 +1,17 @@
 ---
 name: investigate-production-container-restarts
-description: Work out why the blot-container-{blue,green,yellow} Docker containers from the most recent production deployment have restarted — distinguishing a normal deploy-triggered restart from a crash (V8 heap OOM, Linux cgroup OOM kill, a lost sync folder lock - `[LOCK COMPROMISED]` - from a stalled Redis connection, or the deploy script's own health-check rollback). Use when asked to investigate container restarts, figure out why a container went down, or check on the health of the latest deploy.
+description: Work out why the blot-blue and blot-green unit containers from the most recent production deployment have restarted — distinguishing a normal deploy-triggered restart from a crash (V8 heap OOM, Linux cgroup OOM kill, a lost sync folder lock - `[LOCK COMPROMISED]` - from a stalled Redis connection, or the deploy script's own health-check rollback). Use when asked to investigate container restarts, figure out why a container went down, or check on the health of the latest deploy.
 ---
 
 # Investigate production container restarts
 
-Blot runs three named app containers plus an airlock sidecar (see
-`scripts/deploy/constants.js`):
-
-- `blot-container-blue` (port 8088, `siteConfig`) — failover, sites+blogs
-- `blot-container-green` (port 8089, `siteConfig`) — dashboard/brochure/sync
-- `blot-container-yellow` (port 8090, `blogsConfig`) — preview+published blogs
-- `blot-airlock` — separate egress sidecar, not part of blue/green/yellow
+Blot runs two units, `blot-blue` and `blot-green` (see
+`scripts/deploy/constants.js` and `proxy/deploy/README.md`). Each is one container
+holding OpenResty and two Node processes: `node-a` (blogs, dashboard reads) and
+`node-b` (the worker: webhooks, `/clients`, writes and sync). Their log lines are
+labelled `blue/node-a`, `blue/node-b`, `green/node-a` and `green/node-b`. Each unit
+has its own egress sidecar, `blot-blue-airlock` and `blot-green-airlock`, which is
+not part of either unit.
 
 Every container runs `docker create --restart unless-stopped`, so **Docker
 itself will silently restart a crashed container** — a restart is not
@@ -34,7 +34,7 @@ authorized.
 **Auto-approved (no confirmation needed)** — these read-only commands
 over `ssh blot` may be run without asking:
 
-- `docker ps -a` and `docker inspect` on blot-container-{blue,green,yellow}
+- `docker ps -a` and `docker inspect` on blot-blue and blot-green
   (release ID, `CreatedAt`, `RestartCount`, `OOMKilled`, exit code)
 - `cat ~/docker-health-check.log`
 - `dmesg | grep -i kill` (or the `kills` helper)
@@ -49,14 +49,14 @@ explicit user approval.
 ## 1. Identify the most recent deployment
 
 SSH host is `blot`. Each container is created with
-`-e BLOT_RELEASE_ID=<commitHash>` (`scripts/deploy/util/generateDockerCommand.js`)
+`-e BLOT_RELEASE_ID=<commitHash>` (`proxy/deploy/common.sh`)
 and named `${REGISTRY_URL}:${commitHash}` as its image tag — this is the
 ground truth for "what deploy is currently running," independent of
 `docker ps`'s uptime column:
 
 ```bash
 ssh blot "docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.CreatedAt}}\t{{.Image}}'"
-ssh blot "for c in blot-container-blue blot-container-green blot-container-yellow; do echo \$c:; docker inspect \$c --format '{{range .Config.Env}}{{println .}}{{end}}' | grep BLOT_RELEASE_ID; done"
+ssh blot "for c in blot-blue blot-green; do echo \$c:; docker inspect \$c --format '{{range .Config.Env}}{{println .}}{{end}}' | grep BLOT_RELEASE_ID; done"
 ```
 
 Cross-reference the commit hash against GitHub to see what actually
@@ -140,7 +140,7 @@ access log shows the in-flight requests that died with it (502, long
 request time, `up=127.0.0.1:<port>`):
 
 ```bash
-ssh blot "zcat -f /var/instance-ssd/logs/error.log* | grep ':8090' | grep -c 'connect() failed'"
+ssh blot "zcat -f /var/instance-ssd/logs/error.log* | grep -E 'blue-a.sock|green-a.sock' | grep -c 'connect() failed'"
 ```
 
 The crash timestamp is the `Starting server on ...` line that follows the
@@ -310,7 +310,7 @@ For the git client, also check:
   MB inside the container's memory limit):
 
   ```bash
-  ssh -n blot "docker exec blot-container-green sh -c 'ps -o pid,etime,rss,args | grep [g]it-'"
+  ssh -n blot "docker exec blot-green sh -c 'ps -o pid,etime,rss,args | grep [g]it-'"
   ```
 
 - leftover push staging directories (`objects/tmp_objdir-incoming-*` in the
@@ -320,16 +320,16 @@ For the git client, also check:
   mean a user retried a large push that kept failing:
 
   ```bash
-  ssh -n blot "docker exec blot-container-green sh -c 'find /usr/src/app/data/git -mindepth 3 -maxdepth 3 -type d -name \"tmp_objdir-incoming-*\" -exec du -sh {} +'"
+  ssh -n blot "docker exec blot-green sh -c 'find /usr/src/app/data/git -mindepth 3 -maxdepth 3 -type d -name \"tmp_objdir-incoming-*\" -exec du -sh {} +'"
   ```
 
 ### Neither — the deploy's own health check failed
 
-`scripts/deploy/util/checkHealth.js` polls
-`docker inspect --format='{{.State.Health.Status}}'` and then
-`curl --fail http://localhost:<port>/health` after each container starts,
-with a 3-minute timeout. If this fails, the deploy script's rollback logic
-removes/replaces the container rather than leaving a crashed one running —
+`proxy/deploy/common.sh` waits for a new unit to pass its health checks (the
+unit's `docker inspect` health status, the proxy's health socket, and node-a and
+node-b `/health` on their Unix sockets), with a timeout (180s for a unit). If this
+fails, the deploy's rollback replaces the unit rather than leaving a crashed one
+running —
 so a container stuck on an **older** `BLOT_RELEASE_ID` than its siblings
 (step 1) is the signature of this path, not a crash at all. Check
 `/var/log/deploy-commands.log` for the deploy run's own output around that
@@ -349,9 +349,9 @@ out first before assuming a new regression.
 
 ## 4. Since one Node process serves many sites
 
-Blue/green/yellow each run a single Node process serving many sites or
-blogs — a slow/blocking render for one site can stall or crash the whole
-container, not just that one request (root cause of issue #1806, nashp.com's
+Each unit's node-a serves many blogs from a single Node process (node-b serves
+the worker work), so a slow/blocking render for one site can stall or crash the
+whole unit, not just that one request (root cause of issue #1806, nashp.com's
 uncached `/archives` and `/tagged/<slug>` pages blocking the event loop; see
 the `node-response-time-review` skill for identifying which site is
 responsible if the crash correlates with heavy traffic to one domain rather

@@ -5,7 +5,7 @@ const lock = require("sync/lock");
 // in-flight requests and syncs finish, release folder locks, then exit.
 //
 // This must stay under the containers' --stop-timeout (30s, see
-// scripts/deploy/util/generateDockerCommand.js), after which Docker SIGKILLs.
+// proxy/deploy/common.sh), after which Docker SIGKILLs.
 const DRAIN_TIMEOUT_MS = parseInt(process.env.BLOT_DRAIN_TIMEOUT_MS) || 25000;
 const LOCK_POLL_MS = 100;
 

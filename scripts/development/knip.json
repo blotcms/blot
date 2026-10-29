@@ -19,7 +19,6 @@
     "app/documentation/featured/candidates.js",
     "proxy/build/index.js",
     "proxy/e2e/*.js",
-    "proxy/e2e/node-swap/**/*.js",
     "proxy/deploy/e2e/*.js",
     "proxy/deploy/e2e/unit/*.js",
     "proxy/bench/*.js",

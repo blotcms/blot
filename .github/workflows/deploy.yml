@@ -245,9 +245,9 @@ jobs:
           # with the app build and is usually a little slower (Alpine +
           # Chromium + the verify step), so give it a bounded grace window
           # once the app image is up - but do NOT let it block the deploy:
-          # deployAirlockIfNeeded() in scripts/deploy already skips a missing
-          # airlock manifest non-fatally, and an airlock build failure must
-          # not be able to hold up an app hotfix.
+          # the unit deploy (proxy/deploy/common.sh) falls back to the airlock
+          # image already running when there is none for this commit, and an
+          # airlock build failure must not be able to hold up an app hotfix.
           echo "Waiting (best-effort) for airlock image: $AIRLOCK_IMAGE"
           AIRLOCK_AVAILABLE=false
           for i in $(seq 1 60); do   # up to 5 min

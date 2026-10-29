@@ -45,11 +45,19 @@ sudo chown -R 1000:1000 "$PROXY_DISK_CACHE_DIR" "$PROXY_LOG_DIR"
 # PROXY_REDIS_HOST is $HOSTIP rather than 127.0.0.1; both are reachable from
 # every --network host container and from this shell, so one value works
 # everywhere.
+# The upstreams point at the stub on 8088-8090, as the old Node containers
+# did: worker (sync, writes, /clients) on 8089, blogs on 8090, and 8088 as the
+# backup for both. Unit mode has one main address for blogs and the dashboard,
+# so the dashboard now goes to 8090 (it was 8088) and its backup is 8088.
 cat > "$PROXY_ENV_FILE" <<EOF
 BLOT_HOST=$BLOT_HOST
 PROXY_REDIS_HOST=$HOSTIP
 PROXY_PRIVATE_IP=127.0.0.1
 PROXY_FETCH_CDN_IPS=false
+PROXY_UNIT_MAIN=127.0.0.1:8090
+PROXY_UNIT_WORKER=127.0.0.1:8089
+PROXY_PEER_MAIN=127.0.0.1:8088
+PROXY_PEER_WORKER=127.0.0.1:8088
 EOF
 
 # A second env file, identical except for PROXY_PRIVATE_IP, for the

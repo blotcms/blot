@@ -445,7 +445,7 @@ esac
 case "$1" in
   inspect) [ "$MISSING" = "$2" ] && { echo "Error: No such object: $2" >&2; exit 1; }; exit 0 ;;
   logs) [ "$5" = "$LOGS_FAIL" ] && { echo "Error response from daemon: configured logging driver does not support reading"; exit 1; }
-        [ "$3" = --since ] && [ "$5" = blot-container-green ] && echo "2026-10-08T12:00:01.123Z [LOCK] slow heartbeat 900ms"; exit 0 ;;
+        [ "$3" = --since ] && [ "$5" = blot-green ] && echo "2026-10-08T12:00:01.123Z [LOCK] slow heartbeat 900ms"; exit 0 ;;
 esac
 `,
         0o755
@@ -459,18 +459,18 @@ esac
       expect(fs.readFileSync(lockLog, "utf8")).toBe("2026-10-08T12:00:00Z container=green slow=1 compromised=0\n");
 
       // a container docker cannot find: no (empty) app-lock.log for compare.js to read as zero lock lines
-      r = fetch({ MISSING: "blot-container-yellow" });
+      r = fetch({ MISSING: "blot-green" });
       expect(r.status).toBe(0);
-      expect(r.stderr).toContain("No such object: blot-container-yellow");
+      expect(r.stderr).toContain("No such object: blot-green");
       expect(r.stderr).toContain("could not read the app container logs");
       expect(fs.existsSync(lockLog)).toBe(false);
       expect(fs.existsSync(lockLog + ".tmp")).toBe(false);
 
-      // docker logs failing after docker inspect passed is a failure too; grep finding nothing (blue, yellow) is not
+      // docker logs failing after docker inspect passed is a failure too; grep finding nothing (blue, green) is not
       expect(fetch({}).status).toBe(0);
       expect(fs.existsSync(lockLog)).toBe(true);
-      r = fetch({ LOGS_FAIL: "blot-container-blue" });
-      expect(r.stderr).toContain("docker logs blot-container-blue failed");
+      r = fetch({ LOGS_FAIL: "blot-blue" });
+      expect(r.stderr).toContain("docker logs blot-blue failed");
       expect(r.stderr).toContain("could not read the app container logs");
       expect(fs.existsSync(lockLog)).toBe(false);
 

@@ -90,6 +90,7 @@ jobs:
 
           docker run -d --name proxy --network host --cap-add SYS_NICE \
             -e BLOT_HOST=localhost -e PROXY_FETCH_CDN_IPS=false \
+            -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -v "$RUNNER_TEMP/proxylogs:/var/log/openresty" \
             blot-proxy:f2b
           docker run -d --name stub --network host \

@@ -12,10 +12,6 @@ name: integration
 #                    stopped, READONLY or NOREPLICAS.
 #  zero-downtime   : a blue/green handover (SO_REUSEPORT + graceful drain)
 #                    serves every request while the old container is stopped.
-#  node-swap       : a rolling redeploy of the Node containers (stop, rm,
-#                    create, start, blue/green/yellow) under load through the
-#                    proxy, over the Unix sockets like production; any
-#                    dropped or failed request fails the job.
 
 # Pull requests only run it when something it covers changed (the paths
 # below); every push to master runs it. The real-app round trip through the
@@ -79,6 +75,7 @@ jobs:
           echo -n "served from disk" > "$RUNNER_TEMP/global-static/cdn-test.txt"
           docker run -d --name proxy -p 8080:80 -p 8443:443 \
             -e BLOT_HOST=localhost \
+            -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -v "$RUNNER_TEMP/global-static":/var/www/blot/app/blog/static:ro \
             blot-proxy:e2e
           docker run -d --name stub --network container:proxy \
@@ -251,6 +248,7 @@ jobs:
           docker volume create blot-acme-storage
           docker run -d --name proxy --network host --cap-add SYS_NICE \
             -e BLOT_HOST=localhost \
+            -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -e PROXY_ACME_CA=https://127.0.0.1:14000/dir \
             -e ACME_CA_CERT=/pebble-ca.pem \
             -v "$PWD/pebble.minica.pem:/pebble-ca.pem:ro" \
@@ -326,6 +324,7 @@ jobs:
           docker rm -f proxy
           docker run -d --name proxy --network host --cap-add SYS_NICE \
             -e BLOT_HOST=localhost \
+            -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -e PROXY_ACME_CA=https://127.0.0.1:14000/dir \
             -e ACME_CA_CERT=/pebble-ca.pem \
             -v "$PWD/pebble.minica.pem:/pebble-ca.pem:ro" \
@@ -384,6 +383,7 @@ jobs:
           docker rm -f proxy
           docker run -d --name proxy --network host --cap-add SYS_NICE \
             -e BLOT_HOST=localhost \
+            -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -e PROXY_ACME_CA=https://127.0.0.1:14000/dir \
             -e ACME_CA_CERT=/pebble-ca.pem \
             -e PROXY_AUTO_SSL_CACHE_TTL=5 \
@@ -464,7 +464,7 @@ jobs:
 
           start_proxy() {
             docker run -d --name "$1" --network host --cap-add SYS_NICE \
-              -e BLOT_HOST=localhost blot-proxy:zd
+              -e BLOT_HOST=localhost -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 blot-proxy:zd
             for i in $(seq 1 30); do
               [ "$(docker inspect -f '{{.State.Health.Status}}' "$1")" = healthy ] && return 0
               sleep 2
@@ -510,44 +510,3 @@ jobs:
       - name: Tear down
         if: always()
         run: docker rm -f zd-a zd-b stub 2>/dev/null || true
-
-  node-swap:
-    runs-on: ubuntu-latest
-    needs: proxy-behaviour
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24.22.1
-
-      - name: Install config generator dependencies
-        run: |
-          mkdir -p "$RUNNER_TEMP/gendeps"
-          cd "$RUNNER_TEMP/gendeps"
-          npm init -y >/dev/null
-          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
-
-      - name: Generate proxy config (BLOT_HOST=localhost)
-        run: bash proxy/build/build.sh
-        env:
-          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
-
-      - name: Build proxy image
-        run: docker build -f proxy/Dockerfile -t blot-proxy:ns proxy/
-
-      - name: Rolling swap under load
-        run: bash proxy/e2e/node-swap/run.sh
-        env:
-          PROXY_IMAGE: blot-proxy:ns
-
-      - name: Logs
-        if: always()
-        run: |
-          for c in ns-proxy blot-container-blue blot-container-green blot-container-yellow; do
-            echo "=== $c ==="; docker logs --tail 80 "$c" 2>&1 || true
-          done
-
-      - name: Tear down
-        if: always()
-        run: docker rm -f ns-proxy blot-container-blue blot-container-green blot-container-yellow 2>/dev/null || true

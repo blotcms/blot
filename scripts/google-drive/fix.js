@@ -17,8 +17,8 @@
 // number of rows each returned are printed.
 //
 // Usage:
-//   docker exec -it blot-container-green node scripts/google-drive/fix.js
-//   docker exec -it blot-container-green node scripts/google-drive/fix.js <id|handle>
+//   docker exec -it blot-blue node scripts/google-drive/fix.js
+//   docker exec -it blot-blue node scripts/google-drive/fix.js <id|handle>
 //
 // With no argument it asks before processing all blogs.
 

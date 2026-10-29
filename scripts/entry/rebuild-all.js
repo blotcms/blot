@@ -16,7 +16,7 @@
 // is bumped, as at the end of a sync or rebuild.
 //
 // Usage:
-//   docker exec -it blot-container-green node scripts/entry/rebuild-all.js
+//   docker exec -it blot-blue node scripts/entry/rebuild-all.js
 //   node scripts/entry/rebuild-all.js [--blog <id|handle>] [--dry-run] [-r] [-s N] [-e N] [-o <blogID>] [-c N]
 //
 //   --blog     rebuild one blog (full or shortened ID, handle or domain)

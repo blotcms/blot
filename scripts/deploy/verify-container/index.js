@@ -1,7 +1,7 @@
-// Deploy-time verification of a freshly started container. Run by the deploy
-// script (scripts/deploy/index.js) via `docker exec` once the container
-// reports healthy, for the first container of a deploy only - if it fails the
-// deploy stops before the remaining containers are touched.
+// Deploy-time verification of a freshly started unit. Run by the unit deploy
+// (proxy/deploy/common.sh) via `docker exec` once the unit reports healthy, for
+// the first unit of a deploy only - if it fails the deploy stops before the
+// other unit is touched.
 //
 // Deliberately NOT part of /health or the Docker HEALTHCHECK: those run for
 // the container's whole life, including crash-restarts, when the priority is
