@@ -6,15 +6,17 @@
   <div class="favicon-form__body">
     <form method="post" action="{{{base}}}/images/{{image.key}}" enctype="multipart/form-data" class="dashboard-form favicon-form" data-photo-crop-form{{#image.value.url}} data-source-url="{{{image.value.url}}}"{{/image.value.url}}>
       <input type="hidden" name="_csrf" value="{{csrftoken}}" />
-      <input type="hidden" name="redirect" value="{{{base}}}/images/{{image.key}}" />
+      <input type="hidden" name="redirect" value="{{{base}}}/" />
       <input type="hidden" name="update_mask" value="1" />
       <input type="hidden" name="crop_x" value="{{image.value.crop.x}}" data-crop-x />
       <input type="hidden" name="crop_y" value="{{image.value.crop.y}}" data-crop-y />
       <input type="hidden" name="crop_width" value="{{image.value.crop.width}}" data-crop-width />
       <input type="hidden" name="crop_height" value="{{image.value.crop.height}}" data-crop-height />
-      {{> file-drop-field}}
-
       {{> profile-photo-cropper}}
+      <div data-photo-upload-area>
+        {{#image.value.url}}<hr class="photo-upload-divider" />{{/image.value.url}}
+        {{> file-drop-field}}
+      </div>
     </form>
   </div>
 </div>
