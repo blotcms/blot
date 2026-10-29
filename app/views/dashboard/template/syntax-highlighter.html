@@ -31,11 +31,14 @@
 .syntax-highlighter-preview {
   position: sticky;
   top: 0;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 100%;
   height: var(--iframe-container-height);
-  overflow: auto;
-  border: 1px solid var(--light-border-color);
+  max-height: 75vh;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
   box-sizing: border-box;
   background: var(--background-color);
@@ -43,21 +46,54 @@
 }
 
 .syntax-highlighter-preview__header {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0.625rem 1rem;
-  border-bottom: 1px solid var(--light-border-color);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--background-color);
   color: var(--medium-text-color);
   font-size: 12px;
 }
 
 .syntax-highlighter-preview__pre {
+  flex: 1 1 auto;
+  display: block !important;
   box-sizing: border-box;
-  margin: 0;
-  padding: 1rem;
-  background: transparent;
-  transform: none;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  transform: none !important;
+  white-space: normal !important;
+  overflow: auto !important;
+  scrollbar-width: none;
+}
+
+.syntax-highlighter-preview__pre::-webkit-scrollbar {
+  display: none;
+}
+
+.syntax-highlighter-preview__pre > code.hljs {
+  display: block !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 1rem !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere;
 }
 
 .syntax-highlighter-docs {
@@ -80,24 +116,39 @@
 }
 
 .syntax-highlighter-layout {
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(300px, 0.8fr) minmax(300px, 1.2fr);
+  align-items: start;
+  gap: 1.5rem;
   margin-top: 2rem;
 }
 
 .syntax-highlighter-layout__settings {
   box-sizing: border-box;
   width: 100%;
-  min-width: 0;
+  min-width: 300px;
 }
 
 .syntax-highlighter-layout__preview {
   box-sizing: border-box;
   width: 100%;
-  min-width: 0;
-  margin-top: 1rem;
+  min-width: 300px;
 }
 
 @media (max-width: 900px) {
+  .syntax-highlighter-layout {
+    display: block;
+  }
+
+  .syntax-highlighter-layout__settings,
+  .syntax-highlighter-layout__preview {
+    min-width: 0;
+  }
+
+  .syntax-highlighter-layout__preview {
+    margin-top: 1rem;
+  }
+
   .syntax-highlighter-preview {
     position: static;
     height: auto;
@@ -116,27 +167,26 @@
             <p>Syntax highlighting controls are not available for this template.</p>
         </div>
         {{/syntax_themes}}
+        {{#syntax_themes}}
+        <div class="syntax-highlighter-docs">
+            <p>Here’s how to add code snippets:</p>
+            <ul>
+                <li><a class="smallLink" href="/how/files/markdown#code">Markdown</a></li>
+                <li><a class="smallLink" href="/how/files/google-docs#code">Google Docs</a></li>
+            </ul>
+        </div>
+        {{/syntax_themes}}
     </div>
     <div class="syntax-highlighter-layout__preview">
         {{#syntax_themes}}
         <div class="syntax-highlighter-preview" data-syntax-highlighter-preview>
             <div class="syntax-highlighter-preview__header">
-                <span>Theme preview</span>
-                <span>JavaScript</span>
+                <span>Preview</span>
             </div>
             <pre class="syntax-highlighter-preview__pre"><code class="hljs javascript">{{{syntaxHighlighterPreview}}}</code></pre>
         </div>
         {{/syntax_themes}}
     </div>
-    {{#syntax_themes}}
-    <div class="syntax-highlighter-docs">
-        <p>Here’s how to add code snippets:</p>
-        <ul>
-            <li><a class="smallLink" href="/how/files/markdown#code">Markdown</a></li>
-            <li><a class="smallLink" href="/how/files/google-docs#code">Google Docs</a></li>
-        </ul>
-    </div>
-    {{/syntax_themes}}
 </div>
 
 <div
