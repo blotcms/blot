@@ -117,6 +117,26 @@ describe("icloud monitorMacServerStats", function () {
     expect(sent).toEqual(["down", "recovered", "down"]);
   });
 
+  it("does not email server down when the macserver could not read the iCloud quota", async function () {
+    const { check } = require("../util/monitorMacServerStats");
+    response = Object.assign(healthy(), { icloud_bytes_available: null });
+
+    await check();
+
+    expect(sent).toEqual([]);
+  });
+
+  it("still announces recovery when the first good reply has no iCloud quota", async function () {
+    const { check } = require("../util/monitorMacServerStats");
+
+    response = new Error("connection refused");
+    await check();
+    response = Object.assign(healthy(), { icloud_bytes_available: null });
+    await check();
+
+    expect(sent).toEqual(["down", "recovered"]);
+  });
+
   it("does not email server down when /stats is fine but Redis fails", async function () {
     stub("redis", {
       del: async () => {
