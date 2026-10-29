@@ -128,7 +128,7 @@ A run that finds the previous one still going exits without logging, so a minute
 can be missing after a long stall.
 
 **`data/redis-perf/<app-host>/app-lock.log`** (made by `fetch.sh`, one line per
-container per minute that had any): `<minute> container=<blue|green|yellow>
+container per minute that had any): `<minute> container=<blue|green>
 slow=<[LOCK] slow heartbeat lines> compromised=<[LOCK COMPROMISED] lines>`.
 
 ## On first install

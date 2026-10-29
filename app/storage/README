@@ -7,12 +7,15 @@ off EBS onto S3, for cost/scalability/deployment reasons, and enforce
 per-blog storage quotas — with no added read-path latency, paying any cost
 at sync/build time instead.
 
-- **Short term:** move `.assets` to S3 so the EBS volume can shrink to
-  roughly the size of blog folders plus git repos.
+- **Done:** `.assets` is in S3 and nowhere else (Phase 1), and the EBS
+  volume has shrunk to blog folders plus git repos.
+- **Next:** blog folders, with S3 as the source of truth, a Redis metadata
+  index and a per-file content cache on the instance SSD (Phase 2,
+  [#2258](https://github.com/blotcms/blot/issues/2258)). Git client repos
+  follow (Phase 3, [#2259](https://github.com/blotcms/blot/issues/2259)).
 - **Long term:** node containers scale horizontally with no EBS mount
-  (one EBS volume can't be attached to several containers). Blog folders
-  and git client repos both live in object storage; each host's ephemeral
-  SSD is a cache, never the source of truth.
+  (one EBS volume can't be attached to several containers). Each host's
+  ephemeral SSD is a cache, never the source of truth.
 
 ## 2. Current state
 
@@ -21,11 +24,12 @@ at sync/build time instead.
   assets are in the storage bucket (`config.storage`).
 - [`app/helper/localPath.js`](app/helper/localPath.js) resolves
   `(blogID, relativePath)` to an absolute path but does no IO — every caller
-  does its own raw `fs`/`fs-extra` call. ~60 files call `localPath`, including
-  23 in sync clients (`app/clients/*`) and 14 more that read
-  `blog_folder_dir` directly (e.g. `app/blog/routes/assets.js`,
-  `app/cdn/index.js`, `app/models/template/*`, `app/models/blog/remove.js`,
-  `app/dashboard/site/export.js`).
+  does its own raw `fs`/`fs-extra` call. About 65 files in `app/` call
+  `localPath`, 28 of them in sync clients (`app/clients/*`), and about 8 more
+  read `blog_folder_dir` directly (e.g. `app/blog/routes/assets.js`,
+  `app/cdn/index.js`, `app/models/blog/remove.js`,
+  `app/dashboard/site/export.js`, `build/plugins/folderAssets`). Add about 10
+  scripts and the test helpers (`scripts/tests/util/createBlog.js`).
 - Per-blog asset IO all goes through `app/storage/assets.js`: `path`, `url`,
   `commit`, `write`, `writeFrom`, `read`, `exists`, `list`, `walk`,
   `createReadStream`, `ensureLocal`, `serve`, `remove`, `removeAll`, and a
@@ -36,18 +40,23 @@ at sync/build time instead.
   which are regenerable).
 - Blog folders and generated assets map to the public CDN URL as bare
   `{blogID}/{path}`, no scope prefix — relevant to the object-key plan in §3.
-- No exotic IO patterns — overwhelmingly `fs-extra` (`readFile`,
-  `outputFile`, `remove`, `ensureDir`, `copy`) plus `express.static()` for
-  serving. Refactor, not a rewrite.
-- Rendered HTML/CSS/JS is Redis-cached by content hash
-  (`app/blog/render/full-view-cache.js`, `app/cdn/index.js:70-113`), not
-  read from disk per request.
+- Mostly plain `fs-extra` (`readFile`, `outputFile`, `remove`, `ensureDir`,
+  `copy`) plus `express.static()` for serving, with a few exceptions that
+  assume a real filesystem: pandoc, sharp and exiftool take file paths; the
+  git client keeps a live `.git` clone inside the blog folder and runs
+  `reset --hard` there; iCloud renames whole directory trees to resolve case
+  conflicts; Google Drive's local fingerprint reads `dev`, `ino`, `ctimeNs`
+  and `mtimeNs`; the local client watches the folder with chokidar.
+- Rendered pages are cached in-process (`app/blog/render/full-view-cache.js`,
+  an LRU), and rendered template CSS/JS in Redis (`app/cdn/index.js`
+  `/template`), so neither is read from disk per request.
 - Generated assets (thumbnails, doc conversions, image optimization) are
   built asynchronously at sync/build time and written before any visitor
   requests them — the "pay the cost at build time" model already works for
   this half of storage.
-- One uncached per-request disk read: `app/blog/render/retrieve/folder.js`'s
-  `fs.readdir` + `fs.stat` (§4c). Links in posts are baked at build time by
+- Per-request disk reads remain (§4c): `app/blog/render/retrieve/folder.js`'s
+  uncached `fs.readdir` + `fs.stat`, and `app/blog/routes/assets.js` and the
+  CDN's `/folder/v-:version` serving folder files. Links in posts are baked at build time by
   `build/plugins/folderAssets` and links in templates by the template's CDN
   manifest, so rendering no longer looks files up.
 - The per-blog sync lock is a Redis mutex (`app/sync/lock.js`:
@@ -102,11 +111,10 @@ at sync/build time instead.
   `blog_*` keys (no listing, no public writes) because both scopes are
   public by design: assets are served on the CDN, and a blog's folder is
   served at the blog's domain and through the CDN's `/folder/v-:version`
-  route. Two buckets are only needed if versioning/cross-region replication
-  is wanted for folder content but not for assets (e.g. for a "restore
-  deleted file" feature), because versioning is bucket-wide; decide that
-  before Phase 2 puts folder data in the bucket.
-- **Versioning: off**, bucket-wide.
+  route. Folder content goes in the same bucket: a second, versioned bucket
+  for folders (for a "restore deleted file" feature) was considered and
+  turned down.
+- **Versioning: off**, bucket-wide. The B2 backup is the only history.
 - **Backup: hourly `aws s3 sync` (whole bucket, no `--delete`) to
   Backblaze B2**, US West region (closest to the app's `us-west-2`; B2's
   region is a permanent per-account choice). No-`--delete` plus B2's
@@ -219,8 +227,9 @@ at sync/build time instead.
   | `_template_assets` | template editor uploads | No — exists only in Blot |
 
   Nothing may wipe the whole `.assets` scope except blog deletion (today
-  `app/sync/rebuild.js` only `fs.emptyDir`s `_thumbnails`/`_image_cache`,
-  and the storage layer shouldn't expose a scope-wide delete). Even then
+  `app/sync/rebuild.js` only prefix-deletes `_thumbnails`/`_image_cache`
+  with `assets.remove`, and the storage layer shouldn't expose a scope-wide
+  delete). Even then
   `removeAll` deletes only the `{blogID}/_*/` prefixes; blog deletion will
   remove the folder scope separately once it exists. Quota is
   enforced on `.folder` writes only; `.assets` bytes are tracked but not
@@ -238,11 +247,15 @@ with `Last-Modified`.
 
 - `entry.updated` moves only when the entry's `contentHash` changes, so a
   reconnect, a full resync or the copy to S3 leaves it alone.
-- CDN version tokens hash content (`helper/contentVersion`; the ETag on
-  S3). Large files (the `routes/assets.js` redirect to the CDN) use size+mtime, which
+- CDN version tokens hash content (`helper/contentVersion`; the index's
+  hash on S3). Large files (the `routes/assets.js` redirect to the CDN) use size+mtime, which
   still changes whenever the file is rewritten.
 - Google Drive compares Drive's `modifiedTime` with an "applied" record in
   its client DB. iCloud and Dropbox compare content or provider hashes.
+- Exception: Google Drive's local fingerprint (`util/contentFingerprint.js`,
+  `localFingerprint.js`, `verifyContent.js`, `sync/util/localReaddir.js`)
+  reads `dev`, `ino`, `ctimeNs` and `mtimeNs`, which have no S3 equivalent.
+  It has to move to the content hash and size before `.folder` moves.
 - The other mtime reads are display (`retrieve/folder.js`,
   `dashboard/site/folder/stat.js`, `build/multiple.js`) and iCloud
   forwarding the time to the macserver.
@@ -265,8 +278,11 @@ the copy to S3:
   unrecorded; they're compared by checksum.
 
 The storage layer's `stat()` returns `size`, `modified` (local mtime now,
-`Last-Modified` on S3) and `hash` (content hash now, ETag on S3), with no
-ctime, no atime and no way to set `modified`. Accepted trade-offs:
+the upload time on S3) and `hash`, with no ctime, no atime and no way to set
+`modified`. `hash` is Dropbox's `content_hash` algorithm (`helper/hashFile`,
+which entry `contentHash` is already built from), computed as a file is
+written and kept in the Redis index, so it never depends on S3 or B2 ETags;
+Google Drive blogs also keep an MD5. Accepted trade-offs:
 
 - `updated` means when Blot received a change, not when the user saved it.
 - Non-post files in folder listings show the migration date, once.
@@ -283,24 +299,21 @@ the storage layer, not raw S3 calls threaded through each client.
 and index.html/.html fallbacks; `app/cdn/index.js`'s `/folder/v-:version`
 route uses `express.static()` plus `assertNoSymlinks`; `retrieve/folder.js`
 still does an uncached
-`readdir`+`stat` per request. All of these need to move onto the storage
-layer (with either a local cache or measured-acceptable S3 latency) before
-`.folder` moves. Recommendation: measure real S3 latency/throughput first
-(a sampled shadow-read alongside real reads during the dual-write phase)
-before building a caching layer — much of what would hit S3 directly is
-already narrowed by Redis-cached render output, Bunny Perma-Cache on
-generated assets, and Origin Shield deduplicating concurrent misses. Hosts
-will have large ephemeral SSDs, so the long-term design assumes an SSD-LRU
-read cache there (working precedent:
-`app/clients/icloud/macserver/watcher/monitorDiskUsage.js`); the
-measurements size it rather than decide whether it exists.
+`readdir`+`stat` per request. All of these move onto the storage layer
+before `.folder` moves. Metadata (existence, case, fallbacks, listings)
+comes from the Redis index, so none of them waits on an S3 listing. Bytes
+come from a per-file content cache on the instance SSD, keyed by content
+hash so it can't go stale, LRU-bounded (about 50 GB per host to start;
+working precedent: `app/clients/icloud/macserver/watcher/monitorDiskUsage.js`).
+A miss fetches the one object from S3. Sampled shadow reads during the
+dual-write phase measure the latency and tune the cache size.
 
-**d. `app/sync/rebuild.js:113-124` processes files serially**
+**d. `app/sync/rebuild.js` processes files serially**
 (`async.eachSeries`) — a full rebuild of a large blog would turn into
 thousands of serial S3 round trips. Needs bounded concurrency (e.g.
 `async.eachLimit`) before `.folder` goes to S3.
 
-**e. ~66 `err.code === "ENOENT"` checks exist in `app/`.** The storage
+**e. ~53 `err.code === "ENOENT"` checks exist in `app/`.** The storage
 layer needs one backend-agnostic not-found signal (e.g. a `NotFoundError`
 class) that means the same thing on local disk (`ENOENT`) and S3
 (`404`/`NoSuchKey`).
@@ -310,7 +323,9 @@ check once the backend has no filesystem.
 
 **g. Case sensitivity.** S3 keys are case-sensitive, which removes a
 filesystem quirk rather than adding one. Case-insensitive resolution
-(today `helper/caseSensitivePath.js`, used by `folderFile.js` and `routes/assets.js`)
+(today `helper/caseSensitivePath.js`, used by `folderFile.js`, `routes/assets.js`,
+the wikilinks plugin, `extractBibAndCSL`, `helper/transformer` and the
+Dropbox client)
 should consolidate into one storage-layer method, exposed explicitly
 (`store.folder.resolveCaseInsensitive(path)`) rather than built into
 `.read()`'s hot path — it's specifically a user-authored-link problem
@@ -358,19 +373,27 @@ should consolidate into one storage-layer method, exposed explicitly
   - Not done: any read cache beyond the `ensureLocal` download cache (it is
     pruned with the rest of the tmp directory); a read cache on ephemeral SSD
     would be bounded in size.
-- **Phase 2 — `.folder`.** Folder content is stored under
-  `{blogID}/folder/{path}` in the same bucket (§3), outside the assets scope,
-  and blog deletion removes it separately from `removeAll`. Run both §4a
-  backfill scripts on local disk before the copy to S3. Grow the storage-layer API as call sites need it
-  (read/write/remove/list/stat, with `stat()` as described in §4a), migrate
-  sync clients onto a staging pattern, resolve the caveats in §4, parallelize
-  `rebuild.js`, then cut over. Add a paginated `list()` when a caller
-  actually needs pagination — `retrieve/folder.js` is the motivating case.
-  S3's listing already carries size, `Last-Modified` and ETag, so listings
-  need no per-file HEAD. The ephemeral SSD cache (§4c) invalidates
-  per-object using the existing sync-completion pub/sub (`app/sync/index.js`'s
-  `blog:{blogID}:preview:reload` broadcast), extended to carry which paths
-  changed.
+- **Phase 2 — `.folder`** ([#2258](https://github.com/blotcms/blot/issues/2258)
+  has the plan and checklist). S3 becomes the source of truth for folder
+  content, under `{blogID}/folder/{path}` in the same bucket (§3), outside
+  the assets scope; blog deletion removes it separately from `removeAll`.
+  - Every folder read and write goes through `app/storage/folder`, first on
+    a local-disk backend (call sites move one behaviour-neutral PR at a
+    time while EBS is still the store), then on S3 behind the same
+    functions. Nothing else builds a path into a blog folder.
+  - Metadata lives in a Redis index (type, size, modified, hash per file or
+    directory, pageable per directory, with a lowercased lookup), derived
+    from S3 and rebuildable from a listing. It is updated after the S3 write
+    in one `multi()`, under the folder lock, so it is never ahead of S3.
+  - Bytes are cached per file on the instance SSD (§4c). A blog folder can be
+    larger than the SSD.
+  - Writes finish in S3 before they return; a sync is done when S3 has the
+    bytes.
+  - Empty directories are zero-byte `{dir}/` marker objects.
+  - Rollout: groundwork on disk (§4 caveats, hash once, parallel
+    `rebuild.js`, the §4a backfills), the API on a local backend, dual
+    writes with a backfill, reconcile and shadow reads, then S3 blog by blog
+    behind a flag, then no `data/blogs`.
 - **Phase 3 — git client repos.** Planned in
   [#2259](https://github.com/blotcms/blot/issues/2259). Bare repos live in
   `{blot_directory}/data/git/{handle}.git` (`app/clients/git/dataDir.js`)
@@ -381,10 +404,9 @@ should consolidate into one storage-layer method, exposed explicitly
   filesystem mount. A push is acknowledged once its pack is in S3, under the
   per-blog lock, and the blog folder is materialized from the repo with no
   live `.git` in it.
-- **Quotas** — decouple from the storage-layer build-out. Maintain a
-  per-blog byte counter in `app/sync/update` (which already sees every
-  changed path), backed by periodic `du`/`ListObjects` reconciliation to
-  catch drift. Can ship independently of, and before, the S3 work.
+- **Quotas** — the Phase 2 index keeps per-blog byte and file totals, which
+  enforcement can read. Until then, `scripts/user/identify-overdue-users.js`
+  is the manual audit.
 
 ## 6. Directory listing
 
@@ -397,8 +419,8 @@ const { entries, cursor } = await store.folder.list(path, { cursor, limit });
 const allEntries = await store.folder.listAll(path); // buffers everything; for callers that can afford it
 ```
 
-S3's `ListObjectsV2` is natively paginated (1,000 keys/call,
-`NextContinuationToken`); `.list()`'s cursor can just be that token. On
+On S3 the listing comes from the Redis index, one directory at a time
+(`HSCAN`'s cursor is `.list()`'s cursor), not from `ListObjectsV2`. On
 local disk, `fs.promises.opendir()` gives an unbuffered async-iterable
 directory handle — implementing `.list()` on top of it starts fixing
 `retrieve/folder.js`'s existing memory-crash risk immediately, independent
@@ -407,18 +429,16 @@ or the quota-reconciliation script that genuinely need everything; the
 `folder` template local — the one place a huge directory has actually
 caused problems — should call `.list()` directly, never `.listAll()`.
 
-One open tradeoff: `opendir`'s streaming iteration doesn't guarantee a
-stable sort order, and a meaningful opaque cursor generally wants one. If
-the `folder` template local needs deterministic ordering, the local backend
-may need to do more than pure unbuffered streaming — not yet decided.
+Neither `opendir` nor `HSCAN` guarantees an order, so `.list()` doesn't
+either; a caller that needs one (the `folder` template local) sorts a page
+or uses `.listAll()` for small directories.
 
 ## 7. Open questions
 
 - B2 `daysFromHidingToDeleting` retention window (60? 90 days?).
-- Shadow-read instrumentation sample rate for Phase 1 (1%? 5%?).
-- `.list()`'s ordering guarantee (§6).
-- SSD cache size per host — sized from the Phase 1 shadow-read
-  measurements.
+- Shadow-read sample rate for Phase 2 (1%? 5%?).
+- Redis memory per indexed file, measured during Phase 2's dual writes, to
+  size the Redis host.
 - Whether B2 becomes the primary store rather than only the backup —
   decide after measuring time to first byte from `us-west-2`.
 - A one-time scan of existing filenames for anything that's safe on POSIX

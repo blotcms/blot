@@ -109,7 +109,7 @@ creates and deletes. **No `--rebuild` fallback is required for correctness.**
 
 - **Latency is variable.** Creates landed instantly, but the delete sync landed
   roughly half a minute after the `rm` — file events go onto a per-blog
-  `async.queue`, each item takes a `proper-lockfile` lock on the folder, and syncs
+  `async.queue`, each item takes the per-blog Redis lock (`app/sync/lock.js`), and syncs
   are serialised. A verification loop must therefore **wait for a settling signal
   before re-screenshotting**, not poll immediately. `blog.cacheID` is bumped at the
   end of every sync (`Updating cacheID of blog`), which makes it a usable
@@ -154,7 +154,6 @@ Code CLI on the host.
 | `protocol` | `https://` |
 | `cdn.origin` | `https://cdn.local.blot` |
 | `blog_folder_dir` | `<repo>/data/blogs` |
-| `blog_static_files_dir` | `<repo>/data/static` |
 | `tmp_directory` | `<repo>/data/tmp` |
 
 Site URL is therefore `https://<handle>.local.blot`.
@@ -359,7 +358,7 @@ server restart re-establishes all watchers regardless.
   `Sync(blogID, (err, folder, done) => folder.update(path, …))`
 - the watcher closes itself if `blog.client !== "local"`
 
-`Sync` (`app/sync/index.js`) takes a `proper-lockfile` lock on the blog folder,
+`Sync` (`app/sync/index.js`) takes the per-blog Redis lock (`app/sync/lock.js`),
 runs updates, then on release: checks renames, calls
 `models/template.buildFromFolder(blogID)`, bumps `blog.cacheID`.
 
