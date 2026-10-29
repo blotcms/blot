@@ -1,9 +1,36 @@
 import fs from "fs-extra";
-import { join, resolve, sep } from "path";
+import { randomUUID } from "crypto";
+import { tmpdir } from "os";
+import { dirname, join, resolve, sep } from "path";
 import { iCloudDriveDirectory } from "../config.js";
 import { watch, unwatch } from "../watcher/index.js";
 import clfdate from "../util/clfdate.js";
 import normalizeMacserverPath from "./normalizeMacserverPath.js";
+
+// Writing straight into the iCloud folder with fs.outputFile creates the file
+// empty before its contents land. iCloud can register that empty file as a
+// cloud version that wins over the local write, so the macserver's next
+// brctl download replaces the real contents with 0 bytes. Instead, write the
+// file elsewhere on the same volume and rename it into place, so the path
+// only ever appears complete.
+async function writeAtomically(filePath, contents, modifiedTimeDate) {
+  const tempPath = join(tmpdir(), `blot-upload-${randomUUID()}`);
+
+  try {
+    await fs.writeFile(tempPath, contents);
+    await fs.utimes(tempPath, modifiedTimeDate, modifiedTimeDate);
+    await fs.ensureDir(dirname(filePath));
+    await fs.rename(tempPath, filePath);
+  } finally {
+    await fs.remove(tempPath);
+  }
+
+  // Confirm iCloud did not swap in another version straight away
+  const { size } = await fs.stat(filePath);
+  if (size !== contents.length) {
+    throw new Error(`Wrote ${contents.length} bytes but found ${size}`);
+  }
+}
 
 export default async (req, res) => {
   const blogID = req.header("blogID");
@@ -49,12 +76,10 @@ export default async (req, res) => {
   try {
     for (let i = 0; i < 10; i++) {
       try {
-        await fs.outputFile(filePath, req.body);
+        const modifiedTimeDate = new Date(parseInt(modifiedTime, 10));
+        await writeAtomically(filePath, req.body, modifiedTimeDate);
         success = true;
         console.log(clfdate(), `Wrote file: ${filePath}`);
-        const modifiedTimeDate = new Date(parseInt(modifiedTime, 10));
-        await fs.utimes(filePath, modifiedTimeDate, modifiedTimeDate);
-        console.log(clfdate(), `Set modified time for file: ${filePath}`);
         break;
       } catch (error) {
         success = false;
