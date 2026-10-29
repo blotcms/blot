@@ -18,7 +18,21 @@
 }
 
 .source-code-header {
+  display: flex;
+  align-items: center;
+  height: 2rem;
+  padding: 8px 6px 8px 16px;
+  border-bottom: 1px solid var(--border-color);
   background-color: #fff;
+}
+
+.source-code-header__links {
+  display: flex;
+  align-items: baseline;
+}
+
+.source-code-header strong a {
+  color: inherit;
 }
 
 .CodeMirror {

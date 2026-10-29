@@ -1,9 +1,8 @@
 <div
 	class="source-code-header"
-	style="display:flex;align-items: center;height:2rem;padding:8px 6px 8px 16px;border-bottom: 1px solid var(--border-color);"
 >
-        <div style="display: flex;align-items: baseline;">
-                <strong style=""><a href="{{{base}}}/source-code/{{view.name}}/edit" style="color: inherit;">{{view.name}}</a></strong>
+        <div class="source-code-header__links">
+                <strong><a href="{{{base}}}/source-code/{{view.name}}/edit">{{view.name}}</a></strong>
 				{{^view.isPackageJSON}}
                 <a class="smallLink {{selected.edit}}" href="{{{base}}}/source-code/{{view.name}}/edit">Edit</a>
                 {{#view.previewUrl}}

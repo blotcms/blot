@@ -600,6 +600,29 @@ p.template-heading-note {
   padding: var(--template-setting-row-padding);
 }
 
+.template-setting-link--image {
+  border-bottom: none;
+}
+
+.template-setting-image-thumb {
+  display: inline-block;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  object-fit: contain;
+}
+
+.template-setting-image-thumb--empty {
+  box-sizing: content-box;
+  width: 48px;
+  height: 48px;
+  border: 1px dashed var(--border-color);
+}
+
+/* Set by js/debounced-save.js when the last save failed */
+[data-save-error] {
+  box-shadow: inset 3px 0 0 var(--error-text-color);
+}
+
 .template-docs-support-links-group {
   --template-row-link-padding: var(--template-setting-spacing-vertical) var(--template-setting-spacing-horizontal);
 }

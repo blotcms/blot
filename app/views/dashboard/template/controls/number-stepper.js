@@ -56,8 +56,8 @@ Array.from(document.querySelectorAll("[data-number-stepper]")).forEach((input) =
         return;
       }
 
-      const window = document.createElement("span");
-      window.className = "number-stepper__digit-window";
+      const digitWindow = document.createElement("span");
+      digitWindow.className = "number-stepper__digit-window";
       const track = document.createElement("span");
       track.className = `number-stepper__digit-track is-${direction}`;
 
@@ -69,7 +69,7 @@ Array.from(document.querySelectorAll("[data-number-stepper]")).forEach((input) =
       if (direction === "down") {
         track.append(newDigit, oldDigit);
         track.style.transform = "translateY(-1em)";
-        window.append(track);
+        digitWindow.append(track);
         value.append(window);
         track.getBoundingClientRect();
         requestAnimationFrame(() => {
@@ -77,7 +77,7 @@ Array.from(document.querySelectorAll("[data-number-stepper]")).forEach((input) =
         });
       } else {
         track.append(oldDigit, newDigit);
-        window.append(track);
+        digitWindow.append(track);
         value.append(window);
         track.getBoundingClientRect();
         requestAnimationFrame(() => {
@@ -188,6 +188,9 @@ Array.from(document.querySelectorAll("[data-number-stepper]")).forEach((input) =
       if (!isHolding) return;
       isHolding = false;
       clearTimeout(holdTimer);
+      window.removeEventListener("pointerup", stopHold, true);
+      window.removeEventListener("pointercancel", stopHold, true);
+      window.removeEventListener("blur", stopHold);
       suppressNextClick = true;
       setTimeout(() => {
         suppressNextClick = false;
@@ -198,14 +201,13 @@ Array.from(document.querySelectorAll("[data-number-stepper]")).forEach((input) =
       if (!event.isPrimary || event.button !== 0 || isHolding) return;
       isHolding = true;
       suppressNextClick = true;
+      window.addEventListener("pointerup", stopHold, true);
+      window.addEventListener("pointercancel", stopHold, true);
+      window.addEventListener("blur", stopHold);
       holdStartedAt = Date.now();
       step();
       holdTimer = setTimeout(scheduleRepeat, 300);
     });
-
-    window.addEventListener("pointerup", stopHold, true);
-    window.addEventListener("pointercancel", stopHold, true);
-    window.addEventListener("blur", stopHold);
 
     button.addEventListener("click", () => {
       if (suppressNextClick) {

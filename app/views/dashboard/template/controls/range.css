@@ -3,6 +3,8 @@
 }
 
 .number-input {
+  display: flex;
+  align-items: center;
   padding: var(--input-control-padding);
   border-bottom: 1px solid var(--template-editor-divider-color);
 }
@@ -13,4 +15,8 @@
 
 .number-input:last-child {
   border-bottom: none;
+}
+
+.number-input .template-setting-label {
+  flex-grow: 1;
 }

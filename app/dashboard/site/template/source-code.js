@@ -69,6 +69,8 @@ SourceCode.route("/create")
     });
   });
 
+// Views with no URL that can be visited directly (e.g. only parameterised
+// patterns) have no preview, so send the visitor to the editor instead.
 function renderViewPreview(req, res, mode) {
   if (!req.view.previewUrl) {
     return res.redirect(
