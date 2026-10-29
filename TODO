@@ -1,3 +1,5 @@
+Speed up ci / simplify proxy and e2e testing slightly
+
 - PR 8 (#2119): production proxy in local dev. Local docker-compose runs the unit image with the real OpenResty config instead of `scripts/development/proxy`.
 - After moving the app host to AL2023 (kernel 5.14+), check that `net.ipv4.tcp_migrate_req=1` is set on the host and that stopping a unit no longer resets queued connections (reuseport listener close; the deploy e2e sets it, AL2's 5.10 kernel can't). The proxy deploy e2e still drops a request or two now and then even with it set; find out why (#2119)
 - Watch unit memory (`stats`) for the first days after the #2119 cutover: each unit's limit assumes one unit can carry all traffic
