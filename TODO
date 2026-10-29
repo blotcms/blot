@@ -59,7 +59,6 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 
 Finish the container consolidation:
 - Audit consolidated containers spawned subprocesses for memory max oom usage
-- Template editor writes (Template.writeToFolder/removeFromFolder via client.write/remove) take no folder lock and race with syncs; take the lock, or route them with the other folder writes to the worker
 - Move the app/proxy host off Amazon Linux 2, which stopped getting security updates on 2026-06-30 (scripts/security/check-advisories.js flags it). Plan a replacement AL2023 host the way the Redis host was replaced (config/redis/launch.sh), port config/host setup (yum -> dnf), drill it, then cut over.
 - Set up cloud, watch memory agent on instance and in code
 - purchase reserved instance for consolidated host

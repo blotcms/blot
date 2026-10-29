@@ -81,6 +81,15 @@ if (importContainer && (liveUpdatesContainer || importStatusContainer)) {
 
     renderImportStatuses();
 
+    // Statuses published while the stream was down are lost, so reload the
+    // list (which renders each import's last status) when it re-opens after a
+    // drop. The first open is skipped: the page was just rendered.
+    let hasOpened = false;
+    evtSource.onopen = function () {
+      if (hasOpened) refreshFolder();
+      hasOpened = true;
+    };
+
     evtSource.onmessage = function (event) {
       const { status, importID } = JSON.parse(event.data);
 
