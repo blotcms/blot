@@ -25,7 +25,7 @@ ssh blot "cat /var/instance-ssd/logs/access.log-$(date -d yesterday +%Y%m%d) /va
 Log line format (space-separated, so `cut -d ' ' -fN` / `awk '{print $N}'` work):
 
 ```
-[time] request_id status request_time bytes_in:bytes_out url  cache=X ip=X st=X lrs=X up=X conn=X cr=X tls=X wl=X ref=X ua=X ae=X
+[time] request_id status request_time bytes_in:bytes_out url  cache=X ip=X st=X lrs=X up=X conn=X cr=X tls=X wl=X ref=X ua=X ae=X unit=X
    1        2         3      4              5             6      (7 is empty due to double space before cache=)
 ```
 

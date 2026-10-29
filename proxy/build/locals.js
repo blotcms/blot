@@ -15,6 +15,10 @@
 // from. Let's Encrypt production unless set (e.g. its staging directory, to
 // try issuance without rate limits; a Pebble server in CI).
 //
+// PROXY_UNIT: which proxy container this is (blue or green), logged as unit= at
+// the end of each access log line. The deploy scripts set it from the
+// container's name; "-" when unset.
+//
 // PROXY_UPSTREAM_*: host:port of the Node containers. The upstream groups in
 // http.conf keep their weights and failover roles; only where each container
 // is changes. GREEN handles sync, writes and webhooks (/clients), BLUE serves the
@@ -32,6 +36,7 @@ function runtimeDefaults(env = process.env) {
     PROXY_PRIVATE_IP: env.OPENRESTY_INSTANCE_PRIVATE_IP || "127.0.0.1",
     PROXY_RESOLVER: env.OPENRESTY_RESOLVER || "8.8.8.8 ipv6=off",
     PROXY_ACME_CA: env.ACME_CA || LETS_ENCRYPT,
+    PROXY_UNIT: "-",
     PROXY_UPSTREAM_GREEN: "127.0.0.1:8089",
     PROXY_UPSTREAM_BLUE: "127.0.0.1:8088",
     PROXY_UPSTREAM_YELLOW: "127.0.0.1:8090",

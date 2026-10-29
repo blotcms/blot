@@ -160,6 +160,6 @@ or run the Deploy proxy workflow with that commit.
 
 ## Known gaps
 
-- **`:8999` ACME hook** during the overlap (see the root `TODO`).
+- **`:8999` ACME hook** during the overlap, until `PROXY_ACME_HOOK_SECRET` is set in `proxy.env` (the deploy logs a warning while it is not): see `proxy/README.md`.
 - The container has no `fail2ban` of its own; it relies on the host's reading
   the shared log directory (hence the log-mode guard above).
