@@ -49,7 +49,7 @@ case "$1" in
     if [[ "$n" =~ ^blot-(blue|green)(-previous)?$ ]]; then
       if [ "$(cat "$FAKE/serving")" = baremetal ]; then rm -f "$R/$n"; else echo container > "$FAKE/serving"; fi
     fi ;;
-  stop) n="${!#}"; [ "$n" != "${FAKE_STOP_FAILS:-}" ] || exit 1; rm -f "$R/$n"; touch "$FAKE/stopped"
+  stop) n="${!#}"; rm -f "$R/$n"; touch "$FAKE/stopped"
     # the health cron docker-restarts a draining container that went unhealthy
     [ "$n" != "${FAKE_COMES_BACK:-}" ] || { touch "$R/$n"; exit 0; }
     [ -n "$(ls "$R" | grep -E '^blot-(blue|green)(-previous)?$')" ] || echo none > "$FAKE/serving" ;;

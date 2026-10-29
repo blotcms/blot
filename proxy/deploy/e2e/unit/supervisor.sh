@@ -9,8 +9,13 @@ esac
 export BLOT_SOCKET="${BLOT_SOCKET:-/run/blot/$BLOT_UNIT-a.sock}"
 export BLOT_WORKER_SOCKET="${BLOT_WORKER_SOCKET:-/run/blot/$BLOT_UNIT-b.sock}"
 export PROXY_UPSTREAM_MODE=unit
-export PROXY_UNIT_MAIN="unix:$BLOT_SOCKET" PROXY_UNIT_WORKER="unix:$BLOT_WORKER_SOCKET"
-export PROXY_PEER_MAIN="unix:/run/blot/$peer-a.sock" PROXY_PEER_WORKER="unix:/run/blot/$peer-b.sock"
+# E2E_UPSTREAMS_FROM_ENV=1 (proxy.env) keeps the upstream addresses the
+# environment gives, so the swap-under-load job's stub answers instead of this
+# one's "ok"; /health is still answered on the sockets by stub-node.js.
+if [ -z "${E2E_UPSTREAMS_FROM_ENV:-}" ]; then
+  export PROXY_UNIT_MAIN="unix:$BLOT_SOCKET" PROXY_UNIT_WORKER="unix:$BLOT_WORKER_SOCKET"
+  export PROXY_PEER_MAIN="unix:/run/blot/$peer-a.sock" PROXY_PEER_WORKER="unix:/run/blot/$peer-b.sock"
+fi
 
 node /usr/src/app/stub-node.js &
 node_pid=$!

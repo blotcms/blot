@@ -35,7 +35,7 @@ and the app serves as a fallback. Containers also get
 ~20000 fds `worker_connections 10000` can need (two fds per proxied
 connection) and the config's own `worker_rlimit_nofile 20480`
 (`proxy/config/initial.conf`).
-`bash tests/run.sh` exercises both scripts against fake `docker`/`systemctl` (CI runs it), and the `proxy-deploy-e2e` workflow runs `blue-green.sh` against real Docker ([`e2e/`](e2e/README.md)).
+`bash tests/run.sh` exercises both scripts against fake `docker`/`systemctl` (CI runs it), and the `proxy-deploy-e2e` workflow runs `blue-green.sh` against real Docker, with stand-in units ([`e2e/`](e2e/README.md)).
 
 ## Units
 
