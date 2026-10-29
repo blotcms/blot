@@ -1,0 +1,27 @@
+{{> head}}
+
+<div class="header">
+  {{> profile}}
+</div>
+
+<div class="subheading-column fade-in">
+  <h2>Search</h2>
+  <form action="/search" method="get" role="search">
+    <label for="cv-search-query">Search entries</label>
+    <input id="cv-search-query" type="search" name="q" value="{{query}}" />
+    <button type="submit">Search</button>
+  </form>
+
+  {{#query}}
+  <h2>Results for “{{query}}”</h2>
+  {{^entries.length}}
+  <p>No entries found.</p>
+  {{/entries.length}}
+  {{#entries}}
+  <h3 class="date-heading">{{#formatDate}}{{date_display}}{{/formatDate}}</h3>
+  <p><a href="{{{url}}}">{{title}}</a></p>
+  {{/entries}}
+  {{/query}}
+</div>
+
+{{> footer}}

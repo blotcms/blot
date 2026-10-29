@@ -2,12 +2,11 @@
 {{> head}}
 
 <div class="header">
-{{> /Profile.txt}}
+{{> profile}}
 </div>  
 
 <h2 class="section-nav">
-<a href="/">About</a>
-<a href="/writing" class="selected">Writing</a>
+{{#menu}}<a href="{{{url}}}" class="{{#active}}selected{{/active}}">{{label}}</a>{{/menu}}
 </h2>
 
 <div class="subheading-column fade-in">

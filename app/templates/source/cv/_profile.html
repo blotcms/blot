@@ -1,0 +1,21 @@
+{{#title}}
+{{#profile_image.thumbnails.small}}
+<p><img src="{{{url}}}"
+    srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}"
+    sizes="92px"
+    width="{{width}}" height="{{height}}" alt="{{title}}"></p>
+{{/profile_image.thumbnails.small}}
+{{^profile_image.thumbnails.small.url}}
+{{#avatar}}
+<p><img src="{{{avatar}}}" width="92" height="92" alt="{{title}}"></p>
+{{/avatar}}
+{{/profile_image.thumbnails.small.url}}
+<h1><a href="/">{{{title}}}</a></h1>
+{{#bio}}<p>{{bio}}</p>{{/bio}}
+<ul class="profile-links">
+    {{#menu}}<li><a href="{{{url}}}">{{label}}</a></li>{{/menu}}
+</ul>
+{{/title}}
+{{^title}}
+{{> /Profile.txt}}
+{{/title}}
