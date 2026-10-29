@@ -1,3 +1,6 @@
+# Keep NODE_BASE identical to the one in proxy/Dockerfile (the proxy image is
+# built on the same base); scripts/security/check-base-image.js checks it.
+ARG NODE_BASE=node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
 ## Stage 1 (base)
 # Runtime-only foundation shared by every downstream stage. It carries the
 # things that must exist at *run* time (git, tini, pandoc, the libvips and
@@ -5,7 +8,7 @@
 # compile native npm modules - those live in the throwaway `deps` stage and
 # never reach a published image. Keeping them out of `base` shrinks both the
 # `dev` test image (pulled by all ~17 CI matrix jobs) and the `prod` image.
-FROM node:24.22.1-alpine AS base
+FROM ${NODE_BASE} AS base
 
 ARG PANDOC_VERSION=3.6.1
 # sharp 0.35 needs libvips >= 8.18.6 but the Alpine release this base image is
