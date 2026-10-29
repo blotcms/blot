@@ -95,6 +95,9 @@ jobs:
           attempt_limit: 2
           attempt_delay: 10000
           with: |
+            # The checkout, not the Git context: the proxy's generated config
+            # (proxy/build/data) is untracked
+            source: .
             files: docker-bake.hcl
             targets: unit
             set: |
