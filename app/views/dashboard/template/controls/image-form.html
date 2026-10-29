@@ -4,29 +4,14 @@
 <div class="settings-group">
   <h2 class="template-heading">Photo</h2>
   <div class="favicon-form__body">
-    {{#image.value}}
-    <p><img src="{{{url}}}" data-profile-mask="{{mask}}" data-profile-mask-preview alt="Current {{image.label}}" /></p>
-    <form method="post" action="{{{base}}}/images/{{image.key}}" enctype="multipart/form-data" class="dashboard-form photo-delete-form" data-photo-mask-form>
+    <form method="post" action="{{{base}}}/images/{{image.key}}" enctype="multipart/form-data" class="dashboard-form favicon-form" data-photo-crop-form{{#image.value.url}} data-source-url="{{{image.value.url}}}"{{/image.value.url}}>
       <input type="hidden" name="_csrf" value="{{csrftoken}}" />
       <input type="hidden" name="redirect" value="{{{base}}}/images/{{image.key}}" />
       <input type="hidden" name="update_mask" value="1" />
-      {{> profile-photo-shape-options}}
-      <p class="error photo-mask-error" role="alert" data-photo-mask-error hidden></p>
-      <div class="buttons">
-        <button type="submit" class="red" name="remove" value="1">Delete photo</button>
-        <a href="{{{base}}}">Cancel</a>
-      </div>
-    </form>
-    <hr class="photo-upload-divider" />
-    {{/image.value}}
-
-    <form method="post" action="{{{base}}}/images/{{image.key}}" enctype="multipart/form-data" class="dashboard-form favicon-form" data-photo-crop-form>
-      <input type="hidden" name="_csrf" value="{{csrftoken}}" />
-      <input type="hidden" name="redirect" value="{{{base}}}/images/{{image.key}}" />
-      <input type="hidden" name="crop_x" value="" data-crop-x />
-      <input type="hidden" name="crop_y" value="" data-crop-y />
-      <input type="hidden" name="crop_width" value="" data-crop-width />
-      <input type="hidden" name="crop_height" value="" data-crop-height />
+      <input type="hidden" name="crop_x" value="{{image.value.crop.x}}" data-crop-x />
+      <input type="hidden" name="crop_y" value="{{image.value.crop.y}}" data-crop-y />
+      <input type="hidden" name="crop_width" value="{{image.value.crop.width}}" data-crop-width />
+      <input type="hidden" name="crop_height" value="{{image.value.crop.height}}" data-crop-height />
       {{> file-drop-field}}
 
       {{> profile-photo-cropper}}

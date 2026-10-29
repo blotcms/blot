@@ -11,6 +11,7 @@ const writeChangeToFolder = require("./writeChangeToFolder");
 const previewReload = require("helper/publishPreviewReload");
 const { isAjaxRequest } = require("./ajax-response");
 const { generate, regenerate, MAX_PIXELS, normalizeShape } = require("../../../../build/thumbnail/template-image");
+const { normalizedCrop } = require("../../../../build/thumbnail/crop");
 
 const ASSETS = "_template_assets";
 const directory = (blog) => assets.path(blog.id, ASSETS);
@@ -33,6 +34,9 @@ async function saveProfileImageFavicon(req, file, source) {
 }
 
 const nameFromURL = (assetURL) => basename(decodeURIComponent(new URL(assetURL, "http://local").pathname));
+
+const CROP_EPSILON = 1e-6;
+const sameCrop = (a, b) => (!a && !b) || Boolean(a && b && ["x", "y", "width", "height"].every((k) => Math.abs(a[k] - b[k]) < CROP_EPSILON));
 
 function filenames(value) {
   if (!value || !value.url) return [];
@@ -168,15 +172,22 @@ module.exports = async function uploadImage(req, res, next) {
   const previous = locals[key];
   const file = first(req.files);
   const remove = req.body.remove === "1";
-  const maskOnly = req.body.update_mask === "1" && key === "profile_image" && (!file || !file.size);
+  const editOnly = req.body.update_mask === "1" && key === "profile_image" && (!file || !file.size);
   const wantsFavicon = key === "profile_image" && res.locals.favicon_supported && !locals.favicon;
 
-  if (!remove && !maskOnly && (!file || !file.size)) {
+  if (!remove && !editOnly && (!file || !file.size)) {
     await cleanupFiles(req.files);
     return isAjaxRequest(req)
       ? res.json({ image: previous || null })
       : res.message(req.body.redirect || res.locals.base, previous && previous.url ? "No changes" : "Choose an image");
   }
+
+  const cropFields = {
+    x: req.body.crop_x,
+    y: req.body.crop_y,
+    width: req.body.crop_width,
+    height: req.body.crop_height,
+  };
 
   let mask;
   if (key === "profile_image") {
@@ -199,26 +210,29 @@ module.exports = async function uploadImage(req, res, next) {
       : res.message(req.body.redirect || res.locals.base, "Removed image");
   }
 
-  if (maskOnly) {
-    if (previous.mask === mask) {
+  if (editOnly) {
+    // No crop submitted means keep the saved one
+    const crop = normalizedCrop(cropFields) || previous.crop || null;
+    if (previous.mask === mask && sameCrop(previous.crop, crop)) {
       await cleanupFiles(req.files);
       return isAjaxRequest(req)
         ? res.json({ image: previous })
         : res.message(req.body.redirect || res.locals.base, "No changes");
     }
 
-    // The thumbnails are cut to the shape, so a new shape needs new thumbnails.
-    // The stored original is cropped but never masked.
+    // The thumbnails are cropped and cut to the shape, so either changing
+    // needs new thumbnails. The stored original is the whole (shrunk) photo.
     let made;
     try {
-      const original = await assets.read(req.blog.id, assetPath(nameFromURL(previous.url)));
-      made = await regenerate(original, directory(req.blog), mask);
+      const whole = await assets.read(req.blog.id, assetPath(nameFromURL(previous.url)));
+      made = await regenerate(whole, directory(req.blog), crop, mask);
       await commitGenerated(req.blog, { thumbnails: made.thumbnails });
     } catch (error) {
       return next(error);
     }
 
     const updated = { ...previous, mask, thumbnails: {} };
+    if (crop) updated.crop = crop;
     for (const [name, item] of Object.entries(made.thumbnails)) {
       updated.thumbnails[name] = { url: url(req.blog, item.name), width: item.width, height: item.height };
     }
@@ -230,7 +244,7 @@ module.exports = async function uploadImage(req, res, next) {
     previewReload.publish(req.blog.id);
     return isAjaxRequest(req)
       ? res.json({ image: updated })
-      : res.message(req.body.redirect || res.locals.base, "Updated photo shape");
+      : res.message(req.body.redirect || res.locals.base, "Updated photo");
   }
 
   // wantsFavicon also derives a separately-cropped favicon from this same
@@ -240,12 +254,12 @@ module.exports = async function uploadImage(req, res, next) {
 
   let made;
   try {
-    made = await generate(file.path, directory(req.blog), {
-      x: req.body.crop_x,
-      y: req.body.crop_y,
-      width: req.body.crop_width,
-      height: req.body.crop_height,
-    }, { source, shape: mask });
+    made = await generate(file.path, directory(req.blog), cropFields, {
+      source,
+      shape: mask,
+      // A profile photo keeps its whole image so the crop can be edited later
+      editable: key === "profile_image",
+    });
     // generate() wrote the derivatives to the local directory
     await commitGenerated(req.blog, made);
     if (!wantsFavicon) await cleanupFiles(req.files);
@@ -261,6 +275,7 @@ module.exports = async function uploadImage(req, res, next) {
     thumbnails: {},
   };
   if (mask) image.mask = mask;
+  if (made.crop) image.crop = made.crop;
   for (const [name, item] of Object.entries(made.thumbnails)) {
     image.thumbnails[name] = {
       url: url(req.blog, item.name),
