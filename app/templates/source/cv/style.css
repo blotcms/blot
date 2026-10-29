@@ -148,8 +148,7 @@ h2 a.selected {border-bottom: 1px solid var(--link-color);color:var(--link-color
 .header.subpage ul {display: none!important;}
 .header.subpage h1 {font-size: var(--font-size);color:var(--light-text-color);font-weight: normal;}
 .header.subpage h1 + p {display: none;}
-.header.subpage p:first-of-type img,
-.header.subpage p:first-of-type .profile-image-placeholder {width:3em;height:3em;float:none;font-size: 18px;}
+.header.subpage p:first-of-type img {width:3em;height:3em;float:none;font-size: 18px;}
 .header ul:empty {display: none !important;}
 
 /* A page mounted at / is the homepage, even though it uses entry.html. */
@@ -160,13 +159,6 @@ h2 a.selected {border-bottom: 1px solid var(--link-color);color:var(--link-color
   max-width: 100%;
   width: 6.13333333em;
   height: 6.13333333em;
-  float: left;
-  margin-right: 1.333em;
-}
-.entry-page[data-entry-url="/"] .header.subpage p:first-of-type .profile-image-placeholder {
-  width: 6.13333333em;
-  height: 6.13333333em;
-  border-radius: 50%;
   float: left;
   margin-right: 1.333em;
 }
@@ -197,16 +189,6 @@ h2 a.selected {border-bottom: 1px solid var(--link-color);color:var(--link-color
   margin-right: 1.333em;
 }
 
-
-.header p:first-of-type .profile-image-placeholder {
-  display: block;
-  width: 6.13333333em;
-  height: 6.13333333em;
-  border-radius: 50%;
-  float: left;
-  margin-right: 1.333em;
-  background: #ccc;
-}
 
 span.caption {
   display: none;
