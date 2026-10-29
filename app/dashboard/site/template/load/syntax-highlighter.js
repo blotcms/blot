@@ -22,15 +22,12 @@ module.exports = function (req, res, next) {
             req.template.locals.syntax_highlighter_font
           ),
           label: "Font",
-          // This font control is standalone, not part of the sidebar's
-          // `fonts` list, so it must not inherit the sidebar's
-          // singleFontInput flag (which would otherwise hide this label
-          // whenever the sidebar happens to have exactly one other font
-          // local).
-          singleFontInput: false
+          // The font picker sits below the Code theme control, so a separate
+          // visible Font label is redundant here.
+          singleFontInput: true
         }
       : null,
-    label: "Syntax highlighting",
+    label: "Code",
     options: Themes.map(option => {
       return {
         selected:

@@ -586,9 +586,10 @@ p.template-heading-note {
 
 .line.links .link {
   position: absolute;
-  top: 0;
+  top: 50%;
   right: 0;
-  padding: 0 0 1em 4em;
+  padding: 0.75em 0 0.75em 4em;
+  transform: translateY(-50%);
   background: linear-gradient(90deg, transparent, var(--background-color) 50%);
   transition: background-color 0.2s;
 }

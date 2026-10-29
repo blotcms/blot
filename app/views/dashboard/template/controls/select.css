@@ -14,7 +14,10 @@ form.select {
   padding: var(--select-control-padding);
   font-size: var(--select-control-font-size);
   border-bottom: 1px solid var(--light-border-color);
+  cursor: pointer;
 }
+
+form.select label { cursor: pointer; }
 
 form.select:hover {
   background-color: var(--light-background-color);

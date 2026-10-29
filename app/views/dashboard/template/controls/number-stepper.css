@@ -8,6 +8,10 @@
   overflow: hidden;
 }
 
+.number-stepper:focus-within {
+  border-color: var(--accent-color);
+}
+
 .number-stepper__step {
   width: 1.75em;
   padding: 0.4em 0;
@@ -36,6 +40,11 @@
   font: inherit;
   font-variant-numeric: tabular-nums;
   -moz-appearance: textfield;
+}
+
+.number-stepper__input:focus {
+  outline: none;
+  box-shadow: none;
 }
 
 .number-stepper__input::-webkit-outer-spin-button,
