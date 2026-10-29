@@ -72,7 +72,7 @@ checks go on requiring while it does; the new blue's backups, green's sockets,
 do not exist yet, which is fine), checks it, runs the canary, then replaces
 green the same way (a proxy-only peer counts as healthy for the "other unit must
 be healthy" rule). Only when both are healthy units and the checks pass are the
-old containers stopped with `docker stop --time 30`, stopped and not removed. A
+old containers stopped with `docker stop --time 40` (a unit's stop timeout), stopped and not removed. A
 run that is cut off can simply be run again: a unit already on the image is
 skipped, and the stop step does nothing once the old containers are stopped.
 
@@ -157,7 +157,8 @@ looks at what is running and does one of:
 - **steady** (both units up): for blue, then green: refuse unless the other
   unit is running and healthy (its health socket answers); skip a unit that
   already runs this image and is healthy (a re-run is a no-op); otherwise
-  `docker stop --time 30` it, rename it `blot-<unit>-previous`, create and start
+  `docker stop --time 30` it (40 for a unit, which drains OpenResty and then
+  node-a), rename it `blot-<unit>-previous`, create and start
   the new one, wait for its health socket, run the site checks, give it its
   restart policy and remove `-previous`. Any failure removes the new
   container, starts `-previous` again and renames it back, and the deploy stops
