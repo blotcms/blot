@@ -135,7 +135,7 @@ async function waitFor(fn, timeoutMs = 10000, everyMs = 200) {
 }
 
 async function startProxy(c) {
-  docker("run", "-d", "--name", c.name, "-p", `${c.http}:80`, "-p", `${c.https}:443`, "-e", "BLOT_HOST=localhost", "-v", `${c.volume}:${CACHE}`, c.image);
+  docker("run", "-d", "--name", c.name, "-p", `${c.http}:80`, "-p", `${c.https}:443`, "-e", "BLOT_HOST=localhost", "-e", "PROXY_UNIT_MAIN=127.0.0.1:8090", "-e", "PROXY_UNIT_WORKER=127.0.0.1:8089", "-e", "PROXY_PEER_MAIN=127.0.0.1:8088", "-e", "PROXY_PEER_WORKER=127.0.0.1:8088", "-v", `${c.volume}:${CACHE}`, c.image);
   startStub(c);
   const proxyUp = await waitFor(async () => (await send(c, { host: "ready.example", path: "/health" }).catch(() => ({}))).status === 200, 40000, 500);
   if (!proxyUp) throw new Error(c.name + ": proxy did not come up\n" + dockerTry("logs", c.name));

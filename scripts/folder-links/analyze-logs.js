@@ -10,14 +10,14 @@
 // output or on the production host. Run it from the repo root (or anywhere,
 // by path). One container:
 //
-//   ssh blot "docker logs --since 24h blot-container-blue 2>&1" \
+//   ssh blot "docker logs --since 24h blot-blue 2>&1" \
 //     | node scripts/folder-links/analyze-logs.js
 //
-// All three containers (the same loop the node-response-time-review skill
+// Both units (the same loop the node-response-time-review skill
 // uses to collect app logs):
 //
-//   for c in blue green yellow; do
-//     ssh blot "docker logs --since 24h blot-container-$c 2>&1"
+//   for c in blue green; do
+//     ssh blot "docker logs --since 24h blot-$c 2>&1"
 //   done | node scripts/folder-links/analyze-logs.js --top 30
 //
 // Flags: --top N (rows per table, default 10), --json (machine-readable).

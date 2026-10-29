@@ -154,10 +154,7 @@ describe("proxy config locals", function () {
       "PROXY_PEER_WORKER",
       "PROXY_UNIT_MAIN",
       "PROXY_UNIT_WORKER",
-      "PROXY_UPSTREAM_BLUE",
-      "PROXY_UPSTREAM_GREEN",
       "PROXY_UPSTREAM_MODE",
-      "PROXY_UPSTREAM_YELLOW",
     ]);
   });
 

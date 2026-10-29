@@ -29,7 +29,7 @@ page's metadata; the practical fixes are below.
 **Always confirm with the user before running anything against production,
 and stick to read-only commands** (see `investigate-production-container-restarts`
 for the host/architecture background: SSH host `blot`, containers
-`blot-container-{blue,green,yellow}`).
+`blot-{blue,green}`).
 
 `scripts/blog/find-template-tags.js` takes a handle, domain or blog ID and
 prints the owner's email, then each non-deleted text entry whose *source file*
@@ -39,7 +39,7 @@ anything. The script only exists in the image after the PR that added it has
 deployed; run it in the **green** container:
 
 ```
-ssh blot "docker exec blot-container-green node scripts/blog/find-template-tags.js <handle|domain|id>"
+ssh blot "docker exec blot-green node scripts/blog/find-template-tags.js <handle|domain|id>"
 ```
 
 Add `--json` for machine-readable output. If the script isn't in the deployed
@@ -47,9 +47,9 @@ image yet, copy it in temporarily and remove it afterwards:
 
 ```
 scp scripts/blog/find-template-tags.js blot:/tmp/ftt.js
-ssh blot "docker cp /tmp/ftt.js blot-container-green:/usr/src/app/scripts/blog/ftt_tmp.js \
-  && docker exec blot-container-green node scripts/blog/ftt_tmp.js <handle|domain|id>; \
-  docker exec -u root blot-container-green rm -f /usr/src/app/scripts/blog/ftt_tmp.js; rm -f /tmp/ftt.js"
+ssh blot "docker cp /tmp/ftt.js blot-green:/usr/src/app/scripts/blog/ftt_tmp.js \
+  && docker exec blot-green node scripts/blog/ftt_tmp.js <handle|domain|id>; \
+  docker exec -u root blot-green rm -f /usr/src/app/scripts/blog/ftt_tmp.js; rm -f /tmp/ftt.js"
 ```
 
 (The container is BusyBox/Alpine: no `ls --time-style`.) The blog folder is at

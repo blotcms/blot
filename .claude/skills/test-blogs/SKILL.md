@@ -102,7 +102,7 @@ not run `git remote -v`, `git config --list` or `set -x`.
    each: status, `content-type`, `cache-control` (CDN assets are expected to
    be 200 with a long `max-age`). Compare with the S3 numbers below.
 3. **Production disk and bucket**, one approved command (read-only, exits when done):
-   `ssh blot docker exec blot-container-green node scripts/test-blogs/inspect.js <handle> [path-in-folder]`
+   `ssh blot docker exec blot-green node scripts/test-blogs/inspect.js <handle> [path-in-folder]`
    The path is the file's path in the blog folder, e.g. `skilltest-1760000000/post.md`;
    without one it takes the most recent entries (`-n N`, default 3). Output:
    ```

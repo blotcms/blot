@@ -15,10 +15,10 @@ const {
   fromWrapperOptions,
 } = require("../probe/run");
 const { OPTIONS: PROBE_OPTIONS, checkOptions } = require("./probe");
-const { CONTAINERS } = require("../deploy/constants");
+const { UNIT } = require("../deploy/constants");
 
-// As green, which runs Fix() from the hourly Dropbox and iCloud validators.
-const DEFAULTS = { memory: "2g", oldSpace: CONTAINERS.GREEN.maxOldSpaceSize, cpus: 1 };
+// As node-b, which runs Fix() from the hourly Dropbox and iCloud validators.
+const DEFAULTS = { memory: "2g", oldSpace: UNIT.nodeBMaxOldSpaceSize, cpus: 1 };
 
 // --out is the launcher's: results always come back to data/fix-probe.
 const { out, ...probeOptions } = PROBE_OPTIONS;
@@ -32,7 +32,7 @@ function usage() {
 Probe options:
 ${formatOptions(probeOptions)}
 
-Wrapper options (defaults: --memory ${DEFAULTS.memory}, --max-old-space ${DEFAULTS.oldSpace} as green):
+Wrapper options (defaults: --memory ${DEFAULTS.memory}, --max-old-space ${DEFAULTS.oldSpace} as node-b):
 ${formatOptions(WRAPPER_OPTIONS)}`);
 }
 

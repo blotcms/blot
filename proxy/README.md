@@ -51,21 +51,18 @@ serves any host:
 | `PROXY_ACME_CA` | build-time `ACME_CA`, else Let's Encrypt production | ACME directory for custom-domain certificates. Leave it alone in production: the deploy scripts refuse anything else in `proxy.env` |
 | `PROXY_ACME_HOOK_SECRET` | unset: each instance generates its own (a warning is logged) | the secret dehydrated's hook calls carry to the `:8999` hook server. Set it to the same long random string on every instance: they share `:8999` (`reuseport`), so a call can reach either. Read by `init.conf` (never written into `nginx.conf`) |
 | `PROXY_UNIT` | `-` | `blue` or `green`: logged as the last field of every access log line (`unit=`). The deploy script sets it from the container name (`blot-blue` is `blue`) |
-| `PROXY_UPSTREAM_GREEN` | `127.0.0.1:8089` (production: `unix:/run/blot/green.sock`) | the Node that handles sync, writes and webhooks (`/clients`) |
-| `PROXY_UPSTREAM_BLUE` | `127.0.0.1:8088` (`unix:/run/blot/blue.sock`) | the dashboard Node, and failover for the others |
-| `PROXY_UPSTREAM_YELLOW` | `127.0.0.1:8090` (`unix:/run/blot/yellow.sock`) | the blog Node |
-| `PROXY_UPSTREAM_MODE` | `containers` | `containers`: the three Node containers above. `unit`: this container also runs its own two Node processes (the [unit image](#the-unit-image)) and the next four are used instead |
-| `PROXY_UNIT_MAIN` | `unix:/run/blot/blue-a.sock` | unit mode: this unit's main Node process (blogs, dashboard reads) |
-| `PROXY_UNIT_WORKER` | `unix:/run/blot/blue-b.sock` | unit mode: this unit's worker child (`/clients`, webhooks, dashboard writes) |
-| `PROXY_PEER_MAIN` | `unix:/run/blot/green-a.sock` | unit mode: the other unit's main process, `backup` for the two upstreams above |
-| `PROXY_PEER_WORKER` | `unix:/run/blot/green-b.sock` | unit mode: the other unit's worker child, `backup` for `/clients` |
+| `PROXY_UPSTREAM_MODE` | `unit` | the only mode: this container runs its own two Node processes (the [unit image](#the-unit-image)), at the four addresses below |
+| `PROXY_UNIT_MAIN` | `unix:/run/blot/blue-a.sock` | this unit's main Node process (blogs, dashboard reads) |
+| `PROXY_UNIT_WORKER` | `unix:/run/blot/blue-b.sock` | this unit's worker child (`/clients`, webhooks, dashboard writes) |
+| `PROXY_PEER_MAIN` | `unix:/run/blot/green-a.sock` | the other unit's main process, `backup` for the two upstreams above |
+| `PROXY_PEER_WORKER` | `unix:/run/blot/green-b.sock` | the other unit's worker child, `backup` for `/clients` |
 | `PROXY_FETCH_CDN_IPS` | `true` | fetch the Bunny edge list (exempt from rate limits) at start; `false` uses the list baked into the image |
 
 The upstream groups keep their names, weights and failover roles from
-`config/http.conf`; only where each Node is changes. In unit mode `blot_node`
+`config/http.conf`; only where each Node is changes. `blot_node`
 is the unit's worker with the other unit's worker as `backup`, and
 `blot_blogs_node` and `blot_dashboard_node` are the unit's main process with the
-other unit's as `backup`; `render-config.sh` picks the servers from the mode. A `unix:` upstream is a socket the Node
+other unit's as `backup`; `render-config.sh` picks the servers. A `unix:` upstream is a socket the Node
 container listens on in `/run/blot` (a failed connect is immediate, so nginx
 retries the backup); the deploy scripts bind-mount that directory into the
 proxy when any upstream is one. The Bunny
@@ -223,7 +220,7 @@ why issuance can be flaky during a blue/green overlap. Options worth a spike
 ## Deployment
 
 The container runs with `--network host` (the generated upstreams are
-`127.0.0.1:8088-8091`). Two kinds of change:
+the units' Unix sockets in `/run/blot`). Two kinds of change:
 
 - **Config-only** (a `.conf` edit): ship it as a new image like any other
   change. [`deploy/reload-config.sh`](deploy/reload-config.sh) can reload a
@@ -322,7 +319,7 @@ root-owned); it does **not** recurse into the cache.
 ## The unit image
 
 [#2119](https://github.com/blotcms/blot/issues/2119) replaces the proxy
-container and the three Node containers with two identical units, `blot-blue`
+container and the three Node containers (`blot-container-blue`, `-green` and `-yellow`, now retired) with two identical units, `blot-blue`
 and `blot-green`, each one container running OpenResty, node-a (the Node main
 process) and node-b (the worker child node-a forks, `helper/workerChild`). The
 image is the `unit` target of the root `Dockerfile`: the `prod` app image plus

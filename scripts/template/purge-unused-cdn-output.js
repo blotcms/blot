@@ -1,4 +1,4 @@
-// docker exec -it blot-container-green node scripts/template/purge-unused-cdn-output.js [--apply]
+// docker exec -it blot-blue node scripts/template/purge-unused-cdn-output.js [--apply]
 //
 // Prepares rendered {{#cdn}} output to be served from Redis alone, off the old
 // disk store (data/cdn/template). Run it while the app still writes both

@@ -34,16 +34,19 @@ Log format (`proxy/config/http.conf`, `access_log_format`):
 ```
 
 - `st=-`: nginx cache hit, no upstream. `st=0.088, 0.049` / `up=a, b`: a
-  retry on a second upstream (sum them). Ports: `8090` yellow (blogs),
-  `8089` green (blot.im POSTs, webhooks), `8088` blue (dashboard and blot.im
-  GETs; also the **backup** for blogs, so blog requests on blue mean yellow
-  was down or failing, usually around a deploy).
+  retry on a second upstream (sum them). Upstreams are the units' Node
+  sockets: `/run/blot/<unit>-a.sock` (node-a: blogs and dashboard reads; each
+  unit's node-a is the other's **backup** for blogs, so blog requests on
+  `green-a` mean `blue-a` was down or failing, usually around a deploy) and
+  `/run/blot/<unit>-b.sock` (node-b: blot.im POSTs, webhooks, `/clients`).
+  Before the units, the ports `8090` (blogs), `8089` (blot.im POSTs, webhooks)
+  and `8088` (dashboard) appear instead, in logs from the old containers.
 - `<request_id>` is passed to node as `X-Request-ID`, so the same id appears
   in the container's log (`app/request-logger.js`):
   ```
-  [time] [yellow] <id> <url> GET
-  [time] [yellow] <id> +12ms <req.log step>
-  [time] [yellow] <id> <status> <duration-s> <url> elu=<0..1> slowest=+<ms>ms:"<step>"
+  [time] [blue/node-a] <id> <url> GET
+  [time] [blue/node-a] <id> +12ms <req.log step>
+  [time] [blue/node-a] <id> <status> <duration-s> <url> elu=<0..1> slowest=+<ms>ms:"<step>"
   ```
   `st − duration` ≈ time the request queued before the app's middleware
   ran. `elu` is event-loop utilisation over the request: ~1 means the
@@ -129,7 +132,7 @@ Join the slow requests to the app's response lines by request id:
 
 ```bash
 J=.claude/skills/investigate-slow-upstream-responses/join-app-log.js
-ssh blot "for c in blue green yellow; do docker logs blot-container-\$c 2>&1; done | grep -E '^\[[^]]+\] \[[a-z-]+\] [0-9a-f]{32} ([0-9]{3} [0-9.]+ |Connection closed)'" > $S/app.log
+ssh blot "for c in blue green; do docker logs blot-\$c 2>&1; done | grep -E '^\[[^]]+\] \[[a-z/-]+\] [0-9a-f]{32} ([0-9]{3} [0-9.]+ |Connection closed)'" > $S/app.log
 node $J $S/access.log.gz $S/app.log [--host <host>]
 ```
 
@@ -143,13 +146,13 @@ that (pull it fresh if a deploy happened since).
 For one request id, every step it logged:
 
 ```bash
-ssh blot "docker logs --timestamps blot-container-yellow 2>&1 | grep <id>"
+ssh blot "docker logs --timestamps blot-blue 2>&1 | grep <id>"
 ```
 
 All of a host's completion lines, slowest first:
 
 ```bash
-ssh blot "docker logs blot-container-yellow 2>&1 | grep -E '^\[[^]]+\] \[yellow\] [0-9a-f]{32} [0-9]{3} [0-9.]+ https?://<host>' | awk '{print \$5, \$6, \$8, \$7}' | sort -k2 -rn | head"
+ssh blot "docker logs blot-blue 2>&1 | grep -E '^\[[^]]+\] \[blue/node-a\] [0-9a-f]{32} [0-9]{3} [0-9.]+ https?://<host>' | awk '{print \$5, \$6, \$8, \$7}' | sort -k2 -rn | head"
 ```
 
 Read it as:

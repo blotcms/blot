@@ -176,15 +176,15 @@ if [ ! -d "$DATA/static" ]; then
   truncate -s 64M "$DATA/git/sparse.pack"
 fi
 
-# Two "app" containers bind the whole data directory with rslave, like
-# scripts/deploy/util/generateDockerCommand.js. The names matter: host.sh looks
-# for blot-container-*.
+# Two "app" containers bind the whole data directory with rslave, like the
+# units (proxy/deploy/common.sh). The names matter: host.sh looks for blot-blue
+# and blot-green.
 D=/usr/src/app/data
-for n in blot-container-blue blot-container-green blot-proxy-drill; do docker rm -f "$n" > /dev/null 2>&1 || true; done
-docker run -d --name blot-container-blue --restart unless-stopped \
+for n in blot-blue blot-green blot-proxy-drill; do docker rm -f "$n" > /dev/null 2>&1 || true; done
+docker run -d --name blot-blue --restart unless-stopped \
   --mount type=bind,source="$DATA",target="$D",bind-propagation=rslave alpine \
   sh -c 'while true; do for f in static/1/img/f1.txt blogs/1/entries/e1.txt blogs/2/entries/e2.txt .blot-data-volume; do cat /usr/src/app/data/$f > /dev/null 2>&1 || echo "$(date +%T) cannot read $f"; done; sleep 0.2; done'
-docker run -d --name blot-container-green --restart unless-stopped \
+docker run -d --name blot-green --restart unless-stopped \
   --mount type=bind,source="$DATA",target="$D",bind-propagation=rslave alpine \
   sh -c 'while true; do cat /usr/src/app/data/static/3/img/f3.txt > /dev/null 2>&1 || echo "$(date +%T) cannot read"; echo "$(date +%s)" >> /usr/src/app/data/blogs/drill/writes.log || echo "$(date +%T) write failed"; sleep 0.2; done'
 docker ps --format '{{.Names}}'
@@ -233,8 +233,8 @@ Rehearse from the repo root (the key, if any, goes in SSH_OPTS):
   config/host/data-volume/resize.sh \$P --host $target --dry-run shrink 6
   config/host/data-volume/resize.sh \$P --host $target --any-time shrink 6
   config/host/data-volume/resize.sh \$P --host $target grow 10
-Watch while it runs: ssh $target docker logs -f blot-container-blue (read errors),
-and blot-container-green (the writer; its writes.log is in data/blogs/drill).
+Watch while it runs: ssh $target docker logs -f blot-blue (read errors),
+and blot-green (the writer; its writes.log is in data/blogs/drill).
 Clean up: $0 --profile $AWS_PROFILE_NAME --region $AWS_REGION teardown $instance
 EOF
 }

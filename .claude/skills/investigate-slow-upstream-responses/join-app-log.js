@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Join slow nginx requests to the app containers' own log lines by request id.
 //
-//   ssh blot "for c in blue green yellow; do docker logs blot-container-\$c 2>&1; done \
-//     | grep -E '^\[[^]]+\] \[[a-z-]+\] [0-9a-f]{32} ([0-9]{3} [0-9.]+ |Connection closed)'" > app.log
+//   ssh blot "for c in blue green; do docker logs blot-\$c 2>&1; done \
+//     | grep -E '^\[[^]]+\] \[[a-z/-]+\] [0-9a-f]{32} ([0-9]{3} [0-9.]+ |Connection closed)'" > app.log
 //   node join-app-log.js access.log.gz app.log [--threshold 0.1] [--host <host>] [--top 40]
 //
 // For each slow page request (st ≥ threshold, long-lived routes skipped):
@@ -17,8 +17,8 @@ const fs = require("fs");
 const readline = require("readline");
 const { parseLine, classify, read, median, ms, shortUA } = require("./triage");
 
-const RESPONSE = /^\[[^\]]+\] \[([a-z-]+)\] ([0-9a-f]{32}) (\d{3}) ([0-9.]+) (\S+) elu=([0-9.]+)(?: slowest=\+(\d+)ms:(".*"))?/;
-const CLOSED = /^\[[^\]]+\] \[([a-z-]+)\] ([0-9a-f]{32}) Connection closed by client/;
+const RESPONSE = /^\[[^\]]+\] \[([a-z/-]+)\] ([0-9a-f]{32}) (\d{3}) ([0-9.]+) (\S+) elu=([0-9.]+)(?: slowest=\+(\d+)ms:(".*"))?/;
+const CLOSED = /^\[[^\]]+\] \[([a-z/-]+)\] ([0-9a-f]{32}) Connection closed by client/;
 
 function parseArgs(argv) {
   const opts = { files: [], threshold: 0.1, top: 40 };

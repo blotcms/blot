@@ -16,7 +16,7 @@ const {
   fromWrapperOptions,
 } = require("../probe/run");
 const { OPTIONS: PROBE_OPTIONS } = require("./probe");
-const { CONTAINERS } = require("../deploy/constants");
+const { UNIT } = require("../deploy/constants");
 
 const ACCESS_LOG_DIRECTORY = "/var/instance-ssd/logs";
 
@@ -27,11 +27,11 @@ const LOCAL_OPTIONS = {
   urls: { value: "FILE", help: "extra URLs, one per line (a local file)" },
   replay: {
     value: "FILE",
-    help: `replay yellow's requests from ${ACCESS_LOG_DIRECTORY}/<file> (.gz too)`,
+    help: `replay the blog requests from ${ACCESS_LOG_DIRECTORY}/<file> (.gz too)`,
   },
 };
 
-const DEFAULTS = { memory: "3g", oldSpace: CONTAINERS.YELLOW.maxOldSpaceSize, cpus: 1 };
+const DEFAULTS = { memory: "3g", oldSpace: UNIT.nodeAMaxOldSpaceSize, cpus: 1 };
 
 function usage() {
   const { out, replay, ...probeOptions } = PROBE_OPTIONS;
@@ -44,7 +44,7 @@ function usage() {
 Probe options:
 ${formatOptions({ ...LOCAL_OPTIONS, ...probeOptions })}
 
-Wrapper options (defaults: --memory ${DEFAULTS.memory}, --max-old-space ${DEFAULTS.oldSpace} as yellow):
+Wrapper options (defaults: --memory ${DEFAULTS.memory}, --max-old-space ${DEFAULTS.oldSpace} as node-a):
 ${formatOptions(WRAPPER_OPTIONS)}`);
 }
 

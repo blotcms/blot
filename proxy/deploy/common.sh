@@ -352,7 +352,7 @@ run_args() { # run_args <name>
 }
 
 # Arguments for a unit: what run_args gives a proxy, plus everything the Node
-# containers had (scripts/deploy/util/generateDockerCommand.js), from the
+# containers had (the old Node deploy, removed in PR 7), from the
 # settings file. Host networking changes four things for the Node side:
 #   - no published port: node-a serves on its socket alone (config/index.js),
 #     so two units never both want 8080
@@ -510,11 +510,9 @@ ensure_airlock() { # ensure_airlock <unit>
 # ... failed (99: Address not available)"), so allow non-local binds in the
 # container's own network namespace.
 validate_image() { # validate_image <image>
-  local mode=containers
-  [ "$DEPLOY_KIND" != unit ] || mode=unit
   docker run --rm --entrypoint bash \
     --sysctl net.ipv4.ip_nonlocal_bind=1 \
-    --env-file "$ENV_FILE" -e PROXY_FETCH_CDN_IPS=false -e "PROXY_UPSTREAM_MODE=$mode" \
+    --env-file "$ENV_FILE" -e PROXY_FETCH_CDN_IPS=false -e PROXY_UPSTREAM_MODE=unit \
     -v "$CERT_DIR":/etc/ssl/private:ro \
     "$1" -c 'render-config >/dev/null && /usr/local/openresty/bin/openresty -t' 2>&1
 }

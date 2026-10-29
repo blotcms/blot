@@ -78,7 +78,7 @@ phase confirmed unless `--yes`:
    - `host.sh swap`: writes the new ID to `/etc/blot/data-volume` (previous in
      `.previous`), `mount --move`s the new volume over the data directory,
      makes it shared, and checks the marker on the host and inside every
-     `blot-container-*`. The containers bind the directory with `rslave`, so
+     `blot-blue` and `blot-green`. The containers bind the directory with `rslave`, so
      they see the new volume at once, without a restart. On any mismatch it
      unmounts the new volume and restores the old ID.
    - `read-only.js off`. The script prints how long the window lasted.
@@ -92,7 +92,7 @@ phase confirmed unless `--yes`:
 
 After it:
 
-- The next app deploy (`npm run deploy-node`) recreates the containers on the
+- The next app deploy (`npm run deploy-units`) recreates the containers on the
   new volume.
 - The old volume stays mounted underneath the new one, read-only, on the host
   and in every container's mount namespace, so it cannot be detached right
@@ -109,7 +109,7 @@ After it:
     unmounts the top mount, checks the old volume shows, unmounts that
     too, and runs `mount-data-volume.sh`, which mounts the current volume by ID,
     checks its marker and makes it shared. It then checks one mount, the
-    marker, `shared`, and the marker inside every `blot-container-*`, and sets
+    marker, `shared`, and the marker inside each unit (`blot-blue` and `blot-green`), and sets
     the state file's phase to `released`. If the first `umount` fails (EBUSY)
     nothing has changed and it prints what has files open; any other
     surprise stops it with the state and the commands to inspect it, without
@@ -143,7 +143,7 @@ production kernel, without touching production:
     drill.sh teardown <instance-id>
 
 `setup` fills a small data volume with tens of thousands of files and runs
-reader and writer containers (named `blot-container-*`, `rslave` binds). The drill host is marked by
+reader and writer containers (named `blot-blue` and `blot-green`, `rslave` binds). The drill host is marked by
 `/etc/blot/drill`, so `resize.sh` pauses the containers instead of calling
 `read-only.js`, and tags the new volume `BlotDrill=true` and names it
 `drill-data-volume` (never the production tag, or DLM would snapshot it).

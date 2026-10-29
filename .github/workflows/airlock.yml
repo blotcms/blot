@@ -4,7 +4,7 @@
 # screenshots and remote-image downloads through it (config.airlock), so a
 # broken image here degrades those.
 #
-# Every push to master gets an image: scripts/deploy/index.js and deploy.yml
+# Every push to master gets an image: scripts/deploy/units.sh and deploy.yml
 # expect a manifest for every deployed commit's SHA, same as the app image.
 # Pull requests only build it when something it is built from changes (as
 # proxy-image.yml does for the proxy).

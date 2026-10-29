@@ -68,8 +68,8 @@ stdin, so it doesn't need to run on the host. `$SCRATCH` is your
 scratchpad directory, or any local temp directory.
 
 ```bash
-for c in blue green yellow; do
-  ssh blot "docker logs --since 24h blot-container-$c 2>&1 | grep -F '[folder-asset'"
+for c in blue green; do
+  ssh blot "docker logs --since 24h blot-$c 2>&1 | grep -F '[folder-asset'"
 done > "$SCRATCH/folder-assets.log"
 
 node scripts/folder-links/analyze-logs.js --top 20 < "$SCRATCH/folder-assets.log"
@@ -151,7 +151,7 @@ and shares only.
 Entry template:
 
 ```
-### <date> — <window, e.g. 24h across blue/green/yellow>
+### <date> — <window, e.g. 24h across blue/green>
 - Served: origin x%, cdn-redirect y%, static z%
 - Referer: same-site x%, other site y%, none z%
 - Top causes: <generic description of the biggest causes of origin hits>

@@ -6,7 +6,7 @@
 #   npm run deploy-units [-- <commit>]
 #   scripts/deploy/units.sh --proxy-only [<commit>]     (the way back, below)
 #
-# Like `npm run deploy-node` did: run it on master, and <commit> defaults to
+# Run it on master, and <commit> defaults to
 # master's tip. unit-image.yml builds an image for every master push; if it
 # is not published yet, wait for it (up to UNIT_IMAGE_WAIT seconds, default 25
 # min, or 2 min for an explicit commit, as in deploy.yml: an older commit's
@@ -26,9 +26,9 @@
 # targets land in the wrong directory.
 #
 # --proxy-only deploys the proxy-only image (ghcr.io/blotcms/blot-proxy) to
-# both containers instead: the second half of rolling back the cutover. It
-# replaces the units' Node processes with nothing, so start the old
-# blot-container-* containers first.
+# both containers instead. The proxy has no route to the three old
+# blot-container-* containers any more (proxy/render-config.sh is unit-only),
+# so this no longer rolls the cutover back; see proxy/deploy/README.md.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -36,7 +36,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 KIND=unit
 if [ "${1:-}" = "--proxy-only" ]; then KIND=proxy; shift; fi
 
-# Same rule as scripts/deploy/util/checkBranch.js (the workflow sets it).
+# Deploy only from master (the workflow sets SKIP_BRANCH_CHECK).
 if [ "${SKIP_BRANCH_CHECK:-}" != "true" ] && [ "$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)" != master ]; then
   echo "You must be on the master branch to deploy." >&2
   exit 1

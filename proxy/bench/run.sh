@@ -236,8 +236,8 @@ bench() { # impl image
   docker rm -f "$PROXY" >/dev/null 2>&1 || true
   docker run -d --name "$PROXY" --network "$NET" --cpus="$CPUS" --cap-add SYS_NICE \
     -v "$WORK/cdn-ips.conf:/etc/openresty/cdn-ips.default.conf:ro" \
-    -e BLOT_HOST=example.com -e PROXY_UPSTREAM_YELLOW="$STUB:8090" -e PROXY_UPSTREAM_BLUE="$STUB:8090" \
-    -e PROXY_UPSTREAM_GREEN="$STUB:8090" -e PROXY_REDIS_HOST="$REDIS" -e PROXY_RESOLVER=127.0.0.11 \
+    -e BLOT_HOST=example.com -e PROXY_UNIT_MAIN="$STUB:8090" -e PROXY_PEER_MAIN="$STUB:8090" \
+    -e PROXY_UNIT_WORKER="$STUB:8090" -e PROXY_PEER_WORKER="$STUB:8090" -e PROXY_REDIS_HOST="$REDIS" -e PROXY_RESOLVER=127.0.0.11 \
     -e PROXY_FETCH_CDN_IPS=false "$image" >/dev/null
 
   local i

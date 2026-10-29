@@ -170,7 +170,7 @@ mounted_volume() {
 }
 read_marker() { { tr -d '[:space:]' < "$1/$MARKER"; } 2> /dev/null || true; }
 now_mono() { awk '{print int($1)}' /proc/uptime; }
-containers() { command -v docker > /dev/null && docker ps --format '{{.Names}}' | grep -E '^(blot-container-.*|blot-(blue|green))$' || true; }
+containers() { command -v docker > /dev/null && docker ps --format '{{.Names}}' | grep -E '^blot-(blue|green)$' || true; }
 
 state_get() { awk -F= -v k="$1" '$1 == k {print substr($0, length(k) + 2)}' "$STATE" 2> /dev/null || true; }
 # Written to a temp file and renamed so a crash never leaves half a file.

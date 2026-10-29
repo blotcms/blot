@@ -5,8 +5,8 @@
 # compare.js. It overwrites the previous copy, so run it as often as you like.
 #
 # It also counts the app's "[LOCK] slow heartbeat" and "[LOCK COMPROMISED]" lines
-# per minute from the app containers' docker logs (blot-container-blue, -green and
-# -yellow; the same lines the investigate-production-container-restarts skill
+# per minute from the app containers' docker logs (blot-blue and blot-green, the
+# units; the same lines the investigate-production-container-restarts skill
 # reads) and writes them to data/redis-perf/<app-host>/app-lock.log, one line
 # per container per minute that had any. --since is how far back to look (a
 # `docker logs --since` value, default 168h; docker has no `d` unit). docker logs only go back to when each
@@ -56,18 +56,18 @@ if [ "$APP_LOGS" = 1 ]; then
   # missing container would otherwise give an empty file, which compare.js reads
   # as "no lock lines". The same goes for docker logs failing (grep exiting 1
   # for no match is fine). The result is only moved into place if all of it worked.
-  if app_ssh "$APP_HOST" "for c in blue green yellow; do
-    docker inspect blot-container-\$c > /dev/null || { echo \"cannot inspect blot-container-\$c\" >&2; exit 1; }
+  if app_ssh "$APP_HOST" "for c in blue green; do
+    docker inspect blot-\$c > /dev/null || { echo \"cannot inspect blot-\$c\" >&2; exit 1; }
   done
   set -o pipefail
   { rc=0
-  for c in blue green yellow; do
-    docker logs -t --since $SINCE blot-container-\$c 2>&1 |
+  for c in blue green; do
+    docker logs -t --since $SINCE blot-\$c 2>&1 |
       { grep -F -e '[LOCK] slow heartbeat' -e '[LOCK COMPROMISED]' || [ \$? -eq 1 ]; } |
       awk -v c=\$c '{ m = substr(\$1, 1, 16) \":00Z\"; seen[m] = 1
         if (index(\$0, \"[LOCK COMPROMISED]\")) k[m]++; else s[m]++ }
         END { for (m in seen) printf \"%s container=%s slow=%d compromised=%d\\n\", m, c, s[m] + 0, k[m] + 0 }' ||
-      { echo \"docker logs blot-container-\$c failed\" >&2; rc=1; }
+      { echo \"docker logs blot-\$c failed\" >&2; rc=1; }
   done
   exit \$rc; } | sort" > "$LOCK_LOG.tmp"; then
     mv "$LOCK_LOG.tmp" "$LOCK_LOG"

@@ -47,12 +47,12 @@ access <handle>
 **Always confirm with the user before running anything against production,
 and stick to read-only commands** (see `investigate-production-container-restarts`
 for the SSH host/architecture background: host `blot`, helpers in the
-remote `~/.bashrc`, containers `blot-container-{blue,green,yellow}`).
+remote `~/.bashrc`, containers `blot-{blue,green}`).
 Sync/validation logs are in **green** only.
 
 ## Method
 
-Run everything as `ssh blot "docker logs blot-container-green --timestamps 2>&1 | …"`.
+Run everything as `ssh blot "docker logs blot-green --timestamps 2>&1 | …"`.
 (`logs green` is a bashrc function and lacks `--timestamps`; use `docker logs`
 directly so you can window by time.) Docker logs are lost when the container
 is recreated by a deploy, so investigate promptly and say so if the window is

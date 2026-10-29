@@ -150,9 +150,9 @@ means a code path updates `entries` without `pathIndex`.
 3. **Confirm on production if the email isn't conclusive, or to settle a
    first-of-its-kind case.** **Ask the user before every production command,
    even read-only ones**, and stick to read-only commands. Host
-   `blot`, containers `blot-container-{blue,green,yellow}`, helpers in
+   `blot`, containers `blot-{blue,green}`, helpers in
    remote `~/.bashrc` (see `investigate-production-container-restarts`).
-   Use `docker logs blot-container-green --timestamps 2>&1 | …` so you can
+   Use `docker logs blot-green --timestamps 2>&1 | …` so you can
    window by time. Logs disappear when a deploy recreates the container.
    - Find the Fix() run: `grep 'Fix: <blogID>'` (per-check `duration=` lines).
    - Find what happened to a reported path earlier: `grep '<blog12>' | grep -F '<path>'`.
