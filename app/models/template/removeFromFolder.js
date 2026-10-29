@@ -4,8 +4,9 @@ var localPath = require("helper/localPath");
 var fs = require("fs-extra");
 var getAllViews = require("./getAllViews");
 var determineTemplateFolder = require("./determineTemplateFolder");
+var withFolderLock = require("./withFolderLock");
 
-function removeFromFolder (blogID, templateID, callback) {
+function removeFromFolderUnlocked (blogID, templateID, callback) {
   isOwner(blogID, templateID, function (err, owner) {
     if (err) return callback(err);
 
@@ -56,4 +57,4 @@ function makeClient (blogID, callback) {
   });
 }
 
-module.exports = removeFromFolder;
+module.exports = withFolderLock(removeFromFolderUnlocked);

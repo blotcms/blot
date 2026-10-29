@@ -10,6 +10,8 @@ const removeTemplateAssetsIfUnreferenced = require("./save/upload-image").remove
 const loadFavicon = require("./load/favicon");
 const syntaxHighlighterPreview = require("./syntax-highlighter-preview");
 const clfdate = require("helper/clfdate");
+const makeSlug = require("helper/makeSlug");
+const holdFolderLock = require("models/template/withFolderLock").holdForRequest;
 const photoMaskOptions = require("./load/photo-mask-options");
 const { isAjaxRequest } = require("./save/ajax-response");
 
@@ -51,6 +53,32 @@ TemplateEditor.param("viewSlug", require("./load/template-views"));
 TemplateEditor.param("viewSlug", require("./load/template-view"));
 
 TemplateEditor.param("templateSlug", require("./load/template"));
+
+// A change to a template kept in the blog folder is stored in Redis and then
+// written to the folder. A sync that holds the folder lock builds templates
+// from the old folder files just before it releases, which would overwrite
+// the stored change and then get written back. So take the lock before the
+// request changes anything, and hold it until the response is sent. Turning
+// local editing on or off moves files too, so it always takes the lock.
+TemplateEditor.param("templateSlug", function (req, res, next, slug) {
+  if (req.method === "GET" || req.method === "HEAD") return next();
+
+  if (/\/local-editing\/?(\?|$)/.test(req.originalUrl)) {
+    return holdFolderLock(req, res, next);
+  }
+
+  // /template/:slug shows the SITE original while the blog's own copy is in
+  // the folder, but saves made there land on that copy (see fork-if-needed)
+  Template.getMetadata(
+    Template.makeID(req.blog.id, makeSlug(slug)),
+    function (err, own) {
+      if ((own && own.localEditing) || (req.template && req.template.localEditing)) {
+        return holdFolderLock(req, res, next);
+      }
+      next();
+    }
+  );
+});
 
 TemplateEditor.use((req, res, next) => {
   res.locals.layout = "dashboard/template/layout";
@@ -310,20 +338,19 @@ TemplateEditor.route("/:templateSlug/local-editing")
         function (err) {
           if (err) return next(err);
 
-          res.message(
-            "/sites/" +
-              req.blog.handle +
-              "/template-folder/" +
-              req.template.id.split(":").slice(1).join(":") +
-              "/source-code",
-            "Moved template to your folder"
-          );
-
+          // Respond once the files are written, so the folder lock taken for
+          // this request is held until then.
           Template.writeToFolder(req.blog.id, req.template.id, function () {
-            // could we do something with this error? Could we wait to render the page?
-            // it would be useful to have a progress bar here to prevent
-            // busted folder state
-            // we should also do something with the error
+            // could we do something with this error? it would be useful to
+            // have a progress bar here to prevent busted folder state
+            res.message(
+              "/sites/" +
+                req.blog.handle +
+                "/template-folder/" +
+                req.template.id.split(":").slice(1).join(":") +
+                "/source-code",
+              "Moved template to your folder"
+            );
           });
         }
       );

@@ -8,10 +8,11 @@ var localPath = require("helper/localPath");
 var fs = require("fs-extra");
 var generatePackage = require("./package").generate;
 var determineTemplateFolder = require("./determineTemplateFolder");
+var withFolderLock = require("./withFolderLock");
 var PACKAGE = "package.json";
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
-function writeToFolder (blogID, templateID, callback) {
+function writeToFolderUnlocked (blogID, templateID, callback) {
   isOwner(blogID, templateID, function (err, owner) {
     if (err) return callback(err);
 
@@ -273,4 +274,4 @@ function noTemplate (blogID, templateID) {
   return new Error("No template for " + blogID + " and " + templateID);
 }
 
-module.exports = writeToFolder;
+module.exports = withFolderLock(writeToFolderUnlocked);
