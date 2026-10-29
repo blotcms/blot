@@ -27,6 +27,10 @@ The Album template uses a checkbox and label for its CSS-only menu. The header f
 
 The background mask depends on alignment: justified nav naturally reaches the hamburger; left-aligned nav grows to fill its row; right-aligned nav reserves the toggle width in the header and offsets the nav background into that space; centered nav uses a trailing `nav::after` background extension so it stays centered and moves with the nav when wrapping. Disable the centered extension while the menu is open so the close icon remains visible. In the expanded menu, hide the spacer; keep links left-aligned, right-aligned, or centered to match the selected alignment.
 
+## Bold selected links without shifting
+
+For horizontal navigation where the selected link becomes bold, reserve the selected-weight label width in every state and overlay the visible label. The Links template tags menu demonstrates this in `links/_toolbar.html` and `links/style.css` (`#tags a strong` and `#tags a span`). The template editor header uses a hidden `::before` label for the same effect.
+
 ## Profile photo
 
 `profile_image` is a saved photo plus a `mask` shape name (`square`, `circle`, `rounded-square`, `squircle`, `blob`, `pebble`, `cloud`, `arch`). The shape is baked in when the photo is saved or its shape is changed: `small`, `medium`, `large` and `square` are all transparent outside the shape and cropped to the saved `crop` (`x`, `y`, `width`, `height`, fractions of the original). `profile_image.url` is the whole, uncropped, unmasked photo shrunk to at most 2000px on its longer side, kept so the crop and shape can be edited later, so do not show it in a template. Templates need no CSS for the shape. Do not clip or round the photo yourself (`clip-path`, `border-radius`), and don't add a ring or shadow to it, since those draw around the box rather than the shape. A template that rounds its own avatar should only do so with `{{^profile_image.mask}}`.

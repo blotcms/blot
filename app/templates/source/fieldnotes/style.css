@@ -1178,23 +1178,6 @@ a:hover, a:focus, a:active {
 	position: relative;
 }
 
-.site-header-image div {
-	overflow: hidden;
-	height: 100%;
-	background-position: center;
-	-webkit-background-size: cover;
-	-moz-background-size: cover;
-	-o-background-size: cover;
-	background-size: cover;
-}
-
-.site-header-image {
-	height: 150px;
-	display: block;
-	margin: 0 auto;
-	max-height: 150px;
-}
-
 .site-branding {
 	float: left;
 	position: relative;
@@ -2216,10 +2199,6 @@ div#respond,
 	.site {
 		height: 100%;
 	}
-	.site-header-image {
-		height: 500px;
-		max-height: 500px;
-	}
 	#menu-close {
 	display: block;
 	}
@@ -3082,12 +3061,6 @@ a:active {
 .site-header {
 	background: var(--header-background-color);
 }
-
-{{#header_image_url}}
-.site-header-image div {
-	background-image: url("{{{header_image_url}}}");
-}
-{{/header_image_url}}
 
 .site-title a,
 .site-footer,

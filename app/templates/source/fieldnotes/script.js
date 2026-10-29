@@ -370,10 +370,9 @@ jQuery(document).ready( function($) {
 
 	$(window).on( 'load scroll', false, function() {
 		var scrolled = $( window ).scrollTop();
-		var headerHeight = $( '.site-header-image' ).height();
 		var windowWidth = $( window ).width();
 
-		if ( scrolled > headerHeight && windowWidth > 960 ) {
+		if ( scrolled > 0 && windowWidth > 960 ) {
 			$( '.site-header' ).css(
 				{
 					'box-shadow' : '0 -20px 30px 30px rgba(0,0,0,.1)',
