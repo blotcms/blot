@@ -26,7 +26,14 @@ const fs = require("fs");
 const zlib = require("zlib");
 const readline = require("readline");
 
-const UPSTREAMS = { "8088": "blue", "8089": "green", "8090": "yellow" };
+// Upstreams in the access log: the old containers' ports (before the units),
+// then the units' Node sockets (up=unix:/run/blot/<unit>-<a|b>.sock). The
+// socket paths are matched after the split on ":" below.
+const UPSTREAMS = {
+  "8088": "blue", "8089": "green", "8090": "yellow",
+  "/run/blot/blue-a.sock": "blue/node-a", "/run/blot/blue-b.sock": "blue/node-b",
+  "/run/blot/green-a.sock": "green/node-a", "/run/blot/green-b.sock": "green/node-b",
+};
 
 // Slow by design. Matched against host + path (no scheme, no query).
 const LONG_LIVED = [

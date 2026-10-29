@@ -81,7 +81,7 @@ explicitly asked.
   day *before* its date. If you need pm2 itself, use `zsh -lc 'pm2 …'`.
 - `brctl monitor event` lines name the iCloud users who own or edited a
   shared item. That is personal data: fine in chat, never in the log below.
-- prod: `ssh blot`, containers `blot-container-{blue,green,yellow}` (see
+- prod: `ssh blot`, containers `blot-{blue,green}` (see
   `investigate-production-container-restarts`). Macserver HTTP requests can
   land on any container, so grep all three. Docker logs are lost when a
   deploy recreates a container, so if the alert is older than the
@@ -131,7 +131,7 @@ classifying anything as a bug.
    `brctl download` of an evicted file — or `Failed to read file:`).
 3. **Check the server side** for the same window:
    ```
-   ssh blot "for c in blue green yellow; do echo == \$c; docker logs blot-container-\$c --timestamps 2>&1 | grep '<blog12>' | tail -150; done"
+   ssh blot "for c in blue green; do echo == \$c; docker logs blot-\$c --timestamps 2>&1 | grep '<blog12>' | tail -150; done"
    ```
    Several server lines don't carry the blog ID (`Error in /upload:`,
    `Syncing folder:`, `Failed to sync folder tree`), so also grep those

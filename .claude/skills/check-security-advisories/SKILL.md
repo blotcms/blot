@@ -83,7 +83,7 @@ the command to paste instead of retrying. Keep any output with addresses in
 the terminal only.
 
 ```bash
-ssh blot "docker exec blot-container-green node -v"     # and blue, yellow
+ssh blot "docker exec blot-green node -v"     # and blot-blue
 ssh blot "cat /etc/os-release; uname -r; docker version --format '{{.Server.Version}}'"
 ssh blot "docker ps --format '{{.Names}}'"              # the proxies are blot-blue and blot-green
 ssh blot "docker exec blot-blue openresty -v"           # and blot-green
