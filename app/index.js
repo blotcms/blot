@@ -38,6 +38,25 @@ function releaseId() {
   return process.env.BLOT_RELEASE_ID || process.env.GIT_SHA;
 }
 
+// The worker child sends no start email of its own, so this process sends
+// one when the child dies and is forked again, at most every ten minutes so a
+// crash loop sends one rather than one per restart
+function workerExitEmail() {
+  const label = config.container.endsWith("/node-a")
+    ? config.container.slice(0, -1) + "b"
+    : config.container + "-worker";
+  let lastSent = 0;
+
+  return function (reason) {
+    if (config.preview || Date.now() - lastSent < 10 * 60 * 1000) return;
+    lastSent = Date.now();
+    email.SERVER_START(null, {
+      container: label,
+      event: "restarted (" + reason + ")",
+    });
+  };
+}
+
 async function serverStartEvent() {
   const id = releaseId();
 
@@ -148,13 +167,14 @@ setup(async (err) => {
         socket: config.worker_socket,
         maxOldSpaceSize: config.worker_max_old_space_size,
         drainTimeoutMs: drain.DRAIN_TIMEOUT_MS,
+        onExit: workerExitEmail(),
       });
       drain.onStart(() => worker.stop());
     }
 
     // Send an email notification if the server starts or restarts
     // Worktree preview sidecars (scripts/development/preview.sh) and forked
-    // workers (their parent sends one) skip it
+    // workers (their parent emails when one dies: workerExitEmail) skip it
     if (!config.preview && !config.worker_child) {
       serverStartEvent().then((event) =>
         email.SERVER_START(null, { container: config.container, event })
