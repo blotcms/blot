@@ -402,6 +402,33 @@ var writeChangeToFolder = require("../../../dashboard/site/template/save/writeCh
       });
     });
   });
+
+  it("waits for the folder lock to be released before writing", async function () {
+    var folderLock = require("sync/lock");
+    var { promisify } = require("util");
+
+    await promisify(setView)(this.template.id, {
+      name: "post.html",
+      content: "<h1>Locked</h1>",
+    });
+
+    var held = await folderLock.lock(this.blog.id, { ttl: 10000 });
+    var released = false;
+
+    setTimeout(function () {
+      released = true;
+      held.release();
+    }, 1200);
+
+    await promisify(writeToFolder)(this.blog.id, this.template.id);
+
+    // The write only ran once the lock was free, and gave the lock back
+    expect(released).toEqual(true);
+    expect(fs.readFileSync(getTemplatePath(this, "post.html"), "utf-8")).toEqual(
+      "<h1>Locked</h1>"
+    );
+    expect((await folderLock.inspect(this.blog.id)).held).toBeFalsy();
+  });
 });
 
 function getTemplateDir(test) {
