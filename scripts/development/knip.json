@@ -20,6 +20,7 @@
     "proxy/build/index.js",
     "proxy/e2e/*.js",
     "proxy/deploy/e2e/*.js",
+    "proxy/deploy/e2e/unit/*.js",
     "proxy/bench/*.js",
     "app/blog/static/fonts/test.js",
     "app/blog/static/syntax-highlighter/build.js",
