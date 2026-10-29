@@ -47,7 +47,7 @@ describe("template image thumbnails", function () {
     // Left 1000px red, the rest blue, so the crop is easy to see in a pixel
     async function wide(path) {
       await sharp({ create: { width: 3200, height: 1800, channels: 3, background: "#3366cc" } })
-        .composite([{ input: Buffer.from('<svg width="1000" height="1800"><rect width="1000" height="1800" fill="#cc3333"/></svg>') }])
+        .composite([{ input: Buffer.from('<svg width="1000" height="1800"><rect width="1000" height="1800" fill="#cc3333"/></svg>'), left: 0, top: 0 }])
         .png().toFile(path);
     }
     const center = async (file) => {
