@@ -1,8 +1,8 @@
-{{container}} server {{event}}
+{{{container}}} server {{event}}
 
 Log in to server and grep:
 
-logs {{container}} | grep -B 100 "Starting server on"
+logs {{{container}}} | grep -B 100 "Starting server on"
 
 Identify recently restarted docker containers because they were unhealthy:
 
