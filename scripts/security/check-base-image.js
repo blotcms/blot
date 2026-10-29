@@ -3,7 +3,7 @@
 // on the same node:alpine base, so they can later be combined in one
 // container. Each pins it with `ARG NODE_BASE=node:<version>-alpine@sha256:...`.
 // This exits non-zero if either is missing, unpinned by digest, or the two
-// differ. Run by CI (proxy-image.yml) and by check-advisories.js.
+// differ. Run by CI (unit-image.yml) and by check-advisories.js.
 
 const fs = require("fs");
 const path = require("path");

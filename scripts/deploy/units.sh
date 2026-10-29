@@ -4,7 +4,6 @@
 # container each, #2119), to production with proxy/deploy/blue-green.sh.
 #
 #   npm run deploy-units [-- <commit>]
-#   scripts/deploy/units.sh --proxy-only [<commit>]     (the way back, below)
 #
 # Run it on master, and <commit> defaults to
 # master's tip. unit-image.yml builds an image for every master push; if it
@@ -24,17 +23,9 @@
 # ports). They go over ssh with tar rather than scp: ec2-user's ~/.bashrc cds
 # to /var/www/blot, and scp's sftp server runs through it, so relative scp
 # targets land in the wrong directory.
-#
-# --proxy-only deploys the proxy-only image (ghcr.io/blotcms/blot-proxy) to
-# both containers instead. The proxy has no route to the three old
-# blot-container-* containers any more (proxy/render-config.sh is unit-only),
-# so this no longer rolls the cutover back; see proxy/deploy/README.md.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-
-KIND=unit
-if [ "${1:-}" = "--proxy-only" ]; then KIND=proxy; shift; fi
 
 # Deploy only from master (the workflow sets SKIP_BRANCH_CHECK).
 if [ "${SKIP_BRANCH_CHECK:-}" != "true" ] && [ "$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)" != master ]; then
@@ -50,12 +41,8 @@ else
   SHA="$(git -C "$ROOT" rev-parse master)"
   WAIT="${UNIT_IMAGE_WAIT:-${PROXY_IMAGE_WAIT:-1500}}"
 fi
-if [ "$KIND" = unit ]; then
-  IMAGE="ghcr.io/blotcms/blot:$SHA"
-else
-  IMAGE="ghcr.io/blotcms/blot-proxy:$SHA"
-fi
-echo "Deploying $KIND image for commit: $SHA - $(git -C "$ROOT" log -1 --pretty=%s "$SHA")"
+IMAGE="ghcr.io/blotcms/blot:$SHA"
+echo "Deploying unit image for commit: $SHA - $(git -C "$ROOT" log -1 --pretty=%s "$SHA")"
 
 # Poll from the host, which pulls the image anyway, in one ssh session.
 ssh blot "
@@ -86,4 +73,4 @@ node "$ROOT/scripts/deploy/unit-settings.js" | ssh blot '
 '
 
 echo "Running blue-green.sh $SHA on the host"
-ssh blot "PROXY_DEPLOY_KIND=$KIND \$HOME/proxy-deploy/blue-green.sh $SHA"
+ssh blot "PROXY_DEPLOY_KIND=unit \$HOME/proxy-deploy/blue-green.sh $SHA"

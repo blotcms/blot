@@ -1,14 +1,12 @@
 # Builds the unit image (Dockerfile target `unit`: the app, OpenResty and the
 # proxy's files in one container, #2119) and publishes it to GHCR as
-# ghcr.io/<owner>/blot:<commit sha> (the name the Node-only image used before), after boot-testing it with
-# proxy/unit/smoke.sh. The Deploy workflow deploys it (scripts/deploy/units.sh).
+# ghcr.io/<owner>/blot:<commit sha>, after checking OpenResty in it and
+# boot-testing it with proxy/unit/smoke.sh. The Deploy workflow deploys it
+# (scripts/deploy/units.sh).
 #
-# Its own workflow because it needs two images that other workflows build: it
-# takes OpenResty from the proxy image for the same commit (proxy-image.yml)
-# instead of compiling it again, and builds the app on the layers build.yml
-# cached. It waits for the proxy image, so its pull request paths are
-# proxy-image.yml's (plus its own, which proxy-image.yml also lists): a change
-# elsewhere only builds the unit on master, where proxy-image.yml always runs.
+# OpenResty is built in the same build (docker-bake.hcl: the proxy target from
+# proxy/Dockerfile, which the unit stage copies from), on the layers cached
+# under blot:cache-proxy-arm64, and the app on the layers build.yml cached.
 # arm64 only, as the other images (production is Graviton).
 name: unit-image
 
@@ -19,6 +17,7 @@ on:
     branches: [master]
     paths:
       - ".github/workflows/unit-image.yml"
+      - "docker-bake.hcl"
       - "proxy/**"
       - "Dockerfile"
       - "scripts/security/check-base-image.js"
@@ -33,7 +32,6 @@ permissions:
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/blot
-  PROXY_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/blot-proxy
   APP_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/blot
 
 # Superseded PR pushes are cancelled; each master push keeps its own run
@@ -44,7 +42,7 @@ concurrency:
 jobs:
   unit:
     runs-on: ubuntu-24.04-arm
-    # A fork PR's proxy-image.yml can't push the proxy image this builds on
+    # A fork PR's token cannot write to GHCR
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
       - uses: actions/checkout@v4
@@ -70,33 +68,65 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # proxy-image.yml pushes this commit's proxy image once it has built it,
-      # and this workflow doesn't wait for that job, so poll for it.
-      - name: Wait for the proxy image
+      # The proxy image is production-shaped: file logging (LOG_TO_STDOUT=false,
+      # so fail2ban and logrotate on the host keep working) and BLOT_HOST=blot.im.
+      # Host specific settings are runtime values; see proxy/README.md.
+      - name: Check the proxy and app images share a base
+        run: node scripts/security/check-base-image.js
+
+      - name: Install config generator dependencies
         run: |
-          IMAGE="$PROXY_IMAGE_NAME:${{ github.sha }}-arm64"
-          for i in $(seq 1 240); do
-            docker manifest inspect "$IMAGE" > /dev/null 2>&1 && exit 0
-            [ "$i" = 1 ] && echo "Waiting for proxy-image.yml to push $IMAGE"
-            sleep 5
-          done
-          echo "::error::$IMAGE was not pushed within 20 minutes; did the proxy-image workflow fail?"
-          exit 1
+          mkdir -p "$RUNNER_TEMP/gendeps"
+          cd "$RUNNER_TEMP/gendeps"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+
+      - name: Generate proxy config
+        run: bash proxy/build/build.sh
+        env:
+          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+          BLOT_HOST: blot.im
+          LOG_TO_STDOUT: "false"
 
       - name: Build and push the unit image
         uses: Wandalen/wretry.action@v3
         with:
-          action: docker/build-push-action@v6
+          action: docker/bake-action@v6
           attempt_limit: 2
           attempt_delay: 10000
           with: |
-            context: .
-            target: unit
-            platforms: linux/arm64
-            push: true
-            build-args: PROXY_IMAGE=${{ env.PROXY_IMAGE_NAME }}:${{ github.sha }}-arm64
-            tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}-arm64
-            cache-from: type=registry,ref=${{ env.APP_IMAGE_NAME }}:cache-arm64
+            files: docker-bake.hcl
+            targets: unit
+            set: |
+              unit.output=type=registry
+              unit.tags=${{ env.IMAGE_NAME }}:${{ github.sha }}-arm64
+              unit.cache-from=type=registry,ref=${{ env.IMAGE_NAME }}:cache-arm64
+              proxy.cache-from=type=registry,ref=${{ env.IMAGE_NAME }}:cache-proxy-arm64
+              proxy.cache-to=type=registry,ref=${{ env.IMAGE_NAME }}:cache-proxy-arm64,mode=max
+
+      # What the deploy scripts require of OpenResty in the image, checked on
+      # the image itself: the config renders and parses, the access log goes to
+      # the file the host's fail2ban reads, and the tools that issue
+      # custom-domain certificates are present and trust the public CAs (the
+      # cert-issuance job in integration.yml points curl at Pebble's CA only,
+      # so it never exercises the image's own CA bundle).
+      - name: Check OpenResty in the image
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE_NAME:${{ github.sha }}-arm64" >/dev/null
+          docker run --rm --entrypoint bash -e PROXY_FETCH_CDN_IPS=false \
+            "$IMAGE_NAME:${{ github.sha }}-arm64" -c '
+              set -e
+              render-config
+              /usr/local/openresty/bin/openresty -t
+              grep -Eq "^[[:space:]]*access_log /var/log/openresty/access.log" /usr/local/openresty/nginx/conf/nginx.conf
+              test -x /usr/bin/resty-auto-ssl/dehydrated
+              test -x /usr/bin/resty-auto-ssl/sockproc
+              /usr/bin/resty-auto-ssl/dehydrated --version
+              test -z "${CURL_CA_BUNDLE:-}${SSL_CERT_FILE:-}"
+              curl -fsS -o /dev/null https://acme-staging-v02.api.letsencrypt.org/directory
+              curl -fsS -o /dev/null https://acme-v02.api.letsencrypt.org/directory
+            '
 
       - uses: ./.github/actions/start-minio
 
