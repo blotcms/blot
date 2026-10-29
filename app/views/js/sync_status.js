@@ -272,6 +272,15 @@ function attachSSE() {
   if (evtSource) evtSource.close();
   evtSource = new ReconnectingEventSource(syncStatusURL);
 
+  // A message published while the stream was down is lost (the server sends
+  // no state on connect), so load again whenever it re-opens after a drop.
+  // The first open is skipped: the page was just rendered.
+  var hasOpened = false;
+  evtSource.onopen = function () {
+    if (hasOpened) scheduleLoad();
+    hasOpened = true;
+  };
+
   evtSource.onmessage = function (event) {
     var message = event.data || "";
 
