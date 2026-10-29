@@ -292,9 +292,20 @@ root-owned); it does **not** recurse into the cache.
 
 Reproducibility relies on pinning, because the upstream toolchain has drifted:
 
-- Base image `openresty/openresty:1.31.1.1-alpine-fat`, pinned by its
-  multi-architecture digest in `Dockerfile`. The local `sockproc` signal-handler
-  patch supports modern compilers without dropping the upstream warning checks.
+- Base image: the same `node:24.22.1-alpine` as the Node app, pinned by
+  multi-architecture digest in the `NODE_BASE` argument of both `Dockerfile`s
+  (`scripts/security/check-base-image.js` fails CI if they differ). OpenResty
+  1.31.1.1 is compiled on it in the Dockerfile's `openresty` stage with the
+  configure flags and bundled OpenSSL and PCRE2 of the official
+  `openresty/openresty:alpine` image (docker-openresty `alpine/Dockerfile`),
+  each download checked against a sha256. The `-fat` extras (perl, `resty`,
+  `opm`, `restydoc`, luarocks, wget, unzip, outils-md5, the build packages) are
+  not installed; nothing here uses them. The geoip, image_filter and xslt
+  dynamic modules are built as in the official image but their libraries are
+  not installed, so they cannot be loaded without adding gd, geoip and libxslt.
+  The workers run as `ec2-user` (uid 1000), the base's `node` user renamed. The
+  local `sockproc` signal-handler patch supports modern compilers without
+  dropping the upstream warning checks.
 - Lua modules (`lua-resty-auto-ssl` 0.13.1, `lua-resty-http` 0.17.2,
   `shell-games` 1.1.0) are fetched as checksummed `.src.rock` archives from
   luarocks.org rather than via the images' bundled `luarocks`, whose remote
