@@ -29,6 +29,8 @@ on:
       - ".github/workflows/proxy-deploy-e2e.yml"
       - "proxy/**"
       - "config/host/**"
+      - "scripts/deploy/constants.js"
+      - "scripts/deploy/unit-settings.js"
       - "package.json"
       - "app/config.js"
       - "config/index.js"
@@ -37,6 +39,8 @@ on:
       - ".github/workflows/proxy-deploy-e2e.yml"
       - "proxy/**"
       - "config/host/**"
+      - "scripts/deploy/constants.js"
+      - "scripts/deploy/unit-settings.js"
       - "package.json"
       - "app/config.js"
       - "config/index.js"
@@ -61,6 +65,16 @@ jobs:
       IMAGE_B: blot-proxy-b:e2e
     steps:
       - uses: actions/checkout@v4
+
+      # Before any listener exists: the kernel reads the setting when a reuseport
+      # group is created (the first proxy to bind :443), so setting it later, as
+      # deploy-under-load.sh does, does not cover a group that already exists. With
+      # it, closing a listener hands its queued connections to the other one
+      # instead of resetting them (kernel 5.14+).
+      - name: Let a closing reuseport listener hand its queued connections over
+        run: |
+          sudo sysctl -w net.ipv4.tcp_migrate_req=1
+          cat /proc/sys/net/ipv4/tcp_migrate_req
 
       - uses: actions/setup-node@v4
         with:
@@ -312,6 +326,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Before any listener exists: the kernel reads the setting when a reuseport
+      # group is created (the first proxy to bind :443), so setting it later, as
+      # deploy-under-load.sh does, does not cover a group that already exists. With
+      # it, closing a listener hands its queued connections to the other one
+      # instead of resetting them (kernel 5.14+).
+      - name: Let a closing reuseport listener hand its queued connections over
+        run: |
+          sudo sysctl -w net.ipv4.tcp_migrate_req=1
+          cat /proc/sys/net/ipv4/tcp_migrate_req
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24.22.1
@@ -361,3 +385,192 @@ jobs:
           for f in "$E2E_ROOT"/swap-load/*.log "$E2E_ROOT"/swap-load/*.err; do
             echo "=== $f ==="; tail -n 40 "$f" 2>&1 || true
           done
+
+  # blue-green.sh deploying UNITS against real Docker (#2119): the cutover from
+  # proxy-only blot-blue and blot-green with the old Node containers and
+  # blot-airlock running, a steady deploy, a re-run, and a new blue whose
+  # node-a never becomes healthy (rolled back, green untouched). The "unit"
+  # image is the real proxy image plus a stub in place of the app
+  # (proxy/deploy/e2e/unit): building and booting the real unit image is
+  # unit-image.yml's job (proxy/unit/smoke.sh), and it is not available to this
+  # workflow in time. So what this does not cover is the app itself: the real
+  # verify-container checks, the real airlock (its egress filter and Chromium),
+  # node-a and node-b starting from the real image, and the memory limit holding
+  # the real heaps. The three "unit" images are in three repositories because
+  # blue-green.sh removes the other tags of the repository it deploys.
+  unit-deploy-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BLOT_HOST: blot.im
+      PROXY_CANARY_HOST: preview-of-wireframe-on-david.blot.im
+      PROXY_AUTOSSL_VOLUME: blot-e2e-auto-ssl
+      PROXY_NODE_CONTAINER: blot-container-blue
+      PROXY_SKIP_CERT_SWEEP: "1" # see proxy/deploy/e2e/README.md
+      PROXY_HEALTH_TIMEOUT: "40"
+      PROXY_AIRLOCK_IMAGE: blot-airlock-stub:e2e
+      PROXY_IMAGE: blot-proxy:e2e
+      UNIT_A: a.test/blot-unit:e2e
+      UNIT_B: b.test/blot-unit:e2e
+      UNIT_BROKEN: c.test/blot-unit:e2e
+    steps:
+      - uses: actions/checkout@v4
+
+      # Before any listener exists: the kernel reads the setting when a reuseport
+      # group is created (the first proxy to bind :443), so setting it later, as
+      # deploy-under-load.sh does, does not cover a group that already exists. With
+      # it, closing a listener hands its queued connections to the other one
+      # instead of resetting them (kernel 5.14+).
+      - name: Let a closing reuseport listener hand its queued connections over
+        run: |
+          sudo sysctl -w net.ipv4.tcp_migrate_req=1
+          cat /proc/sys/net/ipv4/tcp_migrate_req
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+
+      - name: Compute harness paths
+        run: |
+          E2E_ROOT="$RUNNER_TEMP/proxy-e2e"
+          {
+            echo "E2E_ROOT=$E2E_ROOT"
+            echo "PROXY_ENV_FILE=$E2E_ROOT/proxy.env"
+            echo "PROXY_ENV_FILE_BAD=$E2E_ROOT/proxy-unroutable-private-ip.env"
+            echo "PROXY_DISK_CACHE_DIR=$E2E_ROOT/disk-cache"
+            echo "PROXY_LOG_DIR=$E2E_ROOT/logs"
+            echo "PROXY_CERT_DIR=$E2E_ROOT/certs"
+            echo "PROXY_GLOBAL_STATIC_DIR=$E2E_ROOT/global-static"
+            echo "PROXY_UNIT_SETTINGS=$E2E_ROOT/unit-settings.env"
+            echo "PROXY_SECRETS_ENV_FILE=$E2E_ROOT/secrets.env"
+          } >> "$GITHUB_ENV"
+
+      - name: Install config generator dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/gendeps"
+          cd "$RUNNER_TEMP/gendeps"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+          echo "NODE_PATH=$RUNNER_TEMP/gendeps/node_modules:${{ github.workspace }}/app" >> "$GITHUB_ENV"
+
+      - name: Generate proxy config
+        run: bash proxy/build/build.sh
+        env:
+          LOG_TO_STDOUT: "false"
+          FETCH_CDN_IPS: "false"
+
+      - name: Build the proxy image, the three stand-in units and the stand-in airlock
+        run: |
+          docker build -f proxy/Dockerfile -t "$PROXY_IMAGE" proxy/
+          docker build -f proxy/deploy/e2e/unit/Dockerfile -t "$UNIT_A" proxy/deploy/e2e/unit
+          docker build -f proxy/deploy/e2e/unit/Dockerfile --label e2e.variant=b -t "$UNIT_B" proxy/deploy/e2e/unit
+          docker build -f proxy/deploy/e2e/unit/Dockerfile --build-arg BREAK=a -t "$UNIT_BROKEN" proxy/deploy/e2e/unit
+          docker build -f proxy/deploy/e2e/unit/airlock.Dockerfile -t "$PROXY_AIRLOCK_IMAGE" proxy/deploy/e2e/unit
+
+      - name: Set up the harness (Redis, stub upstream, fake Node container, certs) and the unit's host directories
+        run: |
+          set -euo pipefail
+          bash proxy/deploy/e2e/setup.sh
+          # the data directory is bound with rslave, which Docker accepts only
+          # from a shared mount
+          sudo mount --make-rshared /
+          sudo install -d -m 755 -o "$(id -u)" /run/blot
+          mkdir -p "$E2E_ROOT/data" "$E2E_ROOT/tmp"
+          node scripts/deploy/unit-settings.js > "$PROXY_UNIT_SETTINGS"
+          # the real numbers, except the host directories and a cpu limit the runner can meet
+          printf 'DATA_DIRECTORY_ON_SERVER=%s\nTMP_DIRECTORY=%s\nUNIT_CPUS=2\n' "$E2E_ROOT/data" "$E2E_ROOT/tmp" >> "$PROXY_UNIT_SETTINGS"
+          printf 'BLOT_HOST=%s\nBLOT_REVERSE_PROXY_URLS=http://127.0.0.1:8077\n' "$BLOT_HOST" > "$PROXY_SECRETS_ENV_FILE"
+
+      # Production before the cutover: proxy-only blot-blue and blot-green, the
+      # old Node containers (blot-container-blue is the harness's fake) and
+      # blot-airlock, all running.
+      - name: Start from proxy-only blot-blue and blot-green with the old Node containers and airlock
+        run: |
+          set -euo pipefail
+          bash proxy/deploy/blue-green.sh "$PROXY_IMAGE"
+          for c in blot-container-green blot-container-yellow; do
+            docker run -d --name "$c" --network host node:24.22.1-alpine sleep infinity >/dev/null
+          done
+          docker run -d --name blot-airlock "$PROXY_AIRLOCK_IMAGE" >/dev/null
+          for u in blue green; do [ "$(docker inspect -f '{{.Config.Image}}' blot-$u)" = "$PROXY_IMAGE" ]; done
+
+      # ---- the cutover: the first run of a unit image, under load -------------
+      - name: The cutover replaces both with units under load with zero failed requests, then stops the old containers
+        run: |
+          set -euo pipefail
+          bash proxy/deploy/e2e/deploy-under-load.sh "$UNIT_A"
+          for u in blue green; do
+            [ "$(docker inspect -f '{{.Config.Image}}' blot-$u)" = "$UNIT_A" ]
+            [ "$(docker inspect -f '{{.State.Running}}' blot-$u)" = true ]
+            [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-$u)" = unless-stopped ]
+            [ "$(docker inspect -f '{{.HostConfig.NetworkMode}}' blot-$u)" = host ]
+            [ "$(docker inspect -f '{{.HostConfig.Memory}}' blot-$u)" = 4026531840 ]
+            [ "$(docker inspect -f '{{len .HostConfig.PortBindings}}' blot-$u)" = 0 ]
+            docker exec blot-$u printenv BLOT_UNIT | grep -qx "$u"
+            docker exec blot-$u printenv BLOT_SOCKET | grep -qx "/run/blot/$u-a.sock"
+            docker exec blot-$u printenv BLOT_WORKER_MAX_OLD_SPACE_SIZE | grep -qx 750
+            docker exec blot-$u printenv BLOT_RELEASE_ID | grep -qx e2e
+            [ "$(docker inspect -f '{{.State.Running}}' blot-$u-airlock)" = true ]
+          done
+          # one airlock per unit, each published on loopback at its own ports
+          [ "$(docker port blot-blue-airlock 9222/tcp)" = 127.0.0.1:19222 ]
+          [ "$(docker port blot-green-airlock 9222/tcp)" = 127.0.0.1:19223 ]
+          [ "$(docker port blot-blue-airlock 8888/tcp)" = 127.0.0.1:18888 ]
+          [ "$(docker port blot-green-airlock 8888/tcp)" = 127.0.0.1:18889 ]
+          docker exec blot-blue printenv BLOT_AIRLOCK_BROWSER_URL | grep -qx http://127.0.0.1:19222
+          docker exec blot-green printenv BLOT_AIRLOCK_PROXY_URL | grep -qx http://127.0.0.1:18889
+          # the old containers are stopped, not removed
+          for c in blot-container-blue blot-container-green blot-container-yellow blot-airlock; do
+            [ "$(docker inspect -f '{{.State.Running}}' $c)" = false ]
+          done
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
+          [ "$code" = 200 ]
+
+      - name: A re-run leaves both units, their airlocks and the stopped containers alone
+        run: |
+          set -euo pipefail
+          before=$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-blue blot-green blot-blue-airlock blot-green-airlock)
+          bash proxy/deploy/blue-green.sh "$UNIT_A" | tee rerun.log
+          grep -q "nothing to do" rerun.log
+          [ "$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-blue blot-green blot-blue-airlock blot-green-airlock)" = "$before" ]
+          [ "$(docker inspect -f '{{.State.Running}}' blot-container-yellow)" = false ]
+
+      # ---- a steady deploy -----------------------------------------------------
+      - name: A steady deploy replaces blot-blue then blot-green with zero failed requests
+        run: |
+          set -euo pipefail
+          blue=$(docker inspect -f '{{.Id}}' blot-blue); green=$(docker inspect -f '{{.Id}}' blot-green)
+          bash proxy/deploy/e2e/deploy-under-load.sh "$UNIT_B"
+          [ "$(docker inspect -f '{{.Id}}' blot-blue)" != "$blue" ]
+          [ "$(docker inspect -f '{{.Id}}' blot-green)" != "$green" ]
+          for u in blue green; do [ "$(docker inspect -f '{{.Config.Image}}' blot-$u)" = "$UNIT_B" ]; done
+          [ "$(docker ps -a --format '{{.Names}}' | grep -Ec '^blot-(blue|green)(-previous)?$')" = 2 ]
+
+      # ---- a new blue whose node-a never listens -------------------------------
+      - name: A new blot-blue whose node-a never becomes healthy is rolled back and blot-green is never touched
+        run: |
+          set +e
+          blue=$(docker inspect -f '{{.Id}}' blot-blue)
+          green=$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-green)
+          bash proxy/deploy/blue-green.sh "$UNIT_BROKEN"
+          rc=$?
+          set -e
+          [ "$rc" -ne 0 ]
+          [ "$(docker inspect -f '{{.Id}}' blot-blue)" = "$blue" ]
+          [ "$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-green)" = "$green" ]
+          for u in blue green; do
+            [ "$(docker inspect -f '{{.Config.Image}}' blot-$u)" = "$UNIT_B" ]
+            [ "$(docker inspect -f '{{.State.Running}}' blot-$u)" = true ]
+          done
+          [ "$(docker ps -a --format '{{.Names}}' | grep -Ec '^blot-(blue|green)(-previous)?$')" = 2 ]
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
+          [ "$code" = 200 ]
+
+      - name: Logs
+        if: always()
+        run: |
+          for c in blot-blue blot-green blot-blue-previous blot-green-previous blot-blue-airlock blot-green-airlock blot-e2e-stub blot-e2e-redis; do
+            echo "=== $c ==="; docker logs --tail 100 "$c" 2>&1 || true
+          done
+          echo "=== $PROXY_LOG_DIR/error.log (tail) ==="
+          sudo tail -n 100 "$PROXY_LOG_DIR/error.log" 2>&1 || true

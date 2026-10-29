@@ -1,200 +1,25 @@
 name: Deploy proxy
 
-# Swaps the production proxy container for a new image with
-# proxy/deploy/blue-green.sh (via scripts/deploy/proxy.sh). Manual only, like
-# deploy.yml: purges sent during the few seconds both containers are up reach
-# only one of them, so deploy at a quiet time (proxy/deploy/README.md).
+# Retired: blot-blue and blot-green are units now (OpenResty and Node in one
+# container, #2119), and the Deploy workflow (deploy.yml) deploys them. This
+# workflow used to put a proxy-only image in both containers; run after the
+# cutover it would replace the units' Node processes with nothing, so it fails
+# instead. It goes in PR 7, with the other old deploy code.
+#
+# The one reason to deploy a proxy-only image is rolling back the cutover, by
+# hand: proxy/deploy/README.md "Rolling back the cutover".
 
 on:
   workflow_dispatch:
-    inputs:
-      commit:
-        description: "Optional commit hash or short code on master (defaults to the dispatched commit)"
-        required: false
-        default: ""
-      skip_checks:
-        description: "Deploy even if CI for the commit hasn't passed (emergencies only)"
-        type: boolean
-        required: false
-        default: false
 
 permissions:
   contents: read
-  actions: read # To read CI results for the target commit
-
-# Shared with Deploy node (deploy.yml): see the comment there.
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false
-
-env:
-  BLOT_DEPLOY_SSH_HOST: ${{ secrets.BLOT_DEPLOY_SSH_HOST }}
-  BLOT_DEPLOY_SSH_PORT: ${{ secrets.BLOT_DEPLOY_SSH_PORT }}
 
 jobs:
-  deploy:
+  retired:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    environment: deploy
-
     steps:
-      - name: Check branch
+      - name: Say so
         run: |
-          if [ "${{ github.ref }}" != "refs/heads/master" ]; then
-            echo "❌ Error: This workflow can only be run on the master branch."
-            echo "Current branch: ${{ github.ref }}"
-            exit 1
-          fi
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          # Full history, commits only, so a short code can be resolved and
-          # checked against master; the sparse checkout then fetches just
-          # what proxy.sh uses. See deploy.yml.
-          fetch-depth: 0
-          filter: tree:0
-          sparse-checkout: |
-            scripts/deploy
-            proxy/deploy
-
-      # Run the deploy scripts from the commit being deployed.
-      - name: Resolve and check out target commit
-        id: resolve
-        env:
-          # Bind inputs to the environment so a dispatcher cannot inject
-          # shell syntax into the script below.
-          COMMIT_INPUT: ${{ github.event.inputs.commit }}
-          DISPATCH_SHA: ${{ github.sha }}
-        run: |
-          git fetch --quiet origin master
-
-          if [ -z "$COMMIT_INPUT" ]; then
-            # Default: the immutable commit the run was dispatched against.
-            SHA="$DISPATCH_SHA"
-            echo "custom=false" >> "$GITHUB_OUTPUT"
-          else
-            SHA=$(git rev-parse --verify --quiet "${COMMIT_INPUT}^{commit}") || {
-              echo "❌ Error: could not resolve commit '$COMMIT_INPUT'"
-              exit 1
-            }
-            echo "custom=true" >> "$GITHUB_OUTPUT"
-          fi
-
-          if ! git merge-base --is-ancestor "$SHA" origin/master; then
-            echo "❌ Error: commit $SHA is not on master"
-            exit 1
-          fi
-
-          git checkout --quiet --detach "$SHA"
-
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "✅ Target commit: $SHA"
-
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.BLOT_DEPLOY_SSH_KEY }}
-
-      - name: Configure and verify SSH
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          cat >> ~/.ssh/config << EOF
-          Host blot
-            HostName ${BLOT_DEPLOY_SSH_HOST}
-            User deploy
-            Port ${BLOT_DEPLOY_SSH_PORT}
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-            ServerAliveInterval 30
-            # Reuse one connection for proxy.sh's ssh calls.
-            ControlMaster auto
-            ControlPath ~/.ssh/cm-%C
-            ControlPersist 30m
-          EOF
-          chmod 600 ~/.ssh/config
-          ssh blot "echo 'SSH connection successful'"
-
-      # Don't ship a commit whose CI failed. The path-filtered workflows only
-      # count if they ran for this commit; proxy-deploy-e2e has no name: so
-      # GitHub reports it by file path.
-      - name: Wait for CI on the target commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
-          CUSTOM: ${{ steps.resolve.outputs.custom }}
-          SKIP_CHECKS: ${{ github.event.inputs.skip_checks }}
-          REQUIRED: "node proxy-image app-e2e integration"
-          OPTIONAL: "proxy proxy-fail2ban .github/workflows/proxy-deploy-e2e.yml"
-        run: |
-          if [ "$SKIP_CHECKS" = "true" ]; then
-            echo "::warning::skip_checks is set - deploying $TARGET_SHA without waiting for CI to pass."
-            exit 0
-          fi
-
-          # Same bounds as the image wait: the dispatched commit's CI may
-          # still be running, a chosen older commit's should already be done.
-          if [ "$CUSTOM" = "true" ]; then
-            MAX_TRIES=12    # ~2 min
-          else
-            MAX_TRIES=240   # ~40 min: app-e2e alone may wait 20 min for the image
-          fi
-
-          for i in $(seq 1 "$MAX_TRIES"); do
-            # Latest attempt of each workflow's push run for this commit, as
-            # "name<TAB>status<TAB>conclusion<TAB>html_url". Tolerate an API
-            # blip: an empty result just means "not yet" and we poll again.
-            RUNS=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$TARGET_SHA&event=push&per_page=100" \
-              --jq '.workflow_runs | group_by(.name) | map(max_by(.run_attempt)) | .[] | [.name, .status, (.conclusion // ""), .html_url] | @tsv' || true)
-
-            PENDING=""
-            for NAME in $REQUIRED $OPTIONAL; do
-              ROW=$(printf '%s\n' "$RUNS" | awk -F'\t' -v n="$NAME" '$1 == n')
-              if [ -z "$ROW" ]; then
-                # Path-filtered workflows may legitimately not have run.
-                case " $OPTIONAL " in *" $NAME "*) ;; *) PENDING="$PENDING $NAME" ;; esac
-                continue
-              fi
-              STATUS=$(printf '%s' "$ROW" | cut -f2)
-              CONCLUSION=$(printf '%s' "$ROW" | cut -f3)
-              URL=$(printf '%s' "$ROW" | cut -f4)
-              if [ "$STATUS" != "completed" ]; then
-                PENDING="$PENDING $NAME"
-              elif [ "$CONCLUSION" != "success" ]; then
-                echo "❌ CI workflow '$NAME' concluded '$CONCLUSION' for $TARGET_SHA: $URL"
-                echo "   Fix it and re-run, or re-dispatch with skip_checks to deploy anyway (emergencies only)."
-                exit 1
-              fi
-            done
-
-            if [ -z "$PENDING" ]; then
-              echo "✅ CI passed for $TARGET_SHA"
-              exit 0
-            fi
-            echo "  waiting for CI:$PENDING ($i/$MAX_TRIES)..."; sleep 10
-          done
-
-          echo "❌ CI did not finish for $TARGET_SHA in time (still waiting for:$PENDING)."
-          echo "   Re-dispatch once it has passed, or use skip_checks to deploy anyway (emergencies only)."
+          echo "::error::Deploy proxy is retired: blot-blue and blot-green are units, deployed by the Deploy workflow. To roll back to proxy-only containers see proxy/deploy/README.md (Rolling back the cutover)."
           exit 1
-
-      # proxy.sh waits for the image (up to 25 min for the dispatched commit,
-      # 2 min for a chosen one, as deploy.yml does).
-      - name: Deploy
-        env:
-          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
-          SKIP_BRANCH_CHECK: true
-          PROXY_IMAGE_WAIT: ${{ steps.resolve.outputs.custom == 'true' && '120' || '1500' }}
-        run: |
-          set -o pipefail
-          scripts/deploy/proxy.sh "$TARGET_SHA" 2>&1 | tee deploy.log
-
-      # A failed swap whose old container would not come back keeps the new
-      # one running and says so; make that visible on the run page.
-      - name: Surface a rollback warning
-        if: failure()
-        run: |
-          if [ -f deploy.log ] && grep -q 'WARNING:' deploy.log; then
-            echo "::error::$(grep 'WARNING:' deploy.log | tail -1)"
-          fi

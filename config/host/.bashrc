@@ -35,14 +35,14 @@ nginx-stats() {
   docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.CPUPerc}}' $proxies
 }
 alias client='redis-cli -h $(grep BLOT_REDIS_HOST /etc/blot/secrets.env | cut -d"=" -f2 | tr -d " ")'
-alias login="docker exec -it blot-container-blue /bin/sh"
-alias candidates="docker exec blot-container-blue node app/documentation/featured/candidates"
-alias access="docker exec blot-container-blue node /usr/src/app/scripts/blog/access.js"
-alias info="docker exec blot-container-blue node /usr/src/app/scripts/info"
+alias login="docker exec -it blot-blue /bin/sh"
+alias candidates="docker exec blot-blue node app/documentation/featured/candidates"
+alias access="docker exec blot-blue node /usr/src/app/scripts/blog/access.js"
+alias info="docker exec blot-blue node /usr/src/app/scripts/info"
 alias errors="tail -n 10000000 \$LOGS/access.log | egrep ' (500|501|502|504) '"
 alias 404s="cat /var/instance-ssd/logs/access.log | grep ' 404 ' | cut -d ' ' -f7 | sed -E 's|https?://[^/]+| |' |  sort | uniq -c | sort -rn | head -n 100"
 alias upstream='tail -f /var/instance-ssd/logs/access.log | stdbuf -oL grep "st=[^-]" | stdbuf -oL awk "{print \$10, \$3, \$4, \$7}"'
-alias rebuild='docker exec blot-container-blue node /usr/src/app/scripts/entry/rebuild'
+alias rebuild='docker exec blot-blue node /usr/src/app/scripts/entry/rebuild'
 
 question() {
   if [ -z "$1" ]; then
@@ -51,7 +51,7 @@ question() {
   fi
 
   local url="$1"
-  local container="blot-container-blue"
+  local container="blot-blue"
 
   # Get the user ID from the question script
   local user_id
@@ -66,12 +66,25 @@ question() {
   info "$user_id"
 }
 
+# The running app containers: the units, blot-blue and blot-green (OpenResty and
+# Node, whose lines are labelled blue/node-a, blue/node-b ...), and the old
+# blot-container-* ones while they are still running (PR 7 removes those).
+app_containers() {
+    docker ps --format '{{.Names}}' | grep -E '^(blot-(blue|green)|blot-container-.*)$'
+}
+
 req() {
-    grep -h --line-buffered "$1" <(tail -n 1000000 $LOGS/error.log $LOGS/access.log) <(docker logs blot-container-blue 2>&1) <(docker logs blot-container-green 2>&1) <(docker logs blot-container-yellow 2>&1)
+    # one stream into grep: process substitutions kept in an array are closed
+    # by the time grep runs
+    local c
+    {
+        tail -n 1000000 $LOGS/error.log $LOGS/access.log
+        for c in $(app_containers); do docker logs "$c" 2>&1; done
+    } | grep -h --line-buffered "$1"
 }
 
 live() {
-  containers=(blot-container-blue blot-container-green blot-container-yellow)
+  containers=($(app_containers))
   pids=()
 
   # Start docker logs for each container
@@ -94,20 +107,31 @@ live() {
   trap - INT
 }
 
+# logs [-f] [name]: the app containers' logs. name is blue or green (a unit),
+# or the process label a SERVER_START email gives, blue/node-a or blue/node-b
+# (the whole unit's log: node-a and node-b share it, and their lines are
+# labelled), or yellow (an old blot-container-*). With no name, all of them.
+logs_container() {
+    case "${1%%/*}" in
+        blue|green) if docker inspect "blot-${1%%/*}" >/dev/null 2>&1 && ! docker inspect "blot-container-${1%%/*}" -f "{{.State.Running}}" 2>/dev/null | grep -q true; then echo "blot-${1%%/*}"; else echo "blot-container-${1%%/*}"; fi ;;
+        *) echo "blot-container-${1%%/*}" ;;
+    esac
+}
+
 logs() {
     if [ -z "$1" ]; then
-        docker ps --format '{{.Names}}' | grep '^blot-container-' | xargs -L 1 docker logs --timestamps 2>&1 | sort -k1,1 | cut -d' ' -f2-
+        app_containers | xargs -L 1 docker logs --timestamps 2>&1 | sort -k1,1 | cut -d" " -f2-
     else
         if [ "$1" = "-f" ]; then
             if [ -z "$2" ]; then
                 echo "Container name required when using -f"
                 return 1
             fi
-            docker logs -f "blot-container-$2" 2>&1
+            docker logs -f "$(logs_container "$2")" 2>&1
         elif [ "$2" = "-f" ]; then
-            docker logs -f "blot-container-$1" 2>&1
+            docker logs -f "$(logs_container "$1")" 2>&1
         else
-            docker logs "blot-container-$1" 2>&1
+            docker logs "$(logs_container "$1")" 2>&1
         fi
     fi
 }
@@ -378,7 +402,7 @@ unresponded() {
                 unset requests["$request_id"]
             fi
         fi
-    done < <(docker logs --tail 10000 blot-container-blue)
+    done < <(docker logs --tail 10000 blot-blue)
     
     echo "Unresponded Requests:"
     echo "--------------------"

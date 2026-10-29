@@ -8,7 +8,6 @@ const BLOT_DIRECTORY =
 const BLOT_DATA_DIRECTORY =
   process.env.BLOT_DATA_DIRECTORY || BLOT_DIRECTORY + "/data";
 const BLOT_HOST = process.env.BLOT_HOST || "localhost";
-const BLOT_PORT = process.env.BLOT_PORT || "8080";
 // Unix socket the server also listens on, for the reverse proxy; empty for none
 const BLOT_SOCKET = process.env.BLOT_SOCKET || "";
 // Set by helper/workerChild on the worker it forks: it serves on a socket only
@@ -16,6 +15,11 @@ const BLOT_WORKER_CHILD = process.env.BLOT_WORKER_CHILD === "true";
 // Which unit (blue or green) this process runs in, when it shares a container
 // with a proxy and a second Node process (#2119); empty otherwise
 const BLOT_UNIT = process.env.BLOT_UNIT || "";
+// The TCP port to serve on. A unit runs on the host's network, where two
+// units would both want 8080, and everything that talks to a unit's node-a
+// (the proxy, the image's health check, the deploy) uses its socket, so in a
+// unit the process serves on the socket alone unless BLOT_PORT asks for a port.
+const BLOT_PORT = process.env.BLOT_PORT || (BLOT_UNIT ? "" : "8080");
 const BLOT_PROTOCOL = process.env.BLOT_PROTOCOL || "https";
 const BLOT_IPV6 = process.env.BLOT_IPV6 || null;
 

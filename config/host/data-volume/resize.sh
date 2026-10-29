@@ -24,7 +24,7 @@
 # Options:
 #   --host SSH_HOST          the app host (default blot)
 #   --profile NAME           AWS CLI profile (default blot)   --region NAME (default us-west-2)
-#   --container NAME         the container read-only.js runs in (default blot-container-blue)
+#   --container NAME         the container read-only.js runs in (default blot-blue, a unit)
 #   --lock-wait SECONDS      how long to wait for held folder locks to drain (default 120)
 #   --grace SECONDS          how long to wait after the freeze starts before
 #                            looking at the folder locks (default 15)
@@ -46,7 +46,7 @@ set -euo pipefail
 HOST=blot
 AWS_PROFILE_NAME=blot
 AWS_REGION=${AWS_REGION:-us-west-2}
-CONTAINER=blot-container-blue
+CONTAINER=blot-blue
 LOCK_WAIT=120
 GRACE=15
 # A live pass is one rsync walking the whole tree; the frozen pass walks it in
