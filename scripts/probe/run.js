@@ -24,21 +24,28 @@ const path = require("path");
 const fs = require("fs");
 const sshCommand = require("../deploy/util/sshCommand");
 const askForConfirmation = require("../deploy/util/askForConfirmation");
-const { AIRLOCK_ENV } = require("../deploy/util/generateDockerCommand");
 const { parseArgs, formatOptions } = require("./args");
 const {
-  REGISTRY_URL,
   ENV_FILE_ON_SERVER,
   DATA_DIRECTORY_ON_SERVER,
   DATA_DIRECTORY_ON_CONTAINER,
   AIRLOCK,
-  CONTAINERS,
   TMP_DIRECTORY,
 } = require("../deploy/constants");
 
 const execFileAsync = promisify(execFile);
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
+// The unit that runs the probes' default image (blot-blue's), and its image
+// (proxy/deploy/common.sh names it blot-unit:<sha>).
+const UNIT_CONTAINER = "blot-blue";
+const UNIT_IMAGE = "ghcr.io/blotcms/blot-unit";
+// The probe joins that unit's airlock on blotnet (the unit's own airlock is
+// published on the host only, so a container on bridge cannot reach it).
+const AIRLOCK_ENV = {
+  BLOT_AIRLOCK_BROWSER_URL: `http://${AIRLOCK.units.blue.name}:9222`,
+  BLOT_AIRLOCK_PROXY_URL: `http://${AIRLOCK.units.blue.name}:8888`,
+};
 const APP_ROOT_IN_CONTAINER = "/usr/src/app";
 const REMOTE_ROOT = "/tmp/blot-probe";
 const OUT = "/out";
@@ -49,7 +56,7 @@ const SHARED_FILES = [path.join(__dirname, "args.js"), path.join(__dirname, "ins
 
 // Options every probe wrapper takes; see fromWrapperOptions.
 const WRAPPER_OPTIONS = {
-  release: { value: "SHA", help: "image tag to run (default: yellow's current image)" },
+  release: { value: "SHA", help: "image tag to run (default: blot-blue's current image)" },
   memory: { value: "SIZE", help: "container memory limit, e.g. 3g or 2500m" },
   "max-old-space": { value: "MB", help: "V8 heap limit" },
   cpus: { value: "N", help: "container CPU limit (default 1)" },
@@ -97,7 +104,7 @@ function parseMemoryMB(value) {
 //   memory        container memory limit, e.g. "3g"
 //   oldSpace      V8 heap limit in MB (--max-old-space-size)
 //   cpus          container CPU limit (default 1)
-//   release       image tag (a commit SHA) instead of yellow's current image
+//   release       image tag (a commit SHA) instead of blot-blue's current image
 //   yes           skip the confirmation prompt
 //   overlay       local files inside this repository, each mounted read-only
 //                 over the image's copy at the same path
@@ -233,7 +240,7 @@ async function runProbe({
     `-v ${DATA_DIRECTORY_ON_SERVER}:${DATA_DIRECTORY_ON_CONTAINER}${writableData ? "" : ":ro"}`,
     // Scratch space for helper/tempDir, writable even when data is read-only.
     // --mount, unlike -v, fails if the source is missing rather than quietly
-    // creating it on the root disk (as generateDockerCommand.js does).
+    // creating it on the root disk (as the unit deploy does).
     `--mount ${shellQuote(`type=bind,source=${TMP_DIRECTORY},target=${TMP_DIRECTORY}`)}`,
     `-v ${remoteDir}/out:${OUT}`,
     ...files.map((file) => `-v ${shellQuote(`${file.remote}:${file.container}:ro`)}`),
@@ -243,12 +250,15 @@ async function runProbe({
     `--memory=${memory}`,
     `--memory-swap=${memory}`,
     `--cpus=${cpus}`,
+    "--entrypoint /sbin/tini",
     image,
+    "--",
     ...node.map(shellQuote),
   ].join(" ");
 
-  // Mirrors the deploy (scripts/deploy/util/generateDockerCommand.js): the
-  // airlock network is connected after create and before start.
+  // Mirrors the deploy (proxy/deploy/common.sh): the airlock network is
+  // connected after create and before start. The unit image's entrypoint is
+  // its supervisor, so run node under tini (the image's init) instead.
   const remoteCommand = [
     `${dockerCreate} > /dev/null`,
     ...(airlock ? [`docker network connect ${AIRLOCK.network} ${name}`] : []),
@@ -345,7 +355,7 @@ async function runProbe({
   return { exitCode, localDir };
 }
 
-// yellow's image unless --release; the image name, never its environment
+// blot-blue's image unless --release; the image name, never its environment
 // (which holds the production secrets).
 async function chooseImage(release) {
   if (release) {
@@ -363,12 +373,12 @@ async function chooseImage(release) {
     }
     sha = sha.trim();
     if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error(`Couldn't resolve --release ${release}: ${sha}`);
-    return `${REGISTRY_URL}:${sha}`;
+    return `${UNIT_IMAGE}:${sha}`;
   }
   const image = await sshCommand(
-    `docker inspect ${CONTAINERS.YELLOW.name} --format '{{.Config.Image}}'`
+    `docker inspect ${UNIT_CONTAINER} --format '{{.Config.Image}}'`
   );
-  if (!/^[\w./:@-]+$/.test(image)) throw new Error(`Unexpected image for ${CONTAINERS.YELLOW.name}: ${image}`);
+  if (!/^[\w./:@-]+$/.test(image)) throw new Error(`Unexpected image for ${UNIT_CONTAINER}: ${image}`);
   return image;
 }
 
