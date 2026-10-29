@@ -1,15 +1,31 @@
 #!/usr/bin/env bash
 #
-# Deploy a proxy IMAGE to the two proxy containers, blot-blue and blot-green,
-# one at a time, while the other carries all the traffic.
+# Deploy an IMAGE to the two containers, blot-blue and blot-green, one at a
+# time, while the other carries all the traffic.
 #
 #   proxy/deploy/blue-green.sh <commit-sha | image>
 #
-# Run it on the production host. Both containers are always running (the names
-# are final: the Node containers will move inside them in a later stage), and
-# both are replaced by every deploy, blue first. For a config-only change,
-# deploy a new image the same way (reload-config.sh needs a bind-mounted conf
-# dir, which these scripts' containers do not have).
+# Run it on the production host. Both containers are always running, and both
+# are replaced by every deploy, blue first. For a config-only change, deploy a
+# new image the same way (reload-config.sh needs a bind-mounted conf dir, which
+# these scripts' containers do not have).
+#
+# The image is a unit (ghcr.io/blotcms/blot-unit: OpenResty, node-a and node-b
+# in one container, #2119) or, for a rollback from units, a proxy alone
+# (ghcr.io/blotcms/blot-proxy, PROXY_DEPLOY_KIND=proxy): see common.sh. A unit
+# differs in four ways, everything else below being the same:
+#   - it is created with the Node containers' arguments too (unit_run_args),
+#     and is healthy only when its proxy, node-a and node-b all answer;
+#   - its airlock, blot-<unit>-airlock, is replaced just before it is created;
+#   - blue, deployed first, also passes the app's verify-container checks
+#     before green is touched;
+#   - at the end, the old blot-container-* containers and blot-airlock, if
+#     running, are stopped (not removed). THE FIRST RUN OF A UNIT IMAGE IS
+#     THE CUTOVER: proxy-only blot-green keeps routing to the old Node
+#     containers while blot-blue becomes a unit (its backups, green's sockets,
+#     do not exist yet), then green becomes one, then the old containers stop.
+#     A proxy-only peer counts as healthy for the "other unit must be healthy"
+#     rule. Every step is safe to run again.
 #
 # How it works
 # ------------
@@ -79,7 +95,10 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/common.sh"
 
 NEW_IMAGE="$(resolve_image "$NEW_IMAGE")"
+DEPLOY_KIND="$(deploy_kind "$NEW_IMAGE")"
+RELEASE_ID="$(release_id "$NEW_IMAGE")"
 load_env
+[ "$DEPLOY_KIND" != unit ] || load_unit_settings
 acquire_lock
 [ -r "$CERT_DIR/letsencrypt-domain.pem" ] && [ -r "$CERT_DIR/letsencrypt-domain.key" ] \
   || die "no certificate in $CERT_DIR (letsencrypt-domain.pem / .key)"
@@ -169,11 +188,13 @@ fi
 # failed docker command) must undo what was done. What there is to undo:
 #   STARTED     containers created by this run that are not yet permanent
 #   STOPPED     the legacy proxy, stopped for the transition: start it again
+#   RETIRED     the old Node containers and airlock, being stopped once the
+#               units are healthy (retire_old_nodes): start them again
 #   SWAP        the unit being replaced, and how far it got (SWAP_STATE):
 #     stopped     it is stopped under its own name: start it again
 #     renamed     it is blot-<unit>-previous and the new one may exist as
 #                 blot-<unit>: start the old one, remove the new, rename back
-STARTED="" STOPPED="" SWAP="" SWAP_STATE=""
+STARTED="" STOPPED="" SWAP="" SWAP_STATE="" RETIRED=""
 
 remove_container() { # remove_container <name>, with the end of its log
   docker logs --tail 50 "$1" >&2 || true
@@ -210,6 +231,12 @@ swap_back() {
   fi
 }
 
+unretire() {
+  local c
+  for c in $RETIRED; do docker start "$c" >/dev/null 2>&1 || log "WARNING: could not start $c again"; done
+  RETIRED=""
+}
+
 restore_stopped() {
   log "Starting $STOPPED again"
   if docker start "$STOPPED" >/dev/null 2>&1 && wait_healthy "$STOPPED" "$HEALTH_TIMEOUT"; then
@@ -225,6 +252,9 @@ deploy_rollback() {
   if [ -n "$SWAP_STATE" ]; then
     log "Replacing $SWAP failed or was interrupted (exit $status)"
     swap_back
+  elif [ -n "$RETIRED" ]; then
+    log "Stopping the old Node containers failed or was interrupted (exit $status): starting them again"
+    unretire
   elif [ -n "$STOPPED" ]; then
     log "Transition failed or interrupted (exit $status): putting $STOPPED back"
     restore_stopped
@@ -244,6 +274,12 @@ trap '' HUP PIPE
 # socket. Restart policy `no` until it has passed (see the top).
 bring_up() {
   log "Starting $1 from $NEW_IMAGE"
+  if [ "$DEPLOY_KIND" = unit ]; then
+    # the unit's airlock first: it is reached on 127.0.0.1 and the canary
+    # checks it. The unit is stopped (or new) here, so nothing uses it.
+    ensure_airlock "$(unit_of "$1")" || die "the airlock for $1 did not come up"
+    PURGE_CONTAINER="$1"
+  fi
   run_args "$1"
   docker create --restart no "${RUN_ARGS[@]}" "$NEW_IMAGE" >/dev/null
   docker start "$1" >/dev/null
@@ -269,6 +305,13 @@ start_unit() {
   else
     live_checks "$BASELINE" || die "checks failed after starting $name from $NEW_IMAGE"
   fi
+  canary "$1" "$name"
+}
+
+# canary <unit> <name>: blue's app-level checks, before green is touched
+canary() {
+  [ "$DEPLOY_KIND" = unit ] && [ "$1" = blue ] || return 0
+  verify_unit "$2" || die "verify-container failed in $2"
 }
 
 # replace_unit <unit>: stop the running unit, keep it as -previous, start the
@@ -293,6 +336,7 @@ replace_unit() {
 
   log "Checking the site through $name and $other"
   live_checks "$BASELINE" || die "checks failed after replacing $name with $NEW_IMAGE"
+  canary "$u" "$name"
 
   # Only now, so a daemon restart before this leaves $other running and not an
   # unchecked container; a unit that failed never gets a restart policy.
@@ -309,6 +353,35 @@ replace_unit() {
   fi
   SWAP="" SWAP_STATE=""
   log "Replaced $name"
+}
+
+# retire_old_nodes: the last step of the cutover, and a no-op after it. Once
+# both units are units, healthy, and the site checks pass, the old Node
+# containers and the airlock they used are stopped. Stopped, not removed:
+# they are the way back (proxy/deploy/README.md "Rolling back the cutover"),
+# and a stopped container stays stopped across a daemon restart. Nothing
+# routes to them any more (a unit's proxy sends to its own Node processes),
+# so the checks go on passing. A failure starts them again.
+retire_old_nodes() {
+  [ "$DEPLOY_KIND" = unit ] || return 0
+  local c u n live=""
+  for c in $OLD_NODES "$AIRLOCK_LEGACY_NAME"; do
+    if running "$c"; then live="$live $c"; fi
+  done
+  [ -n "$live" ] || return 0
+  for u in $UNITS; do
+    n="$(unit_name "$u")"
+    { running "$n" && container_is_unit "$n" && healthy "$n"; } \
+      || die "$n is not a running, healthy unit: not stopping the old Node containers [${live# }]"
+  done
+  PURGE_CONTAINER="$(unit_name blue)"
+  live_checks "" || die "checks failed with both units up: not stopping the old Node containers [${live# }]"
+  log "Both units are healthy: stopping the old Node containers [${live# }] (kept, to roll back to)"
+  RETIRED="${live# }"
+  for c in $RETIRED; do docker stop --time "$DRAIN_TIMEOUT" "$c" >/dev/null || die "could not stop $c"; done
+  live_checks "" || die "checks failed after stopping the old Node containers"
+  log "Stopped [${RETIRED}]: remove them (docker rm) once the units have run well for a while"
+  RETIRED=""
 }
 
 # ---- the deploy ------------------------------------------------------------
@@ -352,5 +425,6 @@ case "$MODE" in
     ;;
 esac
 
+retire_old_nodes
 prune_old_images "$NEW_IMAGE" || true
 log "Done: $(unit_name blue) and $(unit_name green) run $NEW_IMAGE"

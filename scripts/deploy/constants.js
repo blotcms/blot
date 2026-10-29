@@ -42,6 +42,33 @@ const blogsConfig = {
 const SERVING_CPU_SHARES = 2048;
 const BACKGROUND_CPU_SHARES = 512;
 
+// The two units (#2119): blot-blue and blot-green, each one container holding
+// OpenResty, node-a (blogs, dashboard reads) and node-b (the worker child:
+// webhooks, /clients, dashboard writes), deployed by proxy/deploy/blue-green.sh
+// (via ./units.sh). It gets these through ./unit-settings.js.
+//
+// One unit must be able to carry all the traffic on its own while the other is
+// being replaced, so each is sized for everything today's three Node
+// containers do, not a third of it:
+//   node-a   yellow's heap (1500) plus room for blue's dashboard reads
+//   node-b   green's heap, with the same overhead green had for pandoc and
+//            esbuild (the browser moved to the airlock)
+//   memory   node-a's heap plus yellow's overhead (378m), node-b's heap plus
+//            green's overhead (615m), and room for OpenResty's workers
+// The heaps are ceilings, not reservations: V8 uses what the render caches
+// and requests need, and the unit's cgroup limit sits above both so a runaway
+// heap dies with a diagnostic report rather than to the OOM killer.
+// cpus overcommits slightly, as the three containers' 2 each did. Each unit
+// has its own airlock (AIRLOCK below), paid for separately.
+const UNIT = {
+  cpus: 4,
+  memory: "3840m",
+  cpuShares: SERVING_CPU_SHARES,
+  nodeAMaxOldSpaceSize: 1800,
+  nodeBMaxOldSpaceSize: 750,
+  stopTimeout: 30, // above the app's drain timeout (app/helper/drain.js)
+};
+
 // Each app container also listens on a Unix socket in this host directory,
 // bind-mounted at the same path into the app containers and the proxy
 // (app/helper/listen.js). Unlike the published port, a socket nobody is
@@ -53,6 +80,7 @@ const SOCKET_DIRECTORY = "/run/blot";
 
 module.exports = {
   SOCKET_DIRECTORY,
+  UNIT,
   REGISTRY_URL: "ghcr.io/blotcms/blot",
   PLATFORM_OS: "linux",
   // A single 512m file only held ~6 hours of yellow's logs, so the output
@@ -125,6 +153,19 @@ module.exports = {
     // Screenshots and remote downloads for entry builds - background work,
     // weighted like green (see the CPU weights note above).
     cpuShares: BACKGROUND_CPU_SHARES,
+
+    // One airlock per unit (#2119), deployed with it as blot-<unit>-airlock.
+    // A unit runs on the host network and cannot join blotnet or resolve
+    // names on it, so each airlock publishes its two ports on 127.0.0.1
+    // only, at a distinct host port per unit, and the unit is given those
+    // URLs. The ports are well clear of 8088-8090, which the old containers
+    // hold during the cutover. The egress filter (config/airlock/egress.nft)
+    // is in the airlock's own network namespace, so it does not depend on
+    // how its clients reach it. See config/airlock/README.md.
+    units: {
+      blue: { name: "blot-blue-airlock", browserPort: 19222, proxyPort: 18888 },
+      green: { name: "blot-green-airlock", browserPort: 19223, proxyPort: 18889 },
+    },
   },
 
   CONTAINERS: {
