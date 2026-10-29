@@ -310,6 +310,39 @@ docker run -d --network host --cap-add SYS_NICE \
 `entrypoint.sh` chowns the volume roots to `ec2-user` on boot (they mount
 root-owned); it does **not** recurse into the cache.
 
+## The unit image
+
+[#2119](https://github.com/blotcms/blot/issues/2119) replaces the proxy
+container and the three Node containers with two identical units, `blot-blue`
+and `blot-green`, each one container running OpenResty, node-a (the Node main
+process) and node-b (the worker child node-a forks, `helper/workerChild`). The
+image is the `unit` target of the root `Dockerfile`: the `prod` app image plus
+OpenResty and the files in this image, which `COPY --from` the proxy image
+built for the same commit (`PROXY_IMAGE`) rather than compiling OpenResty
+again. [`unit-image.yml`](../.github/workflows/unit-image.yml) builds it after
+the proxy image, boots it with [`unit/smoke.sh`](unit/smoke.sh) and publishes
+`ghcr.io/<owner>/blot-unit:<sha>`. Nothing deploys it yet.
+
+- **User.** One user at uid 1000, `ec2-user` (the Node image's `node` user,
+  renamed), for the app and for OpenResty's workers. As in this image, the
+  OpenResty master runs as root to bind 80 and 443; node-a is started with
+  `su-exec`.
+- **Supervisor.** [`unit/supervisor.sh`](unit/supervisor.sh) runs under tini.
+  It starts OpenResty with [`start.sh`](start.sh) (`proxy-start`, the part of
+  `entrypoint.sh` that prepares the container) and node-a. If node-a exits it
+  is started again after 1s, doubling to 30s, reset once it has run for 60s,
+  without touching OpenResty. If OpenResty exits the container exits non-zero.
+  On SIGTERM, SIGQUIT or SIGINT it runs `openresty -s quit`, sends node-a
+  SIGTERM (which drains it and node-b), waits for both and exits 0.
+- **Config.** `BLOT_UNIT` (`blue` or `green`) is required. The supervisor
+  derives the rest from it, unless set: node-a and node-b serve on
+  `/run/blot/<unit>-a.sock` and `<unit>-b.sock`, and the proxy runs in
+  `PROXY_UPSTREAM_MODE=unit` with those as `PROXY_UNIT_MAIN` and
+  `PROXY_UNIT_WORKER` and the other unit's as `PROXY_PEER_MAIN` and
+  `PROXY_PEER_WORKER` (see [Runtime settings](#runtime-settings)).
+- **Health.** The `HEALTHCHECK` ([`unit/healthcheck.sh`](unit/healthcheck.sh))
+  needs both the health socket and node-a's `/health`.
+
 ## Pinned dependencies
 
 Reproducibility relies on pinning, because the upstream toolchain has drifted:

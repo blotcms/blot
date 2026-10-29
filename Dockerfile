@@ -246,7 +246,7 @@ COPY ./scripts ./scripts
 COPY --chown=1000:1000 ./app ./app
 COPY ./TODO ./TODO
 
-## Stage 6 (default, production)
+## Stage 6 (production)
 # The final production stage
 FROM source AS prod
 
@@ -269,7 +269,7 @@ RUN node app/documentation/build
 
 CMD ["node", "/usr/src/app/app/index.js"]
 
-## Stage 7 (unit)
+## Stage 7 (unit; build it with --target, the app image is --target prod)
 # One container holding OpenResty and the Node app, run as one of two units
 # (#2119): the `prod` stage plus the proxy's runtime, started by a supervisor
 # (proxy/unit/supervisor.sh) under tini. Built and tested in CI by
