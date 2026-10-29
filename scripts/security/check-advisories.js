@@ -103,18 +103,20 @@ const pins = {};
 
 function readPins() {
   const dockerfile = read("Dockerfile") || "";
-  const m = dockerfile.match(/^FROM\s+node:([\w.]+?)-alpine/m);
+  const m = dockerfile.match(/^ARG\s+NODE_BASE=node:([\w.]+?)-alpine/m);
   if (m) pins.node = m[1];
   const p = dockerfile.match(/^ARG\s+PANDOC_VERSION=(\S+)/m);
   if (p) pins.pandoc = p[1];
 
   const proxy = read("proxy/Dockerfile") || "";
-  const tag = proxy.match(/^ARG\s+OPENRESTY_TAG=(\S+)/m);
   const ver = proxy.match(/^ARG\s+OPENRESTY_VERSION=(\S+)/m);
   const ngx = proxy.match(/^ARG\s+NGINX_VERSION=(\S+)/m);
-  if (tag) pins.openrestyTag = tag[1];
   if (ver) pins.openresty = ver[1];
   if (ngx) pins.nginx = ngx[1];
+
+  // The app and proxy images must share one node:alpine base (the proxy
+  // builds OpenResty on it); a drift means one of them is behind.
+  for (const problem of require("./check-base-image").problems()) add("action", "Base image: " + problem);
 
   const airlock = read("config/airlock/Dockerfile") || "";
   const a = airlock.match(/^FROM\s+alpine:([\w.]+)/m);
@@ -124,7 +126,7 @@ function readPins() {
 // ---- checks ---------------------------------------------------------------
 
 async function checkNode() {
-  if (!pins.node) return add("watch", "Node: could not find FROM node:<ver>-alpine in Dockerfile");
+  if (!pins.node) return add("watch", "Node: could not find ARG NODE_BASE=node:<ver>-alpine in Dockerfile");
   const floating = !/^\d+\.\d+\.\d+$/.test(pins.node);
   const major = pins.node.split(".")[0];
   if (floating) {

@@ -1,16 +1,149 @@
-# Pin the release and multi-architecture image digest for reproducible builds.
-# Keep the Brotli source version and checksum below in sync with this image.
+# Every stage builds on the same node:alpine image as the Node app (the root
+# Dockerfile), so the two can later be combined in one container. Keep
+# NODE_BASE identical in both Dockerfiles: scripts/security/check-base-image.js
+# (run in CI and by the daily advisories check) fails if they differ. It pins
+# the release and the multi-architecture index digest.
+#
+# OpenResty is compiled in the `openresty` stage the way the official
+# openresty/openresty:alpine image is (docker-openresty tag 1.31.1.1-1,
+# alpine/Dockerfile: same configure flags and bundled OpenSSL and PCRE2),
+# with every download checked against a pinned sha256. The `-fat` variant's
+# extras are left out; see "Pinned dependencies" in proxy/README.md.
 # Lua dependencies are fetched as version-pinned, checksummed .src.rock archives
-# from luarocks.org rather than installed with the luarocks bundled in these
-# images, whose remote manifest no longer loads.
-ARG OPENRESTY_TAG=1.31.1.1-alpine-fat@sha256:32d74c9cb9190e28d07915dbe79d97439d9bbc151b5aff68b7727aa3bb55cce1
+# from luarocks.org rather than installed with a luarocks, whose remote manifest
+# no longer loads.
+ARG NODE_BASE=node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
+
+# The OpenResty release, shared by the openresty and brotli stages
+ARG OPENRESTY_VERSION=1.31.1.1
+ARG OPENRESTY_SHA256=65b78baadd3f0984055de89bf13f4a1932e5bfe9c31932037a134ea2b1a0ce42
+ARG NGINX_VERSION=1.31.1
+
+# ---------------------------------------------------------------------------
+# Stage 0: OpenResty, built from source on the shared base
+# ---------------------------------------------------------------------------
+FROM ${NODE_BASE} AS openresty
+
+ARG OPENRESTY_VERSION
+ARG OPENRESTY_SHA256
+
+# https://github.com/openresty/openresty-packaging/blob/master/alpine/openresty-openssl3/APKBUILD
+ARG RESTY_OPENSSL_VERSION=3.5.6
+ARG RESTY_OPENSSL_SHA256=deae7c80cba99c4b4f940ecadb3c3338b13cb77418409238e57d7f31f2a3b736
+# OpenResty's patch for it, from the release tag
+ARG RESTY_OPENSSL_PATCH_VERSION=3.5.5
+ARG RESTY_OPENSSL_PATCH_SHA256=0a30cc762a9d72901e8415a33f7671bb68469d46121061e26afe7b718f47581e
+ARG RESTY_OPENSSL_BUILD_OPTIONS="enable-camellia enable-seed enable-rfc3779 enable-cms enable-md2 enable-rc5 \
+        enable-weak-ssl-ciphers enable-ssl3 enable-ssl3-method enable-md2 enable-ktls enable-fips \
+        "
+
+# https://github.com/openresty/openresty-packaging/blob/master/alpine/openresty-pcre2/APKBUILD
+ARG RESTY_PCRE_VERSION=10.47
+ARG RESTY_PCRE_SHA256=c08ae2388ef333e8403e670ad70c0a11f1eed021fd88308d7e02f596fcd9dc16
+ARG RESTY_PCRE_BUILD_OPTIONS="--enable-jit --enable-pcre2grep-jit --disable-bsr-anycrlf --disable-coverage --disable-ebcdic --disable-fuzz-support \
+    --disable-jit-sealloc --disable-never-backslash-C --enable-newline-is-lf --enable-pcre2-8 --enable-pcre2-16 --enable-pcre2-32 \
+    --enable-pcre2grep-callout --enable-pcre2grep-callout-fork --disable-pcre2grep-libbz2 --disable-pcre2grep-libz --disable-pcre2test-libedit \
+    --enable-percent-zt --disable-rebuild-chartables --enable-shared --disable-static --disable-silent-rules --enable-unicode --disable-valgrind \
+    "
+
+# https://github.com/openresty/openresty-packaging/blob/master/alpine/openresty/APKBUILD
+ARG RESTY_CONFIG_OPTIONS="\
+    --with-compat \
+    --without-http_rds_json_module \
+    --without-http_rds_csv_module \
+    --without-lua_rds_parser \
+    --without-mail_pop3_module \
+    --without-mail_imap_module \
+    --without-mail_smtp_module \
+    --with-http_addition_module \
+    --with-http_auth_request_module \
+    --with-http_dav_module \
+    --with-http_flv_module \
+    --with-http_geoip_module=dynamic \
+    --with-http_gunzip_module \
+    --with-http_gzip_static_module \
+    --with-http_image_filter_module=dynamic \
+    --with-http_mp4_module \
+    --with-http_random_index_module \
+    --with-http_realip_module \
+    --with-http_secure_link_module \
+    --with-http_slice_module \
+    --with-http_ssl_module \
+    --with-http_stub_status_module \
+    --with-http_sub_module \
+    --with-http_v2_module \
+    --with-http_v3_module \
+    --with-http_xslt_module=dynamic \
+    --with-ipv6 \
+    --with-mail \
+    --with-mail_ssl_module \
+    --with-md5-asm \
+    --with-sha1-asm \
+    --with-stream \
+    --with-stream_ssl_module \
+    --with-stream_ssl_preread_module \
+    --with-threads \
+    "
+ARG RESTY_LUAJIT_OPTIONS="--with-luajit-xcflags='-DLUAJIT_NUMMODE=2 -DLUAJIT_ENABLE_LUA52COMPAT'"
+ARG RESTY_PCRE_OPTIONS="--with-pcre-jit"
+ARG _RESTY_CONFIG_DEPS="--with-pcre \
+    --with-cc-opt='-DNGX_LUA_ABORT_AT_PANIC -I/usr/local/openresty/pcre2/include -I/usr/local/openresty/openssl3/include' \
+    --with-ld-opt='-L/usr/local/openresty/pcre2/lib -L/usr/local/openresty/openssl3/lib -Wl,-rpath,/usr/local/openresty/pcre2/lib:/usr/local/openresty/openssl3/lib' \
+    "
+
+# The official image's build dependencies. The three dynamic modules it builds
+# (geoip, image_filter, xslt) are compiled but never loaded here, so their
+# runtime libraries (gd, geoip, libxslt) are not installed in the final image.
+RUN apk add --no-cache build-base binutils coreutils curl gd-dev geoip-dev \
+      libxslt-dev linux-headers make perl-dev readline-dev zlib-dev patch
+
+WORKDIR /tmp
+
+RUN curl -fsSL -o openssl.tar.gz "https://github.com/openssl/openssl/releases/download/openssl-${RESTY_OPENSSL_VERSION}/openssl-${RESTY_OPENSSL_VERSION}.tar.gz" && \
+    echo "${RESTY_OPENSSL_SHA256}  openssl.tar.gz" | sha256sum -c - && \
+    curl -fsSL -o openssl.patch "https://raw.githubusercontent.com/openresty/openresty/v${OPENRESTY_VERSION}/patches/openssl-${RESTY_OPENSSL_PATCH_VERSION}-sess_set_get_cb_yield.patch" && \
+    echo "${RESTY_OPENSSL_PATCH_SHA256}  openssl.patch" | sha256sum -c - && \
+    tar xzf openssl.tar.gz && \
+    cd "openssl-${RESTY_OPENSSL_VERSION}" && \
+    patch -p1 < ../openssl.patch && \
+    ./config shared zlib -g \
+      --prefix=/usr/local/openresty/openssl3 \
+      --libdir=lib \
+      -Wl,-rpath,/usr/local/openresty/openssl3/lib \
+      ${RESTY_OPENSSL_BUILD_OPTIONS} && \
+    make -j"$(nproc)" && make install_sw
+
+RUN curl -fsSL -o pcre2.tar.gz "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${RESTY_PCRE_VERSION}/pcre2-${RESTY_PCRE_VERSION}.tar.gz" && \
+    echo "${RESTY_PCRE_SHA256}  pcre2.tar.gz" | sha256sum -c - && \
+    tar xzf pcre2.tar.gz && \
+    cd "pcre2-${RESTY_PCRE_VERSION}" && \
+    CFLAGS="-g -O3" ./configure \
+      --prefix=/usr/local/openresty/pcre2 \
+      --libdir=/usr/local/openresty/pcre2/lib \
+      ${RESTY_PCRE_BUILD_OPTIONS} && \
+    CFLAGS="-g -O3" make -j"$(nproc)" && CFLAGS="-g -O3" make install
+
+RUN curl -fsSL -o openresty.tar.gz "https://openresty.org/download/openresty-${OPENRESTY_VERSION}.tar.gz" && \
+    echo "${OPENRESTY_SHA256}  openresty.tar.gz" | sha256sum -c - && \
+    tar xzf openresty.tar.gz && \
+    cd "openresty-${OPENRESTY_VERSION}" && \
+    eval ./configure -j"$(nproc)" ${_RESTY_CONFIG_DEPS} ${RESTY_CONFIG_OPTIONS} ${RESTY_LUAJIT_OPTIONS} ${RESTY_PCRE_OPTIONS} && \
+    make -j"$(nproc)" && make install
+
+# Strip as the official image does with RESTY_STRIP_BINARIES, and drop what only
+# a build needs (headers, static libraries, man pages, the resty CLI tools)
+RUN rm -Rf /usr/local/openresty/openssl3/bin/c_rehash /usr/local/openresty/openssl3/lib/*.a /usr/local/openresty/openssl3/include && \
+    rm -Rf /usr/local/openresty/pcre2/bin /usr/local/openresty/pcre2/share && \
+    rm -Rf /usr/local/openresty/luajit/lib/*.a /usr/local/openresty/luajit/share/man && \
+    find /usr/local/openresty -type f -perm -u+x \( -path '*/openssl3/*' -o -path '*/pcre2/*' -o -path '*/luajit/*' -o -path '*/nginx/*' \) \
+      -exec strip --strip-unneeded '{}' \; 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Stage 1: assemble the Lua dependencies the generated config loads
 # ---------------------------------------------------------------------------
-FROM openresty/openresty:${OPENRESTY_TAG} AS deps
+FROM ${NODE_BASE} AS deps
 
-RUN apk add --no-cache git make gcc musl-dev
+RUN apk add --no-cache git make gcc musl-dev curl unzip
 
 WORKDIR /tmp/rocks
 
@@ -65,19 +198,19 @@ RUN git clone https://github.com/juce/sockproc.git /tmp/sockproc && \
 # Stage 2: the Brotli filter, built as a dynamic module against the nginx
 # source bundled in the pinned OpenResty release. That copy carries OpenResty's
 # patches (some add struct fields), so the module is compiled against the same
-# headers as the binary it loads into. The OpenResty images ship no Brotli
-# support. The binary is already built --with-compat, so a --with-compat build
+# headers as the binary it loads into (the same verified tarball the `openresty`
+# stage builds). OpenResty ships no Brotli support. The binary is already built --with-compat, so a --with-compat build
 # of the module loads into it.
 # ---------------------------------------------------------------------------
-FROM openresty/openresty:${OPENRESTY_TAG} AS brotli
+FROM ${NODE_BASE} AS brotli
 
-ARG OPENRESTY_VERSION=1.31.1.1
-ARG OPENRESTY_SHA256=65b78baadd3f0984055de89bf13f4a1932e5bfe9c31932037a134ea2b1a0ce42
-ARG NGINX_VERSION=1.31.1
+ARG OPENRESTY_VERSION
+ARG OPENRESTY_SHA256
+ARG NGINX_VERSION
 ARG NGX_BROTLI_COMMIT=53e0fb55f250f48fe80c0ddbf6c0f7103cdbaae1
 
-RUN apk add --no-cache git cmake make gcc g++ musl-dev linux-headers \
-      pcre-dev zlib-dev openssl-dev
+RUN apk add --no-cache git cmake make gcc g++ musl-dev linux-headers curl \
+      pcre2-dev zlib-dev openssl-dev
 
 WORKDIR /tmp/brotli-build
 
@@ -109,16 +242,37 @@ RUN cd "openresty-${OPENRESTY_VERSION}/bundle/nginx-${NGINX_VERSION}" && \
 # ---------------------------------------------------------------------------
 # Stage 3: the proxy image
 # ---------------------------------------------------------------------------
-FROM openresty/openresty:${OPENRESTY_TAG}
+FROM ${NODE_BASE}
 
-# brotli is the CLI diskcache.lua compresses stored bodies with, and
-# findutils the GNU find (-printf) its sweeper, evict.sh, lists the cache with.
-# gettext provides envsubst, which render-config.sh uses to fill in the
-# runtime placeholders in the generated config
-RUN apk add --no-cache bash openssl gettext brotli findutils
+# What the image runs or shells out to, besides what the base provides:
+# - bash: entrypoint.sh, render-config.sh and dehydrated
+# - curl and ca-certificates: the healthcheck, the Bunny edge list fetch and
+#   dehydrated's ACME requests
+# - openssl: the CLI dehydrated signs requests with, and the placeholder
+#   certificate below (the libssl OpenResty runs on is its own, in /usr/local/openresty)
+# - gettext: envsubst, which render-config.sh uses to fill in the runtime
+#   placeholders in the generated config
+# - brotli: the CLI diskcache.lua compresses stored bodies with
+# - findutils: the GNU find (-printf) the cache sweeper, evict.sh, lists with
+# - libgcc, zlib: runtime libraries of the compiled binaries
+RUN apk add --no-cache bash curl ca-certificates openssl gettext brotli findutils libgcc zlib
 
-# Match the production convention (workers run as ec2-user)
-RUN addgroup -S ec2-user && adduser -S -u 1000 -G ec2-user ec2-user
+# The workers run as ec2-user (the generated config's `user` directive), uid
+# 1000 to match the owner of the host's bind mounts. The base image already
+# has user and group `node` at 1000, so rename them rather than add a second.
+RUN deluser --remove-home node && \
+    addgroup -g 1000 ec2-user && adduser -S -u 1000 -G ec2-user ec2-user
+
+# OpenResty, built above
+COPY --from=openresty /usr/local/openresty /usr/local/openresty
+ENV PATH=$PATH:/usr/local/openresty/luajit/bin:/usr/local/openresty/nginx/sbin:/usr/local/openresty/bin
+# As the official image: its default log paths go to the container's streams
+RUN mkdir -p /usr/local/openresty/nginx/logs && \
+    ln -sf /dev/stdout /usr/local/openresty/nginx/logs/access.log && \
+    ln -sf /dev/stderr /usr/local/openresty/nginx/logs/error.log
+
+# SIGQUIT drains in-flight requests (entrypoint.sh also traps SIGTERM)
+STOPSIGNAL SIGQUIT
 
 # Brotli filter and static modules, loaded with load_module in proxy/config/initial.conf
 COPY --from=brotli /vendor/modules/ /usr/local/openresty/nginx/modules/

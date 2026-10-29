@@ -22,6 +22,8 @@ on:
     paths:
       - ".github/workflows/proxy-image.yml"
       - "proxy/**"
+      - "Dockerfile"
+      - "scripts/security/check-base-image.js"
       - "package.json"
       - "app/config.js"
       - "config/index.js"
@@ -51,6 +53,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.22.1
+
+      # The proxy and the app image build on one node:alpine pin
+      - name: Check the proxy and app images share a base
+        run: node scripts/security/check-base-image.js
 
       - name: Install config generator dependencies
         run: |
