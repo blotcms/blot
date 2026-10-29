@@ -302,3 +302,10 @@ Entry template:
 - Key events (UTC): 04:27:40 the owner pressed Rebuild; the rebuild held the folder lock until 04:35:35. 04:28:14 Blot wrote one draft preview to the Mac (the other previews were fine). 04:28:16 `brctl` showed a `Zero KB … not downloaded` cloud entry for it, then `server edit to download`. 04:28:23 the watcher's echo found the file not downloaded, ran `brctl download`, and got a 0-byte file. From then every echo upload differed from Blot's good copy, so it needed the lock and got 423 until the resync (first request 04:29:32, acknowledged 04:35:59). The resync, with iCloud as source of truth, downloaded the empty file over Blot's good copy.
 - Cause: the macserver's `fs.outputFile` creates the file empty before the contents land (about 2s for this one). iCloud registered that empty file as a cloud version that won over the local write. The lock contention was only the symptom.
 - Follow-up: fixed in the PR for this entry: `routes/upload.js` writes to a temp file on the same volume and renames it into place, then checks the size. The affected file stays empty on both sides until it is rewritten (re-save the draft or rebuild).
+
+### 2026-10-29 15:00:00 UTC iCloud server down — transient quota failure reported as an outage (bug)
+
+- Alert: one `ICLOUD_SERVER_DOWN` email for the 15:00 UTC (08:00:00 Mac, -0700) minutely `/stats` check. No recovery was needed: the 15:01 check passed. Mac up 57 days, pm2 process healthy.
+- Key events (Mac time): 08:00:00 `GET /stats` answered, but `brctl.quota()` failed with a CloudKit `Network Failure` (NSURLErrorDomain -1005, "The network connection was lost"), so the reply carried `icloud_bytes_available: null`. 08:01:00 and every check after: normal. First quota error in the retained macserver error logs.
+- Cause: not an outage. `monitorMacServerStats.check` throws "No stats returned" when `icloud_bytes_available` is falsy, and treats that as the server being down.
+- Follow-up: fixed in the PR for this entry: a null quota is logged (`Mac server could not report iCloud quota`) and skips the quota checks; only a failed `/stats` or one without disk space counts as down.
