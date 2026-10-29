@@ -10,7 +10,9 @@
   --font-input-margin: 0.5em;
   --font-option-selected-bg: #e0e0e0;
   --font-option-hover-bg: #fff;
-  --font-picker-bg: #fafafa;
+  --font-picker-bg: var(--background-color);
+  --font-row-gap: var(--template-setting-spacing-horizontal);
+  --font-row-label-min-width: 2.75em;
 }
 
 /* Font picker control */
@@ -24,10 +26,10 @@
   align-items: center;
   box-sizing: border-box;
   width: 100%;
-  gap: 0.6em;
-  padding: 8px;
+  gap: var(--font-row-gap);
+  padding: var(--template-setting-row-padding);
   font-size: var(--select-control-font-size);
-  border-bottom: 1px solid var(--light-border-color);
+  border-bottom: 1px solid var(--template-editor-divider-color);
 }
 
 .font-row:last-child {
@@ -36,14 +38,15 @@
 
 .font-row-label {
   flex: 0 0 auto;
-  min-width: 2.75em;
-  font-size: var(--heading-font-size);
-  color: var(--text-color);
+  min-width: var(--font-row-label-min-width);
 }
 
 .font-picker-trigger {
+  display: flex;
+  align-items: center;
   flex: 1 1 auto;
   min-width: 0;
+  height: var(--template-setting-control-height);
   box-sizing: border-box;
   padding: 0.4em 1.6em 0.4em 0.6em;
   cursor: pointer;
@@ -51,11 +54,10 @@
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
   text-align: left;
-  display: block;
   overflow: hidden;
   font: inherit;
   color: inherit;
-  background-color: var(--background-color);
+  background-color: transparent;
 }
 
 .font-picker-trigger:hover {
@@ -111,7 +113,7 @@
   transform: translateY(-8px);
   pointer-events: none;
   transition: opacity 0.16s ease, transform 0.16s ease;
-  border: 1px solid #ddd;
+  border: 1px solid var(--template-editor-divider-color);
   border-radius: var(--border-radius);
   overflow: hidden;
   background: var(--font-picker-bg);
@@ -146,7 +148,7 @@
   flex-wrap: nowrap;
   width: max-content;
   padding: 0.3em 0.5em;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--template-editor-divider-color);
   font-size: var(--font-filter-font-size);
 }
 
@@ -189,7 +191,7 @@
   margin: 0;
   padding: var(--font-option-padding);
   border: none;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--template-editor-divider-color);
   outline: none;
   box-sizing: border-box;
   text-align: left;

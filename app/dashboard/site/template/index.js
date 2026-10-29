@@ -243,6 +243,7 @@ TemplateEditor.route("/:templateSlug/images/:key")
     if (!res.locals.image) return next();
     res.locals.image.isProfileImage = res.locals.image.key === "profile_image";
     if (res.locals.image.isProfileImage) {
+      res.locals.siteTitle = req.blog.title;
       res.locals.image.maskOptions = photoMaskOptions(
         res.locals.image.value && res.locals.image.value.mask
       );
@@ -250,6 +251,13 @@ TemplateEditor.route("/:templateSlug/images/:key")
         id: "profile-image-upload", name: "image", accept: "image/*", inputAttribute: "data-crop-input",
         ariaLabel: "Choose a photo", noun: "photo", selectedLabel: "Selected photo",
         title: res.locals.image.value ? "Upload a different photo" : "Upload a photo",
+      };
+      res.locals.faviconFileDrop = {
+        fileDrop: {
+          id: "favicon-upload", name: "favicon", accept: "image/*,.svg", inputAttribute: "data-favicon-input",
+          ariaLabel: "Choose a favicon", noun: "favicon", selectedLabel: "Selected favicon",
+          title: res.locals.favicon ? "Upload a different favicon" : "Upload a favicon",
+        },
       };
     }
     res.locals.title = `${res.locals.image.label} - ${req.template.displayName}`;
@@ -266,16 +274,8 @@ TemplateEditor.route("/:templateSlug/images/:key")
   );
 
 TemplateEditor.route("/:templateSlug/favicon")
-  .get(require("./load/favicon"), function (req, res) {
-    res.locals.title = `Favicon - ${req.template.displayName}`;
-    res.locals.siteTitle = req.blog.title;
-    res.locals.fileDrop = {
-      id: "favicon-upload", name: "favicon", accept: "image/*,.svg", inputAttribute: "data-favicon-input",
-      ariaLabel: "Choose a favicon", noun: "favicon", selectedLabel: "Selected favicon",
-      title: res.locals.favicon ? "Upload a different favicon" : "Upload a favicon",
-    };
-    res.locals.selected = { ...res.locals.selected, settings: "selected" };
-    res.render("dashboard/template/controls/favicon-form");
+  .get(function (req, res) {
+    res.redirect(`${res.locals.base}/images/profile_image`);
   })
   .post(require("./save/fork-if-needed"), require("./save/upload-favicon"));
 

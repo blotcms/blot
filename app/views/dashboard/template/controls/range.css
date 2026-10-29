@@ -1,10 +1,10 @@
 :root {
-  --input-control-padding: 0.5em 1em;
+  --input-control-padding: var(--template-setting-row-padding);
 }
 
 .number-input {
   padding: var(--input-control-padding);
-  border-bottom: 1px solid var(--light-border-color);
+  border-bottom: 1px solid var(--template-editor-divider-color);
 }
 
 .number-input:hover {

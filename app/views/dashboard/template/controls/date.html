@@ -9,7 +9,7 @@
     
     {{#displayFormats.length}}
     <div id="date_display_container">
-        <label for="date_display" style="flex-shrink: 0;">Dates:</label>
+        <label class="template-setting-label" for="date_display" style="flex-shrink: 0;">Dates:</label>
         <select id="date_display" name="locals.date_display" data-hide-dates-value="{{hide_dates_value}}">
             {{#displayFormats}}
             <option value="{{value}}" {{selected}}>{{date}}</option>

@@ -20,6 +20,35 @@ module.exports = function (req, res, next) {
 
     view.editorMode = editorMode(view.name);
     view.isPackageJSON = false;
+
+    // HTML views can be opened on the template's preview host. Prefer a
+    // concrete URL when a view has multiple configured URL patterns.
+    if (extname(view.name).toLowerCase() === ".html" && res.locals.previewOrigin) {
+      const configuredUrls = [
+        ...(Array.isArray(view.urlPatterns) ? view.urlPatterns : []),
+        ...(Array.isArray(view.url) ? view.url : [view.url]),
+      ];
+      const previewPath = configuredUrls.find(
+        (url) =>
+          typeof url === "string" &&
+          url.startsWith("/") &&
+          !url.startsWith("//") &&
+          !/[:*()]/.test(url)
+      );
+
+      if (previewPath) {
+        view.previewUrl = res.locals.previewOrigin + previewPath;
+        view.outputUrl =
+          view.previewUrl +
+          (view.previewUrl.includes("?") ? "&" : "?") +
+          "output=true";
+        view.jsonUrl =
+          view.previewUrl +
+          (view.previewUrl.includes("?") ? "&" : "?") +
+          "json=true";
+      }
+    }
+
     req.view = res.locals.view = view;
     next();
   });

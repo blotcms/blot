@@ -1,0 +1,13 @@
+<div style="display:flex;min-height:80vh;gap:2em">
+  <div style="flex-shrink:0;display:flex;flex-direction:column;width:284px">
+    {{> source-code-sidebar}}
+  </div>
+  <div class="editor-container source-code-preview-container">
+    {{> source-code-header}}
+    <iframe
+      class="source-code-preview-frame"
+      src="{{view.activePreviewUrl}}"
+      title="{{view.name}} {{view.previewMode}}"
+    ></iframe>
+  </div>
+</div>

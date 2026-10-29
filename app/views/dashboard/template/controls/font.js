@@ -20,9 +20,39 @@ const submitUpdate = (form, name, value) => {
     })
   );
 
-  fetch(withAjax(window.location.href), { method: 'post', body }).then(
+  return fetch(withAjax(window.location.href), { method: 'post', body }).then(
     handleAjaxSaveResponse
   );
+};
+
+const numberSaveQueues = new WeakMap();
+const flushNumberUpdate = (form, input, queue) => {
+  queue.timer = null;
+  if (queue.inFlight || queue.pendingValue === undefined) return;
+
+  const value = queue.pendingValue;
+  queue.pendingValue = undefined;
+  queue.inFlight = true;
+  submitUpdate(form, input.name, value)
+    .catch(() => {})
+    .finally(() => {
+      queue.inFlight = false;
+      if (queue.pendingValue !== undefined && !queue.timer) {
+        flushNumberUpdate(form, input, queue);
+      }
+    });
+};
+
+const scheduleNumberUpdate = (form, input) => {
+  let queue = numberSaveQueues.get(input);
+  if (!queue) {
+    queue = { timer: null, inFlight: false, pendingValue: undefined };
+    numberSaveQueues.set(input, queue);
+  }
+
+  queue.pendingValue = input.value;
+  clearTimeout(queue.timer);
+  queue.timer = setTimeout(() => flushNumberUpdate(form, input, queue), 180);
 };
 
 Array.from(document.querySelectorAll('[data-font-picker-form]')).forEach(form => {
@@ -89,7 +119,7 @@ Array.from(document.querySelectorAll('[data-font-picker-form]')).forEach(form =>
 
   form.querySelectorAll('input[type="number"]').forEach(input => {
     input.addEventListener('change', () => {
-      submitUpdate(form, input.name, input.value);
+      scheduleNumberUpdate(form, input);
     });
   });
 

@@ -19,7 +19,8 @@
 }
 
 .pcr-app.visible {
-  transition: none;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  transform: translateY(0);
   visibility: visible;
   opacity: 1;
 }
@@ -31,7 +32,11 @@
 }
 
 .pcr-app {
-  transition: none;
+  transform: translateY(-8px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    visibility 0s 0.16s;
   box-shadow: 0 1.5em 1.5em 0 rgba(0, 0, 0, 0.1), 0 1em 1em 0 rgba(0, 0, 0, 0.03);
   border-radius: 0;
 }
@@ -53,7 +58,7 @@
 .color-picker .previous {
   outline: 1px solid rgba(0, 0, 0, 0.2);
   outline-offset: -1px;
-  margin: 0 1em 0 0;
+  margin: 0 var(--template-setting-spacing-horizontal) 0 0;
   width: var(--color-swatch-size);
   height: var(--color-swatch-height);
   border-radius: 2px;
@@ -88,8 +93,12 @@
   align-items: center;
   cursor: pointer;
   transition: background-color 0.2s;
-  background-color: white;
-  padding: 0 2.5em 0 1em;
+  background-color: transparent;
+  padding:
+    var(--template-setting-spacing-vertical)
+    calc(var(--template-setting-spacing-horizontal) + 1.5em)
+    var(--template-setting-spacing-vertical)
+    var(--template-setting-spacing-horizontal);
 }
 
 .color-picker-popup:hover {
@@ -101,13 +110,13 @@
 }
 
 .color-picker.is-open .color-picker-popup:hover {
-  background-color: white;
+  background-color: transparent;
 }
 
 .color-picker-chevron {
   position: absolute;
   top: 50%;
-  right: 1em;
+  right: var(--template-setting-spacing-horizontal);
   width: 16px;
   height: 16px;
   transform: translateY(-50%) rotate(0deg);
@@ -122,7 +131,7 @@
 }
 
 .color-label {
-  margin: 0.3125em 1em 0.3125em 0;
+  margin: 0 var(--template-setting-spacing-horizontal) 0 0;
   flex-grow: 1;
   font-size: 14px;
   user-select: none;
@@ -130,7 +139,7 @@
 
 .color-picker {
   position: relative;
-  border-bottom: 1px solid var(--light-border-color);
+  border-bottom: 1px solid var(--template-editor-divider-color);
 }
 
 .color-picker:last-of-type {

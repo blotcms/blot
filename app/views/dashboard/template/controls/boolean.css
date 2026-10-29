@@ -7,8 +7,10 @@ label.bool {
   display: flex;
   align-items: center;
   box-sizing: border-box;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--light-border-color);
+  padding: var(--template-setting-row-padding);
+  padding-top: calc(var(--template-setting-spacing-vertical) + 2px);
+  padding-bottom: calc(var(--template-setting-spacing-vertical) + 2px);
+  border-bottom: 1px solid var(--template-editor-divider-color);
   cursor: pointer;
 }
 
@@ -19,7 +21,7 @@ label.bool {
 .boolean-switch-input {
   position: absolute;
   top: 50%;
-  right: 16px;
+  right: var(--template-setting-spacing-horizontal);
   z-index: 1;
   width: 34px;
   height: 20px;
@@ -47,7 +49,7 @@ label.bool {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background-color: #fff;
+  background-color: var(--background-color);
   content: "";
   transition: transform 0.15s ease;
 }
