@@ -21,13 +21,11 @@ cd /var/www/blot
 
 LOGS=/var/instance-ssd/logs
 
-# Memory and CPU of the running units, blot-blue and blot-green (or the single
-# blot-proxy-<colour> before the move to two); the proxy no longer runs on the
-# host. Whole names: a name= filter is a substring match and would also take
-# blot-blue-previous.
+# Memory and CPU of the running units, blot-blue and blot-green. Whole names: a
+# name= filter is a substring match and would also take blot-blue-previous.
 nginx-stats() {
   local proxies
-  proxies=$(docker ps --filter 'name=^blot-(proxy-)?(blue|green)$' --format '{{.Names}}')
+  proxies=$(docker ps --filter 'name=^blot-(blue|green)$' --format '{{.Names}}')
   if [ -z "$proxies" ]; then
     echo "No proxy container (blot-blue, blot-green) is running" >&2
     return 1

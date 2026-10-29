@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 #
-# Deploys one proxy image over another with the REAL blue-green.sh, against real
-# Docker, Redis and a stub upstream, while a load generator (swap-load.js) never
-# stops. The deploy replaces the two always-running units, blot-blue and then
-# blot-green, one at a time. Every proxy deploy goes through this, so any change
-# to the proxy, the deploy scripts or a cache is rehearsed the same way:
+# Deploys one stand-in unit image (unit/Dockerfile) over another with the REAL
+# blue-green.sh, against real Docker, Redis and a stub upstream, while a load
+# generator (swap-load.js) never stops. The deploy replaces the two
+# always-running units, blot-blue and then blot-green, one at a time. Every
+# deploy goes through this, so any change to the proxy, the deploy scripts or a
+# cache is rehearsed the same way:
 #
 #   1. fresh start with image A (both units); warm its cache
 #   2. A -> B under load
@@ -26,11 +27,11 @@
 # stopped, every page must be the upstream's current generation and a purge must
 # work.
 #
-# Needs what proxy-deploy-e2e.yml's proxy-swap-load-e2e job sets up: the
-# harness from setup.sh (STUB_JS=swap-load-stub.js) and two images, which may be
-# the same build as long as they are different images in different repositories
-# (blue-green.sh removes the other tags of the repository it deployed; see
-# build-image.sh).
+# Needs what proxy-deploy-e2e.yml's unit-swap-load-e2e job sets up: the
+# harness from setup.sh (STUB_JS=swap-load-stub.js, E2E_UPSTREAMS_FROM_ENV=1),
+# unit-setup.sh, and two images, which may be the same build as long as they are
+# different images in different repositories (blue-green.sh removes the other
+# tags of the repository it deployed; see build-unit-image.sh).
 #
 #   IMAGE_A, IMAGE_B   the two images (defaults of local.sh: both built from
 #                      this checkout, B with one extra label)
@@ -73,9 +74,9 @@ run_bg() {
 }
 
 # Whole names: a `docker ps --filter name=` is a substring match
-proxies() { docker ps -a --format '{{.Names}}' | grep -E '^blot-(proxy-)?(blue|green)(-previous)?$' || true; }
+proxies() { docker ps -a --format '{{.Names}}' | grep -E '^blot-(blue|green)(-previous)?$' || true; }
 assert_units() { # assert_units <image>: blot-blue and blot-green, and only they, run this image
-  [ "$(proxies | sort | tr '\n' ' ')" = "blot-blue blot-green " ] || fail "the proxy containers are [$(proxies | tr '\n' ' ')], not blot-blue and blot-green"
+  [ "$(proxies | sort | tr '\n' ' ')" = "blot-blue blot-green " ] || fail "the unit containers are [$(proxies | tr '\n' ' ')], not blot-blue and blot-green"
   local u
   for u in blue green; do
     [ "$(docker inspect -f '{{.State.Running}}' "blot-$u")" = true ] || fail "blot-$u is not running"
@@ -149,7 +150,7 @@ PROBE_F="probe-failed.$BLOT_HOST"
 
 # ---- 1. a fresh start with A -----------------------------------------------
 say "1. fresh start with A"
-[ -z "$(proxies)" ] || fail "a proxy container exists before the test starts"
+[ -z "$(proxies)" ] || fail "a unit container exists before the test starts"
 run_bg "$IMAGE_A" 2>&1 | tee "$WORK/fresh.log"
 assert_units "$IMAGE_A"
 T warm
@@ -201,8 +202,8 @@ IDS_BEFORE="$(unit_ids)"
 T get "$PROBE_F" /probe >/dev/null; sleep 0.3
 [ "$(T get "$PROBE_F" /probe | awk '{print $3}')" = HIT ] || fail "the proxy did not cache the probe page"
 # Redis down for the whole deploy: nothing before the post-replacement checks
-# needs it, and they fail on it (as in proxy-deploy-e2e.yml's forced-failure
-# step). While blot-blue is replaced a filler requests many distinct pages of
+# needs it, and they fail on it (as in proxy-deploy-e2e.yml's unit-deploy-e2e
+# job). While blot-blue is replaced a filler requests many distinct pages of
 # other hosts. Then, with blot-blue stopped, the pages change and the proxy is
 # told: the purge reaches the shared cache, whichever unit takes it.
 docker stop blot-e2e-redis >/dev/null

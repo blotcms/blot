@@ -5,12 +5,19 @@
 directory instead runs the **real** script against **real** Docker and Redis,
 in `.github/workflows/proxy-deploy-e2e.yml`.
 
-The harness starts with no proxy container running, so the first scenario is
+The units are stand-ins: the real proxy image plus a stub in place of the app
+(`unit/`), labelled `im.blot.kind=unit` as `blue-green.sh` requires, with a
+stand-in airlock. What this does not cover is the app itself (building and
+booting the real unit image is `unit-image.yml`'s job, `proxy/unit/smoke.sh`):
+the real verify-container checks, the real airlock, node-a and node-b starting
+from the real image, and the memory limit holding the real heaps.
+
+The `unit-deploy-e2e` job starts with no unit running, so the first scenario is
 the fresh start `blue-green.sh` does when nothing is serving (both units,
-`blot-blue` and `blot-green`), and the rest go from there: a re-run that must
-change nothing, the move from the single legacy proxy (`blot-proxy-*`) to the
-two units, a deploy that replaces blue and then green, and the failures a
-deploy must roll back from. (The one-off move from the bare-metal OpenResty to
+`blot-blue` and `blot-green`, and their airlocks), and the rest go from there:
+a re-run that must change nothing, a deploy that replaces blue and then green
+under load with no failed request, and the failures a deploy must roll back
+from. (The one-off move from the bare-metal OpenResty to
 the first container, a one-off script, ran on 8 Oct 2026 under
 [#1941](https://github.com/blotcms/blot/issues/1941) and was deleted along
 with the bare-metal stand-in this harness used to need.)
@@ -22,20 +29,25 @@ with the bare-metal stand-in this harness used to need.)
   certificate validation (`https_status` in `proxy/deploy/common.sh`) passes.
 - `deploy-under-load.sh` - runs `blue-green.sh` for an image while a loop sends
   a request every 50 ms and fails on any that is not a 200.
-- `setup.sh` - brings up Redis, the stub upstream
-  (`proxy/e2e/stub-upstream.js`) and a fake Node container
-  (`blot-container-blue`, the purge probe target), and writes the
-  `proxy.env` files the scenarios use.
+- `setup.sh` - brings up Redis and the stub upstream
+  (`proxy/e2e/stub-upstream.js`), and writes the `proxy.env` files the
+  scenarios use.
+- `unit-setup.sh` - the host side of a unit deploy: `/run/blot`, the data and
+  tmp directories, `unit-settings.env` and `secrets.env`.
+- `unit/` - the stand-in unit (`Dockerfile`, `supervisor.sh`, `stub-node.js`,
+  `verify.js`) and the stand-in airlock (`airlock.Dockerfile`).
+  `build-unit-image.sh` builds a unit on a proxy image from a source tree.
 
 ## Deploying an image under load
 
-`proxy-swap-load-e2e` (same workflow, own job) runs `swap-load.sh`: one image
+`unit-swap-load-e2e` (same workflow, own job) runs `swap-load.sh`: one unit image
 deployed over another by the real `blue-green.sh`, against real Docker, Redis and
-a stub upstream, while a load generator never stops. Every proxy deploy is
+a stub upstream (the stand-in units send their traffic to it,
+`E2E_UPSTREAMS_FROM_ENV`), while a load generator never stops. Every deploy is
 rehearsed this way, so a change that would drop, reset, corrupt or leave stale a
 request during a deploy shows up here first. By default both images are built
 from the checkout, differing only by a label (`local.sh` and the job build
-them with `build-image.sh`); a PR that changes how a deploy has to go, such as a
+them with `build-unit-image.sh`); a PR that changes how a deploy has to go, such as a
 different cache, points `IMAGE_A` at the old build instead.
 
 1. fresh start with image A (both units), cache warmed;
@@ -103,9 +115,9 @@ there would lose.
 with a Docker daemon of its own (it works on a Mac with Docker Desktop, where
 `--network host` and bind mounts behave differently); `TCP_MIGRATE_REQ=0
 bash proxy/deploy/e2e/local.sh` for the resets. On a Linux host with Docker and
-sudo, build the images with `build-image.sh` and run `setup.sh` (with
-`STUB_JS=$PWD/proxy/deploy/e2e/swap-load-stub.js`) and `swap-load.sh` the way the
-job does. `build-image.sh` adds the whole address space to the image's
+sudo, build the images with `build-unit-image.sh` and run `setup.sh` (with
+`STUB_JS=$PWD/proxy/deploy/e2e/swap-load-stub.js` and `E2E_UPSTREAMS_FROM_ENV=1`),
+`unit-setup.sh` and `swap-load.sh` the way the job does. `build-image.sh` adds the whole address space to the image's
 rate-limit whitelist (the load generator is one client); the two images have
 different repository names because `blue-green.sh` removes the other tags of the
 repository it deployed.
@@ -123,12 +135,13 @@ rather than standing up Pebble and seeding Redis with a real
 `proxy/config/auto-ssl.conf`'s path (the `default_server` block) is
 therefore not covered here.
 
-## Forced-failure rollbacks
+## Forced-failure rollbacks (`unit-deploy-e2e`)
 
 The forced-failure scenarios are deterministic - no timing, no log-line
 trigger, no sleep:
 
-- **A unit that never becomes healthy** (blue-green's "renamed" state, where the
+- **A unit that never becomes healthy**, because node-a never listens (a unit
+  built with `BREAK=a`) or because its proxy exits (blue-green's "renamed" state, where the
   old blot-blue is `blot-blue-previous` and must come back, and blot-green must
   not have been touched, or, on a fresh start, nothing is left behind). The
   forced-failure steps override `PROXY_ENV_FILE` with a copy of the real one

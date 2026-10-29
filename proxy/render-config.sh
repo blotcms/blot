@@ -2,7 +2,7 @@
 #
 # Turn the generated nginx.conf.template into nginx.conf, and write the Bunny
 # CDN edge list, from the container's environment. Run by entrypoint.sh on
-# every start and by proxy/deploy/reload-config.sh before a reload.
+# every start.
 #
 # The template carries ${PROXY_*} placeholders (proxy/build/locals.js).
 # For each one, the value is, in order: the container's environment, then

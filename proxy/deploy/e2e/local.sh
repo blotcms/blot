@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Run the swap-under-load e2e (swap-load.sh) on this machine, for when it is
-# not a Linux box with Docker (a Mac with Docker Desktop). Builds the two images
+# not a Linux box with Docker (a Mac with Docker Desktop). Builds the two stand-in unit images
 # from this checkout with the host's Docker, then runs the harness in a
 # privileged Linux container with a Docker daemon of its own (local/Dockerfile).
 #
@@ -21,13 +21,14 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
 P="${NAME_PREFIX:-sl-}"
-export IMAGE_A="blot-proxy-${P}a:e2e" IMAGE_B="blot-proxy-${P}b:e2e"
+export IMAGE_A="${P}a.test/blot-unit:e2e" IMAGE_B="${P}b.test/blot-unit:e2e"
+AIRLOCK_STUB="blot-airlock-stub:e2e"
 
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/proxy-swap-load.XXXXXX")"
 cleanup() {
   if [ -n "${KEEP_SCRATCH:-}" ]; then echo "kept $SCRATCH"; return; fi
   rm -rf "$SCRATCH"
-  docker rmi "$IMAGE_A" "$IMAGE_B" >/dev/null 2>&1 || true
+  docker rmi "$IMAGE_A" "$IMAGE_B" "$AIRLOCK_STUB" "${P}a-test-blot-unit-base:e2e" "${P}b-test-blot-unit-base:e2e" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -48,9 +49,10 @@ else
 fi
 
 echo "== images"
-bash "$HERE/build-image.sh" "$SCRATCH/src" "$IMAGE_A"
-bash "$HERE/build-image.sh" "$SCRATCH/src" "$IMAGE_B" --label e2e.variant=b
-IMAGES="$IMAGE_A $IMAGE_B"
+bash "$HERE/build-unit-image.sh" "$SCRATCH/src" "$IMAGE_A"
+bash "$HERE/build-unit-image.sh" "$SCRATCH/src" "$IMAGE_B" --label e2e.variant=b
+docker build -q -f "$HERE/unit/airlock.Dockerfile" -t "$AIRLOCK_STUB" "$HERE/unit" >/dev/null
+IMAGES="$IMAGE_A $IMAGE_B $AIRLOCK_STUB"
 docker pull -q node:24.22.1-alpine >/dev/null; docker pull -q redis:7-alpine >/dev/null
 mkdir -p "$SCRATCH/images"
 # shellcheck disable=SC2086

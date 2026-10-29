@@ -81,7 +81,7 @@ docker run -d --name "$NAME" --cap-add SYS_NICE --init \
   -p "127.0.0.1:$PORT:443" \
   -v "$CERT_DIR":/etc/ssl/private:ro \
   "$IMAGE" /usr/local/openresty/bin/openresty -g "daemon off;" >/dev/null
-wait_healthy "$NAME" "$HEALTH_TIMEOUT" \
+wait_healthy "$NAME" "$HEALTH_TIMEOUT" proxy_answers \
   || { docker logs --tail 50 "$NAME" >&2 || true; die "$NAME did not become healthy"; }
 
 issuer=""

@@ -32,8 +32,6 @@ function settings() {
     AIRLOCK_MEMORY: AIRLOCK.memory,
     AIRLOCK_CPUS: AIRLOCK.cpus,
     AIRLOCK_CPU_SHARES: AIRLOCK.cpuShares,
-    // the container the airlock replaces, stopped when the cutover is done
-    AIRLOCK_LEGACY_NAME: AIRLOCK.name,
   };
 
   for (const [unit, airlock] of Object.entries(AIRLOCK.units)) {
