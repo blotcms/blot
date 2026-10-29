@@ -1,17 +1,21 @@
 # Runs the REAL proxy/deploy/blue-green.sh against real Docker: the proxy
 # image, real Redis, a stub upstream, and a fake Node container for the purge
-# probe (see proxy/deploy/e2e/README.md). It starts the first container with
-# nothing running, then swaps colours.
+# probe (see proxy/deploy/e2e/README.md). It starts the two proxy units,
+# blot-blue and blot-green, with nothing running; moves a host with the single
+# legacy proxy to the two; replaces them one at a time; and forces the failures
+# a deploy must roll back from (an unhealthy new unit, failed site checks, an
+# unhealthy other unit).
 #
 # proxy/deploy/tests/run.sh (which this workflow does not replace) covers the
 # script's order-of-operations against fake docker/systemctl/curl and is much
 # faster; this workflow instead proves the script works against the real
 # things. Recommended item under blotcms/blot#1941.
 #
-# The proxy-swap-load-e2e job swaps one proxy image for another (and back, and
-# again, and onto itself) under a load generator that checks every response
-# against the stub upstream, then a swap that fails halfway
-# (proxy/deploy/e2e/swap-load.sh). Every proxy deploy is rehearsed this way.
+# The proxy-swap-load-e2e job deploys one proxy image over another (and back,
+# and again, and the same one twice) to the two units under a load generator
+# that checks every response against the stub upstream, then a deploy that
+# fails halfway (proxy/deploy/e2e/swap-load.sh). Every proxy deploy is
+# rehearsed this way.
 #
 # No `branches: [master]` filter on the pull_request trigger: this workflow
 # is meant to run on a PR based on another feature branch (a stacked PR), not
@@ -51,6 +55,10 @@ jobs:
       PROXY_NODE_CONTAINER: blot-container-blue
       PROXY_SKIP_CERT_SWEEP: "1" # no Pebble/lua-resty-auto-ssl storage in this harness - see README.md
       IMAGE: blot-proxy:e2e
+      # The same build with one more label, in its own repository (blue-green.sh
+      # removes the other tags of the repository it deploys), so a deploy of it
+      # replaces the units.
+      IMAGE_B: blot-proxy-b:e2e
     steps:
       - uses: actions/checkout@v4
 
@@ -96,81 +104,123 @@ jobs:
           FETCH_CDN_IPS: "false"
 
       - name: Build proxy image
-        run: docker build -f proxy/Dockerfile -t "$IMAGE" proxy/
+        run: |
+          docker build -f proxy/Dockerfile -t "$IMAGE" proxy/
+          docker build -f proxy/Dockerfile --label e2e.variant=b -t "$IMAGE_B" proxy/
 
       - name: Set up the harness (Redis, stub upstream, fake Node container, certs)
         run: bash proxy/deploy/e2e/setup.sh
 
       # ---- 1. a fresh start: no proxy container is running ------------------
-      # blue-green.sh starts blot-proxy-blue with no overlap and makes it
-      # permanent only once the site answers 200 with the right certificate.
-      - name: blue-green starts the first container when none is running
+      # blue-green.sh starts blot-blue and then blot-green with no overlap and
+      # makes each permanent only once the site answers 200 with the right
+      # certificate.
+      - name: blue-green starts both units when none is running
         run: |
           set -euo pipefail
-          ! docker ps -a --format '{{.Names}}' | grep -q '^blot-proxy-'
+          ! docker ps -a --format '{{.Names}}' | grep -Eq '^blot-(proxy-)?(blue|green)'
           bash proxy/deploy/blue-green.sh "$IMAGE"
-          [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-proxy-blue)" = unless-stopped ]
-          [ "$(docker inspect -f '{{.State.Running}}' blot-proxy-blue)" = true ]
+          for u in blue green; do
+            [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-$u)" = unless-stopped ]
+            [ "$(docker inspect -f '{{.State.Running}}' blot-$u)" = true ]
+            [ "$(docker inspect -f '{{.Config.Image}}' blot-$u)" = "$IMAGE" ]
+            docker exec blot-$u printenv PROXY_UNIT | grep -qx "$u"
+          done
           code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
           [ "$code" = 200 ]
           # a fresh start empties the cache directory (the
           # files are deleted in the background, so only the top level is checked)
           [ ! -e "$PROXY_DISK_CACHE_DIR/warm-1" ]
 
-      # ---- 2. blue-green: no failed requests during the swap --------------
-      # HTTPS with --connect-to (same technique https_status() in common.sh
-      # uses, already proven above against the container). A plain-HTTP request to 127.0.0.1 with only a Host header
-      # (tried first) got 404 for every attempt, not just during the swap:
-      # server.conf's internal purge server also `listen`s on
-      # `127.0.0.1:80` (plain HTTP only, no `:443`), a more specific bind
-      # than the vhosts' `listen 80`, so nginx sends a connection that
-      # literally targets 127.0.0.1 there regardless of Host header - not a
-      # config bug, and not something HTTPS on the same address hits, since
-      # that internal server has no `127.0.0.1:443` counterpart. Other proxy
-      # CI work has hit the same thing.
-      - name: blue-green swaps blot-proxy-blue for blot-proxy-green with zero failed requests
+      # ---- 2. a re-run with the image both units run: a no-op ------------------
+      - name: blue-green leaves both units alone when they already run the image
         run: |
           set -euo pipefail
-          : > codes.txt
-          (
-            # No --retry: every attempt is recorded as-is, so a single
-            # refused/dropped request during the swap shows up as non-200.
-            for i in $(seq 1 400); do
-              curl -s -o /dev/null -w '%{http_code}\n' --max-time 5 \
-                --connect-to "$PROXY_CANARY_HOST:443:127.0.0.1:443" "https://$PROXY_CANARY_HOST/" \
-                >> codes.txt || echo curl-err >> codes.txt
-              sleep 0.05
-            done
-          ) &
-          loop=$!
-          sleep 1
-          bash proxy/deploy/blue-green.sh "$IMAGE"
-          wait "$loop"
-          total=$(wc -l < codes.txt); bad=$(grep -vc '^200$' codes.txt || true)
-          echo "total=$total bad=$bad"; sort codes.txt | uniq -c
-          [ "$total" -ge 50 ]
-          [ "$bad" -eq 0 ]
-          docker ps --format '{{.Names}}' | grep -qx blot-proxy-green
-          ! docker ps -a --format '{{.Names}}' | grep -qx blot-proxy-blue
-          [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-proxy-green)" = unless-stopped ]
+          before=$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-blue blot-green)
+          bash proxy/deploy/blue-green.sh "$IMAGE" | tee rerun.log
+          grep -q "nothing to do" rerun.log
+          [ "$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-blue blot-green)" = "$before" ]
 
-      # ---- 3. blue-green forced failure, "swapping" state: the old colour
-      # was already stopped and must be restarted. A first version of this
-      # triggered off the script's own "Draining and stopping" log line, but
-      # that raced live_checks for real: with the stub already healthy and a
-      # local container that drains in well under a second, the window
-      # between that log line and live_checks running was sometimes too
-      # narrow for even a log-tailing trigger to reliably win. Redis
-      # unreachable is deterministic instead: blue-green's preflight only
-      # calls redis_reachable() when PROXY_SKIP_CERT_SWEEP is unset (it's
-      # set here), so stopping Redis before the run and for its whole
-      # duration doesn't affect preflight or the new colour's health (its
-      # health socket doesn't need Redis either) - only post-swap
-      # live_checks(), which does call redis_reachable(), fails, no timing
-      # required at all.
-      - name: blue-green restarts the old colour when the swap's post-swap checks fail
+      # ---- 3. the move from the single legacy proxy to the two units ----------
+      # Production ran one proxy, named blot-proxy-green here, before the two
+      # units: make the host look like that (units gone, the legacy container
+      # created the way the old deploy did), then deploy under load. Both units
+      # start beside it, it is stopped and removed, and no request fails.
+      - name: blue-green moves a single legacy proxy to blot-blue and blot-green with zero failed requests
+        run: |
+          set -euo pipefail
+          docker rm -f blot-blue blot-green >/dev/null
+          bash -c '
+            . proxy/deploy/common.sh
+            load_env
+            run_args blot-proxy-green
+            docker create --restart unless-stopped "${RUN_ARGS[@]}" "$IMAGE" >/dev/null
+            docker start blot-proxy-green >/dev/null
+            wait_healthy blot-proxy-green 60'
+          bash proxy/deploy/e2e/deploy-under-load.sh "$IMAGE"
+          ! docker ps -a --format '{{.Names}}' | grep -q '^blot-proxy-'
+          [ "$(docker ps --format '{{.Names}}' | grep -Ec '^blot-(blue|green)$')" = 2 ]
+          for u in blue green; do
+            [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-$u)" = unless-stopped ]
+          done
+
+      # ---- 4. a steady-state deploy replaces blue, then green ------------------
+      # IMAGE_B is a different image, so both units are replaced, one at a time
+      # while the other carries the traffic: no request may fail.
+      - name: blue-green replaces blot-blue then blot-green with zero failed requests
+        run: |
+          set -euo pipefail
+          blue=$(docker inspect -f '{{.Id}}' blot-blue); green=$(docker inspect -f '{{.Id}}' blot-green)
+          bash proxy/deploy/e2e/deploy-under-load.sh "$IMAGE_B"
+          [ "$(docker inspect -f '{{.Id}}' blot-blue)" != "$blue" ]
+          [ "$(docker inspect -f '{{.Id}}' blot-green)" != "$green" ]
+          for u in blue green; do
+            [ "$(docker inspect -f '{{.Config.Image}}' blot-$u)" = "$IMAGE_B" ]
+            [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-$u)" = unless-stopped ]
+            [ "$(docker inspect -f '{{.State.Running}}' blot-$u)" = true ]
+          done
+          # the previous containers are gone, and the name filter is exact
+          [ "$(docker ps -a --format '{{.Names}}' | grep -Ec '^blot-(blue|green)(-previous)?$')" = 2 ]
+
+      # ---- 5. a unit that never becomes healthy is rolled back, the other is untouched
+      # Deterministic (no timing/log-line trigger needed): PROXY_ENV_FILE_BAD's
+      # PROXY_PRIVATE_IP is 198.51.100.7 (TEST-NET-2, RFC 5737), which no
+      # runner interface owns, so the real new container's :8077 listener
+      # fails to bind and openresty exits immediately - wait_healthy sees it
+      # not running and fails fast. validate_image() runs `openresty -t` with
+      # ip_nonlocal_bind, so preflight still passes with this file. Blue is
+      # replaced first, so it is blue that fails and green that must not move.
+      - name: blue-green rolls blot-blue back and never touches blot-green when the new blot-blue never becomes healthy
+        env:
+          PROXY_ENV_FILE: ${{ env.PROXY_ENV_FILE_BAD }}
         run: |
           set +e
+          blue=$(docker inspect -f '{{.Id}}' blot-blue)
+          green=$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-green)
+          bash proxy/deploy/blue-green.sh "$IMAGE"
+          rc=$?
+          set -e
+          [ "$rc" -ne 0 ]
+          # the same containers, not recreated: blue came back from -previous
+          [ "$(docker inspect -f '{{.Id}}' blot-blue)" = "$blue" ]
+          [ "$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-green)" = "$green" ]
+          [ "$(docker inspect -f '{{.State.Running}}' blot-blue)" = true ]
+          [ "$(docker inspect -f '{{.Config.Image}}' blot-blue)" = "$IMAGE_B" ]
+          [ "$(docker ps -a --format '{{.Names}}' | grep -Ec '^blot-(blue|green)(-previous)?$')" = 2 ]
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
+          [ "$code" = 200 ]
+
+      # ---- 6. failed site checks after blue was replaced roll back ---------------
+      # Deterministic: Redis stopped for the whole run. blue-green's preflight
+      # only calls redis_reachable() when PROXY_SKIP_CERT_SWEEP is unset (it's
+      # set here), so stopping Redis doesn't affect preflight or the new unit's
+      # health (its health socket doesn't need Redis either) - only the
+      # live_checks() after blot-blue was replaced, which calls
+      # redis_reachable(), fails, no timing required at all.
+      - name: blue-green puts blot-blue back when the checks after replacing it fail
+        run: |
+          set +e
+          blue=$(docker inspect -f '{{.Id}}' blot-blue); green=$(docker inspect -f '{{.Id}}' blot-green)
           docker stop blot-e2e-redis >/dev/null
           bash proxy/deploy/blue-green.sh "$IMAGE"
           rc=$?
@@ -178,60 +228,60 @@ jobs:
           set -e
           for i in $(seq 1 30); do timeout 2 bash -c "</dev/tcp/127.0.0.1/6379" 2>/dev/null && break; sleep 1; done
           [ "$rc" -ne 0 ]
-          docker ps --format '{{.Names}}' | grep -qx blot-proxy-green
-          [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-proxy-green)" = unless-stopped ]
-          ! docker ps -a --format '{{.Names}}' | grep -qx blot-proxy-blue
+          [ "$(docker inspect -f '{{.Id}}' blot-blue)" = "$blue" ]
+          [ "$(docker inspect -f '{{.Id}}' blot-green)" = "$green" ]
+          [ "$(docker inspect -f '{{.State.Running}}' blot-blue)" = true ]
+          [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-blue)" = unless-stopped ]
+          [ "$(docker ps -a --format '{{.Names}}' | grep -Ec '^blot-(blue|green)(-previous)?$')" = 2 ]
           code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
           [ "$code" = 200 ]
 
-      # ---- 4. blue-green forced failure, "starting" state: the new colour
-      # never becomes healthy, so the old one is never touched. Deterministic
-      # (no timing/log-line trigger needed): PROXY_ENV_FILE_BAD's
-      # PROXY_PRIVATE_IP is 198.51.100.7 (TEST-NET-2, RFC 5737), which no
-      # runner interface owns, so the real new container's :8077 listener
-      # fails to bind and openresty exits immediately - wait_healthy sees it
-      # not running and fails fast. validate_image() runs `openresty -t` with
-      # ip_nonlocal_bind, so preflight still passes with this file.
-      - name: blue-green never touches the old colour when the new one never becomes healthy
-        env:
-          PROXY_ENV_FILE: ${{ env.PROXY_ENV_FILE_BAD }}
+      # ---- 7. blot-blue is not stopped while blot-green is unhealthy -------------
+      # The health socket is removed from blot-green: it still serves (nginx
+      # keeps its listening socket) but no longer answers its health check.
+      - name: blue-green refuses to stop blot-blue while blot-green is unhealthy
         run: |
           set +e
-          bash proxy/deploy/blue-green.sh "$IMAGE"
-          rc=$?
+          blue=$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-blue)
+          docker exec -u 0 blot-green rm -f /run/openresty/health.sock
+          bash proxy/deploy/blue-green.sh "$IMAGE" 2>&1 | tee refuse.log
+          rc=${PIPESTATUS[0]}
           set -e
           [ "$rc" -ne 0 ]
-          docker ps --format '{{.Names}}' | grep -qx blot-proxy-green
-          [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-proxy-green)" = unless-stopped ]
-          ! docker ps -a --format '{{.Names}}' | grep -qx blot-proxy-blue
-          code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
-          [ "$code" = 200 ]
+          grep -q "refusing to stop blot-blue" refuse.log
+          [ "$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-blue)" = "$blue" ]
+          [ "$(docker ps -a --format '{{.Names}}' | grep -Ec '^blot-(blue|green)(-previous)?$')" = 2 ]
+          # what the operator does (and the health cron does within a minute)
+          docker restart --time 30 blot-green >/dev/null
+          for i in $(seq 1 60); do docker exec blot-green curl -fsS -o /dev/null --unix-socket /run/openresty/health.sock http://localhost/health && break; sleep 1; done
+          bash proxy/deploy/blue-green.sh "$IMAGE"
+          for u in blue green; do [ "$(docker inspect -f '{{.Config.Image}}' blot-$u)" = "$IMAGE" ]; done
 
-      # ---- 5. forced failure on a fresh start: the container never becomes
-      # healthy and there is no old colour to fall back to, so the script must
+      # ---- 8. forced failure on a fresh start: the first unit never becomes
+      # healthy and there is no other to fall back to, so the script must
       # leave no proxy container behind. Same unroutable PROXY_PRIVATE_IP as
-      # step 4.
-      - name: blue-green removes a first container that never becomes healthy
+      # step 5.
+      - name: blue-green removes a first unit that never becomes healthy
         env:
           PROXY_ENV_FILE: ${{ env.PROXY_ENV_FILE_BAD }}
         run: |
-          docker rm -f blot-proxy-green >/dev/null
+          docker rm -f blot-blue blot-green >/dev/null
           set +e
           bash proxy/deploy/blue-green.sh "$IMAGE"
           rc=$?
           set -e
           [ "$rc" -ne 0 ]
-          ! docker ps -a --format '{{.Names}}' | grep -q '^blot-proxy-'
+          ! docker ps -a --format '{{.Names}}' | grep -Eq '^blot-(proxy-)?(blue|green)'
 
       - name: Logs
         if: always()
         run: |
-          for c in blot-proxy-blue blot-proxy-green blot-e2e-stub blot-container-blue blot-e2e-redis; do
+          for c in blot-blue blot-green blot-blue-previous blot-green-previous blot-proxy-green blot-e2e-stub blot-container-blue blot-e2e-redis; do
             echo "=== $c ==="; docker logs --tail 100 "$c" 2>&1 || true
           done
           # LOG_TO_STDOUT=false, so `docker logs` above is near-empty for the
           # proxy containers - the real access/error logs are these files on
-          # $PROXY_LOG_DIR, shared by every blot-proxy-*
+          # $PROXY_LOG_DIR, shared by every proxy
           # container (see run_args() in common.sh).
           echo "=== $PROXY_LOG_DIR/access.log (tail) ==="
           sudo tail -n 100 "$PROXY_LOG_DIR/access.log" 2>&1 || true
@@ -240,12 +290,12 @@ jobs:
 
   # blue-green.sh between two images, as every proxy deploy does it (see
   # proxy/deploy/e2e/swap-load.sh): A -> B, B -> A (the rollback), A -> B again
-  # and B -> B, each while a load generator sends cached, uncached, large,
-  # Range, POST and event-stream requests and a purge every 500 ms, and checks
-  # every response against what the stub upstream would have served; then a
-  # swap that fails after the old container was stopped. Any failed, reset or
-  # wrong response, or a page older than the last purge outside the window in
-  # which both containers are up, fails the job. A and B are the same build with
+  # and B -> A, each replacing blot-blue and then blot-green while a load
+  # generator sends cached, uncached, large, Range, POST and event-stream
+  # requests and a purge every 500 ms, and checks every response against what
+  # the stub upstream would have served; then a deploy that fails after
+  # blot-blue was stopped. Any failed, reset or wrong response, or a page older
+  # than the last purge, fails the job. A and B are the same build with
   # one extra label, in different repositories (blue-green.sh removes the other
   # tags of the repository it deploys).
   proxy-swap-load-e2e:
@@ -297,13 +347,13 @@ jobs:
         env:
           STUB_JS: ${{ github.workspace }}/proxy/deploy/e2e/swap-load-stub.js
 
-      - name: Swap under load, back, again, onto itself, and a swap that fails
+      - name: Deploy under load, back, again, again onto itself, and a deploy that fails
         run: bash proxy/deploy/e2e/swap-load.sh
 
       - name: Logs
         if: always()
         run: |
-          for c in blot-proxy-blue blot-proxy-green blot-e2e-stub blot-e2e-redis; do
+          for c in blot-blue blot-green blot-e2e-stub blot-e2e-redis; do
             echo "=== $c ==="; docker logs --tail 100 "$c" 2>&1 || true
           done
           echo "=== $PROXY_LOG_DIR/error.log (tail) ==="
