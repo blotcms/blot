@@ -77,6 +77,21 @@ describe("template image upload preflight", function () {
     }
   });
 
+  it("lets a profile photo edit through only with a valid shape and crop", async function () {
+    const old = { url: "https://cdn.example/image.webp", width: 2000, height: 1000, mask: "square" };
+    const attempt = async (body) => {
+      const req = { template: { locals: { profile_image: old } }, params: { key: "profile_image" }, files: {}, body: { update_mask: "1", ...body }, query: { ajax: "1" } };
+      const next = jasmine.createSpy("next");
+      await preflight(req, response([{ key: "profile_image" }]).res, next);
+      return next;
+    };
+
+    expect(await attempt({ photo_shape: "blob", crop_x: "0.25", crop_y: "0", crop_width: "0.5", crop_height: "1" })).toHaveBeenCalledWith();
+    expect(await attempt({ photo_shape: "blob" })).toHaveBeenCalledWith();
+    expect(await attempt({ photo_shape: "star" })).toHaveBeenCalledWith(jasmine.objectContaining({ status: 400 }));
+    expect(await attempt({ photo_shape: "blob", crop_x: "0.9", crop_y: "0", crop_width: "0.5", crop_height: "1" })).toHaveBeenCalledWith(jasmine.objectContaining({ status: 400 }));
+  });
+
   it("rejects corrupt image data before the fork middleware and removes the upload", async function () {
     const path = join(this.tmp, "corrupt-image.png");
     await fs.writeFile(path, "not an image");

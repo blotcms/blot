@@ -10,8 +10,11 @@
 .favicon-current__actions { width: 100%; }
 .photo-upload-divider { border: 0; border-top: 1px solid var(--border-color); margin: 2rem 0; }
 .photo-upload-actions[hidden] { display: none; }
-.photo-mask-error[hidden] { display: none; }
-.photo-mask-error { margin: 0 0 1rem; }
+.photo-delete-actions { margin-top: 0; }
+/* A lone button is both :first-child and :last-child, so buttons.css would grey it */
+.buttons.photo-delete-actions > .red { background: red; color: var(--background-color); flex-grow: 0.6666; }
+.buttons.photo-delete-actions > .red:hover { background: #d50000; }
+[data-photo-no-preview][hidden] { display: none; }
 .favicon-cropper__image { position: relative; display: inline-block; max-width: min(100%, 480px); line-height: 0; overflow: hidden; }
 .favicon-cropper__image img { display: block; max-width: 100%; max-height: 360px; }
 .favicon-cropper--image .favicon-cropper__image { overflow: visible; }
@@ -44,22 +47,27 @@
 .photo-cropper[data-shape="square"] .photo-cropper__outside-image { opacity: 0; }
 .photo-cropper__mask { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 :root {
-  /* Keep in step with SHAPES in app/build/thumbnail/image-mask.js */
+  /* Generated from CLIP_PATHS in app/build/thumbnail/image-mask.js; a spec keeps them in step */
   --mask-circle: circle(50%);
   --mask-rounded-square: inset(0 round 20%);
   --mask-squircle: polygon(100.00% 50.00%, 99.95% 62.79%, 99.79% 68.06%, 99.52% 72.08%, 99.14% 75.44%, 98.66% 78.35%, 98.06% 80.93%, 97.35% 83.25%, 96.53% 85.36%, 95.59% 87.27%, 94.54% 89.01%, 93.35% 90.60%, 92.04% 92.04%, 90.60% 93.35%, 89.01% 94.54%, 87.27% 95.59%, 85.36% 96.53%, 83.25% 97.35%, 80.93% 98.06%, 78.35% 98.66%, 75.44% 99.14%, 72.08% 99.52%, 68.06% 99.79%, 62.79% 99.95%, 50.00% 100.00%, 37.21% 99.95%, 31.94% 99.79%, 27.92% 99.52%, 24.56% 99.14%, 21.65% 98.66%, 19.07% 98.06%, 16.75% 97.35%, 14.64% 96.53%, 12.73% 95.59%, 10.99% 94.54%, 9.40% 93.35%, 7.96% 92.04%, 6.65% 90.60%, 5.46% 89.01%, 4.41% 87.27%, 3.47% 85.36%, 2.65% 83.25%, 1.94% 80.93%, 1.34% 78.35%, 0.86% 75.44%, 0.48% 72.08%, 0.21% 68.06%, 0.05% 62.79%, 0.00% 50.00%, 0.05% 37.21%, 0.21% 31.94%, 0.48% 27.92%, 0.86% 24.56%, 1.34% 21.65%, 1.94% 19.07%, 2.65% 16.75%, 3.47% 14.64%, 4.41% 12.73%, 5.46% 10.99%, 6.65% 9.40%, 7.96% 7.96%, 9.40% 6.65%, 10.99% 5.46%, 12.73% 4.41%, 14.64% 3.47%, 16.75% 2.65%, 19.07% 1.94%, 21.65% 1.34%, 24.56% 0.86%, 27.92% 0.48%, 31.94% 0.21%, 37.21% 0.05%, 50.00% 0.00%, 62.79% 0.05%, 68.06% 0.21%, 72.08% 0.48%, 75.44% 0.86%, 78.35% 1.34%, 80.93% 1.94%, 83.25% 2.65%, 85.36% 3.47%, 87.27% 4.41%, 89.01% 5.46%, 90.60% 6.65%, 92.04% 7.96%, 93.35% 9.40%, 94.54% 10.99%, 95.59% 12.73%, 96.53% 14.64%, 97.35% 16.75%, 98.06% 19.07%, 98.66% 21.65%, 99.14% 24.56%, 99.52% 27.92%, 99.79% 31.94%, 99.95% 37.21%);
-  --mask-hexagon: polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%);
+  --mask-blob: polygon(95.37% 48.67%, 93.86% 51.85%, 92.05% 54.82%, 90.06% 57.57%, 87.99% 60.11%, 85.93% 62.46%, 83.95% 64.67%, 82.08% 66.80%, 80.34% 68.89%, 78.70% 70.98%, 77.14% 73.10%, 75.61% 75.24%, 74.04% 77.41%, 72.40% 79.57%, 70.65% 81.69%, 68.75% 83.75%, 66.69% 85.71%, 64.48% 87.54%, 62.12% 89.25%, 59.62% 90.83%, 57.00% 92.30%, 54.26% 93.66%, 51.40% 94.94%, 48.42% 96.14%, 45.31% 97.24%, 42.06% 98.23%, 38.67% 99.07%, 35.16% 99.68%, 31.55% 100.00%, 27.90% 99.95%, 24.26% 99.47%, 20.73% 98.50%, 17.40% 97.00%, 14.36% 94.98%, 11.69% 92.47%, 9.47% 89.53%, 7.74% 86.23%, 6.49% 82.70%, 5.71% 79.05%, 5.33% 75.38%, 5.27% 71.78%, 5.42% 68.34%, 5.66% 65.09%, 5.90% 62.05%, 6.03% 59.19%, 6.01% 56.48%, 5.80% 53.87%, 5.42% 51.28%, 4.89% 48.67%, 4.28% 45.98%, 3.69% 43.19%, 3.20% 40.29%, 2.90% 37.31%, 2.87% 34.26%, 3.16% 31.21%, 3.80% 28.20%, 4.79% 25.28%, 6.12% 22.49%, 7.75% 19.85%, 9.64% 17.39%, 11.73% 15.09%, 13.98% 12.95%, 16.36% 10.94%, 18.84% 9.06%, 21.42% 7.29%, 24.09% 5.65%, 26.86% 4.14%, 29.73% 2.79%, 32.71% 1.66%, 35.78% 0.79%, 38.93% 0.23%, 42.12% 0.00%, 45.31% 0.13%, 48.45% 0.62%, 51.52% 1.44%, 54.48% 2.56%, 57.30% 3.89%, 60.00% 5.38%, 62.59% 6.95%, 65.10% 8.54%, 67.58% 10.09%, 70.08% 11.59%, 72.65% 13.04%, 75.31% 14.46%, 78.07% 15.90%, 80.91% 17.44%, 83.79% 19.14%, 86.62% 21.06%, 89.32% 23.26%, 91.76% 25.76%, 93.85% 28.56%, 95.49% 31.63%, 96.60% 34.92%, 97.13% 38.36%, 97.08% 41.85%, 96.47% 45.31%);
+  --mask-pebble: polygon(99.44% 50.29%, 98.79% 53.33%, 97.93% 56.27%, 96.89% 59.12%, 95.68% 61.86%, 94.34% 64.50%, 92.90% 67.03%, 91.38% 69.47%, 89.78% 71.82%, 88.12% 74.10%, 86.41% 76.31%, 84.63% 78.47%, 82.77% 80.57%, 80.84% 82.61%, 78.80% 84.57%, 76.65% 86.44%, 74.37% 88.19%, 71.97% 89.78%, 69.44% 91.20%, 66.79% 92.41%, 64.04% 93.38%, 61.20% 94.09%, 58.32% 94.54%, 55.40% 94.71%, 52.49% 94.62%, 49.61% 94.28%, 46.77% 93.73%, 44.00% 92.98%, 41.30% 92.07%, 38.66% 91.04%, 36.07% 89.93%, 33.53% 88.74%, 31.00% 87.51%, 28.48% 86.23%, 25.94% 84.90%, 23.36% 83.50%, 20.76% 82.02%, 18.13% 80.42%, 15.50% 78.67%, 12.91% 76.74%, 10.39% 74.59%, 8.02% 72.22%, 5.84% 69.62%, 3.92% 66.78%, 2.32% 63.73%, 1.11% 60.51%, 0.33% 57.16%, 0.00% 53.73%, 0.14% 50.29%, 0.75% 46.90%, 1.81% 43.62%, 3.27% 40.50%, 5.09% 37.59%, 7.19% 34.91%, 9.51% 32.49%, 11.99% 30.32%, 14.54% 28.38%, 17.11% 26.65%, 19.65% 25.09%, 22.13% 23.67%, 24.52% 22.32%, 26.83% 21.02%, 29.04% 19.73%, 31.20% 18.42%, 33.31% 17.07%, 35.42% 15.68%, 37.57% 14.26%, 39.77% 12.83%, 42.07% 11.42%, 44.49% 10.06%, 47.03% 8.80%, 49.70% 7.67%, 52.49% 6.73%, 55.39% 6.00%, 58.39% 5.51%, 61.44% 5.29%, 64.53% 5.35%, 67.63% 5.69%, 70.71% 6.32%, 73.73% 7.22%, 76.68% 8.40%, 79.53% 9.82%, 82.26% 11.49%, 84.86% 13.38%, 87.31% 15.47%, 89.59% 17.76%, 91.68% 20.22%, 93.58% 22.84%, 95.25% 25.60%, 96.70% 28.49%, 97.89% 31.48%, 98.83% 34.56%, 99.50% 37.70%, 99.88% 40.86%, 100.00% 44.04%, 99.85% 47.19%);
+  --mask-cloud: polygon(97.30% 48.36%, 95.28% 51.44%, 92.74% 54.22%, 89.99% 56.66%, 87.30% 58.82%, 84.87% 60.78%, 82.80% 62.66%, 81.10% 64.55%, 79.68% 66.49%, 78.42% 68.50%, 77.18% 70.54%, 75.86% 72.55%, 74.41% 74.49%, 72.83% 76.35%, 71.16% 78.18%, 69.45% 80.04%, 67.73% 82.05%, 66.00% 84.29%, 64.20% 86.80%, 62.26% 89.55%, 60.08% 92.41%, 57.59% 95.15%, 54.75% 97.51%, 51.61% 99.20%, 48.28% 100.00%, 44.91% 99.78%, 41.67% 98.53%, 38.72% 96.39%, 36.15% 93.61%, 33.97% 90.51%, 32.11% 87.40%, 30.42% 84.57%, 28.74% 82.20%, 26.90% 80.35%, 24.79% 78.98%, 22.36% 77.92%, 19.67% 76.97%, 16.83% 75.94%, 14.01% 74.66%, 11.38% 73.02%, 9.06% 71.00%, 7.13% 68.65%, 5.59% 66.04%, 4.38% 63.26%, 3.42% 60.38%, 2.63% 57.44%, 1.97% 54.46%, 1.47% 51.43%, 1.21% 48.36%, 1.33% 45.29%, 1.97% 42.27%, 3.25% 39.41%, 5.19% 36.82%, 7.73% 34.60%, 10.73% 32.81%, 13.93% 31.42%, 17.07% 30.35%, 19.89% 29.40%, 22.20% 28.35%, 23.91% 26.99%, 25.05% 25.13%, 25.77% 22.69%, 26.27% 19.69%, 26.83% 16.26%, 27.65% 12.64%, 28.92% 9.11%, 30.71% 5.95%, 33.01% 3.38%, 35.73% 1.53%, 38.74% 0.43%, 41.91% 0.00%, 45.12% 0.10%, 48.28% 0.57%, 51.37% 1.25%, 54.38% 2.05%, 57.31% 2.95%, 60.17% 3.98%, 62.93% 5.21%, 65.52% 6.74%, 67.89% 8.60%, 69.97% 10.80%, 71.74% 13.24%, 73.26% 15.81%, 74.60% 18.34%, 75.95% 20.69%, 77.46% 22.77%, 79.32% 24.54%, 81.62% 26.08%, 84.37% 27.53%, 87.45% 29.05%, 90.66% 30.81%, 93.69% 32.95%, 96.23% 35.51%, 98.00% 38.47%, 98.79% 41.71%, 98.53% 45.07%);
   --mask-arch: inset(0 round 50% 50% 0 0);
 }
 .photo-cropper[data-shape="circle"] .photo-cropper__mask, [data-profile-mask="circle"] { clip-path: var(--mask-circle); }
 .photo-cropper[data-shape="rounded-square"] .photo-cropper__mask, [data-profile-mask="rounded-square"] { clip-path: var(--mask-rounded-square); }
 .photo-cropper[data-shape="squircle"] .photo-cropper__mask, [data-profile-mask="squircle"] { clip-path: var(--mask-squircle); }
-.photo-cropper[data-shape="hexagon"] .photo-cropper__mask, [data-profile-mask="hexagon"] { clip-path: var(--mask-hexagon); }
+.photo-cropper[data-shape="blob"] .photo-cropper__mask, [data-profile-mask="blob"] { clip-path: var(--mask-blob); }
+.photo-cropper[data-shape="pebble"] .photo-cropper__mask, [data-profile-mask="pebble"] { clip-path: var(--mask-pebble); }
+.photo-cropper[data-shape="cloud"] .photo-cropper__mask, [data-profile-mask="cloud"] { clip-path: var(--mask-cloud); }
 .photo-cropper[data-shape="arch"] .photo-cropper__mask, [data-profile-mask="arch"] { clip-path: var(--mask-arch); }
 .photo-cropper__frame { position: absolute; inset: 0; outline: 1px solid rgba(0, 0, 0, 0.2); outline-offset: -1px; pointer-events: none; }
+.photo-cropper__controls { min-width: 0; }
 .photo-cropper__controls h3 { margin: 0 0 0.5rem; color: var(--text-color); font-size: 1.25rem; }
 .photo-cropper__controls > p { margin: 0 0 1.5rem; color: var(--medium-text-color); }
-.photo-cropper__shape { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.5rem; margin: 0 0 1rem; padding: 0; border: 0; }
+.photo-cropper__shape { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 0.5rem; margin: 0 0 1rem; padding: 0; border: 0; }
 .photo-cropper__shape legend { grid-column: 1 / -1; margin-bottom: 0.4rem; color: var(--medium-text-color); }
 form.dashboard-form .photo-cropper__shape label { position: relative; display: flex; width: 100%; height: 40px; min-width: 0; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 6px; background: #f7f7f5; color: var(--medium-text-color); cursor: pointer; }
 .photo-cropper__shape label:has(input:checked) { background: #e9e9e6; color: var(--accent-color); }
@@ -72,7 +80,6 @@ form.dashboard-form .photo-cropper__shape label { position: relative; display: f
 .photo-cropper__zoom button:disabled { opacity: 0.45; cursor: default; }
 .photo-cropper__zoom input[type="range"] { width: 100%; accent-color: var(--accent-color); }
 .photo-cropper__controls .photo-upload-actions { margin-top: 1rem; }
-.photo-cropper__controls .photo-upload-actions[hidden] { display: none; }
 @media (max-width: 700px) {
   .photo-cropper { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
   .photo-cropper__stage { width: min(100%, 320px); justify-self: center; }

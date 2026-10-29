@@ -51,4 +51,12 @@ function parseCrop(value, width, height, label = "image") {
   return extraction;
 }
 
-module.exports = { parseCrop, orientedDimensions };
+// The rectangle as normalized numbers, for saving next to an image so it can be
+// edited again later. null when no (or an incomplete) rectangle was submitted;
+// validate it with parseCrop first.
+function normalizedCrop(value) {
+  if (!value || [value.x, value.y, value.width, value.height].some(blank)) return null;
+  return { x: Number(value.x), y: Number(value.y), width: Number(value.width), height: Number(value.height) };
+}
+
+module.exports = { parseCrop, normalizedCrop, orientedDimensions };
