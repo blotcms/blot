@@ -278,7 +278,7 @@ FROM blot-proxy AS proxy
 
 FROM prod AS unit
 
-# What proxy/deploy/blue-green.sh tells a unit from a proxy-only image by
+# proxy/deploy/blue-green.sh refuses to deploy an image without this label
 LABEL im.blot.kind=unit
 
 USER root

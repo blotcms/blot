@@ -19,7 +19,7 @@ back, deploy an older image.
 | `Dockerfile` | Three-stage build: vendors the Lua deps, builds the Brotli modules, then assembles the image. |
 | `SECURITY.md` | OpenResty/nginx upgrade assessment, enabled features, and remaining advisory exposure. |
 | `entrypoint.sh` | Fixes volume ownership, optionally trusts a test ACME CA, then starts OpenResty with a SIGTERM drain (`openresty -s quit`). |
-| `deploy/` | `blue-green.sh` (replaces the two always-running proxy units one at a time via SO_REUSEPORT + drain, per-container health socket, requires a real cert mount) (and `reload-config.sh`, which needs a bind-mounted conf dir the production scripts do not use). They are run on the host; see [`deploy/README.md`](deploy/README.md) for the checks each script makes. |
+| `deploy/` | `blue-green.sh` (replaces the two always-running proxy units one at a time via SO_REUSEPORT + drain, per-container health socket, requires a real cert mount). They are run on the host; see [`deploy/README.md`](deploy/README.md) for the checks each script makes. |
 | `evict.sh` | The cache sweeper, run hourly by `diskcache.lua` (see "Cache" below). |
 | `tests/` | Specs for the scanner ban and push limits, and a check that every variable the config reads has a value. Run as the `proxy` suite in the `node` workflow's test matrix. |
 | `e2e/` | Full-stack checks driven through the built image (stub upstream + a real Blot app container + Pebble for certs). Run by the `integration` workflow. |
@@ -223,9 +223,7 @@ The container runs with `--network host` (the generated upstreams are
 the units' Unix sockets in `/run/blot`). Two kinds of change:
 
 - **Config-only** (a `.conf` edit): ship it as a new image like any other
-  change. [`deploy/reload-config.sh`](deploy/reload-config.sh) can reload a
-  container whose conf directory is bind-mounted, but the production
-  containers do not mount one.
+  change.
 - **Image change** (base image, Lua deps, Dockerfile): use
   [`deploy/blue-green.sh`](deploy/blue-green.sh). Two proxy containers always
   run, `blot-blue` and `blot-green`; the generated config sets `reuseport` on
@@ -241,10 +239,8 @@ the units' Unix sockets in `/run/blot`). Two kinds of change:
   (`/run/openresty/health.sock` - not a reuseport TCP port the other
   container could answer for it). Only when the site checks pass is the
   previous container removed; otherwise it is put back and the deploy stops
-  before the other unit is touched. A host with the single proxy of before
-  (`blot-proxy-blue` or `blot-proxy-green`) is moved to the two units by
-  starting both beside it before stopping it, and a host missing one unit gets
-  it started first. It refuses to run without `PROXY_CERT_MOUNT` (the image
+  before the other unit is touched. A host missing one unit gets it started
+  first. It refuses to run without `PROXY_CERT_MOUNT` (the image
   ships only a self-signed placeholder). The `zero-downtime` job in the
   `integration` workflow exercises the handover under load.
   - *Hook secret*: the `:8999` ACME hook server is shared by the instances
@@ -319,7 +315,7 @@ root-owned); it does **not** recurse into the cache.
 ## The unit image
 
 [#2119](https://github.com/blotcms/blot/issues/2119) replaces the proxy
-container and the three Node containers (`blot-container-blue`, `-green` and `-yellow`, now retired) with two identical units, `blot-blue`
+container and the three Node containers it fronted with two identical units, `blot-blue`
 and `blot-green`, each one container running OpenResty, node-a (the Node main
 process) and node-b (the worker child node-a forks, `helper/workerChild`). The
 image is the `unit` target of the root `Dockerfile`: the `prod` app image plus

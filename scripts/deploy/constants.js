@@ -13,9 +13,7 @@ const BACKGROUND_CPU_SHARES = 512;
 // (via ./units.sh). It gets these through ./unit-settings.js.
 //
 // One unit must be able to carry all the traffic on its own while the other is
-// being replaced, so each is sized for everything the three Node containers it
-// replaced (blot-container-blue, -green and -yellow, retired) did, not a third
-// of it:
+// being replaced, so each is sized for everything the app does, not half of it:
 //   node-a   the blog container's heap (1500) plus room for dashboard reads
 //   node-b   the sync container's heap, with the same overhead it had for
 //            pandoc and esbuild (the browser moved to the airlock)
@@ -25,7 +23,7 @@ const BACKGROUND_CPU_SHARES = 512;
 // The heaps are ceilings, not reservations: V8 uses what the render caches
 // and requests need, and the unit's cgroup limit sits above both so a runaway
 // heap dies with a diagnostic report rather than to the OOM killer.
-// cpus overcommits slightly, as the three containers' 2 each did. Each unit
+// cpus overcommits slightly. Each unit
 // has its own airlock (AIRLOCK below), paid for separately.
 const UNIT = {
   cpus: 4,
@@ -88,11 +86,8 @@ module.exports = {
   // run there, serialized by the lock in app/helper/screenshot. The 512m is
   // paid for out of the unit's memory (UNIT above).
   //
-  // name is the single airlock of before (blot-airlock), which the cutover
-  // stops and removes; unit-settings.js passes it on for that. Its registry,
-  // network and sizing are the units' airlocks' too.
+  // The registry, network and sizing below are every unit's airlock's.
   AIRLOCK: {
-    name: "blot-airlock",
     registry: "ghcr.io/blotcms/blot-airlock",
     network: "blotnet",
     memory: "512m",

@@ -18,11 +18,11 @@ unhealthy_containers=$(docker ps --format "{{.Names}}" --filter "health=unhealth
 # drains the unit it replaces with `docker stop`, during which its healthcheck
 # goes unhealthy. Restarting it then brings the old unit back to life next to
 # the new one, so leave the units alone while the lock is held: blot-blue,
-# blot-green, blot-<unit>-previous and the single blot-proxy-<colour> of before
-# the two units. Whole names, so the airlocks are still restarted.
+# blot-green and blot-<unit>-previous. Whole names, so the airlocks are still
+# restarted.
 PROXY_DEPLOY_LOCK="${PROXY_DEPLOY_LOCK:-/tmp/blot-proxy-deploy.lock}"
 if [ -e "$PROXY_DEPLOY_LOCK" ] && ! flock -n "$PROXY_DEPLOY_LOCK" true 2>/dev/null; then
-    unhealthy_containers=$(echo "$unhealthy_containers" | grep -Ev '^blot-(proxy-)?(blue|green)(-previous)?$')
+    unhealthy_containers=$(echo "$unhealthy_containers" | grep -Ev '^blot-(blue|green)(-previous)?$')
 fi
 
 # A unit holds OpenResty and Node, so restarting one drops every connection it

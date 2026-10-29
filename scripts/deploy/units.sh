@@ -13,10 +13,6 @@
 # operator's Mac or from .github/workflows/deploy.yml, over the `ssh blot`
 # alias (ec2-user from the Mac, deploy from the workflow).
 #
-# The first run on a host that still has proxy-only containers and the
-# blot-container-* Node containers is the cutover: see "Cutover" in
-# proxy/deploy/README.md.
-#
 # The proxy/deploy scripts are copied from this checkout on every run, so the
 # host never runs a stale copy, together with unit-settings.env, written here
 # from scripts/deploy/constants.js (the units' memory, cpus, heaps and airlock
@@ -73,4 +69,4 @@ node "$ROOT/scripts/deploy/unit-settings.js" | ssh blot '
 '
 
 echo "Running blue-green.sh $SHA on the host"
-ssh blot "PROXY_DEPLOY_KIND=unit \$HOME/proxy-deploy/blue-green.sh $SHA"
+ssh blot "\$HOME/proxy-deploy/blue-green.sh $SHA"
