@@ -20,6 +20,13 @@ describe("workerChild", function () {
 
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+  // Waits until there have been n forks, so a slow CI runner's late timer
+  // doesn't fail a spec that only checks a retry happens
+  async function forked(n) {
+    for (let i = 0; i < 100 && forks.length < n; i++) await wait(10);
+    expect(forks.length).toBe(n);
+  }
+
   function start(options = {}) {
     supervisor = workerChild(
       Object.assign(
@@ -76,8 +83,7 @@ describe("workerChild", function () {
 
     forks[0].emit("exit", 1, null);
     expect(forks.length).toBe(1);
-    await wait(40);
-    expect(forks.length).toBe(2);
+    await forked(2);
 
     // The second delay is double the first
     forks[1].emit("exit", 1, null);
@@ -107,8 +113,7 @@ describe("workerChild", function () {
       },
     });
 
-    await wait(40);
-    expect(forks.length).toBe(2);
+    await forked(2);
     await wait(60);
     expect(forks.length).toBe(2);
   });
@@ -126,8 +131,7 @@ describe("workerChild", function () {
     });
 
     expect(forks.length).toBe(0);
-    await wait(40);
-    expect(forks.length).toBe(1);
+    await forked(1);
   });
 
   it("stops the child with SIGTERM and resolves once it has exited", async function () {
@@ -160,8 +164,7 @@ describe("workerChild", function () {
     });
 
     forks[0].emit("exit", 1, null);
-    await wait(40);
-    expect(forks.length).toBe(2);
+    await forked(2);
   });
 
   it("forks nothing more once stopped, even while a restart is pending", async function () {
