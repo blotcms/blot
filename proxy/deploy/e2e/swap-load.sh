@@ -1,25 +1,28 @@
 #!/usr/bin/env bash
 #
-# Swaps one proxy image for another with the REAL blue-green.sh, against real
+# Deploys one proxy image over another with the REAL blue-green.sh, against real
 # Docker, Redis and a stub upstream, while a load generator (swap-load.js) never
-# stops. Every proxy deploy goes through this, so any change to the proxy, the
-# deploy scripts or a cache is rehearsed the same way:
+# stops. The deploy replaces the two always-running units, blot-blue and then
+# blot-green, one at a time. Every proxy deploy goes through this, so any change
+# to the proxy, the deploy scripts or a cache is rehearsed the same way:
 #
-#   1. fresh start with image A; warm its cache
+#   1. fresh start with image A (both units); warm its cache
 #   2. A -> B under load
 #   3. B -> A under load (the rollback)
 #   4. A -> B under load again
-#   5. B -> B under load: a redeploy of the same image keeps the warm cache
-#   6. a swap B -> A that fails after B was stopped, while the page changes and
-#      the proxy is told: B is put back and must not serve what changed
+#   5. B -> A under load: the warm cache is kept; then A again, which must
+#      change nothing
+#   6. a deploy of B over A that fails after blot-blue was stopped, while the
+#      page changes and the proxy is told: blot-blue is put back and must not
+#      serve what changed, and blot-green is never touched
 #
 # Under load means: cached pages (gzip/brotli/identity, HEAD, conditional, Range,
 # a 2.5 MB file, a slow fill), uncached GETs, POSTs up to 24 MB, 6-second event
 # streams, and a purge about every 500 ms. Every response is checked against
 # what the stub upstream would have served (swap-load-lib.js); a swap must
 # produce no connection error, no non-2xx/304, no wrong body, no cut event
-# stream and no page older than the last finished purge (both containers share
-# one cache directory, so a purge reaches both). After each swap, with the load
+# stream and no page older than the last finished purge (all the containers
+# share one cache directory, so a purge reaches every one). After each swap, with the load
 # stopped, every page must be the upstream's current generation and a purge must
 # work.
 #
@@ -69,21 +72,24 @@ run_bg() {
     as_root runuser -u "$DEPLOY_USER" -- env "PATH=$PATH" "${vars[@]}" bash "$BG" "$@"; fi
 }
 
-current() { docker ps --format '{{.Names}}' | grep '^blot-proxy-' | sed 's/blot-proxy-//'; }
-assert_running() { # assert_running <colour>
-  docker ps --format '{{.Names}}' | grep -qx "blot-proxy-$1" || fail "blot-proxy-$1 is not running"
-  [ "$(docker ps --format '{{.Names}}' | grep -c '^blot-proxy-')" = 1 ] || fail "more than one proxy container is running"
-  [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "blot-proxy-$1")" = unless-stopped ] || fail "blot-proxy-$1 has the wrong restart policy"
+# Whole names: a `docker ps --filter name=` is a substring match
+proxies() { docker ps -a --format '{{.Names}}' | grep -E '^blot-(proxy-)?(blue|green)(-previous)?$' || true; }
+assert_units() { # assert_units <image>: blot-blue and blot-green, and only they, run this image
+  [ "$(proxies | sort | tr '\n' ' ')" = "blot-blue blot-green " ] || fail "the proxy containers are [$(proxies | tr '\n' ' ')], not blot-blue and blot-green"
+  local u
+  for u in blue green; do
+    [ "$(docker inspect -f '{{.State.Running}}' "blot-$u")" = true ] || fail "blot-$u is not running"
+    [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "blot-$u")" = unless-stopped ] || fail "blot-$u has the wrong restart policy"
+    [ "$(docker inspect -f '{{.Config.Image}}' "blot-$u")" = "$1" ] || fail "blot-$u is not of $1"
+  done
 }
-assert_image() { # assert_image <image>: the running proxy container is of this image
-  [ "$(docker inspect -f '{{.Config.Image}}' "blot-proxy-$(current)")" = "$1" ] || fail "the running container is not of $1"
-}
+unit_ids() { docker inspect -f '{{.Id}}' blot-blue blot-green | tr '\n' ' '; }
 
 [ "${IMAGE_A%:*}" != "${IMAGE_B%:*}" ] || fail "IMAGE_A and IMAGE_B are tags of one repository: blue-green.sh removes the other tags of the repository it deploys"
 [ "$(docker image inspect -f '{{.Id}}' "$IMAGE_A")" != "$(docker image inspect -f '{{.Id}}' "$IMAGE_B")" ] || fail "IMAGE_A and IMAGE_B are the same image: a swap between them would not be one"
 
 # A container being stopped closes its listening sockets, and with SO_REUSEPORT
-# (how both colours share :80/:443) a connection that finished its handshake but
+# (how the units share :80/:443) a connection that finished its handshake but
 # had not been accepted yet is reset. Measured on this harness at ~1000 new
 # connections a second: resets in 6 of 10 swaps without the setting below, none
 # in 10 with it (the load generator below is slower, and sees one in some 20
@@ -143,68 +149,68 @@ PROBE_F="probe-failed.$BLOT_HOST"
 
 # ---- 1. a fresh start with A -----------------------------------------------
 say "1. fresh start with A"
-! docker ps -a --format '{{.Names}}' | grep -q '^blot-proxy-' || fail "a proxy container exists before the test starts"
+[ -z "$(proxies)" ] || fail "a proxy container exists before the test starts"
 run_bg "$IMAGE_A" 2>&1 | tee "$WORK/fresh.log"
-assert_running blue
-assert_image "$IMAGE_A"
+assert_units "$IMAGE_A"
 T warm
 T purge-works "b1.$BLOT_HOST"
 
 # ---- 2. A -> B ---------------------------------------------------------------
 say "2. A -> B under load"
 swap_under_load a-to-b "$IMAGE_B"
-assert_running green
-assert_image "$IMAGE_B"
+assert_units "$IMAGE_B"
 T verify-all
 T purge-works "b2.$BLOT_HOST"
 
 # ---- 3. B -> A (rollback) ----------------------------------------------------
 say "3. B -> A under load (the rollback)"
 swap_under_load b-to-a "$IMAGE_A"
-assert_running blue
-assert_image "$IMAGE_A"
+assert_units "$IMAGE_A"
 T verify-all
 T purge-works "b3.$BLOT_HOST"
 
 # ---- 4. A -> B again ---------------------------------------------------------
 say "4. A -> B under load again"
 swap_under_load a-to-b-again "$IMAGE_B"
-assert_running green
-assert_image "$IMAGE_B"
+assert_units "$IMAGE_B"
 T verify-all
 T purge-works "b4.$BLOT_HOST"
 
-# ---- 5. B -> B: the warm cache stays ----------------------------------------
-say "5. B -> B under load: the cache is kept"
+# ---- 5. B -> A: the warm cache stays; then A again: nothing changes ----------
+say "5. B -> A under load: the cache is kept"
 T warm
 T get "$PROBE_K" /probe >/dev/null; sleep 0.3
 KEPT=$(T get "$PROBE_K" /probe)
 [ "$(echo "$KEPT" | awk '{print $3}')" = HIT ] || fail "premise: $PROBE_K should be cached"
-swap_under_load b-to-b "$IMAGE_B"
-assert_running blue
-assert_image "$IMAGE_B"
+swap_under_load b-to-a-warm "$IMAGE_A"
+assert_units "$IMAGE_A"
 AFTER=$(T get "$PROBE_K" /probe)
 [ "$AFTER" = "$KEPT" ] || fail "the first request after a redeploy was [$AFTER], wanted the cached [$KEPT]"
 T verify-all
 T purge-works "b5.$BLOT_HOST"
+say "5b. the same image again: neither unit is replaced"
+IDS_BEFORE="$(unit_ids)"
+run_bg "$IMAGE_A" 2>&1 | tee "$WORK/noop.log"
+[ "$(unit_ids)" = "$IDS_BEFORE" ] || fail "a deploy of the image both units run replaced a container"
+grep -q "nothing to do" "$WORK/noop.log" || fail "the no-op deploy did not say so"
+assert_units "$IMAGE_A"
 
-# ---- 6. a swap that fails after the old container was stopped --------------------
-say "6. a failed B -> A swap: B is put back"
-RUNNING_BEFORE="$(current)"
+# ---- 6. a deploy that fails after blot-blue was stopped ---------------------------
+say "6. a failed A -> B deploy: blot-blue is put back, blot-green is not touched"
+IDS_BEFORE="$(unit_ids)"
 T get "$PROBE_F" /probe >/dev/null; sleep 0.3
 [ "$(T get "$PROBE_F" /probe | awk '{print $3}')" = HIT ] || fail "the proxy did not cache the probe page"
-# Redis down for the whole deploy: nothing before the post-swap checks needs it,
-# and they fail on it (as in proxy-deploy-e2e.yml's forced-failure step). While
-# the swap a filler requests many distinct pages of other hosts: a page the OLD
-# container caches after the new one rebuilt its purge index is not in the new
-# one's index. Then, with the old container stopped, the pages change
-# and the proxy is told: the purge can only reach the new container.
+# Redis down for the whole deploy: nothing before the post-replacement checks
+# needs it, and they fail on it (as in proxy-deploy-e2e.yml's forced-failure
+# step). While blot-blue is replaced a filler requests many distinct pages of
+# other hosts. Then, with blot-blue stopped, the pages change and the proxy is
+# told: the purge reaches the shared cache, whichever unit takes it.
 docker stop blot-e2e-redis >/dev/null
 FILL_FILE="$WORK/fill.txt" node "$HERE/swap-load.js" fill ov >/dev/null 2>&1 & fill_pid=$!
 sleep 1
-run_bg "$IMAGE_A" > "$WORK/failed-swap.log" 2>&1 & failed_pid=$!
+run_bg "$IMAGE_B" > "$WORK/failed-swap.log" 2>&1 & failed_pid=$!
 for _ in $(seq 1 1500); do grep -q "Checking the site through" "$WORK/failed-swap.log" 2>/dev/null && break; sleep 0.02; done
-grep -q "Checking the site through" "$WORK/failed-swap.log" || { cat "$WORK/failed-swap.log"; fail "the swap never reached its post-swap checks"; }
+grep -q "Checking the site through" "$WORK/failed-swap.log" || { cat "$WORK/failed-swap.log"; fail "the deploy never reached its post-replacement checks"; }
 kill -TERM "$fill_pid"; wait "$fill_pid" || true
 T change "$PROBE_F" >/dev/null
 FILL_FILE="$WORK/fill.txt" T change-fill ov >/dev/null
@@ -212,21 +218,21 @@ failed_rc=0; wait "$failed_pid" || failed_rc=$?
 docker start blot-e2e-redis >/dev/null
 for _ in $(seq 1 30); do timeout 2 bash -c "</dev/tcp/127.0.0.1/6379" 2>/dev/null && break; sleep 1; done
 cat "$WORK/failed-swap.log"
-[ "$failed_rc" != 0 ] || fail "the swap should have failed with Redis down"
-assert_running "$RUNNING_BEFORE"
-assert_image "$IMAGE_B"
-echo "pages the filler cached while both containers were up: $(wc -l < "$WORK/fill.txt")"
-# the page B had cached before the swap, which the new container knew of: purged
+[ "$failed_rc" != 0 ] || fail "the deploy should have failed with Redis down"
+assert_units "$IMAGE_A"
+[ "$(unit_ids)" = "$IDS_BEFORE" ] || fail "the failed deploy left a different container behind (blot-blue should be the one that was stopped, put back; blot-green untouched)"
+echo "pages the filler cached while the units were up: $(wc -l < "$WORK/fill.txt")"
+# the page A had cached before the deploy: purged
 T fresh "$PROBE_F" /probe
-# the pages B cached while both were up, which the new container did not
+# the pages cached while blot-blue was being replaced
 FILL_STALE=0
 FILL_FILE="$WORK/fill.txt" T check-fill ov | tee "$WORK/check-fill.txt" || FILL_STALE=$?
 T purge-works "b6.$BLOT_HOST"
 
-say "passed: $TOTAL_REQUESTS requests across five swaps, none failed, wrong or stale; $TOTAL_RESETS new connections reset before a response byte (net.ipv4.tcp_migrate_req=$MIGRATE); a failed swap put the old container back"
+say "passed: $TOTAL_REQUESTS requests across four deploys, none failed, wrong or stale; $TOTAL_RESETS new connections reset before a response byte (net.ipv4.tcp_migrate_req=$MIGRATE); a failed deploy put the old container back and left the other unit alone"
 printf 'per swap:%s\n' "$SUMMARY"
 if [ "$FILL_STALE" != 0 ]; then
-  say "FINDING: the container put back after the failed swap serves pages that changed while it was stopped"
+  say "FINDING: the container put back after the failed deploy serves pages that changed while it was stopped"
   cat "$WORK/check-fill.txt"
   [ "${ALLOW_FAILED_SWAP_STALE:-0}" = 1 ] || fail "see the finding above (ALLOW_FAILED_SWAP_STALE=1 reports it without failing)"
 fi

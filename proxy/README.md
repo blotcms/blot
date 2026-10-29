@@ -19,7 +19,7 @@ back, deploy an older image.
 | `Dockerfile` | Three-stage build: vendors the Lua deps, builds the Brotli modules, then assembles the image. |
 | `SECURITY.md` | OpenResty/nginx upgrade assessment, enabled features, and remaining advisory exposure. |
 | `entrypoint.sh` | Fixes volume ownership, optionally trusts a test ACME CA, then starts OpenResty with a SIGTERM drain (`openresty -s quit`). |
-| `deploy/` | `blue-green.sh` (image swap via SO_REUSEPORT + drain, per-container health socket, requires a real cert mount) (and `reload-config.sh`, which needs a bind-mounted conf dir the production scripts do not use). They are run on the host; see [`deploy/README.md`](deploy/README.md) for the checks each script makes. |
+| `deploy/` | `blue-green.sh` (replaces the two always-running proxy units one at a time via SO_REUSEPORT + drain, per-container health socket, requires a real cert mount) (and `reload-config.sh`, which needs a bind-mounted conf dir the production scripts do not use). They are run on the host; see [`deploy/README.md`](deploy/README.md) for the checks each script makes. |
 | `evict.sh` | The cache sweeper, run hourly by `diskcache.lua` (see "Cache" below). |
 | `tests/` | Specs for the scanner ban and push limits, and a check that every variable the config reads has a value. Run as the `proxy` suite in the `node` workflow's test matrix. |
 | `e2e/` | Full-stack checks driven through the built image (stub upstream + a real Blot app container + Pebble for certs). Run by the `integration` workflow. |
@@ -50,7 +50,7 @@ serves any host:
 | `PROXY_RESOLVER` | build-time `OPENRESTY_RESOLVER`, else `8.8.8.8 ipv6=off` | DNS resolver (`127.0.0.11` on a user-defined Docker network) |
 | `PROXY_ACME_CA` | build-time `ACME_CA`, else Let's Encrypt production | ACME directory for custom-domain certificates. Leave it alone in production: the deploy scripts refuse anything else in `proxy.env` |
 | `PROXY_ACME_HOOK_SECRET` | unset: each instance generates its own (a warning is logged) | the secret dehydrated's hook calls carry to the `:8999` hook server. Set it to the same long random string on every instance: they share `:8999` (`reuseport`), so a call can reach either. Read by `init.conf` (never written into `nginx.conf`) |
-| `PROXY_UNIT` | `-` | `blue` or `green`: logged as the last field of every access log line (`unit=`). The deploy scripts set it from the container name |
+| `PROXY_UNIT` | `-` | `blue` or `green`: logged as the last field of every access log line (`unit=`). The deploy script sets it from the container name (`blot-blue` is `blue`) |
 | `PROXY_UPSTREAM_GREEN` | `127.0.0.1:8089` (production: `unix:/run/blot/green.sock`) | the Node that handles sync, writes and webhooks (`/clients`) |
 | `PROXY_UPSTREAM_BLUE` | `127.0.0.1:8088` (`unix:/run/blot/blue.sock`) | the dashboard Node, and failover for the others |
 | `PROXY_UPSTREAM_YELLOW` | `127.0.0.1:8090` (`unix:/run/blot/yellow.sock`) | the blog Node |
@@ -222,16 +222,25 @@ The container runs with `--network host` (the generated upstreams are
   container whose conf directory is bind-mounted, but the production
   containers do not mount one.
 - **Image change** (base image, Lua deps, Dockerfile): use
-  [`deploy/blue-green.sh`](deploy/blue-green.sh). The generated config sets
-  `reuseport` on the single default server for `:80` and `:443` (and on the
-  loopback-only `:80` / `:8999` helpers), so the new container joins the
-  listening group before the old one leaves it. The script waits for the new
-  container to answer its **own per-container health socket**
-  (`/run/openresty/health.sock` - not a reuseport TCP port the old container
-  could answer for it), then `docker stop --time 30` the old one -
-  `entrypoint.sh` traps SIGTERM and runs `openresty -s quit`, so in-flight
-  requests drain first. It refuses to run without `PROXY_CERT_MOUNT` (the
-  image ships only a self-signed placeholder). The `zero-downtime` job in the
+  [`deploy/blue-green.sh`](deploy/blue-green.sh). Two proxy containers always
+  run, `blot-blue` and `blot-green`; the generated config sets `reuseport` on
+  the single default server for `:80` and `:443` (and on the loopback-only
+  `:80` / `:8999` helpers), so both listen on the same ports and the kernel
+  gives new connections to whichever are up: if one dies the other takes
+  every new connection. A deploy replaces them one at a time, blue first: it
+  refuses unless the other is running and healthy, `docker stop --time 30`
+  the unit (`entrypoint.sh` traps SIGTERM and runs `openresty -s quit`, so
+  in-flight requests drain first, while the other carries the traffic), keeps
+  it stopped as `blot-<unit>-previous`, starts the new one under the unit's
+  name and waits for it to answer its **own per-container health socket**
+  (`/run/openresty/health.sock` - not a reuseport TCP port the other
+  container could answer for it). Only when the site checks pass is the
+  previous container removed; otherwise it is put back and the deploy stops
+  before the other unit is touched. A host with the single proxy of before
+  (`blot-proxy-blue` or `blot-proxy-green`) is moved to the two units by
+  starting both beside it before stopping it, and a host missing one unit gets
+  it started first. It refuses to run without `PROXY_CERT_MOUNT` (the image
+  ships only a self-signed placeholder). The `zero-downtime` job in the
   `integration` workflow exercises the handover under load.
   - *Hook secret*: the `:8999` ACME hook server is shared by the instances
     through `reuseport`, so dehydrated's hook call can land on the other one.

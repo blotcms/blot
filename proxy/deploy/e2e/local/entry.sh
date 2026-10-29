@@ -20,7 +20,7 @@ STUB_JS="$REPO/proxy/deploy/e2e/swap-load-stub.js" bash "$REPO/proxy/deploy/e2e/
 status=0
 bash "$REPO/proxy/deploy/e2e/swap-load.sh" || status=$?
 if [ "$status" != 0 ]; then
-  for c in blot-proxy-blue blot-proxy-green blot-e2e-stub; do echo "=== $c ==="; docker logs --tail 40 "$c" 2>&1 || true; done
+  for c in blot-blue blot-green blot-e2e-stub; do echo "=== $c ==="; docker logs --tail 40 "$c" 2>&1 || true; done
   echo "=== error.log ==="; tail -n 60 "$PROXY_LOG_DIR/error.log" || true
 fi
 exit "$status"
