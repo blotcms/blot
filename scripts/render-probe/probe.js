@@ -4,7 +4,7 @@
 // one-off container of the same image the app containers run - see
 // README.md. It mounts the real `blog` router on 127.0.0.1, so lookups,
 // template loading, retrieval and the process-local LRU caches behave
-// exactly as they do in yellow (and start cold, like a freshly restarted
+// exactly as they do in a unit's node-a (and start cold, like a freshly restarted
 // container).
 //
 //   node probe.js <url...> [--concurrency N] [--repeat N]
@@ -35,7 +35,7 @@ const OPTIONS = {
   stats: { value: "URL|HANDLE", help: "catalog size, bytes per field, backlink facts and catalog read timings, no rendering" },
   experiment: { help: "with --stats: repeat the catalog read, other batch sizes, pipelined GETs (~35MB of reads)" },
   sweep: { help: "with --stats: catalog read at batch sizes 10/25/50/100, interleaved, 2 passes each (~42MB of reads)" },
-  replay: { value: "FILE", help: "replay yellow's requests from an access log (.gz too)" },
+  replay: { value: "FILE", help: "replay blog requests from an access log (.gz too)" },
   from: { value: "TIME", help: "replay window start, UTC (YYYY-MM-DDTHH:MM:SS)" },
   to: { value: "TIME", help: "replay window end, UTC" },
   speed: { value: "N", help: `replay speed multiplier (default 1, max ${MAX_REPLAY_SPEED})` },
@@ -43,7 +43,7 @@ const OPTIONS = {
     value: "N",
     help: `replay: skip requests while N are in flight (default and max ${MAX_CONCURRENCY})`,
   },
-  upstream: { value: "HOST:PORT", help: "replay: the container's upstream (default yellow's)" },
+  upstream: { value: "HOST:PORT", help: "replay: the container's upstream (default the old yellow port, for logs from before the units)" },
   timeout: { value: "S", help: "per-request timeout (default 120)" },
   verbose: { help: "print each request's render steps" },
   out: { value: "DIR" },
@@ -327,7 +327,7 @@ async function readReplay(file) {
   return requests.sort((a, b) => a.at - b.at);
 }
 
-// Capped like --concurrency: the point is to reproduce yellow's load on
+// Capped like --concurrency: the point is to reproduce node-a's blog load on
 // this process, but it all lands on the live Redis too.
 async function runReplay(port) {
   const requests = await readReplay(args.replay);
