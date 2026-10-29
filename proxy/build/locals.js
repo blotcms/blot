@@ -23,6 +23,19 @@
 // http.conf keep their weights and failover roles; only where each container
 // is changes. GREEN handles sync, writes and webhooks (/clients), BLUE serves the
 // dashboard and is the failover for the others, YELLOW serves blogs.
+//
+// PROXY_UPSTREAM_MODE: "containers" (today's three Node containers, the
+// default) or "unit" (the proxy shares a container with its own two Node
+// processes, #2119). Unit mode takes four addresses, normally Unix sockets in
+// the /run/blot both units share: PROXY_UNIT_MAIN and PROXY_UNIT_WORKER are
+// this unit's main process (blogs, dashboard reads) and worker child
+// (/clients, writes, webhooks); PROXY_PEER_MAIN and PROXY_PEER_WORKER are the
+// other unit's, used as `backup`.
+//
+// The upstream groups in http.conf read six PROXY_*_PRIMARY / PROXY_*_BACKUP
+// placeholders. render-config.sh always sets them from the mode and the
+// addresses above, so a value given for one of the six is ignored; their
+// defaults here are the containers-mode values.
 const placeholder = (name) => "${" + name + "}";
 
 const LETS_ENCRYPT = "https://acme-v02.api.letsencrypt.org/directory";
@@ -40,6 +53,17 @@ function runtimeDefaults(env = process.env) {
     PROXY_UPSTREAM_GREEN: "127.0.0.1:8089",
     PROXY_UPSTREAM_BLUE: "127.0.0.1:8088",
     PROXY_UPSTREAM_YELLOW: "127.0.0.1:8090",
+    PROXY_UPSTREAM_MODE: "containers",
+    PROXY_UNIT_MAIN: "unix:/run/blot/blue-a.sock",
+    PROXY_UNIT_WORKER: "unix:/run/blot/blue-b.sock",
+    PROXY_PEER_MAIN: "unix:/run/blot/green-a.sock",
+    PROXY_PEER_WORKER: "unix:/run/blot/green-b.sock",
+    PROXY_NODE_PRIMARY: "127.0.0.1:8089",
+    PROXY_NODE_BACKUP: "127.0.0.1:8088",
+    PROXY_BLOGS_PRIMARY: "127.0.0.1:8090",
+    PROXY_BLOGS_BACKUP: "127.0.0.1:8088",
+    PROXY_DASHBOARD_PRIMARY: "127.0.0.1:8088",
+    PROXY_DASHBOARD_BACKUP: "127.0.0.1:8089",
   };
 }
 

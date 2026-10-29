@@ -54,10 +54,18 @@ serves any host:
 | `PROXY_UPSTREAM_GREEN` | `127.0.0.1:8089` (production: `unix:/run/blot/green.sock`) | the Node that handles sync, writes and webhooks (`/clients`) |
 | `PROXY_UPSTREAM_BLUE` | `127.0.0.1:8088` (`unix:/run/blot/blue.sock`) | the dashboard Node, and failover for the others |
 | `PROXY_UPSTREAM_YELLOW` | `127.0.0.1:8090` (`unix:/run/blot/yellow.sock`) | the blog Node |
+| `PROXY_UPSTREAM_MODE` | `containers` | `containers`: the three Node containers above. `unit`: this container also runs its own two Node processes (the [unit image](#the-unit-image)) and the next four are used instead |
+| `PROXY_UNIT_MAIN` | `unix:/run/blot/blue-a.sock` | unit mode: this unit's main Node process (blogs, dashboard reads) |
+| `PROXY_UNIT_WORKER` | `unix:/run/blot/blue-b.sock` | unit mode: this unit's worker child (`/clients`, webhooks, dashboard writes) |
+| `PROXY_PEER_MAIN` | `unix:/run/blot/green-a.sock` | unit mode: the other unit's main process, `backup` for the two upstreams above |
+| `PROXY_PEER_WORKER` | `unix:/run/blot/green-b.sock` | unit mode: the other unit's worker child, `backup` for `/clients` |
 | `PROXY_FETCH_CDN_IPS` | `true` | fetch the Bunny edge list (exempt from rate limits) at start; `false` uses the list baked into the image |
 
-The upstream groups keep their weights and failover roles from
-`config/http.conf`; only where each Node is changes. A `unix:` upstream is a socket the Node
+The upstream groups keep their names, weights and failover roles from
+`config/http.conf`; only where each Node is changes. In unit mode `blot_node`
+is the unit's worker with the other unit's worker as `backup`, and
+`blot_blogs_node` and `blot_dashboard_node` are the unit's main process with the
+other unit's as `backup`; `render-config.sh` picks the servers from the mode. A `unix:` upstream is a socket the Node
 container listens on in `/run/blot` (a failed connect is immediate, so nginx
 retries the backup); the deploy scripts bind-mount that directory into the
 proxy when any upstream is one. The Bunny
