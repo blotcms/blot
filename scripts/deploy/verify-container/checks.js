@@ -27,8 +27,9 @@ const MIN_FREE_BYTES = 2 * 1024 ** 3; // 2GiB
 // one request. Preview subdomains are exempt from the HTTPS redirect, so
 // plain HTTP to the container works.
 //
-// The request goes straight to this container's own node process on
-// 127.0.0.1 (this script runs inside it via `docker exec`), never through
+// The request goes straight to this container's own node process, on
+// 127.0.0.1 or, in a unit, its socket (this script runs inside it via
+// `docker exec`), never through
 // the OpenResty proxy: its cache or another container could otherwise
 // answer, and the check would pass for the wrong container.
 const CANARY_HANDLE = "david";
@@ -42,6 +43,14 @@ const REQUIRED_ENV = [
   "BLOT_AIRLOCK_BROWSER_URL",
   "BLOT_AIRLOCK_PROXY_URL",
 ];
+
+// Where this process serves: 127.0.0.1:<port>, or its socket when it has no
+// TCP port (a unit's node-a). A base URL and request() options.
+function local({ port, socket }) {
+  return port
+    ? { base: `http://127.0.0.1:${port}`, options: {} }
+    : { base: "http://localhost", options: { socketPath: socket } };
+}
 
 function request({ url, host, headers = {}, timeout = 8000, options = {} }) {
   return new Promise((resolve, reject) => {
@@ -236,7 +245,8 @@ async function airlock({ config }) {
 
 async function canaryBlog({ config }) {
   const host = `preview-of-${CANARY_TEMPLATE}-on-${CANARY_HANDLE}.${config.host}`;
-  const res = await request({ url: `http://127.0.0.1:${config.port}/`, host });
+  const { base, options } = local(config);
+  const res = await request({ url: `${base}/`, host, options });
   if (res.status !== 200) throw new Error(`${host} returned ${res.status}`);
   if (!/<html/i.test(res.body) || !/<\/html>/i.test(res.body) || res.body.length < 500) {
     throw new Error(`${host} returned a ${res.body.length} byte body that isn't a complete HTML page`);
@@ -245,10 +255,12 @@ async function canaryBlog({ config }) {
 }
 
 async function loginPage({ config }) {
+  const { base, options } = local(config);
   const res = await request({
-    url: `http://127.0.0.1:${config.port}/sites/log-in`,
+    url: `${base}/sites/log-in`,
     host: config.host,
     headers: { "X-Forwarded-Proto": "https" },
+    options,
   });
   if (res.status !== 200) throw new Error(`/sites/log-in returned ${res.status}`);
   return "dashboard log-in page rendered";

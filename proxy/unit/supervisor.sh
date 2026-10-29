@@ -11,8 +11,10 @@
 #              delay that doubles from 1s to 30s and resets once it has run
 #              for 60s. OpenResty is not touched.
 #
-# SIGTERM, SIGQUIT and SIGINT drain both: OpenResty with `-s quit`, node-a with
-# SIGTERM (helper/drain), which stops node-b first. Then this exits 0.
+# SIGTERM, SIGQUIT and SIGINT drain both, OpenResty first: `-s quit` lets it
+# finish what it has accepted (up to worker_shutdown_timeout), which may still
+# be waiting on node-a, and only once it has exited is node-a sent SIGTERM
+# (helper/drain), which stops node-b first. Then this exits 0.
 #
 # Environment: BLOT_UNIT (blue or green) is required. Everything else defaults
 # from it: the sockets in /run/blot (<unit>-a.sock for node-a, <unit>-b.sock for
@@ -83,7 +85,6 @@ stop() {
   stopping=1
   echo "supervisor: shutdown signal received, draining"
   "$OPENRESTY" -s quit || true
-  kill -TERM "$node_loop" 2>/dev/null
 }
 trap stop TERM QUIT INT
 
@@ -102,8 +103,9 @@ else
   exit_status=$status
   [ "$exit_status" -eq 0 ] && exit_status=1
   echo "supervisor: OpenResty exited status=$status, stopping the unit" >&2
-  kill -TERM "$node_loop" 2>/dev/null
 fi
 
+# OpenResty has exited, so nothing is left to send node-a a request
+kill -TERM "$node_loop" 2>/dev/null
 reap "$node_loop"
 exit "$exit_status"

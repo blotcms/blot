@@ -2,7 +2,7 @@
 
 Setup for the production proxy host (the EC2 instance that runs the proxy
 container and the Node containers). The proxy itself is not installed from
-here: deploy it with `npm run deploy-proxy` or the Deploy proxy workflow (see
+here: deploy it with `npm run deploy-units` or the Deploy workflow (see
 [`proxy/deploy/README.md`](../../proxy/deploy/README.md)).
 
 ```
@@ -172,4 +172,4 @@ systemd unit and its `openresty.service.d` drop-in, `/usr/local/openresty` and
 `/etc/resty-auto-ssl`), so there is no host rollback. The auto-ssl state now
 lives in the `blot-proxy-auto-ssl` Docker volume, and customer certificates in
 Redis (`ssl:<domain>:latest`). To roll the proxy back, redeploy an older image:
-`npm run deploy-proxy -- <older commit>`.
+`npm run deploy-units -- <older commit>`.

@@ -54,7 +54,6 @@ docker run -d --name "$NAME" --network host \
   -e BLOT_UNIT=blue \
   -e BLOT_HOST=blot.im \
   -e BLOT_REDIS_HOST=127.0.0.1 \
-  -e BLOT_PORT=8081 \
   -e PROXY_FETCH_CDN_IPS=false \
   -e BLOT_STORAGE_BUCKET -e BLOT_STORAGE_ENDPOINT -e BLOT_STORAGE_REGION \
   -e BLOT_AWS_KEY -e BLOT_AWS_SECRET \

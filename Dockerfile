@@ -278,6 +278,9 @@ FROM ${PROXY_IMAGE} AS proxy
 
 FROM prod AS unit
 
+# What proxy/deploy/blue-green.sh tells a unit from a proxy-only image by
+LABEL im.blot.kind=unit
+
 USER root
 
 # The runtime packages of the proxy image (see proxy/Dockerfile for why each),

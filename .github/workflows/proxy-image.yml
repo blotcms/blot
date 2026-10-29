@@ -3,8 +3,8 @@
 # pull. Mirrors the app and airlock jobs in
 # build.yml: arm64 only (production is Graviton), as a manifest list.
 #
-# Every push to master gets an image, so `npm run deploy-proxy` and the Deploy
-# proxy workflow can deploy any master commit (like build.yml for the app).
+# Every push to master gets an image, so a proxy-only rollback (`scripts/deploy/units.sh --proxy-only`) and
+# the unit image (unit-image.yml builds on this one) can use any master commit.
 # Pull requests only build when something the image is built from changes
 # (same paths as proxy.yml), and check the image; same-repo PRs also push it (as build.yml does), fork PRs do not.
 #

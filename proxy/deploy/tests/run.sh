@@ -21,12 +21,15 @@ echo "docker $*" >> "$FAKE/calls"
 R="$FAKE/running"; mkdir -p "$R"
 name_arg() { while [ $# -gt 0 ]; do [ "$1" = --name ] && { echo "$2"; return; }; shift; done; }
 case "$1" in
-  image) if [[ "$*" == *"{{.Id}}"* ]]; then echo "${!#}"; fi; exit 0 ;;
+  image) if [[ "$*" == *Labels* ]]; then [[ "${!#}" =~ :[0-9a-f]{40}$ ]] && echo unit; exit 0; fi   # the unit images are the ones tagged with a commit
+    [ -z "${FAKE_NO_AIRLOCK_IMAGE:-}" ] || [[ "${!#}" != *blot-airlock:* ]] || exit 1
+    if [[ "$*" == *"{{.Id}}"* ]]; then echo "${!#}"; fi; exit 0 ;;
   images) for i in ${FAKE_IMAGES-}; do [[ "$i" == "$2":* ]] && echo "$i"; done; exit 0 ;;
   rmi) [[ " ${FAKE_IMAGE_IN_USE:-} " != *" ${!#} "* ]]; exit ;;
-  pull) exit 0 ;;
+  pull) [ -z "${FAKE_NO_AIRLOCK_IMAGE:-}" ] || [[ "${!#}" != *blot-airlock:* ]] || exit 1; exit 0 ;;
   network) echo 172.17.0.1 ;;
-  ps) if [[ "$*" == *" -a "* ]]; then ls "$FAKE/all" 2>/dev/null; else ls "$R"; fi; exit 0 ;;
+  ps) if [[ "$*" == *health=unhealthy* ]]; then printf '%s\n' ${FAKE_UNHEALTHY_LIST-}; exit 0; fi
+    if [[ "$*" == *" -a "* ]]; then ls "$FAKE/all" 2>/dev/null; else ls "$R"; fi; exit 0 ;;
   run)
     # reset_cache_dir: the foreground container moves the entries aside, the
     # detached one deletes them
@@ -34,7 +37,7 @@ case "$1" in
       [ -z "${FAKE_RESET_FAILS:-}" ] || exit 1
       exit 0
     fi
-    if [[ " $* " == *" -d "* ]]; then n=$(name_arg "$@"); touch "$R/$n" "$FAKE/all/$n" 2>/dev/null || { mkdir -p "$FAKE/all"; touch "$R/$n" "$FAKE/all/$n"; }; exit 0; fi
+    if [[ " $* " == *" -d "* ]]; then n=$(name_arg "$@"); mkdir -p "$FAKE/image"; echo "${!#}" > "$FAKE/image/$n"; touch "$R/$n" "$FAKE/all/$n" 2>/dev/null || { mkdir -p "$FAKE/all"; touch "$R/$n" "$FAKE/all/$n"; }; exit 0; fi
     if [[ "$*" == *"openresty -t"* ]]; then [ -z "${FAKE_VALIDATE_FAIL:-}" ] || { echo "nginx: [emerg] bad"; exit 1; }; exit 0; fi
     if [[ "$*" == *"access_log"* ]]; then [ -z "${FAKE_STDOUT_LOGS:-}" ]; exit; fi ;;
   create) [ -z "${FAKE_CREATE_FAILS:-}" ] || exit 1; n=$(name_arg "$@"); mkdir -p "$FAKE/all" "$FAKE/image"; touch "$FAKE/all/$n"
@@ -46,20 +49,32 @@ case "$1" in
     if [[ "$n" =~ ^blot-(proxy-)?(blue|green)(-previous)?$ ]]; then
       if [ "$(cat "$FAKE/serving")" = baremetal ]; then rm -f "$R/$n"; else echo container > "$FAKE/serving"; fi
     fi ;;
-  stop) n="${!#}"; rm -f "$R/$n"; touch "$FAKE/stopped"
+  stop) n="${!#}"; [ "$n" != "${FAKE_STOP_FAILS:-}" ] || exit 1; rm -f "$R/$n"; touch "$FAKE/stopped"
     # the health cron docker-restarts a draining container that went unhealthy
     [ "$n" != "${FAKE_COMES_BACK:-}" ] || { touch "$R/$n"; exit 0; }
-    [ -n "$(ls "$R" | grep -E '^blot-(proxy-)?(blue|green)')" ] || echo none > "$FAKE/serving" ;;
+    [ -n "$(ls "$R" | grep -E '^blot-(proxy-)?(blue|green)(-previous)?$')" ] || echo none > "$FAKE/serving" ;;
   rm) n="${!#}"; [ "$n" != "${FAKE_RM_FAILS:-}" ] || exit 1
     rm -f "$R/$n" "$FAKE/all/$n"
-    [ -n "$(ls "$R" | grep -E '^blot-(proxy-)?(blue|green)')" ] || { [ "$(cat "$FAKE/serving")" != container ] || echo none > "$FAKE/serving"; } ;;
+    [ -n "$(ls "$R" | grep -E '^blot-(proxy-)?(blue|green)(-previous)?$')" ] || { [ "$(cat "$FAKE/serving")" != container ] || echo none > "$FAKE/serving"; } ;;
   update) [ -z "${FAKE_UPDATE_FAILS:-}" ] || exit 1 ;;
   logs) cat "$FAKE/dlogs/${!#}" 2>/dev/null ;;
-  inspect) if [[ "$*" == *"{{.Image}}"* ]]; then cat "$FAKE/image/${!#}" 2>/dev/null; exit 0; fi
+  inspect) if [[ "$*" == *Labels* ]]; then [[ "$(cat "$FAKE/image/${!#}" 2>/dev/null)" =~ :[0-9a-f]{40}$ ]] && echo unit; exit 0; fi
+    if [[ "$*" == *"State.Running"* ]]; then echo "${FAKE_HEALTH_OF_OTHER:-healthy}"; exit 0; fi
+    if [[ "$*" == *"Health.Status"* ]]; then if [ "${!#}" = "${FAKE_AIRLOCK_UNHEALTHY:-}" ]; then echo unhealthy; else echo healthy; fi; exit 0; fi
+    if [[ "$*" == *"{{.Image}}"* || "$*" == *"{{.Config.Image}}"* ]]; then cat "$FAKE/image/${!#}" 2>/dev/null; exit 0; fi
     cat "$FAKE/started/${!#}" 2>/dev/null ;;
   exec)
+    # skip docker exec's own options (--user, -e ...) so $2 is the container again
+    shift; while [[ "${1:-}" == -* ]]; do case "$1" in --user|-u|-e|-w) shift 2 ;; *) shift ;; esac; done
+    set -- exec "$@"
     n="$2"
-    if [[ "$*" == *"--unix-socket"* ]]; then [ -e "$R/$n" ] && [ "$n" != "${FAKE_UNHEALTHY:-}" ]; exit; fi
+    if [[ "$*" == *verify-container* ]]; then [ -z "${FAKE_VERIFY_FAIL:-}" ] || { echo "FAIL fake check"; exit 1; }; echo "PASS fake"; exit 0; fi
+    if [[ "$*" == *"--unix-socket"* ]]; then
+      [ -e "$R/$n" ] && [ "$n" != "${FAKE_UNHEALTHY:-}" ] || exit 1
+      if [[ "$*" == *-a.sock* && "$n" == "${FAKE_NODE_A_UNHEALTHY:-}" ]]; then exit 1; fi
+      if [[ "$*" == *-b.sock* && "$n" == "${FAKE_NODE_B_UNHEALTHY:-}" ]]; then exit 1; fi
+      exit 0
+    fi
     if [[ "$3" == printenv ]]; then [ -z "${FAKE_NO_PURGE_ENV:-}" ] && echo http://10.0.0.9:8077; exit 0; fi
     if [[ "$3" == node ]]; then [ -z "${FAKE_PURGE_FAIL:-}" ]; exit; fi ;;
 esac
@@ -168,7 +183,22 @@ export PATH="$T/bin:$PATH"
 
 export PROXY_ENV_FILE="$T/proxy.env" PROXY_DISK_CACHE_DIR="$T/disk-cache" PROXY_LOG_DIR="$T/logs" \
   PROXY_CERT_DIR="$T/certs" PROXY_DEPLOY_LOCK="$T/lock" \
-  PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 PROXY_UPSTREAM_WAIT=0 TMUX=fake # nap() is a no-op, so a refusal busy-waits out PROXY_HEALTH_TIMEOUT real seconds
+  PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 PROXY_AIRLOCK_HEALTH_TIMEOUT=1 PROXY_UPSTREAM_WAIT=0 TMUX=fake # nap() is a no-op, so a refusal busy-waits out PROXY_HEALTH_TIMEOUT real seconds
+
+# Units (#2119): the images, and the settings blue-green.sh reads for one. The
+# numbers are the real ones from scripts/deploy/constants.js; only the host
+# directories are this test's.
+SHA_NEW=0123456789abcdef0123456789abcdef01234567
+SHA_OLD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+UNIT_IMG="ghcr.io/blotcms/blot:$SHA_NEW"
+UNIT_OLD="ghcr.io/blotcms/blot:$SHA_OLD"
+AIRLOCK_NEW="ghcr.io/blotcms/blot-airlock:$SHA_NEW"
+AIRLOCK_OLD="ghcr.io/blotcms/blot-airlock:$SHA_OLD"
+mkdir -p "$T/data" "$T/tmp" "$T/run-blot"
+node "$DEPLOY/../../scripts/deploy/unit-settings.js" > "$T/unit-settings.env"
+printf 'DATA_DIRECTORY_ON_SERVER=%s\nTMP_DIRECTORY=%s\nSOCKET_DIRECTORY=%s\n' "$T/data" "$T/tmp" "$T/run-blot" >> "$T/unit-settings.env"
+printf 'BLOT_HOST=blot.test\nBLOT_REDIS_HOST=10.0.0.5\nBLOT_PURGE_TOKEN=secret\nBLOT_REVERSE_PROXY_URLS=http://10.0.0.9:8077\n' > "$T/secrets.env"
+export PROXY_UNIT_SETTINGS="$T/unit-settings.env" PROXY_SECRETS_ENV_FILE="$T/secrets.env"
 
 pass=0; failed=0
 ok() { pass=$((pass + 1)); echo "  ok   $*"; }
@@ -180,6 +210,8 @@ up() { touch "$FAKE/running/$1" "$FAKE/all/$1"; echo "${2:-img:old}" > "$FAKE/im
 # reset [baremetal|none|legacy|steady]: fresh host state, `serving` says who owns :443
 #   none      no proxy         legacy   blot-proxy-blue alone (the single proxy of before)
 #   baremetal a systemd unit   steady   blot-blue and blot-green, both running img:old
+#   cutover   steady, plus the old Node containers and blot-airlock (production before the units)
+#   units     blot-blue and blot-green as units on an older image, each with its airlock
 reset() {
   rm -rf "$FAKE"; mkdir -p "$FAKE/running" "$FAKE/all" "$FAKE/image"; : > "$FAKE/calls"; rm -f "$PROXY_LOG_DIR/error.log"
   unset "${!FAKE_@}" 2>/dev/null; export FAKE="$T/fake"
@@ -188,6 +220,10 @@ reset() {
     baremetal) touch "$FAKE/unit_active"; echo baremetal > "$FAKE/serving" ;;
     legacy) up blot-proxy-blue; echo container > "$FAKE/serving" ;;
     steady) up blot-blue; up blot-green; echo container > "$FAKE/serving" ;;
+    cutover) up blot-blue; up blot-green; up blot-container-blue; up blot-container-green; up blot-container-yellow
+      up blot-airlock "$AIRLOCK_OLD"; echo container > "$FAKE/serving" ;;
+    units) up blot-blue "$UNIT_OLD"; up blot-green "$UNIT_OLD"; up blot-blue-airlock "$AIRLOCK_OLD"; up blot-green-airlock "$AIRLOCK_OLD"
+      echo container > "$FAKE/serving" ;;
     *) echo "reset: unknown state $1" >&2; exit 2 ;;
   esac
 }
@@ -238,6 +274,9 @@ issue() { bash "$DEPLOY/try-issuance.sh" img:3 "$@" >"$T/out" 2>&1; RC=$?; }
 reset steady; issue throwaway.example.org
 check "issues from staging in its own container, then removes the keys and the container" '[ $RC = 0 ] && called "PROXY_ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory" && called "redis-cli -h 10.0.0.5 set domain:throwaway.example.org" && called "redis-cli -h 10.0.0.5 del domain:throwaway.example.org ssl:throwaway.example.org:latest" && called "docker rm -f blot-proxy-issuance" && ! [ -e "$FAKE/running/blot-proxy-issuance" ]'
 check "the throwaway container uses no cache, log or auto-ssl volume and is not published beyond loopback" '! called "run -d.*/var/cache/openresty" && ! called "run -d.*/etc/resty-auto-ssl" && called "127.0.0.1:18444:443"'
+
+reset steady; bash "$DEPLOY/try-issuance.sh" abc123 throwaway.example.org >"$T/out" 2>&1; RC=$?
+check "a bare commit SHA means the proxy image (not the unit image, whose entrypoint needs Node)" '[ $RC = 0 ] && called "ghcr.io/blotcms/blot-proxy:abc123"'
 
 reset steady; FAKE_NO_ISSUE=1 PROXY_ISSUANCE_ATTEMPTS=2 issue throwaway.example.org
 check "no staging certificate: fails, and still cleans up" '[ $RC != 0 ] && mentions "no staging certificate" && called "redis-cli -h 10.0.0.5 del" && ! [ -e "$FAKE/running/blot-proxy-issuance" ]'
@@ -369,7 +408,7 @@ printf 'PROXY_UPSTREAM_BLUE=unix:/run/blot/blue.sock\nPROXY_UPSTREAM_GREEN=unix:
 bluegreen; cp "$T/proxy.env.tcp" "$T/proxy.env"
 check "unix: upstreams: /run/blot is bind-mounted and each socket is checked" '[ $RC = 0 ] && called "create.*--mount type=bind,source=/run/blot,target=/run/blot" && called "curl.*--unix-socket /run/blot/green.sock http://localhost/health"'
 
-reset steady; bash "$DEPLOY/blue-green.sh" abc123 >"$T/out" 2>&1; RC=$?
+reset steady; PROXY_DEPLOY_KIND=proxy bash "$DEPLOY/blue-green.sh" abc123 >"$T/out" 2>&1; RC=$?
 check "a bare commit SHA is pulled from the proxy registry" '[ $RC = 0 ] && called "ghcr.io/blotcms/blot-proxy:abc123"'
 
 echo "blue-green.sh: a unit is missing (a crash, an earlier failed deploy)"
@@ -540,6 +579,141 @@ check "an image still in use is left alone, and the deploy still succeeds" '[ $R
 
 reset steady; FAKE_IMAGES="img:1 img:2" FAKE_UNHEALTHY=blot-blue bluegreen
 check "a failed deploy removes no images" '[ $RC != 0 ] && ! called "docker rmi"'
+
+echo "units (#2119): the cutover from proxy-only blot-blue/blot-green and the old Node containers"
+
+unitdeploy() { bash "$DEPLOY/blue-green.sh" "${1:-$UNIT_IMG}" >"$T/out" 2>&1; RC=$?; }
+stopped_count() { grep -c "docker stop" "$FAKE/calls"; }
+
+reset cutover; unitdeploy
+check "cutover: blue's airlock, then blue is replaced, checked and verified, all before green is touched" \
+  '[ $RC = 0 ] && before "docker run -d --restart unless-stopped --name blot-blue-airlock" "docker create --restart no --name blot-blue" && before "docker create --restart no --name blot-blue" "verify-container" && before "verify-container" "docker stop --time 40 blot-green" && before "docker stop --time 40 blot-green" "docker run -d --restart unless-stopped --name blot-green-airlock"'
+check "cutover: the old Node containers and blot-airlock are stopped only after both units are replaced, and not removed" \
+  'before "docker rm -f blot-green-previous" "docker stop --time 40 blot-container-blue" && called "docker stop --time 40 blot-container-green" && called "docker stop --time 40 blot-container-yellow" && called "docker stop --time 40 blot-airlock" && ! called "docker rm -f blot-container" && ! called "docker rm -f blot-airlock$" && ! gone blot-container-blue && ! gone blot-airlock && ! running_now blot-container-blue && ! running_now blot-airlock'
+check "cutover: both units and their airlocks run, the units on the new image, and blue was verified once" \
+  'running_now blot-blue && running_now blot-green && running_now blot-blue-airlock && running_now blot-green-airlock && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ] && [ "$(grep -c verify-container "$FAKE/calls")" = 1 ] && called "exec --user 1000:1000 -e HOME=/home/node blot-blue node /usr/src/app/scripts/deploy/verify-container/index.js $SHA_NEW"'
+check "cutover: the old blot-airlock is stopped last, the units each keep their own" \
+  'before "docker stop --time 40 blot-container-yellow" "docker stop --time 40 blot-airlock"'
+check "cutover: a unit gets both env files (secrets.env first), its name, sockets, memory, heaps, release and mounts" \
+  'called "create --restart no --name blot-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536 --stop-timeout 40" && called "create .*--env-file $T/secrets.env --env-file $T/proxy.env -e BLOT_UNIT=blue -e PROXY_UNIT=blue -e PROXY_UPSTREAM_MODE=unit" && called "create .*-e BLOT_SOCKET=$T/run-blot/blue-a.sock -e BLOT_WORKER_SOCKET=$T/run-blot/blue-b.sock" && called "create .*--memory 3840m --cpus 4 --cpu-shares 2048" && called "create .*-e BLOT_RELEASE_ID=$SHA_NEW" && called "create .*-e NODE_OPTIONS=--max-old-space-size=1800 --report-on-fatalerror --report-directory=/usr/src/app/data/node-reports/blot-blue" && called "create .*-e BLOT_WORKER_MAX_OLD_SPACE_SIZE=750" && called "create .*bind-propagation=rslave" && called "create .*source=$T/tmp,target=$T/tmp" && called "create .*-e BLOT_TMP_DIRECTORY=$T/tmp"'
+check "cutover: no port is published and the unit is on the host network, not blotnet" \
+  '! called "create .* -p " && ! called "create .*blotnet" && called "create .*--network host"'
+check "cutover: each unit reaches its own airlock on 127.0.0.1, which publishes on loopback only" \
+  'called "create .*--name blot-blue .*-e BLOT_AIRLOCK_BROWSER_URL=http://127.0.0.1:19222 -e BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18888" && called "create .*--name blot-green .*-e BLOT_AIRLOCK_BROWSER_URL=http://127.0.0.1:19223 -e BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18889" && called "run -d .*--name blot-blue-airlock --network blotnet -p 127.0.0.1:19222:9222 -p 127.0.0.1:18888:8888 --cap-add=NET_ADMIN" && called "run -d .*--name blot-green-airlock --network blotnet -p 127.0.0.1:19223:9222 -p 127.0.0.1:18889:8888"'
+
+reset cutover; unitdeploy; : > "$FAKE/calls"
+unitdeploy
+check "cutover run again: nothing more is stopped, created or started, and the old containers stay stopped" \
+  '[ $RC = 0 ] && [ "$(stopped_count)" = 0 ] && ! called "docker create" && ! running_now blot-container-blue && mentions "nothing to do"'
+
+reset cutover; up blot-blue "$UNIT_IMG"; up blot-blue-airlock "$AIRLOCK_NEW"; unitdeploy
+check "cutover cut off after blue: blue is kept, green is replaced, then the old containers are stopped" \
+  '[ $RC = 0 ] && ! called "docker stop --time 40 blot-blue$" && called "docker stop --time 40 blot-green" && called "docker stop --time 40 blot-container-yellow" && ! called "docker run -d --restart unless-stopped --name blot-blue-airlock"'
+
+reset cutover; FAKE_NODE_A_UNHEALTHY=blot-blue unitdeploy
+check "cutover, node-a never healthy in the new blue: the proxy-only blue is put back, green and the old containers untouched" \
+  '[ $RC != 0 ] && called "docker start blot-blue-previous" && [ "$(cat "$FAKE/image/blot-blue")" = img:old ] && running_now blot-blue && ! called "docker stop --time 40 blot-green" && ! called "docker stop --time 40 blot-container" && ! called "docker stop --time 40 blot-airlock" && running_now blot-container-yellow'
+
+reset cutover; FAKE_NODE_B_UNHEALTHY=blot-blue unitdeploy
+check "cutover, node-b never healthy in the new blue: rolled back the same way" \
+  '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = img:old ] && ! called "docker stop --time 40 blot-green" && running_now blot-container-blue'
+
+reset cutover; FAKE_VERIFY_FAIL=1 unitdeploy
+check "cutover, verify-container fails on blue: rolled back before green is touched" \
+  '[ $RC != 0 ] && mentions "verify-container failed in blot-blue" && [ "$(cat "$FAKE/image/blot-blue")" = img:old ] && ! called "docker stop --time 40 blot-green" && ! called "docker stop --time 40 blot-container"'
+
+reset cutover; FAKE_AIRLOCK_UNHEALTHY=blot-blue-airlock unitdeploy
+check "cutover, blue's airlock does not come up: the unit is not created, blue is put back, green untouched" \
+  '[ $RC != 0 ] && mentions "airlock for blot-blue did not come up" && ! called "docker create --restart no --name blot-blue" && [ "$(cat "$FAKE/image/blot-blue")" = img:old ] && ! called "docker stop --time 40 blot-green"'
+
+reset cutover; FAKE_START_FAILS=blot-green unitdeploy
+check "cutover, green fails after blue became a unit: green is put back, the old containers keep running" \
+  '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = img:old ] && running_now blot-container-blue && running_now blot-airlock && ! called "docker stop --time 40 blot-container"'
+
+reset cutover; FAKE_UNHEALTHY=blot-green unitdeploy
+check "cutover, the proxy-only green is unhealthy: blue is not stopped" \
+  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "refusing to stop blot-blue"'
+
+reset cutover; FAKE_UPSTREAM_DOWN=8090 unitdeploy
+check "cutover, an old Node container is unhealthy: refused in preflight (the proxy-only green still routes to it)" \
+  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create"'
+
+reset cutover; FAKE_STOP_FAILS=blot-container-green unitdeploy
+check "cutover, stopping an old container fails: the ones already stopped are started again, the units stay" \
+  '[ $RC != 0 ] && called "docker start blot-container-blue" && called "docker start blot-container-green" && running_now blot-blue && running_now blot-green && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ]'
+
+reset cutover; FAKE_NO_AIRLOCK_IMAGE=1 unitdeploy
+check "cutover, no airlock image for the commit: the unit airlocks take the image of the blot-airlock running now" \
+  '[ $RC = 0 ] && called "run -d .*--name blot-blue-airlock .*$AIRLOCK_OLD" && called "run -d .*--name blot-green-airlock .*$AIRLOCK_OLD"'
+
+reset cutover; printf 'BLOT_HOST=elsewhere.test\n' >> "$T/secrets.env"; unitdeploy
+sed -i.bak '/^BLOT_HOST=elsewhere.test$/d' "$T/secrets.env"; rm -f "$T/secrets.env.bak"
+check "a key set to different values in secrets.env and proxy.env: refused before anything is touched" \
+  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "different values for: BLOT_HOST"'
+
+reset cutover; rmdir "$T/run-blot"; unitdeploy; mkdir -p "$T/run-blot"
+check "the socket directory missing on the host: refused before anything is touched" \
+  '[ $RC != 0 ] && ! called "docker stop" && mentions "does not exist on this host"'
+
+echo "units: steady deploys"
+
+reset units; unitdeploy
+check "steady: blue then green, each with its airlock replaced first, blue verified, exactly two stops, no old containers to stop" \
+  '[ $RC = 0 ] && before "docker rm -f blot-blue-airlock" "docker create --restart no --name blot-blue" && before "verify-container" "docker stop --time 40 blot-green" && [ "$(stopped_count)" = 2 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-blue-airlock")" = "$AIRLOCK_NEW" ]'
+
+reset units; up blot-blue "$UNIT_IMG"; up blot-green "$UNIT_IMG"; up blot-blue-airlock "$AIRLOCK_NEW"; up blot-green-airlock "$AIRLOCK_NEW"; unitdeploy
+check "steady, same image already deployed: nothing is stopped, created or replaced" \
+  '[ $RC = 0 ] && [ "$(stopped_count)" = 0 ] && ! called "docker create" && ! called "docker run -d" && mentions "nothing to do"'
+
+reset units; up blot-blue "$UNIT_IMG"; up blot-green "$UNIT_IMG"; unitdeploy
+check "steady, the units are current but their airlocks are not: the airlocks are replaced, the units left alone" \
+  '[ $RC = 0 ] && [ "$(stopped_count)" = 0 ] && ! called "docker create" && [ "$(cat "$FAKE/image/blot-blue-airlock")" = "$AIRLOCK_NEW" ] && [ "$(cat "$FAKE/image/blot-green-airlock")" = "$AIRLOCK_NEW" ]'
+
+reset units; FAKE_IMAGES="ghcr.io/blotcms/blot-airlock:$SHA_OLD ghcr.io/blotcms/blot-airlock:$SHA_NEW" unitdeploy
+check "steady: superseded airlock images are removed, the one in use is kept" \
+  '[ $RC = 0 ] && called "docker rmi ghcr.io/blotcms/blot-airlock:$SHA_OLD" && ! called "docker rmi ghcr.io/blotcms/blot-airlock:$SHA_NEW"'
+
+reset units; FAKE_NODE_A_UNHEALTHY=blot-blue unitdeploy
+check "steady, node-a of the new blue never healthy: the new unit is removed BEFORE the old one starts (they share sockets), green untouched" \
+  '[ $RC != 0 ] && before "docker rm -f blot-blue$" "docker start blot-blue-previous" && called "docker start blot-blue-previous" && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_OLD" ] && ! called "docker stop --time 40 blot-green"'
+
+reset units; FAKE_NODE_B_UNHEALTHY=blot-green unitdeploy
+check "steady, node-b of green is down: blue is not stopped, a unit counts as healthy only with node-a and node-b" \
+  '[ $RC != 0 ] && ! called "docker stop" && mentions "refusing to stop blot-blue"'
+
+reset units; FAKE_VERIFY_FAIL=1 unitdeploy
+check "steady, verify-container fails on blue: rolled back, green untouched, the airlock stays on the new image" \
+  '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_OLD" ] && ! called "docker stop --time 40 blot-green"'
+
+reset units; FAKE_NO_AIRLOCK_IMAGE=1 unitdeploy
+check "steady, no airlock image for the commit: the airlocks keep the image they run and the units are still replaced" \
+  '[ $RC = 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ]'
+
+reset units; FAKE_PURGE_FAIL=1 unitdeploy
+check "steady, the purge endpoint is not reachable from the new blue: rolled back" '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_OLD" ]'
+
+echo "units: the way back (a proxy-only image over units)"
+
+reset units; PROXY_DEPLOY_KIND=proxy bash "$DEPLOY/blue-green.sh" img:3 >"$T/out" 2>&1; RC=$?
+check "a proxy-only image over units needs no unit settings, env files or airlock, and replaces both" \
+  '[ $RC = 0 ] && ! called "blot-blue-airlock" && ! called "secrets.env" && [ "$(cat "$FAKE/image/blot-blue")" = img:3 ]'
+
+echo "check_docker_health.sh"
+
+health() { PROXY_DEPLOY_LOCK="$T/lock" bash "$DEPLOY/../../config/host/scripts/check_docker_health.sh" >"$T/out" 2>&1; RC=$?; }
+
+reset units; FAKE_UNHEALTHY_LIST="blot-blue blot-green" FAKE_HEALTH_OF_OTHER=unhealthy health
+check "both units unhealthy: only blue is restarted" '[ $RC = 0 ] && called "docker restart blot-blue" && ! called "docker restart blot-green"'
+
+reset units; FAKE_UNHEALTHY_LIST="blot-green" FAKE_HEALTH_OF_OTHER=healthy health
+check "one unit unhealthy, the other healthy: it is restarted" 'called "docker restart blot-green"'
+
+reset units; FAKE_UNHEALTHY_LIST="blot-green" FAKE_HEALTH_OF_OTHER=starting health
+check "one unit unhealthy, the other still starting: it is left alone" '! called "docker restart" && mentions "Not restarting blot-green"'
+
+reset units; : > "$T/lock"; FAKE_LOCK_HELD=1 FAKE_UNHEALTHY_LIST="blot-blue blot-blue-previous blot-blue-airlock blot-container-yellow" health; rm -f "$T/lock"
+check "a deploy holds the lock: the units and -previous are left alone, the airlock and old Node containers are not" \
+  '! called "docker restart blot-blue$" && ! called "docker restart blot-blue-previous" && called "docker restart blot-blue-airlock" && called "docker restart blot-container-yellow"'
 
 echo "$pass passed, $failed failed"
 [ "$failed" = 0 ]

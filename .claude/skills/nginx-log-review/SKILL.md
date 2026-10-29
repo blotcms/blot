@@ -80,7 +80,7 @@ narrow what's already covered:
 - `proxy/config/blot-blogs.conf` — path/extension-based `location`
   blocks (`.env`, `.git`, wp-*, php extensions, sensitive JSON files, etc.)
   This is the production config: it ships in the proxy image, deployed with
-  `npm run deploy-proxy` or the Deploy proxy workflow.
+  `npm run deploy-units` or the Deploy workflow.
 - `proxy/config/server.conf` — the `$bad_bot` user-agent map
   (`restrict-bot-uas.conf` returns 403 for matches). Scanner traffic
   usually spoofs a real browser UA, so this rarely helps for the paths
@@ -177,7 +177,7 @@ elaborate local Docker setups.
   IP-based blocking would or wouldn't help (Cloudflare-fronted domains
   usually mean it wouldn't).
 - The rule only reaches production when a new proxy image is deployed
-  (Deploy proxy workflow / `npm run deploy-proxy`, see
+  (Deploy workflow / `npm run deploy-units`, see
   `proxy/deploy/README.md`); mention that in the PR.
 - If the log review surfaces something that **isn't** an openresty block —
   e.g. an app/template bug generating a pathological amount of traffic, a

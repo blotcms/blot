@@ -433,6 +433,18 @@ async function connectToAirlockNetwork(containerName) {
 }
 
 async function main() {
+  // The blot-container-* containers this deploys are retired: production runs
+  // units (OpenResty and Node in one container, ./units.sh, #2119). Starting
+  // these beside them would run a third and fourth set of Node processes
+  // against the units' data and routes. Deleted in PR 7 with the rest of the
+  // old container deploy (this file, generateDockerCommand.js, checkHealth.js).
+  if (process.env.BLOT_DEPLOY_LEGACY_NODE !== "1") {
+    console.error(
+      "Deploy node is retired: blot-blue and blot-green are units now. Use npm run deploy-units (or the Deploy workflow)."
+    );
+    process.exit(1);
+  }
+
   try {
     // Validate arguments
     if (process.argv.length > 3) {

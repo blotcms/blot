@@ -35,6 +35,9 @@ NAME=blot-proxy-issuance
 PORT=18444
 ATTEMPTS="${PROXY_ISSUANCE_ATTEMPTS:-40}"
 
+# The probe runs the proxy image on its own (its entrypoint), so a bare tag or
+# commit SHA means ghcr.io/blotcms/blot-proxy, not the unit image
+PROXY_DEPLOY_KIND=proxy
 IMAGE="$(resolve_image "$IMAGE_ARG")"
 load_env
 acquire_lock
@@ -62,6 +65,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 ensure_image "$IMAGE"
+! image_is_unit "$IMAGE" || die "$IMAGE is a unit image, whose entrypoint needs BLOT_UNIT and Node: try issuance with the proxy image (ghcr.io/blotcms/blot-proxy:<sha>)"
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 redis-cli -h "$REDIS_HOST" set "domain:$DOMAIN" 1 >/dev/null
 

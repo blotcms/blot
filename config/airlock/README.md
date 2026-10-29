@@ -76,6 +76,26 @@ The DevTools endpoint and the proxy are **unauthenticated**. Network scope is
 the access control: keep `airlock` on a Docker network shared **only** with the
 Blot app containers. Nothing about `airlock` should be published to the host.
 
+**Units (#2119).** The exception is the per-unit airlocks. Each unit
+(`blot-blue`, `blot-green`) runs on the host network, which cannot join
+`blotnet` or resolve its names, so it has its own airlock, `blot-blue-airlock`
+and `blot-green-airlock`, deployed with it by `proxy/deploy/blue-green.sh`.
+They stay on `blotnet` (for Docker's DNS) and publish their two ports on
+**127.0.0.1 only**, at a distinct host port per unit (`AIRLOCK.units` in
+`scripts/deploy/constants.js`, 19222/18888 for blue and 19223/18889 for green);
+the unit's `BLOT_AIRLOCK_BROWSER_URL` and `BLOT_AIRLOCK_PROXY_URL` point at
+them. The egress boundary does not change: `egress.nft` is in the airlock's
+own network namespace and rejects by the real destination of each connection,
+whoever the client is, and tinyproxy's client ACL already allows the bridge
+gateway address that a published port presents. What does change is *who may
+use* the airlock: nothing on a Docker network is a client any more, but any
+process on the host can reach a loopback port, the proxy in each unit and
+the host's shell users included. They could drive the airlock's browser, which
+can still only reach public addresses. Treat the host's loopback as inside the
+trust boundary, as it is for the Redis and purge listeners. The single
+`blot-airlock` of before is stopped when the units take over, and removed
+later with the old Node containers.
+
 `airlock` itself only ever holds a rendered screenshot or a downloaded asset
 in `/tmp` and `/home/airlock/profile` — no secrets, no data mount, no cloud
 identity.
