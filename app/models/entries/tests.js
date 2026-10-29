@@ -116,6 +116,54 @@ describe("entries", function () {
     });
   });
 
+  describe("list totals and ordering", function () {
+    async function setEntry(blogID, path, updates) {
+      await new Promise((resolve, reject) => {
+        Entry.set(blogID, path, updates, (err) => (err ? reject(err) : resolve()));
+      });
+    }
+
+    const call = (fn, ...args) =>
+      new Promise((resolve, reject) =>
+        fn(...args, (err, result) => (err ? reject(err) : resolve(result)))
+      );
+
+    it("counts the entries in a named list", async function () {
+      const blogID = this.blog.id;
+
+      expect(await call(Entries.getListTotal, blogID, "drafts")).toEqual(0);
+
+      await setEntry(blogID, "/a.txt", buildEntry("/a.txt", { draft: true }));
+      await setEntry(blogID, "/b.txt", buildEntry("/b.txt", { draft: true }));
+      await setEntry(blogID, "/c.txt", buildEntry("/c.txt"));
+
+      expect(await call(Entries.getListTotal, blogID, "drafts")).toEqual(2);
+      expect(await call(Entries.getListTotal, blogID, "entries")).toEqual(1);
+    });
+
+    it("lists the oldest entries first when ascending", async function () {
+      const blogID = this.blog.id;
+      const now = Date.now();
+
+      for (const [path, offset] of [["/one.txt", 3000], ["/two.txt", 2000], ["/three.txt", 1000]]) {
+        await setEntry(
+          blogID,
+          path,
+          buildEntry(path, { dateStamp: now + offset, created: now + offset })
+        );
+      }
+
+      const newestFirst = await call(Entries.getListIDs, blogID, "entries", { first: 2 });
+      const oldestFirst = await call(Entries.getListIDs, blogID, "entries", {
+        first: 2,
+        ascending: true,
+      });
+
+      expect(newestFirst).toEqual(["/one.txt", "/two.txt"]);
+      expect(oldestFirst).toEqual(["/three.txt", "/two.txt"]);
+    });
+  });
+
   describe("entry list membership transitions", function () {
     it("keeps list and lex memberships in sync across state transitions", async function () {
       const blogID = this.blog.id;

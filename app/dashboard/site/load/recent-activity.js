@@ -4,6 +4,10 @@ const Path = require("path");
 const { promisify } = require("util");
 
 const getStatuses = promisify(Blog.getStatuses);
+// Status messages look like "Syncing /path". The verbs are published by the
+// sync clients (search for progress.publish / folder.status in app/clients)
+// and the folder sync; if one is reworded, add it here or its files drop out of
+// the activity list.
 const verbs = {
   Downloading: "downloaded",
   Syncing: "synced",
@@ -14,6 +18,22 @@ const PROGRESS_PREFIX = /^\(\d+\/\d+\)\s+/;
 const STATUS_HISTORY_PAGE_SIZE = 2000;
 const MAX_RECENT_GROUPS = 20;
 const MAX_VISIBLE_FILES_PER_GROUP = 8;
+
+// Splits "(2/5) Syncing /a/b.txt" into { verb: "synced", path: "/a/b.txt" },
+// or returns null for messages that are not file operations.
+function parseFileStatus(rawMessage) {
+  const message = String(rawMessage || "").replace(PROGRESS_PREFIX, "");
+  const verb = Object.keys(verbs).find(function (candidate) {
+    return message.startsWith(candidate + " /");
+  });
+
+  if (!verb) return null;
+
+  const path = message.slice(verb.length + 1).trim();
+  if (!path) return null;
+
+  return { verb: operation.verb, path };
+}
 
 module.exports = async function (req, res, next) {
   if (!req.blog.client) {
@@ -28,17 +48,12 @@ module.exports = async function (req, res, next) {
     const groups = new Map();
 
     statuses.forEach(function (status, index) {
-      const message = String(status.message || "").replace(PROGRESS_PREFIX, "");
-      const verb = Object.keys(verbs).find(function (candidate) {
-        return message.startsWith(candidate + " /");
-      });
-
       // The status log also contains rebuild and health-check messages. Keep
       // only file operations so this reads like a file history.
-      if (!verb) return;
+      const operation = parseFileStatus(status.message);
+      if (!operation) return;
 
-      const path = message.slice(verb.length + 1).trim();
-      if (!path) return;
+      const path = operation.path;
 
       const date = status.datestamp || Date.now();
       const key = status.syncID || "status-" + date + "-" + index;
@@ -56,7 +71,7 @@ module.exports = async function (req, res, next) {
 
       group.totalFiles++;
       group.files.push({
-        verb: verbs[verb],
+        verb: operation.verb,
         path: Path.posix.normalize(path),
         urlPath: path
           .replace(/^\/+/, "")
@@ -86,3 +101,5 @@ module.exports = async function (req, res, next) {
     next();
   }
 };
+
+module.exports.parseFileStatus = parseFileStatus;

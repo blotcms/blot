@@ -40,54 +40,61 @@ site.post(
   save.finish
 );
 
-const dashboardViews = ["/", "/recents", "/posts", "/posts/:filter"];
 const postFilters = new Set(["posts", "pages", "drafts", "scheduled"]);
+const postFilterLabels = {
+  posts: "Published",
+  pages: "Pages",
+  drafts: "Drafts",
+  scheduled: "Scheduled",
+};
 
-site.get(
-  dashboardViews,
-  (req, res, next) => {
-    if (req.path === "/recents") {
-      res.locals.dashboardView = "recent";
-      res.locals.dashboardFilter = "all";
-      res.locals.breadcrumbs.add("Recents", "recents");
-    } else if (req.path === "/posts" || req.path.startsWith("/posts/")) {
-      const filter = req.params.filter || "all";
-      if (filter !== "all" && !postFilters.has(filter)) {
-        return res.redirect(`${res.locals.base}/posts`);
-      }
+// Each view only loads the data it renders
+const setView = (view) => (req, res, next) => {
+  const filter = req.params.filter || "all";
 
-      res.locals.dashboardView = "posts";
-      res.locals.dashboardFilter = filter;
-      res.locals.breadcrumbs.add("Posts", "posts");
-      if (filter !== "all") {
-        const filterLabels = {
-          posts: "Published",
-          pages: "Pages",
-          drafts: "Drafts",
-          scheduled: "Scheduled",
-        };
-        res.locals.breadcrumbs.add(filterLabels[filter], filter);
-      }
-    } else {
-      res.locals.dashboardView = "folder";
-      res.locals.dashboardFilter = "all";
-    }
-
-    res.locals.isFolderView = res.locals.dashboardView === "folder";
-    res.locals.isRecentView = res.locals.dashboardView === "recent";
-    res.locals.isPostsView = res.locals.dashboardView === "posts";
-    res.locals.isAllPostsFilter = res.locals.dashboardFilter === "all";
-    next();
-  },
-  require("./load/posts"),
-  require("./load/recent-activity"),
-  require("./folder"),
-  loadClient,
-  (req, res) => {
-    res.render("dashboard/site", {
-      title: req.blog.pretty.label,
-    });
+  if (view === "posts" && filter !== "all" && !postFilters.has(filter)) {
+    return res.redirect(`${res.locals.base}/posts`);
   }
+
+  res.locals.dashboardView = view;
+  res.locals.dashboardFilter = view === "posts" ? filter : "all";
+  res.locals.isFolderView = view === "folder";
+  res.locals.isRecentView = view === "recent";
+  res.locals.isPostsView = view === "posts";
+  res.locals.isAllPostsFilter = res.locals.dashboardFilter === "all";
+
+  if (view === "recent") res.locals.breadcrumbs.add("Recents", "recents");
+
+  if (view === "posts") {
+    res.locals.breadcrumbs.add("Posts", "posts");
+    if (filter !== "all") {
+      res.locals.breadcrumbs.add(postFilterLabels[filter], filter);
+    }
+  }
+
+  next();
+};
+
+const renderDashboard = (req, res) => {
+  res.render("dashboard/site", {
+    title: req.blog.pretty.label,
+  });
+};
+
+site.get("/", setView("folder"), require("./folder"), loadClient, renderDashboard);
+site.get(
+  "/recents",
+  setView("recent"),
+  require("./load/recent-activity"),
+  loadClient,
+  renderDashboard
+);
+site.get(
+  ["/posts", "/posts/:filter"],
+  setView("posts"),
+  require("./load/posts"),
+  loadClient,
+  renderDashboard
 );
 
 // Load the files and folders inside a blog's folder
@@ -115,8 +122,6 @@ site.use("/import", require("./import"));
 site.use("/export", require("./export"));
 const domain = require("./domain");
 const title = require("./title");
-site.use("/domain", domain);
-site.use("/title", title);
 
 site.use("/settings/date", require("./date"));
 site.use("/settings/links", load.plugins, require("./link-format"));
@@ -140,6 +145,14 @@ site.use("/client", (req, res) => {
   const suffix = req.url === "/" ? "" : req.url;
   res.redirect(308, `${res.locals.base}/settings/folder${suffix}`);
 });
+
+// The title and domain pages also moved under Settings
+for (const page of ["title", "domain"]) {
+  site.use("/" + page, (req, res) => {
+    const suffix = req.url === "/" ? "" : req.url;
+    res.redirect(308, `${res.locals.base}/settings/${page}${suffix}`);
+  });
+}
 
 site.use("/settings/title", title);
 site.use("/settings/domain", domain);

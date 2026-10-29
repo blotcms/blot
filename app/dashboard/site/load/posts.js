@@ -6,6 +6,9 @@ const { promisify } = require("util");
 const NUMBER_OF_POSTS_TO_DISPLAY = 5;
 const getListIDs = promisify(Entries.getListIDs);
 const getListTotal = promisify(Entries.getListTotal);
+// Entry.get calls back with the entries only, no error argument
+const getEntries = (blogID, ids) =>
+  new Promise((resolve) => Entry.get(blogID, ids, resolve));
 const lists = [
   {
     name: "entries",
@@ -48,62 +51,60 @@ module.exports = async function (req, res, next) {
       return allIDs.concat(result.ids);
     }, []);
 
-    Entry.get(blogID, ids, function (entries) {
-      const entriesByID = new Map(
-        entries.map(function (entry) {
-          return [entry.id, entry];
+    const entries = await getEntries(blogID, ids);
+    const entriesByID = new Map(
+      entries.map(function (entry) {
+        return [entry.id, entry];
+      })
+    );
+
+    res.locals.postGroups = results.map(function (result) {
+      const items = result.ids
+        .map(function (id) {
+          return entriesByID.get(id);
         })
-      );
-
-      res.locals.postGroups = results
-        .map(function (result) {
-          const items = result.ids
-            .map(function (id) {
-              return entriesByID.get(id);
-            })
-            .filter(Boolean)
-            .map(function (entry) {
-              return {
-                title: entry.title || entry.path,
-                date: moment(entry.dateStamp).fromNow(),
-                urlPath: entry.path
-                  .replace(/^\/+/, "")
-                  .split("/")
-                  .map(encodeURIComponent)
-                  .join("/"),
-              };
-            });
-
-          res.locals.postCount += result.total;
-
-          const isActive = res.locals.dashboardFilter === result.list.key;
-          const isVisible =
-            res.locals.isAllPostsFilter || isActive;
-          if (isActive && result.total === 0) {
-            res.locals.emptyPostFilterMessage =
-              "No " + result.list.filterTitle.toLowerCase() + " yet.";
-          }
-
+        .filter(Boolean)
+        .map(function (entry) {
           return {
-            key: result.list.key,
-            filterTitle: result.list.filterTitle,
-            title: result.list.title,
-            count: result.total,
-            items: items,
-            moreCount: Math.max(0, result.total - items.length),
-            isActive: isActive,
-            isVisible: isVisible,
+            title: entry.title || entry.path,
+            date: moment(entry.dateStamp).fromNow(),
+            urlPath: entry.path
+              .replace(/^\/+/, "")
+              .split("/")
+              .map(encodeURIComponent)
+              .join("/"),
           };
         });
 
-      if (res.locals.isAllPostsFilter) {
-        res.locals.emptyPostFilterMessage = "";
-      }
+      const isActive = res.locals.dashboardFilter === result.list.key;
 
-      next();
+      return {
+        key: result.list.key,
+        filterTitle: result.list.filterTitle,
+        title: result.list.title,
+        count: result.total,
+        items: items,
+        moreCount: Math.max(0, result.total - items.length),
+        isActive: isActive,
+        isVisible: res.locals.isAllPostsFilter || isActive,
+      };
     });
+
+    res.locals.postCount = results.reduce(function (sum, result) {
+      return sum + result.total;
+    }, 0);
+
+    const activeGroup = res.locals.postGroups.find(function (group) {
+      return group.isActive;
+    });
+
+    if (activeGroup && activeGroup.count === 0) {
+      res.locals.emptyPostFilterMessage =
+        "No " + activeGroup.filterTitle.toLowerCase() + " yet.";
+    }
   } catch (err) {
     console.log(err);
-    next();
   }
+
+  next();
 };
