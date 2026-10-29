@@ -16,10 +16,13 @@ node /usr/src/app/stub-node.js &
 node_pid=$!
 
 OPENRESTY=/usr/local/openresty/bin/openresty
-stop() { "$OPENRESTY" -s quit || true; kill "$node_pid" 2>/dev/null; }
+# OpenResty drains first; the stub goes only once it has exited (as in
+# proxy/unit/supervisor.sh)
+stop() { "$OPENRESTY" -s quit || true; }
 trap stop TERM QUIT INT
 
 /usr/local/bin/proxy-start "$OPENRESTY" -g "daemon off;" &
 pid=$!
 wait "$pid"
 while kill -0 "$pid" 2>/dev/null; do wait "$pid"; done
+kill "$node_pid" 2>/dev/null

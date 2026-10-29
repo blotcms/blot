@@ -33,7 +33,7 @@ const UNIT = {
   cpuShares: SERVING_CPU_SHARES,
   nodeAMaxOldSpaceSize: 1800,
   nodeBMaxOldSpaceSize: 750,
-  stopTimeout: 30, // above the app's drain timeout (app/helper/drain.js)
+  stopTimeout: 40, // above OpenResty drain (10s) plus the app drain (25s): drained in turn
 };
 
 // Each app container also listens on a Unix socket in this host directory,

@@ -587,15 +587,15 @@ stopped_count() { grep -c "docker stop" "$FAKE/calls"; }
 
 reset cutover; unitdeploy
 check "cutover: blue's airlock, then blue is replaced, checked and verified, all before green is touched" \
-  '[ $RC = 0 ] && before "docker run -d --restart unless-stopped --name blot-blue-airlock" "docker create --restart no --name blot-blue" && before "docker create --restart no --name blot-blue" "verify-container" && before "verify-container" "docker stop --time 30 blot-green" && before "docker stop --time 30 blot-green" "docker run -d --restart unless-stopped --name blot-green-airlock"'
+  '[ $RC = 0 ] && before "docker run -d --restart unless-stopped --name blot-blue-airlock" "docker create --restart no --name blot-blue" && before "docker create --restart no --name blot-blue" "verify-container" && before "verify-container" "docker stop --time 40 blot-green" && before "docker stop --time 40 blot-green" "docker run -d --restart unless-stopped --name blot-green-airlock"'
 check "cutover: the old Node containers and blot-airlock are stopped only after both units are replaced, and not removed" \
-  'before "docker rm -f blot-green-previous" "docker stop --time 30 blot-container-blue" && called "docker stop --time 30 blot-container-green" && called "docker stop --time 30 blot-container-yellow" && called "docker stop --time 30 blot-airlock" && ! called "docker rm -f blot-container" && ! called "docker rm -f blot-airlock$" && ! gone blot-container-blue && ! gone blot-airlock && ! running_now blot-container-blue && ! running_now blot-airlock'
+  'before "docker rm -f blot-green-previous" "docker stop --time 40 blot-container-blue" && called "docker stop --time 40 blot-container-green" && called "docker stop --time 40 blot-container-yellow" && called "docker stop --time 40 blot-airlock" && ! called "docker rm -f blot-container" && ! called "docker rm -f blot-airlock$" && ! gone blot-container-blue && ! gone blot-airlock && ! running_now blot-container-blue && ! running_now blot-airlock'
 check "cutover: both units and their airlocks run, the units on the new image, and blue was verified once" \
   'running_now blot-blue && running_now blot-green && running_now blot-blue-airlock && running_now blot-green-airlock && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ] && [ "$(grep -c verify-container "$FAKE/calls")" = 1 ] && called "exec --user 1000:1000 -e HOME=/home/node blot-blue node /usr/src/app/scripts/deploy/verify-container/index.js $SHA_NEW"'
 check "cutover: the old blot-airlock is stopped last, the units each keep their own" \
-  'before "docker stop --time 30 blot-container-yellow" "docker stop --time 30 blot-airlock"'
+  'before "docker stop --time 40 blot-container-yellow" "docker stop --time 40 blot-airlock"'
 check "cutover: a unit gets both env files (secrets.env first), its name, sockets, memory, heaps, release and mounts" \
-  'called "create --restart no --name blot-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536 --stop-timeout 30" && called "create .*--env-file $T/secrets.env --env-file $T/proxy.env -e BLOT_UNIT=blue -e PROXY_UNIT=blue -e PROXY_UPSTREAM_MODE=unit" && called "create .*-e BLOT_SOCKET=$T/run-blot/blue-a.sock -e BLOT_WORKER_SOCKET=$T/run-blot/blue-b.sock" && called "create .*--memory 3840m --cpus 4 --cpu-shares 2048" && called "create .*-e BLOT_RELEASE_ID=$SHA_NEW" && called "create .*-e NODE_OPTIONS=--max-old-space-size=1800 --report-on-fatalerror --report-directory=/usr/src/app/data/node-reports/blot-blue" && called "create .*-e BLOT_WORKER_MAX_OLD_SPACE_SIZE=750" && called "create .*bind-propagation=rslave" && called "create .*source=$T/tmp,target=$T/tmp" && called "create .*-e BLOT_TMP_DIRECTORY=$T/tmp"'
+  'called "create --restart no --name blot-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536 --stop-timeout 40" && called "create .*--env-file $T/secrets.env --env-file $T/proxy.env -e BLOT_UNIT=blue -e PROXY_UNIT=blue -e PROXY_UPSTREAM_MODE=unit" && called "create .*-e BLOT_SOCKET=$T/run-blot/blue-a.sock -e BLOT_WORKER_SOCKET=$T/run-blot/blue-b.sock" && called "create .*--memory 3840m --cpus 4 --cpu-shares 2048" && called "create .*-e BLOT_RELEASE_ID=$SHA_NEW" && called "create .*-e NODE_OPTIONS=--max-old-space-size=1800 --report-on-fatalerror --report-directory=/usr/src/app/data/node-reports/blot-blue" && called "create .*-e BLOT_WORKER_MAX_OLD_SPACE_SIZE=750" && called "create .*bind-propagation=rslave" && called "create .*source=$T/tmp,target=$T/tmp" && called "create .*-e BLOT_TMP_DIRECTORY=$T/tmp"'
 check "cutover: no port is published and the unit is on the host network, not blotnet" \
   '! called "create .* -p " && ! called "create .*blotnet" && called "create .*--network host"'
 check "cutover: each unit reaches its own airlock on 127.0.0.1, which publishes on loopback only" \
@@ -608,27 +608,27 @@ check "cutover run again: nothing more is stopped, created or started, and the o
 
 reset cutover; up blot-blue "$UNIT_IMG"; up blot-blue-airlock "$AIRLOCK_NEW"; unitdeploy
 check "cutover cut off after blue: blue is kept, green is replaced, then the old containers are stopped" \
-  '[ $RC = 0 ] && ! called "docker stop --time 30 blot-blue$" && called "docker stop --time 30 blot-green" && called "docker stop --time 30 blot-container-yellow" && ! called "docker run -d --restart unless-stopped --name blot-blue-airlock"'
+  '[ $RC = 0 ] && ! called "docker stop --time 40 blot-blue$" && called "docker stop --time 40 blot-green" && called "docker stop --time 40 blot-container-yellow" && ! called "docker run -d --restart unless-stopped --name blot-blue-airlock"'
 
 reset cutover; FAKE_NODE_A_UNHEALTHY=blot-blue unitdeploy
 check "cutover, node-a never healthy in the new blue: the proxy-only blue is put back, green and the old containers untouched" \
-  '[ $RC != 0 ] && called "docker start blot-blue-previous" && [ "$(cat "$FAKE/image/blot-blue")" = img:old ] && running_now blot-blue && ! called "docker stop --time 30 blot-green" && ! called "docker stop --time 30 blot-container" && ! called "docker stop --time 30 blot-airlock" && running_now blot-container-yellow'
+  '[ $RC != 0 ] && called "docker start blot-blue-previous" && [ "$(cat "$FAKE/image/blot-blue")" = img:old ] && running_now blot-blue && ! called "docker stop --time 40 blot-green" && ! called "docker stop --time 40 blot-container" && ! called "docker stop --time 40 blot-airlock" && running_now blot-container-yellow'
 
 reset cutover; FAKE_NODE_B_UNHEALTHY=blot-blue unitdeploy
 check "cutover, node-b never healthy in the new blue: rolled back the same way" \
-  '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = img:old ] && ! called "docker stop --time 30 blot-green" && running_now blot-container-blue'
+  '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = img:old ] && ! called "docker stop --time 40 blot-green" && running_now blot-container-blue'
 
 reset cutover; FAKE_VERIFY_FAIL=1 unitdeploy
 check "cutover, verify-container fails on blue: rolled back before green is touched" \
-  '[ $RC != 0 ] && mentions "verify-container failed in blot-blue" && [ "$(cat "$FAKE/image/blot-blue")" = img:old ] && ! called "docker stop --time 30 blot-green" && ! called "docker stop --time 30 blot-container"'
+  '[ $RC != 0 ] && mentions "verify-container failed in blot-blue" && [ "$(cat "$FAKE/image/blot-blue")" = img:old ] && ! called "docker stop --time 40 blot-green" && ! called "docker stop --time 40 blot-container"'
 
 reset cutover; FAKE_AIRLOCK_UNHEALTHY=blot-blue-airlock unitdeploy
 check "cutover, blue's airlock does not come up: the unit is not created, blue is put back, green untouched" \
-  '[ $RC != 0 ] && mentions "airlock for blot-blue did not come up" && ! called "docker create --restart no --name blot-blue" && [ "$(cat "$FAKE/image/blot-blue")" = img:old ] && ! called "docker stop --time 30 blot-green"'
+  '[ $RC != 0 ] && mentions "airlock for blot-blue did not come up" && ! called "docker create --restart no --name blot-blue" && [ "$(cat "$FAKE/image/blot-blue")" = img:old ] && ! called "docker stop --time 40 blot-green"'
 
 reset cutover; FAKE_START_FAILS=blot-green unitdeploy
 check "cutover, green fails after blue became a unit: green is put back, the old containers keep running" \
-  '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = img:old ] && running_now blot-container-blue && running_now blot-airlock && ! called "docker stop --time 30 blot-container"'
+  '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = img:old ] && running_now blot-container-blue && running_now blot-airlock && ! called "docker stop --time 40 blot-container"'
 
 reset cutover; FAKE_UNHEALTHY=blot-green unitdeploy
 check "cutover, the proxy-only green is unhealthy: blue is not stopped" \
@@ -659,7 +659,7 @@ echo "units: steady deploys"
 
 reset units; unitdeploy
 check "steady: blue then green, each with its airlock replaced first, blue verified, exactly two stops, no old containers to stop" \
-  '[ $RC = 0 ] && before "docker rm -f blot-blue-airlock" "docker create --restart no --name blot-blue" && before "verify-container" "docker stop --time 30 blot-green" && [ "$(stopped_count)" = 2 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-blue-airlock")" = "$AIRLOCK_NEW" ]'
+  '[ $RC = 0 ] && before "docker rm -f blot-blue-airlock" "docker create --restart no --name blot-blue" && before "verify-container" "docker stop --time 40 blot-green" && [ "$(stopped_count)" = 2 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-blue-airlock")" = "$AIRLOCK_NEW" ]'
 
 reset units; up blot-blue "$UNIT_IMG"; up blot-green "$UNIT_IMG"; up blot-blue-airlock "$AIRLOCK_NEW"; up blot-green-airlock "$AIRLOCK_NEW"; unitdeploy
 check "steady, same image already deployed: nothing is stopped, created or replaced" \
@@ -675,7 +675,7 @@ check "steady: superseded airlock images are removed, the one in use is kept" \
 
 reset units; FAKE_NODE_A_UNHEALTHY=blot-blue unitdeploy
 check "steady, node-a of the new blue never healthy: the new unit is removed BEFORE the old one starts (they share sockets), green untouched" \
-  '[ $RC != 0 ] && before "docker rm -f blot-blue$" "docker start blot-blue-previous" && called "docker start blot-blue-previous" && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_OLD" ] && ! called "docker stop --time 30 blot-green"'
+  '[ $RC != 0 ] && before "docker rm -f blot-blue$" "docker start blot-blue-previous" && called "docker start blot-blue-previous" && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_OLD" ] && ! called "docker stop --time 40 blot-green"'
 
 reset units; FAKE_NODE_B_UNHEALTHY=blot-green unitdeploy
 check "steady, node-b of green is down: blue is not stopped, a unit counts as healthy only with node-a and node-b" \
@@ -683,7 +683,7 @@ check "steady, node-b of green is down: blue is not stopped, a unit counts as he
 
 reset units; FAKE_VERIFY_FAIL=1 unitdeploy
 check "steady, verify-container fails on blue: rolled back, green untouched, the airlock stays on the new image" \
-  '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_OLD" ] && ! called "docker stop --time 30 blot-green"'
+  '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_OLD" ] && ! called "docker stop --time 40 blot-green"'
 
 reset units; FAKE_NO_AIRLOCK_IMAGE=1 unitdeploy
 check "steady, no airlock image for the commit: the airlocks keep the image they run and the units are still replaced" \

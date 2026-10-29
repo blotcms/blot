@@ -216,6 +216,9 @@ load_unit_settings() {
   done
   # a unit's default is the longer of these: Node has to start as well
   HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-180}"
+  # and a unit drains OpenResty and then node-a, so it is given the unit's
+  # stop timeout (also its --stop-timeout) to stop
+  DRAIN_TIMEOUT="${PROXY_DRAIN_TIMEOUT:-$UNIT_STOP_TIMEOUT}"
 }
 
 # A bare tag or commit SHA means the image CI publishes
