@@ -75,6 +75,7 @@ jobs:
           echo -n "served from disk" > "$RUNNER_TEMP/global-static/cdn-test.txt"
           docker run -d --name proxy -p 8080:80 -p 8443:443 \
             -e BLOT_HOST=localhost \
+            -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -v "$RUNNER_TEMP/global-static":/var/www/blot/app/blog/static:ro \
             blot-proxy:e2e
           docker run -d --name stub --network container:proxy \
@@ -247,6 +248,7 @@ jobs:
           docker volume create blot-acme-storage
           docker run -d --name proxy --network host --cap-add SYS_NICE \
             -e BLOT_HOST=localhost \
+            -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -e PROXY_ACME_CA=https://127.0.0.1:14000/dir \
             -e ACME_CA_CERT=/pebble-ca.pem \
             -v "$PWD/pebble.minica.pem:/pebble-ca.pem:ro" \
@@ -322,6 +324,7 @@ jobs:
           docker rm -f proxy
           docker run -d --name proxy --network host --cap-add SYS_NICE \
             -e BLOT_HOST=localhost \
+            -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -e PROXY_ACME_CA=https://127.0.0.1:14000/dir \
             -e ACME_CA_CERT=/pebble-ca.pem \
             -v "$PWD/pebble.minica.pem:/pebble-ca.pem:ro" \
@@ -380,6 +383,7 @@ jobs:
           docker rm -f proxy
           docker run -d --name proxy --network host --cap-add SYS_NICE \
             -e BLOT_HOST=localhost \
+            -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -e PROXY_ACME_CA=https://127.0.0.1:14000/dir \
             -e ACME_CA_CERT=/pebble-ca.pem \
             -e PROXY_AUTO_SSL_CACHE_TTL=5 \
@@ -460,7 +464,7 @@ jobs:
 
           start_proxy() {
             docker run -d --name "$1" --network host --cap-add SYS_NICE \
-              -e BLOT_HOST=localhost blot-proxy:zd
+              -e BLOT_HOST=localhost -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 blot-proxy:zd
             for i in $(seq 1 30); do
               [ "$(docker inspect -f '{{.State.Health.Status}}' "$1")" = healthy ] && return 0
               sleep 2

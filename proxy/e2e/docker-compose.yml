@@ -4,8 +4,8 @@ name: blot-proxy-e2e
 # proxy/e2e/run.js can drive requests through it. See
 # .github/workflows/app-e2e.yml.
 #
-# Everything runs on the host network so the proxy's hard-coded upstream
-# addresses (127.0.0.1:8088-8091) resolve with no extra plumbing. Meant for a
+# Everything runs on the host network so the proxy's upstream addresses
+# (127.0.0.1:8088-8090, set on the proxy below) resolve with no extra plumbing. Meant for a
 # CI runner, not a shared machine (it binds :80 and :443).
 
 services:
@@ -46,9 +46,8 @@ services:
       retries: 90
       start_period: 60s
 
-  # The generated proxy config has four hard-coded upstream addresses
-  # (127.0.0.1:8088-8091 - blue/green/yellow/purple). Point all of them at
-  # the single app instance on :8081.
+  # The proxy's upstreams are set on the proxy below (unit mode): 8088-8090 here.
+  # Point all four ports (8088-8091) at the single app instance on :8081.
   upstream-mux:
     image: alpine/socat
     network_mode: host
@@ -77,6 +76,12 @@ services:
     network_mode: host
     environment:
       BLOT_HOST: ${BLOT_HOST:-localhost}
+      # Unit mode: worker on 8089, main (blogs, dashboard) on 8090, the
+      # backup for both on 8088.
+      PROXY_UNIT_MAIN: "127.0.0.1:8090"
+      PROXY_UNIT_WORKER: "127.0.0.1:8089"
+      PROXY_PEER_MAIN: "127.0.0.1:8088"
+      PROXY_PEER_WORKER: "127.0.0.1:8088"
     # Persistent volumes for the proxy cache and the lua-resty-auto-ssl /
     # dehydrated working files, so recreating the container does not
     # cold-start the cache or lose issuance state. entrypoint.sh chowns both
