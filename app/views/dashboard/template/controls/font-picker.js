@@ -32,6 +32,12 @@ function createFontPicker() {
     ? Array.from(optionsRoot.querySelectorAll("[data-font-option-id]"))
     : [];
 
+  const updateMoreIndicator = () => {
+    if (!optionsRoot) return;
+    const hasMore = optionsRoot.scrollHeight > optionsRoot.clientHeight + optionsRoot.scrollTop + 1;
+    container.classList.toggle("has-more-options", hasMore);
+  };
+
   let currentFilter = filtersRoot
     ? filtersRoot.dataset.fontPickerDefaultFilter || "all"
     : "all";
@@ -76,6 +82,7 @@ function createFontPicker() {
 
     if (optionsRoot) {
       optionsRoot.scrollTop = 0;
+      updateMoreIndicator();
     }
   };
 
@@ -88,7 +95,8 @@ function createFontPicker() {
 
     const top = scrollY + rect.bottom + 6;
 
-    container.style.minWidth = rect.width + "px";
+    const filterWidth = filtersRoot ? filtersRoot.scrollWidth + 2 : 0;
+    container.style.width = Math.max(rect.width, filterWidth) + "px";
 
     const viewportWidth =
       document.documentElement.clientWidth || window.innerWidth;
@@ -151,6 +159,7 @@ function createFontPicker() {
 
     requestAnimationFrame(() => {
       position(context.anchor);
+      updateMoreIndicator();
       requestAnimationFrame(() => {
         if (activeContext === context) {
           container.classList.add("is-visible");
@@ -165,6 +174,10 @@ function createFontPicker() {
       applyFilter(button.dataset.fontPickerFilter || "all");
     });
   });
+
+  if (optionsRoot) {
+    optionsRoot.addEventListener("scroll", updateMoreIndicator, { passive: true });
+  }
 
   optionButtons.forEach((button) => {
     button.addEventListener("click", (event) => {
