@@ -6,9 +6,11 @@ The Git client enables Blot users to manage their blog using a Git repository as
 
 The Git client implements a three-repository architecture:
 
-1. **Bare repository** (storage layer): Located in `/data/git/<blogHandle>.git`. This is a bare Git repository (no working tree) that serves as the central authority for blog content.
-2. **Live repository** (on Blot server): Located in the user's blog folder (`/data/blog_<blogID>/`). A cloned checkout of the bare repository where Blot processes and syncs blog files.
+1. **Bare repository** (storage layer): Located in `data/git/<blogHandle>.git`. This is a bare Git repository (no working tree) that serves as the central authority for blog content.
+2. **Live repository** (on Blot server): Located in the user's blog folder (`data/blogs/<blogID>/`, `config.blog_folder_dir`). A cloned checkout of the bare repository where Blot processes and syncs blog files.
 3. **User repository** (on user's computer): A clone of the bare repository where the user makes edits via Git pushes.
+
+The bare repositories are planned to move to S3 (https://github.com/blotcms/blot/issues/2259).
 
 When a user pushes changes from their local repository to the bare repository, Blot automatically detects the change, syncs the blog folder, and processes modified files.
 
