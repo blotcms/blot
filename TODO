@@ -89,10 +89,7 @@ Finish move to s3
 - implement folder storage limits (include generated files in this amount?)
 - implement s3 storage for folder files
 
-Look into https://github.com/tobi/walgit for s3 backed git server
-- https://cursor.com/blog/git-at-any-scale
-- Investigate S3-backed Git hosting with incremental folder materialization. Prototype replacing Blot's EBS-backed Git repository storage with Walgit, a Git server using S3 as its source of truth and local disks as disposable caches, enabling cheaper storage and horizontal scaling across thousands of customer repositories. Run Walgit as a private service behind Blot's existing Express.js authentication (static username/password), without its UI, authentication, policies, or other unnecessary features. Build a Node.js materializer that incrementally synchronizes the master branch of each repository to ordinary files under a separate prefix in the same S3 bucket, uploading only changed files and deleting removed ones. Trigger materialization immediately after successful pushes, ideally reusing locally cached Git objects to minimize latency, with durable progress tracking, concurrency control, and automatic recovery from failures. Evaluate Git LFS support and benchmark cold pushes, S3 costs, and performance at scale. Consider a native Node.js implementation inspired by Walgit if maintaining the Rust service proves unnecessarily complex.
-- this will also solve: Bump simple-git to >= 4.0.1 to fix the critical Dependabot alert (unsafe-operation guard does not block trailer command config) and two high command-execution bypasses; 4.x is a major bump, so check our git sync usage. Also bump katex to >= 0.18.2 (low, prototype pollution).
+Bump katex to >= 0.18.2 (low, prototype pollution Dependabot alert). The simple-git alert is covered by #2259 (git repos to S3), which replaces simple-git.
 
 ---
 
@@ -877,15 +874,6 @@ Move from EBS to s3
  - abstract write / read from blog directory
  - we probably need a caching layer using instance SSD as LRU cache of say 10GB
   - when we rebuild all files on a site, we'll probably want to download all the folder? or maybe just have a SSD LRU caching layer built in that can adapt.
-- Rewrite git client as follows:
-  - Store bare repos (e.g. blog.git) on s3 as source of truth
-  - On push, fetch bare repo from s3 and store it on instance SSD in 'cache' 
-  - After push, resync bare repo to s3
-  - Compare diff on bare repo to identify changed files
-  - For new or modified files, check out those files only to a tmp folder and then copy across to blog folder dir directly and trigger folder.update
-  - Remove the live repo from the blog folder dir
-  - Other ideas which I decided against:
-    - I thought about using an s3fs but it seems risky and likely too slow
  - Once this is done, the nginx + node server is 'stateless' and could be replicated easily across aws regions
  - We could combine this with the containerization of openresty
 
