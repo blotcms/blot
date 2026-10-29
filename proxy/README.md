@@ -323,11 +323,16 @@ container and the three Node containers (`blot-container-blue`, `-green` and `-y
 and `blot-green`, each one container running OpenResty, node-a (the Node main
 process) and node-b (the worker child node-a forks, `helper/workerChild`). The
 image is the `unit` target of the root `Dockerfile`: the `prod` app image plus
-OpenResty and the files in this image, which `COPY --from` the proxy image
-built for the same commit (`PROXY_IMAGE`) rather than compiling OpenResty
-again. [`unit-image.yml`](../.github/workflows/unit-image.yml) builds it after
-the proxy image, boots it with [`unit/smoke.sh`](unit/smoke.sh) and publishes
+OpenResty and the files in this image, which `COPY --from` this image's
+Dockerfile (the root `Dockerfile` names it `blot-proxy`). [`unit-image.yml`](../.github/workflows/unit-image.yml)
+builds both in one `docker buildx bake unit` ([`docker-bake.hcl`](../docker-bake.hcl)
+makes the proxy build the `blot-proxy` context, so no proxy image is published),
+checks OpenResty in the result, boots it with [`unit/smoke.sh`](unit/smoke.sh) and publishes
 `ghcr.io/<owner>/blot:<sha>` (the Node-only image is now `blot:prod-<sha>-arm64`, CI only). The Deploy workflow deploys it.
+
+To build it locally, generate the config and build this image as `blot-proxy`
+(see "Build and run locally"), then `docker build --target unit .` from the
+repository root, or `docker buildx bake unit` to build both as CI does.
 
 - **User.** One user at uid 1000, `ec2-user` (the Node image's `node` user,
   renamed), for the app and for OpenResty's workers. As in this image, the

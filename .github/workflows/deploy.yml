@@ -148,7 +148,7 @@ jobs:
           TARGET_SHA: ${{ steps.resolve.outputs.sha }}
           CUSTOM: ${{ steps.resolve.outputs.custom }}
           SKIP_CHECKS: ${{ github.event.inputs.skip_checks }}
-          REQUIRED: "node build app-e2e integration proxy-image unit-image"
+          REQUIRED: "node build app-e2e integration unit-image"
           OPTIONAL: "proxy proxy-fail2ban .github/workflows/proxy-deploy-e2e.yml"
         run: |
           if [ "$SKIP_CHECKS" = "true" ]; then

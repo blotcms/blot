@@ -81,17 +81,15 @@ skipped, and the stop step does nothing once the old containers are stopped.
 The way back to the three Node containers was removed with them (#2119, PR 7):
 `render-config.sh` only knows the unit upstreams, and `scripts/deploy/index.js`
 (the old Node deploy) is gone. The old containers are stopped, not removed, on
-a host that cut over, but the proxy no longer routes to them, and
-`scripts/deploy/units.sh --proxy-only` deploys a proxy-only image that routes
-to the units' sockets, not to them. The way back from a bad unit image is an
+a host that cut over, but the proxy no longer routes to them. The way back from a bad unit image is an
 older unit image, `npm run deploy-units -- <commit>`.
 
 The Deploy workflow always deploys units; the **Deploy proxy** workflow is gone.
 
 ## Setting up a host
 
-1. **An image.** `.github/workflows/proxy-image.yml` publishes
-   `ghcr.io/blotcms/blot-proxy:<sha>` (multi-arch, built with
+1. **An image.** `.github/workflows/unit-image.yml` publishes
+   `ghcr.io/blotcms/blot:<sha>` (arm64, with OpenResty built into it with
    `LOG_TO_STDOUT=false` because `fail2ban`, `logrotate` and the `.bashrc`
    helpers read `/var/instance-ssd/logs/access.log` and the container has no
    ban layer of its own; `blue-green.sh` refuses an image that logs to stdout).

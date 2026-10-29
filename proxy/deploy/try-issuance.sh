@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Issue a certificate through the proxy image from Let's Encrypt STAGING, for a
+# Issue a certificate through the unit image's OpenResty from Let's Encrypt STAGING, for a
 # throwaway domain, without touching what is serving. Run it on the production
 # host, before a blue-green deploy:
 #
@@ -35,9 +35,6 @@ NAME=blot-proxy-issuance
 PORT=18444
 ATTEMPTS="${PROXY_ISSUANCE_ATTEMPTS:-40}"
 
-# The probe runs the proxy image on its own (its entrypoint), so a bare tag or
-# commit SHA means ghcr.io/blotcms/blot-proxy, not the unit image
-PROXY_DEPLOY_KIND=proxy
 IMAGE="$(resolve_image "$IMAGE_ARG")"
 load_env
 acquire_lock
@@ -65,20 +62,25 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 ensure_image "$IMAGE"
-! image_is_unit "$IMAGE" || die "$IMAGE is a unit image, whose entrypoint needs BLOT_UNIT and Node: try issuance with the proxy image (ghcr.io/blotcms/blot-proxy:<sha>)"
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 redis-cli -h "$REDIS_HOST" set "domain:$DOMAIN" 1 >/dev/null
 
 log "Starting $NAME from $IMAGE with PROXY_ACME_CA=$STAGING_CA"
 # -e comes after --env-file, so it wins. No auto-ssl, cache or log volumes.
-docker run -d --name "$NAME" --cap-add SYS_NICE \
+# The unit image's own entrypoint needs BLOT_UNIT and starts Node, so this runs
+# OpenResty alone, as the unit's supervisor does (--init for tini, and the
+# health check without the Node half).
+docker run -d --name "$NAME" --cap-add SYS_NICE --init \
+  --entrypoint /usr/local/bin/proxy-start \
+  --health-cmd 'curl -fsS -o /dev/null --unix-socket /run/openresty/health.sock http://localhost/health' \
+  --health-interval 2s --health-start-period 0s \
   --env-file "$ENV_FILE" \
   -e PROXY_ACME_CA="$STAGING_CA" \
   -e PROXY_FETCH_CDN_IPS=false \
   -e PROXY_PRIVATE_IP=127.0.0.1 \
   -p "127.0.0.1:$PORT:443" \
   -v "$CERT_DIR":/etc/ssl/private:ro \
-  "$IMAGE" >/dev/null
+  "$IMAGE" /usr/local/openresty/bin/openresty -g "daemon off;" >/dev/null
 wait_healthy "$NAME" "$HEALTH_TIMEOUT" \
   || { docker logs --tail 50 "$NAME" >&2 || true; die "$NAME did not become healthy"; }
 
