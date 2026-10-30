@@ -78,6 +78,20 @@ it. The rest is state that lives on the host and has to be carried across or
 recreated. Do it before pointing traffic at the new host.
 
 ```
+config/host/launch.sh --type <instance-type> --key-name <aws-key-pair> --key <private-key> --ssh-port N
+```
+
+`launch.sh` starts the instance (newest AL2023 arm64 AMI, the app subnet, the
+app and Redis security groups, IMDSv2 only, a 200 GB gp3 root, termination
+protection on) and runs `bootstrap.sh` on it. `--ssh-port` goes in user data, so
+the first connection already uses that port. It attaches no data volume and
+moves no Elastic IP; it ends by printing the `npm run deploy-host` command to run
+next. Run it with `--dry-run` first to see the `run-instances` call, `--drill`
+for a throwaway, `--list` for the hosts it has launched. The key pair name, key
+and port can be set as `BLOT_HOST_KEY_NAME`, `BLOT_HOST_SSH_KEY` and
+`BLOT_SSH_PORT`. To run only the OS setup on an existing host:
+
+```
 BLOT_SSH_PORT=... BLOT_DEPLOY_PUBLIC_KEY="ssh-..." config/host/bootstrap.sh <ssh-host>
 ```
 
