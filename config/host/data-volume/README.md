@@ -133,8 +133,8 @@ clearly.
 
 ## Drill first
 
-`drill.sh` rehearses the whole thing on an Amazon Linux 2 arm64 instance, the
-production kernel, without touching production:
+`drill.sh` rehearses the whole thing on an Amazon Linux 2023 arm64 instance, the OS
+of a new app host, without touching production:
 
     drill.sh launch --ami <id> --subnet <id> --security-group <id> --key-name <name>
     # add --ssh-port N if the security group does not allow 22: user data moves sshd there

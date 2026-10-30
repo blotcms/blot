@@ -14,7 +14,7 @@
 #              Copy the values from the app host:
 #                aws ec2 describe-instances --instance-ids <app host id> \
 #                  --query 'Reservations[0].Instances[0].[ImageId,SubnetId,SecurityGroups[0].GroupId,KeyName]'
-#              (an Amazon Linux 2 arm64 AMI, so the kernel matches production)
+#              (an Amazon Linux 2023 arm64 AMI, the OS of a new app host)
 #   setup      install docker, rsync and xfsprogs, format the data volume,
 #              install mount-data-volume.sh and the docker drop-in from the repo,
 #              fill it, start the containers; then print the resize.sh commands
@@ -129,8 +129,8 @@ set -euo pipefail
 DATA=/var/www/blot/data
 LINK=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${VOLUME_ID/-/}
 
-command -v docker > /dev/null || amazon-linux-extras install -y docker
-for p in rsync xfsprogs lsof; do rpm -q "$p" > /dev/null || yum install -y "$p"; done
+command -v docker > /dev/null || dnf install -y docker
+for p in rsync xfsprogs lsof; do rpm -q "$p" > /dev/null || dnf install -y "$p"; done
 systemctl enable --now docker
 usermod -aG docker ec2-user || true
 
