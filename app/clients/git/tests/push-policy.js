@@ -42,6 +42,11 @@ describe("git client push policy", function () {
 
     expect(refused.code).not.toBe(0);
     expect(refused.stderr).toContain("master");
+
+    // Today the server starts a sync for the refused deletion all the same;
+    // let it finish so it cannot run into the next spec's teardown
+    await local.waitForSync();
+
     expect(await local.remoteHead()).toBe(await local.head());
     expect(await helpers.blogHas(this, "/stays.txt")).toBe(true);
   });
