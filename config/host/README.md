@@ -220,6 +220,26 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
 `/home/ec2-user/scripts/mount-instance-store.sh` (likewise
 `mount-data-volume.service` and `mount-data-volume.sh`).
 
+### The wildcard certificate
+
+`blue-green.sh` will not start a unit in fresh mode until
+`/etc/ssl/private/letsencrypt-domain.pem` and `.key` exist and the `deploy` user
+can read them. `wildcard-cert.sh` writes both from the wildcard certificate in
+the host's own Redis (`blot:openresty:ssl:pem` and `:key`):
+
+```
+config/host/wildcard-cert.sh <ssh-host>
+```
+
+Run it after Redis on the new host has synced, since the keys come from that
+Redis; it only reads, so a read-only replica is fine, and it is safe to re-run.
+It copies itself to the host and runs there with sudo (`SSH_OPTS` works as in
+`bootstrap.sh`). It refuses, leaving any existing files alone, if either value
+is empty, the certificate has expired or the key is not the certificate's key.
+Each file is written to a temp file in the same directory, then moved into
+place as `root:deploy` mode `0640`, so the key is never world-readable. It never
+prints the key. Run it before the first `deploy-units`.
+
 ## Scripts and cron
 
 - The wildcard certificate is not renewed from the host: the app's scheduler
@@ -263,8 +283,9 @@ and what still depends on it. `deploy.sh` does not install any of it.
   rebuilt host does not need the file.
 - Wrote the wildcard certificate and key from Redis (`blot:openresty:ssl:pem`
   and `blot:openresty:ssl:key`) to `/etc/ssl/private/letsencrypt-domain.pem` and
-  `.key`, the directory the proxy container mounts read-only. On a rebuilt host
-  these must exist before `blue-green.sh` will start a container.
+  `.key`, the directory the proxy container mounts read-only. `wildcard-cert.sh`
+  now does this on a rebuilt host (see
+  [Moving to a new host](#moving-to-a-new-host)).
 - Enabled and started `mount-instance-store.service`, and installed the
   `docker.service.d` drop-in that gates docker on `/var/instance-ssd` being
   mounted. `deploy.sh` installs both.
