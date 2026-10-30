@@ -61,7 +61,9 @@ chown "${DEPLOY_USER}:${DEPLOY_USER}" "${SSH_DIR}"
 
 # Create authorized_keys
 log "Setting up SSH authorized_keys..."
-if [ -n "${1:-}" ]; then
+if [ -n "${1:-}" ] && grep -qxF -- "$1" "${SSH_DIR}/authorized_keys" 2>/dev/null; then
+    log "Public key already in authorized_keys"
+elif [ -n "${1:-}" ]; then
     PUBLIC_KEY="$1"
     log "Adding provided public key..."
     cat > "${SSH_DIR}/authorized_keys" <<EOF

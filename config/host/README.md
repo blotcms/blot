@@ -72,11 +72,35 @@ Moving to a new host: see [Moving to a new host](#moving-to-a-new-host).
 
 ## Moving to a new host
 
-There is no bootstrap script: the host was built by hand (the old setup script
-is described at the end of this file), and `deploy.sh` only installs the files
-in the table above onto a host that already exists. This is the state that
-lives on the host and has to be carried across or recreated. Do it before
-pointing traffic at the new host.
+A new host is built on Amazon Linux 2023 (arm64). `bootstrap.sh` does the
+root-side OS setup, then `deploy.sh` installs the files in the table above onto
+it. The rest is state that lives on the host and has to be carried across or
+recreated. Do it before pointing traffic at the new host.
+
+```
+BLOT_SSH_PORT=... BLOT_DEPLOY_PUBLIC_KEY="ssh-..." config/host/bootstrap.sh <ssh-host>
+```
+
+It copies `host/` and `scripts/deploy/setup-deploy-user.sh` to the host and
+runs `host/setup.sh` with sudo; both variables are optional and `SSH_OPTS`
+works as in `config/redis/bootstrap.sh`. `setup.sh` refuses to run anywhere but
+Amazon Linux 2023, is safe to re-run, and never starts or restarts docker or
+upgrades a package. It:
+
+- installs `docker`, `fail2ban-server`, `iptables-nft`, `rsyslog`, `cronie`,
+  `chrony`, `rsync`, `xfsprogs`, `nvme-cli`, `redis6` and `logrotate`, and links
+  `redis6-cli` as `/usr/local/bin/redis-cli`;
+- enables docker without starting it, checks cgroup v2, and adds a drop-in that
+  orders docker after `redis6.service`; `ec2-user` joins the `docker` group;
+- creates the `deploy` user (`scripts/deploy/setup-deploy-user.sh`);
+- with `BLOT_SSH_PORT`, sets sshd's port in `/etc/ssh/sshd_config.d/11-blot-port.conf`
+  (sshd then listens on that port only);
+- installs the `check_docker_health.sh` cron entry, enables `crond`, `rsyslog`,
+  `chronyd` and `fail2ban` (the last is started by `deploy.sh`), creates
+  `/var/www/blot/data` and `/var/www/blot/app/blog/static`, and sets
+  `net.ipv4.tcp_migrate_req = 1`.
+
+`config/host/tests/setup.sh` runs it in Docker. Still by hand:
 
 - **Permanent bans** (`manual-permaban`). The only fail2ban state worth keeping;
   the nginx jails' bans last 30-60 minutes and `recidive` a week. On the old
@@ -98,10 +122,8 @@ pointing traffic at the new host.
 - **Wildcard certificate** files in `/etc/ssl/private/` (`letsencrypt-domain.pem`
   and `.key`), written from Redis; `blue-green.sh` won't start a proxy
   container without them.
-- **Packages and cron:** `redis6` (for `redis-cli`), `nvme-cli`, `cronie`, and
-  the cron entry that runs `check_docker_health.sh` every minute (`deploy.sh`
-  copies the script but not the entry).
-- Then `npm run deploy-host` and the Deploy workflow.
+- Then `npm run deploy-host` and the Deploy workflow. docker is enabled but
+  stays stopped until the instance store and the data volume are mounted.
 
 Nothing in `proxy/` or the units needs copying: custom-domain
 certificates are in Redis and the proxy cache refills itself.
@@ -149,7 +171,8 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
   `/usr/local/bin/acme-nginx`; none of them is used any more.
 - `check_docker_health.sh` restarts containers Docker reports as unhealthy. It
   is run from cron every minute as `/usr/local/bin/check_docker_health.sh`
-  (`deploy.sh` copies it there, but does not install the cron entry). It skips
+  (`deploy.sh` copies it there, but does not install the cron entry; on a new
+  host `host/setup.sh` does). It skips
   `blot-blue`, `blot-green` and `blot-<unit>-previous` (whole names, so the
   airlocks are still restarted) while a proxy deploy holds its lock, so it
   cannot restart the unit that is draining.
