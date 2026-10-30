@@ -208,6 +208,10 @@ for logpath in $(sed -n 's/^[[:space:]]*logpath[[:space:]]*=[[:space:]]*//p' /et
 done
 LOGFILES
 
+# Order fail2ban after the instance store, which holds a logpath, at boot.
+echo "Installing the fail2ban.service.d drop-in on $PUBLIC_IP"
+ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo mkdir -p /etc/systemd/system/fail2ban.service.d && sudo cp /home/ec2-user/scripts/fail2ban.service.d/10-instance-store.conf /etc/systemd/system/fail2ban.service.d/10-instance-store.conf && sudo systemctl daemon-reload"
+
 # Restart fail2ban
 echo "Restarting fail2ban on $PUBLIC_IP"
 ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo systemctl restart fail2ban"
@@ -228,7 +232,7 @@ echo "Fail2Ban deployment complete."
 # includes the directory, so nothing is added to an Amazon Linux 2 host.
 echo "Disabling X11 forwarding in sshd_config on $PUBLIC_IP"
 ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo sed -i 's/^#\?X11Forwarding.*/X11Forwarding no/' /etc/ssh/sshd_config"
-ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "if grep -q '^Include /etc/ssh/sshd_config.d/' /etc/ssh/sshd_config; then printf '%s\n' '# Installed by config/host/deploy.sh' 'X11Forwarding no' | sudo tee /etc/ssh/sshd_config.d/12-blot-x11.conf >/dev/null && sudo chmod 600 /etc/ssh/sshd_config.d/12-blot-x11.conf; fi"
+ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "if sudo grep -q '^Include /etc/ssh/sshd_config.d/' /etc/ssh/sshd_config; then printf '%s\n' '# Installed by config/host/deploy.sh' 'X11Forwarding no' | sudo tee /etc/ssh/sshd_config.d/12-blot-x11.conf >/dev/null && sudo chmod 600 /etc/ssh/sshd_config.d/12-blot-x11.conf; fi"
 ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo sshd -t && sudo systemctl reload sshd"
 
 echo "sshd hardening complete."
