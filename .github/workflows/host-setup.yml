@@ -11,7 +11,9 @@ on:
     paths:
       - ".github/workflows/host-setup.yml"
       - "config/host/bootstrap.sh"
+      - "config/host/launch.sh"
       - "config/host/host/**"
+      - "config/host/tests/launch.sh"
       - "config/host/tests/setup.sh"
       - "config/host/tests/deploy.sh"
       - "config/host/deploy.sh"
@@ -28,7 +30,9 @@ on:
     paths:
       - ".github/workflows/host-setup.yml"
       - "config/host/bootstrap.sh"
+      - "config/host/launch.sh"
       - "config/host/host/**"
+      - "config/host/tests/launch.sh"
       - "config/host/tests/setup.sh"
       - "config/host/tests/deploy.sh"
       - "config/host/deploy.sh"
@@ -54,3 +58,10 @@ jobs:
         run: config/host/tests/setup.sh
       - name: deploy.sh on Amazon Linux 2023
         run: config/host/tests/deploy.sh
+  launch:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: launch.sh against stub aws, ssh and bootstrap.sh
+        run: config/host/tests/launch.sh
