@@ -85,6 +85,9 @@ function git(args, { cwd = workRoot, env = {}, input, timeout = GIT_TIMEOUT_MS }
   return new Promise((resolve) => {
     const child = spawn("git", ["-c", "http.sslVerify=false", ...args], {
       cwd,
+      // Own process group, so a timeout can kill git-remote-https and friends
+      // too (they inherit the pipes, which would keep `close` from firing).
+      detached: true,
       env: {
         PATH: process.env.PATH,
         HOME: workRoot,
@@ -101,19 +104,30 @@ function git(args, { cwd = workRoot, env = {}, input, timeout = GIT_TIMEOUT_MS }
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch (e) {
+        child.kill("SIGKILL");
+      }
+      // Settle now even if a straggler keeps the pipes open
+      settle({ code: -1, stdout, stderr, timedOut });
     }, timeout);
     child.stdout.on("data", (d) => (stdout += d));
     child.stderr.on("data", (d) => (stderr += d));
     child.on("error", (err) => {
-      clearTimeout(timer);
-      resolve({ code: -1, stdout, stderr: stderr + String(err), timedOut });
+      settle({ code: -1, stdout, stderr: stderr + String(err), timedOut });
     });
     child.on("close", (code) => {
-      clearTimeout(timer);
-      resolve({ code, stdout, stderr, timedOut });
+      settle({ code, stdout, stderr, timedOut });
     });
     if (input !== undefined) child.stdin.end(input);
     else child.stdin.end();
@@ -248,7 +262,7 @@ async function main() {
     return { ok: res.status < 500, detail: "status " + res.status };
   }, 60000);
   if (!ready.ok) {
-    console.log("  FAIL - git endpoint never became ready through the proxy ->", ready.detail);
+    check("git endpoint became ready through the proxy", false, ready.detail);
     return;
   }
 
@@ -583,6 +597,10 @@ main()
     try {
       fs.rmSync(workRoot, { recursive: true, force: true });
     } catch (e) {}
+    if (passes + failures === 0) {
+      failures++;
+      console.log("  FAIL - no checks ran");
+    }
     console.log(`\n${passes} passed, ${failures} failed`);
     process.exit(failures ? 1 : 0);
   });
