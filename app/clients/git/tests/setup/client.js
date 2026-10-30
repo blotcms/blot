@@ -23,7 +23,6 @@ var crypto = require("crypto");
 var http = require("http");
 var fs = require("fs-extra");
 var path = require("path");
-var dirCompare = require("dir-compare");
 
 // How long to wait for one git command, and for Blot to finish syncing after
 // a push. Both fail with a message rather than hanging the spec.
@@ -403,40 +402,33 @@ Client.prototype.expectSynced = async function () {
   await compareDirectories(this.directory, this.blogDirectory);
 };
 
-function compareDirectories(expected, actual) {
-  return dirCompare
-    .compare(expected, actual, {
-      compareSize: true,
-      compareContent: true,
-      excludeFilter: ".git",
-    })
-    .then(function (res) {
-      if (!res.differences) return;
+// Compares the files of two directories, not their .git directories and not
+// their empty directories: git does not track those, and what Blot leaves
+// behind when it removes the last file in a folder is checked by the specs
+// which care. Rejects with a description of the differences.
+async function compareDirectories(expected, actual) {
+  var left = await readTree(expected);
+  var right = await readTree(actual);
+  var message = [];
 
-      var message = [
-        "The blog folder is not the same as the clone (" + res.differences + " differences):",
-      ];
+  Object.keys(left).forEach(function (file) {
+    if (!(file in right)) message.push("  " + file + " (only in the clone)");
+    else if (!left[file].equals(right[file]))
+      message.push("  " + file + " (contents differ)");
+  });
 
-      res.diffSet.forEach(function (entry) {
-        if (entry.state === "equal") return;
+  Object.keys(right).forEach(function (file) {
+    if (!(file in left)) message.push("  " + file + " (only in the blog folder)");
+  });
 
-        message.push(
-          "  " +
-            (entry.relativePath || "") +
-            "/" +
-            (entry.name1 || entry.name2) +
-            " (" +
-            entry.state +
-            ": only in " +
-            ({ left: "clone", right: "blog folder", distinct: "both, different" }[
-              entry.state
-            ] || entry.state) +
-            ")"
-        );
-      });
-
-      throw new Error(message.join("\n"));
-    });
+  if (message.length) {
+    throw new Error(
+      "The blog folder is not the same as the clone (" +
+        message.length +
+        " differences):\n" +
+        message.join("\n")
+    );
+  }
 }
 
 // A tiny HTTP proxy in front of the test server which records every request
