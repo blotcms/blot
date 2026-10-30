@@ -4,6 +4,27 @@
 # mounted", and Redis still starts because it only Wants= this unit.
 set -e
 
+# A combined host (marker written by setup.sh): the app's
+# mount-instance-store.service owns the one NVMe disk at /var/instance-ssd, so
+# /backups is a bind mount of a directory on it. This must come before the nvme,
+# blkid and mkfs code below, which would format the app's disk.
+if [ -e /etc/blot-redis/shared-instance-store ]; then
+  if ! mountpoint -q /var/instance-ssd; then
+    echo "/var/instance-ssd is not mounted; the app's mount-instance-store.service owns the disk."
+    exit 1
+  fi
+  if mountpoint -q /backups; then
+    echo "/backups is already mounted."
+    chown ec2-user:ec2-user /backups
+    exit 0
+  fi
+  install -d -o ec2-user -g ec2-user /var/instance-ssd/redis-backups
+  mkdir -p /backups
+  mount --bind /var/instance-ssd/redis-backups /backups
+  mountpoint -q /backups
+  exit 0
+fi
+
 # Already mounted (the unit re-ran, or this is a reboot): only make sure the
 # backup user owns it, which a host set up by the old root-run scripts lacks.
 if mountpoint -q /backups; then

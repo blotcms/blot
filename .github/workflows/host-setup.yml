@@ -1,0 +1,74 @@
+name: host-setup
+
+# Runs config/host/host/setup.sh, which also runs the Redis host setup and loads
+# the port 6379 firewall file, in Amazon Linux 2023 containers (twice, to check
+# it is idempotent) and in an Amazon Linux 2 one, where it must refuse.
+# Then runs config/host/deploy.sh on such a container (config/host/tests/deploy.sh).
+# It needs Docker on the runner.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/host-setup.yml"
+      - "config/host/bootstrap.sh"
+      - "config/host/launch.sh"
+      - "config/host/host/**"
+      - "config/redis/host/**"
+      - "config/redis/bin/**"
+      - "config/redis/redis.conf"
+      - "config/host/tests/launch.sh"
+      - "config/host/tests/setup.sh"
+      - "config/host/tests/deploy.sh"
+      - "config/host/deploy.sh"
+      - "config/host/.bashrc"
+      - "config/host/fail2ban/**"
+      - "config/host/scripts/mount-instance-store.*"
+      - "config/host/scripts/mount-data-volume.*"
+      - "config/host/scripts/docker.service.d/**"
+      - "config/host/logrotate/**"
+      - "config/host/tmpfiles.d/**"
+      - "scripts/deploy/setup-deploy-user.sh"
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/host-setup.yml"
+      - "config/host/bootstrap.sh"
+      - "config/host/launch.sh"
+      - "config/host/host/**"
+      - "config/redis/host/**"
+      - "config/redis/bin/**"
+      - "config/redis/redis.conf"
+      - "config/host/tests/launch.sh"
+      - "config/host/tests/setup.sh"
+      - "config/host/tests/deploy.sh"
+      - "config/host/deploy.sh"
+      - "config/host/.bashrc"
+      - "config/host/fail2ban/**"
+      - "config/host/scripts/mount-instance-store.*"
+      - "config/host/scripts/mount-data-volume.*"
+      - "config/host/scripts/docker.service.d/**"
+      - "config/host/logrotate/**"
+      - "config/host/tmpfiles.d/**"
+      - "scripts/deploy/setup-deploy-user.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup.sh on Amazon Linux 2023 and 2
+        run: config/host/tests/setup.sh
+      - name: deploy.sh on Amazon Linux 2023
+        run: config/host/tests/deploy.sh
+  launch:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: launch.sh against stub aws, ssh and bootstrap.sh
+        run: config/host/tests/launch.sh

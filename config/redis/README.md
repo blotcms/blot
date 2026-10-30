@@ -27,7 +27,7 @@ server size"). The hand-built host that served Redis until 8 Oct 2026 is gone.
 | `cutover.sh <old> <new>` | Move live traffic to a replica: FAILOVER, floating IP, backups (see below). |
 | `readonly.sh <ssh-host> on\|off` | Refuse or accept writes (`min-replicas-to-write` 99 / 0). |
 | `host/setup.sh` | Root-side setup: packages, config, sysctls, systemd units, cron. |
-| `host/mount-instance-store.sh` | Mounts the NVMe instance store at `/backups`. |
+| `host/mount-instance-store.sh` | Mounts the NVMe instance store at `/backups` (a bind mount of a directory of the app's instance store on a combined host). |
 | `bin/backup.sh` | Hourly and daily backup to S3 (cron). |
 | `bin/redis-mem-log.sh`, `bin/tcpmem-log.sh` | Memory logging every 5 minutes (cron). |
 
@@ -310,6 +310,19 @@ resized in place.
   `50-redhat.conf` (sshd keeps the first value it reads). Applied with
   `systemctl reload sshd`, and only if `sshd -t` passes; otherwise the file is
   removed with a warning.
+
+### On a combined app and Redis host
+
+`config/host/host/setup.sh` runs this setup with
+`BLOT_REDIS_SHARED_INSTANCE_STORE=1`, which writes
+`/etc/blot-redis/shared-instance-store`. The marker is explicit config, never
+inferred from what is mounted, and a re-run without the variable leaves it in
+place. With it, `mount-instance-store.sh` does not touch the NVMe disk, which
+the app's `mount-instance-store.service` owns at `/var/instance-ssd`: it
+bind-mounts `/var/instance-ssd/redis-backups` at `/backups` (and fails if
+`/var/instance-ssd` is not mounted yet), so `backup.sh` and `tcpmem-log.sh`
+work as they are. `blot-instance-store.service` is ordered after the app's
+unit.
 
 ### Backups
 

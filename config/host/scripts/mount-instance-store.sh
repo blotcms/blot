@@ -20,12 +20,17 @@ set -e
 # deploy user has no sudo to create it). A stop/start of the instance wipes
 # the disk, and the containers run as uid 1000, not root, so recreate them on
 # every run, owned by them. install -d is idempotent.
+#
+# The proxy's logs directory (PROXY_LOG_DIR, where it writes access.log for
+# fail2ban and logrotate) is owned by uid 1000 too, but it holds data that
+# survives a reboot, so an existing one is left exactly as it is.
 ensure_tmp() {
   install -d -o 1000 -g 1000 /var/instance-ssd/tmp /var/instance-ssd/disk-cache
+  [ -d /var/instance-ssd/logs ] || install -d -o 1000 -g 1000 /var/instance-ssd/logs
 }
 
 # Already mounted (e.g. this ran once already, or the unit is re-run):
-# nothing to do but make sure tmp and disk-cache exist.
+# nothing to do but make sure tmp, disk-cache and logs exist.
 if mountpoint -q /var/instance-ssd; then
   echo "/var/instance-ssd is already mounted."
   ensure_tmp

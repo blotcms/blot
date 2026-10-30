@@ -26,6 +26,14 @@ if [ -z "$PUBLIC_IP" ]; then
   exit 1
 fi
 
+# Optional: the EBS volume ID of the data volume, for a host that has no
+# /etc/blot/data-volume yet (see the data volume section below).
+DATA_VOLUME_ID="${DATA_VOLUME_ID:-}"
+if [ -n "$DATA_VOLUME_ID" ] && ! printf '%s\n' "$DATA_VOLUME_ID" | grep -Eq '^vol-[0-9a-f]{8,17}$'; then
+  echo "DATA_VOLUME_ID must look like vol-0a2e04d301e025e60"
+  exit 1
+fi
+
 
 #upload the scripts to the proxy host
 SCRIPTS_DIRECTORY="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/scripts"
@@ -46,19 +54,30 @@ echo "Installing unit-mem-log.sh, unit-mem-summary.sh and /etc/cron.d/blot-unit-
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo install -m 755 /home/ec2-user/scripts/unit-mem-log.sh /home/ec2-user/scripts/unit-mem-summary.sh /usr/local/bin/"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "printf '%s\n' '# Installed by config/host/deploy.sh' '* * * * * root /usr/local/bin/unit-mem-log.sh >/dev/null 2>&1' | sudo tee /etc/cron.d/blot-unit-mem >/dev/null && sudo chmod 644 /etc/cron.d/blot-unit-mem && sudo chown root:root /etc/cron.d/blot-unit-mem"
 
-# Install (or update) the mount-instance-store unit and the docker.service
+# Install (or update) the mount-instance-store unit and the docker.service.d
 # drop-in that gates on it, so docker cannot (re)start at boot against the
-# not-yet-mounted, empty /var/instance-ssd. Only installs files +
-# daemon-reload: it must NOT restart docker.service or
-# mount-instance-store.service here, since all are live on a running host
-# (restarting docker would kill the running containers, restarting the mount
-# unit would unmount the cache under them) and daemon-reload alone is safe
-# against a running unit. The new ordering takes effect at the next reboot.
+# not-yet-mounted, empty /var/instance-ssd. daemon-reload alone is safe against
+# a running unit, but nothing here may restart docker.service or
+# mount-instance-store.service: all are live on a running host (restarting
+# docker would kill the running containers, restarting the mount unit would
+# unmount the cache under them). The unit is enabled, and started only if
+# /var/instance-ssd is not already a mountpoint, which is the case on a new
+# host (fail2ban below needs the log directory on it). On a running host the
+# mount is there and nothing is started; the new docker ordering takes effect at
+# the next reboot.
 echo "Installing mount-instance-store.service and its docker.service.d drop-in on $PUBLIC_IP"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo cp /home/ec2-user/scripts/mount-instance-store.service /etc/systemd/system/mount-instance-store.service"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo mkdir -p /etc/systemd/system/docker.service.d && sudo cp /home/ec2-user/scripts/docker.service.d/10-instance-store.conf /etc/systemd/system/docker.service.d/10-instance-store.conf"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo systemctl daemon-reload"
-echo "mount-instance-store / docker.service ordering installed (takes effect on next boot)."
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo systemctl enable mount-instance-store.service"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "mountpoint -q /var/instance-ssd || sudo systemctl start mount-instance-store.service"
+echo "mount-instance-store / docker.service ordering installed."
+
+# On a new combined host host/setup.sh ran before the instance store was
+# mounted, so blot-instance-store.service (Redis's /backups, a bind mount of a
+# directory of it) failed then. Start it now. Nothing happens where the unit
+# does not exist (the Amazon Linux 2 app host) or /backups is already mounted.
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "if [ -e /etc/systemd/system/blot-instance-store.service ] && ! mountpoint -q /backups; then sudo systemctl start blot-instance-store.service || echo \"WARNING: /backups is not mounted; see journalctl -u blot-instance-store\"; fi"
 
 # Install (or update) the mount-data-volume unit and its docker.service
 # drop-in, the same way: docker must not (re)start at boot against an unmounted,
@@ -71,11 +90,17 @@ echo "mount-instance-store / docker.service ordering installed (takes effect on 
 # so a later run never overwrites what a volume swap put there. Starting the
 # unit afterwards is safe on a running host: with the right volume already
 # mounted the script verifies the device and exits 0 without touching it.
+#
+# A new host has no volume mounted to adopt from: pass DATA_VOLUME_ID and it is
+# written to /etc/blot/data-volume, also only when that file is missing. If a
+# volume is mounted and it is not that one, nothing is written. The marker is
+# only ever written for the volume that is mounted: a volume that is not
+# mounted yet needs its own marker, put there before the unit mounts it.
 echo "Installing mount-data-volume.service and its docker.service.d drop-in on $PUBLIC_IP"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo cp /home/ec2-user/scripts/mount-data-volume.service /etc/systemd/system/mount-data-volume.service"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo mkdir -p /etc/systemd/system/docker.service.d && sudo cp /home/ec2-user/scripts/docker.service.d/20-data-volume.conf /etc/systemd/system/docker.service.d/20-data-volume.conf"
 
-ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo bash -s" <<'ADOPT'
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo env DATA_VOLUME_ID='$DATA_VOLUME_ID' bash -s" <<'ADOPT'
 set -eu
 DATA_DIRECTORY=/var/www/blot/data
 VOLUME_ID_FILE=/etc/blot/data-volume
@@ -95,6 +120,11 @@ if [ ! -f "$VOLUME_ID_FILE" ] && mountpoint -q "$DATA_DIRECTORY"; then
     fi
   done
 
+  if [ -n "${DATA_VOLUME_ID:-}" ] && [ "$FOUND" != "$DATA_VOLUME_ID" ]; then
+    echo "ERROR: $DATA_DIRECTORY is mounted from $MOUNTED_DEVICE (${FOUND:-no matching EBS volume}), not DATA_VOLUME_ID=$DATA_VOLUME_ID."
+    exit 1
+  fi
+
   if [ -n "$FOUND" ]; then
     mkdir -p /etc/blot
     echo "$FOUND" > "$VOLUME_ID_FILE"
@@ -108,9 +138,17 @@ if [ ! -f "$VOLUME_ID_FILE" ] && mountpoint -q "$DATA_DIRECTORY"; then
   fi
 fi
 
+if [ ! -f "$VOLUME_ID_FILE" ] && [ -n "${DATA_VOLUME_ID:-}" ]; then
+  mkdir -p /etc/blot
+  echo "$DATA_VOLUME_ID" > "$VOLUME_ID_FILE"
+  echo "Wrote $DATA_VOLUME_ID to $VOLUME_ID_FILE."
+elif [ -f "$VOLUME_ID_FILE" ] && [ -n "${DATA_VOLUME_ID:-}" ]; then
+  echo "$VOLUME_ID_FILE already exists; DATA_VOLUME_ID was not written."
+fi
+
 if [ ! -f "$VOLUME_ID_FILE" ]; then
   echo "WARNING: $VOLUME_ID_FILE does not exist and no data volume could be adopted from $DATA_DIRECTORY."
-  echo "Create it with the data volume's ID (e.g. vol-0a2e04d301e025e60), put the same ID in .blot-data-volume at the root of the volume, then re-run."
+  echo "Re-run with DATA_VOLUME_ID set to the data volume's ID (e.g. vol-0a2e04d301e025e60), and put the same ID in .blot-data-volume at the root of the volume."
 fi
 ADOPT
 
@@ -150,6 +188,26 @@ echo "Uploading fail2ban.local to $PUBLIC_IP:/etc/fail2ban/fail2ban.local"
 scp -P "$SSH_PORT" -i "$SSH_KEY" "$FAIL2BAN_LOCAL_DIR/fail2ban.local" ec2-user@$PUBLIC_IP:/tmp/fail2ban.local
 ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo mv /tmp/fail2ban.local /etc/fail2ban/fail2ban.local && sudo chown root:root /etc/fail2ban/fail2ban.local"
 
+# A jail whose logpath does not exist stops fail2ban from starting at all. On
+# a new host the access log does not exist until the proxy has started, so
+# create what is missing, for every logpath in the jail.local just uploaded.
+# Existing files are never touched. The access log is in the container's log
+# directory, owned by uid 1000 (see mount-instance-store.sh); the directory
+# itself must already be there, i.e. the instance store mounted.
+echo "Making sure the log files in jail.local exist on $PUBLIC_IP"
+ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo bash -s" <<'LOGFILES'
+set -eu
+for logpath in $(sed -n 's/^[[:space:]]*logpath[[:space:]]*=[[:space:]]*//p' /etc/fail2ban/jail.local | sort -u); do
+  [ ! -e "$logpath" ] || continue
+  [ -d "$(dirname "$logpath")" ] || { echo "ERROR: $(dirname "$logpath") does not exist, so $logpath cannot be created."; exit 1; }
+  case "$logpath" in
+    /var/instance-ssd/logs/*) install -m 644 -o 1000 -g 1000 /dev/null "$logpath" ;;
+    *) install -m 600 -o root -g root /dev/null "$logpath" ;;
+  esac
+  echo "Created $logpath."
+done
+LOGFILES
+
 # Restart fail2ban
 echo "Restarting fail2ban on $PUBLIC_IP"
 ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo systemctl restart fail2ban"
@@ -161,8 +219,17 @@ echo "Fail2Ban deployment complete."
 # Begin sshd hardening section
 #########################################################
 
+# sshd uses the first value it reads. Amazon Linux 2 has no drop-in directory
+# and the sed is enough. On Amazon Linux 2023 sshd_config includes
+# sshd_config.d/*.conf at the top and 50-redhat.conf there sets
+# `X11Forwarding yes`, so the sed has no effect and a drop-in that sorts before
+# it is what counts. 12- sits after 10-blot.conf (config/redis/host/setup.sh)
+# and 11-blot-port.conf (host/setup.sh). It is only written where sshd_config
+# includes the directory, so nothing is added to an Amazon Linux 2 host.
 echo "Disabling X11 forwarding in sshd_config on $PUBLIC_IP"
-ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo sed -i 's/^#\?X11Forwarding.*/X11Forwarding no/' /etc/ssh/sshd_config && sudo sshd -t && sudo systemctl reload sshd"
+ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo sed -i 's/^#\?X11Forwarding.*/X11Forwarding no/' /etc/ssh/sshd_config"
+ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "if grep -q '^Include /etc/ssh/sshd_config.d/' /etc/ssh/sshd_config; then printf '%s\n' '# Installed by config/host/deploy.sh' 'X11Forwarding no' | sudo tee /etc/ssh/sshd_config.d/12-blot-x11.conf >/dev/null && sudo chmod 600 /etc/ssh/sshd_config.d/12-blot-x11.conf; fi"
+ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo sshd -t && sudo systemctl reload sshd"
 
 echo "sshd hardening complete."
 #########################################################
