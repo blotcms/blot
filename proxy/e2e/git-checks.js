@@ -14,6 +14,8 @@
 //   E2E_GIT_EMAIL    its owner's email
 //   E2E_GIT_BLOG_ID  its blog ID (for the rename step)
 //   E2E_GIT_BLOG_HOST  its vhost, e.g. e2egit.localhost
+//   GIT_BIN          the git executable to test (default: git on PATH), so the
+//                    workflow can run the same checks with an older git
 //
 // The proxy terminates TLS with the image's self-signed placeholder cert, so
 // verification is off (-c http.sslVerify=false, rejectUnauthorized: false).
@@ -32,6 +34,7 @@ const HANDLE = process.env.E2E_GIT_HANDLE;
 const TOKEN = process.env.E2E_GIT_TOKEN;
 const EMAIL = process.env.E2E_GIT_EMAIL || "e2e@example.com";
 const BLOG_ID = process.env.E2E_GIT_BLOG_ID;
+const GIT_BIN = process.env.GIT_BIN || "git";
 const BLOG_HOST = process.env.E2E_GIT_BLOG_HOST || HANDLE + "." + HOST;
 
 if (!HANDLE || !TOKEN) {
@@ -83,7 +86,7 @@ const newDir = (label) => {
 // outlives GIT_TIMEOUT_MS (a hang is a failure, not a stuck job).
 function git(args, { cwd = workRoot, env = {}, input, timeout = GIT_TIMEOUT_MS } = {}) {
   return new Promise((resolve) => {
-    const child = spawn("git", ["-c", "http.sslVerify=false", ...args], {
+    const child = spawn(GIT_BIN, ["-c", "http.sslVerify=false", ...args], {
       cwd,
       env: {
         PATH: process.env.PATH,
@@ -251,6 +254,8 @@ async function main() {
     console.log("  FAIL - git endpoint never became ready through the proxy ->", ready.detail);
     return;
   }
+
+  console.log("  git under test:", (await git(["--version"])).stdout.trim(), "(" + GIT_BIN + ")");
 
   // 1. Clone and ls-remote.
   const a = newDir("clone-a");

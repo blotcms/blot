@@ -134,28 +134,35 @@ jobs:
       # The git client through the same proxy, with the runner's real git.
       # Seeded after the existing suite's steps and run under !cancelled(), so
       # a failure in run.js still lets these run (and the reverse).
-      - name: Seed git blog
+      # One blog per client under test, so the handle-rename check (which
+      # mutates the blog) in one client's run can't break another's. They share
+      # the one user, and so the one token.
+      - name: Seed git blogs
         id: seed-git
         if: ${{ !cancelled() && steps.seed-blog.conclusion == 'success' }}
         run: |
           docker compose -f proxy/e2e/docker-compose.yml cp \
             proxy/e2e/seed-git.js app:/tmp/seed-git.js
-          out=$(docker compose -f proxy/e2e/docker-compose.yml exec -T app \
-            node /tmp/seed-git.js e2e@example.com e2egit)
-          json=$(echo "$out" | grep -o 'SEED_GIT_RESULT=.*' | head -n1 | cut -d= -f2-)
-          # Everything the seed printed except the result line (it has the token)
-          echo "$out" | grep -v 'SEED_GIT_RESULT=' || true
-          test -n "$json"
-          field() { printf '%s' "$json" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s)[process.argv[1]]))' "$1"; }
-          token=$(field token)
-          echo "::add-mask::$token"
-          {
-            echo "handle=$(field handle)"
-            echo "host=$(field host)"
-            echo "blog_id=$(field blogID)"
-            echo "token=$token"
-          } >> "$GITHUB_OUTPUT"
-          echo "seeded git blog $(field handle)"
+          field() { printf '%s' "$2" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s)[process.argv[1]]))' "$1"; }
+          # output-prefix:handle
+          for spec in :e2egit old_:e2egitold libgit2_:e2egitlibgit2; do
+            prefix=${spec%%:*}
+            out=$(docker compose -f proxy/e2e/docker-compose.yml exec -T app \
+              node /tmp/seed-git.js e2e@example.com "${spec#*:}")
+            json=$(echo "$out" | grep -o 'SEED_GIT_RESULT=.*' | head -n1 | cut -d= -f2-)
+            # Everything the seed printed except the result line (it has the token)
+            echo "$out" | grep -v 'SEED_GIT_RESULT=' || true
+            test -n "$json"
+            token=$(field token "$json")
+            echo "::add-mask::$token"
+            {
+              echo "${prefix}handle=$(field handle "$json")"
+              echo "${prefix}host=$(field host "$json")"
+              echo "${prefix}blog_id=$(field blogID "$json")"
+              echo "token=$token"
+            } >> "$GITHUB_OUTPUT"
+            echo "seeded git blog $(field handle "$json")"
+          done
 
       - name: Run git end-to-end checks
         if: ${{ !cancelled() && steps.seed-git.conclusion == 'success' }}
@@ -167,6 +174,53 @@ jobs:
           E2E_GIT_BLOG_ID: ${{ steps.seed-git.outputs.blog_id }}
           E2E_GIT_TOKEN: ${{ steps.seed-git.outputs.token }}
         run: node proxy/e2e/git-checks.js
+
+      # Git 2.37 is the oldest stock git seen from real clients (GitHub
+      # Desktop, VS Code, Xcode and Git for Windows all wrap stock git, so
+      # versions stand in for them). Built from the pinned release tarball and
+      # cached; no supported distro release ships 2.37.
+      - name: Cache git 2.37.7
+        id: cache-old-git
+        if: ${{ !cancelled() }}
+        uses: actions/cache@v4
+        with:
+          path: ~/git-2.37.7
+          key: git-2.37.7-${{ runner.os }}-${{ runner.arch }}-v1
+
+      - name: Build git 2.37.7
+        if: ${{ !cancelled() && steps.cache-old-git.outputs.cache-hit != 'true' }}
+        run: |
+          sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev libssl-dev zlib1g-dev
+          curl -fsSL -o "$RUNNER_TEMP/git.tar.xz" https://www.kernel.org/pub/software/scm/git/git-2.37.7.tar.xz
+          tar -xf "$RUNNER_TEMP/git.tar.xz" -C "$RUNNER_TEMP"
+          make -C "$RUNNER_TEMP/git-2.37.7" -j"$(nproc)" prefix="$HOME/git-2.37.7" \
+            NO_GETTEXT=1 NO_TCL=1 NO_PERL=1 NO_PYTHON=1 NO_EXPAT=1 NO_INSTALL_HARDLINKS=1 install
+
+      - name: Run git end-to-end checks (git 2.37.7)
+        if: ${{ !cancelled() && steps.seed-git.conclusion == 'success' }}
+        env:
+          GIT_BIN: /home/runner/git-2.37.7/bin/git
+          PROXY_ORIGIN: https://127.0.0.1
+          E2E_GIT_EMAIL: e2e@example.com
+          E2E_GIT_HANDLE: ${{ steps.seed-git.outputs.old_handle }}
+          E2E_GIT_BLOG_HOST: ${{ steps.seed-git.outputs.old_host }}
+          E2E_GIT_BLOG_ID: ${{ steps.seed-git.outputs.old_blog_id }}
+          E2E_GIT_TOKEN: ${{ steps.seed-git.outputs.token }}
+        run: node proxy/e2e/git-checks.js
+
+      # Working Copy (iOS) is built on libgit2 rather than the git CLI.
+      - name: Smoke test through libgit2 (pygit2)
+        if: ${{ !cancelled() && steps.seed-git.conclusion == 'success' }}
+        env:
+          PROXY_ORIGIN: https://127.0.0.1
+          E2E_GIT_EMAIL: e2e@example.com
+          E2E_GIT_HANDLE: ${{ steps.seed-git.outputs.libgit2_handle }}
+          E2E_GIT_BLOG_HOST: ${{ steps.seed-git.outputs.libgit2_host }}
+          E2E_GIT_TOKEN: ${{ steps.seed-git.outputs.token }}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/pygit2-venv"
+          "$RUNNER_TEMP/pygit2-venv/bin/pip" install --quiet --disable-pip-version-check pygit2==1.18.0
+          "$RUNNER_TEMP/pygit2-venv/bin/python" proxy/e2e/libgit2-smoke.py
 
       - name: Stack logs
         if: always()
