@@ -19,6 +19,8 @@ the private key) and `PUBLIC_IP` (the host), and optionally `SSH_PORT`
 | Here | On the host |
 | --- | --- |
 | `scripts/` (all of it, replacing the old directory) | `/home/ec2-user/scripts/` |
+| `scripts/unit-mem-log.sh`, `scripts/unit-mem-summary.sh` | `/usr/local/bin/` |
+| (written by `deploy.sh`) | `/etc/cron.d/blot-unit-mem` (runs `unit-mem-log.sh` every minute as root) |
 | `scripts/mount-instance-store.service` | `/etc/systemd/system/mount-instance-store.service` |
 | `scripts/docker.service.d/10-instance-store.conf` | `/etc/systemd/system/docker.service.d/10-instance-store.conf` |
 | `scripts/mount-data-volume.service` | `/etc/systemd/system/mount-data-volume.service` |
@@ -32,6 +34,25 @@ The `nginx-*` fail2ban jails ban `http,https` over TCP and, with a second
 `iptables-multiport` action named `<jail>-udp`, over UDP too (HTTP/3 is UDP 443).
 They deliberately do not use `iptables-allports`, which would also lock a
 banned IP out of ssh.
+
+## Unit memory log
+
+`unit-mem-log.sh` appends to `/var/instance-ssd/logs/unit-mem.log` (instance
+store, so it survives deploys; about 30 days are kept). Each cron run takes four
+samples 15 seconds apart. Per sample there is one line per container
+(`blot-blue`, `blot-green` and their airlocks) with `anon`, `file`, `shmem`,
+`limit` and `oom_kill` from the container's cgroup (v1 or v2), `node_max` (the
+biggest node process) and `top=comm:bytes` (the biggest non-node process, i.e. a
+pandoc/git/exiftool spike), and one `name=host` line with `mem_available`.
+`anon+shmem` is the memory that can't be reclaimed; the cgroup limit also counts
+page cache. Summarise it with:
+
+```
+unit-mem-summary.sh [logfile]
+```
+
+(per container: max and p99 anon+shmem, max node_max, max oom_kill, top 5 child
+processes; host: lowest mem_available.)
 
 ## Permanent bans
 
