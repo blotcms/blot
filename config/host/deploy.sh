@@ -38,6 +38,14 @@ ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "chmod +x /home/ec2-user/scri
 echo "Installing check_docker_health.sh to /usr/local/bin on $PUBLIC_IP"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo install -m 755 /home/ec2-user/scripts/check_docker_health.sh /usr/local/bin/check_docker_health.sh"
 
+# cron runs the memory sampler from /usr/local/bin too. This is the first
+# cron entry deploy.sh installs (check_docker_health.sh's is still by hand): an
+# /etc/cron.d file is replaced whole each run, so there is nothing to duplicate.
+# The log is in /var/instance-ssd/logs, which survives deploys; see README.md.
+echo "Installing unit-mem-log.sh, unit-mem-summary.sh and /etc/cron.d/blot-unit-mem on $PUBLIC_IP"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo install -m 755 /home/ec2-user/scripts/unit-mem-log.sh /home/ec2-user/scripts/unit-mem-summary.sh /usr/local/bin/"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "printf '%s\n' '# Installed by config/host/deploy.sh' '* * * * * root /usr/local/bin/unit-mem-log.sh >/dev/null 2>&1' | sudo tee /etc/cron.d/blot-unit-mem >/dev/null && sudo chmod 644 /etc/cron.d/blot-unit-mem && sudo chown root:root /etc/cron.d/blot-unit-mem"
+
 # Install (or update) the mount-instance-store unit and the docker.service
 # drop-in that gates on it, so docker cannot (re)start at boot against the
 # not-yet-mounted, empty /var/instance-ssd. Only installs files +
