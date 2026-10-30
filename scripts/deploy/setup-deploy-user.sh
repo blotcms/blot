@@ -118,9 +118,9 @@ chown root:adm "${COMMAND_LOG}" 2>/dev/null || chown root:root "${COMMAND_LOG}"
 if command -v rsyslogd &> /dev/null; then
     log "Configuring rsyslog for deploy user monitoring..."
     cat > /etc/rsyslog.d/30-deploy-user.conf <<EOF
-# Log SSH access by deploy user
+# Log SSH access by deploy user. Not "& stop": sshd lines must still reach
+# /var/log/secure, or fail2ban's sshd jail never sees failed logins for deploy.
 :msg, contains, "deploy" ${AUDIT_LOG}
-& stop
 EOF
     systemctl restart rsyslog 2>/dev/null || warn "Could not restart rsyslog"
 fi
