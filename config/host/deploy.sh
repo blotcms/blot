@@ -73,6 +73,12 @@ ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo systemctl enable mount-
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "mountpoint -q /var/instance-ssd || sudo systemctl start mount-instance-store.service"
 echo "mount-instance-store / docker.service ordering installed."
 
+# On a new combined host host/setup.sh ran before the instance store was
+# mounted, so blot-instance-store.service (Redis's /backups, a bind mount of a
+# directory of it) failed then. Start it now. Nothing happens where the unit
+# does not exist (the Amazon Linux 2 app host) or /backups is already mounted.
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "if [ -e /etc/systemd/system/blot-instance-store.service ] && ! mountpoint -q /backups; then sudo systemctl start blot-instance-store.service || echo \"WARNING: /backups is not mounted; see journalctl -u blot-instance-store\"; fi"
+
 # Install (or update) the mount-data-volume unit and its docker.service
 # drop-in, the same way: docker must not (re)start at boot against an unmounted,
 # empty /var/www/blot/data on the root disk. Again no docker restart here.

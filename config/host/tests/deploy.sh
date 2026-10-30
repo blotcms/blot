@@ -4,7 +4,9 @@
 # reach the container; the container has no systemd, so systemctl, mountpoint,
 # mount, nvme and blkid are stubs too (systemctl start mount-instance-store runs
 # the real mount-instance-store.sh against them). Everything else is real: sshd,
-# fail2ban, logrotate, install, sed.
+# fail2ban, logrotate, install, sed. host/setup.sh sets up Redis too, so this is
+# a combined host: blot-instance-store.service (Redis's /backups) is started by
+# deploy.sh once the instance store is mounted.
 #
 # Needs docker. Usage: config/host/tests/deploy.sh
 set -euo pipefail
@@ -35,11 +37,11 @@ deploy() { # deploy <output file> [VAR=value...]
     bash "$REPO/config/host/deploy.sh" > "$out" 2>&1 || { tail -20 "$out"; return 1; }
 }
 
-docker run -d --name "$NAME" -v "$REPO:/repo:ro" amazonlinux:2023 sleep 3600 > /dev/null
+docker run -d --cap-add NET_ADMIN --name "$NAME" -v "$REPO:/repo:ro" amazonlinux:2023 sleep 3600 > /dev/null
 # Test artifacts: the base image lacks these, a real AMI has them.
 docker exec "$NAME" dnf install -y -q shadow-utils diffutils openssh-server tar systemd util-linux > /dev/null
 in_ct 'useradd -m ec2-user && ssh-keygen -A > /dev/null'
-docker exec -e BLOT_HOST_SKIP_SYSTEMD=1 -e BLOT_SSH_PORT=2222 "$NAME" bash /repo/config/host/host/setup.sh > "$TMP/setup" 2>&1 ||
+docker exec -e BLOT_HOST_SKIP_SYSTEMD=1 -e BLOT_SSH_PORT=2222 -e REDIS_MAXMEMORY=1gb -e BLOT_VPC_CIDR=10.0.0.0/16 -e BLOT_MAIN_INTERFACE=eth0 "$NAME" bash /repo/config/host/host/setup.sh > "$TMP/setup" 2>&1 ||
   { cat "$TMP/setup"; fail "setup.sh exited non-zero"; }
 
 # Stubs for ssh and scp on this side, and for what needs systemd or a real
@@ -59,14 +61,16 @@ EOS
 chmod +x "$TMP/bin/ssh" "$TMP/bin/scp"
 in_ct 'cd /usr/local/bin
 printf "#!/bin/bash\nexec \"\$@\"\n" > sudo
-printf "#!/bin/bash\necho \"\$*\" >> /tmp/systemctl.log\n[ \"\$*\" != \"start mount-instance-store.service\" ] || bash /home/ec2-user/scripts/mount-instance-store.sh\n" > systemctl
+printf "#!/bin/bash\necho \"\$*\" >> /tmp/systemctl.log\n[ \"\$*\" != \"start mount-instance-store.service\" ] || bash /home/ec2-user/scripts/mount-instance-store.sh\n[ \"\$*\" != \"start blot-instance-store.service\" ] || bash /usr/local/bin/mount-instance-store.sh\n" > systemctl
 printf "#!/bin/bash\n[ \"\$1\" = -q ] && shift\ngrep -qx \"\$1\" /tmp/mounted 2> /dev/null\n" > mountpoint
-printf "#!/bin/bash\necho \"\$2\" >> /tmp/mounted\n" > mount
+printf "#!/bin/bash\necho \"\${@: -1}\" >> /tmp/mounted\necho \"mount \$*\" >> /tmp/mount.log\n" > mount
 printf "#!/bin/bash\necho \"/dev/nvme1n1 SN Amazon EC2 NVMe Instance Storage 1\"\n" > nvme
 printf "#!/bin/bash\nexit 0\n" > blkid
 chmod +x sudo systemctl mountpoint mount nvme blkid'
 
 echo "# A new host: no instance store mounted, no data volume file"
+# Skip mode writes no units; the real one exists on a host set up with systemd.
+in_ct 'touch /etc/systemd/system/blot-instance-store.service'
 check "deploy.sh runs to the end" deploy "$TMP/run1" DATA_VOLUME_ID=$VOLUME
 check "deploy.sh says so" grep -q '^Host setup complete' "$TMP/run1"
 check "DATA_VOLUME_ID is written" in_ct "[ \"\$(cat /etc/blot/data-volume)\" = $VOLUME ]"
@@ -74,6 +78,12 @@ check "no marker is written for a volume that is not mounted" in_ct '[ ! -e /var
 check "mount-data-volume is enabled and started" in_ct 'grep -qx "enable --now mount-data-volume.service" /tmp/systemctl.log'
 check "the instance store unit is enabled" in_ct 'grep -qx "enable mount-instance-store.service" /tmp/systemctl.log'
 check "the instance store unit is started when not mounted" in_ct '[ "$(grep -cx "start mount-instance-store.service" /tmp/systemctl.log)" = 1 ]'
+check "the Redis backup unit is started after the instance store, when /backups is not mounted" in_ct '
+  [ "$(grep -cx "start blot-instance-store.service" /tmp/systemctl.log)" = 1 ] &&
+  [ "$(grep -nx "start mount-instance-store.service" /tmp/systemctl.log | cut -d: -f1)" -lt "$(grep -nx "start blot-instance-store.service" /tmp/systemctl.log | cut -d: -f1)" ]'
+check "/backups is a bind mount of a directory on the instance store" in_ct '
+  grep -qx "mount --bind /var/instance-ssd/redis-backups /backups" /tmp/mount.log && grep -qx /backups /tmp/mounted &&
+  [ "$(stat -c %U:%G /var/instance-ssd/redis-backups)" = ec2-user:ec2-user ]'
 check "docker is never started, restarted or stopped" in_ct '! grep -E "(start|stop|restart).* docker" /tmp/systemctl.log'
 check "logs, tmp and disk-cache are owned by uid 1000" in_ct '
   for d in logs tmp disk-cache; do [ "$(stat -c %u:%g /var/instance-ssd/$d)" = 1000:1000 ] || exit 1; done'
@@ -110,13 +120,19 @@ in_ct 'rm /tmp/systemctl.log; chown 1234:1234 /var/instance-ssd/logs /var/instan
 check "deploy.sh runs again, with another DATA_VOLUME_ID" deploy "$TMP/run2" DATA_VOLUME_ID=$OTHER_VOLUME
 check "the existing data volume file is not overwritten" in_ct "[ \"\$(cat /etc/blot/data-volume)\" = $VOLUME ]"
 check "the instance store unit is not started when mounted" in_ct '! grep -q "start mount-instance-store" /tmp/systemctl.log'
+check "the Redis backup unit is not started when /backups is mounted" in_ct '! grep -q "start blot-instance-store" /tmp/systemctl.log'
 check "docker is never started, restarted or stopped" in_ct '! grep -E "(start|stop|restart).* docker" /tmp/systemctl.log'
 check "the existing log directory and access log keep their owner" in_ct '
   [ "$(stat -c %u:%g /var/instance-ssd/logs)" = 1234:1234 ] && [ "$(stat -c %u:%g /var/instance-ssd/logs/access.log)" = 1234:1234 ]'
 in_ct 'bash /home/ec2-user/scripts/mount-instance-store.sh > /dev/null'
 check "mount-instance-store.sh does not take over an existing log directory" in_ct '[ "$(stat -c %u:%g /var/instance-ssd/logs)" = 1234:1234 ]'
-check "nothing was mounted a second time" in_ct '[ "$(wc -l < /tmp/mounted)" = 1 ]'
+check "nothing was mounted a second time" in_ct '[ "$(grep -cx /var/instance-ssd /tmp/mounted)" = 1 ] && [ "$(grep -cx /backups /tmp/mounted)" = 1 ]'
 check "sshd -T still reports x11forwarding no" in_ct 'sshd -T | grep -qx "x11forwarding no"'
+
+echo "# A host without blot-instance-store.service (the Amazon Linux 2 app host)"
+in_ct 'rm /etc/systemd/system/blot-instance-store.service /tmp/systemctl.log; sed -i "/^\/backups\$/d" /tmp/mounted'
+check "deploy.sh runs, and starts nothing for Redis" deploy "$TMP/run2b" DATA_VOLUME_ID=$VOLUME
+check "the Redis backup unit is not started" in_ct '! grep -q "blot-instance-store" /tmp/systemctl.log'
 
 echo "# DATA_VOLUME_ID and a data volume that is already mounted"
 # A fake mounted volume: findmnt names a device, and the by-id link for $VOLUME

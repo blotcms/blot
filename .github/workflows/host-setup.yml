@@ -1,7 +1,8 @@
 name: host-setup
 
-# Runs config/host/host/setup.sh in Amazon Linux 2023 containers (twice, to
-# check it is idempotent) and in an Amazon Linux 2 one, where it must refuse.
+# Runs config/host/host/setup.sh, which also runs the Redis host setup and loads
+# the port 6379 firewall file, in Amazon Linux 2023 containers (twice, to check
+# it is idempotent) and in an Amazon Linux 2 one, where it must refuse.
 # Then runs config/host/deploy.sh on such a container (config/host/tests/deploy.sh).
 # It needs Docker on the runner.
 
@@ -13,6 +14,9 @@ on:
       - "config/host/bootstrap.sh"
       - "config/host/launch.sh"
       - "config/host/host/**"
+      - "config/redis/host/**"
+      - "config/redis/bin/**"
+      - "config/redis/redis.conf"
       - "config/host/tests/launch.sh"
       - "config/host/tests/setup.sh"
       - "config/host/tests/deploy.sh"
@@ -32,6 +36,9 @@ on:
       - "config/host/bootstrap.sh"
       - "config/host/launch.sh"
       - "config/host/host/**"
+      - "config/redis/host/**"
+      - "config/redis/bin/**"
+      - "config/redis/redis.conf"
       - "config/host/tests/launch.sh"
       - "config/host/tests/setup.sh"
       - "config/host/tests/deploy.sh"

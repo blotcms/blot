@@ -74,20 +74,26 @@ Moving to a new host: see [Moving to a new host](#moving-to-a-new-host).
 
 ## Moving to a new host
 
-A new host is built on Amazon Linux 2023 (arm64). `bootstrap.sh` does the
-root-side OS setup, then `deploy.sh` installs the files in the table above onto
+A new host is built on Amazon Linux 2023 (arm64) and runs Redis alongside the
+units. `bootstrap.sh` does the root-side OS and Redis setup, then `deploy.sh`
+installs the files in the table above onto
 it. The rest is state that lives on the host and has to be carried across or
 recreated. Do it before pointing traffic at the new host.
 
 ```
-config/host/launch.sh --type <instance-type> --key-name <aws-key-pair> --key <private-key> --ssh-port N
+config/host/launch.sh --type <instance-type> --key-name <aws-key-pair> --key <private-key> --ssh-port N --redis-maxmemory <value>
 ```
 
 `launch.sh` starts the instance (newest AL2023 arm64 AMI, the app subnet, the
 app and Redis security groups, IMDSv2 only, a 200 GB gp3 root, termination
 protection on) and runs `bootstrap.sh` on it. `--ssh-port` goes in user data, so
-the first connection already uses that port. It attaches no data volume and
-moves no Elastic IP; it ends by printing the `deploy.sh` command to run next. On
+the first connection already uses that port. `--redis-maxmemory` (or
+`REDIS_MAXMEMORY`) is required and has no default: the Redis setup's 70% of RAM
+is wrong on a host the units share. Afterwards it checks from your machine
+that port 6379 is not reachable on the host's public address, and if it is it
+stops and says the instance is still running. It attaches no data volume,
+moves no Elastic IP and starts no replication; it ends by printing the
+`deploy.sh` command to run next. On
 a new host run `deploy.sh` directly, as that prints it: `npm run deploy-host`
 sources the production host's `PUBLIC_IP` over the one you set. Run it with
 `--dry-run` first to see the `run-instances` call, `--drill` for a throwaway, `--list` for the hosts it has launched. The key pair name, key
@@ -95,16 +101,17 @@ and port can be set as `BLOT_HOST_KEY_NAME`, `BLOT_HOST_SSH_KEY` and
 `BLOT_SSH_PORT`. To run only the OS setup on an existing host:
 
 ```
-BLOT_SSH_PORT=... BLOT_DEPLOY_PUBLIC_KEY="ssh-..." config/host/bootstrap.sh <ssh-host>
+REDIS_MAXMEMORY=... BLOT_SSH_PORT=... BLOT_DEPLOY_PUBLIC_KEY="ssh-..." config/host/bootstrap.sh <ssh-host>
 ```
 
-It copies `host/` and `scripts/deploy/setup-deploy-user.sh` to the host and
-runs `host/setup.sh` with sudo; both variables are optional and `SSH_OPTS`
-works as in `config/redis/bootstrap.sh`. `setup.sh` refuses to run anywhere but
+It copies `host/`, `scripts/deploy/setup-deploy-user.sh` and the Redis host
+files (`config/redis`'s `redis.conf`, `bin/` and `host/`) to the host and runs
+`host/setup.sh` with sudo; `REDIS_MAXMEMORY` is required, the other two are
+optional, and `SSH_OPTS` works as in `config/redis/bootstrap.sh`. `setup.sh` refuses to run anywhere but
 Amazon Linux 2023, is safe to re-run, and never starts or restarts docker or
 upgrades a package. It:
 
-- installs `docker`, `fail2ban-server`, `iptables-nft`, `rsyslog`, `cronie`,
+- installs `docker`, `fail2ban-server`, `iptables-nft`, `nftables`, `rsyslog`, `cronie`,
   `chrony`, `rsync`, `xfsprogs`, `nvme-cli`, `redis6` and `logrotate`, and links
   `redis6-cli` as `/usr/local/bin/redis-cli`;
 - enables docker without starting it, checks cgroup v2, and adds a drop-in that
@@ -115,7 +122,23 @@ upgrades a package. It:
 - installs the `check_docker_health.sh` cron entry, enables `crond`, `rsyslog`,
   `chronyd` and `fail2ban` (the last is started by `deploy.sh`), creates
   `/var/www/blot/data` and `/var/www/blot/app/blog/static`, and sets
-  `net.ipv4.tcp_migrate_req = 1`.
+  `net.ipv4.tcp_migrate_req = 1`;
+- loads a firewall for Redis, then runs `config/redis/host/setup.sh` with
+  `REDIS_MAXMEMORY` and `BLOT_REDIS_SHARED_INSTANCE_STORE=1`. Redis has no
+  password and `redis.conf` binds every address, so `blot-redis-firewall.service`
+  loads `/etc/nftables/blot-redis.nft` before Redis starts: port 6379 is open
+  from loopback and the VPC's range on the main interface (both read from the
+  instance metadata) and dropped from everything else, docker bridges and IPv6
+  included. The file replaces only its own table, so fail2ban's and docker's
+  rules stay. `redis6` `Requires=` the unit, so it does not start if the rules
+  fail to load. Re-running reloads the unit and never restarts Redis. Check it
+  with `sudo nft list table inet blot_redis`.
+
+On the first run Redis's `/backups` cannot be mounted yet: it is a bind mount of
+`/var/instance-ssd/redis-backups`, and `deploy.sh` mounts the instance store
+afterwards. `deploy.sh` then starts `blot-instance-store.service`, so the
+warning from the Redis setup can be ignored. A new host has no
+`/etc/blot-redis/floating-ip`, so `backup.sh` does not upload from it yet.
 
 `config/host/tests/setup.sh` runs it in Docker, and `config/host/tests/deploy.sh`
 runs `deploy.sh` on top of it. Still by hand:

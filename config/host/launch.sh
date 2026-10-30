@@ -2,9 +2,11 @@
 # Usage: launch.sh --type <instance-type> --key-name <aws-key-pair> [options]
 #        launch.sh --list [--profile NAME] [--region NAME]
 # Launches a new app host on the newest Amazon Linux 2023 arm64 AMI, waits for
-# SSH and runs bootstrap.sh on it. The last lines print the deploy.sh command
+# SSH and runs bootstrap.sh on it, which also installs and configures Redis and
+# firewalls port 6379. It then checks from here that 6379 is not reachable on
+# the host's public address (nc). The last lines print the deploy.sh command
 # to run next. It attaches no data volume, moves no Elastic IP and sets up no
-# Redis or replication.
+# replication.
 # Runs on a Mac, so it has to work in bash 3.2.
 #
 # Try it with --dry-run first.
@@ -12,6 +14,8 @@
 # Options:
 #   --type TYPE            instance type (required)
 #   --key-name NAME        the AWS key pair (required; or BLOT_HOST_KEY_NAME)
+#   --redis-maxmemory VALUE  Redis's maxmemory, e.g. 10gb (or REDIS_MAXMEMORY); required
+#                          except with --dry-run. No default: it depends on the unit sizes
 #   --key PATH             SSH private key (or BLOT_HOST_SSH_KEY); needed to reach the new host
 #   --ssh-port N           the port sshd listens on (or BLOT_SSH_PORT). Set in user data, so
 #                          the first connection already uses it: the security group may not
@@ -48,7 +52,7 @@ APP_SECURITY_GROUP=sg-0d1c2c28e0c7084ad
 REDIS_SECURITY_GROUP=sg-0b3b200323d36ce2e
 PROVISIONED_BY=config/host/launch.sh
 
-TYPE=""; KEY_NAME=${BLOT_HOST_KEY_NAME:-}; KEY=${BLOT_HOST_SSH_KEY:-}
+TYPE=""; KEY_NAME=${BLOT_HOST_KEY_NAME:-}; KEY=${BLOT_HOST_SSH_KEY:-}; REDIS_MAXMEMORY=${REDIS_MAXMEMORY:-}
 SSH_PORT=${BLOT_SSH_PORT:-}; DEPLOY_KEY=${BLOT_DEPLOY_PUBLIC_KEY:-}
 ROOT_GB=200; INSTANCE_PROFILE=""; SSH_USER=ec2-user
 DRY_RUN=""; DRILL=""; LIST=""
@@ -59,6 +63,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --type) TYPE=$2; shift 2 ;;
     --key-name) KEY_NAME=$2; shift 2 ;;
+    --redis-maxmemory) REDIS_MAXMEMORY=$2; shift 2 ;;
     --key) KEY=$2; shift 2 ;;
     --ssh-port) SSH_PORT=$2; shift 2 ;;
     --deploy-public-key)
@@ -90,6 +95,8 @@ fi
 [ -n "$TYPE" ] || die "usage: launch.sh --type <instance-type> --key-name <aws-key-pair> [options]"
 [ -n "$KEY_NAME" ] || die "need --key-name (or BLOT_HOST_KEY_NAME): the AWS key pair"
 [ -n "$KEY" ] || [ -n "$DRY_RUN" ] || die "need --key (or BLOT_HOST_SSH_KEY): the private key for the instance"
+[ -n "$REDIS_MAXMEMORY" ] || [ -n "$DRY_RUN" ] || die "need --redis-maxmemory (or REDIS_MAXMEMORY), e.g. 10gb"
+[ -n "$DRY_RUN" ] || command -v nc > /dev/null || die "need nc, to check that Redis is not reachable from outside"
 [ -z "$KEY" ] || [ -f "$KEY" ] || die "no such key file: $KEY"
 [ -z "$SSH_PORT" ] || [[ $SSH_PORT =~ ^[0-9]+$ ]] || die "--ssh-port takes a port number"
 [[ $ROOT_GB =~ ^[0-9]+$ ]] || die "--root-gb takes a number"
@@ -135,8 +142,10 @@ echo "Instance: $ID ($NAME)"
 aws_cli ec2 wait instance-running --instance-ids "$ID"
 
 # Prefer the public address (you are on a laptop); fall back to the private one.
-IP=$(aws_cli ec2 describe-instances --instance-ids "$ID" \
-  --query 'Reservations[0].Instances[0].[PublicIpAddress,PrivateIpAddress]' --output text | awk '{ if ($1 != "None") print $1; else print $2 }')
+ADDRESSES=$(aws_cli ec2 describe-instances --instance-ids "$ID" \
+  --query 'Reservations[0].Instances[0].[PublicIpAddress,PrivateIpAddress]' --output text)
+PUBLIC_ADDRESS=$(echo "$ADDRESSES" | awk '$1 != "None" { print $1 }')
+IP=$(echo "$ADDRESSES" | awk '{ if ($1 != "None") print $1; else print $2 }')
 echo "Address: $IP"
 
 # A new instance reuses IPs, so do not trust or record its host key.
@@ -147,8 +156,19 @@ echo "Waiting for SSH"
 for _ in $(seq 1 30); do ssh_run "$TARGET" true 2> /dev/null && break; sleep 10; done
 ssh_run "$TARGET" true || die "cannot ssh to $TARGET; the instance $ID is still running"
 
-BLOT_SSH_PORT=$SSH_PORT BLOT_DEPLOY_PUBLIC_KEY=$DEPLOY_KEY "$HERE/bootstrap.sh" "$TARGET" ||
+REDIS_MAXMEMORY=$REDIS_MAXMEMORY BLOT_SSH_PORT=$SSH_PORT BLOT_DEPLOY_PUBLIC_KEY=$DEPLOY_KEY "$HERE/bootstrap.sh" "$TARGET" ||
   die "bootstrap.sh failed; the instance $ID is still running"
+
+# Redis has no password: the security group and the host firewall are the only
+# protection. This catches both being wrong. Meaningless against a private address.
+if [ -n "$PUBLIC_ADDRESS" ]; then
+  if nc -z -w 5 "$PUBLIC_ADDRESS" 6379 > /dev/null 2>&1; then
+    die "REDIS IS EXPOSED: $PUBLIC_ADDRESS accepts connections on port 6379, and Redis has no password. Fix the security group and the firewall now. The instance $ID is still running"
+  fi
+  echo "Port 6379 is not reachable on $PUBLIC_ADDRESS"
+else
+  echo "No public address: port 6379 was not checked from outside"
+fi
 
 echo "Done: $ID ($NAME) at $IP"
 # Not `npm run deploy-host`: it sources the production host's PUBLIC_IP over these.
