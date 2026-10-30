@@ -84,6 +84,7 @@ check "directories are owned by ec2-user" in_ct '
   done'
 check "nothing under /var/instance-ssd" in_ct '[ ! -e /var/instance-ssd ]'
 check "sysctl file" in_ct 'grep -qx "net.ipv4.tcp_migrate_req = 1" /etc/sysctl.d/91-blot-host.conf'
+check "the deploy rsyslog rule lets lines through to /var/log/secure" in_ct '! grep -q "^& stop" /etc/rsyslog.d/30-deploy-user.conf'
 check "sshd -t passes with the port drop-in" in_ct 'sshd -t && sshd -T | grep -qx "port 2222"'
 # The Redis setup writes 10-blot.conf only outside skip mode, so it is still absent here.
 check "the port drop-in is separate from 10-blot.conf" in_ct '[ ! -e /etc/ssh/sshd_config.d/10-blot.conf ]'

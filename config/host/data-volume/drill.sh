@@ -232,6 +232,8 @@ Rehearse from the repo root (the key, if any, goes in SSH_OPTS):
   P="--profile $AWS_PROFILE_NAME --region $AWS_REGION"
   config/host/data-volume/resize.sh \$P --host $target --dry-run shrink 6
   config/host/data-volume/resize.sh \$P --host $target --any-time shrink 6
+  ssh $target docker rm -f blot-blue blot-green   # stands in for the app deploy
+  config/host/data-volume/resize.sh \$P --host $target finish
   config/host/data-volume/resize.sh \$P --host $target grow 10
 Watch while it runs: ssh $target docker logs -f blot-blue (read errors),
 and blot-green (the writer; its writes.log is in data/blogs/drill).
