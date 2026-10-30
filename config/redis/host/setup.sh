@@ -5,6 +5,9 @@
 # allows it, and the rest is listed as needing a restart.
 #
 # Env: REDIS_MAXMEMORY       maxmemory value (default: 70% of RAM)
+#      BLOT_REDIS_SHARED_INSTANCE_STORE=1  a combined app and Redis host:
+#                                 /backups is a directory of the app's instance
+#                                 store, not a disk of its own
 #      BLOT_REDIS_SKIP_SYSTEMD=1  for container tests: no systemd, sysctl or
 #                                 package extras, and Redis is started by hand
 set -euo pipefail
@@ -95,6 +98,16 @@ say "Scripts"
 install -m 0755 -o root -g root -t /usr/local/bin \
   "$ROOT"/bin/*.sh "$HERE/mount-instance-store.sh"
 mkdir -p /etc/blot-redis # holds floating-ip, which marks the active host for backup.sh
+# Explicit config, never detected from what is mounted. It is only ever written
+# here: a re-run without the variable must not switch a host back.
+if [ "${BLOT_REDIS_SHARED_INSTANCE_STORE:-}" = 1 ]; then
+  put /etc/blot-redis/shared-instance-store 0644 root:root <<'EOF'
+# Written by config/redis/host/setup.sh (BLOT_REDIS_SHARED_INSTANCE_STORE=1):
+# the app's mount-instance-store.service owns the instance store, so
+# mount-instance-store.sh bind-mounts /var/instance-ssd/redis-backups at
+# /backups instead of formatting the disk.
+EOF
+fi
 # The backup user reads Redis's RDB through the redis6 group.
 if id "$BACKUP_USER" > /dev/null 2>&1; then
   id -nG "$BACKUP_USER" | grep -qw redis6 || usermod -aG redis6 "$BACKUP_USER"
@@ -173,7 +186,10 @@ WantedBy=multi-user.target
 EOF
   put /etc/systemd/system/blot-instance-store.service 0644 root:root <<'EOF'
 [Unit]
-Description=Mount the instance store at /backups
+Description=Mount /backups (the instance store, or a directory of it on a combined host)
+# On a combined host the app's unit mounts the instance store first. That unit
+# does not exist on the Redis-only host, where this line has no effect.
+After=mount-instance-store.service
 Before=redis6.service
 
 [Service]

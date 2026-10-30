@@ -1,7 +1,7 @@
 #!/bin/bash
-# Tests config/host/launch.sh with a stub aws, a stub ssh and a stub bootstrap.sh
+# Tests config/host/launch.sh with a stub aws, ssh and nc and a stub bootstrap.sh
 # that record their arguments: no Docker, no AWS, no ssh. The stubs are on PATH
-# (aws, ssh) and next to a copy of launch.sh (bootstrap.sh).
+# (aws, ssh, nc) and next to a copy of launch.sh (bootstrap.sh).
 #
 # Usage: config/host/tests/launch.sh   (also run it with /bin/bash on a Mac: 3.2)
 set -euo pipefail
@@ -27,33 +27,41 @@ case "$*" in
   *"ssm get-parameter"*) echo ami-test ;;
   *"describe-images"*) echo /dev/xvda ;;
   *"run-instances"*) echo i-test ;;
-  *"describe-instances --instance-ids"*) echo "None 10.0.0.5" ;;
+  *"describe-instances --instance-ids"*) echo "$STUB_ADDRESSES" ;;
 esac
 EOF
 cat > "$TMP/bin/ssh" << 'EOF'
 #!/bin/bash
 echo "$*" >> "$STUB_DIR/ssh.log"
 EOF
+# The exit status is what STUB_NC_EXIT says: 0 means the port connected.
+cat > "$TMP/bin/nc" << 'EOF'
+#!/bin/bash
+echo "$*" >> "$STUB_DIR/nc.log"
+exit "$STUB_NC_EXIT"
+EOF
 cat > "$TMP/host/bootstrap.sh" << 'EOF'
 #!/bin/bash
-echo "$* SSH_OPTS=[$SSH_OPTS] BLOT_SSH_PORT=[$BLOT_SSH_PORT] BLOT_DEPLOY_PUBLIC_KEY=[$BLOT_DEPLOY_PUBLIC_KEY]" >> "$STUB_DIR/bootstrap.log"
+echo "$* REDIS_MAXMEMORY=[$REDIS_MAXMEMORY] SSH_OPTS=[$SSH_OPTS] BLOT_SSH_PORT=[$BLOT_SSH_PORT] BLOT_DEPLOY_PUBLIC_KEY=[$BLOT_DEPLOY_PUBLIC_KEY]" >> "$STUB_DIR/bootstrap.log"
 EOF
-chmod +x "$TMP/bin/aws" "$TMP/bin/ssh" "$TMP/host/bootstrap.sh" "$TMP/host/launch.sh"
+chmod +x "$TMP/bin/aws" "$TMP/bin/ssh" "$TMP/bin/nc" "$TMP/host/bootstrap.sh" "$TMP/host/launch.sh"
 
 # run <args...>: launch.sh with the stubs; sets OUT, STATUS and the logs.
+# STUB_ADDRESSES (public and private) and STUB_NC_EXIT set what the stubs answer.
 run() {
   rm -f "$TMP"/*.log
   STATUS=0
-  OUT=$(STUB_DIR="$TMP" PATH="$TMP/bin:$PATH" "$TMP/host/launch.sh" "$@" 2>&1) || STATUS=$?
+  OUT=$(STUB_DIR="$TMP" STUB_ADDRESSES="${STUB_ADDRESSES:-None 10.0.0.5}" STUB_NC_EXIT="${STUB_NC_EXIT:-1}" PATH="$TMP/bin:$PATH" "$TMP/host/launch.sh" "$@" 2>&1) || STATUS=$?
   AWS_LOG=$(cat "$TMP/aws.log" 2> /dev/null || true)
   SSH_LOG=$(cat "$TMP/ssh.log" 2> /dev/null || true)
   BOOTSTRAP_LOG=$(cat "$TMP/bootstrap.log" 2> /dev/null || true)
+  NC_LOG=$(cat "$TMP/nc.log" 2> /dev/null || true)
 }
 # has <description> <text> <pattern>
 has() { if printf '%s\n' "$2" | grep -qF -- "$3"; then ok "$1"; else fail "$1 (no '$3' in: $2)"; fi; }
 lacks() { if printf '%s\n' "$2" | grep -qF -- "$3"; then fail "$1 (found '$3')"; else ok "$1"; fi; }
 
-COMMON=(--type m6gd.xlarge --key-name test-key --key "$TMP/key")
+COMMON=(--type m6gd.xlarge --key-name test-key --key "$TMP/key" --redis-maxmemory 1gb)
 
 run --dry-run --type m6gd.xlarge --key-name test-key
 [ "$STATUS" -eq 0 ] && ok "dry run exits 0 without --key" || fail "dry run exits 0 without --key: $OUT"
@@ -62,6 +70,7 @@ has "dry run prints the command" "$OUT" "would run: aws"
 
 run "${COMMON[@]}"
 [ "$STATUS" -eq 0 ] || fail "normal launch exits 0: $OUT"
+has "launch passes the maxmemory to bootstrap" "$BOOTSTRAP_LOG" "REDIS_MAXMEMORY=[1gb]"
 RUN=$(printf '%s\n' "$AWS_LOG" | grep run-instances)
 has "launch passes the type" "$RUN" "--instance-type m6gd.xlarge"
 has "launch passes the key name" "$RUN" "--key-name test-key"
@@ -109,11 +118,32 @@ run --type m6gd.xlarge --key "$TMP/key"
 [ "$STATUS" -ne 0 ] && ok "missing --key-name fails" || fail "missing --key-name fails"
 run --key-name test-key --key "$TMP/key"
 [ "$STATUS" -ne 0 ] && ok "missing --type fails" || fail "missing --type fails"
-run --type m6gd.xlarge --key-name test-key
+run --type m6gd.xlarge --key-name test-key --redis-maxmemory 1gb
 [ "$STATUS" -ne 0 ] && ok "missing --key fails" || fail "missing --key fails"
+run --type m6gd.xlarge --key-name test-key --key "$TMP/key"
+[ "$STATUS" -ne 0 ] && ok "missing --redis-maxmemory fails" || fail "missing --redis-maxmemory fails"
+lacks "and launches nothing" "$AWS_LOG" "run-instances"
+REDIS_MAXMEMORY=2gb run --type m6gd.xlarge --key-name test-key --key "$TMP/key"
+has "REDIS_MAXMEMORY in the environment is used" "$BOOTSTRAP_LOG" "REDIS_MAXMEMORY=[2gb]"
 run "${COMMON[@]}" --ssh-port 22x
 [ "$STATUS" -ne 0 ] && ok "bad --ssh-port fails" || fail "bad --ssh-port fails"
 lacks "bad --ssh-port launches nothing" "$AWS_LOG" "run-instances"
+
+# The check that Redis is not reachable from outside: only against a public address.
+STUB_ADDRESSES="203.0.113.7 10.0.0.5" STUB_NC_EXIT=1 run "${COMMON[@]}"
+[ "$STATUS" -eq 0 ] && ok "a closed port 6379 passes" || fail "a closed port 6379 passes: $OUT"
+has "nc checks the public address, port 6379, with a timeout" "$NC_LOG" "-z -w 5 203.0.113.7 6379"
+has "launch says it is not reachable" "$OUT" "Port 6379 is not reachable on 203.0.113.7"
+has "the next step uses the public address" "$OUT" "PUBLIC_IP=203.0.113.7"
+STUB_ADDRESSES="203.0.113.7 10.0.0.5" STUB_NC_EXIT=0 run "${COMMON[@]}"
+[ "$STATUS" -ne 0 ] && ok "an open port 6379 fails" || fail "an open port 6379 fails"
+has "and says Redis is exposed" "$OUT" "REDIS IS EXPOSED"
+has "and that the instance is still running" "$OUT" "i-test is still running"
+lacks "and does not report success" "$OUT" "Done:"
+STUB_ADDRESSES="None 10.0.0.5" STUB_NC_EXIT=0 run "${COMMON[@]}"
+[ "$STATUS" -eq 0 ] && ok "without a public address nothing is checked" || fail "without a public address nothing is checked: $OUT"
+[ -z "$NC_LOG" ] && ok "and nc is not run" || fail "and nc is not run"
+has "and launch says so" "$OUT" "port 6379 was not checked"
 
 run --list
 has "--list filters on the provisioning tag" "$AWS_LOG" "tag:HostProvisionedBy,Values=config/host/launch.sh"
