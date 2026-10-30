@@ -130,6 +130,7 @@ check "mount-instance-store.sh does not take over an existing access log" in_ct 
 in_ct 'rm /var/instance-ssd/logs/access.log; bash /home/ec2-user/scripts/mount-instance-store.sh > /dev/null'
 check "a wiped access log is recreated, so fail2ban can start" in_ct '[ "$(stat -c %u:%g /var/instance-ssd/logs/access.log)" = 1000:1000 ] && fail2ban-client -t > /dev/null 2>&1'
 check "fail2ban is ordered after the instance store" in_ct 'grep -qx "After=mount-instance-store.service" /etc/systemd/system/fail2ban.service.d/10-instance-store.conf'
+check "fail2ban's log is rotated" in_ct 'logrotate --debug /etc/logrotate.d/fail2ban 2>&1 | grep -q "/var/log/fail2ban.log"'
 check "nothing was mounted a second time" in_ct '[ "$(grep -cx /var/instance-ssd /tmp/mounted)" = 1 ] && [ "$(grep -cx /backups /tmp/mounted)" = 1 ]'
 check "sshd -T still reports x11forwarding no" in_ct 'sshd -T | grep -qx "x11forwarding no"'
 
