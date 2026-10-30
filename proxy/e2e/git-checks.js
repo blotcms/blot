@@ -372,7 +372,7 @@ async function main() {
   const small = crypto.randomBytes(300 * 1024);
   write(a, "files/chunked-small.bin", small);
   await commitAll(a, "add 300k binary");
-  const pushSmall = await git(["-c", "http.postBuffer=65536", "push", "origin", "HEAD:master"], {
+  const pushSmall = await git(["-c", "http.postBuffer=65536", "-c", "http.version=HTTP/1.1", "push", "origin", "HEAD:master"], {
     cwd: a,
     env: TRACE,
   });
@@ -386,7 +386,7 @@ async function main() {
   const big = crypto.randomBytes(4 * 1024 * 1024 + 123);
   write(a, "files/big.bin", big);
   await commitAll(a, "add 4M binary");
-  const pushBig = await git(["-c", "http.postBuffer=65536", "push", "origin", "HEAD:master"], {
+  const pushBig = await git(["-c", "http.postBuffer=65536", "-c", "http.version=HTTP/1.1", "push", "origin", "HEAD:master"], {
     cwd: a,
     env: TRACE,
   });
@@ -396,6 +396,17 @@ async function main() {
     /Send header: Transfer-Encoding: chunked/i.test(pushBig.stderr),
     "headers sent: " + sentHeaders(pushBig.stderr)
   );
+
+  // The proxy negotiates HTTP/2 with curl by default, which has no chunked
+  // encoding: the same kind of push over h2 streams DATA frames instead.
+  write(a, "files/h2.bin", crypto.randomBytes(1024 * 1024));
+  await commitAll(a, "add 1M binary");
+  const pushH2 = await git(["-c", "http.postBuffer=65536", "push", "origin", "HEAD:master"], {
+    cwd: a,
+    env: TRACE,
+  });
+  check("streamed push of a body above http.postBuffer succeeds (default HTTP version)", pushH2.code === 0, why(pushH2));
+  check("default push used " + (/POST \S+ HTTP\/2/.test(pushH2.stderr) ? "HTTP/2" : "HTTP/1.1"), true);
 
   const wantHash = sha256(big);
   let lastGot = "";
@@ -415,14 +426,15 @@ async function main() {
   );
 
   // 7. Fetching.
-  // Give clone B enough local history the server has never seen that a fetch
+  // Give clone B enough local history, dated newer than anything on the server
+  // so git offers it first, that the server has never seen, so that a fetch
   // has to negotiate with a long `have` list, big enough for git to gzip the
   // POST body (it gzips requests over 1024 bytes).
   const stream = [];
   for (let i = 0; i < 400; i++) {
     stream.push(
       "commit refs/heads/local-noise\n" +
-        "committer E2E <e2e@example.com> " + (1600000000 + i) + " +0000\n" +
+        "committer E2E <e2e@example.com> " + (4102444800 + i) + " +0000\n" +
         "data 6\nnoise\n" +
         "\n"
     );
