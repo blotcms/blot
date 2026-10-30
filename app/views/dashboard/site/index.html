@@ -4,92 +4,127 @@
 
 
 
-<div class="collapse-on-small-screens site-dashboard">
+<div class="collapse-on-small-screens site-dashboard{{#isFolderView}} is-folder-view{{/isFolderView}}{{#isOverviewView}} is-overview-view{{/isOverviewView}}{{#isFilesView}} is-files-view{{/isFilesView}}{{#isRecentView}} is-recent-view{{/isRecentView}}{{#isSearchView}} is-search-view{{/isSearchView}}">
 
-  {{> site-dashboard-header}}
+  <div class="site-dashboard-folder-layout">
+    <div class="site-dashboard-folder-view">
+      {{> site-dashboard-header}}
 
-  <div class="dashboard-main">
-    {{> site-dashboard-views}}
-
-    <section id="site-dashboard-folder" class="site-dashboard-view-panel" aria-label="Site folder"{{^isFolderView}} hidden{{/isFolderView}}>
-      {{> directory}}
-    </section>
-
-    <section id="site-dashboard-recent" class="site-dashboard-view-panel" aria-label="Recent file activity"{{^isRecentView}} hidden{{/isRecentView}}>
-      {{#recentActivity.length}}
-      <div class="site-dashboard-recent-list">
-        {{#recentActivity}}
-        <article class="site-dashboard-recent-group">
-          <time class="site-dashboard-recent-time" datetime="{{datetime}}">{{time}}</time>
-          <ul>
-            {{#files}}
-            <li{{#isCollapsed}} data-recent-collapsed hidden{{/isCollapsed}}><span class="site-dashboard-recent-verb">{{verb}}</span><a href="{{{base}}}/folder/{{{urlPath}}}">{{path}}</a></li>
-            {{/files}}
-          </ul>
-          {{#moreFiles}}<button class="site-dashboard-more site-dashboard-recent-expand" type="button" data-recent-expand data-more-count="{{moreFiles}}" aria-expanded="false">and {{moreFiles}} more file changes</button>{{/moreFiles}}
-        </article>
-        {{/recentActivity}}
-      </div>
-      {{/recentActivity.length}}
-      {{^recentActivity.length}}
-      <p class="site-dashboard-empty">No recent file changes.</p>
-      {{/recentActivity.length}}
-      {{#blog.client}}<a class="site-dashboard-activity-link" href="{{{base}}}/settings/folder/activity">View full activity</a>{{/blog.client}}
-    </section>
-
-    <section id="site-dashboard-posts" class="site-dashboard-view-panel" aria-label="Posts, pages, drafts and scheduled items"{{^isPostsView}} hidden{{/isPostsView}}>
-      <nav class="site-dashboard-post-filters" aria-label="Filter posts">
-        <a class="site-dashboard-post-filter{{#isAllPostsFilter}} is-active{{/isAllPostsFilter}}" href="{{{base}}}/posts"{{#isAllPostsFilter}} aria-current="page"{{/isAllPostsFilter}}>
-          All {{#postCount}}<span class="site-dashboard-view-count">{{postCount}}</span>{{/postCount}}
-        </a>
-        {{#postGroups}}
-        <a class="site-dashboard-post-filter{{#isActive}} is-active{{/isActive}}" href="{{{base}}}/posts/{{key}}"{{#isActive}} aria-current="page"{{/isActive}}>
-          {{filterTitle}} {{#count}}<span class="site-dashboard-view-count">{{count}}</span>{{/count}}
-        </a>
-        {{/postGroups}}
-      </nav>
-      <div class="site-dashboard-post-groups">
-        {{#postGroups}}
-        {{#count}}{{#isVisible}}
-        <section class="site-dashboard-post-group" data-post-group="{{key}}">
-          <h3>{{title}} <span>{{count}}</span></h3>
-          <ul class="site-dashboard-post-list">
-            {{#items}}
-            <li><a href="{{{base}}}/folder/{{{urlPath}}}">{{title}}</a><span>{{date}}</span></li>
-            {{/items}}
-          </ul>
-          {{#moreCount}}<p class="site-dashboard-more">And {{moreCount}} more</p>{{/moreCount}}
+      <div class="dashboard-main">
+        {{^isRecentView}}{{^isSearchView}}{{^isFilesView}}
+        <section class="site-dashboard-recent-preview" aria-label="Recent file activity">
+          <div class="site-dashboard-recent-list site-dashboard-recent-list--preview">
+            {{#blog.client}}
+            <article class="site-dashboard-recent-group is-current">
+              <div class="site-dashboard-recent-heading">
+                <div class="status-link site-dashboard-status" data-sync-source="{{client.display_name}}">
+                  {{> sync-status}}
+                </div>
+                <a href="{{{base}}}/recents">See all</a>
+              </div>
+            </article>
+            {{/blog.client}}
+            {{^blog.client}}
+            <div class="site-dashboard-recent-heading">
+              <a href="{{{base}}}/recents">See all</a>
+            </div>
+            {{/blog.client}}
+            {{#recentActivityPreview}}
+            <article class="site-dashboard-recent-group">
+              <ul>
+                {{#files}}
+                <li class="site-dashboard-recent-item">
+                  <div class="site-dashboard-recent-file-details">
+                    <a class="site-dashboard-recent-file-name" href="{{{base}}}/folder/{{{urlPath}}}" title="{{path}}"><span class="icon-file site-dashboard-recent-file-icon" aria-hidden="true"></span><span class="site-dashboard-recent-file-label">{{name}}</span></a>
+                    <div class="site-dashboard-recent-file-meta"><span>{{verb}}</span><time datetime="{{datetime}}">{{time}}</time></div>
+                  </div>
+                </li>
+                {{/files}}
+              </ul>
+            </article>
+            {{/recentActivityPreview}}
+            {{^recentActivityPreview.length}}
+            {{^blog.client}}<p class="site-dashboard-empty">Connect a folder to see recent activity.</p>{{/blog.client}}
+            {{/recentActivityPreview.length}}
+          </div>
         </section>
-        {{/isVisible}}{{/count}}
-        {{/postGroups}}
+        {{/isFilesView}}{{/isSearchView}}{{/isRecentView}}
+
+        <section id="site-dashboard-folder" class="site-dashboard-view-panel" aria-label="Site folder"{{^isFolderView}} hidden{{/isFolderView}}>
+          {{> directory}}
+          {{#isOverviewView}}<a class="site-dashboard-overview-files-link" href="{{{base}}}/files">See all files</a>{{/isOverviewView}}
+        </section>
+
+        <section id="site-dashboard-recent" class="site-dashboard-view-panel" aria-label="Recent file activity"{{^isRecentView}} hidden{{/isRecentView}}>
+          <a class="site-dashboard-back" href="{{{base}}}">Back</a>
+          {{#recentActivity.length}}
+          <div class="site-dashboard-recent-list">
+            {{#recentActivity}}
+            <article class="site-dashboard-recent-group">
+              <ul>
+                {{#files}}
+                <li class="site-dashboard-recent-item"{{#isCollapsed}} data-recent-collapsed hidden{{/isCollapsed}}>
+                  <div class="site-dashboard-recent-file-details">
+                    <a class="site-dashboard-recent-file-name" href="{{{base}}}/folder/{{{urlPath}}}" title="{{path}}"><span class="icon-file site-dashboard-recent-file-icon" aria-hidden="true"></span><span class="site-dashboard-recent-file-label">{{name}}</span></a>
+                    <div class="site-dashboard-recent-file-meta"><span>{{verb}}</span><time datetime="{{datetime}}">{{time}}</time></div>
+                  </div>
+                </li>
+                {{/files}}
+              </ul>
+              {{#moreFiles}}<button class="site-dashboard-more site-dashboard-recent-expand" type="button" data-recent-expand data-more-count="{{moreFiles}}" aria-expanded="false">and {{moreFiles}} more file changes</button>{{/moreFiles}}
+            </article>
+            {{/recentActivity}}
+          </div>
+          {{/recentActivity.length}}
+          {{^recentActivity.length}}
+          <p class="site-dashboard-empty">No recent file changes.</p>
+          {{/recentActivity.length}}
+          {{#blog.client}}<a class="site-dashboard-activity-link" href="{{{base}}}/settings/folder/activity">View full activity</a>{{/blog.client}}
+        </section>
+
+        <section id="site-dashboard-search" class="site-dashboard-view-panel" aria-label="Search results"{{^isSearchView}} hidden{{/isSearchView}}>
+          {{> site-dashboard-views}}
+          {{> site-dashboard-search-results}}
+        </section>
+
+        <section id="site-dashboard-posts" class="site-dashboard-view-panel" aria-label="Posts, pages, drafts and scheduled items"{{^isPostsView}} hidden{{/isPostsView}}>
+          {{> site-dashboard-views}}
+          <nav class="site-dashboard-post-filters" aria-label="Filter posts">
+            <a class="site-dashboard-post-filter{{#isAllPostsFilter}} is-active{{/isAllPostsFilter}}" href="{{{base}}}/posts"{{#isAllPostsFilter}} aria-current="page"{{/isAllPostsFilter}}>
+              All {{#postCount}}<span class="site-dashboard-view-count">{{postCount}}</span>{{/postCount}}
+            </a>
+            {{#postGroups}}
+            <a class="site-dashboard-post-filter{{#isActive}} is-active{{/isActive}}" href="{{{base}}}/posts/{{key}}"{{#isActive}} aria-current="page"{{/isActive}}>
+              {{filterTitle}} {{#count}}<span class="site-dashboard-view-count">{{count}}</span>{{/count}}
+            </a>
+            {{/postGroups}}
+          </nav>
+          <div class="site-dashboard-post-groups">
+            {{#postGroups}}
+            {{#count}}{{#isVisible}}
+            <section class="site-dashboard-post-group" data-post-group="{{key}}">
+              <h3>{{title}} <span>{{count}}</span></h3>
+              <ul class="site-dashboard-post-list">
+                {{#items}}
+                <li><a href="{{{base}}}/folder/{{{urlPath}}}">{{title}}</a><span>{{date}}</span></li>
+                {{/items}}
+              </ul>
+              {{#moreCount}}<p class="site-dashboard-more">And {{moreCount}} more</p>{{/moreCount}}
+            </section>
+            {{/isVisible}}{{/count}}
+            {{/postGroups}}
+          </div>
+          {{#isAllPostsFilter}}{{^postCount}}<p class="site-dashboard-empty">No posts, pages, drafts or scheduled items yet.</p>{{/postCount}}{{/isAllPostsFilter}}
+          {{#emptyPostFilterMessage}}<p class="site-dashboard-empty">{{emptyPostFilterMessage}}</p>{{/emptyPostFilterMessage}}
+        </section>
       </div>
-      {{#isAllPostsFilter}}{{^postCount}}<p class="site-dashboard-empty">No posts, pages, drafts or scheduled items yet.</p>{{/postCount}}{{/isAllPostsFilter}}
-      {{#emptyPostFilterMessage}}<p class="site-dashboard-empty">{{emptyPostFilterMessage}}</p>{{/emptyPostFilterMessage}}
-    </section>
+    </div>
+
   </div>
 </div>
 
 <script>
   (function () {
-    var activeView = document.querySelector(
-      ".site-dashboard-view[aria-current='page']"
-    );
-    if (activeView && activeView.getAttribute("href") !== "{{{base}}}") {
-      activeView.addEventListener("click", function (event) {
-        if (
-          event.button !== 0 ||
-          event.metaKey ||
-          event.ctrlKey ||
-          event.shiftKey ||
-          event.altKey
-        ) {
-          return;
-        }
-        event.preventDefault();
-        window.location.href = "{{{base}}}";
-      });
-    }
-
     document.querySelectorAll("[data-recent-expand]").forEach(function (button) {
       button.addEventListener("click", function () {
         var expanded = button.getAttribute("aria-expanded") === "true";

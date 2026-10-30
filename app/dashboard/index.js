@@ -42,7 +42,12 @@ dashboard.get("/deleted", logout, (req, res) => {
 dashboard.use(require('dashboard/util/require-authentication'));
 
 dashboard.use((req, res, next)=>{
-  res.locals.selected = { dashboard: "selected" };
+  const isAccount = req.path.startsWith("/account");
+  res.locals.selected = {
+    dashboard: "selected",
+    sites: isAccount ? "" : "is-active",
+    account: isAccount ? "is-active" : ""
+  };
   next();
 });
 

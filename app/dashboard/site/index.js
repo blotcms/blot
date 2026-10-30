@@ -40,6 +40,40 @@ site.post(
   save.finish
 );
 
+function getSidebarSelection(path) {
+  if (path === "/") return "overview";
+  if (path === "/files" || path === "/search") return "files";
+  if (path === "/posts" || path.startsWith("/posts/")) return "posts";
+  if (path === "/recents") return "activity";
+  if (path.startsWith("/settings/folder")) return "sync";
+  if (path.startsWith("/settings/title")) return "title";
+  if (path.startsWith("/settings/domain")) return "domain";
+  if (path === "/settings" || path === "/settings/flags") return "general";
+  if (path.startsWith("/settings/images")) return "images";
+  if (path.startsWith("/settings/links")) return "links";
+  if (path.startsWith("/settings/embeds")) return "embeds";
+  if (path.startsWith("/settings/redirects")) return "redirects";
+  if (path.startsWith("/settings/date")) return "date";
+  if (path.startsWith("/settings/services")) return "services";
+  if (path.startsWith("/import")) return "import";
+  if (path.startsWith("/export")) return "export";
+  if (path.startsWith("/delete")) return "delete";
+  return null;
+}
+
+site.use((req, res, next) => {
+  const path = req.path.replace(/\/$/, "") || "/";
+  const selectedItem = getSidebarSelection(path);
+  res.locals.isSettingsSidebar =
+    path === "/settings" || path.startsWith("/settings/");
+
+  if (selectedItem) {
+    res.locals.selected = { ...res.locals.selected, [selectedItem]: "is-active" };
+  }
+
+  next();
+});
+
 const postFilters = new Set(["posts", "pages", "drafts", "scheduled"]);
 const postFilterLabels = {
   posts: "Published",
@@ -58,12 +92,18 @@ const setView = (view) => (req, res, next) => {
 
   res.locals.dashboardView = view;
   res.locals.dashboardFilter = view === "posts" ? filter : "all";
-  res.locals.isFolderView = view === "folder";
+  res.locals.isFolderView = view === "folder" || view === "files";
+  res.locals.isOverviewView = view === "folder";
+  res.locals.isFilesView = view === "files";
   res.locals.isRecentView = view === "recent";
   res.locals.isPostsView = view === "posts";
+  res.locals.isSearchView = view === "search";
+  res.locals.showDashboardSearch =
+    view === "folder" || view === "files" || view === "search";
   res.locals.isAllPostsFilter = res.locals.dashboardFilter === "all";
 
   if (view === "recent") res.locals.breadcrumbs.add("Recents", "recents");
+  if (view === "search") res.locals.breadcrumbs.add("Search", "search");
 
   if (view === "posts") {
     res.locals.breadcrumbs.add("Posts", "posts");
@@ -81,11 +121,32 @@ const renderDashboard = (req, res) => {
   });
 };
 
-site.get("/", setView("folder"), require("./folder"), loadClient, renderDashboard);
+site.get(
+  "/",
+  setView("folder"),
+  require("./folder"),
+  require("./load/recent-activity"),
+  loadClient,
+  renderDashboard
+);
+site.get(
+  "/files",
+  setView("files"),
+  require("./folder"),
+  loadClient,
+  renderDashboard
+);
 site.get(
   "/recents",
   setView("recent"),
   require("./load/recent-activity"),
+  loadClient,
+  renderDashboard
+);
+site.get(
+  "/search",
+  setView("search"),
+  require("./load/search"),
   loadClient,
   renderDashboard
 );

@@ -1,0 +1,21 @@
+{{#searchQuery}}
+<div class="site-dashboard-search-results">
+  <p class="site-dashboard-search-summary">{{searchResults.length}} matching entries</p>
+  {{#searchResults.length}}
+  <ul>
+    {{#searchResults}}
+    <li>
+      <a href="{{{base}}}/folder/{{{urlPath}}}">
+        <span class="site-dashboard-search-result-title">{{title}}</span>
+        <span class="site-dashboard-search-result-path">{{path}}</span>
+      </a>
+    </li>
+    {{/searchResults}}
+  </ul>
+  {{/searchResults.length}}
+  {{^searchResults.length}}<p class="site-dashboard-empty">No matching entries.</p>{{/searchResults.length}}
+</div>
+{{/searchQuery}}
+{{^searchQuery}}
+<p class="site-dashboard-empty">Enter a term to search your entries.</p>
+{{/searchQuery}}

@@ -38,6 +38,7 @@ function parseFileStatus(rawMessage) {
 module.exports = async function (req, res, next) {
   if (!req.blog.client) {
     res.locals.recentActivity = [];
+    res.locals.recentActivityPreview = [];
     return next();
   }
 
@@ -69,10 +70,14 @@ module.exports = async function (req, res, next) {
         groups.set(key, group);
       }
 
+      const normalizedPath = Path.posix.normalize(path);
       group.totalFiles++;
       group.files.push({
         verb: operation.verb,
-        path: Path.posix.normalize(path),
+        path: normalizedPath,
+        name: Path.posix.basename(normalizedPath),
+        time: group.time,
+        datetime: group.datetime,
         urlPath: path
           .replace(/^\/+/, "")
           .split("/")
@@ -94,10 +99,29 @@ module.exports = async function (req, res, next) {
         group.files.length - MAX_VISIBLE_FILES_PER_GROUP
       );
     });
+
+    // Keep the folder dashboard glanceable while the Recents page retains the
+    // complete recent activity window.
+    if (!res.locals.isRecentView) {
+      let previewFileCount = 0;
+      res.locals.recentActivityPreview = res.locals.recentActivity.reduce(
+        function (preview, group) {
+          const remaining = 2 - previewFileCount;
+          if (remaining <= 0) return preview;
+
+          const files = group.files.slice(0, remaining);
+          previewFileCount += files.length;
+          preview.push({ ...group, files });
+          return preview;
+        },
+        []
+      );
+    }
     next();
   } catch (err) {
     console.log(err);
     res.locals.recentActivity = [];
+    res.locals.recentActivityPreview = [];
     next();
   }
 };

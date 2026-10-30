@@ -11,6 +11,7 @@
 
     <div class="folder-box {{#root}}root{{/root}} {{#directory}}directory{{/directory}}" style="position:relative;">
     <div class="folder-drop-target" aria-hidden="true" style="display:none;position:absolute;inset:0;z-index:10;align-items:center;justify-content:center;background:rgba(0, 112, 232, 0.08);border:2px dashed rgba(0, 112, 232, 0.6);border-radius:6px;color:var(--text-color);font-weight:600;pointer-events:none;">Drop files to upload</div>
+    {{#root}}{{#isFolderView}}{{> site-dashboard-views}}{{/isFolderView}}{{/root}}
     {{#directory}}
     {{^root}}
     {{> folder-view-header}}

@@ -1,5 +1,5 @@
-<nav class="site-dashboard-views" aria-label="Site sections">
-  <a class="site-dashboard-view{{#isFolderView}} is-active{{/isFolderView}}" href="{{{dashboardBase}}}"{{#isFolderView}} aria-current="page"{{/isFolderView}}>Folder</a>
-  <a class="site-dashboard-view{{#isRecentView}} is-active{{/isRecentView}}" href="{{{dashboardBase}}}/recents"{{#isRecentView}} aria-current="page"{{/isRecentView}}>Recents</a>
-  <a class="site-dashboard-view{{#isPostsView}} is-active{{/isPostsView}}" href="{{{dashboardBase}}}/posts"{{#isPostsView}} aria-current="page"{{/isPostsView}}>Posts</a>
-</nav>
+{{#showDashboardSearch}}
+  <form class="site-dashboard-search" action="{{{dashboardBase}}}/search" method="get" role="search">
+    <input type="search" name="q" value="{{searchQuery}}" aria-label="Search site entries" placeholder="Search entries">
+  </form>
+{{/showDashboardSearch}}

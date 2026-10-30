@@ -1,24 +1,6 @@
-<header class="header dashboard-header">
-  <div class="header-inner">
-    <div class="dashboard-header-context">
-      <a class="site-brand {{selected.dashboard}}" href="/sites">
-        <svg class="site-brand-logo" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-          <path fill="#a8c7fa" d="M0 2.75C0 1.784.784 1 1.75 1H5c.55 0 1.07.26 1.4.7l.9 1.2a.25.25 0 0 0 .2.1h6.75C15.216 3 16 3.784 16 4.75v8.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25z"/>
-        </svg>
-        <span>Blot</span>
-      </a>
-
-      {{> dashboard-breadcrumbs}}
-    </div>
-
-    <input type="checkbox" id="navbar-toggle" aria-label="Toggle navigation">
-    <label class="navigation-toggle" for="navbar-toggle" aria-controls="site-navigation">
-      <span class="icon-menu" aria-hidden="true"></span>
-      <span class="visually-hidden">Toggle navigation</span>
-    </label>
-
-    <nav class="site-navigation dashboard-navigation" id="site-navigation" aria-label="Main navigation">
-      {{> dashboard-navigation}}
-    </nav>
-  </div>
-</header>
+{{#blog}}
+{{> site-dashboard-sidebar}}
+{{/blog}}
+{{^blog}}
+{{> dashboard-sidebar}}
+{{/blog}}
