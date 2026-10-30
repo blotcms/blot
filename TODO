@@ -1192,6 +1192,7 @@ Write new app/build/converters to turn new file formats into posts
 - Add support for INI files and tell [Frank](https://mail.google.com/mail/u/0/#inbox/FMfcgzGwJckFhJhMMwFLzrRTfcSmHbrV)
 
 Write new clients to sync blog folders 
+- Add a generic 'use your ai agent' client which lets you copy paste a prompt that configures a site with the git client behind the scenes
 - Add [OneDrive](https://onedrive.com) client
   - Tell [Nenad](https://mail.google.com/mail/u/0/#inbox/FMfcgzGxSHlNTlFCKwNsPbZPxRgbbVkB)
   - Tell [John](https://mail.google.com/mail/u/0/#inbox/FMfcgzGkbDVrfBwGjnVDdtXkNxKpwjfq) 

@@ -71,7 +71,7 @@ module.exports = async function (req, res) {
         .send(`Directory successfully created for blogID: ${blogID}`);
     } finally {
       // Release the sync lock
-      done().catch((err) => console.error("Error releasing lock:", err));
+      await done().catch((err) => console.error("Error releasing lock:", err));
     }
   } catch (err) {
     if (
