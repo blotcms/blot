@@ -85,8 +85,9 @@ config/host/launch.sh --type <instance-type> --key-name <aws-key-pair> --key <pr
 app and Redis security groups, IMDSv2 only, a 200 GB gp3 root, termination
 protection on) and runs `bootstrap.sh` on it. `--ssh-port` goes in user data, so
 the first connection already uses that port. It attaches no data volume and
-moves no Elastic IP; it ends by printing the `npm run deploy-host` command to run
-next. Run it with `--dry-run` first to see the `run-instances` call, `--drill`
+moves no Elastic IP; it ends by printing the `deploy.sh` command to run next. On a new host run
+`deploy.sh` directly, as that prints it: `npm run deploy-host` sources the
+production host's `PUBLIC_IP` over the one you set. Run it with `--dry-run` first to see the `run-instances` call, `--drill`
 for a throwaway, `--list` for the hosts it has launched. The key pair name, key
 and port can be set as `BLOT_HOST_KEY_NAME`, `BLOT_HOST_SSH_KEY` and
 `BLOT_SSH_PORT`. To run only the OS setup on an existing host:
@@ -118,7 +119,7 @@ upgrades a package. It:
 
 - **Permanent bans** (`manual-permaban`). The only fail2ban state worth keeping;
   the nginx jails' bans last 30-60 minutes and `recidive` a week. On the old
-  host, list them, then on the new host (after `npm run deploy-host`) re-add
+  host, list them, then on the new host (after `deploy.sh`) re-add
   each one:
 
   ```
@@ -136,7 +137,7 @@ upgrades a package. It:
 - **Wildcard certificate** files in `/etc/ssl/private/` (`letsencrypt-domain.pem`
   and `.key`), written from Redis; `blue-green.sh` won't start a proxy
   container without them.
-- Then `npm run deploy-host` and the Deploy workflow. docker is enabled but
+- Then `deploy.sh` and the Deploy workflow. docker is enabled but
   stays stopped until the instance store and the data volume are mounted.
 
 Nothing in `proxy/` or the units needs copying: custom-domain

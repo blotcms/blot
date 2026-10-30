@@ -2,9 +2,9 @@
 # Usage: launch.sh --type <instance-type> --key-name <aws-key-pair> [options]
 #        launch.sh --list [--profile NAME] [--region NAME]
 # Launches a new app host on the newest Amazon Linux 2023 arm64 AMI, waits for
-# SSH and runs bootstrap.sh on it. The last lines print the `npm run deploy-host`
-# command to run next. It attaches no data volume, moves no Elastic IP and sets
-# up no Redis or replication.
+# SSH and runs bootstrap.sh on it. The last lines print the deploy.sh command
+# to run next. It attaches no data volume, moves no Elastic IP and sets up no
+# Redis or replication.
 # Runs on a Mac, so it has to work in bash 3.2.
 #
 # Try it with --dry-run first.
@@ -151,4 +151,5 @@ BLOT_SSH_PORT=$SSH_PORT BLOT_DEPLOY_PUBLIC_KEY=$DEPLOY_KEY "$HERE/bootstrap.sh" 
   die "bootstrap.sh failed; the instance $ID is still running"
 
 echo "Done: $ID ($NAME) at $IP"
-echo "Next: SSH_KEY=<your key> PUBLIC_IP=$IP SSH_PORT=${SSH_PORT:-22} DATA_VOLUME_ID=<vol-...> npm run deploy-host"
+# Not `npm run deploy-host`: it sources the production host's PUBLIC_IP over these.
+echo "Next: SSH_KEY=<your key> PUBLIC_IP=$IP SSH_PORT=${SSH_PORT:-22} DATA_VOLUME_ID=<vol-...> config/host/deploy.sh"

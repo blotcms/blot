@@ -77,7 +77,9 @@ lacks "no instance profile by default" "$RUN" "--iam-instance-profile"
 lacks "no user data without --ssh-port" "$RUN" "--user-data"
 lacks "a real launch has no drill tag" "$RUN" "BlotDrill"
 has "launch bootstraps the address" "$BOOTSTRAP_LOG" "ec2-user@10.0.0.5"
-has "launch prints the next step" "$OUT" "npm run deploy-host"
+has "launch prints the next step" "$OUT" "PUBLIC_IP=10.0.0.5"
+has "the next step runs deploy.sh directly" "$OUT" " config/host/deploy.sh"
+lacks "the next step avoids npm, which would target production" "$OUT" "npm run deploy-host"
 has "launch waits for ssh on port 22" "$SSH_LOG" "-p 22 "
 
 run "${COMMON[@]}" --root-gb 300 --instance-profile test-profile --tag Owner=test
