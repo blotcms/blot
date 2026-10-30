@@ -152,4 +152,5 @@ BLOT_SSH_PORT=$SSH_PORT BLOT_DEPLOY_PUBLIC_KEY=$DEPLOY_KEY "$HERE/bootstrap.sh" 
 
 echo "Done: $ID ($NAME) at $IP"
 # Not `npm run deploy-host`: it sources the production host's PUBLIC_IP over these.
-echo "Next: SSH_KEY=<your key> PUBLIC_IP=$IP SSH_PORT=${SSH_PORT:-22} DATA_VOLUME_ID=<vol-...> config/host/deploy.sh"
+echo "Next: SSH_KEY=<your key> PUBLIC_IP=$IP SSH_PORT=${SSH_PORT:-22} config/host/deploy.sh"
+echo "Run it again with DATA_VOLUME_ID=<vol-...> once the data volume is attached."

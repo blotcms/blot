@@ -13,6 +13,7 @@ Sources `/etc/blot/openresty-deploy-environment.sh` on your Mac, then runs
 `deploy.sh`, which ssh's to the host as `ec2-user`. It needs `SSH_KEY` (path to
 the private key) and `PUBLIC_IP` (the host), and optionally `SSH_PORT`
 (default 22). Re-running it is safe; it replaces what it installed last time.
+On a new host run `deploy.sh` directly (see [Moving to a new host](#moving-to-a-new-host)).
 
 ## What it installs
 
@@ -21,14 +22,15 @@ the private key) and `PUBLIC_IP` (the host), and optionally `SSH_PORT`
 | `scripts/` (all of it, replacing the old directory) | `/home/ec2-user/scripts/` |
 | `scripts/unit-mem-log.sh`, `scripts/unit-mem-summary.sh` | `/usr/local/bin/` |
 | (written by `deploy.sh`) | `/etc/cron.d/blot-unit-mem` (runs `unit-mem-log.sh` every minute as root) |
-| `scripts/mount-instance-store.service` | `/etc/systemd/system/mount-instance-store.service` |
+| `scripts/mount-instance-store.service` | `/etc/systemd/system/mount-instance-store.service` (enabled; started only if `/var/instance-ssd` is not mounted yet) |
 | `scripts/docker.service.d/10-instance-store.conf` | `/etc/systemd/system/docker.service.d/10-instance-store.conf` |
 | `scripts/mount-data-volume.service` | `/etc/systemd/system/mount-data-volume.service` |
 | `scripts/docker.service.d/20-data-volume.conf` | `/etc/systemd/system/docker.service.d/20-data-volume.conf` |
-| `fail2ban/filter.d/*.conf`, `fail2ban/jail.local`, `fail2ban/fail2ban.local` | `/etc/fail2ban/` (then restarts fail2ban) |
+| `fail2ban/filter.d/*.conf`, `fail2ban/jail.local`, `fail2ban/fail2ban.local` | `/etc/fail2ban/` (then creates any `logpath` in `jail.local` that is missing and restarts fail2ban) |
+| (written by `deploy.sh`) | `X11Forwarding no` in `/etc/ssh/sshd_config`, and on Amazon Linux 2023 in `/etc/ssh/sshd_config.d/12-blot-x11.conf` |
 | `logrotate/*` | `/etc/logrotate.d/` |
 | `tmpfiles.d/blot.conf` | `/etc/tmpfiles.d/blot.conf` (creates `/run/blot`) |
-| `.bashrc` | `/home/ec2-user/.bashrc` |
+| `.bashrc` | `/home/ec2-user/.bashrc` (must print nothing to stdout in a non-interactive shell: scp is SFTP on Amazon Linux 2023) |
 
 The `nginx-*` fail2ban jails ban `http,https` over TCP and, with a second
 `iptables-multiport` action named `<jail>-udp`, over UDP too (HTTP/3 is UDP 443).
@@ -85,10 +87,10 @@ config/host/launch.sh --type <instance-type> --key-name <aws-key-pair> --key <pr
 app and Redis security groups, IMDSv2 only, a 200 GB gp3 root, termination
 protection on) and runs `bootstrap.sh` on it. `--ssh-port` goes in user data, so
 the first connection already uses that port. It attaches no data volume and
-moves no Elastic IP; it ends by printing the `deploy.sh` command to run next. On a new host run
-`deploy.sh` directly, as that prints it: `npm run deploy-host` sources the
-production host's `PUBLIC_IP` over the one you set. Run it with `--dry-run` first to see the `run-instances` call, `--drill`
-for a throwaway, `--list` for the hosts it has launched. The key pair name, key
+moves no Elastic IP; it ends by printing the `deploy.sh` command to run next. On
+a new host run `deploy.sh` directly, as that prints it: `npm run deploy-host`
+sources the production host's `PUBLIC_IP` over the one you set. Run it with
+`--dry-run` first to see the `run-instances` call, `--drill` for a throwaway, `--list` for the hosts it has launched. The key pair name, key
 and port can be set as `BLOT_HOST_KEY_NAME`, `BLOT_HOST_SSH_KEY` and
 `BLOT_SSH_PORT`. To run only the OS setup on an existing host:
 
@@ -115,12 +117,12 @@ upgrades a package. It:
   `/var/www/blot/data` and `/var/www/blot/app/blog/static`, and sets
   `net.ipv4.tcp_migrate_req = 1`.
 
-`config/host/tests/setup.sh` runs it in Docker. Still by hand:
+`config/host/tests/setup.sh` runs it in Docker, and `config/host/tests/deploy.sh`
+runs `deploy.sh` on top of it. Still by hand:
 
 - **Permanent bans** (`manual-permaban`). The only fail2ban state worth keeping;
   the nginx jails' bans last 30-60 minutes and `recidive` a week. On the old
-  host, list them, then on the new host (after `deploy.sh`) re-add
-  each one:
+  host, list them, then on the new host (after `deploy.sh`) re-add each one:
 
   ```
   sudo fail2ban-client status manual-permaban     # old host: "Banned IP list"
@@ -132,8 +134,12 @@ upgrades a package. It:
   <copy>"`), put it in place on the new host before fail2ban first starts, and
   keep the same fail2ban version. Re-running `banip` is simpler and doesn't
   depend on either.
-- **`/etc/blot/data-volume`** and the `.blot-data-volume` marker on the data
-  volume (see above).
+- **The data volume.** Attach it, then run `deploy.sh` again with
+  `DATA_VOLUME_ID=vol-...`, which writes `/etc/blot/data-volume`. Don't set it
+  before the volume is attached: the unit waits for the device, then fails the
+  run. A volume restored from a snapshot still
+  carries the old volume's ID in `.blot-data-volume`; mount it once by hand and
+  write the new ID there before the unit mounts it (see below).
 - **Wildcard certificate** files in `/etc/ssl/private/` (`letsencrypt-domain.pem`
   and `.key`), written from Redis; `blue-green.sh` won't start a proxy
   container without them.
@@ -143,9 +149,18 @@ upgrades a package. It:
 Nothing in `proxy/` or the units needs copying: custom-domain
 certificates are in Redis and the proxy cache refills itself.
 
-It also turns off X11 forwarding in `sshd_config`. The systemd files are
-installed and `daemon-reload`ed only: docker is not restarted, so the
-mount-before-docker ordering takes effect at the next reboot.
+X11 forwarding is turned off in `sshd_config`, which is enough on Amazon Linux 2.
+On Amazon Linux 2023 sshd reads `sshd_config.d/*.conf` first and uses the first
+value it finds, and `50-redhat.conf` there sets `X11Forwarding yes`, so
+`deploy.sh` also writes `sshd_config.d/12-blot-x11.conf` (after `10-blot.conf`
+and `11-blot-port.conf`, which other setup scripts own) wherever `sshd_config`
+includes that directory.
+
+The systemd files are installed and `daemon-reload`ed; docker is never restarted,
+so the mount-before-docker ordering takes effect at the next reboot. The instance
+store unit is also enabled, and started if `/var/instance-ssd` is not a
+mountpoint, so on a new host the log directory exists before fail2ban starts; on
+a running host it is mounted and nothing is started or remounted.
 
 The data volume (the EBS volume at `/var/www/blot/data`) is mounted at boot by
 `mount-data-volume.service`, and the drop-in gates docker on it the same way.
@@ -165,8 +180,12 @@ changes whenever it is swapped for a resized or restored one:
 
 On the first run against a host with the volume already mounted (and no
 `/etc/blot/data-volume`), `deploy.sh` works out the volume ID from the mounted
-device and writes both files; it never overwrites them afterwards. If there is
-neither the file nor a mounted volume it warns and leaves the unit disabled.
+device and writes both files; it never overwrites them afterwards. With
+`DATA_VOLUME_ID` set (`vol-` and 8 to 17 hex digits) and no
+`/etc/blot/data-volume`, it writes that ID instead; if a different volume is
+mounted it stops without writing anything, and it writes the marker only for the
+volume that is mounted. If there is neither the file nor a mounted volume it
+warns and leaves the unit disabled.
 `mount-data-volume.sh` also makes the mount `shared`, which the app
 containers' `bind-propagation=rslave` bind of the data directory needs, so a
 volume mounted on the host over `/var/www/blot/data` reaches running
@@ -199,8 +218,9 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
 - `mount-instance-store.sh` mounts the NVMe instance store at
   `/var/instance-ssd` (logs, cache and the app's tmp directory) at boot, and
   creates `/var/instance-ssd/tmp` for the app containers and
-  `/var/instance-ssd/disk-cache` for the proxy's disk cache (both uid 1000), since a
-  stop/start of the instance wipes the disk.
+  `/var/instance-ssd/disk-cache` for the proxy's disk cache (both uid 1000), and
+  `/var/instance-ssd/logs` (uid 1000, as the proxy container writes it) if it is
+  missing, since a stop/start of the instance wipes the disk.
 - `mount-data-volume.sh` mounts the EBS data volume at `/var/www/blot/data` at
   boot (see above).
 
