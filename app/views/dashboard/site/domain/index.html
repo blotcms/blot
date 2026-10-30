@@ -2,7 +2,11 @@
 
 {{> message}}
 
-<form class="dashboard-form" action="{{{base}}}/domain" method="POST">
+<div class="dashboard-form-panel" style="display: flex;border-radius: var(--border-radius);border: 1px solid var(--border-color);">
+{{> settings-sidebar}}
+<div style="flex-grow: 1;padding:24px">
+<h1>Domain</h1>
+<form class="dashboard-form" action="{{{domainBase}}}" method="POST">
 <div style="border:1px solid #eeeeec;border-radius: 5px;overflow: hidden;">
 <input type="hidden" name="_csrf" value="{{csrftoken}}" />
 
@@ -10,7 +14,7 @@
 {{> custom-domain}}
 {{/edit.custom}}
 {{^edit.custom}}
-<a class="line" href="{{{base}}}/domain/custom" >
+<a class="line" href="{{{domainBase}}}/custom" >
   <span class="label">Domain</span>
   <span class="center" style="display: flex;max-width: 100%;">
     <span style="display: flex;width: 100%;">
@@ -48,7 +52,7 @@
 
 
 {{^edit.subdomain}}
-<a class="line" href="{{{base}}}/domain/subdomain" style="border-bottom: none;">
+<a class="line" href="{{{domainBase}}}/subdomain" style="border-bottom: none;">
   <span class="label">Subdomain on Blot</span>
   <span class="center" style="display: flex;max-width: 100%;">
     <span style="display: flex;width: 100%;">
@@ -68,6 +72,8 @@
 
 </div>
 </form>
+</div>
+</div>
 
 <style>
   th, td {

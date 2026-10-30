@@ -23,9 +23,12 @@ const RESYNC_REFUSALS = [
 ];
 const getStatuses = promisify(Blog.getStatuses);
 
-// So the breadcrumbs look like: Settings > Client
+// So the breadcrumbs look like: Settings > Folder
 client_routes.use(function (req, res, next) {
-  res.locals.breadcrumbs.add("Folder", "client");
+  res.locals.base = req.baseUrl;
+  res.locals.selected = { ...res.locals.selected, folder: "selected" };
+  res.locals.isFolderSettingsView = true;
+  res.locals.breadcrumbs.add("Folder", "folder");
   next();
 });
 
@@ -151,13 +154,13 @@ client_routes.post("/reset/rebuild", function (req, res) {
   Sync(req.blog.id, function (err, folder, done) {
     if (err) {
       return res.message(
-        res.locals.base + "/client/reset",
+        res.locals.base + "/reset",
         new Error("Failed to rebuild folder since it is syncing")
       );
     }
 
     res.message(
-      res.locals.base + "/client/reset",
+      res.locals.base + "/reset",
       "Begin rebuild of your site"
     );
 
@@ -194,12 +197,12 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
   Sync(req.blog.id, async function (err, folder, done) {
     if (err) {
       return res.message(
-        res.locals.base + "/client/reset",
+        res.locals.base + "/reset",
         new Error("Failed to resync folder since it is syncing")
       );
     }
 
-    res.message(res.locals.base + "/client/reset", "Begin resync of your site");
+    res.message(res.locals.base + "/reset", "Begin resync of your site");
 
     let summary;
 
@@ -272,7 +275,7 @@ if (config.environment === "development") {
         throw new Error("Request failed");
       }
 
-      res.redirect(res.locals.base + "/client" + (req.blog.client ? "/" + req.blog.client : ""));
+      res.redirect(res.locals.dashboardBase + "/settings/folder" + (req.blog.client ? "/" + req.blog.client : ""));
     } catch (error) {
       next(new Error("Could not open folder on your computer"));
     }
@@ -304,11 +307,11 @@ client_routes
 
 client_routes.use("/:client", function (req, res, next) {
   if (clients[req.params.client] === undefined) {
-    return res.redirect(res.locals.base + "/client");
+    return res.redirect(res.locals.dashboardBase + "/settings/folder");
   }
 
   if (req.blog.client && req.params.client !== req.blog.client) {
-    return res.redirect(res.locals.base + "/client/" + req.blog.client);
+    return res.redirect(res.locals.dashboardBase + "/settings/folder/" + req.blog.client);
   }
 
   if (!req.blog.client) {
@@ -325,7 +328,7 @@ client_routes.use("/:client", function (req, res, next) {
     ]);
 
     if (!allowedUnpersistedPaths.has(relativePath)) {
-      return res.redirect(res.locals.base + "/client");
+      return res.redirect(res.locals.dashboardBase + "/settings/folder");
     }
   }
 
@@ -344,7 +347,7 @@ for (let client_name in clients) {
 }
 
 client_routes.use("/:client", (req, res) => {
-  res.redirect(`/sites/${req.blog.handle}/client`);
+  res.redirect(`${res.locals.dashboardBase}/settings/folder`);
 });
 
 module.exports = client_routes;

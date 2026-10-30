@@ -90,6 +90,10 @@
   padding-bottom: calc(var(--spacing) * 2);
 }
 
+.site-dashboard {
+  --border-radius: 12px;
+}
+
 .site {
   position: relative;
   background-color: var(--background-color);
@@ -221,6 +225,7 @@ form.create-site-button button {
   padding: 0.5em 0.75em;
   font-weight: 600;
   margin:0;
+  transition: background-color 0.1s ease;
 }
 
 

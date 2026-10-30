@@ -171,6 +171,7 @@ const loadFolder = async (blog, dir, options = {}) => {
     folder.contents = folderContents.contents;
     folder.pagination = folderContents.pagination;
     folder.breadcrumbs = breadcrumbs;
+    folder.currentName = dir.split("/").filter(Boolean).pop();
 
     // A "+" folder that has produced a published entry is shown as a single
     // aggregated post instead of a plain directory listing.

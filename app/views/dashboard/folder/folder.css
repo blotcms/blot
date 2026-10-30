@@ -1,12 +1,11 @@
 
 .folder-container{
-    display:flex;flex-direction:column; 
-    border: 1px solid var(--border-color);flex-grow: 1;
-    border-radius: 6px;position: relative;
+    display:flex;flex-direction:column;
+    flex-grow: 1;position: relative;
   }
 
   .folder-container a.line {
-    border-radius: var(--border-radius) var(--border-radius) 0 0;padding-bottom: 14px;padding-top: 14px;border-bottom-color: #eeeeec;
+    padding-bottom: 14px;padding-top: 14px;border-bottom-color: #eeeeec;
   }
 
   .folder-container a.line img {
@@ -48,11 +47,6 @@
     margin: 0;
   }
 
-  .folder-box:not(.root).directory{
-    border-radius:var(--border-radius) var(--border-radius) 0 0;overflow:hidden;border:1px solid #eeeeec;
-    border-bottom: none;
-  }
-
   .status-link {
     border-top:1px solid #eeeeec;display: block;width: 100%;box-sizing: border-box;padding: 8px 16px;font-size: 14px;overflow: hidden;color:var(--medium-text-color);
     background-color: none;
@@ -76,6 +70,68 @@
 
   .status-link:hover:after {
     background: linear-gradient(90deg, rgba(255, 255, 255, 0), var(--light-background-color) 50%);
+  }
+
+  .site-dashboard-edit,
+  .site-dashboard-sync-edit {
+    color: var(--accent-color);
+    font-size: 14px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+  }
+
+  .site-dashboard-sync-edit {
+    font-size: 13px;
+  }
+
+  .site-dashboard-title-row:hover .site-dashboard-edit,
+  .site-dashboard-title-row:focus-within .site-dashboard-edit,
+  .site-dashboard-domain-row:hover .site-dashboard-edit,
+  .site-dashboard-domain-row:focus-within .site-dashboard-edit,
+  .site-dashboard-sync-row:hover .site-dashboard-sync-edit,
+  .site-dashboard-sync-row:focus-within .site-dashboard-sync-edit {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  @media (hover: none) {
+    .site-dashboard-edit,
+    .site-dashboard-sync-edit {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  .site-dashboard-status {
+    display: inline-flex;
+    width: auto;
+    max-width: 100%;
+    margin-top: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 13px;
+  }
+
+  .site-dashboard-status::after {
+    display: none;
+  }
+
+  .site-dashboard-status:hover {
+    background: transparent;
+  }
+
+  .site-dashboard-sync-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .folder-view-sync-row {
+    width: fit-content;
   }
 
   .sync-status {
@@ -127,94 +183,13 @@
     white-space: nowrap;
   }
 
-  .folder-corner {
-    position: absolute;
-    top: 5px;
-    right: -1px;
-    width: var(--border-radius);
-    height: var(--border-radius);
-  }
-
-  .folder-corner:before {
-    z-index: 3;
-    content: ' ';
-    width: 100%;
-    height: 100%;
-    position: absolute;
-    top: 0;
-    right: 0;
-    background: var(--background-color);
-    border: 1px solid var(--border-color);
-    border-radius: 0 var(--border-radius) 0 0;
-    border-bottom-color: var(--background-color);
-    border-left-color: var(--background-color);
-    transition: background-color 0.2s;
-  }
-
-
-  .folder-corner:after {
-    width: 100%;
-    height: 100%;
-    background: var(--background-color);
-    content: ' ';
-    position: absolute;
-    top: 0;
-    right: 0;
-    z-index: 2;
-  }
-
-  .folder-top {
-    position: absolute;
-    top:0;
-    left: 0;
-    right:0;
-    overflow: visible;
-  }
-
-  .folder-top:before {
-    width:var(--border-radius);
-    z-index: 2;
-    border-radius:  0 var(--border-radius) 0 0;
-    height: var(--border-radius);
-    content: ' ';
-    background: var(--background-color);
-    border: 1px solid var(--border-color);
-    border-left-color: var(--background-color);
-    border-bottom-color: var(--background-color);
-    position: absolute;
-    top: -1px;
-    left: 20%;
-    transition: background-color 0.2s;
-  }
-
-
-  a:hover ~ .folder-corner:before, 
-  a:hover ~ .folder-top:before {
-    background-color: #f8faff;
-    border-left-color: #f8faff;
-    border-bottom-color: #f8faff;
-  }
-
-  .folder-top:after {
-    width: 80%;
-    z-index: 1;
-    height: calc(1px + var(--border-radius));
-    content: ' ';
-    background: white;
-    border-bottom: 1px solid var(--border-color);
-    position: absolute;
-    top: -1px;
-    right: -1px;
-  }
-
-
-
-
 .directory-list {
   width: 100%;
   font-size: 16px;
   max-width: none;
   margin-bottom: 0;
+  border-collapse: separate;
+  border-spacing: 0;
 } 
 
 .directory-list.empty {
@@ -298,23 +273,6 @@
   flex-shrink: 0;
 }
 
-.directory-list tr:not(:last-child) td:after {
-  content: '';
-  border-bottom: 1px solid #f4f4f5;
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-}
-
-.directory-list tr td:first-child:after{
-  left: 16px;
-}
-
-.directory-list tr td:last-child:after {
-  right: 16px;
-}
-
 .directory-list th {
   text-align: left;
   border-bottom: 1px solid #eeeeec;
@@ -325,15 +283,50 @@
   color: var(--light-text-color);
 }
 
+.directory-list thead th {
+  border-top: 1px solid var(--border-color);
+}
+
+.folder-view-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 4px;
+  padding: 0;
+  color: var(--text-color);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.folder-view-heading .icon-folder {
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+  background-color: #a8c7fa;
+  mask-size: contain;
+  vertical-align: middle;
+  top: 0;
+}
+
+.folder-view-heading + .folder-view-sync-row {
+  margin-bottom: 14px;
+}
+
 .directory-list th:first-child, .directory-list td:first-child {
   padding-left: 16px;
 }
 
-.directory-list tr:hover {
+.directory-list tr:hover,
+.directory-list tr:hover > td,
+.directory-list tbody tr.directory-row:nth-child(even):hover,
+.directory-list tbody tr.directory-row:nth-child(even):hover > td {
   background-color: var(--light-background-color);
 }
 
-.directory-list tr:first-child:last-child:hover {
+.directory-list tr:first-child:last-child:hover,
+.directory-list tr:first-child:last-child:hover > td {
   background-color: transparent;
 }
 
@@ -363,26 +356,56 @@
 
 .directory-scroll {
   position: relative;
+  flex: 1 0 auto;
 }
 
-/* Collapsed: clip the list to a preview height with a fade over the last
-   rows and reveal the "View all files" button. JS adds .is-clamped only
-   when there is more than one page, so without JS the full first page and
-   the Previous/Next nav below remain usable.
+.directory-list tbody tr {
+  height: 40px;
+}
 
-   The preview height is viewport-relative and leaves room for the page
-   chrome above, the sticky table header, the "View all files" button and
-   the sync-status line below it, so "View all files" always sits just
-   under the visible rows without pushing anything off screen. */
+.directory-list tbody tr.directory-row:nth-child(even) > td {
+  background-color: #fafafa;
+}
+
+.directory-list tbody tr.directory-row:nth-child(even) > td:first-child {
+  border-radius: 12px 0 0 12px;
+}
+
+.directory-list tbody tr.directory-row:nth-child(even) > td:last-child {
+  border-radius: 0 12px 12px 0;
+}
+
+.directory-list span.icon-folder,
+.folder-view-heading .icon-folder {
+  background-color: #a8c7fa;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 2.75C0 1.784.784 1 1.75 1H5c.55 0 1.07.26 1.4.7l.9 1.2a.25.25 0 0 0 .2.1h6.75C15.216 3 16 3.784 16 4.75v8.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25z'/%3E%3C/svg%3E");
+}
+
+.directory-list span.icon-file-check {
+  background-color: #555;
+}
+
+.directory-list span.icon-file {
+  background-color: #b8b8b8;
+}
+
+/* On folder pages, clip the list to a preview height with a fade and reveal
+   the "View all files" button. The site overview overrides the clipping so
+   its root listing keeps its natural height. */
 .folder-box.is-clamped .directory-scroll {
   overflow: hidden;
 }
 
-/* Root listing: embedded in the site dashboard below other cards, so the
-   page still scrolls. Keep the preview short enough that "View all files"
-   stays above the fold on a laptop viewport. */
+/* Root listing on the site overview stays in normal document flow. Keep the
+   expand button for pagination, but let the visible rows set the section's
+   height instead of clipping them to the viewport. */
 .folder-box.root.is-clamped .directory-scroll {
-  max-height: max(220px, calc(100vh - 24rem));
+  max-height: none;
+  overflow: visible;
+}
+
+.folder-box.root.is-clamped .directory-fade {
+  display: none;
 }
 
 /* Subfolder listing: its own full-height page with a sync-status line
@@ -600,6 +623,12 @@ body.upload-modal-open {
   flex: 1;
 }
 
+.directory-row__name-cell > .directory-row__link.cover {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .directory-row__link.cover {
   position: absolute;
   inset: 0;
@@ -610,6 +639,8 @@ body.upload-modal-open {
 }
 
 .folder-box.directory {
+  display: flex;
+  flex-direction: column;
   --row-action-menu-right: 12px;
   --row-action-menu-margin-top: 28px;
   --row-action-menu-trigger-opacity: 1;
@@ -629,6 +660,10 @@ body.upload-modal-open {
   z-index: 1;
   opacity: 0;
   transition: opacity 0.2s;
+}
+
+.directory-list td.directory-row__modified-cell {
+  padding-right: 42px;
 }
 
 .directory-row:hover .directory-row__menu-trigger {

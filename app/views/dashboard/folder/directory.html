@@ -6,37 +6,22 @@
 {{/root}}
 
 {{#root}}
-  <div class="folder-container" style="position:relative;top:-7px">
-    <a class="line" href="{{{base}}}/client{{#blog.client}}/{{client.name}}{{/blog.client}}">
-      <span class="label">Folder</span>
-      {{^blog.client}}
-      <span class="link">Sync the folder</span>
-      {{/blog.client}}
-      {{#blog.client}}
-      <span class="center">
-        <img width="16" height="16" src="{{#cdn}}/images/sync/{{blog.client}}.svg{{/cdn}}" />
-        {{client.display_name}}
-        {{! Header and footer health elements sit outside .live-updates, so live refresh doesn't replace them automatically — sync_status.js swaps them explicitly when health changes. }}
-        <span class="header-health-badge">{{#blog.healthIssue}}<span class="health-badge" data-health="{{code}}" title="{{message}}">{{label}}</span>{{/blog.healthIssue}}</span>
-        <span class="link" style="margin-left: 12px;">Edit</span>
-
-      </span>
-      {{/blog.client}}
-    </a>
-    <div class="folder-corner"></div>
-    <div class="folder-top"></div>
-    {{/root}}
+  <div class="folder-container">
+  {{/root}}
 
     <div class="folder-box {{#root}}root{{/root}} {{#directory}}directory{{/directory}}" style="position:relative;">
     <div class="folder-drop-target" aria-hidden="true" style="display:none;position:absolute;inset:0;z-index:10;align-items:center;justify-content:center;background:rgba(0, 112, 232, 0.08);border:2px dashed rgba(0, 112, 232, 0.6);border-radius:6px;color:var(--text-color);font-weight:600;pointer-events:none;">Drop files to upload</div>
     {{#directory}}
+    {{^root}}
+    {{> folder-view-header}}
+    {{/root}}
     <div class="directory-scroll">
     <table class="directory-list {{^contents.length}}empty{{/contents.length}}">
         <thead style="height: 1.4em;">
           <tr>
-            <th data-sort-key="name">Name</th>
-            <th data-sort-key="modified">Date modified</th>
-            <th data-sort-key="size">Size</th>
+            <th data-sort-key="name" {{#root}}style="width:62%"{{/root}}>Name</th>
+            <th data-sort-key="size" {{#root}}style="width:12%"{{/root}}>Size</th>
+            <th data-sort-key="modified" {{#root}}style="width:26%"{{/root}}>Date modified</th>
           </tr>
         </thead>
         <tbody class="live-updates">
@@ -49,7 +34,7 @@
               text-align: center;{{#directory}}min-height: 300px;{{/directory}}
               color: var(--light-text-color);justify-content: center;">  
                 <span style="align-self: center; text-align: center;display: block;">
-                  {{#root}}Folder is empty.<br>{{^blog.client}}<a style="display: inline;" href="{{{base}}}/client">Sync the folder</a>{{/blog.client}}{{/root}}
+                  {{#root}}Folder is empty.<br>{{^blog.client}}<a style="display: inline;" href="{{{base}}}/settings/folder">Sync the folder</a>{{/blog.client}}{{/root}}
                   {{^root}}There is nothing here.{{/root}}
                 </span>
               </small>
@@ -79,27 +64,26 @@
                 </a>
               </div>
             </td>
-            <td data-sort="{{unix}}">
-              <a href="{{{base}}}/folder{{{url}}}" class="directory-row__link cover" aria-hidden="true" tabindex="-1"></a>
-              {{modified}}
-            </td>
             <td data-sort="{{#directory}}0{{/directory}}{{^directory}}{{bytes}}{{/directory}}">
               <a href="{{{base}}}/folder{{{url}}}" class="directory-row__link cover" aria-hidden="true" tabindex="-1"></a>
               {{#directory}}--{{/directory}}{{^directory}}{{size}}{{/directory}}
+            </td>
+            <td class="directory-row__modified-cell" data-sort="{{unix}}">
+              <a href="{{{base}}}/folder{{{url}}}" class="directory-row__link cover" aria-hidden="true" tabindex="-1"></a>
+              {{modified}}
               <button
-              class="directory-row__menu-trigger row-action-menu__trigger"
-              type="button"
-              aria-haspopup="true"
-              aria-expanded="false"
-              data-url="{{{url}}}"
-              data-view-url="{{{base}}}/folder{{{url}}}"
-              data-name="{{name}}"
-              data-directory="{{#directory}}true{{/directory}}{{^directory}}false{{/directory}}"
-              data-entry="{{#entry}}true{{/entry}}{{^entry}}false{{/entry}}"
-            >
-              <span class="icon-dots"></span>
-            </button>
-
+                class="directory-row__menu-trigger row-action-menu__trigger"
+                type="button"
+                aria-haspopup="true"
+                aria-expanded="false"
+                data-url="{{{url}}}"
+                data-view-url="{{{base}}}/folder{{{url}}}"
+                data-name="{{name}}"
+                data-directory="{{#directory}}true{{/directory}}{{^directory}}false{{/directory}}"
+                data-entry="{{#entry}}true{{/entry}}{{^entry}}false{{/entry}}"
+              >
+                <span class="icon-dots"></span>
+              </button>
             </td>
           </tr>
           {{/contents}}
@@ -195,13 +179,26 @@
           const csrfToken = '{{csrftoken}}';
           const currentFolderPrefix = normalizeCurrentFolderPrefix(window.location.pathname);
           
-          // Restore the width of each column from local storage
-          document.querySelectorAll('.directory-list th').forEach(function (th, index) {
-            var width = localStorage.getItem('column-width-' + index);
+          // Restore widths by column key so reordering columns does not apply
+          // a saved width to a different column. Migrate the old index keys.
+          function getSavedColumnWidth(key) {
+            var width = localStorage.getItem('column-width-' + key);
+            if (width) return width;
+
+            var legacyIndex = { name: 0, modified: 1, size: 2 }[key];
+            if (typeof legacyIndex === 'undefined') return null;
+
+            width = localStorage.getItem('column-width-' + legacyIndex);
+            if (width) localStorage.setItem('column-width-' + key, width);
+            return width;
+          }
+
+          document.querySelectorAll('.directory-list th').forEach(function (th) {
+            var width = getSavedColumnWidth(th.getAttribute('data-sort-key'));
             if (width) {
               th.style.width = width;
               var nextTh = th.nextElementSibling;
-              var nextWidth = localStorage.getItem('column-width-' + (index + 1));
+              var nextWidth = nextTh && getSavedColumnWidth(nextTh.getAttribute('data-sort-key'));
               if (nextWidth) {
                 nextTh.style.width = nextWidth;
               }
@@ -1215,9 +1212,10 @@
                 document.removeEventListener('mouseup', stopResize);
       
                 // Persist the width of each column in local storage
-                var index = Array.from(th.parentNode.children).indexOf(th);
-                localStorage.setItem('column-width-' + index, (th.offsetWidth / tableWidth) * 100 + '%');
-                localStorage.setItem('column-width-' + (index + 1), (nextTh.offsetWidth / tableWidth) * 100 + '%');
+                var columnKey = th.getAttribute('data-sort-key');
+                var nextColumnKey = nextTh.getAttribute('data-sort-key');
+                localStorage.setItem('column-width-' + columnKey, (th.offsetWidth / tableWidth) * 100 + '%');
+                localStorage.setItem('column-width-' + nextColumnKey, (nextTh.offsetWidth / tableWidth) * 100 + '%');
               }
             });
           });
@@ -1227,12 +1225,5 @@
             {{/directory}}
 
   </div>
-{{#blog.client}}
-{{#directory}}
-<a href="{{{base}}}/client" class="status-link" style="{{^root}}border:1px solid var(--border-color);{{/root}}border-radius: 0 0 6px 6px;">
-  {{> sync-status}}
-</a>
-{{/directory}}
-{{/blog.client}}
 </div>
 {{/folder}}

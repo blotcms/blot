@@ -137,7 +137,7 @@ CreateBlog.route("/")
     // For the first site, we immediately redirect to the client
     // setup page so they can sync their folder
     if (req.user.blogs.length === 0) {
-      res.redirect('/sites/' + req.blog.handle + '/client');
+      res.redirect('/sites/' + req.blog.handle + '/settings/folder');
     } else {
       res.message('/sites/' + req.blog.handle, 'Created site');
     }

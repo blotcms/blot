@@ -2,6 +2,10 @@
 
 {{> message}}
 
+<div class="dashboard-form-panel" style="display: flex;border-radius: var(--border-radius);border: 1px solid var(--border-color);">
+    {{> settings-sidebar}}
+    <div style="flex-grow: 1;padding:24px">
+<h1>Title</h1>
 <form class="dashboard-form" method="POST">
     <div style="border:1px solid var(--border-color);border-radius: var(--border-radius);padding:20px">
     <input type="hidden" name="_csrf" value="{{csrftoken}}" />
@@ -16,3 +20,5 @@
     </div>
     </div>
 </form>
+</div>
+</div>

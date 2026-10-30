@@ -40,7 +40,7 @@
       <input type="text" name="sharingLink" placeholder="https://www.icloud.com/iclouddrive/..." value="">
       <div class="buttons">
         <button type="submit">Finish Setup</button>
-        {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
+        {{^blog.client}}<a href="{{{dashboardBase}}}/settings/folder">Cancel</a>{{/blog.client}}
         {{#blog.client}}<button type="submit" name="cancel" value="true">Cancel</button>{{/blog.client}}
       </div>
     </form>

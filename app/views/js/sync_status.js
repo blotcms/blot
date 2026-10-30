@@ -83,6 +83,13 @@ function renderSyncStatusMessage(message) {
 
   var parsed = parseSyncStatusMessage(message);
   var visibleMessage = shortenSyncingFilename(parsed.text);
+  var dashboardStatus = statusContainer.closest(".site-dashboard-status");
+  var syncSource = dashboardStatus && dashboardStatus.getAttribute("data-sync-source");
+
+  if (syncSource && parsed.text === "Synced") {
+    visibleMessage = "Synced from " + syncSource;
+  }
+
   var progressBar = q(".sync-status-progress-bar");
   var progressLabel = q(".sync-status-progress-label");
   // Folder footer stays a single compact status line. Drive/iCloud syncs still
