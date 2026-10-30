@@ -43,7 +43,7 @@ def blog_index():
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
-    req = urllib.request.Request(ORIGIN + "/", headers={"Host": BLOG_HOST})
+    req = urllib.request.Request(ORIGIN + "/", headers={"Host": BLOG_HOST, "User-Agent": "blot-git-e2e"})
     with urllib.request.urlopen(req, context=ctx, timeout=20) as res:
         return res.status, res.read().decode("utf8", "replace")
 
