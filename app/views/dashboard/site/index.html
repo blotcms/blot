@@ -5,13 +5,16 @@
 
 
 <div class="collapse-on-small-screens site-dashboard{{#isFolderView}} is-folder-view{{/isFolderView}}{{#isOverviewView}} is-overview-view{{/isOverviewView}}{{#isFilesView}} is-files-view{{/isFilesView}}{{#isRecentView}} is-recent-view{{/isRecentView}}{{#isSearchView}} is-search-view{{/isSearchView}}">
+  {{#isOverviewView}}{{> close-button}}{{/isOverviewView}}
 
   <div class="site-dashboard-folder-layout">
     <div class="site-dashboard-folder-view">
+      {{^isPostsView}}{{^isRecentView}}
       {{> site-dashboard-header}}
+      {{/isRecentView}}{{/isPostsView}}
 
       <div class="dashboard-main">
-        {{^isRecentView}}{{^isSearchView}}{{^isFilesView}}
+        {{^isPostsView}}{{^isRecentView}}{{^isSearchView}}{{^isFilesView}}
         <section class="site-dashboard-recent-preview" aria-label="Recent file activity">
           <div class="site-dashboard-recent-list site-dashboard-recent-list--preview">
             {{#blog.client}}
@@ -48,7 +51,7 @@
             {{/recentActivityPreview.length}}
           </div>
         </section>
-        {{/isFilesView}}{{/isSearchView}}{{/isRecentView}}
+        {{/isFilesView}}{{/isSearchView}}{{/isRecentView}}{{/isPostsView}}
 
         <section id="site-dashboard-folder" class="site-dashboard-view-panel" aria-label="Site folder"{{^isFolderView}} hidden{{/isFolderView}}>
           {{> directory}}
@@ -56,7 +59,6 @@
         </section>
 
         <section id="site-dashboard-recent" class="site-dashboard-view-panel" aria-label="Recent file activity"{{^isRecentView}} hidden{{/isRecentView}}>
-          <a class="site-dashboard-back" href="{{{base}}}">Back</a>
           {{#recentActivity.length}}
           <div class="site-dashboard-recent-list">
             {{#recentActivity}}

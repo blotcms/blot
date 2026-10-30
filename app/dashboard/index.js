@@ -43,10 +43,12 @@ dashboard.use(require('dashboard/util/require-authentication'));
 
 dashboard.use((req, res, next)=>{
   const isAccount = req.path.startsWith("/account");
+  const isSupport = req.path === "/support";
   res.locals.selected = {
     dashboard: "selected",
-    sites: isAccount ? "" : "is-active",
-    account: isAccount ? "is-active" : ""
+    sites: isAccount || isSupport ? "" : "is-active",
+    account: isAccount ? "is-active" : "",
+    support: isSupport ? "is-active" : ""
   };
   next();
 });
@@ -62,6 +64,12 @@ dashboard.param("handle", require("dashboard/util/load-blog"));
 dashboard.use(trace("loaded blog"));
 
 dashboard.use(require("dashboard/util/breadcrumbs"));
+
+dashboard.get("/support", (req, res) => {
+  res.locals.title = "Support";
+  res.locals.breadcrumbs.add("Support", "/sites/support");
+  res.render("dashboard/support");
+});
 
 // These need to be before ':handle'
 dashboard.use("/account", require("./account"));

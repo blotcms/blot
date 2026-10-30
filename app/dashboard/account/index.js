@@ -47,7 +47,9 @@ Account.use(["/subscription", "/pay-subscription"], function (req, res, next) {
 });
 
 Account.route("/").get(function (req, res) {
-  res.redirect("/sites");
+  res.locals.title = "Account";
+  res.locals.isAccountView = true;
+  res.render("dashboard/account/index");
 });
 
 Account.use("/:section", function (req, res, next) {

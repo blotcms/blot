@@ -844,6 +844,17 @@
     display: none;
   }
 
+  /* The Files page should size the root folder card to its rows rather than
+     letting the flex children stretch into a tall, mostly empty panel. */
+  .site-dashboard.is-files-view #site-dashboard-folder .folder-box.directory {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+
+  .site-dashboard.is-files-view #site-dashboard-folder .directory-scroll {
+    flex: 0 0 auto;
+  }
+
   .site-dashboard-overview-files-link {
     display: block;
     margin-top: 8px;
@@ -856,4 +867,12 @@
 
   .site-dashboard-overview-files-link:hover {
     text-decoration: underline;
+  }
+
+  .site-dashboard.is-posts-view #site-dashboard-posts {
+    grid-row: 1;
+  }
+
+  .site-dashboard.is-recent-view #site-dashboard-recent {
+    grid-row: 1;
   }

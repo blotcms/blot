@@ -65,7 +65,11 @@ site.use((req, res, next) => {
   const path = req.path.replace(/\/$/, "") || "/";
   const selectedItem = getSidebarSelection(path);
   res.locals.isSettingsSidebar =
-    path === "/settings" || path.startsWith("/settings/");
+    path === "/settings" ||
+    path.startsWith("/settings/") ||
+    path.startsWith("/import") ||
+    path.startsWith("/export") ||
+    path.startsWith("/delete");
 
   if (selectedItem) {
     res.locals.selected = { ...res.locals.selected, [selectedItem]: "is-active" };
@@ -124,6 +128,13 @@ const renderDashboard = (req, res) => {
 site.get(
   "/",
   setView("folder"),
+  require("dashboard/util/load-blogs"),
+  (req, res, next) => {
+    (res.locals.blogs || []).forEach((blog) => {
+      blog.isCurrent = blog.id === req.blog.id;
+    });
+    next();
+  },
   require("./folder"),
   require("./load/recent-activity"),
   loadClient,

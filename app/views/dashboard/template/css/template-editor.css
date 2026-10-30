@@ -57,10 +57,6 @@
   margin-bottom: var(--breadcrumbs-margin-bottom);
 }
 
-.template-sidebar-sites-link:hover {
-  background: var(--template-row-hover-background-color);
-}
-
 h2 {
   margin: 0;
   font-size: var(--heading-font-size);
@@ -233,7 +229,7 @@ h2 {
 .template-sidebar.is-collapsed .template-sidebar-sites-link > span:first-child,
 .template-editor-sidebar-collapsed .template-sidebar-sites-link > span:first-child {
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
 }
 
 .template-sidebar.is-collapsed .template-sidebar-toggle,
