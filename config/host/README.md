@@ -63,7 +63,9 @@ The `manual-permaban` jail holds ranges we ban by hand and keep banned. Bans
 are dropped in the kernel (TCP and UDP 80/443), so a banned client costs no TLS
 handshake. The ranges are kept in fail2ban's database on the host
 (`/var/lib/fail2ban/fail2ban.sqlite3`), not in this repo, so they stay out of
-the public history.
+the public history. They persist across fail2ban restarts because the jail
+turns off ban-time increment: with it on, a restart rewrote the permanent
+`-1` to `bantime.maxtime` and the ban ended a week after it was added.
 
 ```
 sudo fail2ban-client set manual-permaban banip 203.0.113.0/24      # add
@@ -145,19 +147,19 @@ warning from the Redis setup can be ignored. A new host has no
 runs `deploy.sh` on top of it. Still by hand:
 
 - **Permanent bans** (`manual-permaban`). The only fail2ban state worth keeping;
-  the nginx jails' bans last 30-60 minutes and `recidive` a week. On the old
-  host, list them, then on the new host (after `deploy.sh`) re-add each one:
+  the nginx jails' bans last 30-60 minutes and `recidive` a week. From your
+  Mac, save the list from the old host and ban it on the new one, after
+  `deploy.sh`. The file is one address or CIDR per line and belongs in the
+  gitignored `data/` of the main checkout; the script prints counts only:
 
   ```
-  sudo fail2ban-client status manual-permaban     # old host: "Banned IP list"
-  sudo fail2ban-client set manual-permaban banip <ip-or-cidr>   # new host, each
+  config/host/bans.sh export <old-host> data/bans.txt
+  config/host/bans.sh import <new-host> data/bans.txt
   ```
 
-  Copying `/var/lib/fail2ban/fail2ban.sqlite3` also works, but fail2ban holds it
-  open: stop fail2ban on the old host first (or use `sqlite3 <db> ".backup
-  <copy>"`), put it in place on the new host before fail2ban first starts, and
-  keep the same fail2ban version. Re-running `banip` is simpler and doesn't
-  depend on either.
+  `export` also reads bans a restart dropped from fail2ban's database (needs
+  `sqlite3` on the host). `import` refuses the whole file if a line is not an
+  address or CIDR, skips what is banned, and fails if any is not listed after.
 - **The data volume.** Attach it, then run `deploy.sh` again with
   `DATA_VOLUME_ID=vol-...`, which writes `/etc/blot/data-volume`. Don't set it
   before the volume is attached: the unit waits for the device, then fails the

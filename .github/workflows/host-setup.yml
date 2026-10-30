@@ -20,6 +20,8 @@ on:
       - "config/host/tests/launch.sh"
       - "config/host/tests/setup.sh"
       - "config/host/tests/deploy.sh"
+      - "config/host/bans.sh"
+      - "config/host/tests/bans.sh"
       - "config/host/deploy.sh"
       - "config/host/.bashrc"
       - "config/host/fail2ban/**"
@@ -43,6 +45,8 @@ on:
       - "config/host/tests/launch.sh"
       - "config/host/tests/setup.sh"
       - "config/host/tests/deploy.sh"
+      - "config/host/bans.sh"
+      - "config/host/tests/bans.sh"
       - "config/host/deploy.sh"
       - "config/host/.bashrc"
       - "config/host/fail2ban/**"
@@ -74,3 +78,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: launch.sh against stub aws, ssh and bootstrap.sh
         run: config/host/tests/launch.sh
+  bans:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: bans.sh against stub ssh and fail2ban-client
+        run: config/host/tests/bans.sh
