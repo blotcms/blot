@@ -2,7 +2,8 @@ name: host-setup
 
 # Runs config/host/host/setup.sh in Amazon Linux 2023 containers (twice, to
 # check it is idempotent) and in an Amazon Linux 2 one, where it must refuse.
-# See config/host/tests/setup.sh. It needs Docker on the runner.
+# Then runs config/host/deploy.sh on such a container (config/host/tests/deploy.sh).
+# It needs Docker on the runner.
 
 on:
   push:
@@ -12,6 +13,15 @@ on:
       - "config/host/bootstrap.sh"
       - "config/host/host/**"
       - "config/host/tests/setup.sh"
+      - "config/host/tests/deploy.sh"
+      - "config/host/deploy.sh"
+      - "config/host/.bashrc"
+      - "config/host/fail2ban/**"
+      - "config/host/scripts/mount-instance-store.*"
+      - "config/host/scripts/mount-data-volume.*"
+      - "config/host/scripts/docker.service.d/**"
+      - "config/host/logrotate/**"
+      - "config/host/tmpfiles.d/**"
       - "scripts/deploy/setup-deploy-user.sh"
   pull_request:
     branches: [master]
@@ -20,6 +30,15 @@ on:
       - "config/host/bootstrap.sh"
       - "config/host/host/**"
       - "config/host/tests/setup.sh"
+      - "config/host/tests/deploy.sh"
+      - "config/host/deploy.sh"
+      - "config/host/.bashrc"
+      - "config/host/fail2ban/**"
+      - "config/host/scripts/mount-instance-store.*"
+      - "config/host/scripts/mount-data-volume.*"
+      - "config/host/scripts/docker.service.d/**"
+      - "config/host/logrotate/**"
+      - "config/host/tmpfiles.d/**"
       - "scripts/deploy/setup-deploy-user.sh"
 
 permissions:
@@ -33,3 +52,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: setup.sh on Amazon Linux 2023 and 2
         run: config/host/tests/setup.sh
+      - name: deploy.sh on Amazon Linux 2023
+        run: config/host/tests/deploy.sh
