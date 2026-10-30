@@ -78,6 +78,23 @@ check "sysctl file" in_ct 'grep -qx "net.ipv4.tcp_migrate_req = 1" /etc/sysctl.d
 check "sshd -t passes with the port drop-in" in_ct 'sshd -t && sshd -T | grep -qx "port 2222"'
 check "the port drop-in is separate from 10-blot.conf" in_ct '[ ! -e /etc/ssh/sshd_config.d/10-blot.conf ]'
 
+echo "# bootstrap.sh"
+# A stub ssh and sudo, so the real tar pipe and quoting reach the container.
+mkdir "$TMP/bin"
+cat > "$TMP/bin/ssh" <<EOF
+#!/bin/bash
+while [ "\$1" = -o ]; do shift 2; done
+shift
+exec docker exec -i -e BLOT_HOST_SKIP_SYSTEMD=1 $NAME bash -c "\$*"
+EOF
+chmod +x "$TMP/bin/ssh"
+in_ct 'dnf install -y -q tar > /dev/null && printf "#!/bin/bash\nexec \"\$@\"\n" > /usr/local/bin/sudo && chmod +x /usr/local/bin/sudo'
+check "bootstrap.sh copies the files and runs setup.sh" \
+  env PATH="$TMP/bin:$PATH" BLOT_SSH_PORT=2222 BLOT_DEPLOY_PUBLIC_KEY="$KEY" \
+  bash -c "'$REPO/config/host/bootstrap.sh' host > '$TMP/bootstrap' 2>&1"
+check "the deploy-user script is found in the copied layout" in_ct '[ -f /tmp/blot-host/setup-deploy-user.sh ] && [ -f /tmp/blot-host/host/setup.sh ]'
+check "the key survives the remote shell's quoting" in_ct "[ \"\$(grep -c 'test@example.com' /home/deploy/.ssh/authorized_keys)\" = 1 ]"
+
 echo "# Amazon Linux 2023 without the optional env"
 cleanup
 docker run -d --name "$NAME" -v "$REPO:/repo:ro" amazonlinux:2023 sleep 3600 > /dev/null

@@ -71,8 +71,8 @@ for pkg in $PACKAGES; do rpm -q "$pkg" > /dev/null 2>&1 || missing="$missing $pk
 [ -z "$missing" ] || dnf install -y $missing
 
 # The redis6 package only ships redis6-cli, and the proxy deploy scripts
-# (common.sh, try-issuance.sh) refuse to run without redis-cli. Redis itself
-# runs on its own host.
+# (common.sh, try-issuance.sh) refuse to run without redis-cli. This does not
+# set up Redis itself.
 ln -sfn /usr/bin/redis6-cli /usr/local/bin/redis-cli
 
 say "Docker"
@@ -101,24 +101,24 @@ else
   bash "$DEPLOY_USER_SCRIPT"
 fi
 
+say "SSH"
+# Not 10-blot.conf, which config/redis/host/setup.sh owns and overwrites.
 if [ -n "${BLOT_SSH_PORT:-}" ]; then
-  say "SSH"
-  # Not 10-blot.conf, which config/redis/host/setup.sh owns and overwrites.
-  # Reloaded, not restarted, so a live session survives; and only if `sshd -t`
-  # accepts the result, so a bad config never stops sshd.
   put /etc/ssh/sshd_config.d/11-blot-port.conf 0600 root:root <<EOF2
 # Installed by config/host/host/setup.sh.
 Port $BLOT_SSH_PORT
 EOF2
-  changed=$CHANGED
-  if ! ls /etc/ssh/ssh_host_*_key > /dev/null 2>&1 && [ -n "$SKIP_SYSTEMD" ]; then
-    echo "    no host keys: sshd -t not run"
-  elif sshd -t; then
-    [ "$changed" = 0 ] || sd reload sshd
-  else
-    rm -f /etc/ssh/sshd_config.d/11-blot-port.conf
-    echo "    WARNING: sshd -t rejected the config; removed 11-blot-port.conf, so sshd keeps its old port"
-  fi
+fi
+# Always reloaded: setup-deploy-user.sh adds a Match block to sshd_config too.
+# Reloaded, not restarted, so a live session survives; and only if `sshd -t`
+# accepts the result, so a bad config never stops sshd.
+if ! ls /etc/ssh/ssh_host_*_key > /dev/null 2>&1 && [ -n "$SKIP_SYSTEMD" ]; then
+  echo "    no host keys: sshd -t not run"
+elif sshd -t; then
+  sd reload sshd
+else
+  rm -f /etc/ssh/sshd_config.d/11-blot-port.conf
+  echo "    WARNING: sshd -t rejected the config; removed 11-blot-port.conf, so sshd keeps its old port"
 fi
 
 say "Cron"
