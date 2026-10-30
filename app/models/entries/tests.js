@@ -143,7 +143,8 @@ describe("entries", function () {
 
     it("lists the oldest entries first when ascending", async function () {
       const blogID = this.blog.id;
-      const now = Date.now();
+      // In the past, so the entries are published rather than scheduled.
+      const now = Date.now() - 24 * 60 * 60 * 1000;
 
       for (const [path, offset] of [["/one.txt", 3000], ["/two.txt", 2000], ["/three.txt", 1000]]) {
         await setEntry(

@@ -32,7 +32,7 @@ function parseFileStatus(rawMessage) {
   const path = message.slice(verb.length + 1).trim();
   if (!path) return null;
 
-  return { verb: operation.verb, path };
+  return { verb: verbs[verb], path };
 }
 
 module.exports = async function (req, res, next) {
