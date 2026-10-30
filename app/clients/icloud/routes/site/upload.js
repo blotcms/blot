@@ -119,7 +119,7 @@ module.exports = async function (req, res) {
       res.status(200).send(`File successfully uploaded for blogID: ${blogID}`);
     } finally {
       // Release the sync lock
-      done().catch((err) => console.error("Error releasing lock:", err));
+      await done().catch((err) => console.error("Error releasing lock:", err));
     }
   } catch (err) {
     if (

@@ -94,7 +94,7 @@ module.exports = async function (req, res) {
       return res.status(200).send(`Successfully deleted for blogID: ${blogID}`);
     } finally {
       // Release the sync lock
-      done().catch((err) => console.error("Error releasing lock:", err));
+      await done().catch((err) => console.error("Error releasing lock:", err));
     }
   } catch (err) {
     if (
