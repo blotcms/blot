@@ -7,16 +7,32 @@ import clfdate from "../util/clfdate.js";
 
 const statfs = promisify(statfsSync);
 
+// brctl quota can hang until the exec timeout (30s), longer than Blot waits
+// for /stats, so a slow lookup must not hold up the reply. Reply with the last
+// known quota (null until the first lookup finishes) and refresh it in the
+// background, one lookup at a time.
+let lastQuota = null;
+let refreshing = false;
+
+const refreshQuota = async () => {
+  if (refreshing) return;
+  refreshing = true;
+  try {
+    lastQuota = await brctl.quota();
+  } catch (error) {
+    console.error(clfdate(), `Error getting iCloud Drive quota: ${error}`);
+    lastQuota = null;
+  } finally {
+    refreshing = false;
+  }
+};
+
 export default async (req, res) => {
   const result = {};
 
-  try {
-    // get iCloud Drive free space in bytes
-    result.icloud_bytes_available = await brctl.quota();
-  } catch (error) {
-    console.error(clfdate(), `Error getting iCloud Drive quota: ${error}`);
-    result.icloud_bytes_available = null;
-  }
+  refreshQuota();
+  // get iCloud Drive free space in bytes
+  result.icloud_bytes_available = lastQuota;
 
   try {
     const stats = await statfs('/');

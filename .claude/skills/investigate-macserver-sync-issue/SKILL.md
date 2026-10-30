@@ -309,3 +309,10 @@ Entry template:
 - Key events (Mac time): 08:00:00 `GET /stats` answered, but `brctl.quota()` failed with a CloudKit `Network Failure` (NSURLErrorDomain -1005, "The network connection was lost"), so the reply carried `icloud_bytes_available: null`. 08:01:00 and every check after: normal. First quota error in the retained macserver error logs.
 - Cause: not an outage. `monitorMacServerStats.check` throws "No stats returned" when `icloud_bytes_available` is falsy, and treats that as the server being down.
 - Follow-up: fixed in the PR for this entry: a null quota is logged (`Mac server could not report iCloud quota`) and skips the quota checks; only a failed `/stats` or one without disk space counts as down.
+
+### 2026-10-30 06:04:20 UTC iCloud server down — slow quota lookup blocked /stats (bug)
+
+- Alert: one `ICLOUD_SERVER_DOWN` email for the minutely `/stats` check (23:04 Mac, -0700, on 29 Oct). Mac up 58 days, no error or restart, the next check (06:05:00 UTC) passed. Prod container logs not read (the read was declined).
+- Key events (Mac time): 23:04:20 `GET /stats` arrived (the earlier tries of that check are not in the log). The `brctl` quota call hung until the macserver's own 30s exec timeout, killed at 23:04:50, and only then did `/stats` reply (quota null). Blot's fetch gives up after 3 tries of 10s, so the check had already failed. Every other minute that day was served. Second quota failure in the retained logs besides yesterday's CloudKit one (the 12-13 Oct "Unexpected iCloud Drive quota output" runs were different).
+- Cause: `routes/stats.js` awaits `brctl.quota()` before replying, so a hung quota lookup (30s) makes the whole endpoint slower than Blot's 30s retry budget. The 29 Oct fix handled a quick null quota, not a slow one.
+- Follow-up: fixed in the PR for this entry: `/stats` replies at once with the last known quota (null until the first lookup finishes) and refreshes it in the background, one lookup at a time.
