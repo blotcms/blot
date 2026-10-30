@@ -185,14 +185,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/git-2.37.7
-          key: git-2.37.7-${{ runner.os }}-${{ runner.arch }}-v1
+          key: git-2.37.7-${{ runner.os }}-${{ runner.arch }}-v2
 
       - name: Build git 2.37.7
         if: ${{ !cancelled() && steps.cache-old-git.outputs.cache-hit != 'true' }}
         run: |
           sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev libssl-dev zlib1g-dev
-          curl -fsSL -o "$RUNNER_TEMP/git.tar.xz" https://www.kernel.org/pub/software/scm/git/git-2.37.7.tar.xz
-          tar -xf "$RUNNER_TEMP/git.tar.xz" -C "$RUNNER_TEMP"
+          curl -fsSL -o "$RUNNER_TEMP/git.tar.gz" https://www.kernel.org/pub/software/scm/git/git-2.37.7.tar.gz
+          echo "2108fa57b74add4300b8960e9404e0ed3e5f0efda7470450c67c67e8ab7616d5  $RUNNER_TEMP/git.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/git.tar.gz" -C "$RUNNER_TEMP"
           make -C "$RUNNER_TEMP/git-2.37.7" -j"$(nproc)" prefix="$HOME/git-2.37.7" \
             NO_GETTEXT=1 NO_TCL=1 NO_PERL=1 NO_PYTHON=1 NO_EXPAT=1 NO_INSTALL_HARDLINKS=1 install
 
