@@ -17,6 +17,24 @@
   --editor-save-disabled-bg: #fafafa;
 }
 
+.source-code-header {
+  display: flex;
+  align-items: center;
+  height: 2rem;
+  padding: 8px 6px 8px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: #fff;
+}
+
+.source-code-header__links {
+  display: flex;
+  align-items: baseline;
+}
+
+.source-code-header strong a {
+  color: inherit;
+}
+
 .CodeMirror {
   flex-grow: 1;
   height: auto;
@@ -51,7 +69,7 @@
 }
 
 .file-list {
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--template-editor-border-color);
   border-radius: var(--border-radius);
 }
 
@@ -146,17 +164,44 @@
 }
 
 .editor-container {
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
   width: auto;
   box-sizing: border-box;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
+  padding: var(--iframe-container-padding);
+  border-radius: var(--iframe-container-border-radius);
+  overflow: hidden;
+}
+
+.editor-container::after {
+  position: absolute;
+  inset: var(--iframe-container-padding);
+  z-index: 10;
+  border-radius: calc(
+    var(--iframe-container-border-radius) - var(--iframe-container-padding)
+  );
+  box-shadow: var(--template-editor-inset-shadow);
+  content: "";
+  pointer-events: none;
 }
 
 .editor-container .error {
   margin: -1px 0 0 0;
   border-left: none;
   border-right: none;
+}
+
+.source-code-preview-container {
+  overflow: hidden;
+}
+
+.source-code-preview-frame {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 182px);
+  min-height: 400px;
+  border: 0;
+  background: #fff;
 }
 

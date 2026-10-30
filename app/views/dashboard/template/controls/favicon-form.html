@@ -1,5 +1,3 @@
-{{> template-settings-back}}
-
 <div class="settings-group">
   <h2 class="template-heading">Favicon</h2>
   <div class="favicon-form__body">
@@ -12,10 +10,10 @@
       </div>
       <form method="post" action="{{{base}}}/favicon" class="dashboard-form favicon-current__actions">
         <input type="hidden" name="_csrf" value="{{csrftoken}}" />
-        <input type="hidden" name="redirect" value="{{{base}}}/favicon" />
+        <input type="hidden" name="redirect" value="{{{base}}}/images/profile_image" />
         <div class="buttons">
           <button type="submit" class="red" name="remove" value="1">Delete favicon</button>
-          <a href="{{{base}}}">Cancel</a>
+          <a href="{{{base}}}/images/profile_image">Cancel</a>
         </div>
       </form>
     </div>
@@ -24,19 +22,19 @@
 
     <form method="post" action="{{{base}}}/favicon" enctype="multipart/form-data" class="dashboard-form favicon-form" data-favicon-form>
       <input type="hidden" name="_csrf" value="{{csrftoken}}" />
-      <input type="hidden" name="redirect" value="{{{base}}}/favicon" />
+      <input type="hidden" name="redirect" value="{{{base}}}/images/profile_image" />
       <input type="hidden" name="crop_x" value="" data-favicon-crop-x />
       <input type="hidden" name="crop_y" value="" data-favicon-crop-y />
       <input type="hidden" name="crop_size" value="" data-favicon-crop-size />
 
-      {{> file-drop-field}}
+      {{#faviconFileDrop}}{{> file-drop-field}}{{/faviconFileDrop}}
 
       <p class="favicon-form__help" role="alert" hidden data-favicon-load-error>The selected image could not be previewed. Please choose another image.</p>
       {{> favicon-crop-ui}}
 
       <div class="buttons photo-upload-actions" data-file-drop-actions hidden>
         <button type="submit">Save favicon</button>
-        <a href="{{{base}}}">Cancel</a>
+        <a href="{{{base}}}/images/profile_image">Cancel</a>
       </div>
     </form>
   </div>

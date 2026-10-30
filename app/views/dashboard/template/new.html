@@ -69,11 +69,19 @@
 <br>
 <h1>Your templates</h1>
 
+{{#yourTemplates.length}}
 <div class="template-grid">
 {{#yourTemplates}}
 {{> duplicate-form}}
 {{/yourTemplates}}
 </div>
+{{/yourTemplates.length}}
+{{^yourTemplates.length}}
+<div class="template-empty-state">
+  <p>You have no templates</p>
+  <p>Upload one above or copy a default template below to get started.</p>
+</div>
+{{/yourTemplates.length}}
 
 <br><br>
 <h1>Default templates</h1>
