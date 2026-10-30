@@ -14,7 +14,8 @@
 #     node_max=B node_sum=B top=comm:B
 # anon+shmem is the memory that cannot be reclaimed; the cgroup limit also
 # counts page cache (file), so usage against limit overstates the need.
-# node_max is the biggest node process (node_sum can't tell one from two);
+# node_max is the biggest node process (node_sum can't tell one from two; a
+# node process shows up in comm as MainThread);
 # top is the biggest process that is not node/nginx/openresty/tini/sh/su-exec
 # ("-" if none), i.e. the child-process spike. limit=0 means unlimited. Plus
 # one `name=host mem_available mem_total swap_used` line per sample.
@@ -90,7 +91,7 @@ container_fields() {
     comm=""; read -r comm < "$PROC/$pid/comm" || continue
     bytes=$(rss "$pid"); [ -n "$bytes" ] || continue
     case "$comm" in
-      node) node_sum=$((node_sum + bytes)); [ "$bytes" -gt "$node_max" ] && node_max=$bytes ;;
+      node | MainThread) node_sum=$((node_sum + bytes)); [ "$bytes" -gt "$node_max" ] && node_max=$bytes ;;
       nginx | openresty | tini | sh | su-exec) ;;
       *) if [ "$bytes" -gt "$top_rss" ]; then
            top_rss=$bytes; top_comm=$(printf %s "$comm" | tr ' ' _)
