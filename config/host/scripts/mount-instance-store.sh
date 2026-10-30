@@ -23,10 +23,13 @@ set -e
 #
 # The proxy's logs directory (PROXY_LOG_DIR, where it writes access.log for
 # fail2ban and logrotate) is owned by uid 1000 too, but it holds data that
-# survives a reboot, so an existing one is left exactly as it is.
+# survives a reboot, so an existing one is left exactly as it is. access.log has
+# to exist before the proxy starts: after a stop/start it is gone, and fail2ban
+# exits at boot if a logpath is missing, leaving the host with no bans.
 ensure_tmp() {
   install -d -o 1000 -g 1000 /var/instance-ssd/tmp /var/instance-ssd/disk-cache
   [ -d /var/instance-ssd/logs ] || install -d -o 1000 -g 1000 /var/instance-ssd/logs
+  [ -e /var/instance-ssd/logs/access.log ] || install -m 644 -o 1000 -g 1000 /dev/null /var/instance-ssd/logs/access.log
 }
 
 # Already mounted (e.g. this ran once already, or the unit is re-run):
