@@ -127,7 +127,17 @@ in_ct 'fail2ban-client set manual-permaban banip 192.0.2.0/24 > /dev/null && fai
 check "the bans are listed" in_ct 'fail2ban-client get manual-permaban banned | grep -F 192.0.2.0/24 | grep -qF 2001:db8::/32'
 in_ct 'fail2ban-client stop > /dev/null 2>&1; sleep 1'
 check "fail2ban starts again" f2b_start
-check "both bans are still listed after the restart" in_ct 'fail2ban-client get manual-permaban banned | grep -F 192.0.2.0/24 | grep -qF 2001:db8::/32'
+# ping answers before the jail has restored its bans, so give it time, and show
+# why on failure: a real miss must not look like this wait being too short.
+check "both bans are still listed after the restart" in_ct '
+  for i in $(seq 20); do
+    fail2ban-client get manual-permaban banned | grep -F 192.0.2.0/24 | grep -qF 2001:db8::/32 && exit 0
+    sleep 1
+  done
+  fail2ban-client status manual-permaban
+  command -v sqlite3 > /dev/null && sqlite3 /var/lib/fail2ban/fail2ban.sqlite3 "select jail,ip,bantime from bips where jail=\"manual-permaban\""
+  tail -30 /var/log/fail2ban.log
+  exit 1'
 check "and are still permanent in the database" in_ct '! command -v sqlite3 > /dev/null || [ "$(sqlite3 /var/lib/fail2ban/fail2ban.sqlite3 "select count(*) from bips where jail=\"manual-permaban\" and bantime=-1")" = 2 ]'
 in_ct 'fail2ban-client stop > /dev/null 2>&1; rm -f /var/lib/fail2ban/fail2ban.sqlite3'
 
