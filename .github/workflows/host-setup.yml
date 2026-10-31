@@ -20,6 +20,8 @@ on:
       - "config/host/tests/launch.sh"
       - "config/host/tests/setup.sh"
       - "config/host/tests/deploy.sh"
+      - "config/host/tests/wildcard-cert.sh"
+      - "config/host/wildcard-cert.sh"
       - "config/host/deploy.sh"
       - "config/host/.bashrc"
       - "config/host/fail2ban/**"
@@ -43,6 +45,8 @@ on:
       - "config/host/tests/launch.sh"
       - "config/host/tests/setup.sh"
       - "config/host/tests/deploy.sh"
+      - "config/host/tests/wildcard-cert.sh"
+      - "config/host/wildcard-cert.sh"
       - "config/host/deploy.sh"
       - "config/host/.bashrc"
       - "config/host/fail2ban/**"
@@ -67,6 +71,13 @@ jobs:
         run: config/host/tests/setup.sh
       - name: deploy.sh on Amazon Linux 2023
         run: config/host/tests/deploy.sh
+  wildcard-cert:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: wildcard-cert.sh against a stub redis-cli
+        run: config/host/tests/wildcard-cert.sh
   launch:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
