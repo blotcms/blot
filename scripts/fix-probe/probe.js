@@ -142,9 +142,14 @@ function pinger(redis) {
 
 // This process' TCP sockets to Redis, from the kernel's point of view:
 // bytes queued to send (tx) and received but unread (rx), and retransmits.
+//
+// None of that exists for a Unix socket (BLOT_REDIS_SOCKET): there is no
+// kernel queue or retransmit count to read, so these report nothing and the
+// summary says "unavailable" instead of zeros. Node's own view still works.
 function readTcp() {
   const port = Number(config.redis.port);
   const sockets = {};
+  if (config.redis.socket) return { sockets };
   let text;
   try {
     text = fs.readFileSync("/proc/net/tcp", "utf8");
@@ -163,6 +168,7 @@ function readTcp() {
 }
 
 function readRetransSegs() {
+  if (config.redis.socket) return null;
   try {
     const lines = fs.readFileSync("/proc/net/snmp", "utf8").split("\n").filter((l) => l.startsWith("Tcp:"));
     const names = lines[0].split(/\s+/);
@@ -176,12 +182,25 @@ function readRetransSegs() {
 // Node's view of each Redis socket: bytes written and read, and what is
 // buffered in Node waiting for the kernel (node-redis stops writing once
 // writableNeedDrain is set and resumes on 'drain').
+//
+// Over TCP a socket is identified by its local port. A Unix socket has none,
+// so the pipes of this process other than stdio (fd 0-2) are taken to be
+// Redis's, identified by file descriptor; the probe opens no others.
 function nodeSockets() {
   const port = Number(config.redis.port);
   const sockets = {};
   for (const handle of process._getActiveHandles()) {
-    if (!handle || handle.remotePort !== port) continue;
-    sockets[handle.localPort] = {
+    if (!handle) continue;
+    let id;
+    if (config.redis.socket) {
+      const pipe = handle._handle;
+      if (!pipe || pipe.constructor.name !== "Pipe" || !(pipe.fd > 2)) continue;
+      id = pipe.fd;
+    } else {
+      if (handle.remotePort !== port) continue;
+      id = handle.localPort;
+    }
+    sockets[id] = {
       written: handle.bytesWritten,
       read: handle.bytesRead,
       buffered: handle.writableLength,
@@ -191,7 +210,8 @@ function nodeSockets() {
   return sockets;
 }
 
-// The local ports of this process' Redis sockets, to tell the shared
+// The local ports (or, on a Unix socket, file descriptors) of this process'
+// Redis sockets, to tell the shared
 // client's socket from the control connection's (Redis may see other ports
 // through Docker's NAT, so CLIENT INFO can't be used).
 function redisPorts() {
@@ -349,6 +369,10 @@ async function main() {
     const shared = pinger(client);
     const controlPing = pinger(control);
     const retransAtStart = readRetransSegs();
+    if (config.redis.socket) {
+      summary.tcp = "unavailable: Redis is on a Unix socket, so there are no kernel queues or retransmits";
+      console.log(`[probe] ${summary.tcp}`);
+    }
     let previous = nodeSockets();
 
     const sampler = instrument.startSampler(out, {
@@ -372,7 +396,7 @@ async function main() {
           sharedPingOutstandingMs: shared.outstandingMs(),
           sharedPingLastMs: shared.stats.last,
           controlPingOutstandingMs: controlPing.outstandingMs(),
-          retransSegs: readRetransSegs(),
+          retransSegs: retransAtStart === null ? null : readRetransSegs(),
           shared: sharedPort === null ? undefined : deltas[sharedPort],
           // Every socket, if the shared one couldn't be singled out.
           ...(sharedPort === null ? { sockets: deltas } : {}),
@@ -383,8 +407,8 @@ async function main() {
         console.log(
           `[${(s.t / 1000).toFixed(1)}s] pending=${s.pending}${s.waitingToWrite ? " (unsent)" : ""}` +
             ` sharedPing=${s.sharedPingOutstandingMs || s.sharedPingLastMs}ms controlPing=${s.controlPingOutstandingMs}ms` +
-            ` nodeBuffered=${s.shared ? s.shared.buffered : "?"} kernelTx=${k.tx ?? "?"} kernelRx=${k.rx ?? "?"}` +
-            ` retrans=${s.retransSegs - retransAtStart} heap=${s.heapUsedMB}MB loopDelayMax=${s.eventLoopDelayMaxMs}ms`
+            ` nodeBuffered=${s.shared ? s.shared.buffered : "?"} kernelTx=${k.tx ?? "n/a"} kernelRx=${k.rx ?? "n/a"}` +
+            ` retrans=${s.retransSegs === null ? "n/a" : s.retransSegs - retransAtStart} heap=${s.heapUsedMB}MB loopDelayMax=${s.eventLoopDelayMaxMs}ms`
         );
       },
     });
@@ -416,7 +440,7 @@ async function main() {
     summary.sampler = sampler.summary();
     summary.sharedPing = shared.stats;
     summary.controlPing = controlPing.stats;
-    summary.retransSegs = readRetransSegs() - retransAtStart;
+    summary.retransSegs = retransAtStart === null ? null : readRetransSegs() - retransAtStart;
     summary.redis = redisTotals.summary();
   }
 
