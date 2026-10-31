@@ -48,22 +48,34 @@ case "$DOMAIN" in
   "$BLOT_HOST"|*."$BLOT_HOST") die "$DOMAIN is under $BLOT_HOST: use a separate throwaway domain" ;;
 esac
 for key in "domain:$DOMAIN" "ssl:$DOMAIN:latest"; do
-  [ "$(redis-cli -h "$REDIS_HOST" exists "$key")" = 0 ] \
+  [ "$(redis_cli exists "$key")" = 0 ] \
     || die "Redis already has $key: this is not a throwaway domain, refusing"
 done
 
 cleanup() {
   local status=$?
   docker rm -f "$NAME" >/dev/null 2>&1 || true
-  redis-cli -h "$REDIS_HOST" del "domain:$DOMAIN" "ssl:$DOMAIN:latest" >/dev/null 2>&1 || true
+  redis_cli del "domain:$DOMAIN" "ssl:$DOMAIN:latest" >/dev/null 2>&1 || true
   exit "$status"
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
+# This container is on a bridge network, not the host's, and a host that runs
+# Redis drops Docker bridges from its TCP port, so a unix: Redis needs the
+# socket's directory mounted (the directory, not the socket, which Redis
+# recreates when it restarts). A TCP Redis needs nothing.
+redis_mount=()
+case "$REDIS_HOST" in
+  unix:*)
+    redis_dir="$(dirname "${REDIS_HOST#unix:}")"
+    redis_mount=(--mount "type=bind,source=$redis_dir,target=$redis_dir")
+    ;;
+esac
+
 ensure_image "$IMAGE"
 docker rm -f "$NAME" >/dev/null 2>&1 || true
-redis-cli -h "$REDIS_HOST" set "domain:$DOMAIN" 1 >/dev/null
+redis_cli set "domain:$DOMAIN" 1 >/dev/null
 
 log "Starting $NAME from $IMAGE with PROXY_ACME_CA=$STAGING_CA"
 # -e comes after --env-file, so it wins. No auto-ssl, cache or log volumes.
@@ -79,6 +91,7 @@ docker run -d --name "$NAME" --cap-add SYS_NICE --init \
   -e PROXY_FETCH_CDN_IPS=false \
   -e PROXY_PRIVATE_IP=127.0.0.1 \
   -p "127.0.0.1:$PORT:443" \
+  ${redis_mount[@]+"${redis_mount[@]}"} \
   -v "$CERT_DIR":/etc/ssl/private:ro \
   "$IMAGE" /usr/local/openresty/bin/openresty -g "daemon off;" >/dev/null
 wait_healthy "$NAME" "$HEALTH_TIMEOUT" proxy_answers \

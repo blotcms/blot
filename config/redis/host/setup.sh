@@ -5,6 +5,9 @@
 # allows it, and the rest is listed as needing a restart.
 #
 # Env: REDIS_MAXMEMORY       maxmemory value (default: 70% of RAM)
+#      BLOT_REDIS_SHARED_INSTANCE_STORE=1  a combined app and Redis host:
+#                                 /backups is a directory of the app's instance
+#                                 store, not a disk of its own
 #      BLOT_REDIS_SKIP_SYSTEMD=1  for container tests: no systemd, sysctl or
 #                                 package extras, and Redis is started by hand
 set -euo pipefail
@@ -69,8 +72,10 @@ echo "    redis.conf parses"
 # Settings to compare with the running server. Skip ones the scratch server
 # overrides or that cannot meaningfully differ.
 SETTINGS=$(awk '!/^[ \t]*(#|$)/ {print tolower($1)}' "$TMP/test.conf" | sort -u |
-  grep -vxE 'bind|port|dir|logfile|pidfile')
+  grep -vxE 'bind|port|dir|logfile|pidfile|unixsocket')
 for s in $SETTINGS; do printf '%s\t%s\n' "$s" "$(scratch CONFIG GET "$s" | sed -n 2p)"; done > "$TMP/wanted"
+# The scratch server's socket is overridden above; compare the real path.
+printf 'unixsocket\t%s\n' "$(awk '$1 == "unixsocket" {print $2}' "$ROOT/redis.conf" | tail -n1)" >> "$TMP/wanted"
 scratch SHUTDOWN NOSAVE > /dev/null 2>&1 || true
 
 say "Config files"
@@ -90,11 +95,31 @@ put /etc/redis6/blot-memory.conf 0640 root:redis6 < "$TMP/blot-memory.conf"
 # Keep the package's stock config (or the live host's old one) the first time.
 [ -f /etc/redis6/redis6.conf.dist ] || cp -p /etc/redis6/redis6.conf /etc/redis6/redis6.conf.dist
 put /etc/redis6/redis6.conf 0640 root:redis6 < "$ROOT/redis.conf"
+# The directory of redis.conf's unixsocket. /run is a tmpfs, so tmpfiles.d
+# recreates it at boot, before redis6 starts. On a combined host
+# tmpfiles.d/blot.conf also declares /run/blot (for the app); the two files
+# name different paths and neither changes the other's, whichever runs first.
+# Not the unit's RuntimeDirectory=, which is /run/redis6.
+put /etc/tmpfiles.d/blot-redis.conf 0644 root:root <<'EOF'
+# Installed by config/redis/host/setup.sh: where redis.conf puts its Unix socket.
+d /run/blot/redis 0755 redis6 redis6 -
+EOF
+systemd-tmpfiles --create /etc/tmpfiles.d/blot-redis.conf
 
 say "Scripts"
 install -m 0755 -o root -g root -t /usr/local/bin \
   "$ROOT"/bin/*.sh "$HERE/mount-instance-store.sh"
 mkdir -p /etc/blot-redis # holds floating-ip, which marks the active host for backup.sh
+# Explicit config, never detected from what is mounted. It is only ever written
+# here: a re-run without the variable must not switch a host back.
+if [ "${BLOT_REDIS_SHARED_INSTANCE_STORE:-}" = 1 ]; then
+  put /etc/blot-redis/shared-instance-store 0644 root:root <<'EOF'
+# Written by config/redis/host/setup.sh (BLOT_REDIS_SHARED_INSTANCE_STORE=1):
+# the app's mount-instance-store.service owns the instance store, so
+# mount-instance-store.sh bind-mounts /var/instance-ssd/redis-backups at
+# /backups instead of formatting the disk.
+EOF
+fi
 # The backup user reads Redis's RDB through the redis6 group.
 if id "$BACKUP_USER" > /dev/null 2>&1; then
   id -nG "$BACKUP_USER" | grep -qw redis6 || usermod -aG redis6 "$BACKUP_USER"
@@ -108,6 +133,7 @@ SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 0 * * * * $BACKUP_USER /usr/local/bin/backup.sh hourly >> /home/$BACKUP_USER/backup.log 2>&1
 5 3 * * * $BACKUP_USER /usr/local/bin/backup.sh daily >> /home/$BACKUP_USER/backup.log 2>&1
+35 3 * * 0 $BACKUP_USER /usr/local/bin/backup.sh weekly >> /home/$BACKUP_USER/backup.log 2>&1
 0 0 1 * * $BACKUP_USER : > /home/$BACKUP_USER/backup.log
 */5 * * * * $BACKUP_USER /usr/local/bin/tcpmem-log.sh
 */5 * * * * $BACKUP_USER /usr/local/bin/redis-mem-log.sh
@@ -173,7 +199,10 @@ WantedBy=multi-user.target
 EOF
   put /etc/systemd/system/blot-instance-store.service 0644 root:root <<'EOF'
 [Unit]
-Description=Mount the instance store at /backups
+Description=Mount /backups (the instance store, or a directory of it on a combined host)
+# On a combined host the app's unit mounts the instance store first. That unit
+# does not exist on the Redis-only host, where this line has no effect.
+After=mount-instance-store.service
 Before=redis6.service
 
 [Service]

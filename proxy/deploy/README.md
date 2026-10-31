@@ -74,10 +74,16 @@ The way back from a bad unit image is an older unit image, `npm run deploy-units
 2. **`/etc/blot/proxy.env`** from the example. The units' sockets come
    from the settings the scripts write; `/run/blot` is mounted into each unit and each
    socket is checked before and after the swap. `PROXY_PRIVATE_IP` and
-   `PROXY_REDIS_HOST` (both required, the scripts refuse empty values) must be the host's private IP and Redis host, and `BLOT_REVERSE_PROXY_URLS`
-   in `/etc/blot/secrets.env` must point at `http://<PROXY_PRIVATE_IP>:8077`,
-   because Node purges the cache from a Docker bridge that cannot see the
-   host's `127.0.0.1`. The units read these at start, so redeploy after editing them.
+   `PROXY_REDIS_HOST` (both required, the scripts refuse empty values) must be the Redis host, and `PROXY_PRIVATE_IP` must be `127.0.0.1`:
+   units run with host networking, so Node reaches the purge listener on loopback.
+   `BLOT_REVERSE_PROXY_URLS` in `/etc/blot/secrets.env` must be `http://127.0.0.1:8077`
+   to match. The units read these at start, so redeploy after editing them.
+   `PROXY_REDIS_HOST` can also be `unix:<path>` (`unix:/run/blot/redis/redis.sock`)
+   for a Redis on the same host, as `PROXY_UNIT_MAIN` and friends are. The
+   scripts then use `redis-cli -s <path>`, `redis_reachable` needs a PONG from
+   the socket (a socket file left by a dead Redis fails), and `try-issuance.sh`
+   mounts the socket's directory into its container. Pair it with
+   `BLOT_REDIS_SOCKET=<path>` (no `unix:`) in `/etc/blot/secrets.env` for Node.
    GitHub's Deploy workflow runs the scripts as the `deploy` user, which
    must be able to read the file. It can hold `BLOT_PURGE_TOKEN`, so grant that
    user an ACL rather than making it world-readable:

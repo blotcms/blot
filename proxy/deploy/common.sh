@@ -265,8 +265,8 @@ reset_cache_dir() { # reset_cache_dir <host dir> <image>
 #     so two units never both want 8080
 #   - no blotnet: the airlock is reached on 127.0.0.1 at this unit's own ports
 #     (ensure_airlock)
-#   - the host's Redis, DNS and purge listener (BLOT_REVERSE_PROXY_URLS, the
-#     private address of the host) are reached directly
+#   - the host's Redis, DNS and purge listener (BLOT_REVERSE_PROXY_URLS, on
+#     the host's loopback) are reached directly
 #   - the container shares the host's loopback, so nothing else may bind the
 #     ports above
 # The env files: secrets.env (what Node gets), then proxy.env,
@@ -410,10 +410,10 @@ ensure_airlock() { # ensure_airlock <unit>
 
 # Render the image's config with this host's settings and have nginx parse it.
 # Only the certificate directory is mounted: the check must not touch the live
-# cache or logs. `openresty -t` can bind the listeners, and on the Docker bridge
-# the purge listener's PROXY_PRIVATE_IP is not a local address (prod: "bind()
-# ... failed (99: Address not available)"), so allow non-local binds in the
-# container's own network namespace.
+# cache or logs. `openresty -t` can bind the listeners, and this check runs on
+# the default bridge, where a PROXY_PRIVATE_IP that is not loopback is not a
+# local address (prod: "bind() ... failed (99: Address not available)"), so
+# allow non-local binds in the container's own network namespace.
 validate_image() { # validate_image <image>
   docker run --rm --entrypoint bash \
     --sysctl net.ipv4.ip_nonlocal_bind=1 \
@@ -508,6 +508,15 @@ snapshot() { # snapshot [port] -> "host=status host=status ..."
 # without any of the checked hosts noticing. So ask the proxy for every one of
 # them (by SNI) and require the same certificates from the replacement.
 
+# redis-cli against PROXY_REDIS_HOST: a host name or address, or unix:<path>
+# for Redis's Unix socket, whose path redis-cli wants without the prefix.
+redis_cli() {
+  case "$REDIS_HOST" in
+    unix:*) redis-cli -s "${REDIS_HOST#unix:}" "$@" ;;
+    *) redis-cli -h "$REDIS_HOST" "$@" ;;
+  esac
+}
+
 # SCAN by hand: `redis-cli --scan --count` needs redis-cli 7, and the
 # production host has 6.2, whose --scan uses SCAN's default COUNT of 10 (a
 # round trip per 10 keys of the whole keyspace).
@@ -517,7 +526,7 @@ snapshot() { # snapshot [port] -> "host=status host=status ..."
 custom_cert_domains() {
   local cursor=0 reply keys=""
   while :; do
-    reply=$(redis-cli -h "$REDIS_HOST" --raw scan "$cursor" match 'ssl:*:latest' count 1000) || return 1
+    reply=$(redis_cli --raw scan "$cursor" match 'ssl:*:latest' count 1000) || return 1
     cursor=$(printf '%s\n' "$reply" | head -n 1)
     case "$cursor" in ''|*[!0-9]*) return 1 ;; esac
     keys="$keys$(printf '%s\n' "$reply" | tail -n +2)
@@ -542,7 +551,7 @@ expired_cert_domains() {
   domains="$(sed '/^$/d')"
   [ -n "$domains" ] || return 0
   paste -d' ' <(printf '%s\n' "$domains") \
-    <(printf '%s\n' "$domains" | sed 's/^/get ssl:/; s/$/:latest/' | redis-cli -h "$REDIS_HOST" --raw 2>/dev/null \
+    <(printf '%s\n' "$domains" | sed 's/^/get ssl:/; s/$/:latest/' | redis_cli --raw 2>/dev/null \
       | awk '{ if (match($0, /"expiry":[0-9]+/)) print substr($0, RSTART + 9, RLENGTH - 9); else print "-" }') \
     | awk -v now="$(date +%s)" '$2 != "-" && $2 + 0 <= now { print $1 }'
 }
@@ -629,7 +638,7 @@ all_ok() { ! echo "$1" | tr ' ' '\n' | grep -v '=200$' | grep -q .; }
 # none or it cannot be read.
 redis_wildcard_fingerprint() {
   local pem
-  pem=$(redis-cli -h "$REDIS_HOST" --raw get blot:openresty:ssl:pem 2>/dev/null || true)
+  pem=$(redis_cli --raw get blot:openresty:ssl:pem 2>/dev/null || true)
   [ -n "$pem" ] || return 0
   echo "$pem" | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2 || true
 }
@@ -654,8 +663,8 @@ purge_urls() {
   echo "$urls" | tr ',' '\n' | sed '/^$/d'
 }
 
-# Blot purges the proxy cache from inside its Node process, at the listener on
-# the host's private address (:8077). The probe sends the unit's own
+# Blot purges the proxy cache from inside its Node process, at the purge
+# listener (:8077, PROXY_PRIVATE_IP on the host's loopback in production). The probe sends the unit's own
 # BLOT_PURGE_TOKEN (as the app does) to the listener's root: an
 # authorised request gets the listener's 404, an unreachable address or a
 # rejected token (403, a token mismatch between Node and the proxy) fails.
@@ -678,10 +687,21 @@ purge_reachable() {
 
 # Redis holds the custom-domain certificates and allowlist; none of the hosts
 # checked above needs it, so probe it directly (host networking: the container
-# sees what the host sees).
+# sees what the host sees). A socket has to answer PING: the file a dead Redis
+# leaves behind still exists, but nothing is listening on it.
 redis_reachable() {
-  timeout 5 bash -c "</dev/tcp/$REDIS_HOST/6379" 2>/dev/null \
-    || { log "the proxy cannot reach Redis at $REDIS_HOST:6379"; return 1; }
+  case "$REDIS_HOST" in
+    unix:*)
+      command -v redis-cli >/dev/null 2>&1 \
+        || { log "redis-cli is not installed, so the Redis socket ${REDIS_HOST#unix:} cannot be checked"; return 1; }
+      [ "$(timeout 5 redis-cli -s "${REDIS_HOST#unix:}" ping 2>/dev/null || true)" = PONG ] \
+        || { log "Redis does not answer on its socket ${REDIS_HOST#unix:} (is it running, and is the path right?)"; return 1; }
+      ;;
+    *)
+      timeout 5 bash -c "</dev/tcp/$REDIS_HOST/6379" 2>/dev/null \
+        || { log "the proxy cannot reach Redis at $REDIS_HOST:6379"; return 1; }
+      ;;
+  esac
 }
 
 # No checked host exercises every Node process, so probe the node-a and node-b

@@ -61,7 +61,9 @@ chown "${DEPLOY_USER}:${DEPLOY_USER}" "${SSH_DIR}"
 
 # Create authorized_keys
 log "Setting up SSH authorized_keys..."
-if [ -n "${1:-}" ]; then
+if [ -n "${1:-}" ] && grep -qxF -- "$1" "${SSH_DIR}/authorized_keys" 2>/dev/null; then
+    log "Public key already in authorized_keys"
+elif [ -n "${1:-}" ]; then
     PUBLIC_KEY="$1"
     log "Adding provided public key..."
     cat > "${SSH_DIR}/authorized_keys" <<EOF
@@ -116,9 +118,9 @@ chown root:adm "${COMMAND_LOG}" 2>/dev/null || chown root:root "${COMMAND_LOG}"
 if command -v rsyslogd &> /dev/null; then
     log "Configuring rsyslog for deploy user monitoring..."
     cat > /etc/rsyslog.d/30-deploy-user.conf <<EOF
-# Log SSH access by deploy user
+# Log SSH access by deploy user. Not "& stop": sshd lines must still reach
+# /var/log/secure, or fail2ban's sshd jail never sees failed logins for deploy.
 :msg, contains, "deploy" ${AUDIT_LOG}
-& stop
 EOF
     systemctl restart rsyslog 2>/dev/null || warn "Could not restart rsyslog"
 fi

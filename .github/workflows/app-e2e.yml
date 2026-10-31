@@ -16,6 +16,9 @@ on:
     branches: [master]
 
 env:
+  # The compiled stages of the proxy image come from here (proxy/build/image.sh);
+  # unit-image.yml writes it on master. Layers are arm64, as production.
+  PROXY_IMAGE_CACHE: ghcr.io/blotcms/blot:cache-proxy-arm64
   BLOT_HOST: localhost
   BLOT_REPO: ${{ github.workspace }}
   # Skip the BunnyCDN edge-IP fetch so image builds stay hermetic. Local and
@@ -51,7 +54,7 @@ jobs:
           NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
 
       - name: Build proxy image
-        run: docker build -f proxy/Dockerfile -t blot-proxy:e2e proxy/
+        run: bash proxy/build/image.sh blot-proxy:e2e
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -130,6 +133,43 @@ jobs:
           E2E_PASSWORD: e2e-password
           E2E_BLOG_HOST: ${{ steps.seed-blog.outputs.host }}
         run: node proxy/e2e/run.js
+
+      # The git client through the same proxy, with the runner's real git.
+      # Seeded after the existing suite's steps and run under !cancelled(), so
+      # a failure in run.js still lets these run (and the reverse).
+      - name: Seed git blog
+        id: seed-git
+        if: ${{ !cancelled() && steps.seed-blog.conclusion == 'success' }}
+        run: |
+          docker compose -f proxy/e2e/docker-compose.yml cp \
+            proxy/e2e/seed-git.js app:/tmp/seed-git.js
+          out=$(docker compose -f proxy/e2e/docker-compose.yml exec -T app \
+            node /tmp/seed-git.js e2e@example.com e2egit)
+          json=$(echo "$out" | grep -o 'SEED_GIT_RESULT=.*' | head -n1 | cut -d= -f2-)
+          # Everything the seed printed except the result line (it has the token)
+          echo "$out" | grep -v 'SEED_GIT_RESULT=' || true
+          test -n "$json"
+          field() { printf '%s' "$json" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s)[process.argv[1]]))' "$1"; }
+          token=$(field token)
+          echo "::add-mask::$token"
+          {
+            echo "handle=$(field handle)"
+            echo "host=$(field host)"
+            echo "blog_id=$(field blogID)"
+            echo "token=$token"
+          } >> "$GITHUB_OUTPUT"
+          echo "seeded git blog $(field handle)"
+
+      - name: Run git end-to-end checks
+        if: ${{ !cancelled() && steps.seed-git.conclusion == 'success' }}
+        env:
+          PROXY_ORIGIN: https://127.0.0.1
+          E2E_GIT_EMAIL: e2e@example.com
+          E2E_GIT_HANDLE: ${{ steps.seed-git.outputs.handle }}
+          E2E_GIT_BLOG_HOST: ${{ steps.seed-git.outputs.host }}
+          E2E_GIT_BLOG_ID: ${{ steps.seed-git.outputs.blog_id }}
+          E2E_GIT_TOKEN: ${{ steps.seed-git.outputs.token }}
+        run: node proxy/e2e/git-checks.js
 
       - name: Stack logs
         if: always()

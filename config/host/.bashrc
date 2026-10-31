@@ -15,7 +15,9 @@ export NVM_DIR="/home/ec2-user/.nvm"
 
 export PS1='[BLOT:\u] \W > '
 
-cd /var/www/blot
+# sshd runs this for every non-interactive command too, and scp (SFTP on Amazon
+# Linux 2023) breaks on anything printed to stdout here; keep the rest quiet too.
+cd /var/www/blot 2>/dev/null || true
 
 #. /etc/blot/environment.sh
 
@@ -32,7 +34,17 @@ nginx-stats() {
   fi
   docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.CPUPerc}}' $proxies
 }
-alias client='redis-cli -h $(grep BLOT_REDIS_HOST /etc/blot/secrets.env | cut -d"=" -f2 | tr -d " ")'
+# redis-cli against the Redis the app uses: its socket if secrets.env sets
+# BLOT_REDIS_SOCKET, else BLOT_REDIS_HOST
+client() {
+  local socket
+  socket=$(grep '^BLOT_REDIS_SOCKET=' /etc/blot/secrets.env | cut -d"=" -f2 | tr -d " ")
+  if [ -n "$socket" ]; then
+    redis-cli -s "$socket" "$@"
+  else
+    redis-cli -h "$(grep BLOT_REDIS_HOST /etc/blot/secrets.env | cut -d"=" -f2 | tr -d " ")" "$@"
+  fi
+}
 alias login="docker exec -it blot-blue /bin/sh"
 alias candidates="docker exec blot-blue node app/documentation/featured/candidates"
 alias access="docker exec blot-blue node /usr/src/app/scripts/blog/access.js"
@@ -259,9 +271,8 @@ function biggest() {
 block() {
     while true; do
         echo "----------------------------"
-        echo "Current Banned IPs:"
-           # List all DROP rules in the INPUT chain and extract IPs
-        banned_ips=$(sudo iptables -S INPUT | grep 'DROP' | awk '{for(i=1;i<=NF;i++){if($i=="-s"){print $(i+1)}}}')
+        echo "Current Banned IPs (manual-permaban jail):"
+        banned_ips=$(sudo fail2ban-client get manual-permaban banned | tr -d "[]'," | tr ' ' '\n' | grep .)
         total_banned=$(echo "$banned_ips" | grep -c .)
         echo "Total banned IPs: $total_banned"
         echo "Last 20 banned IPs:"
@@ -273,17 +284,16 @@ block() {
             echo "Exiting."
             break
         fi
-    if [[ ! "$new_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid IP. Please enter a valid IPv4 address."
+    if [[ ! "$new_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(/[0-9]+)?$ ]]; then
+            echo "Invalid IP. Please enter a valid IPv4 address or CIDR."
             continue
         fi
 
     if echo "$banned_ips" | grep -Fxq "$new_ip"; then
             echo "IP $new_ip is already banned."
         else
-            sudo iptables -I INPUT -s "$new_ip" -j DROP \
-                && sudo sh -c 'iptables-save > /etc/sysconfig/iptables'
-            echo "IP $new_ip has been banned."
+            sudo fail2ban-client set manual-permaban banip "$new_ip" \
+                && echo "IP $new_ip has been banned."
         fi
     done
 }

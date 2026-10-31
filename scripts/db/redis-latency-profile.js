@@ -8,6 +8,7 @@ function parseArgs(argv) {
     port: process.env.BLOT_REDIS_PORT
       ? parseInt(process.env.BLOT_REDIS_PORT, 10)
       : 6379,
+    socket: process.env.BLOT_REDIS_SOCKET || undefined,
     intervalMs: 3000,
     samplesPerPoll: 5,
     reportEveryMs: 60000,
@@ -18,8 +19,16 @@ function parseArgs(argv) {
     const part = argv[i];
     const next = argv[i + 1];
 
+    if (part === "--socket" && next) {
+      args.socket = next;
+      i++;
+      continue;
+    }
+
+    // An explicit host means TCP, whatever BLOT_REDIS_SOCKET says
     if (part === "--host" && next) {
       args.host = next;
+      args.socket = undefined;
       i++;
       continue;
     }
@@ -55,7 +64,7 @@ function parseArgs(argv) {
     }
 
     if (part === "--help") {
-      console.log(`Usage: node scripts/util/redis-latency-profile.js [options]\n\nOptions:\n  --host <host>                Redis host (default: BLOT_REDIS_HOST or 127.0.0.1)\n  --port <port>                Redis port (default: BLOT_REDIS_PORT or 6379)\n  --interval-ms <ms>           Delay between polls (default: 3000)\n  --samples-per-poll <n>       Number of ping samples per poll (default: 5)\n  --report-every-ms <ms>       How often to print recommendations (default: 60000)\n  --max-samples <n>            Max rolling sample count retained (default: 2000)\n  --help                       Show this help message\n`);
+      console.log(`Usage: node scripts/util/redis-latency-profile.js [options]\n\nOptions:\n  --host <host>                Redis host (default: BLOT_REDIS_HOST or 127.0.0.1)\n  --socket <path>              Redis Unix socket, used instead of host and port (default: BLOT_REDIS_SOCKET)\n  --port <port>                Redis port (default: BLOT_REDIS_PORT or 6379)\n  --interval-ms <ms>           Delay between polls (default: 3000)\n  --samples-per-poll <n>       Number of ping samples per poll (default: 5)\n  --report-every-ms <ms>       How often to print recommendations (default: 60000)\n  --max-samples <n>            Max rolling sample count retained (default: 2000)\n  --help                       Show this help message\n`);
       process.exit(0);
     }
 
@@ -149,10 +158,11 @@ async function collectSamples(client, count) {
 async function main() {
   const args = parseArgs(process.argv);
   const client = redis.createClient({
-    url: `redis://${args.host}:${args.port}`,
+    ...(args.socket ? {} : { url: `redis://${args.host}:${args.port}` }),
     RESP: 2,
     commandOptions: { timeout: undefined },
     socket: {
+      ...(args.socket ? { path: args.socket } : {}),
       keepAliveInitialDelay: 5000,
       reconnectStrategy: () => 1000,
     },
@@ -190,7 +200,7 @@ async function main() {
 
   console.log("[redis-latency-profile] started");
   console.log(
-    `[redis-latency-profile] redis=${args.host}:${args.port}, interval=${args.intervalMs}ms, samples-per-poll=${args.samplesPerPoll}, report-every=${args.reportEveryMs}ms`
+    `[redis-latency-profile] redis=${args.socket || args.host + ":" + args.port}, interval=${args.intervalMs}ms, samples-per-poll=${args.samplesPerPoll}, report-every=${args.reportEveryMs}ms`
   );
 
   const report = () => {

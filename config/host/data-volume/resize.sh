@@ -227,6 +227,11 @@ cmd_status() {
 # filesystem, and XFS grows while mounted. Nothing stops, nothing is copied.
 cmd_grow() {
   case "$PHASE" in prepared | copied) die "a shrink is in progress ($R_NEW); finish or abandon it first" ;; esac
+  # After a shrink the old volume is still mounted underneath until `finish`.
+  # xfs_growfs takes its target size from the first mount listed there, the old
+  # volume, and exits 0 at that size. Refuse before spending the 6-hour EBS change.
+  [ "$(field "$FACTS" data_mounts)" = 1 ] ||
+    die "the old volume is still mounted under $CUR_VOL: run the app deploy and resize.sh finish first"
   local out state i fs_only=""
   if [ "$SIZE" -eq "$CUR_SIZE" ] && [ "$SIZE_B" -lt $((SIZE * 1073741824 / 100 * 99)) ]; then
     # EBS already has the new size (an earlier grow stopped before the

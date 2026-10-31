@@ -5,13 +5,20 @@
 // Redis tells us its own memory and last save, but only the Redis host can
 // read its disk: config/redis/bin/tcpmem-log.sh stores that in its 5-minute
 // sample (SAMPLE_KEY), and config/redis/bin/backup.sh stores each upload in
-// BACKUP_KEY. The trends come from the last week of daily readings of each
+// BACKUP_KEY (and each daily offsite one in OFFSITE_KEY). The trends come from the last week of daily readings of each
 // (daily/trend.js), stored at MEMORY_HISTORY_KEY and DISK_HISTORY_KEY. Anything that needs attention is bold;
 // missing or stale data is said so. This never fails the rest of the email.
-const { parseSample, parseMemory, parseInfo, SAMPLE_KEY } = require("../check-redis-host");
+const {
+  parseSample,
+  parseMemory,
+  parseInfo,
+  parseBackup,
+  SAMPLE_KEY,
+  BACKUP_KEY,
+  OFFSITE_KEY,
+} = require("../check-redis-host");
 const trend = require("./trend");
 
-const BACKUP_KEY = "blot:redis-host:backup";
 // JSON [{ time, used, scope? }] of the daily runs (daily/trend.js), no TTL. The
 // disk history is scoped to the host, since a replacement host starts afresh.
 const MEMORY_HISTORY_KEY = "blot:redis-host:daily-memory-history";
@@ -31,6 +38,8 @@ const RESIZE_URL =
 const SAMPLE_STALE_MS = 20 * MINUTE;
 // Backups are hourly (the daily one is a second upload at 03:05).
 const BACKUP_OVERDUE_MS = 2 * HOUR;
+// The offsite copy is daily; allow one missed day.
+const OFFSITE_OVERDUE_MS = 2 * DAY;
 // The instance store holding local backup copies.
 const BACKUP_DISK_FULL = 0.8;
 // The root disk's trend projects to this, as memory does to MEMORY_WARNING.
@@ -46,31 +55,14 @@ function compact(ms) {
   return Math.round(ms / DAY) + "d";
 }
 
-// "2026-10-08T03:05:11Z daily daily/2026-10-08-hour-03.rdb 4123456789"
-// (backup.sh). Null if it can't be read.
-function parseBackup(value) {
-  if (!value) return null;
-
-  const [stamp, kind, key, bytes] = String(value).trim().split(/\s+/);
-  const time = Date.parse(stamp);
-
-  if (!time || !kind || !key) return null;
-
-  return {
-    time,
-    kind: kind.replace(/[^\w-]/g, ""),
-    key: key.replace(/[^\w./-]/g, ""),
-    bytes: Number(bytes) > 0 ? Number(bytes) : null,
-  };
-}
-
 // Everything the line needs, from Redis. client.sendCommand keeps these off
 // the client-side cache: the host writes them from another client.
 async function collect({ client = require("models/client"), now = Date.now() } = {}) {
-  const [info, sampleValue, backupValue, memoryHistory, diskHistory] = await Promise.all([
+  const [info, sampleValue, backupValue, offsiteValue, memoryHistory, diskHistory] = await Promise.all([
     client.sendCommand(["INFO"]),
     client.sendCommand(["GET", SAMPLE_KEY]),
     client.sendCommand(["GET", BACKUP_KEY]),
+    client.sendCommand(["GET", OFFSITE_KEY]),
     client.sendCommand(["GET", MEMORY_HISTORY_KEY]),
     client.sendCommand(["GET", DISK_HISTORY_KEY]),
   ]);
@@ -82,6 +74,7 @@ async function collect({ client = require("models/client"), now = Date.now() } =
     save: parseSave(fields),
     sample: parseSample(sampleValue),
     backup: parseBackup(backupValue),
+    offsite: offsiteValue === null || offsiteValue === undefined ? undefined : parseBackup(offsiteValue),
     memoryHistory: trend.parse(memoryHistory),
     diskHistory: trend.parse(diskHistory),
   };
@@ -169,11 +162,24 @@ function backupPart({ now, backup }) {
     : `backed up ${compact(age)} ago`;
 }
 
+// Nothing if offsite was never recorded, so hosts without it don't alert.
+function offsitePart({ now, offsite }) {
+  if (offsite === undefined) return null;
+  if (!offsite) return "**offsite backup unreadable**";
+
+  const age = now - offsite.time;
+  return age > OFFSITE_OVERDUE_MS
+    ? `**last offsite backup ${compact(age)} ago, overdue**`
+    : `offsite ${compact(age)} ago`;
+}
+
 // Turns collect()'s data into the line of the email.
 function line(data) {
   return (
     "Redis server: " +
-    [memoryPart(data), diskPart(data), savePart(data), backupPart(data)].join(", ")
+    [memoryPart(data), diskPart(data), savePart(data), backupPart(data), offsitePart(data)]
+      .filter(Boolean)
+      .join(", ")
   );
 }
 
@@ -212,8 +218,9 @@ async function main(callback, deps = {}) {
 module.exports = main;
 module.exports.collect = collect;
 module.exports.line = line;
-module.exports.parseBackup = parseBackup;
+module.exports.parseBackup = parseBackup; // from check-redis-host.js
 module.exports.BACKUP_KEY = BACKUP_KEY;
+module.exports.OFFSITE_KEY = OFFSITE_KEY;
 module.exports.MEMORY_HISTORY_KEY = MEMORY_HISTORY_KEY;
 module.exports.DISK_HISTORY_KEY = DISK_HISTORY_KEY;
 module.exports.RESIZE_URL = RESIZE_URL;

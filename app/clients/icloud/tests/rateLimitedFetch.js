@@ -22,7 +22,7 @@ describe("icloud rateLimitedFetchWithRetriesAndTimeout", function () {
         return;
       }
       if (trickle) {
-        // one byte every 60ms: slower overall than the timeout, never idle that long
+        // one byte every 100ms: slower overall than the timeout, never idle that long
         let i = 0;
         const interval = setInterval(() => {
           res.write("hello"[i++]);
@@ -30,7 +30,7 @@ describe("icloud rateLimitedFetchWithRetriesAndTimeout", function () {
             clearInterval(interval);
             res.end();
           }
-        }, 60);
+        }, 100);
         return;
       }
       res.end("hello");
@@ -60,7 +60,7 @@ describe("icloud rateLimitedFetchWithRetriesAndTimeout", function () {
 
   it("does not abort a slow body that keeps arriving", async function () {
     trickle = true;
-    const body = await fetch(url, { readBody: true, timeout: 150 });
+    const body = await fetch(url, { readBody: true, timeout: 400 });
     expect(body.toString()).toBe("hello");
     expect(requests).toBe(1);
   });

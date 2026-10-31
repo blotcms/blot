@@ -7,6 +7,9 @@
 # OpenResty is built in the same build (docker-bake.hcl: the proxy target from
 # proxy/Dockerfile, which the unit stage copies from), on the layers cached
 # under blot:cache-proxy-arm64, and the app on the layers build.yml cached.
+# Every workflow that builds the proxy image reads that cache
+# (proxy/build/image.sh), so only master writes it: a pull request changing the
+# Dockerfile must not replace master's layers with its own.
 # arm64 only, as the other images (production is Graviton).
 name: unit-image
 
@@ -105,7 +108,7 @@ jobs:
               unit.tags=${{ env.IMAGE_NAME }}:${{ github.sha }}-arm64
               unit.cache-from=type=registry,ref=${{ env.IMAGE_NAME }}:cache-arm64
               proxy.cache-from=type=registry,ref=${{ env.IMAGE_NAME }}:cache-proxy-arm64
-              proxy.cache-to=type=registry,ref=${{ env.IMAGE_NAME }}:cache-proxy-arm64,mode=max
+              proxy.cache-to=${{ github.ref == 'refs/heads/master' && format('type=registry,ref={0}:cache-proxy-arm64,mode=max', env.IMAGE_NAME) || '' }}
 
       # What the deploy scripts require of OpenResty in the image, checked on
       # the image itself: the config renders and parses, the access log goes to

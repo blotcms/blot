@@ -13,25 +13,49 @@ Sources `/etc/blot/openresty-deploy-environment.sh` on your Mac, then runs
 `deploy.sh`, which ssh's to the host as `ec2-user`. It needs `SSH_KEY` (path to
 the private key) and `PUBLIC_IP` (the host), and optionally `SSH_PORT`
 (default 22). Re-running it is safe; it replaces what it installed last time.
+On a new host run `deploy.sh` directly (see [Moving to a new host](#moving-to-a-new-host)).
 
 ## What it installs
 
 | Here | On the host |
 | --- | --- |
 | `scripts/` (all of it, replacing the old directory) | `/home/ec2-user/scripts/` |
-| `scripts/mount-instance-store.service` | `/etc/systemd/system/mount-instance-store.service` |
+| `scripts/unit-mem-log.sh`, `scripts/unit-mem-summary.sh` | `/usr/local/bin/` |
+| (written by `deploy.sh`) | `/etc/cron.d/blot-unit-mem` (runs `unit-mem-log.sh` every minute as root) |
+| `scripts/mount-instance-store.service` | `/etc/systemd/system/mount-instance-store.service` (enabled; started only if `/var/instance-ssd` is not mounted yet) |
 | `scripts/docker.service.d/10-instance-store.conf` | `/etc/systemd/system/docker.service.d/10-instance-store.conf` |
 | `scripts/mount-data-volume.service` | `/etc/systemd/system/mount-data-volume.service` |
 | `scripts/docker.service.d/20-data-volume.conf` | `/etc/systemd/system/docker.service.d/20-data-volume.conf` |
-| `fail2ban/filter.d/*.conf`, `fail2ban/jail.local`, `fail2ban/fail2ban.local` | `/etc/fail2ban/` (then restarts fail2ban) |
+| `fail2ban/filter.d/*.conf`, `fail2ban/jail.local`, `fail2ban/fail2ban.local` | `/etc/fail2ban/` (then creates any `logpath` in `jail.local` that is missing and restarts fail2ban) |
+| `scripts/fail2ban.service.d/10-instance-store.conf` | `/etc/systemd/system/fail2ban.service.d/10-instance-store.conf` |
+| (written by `deploy.sh`) | `X11Forwarding no` in `/etc/ssh/sshd_config`, and on Amazon Linux 2023 in `/etc/ssh/sshd_config.d/12-blot-x11.conf` |
 | `logrotate/*` | `/etc/logrotate.d/` |
 | `tmpfiles.d/blot.conf` | `/etc/tmpfiles.d/blot.conf` (creates `/run/blot`) |
-| `.bashrc` | `/home/ec2-user/.bashrc` |
+| `.bashrc` | `/home/ec2-user/.bashrc` (must print nothing to stdout in a non-interactive shell: scp is SFTP on Amazon Linux 2023) |
 
 The `nginx-*` fail2ban jails ban `http,https` over TCP and, with a second
 `iptables-multiport` action named `<jail>-udp`, over UDP too (HTTP/3 is UDP 443).
 They deliberately do not use `iptables-allports`, which would also lock a
 banned IP out of ssh.
+
+## Unit memory log
+
+`unit-mem-log.sh` appends to `/var/instance-ssd/logs/unit-mem.log` (instance
+store, so it survives deploys; about 30 days are kept). Each cron run takes four
+samples 15 seconds apart. Per sample there is one line per container
+(`blot-blue`, `blot-green` and their airlocks) with `anon`, `file`, `shmem`,
+`limit` and `oom_kill` from the container's cgroup (v1 or v2), `node_max` (the
+biggest node process) and `top=comm:bytes` (the biggest non-node process, i.e. a
+pandoc/git/exiftool spike), and one `name=host` line with `mem_available`.
+`anon+shmem` is the memory that can't be reclaimed; the cgroup limit also counts
+page cache. Summarise it with:
+
+```
+unit-mem-summary.sh [logfile]
+```
+
+(per container: max and p99 anon+shmem, max node_max, max oom_kill, top 5 child
+processes; host: lowest mem_available.)
 
 ## Permanent bans
 
@@ -39,7 +63,9 @@ The `manual-permaban` jail holds ranges we ban by hand and keep banned. Bans
 are dropped in the kernel (TCP and UDP 80/443), so a banned client costs no TLS
 handshake. The ranges are kept in fail2ban's database on the host
 (`/var/lib/fail2ban/fail2ban.sqlite3`), not in this repo, so they stay out of
-the public history.
+the public history. They persist across fail2ban restarts because the jail
+turns off ban-time increment: with it on, a restart rewrote the permanent
+`-1` to `bantime.maxtime` and the ban ended a week after it was added.
 
 ```
 sudo fail2ban-client set manual-permaban banip 203.0.113.0/24      # add
@@ -51,43 +77,135 @@ Moving to a new host: see [Moving to a new host](#moving-to-a-new-host).
 
 ## Moving to a new host
 
-There is no bootstrap script: the host was built by hand (the old setup script
-is described at the end of this file), and `deploy.sh` only installs the files
-in the table above onto a host that already exists. This is the state that
-lives on the host and has to be carried across or recreated. Do it before
-pointing traffic at the new host.
+A new host is built on Amazon Linux 2023 (arm64) and runs Redis alongside the
+units. `bootstrap.sh` does the root-side OS and Redis setup, then `deploy.sh`
+installs the files in the table above onto
+it. The rest is state that lives on the host and has to be carried across or
+recreated. Do it before pointing traffic at the new host.
+
+```
+config/host/launch.sh --type <instance-type> --key-name <aws-key-pair> --key <private-key> --ssh-port N --redis-maxmemory <value>
+```
+
+`launch.sh` starts the instance (newest AL2023 arm64 AMI, the app subnet, the
+app and Redis security groups, IMDSv2 only, a 200 GB gp3 root, termination
+protection on) and runs `bootstrap.sh` on it. `--ssh-port` goes in user data, so
+the first connection already uses that port. `--redis-maxmemory` (or
+`REDIS_MAXMEMORY`) is required and has no default: the Redis setup's 70% of RAM
+is wrong on a host the units share. Afterwards it checks from your machine
+that port 6379 is not reachable on the host's public address, and if it is it
+stops and says the instance is still running. It attaches no data volume,
+moves no Elastic IP and starts no replication; it ends by printing the
+`deploy.sh` command to run next. On
+a new host run `deploy.sh` directly, as that prints it: `npm run deploy-host`
+sources the production host's `PUBLIC_IP` over the one you set. Run it with
+`--dry-run` first to see the `run-instances` call, `--drill` for a throwaway, `--list` for the hosts it has launched. The key pair name, key
+and port can be set as `BLOT_HOST_KEY_NAME`, `BLOT_HOST_SSH_KEY` and
+`BLOT_SSH_PORT`.
+
+The `deploy` user's ssh public key is not in the repo. `launch.sh` finds it,
+first match wins, in `--deploy-public-key FILE`, `BLOT_DEPLOY_PUBLIC_KEY` (the
+key itself), `~/.ssh/blot-deploy.pub`, and the `BLOT_DEPLOY_PUBLIC_KEY`
+variable of the GitHub `deploy` environment (read with `gh`). It prints which
+one it used, never the key, and stops if the key is not one `ssh-` or `ecdsa-`
+line. With none found a real launch stops, since the Deploy workflow could not
+reach the host; `--drill` and `--dry-run` go on without. If
+`~/.ssh/blot-deploy.pub` is lost:
+
+```
+gh variable get BLOT_DEPLOY_PUBLIC_KEY --env deploy --repo blotcms/blot > ~/.ssh/blot-deploy.pub
+```
+
+If both are lost, derive it from the private key (`ssh-keygen -y -f <key>`) or
+copy it from the live host's `/home/deploy/.ssh/authorized_keys`, then store it
+in both places again (see `scripts/deploy/README.md`).
+
+To run only the OS setup on an existing host:
+
+```
+REDIS_MAXMEMORY=... BLOT_SSH_PORT=... BLOT_DEPLOY_PUBLIC_KEY="ssh-..." config/host/bootstrap.sh <ssh-host>
+```
+
+It copies `host/`, `scripts/deploy/setup-deploy-user.sh` and the Redis host
+files (`config/redis`'s `redis.conf`, `bin/` and `host/`) to the host and runs
+`host/setup.sh` with sudo; `REDIS_MAXMEMORY` is required, the other two are
+optional, and `SSH_OPTS` works as in `config/redis/bootstrap.sh`. `setup.sh` refuses to run anywhere but
+Amazon Linux 2023, is safe to re-run, and never starts or restarts docker or
+upgrades a package. It:
+
+- installs `docker`, `fail2ban-server`, `iptables-nft`, `nftables`, `rsyslog`, `cronie`,
+  `chrony`, `rsync`, `xfsprogs`, `nvme-cli`, `redis6` and `logrotate`, and links
+  `redis6-cli` as `/usr/local/bin/redis-cli`;
+- enables docker without starting it, checks cgroup v2, and adds a drop-in that
+  orders docker after `redis6.service`; `ec2-user` joins the `docker` group;
+- creates the `deploy` user (`scripts/deploy/setup-deploy-user.sh`);
+- with `BLOT_SSH_PORT`, sets sshd's port in `/etc/ssh/sshd_config.d/11-blot-port.conf`
+  (sshd then listens on that port only);
+- installs the `check_docker_health.sh` cron entry, enables `crond`, `rsyslog`,
+  `chronyd` and `fail2ban` (the last is started by `deploy.sh`), creates
+  `/var/www/blot/data` and `/var/www/blot/app/blog/static`, and sets
+  `net.ipv4.tcp_migrate_req = 1`;
+- loads a firewall for Redis, then runs `config/redis/host/setup.sh` with
+  `REDIS_MAXMEMORY` and `BLOT_REDIS_SHARED_INSTANCE_STORE=1`. Redis has no
+  password and `redis.conf` binds every address, so `blot-redis-firewall.service`
+  loads `/etc/nftables/blot-redis.nft` before Redis starts: port 6379 is open
+  from loopback and the VPC's range on the main interface (both read from the
+  instance metadata) and dropped from everything else, docker bridges and IPv6
+  included. The file replaces only its own table, so fail2ban's and docker's
+  rules stay. `redis6` `Requires=` the unit, so it does not start if the rules
+  fail to load. Re-running reloads the unit and never restarts Redis. Check it
+  with `sudo nft list table inet blot_redis`.
+
+On the first run Redis's `/backups` cannot be mounted yet: it is a bind mount of
+`/var/instance-ssd/redis-backups`, and `deploy.sh` mounts the instance store
+afterwards. `deploy.sh` then starts `blot-instance-store.service`, so the
+warning from the Redis setup can be ignored. A new host has no
+`/etc/blot-redis/floating-ip`, so `backup.sh` does not upload from it yet.
+
+`config/host/tests/setup.sh` runs it in Docker, and `config/host/tests/deploy.sh`
+runs `deploy.sh` on top of it. Still by hand:
 
 - **Permanent bans** (`manual-permaban`). The only fail2ban state worth keeping;
-  the nginx jails' bans last 30-60 minutes and `recidive` a week. On the old
-  host, list them, then on the new host (after `npm run deploy-host`) re-add
-  each one:
+  the nginx jails' bans last 30-60 minutes and `recidive` a week. From your
+  Mac, save the list from the old host and ban it on the new one, after
+  `deploy.sh`. The file is one address or CIDR per line and belongs in the
+  gitignored `data/` of the main checkout; the script prints counts only:
 
   ```
-  sudo fail2ban-client status manual-permaban     # old host: "Banned IP list"
-  sudo fail2ban-client set manual-permaban banip <ip-or-cidr>   # new host, each
+  config/host/bans.sh export <old-host> data/bans.txt
+  config/host/bans.sh import <new-host> data/bans.txt
   ```
 
-  Copying `/var/lib/fail2ban/fail2ban.sqlite3` also works, but fail2ban holds it
-  open: stop fail2ban on the old host first (or use `sqlite3 <db> ".backup
-  <copy>"`), put it in place on the new host before fail2ban first starts, and
-  keep the same fail2ban version. Re-running `banip` is simpler and doesn't
-  depend on either.
-- **`/etc/blot/data-volume`** and the `.blot-data-volume` marker on the data
-  volume (see above).
+  `export` also reads bans a restart dropped from fail2ban's database (needs
+  `sqlite3` on the host). `import` refuses the whole file if a line is not an
+  address or CIDR, skips what is banned, and fails if any is not listed after.
+- **The data volume.** Attach it, then run `deploy.sh` again with
+  `DATA_VOLUME_ID=vol-...`, which writes `/etc/blot/data-volume`. Don't set it
+  before the volume is attached: the unit waits for the device, then fails the
+  run. A volume restored from a snapshot still
+  carries the old volume's ID in `.blot-data-volume`; mount it once by hand and
+  write the new ID there before the unit mounts it (see below).
 - **Wildcard certificate** files in `/etc/ssl/private/` (`letsencrypt-domain.pem`
   and `.key`), written from Redis; `blue-green.sh` won't start a proxy
   container without them.
-- **Packages and cron:** `redis6` (for `redis-cli`), `nvme-cli`, `cronie`, and
-  the cron entry that runs `check_docker_health.sh` every minute (`deploy.sh`
-  copies the script but not the entry).
-- Then `npm run deploy-host` and the Deploy workflow.
+- Then `deploy.sh` and the Deploy workflow. docker is enabled but
+  stays stopped until the instance store and the data volume are mounted.
 
 Nothing in `proxy/` or the units needs copying: custom-domain
 certificates are in Redis and the proxy cache refills itself.
 
-It also turns off X11 forwarding in `sshd_config`. The systemd files are
-installed and `daemon-reload`ed only: docker is not restarted, so the
-mount-before-docker ordering takes effect at the next reboot.
+X11 forwarding is turned off in `sshd_config`, which is enough on Amazon Linux 2.
+On Amazon Linux 2023 sshd reads `sshd_config.d/*.conf` first and uses the first
+value it finds, and `50-redhat.conf` there sets `X11Forwarding yes`, so
+`deploy.sh` also writes `sshd_config.d/12-blot-x11.conf` (after `10-blot.conf`
+and `11-blot-port.conf`, which other setup scripts own) wherever `sshd_config`
+includes that directory.
+
+The systemd files are installed and `daemon-reload`ed; docker is never restarted,
+so the mount-before-docker ordering takes effect at the next reboot. The instance
+store unit is also enabled, and started if `/var/instance-ssd` is not a
+mountpoint, so on a new host the log directory exists before fail2ban starts; on
+a running host it is mounted and nothing is started or remounted.
 
 The data volume (the EBS volume at `/var/www/blot/data`) is mounted at boot by
 `mount-data-volume.service`, and the drop-in gates docker on it the same way.
@@ -107,8 +225,12 @@ changes whenever it is swapped for a resized or restored one:
 
 On the first run against a host with the volume already mounted (and no
 `/etc/blot/data-volume`), `deploy.sh` works out the volume ID from the mounted
-device and writes both files; it never overwrites them afterwards. If there is
-neither the file nor a mounted volume it warns and leaves the unit disabled.
+device and writes both files; it never overwrites them afterwards. With
+`DATA_VOLUME_ID` set (`vol-` and 8 to 17 hex digits) and no
+`/etc/blot/data-volume`, it writes that ID instead; if a different volume is
+mounted it stops without writing anything, and it writes the marker only for the
+volume that is mounted. If there is neither the file nor a mounted volume it
+warns and leaves the unit disabled.
 `mount-data-volume.sh` also makes the mount `shared`, which the app
 containers' `bind-propagation=rslave` bind of the data directory needs, so a
 volume mounted on the host over `/var/www/blot/data` reaches running
@@ -119,6 +241,26 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
 `/home/ec2-user/scripts/mount-instance-store.sh` (likewise
 `mount-data-volume.service` and `mount-data-volume.sh`).
 
+### The wildcard certificate
+
+`blue-green.sh` will not start a unit in fresh mode until
+`/etc/ssl/private/letsencrypt-domain.pem` and `.key` exist and the `deploy` user
+can read them. `wildcard-cert.sh` writes both from the wildcard certificate in
+the host's own Redis (`blot:openresty:ssl:pem` and `:key`):
+
+```
+config/host/wildcard-cert.sh <ssh-host>
+```
+
+Run it after Redis on the new host has synced, since the keys come from that
+Redis; it only reads, so a read-only replica is fine, and it is safe to re-run.
+It copies itself to the host and runs there with sudo (`SSH_OPTS` works as in
+`bootstrap.sh`). It refuses, leaving any existing files alone, if either value
+is empty, the certificate has expired or the key is not the certificate's key.
+Each file is written to a temp file in the same directory, then moved into
+place as `root:deploy` mode `0640`, so the key is never world-readable. It never
+prints the key. Run it before the first `deploy-units`.
+
 ## Scripts and cron
 
 - The wildcard certificate is not renewed from the host: the app's scheduler
@@ -128,7 +270,8 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
   `/usr/local/bin/acme-nginx`; none of them is used any more.
 - `check_docker_health.sh` restarts containers Docker reports as unhealthy. It
   is run from cron every minute as `/usr/local/bin/check_docker_health.sh`
-  (`deploy.sh` copies it there, but does not install the cron entry). It skips
+  (`deploy.sh` copies it there, but does not install the cron entry; on a new
+  host `host/setup.sh` does). It skips
   `blot-blue`, `blot-green` and `blot-<unit>-previous` (whole names, so the
   airlocks are still restarted) while a proxy deploy holds its lock, so it
   cannot restart the unit that is draining.
@@ -140,8 +283,9 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
 - `mount-instance-store.sh` mounts the NVMe instance store at
   `/var/instance-ssd` (logs, cache and the app's tmp directory) at boot, and
   creates `/var/instance-ssd/tmp` for the app containers and
-  `/var/instance-ssd/disk-cache` for the proxy's disk cache (both uid 1000), since a
-  stop/start of the instance wipes the disk.
+  `/var/instance-ssd/disk-cache` for the proxy's disk cache (both uid 1000), and
+  `/var/instance-ssd/logs` (uid 1000, as the proxy container writes it) if it is
+  missing, since a stop/start of the instance wipes the disk.
 - `mount-data-volume.sh` mounts the EBS data volume at `/var/www/blot/data` at
   boot (see above).
 
@@ -160,8 +304,9 @@ and what still depends on it. `deploy.sh` does not install any of it.
   rebuilt host does not need the file.
 - Wrote the wildcard certificate and key from Redis (`blot:openresty:ssl:pem`
   and `blot:openresty:ssl:key`) to `/etc/ssl/private/letsencrypt-domain.pem` and
-  `.key`, the directory the proxy container mounts read-only. On a rebuilt host
-  these must exist before `blue-green.sh` will start a container.
+  `.key`, the directory the proxy container mounts read-only. `wildcard-cert.sh`
+  now does this on a rebuilt host (see
+  [Moving to a new host](#moving-to-a-new-host)).
 - Enabled and started `mount-instance-store.service`, and installed the
   `docker.service.d` drop-in that gates docker on `/var/instance-ssd` being
   mounted. `deploy.sh` installs both.

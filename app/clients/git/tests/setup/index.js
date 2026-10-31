@@ -79,6 +79,15 @@ module.exports = function setup(options) {
       });
     });
 
+  // { client: true } makes a clone with a real git client (./client.js)
+  // as this.local, instead of the simple-git clone below. Pass
+  // { clone: false } with it. Specs written with it never touch the bare
+  // repository or the blog folder's .git directory.
+  if (options.client)
+    before(async function () {
+      this.local = await require("./client").forContext(this);
+    });
+
   if (options.clone !== false)
     before(function (done) {
       var context = this;

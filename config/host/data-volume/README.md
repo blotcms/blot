@@ -131,15 +131,18 @@ for `optimizing`, then `xfs_growfs`. It is online and needs no freeze. AWS
 allows one modification per volume every 6 hours; the error is passed on
 clearly.
 
+It refuses to run between a shrink and `finish`: the old volume is still mounted
+underneath, and `xfs_growfs` would stop at that volume's size and exit 0.
+
 ## Drill first
 
-`drill.sh` rehearses the whole thing on an Amazon Linux 2 arm64 instance, the
-production kernel, without touching production:
+`drill.sh` rehearses the whole thing on an Amazon Linux 2023 arm64 instance, the OS
+of a new app host, without touching production:
 
     drill.sh launch --ami <id> --subnet <id> --security-group <id> --key-name <name>
     # add --ssh-port N if the security group does not allow 22: user data moves sshd there
     drill.sh --key <pem> setup ec2-user@<ip>
-    # then the commands setup prints: resize.sh --host ... shrink 6, grow 10
+    # then the commands setup prints: resize.sh --host ... shrink 6, finish, grow 10
     drill.sh teardown <instance-id>
 
 `setup` fills a small data volume with tens of thousands of files and runs

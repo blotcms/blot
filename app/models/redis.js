@@ -22,6 +22,25 @@ function reconnectStrategy(retries) {
   return Math.min(Math.pow(2, retries) * 50, 2000) + jitter;
 }
 
+// BLOT_REDIS_SOCKET is explicit config, never auto-detected: when it is set
+// and the socket is missing the connection fails visibly, it does not quietly
+// use TCP to a Redis the operator did not mean. node-redis connects over IPC
+// when socket.path is present, so the url (which would merge a host and port
+// in) is left out. keepAliveInitialDelay is ignored on IPC; socketTimeout and
+// reconnectStrategy apply to any transport. Read per client, not at require
+// time, so a spec can point config at a socket.
+function connectionOptions() {
+  const socket = {
+    keepAliveInitialDelay: 5000,
+    socketTimeout: SOCKET_TIMEOUT_MS,
+    reconnectStrategy,
+  };
+
+  if (config.redis.socket) return { socket: { ...socket, path: config.redis.socket } };
+
+  return { url, socket };
+}
+
 // Pass { clientSideCache: false } for a client which never reads cacheable
 // keys (the pubsub subscriber), so Redis does not track anything for it.
 function createRedisClient({ clientSideCache: useCache = true } = {}) {
@@ -34,16 +53,11 @@ function createRedisClient({ clientSideCache: useCache = true } = {}) {
     : undefined;
 
   const client = redis.createClient({
-    url,
+    ...connectionOptions(),
     RESP: 3,
     maintNotifications: "disabled",
     commandOptions: { timeout: undefined },
     pingInterval: PING_INTERVAL_MS,
-    socket: {
-      keepAliveInitialDelay: 5000,
-      socketTimeout: SOCKET_TIMEOUT_MS,
-      reconnectStrategy,
-    },
     clientSideCache,
   });
 
@@ -95,15 +109,10 @@ createRedisClient.failFastOnceReady = function (client) {
 // socket errors are emitted here as well as rejecting commands.
 createRedisClient.createLibraryClient = function (label) {
   const client = redis.createClient({
-    url,
+    ...connectionOptions(),
     RESP: 2,
     commandOptions: { timeout: undefined },
     pingInterval: PING_INTERVAL_MS,
-    socket: {
-      keepAliveInitialDelay: 5000,
-      socketTimeout: SOCKET_TIMEOUT_MS,
-      reconnectStrategy,
-    },
   });
 
   client.on("error", function (err) {
