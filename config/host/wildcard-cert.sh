@@ -26,7 +26,8 @@
 # read-only and runs as root, which reads them regardless.
 #
 # Env (for tests): BLOT_CERT_DIR (default /etc/ssl/private),
-#   BLOT_CERT_OWNER (default root:deploy), REDIS_CLI (default redis-cli),
+#   BLOT_CERT_OWNER (default root:deploy), REDIS_CLI (default redis-cli;
+#   a command and arguments, "redis-cli -s /run/blot/redis/redis.sock" for the socket),
 #   SSH_OPTS (extra ssh options as one string, as in bootstrap.sh)
 # Runs on a Mac when given an ssh host, so that part has to work in bash 3.2.
 set -euo pipefail
@@ -38,24 +39,25 @@ if [ "${1:-}" != "--local" ]; then
   [ $# -eq 1 ] || die "usage: wildcard-cert.sh <ssh-host>"
   # shellcheck disable=SC2086
   exec ssh -o BatchMode=yes -o ConnectTimeout=15 ${SSH_OPTS:-} "$1" \
-    "sudo env BLOT_CERT_DIR=$(printf %q "${BLOT_CERT_DIR:-}") BLOT_CERT_OWNER=$(printf %q "${BLOT_CERT_OWNER:-}") bash -s -- --local" < "$0"
+    "sudo env BLOT_CERT_DIR=$(printf %q "${BLOT_CERT_DIR:-}") BLOT_CERT_OWNER=$(printf %q "${BLOT_CERT_OWNER:-}") REDIS_CLI=$(printf %q "${REDIS_CLI:-}") bash -s -- --local" < "$0"
 fi
 
 DIR=${BLOT_CERT_DIR:-/etc/ssl/private}
 OWNER=${BLOT_CERT_OWNER:-root:deploy}
-REDIS_CLI=${REDIS_CLI:-redis-cli}
+# a command and its arguments, e.g. "redis-cli -s /run/blot/redis/redis.sock"
+read -r -a REDIS_CMD <<< "${REDIS_CLI:-redis-cli}"
 PEM_KEY=blot:openresty:ssl:pem
 KEY_KEY=blot:openresty:ssl:key
 
 command -v openssl > /dev/null || die "openssl is not installed"
-command -v "$REDIS_CLI" > /dev/null || die "$REDIS_CLI is not installed"
+command -v "${REDIS_CMD[0]}" > /dev/null || die "${REDIS_CMD[0]} is not installed"
 
 [ -d "$DIR" ] || install -d -m 0755 "$DIR"
 WORK=$(mktemp -d "$DIR/.wildcard-cert.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 
 fetch() { # fetch <redis key> <file>
-  "$REDIS_CLI" --raw get "$1" > "$2" || die "could not read $1 from Redis"
+  "${REDIS_CMD[@]}" --raw get "$1" > "$2" || die "could not read $1 from Redis"
   grep -q -- '-----BEGIN ' "$2" || die "$1 is empty or not PEM in Redis; nothing written"
 }
 fetch "$PEM_KEY" "$WORK/pem"
