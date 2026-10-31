@@ -482,6 +482,15 @@ async function one(host, path) {
 
 const settle = () => sleep(250); // a miss is published just after the response ends
 
+// One host stays sequential (the proxy rate-limits a host, and each page's
+// settle must follow its own request); only different hosts overlap.
+async function perHost(fn, width = 4) {
+  const queue = [...PAGE_HOSTS];
+  await Promise.all(Array.from({ length: width }, async () => {
+    for (let h; (h = queue.shift()); ) await fn(h);
+  }));
+}
+
 async function main() {
   const [cmd, host, path] = process.argv.slice(2);
   const fail = (msg) => {
@@ -490,7 +499,7 @@ async function main() {
   };
   if (cmd === "load") return load();
   if (cmd === "warm") {
-    for (const h of PAGE_HOSTS) {
+    await perHost(async (h) => {
       for (const p of [...PAGES, LARGE]) {
         let r;
         for (let tries = 0; tries < 3; tries++) {
@@ -500,7 +509,7 @@ async function main() {
         }
         if (r.status !== 200 || r.cache !== "HIT") fail(`${h}${p} was not a HIT after warming (status ${r.status}, cache ${r.cache})`);
       }
-    }
+    });
     console.log(`warmed ${PAGE_HOSTS.length * (PAGES.length + 1)} pages`);
     return;
   }
@@ -508,7 +517,7 @@ async function main() {
     // after the load has stopped, every change was followed by a purge: no
     // page, cached or not, may be from an older generation than the upstream's
     let n = 0;
-    for (const h of PAGE_HOSTS) {
+    await perHost(async (h) => {
       const gen = await stubGen(h);
       for (const p of [...PAGES, LARGE]) {
         const r = await one(h, p);
@@ -517,7 +526,7 @@ async function main() {
         if (r.gen !== gen) fail(`${h}${p}: generation ${r.gen} served, the upstream is at ${gen}: STALE (cache ${r.cache})`);
         n++;
       }
-    }
+    });
     console.log(`verified ${n} pages: all of the upstream's current generation`);
     return;
   }
