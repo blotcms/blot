@@ -46,7 +46,7 @@ serves any host:
 | --- | --- | --- |
 | `PROXY_REDIS_HOST` | build-time `REDIS_IP`, else `127.0.0.1` | Redis for certificates and the domain allowlist |
 | `PROXY_SERVER_LABEL` | build-time `SERVER_LABEL`, else `us` | the `Blot-Server` response header |
-| `PROXY_PRIVATE_IP` | build-time `OPENRESTY_INSTANCE_PRIVATE_IP`, else `127.0.0.1` | address of the extra `:8077` cache-purge listener, for Node containers that cannot reach the host's `127.0.0.1:80` |
+| `PROXY_PRIVATE_IP` | build-time `OPENRESTY_INSTANCE_PRIVATE_IP`, else `127.0.0.1` | address of the extra `:8077` cache-purge listener that Node purges through (`BLOT_REVERSE_PROXY_URLS`). Loopback because units use host networking, so Node shares the host's loopback |
 | `PROXY_RESOLVER` | build-time `OPENRESTY_RESOLVER`, else `8.8.8.8 ipv6=off` | DNS resolver (`127.0.0.11` on a user-defined Docker network) |
 | `PROXY_ACME_CA` | build-time `ACME_CA`, else Let's Encrypt production | ACME directory for custom-domain certificates. Leave it alone in production: the deploy scripts refuse anything else in `proxy.env` |
 | `PROXY_ACME_HOOK_SECRET` | unset: each instance generates its own (a warning is logged) | the secret dehydrated's hook calls carry to the `:8999` hook server. Set it to the same long random string on every instance: they share `:8999` (`reuseport`), so a call can reach either. Read by `init.conf` (never written into `nginx.conf`) |
