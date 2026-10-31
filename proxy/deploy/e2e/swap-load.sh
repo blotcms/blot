@@ -60,12 +60,16 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 # the caller).
 DEPLOY_USER=sl-deploy
 if [ "${DEPLOY_AS_ROOT:-0}" != 1 ]; then
-  id "$DEPLOY_USER" >/dev/null 2>&1 || as_root useradd -m -G docker "$DEPLOY_USER"
+  echo "t0 $(date +%T)"
+  id "$DEPLOY_USER" >/dev/null 2>&1 || as_root useradd -M -l -G docker "$DEPLOY_USER"
+  echo "useradd $(date +%T)"
   # the harness' certificate and env files, readable as production's are for its deploy user
   as_root chmod -R a+rX "$E2E_ROOT"
   as_root chmod a+r "$PROXY_CERT_DIR"/*
   d="$E2E_ROOT"; while [ "$d" != / ]; do as_root chmod a+x "$d"; d="$(dirname "$d")"; done
+  echo "chmod $(date +%T)"
   ! as_root runuser -u "$DEPLOY_USER" -- sudo -n true >/dev/null 2>&1 || fail "$DEPLOY_USER can sudo: the test would not catch a script that needs it"
+  echo "sudo $(date +%T)"
 fi
 run_bg() {
   if [ "${DEPLOY_AS_ROOT:-0}" = 1 ]; then bash "$BG" "$@"; else local vars; mapfile -t vars < <(env | grep -E '^(PROXY_|BLOT_|ALLOW_STDOUT_LOGS=)')

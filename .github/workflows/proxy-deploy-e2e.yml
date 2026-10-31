@@ -211,6 +211,8 @@ jobs:
 
       # ---- 4. a new blue whose node-a never listens -----------------------------
       - name: A new blot-blue whose node-a never becomes healthy is rolled back and blot-green is never touched
+        env:
+          PROXY_HEALTH_TIMEOUT: "15" # a real timeout here; a healthy stand-in answers in ~2 s
         run: |
           set +e
           blue=$(docker inspect -f '{{.Id}}' blot-blue)
