@@ -25,13 +25,15 @@ const DAILY_HISTORY_KEY = "metrics:render-time:daily-p95-history";
 // app/scheduler/daily/render-time.js for what writes these.
 const REMOTE_SCRIPT = `
 set -e
-HOST=$(grep BLOT_REDIS_HOST /etc/blot/secrets.env | cut -d= -f2 | tr -d ' ')
+SOCKET=$(grep '^BLOT_REDIS_SOCKET=' /etc/blot/secrets.env | cut -d= -f2 | tr -d ' ' || true)
+HOST=$(grep BLOT_REDIS_HOST /etc/blot/secrets.env | cut -d= -f2 | tr -d ' ' || true)
+redis() { if [ -n "$SOCKET" ]; then redis-cli -s "$SOCKET" "$@"; else redis-cli -h "$HOST" "$@"; fi; }
 for c in ${CONTAINERS.join(" ")}; do
   echo "==$c=="
-  redis-cli -h "$HOST" lrange "metrics:render-time:p95:$c" 0 -1
+  redis lrange "metrics:render-time:p95:$c" 0 -1
 done
 echo "==daily=="
-redis-cli -h "$HOST" lrange "${DAILY_HISTORY_KEY}" 0 -1
+redis lrange "${DAILY_HISTORY_KEY}" 0 -1
 `;
 
 function parseSections(output) {

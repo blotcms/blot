@@ -122,8 +122,12 @@ if [[ " $* " == *" scan "* ]]; then
   for d in ${FAKE_CUSTOM_DOMAINS-a.custom.test b.custom.test}; do echo "ssl:$d:latest"; done
   exit
 fi
+if [[ " $* " == *" ping "* ]]; then
+  # common.sh's redis_reachable on a socket; FAKE_REDIS_DOWN is a stale socket file
+  [ -z "${FAKE_REDIS_DOWN:-}" ] && echo PONG; exit 0
+fi
 if [[ " $* " == *" get blot:openresty:ssl:pem "* ]]; then echo "${FAKE_REDIS_WILDCARD_PEM:-}"; exit; fi
-if [ "$*" = "-h 10.0.0.5 --raw" ]; then
+if [ "$*" = "-h 10.0.0.5 --raw" ] || [ "$*" = "-s /run/blot/redis/redis.sock --raw" ]; then
   # common.sh's expired_cert_domains: "get ssl:<domain>:latest" lines on stdin,
   # one stored certificate JSON line back for each
   while read -r _ key; do
@@ -581,6 +585,30 @@ check "steady, no airlock image for the commit: the airlocks keep the image they
 
 reset units; FAKE_PURGE_FAIL=1 bluegreen
 check "steady, the purge endpoint is not reachable from the new blue: rolled back" '[ $RC != 0 ] && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_OLD" ]'
+
+echo "Redis over a Unix socket (PROXY_REDIS_HOST=unix:...)"
+
+SOCK=/run/blot/redis/redis.sock
+sed -i.bak "s|^PROXY_REDIS_HOST=.*|PROXY_REDIS_HOST=unix:$SOCK|" "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+sed -i.bak "s|^BLOT_REDIS_HOST=.*|BLOT_REDIS_SOCKET=$SOCK|" "$T/secrets.env"; rm -f "$T/secrets.env.bak"
+
+reset units; bluegreen
+check "a unit deploy with both settings (secrets.env and proxy.env name different keys): runs, Redis is reached with -s and the path without unix:" \
+  '[ $RC = 0 ] && ! mentions "different values" && ! called "redis-cli -h"'
+reset units; FAKE_REDIS_DOWN=1 bluegreen
+check "a stale socket (the file is there, nothing answers): fails, and says which socket" \
+  '[ $RC != 0 ] && called "docker start blot-blue-previous" && mentions "does not answer on its socket $SOCK"'
+
+reset units; issue throwaway.example.org
+check "try-issuance: redis-cli gets -s and the bare path" \
+  '[ $RC = 0 ] && called "redis-cli -s $SOCK set domain:throwaway.example.org" && called "redis-cli -s $SOCK del domain:throwaway.example.org" && ! called "redis-cli -h"'
+check "try-issuance: the socket directory (only) is mounted into its bridge-network container" \
+  'called "run -d.*--mount type=bind,source=/run/blot/redis,target=/run/blot/redis " && ! called "source=/run/blot,"'
+
+sed -i.bak "s|^PROXY_REDIS_HOST=.*|PROXY_REDIS_HOST=10.0.0.5|" "$T/proxy.env"; rm -f "$T/proxy.env.bak"
+sed -i.bak "s|^BLOT_REDIS_SOCKET=.*|BLOT_REDIS_HOST=10.0.0.5|" "$T/secrets.env"; rm -f "$T/secrets.env.bak"
+reset units; issue throwaway.example.org
+check "try-issuance on TCP: no Redis mount" '[ $RC = 0 ] && ! called "run -d.*/run/blot/redis"'
 
 echo "check_docker_health.sh"
 
