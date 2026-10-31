@@ -159,4 +159,90 @@ describe("models/redis", function () {
     expect(error && error.constructor.name).toBe("SocketTimeoutError");
     expect(recovered).toBe("OK");
   });
+
+  describe("over a Unix socket", function () {
+    const net = require("net");
+    const os = require("os");
+    const fs = require("fs");
+    const path = require("path");
+    const config = require("config");
+    const { isRedisUnavailableError } = require("helper/redisUnavailable");
+
+    const socketPath = path.join(os.tmpdir(), "blot-redis-" + process.pid + ".sock");
+    let original, server, connections;
+
+    // The test Redis listens on TCP in another container, so this stands in
+    // for the socket Redis serves in production: a Unix socket in this
+    // process which pipes each connection through to it.
+    beforeEach(async function () {
+      original = config.redis.socket;
+      connections = 0;
+      fs.rmSync(socketPath, { force: true });
+      server = net.createServer(function (client) {
+        connections++;
+        const redis = net.connect(config.redis.port, config.redis.host);
+        client.on("error", function () {});
+        redis.on("error", function () {});
+        client.pipe(redis).pipe(client);
+        client.on("close", () => redis.destroy());
+      });
+      await new Promise((resolve) => server.listen(socketPath, resolve));
+    });
+
+    afterEach(async function () {
+      config.redis.socket = original;
+      await new Promise((resolve) => server.close(resolve));
+      fs.rmSync(socketPath, { force: true });
+    });
+
+    it("connects by path when config.redis.socket is set", async function () {
+      config.redis.socket = socketPath;
+      const client = createRedisClient();
+      expect(client.options.url).toBeUndefined();
+      expect(client.options.socket.path).toBe(socketPath);
+      // The timeouts and reconnects which detect a stall apply as on TCP
+      expect(client.options.socket.socketTimeout).toBe(
+        createRedisClient.SOCKET_TIMEOUT_MS
+      );
+      expect(client.options.socket.reconnectStrategy).toBe(
+        createRedisClient.reconnectStrategy
+      );
+      expect(client.options.pingInterval).toBe(createRedisClient.PING_INTERVAL_MS);
+
+      const key = "test:redis-socket:" + Date.now();
+      await client.connect();
+      await client.set(key, "over the socket");
+      expect(await client.get(key)).toBe("over the socket");
+      await client.del(key);
+      await client.quit();
+      expect(connections).toBe(1);
+    });
+
+    it("gives library clients the socket too", async function () {
+      config.redis.socket = socketPath;
+      const client = createRedisClient.createLibraryClient("socket spec");
+      expect(client.options.url).toBeUndefined();
+      await client.ping();
+      await client.quit();
+      expect(connections).toBe(1);
+    });
+
+    it("fails visibly when the socket is missing, without falling back to TCP", async function () {
+      // Redis is reachable over TCP at config.redis.host and port throughout
+      config.redis.socket = socketPath + ".missing";
+      const client = createRedisClient();
+      const errors = [];
+      client.on("error", (err) => errors.push(err));
+      client.connect().catch(function () {});
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      expect(client.isReady).toBe(false);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].code).toBe("ENOENT");
+      expect(errors[0].address).toBe(config.redis.socket);
+      expect(isRedisUnavailableError(errors[0])).toBe(true);
+      expect(connections).toBe(0);
+      await client.destroy();
+    });
+  });
 });
