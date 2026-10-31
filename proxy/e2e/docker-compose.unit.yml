@@ -25,6 +25,9 @@ services:
       BLOT_HOST: ${BLOT_HOST:-localhost}
       BLOT_REDIS_HOST: "127.0.0.1"
       PROXY_FETCH_CDN_IPS: "false"
+      # node-a and node-b each make up a secret when this is unset, so a
+      # session started on one is not valid on the other (production sets one)
+      BLOT_SESSION_SECRET: e2e-session-secret
       BLOT_STORAGE_BUCKET: ${BLOT_STORAGE_BUCKET}
       BLOT_STORAGE_ENDPOINT: ${BLOT_STORAGE_ENDPOINT}
       BLOT_STORAGE_REGION: ${BLOT_STORAGE_REGION}

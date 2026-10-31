@@ -216,9 +216,7 @@ async function waitForUpstream(timeoutMs = 60000) {
   }
 
   // 6c. Saving a setting works and publishes: change the blog's title through
-  //     the dashboard form, then see it on the blog (its pages carry the title
-  //     in their meta tags). The proxy cache entry for the old page is purged
-  //     in the background, so poll briefly.
+  //     the dashboard form and read it back (the blog itself is checked below).
   const newTitle = "E2E title " + Date.now();
   const saved = await request(`/sites/${handle}/title`, {
     method: "POST",
@@ -228,12 +226,6 @@ async function waitForUpstream(timeoutMs = 60000) {
   check("POST the blog title saves", saved.status === 200, "got " + saved.status);
   const form = await request(`/sites/${handle}/title`, { jar });
   check("the dashboard shows the saved title", form.body.includes(newTitle));
-  let published = false;
-  for (let i = 0; i < 20 && !published; i++) {
-    published = (await request("/", { headers: { Host: BLOG_HOST } })).body.includes(newTitle);
-    if (!published) await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  check("the saved title is on the published blog", published);
 
   // 7. Sign out, then the session no longer works (log-out is also a
   //    CSRF-protected mutation).
@@ -294,6 +286,17 @@ async function waitForUpstream(timeoutMs = 60000) {
     (blog2.headers["blot-cache"] || "").toUpperCase() === "HIT",
     "Blot-Cache: " + blog2.headers["blot-cache"]
   );
+  // The saved title (6c) is on the published blog. Its pages carry the title in
+  // their meta tags; the proxy cache entry for the old page is purged in the
+  // background, so poll briefly. After the MISS/HIT checks, which need the
+  // blog's first request to be theirs.
+  let published = false;
+  for (let i = 0; i < 20 && !published; i++) {
+    published = (await request("/", blogOpts)).body.includes(newTitle);
+    if (!published) await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  check("the saved title is on the published blog", published);
+
   const missing = await once("/nope-" + Date.now(), blogOpts);
   check(
     "unknown blog path returns 404 from the app",

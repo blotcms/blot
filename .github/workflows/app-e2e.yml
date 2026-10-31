@@ -33,6 +33,11 @@ env:
   E2E_UNIT: ${{ github.event_name == 'push' || github.head_ref == 'claude/ci-smoke-deployed-image' }}
   E2E_COMPOSE_FILE: ${{ (github.event_name == 'push' || github.head_ref == 'claude/ci-smoke-deployed-image') && 'proxy/e2e/docker-compose.unit.yml' || 'proxy/e2e/docker-compose.yml' }}
 
+# Superseded PR pushes are cancelled; each master push keeps its own run
+concurrency:
+  group: app-e2e-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   app-e2e:
     # arm64: the app image it pulls (build.yml's) is arm64 only

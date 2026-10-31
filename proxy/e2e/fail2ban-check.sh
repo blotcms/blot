@@ -27,7 +27,7 @@
 # Requires `fail2ban-regex` on PATH (apt install fail2ban) and the proxy +
 # stub-upstream containers already running against it, on --network host
 # (as production runs them - see proxy/deploy/common.sh), as
-# .github/workflows/proxy-fail2ban.yml sets up. Host networking matters
+# .github/workflows/integration.yml sets up. Host networking matters
 # here specifically: with a published/bridged port, $remote_addr would be
 # the docker bridge gateway for every request, and the IP-extraction checks
 # below would be trivially "correct" without proving anything about what

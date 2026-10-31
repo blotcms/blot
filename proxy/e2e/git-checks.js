@@ -83,7 +83,9 @@ const newDir = (label) => {
 // outlives GIT_TIMEOUT_MS (a hang is a failure, not a stuck job).
 function git(args, { cwd = workRoot, env = {}, input, timeout = GIT_TIMEOUT_MS } = {}) {
   return new Promise((resolve) => {
-    const child = spawn("git", ["-c", "http.sslVerify=false", ...args], {
+    // The remote's host is a name (blot.im when the unit image is under test)
+    // that must not resolve to the real thing: send it to the local proxy.
+    const child = spawn("git", ["-c", "http.sslVerify=false", "-c", `http.curloptResolve=${HOST}:443:127.0.0.1`, ...args], {
       cwd,
       // Own process group, so a timeout can kill git-remote-https and friends
       // too (they inherit the pipes, which would keep `close` from firing).
