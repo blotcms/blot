@@ -65,34 +65,28 @@ on:
 permissions:
   contents: read
 
+# Superseded PR pushes are cancelled. Each master push gets its own group, so
+# a master run is never cancelled.
+concurrency:
+  group: host-setup-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# One job: the wildcard-cert, launch and bans tests are stubs of about ten
+# seconds each, less than a runner takes to start. They go first so a plain
+# script failure shows before the slow container steps.
 jobs:
   setup:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: wildcard-cert.sh against a stub redis-cli
+        run: config/host/tests/wildcard-cert.sh
+      - name: launch.sh against stub aws, ssh and bootstrap.sh
+        run: config/host/tests/launch.sh
+      - name: bans.sh against stub ssh and fail2ban-client
+        run: config/host/tests/bans.sh
       - name: setup.sh on Amazon Linux 2023 and 2
         run: config/host/tests/setup.sh
       - name: deploy.sh on Amazon Linux 2023
         run: config/host/tests/deploy.sh
-  wildcard-cert:
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - name: wildcard-cert.sh against a stub redis-cli
-        run: config/host/tests/wildcard-cert.sh
-  launch:
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - name: launch.sh against stub aws, ssh and bootstrap.sh
-        run: config/host/tests/launch.sh
-  bans:
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - name: bans.sh against stub ssh and fail2ban-client
-        run: config/host/tests/bans.sh

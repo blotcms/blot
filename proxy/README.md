@@ -84,7 +84,8 @@ HTTP/3 routes. HTTPS continues over HTTP/2 and HTTP/1.1 on TCP 443.
 `--cap-add SYS_NICE` avoids a harmless `setpriority(-20) failed` alert from
 `worker_priority` in an unprivileged container.
 
-CI runs the same steps in [`.github/workflows/proxy.yml`](../.github/workflows/proxy.yml)
+CI runs the same steps in the `proxy-behaviour` job of
+[`.github/workflows/integration.yml`](../.github/workflows/integration.yml)
 on any change under `proxy/` (plus `package.json` and
 `config/index.js`, which the generator reads).
 
