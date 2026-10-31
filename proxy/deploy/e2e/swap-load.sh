@@ -61,7 +61,7 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 DEPLOY_USER=sl-deploy
 if [ "${DEPLOY_AS_ROOT:-0}" != 1 ]; then
   echo "t0 $(date +%T)"
-  id "$DEPLOY_USER" >/dev/null 2>&1 || as_root useradd -l -m -G docker "$DEPLOY_USER"
+  id "$DEPLOY_USER" >/dev/null 2>&1 || { command -v strace >/dev/null || as_root apt-get install -y -qq strace >/dev/null 2>&1; as_root strace -f -tt -T -o /tmp/ua.trace useradd -l -m -G docker "$DEPLOY_USER"; awk -F"<" '{t=$NF; sub(/>.*/,"",t); if (t+0>0.5) print}' /tmp/ua.trace | cut -c1-200; }
   echo "useradd $(date +%T)"
   # the harness' certificate and env files, readable as production's are for its deploy user
   as_root chmod -R a+rX "$E2E_ROOT"
