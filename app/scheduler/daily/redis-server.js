@@ -8,13 +8,17 @@
 // BACKUP_KEY (and each daily offsite one in OFFSITE_KEY). The trends come from the last week of daily readings of each
 // (daily/trend.js), stored at MEMORY_HISTORY_KEY and DISK_HISTORY_KEY. Anything that needs attention is bold;
 // missing or stale data is said so. This never fails the rest of the email.
-const { parseSample, parseMemory, parseInfo, SAMPLE_KEY } = require("../check-redis-host");
+const {
+  parseSample,
+  parseMemory,
+  parseInfo,
+  parseBackup,
+  SAMPLE_KEY,
+  BACKUP_KEY,
+  OFFSITE_KEY,
+} = require("../check-redis-host");
 const trend = require("./trend");
 
-const BACKUP_KEY = "blot:redis-host:backup";
-// Same format, written by backup.sh after a daily upload to B2. Absent where
-// offsite isn't configured (tests, development), and then not shown.
-const OFFSITE_KEY = "blot:redis-host:offsite";
 // JSON [{ time, used, scope? }] of the daily runs (daily/trend.js), no TTL. The
 // disk history is scoped to the host, since a replacement host starts afresh.
 const MEMORY_HISTORY_KEY = "blot:redis-host:daily-memory-history";
@@ -49,24 +53,6 @@ function compact(ms) {
   if (ms < HOUR) return Math.max(0, Math.round(ms / MINUTE)) + "m";
   if (ms < 48 * HOUR) return Math.round(ms / HOUR) + "h";
   return Math.round(ms / DAY) + "d";
-}
-
-// "2026-10-08T03:05:11Z daily daily/2026-10-08-hour-03.rdb 4123456789"
-// (backup.sh). Null if it can't be read.
-function parseBackup(value) {
-  if (!value) return null;
-
-  const [stamp, kind, key, bytes] = String(value).trim().split(/\s+/);
-  const time = Date.parse(stamp);
-
-  if (!time || !kind || !key) return null;
-
-  return {
-    time,
-    kind: kind.replace(/[^\w-]/g, ""),
-    key: key.replace(/[^\w./-]/g, ""),
-    bytes: Number(bytes) > 0 ? Number(bytes) : null,
-  };
 }
 
 // Everything the line needs, from Redis. client.sendCommand keeps these off
@@ -232,7 +218,7 @@ async function main(callback, deps = {}) {
 module.exports = main;
 module.exports.collect = collect;
 module.exports.line = line;
-module.exports.parseBackup = parseBackup;
+module.exports.parseBackup = parseBackup; // from check-redis-host.js
 module.exports.BACKUP_KEY = BACKUP_KEY;
 module.exports.OFFSITE_KEY = OFFSITE_KEY;
 module.exports.MEMORY_HISTORY_KEY = MEMORY_HISTORY_KEY;

@@ -1,6 +1,6 @@
 ---
 name: redis-host
-description: Look after Blot's production Redis host (its own EC2 instance, built and operated with config/redis/): triage a "Redis host:" alert email from app/scheduler/check-redis-host.js (failed background save, Redis refused writes - OOM/MISCONF/NOREPLICAS, other Redis errors, rejected connections, Redis restarted or switched host, slow Redis commands, TCP memory, memory over 80% of maxmemory, stale sample, maxmemory unset) or a problem in the Redis line of the daily email (resize now, last save failed, backup overdue, no sample, backup disk full); resize the host; rehearse or run disaster recovery; or check Redis health. Holds the procedure and the guardrails (ask before every production command, drill hosts, teardown, no rollback to a recent host) and points into config/redis/README.md for the steps. Appends a short entry to this skill's incident log. Use when the user pastes or forwards one of these alerts, or asks to resize, drill, restore or check the Redis host.
+description: Look after Blot's production Redis host (its own EC2 instance, built and operated with config/redis/): triage a "Redis host:" alert email from app/scheduler/check-redis-host.js (failed background save, Redis refused writes - OOM/MISCONF/NOREPLICAS, other Redis errors, rejected connections, Redis restarted or switched host, slow Redis commands, TCP memory, memory over 80% of maxmemory, stale sample, stale backup or offsite backup, maxmemory unset) or a problem in the Redis line of the daily email (resize now, last save failed, backup overdue, no sample, backup disk full); resize the host; rehearse or run disaster recovery; or check Redis health. Holds the procedure and the guardrails (ask before every production command, drill hosts, teardown, no rollback to a recent host) and points into config/redis/README.md for the steps. Appends a short entry to this skill's incident log. Use when the user pastes or forwards one of these alerts, or asks to resize, drill, restore or check the Redis host.
 ---
 
 # Redis host
@@ -70,6 +70,8 @@ starts a new baseline, so a long outage does not produce a flood).
 | TCP memory nearing tcp_mem[1] | the host's sample `mem` is at 50% of `tcp_mem[1]` (clears at 45%) |
 | TCP memory pressure | `TCPMemoryPressures` rose on the same host since the last sample |
 | TCP memory sample stale | no new sample for 20 minutes (judged only if the previous check also read Redis within 11 minutes) |
+| Redis backup stale | the time in `blot:redis-host:backup` is over 3 hours old (two missed hourly runs), or the value can't be read; a missing key is quiet |
+| Offsite Redis backup stale | the same for `blot:redis-host:offsite` at 50 hours (two missed daily runs); S3 backups may be fine. Look at `~/backup.log`, the `blot-b2` profile, B2 and `/etc/blot-redis/offsite-bucket` |
 | Redis memory nearing maxmemory | `used_memory` at 80% of `maxmemory` (clears at 75%); `noeviction`, so writes fail at the limit |
 | maxmemory not set | `maxmemory` is 0 on a host marked active by `/etc/blot-redis/floating-ip` |
 | Redis background save failing, writes will be refused | `rdb_last_bgsave_status` is not `ok` (`stop-writes-on-bgsave-error yes`) |

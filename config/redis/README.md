@@ -395,7 +395,10 @@ the master) emails the admin address `REDIS_HOST_ALERT` when:
 - `maxmemory` is 0 on a host marked active by `/etc/blot-redis/floating-ip`;
 - the TCP memory sample is over 20 minutes old;
 - the last background save failed (`stop-writes-on-bgsave-error yes`, so Redis
-  refuses every write until one succeeds).
+  refuses every write until one succeeds);
+- the last backup in `blot:redis-host:backup` is over 3 hours old, or the last
+  offsite one in `blot:redis-host:offsite` over 50 hours (two missed runs). A
+  missing key is quiet, an unreadable value alerts.
 
 It also emails what happened since its last check (it keeps Redis's counters in
 the state key below, and starts again after a restart): errors that mean Redis

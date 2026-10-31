@@ -6,6 +6,11 @@
 //   5-minute cron (config/redis/bin/tcpmem-log.sh) stores each sample in Redis
 //   at SAMPLE_KEY, and this check reads it. A sample that stops arriving means
 //   that monitoring stopped, which is alerted too.
+// - A stale backup: backup.sh (config/redis/bin) records each upload at
+//   BACKUP_KEY, and the daily one's copy to Backblaze B2 at OFFSITE_KEY. Over
+//   BACKUP_STALE_MS (two missed hourly runs) or OFFSITE_STALE_MS (two missed
+//   daily runs) since the recorded time is alerted. A missing key is not
+//   (hosts without backups or offsite stay quiet); one that can't be read is.
 // - Redis's memory nearing maxmemory. With noeviction, writes fail at the
 //   limit. maxmemory being unset is alerted too, but only on a host that
 //   cutover.sh has marked active (/etc/blot-redis/floating-ip): a host still
@@ -44,11 +49,21 @@ const {
 } = require("./redis-host-events");
 
 const SAMPLE_KEY = "blot:redis-host:tcpmem";
+const BACKUP_KEY = "blot:redis-host:backup";
+// Same format, written after a daily upload to B2. Absent where offsite isn't
+// configured (tests, development).
+const OFFSITE_KEY = "blot:redis-host:offsite";
 const STATE_KEY = "blot:redis-host:alerts";
 const README_URL = "https://github.com/blotcms/blot/blob/master/config/redis/README.md";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
+
+// Backups are hourly and the offsite copy daily, so these are two missed runs
+// (the offsite one with some slack for a slow upload, so one bad night does
+// not alert).
+const BACKUP_STALE_MS = 3 * HOUR;
+const OFFSITE_STALE_MS = 50 * HOUR;
 
 // Rate limits. A condition (a state: memory high, save failing, sample stale)
 // is emailed when it starts and when it clears, but not twice within this long
@@ -98,6 +113,8 @@ const TITLES = {
   "tcp-mem": "TCP memory nearing tcp_mem[1]",
   "tcp-pressure": "TCP memory pressure",
   "sample-stale": "TCP memory sample stale",
+  "backup-stale": "Redis backup stale",
+  "offsite-stale": "Offsite Redis backup stale",
   maxmemory: "Redis memory nearing maxmemory",
   "maxmemory-unset": "maxmemory not set",
   "bgsave-failed": "Redis background save failing, writes will be refused",
@@ -165,6 +182,24 @@ function parseSample(value) {
   };
 }
 
+// "2026-10-08T03:05:11Z daily daily/2026-10-08-hour-03.rdb 4123456789"
+// (backup.sh). Null if it can't be read.
+function parseBackup(value) {
+  if (!value) return null;
+
+  const [stamp, kind, key, bytes] = String(value).trim().split(/\s+/);
+  const time = Date.parse(stamp);
+
+  if (!time || !kind || !key) return null;
+
+  return {
+    time,
+    kind: kind.replace(/[^\w-]/g, ""),
+    key: key.replace(/[^\w./-]/g, ""),
+    bytes: Number(bytes) > 0 ? Number(bytes) : null,
+  };
+}
+
 // The INFO memory fields we need. maxmemory is compared with used_memory less
 // what Redis leaves out of it (replica output buffers, the AOF buffer), as
 // Redis does, so a replica's full sync doesn't look like the dataset growing.
@@ -229,8 +264,10 @@ async function check(deps = {}) {
   // every 5 minutes, written by another client. One INFO (the default
   // sections hold memory, persistence, stats, errorstats and keyspace) and one
   // SLOWLOG GET: both are cheap.
-  const [sampleValue, stateValue, infoText, slowlogReply] = await Promise.all([
+  const [sampleValue, backupValue, offsiteValue, stateValue, infoText, slowlogReply] = await Promise.all([
     client.sendCommand(["GET", SAMPLE_KEY]),
+    client.sendCommand(["GET", BACKUP_KEY]),
+    client.sendCommand(["GET", OFFSITE_KEY]),
     client.sendCommand(["GET", STATE_KEY]),
     client.sendCommand(["INFO"]),
     client.sendCommand(["SLOWLOG", "GET", String(SLOWLOG_ENTRIES)]),
@@ -281,6 +318,20 @@ async function check(deps = {}) {
     if (age <= STALE_MS) conditions["sample-stale"] = false;
     else if (continuous) conditions["sample-stale"] = true;
   }
+
+  // Missing key: not configured here, nothing to judge. A value that can't be
+  // read counts as stale, since nothing can vouch for the backup.
+  const staleBackups = {};
+  [
+    ["backup-stale", backupValue, BACKUP_STALE_MS],
+    ["offsite-stale", offsiteValue, OFFSITE_STALE_MS],
+  ].forEach(([name, value, limit]) => {
+    if (value === null || value === undefined) return;
+
+    const backup = parseBackup(value);
+    staleBackups[name] = { age: backup ? now - backup.time : null };
+    conditions[name] = !backup || now - backup.time > limit;
+  });
 
   const fresh = conditions["sample-stale"] === false;
 
@@ -374,6 +425,7 @@ async function check(deps = {}) {
     memory,
     redis,
     conditions,
+    staleBackups,
     started,
     cleared,
     flaps,
@@ -429,6 +481,27 @@ function message(name, report) {
       return `${sample.mem} pages, ${percent(sample.fraction)} of tcp_mem[1] (${sample.tcpMem[1]}) on ${sample.host}`;
     case "sample-stale":
       return `the last sample from ${sample.host} is ${minutes(age)} old`;
+    case "backup-stale": {
+      const { age: backupAge } = report.staleBackups[name];
+      return (
+        (backupAge === null
+          ? `the last backup recorded in \`${BACKUP_KEY}\` can't be read`
+          : `the last backup was ${duration(backupAge)} ago`) +
+        " (they run hourly). Look at `~/backup.log` on the Redis host: the upload to S3, or `backup.sh` skipping " +
+        `(drill host, not the active host); see [config/redis/README.md](${README_URL})`
+      );
+    }
+    case "offsite-stale": {
+      const { age: backupAge } = report.staleBackups[name];
+      return (
+        (backupAge === null
+          ? `the last offsite backup recorded in \`${OFFSITE_KEY}\` can't be read`
+          : `the last offsite backup (to Backblaze B2) was ${duration(backupAge)} ago`) +
+        " (it runs daily at 03:05). Look at `~/backup.log` on the Redis host, the `blot-b2` profile in `~ec2-user/.aws`, " +
+        "B2 itself and `/etc/blot-redis/offsite-bucket`. This does not mean the S3 backups stopped; " +
+        `see [config/redis/README.md](${README_URL})`
+      );
+    }
     case "maxmemory":
       return `${gb(memory.used)} of ${gb(memory.maxmemory)} (${percent(memory.fraction)})`;
     case "maxmemory-unset":
@@ -508,6 +581,8 @@ function view(report) {
       tcpMem: percent(TCP_MEM_ALERT),
       maxmemory: percent(MAXMEMORY_ALERT),
       stale: minutes(STALE_MS),
+      backup: duration(BACKUP_STALE_MS),
+      offsite: duration(OFFSITE_STALE_MS),
       errors: ERROR_ALERT_COUNT,
       slowlog: ms(SLOWLOG_ALERT_US),
       fork: ms(FORK_ALERT_US),
@@ -551,8 +626,11 @@ module.exports.check = check;
 module.exports.view = view;
 module.exports.parseSample = parseSample;
 module.exports.parseMemory = parseMemory;
+module.exports.parseBackup = parseBackup;
 module.exports.parseInfo = parseInfo;
 module.exports.SAMPLE_KEY = SAMPLE_KEY;
+module.exports.BACKUP_KEY = BACKUP_KEY;
+module.exports.OFFSITE_KEY = OFFSITE_KEY;
 module.exports.STATE_KEY = STATE_KEY;
 module.exports.CONDITION_MIN_INTERVAL = CONDITION_MIN_INTERVAL;
 module.exports.EVENT_COOLDOWN = EVENT_COOLDOWN;
