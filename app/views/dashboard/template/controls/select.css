@@ -1,7 +1,7 @@
 :root {
-  --select-control-padding: 8px 16px;
+  --select-control-padding: var(--template-setting-row-padding);
   --select-control-font-size: 14px;
-  --select-dropdown-icon-right: 12px;
+  --select-dropdown-icon-right: var(--template-setting-spacing-horizontal);
   --select-dropdown-icon-opacity: 0.3;
   --select-dropdown-icon-opacity-hover: 0.7;
 }
@@ -9,11 +9,13 @@
 form.select {
   display: flex;
   align-items: center;
-  gap: 0.5em;
+  gap: var(--template-setting-spacing-horizontal);
   position: relative;
   padding: var(--select-control-padding);
+  padding-top: calc(var(--template-setting-spacing-vertical) + 2px);
+  padding-bottom: calc(var(--template-setting-spacing-vertical) + 2px);
   font-size: var(--select-control-font-size);
-  border-bottom: 1px solid var(--light-border-color);
+  border-bottom: 1px solid var(--template-editor-divider-color);
   cursor: pointer;
 }
 
@@ -57,11 +59,13 @@ form.select--full-width select {
 #date_display_container {
   display: flex;
   align-items: center;
-  gap: 0.5em;
+  gap: var(--template-setting-spacing-horizontal);
   position: relative;
   padding: var(--select-control-padding);
+  padding-top: calc(var(--template-setting-spacing-vertical) + 2px);
+  padding-bottom: calc(var(--template-setting-spacing-vertical) + 2px);
   font-size: var(--select-control-font-size);
-  border-bottom: 1px solid var(--light-border-color);
+  border-bottom: 1px solid var(--template-editor-divider-color);
 }
 
 #date_display_container:hover {

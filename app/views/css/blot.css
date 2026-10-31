@@ -81,7 +81,7 @@ body {
   flex-shrink: 1;
   box-sizing: border-box;
   width: 100%;
-  padding: 2rem 4rem;
+  padding: 1rem 4rem;
   min-width: 0;
   min-height: 101vh;
 }
@@ -217,6 +217,7 @@ h1.import-method-title img {
   gap: 2rem;
   justify-content: center;
   margin: 0 0 2.5rem;
+  max-width: 600px;
   min-height: 250px;
   padding: 2rem;
   width: 100%;

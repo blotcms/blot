@@ -34,7 +34,7 @@
   margin: 0;
   padding: var(--highlighter-option-padding);
   border: none;
-  border-top: 1px solid var(--light-border-color);
+  border-top: 1px solid var(--template-editor-divider-color);
   border-radius: 0;
   outline: none;
   background: var(--highlighter-option-bg);

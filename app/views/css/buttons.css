@@ -37,14 +37,14 @@
 
 
   a.close-button {
-    color:var(--accent-color);
+    color:#666;
     position: absolute;top:1.85rem;right:4rem;z-index: 10;
 }
 
 a.close-button > span {
     display: flex;flex-direction: column;
     justify-content: center;align-items: center;width: 40px;height: 40px;
-    text-align: center;background: var(--light-background-color);
+    text-align: center;background: #e8e8e8;
     border-radius: 40px;
     transition: background-color 0.2s;
 }
@@ -59,7 +59,7 @@ a.close-button:hover > span,
 }
 
 a.close-button:hover > span {
-  background-color: var(--medium-background-color);
+  background-color: #dcdcdc;
 }
 
 .template-button {

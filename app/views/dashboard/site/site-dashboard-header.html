@@ -1,0 +1,57 @@
+<header class="site-dashboard-header">
+  <div class="site-dashboard-identity">
+    <div class="site-dashboard-title-row">
+      {{#isOverviewView}}
+      <div class="site-dashboard-title-switcher is-switcher-enabled">
+        <details class="site-switcher">
+          <summary class="site-switcher__trigger" aria-label="Switch site">
+            <span class="site-dashboard-title">
+              {{#blog.title}}{{blog.title}}{{/blog.title}}
+              {{^blog.title}}Add a title{{/blog.title}}
+            </span>
+            <span class="site-switcher__chevron" aria-hidden="true">
+              <svg viewBox="0 0 16 16"><path d="M4.25 5.75 8 2l3.75 3.75M4.25 10.25 8 14l3.75-3.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>
+            </span>
+          </summary>
+          <div class="site-switcher__menu">
+            <nav class="site-switcher__sites" aria-label="Your sites">
+              {{#blogs}}
+              <a class="site-switcher__site{{#isCurrent}} is-current{{/isCurrent}}" href="/sites/{{handle}}"{{#isCurrent}} aria-current="page"{{/isCurrent}}>
+                <span class="site-switcher__site-info">
+                  <span class="site-switcher__site-title">{{pretty.label}}</span>
+                  <span class="site-switcher__site-domain">{{pretty.url}}</span>
+                </span>
+                {{#isCurrent}}<span class="site-switcher__check" aria-label="Current site">✓</span>{{/isCurrent}}
+              </a>
+              {{/blogs}}
+            </nav>
+            <a class="site-switcher__create" href="/sites/account/create-site"><span aria-hidden="true">+</span>Create site</a>
+          </div>
+        </details>
+      </div>
+      {{/isOverviewView}}
+      {{^isOverviewView}}
+      <div class="site-dashboard-title-switcher">
+        <a class="site-dashboard-title" href="{{{dashboardBase}}}/settings/title">
+          {{#blog.title}}{{blog.title}}{{/blog.title}}
+          {{^blog.title}}Add a title{{/blog.title}}
+        </a>
+      </div>
+      {{#blog.title}}<a class="site-dashboard-edit" href="{{{dashboardBase}}}/settings/title">Edit</a>{{/blog.title}}
+      {{/isOverviewView}}
+    </div>
+    <div class="site-dashboard-domain-row">
+      <span class="template-live-dot" aria-hidden="true"></span>
+      <span class="site-dashboard-domain">{{blog.pretty.url}}</span>
+      <a class="site-dashboard-edit" href="{{{dashboardBase}}}/settings/domain/custom">Edit</a>
+    </div>
+  </div>
+
+  {{^isFilesView}}{{^isPostsView}}{{^isRecentView}}
+  <nav class="site-dashboard-links" aria-label="Site actions">
+    <a target="_blank" href="https://{{{blog.pretty.url}}}" class="panel-link visit-site">Visit site</a>
+    <a href="{{{dashboardBase}}}/settings" class="panel-link">Settings</a>
+    <a href="{{{dashboardBase}}}/template/{{template.slug}}" class="panel-link">Edit template</a>
+  </nav>
+  {{/isRecentView}}{{/isPostsView}}{{/isFilesView}}
+</header>

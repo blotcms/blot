@@ -4,10 +4,10 @@
 {{#stat}}
 <div class="folder-box {{#root}}root{{/root}} {{#directory}}directory{{/directory}} live-updates">
 
+{{> file-view-header}}
+
 <div class="file-info">
 
-  <h1><span class="icon-file{{#entry}}-check{{/entry}}"></span>{{name}}</h1>
- 
   <a href="{{{base}}}/folder-download{{{url}}}" target="_blank" class="template-button file-helper">
     Download file
     <span class="icon-download"></span>

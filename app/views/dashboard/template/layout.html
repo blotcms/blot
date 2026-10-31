@@ -57,26 +57,26 @@
 })();
 </script>
 <body>
-    <a href="/sites/{{blog.handle}}" class="close-button template-editor-close-button">
-                            <span>
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path d="M5.72 5.72a.75.75 0 0 1 1.06 0L12 10.94l5.22-5.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L13.06 12l5.22 5.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L12 13.06l-5.22 5.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L10.94 12 5.72 6.78a.75.75 0 0 1 0-1.06Z"></path></svg>
-                            </span>
-                        </a>
-    <div class="template-layout">        
+    <div class="template-layout">
+        {{> close-button}}
         <div class="template-sidebar">
             <div id="template-sidebar-content" class="template-sidebar-content">
+                <a class="template-sidebar-sites-link" href="/sites">
+                    <span aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M9.78 12.78a.75.75 0 0 1-1.06 0L4.47 8.53a.75.75 0 0 1 0-1.06l4.25-4.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L6.06 8l3.72 3.72a.75.75 0 0 1 0 1.06Z"></path></svg></span>
+                    <span>{{blog.title}}</span>
+                </a>
                 <div class="scroll-container">
                     {{> template-navbar-list}}
                 </div>
 
                 <div id="template-action-menu" class="template-action-menu row-action-menu" aria-hidden="true">
                     <ul>
-                        <li><a data-menu-link="use" href="#">Install</a></li>
+                        <li><a data-menu-link="use" href="#">Activate</a></li>
                         <li><a data-menu-link="source" href="#">Edit code</a></li>
                         <li><a data-menu-link="rename" href="#">Rename</a></li>
                         <li><a data-menu-link="delete" href="#">Delete</a></li>
-                        <li><a data-menu-link="reset" href="#">Reset changes</a></li>
-                        <li><a data-menu-link="duplicate" href="#">Make a copy</a></li>
+                        <li><a data-menu-link="reset" href="#">Reset</a></li>
+                        <li><a data-menu-link="duplicate" href="#">Copy</a></li>
                     </ul>
                 </div>
             </div>
@@ -106,18 +106,20 @@
                       </a>
                     {{/template.localEditing}}
                     {{^template.localEditing}}
-                      <a href="{{{base}}}">{{template.displayName}}</a>
+                      <a href="{{{base}}}">{{template.displayName}} template</a>
                     {{/template.localEditing}}
                   </h1>
         {{#template.checked}}
-                  <span class="template-in-use">Installed</span>
+                  <span class="template-in-use">
+                    <span class="template-live-dot" aria-hidden="true"></span>Live
+                  </span>
         {{/template.checked}}
 
         {{^template.checked}}
 
 	<a href="{{{base}}}/install" class="template-button {{selected.install}}">
-        <span class="icon-download"></span> 
-        Install
+        <svg class="template-activate-icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.198.57c.275-.752 1.34-.752 1.615 0l.849 2.317a5.82 5.82 0 0 0 3.462 3.463l2.317.848c.753.275.753 1.34 0 1.615l-2.317.849a5.82 5.82 0 0 0-3.462 3.462l-.849 2.317c-.275.753-1.34.753-1.615 0l-.848-2.317a5.82 5.82 0 0 0-3.463-3.462L.57 8.813c-.752-.275-.752-1.34 0-1.615l2.317-.848A5.82 5.82 0 0 0 6.35 2.887zm.562 2.833A7.32 7.32 0 0 1 3.403 7.76l-.673.246l.673.246a7.32 7.32 0 0 1 4.357 4.356l.246.673l.246-.673a7.32 7.32 0 0 1 4.356-4.356l.673-.246l-.673-.246a7.32 7.32 0 0 1-4.356-4.357l-.246-.673z"></path></svg>
+        <span class="template-button-label" data-label="Activate"><span>Activate</span></span>
     </a>
     {{/template.checked}}
 
@@ -126,7 +128,7 @@
 {{^template.localEditing}}
     <a href="{{{base}}}/rename" class="template-button {{selected.rename}}">
         <svg style="vertical-align: middle;position:relative;top:-0.1em" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm.176 4.823L9.75 4.81l-6.286 6.287a.253.253 0 0 0-.064.108l-.558 1.953 1.953-.558a.253.253 0 0 0 .108-.064Zm1.238-3.763a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Z"></path></svg>
-        Rename
+        <span class="template-button-label" data-label="Rename"><span>Rename</span></span>
     </a>
 {{/template.localEditing}}
 {{/template.isMine}}
@@ -134,27 +136,27 @@
 
     <a href="{{{base}}}/duplicate" class="template-button {{selected.duplicate}}">
         <span class="icon-copy"></span>
-        Make a copy
+        <span class="template-button-label" data-label="Copy"><span>Copy</span></span>
     </a>
 
     {{#template.isMirror}}
 	<a href="{{{base}}}/reset" class="template-button {{selected.reset}}">
         <svg style="vertical-align: middle;position:relative;top:-0.1em" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M11 1.75V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.675l.66 6.6a.25.25 0 0 0 .249.225h5.19a.25.25 0 0 0 .249-.225l.66-6.6a.75.75 0 0 1 1.492.149l-.66 6.6A1.748 1.748 0 0 1 10.595 15h-5.19a1.75 1.75 0 0 1-1.741-1.575l-.66-6.6a.75.75 0 1 1 1.492-.15ZM6.5 1.75V3h3V1.75a.25.25 0 0 0-.25-.25h-2.5a.25.25 0 0 0-.25.25Z"></path></svg> 
-        Reset changes
+        <span class="template-button-label" data-label="Reset"><span>Reset</span></span>
     </a>
     {{/template.isMirror}}
     {{^template.isMirror}}
     {{#template.isMine}}
     <a href="{{{base}}}/delete" class="template-button {{selected.delete}}">
         <svg style="vertical-align: middle;position:relative;top:-0.1em" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M11 1.75V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.675l.66 6.6a.25.25 0 0 0 .249.225h5.19a.25.25 0 0 0 .249-.225l.66-6.6a.75.75 0 0 1 1.492.149l-.66 6.6A1.748 1.748 0 0 1 10.595 15h-5.19a1.75 1.75 0 0 1-1.741-1.575l-.66-6.6a.75.75 0 1 1 1.492-.15ZM6.5 1.75V3h3V1.75a.25.25 0 0 0-.25-.25h-2.5a.25.25 0 0 0-.25.25Z"></path></svg> 
-        Delete
+        <span class="template-button-label" data-label="Delete"><span>Delete</span></span>
     </a>
     {{/template.isMine}}
     {{/template.isMirror}}
 
     <a  href="{{{preview}}}" target="_blank" class="template-button " data-preview-link>
         <svg  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M3.75 7.5a.75.75 0 0 1 .75-.75h2.25V4.5a.75.75 0 0 1 1.5 0v2.25h2.25a.75.75 0 0 1 0 1.5H8.25v2.25a.75.75 0 0 1-1.5 0V8.25H4.5a.75.75 0 0 1-.75-.75Z"></path><path d="M7.5 0a7.5 7.5 0 0 1 5.807 12.247l2.473 2.473a.749.749 0 1 1-1.06 1.06l-2.473-2.473A7.5 7.5 0 1 1 7.5 0Zm-6 7.5a6 6 0 1 0 12 0 6 6 0 0 0-12 0Z"></path></svg>
-        Preview
+        <span class="template-button-label" data-label="Preview"><span>Preview</span></span>
     </a>
                 </div>
                 {{/template.name}}

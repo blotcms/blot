@@ -68,17 +68,17 @@
 	<div class="settings-group">
 		<h2 class="template-heading">Photo</h2>
 		{{#profile_image_control}}
-		<a class="line" href="{{{base}}}/images/{{key}}" style="padding:11px 14px;border-bottom:1px solid var(--light-border-color);{{^favicon_supported}}border-bottom:none;{{/favicon_supported}}">
+		<a class="line template-setting-link" href="{{{base}}}/images/{{key}}" style="display:flex;align-items:center;border-bottom:none;">
 		{{#value}}<span style="width:40px;height:40px;border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-right:.5rem;flex:0 0 40px"><img src="{{{thumbnails.small.url}}}" data-profile-mask="{{mask}}" style="max-width:40px;max-height:40px;object-fit:contain" alt="" /></span><span class="link">Edit photo</span>{{/value}}
-		{{^value}}<span class="center" style="border:1px dashed var(--dark-border-color);width:40px;height:40px;display:inline-block;vertical-align:middle;margin-right:.5rem"></span><span class="link">Choose a photo</span>{{/value}}
+		{{^value}}<span class="center" style="border:1px dashed var(--dark-border-color);width:40px;height:40px;display:inline-block;vertical-align:middle;margin-right:.5rem;border-radius:50%"></span><span class="link template-photo-empty-label">Choose a photo</span>{{/value}}
 		</a>
 		{{/profile_image_control}}
 		{{^profile_image_control}}
-		<a class="line" href="{{{base}}}/photo" style="padding:11px 14px;border-bottom:1px solid var(--light-border-color);{{^favicon_supported}}border-bottom:none;{{/favicon_supported}}">
+		<a class="line template-setting-link" href="{{{base}}}/photo" style="display:flex;align-items:center;border-bottom:none;">
 		{{^blog.avatar}}
 		<span class="center" style="border: 1px dashed var(--dark-border-color);width: 40px;height:40px;display:inline-block; vertical-align: middle;margin-right: 0.5rem;border-radius: var(--border-radius);">
 		</span>
-		<span class="link">Choose a photo</span>
+		<span class="link template-photo-empty-label">Choose a photo</span>
 		{{/blog.avatar}}
 
 		{{#blog.avatar}}
@@ -89,15 +89,6 @@
 			{{/blog.avatar}}
 		</a>
 		{{/profile_image_control}}
-		{{#favicon_supported}}
-		<a class="line" href="{{{base}}}/favicon" style="padding:7px 14px;border-bottom:none;">
-			<span class="center" style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-left:26px;margin-right:0.5rem;">
-				{{#favicon}}<img width="16" height="16" style="width:16px;height:16px;image-rendering:pixelated;" src="{{{png16}}}" alt="Favicon preview" />{{/favicon}}
-				{{^favicon}}<span aria-hidden="true" style="box-sizing:border-box;border:1px dashed var(--dark-border-color);width:16px;height:16px;display:block;"></span>{{/favicon}}
-			</span>
-			<span class="link">{{#favicon}}Edit favicon{{/favicon}}{{^favicon}}Choose a favicon{{/favicon}}</span>
-		</a>
-		{{/favicon_supported}}
 	</div>
 
         <div class="settings-group">

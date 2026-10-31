@@ -1,0 +1,39 @@
+<div class="account-dashboard">
+  {{> close-button}}
+
+  <header class="account-dashboard__header">
+    <h1>Account</h1>
+  </header>
+
+  <div class="account-dashboard__details">
+    <a class="line" href="/sites/account/email">
+      <span class="label">Email</span>
+      <span class="center">{{user.email}}</span>
+      <span class="right">Edit</span>
+    </a>
+
+    {{#user.hasPassword}}
+    <a class="line" href="/sites/account/password">
+      <span class="label">Password</span>
+      <span class="center">&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+      <span class="right">Edit</span>
+    </a>
+    {{/user.hasPassword}}
+    {{^user.hasPassword}}
+    <a class="line" href="/sites/account/password/set">
+      <span class="label">Password</span>
+      <span class="center"><span class="link">Set password</span></span>
+    </a>
+    {{/user.hasPassword}}
+
+    <a class="line" href="/sites/account/subscription" style="border-bottom: none;">
+      <span class="label">Subscription</span>
+      <span class="center"><span class="link">Manage subscription</span></span>
+    </a>
+  </div>
+
+  <form class="account-dashboard__logout" action="/sites/account/log-out" method="post">
+    <input type="hidden" name="_csrf" value="{{csrftoken}}">
+    <button type="submit" class="logout">Log out</button>
+  </form>
+</div>

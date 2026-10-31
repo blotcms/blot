@@ -1,22 +1,20 @@
+const createDebouncedSave = require('../js/debounced-save');
 
 Array.from(document.querySelectorAll('form.number-input')).forEach(function(form){
-	
-	form.querySelectorAll('input').forEach(function(node){
-		node.addEventListener('change',  (event) => {
+	const input = form.querySelector('input[type="number"]');
+	const csrf = form.querySelector('input[name="_csrf"]');
+	if (!input || !csrf) return;
 
-			// construct the body based on the single input or button that was clicked
-			const body = new URLSearchParams();
+	const scheduleSave = createDebouncedSave(form, (value) => {
+		const body = new URLSearchParams();
+		body.append(input.name, value);
+		body.append(csrf.name, csrf.value);
 
-			body.append(node.name, node.value);
-			body.append("_csrf", form.querySelector('input[name="_csrf"]').value);
-			
-			fetch(window.location.href, { method: "post", body }).then(function (response) {
-				document.dispatchEvent(new CustomEvent("template-preview:refresh"));
-			});
+		return fetch(window.location.href, { method: "post", body }).then((response) => {
+			if (response.ok) document.dispatchEvent(new CustomEvent("template-preview:refresh"));
+			return response;
+		});
+	});
 
-			event.preventDefault();
-			return false;
-			})
-	})
-
+	input.addEventListener('change', () => scheduleSave(input.value));
 });

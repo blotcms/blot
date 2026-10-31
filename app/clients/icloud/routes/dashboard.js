@@ -85,7 +85,7 @@ dashboard
     try {
       if (req.body.cancel) {
         if (!req.blog.client) {
-          return res.redirect(res.locals.dashboardBase + "/client");
+          return res.redirect(res.locals.dashboardBase + "/settings/folder");
         }
 
         return disconnect(req.blog.id, next);

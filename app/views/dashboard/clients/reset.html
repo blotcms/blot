@@ -25,7 +25,7 @@ button[type="submit"]:hover {background: rgba(0,0,0,0.03);cursor: pointer;}
 
 
 {{#client.canResync}}
-<form style="padding-top:0;padding-bottom: 0" method='post' class="dashboard-form"  action="{{{base}}}/client/reset/resync">
+<form style="padding-top:0;padding-bottom: 0" method='post' class="dashboard-form"  action="{{{base}}}/reset/resync">
 
   <input type="hidden" name="_csrf" value="{{csrftoken}}">
   <button type="submit">Resync folder from {{client.display_name}}</button>
@@ -33,31 +33,31 @@ button[type="submit"]:hover {background: rgba(0,0,0,0.03);cursor: pointer;}
 </form>
 {{/client.canResync}}
 
-<form style="padding-top:0;padding-bottom: 0" method='post' class="dashboard-form"  action="{{{base}}}/client/reset/rebuild">
+<form style="padding-top:0;padding-bottom: 0" method='post' class="dashboard-form"  action="{{{base}}}/reset/rebuild">
 
   <input type="hidden" name="_csrf" value="{{csrftoken}}">
   <button type="submit">Rebuild all posts and pages</button>
 
 </form>
-<form style="padding-top:0;padding-bottom: 0" method='post' class="dashboard-form"  action="{{{base}}}/client/reset/rebuild?thumbnails=true">
+<form style="padding-top:0;padding-bottom: 0" method='post' class="dashboard-form"  action="{{{base}}}/reset/rebuild?thumbnails=true">
 
   <input type="hidden" name="_csrf" value="{{csrftoken}}">
   <button type="submit">Regenerate all thumbnails</button>
 
 </form>
 
-<form style="padding-top:0;padding-bottom: 0" method='post' class="dashboard-form"  action="{{{base}}}/client/reset/rebuild?imageCache=true">
+<form style="padding-top:0;padding-bottom: 0" method='post' class="dashboard-form"  action="{{{base}}}/reset/rebuild?imageCache=true">
 
   <input type="hidden" name="_csrf" value="{{csrftoken}}">
   <button type="submit">Re-fetch cached images</button>
 
 </form>
 
-<form style="padding-top:0;padding-bottom: 0" method='post' action="{{{base}}}/client/reset/resync" class="dashboard-form">
+<form style="padding-top:0;padding-bottom: 0" method='post' action="{{{base}}}/reset/resync" class="dashboard-form">
 
   <div class="buttons">
-    {{#effectiveClient}}<a href="{{{base}}}/client/{{effectiveClient}}">Cancel</a>{{/effectiveClient}}
-    {{^effectiveClient}}<a href="{{{base}}}/client/{{blog.client}}">Cancel</a>{{/effectiveClient}}
+    {{#effectiveClient}}<a href="{{{base}}}/{{effectiveClient}}">Cancel</a>{{/effectiveClient}}
+    {{^effectiveClient}}<a href="{{{base}}}/{{blog.client}}">Cancel</a>{{/effectiveClient}}
   </div>
   <br>
 </form>

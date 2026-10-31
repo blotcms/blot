@@ -1,0 +1,45 @@
+<aside class="dashboard-sidebar dashboard-sidebar--site" aria-label="Site dashboard">
+  {{#isSettingsSidebar}}
+  <a class="dashboard-sidebar__back" href="{{{dashboardBase}}}">
+    <span aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M9.78 12.78a.75.75 0 0 1-1.06 0L4.47 8.53a.75.75 0 0 1 0-1.06l4.25-4.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L6.06 8l3.72 3.72a.75.75 0 0 1 0 1.06Z"></path></svg></span>
+    <span>{{blog.title}}</span>
+  </a>
+
+  <nav class="dashboard-sidebar__nav" aria-label="Site settings">
+    <div class="dashboard-sidebar__section">
+      <a class="dashboard-sidebar__link {{selected.sync}}" href="{{{dashboardBase}}}/settings/folder">Sync</a>
+      <a class="dashboard-sidebar__link {{selected.title}}" href="{{{dashboardBase}}}/settings/title">Title</a>
+      <a class="dashboard-sidebar__link {{selected.domain}}" href="{{{dashboardBase}}}/settings/domain">Domain</a>
+      <a class="dashboard-sidebar__link {{selected.general}}" href="{{{dashboardBase}}}/settings">General</a>
+      <a class="dashboard-sidebar__link {{selected.images}}" href="{{{dashboardBase}}}/settings/images">Images</a>
+      <a class="dashboard-sidebar__link {{selected.links}}" href="{{{dashboardBase}}}/settings/links">Links</a>
+      <a class="dashboard-sidebar__link {{selected.embeds}}" href="{{{dashboardBase}}}/settings/embeds">Embeds</a>
+      <a class="dashboard-sidebar__link {{selected.redirects}}" href="{{{dashboardBase}}}/settings/redirects">Redirects</a>
+      <a class="dashboard-sidebar__link {{selected.date}}" href="{{{dashboardBase}}}/settings/date">Date and time</a>
+      <a class="dashboard-sidebar__link {{selected.services}}" href="{{{dashboardBase}}}/settings/services">External services</a>
+    </div>
+    <div class="dashboard-sidebar__section">
+      <a class="dashboard-sidebar__link {{selected.import}}" href="{{{dashboardBase}}}/import">Import</a>
+      <a class="dashboard-sidebar__link {{selected.export}}" href="{{{dashboardBase}}}/export">Export</a>
+      <a class="dashboard-sidebar__link {{selected.delete}}" href="{{{dashboardBase}}}/delete">Delete</a>
+    </div>
+  </nav>
+  {{/isSettingsSidebar}}
+  {{^isSettingsSidebar}}
+  <a class="dashboard-sidebar__back" href="/sites">
+    <span aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M9.78 12.78a.75.75 0 0 1-1.06 0L4.47 8.53a.75.75 0 0 1 0-1.06l4.25-4.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L6.06 8l3.72 3.72a.75.75 0 0 1 0 1.06Z"></path></svg></span>
+    <span>Sites</span>
+  </a>
+
+  <nav class="dashboard-sidebar__nav" aria-label="Site navigation">
+    <div class="dashboard-sidebar__section">
+      <a class="dashboard-sidebar__link {{selected.overview}}" href="{{{dashboardBase}}}">Overview</a>
+      <a class="dashboard-sidebar__link {{selected.files}}" href="{{{dashboardBase}}}/files">Files</a>
+      <a class="dashboard-sidebar__link {{selected.posts}}" href="{{{dashboardBase}}}/posts">Posts</a>
+      <a class="dashboard-sidebar__link {{selected.activity}}" href="{{{dashboardBase}}}/recents">Activity</a>
+      <a class="dashboard-sidebar__link" href="{{{dashboardBase}}}/template/{{template.slug}}">Template</a>
+      <a class="dashboard-sidebar__link" href="{{{dashboardBase}}}/settings">Settings</a>
+    </div>
+  </nav>
+  {{/isSettingsSidebar}}
+</aside>

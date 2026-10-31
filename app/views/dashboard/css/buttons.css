@@ -44,7 +44,8 @@
   font-weight: 600;
 }
 
-.buttons > :first-child:not(:last-child):hover:not(.working):not(:disabled) {
+.buttons > :first-child:not(:last-child):hover:not(.working):not(:disabled),
+form.create-site-button button:hover:not(.working):not(:disabled) {
   background-color: #1a75e5;
 }
 
@@ -73,7 +74,7 @@
 }
 
 .buttons > :last-child:hover {
-  background-color: #dedede;
+  background-color: #e6e6e6;
 }
 
 

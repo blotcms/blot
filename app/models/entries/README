@@ -103,12 +103,19 @@ Returns the count of entries in the published `entries` list.
 
 - `callback(err, total)` — integer.
 
+### `getListTotal(blogID, listName, callback)`
+
+Returns the count of entries in a named list.
+
+- `callback(err, total)` — integer.
+
 ### `getListIDs(blogID, listName, options, callback)`
 
 Returns the IDs of entries in a named list.
 
 - `options.first` — if set, limits results to the first `N` IDs.
-- `callback(err, ids)` — array of string IDs in reverse-score order.
+- `options.ascending` — when true, returns IDs in ascending-score order.
+- `callback(err, ids)` — array of string IDs in reverse-score order by default.
 
 ### `getRecent(blogID, callback)`
 
@@ -247,7 +254,7 @@ The lex index is only updated incrementally by `_assign.js` when the ready flag 
 | `app/dashboard/site/save/finish.js` | `resave` |
 | `app/dashboard/site/link-format.js` | `resave` |
 | `app/dashboard/site/export.js` | `getAll` |
-| `app/dashboard/site/load/scheduled.js` | `get` with `lists: ["scheduled"]` |
+| `app/dashboard/site/load/posts.js` | `getListIDs`, `getListTotal` — builds the dashboard's published, page, draft and scheduled post groups |
 | `scripts/entry/backfill-scheduled-alarms.js` | `get` with `lists: ["scheduled"]` |
 | `app/scheduler/daily/new-posts.js` | `getCreated`, `getDeleted` |
 | `app/sync/renames.js` | `each` |

@@ -1,22 +1,21 @@
 <div class="sites-list-container">
 	<div class="sites">
-		{{#blogs}}
-		<div class="site{{#healthIssue}} has-health-issue{{/healthIssue}}">
-			<a href="/sites/{{handle}}" class="blog-link" style="padding-left: 1rem;">
-				<span class="text-info">
-					<span class="title truncate">{{pretty.label}}</span>
-					<span class="truncate url">{{pretty.url}}</span>
-				</span>
-				<span class="icon-chevron"></span>
-			</a>
-			{{#healthIssue}}
-			<a href="/sites/{{handle}}/client" class="health-badge" data-health="{{code}}" title="{{message}}">{{label}}</a>
-			{{/healthIssue}}
-			<!-- <div class="preview-holder">
-				<div class="site-preview" data-url="{{{previewURL}}}" data-cache-id="{{cacheID}}"></div>
-			</div> -->
+		<div class="sites-grid">
+			{{#blogs}}
+			<div class="site{{#healthIssue}} has-health-issue{{/healthIssue}}">
+				<a href="/sites/{{handle}}" class="blog-link">
+					<span class="text-info">
+						<span class="title truncate">{{pretty.label}}</span>
+						<span class="truncate url">{{pretty.url}}</span>
+					</span>
+					<span class="icon-chevron"></span>
+				</a>
+				{{#healthIssue}}
+				<a href="/sites/{{handle}}/settings/folder" class="health-badge" data-health="{{code}}" title="{{message}}">{{label}}</a>
+				{{/healthIssue}}
+			</div>
+			{{/blogs}}
 		</div>
-		{{/blogs}}
 
 		<form class="create-site-button" action="/sites/account/create-site" method="POST">
 			<input type="hidden" name="timeZone" value="">
@@ -26,44 +25,5 @@
 				<span class="icon-plus"></span>&thinsp; Create site
 			</button>
 		</form>
-	</div>
-
-	<div>
-		<form class="foot" action="/sites/account/log-out" method="post" style="float:right;background:none;padding:0 0 0;font-size: 14px;color: var(--border-color);">
-			<input type="hidden" name="_csrf" value="{{csrftoken}}">
-			<button type="submit" class="logout">
-				Log out 
-			</button>
-		</form>
-
-		<span style="padding:11px 0;display:block;font-weight: 400;color: var(--medium-text-color);">Account</span>
-	</div>
-
-	<!-- Account rows use the shared .line/.label/.center/.right layout in dashboard-line.css. -->
-	<div style="border-radius: 4px;border:1px solid var(--border-color);overflow: hidden;">
-		<a class="line" href="/sites/account/email">
-			<span class="label">Email</span>
-			<span class="center">{{user.email}}</span>
-			<span class="right">Edit</span>
-		</a>
-
-		{{#user.hasPassword}}
-		<a class="line" href="/sites/account/password">
-			<span class="label">Password</span>
-			<span class="center">&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
-			<span class="right">Edit</span>
-		</a>
-		{{/user.hasPassword}}
-		{{^user.hasPassword}}
-		<a class="line" href="/sites/account/password/set">
-			<span class="label">Password</span>
-			<span class="center"><span class="link">Set password</span></span>
-		</a>
-		{{/user.hasPassword}}
-
-		<a class="line" href="/sites/account/subscription" style="border-bottom: none;">
-			<span class="label">Subscription</span>
-			<span class="center"><span class="link">Manage subscription</span></span>
-		</a>
 	</div>
 </div>

@@ -28,6 +28,19 @@ describe("render middleware", function() {
     expect(body).toEqual(config.cdn.origin.split("https://").join("http://"));
   });
 
+  it("serves rendered HTML as plain text for output=true on preview hosts only", async function () {
+    await this.template({ "entries.html": "<html><body><b>Hello</b></body></html>" });
+
+    const previewHost = `${config.protocol}preview-of-my-local-on-${this.blog.handle}.${config.host}`;
+
+    const preview = await this.fetch(previewHost + "/?output=true");
+    expect(preview.headers.get("content-type")).toContain("text/plain");
+    expect(await preview.text()).toEqual("<html><body><b>Hello</b></body></html>");
+
+    const live = await this.get("/?output=true");
+    expect(live.headers.get("content-type")).toContain("text/html");
+  });
+
   it("leaves CDN links as https for requests served over https", async function () {
     await this.template({ "entries.html": "{{{cdn}}}" });
 

@@ -5,7 +5,8 @@ const title = express.Router();
 
 title.route('/')
     .get((req, res) => {
-        res.locals.breadcrumbs.add('Title');
+        res.locals.selected = { ...res.locals.selected, title: 'selected' };
+        res.locals.breadcrumbs.add('Title', 'title');
         res.render('dashboard/site/title');
     })
     .post(async (req, res) => {

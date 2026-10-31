@@ -1,4 +1,4 @@
-<hr style="border:none;border-top:1px solid var(--border-color);margin:-16px 0 0">
+<hr style="border:none;border-top:1px solid var(--border-color);margin:-9px 0 0">
 <br><br>
 <form action="{{{base}}}/install" method="POST" class="dashboard-form">
     <input type="hidden" name="_csrf" value="{{csrftoken}}">
@@ -7,7 +7,7 @@
     {{^template.checked}}
     <p>Would you like to make <strong>{{template.displayName}}</strong> your current template? You can switch template at any point.</p>
     <div class="buttons">
-        <button type="submit">Install</button>
+        <button type="submit">Activate</button>
         <a href="{{{base}}}">Cancel</a>
     </div>
     {{/template.checked}}
