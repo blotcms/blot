@@ -31,7 +31,7 @@ TCP memory background) and `investigate-slow-upstream-responses`.
    calls are fine without asking, but say what you ran.
 2. **Use `launch.sh --drill` for any throwaway host** (a rehearsal, a
    restore test, a cutover practice). A drill host is tagged `BlotDrill=true`
-   and can never upload backups, so it cannot overwrite or prune the
+   and can never upload backups, so it cannot add to the
    production ones.
 3. **Tear down by explicit instance ID only**, never with a filter-based
    terminate. Immediately before, re-check that instance's `BlotDrill` tag and
@@ -276,7 +276,7 @@ bootstrap on a live host").
 ```
 ssh redis 'tail -n 20 ~/backup.log; ls -l /etc/blot-redis; cat /etc/cron.d/blot-redis'
 ssh redis 'df -h /backups; findmnt /backups; systemctl status blot-instance-store --no-pager | head'
-aws s3 ls s3://blot-redis-backups/hourly/ | tail -n 3
+aws s3 ls s3://blot-redis-backups/hourly/ | tail -n 3  # hourly/ keeps 1 day, daily/ 7, weekly/ 30 (lifecycle rules)
 ```
 
 `bin/backup.sh` exits quietly unless the host is a master that accepts

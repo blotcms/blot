@@ -1,16 +1,20 @@
 #!/bin/bash
-# Usage: backup.sh hourly|daily
+# Usage: backup.sh hourly|daily|weekly
 # Copies Redis's RDB snapshot to /backups and uploads it to
-# s3://blot-redis-backups/<hourly|daily>/<YYYY-MM-DD-hour-HH>.rdb, then prunes
-# old copies. Runs as ec2-user from /etc/cron.d/blot-redis (hourly at :00, daily
-# at 03:05) and uses whatever AWS credentials that user has (instance profile
+# s3://blot-redis-backups/<hourly|daily|weekly>/<YYYY-MM-DD-hour-HH>.rdb. Runs
+# as ec2-user from /etc/cron.d/blot-redis (hourly at :00, daily at 03:05,
+# weekly on Sundays at 03:35). The upload is write-once (--no-overwrite, so the
+# host needs no delete or overwrite rights) and S3 never has anything deleted
+# from here: the bucket's lifecycle rules expire hourly/ after 1 day, daily/
+# after 7 and weekly/ after 30. Only the local copies in /backups are pruned.
+# It uses whatever AWS credentials that user has (instance profile
 # or ~/.aws). After an upload it records it in Redis at blot:redis-host:backup,
 # which the app's daily email reads. The daily one also goes to an offsite
 # bucket (Backblaze B2) if /etc/blot-redis/offsite-bucket names one. BLOT_ROOT
 # prefixes paths, for the tests.
 set -euo pipefail
 
-KIND=${1:?usage: backup.sh hourly|daily}
+KIND=${1:?usage: backup.sh hourly|daily|weekly}
 BUCKET=${BLOT_BACKUP_BUCKET:-s3://blot-redis-backups}
 ROOT=${BLOT_ROOT:-}
 RDB=$ROOT/var/lib/redis6/dump.rdb
@@ -24,12 +28,9 @@ OFFSITE_FILE=$ROOT/etc/blot-redis/offsite-bucket
 MAX_SNAPSHOT_AGE=60 # seconds
 NAME=$(date +%Y-%m-%d-hour-%H)
 
-# How many to keep in S3. Local copies (hourly and daily share them) are
-# pruned to the 10 newest.
 case "$KIND" in
-  hourly) KEEP=6 ;;
-  daily) KEEP=7 ;;
-  *) echo "usage: backup.sh hourly|daily" >&2; exit 2 ;;
+  hourly | daily | weekly) ;;
+  *) echo "usage: backup.sh hourly|daily|weekly" >&2; exit 2 ;;
 esac
 
 log() { echo "[$(date +%Y-%m-%d-%H-%M-%S)] $KIND backup: $*"; }
@@ -102,7 +103,8 @@ else
 fi
 
 log "uploading to $BUCKET/$KIND/$NAME.rdb"
-aws s3 cp --only-show-errors "$SOURCE" "$BUCKET/$KIND/$NAME.rdb"
+# A name that exists is left alone (and exits 0): a rerun within the hour.
+aws s3 cp --only-show-errors --no-overwrite "$SOURCE" "$BUCKET/$KIND/$NAME.rdb"
 
 # Record it for the app: "<time> <kind> <s3 key> <bytes>", no TTL. Best effort
 # like tcpmem-log.sh's SET: a failure here never fails the backup, and cron
@@ -114,8 +116,9 @@ $TIMEOUT redis6-cli SET blot:redis-host:backup \
   log "WARNING: could not record the backup in Redis"
 
 # Daily only, to B2 through the write-only blot-b2 profile (README: Offsite
-# backups). It must never fail the backup or stop the prune: the upload sits in
-# an if, which set -e ignores. No bucket file means offsite is off (drill
+# backups). B2 versions files, so this upload can be plain. It must never fail
+# the backup or stop the local prune: the upload sits in an if, which set -e
+# ignores. No bucket file means offsite is off (drill
 # hosts, hosts without the key). Recorded like the backup, for the daily email.
 if [ "$KIND" = daily ]; then
   OFFSITE=$(head -n 1 "$OFFSITE_FILE" 2> /dev/null | tr -d '[:space:]') || OFFSITE=
@@ -130,11 +133,6 @@ if [ "$KIND" = daily ]; then
     log "WARNING: offsite upload failed"
   fi
 fi
-
-# Names sort chronologically, so everything after the newest $KEEP is old.
-log "pruning $BUCKET/$KIND"
-aws s3 ls "$BUCKET/$KIND/" | awk '{print $4}' | sort -r | tail -n +$((KEEP + 1)) |
-  while read -r old; do aws s3 rm --only-show-errors "$BUCKET/$KIND/$old"; done
 
 if mountpoint -q "$LOCAL"; then
   for old in $(ls -d "$LOCAL"/20??-??-??-hour-?? | sort -r | tail -n +11); do rm -rf "$old"; done

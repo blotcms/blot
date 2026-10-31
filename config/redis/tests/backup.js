@@ -77,7 +77,7 @@ esac
     const name = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-hour-${pad(now.getHours())}`;
 
     expect(result.status).toBe(0);
-    expect(read("aws-calls")).toContain(`s3 cp --only-show-errors ${root}/var/lib/redis6/dump.rdb s3://test-bucket/hourly/${name}.rdb`);
+    expect(read("aws-calls")).toContain(`s3 cp --only-show-errors --no-overwrite ${root}/var/lib/redis6/dump.rdb s3://test-bucket/hourly/${name}.rdb`);
 
     const [command, key, value] = setArgs();
     expect([command, key]).toEqual(["SET", BACKUP_KEY]);
@@ -107,6 +107,33 @@ esac
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("could not record the backup in Redis");
     expect(result.stdout).toContain("hourly backup: done");
+  });
+
+  it("uploads hourly, daily and weekly write-once, and never deletes from S3", function () {
+    for (const kind of ["hourly", "daily", "weekly"]) {
+      fs.rmSync(file("aws-calls"), { force: true });
+      const result = run(kind);
+
+      expect(result.status).toBe(0);
+      expect(read("aws-calls")).toMatch(
+        new RegExp(`^s3 cp --only-show-errors --no-overwrite \\S+ s3://test-bucket/${kind}/\\d{4}-\\d\\d-\\d\\d-hour-\\d\\d\\.rdb\\n$`)
+      );
+      expect(setArgs()[2]).toContain(` ${kind} ${kind}/`);
+    }
+  });
+
+  it("does not upload a weekly to B2", function () {
+    write("etc/blot-redis/offsite-bucket", "s3://offsite-bucket\n");
+    expect(run("weekly").status).toBe(0);
+    expect(read("aws-calls")).not.toContain("blot-b2");
+  });
+
+  it("refuses any other kind", function () {
+    const result = run("monthly");
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("usage: backup.sh hourly|daily|weekly");
+    expect(fs.existsSync(file("aws-calls"))).toBe(false);
   });
 
   it("records nothing when the upload fails", function () {
@@ -183,16 +210,16 @@ esac
       expect(fs.existsSync(file("aws-calls"))).toBe(false);
     });
 
-    it("survives a failing B2 upload: exits 0, still prunes, records nothing", function () {
-      const listing = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => `2026-01-0${i} 00:00:00 1 2026-01-0${i}-hour-03.rdb`);
-      write("listing", listing.join("\n") + "\n");
+    it("survives a failing B2 upload: exits 0, still prunes locally, records nothing", function () {
+      stub("mountpoint", "exit 0");
+      // 12 old local copies and the new one: the 10 newest stay
+      for (let i = 1; i <= 12; i++) write(`backups/2026-01-${String(i).padStart(2, "0")}-hour-03/dump.rdb`, "x");
       stub(
         "aws",
         `
 echo "$@" >> "${root}/aws-calls"
 case "$*" in
   *blot-b2*) echo "b2 error" >&2; exit 1 ;;
-  *"s3 ls"*) cat "${root}/listing" ;;
 esac
 `
       );
@@ -202,11 +229,9 @@ esac
       expect(result.stdout).toContain("WARNING: offsite upload failed");
       expect(result.stdout).toContain("daily backup: done");
       expect(offsiteCalls().length).toBe(1);
-      // 9 listed, 7 kept: the two oldest go
-      expect(calls().filter((call) => call.startsWith("s3 rm"))).toEqual([
-        "s3 rm --only-show-errors s3://test-bucket/daily/2026-01-02-hour-03.rdb",
-        "s3 rm --only-show-errors s3://test-bucket/daily/2026-01-01-hour-03.rdb",
-      ]);
+      expect(fs.existsSync(file("backups/2026-01-01-hour-03"))).toBe(false);
+      expect(fs.existsSync(file("backups/2026-01-03-hour-03"))).toBe(false);
+      expect(fs.existsSync(file("backups/2026-01-04-hour-03"))).toBe(true);
       expect(keys()).toEqual([BACKUP_KEY]);
     });
 
