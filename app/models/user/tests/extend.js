@@ -376,8 +376,9 @@ describe("user extend", function () {
 
   describe("payment methods", function () {
     function monthsFromNow(months) {
-      var date = new Date();
-      date.setMonth(date.getMonth() + months);
+      // From the 1st: on the 31st, setMonth would overflow into the next month
+      var now = new Date();
+      var date = new Date(now.getFullYear(), now.getMonth() + months, 1);
       return { exp_month: date.getMonth() + 1, exp_year: date.getFullYear() };
     }
 
