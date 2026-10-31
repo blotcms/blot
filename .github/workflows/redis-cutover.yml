@@ -24,6 +24,12 @@ on:
 permissions:
   contents: read
 
+# Superseded PR pushes are cancelled. Each master push gets its own group, so
+# a master run is never cancelled.
+concurrency:
+  group: redis-cutover-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   cutover:
     runs-on: ubuntu-latest
