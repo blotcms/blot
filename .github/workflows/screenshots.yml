@@ -28,6 +28,11 @@ on:
       - "app/templates/source/**"
       - "app/templates/folders/**"
 
+# Superseded PR pushes are cancelled; dispatched runs each get their own group.
+concurrency:
+  group: screenshots-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Figures out which template previews a pull request touched, so the
   # screenshot job below only re-renders those previews instead of every

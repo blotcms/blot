@@ -147,8 +147,8 @@ jobs:
           TARGET_SHA: ${{ steps.resolve.outputs.sha }}
           CUSTOM: ${{ steps.resolve.outputs.custom }}
           SKIP_CHECKS: ${{ github.event.inputs.skip_checks }}
-          REQUIRED: "node build app-e2e integration unit-image"
-          OPTIONAL: "proxy proxy-fail2ban .github/workflows/proxy-deploy-e2e.yml"
+          REQUIRED: "node build app-e2e unit-image"
+          OPTIONAL: "integration .github/workflows/proxy-deploy-e2e.yml"
         run: |
           if [ "$SKIP_CHECKS" = "true" ]; then
             echo "::warning::skip_checks is set - deploying $TARGET_SHA without waiting for CI to pass."
@@ -174,7 +174,11 @@ jobs:
             for NAME in $REQUIRED $OPTIONAL; do
               ROW=$(printf '%s\n' "$RUNS" | awk -F'\t' -v n="$NAME" '$1 == n')
               if [ -z "$ROW" ]; then
-                # Path-filtered workflows may legitimately not have run.
+                # Path-filtered workflows may legitimately not have run
+                # (integration, proxy-deploy-e2e). The REQUIRED ones, which
+                # every push runs, hold the loop until they finish, by which
+                # time these have appeared too: runs are created when the
+                # push lands, together.
                 case " $OPTIONAL " in *" $NAME "*) ;; *) PENDING="$PENDING $NAME" ;; esac
                 continue
               fi

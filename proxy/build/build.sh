@@ -4,7 +4,7 @@
 # proxy/build/data/latest/ (openresty.conf, diskcache.lua, html/).
 #
 # Run this before `docker build proxy/`. CI runs the same script in
-# .github/workflows/proxy.yml so there is a single source of truth for the
+# .github/workflows/integration.yml so there is a single source of truth for the
 # environment the config is generated with.
 #
 # The paths below must match where proxy/Dockerfile copies the generated
