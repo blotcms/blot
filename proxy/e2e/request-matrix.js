@@ -1,6 +1,6 @@
 // What a client sees through the proxy, request kind by request kind, against
 // the REAL proxy image with the generated production config. Plain node, no
-// dependencies. Run by the proxy-behaviour job in
+// dependencies. Run by the proxy-matrix job in
 // .github/workflows/integration.yml after the image is built:
 //
 //   docker build -f proxy/Dockerfile -t blot-proxy:e2e proxy/
