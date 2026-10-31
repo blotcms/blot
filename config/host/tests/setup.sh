@@ -42,8 +42,9 @@ sums() {
     /home/deploy/.ssh/authorized_keys /etc/rsyslog.d/30-deploy-user.conf /etc/logrotate.d/deploy-user \
     /etc/nftables/blot-redis.nft /etc/systemd/system/blot-redis-firewall.service \
     /etc/systemd/system/redis6.service.d/zz-blot-firewall.conf /etc/blot-redis/shared-instance-store \
-    /etc/redis6/redis6.conf /etc/redis6/blot-memory.conf /etc/cron.d/blot-redis /usr/local/bin/mount-instance-store.sh
-    stat -c "%n %U:%G %a" /var/www/blot /var/www/blot/data /var/www/blot/app/blog/static
+    /etc/redis6/redis6.conf /etc/redis6/blot-memory.conf /etc/cron.d/blot-redis /usr/local/bin/mount-instance-store.sh \
+    /etc/tmpfiles.d/blot-redis.conf
+    stat -c "%n %U:%G %a" /var/www/blot /var/www/blot/data /var/www/blot/app/blog/static /run/blot/redis
     readlink /usr/local/bin/redis-cli; id -nG ec2-user deploy
     redis6-cli INFO server | grep process_id'
 }
@@ -94,6 +95,28 @@ check "the shared instance store marker exists" in_ct '[ -f /etc/blot-redis/shar
 check "Redis answers" in_ct 'redis6-cli PING | grep -qx PONG'
 check "maxmemory is REDIS_MAXMEMORY" in_ct '[ "$(redis6-cli CONFIG GET maxmemory | sed -n 2p)" = 1073741824 ]'
 check "the second run found Redis running and left it" grep -q 'already running: not restarting it' "$TMP/run2"
+SOCK=/run/blot/redis/redis.sock
+check "tmpfiles.d declares the socket directory, and setup created it for redis6" in_ct '
+  [ "$(grep -v "^#" /etc/tmpfiles.d/blot-redis.conf)" = "d /run/blot/redis 0755 redis6 redis6 -" ] &&
+  [ "$(stat -c "%U:%G %a" /run/blot/redis)" = "redis6:redis6 755" ]'
+check "Redis serves the socket, mode 777" in_ct '[ -S '$SOCK' ] && [ "$(stat -c %a '$SOCK')" = 777 ]'
+check "uid 1000 can PING through the socket" in_ct '
+  [ "$(id -u ec2-user)" = 1000 ] && [ "$(runuser -u ec2-user -- redis6-cli -s '$SOCK' PING)" = PONG ]'
+check "and the socket reaches the same Redis as TCP" in_ct '
+  [ "$(redis6-cli -s '$SOCK' CONFIG GET maxmemory | sed -n 2p)" = 1073741824 ] &&
+  [ "$(redis6-cli -h 127.0.0.1 -p 6379 PING)" = PONG ]'
+# Every boot: /run is a tmpfs, so the directory is gone until tmpfiles.d makes it again.
+# With the app's file for /run/blot, in either order, as on a combined host.
+check "tmpfiles recreates the directory, with the app's file before or after" in_ct '
+  mv /run/blot /run/blot.gone
+  systemd-tmpfiles --create /etc/tmpfiles.d/blot-redis.conf /repo/config/host/tmpfiles.d/blot.conf &&
+  [ "$(stat -c "%U:%G %a" /run/blot/redis)" = "redis6:redis6 755" ] &&
+  [ "$(stat -c "%u:%g %a" /run/blot)" = "1000:1000 755" ] &&
+  rm -rf /run/blot && systemd-tmpfiles --create /repo/config/host/tmpfiles.d/blot.conf &&
+  systemd-tmpfiles --create /etc/tmpfiles.d/blot-redis.conf &&
+  [ "$(stat -c "%U:%G %a" /run/blot/redis)" = "redis6:redis6 755" ] &&
+  [ "$(stat -c "%u:%g %a" /run/blot)" = "1000:1000 755" ]'
+in_ct 'rm -rf /run/blot; mv /run/blot.gone /run/blot' || fail "could not restore /run/blot"
 docker exec -e BLOT_REDIS_SKIP_SYSTEMD=1 -e REDIS_MAXMEMORY=1gb "$NAME" bash /repo/config/redis/host/setup.sh > "$TMP/redis-alone" 2>&1 ||
   fail "the Redis setup alone exited non-zero"
 check "a Redis setup run without the variable keeps the marker" in_ct '[ -f /etc/blot-redis/shared-instance-store ]'
@@ -212,6 +235,42 @@ check "the range and interface from the metadata are in the nft file" \
   in_ct 'grep -qF "iifname \"ens5\" ip saddr 10.1.0.0/16 tcp dport 6379 accept" /etc/nftables/blot-redis.nft'
 check "no sshd drop-in without a port" in_ct '[ ! -e /etc/ssh/sshd_config.d/11-blot-port.conf ]'
 check "bad port is refused" bash -c "! docker exec -e BLOT_HOST_SKIP_SYSTEMD=1 -e 'BLOT_SSH_PORT=22 --x' $NAME bash /repo/config/host/host/setup.sh > /dev/null 2>&1"
+
+echo "# Redis socket on a Redis-only host, and on a live Redis that predates it"
+cleanup
+start amazonlinux:2023
+docker exec "$NAME" dnf install -y -q shadow-utils diffutils util-linux > /dev/null
+in_ct 'useradd -m ec2-user'
+redis_setup() { # redis_setup <setup.sh path> <output file>
+  docker exec -e BLOT_REDIS_SKIP_SYSTEMD=1 -e REDIS_MAXMEMORY=1gb "$NAME" bash "$1" > "$2" 2>&1 ||
+    { cat "$2"; fail "$1 exited non-zero"; return 1; }
+}
+# The Redis setup as it was: a copy of config/redis without the socket.
+in_ct 'cp -r /repo/config/redis /tmp/old-redis && sed -i "/^unixsocket/d" /tmp/old-redis/redis.conf'
+redis_setup /tmp/old-redis/host/setup.sh "$TMP/old" || exit 1
+check "nothing else created /run/blot, and the old Redis has no socket" in_ct '
+  [ "$(stat -c %U:%G /run/blot)" = root:root ] && [ ! -e '$SOCK' ] && [ "$(redis6-cli PING)" = PONG ]'
+in_ct 'redis6-cli INFO server | grep process_id' > "$TMP/pid1"
+redis_setup /repo/config/redis/host/setup.sh "$TMP/live" || exit 1
+in_ct 'redis6-cli INFO server | grep process_id' > "$TMP/pid2"
+check "setup on the live Redis leaves it running, same process" cmp -s "$TMP/pid1" "$TMP/pid2"
+check "and lists the socket settings as needing a restart" bash -c "
+  grep -q 'unixsocket: running' '$TMP/live' && grep -q 'unixsocketperm: running' '$TMP/live' &&
+  grep -q 'Need a restart (not done)' '$TMP/live'"
+check "the socket directory exists now, the socket does not yet" in_ct '
+  [ "$(stat -c "%U:%G %a" /run/blot/redis)" = "redis6:redis6 755" ] && [ ! -e '$SOCK' ]'
+check "running it again changes nothing" bash -c "
+  docker exec -e BLOT_REDIS_SKIP_SYSTEMD=1 -e REDIS_MAXMEMORY=1gb $NAME bash /repo/config/redis/host/setup.sh > '$TMP/live2' 2>&1 &&
+  ! grep -q updated '$TMP/live2' && grep -q 'unixsocket: running' '$TMP/live2'"
+# What a restart does (systemd would do it with the unit): Redis starts from the installed config.
+in_ct 'redis6-cli SHUTDOWN NOSAVE; sleep 1; runuser -u redis6 -- redis6-server /etc/redis6/redis6.conf --daemonize yes --supervised no'
+for _ in $(seq 1 20); do in_ct 'redis6-cli PING' > /dev/null 2>&1 && break; sleep 0.5; done
+check "after a restart Redis serves the socket" in_ct '[ -S '$SOCK' ] && [ "$(stat -c %a '$SOCK')" = 777 ]'
+check "uid 1000 PINGs through it and TCP still answers" in_ct '
+  [ "$(id -u ec2-user)" = 1000 ] && [ "$(runuser -u ec2-user -- redis6-cli -s '$SOCK' PING)" = PONG ] &&
+  [ "$(redis6-cli -h 127.0.0.1 -p 6379 PING)" = PONG ]'
+redis_setup /repo/config/redis/host/setup.sh "$TMP/live3" || exit 1
+check "a rerun now finds nothing to restart" grep -q 'running settings match the new config' "$TMP/live3"
 
 echo "# Amazon Linux 2"
 cleanup

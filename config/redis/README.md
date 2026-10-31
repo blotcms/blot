@@ -292,6 +292,13 @@ resized in place.
 
 - `/etc/redis6/redis6.conf` plus `/etc/redis6/blot-memory.conf` (`maxmemory`).
   The previous config is kept once as `redis6.conf.dist`.
+- A Unix socket, `/run/blot/redis/redis.sock` (mode 777; TCP stays on), for
+  clients on the same host. `/etc/tmpfiles.d/blot-redis.conf` creates its
+  directory, owned by `redis6`, at every boot, since `/run` is a tmpfs and
+  Redis exits at start if it cannot bind the socket. The unit has no
+  sandboxing that would block it. A running Redis only gets the socket at its
+  next restart: `unixsocket` and `unixsocketperm` cannot be changed with
+  `CONFIG SET`, so `bootstrap.sh` lists them as needing a restart.
 - `/etc/sysctl.d/90-blot-redis.conf`: `vm.overcommit_memory=1`,
   `vm.swappiness=1`, `somaxconn` and `tcp_max_syn_backlog` 4096. `tcp_mem` is
   left at the kernel default. No swap.

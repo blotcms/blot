@@ -72,8 +72,10 @@ echo "    redis.conf parses"
 # Settings to compare with the running server. Skip ones the scratch server
 # overrides or that cannot meaningfully differ.
 SETTINGS=$(awk '!/^[ \t]*(#|$)/ {print tolower($1)}' "$TMP/test.conf" | sort -u |
-  grep -vxE 'bind|port|dir|logfile|pidfile')
+  grep -vxE 'bind|port|dir|logfile|pidfile|unixsocket')
 for s in $SETTINGS; do printf '%s\t%s\n' "$s" "$(scratch CONFIG GET "$s" | sed -n 2p)"; done > "$TMP/wanted"
+# The scratch server's socket is overridden above; compare the real path.
+printf 'unixsocket\t%s\n' "$(awk '$1 == "unixsocket" {print $2}' "$ROOT/redis.conf" | tail -n1)" >> "$TMP/wanted"
 scratch SHUTDOWN NOSAVE > /dev/null 2>&1 || true
 
 say "Config files"
@@ -93,6 +95,16 @@ put /etc/redis6/blot-memory.conf 0640 root:redis6 < "$TMP/blot-memory.conf"
 # Keep the package's stock config (or the live host's old one) the first time.
 [ -f /etc/redis6/redis6.conf.dist ] || cp -p /etc/redis6/redis6.conf /etc/redis6/redis6.conf.dist
 put /etc/redis6/redis6.conf 0640 root:redis6 < "$ROOT/redis.conf"
+# The directory of redis.conf's unixsocket. /run is a tmpfs, so tmpfiles.d
+# recreates it at boot, before redis6 starts. On a combined host
+# tmpfiles.d/blot.conf also declares /run/blot (for the app); the two files
+# name different paths and neither changes the other's, whichever runs first.
+# Not the unit's RuntimeDirectory=, which is /run/redis6.
+put /etc/tmpfiles.d/blot-redis.conf 0644 root:root <<'EOF'
+# Installed by config/redis/host/setup.sh: where redis.conf puts its Unix socket.
+d /run/blot/redis 0755 redis6 redis6 -
+EOF
+systemd-tmpfiles --create /etc/tmpfiles.d/blot-redis.conf
 
 say "Scripts"
 install -m 0755 -o root -g root -t /usr/local/bin \
