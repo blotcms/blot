@@ -34,7 +34,12 @@ module.exports = (client) => ({
       BY: "SCORE",
       LIMIT: { offset: 0, count },
     });
-    return members.map(({ value, score }) => ({ host: value, score }));
+    // Scores are recorded to the thousandth, but RESP3 decodes them slightly
+    // off, and a removal must send back exactly what was recorded
+    return members.map(({ value, score }) => ({
+      host: value,
+      score: Math.round(score * 1000) / 1000,
+    }));
   },
 
   async remove(target, entries) {
