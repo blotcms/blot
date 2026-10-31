@@ -232,6 +232,14 @@ Before using the GitHub Actions deployment workflow, ensure you have:
 
 The app runs as two units, `blot-blue` and `blot-green`, deployed with `npm run deploy-units` or the Deploy workflow (see [proxy/deploy/README.md](../../proxy/deploy/README.md)).
 
+By default these scripts reach the host over the `blot` alias in `~/.ssh/config`. To deploy to another host, set `BLOT_DEPLOY_TARGET` to an ssh alias or `user@host` (a non-standard port or key goes in an alias):
+
+```bash
+BLOT_DEPLOY_TARGET=ec2-user@10.0.0.7 npm run deploy-units
+```
+
+`scripts/deploy/util/sshCommand.js` (used by `scripts/probe/run.js`) reads the same variable. The target may contain only letters, digits and `._@-`, and may not start with `-`. The Deploy workflow leaves it unset.
+
 #### Via GitHub UI
 
 1. Go to the **Actions** tab in your GitHub repository

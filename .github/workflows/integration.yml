@@ -62,6 +62,11 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
 
+      # Which host scripts/deploy/units.sh and util/sshCommand.js ssh to
+      # (BLOT_DEPLOY_TARGET), against a stub ssh.
+      - name: Deploy ssh target
+        run: bash scripts/deploy/tests/target.sh
+
       - name: Build proxy image
         run: docker build -f proxy/Dockerfile -t blot-proxy:e2e proxy/
 
