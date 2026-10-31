@@ -64,6 +64,14 @@ describe("redis.conf", function () {
     ].forEach((name) => expect(only(name)).toBe("yes"));
   });
 
+  it("is last in the kill order, with its BGSAVE child first", function () {
+    const setup = read("host/setup.sh");
+    expect(only("oom-score-adj")).toBe("relative");
+    expect(only("oom-score-adj-values")).toBe("0 0 1900");
+    expect(setup).toContain("OOMScoreAdjust=-900");
+    expect(setup).toContain("CPUWeight=1000");
+  });
+
   it("stays consistent with the host settings", function () {
     const setup = read("host/setup.sh");
     expect(setup).toContain("net.core.somaxconn = 4096");
