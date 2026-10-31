@@ -2,7 +2,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { parseBackup, BACKUP_KEY } = require("../../../app/scheduler/daily/redis-server");
+const { parseBackup, BACKUP_KEY, OFFSITE_KEY } = require("../../../app/scheduler/daily/redis-server");
 
 // Runs bin/backup.sh against a fake root and fake redis6-cli, aws, flock,
 // mountpoint, rsync and ip, and checks it records each upload in Redis for the
@@ -44,7 +44,7 @@ case "$*" in
   "INFO persistence") printf 'loading:0\\r\\nrdb_bgsave_in_progress:0\\r\\nrdb_last_bgsave_status:ok\\r\\n' ;;
   "CONFIG GET min-replicas-to-write") printf 'min-replicas-to-write\\r\\n0\\r\\n' ;;
   LASTSAVE) date +%s ;;
-  SET*) for arg in "$@"; do echo "$arg"; done > "${root}/set-args"; eval "\${SET_COMMAND:-:}" ;;
+  SET*) echo "$*" >> "${root}/set-calls"; for arg in "$@"; do echo "$arg"; done > "${root}/set-args"; eval "\${SET_COMMAND:-:}" ;;
   *) echo "unexpected: $*" >&2; exit 1 ;;
 esac
 `
@@ -115,6 +115,108 @@ esac
 
     expect(result.status).not.toBe(0);
     expect(fs.existsSync(file("set-args"))).toBe(false);
+  });
+
+  describe("offsite copy", function () {
+    const calls = () => (fs.existsSync(file("aws-calls")) ? read("aws-calls").trimEnd().split("\n") : []);
+    const offsiteCalls = () => calls().filter((call) => call.includes("blot-b2"));
+    // Every SET as [key, value]
+    const sets = () =>
+      fs.existsSync(file("set-calls"))
+        ? read("set-calls").trimEnd().split("\n").map((line) => [line.split(" ")[1], line.split(" ").slice(2).join(" ")])
+        : [];
+    const keys = () => sets().map(([key]) => key);
+
+    beforeEach(function () {
+      write("etc/blot-redis/offsite-bucket", "s3://offsite-bucket\n");
+    });
+
+    it("uploads a daily through the blot-b2 profile and records it", function () {
+      const result = run("daily");
+      const name = /daily\/(\d{4}-\d\d-\d\d-hour-\d\d)\.rdb/.exec(read("aws-calls"))[1];
+
+      expect(result.status).toBe(0);
+      expect(offsiteCalls()).toEqual([
+        `--profile blot-b2 s3 cp --only-show-errors ${root}/var/lib/redis6/dump.rdb s3://offsite-bucket/daily/${name}.rdb`,
+      ]);
+
+      // The S3 backup's own record is unchanged
+      expect(keys()).toEqual([BACKUP_KEY, OFFSITE_KEY]);
+      const value = sets()[1][1];
+      expect(value).toMatch(
+        new RegExp(`^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\dZ daily daily/${name}\\.rdb 1234$`)
+      );
+      expect(parseBackup(value).bytes).toBe(1234);
+    });
+
+    it("does not upload an hourly", function () {
+      const result = run("hourly");
+
+      expect(result.status).toBe(0);
+      expect(offsiteCalls()).toEqual([]);
+      expect(keys()).toEqual([BACKUP_KEY]);
+    });
+
+    it("is off without a bucket file, or with an empty one", function () {
+      for (const text of [null, "\n"]) {
+        fs.rmSync(file("aws-calls"), { force: true });
+        fs.rmSync(file("set-calls"), { force: true });
+        if (text === null) fs.rmSync(file("etc/blot-redis/offsite-bucket"));
+        else write("etc/blot-redis/offsite-bucket", text);
+
+        const result = run("daily");
+
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain("offsite is off");
+        expect(offsiteCalls()).toEqual([]);
+        expect(calls().length).toBeGreaterThan(0); // the S3 backup still ran
+        expect(keys()).toEqual([BACKUP_KEY]);
+      }
+    });
+
+    it("does not touch B2 on a drill host or an inactive host", function () {
+      write("etc/blot-redis/drill", "");
+      expect(run("daily").status).toBe(0);
+      fs.rmSync(file("etc/blot-redis/drill"));
+      fs.rmSync(file("etc/blot-redis/floating-ip"));
+      expect(run("daily").status).toBe(0);
+      expect(fs.existsSync(file("aws-calls"))).toBe(false);
+    });
+
+    it("survives a failing B2 upload: exits 0, still prunes, records nothing", function () {
+      const listing = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => `2026-01-0${i} 00:00:00 1 2026-01-0${i}-hour-03.rdb`);
+      write("listing", listing.join("\n") + "\n");
+      stub(
+        "aws",
+        `
+echo "$@" >> "${root}/aws-calls"
+case "$*" in
+  *blot-b2*) echo "b2 error" >&2; exit 1 ;;
+  *"s3 ls"*) cat "${root}/listing" ;;
+esac
+`
+      );
+      const result = run("daily");
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("WARNING: offsite upload failed");
+      expect(result.stdout).toContain("daily backup: done");
+      expect(offsiteCalls().length).toBe(1);
+      // 9 listed, 7 kept: the two oldest go
+      expect(calls().filter((call) => call.startsWith("s3 rm"))).toEqual([
+        "s3 rm --only-show-errors s3://test-bucket/daily/2026-01-02-hour-03.rdb",
+        "s3 rm --only-show-errors s3://test-bucket/daily/2026-01-01-hour-03.rdb",
+      ]);
+      expect(keys()).toEqual([BACKUP_KEY]);
+    });
+
+    it("does not fail when Redis refuses the offsite record", function () {
+      const result = run("daily", { SET_COMMAND: "echo READONLY; exit 1" });
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("could not record the offsite backup in Redis");
+      expect(result.stdout).toContain("daily backup: done");
+    });
   });
 
   it("records nothing on a drill host", function () {

@@ -342,6 +342,47 @@ Redis key `blot:redis-host:backup` (no TTL), which the daily email shows as the
 time since the last backup. Like the sample below, it is best effort: a refused
 write never fails the backup.
 
+### Offsite backups
+
+The daily backup is also uploaded to a private Backblaze B2 bucket, so losing
+the AWS account or region does not take the backups with it. `backup.sh` does
+it after the S3 upload and records it in `blot:redis-host:offsite` (same format
+as the backup key); the daily email shows it and flags it after 2 days. A B2
+failure only logs a WARNING in `~/backup.log`: it never fails the backup or
+stops the prune.
+
+- `/etc/blot-redis/offsite-bucket` holds one line, `s3://<bucket>`. The bucket
+  name is not in the repo. Without the file (or empty), offsite is off, which
+  is how drill hosts and hosts without the key stay inert.
+- `~ec2-user/.aws` has a `blot-b2` profile (placeholders):
+  ```
+  # config
+  [profile blot-b2]
+  region = <b2-region>
+  endpoint_url = https://s3.<b2-region>.backblazeb2.com
+  request_checksum_calculation = when_required
+
+  # credentials
+  [blot-b2]
+  aws_access_key_id = <key id>
+  aws_secret_access_key = <key>
+  ```
+- The key can only write. Create it with the CLI, because the console's "Write
+  Only" key type also grants delete and lifecycle rights:
+  `b2 key create --bucket <bucket> <name> writeFiles,listBuckets`.
+- A separate read key stays on the operator's machine, never on a server. It
+  is what a recovery uses when AWS is unavailable.
+- A lifecycle rule hides files after 23 days and deletes them 7 days later, so
+  they last about 30 days, for privacy. Nothing prunes them from the host.
+
+To restore from B2 (`restore.sh` reads only S3): with the read key, download
+the newest `daily/*.rdb` (`aws --profile <read-profile> s3 ls s3://<bucket>/daily/`,
+then `s3 cp`), copy it to the new host, and load it as `restore.sh` does:
+check it with `redis-check-rdb` (through a link to `redis6-server`, see Notes),
+then as root `install -o redis6 -g redis6 -m 0644 <file> /var/lib/redis6/dump.rdb.restoring`,
+`systemctl stop redis6`, `mv -f` it over `/var/lib/redis6/dump.rdb`, and
+`systemctl start redis6`. Redis must not be using AOF.
+
 ## Alerts
 
 The app's scheduler (`app/scheduler/check-redis-host.js`, every 5 minutes on

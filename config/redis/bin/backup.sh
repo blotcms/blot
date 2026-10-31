@@ -5,7 +5,9 @@
 # old copies. Runs as ec2-user from /etc/cron.d/blot-redis (hourly at :00, daily
 # at 03:05) and uses whatever AWS credentials that user has (instance profile
 # or ~/.aws). After an upload it records it in Redis at blot:redis-host:backup,
-# which the app's daily email reads. BLOT_ROOT prefixes paths, for the tests.
+# which the app's daily email reads. The daily one also goes to an offsite
+# bucket (Backblaze B2) if /etc/blot-redis/offsite-bucket names one. BLOT_ROOT
+# prefixes paths, for the tests.
 set -euo pipefail
 
 KIND=${1:?usage: backup.sh hourly|daily}
@@ -14,6 +16,7 @@ ROOT=${BLOT_ROOT:-}
 RDB=$ROOT/var/lib/redis6/dump.rdb
 LOCAL=$ROOT/backups
 FLOATING_IP=$ROOT/etc/blot-redis/floating-ip
+OFFSITE_FILE=$ROOT/etc/blot-redis/offsite-bucket
 # Save first unless a save finished in the last minute: the backup is then the
 # data as of now rather than as of the last scheduled save (up to ~5 minutes,
 # or an hour on a quiet host, earlier), which bounds a restore's data loss by
@@ -109,6 +112,24 @@ TIMEOUT=$(command -v timeout > /dev/null && echo "timeout 10" || true)
 $TIMEOUT redis6-cli SET blot:redis-host:backup \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ) $KIND $KIND/$NAME.rdb ${bytes:-0}" > /dev/null 2>&1 ||
   log "WARNING: could not record the backup in Redis"
+
+# Daily only, to B2 through the write-only blot-b2 profile (README: Offsite
+# backups). It must never fail the backup or stop the prune: the upload sits in
+# an if, which set -e ignores. No bucket file means offsite is off (drill
+# hosts, hosts without the key). Recorded like the backup, for the daily email.
+if [ "$KIND" = daily ]; then
+  OFFSITE=$(head -n 1 "$OFFSITE_FILE" 2> /dev/null | tr -d '[:space:]') || OFFSITE=
+  if [ -z "$OFFSITE" ]; then
+    log "offsite is off (no bucket in /etc/blot-redis/offsite-bucket)"
+  elif aws --profile blot-b2 s3 cp --only-show-errors "$SOURCE" "$OFFSITE/daily/$NAME.rdb"; then
+    log "uploaded to offsite daily/$NAME.rdb"
+    $TIMEOUT redis6-cli SET blot:redis-host:offsite \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ) daily daily/$NAME.rdb ${bytes:-0}" > /dev/null 2>&1 ||
+      log "WARNING: could not record the offsite backup in Redis"
+  else
+    log "WARNING: offsite upload failed"
+  fi
+fi
 
 # Names sort chronologically, so everything after the newest $KEEP is old.
 log "pruning $BUCKET/$KIND"
