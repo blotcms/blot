@@ -154,7 +154,9 @@ ssh blot 'sudo fail2ban-client status manual-permaban && sudo iptables -S | grep
 
 A /24 (`a.b.c.0/24`), an IPv6 /48, or a single address all work as the
 argument. Unban with `unbanip`. Bans persist across fail2ban restarts
-(`dbpurgeage` is set long in `config/host/fail2ban/fail2ban.local`); only
+(`dbpurgeage` is set long in `config/host/fail2ban/fail2ban.local`, and the
+jail turns off ban-time increment); this was not true before that fix, when a
+restart ended a ban a week after it was added. Only
 restart fail2ban to test that if the operator asks. Moving hosts: see "Moving
 to a new host" in `config/host/README.md`.
 

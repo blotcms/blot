@@ -115,6 +115,32 @@ out=$(remote)
 check "nor do they without /var/www/blot" test -z "$out"
 in_ct 'mv /var/www/blot.away /var/www/blot'
 
+echo "# A permanent ban survives a fail2ban restart"
+# Real fail2ban with the deployed config. Ranges are RFC 5737 and RFC 3849.
+f2b_start() { in_ct 'fail2ban-client -x start > /dev/null 2>&1; for i in $(seq 30); do fail2ban-client ping > /dev/null 2>&1 && exit 0; sleep 1; done; exit 1'; }
+check "bantime.increment is off for manual-permaban and on elsewhere" in_ct '
+  d=$(fail2ban-client -d 2> /dev/null)
+  echo "$d" | grep manual-permaban | grep bantime.increment | grep -q False || exit 1
+  echo "$d" | grep sshd | grep bantime.increment | grep -q True'
+check "fail2ban starts" f2b_start
+in_ct 'fail2ban-client set manual-permaban banip 192.0.2.0/24 > /dev/null && fail2ban-client set manual-permaban banip 2001:db8::/32 > /dev/null'
+check "the bans are listed" in_ct 'fail2ban-client get manual-permaban banned | grep -F 192.0.2.0/24 | grep -qF 2001:db8::/32'
+in_ct 'fail2ban-client stop > /dev/null 2>&1; sleep 1'
+check "fail2ban starts again" f2b_start
+# ping answers before the jail has restored its bans, so give it time, and show
+# why on failure: a real miss must not look like this wait being too short.
+check "both bans are still listed after the restart" in_ct '
+  for i in $(seq 20); do
+    fail2ban-client get manual-permaban banned | grep -F 192.0.2.0/24 | grep -qF 2001:db8::/32 && exit 0
+    sleep 1
+  done
+  fail2ban-client status manual-permaban
+  command -v sqlite3 > /dev/null && sqlite3 /var/lib/fail2ban/fail2ban.sqlite3 "select jail,ip,bantime from bips where jail=\"manual-permaban\""
+  tail -30 /var/log/fail2ban.log
+  exit 1'
+check "and are still permanent in the database" in_ct '! command -v sqlite3 > /dev/null || [ "$(sqlite3 /var/lib/fail2ban/fail2ban.sqlite3 "select count(*) from bips where jail=\"manual-permaban\" and bantime=-1")" = 2 ]'
+in_ct 'fail2ban-client stop > /dev/null 2>&1; rm -f /var/lib/fail2ban/fail2ban.sqlite3'
+
 echo "# Re-running on a live host: instance store mounted, files in place"
 in_ct 'rm /tmp/systemctl.log; chown 1234:1234 /var/instance-ssd/logs /var/instance-ssd/logs/access.log'
 check "deploy.sh runs again, with another DATA_VOLUME_ID" deploy "$TMP/run2" DATA_VOLUME_ID=$OTHER_VOLUME
