@@ -386,17 +386,25 @@ stops the local prune.
   Only" key type also grants delete and lifecycle rights:
   `b2 key create --bucket <bucket> <name> writeFiles,listBuckets`.
 - A separate read key stays on the operator's machine, never on a server. It
-  is what a recovery uses when AWS is unavailable.
+  is what a recovery uses when AWS is unavailable. Create it like the write
+  key, with read capabilities:
+  `b2 key create --bucket <bucket> <name> listBuckets,listFiles,readFiles`.
 - A lifecycle rule hides files after 23 days and deletes them 7 days later, so
   they last about 30 days, for privacy. Nothing prunes them from the host.
 
-To restore from B2 (`restore.sh` reads only S3): with the read key, download
-the newest `daily/*.rdb` (`aws --profile <read-profile> s3 ls s3://<bucket>/daily/`,
-then `s3 cp`), copy it to the new host, and load it as `restore.sh` does:
-check it with `redis-check-rdb` (through a link to `redis6-server`, see Notes),
-then as root `install -o redis6 -g redis6 -m 0644 <file> /var/lib/redis6/dump.rdb.restoring`,
-`systemctl stop redis6`, `mv -f` it over `/var/lib/redis6/dump.rdb`, and
-`systemctl start redis6`. Redis must not be using AOF.
+To restore from B2, with the read key's profile on your machine (here
+`blot-b2-read`, set up like `blot-b2` above), pass the bucket, whose name is
+not in the repo (it is in `/etc/blot-redis/offsite-bucket` on the Redis host):
+
+```
+restore.sh --offsite blot-b2-read s3://<bucket> <ssh-host> latest
+```
+
+`list` and a backup name work as for S3, and `launch.sh --from latest --offsite
+blot-b2-read s3://<bucket>` does the same on a new host. Only `daily/` backups
+are offsite. Your machine lists and downloads the backup, then streams it to
+the host over ssh, so it needs disk space for one backup and the host needs no
+AWS or B2 key. After that it is checked and loaded as with S3.
 
 ## Alerts
 
