@@ -56,7 +56,7 @@ done
 aws_cli() { aws $AWS_PROFILE_ARGS --region "$AWS_REGION" "$@"; }
 
 if [ -n "$LIST" ]; then
-  aws_cli s3 ls --recursive s3://blot-redis-backups/ | grep -E ' (hourly|daily)/.*\.rdb$' | sort
+  aws_cli s3 ls --recursive s3://blot-redis-backups/ | grep -E ' (hourly|daily|weekly)/.*\.rdb$' | sort
   exit 0
 fi
 
