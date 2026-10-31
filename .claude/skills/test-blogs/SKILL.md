@@ -153,3 +153,8 @@ Newest last. Add one dated entry per run.
 - Blogs / content: `skilltest-1792053452/post.md` + `photo.png` (492×507 PNG) on gittest.
 - Result: live after ~3s. The `_image_cache` image and `large` thumbnail returned 200 `image/png`, `public, max-age=31536000, immutable`, `Access-Control-Allow-Origin: *`, with `x-amz-request-id` and `perma-cache: MISS` / `cdn-cache: MISS` on first fetch, so Bunny pulled them from the bucket. `head-object` matched (uploaded 10s before the fetch). The proxy access log had no line for either asset. Cleanup: gone after ~3s.
 - Odd: none.
+
+### 2026-10-31 — cache purge after an edit, following the move to loopback (#2277)
+- Blogs / content: one `post.md`, then an edit, on gittest and dbtest; the same on icloudtest.
+- Result: gittest live after 1s, and with the page cached, the edit showed after 3s. dbtest live after 8s, edit after 8s. Cleanup: gittest gone after 1s. icloudtest had not synced after more than 10 minutes, which the operator says is normal iCloud slowness, so the iCloud lock fix (`31dc193e0`) is unverified.
+- Odd: a delete in a `bash -c` script is stopped by Claude Code's safety check, so the dbtest and icloudtest folders were left for the operator to delete. A 404 from a post that never went live looks the same as a successful removal, so check it was live first.
