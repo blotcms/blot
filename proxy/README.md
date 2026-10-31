@@ -44,7 +44,7 @@ serves any host:
 
 | Variable | Default | |
 | --- | --- | --- |
-| `PROXY_REDIS_HOST` | build-time `REDIS_IP`, else `127.0.0.1` | Redis for certificates and the domain allowlist |
+| `PROXY_REDIS_HOST` | build-time `REDIS_IP`, else `127.0.0.1` | Redis for certificates and the domain allowlist: a host (port 6379) or `unix:/run/blot/redis/redis.sock`, a Unix socket the container must have mounted. A missing socket behaves like an unreachable host: there is no fallback to TCP |
 | `PROXY_SERVER_LABEL` | build-time `SERVER_LABEL`, else `us` | the `Blot-Server` response header |
 | `PROXY_PRIVATE_IP` | build-time `OPENRESTY_INSTANCE_PRIVATE_IP`, else `127.0.0.1` | address of the extra `:8077` cache-purge listener that Node purges through (`BLOT_REVERSE_PROXY_URLS`). Loopback because units use host networking, so Node shares the host's loopback |
 | `PROXY_RESOLVER` | build-time `OPENRESTY_RESOLVER`, else `8.8.8.8 ipv6=off` | DNS resolver (`127.0.0.11` on a user-defined Docker network) |
@@ -380,8 +380,8 @@ Reproducibility relies on pinning, because the upstream toolchain has drifted:
 Open items are tracked in the repo's `TODO` under "Proxy container (OpenResty)"
 and "Proxy container follow-ups". The main ones:
 
-- **Redis auth/TLS**. `config/init.conf` hard-codes port 6379 with no auth;
-  production Redis credentials need wiring.
+- **Redis auth/TLS**. The proxy always connects to port 6379 (or the socket)
+  with no auth; production Redis credentials need wiring.
 - **`fail2ban` / `logrotate`** are host-level in [`config/host`](../config/host); the
   container logs to stdout/stderr by default (so `docker logs` works), but the
   production image is built with `LOG_TO_STDOUT=false` so the host's fail2ban
@@ -419,6 +419,11 @@ and "Proxy container follow-ups". The main ones:
     cache, including after a reload, that a newer certificate in Redis wins
     once it is back, and that `READONLY` / `NOREPLICAS` Redis still serves
     certificates while issuance fails fast.
+    [`e2e/redis-socket-checks.sh`](e2e/redis-socket-checks.sh) then runs the
+    proxy with `PROXY_REDIS_HOST=unix:...` against a Redis that listens only on
+    that socket: it issues a certificate and serves the wildcard one through
+    it, survives Redis restarting, and with the socket missing degrades like
+    an unreachable Redis.
   - `zero-downtime` runs two proxy containers sharing `:80`/`:443` via
     SO_REUSEPORT and asserts no request is dropped while the first is stopped
     with a drain timeout.
