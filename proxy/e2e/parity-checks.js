@@ -735,6 +735,8 @@ function label(spec) {
 // only serve hits (nothing is published) pass 0.
 async function runPass(name, specs, { settleMs = 40, only, skipSSE } = {}) {
   let count = 0;
+  const timed = [];
+  const passStart = Date.now();
   for (const spec of specs) {
     if (only && !only(spec)) continue;
     if (skipSSE && spec.sse) continue;
@@ -748,6 +750,7 @@ async function runPass(name, specs, { settleMs = 40, only, skipSSE } = {}) {
       send(B, spec).catch((e) => ((eb = e), null)),
     ]);
     count++;
+    if (ra && rb) timed.push([Math.max(ra.ms, rb.ms), spec.id]);
     if (!ra || !rb) {
       // both failing the same way is parity (a connection closed by 444)
       const same = !ra && !rb && String(ea && ea.message) === String(eb && eb.message);
@@ -758,7 +761,9 @@ async function runPass(name, specs, { settleMs = 40, only, skipSSE } = {}) {
     results.push({ pass: name, spec, diffs, ra, rb });
     if (!spec.sse && (spec.method || "GET") === "GET") await sleep(settleMs);
   }
-  console.log(`  pass ${name}: ${count} requests`);
+  timed.sort((a, b) => b[0] - a[0]);
+  const slowest = timed.slice(0, 3).map(([ms, id]) => `${ms}ms ${id}`).join("; ");
+  console.log(`  pass ${name}: ${count} requests in ${Math.round((Date.now() - passStart) / 1000)} s, ${timed.reduce((n, t) => n + t[0], 0)} ms in requests; slowest: ${slowest}`);
 }
 
 // Classify each difference: intended (by rule) or not

@@ -22,7 +22,9 @@ env:
   # The compiled stages of the proxy image come from here (proxy/build/image.sh);
   # unit-image.yml writes it on master. Layers are arm64, as production.
   PROXY_IMAGE_CACHE: ghcr.io/blotcms/blot:cache-proxy-arm64
-  BLOT_HOST: localhost
+  # The unit image's proxy config is generated for blot.im when the image is built, so
+  # the unit serves the site as blot.im; the proxy image built here is for localhost.
+  BLOT_HOST: ${{ (github.event_name == 'push' || github.head_ref == 'claude/ci-smoke-deployed-image') && 'blot.im' || 'localhost' }}
   BLOT_REPO: ${{ github.workspace }}
   # Skip the BunnyCDN edge-IP fetch so image builds stay hermetic. Local and
   # deploy generates still fetch by default (see proxy/build/index.js).
