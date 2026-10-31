@@ -91,10 +91,10 @@ function container({ env = process.env, config }) {
 
     server_label: placeholder("PROXY_SERVER_LABEL"),
 
-    // Address of the extra :8077 listener for the cache purge endpoint. The
-    // Node containers sit on a Docker bridge and cannot reach the host's
-    // 127.0.0.1:80, so they purge through the host's private address instead
-    // (BLOT_REVERSE_PROXY_URLS). Loopback when unset: nothing else can use it.
+    // Address of the extra :8077 listener for the cache purge endpoint. Node
+    // purges through it (BLOT_REVERSE_PROXY_URLS). Units run with host
+    // networking, so this is loopback in production. Loopback when unset:
+    // nothing else can use it.
     openresty_instance_private_ip: placeholder("PROXY_PRIVATE_IP"),
 
     resolver: placeholder("PROXY_RESOLVER"),
