@@ -3,6 +3,7 @@
 tests/
 build/index.js
 build/build.sh
+build/image.sh
 build/locals.js
 build/data/*-previous-*
 *.md

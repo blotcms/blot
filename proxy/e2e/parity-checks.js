@@ -106,7 +106,7 @@ function buildImage(tree, tag) {
       NODE_PATH: path.join(gen, "node_modules") + ":" + path.join(tree, "app"),
     },
   });
-  execFileSync("docker", ["build", "-f", "proxy/Dockerfile", "-t", tag, "proxy/"], { cwd: tree, stdio: "ignore" });
+  execFileSync("bash", [path.join(REPO, "proxy/build/image.sh"), tag], { cwd: tree, stdio: "ignore" });
 }
 
 function buildImages() {
