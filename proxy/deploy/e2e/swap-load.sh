@@ -61,7 +61,7 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 DEPLOY_USER=sl-deploy
 if [ "${DEPLOY_AS_ROOT:-0}" != 1 ]; then
   echo "t0 $(date +%T)"
-  id "$DEPLOY_USER" >/dev/null 2>&1 || as_root useradd -m -G docker "$DEPLOY_USER"
+  id "$DEPLOY_USER" >/dev/null 2>&1 || as_root useradd -l -m -G docker "$DEPLOY_USER"
   echo "useradd $(date +%T)"
   # the harness' certificate and env files, readable as production's are for its deploy user
   as_root chmod -R a+rX "$E2E_ROOT"
