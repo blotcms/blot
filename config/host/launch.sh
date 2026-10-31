@@ -20,8 +20,12 @@
 #   --ssh-port N           the port sshd listens on (or BLOT_SSH_PORT). Set in user data, so
 #                          the first connection already uses it: the security group may not
 #                          allow 22. Passed on to bootstrap.sh
-#   --deploy-public-key FILE  the deploy user's ssh public key (or BLOT_DEPLOY_PUBLIC_KEY,
-#                          holding the key itself); passed on to bootstrap.sh
+#   --deploy-public-key FILE  the deploy user's ssh public key, passed on to bootstrap.sh.
+#                          Found in this order: the flag, BLOT_DEPLOY_PUBLIC_KEY (the key
+#                          itself), ~/.ssh/blot-deploy.pub, then the BLOT_DEPLOY_PUBLIC_KEY
+#                          variable of the GitHub deploy environment (gh). Only the source
+#                          is printed. None found is an error, except with --drill or
+#                          --dry-run (which never asks gh)
 #   --root-gb N            root volume size in GB, gp3 (default 200: the Redis RDB and a spare copy)
 #   --instance-profile NAME  IAM instance profile (default none)
 #   --user USER            SSH user (default ec2-user)
@@ -53,7 +57,8 @@ REDIS_SECURITY_GROUP=sg-0b3b200323d36ce2e
 PROVISIONED_BY=config/host/launch.sh
 
 TYPE=""; KEY_NAME=${BLOT_HOST_KEY_NAME:-}; KEY=${BLOT_HOST_SSH_KEY:-}; REDIS_MAXMEMORY=${REDIS_MAXMEMORY:-}
-SSH_PORT=${BLOT_SSH_PORT:-}; DEPLOY_KEY=${BLOT_DEPLOY_PUBLIC_KEY:-}
+SSH_PORT=${BLOT_SSH_PORT:-}; DEPLOY_KEY=${BLOT_DEPLOY_PUBLIC_KEY:-}; DEPLOY_KEY_SOURCE=""
+[ -z "$DEPLOY_KEY" ] || DEPLOY_KEY_SOURCE="BLOT_DEPLOY_PUBLIC_KEY in the environment"
 ROOT_GB=200; INSTANCE_PROFILE=""; SSH_USER=ec2-user
 DRY_RUN=""; DRILL=""; LIST=""
 AWS_REGION=${AWS_REGION:-us-west-2}; AWS_PROFILE_ARGS=""; EXTRA_TAGS=""
@@ -68,7 +73,7 @@ while [ $# -gt 0 ]; do
     --ssh-port) SSH_PORT=$2; shift 2 ;;
     --deploy-public-key)
       [ -f "$2" ] || die "no such file: $2"
-      DEPLOY_KEY=$(cat "$2"); shift 2 ;;
+      DEPLOY_KEY=$(cat "$2"); DEPLOY_KEY_SOURCE="--deploy-public-key $2"; shift 2 ;;
     --root-gb) ROOT_GB=$2; shift 2 ;;
     --instance-profile) INSTANCE_PROFILE=$2; shift 2 ;;
     --user) SSH_USER=$2; shift 2 ;;
@@ -100,6 +105,26 @@ fi
 [ -z "$KEY" ] || [ -f "$KEY" ] || die "no such key file: $KEY"
 [ -z "$SSH_PORT" ] || [[ $SSH_PORT =~ ^[0-9]+$ ]] || die "--ssh-port takes a port number"
 [[ $ROOT_GB =~ ^[0-9]+$ ]] || die "--root-gb takes a number"
+
+# The deploy key must outlive the host, so it lives outside the repo: find it
+# before launching anything. gh failing is not fatal, only finding nothing is.
+if [ -z "$DEPLOY_KEY" ] && [ -f "$HOME/.ssh/blot-deploy.pub" ]; then
+  DEPLOY_KEY=$(cat "$HOME/.ssh/blot-deploy.pub") || DEPLOY_KEY=""
+  DEPLOY_KEY_SOURCE="~/.ssh/blot-deploy.pub"
+fi
+if [ -z "$DEPLOY_KEY" ] && [ -z "$DRY_RUN" ] && command -v gh > /dev/null; then
+  DEPLOY_KEY=$(gh variable get BLOT_DEPLOY_PUBLIC_KEY --env deploy --repo blotcms/blot 2> /dev/null) || DEPLOY_KEY=""
+  DEPLOY_KEY_SOURCE="the GitHub deploy environment (gh)"
+fi
+if [ -n "$DEPLOY_KEY" ]; then
+  [[ $DEPLOY_KEY != *$'\n'* && ($DEPLOY_KEY == ssh-* || $DEPLOY_KEY == ecdsa-*) ]] ||
+    die "the deploy public key from $DEPLOY_KEY_SOURCE is not one line starting ssh- or ecdsa-"
+  echo "Deploy public key: $DEPLOY_KEY_SOURCE"
+elif [ -n "$DRILL" ] || [ -n "$DRY_RUN" ]; then
+  echo "No deploy public key found: continuing without one"
+else
+  die "no deploy public key: pass --deploy-public-key, set BLOT_DEPLOY_PUBLIC_KEY, create ~/.ssh/blot-deploy.pub, or set the BLOT_DEPLOY_PUBLIC_KEY variable in the GitHub deploy environment (see config/host/README.md)"
+fi
 
 AMI=$(aws_cli ssm get-parameter --name "$AMI_PARAMETER" --query Parameter.Value --output text)
 echo "AMI: $AMI"

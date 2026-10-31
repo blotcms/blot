@@ -45,18 +45,32 @@ ssh ec2-user@YOUR_EC2_HOST
 sudo bash /tmp/setup-deploy-user.sh "$(cat deploy-key.pub)"
 ```
 
-### 3. Add GitHub Secrets
+### 3. Keep the public key outside the host
+
+The host can be lost, and `config/host/launch.sh` needs the public key to set up
+the next one. It is not committed. Keep it at `~/.ssh/blot-deploy.pub` and in
+the GitHub `deploy` environment as a variable (not a secret: secrets can't be
+read back):
+
+```bash
+cp deploy-key.pub ~/.ssh/blot-deploy.pub
+gh variable set BLOT_DEPLOY_PUBLIC_KEY --env deploy --repo blotcms/blot < ~/.ssh/blot-deploy.pub
+```
+
+Rotating `BLOT_DEPLOY_SSH_KEY` means updating both.
+
+### 4. Add GitHub Secrets
 
 1. **DEPLOY_SSH_KEY**: Content of `deploy-key` (private key)
 2. **EC2_HOST**: Your EC2 hostname/IP
 
-### 4. Test
+### 5. Test
 
 ```bash
 ssh -i deploy-key deploy@YOUR_EC2_HOST "docker ps"
 ```
 
-### 5. Deploy via GitHub Actions
+### 6. Deploy via GitHub Actions
 
 Go to Actions → Deploy to EC2 → Run workflow
 
@@ -115,7 +129,20 @@ ssh -i deploy-key deploy@YOUR_EC2_HOST "docker ps"
 
 You should see Docker containers listed. The deploy user can execute any command.
 
-#### 4. Configure GitHub Secrets
+#### 4. Store the public key outside the host
+
+So `config/host/launch.sh` can set up a replacement host, keep `deploy-key.pub`
+at `~/.ssh/blot-deploy.pub` and in the GitHub `deploy` environment as a variable
+(not a secret, which can't be read back):
+
+```bash
+cp deploy-key.pub ~/.ssh/blot-deploy.pub
+gh variable set BLOT_DEPLOY_PUBLIC_KEY --env deploy --repo blotcms/blot < ~/.ssh/blot-deploy.pub
+```
+
+Rotating `BLOT_DEPLOY_SSH_KEY` must update both.
+
+#### 5. Configure GitHub Secrets
 
 Add the following secrets to your GitHub repository:
 
