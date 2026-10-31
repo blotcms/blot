@@ -99,7 +99,26 @@ a new host run `deploy.sh` directly, as that prints it: `npm run deploy-host`
 sources the production host's `PUBLIC_IP` over the one you set. Run it with
 `--dry-run` first to see the `run-instances` call, `--drill` for a throwaway, `--list` for the hosts it has launched. The key pair name, key
 and port can be set as `BLOT_HOST_KEY_NAME`, `BLOT_HOST_SSH_KEY` and
-`BLOT_SSH_PORT`. To run only the OS setup on an existing host:
+`BLOT_SSH_PORT`.
+
+The `deploy` user's ssh public key is not in the repo. `launch.sh` finds it,
+first match wins, in `--deploy-public-key FILE`, `BLOT_DEPLOY_PUBLIC_KEY` (the
+key itself), `~/.ssh/blot-deploy.pub`, and the `BLOT_DEPLOY_PUBLIC_KEY`
+variable of the GitHub `deploy` environment (read with `gh`). It prints which
+one it used, never the key, and stops if the key is not one `ssh-` or `ecdsa-`
+line. With none found a real launch stops, since the Deploy workflow could not
+reach the host; `--drill` and `--dry-run` go on without. If
+`~/.ssh/blot-deploy.pub` is lost:
+
+```
+gh variable get BLOT_DEPLOY_PUBLIC_KEY --env deploy --repo blotcms/blot > ~/.ssh/blot-deploy.pub
+```
+
+If both are lost, derive it from the private key (`ssh-keygen -y -f <key>`) or
+copy it from the live host's `/home/deploy/.ssh/authorized_keys`, then store it
+in both places again (see `scripts/deploy/README.md`).
+
+To run only the OS setup on an existing host:
 
 ```
 REDIS_MAXMEMORY=... BLOT_SSH_PORT=... BLOT_DEPLOY_PUBLIC_KEY="ssh-..." config/host/bootstrap.sh <ssh-host>
