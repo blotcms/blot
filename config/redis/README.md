@@ -10,7 +10,7 @@ vCPU) running Amazon Linux 2023 arm64 and `redis6` 6.2.x, with ssh on port 22,
 key-only. Its primary private IP is 172.30.0.163, but nothing connects to
 that: the app containers (`BLOT_REDIS_HOST`), the OpenResty proxy (`REDIS_IP`)
 and the certificate scripts all use the floating private IP 172.30.0.200,
-which `cutover.sh` moves between hosts. Hourly and daily RDB backups go to
+which `cutover.sh` moves between hosts. Hourly, daily and weekly RDB backups go to
 `s3://blot-redis-backups` from `/etc/cron.d/blot-redis`, and only on the host
 marked by `/etc/blot-redis/floating-ip`. To resize, launch a replica of the
 live host on a new instance type and cut over to it (see "Increasing the Redis
@@ -28,7 +28,7 @@ server size"). The hand-built host that served Redis until 8 Oct 2026 is gone.
 | `readonly.sh <ssh-host> on\|off` | Refuse or accept writes (`min-replicas-to-write` 99 / 0). |
 | `host/setup.sh` | Root-side setup: packages, config, sysctls, systemd units, cron. |
 | `host/mount-instance-store.sh` | Mounts the NVMe instance store at `/backups` (a bind mount of a directory of the app's instance store on a combined host). |
-| `bin/backup.sh` | Hourly and daily backup to S3 (cron). |
+| `bin/backup.sh` | Hourly, daily and weekly backup to S3 (cron). |
 | `bin/redis-mem-log.sh`, `bin/tcpmem-log.sh` | Memory logging every 5 minutes (cron). |
 
 `SSH_OPTS` (for example `SSH_OPTS="-i $HOME/key.pem"`) adds ssh options to
@@ -52,7 +52,7 @@ Redis host, `blot` the app host).
    throwaway host (a rehearsal, a restore test): it is named `drill-redis-*`,
    tagged `BlotDrill=true`, and gets `/etc/blot-redis/drill` before bootstrap,
    which stops `backup.sh` from ever uploading from it, even after a rehearsal
-   cutover marks it active (otherwise it would overwrite and prune the
+   cutover marks it active (otherwise it would add its own copies to the
    production backups). `cutover.sh` warns when the new host is a drill host.
 2. `./bootstrap.sh ec2-user@<ip>`
 3. `./restore.sh ec2-user@<ip> latest` (add `--reference <current-redis-host>`
@@ -301,7 +301,7 @@ resized in place.
   long start/stop timeouts). It is named `zz-` so it sorts after the package's
   `limit.conf`, which would otherwise win.
 - `/etc/cron.d/blot-redis`, as `ec2-user`: backups (hourly at :00, daily at
-  03:05, log in `~/backup.log`, truncated monthly) and the two monitoring
+  03:05, weekly on Sundays at 03:35, log in `~/backup.log`, truncated monthly) and the two monitoring
   scripts every 5 minutes (`~/tcpmem.log`, `~/redis-mem.log`).
 - journald `SystemMaxUse=100M`, logrotate for `/var/log/redis6`.
 - `/etc/ssh/sshd_config.d/10-blot.conf`: key-only ssh (`PasswordAuthentication no`,
@@ -328,19 +328,68 @@ unit.
 
 `bin/backup.sh` copies the RDB to `/backups` (local copies only; the instance
 store is wiped on stop) and uploads to
-`s3://blot-redis-backups/{hourly,daily}/<YYYY-MM-DD-hour-HH>.rdb`, keeping the
-6 newest hourly, 7 newest daily and 10 local copies. It runs `BGSAVE` first unless
+`s3://blot-redis-backups/{hourly,daily,weekly}/<YYYY-MM-DD-hour-HH>.rdb`, and
+keeps the 10 newest local copies. The hourly runs at :00, the daily at 03:05 and
+the weekly on Sundays at 03:35. Retention is the bucket's lifecycle rules, not
+the script: `hourly/` expires after 1 day, `daily/` after 7 and `weekly/` after
+30, so nothing lives past about a month (which also bounds how long deleted
+content survives). `backup.sh` never deletes from S3, and its uploads are
+write-once (`aws s3 cp --no-overwrite`, which needs a recent AWS CLI: check
+`aws s3 cp help | grep no-overwrite` on the host, since an older CLI fails every
+backup), so the host needs `s3:PutObject` only and a rerun within the same hour
+leaves the first copy. It runs `BGSAVE` first unless
 a save finished in the last minute, so a backup holds the data as of its
 upload and a restore loses at most the time since then. It exits quietly without uploading on a drill host
 (`/etc/blot-redis/drill`, from `launch.sh --drill`), or unless
 the host is a master that accepts writes, `/etc/blot-redis/floating-ip` exists,
 and the address in it is on the host. That file is written at cutover, so a
-new or restored host never uploads (or prunes) alongside the live one. It works with an instance profile or keys in `~ec2-user/.aws`.
+new or restored host never uploads alongside the live one. It works with an instance profile or keys in `~ec2-user/.aws`.
 
-After each upload it stores `<iso-time> <hourly|daily> <s3-key> <bytes>` in the
+After each upload it stores `<iso-time> <hourly|daily|weekly> <s3-key> <bytes>` in the
 Redis key `blot:redis-host:backup` (no TTL), which the daily email shows as the
 time since the last backup. Like the sample below, it is best effort: a refused
 write never fails the backup.
+
+### Offsite backups
+
+The daily backup is also uploaded to a private Backblaze B2 bucket, so losing
+the AWS account or region does not take the backups with it. `backup.sh` does
+it after the S3 upload and records it in `blot:redis-host:offsite` (same format
+as the backup key); the daily email shows it and flags it after 2 days. A B2
+failure only logs a WARNING in `~/backup.log`: it never fails the backup or
+stops the local prune.
+
+- `/etc/blot-redis/offsite-bucket` holds one line, `s3://<bucket>`. The bucket
+  name is not in the repo. Without the file (or empty), offsite is off, which
+  is how drill hosts and hosts without the key stay inert.
+- `~ec2-user/.aws` has a `blot-b2` profile (placeholders):
+  ```
+  # config
+  [profile blot-b2]
+  region = <b2-region>
+  endpoint_url = https://s3.<b2-region>.backblazeb2.com
+  request_checksum_calculation = when_required
+
+  # credentials
+  [blot-b2]
+  aws_access_key_id = <key id>
+  aws_secret_access_key = <key>
+  ```
+- The key can only write. Create it with the CLI, because the console's "Write
+  Only" key type also grants delete and lifecycle rights:
+  `b2 key create --bucket <bucket> <name> writeFiles,listBuckets`.
+- A separate read key stays on the operator's machine, never on a server. It
+  is what a recovery uses when AWS is unavailable.
+- A lifecycle rule hides files after 23 days and deletes them 7 days later, so
+  they last about 30 days, for privacy. Nothing prunes them from the host.
+
+To restore from B2 (`restore.sh` reads only S3): with the read key, download
+the newest `daily/*.rdb` (`aws --profile <read-profile> s3 ls s3://<bucket>/daily/`,
+then `s3 cp`), copy it to the new host, and load it as `restore.sh` does:
+check it with `redis-check-rdb` (through a link to `redis6-server`, see Notes),
+then as root `install -o redis6 -g redis6 -m 0644 <file> /var/lib/redis6/dump.rdb.restoring`,
+`systemctl stop redis6`, `mv -f` it over `/var/lib/redis6/dump.rdb`, and
+`systemctl start redis6`. Redis must not be using AOF.
 
 ## Alerts
 
@@ -354,7 +403,10 @@ the master) emails the admin address `REDIS_HOST_ALERT` when:
 - `maxmemory` is 0 on a host marked active by `/etc/blot-redis/floating-ip`;
 - the TCP memory sample is over 20 minutes old;
 - the last background save failed (`stop-writes-on-bgsave-error yes`, so Redis
-  refuses every write until one succeeds).
+  refuses every write until one succeeds);
+- the last backup in `blot:redis-host:backup` is over 3 hours old, or the last
+  offsite one in `blot:redis-host:offsite` over 50 hours (two missed runs). A
+  missing key is quiet, an unreadable value alerts.
 
 It also emails what happened since its last check (it keeps Redis's counters in
 the state key below, and starts again after a restart): errors that mean Redis
@@ -412,8 +464,8 @@ profile. For `cutover.sh`: `sts:GetCallerIdentity`,
 `ec2:DescribeNetworkInterfaces` (needs `Resource: "*"`) and
 `ec2:AssignPrivateIpAddresses` (can be scoped to the two network interfaces'
 ARNs, or by tag). For the Redis host (instance profile, or keys in `~ec2-user/.aws`): `s3:ListBucket` on `blot-redis-backups`, `s3:GetObject`
-on `hourly/*` and `daily/*` (restore), and `s3:PutObject` and `s3:DeleteObject`
-on the same (backups).
+on `hourly/*`, `daily/*` and `weekly/*` (restore), and `s3:PutObject` on the same
+(backups; no delete or overwrite rights are needed).
 
 ## Still manual
 

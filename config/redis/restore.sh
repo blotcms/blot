@@ -28,7 +28,7 @@ case "$WHICH$REFERENCE" in *[!A-Za-z0-9._:/-]*) die "unexpected characters in ar
 
 # Every backup in the bucket, oldest first: "<date> <time> <size> <key>".
 listing=$(ssh_run "$HOST" "aws s3 ls --recursive s3://$BUCKET/ | sort") || die "could not list s3://$BUCKET (does $HOST have AWS credentials?)"
-listing=$(echo "$listing" | grep -E ' (hourly|daily)/.*\.rdb$' || true)
+listing=$(echo "$listing" | grep -E ' (hourly|daily|weekly)/.*\.rdb$' || true)
 [ -n "$listing" ] || die "no backups found in s3://$BUCKET"
 
 if [ "$WHICH" = list ]; then
@@ -39,12 +39,12 @@ fi
 if [ "$WHICH" = latest ]; then
   KEY=$(echo "$listing" | tail -n 1 | awk '{print $4}')
 else
-  # Accept "NAME", "NAME.rdb", "hourly/NAME" or "daily/NAME"; if a bare name is in both folders take the newer.
+  # Accept "NAME", "NAME.rdb", "hourly/NAME", "daily/NAME" or "weekly/NAME"; if a bare name is in both folders take the newer.
   name=${WHICH%.rdb}
   KEY=$(echo "$listing" | awk '{print $4}' | grep -E "(^|/)$name\.rdb\$" | tail -n 1 || true)
   [ -n "$KEY" ] || die "no backup called $WHICH (try: restore.sh $HOST list)"
 fi
-echo "$KEY" | grep -qE '^(hourly|daily)/[A-Za-z0-9._-]+\.rdb$' || die "unexpected backup key: $KEY"
+echo "$KEY" | grep -qE '^(hourly|daily|weekly)/[A-Za-z0-9._-]+\.rdb$' || die "unexpected backup key: $KEY"
 echo "Backup: s3://$BUCKET/$KEY"
 
 # The target must be ready, and must not be using AOF (it would load that

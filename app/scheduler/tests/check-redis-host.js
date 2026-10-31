@@ -6,12 +6,15 @@ describe("scheduler check-redis-host", function () {
     parseSample,
     parseMemory,
     SAMPLE_KEY,
+    BACKUP_KEY,
+    OFFSITE_KEY,
     STATE_KEY,
     CONDITION_MIN_INTERVAL,
     EVENT_COOLDOWN,
   } = run;
 
   const MINUTE = 60 * 1000;
+  const HOUR = 60 * MINUTE;
   const GB = 1024 * 1024 * 1024;
   const NOW = Date.UTC(2026, 9, 7, 12, 2);
 
@@ -133,6 +136,13 @@ describe("scheduler check-redis-host", function () {
       },
     };
   }
+
+  // A value as config/redis/bin/backup.sh stores it
+  const backupLine = (time, kind = "hourly") => `${stamp(time)} ${kind} ${kind}/2026-10-07-hour-09.rdb 1234`;
+  const withBackups = (h, { backup, offsite }) => {
+    if (backup !== undefined) h.client.store.set(BACKUP_KEY, backup);
+    if (offsite !== undefined) h.client.store.set(OFFSITE_KEY, offsite);
+  };
 
   const titles = (v) => v.alerts.map((a) => a.title);
 
@@ -315,6 +325,80 @@ describe("scheduler check-redis-host", function () {
     });
   });
 
+  describe("stale backups", function () {
+    const title = (name) => ({ backup: "Redis backup stale", offsite: "Offsite Redis backup stale" })[name];
+
+    it("stays quiet with fresh backups, or with no keys at all", async function () {
+      const h = harness();
+      await h.tick();
+      withBackups(h, { backup: backupLine(NOW - 2 * HOUR), offsite: backupLine(NOW - 49 * HOUR, "daily") });
+      await h.tick();
+
+      expect(h.sent).toEqual([]);
+      expect(h.state.alerts).toEqual({});
+    });
+
+    it("alerts past 3 hours, says how old and what to look at, and clears on a fresh value", async function () {
+      const h = harness();
+      withBackups(h, { backup: backupLine(NOW - 4 * HOUR) });
+      await h.tick();
+
+      expect(h.sent.map(titles)).toEqual([[title("backup")]]);
+      expect(h.sent[0].alerts[0].message).toContain("the last backup was 4 hours ago");
+      expect(h.sent[0].alerts[0].message).toContain("~/backup.log");
+
+      h.advance(CONDITION_MIN_INTERVAL);
+      h.sample = sampleLine({ time: h.now - MINUTE });
+      withBackups(h, { backup: backupLine(h.now - 5 * MINUTE) });
+      await h.tick();
+
+      expect(h.sent.length).toBe(2);
+      expect(h.sent[1].recovered.map((r) => r.title)).toEqual([title("backup")]);
+      expect(h.state.alerts).toEqual({});
+    });
+
+    it("alerts the offsite copy past 50 hours, and says S3 may be fine", async function () {
+      const h = harness();
+      withBackups(h, { backup: backupLine(NOW - 5 * MINUTE), offsite: backupLine(NOW - 51 * HOUR, "daily") });
+      await h.tick();
+
+      expect(h.sent.map(titles)).toEqual([[title("offsite")]]);
+      const message = h.sent[0].alerts[0].message;
+      expect(message).toContain("the last offsite backup (to Backblaze B2) was 51 hours ago");
+      expect(message).toContain("blot-b2");
+      expect(message).toContain("/etc/blot-redis/offsite-bucket");
+      expect(message).toContain("does not mean the S3 backups stopped");
+
+      h.advance(CONDITION_MIN_INTERVAL);
+      h.sample = sampleLine({ time: h.now - MINUTE });
+      withBackups(h, { offsite: backupLine(h.now - 2 * HOUR, "daily") });
+      await h.tick();
+      expect(h.sent[1].recovered.map((r) => r.title)).toEqual([title("offsite")]);
+    });
+
+    it("judges the two independently", async function () {
+      const h = harness();
+      withBackups(h, { backup: backupLine(NOW - 4 * HOUR), offsite: backupLine(NOW - HOUR, "daily") });
+      await h.tick();
+      expect(Object.keys(h.state.alerts)).toEqual(["backup-stale"]);
+
+      withBackups(h, { backup: backupLine(h.now - MINUTE), offsite: backupLine(h.now - 60 * HOUR, "daily") });
+      h.advance(CONDITION_MIN_INTERVAL);
+      h.sample = sampleLine({ time: h.now - MINUTE });
+      await h.tick();
+      expect(Object.keys(h.state.alerts)).toEqual(["offsite-stale"]);
+    });
+
+    it("alerts on a value that cannot be read", async function () {
+      const h = harness();
+      withBackups(h, { backup: "garbage" });
+      await h.tick();
+
+      expect(h.sent.map(titles)).toEqual([[title("backup")]]);
+      expect(h.sent[0].alerts[0].message).toContain("can't be read");
+    });
+  });
+
   describe("maxmemory", function () {
     it("alerts once at 80%, then once below 75%", async function () {
       const h = harness({ memory: { used: 8 * GB, maxmemory: 10 * GB } });
@@ -390,6 +474,8 @@ describe("scheduler check-redis-host", function () {
         tcpMem: "50%",
         maxmemory: "80%",
         stale: "20 minutes",
+        backup: "3 hours",
+        offsite: "50 hours",
         errors: 100,
         slowlog: "50ms",
         fork: "500ms",

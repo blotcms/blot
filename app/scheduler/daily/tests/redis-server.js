@@ -1,5 +1,5 @@
 const redisServer = require("../redis-server");
-const { collect, line, parseBackup, BACKUP_KEY, MEMORY_HISTORY_KEY, DISK_HISTORY_KEY, RESIZE_URL } = redisServer;
+const { collect, line, parseBackup, BACKUP_KEY, OFFSITE_KEY, MEMORY_HISTORY_KEY, DISK_HISTORY_KEY, RESIZE_URL } = redisServer;
 const { SAMPLE_KEY } = require("../../check-redis-host");
 
 describe("scheduler/daily/redis-server", function () {
@@ -64,10 +64,11 @@ describe("scheduler/daily/redis-server", function () {
   const snapshotLine = ({ age = DAY, memory = 2.9 * GB } = {}) => historyLine([age, memory]);
 
   // The parts of the Redis client the module uses
-  function fakeRedis({ sample = sampleLine(), backup = backupLine(), memory = info(), snapshot = null, disk = null } = {}) {
+  function fakeRedis({ sample = sampleLine(), backup = backupLine(), offsite = null, memory = info(), snapshot = null, disk = null } = {}) {
     const store = new Map();
     if (sample !== null) store.set(SAMPLE_KEY, sample);
     if (backup !== null) store.set(BACKUP_KEY, backup);
+    if (offsite !== null) store.set(OFFSITE_KEY, offsite);
     if (snapshot !== null) store.set(MEMORY_HISTORY_KEY, snapshot);
     if (disk !== null) store.set(DISK_HISTORY_KEY, disk);
     return {
@@ -272,6 +273,33 @@ describe("scheduler/daily/redis-server", function () {
         key: "hourly/2026-10-08-hour-06.rdb",
         bytes: 1234,
       });
+    });
+  });
+
+  describe("offsite backup", function () {
+    it("says how long ago, after the backup", async function () {
+      expect(await render({ offsite: backupLine({ age: 5 * HOUR, kind: "daily" }) })).toEndWith(
+        "backed up 30m ago, offsite 5h ago"
+      );
+    });
+
+    it("flags it after two days", async function () {
+      expect(await render({ offsite: backupLine({ age: 2 * DAY, kind: "daily" }) })).toEndWith(
+        "offsite 2d ago"
+      );
+      expect(await render({ offsite: backupLine({ age: 3 * DAY, kind: "daily" }) })).toEndWith(
+        "**last offsite backup 3d ago, overdue**"
+      );
+    });
+
+    it("flags a value that cannot be read", async function () {
+      expect(await render({ offsite: "garbage" })).toEndWith("**offsite backup unreadable**");
+    });
+
+    it("shows nothing where offsite is not configured", async function () {
+      const result = await render({});
+      expect(result).toEndWith("backed up 30m ago");
+      expect(result).not.toContain("offsite");
     });
   });
 

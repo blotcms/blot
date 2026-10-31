@@ -121,6 +121,7 @@ SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 0 * * * * $BACKUP_USER /usr/local/bin/backup.sh hourly >> /home/$BACKUP_USER/backup.log 2>&1
 5 3 * * * $BACKUP_USER /usr/local/bin/backup.sh daily >> /home/$BACKUP_USER/backup.log 2>&1
+35 3 * * 0 $BACKUP_USER /usr/local/bin/backup.sh weekly >> /home/$BACKUP_USER/backup.log 2>&1
 0 0 1 * * $BACKUP_USER : > /home/$BACKUP_USER/backup.log
 */5 * * * * $BACKUP_USER /usr/local/bin/tcpmem-log.sh
 */5 * * * * $BACKUP_USER /usr/local/bin/redis-mem-log.sh
