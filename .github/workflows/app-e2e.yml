@@ -187,7 +187,12 @@ jobs:
 
       - name: Stack logs
         if: always()
-        run: docker compose -f "$E2E_COMPOSE_FILE" logs --no-color --tail 300 || true
+        run: |
+          docker compose -f "$E2E_COMPOSE_FILE" logs --no-color --tail 300 || true
+          # the unit's OpenResty writes its logs to files, not stdout
+          if [ "$E2E_UNIT" = true ]; then
+            docker compose -f "$E2E_COMPOSE_FILE" exec -T app sh -c 'echo "--- error.log"; tail -n 60 /var/log/openresty/error.log; echo "--- access.log"; tail -n 80 /var/log/openresty/access.log' || true
+          fi
 
       - name: Tear down
         if: always()
