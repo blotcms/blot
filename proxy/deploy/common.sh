@@ -265,8 +265,8 @@ reset_cache_dir() { # reset_cache_dir <host dir> <image>
 #     so two units never both want 8080
 #   - no blotnet: the airlock is reached on 127.0.0.1 at this unit's own ports
 #     (ensure_airlock)
-#   - the host's Redis, DNS and purge listener (BLOT_REVERSE_PROXY_URLS, the
-#     private address of the host) are reached directly
+#   - the host's Redis, DNS and purge listener (BLOT_REVERSE_PROXY_URLS, on
+#     the host's loopback) are reached directly
 #   - the container shares the host's loopback, so nothing else may bind the
 #     ports above
 # The env files: secrets.env (what Node gets), then proxy.env,
@@ -410,10 +410,10 @@ ensure_airlock() { # ensure_airlock <unit>
 
 # Render the image's config with this host's settings and have nginx parse it.
 # Only the certificate directory is mounted: the check must not touch the live
-# cache or logs. `openresty -t` can bind the listeners, and on the Docker bridge
-# the purge listener's PROXY_PRIVATE_IP is not a local address (prod: "bind()
-# ... failed (99: Address not available)"), so allow non-local binds in the
-# container's own network namespace.
+# cache or logs. `openresty -t` can bind the listeners, and this check runs on
+# the default bridge, where a PROXY_PRIVATE_IP that is not loopback is not a
+# local address (prod: "bind() ... failed (99: Address not available)"), so
+# allow non-local binds in the container's own network namespace.
 validate_image() { # validate_image <image>
   docker run --rm --entrypoint bash \
     --sysctl net.ipv4.ip_nonlocal_bind=1 \
@@ -654,8 +654,8 @@ purge_urls() {
   echo "$urls" | tr ',' '\n' | sed '/^$/d'
 }
 
-# Blot purges the proxy cache from inside its Node process, at the listener on
-# the host's private address (:8077). The probe sends the unit's own
+# Blot purges the proxy cache from inside its Node process, at the purge
+# listener (:8077, PROXY_PRIVATE_IP on the host's loopback in production). The probe sends the unit's own
 # BLOT_PURGE_TOKEN (as the app does) to the listener's root: an
 # authorised request gets the listener's 404, an unreachable address or a
 # rejected token (403, a token mismatch between Node and the proxy) fails.
