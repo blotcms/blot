@@ -4,7 +4,12 @@ name: integration
 # nothing here is deployed.
 #
 #  proxy-behaviour : the built image vs a stub upstream (routing, caching,
-#                    gzip, hardening). Proves the generated production config.
+#                    gzip, hardening, HTTP/3 off, the wildcard certificate
+#                    from Redis). Proves the generated production config.
+#  proxy-matrix    : the disk cache and what a client sees through the cached
+#                    locations, request kind by request kind.
+#  proxy-parity    : this tree's proxy vs origin/master's, request for request
+#                    (pull requests only).
 #  cert-issuance   : on-demand custom-domain certificate issuance through the
 #                    proxy against a Pebble ACME test server, that an issued
 #                    cert survives a container recreate (persistence), and
@@ -12,6 +17,9 @@ name: integration
 #                    stopped, READONLY or NOREPLICAS.
 #  zero-downtime   : a blue/green handover (SO_REUSEPORT + graceful drain)
 #                    serves every request while the old container is stopped.
+#
+# The jobs are independent (each builds its own image from the registry
+# cache) and run concurrently, so none of them gates another.
 
 # Pull requests only run it when something it covers changed (the paths
 # below); every push to master runs it. The real-app round trip through the
@@ -53,25 +61,14 @@ jobs:
         with:
           node-version: 24.22.1
 
-      - name: Install config generator dependencies
-        run: |
-          mkdir -p "$RUNNER_TEMP/gendeps"
-          cd "$RUNNER_TEMP/gendeps"
-          npm init -y >/dev/null
-          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
-
-      - name: Generate proxy config (BLOT_HOST=localhost)
-        run: bash proxy/build/build.sh
-        env:
-          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
-
       # Which host scripts/deploy/units.sh and util/sshCommand.js ssh to
       # (BLOT_DEPLOY_TARGET), against a stub ssh.
       - name: Deploy ssh target
         run: bash scripts/deploy/tests/target.sh
 
-      - name: Build proxy image
-        run: bash proxy/build/image.sh blot-proxy:e2e
+      - uses: ./.github/actions/build-proxy-image
+        with:
+          tag: blot-proxy:e2e
 
       - name: Start proxy + stub upstream
         run: |
@@ -111,35 +108,6 @@ jobs:
       - name: HTTP/3 disabled; HTTP/1.1 and HTTP/2 available
         run: node proxy/e2e/http3-disabled-checks.js
 
-      # The disk cache (proxy/config/diskcache.lua, proxy/evict.sh) against the
-      # real image: starts its own dc-* proxy containers on ports 18080-18084,
-      # two of them sharing a cache volume, and removes them afterwards.
-      - name: Disk cache checks
-        run: node proxy/e2e/diskcache-checks.js
-
-      # What a client sees through the cached locations, request kind by
-      # request kind, against the same image: starts its own rm-* containers
-      # (ports 18120-18139), each with a stub upstream, and removes them.
-      # Behaviour that looks wrong today is asserted and labelled KNOWN.
-      - name: Request matrix
-        run: node proxy/e2e/request-matrix.js
-
-      # The proxy of the base ref (origin/master) and this tree's side by side,
-      # the same ~770 requests to both (miss, hit, purge, refill, Node down,
-      # Node back): status, decoded body and headers must match unless a rule
-      # in parity-checks.js explains the difference. Builds the baseline image
-      # itself, from a worktree of origin/master. Containers pa-*, ports
-      # 18090-18093. Pull requests only: on a push to master both sides are
-      # the same code.
-      - name: Parity with origin/master
-        if: github.event_name == 'pull_request'
-        env:
-          PARITY_GENDEPS: ${{ runner.temp }}/gendeps
-          PARITY_TREE_IMAGE: blot-proxy:e2e
-        run: |
-          git fetch --no-tags --depth=1 origin '+refs/heads/master:refs/remotes/origin/master'
-          node proxy/e2e/parity-checks.js
-
       # The wildcard certificate comes from Redis when it is there, else from
       # the file. Starts a Redis in the proxy's network namespace, which the
       # proxy has not had until now; keep this the last check.
@@ -157,12 +125,69 @@ jobs:
         if: always()
         run: docker logs proxy || true
 
+  # Both start their own containers on their own ports from the built image;
+  # they need nothing from proxy-behaviour's containers.
+  proxy-matrix:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+
+      - uses: ./.github/actions/build-proxy-image
+        with:
+          tag: blot-proxy:e2e
+
+      # The disk cache (proxy/config/diskcache.lua, proxy/evict.sh) against the
+      # real image: starts its own dc-* proxy containers on ports 18080-18084,
+      # two of them sharing a cache volume, and removes them afterwards.
+      - name: Disk cache checks
+        run: node proxy/e2e/diskcache-checks.js
+
+      # What a client sees through the cached locations, request kind by
+      # request kind, against the same image: starts its own rm-* containers
+      # (ports 18120-18139), each with a stub upstream, and removes them.
+      # Behaviour that looks wrong today is asserted and labelled KNOWN.
+      - name: Request matrix
+        run: node proxy/e2e/request-matrix.js
+
+  proxy-parity:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+
+      - uses: ./.github/actions/build-proxy-image
+        with:
+          tag: blot-proxy:e2e
+
+      # The proxy of the base ref (origin/master) and this tree's side by side,
+      # the same ~770 requests to both (miss, hit, purge, refill, Node down,
+      # Node back): status, decoded body and headers must match unless a rule
+      # in parity-checks.js explains the difference. Builds the baseline image
+      # itself, from a worktree of origin/master. Containers pa-*, ports
+      # 18090-18093. Pull requests only: on a push to master both sides are
+      # the same code.
+      - name: Parity with origin/master
+        if: github.event_name == 'pull_request'
+        env:
+          PARITY_GENDEPS: ${{ runner.temp }}/gendeps
+          PARITY_TREE_IMAGE: blot-proxy:e2e
+        run: |
+          git fetch --no-tags --depth=1 origin '+refs/heads/master:refs/remotes/origin/master'
+          node proxy/e2e/parity-checks.js
+
   # On-demand certificate issuance for custom domains, end to end, against a
   # Pebble ACME test server (no public DNS or rate limits). Also asserts the
   # issued cert survives recreating the proxy container (persistence).
   cert-issuance:
     runs-on: ubuntu-24.04-arm
-    needs: proxy-behaviour
     env:
       TEST_DOMAIN: cert-test.example
     steps:
@@ -172,20 +197,9 @@ jobs:
         with:
           node-version: 24.22.1
 
-      - name: Install config generator dependencies
-        run: |
-          mkdir -p "$RUNNER_TEMP/gendeps"
-          cd "$RUNNER_TEMP/gendeps"
-          npm init -y >/dev/null
-          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
-
-      - name: Generate proxy config
-        run: bash proxy/build/build.sh
-        env:
-          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
-
-      - name: Build proxy image
-        run: bash proxy/build/image.sh blot-proxy:acme
+      - uses: ./.github/actions/build-proxy-image
+        with:
+          tag: blot-proxy:acme
 
       - name: Start Redis, challtestsrv and Pebble
         env:
@@ -438,7 +452,6 @@ jobs:
   # drop a single request.
   zero-downtime:
     runs-on: ubuntu-24.04-arm
-    needs: proxy-behaviour
     steps:
       - uses: actions/checkout@v4
 
@@ -446,20 +459,9 @@ jobs:
         with:
           node-version: 24.22.1
 
-      - name: Install config generator dependencies
-        run: |
-          mkdir -p "$RUNNER_TEMP/gendeps"
-          cd "$RUNNER_TEMP/gendeps"
-          npm init -y >/dev/null
-          npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
-
-      - name: Generate proxy config (BLOT_HOST=localhost)
-        run: bash proxy/build/build.sh
-        env:
-          NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
-
-      - name: Build proxy image
-        run: bash proxy/build/image.sh blot-proxy:zd
+      - uses: ./.github/actions/build-proxy-image
+        with:
+          tag: blot-proxy:zd
 
       - name: Start upstream + proxy A + proxy B
         run: |
@@ -491,11 +493,14 @@ jobs:
       - name: Hammer the proxy while stopping A
         run: |
           set -eux
+          rm -f stopped
           (
             # No --retry: every attempt is recorded as-is, so a single
             # refused/dropped connection during the handover shows up as a
             # non-200 and fails the assertion below. That is the whole point.
-            for i in $(seq 1 600); do
+            # Runs until the stop has returned (plus a few seconds on B alone,
+            # past the drain), not for a fixed count.
+            while [ ! -e stopped ]; do
               curl -s -o /dev/null -w '%{http_code}\n' --max-time 5 \
                 -H 'Host: someblog.example' "http://$HOSTIP/" || echo "curl-err"
               sleep 0.05
@@ -504,13 +509,16 @@ jobs:
           loop=$!
           sleep 3
           docker stop --time 30 zd-a
+          sleep 8
+          touch stopped
           wait "$loop"
 
           total=$(wc -l < codes.txt)
           bad=$(grep -vc '^200$' codes.txt || true)
           echo "total=$total bad=$bad"
           sort codes.txt | uniq -c
-          [ "$total" -ge 100 ]
+          # ~6 req/s over at least the 3s before the stop plus the 8s after
+          [ "$total" -ge 30 ]
           [ "$bad" -eq 0 ]
 
       - name: Logs

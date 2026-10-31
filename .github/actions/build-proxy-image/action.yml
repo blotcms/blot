@@ -1,0 +1,28 @@
+name: Build proxy image
+description: >
+  Generates the proxy config for the job's BLOT_HOST and builds the image
+  (proxy/build/image.sh, which uses PROXY_IMAGE_CACHE) under the given tag.
+  The config generator's dependencies go in $RUNNER_TEMP/gendeps, where
+  parity-checks.js also looks for them (PARITY_GENDEPS). Needs actions/setup-node
+  first, and BLOT_HOST etc. in the job's env.
+inputs:
+  tag:
+    description: Image tag to build, e.g. blot-proxy:e2e
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/gendeps"
+        cd "$RUNNER_TEMP/gendeps"
+        npm init -y >/dev/null
+        npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
+    - shell: bash
+      run: bash proxy/build/build.sh
+      env:
+        NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
+    - shell: bash
+      run: bash proxy/build/image.sh "$TAG"
+      env:
+        TAG: ${{ inputs.tag }}

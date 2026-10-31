@@ -4,7 +4,7 @@
 // headers are compared. On master the two are the same code, so the run must
 // show 0 differences; it guards later proxy PRs, which list each change they
 // make to what a client sees in INTENDED below, with a reason. Plain node, no
-// dependencies. Run by the proxy-behaviour job in
+// dependencies. Run by the proxy-parity job in
 // .github/workflows/integration.yml after request-matrix.js; locally:
 //
 //   node proxy/e2e/parity-checks.js
