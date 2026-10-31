@@ -9,7 +9,8 @@
 # defaults.env (baked in at build time from REDIS_IP, SERVER_LABEL and
 # OPENRESTY_RESOLVER, and today's loopback upstreams).
 #
-#   PROXY_REDIS_HOST       Redis for certificates and the domain allowlist
+#   PROXY_REDIS_HOST       Redis for certificates and the domain allowlist: a host
+#                          (port 6379) or unix:/path/to/redis.sock
 #   PROXY_SERVER_LABEL     the Blot-Server response header
 #   PROXY_RESOLVER         DNS resolver, e.g. "127.0.0.11" or "8.8.8.8 ipv6=off"
 #   PROXY_UNIT             blue or green: logged as unit= in the access log ("-" if unset)

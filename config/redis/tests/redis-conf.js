@@ -46,6 +46,13 @@ describe("redis.conf", function () {
     expect(only("repl-diskless-sync")).toBe("no");
   });
 
+  it("serves a Unix socket in a directory that setup.sh creates", function () {
+    expect(only("unixsocket")).toBe("/run/blot/redis/redis.sock");
+    expect(only("unixsocketperm")).toBe("777");
+    expect(only("port")).toBe("6379");
+    expect(read("host/setup.sh")).toContain("d /run/blot/redis 0755 redis6 redis6 -");
+  });
+
   it("frees memory lazily and avoids huge pages", function () {
     [
       "lazyfree-lazy-eviction",

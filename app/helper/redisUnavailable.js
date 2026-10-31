@@ -50,6 +50,13 @@ const SOCKET_ERROR_CODES = new Set([
   "EPIPE",
 ]);
 
+// Connecting to a Unix socket also fails with these when the socket file is
+// missing (ENOENT) or not ours to open (EACCES). Both are everyday filesystem
+// errors (fs.readFile of a missing file is ENOENT), so unlike the codes above
+// they only count when the error's address is the configured socket path:
+// a filesystem error carries .path, never .address.
+const SOCKET_PATH_ERROR_CODES = new Set(["ENOENT", "EACCES"]);
+
 // Commands in flight when the server resets the connection reject with the
 // bare socket error ("read ECONNRESET", no address or port), the same object
 // the client emits as its "error" event. Our clients (models/redis) record
@@ -84,10 +91,22 @@ function isRedisUnavailableError(err, depth = 0) {
     }
   }
 
-  if (SOCKET_ERROR_CODES.has(err.code)) {
+  const redis = config.redis || {};
+
+  if (redis.socket) {
+    // A Unix socket connect error names the socket and has no port. Another
+    // path is some other socket, not Redis. With the socket configured
+    // nothing talks TCP to Redis, so the host and port are not consulted.
+    if (
+      (SOCKET_ERROR_CODES.has(err.code) ||
+        SOCKET_PATH_ERROR_CODES.has(err.code)) &&
+      (clientSocketErrors.has(err) || err.address === redis.socket)
+    ) {
+      return true;
+    }
+  } else if (SOCKET_ERROR_CODES.has(err.code)) {
     if (clientSocketErrors.has(err)) return true;
 
-    const redis = config.redis || {};
     // Node reports the target as port + address (connect) or hostname (lookup)
     const target = err.address !== undefined ? err.address : err.hostname;
     const hostIsName = net.isIP(String(redis.host)) === 0;

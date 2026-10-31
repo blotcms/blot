@@ -48,6 +48,10 @@ Dropbox and iCloud validators do.
     connection, so it shows what Redis and the network were doing meanwhile.
   - Redis commands by type, with reply sizes.
   - TCP retransmits in the container while the check ran.
+  - With `BLOT_REDIS_SOCKET` set (Redis on a Unix socket) the kernel has no
+    queues or retransmits to read: `retransSegs` is `null`, the kernel fields
+    are absent, and `tcp` says so. Node's byte counts and buffering, the
+    pings and the queue are still recorded.
 - `samples.ndjson`, every 100ms:
   - node-redis' queue: `pending`, and whether commands were still unsent
   - each ping's wait so far

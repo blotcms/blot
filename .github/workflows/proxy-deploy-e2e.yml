@@ -51,6 +51,12 @@ env:
   # unit-image.yml writes it on master. Layers are arm64, as production.
   PROXY_IMAGE_CACHE: ghcr.io/blotcms/blot:cache-proxy-arm64
 
+# Superseded PR pushes are cancelled. Each master push gets its own group, so
+# a master run is never cancelled.
+concurrency:
+  group: proxy-deploy-e2e-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # The stand-in unit is the real proxy image plus a stub in place of the app
   # (proxy/deploy/e2e/unit): building and booting the real unit image is
