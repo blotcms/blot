@@ -18,6 +18,7 @@
 #     build-image.sh <source tree> <image tag> [docker build args]
 set -euo pipefail
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$(cd "${1:?usage: build-image.sh <source tree> <image tag> [docker build args]}" && pwd)"
 TAG="${2:?usage: build-image.sh <source tree> <image tag> [docker build args]}"
 shift 2
@@ -28,4 +29,4 @@ NODE_PATH="$GENDEPS_MODULES:$SRC/app" LOG_TO_STDOUT=false FETCH_CDN_IPS=false BL
   bash proxy/build/build.sh
 # (halves: http.conf's `default 0` is already the entry for 0.0.0.0/0)
 printf '0.0.0.0/1 1;\n128.0.0.0/1 1;\n::/1 1;\n8000::/1 1;\n' >> proxy/build/data/latest/cdn-ips.conf
-docker build -f proxy/Dockerfile -t "$TAG" "$@" proxy/
+bash "$HERE/../../build/image.sh" "$TAG" "$@"

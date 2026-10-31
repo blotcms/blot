@@ -16,6 +16,9 @@ on:
     branches: [master]
 
 env:
+  # The compiled stages of the proxy image come from here (proxy/build/image.sh);
+  # unit-image.yml writes it on master. Layers are arm64, as production.
+  PROXY_IMAGE_CACHE: ghcr.io/blotcms/blot:cache-proxy-arm64
   BLOT_HOST: localhost
   BLOT_REPO: ${{ github.workspace }}
   # Skip the BunnyCDN edge-IP fetch so image builds stay hermetic. Local and
@@ -51,7 +54,7 @@ jobs:
           NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
 
       - name: Build proxy image
-        run: docker build -f proxy/Dockerfile -t blot-proxy:e2e proxy/
+        run: bash proxy/build/image.sh blot-proxy:e2e
 
       - name: Login to GHCR
         uses: docker/login-action@v3
