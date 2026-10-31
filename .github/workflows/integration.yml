@@ -34,6 +34,9 @@ on:
       - "scripts/deploy/**"
 
 env:
+  # The compiled stages of the proxy image come from here (proxy/build/image.sh);
+  # unit-image.yml writes it on master. Layers are arm64, as production.
+  PROXY_IMAGE_CACHE: ghcr.io/blotcms/blot:cache-proxy-arm64
   BLOT_HOST: localhost
   BLOT_REPO: ${{ github.workspace }}
   # Skip the BunnyCDN edge-IP fetch so image builds stay hermetic. Local and
@@ -42,7 +45,7 @@ env:
 
 jobs:
   proxy-behaviour:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
@@ -68,7 +71,7 @@ jobs:
         run: bash scripts/deploy/tests/target.sh
 
       - name: Build proxy image
-        run: docker build -f proxy/Dockerfile -t blot-proxy:e2e proxy/
+        run: bash proxy/build/image.sh blot-proxy:e2e
 
       - name: Start proxy + stub upstream
         run: |
@@ -158,7 +161,7 @@ jobs:
   # Pebble ACME test server (no public DNS or rate limits). Also asserts the
   # issued cert survives recreating the proxy container (persistence).
   cert-issuance:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: proxy-behaviour
     env:
       TEST_DOMAIN: cert-test.example
@@ -182,7 +185,7 @@ jobs:
           NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
 
       - name: Build proxy image
-        run: docker build -f proxy/Dockerfile -t blot-proxy:acme proxy/
+        run: bash proxy/build/image.sh blot-proxy:acme
 
       - name: Start Redis, challtestsrv and Pebble
         env:
@@ -434,7 +437,7 @@ jobs:
   # on `--network host`; stopping the first one with a drain timeout must not
   # drop a single request.
   zero-downtime:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: proxy-behaviour
     steps:
       - uses: actions/checkout@v4
@@ -456,7 +459,7 @@ jobs:
           NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
 
       - name: Build proxy image
-        run: docker build -f proxy/Dockerfile -t blot-proxy:zd proxy/
+        run: bash proxy/build/image.sh blot-proxy:zd
 
       - name: Start upstream + proxy A + proxy B
         run: |

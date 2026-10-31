@@ -46,6 +46,11 @@ on:
       - "config/index.js"
   workflow_dispatch:
 
+env:
+  # The compiled stages of the proxy image come from here (proxy/build/image.sh);
+  # unit-image.yml writes it on master. Layers are arm64, as production.
+  PROXY_IMAGE_CACHE: ghcr.io/blotcms/blot:cache-proxy-arm64
+
 jobs:
   # The stand-in unit is the real proxy image plus a stub in place of the app
   # (proxy/deploy/e2e/unit): building and booting the real unit image is
@@ -56,7 +61,7 @@ jobs:
   # the real heaps. The "unit" images are in different repositories because
   # blue-green.sh removes the other tags of the repository it deploys.
   unit-deploy-e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     env:
       BLOT_HOST: blot.im
@@ -129,7 +134,7 @@ jobs:
 
       - name: Build the proxy image, the three stand-in units and the stand-in airlock
         run: |
-          docker build -f proxy/Dockerfile -t "$PROXY_IMAGE" proxy/
+          bash proxy/build/image.sh "$PROXY_IMAGE"
           docker build -f proxy/deploy/e2e/unit/Dockerfile -t "$UNIT_A" proxy/deploy/e2e/unit
           docker build -f proxy/deploy/e2e/unit/Dockerfile --label e2e.variant=b -t "$UNIT_B" proxy/deploy/e2e/unit
           docker build -f proxy/deploy/e2e/unit/Dockerfile --build-arg BREAK=a -t "$UNIT_BROKEN" proxy/deploy/e2e/unit
@@ -341,7 +346,7 @@ jobs:
   # tags of the repository it deploys). The stand-in units send their traffic
   # to the stub upstream (E2E_UPSTREAMS_FROM_ENV), not to their own sockets.
   unit-swap-load-e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 45
     env:
       BLOT_HOST: blot.im

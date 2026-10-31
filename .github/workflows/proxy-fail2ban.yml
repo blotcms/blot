@@ -44,13 +44,16 @@ on:
       - "config/index.js"
 
 env:
+  # The compiled stages of the proxy image come from here (proxy/build/image.sh);
+  # unit-image.yml writes it on master. Layers are arm64, as production.
+  PROXY_IMAGE_CACHE: ghcr.io/blotcms/blot:cache-proxy-arm64
   BLOT_HOST: localhost
   BLOT_REPO: ${{ github.workspace }}
   FETCH_CDN_IPS: "false"
 
 jobs:
   fail2ban-regex:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
@@ -77,7 +80,7 @@ jobs:
           LOG_TO_STDOUT: "false"
 
       - name: Build proxy image
-        run: docker build -f proxy/Dockerfile -t blot-proxy:f2b proxy/
+        run: bash proxy/build/image.sh blot-proxy:f2b
 
       - name: Start proxy (host networking, as production) + stub upstream
         run: |
