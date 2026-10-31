@@ -34,7 +34,17 @@ nginx-stats() {
   fi
   docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.CPUPerc}}' $proxies
 }
-alias client='redis-cli -h $(grep BLOT_REDIS_HOST /etc/blot/secrets.env | cut -d"=" -f2 | tr -d " ")'
+# redis-cli against the Redis the app uses: its socket if secrets.env sets
+# BLOT_REDIS_SOCKET, else BLOT_REDIS_HOST
+client() {
+  local socket
+  socket=$(grep '^BLOT_REDIS_SOCKET=' /etc/blot/secrets.env | cut -d"=" -f2 | tr -d " ")
+  if [ -n "$socket" ]; then
+    redis-cli -s "$socket" "$@"
+  else
+    redis-cli -h "$(grep BLOT_REDIS_HOST /etc/blot/secrets.env | cut -d"=" -f2 | tr -d " ")" "$@"
+  fi
+}
 alias login="docker exec -it blot-blue /bin/sh"
 alias candidates="docker exec blot-blue node app/documentation/featured/candidates"
 alias access="docker exec blot-blue node /usr/src/app/scripts/blog/access.js"

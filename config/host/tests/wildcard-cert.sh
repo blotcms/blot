@@ -62,6 +62,8 @@ fi
 mkdir "$TMP/bin"
 cat > "$TMP/bin/redis-cli" <<'EOS'
 #!/bin/bash
+echo "$*" >> "${STUB_LOG:-/dev/null}"
+if [ "$1" = -s ]; then shift 2; fi
 [ "$1" = --raw ] && [ "$2" = get ] || exit 2
 case $3 in
   blot:openresty:ssl:pem) f=$STUB_PEM ;;
@@ -75,7 +77,7 @@ chmod +x "$TMP/bin/redis-cli"
 
 run() { # run <pem file> <key file>; output in $TMP/out
   env PATH="$TMP/bin:$PATH" STUB_PEM="$1" STUB_KEY="$2" BLOT_CERT_DIR="$TMP/certs" \
-    BLOT_CERT_OWNER="$(id -un):$(id -gn)" bash "$SCRIPT" --local > "$TMP/out" 2>&1
+    BLOT_CERT_OWNER="$(id -un):$(id -gn)" STUB_LOG="$TMP/stub-calls" bash "$SCRIPT" --local > "$TMP/out" 2>&1
 }
 snapshot() { cat "$TMP/certs/letsencrypt-domain.pem" "$TMP/certs/letsencrypt-domain.key" | cksum; }
 count() { ls -A "$TMP/certs" | wc -l | tr -d ' '; }
@@ -108,5 +110,14 @@ chmod 0600 "$TMP/certs/letsencrypt-domain.key"
 check "re-run succeeds" run "$TMP/good.pem" "$TMP/good.key"
 check "re-run restores the mode" [ "$(mode "$TMP/certs/letsencrypt-domain.key")" = 640 ]
 check "re-run reports already current" grep -q "already current" "$TMP/out"
+
+: > "$TMP/stub-calls"
+check "REDIS_CLI defaults to plain redis-cli" run "$TMP/good.pem" "$TMP/good.key"
+check "the default calls redis-cli with --raw get and nothing before it" [ "$(head -1 "$TMP/stub-calls")" = "--raw get blot:openresty:ssl:pem" ]
+: > "$TMP/stub-calls"
+check "REDIS_CLI takes a command and arguments (a socket)" env PATH="$TMP/bin:$PATH" STUB_PEM="$TMP/good.pem" STUB_KEY="$TMP/good.key" STUB_LOG="$TMP/stub-calls" \
+  BLOT_CERT_DIR="$TMP/certs" BLOT_CERT_OWNER="$(id -un):$(id -gn)" REDIS_CLI="redis-cli -s /run/blot/redis/redis.sock" bash "$SCRIPT" --local
+check "every call went to the socket" [ "$(grep -c '^-s /run/blot/redis/redis.sock --raw get ' "$TMP/stub-calls")" = 2 ]
+check "a missing command is named in the refusal" refuses env PATH="$TMP/bin:$PATH" REDIS_CLI="no-such-redis -s /x" BLOT_CERT_DIR="$TMP/certs" bash "$SCRIPT" --local
 
 exit "$FAILED"
