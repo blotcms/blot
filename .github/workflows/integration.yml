@@ -434,18 +434,25 @@ jobs:
           CACHE_TTL: "5"
         run: bash proxy/e2e/expired-cert-checks.sh
 
+      # Replaces the proxy and Redis above with a pair that talk over a Unix
+      # socket (PROXY_REDIS_HOST=unix:...): keep this the last Redis check.
+      - name: Redis over a Unix socket
+        env:
+          CA_BUNDLE: pebble-ca.bundle.pem
+        run: bash proxy/e2e/redis-socket-checks.sh
+
       - name: Logs
         if: always()
         run: |
-          for c in proxy pebble challtestsrv stub redis; do
+          for c in proxy proxy-sock pebble challtestsrv stub redis redis-sock; do
             echo "=== $c ==="; docker logs --tail 100 "$c" 2>&1 || true
           done
 
       - name: Tear down
         if: always()
         run: |
-          docker rm -f proxy pebble challtestsrv stub redis 2>/dev/null || true
-          docker volume rm blot-acme-storage 2>/dev/null || true
+          docker rm -f proxy proxy-sock pebble challtestsrv stub redis redis-sock 2>/dev/null || true
+          docker volume rm blot-acme-storage blot-acme-socket 2>/dev/null || true
 
   # A blue/green handover: two proxy containers share :80/:443 via SO_REUSEPORT
   # on `--network host`; stopping the first one with a drain timeout must not
