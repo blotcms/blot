@@ -1,13 +1,16 @@
 name: app-e2e
 
-# A real round trip through the proxy container to a Blot app container (site +
-# dashboard sign in / sign out, plus a seeded blog rendering on its own vhost).
+# A real round trip through the proxy to a Blot app (site + dashboard sign in /
+# sign out and a saved setting, a seeded blog rendering on its own vhost, the
+# client for pushing to a blog), gating deploy.yml.
 #
 # Its own workflow so it runs on every PR and every push to master: GitHub's
 # path filters are per workflow, and integration.yml filters the rest of the
-# proxy suites. It builds its own proxy image and runs the production app image
-# build.yml pushes for the commit (:<sha>-arm64) - the bytes deploy.yml ships -
-# so it also stands in for a boot check of the prod target.
+# proxy suites. On master it runs the unit image unit-image.yml pushes
+# (:<sha>-arm64), the bytes deploy.yml ships, as docker-compose.unit.yml. A PR
+# can't rely on that image (unit-image.yml is path filtered), so there it builds
+# its own proxy image and runs the production app image build.yml pushes
+# (:prod-<sha>-arm64), which also stands in for a boot check of the prod target.
 
 on:
   push:
@@ -24,6 +27,9 @@ env:
   # Skip the BunnyCDN edge-IP fetch so image builds stay hermetic. Local and
   # deploy generates still fetch by default (see proxy/build/index.js).
   FETCH_CDN_IPS: "false"
+  # TEMPORARY: also on this PR's branch, to test the master path before merge
+  E2E_UNIT: ${{ github.event_name == 'push' || github.head_ref == 'claude/ci-smoke-deployed-image' }}
+  E2E_COMPOSE_FILE: ${{ (github.event_name == 'push' || github.head_ref == 'claude/ci-smoke-deployed-image') && 'proxy/e2e/docker-compose.unit.yml' || 'proxy/e2e/docker-compose.yml' }}
 
 jobs:
   app-e2e:
@@ -42,6 +48,7 @@ jobs:
           node-version: 24.22.1
 
       - name: Install config generator dependencies
+        if: ${{ env.E2E_UNIT != 'true' }}
         run: |
           mkdir -p "$RUNNER_TEMP/gendeps"
           cd "$RUNNER_TEMP/gendeps"
@@ -49,11 +56,13 @@ jobs:
           npm install --no-audit --no-fund mustache@4.2.0 fs-extra@11.1.0
 
       - name: Generate proxy config (BLOT_HOST=localhost)
+        if: ${{ env.E2E_UNIT != 'true' }}
         run: bash proxy/build/build.sh
         env:
           NODE_PATH: ${{ runner.temp }}/gendeps/node_modules:${{ github.workspace }}/app
 
       - name: Build proxy image
+        if: ${{ env.E2E_UNIT != 'true' }}
         run: bash proxy/build/image.sh blot-proxy:e2e
 
       - name: Login to GHCR
@@ -63,18 +72,23 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # build.yml pushes this commit's prod image (blot:prod-<sha>-arm64) once it has built it, and this
-      # workflow doesn't wait for it, so poll for it.
-      - name: Pull Blot app image
+      # unit-image.yml pushes the unit image (:<sha>-arm64) as soon as it has built it,
+      # before its own checks, and build.yml the prod image (:prod-<sha>-arm64); this
+      # workflow doesn't wait for either, so poll.
+      - name: Pull Blot image
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/blot:prod-${{ github.sha }}-arm64"
-          for i in $(seq 1 240); do
+          if [ "$E2E_UNIT" = true ]; then
+            IMAGE="ghcr.io/${{ github.repository_owner }}/blot:${{ github.sha }}-arm64"
+          else
+            IMAGE="ghcr.io/${{ github.repository_owner }}/blot:prod-${{ github.sha }}-arm64"
+          fi
+          for i in $(seq 1 120); do
             docker manifest inspect "$IMAGE" > /dev/null 2>&1 && break
-            [ "$i" = 1 ] && echo "Waiting for build.yml to push $IMAGE"
+            [ "$i" = 1 ] && echo "Waiting for $IMAGE"
             sleep 5
           done
           if ! docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
-            echo "::error::$IMAGE was not pushed within 20 minutes; did the build workflow fail?"
+            echo "::error::$IMAGE was not pushed within 10 minutes; did the image workflow fail?"
             exit 1
           fi
           docker pull "$IMAGE"
@@ -90,7 +104,7 @@ jobs:
           AWS_DEFAULT_REGION: ${{ env.BLOT_STORAGE_REGION }}
 
       - name: Start the stack
-        run: docker compose -f proxy/e2e/docker-compose.yml up -d --wait --wait-timeout 420
+        run: docker compose -f "$E2E_COMPOSE_FILE" up -d --wait --wait-timeout 420
 
       # /health answers before the app has finished starting up: it is still
       # building the global templates and the folder templates, which would race
@@ -99,7 +113,7 @@ jobs:
       - name: Wait for the app to finish starting
         run: |
           for i in $(seq 1 120); do
-            docker compose -f proxy/e2e/docker-compose.yml logs --no-color app \
+            docker compose -f "$E2E_COMPOSE_FILE" logs --no-color app \
               | grep -qE "Built folders asynchronously|Error building folders" && exit 0
             sleep 1
           done
@@ -108,17 +122,17 @@ jobs:
 
       - name: Seed a user
         run: |
-          docker compose -f proxy/e2e/docker-compose.yml cp \
+          docker compose -f "$E2E_COMPOSE_FILE" cp \
             proxy/e2e/seed-user.js app:/tmp/seed-user.js
-          docker compose -f proxy/e2e/docker-compose.yml exec -T app \
+          docker compose -f "$E2E_COMPOSE_FILE" exec -T -u 1000 app \
             node /tmp/seed-user.js e2e@example.com e2e-password
 
       - name: Seed a blog
         id: seed-blog
         run: |
-          docker compose -f proxy/e2e/docker-compose.yml cp \
+          docker compose -f "$E2E_COMPOSE_FILE" cp \
             proxy/e2e/seed-blog.js app:/tmp/seed-blog.js
-          out=$(docker compose -f proxy/e2e/docker-compose.yml exec -T app \
+          out=$(docker compose -f "$E2E_COMPOSE_FILE" exec -T -u 1000 app \
             node /tmp/seed-blog.js e2e@example.com e2eblog)
           echo "$out"
           json=$(echo "$out" | grep -o 'SEED_BLOG_RESULT=.*' | head -n1 | cut -d= -f2-)
@@ -141,9 +155,9 @@ jobs:
         id: seed-git
         if: ${{ !cancelled() && steps.seed-blog.conclusion == 'success' }}
         run: |
-          docker compose -f proxy/e2e/docker-compose.yml cp \
+          docker compose -f "$E2E_COMPOSE_FILE" cp \
             proxy/e2e/seed-git.js app:/tmp/seed-git.js
-          out=$(docker compose -f proxy/e2e/docker-compose.yml exec -T app \
+          out=$(docker compose -f "$E2E_COMPOSE_FILE" exec -T -u 1000 app \
             node /tmp/seed-git.js e2e@example.com e2egit)
           json=$(echo "$out" | grep -o 'SEED_GIT_RESULT=.*' | head -n1 | cut -d= -f2-)
           # Everything the seed printed except the result line (it has the token)
@@ -173,8 +187,8 @@ jobs:
 
       - name: Stack logs
         if: always()
-        run: docker compose -f proxy/e2e/docker-compose.yml logs --no-color --tail 300 || true
+        run: docker compose -f "$E2E_COMPOSE_FILE" logs --no-color --tail 300 || true
 
       - name: Tear down
         if: always()
-        run: docker compose -f proxy/e2e/docker-compose.yml down -v || true
+        run: docker compose -f "$E2E_COMPOSE_FILE" down -v || true

@@ -191,6 +191,50 @@ async function waitForUpstream(timeoutMs = 60000) {
     "got " + authedSites.status + " location " + authedSites.headers.location
   );
 
+  // 6b. The main dashboard pages render for the seeded blog: the site list, the
+  //     blog's own page and its settings, the client and template pages, and
+  //     the account pages. 200 plus, where known, text only that page has, so
+  //     an error page or a wrong redirect target fails.
+  const handle = BLOG_HOST.split(".")[0];
+  const pages = [
+    ["/sites", handle],
+    [`/sites/${handle}`, handle],
+    [`/sites/${handle}/settings`, "Markdown features"],
+    [`/sites/${handle}/title`, 'name="title"'],
+    [`/sites/${handle}/client`, ""],
+    [`/sites/${handle}/template`, ""],
+    ["/sites/account/email", EMAIL],
+    ["/sites/account/password", ""],
+  ];
+  for (const [page, text] of pages) {
+    const res = await request(page, { jar });
+    check(
+      `dashboard ${page} renders`,
+      res.status === 200 && res.body.includes(text),
+      `got ${res.status}, ${res.body.includes(text) ? "" : "no "}"${text}" in body`
+    );
+  }
+
+  // 6c. Saving a setting works and publishes: change the blog's title through
+  //     the dashboard form, then see it on the blog (its pages carry the title
+  //     in their meta tags). The proxy cache entry for the old page is purged
+  //     in the background, so poll briefly.
+  const newTitle = "E2E title " + Date.now();
+  const saved = await request(`/sites/${handle}/title`, {
+    method: "POST",
+    jar,
+    body: { title: newTitle, _csrf: csrf },
+  });
+  check("POST the blog title saves", saved.status === 200, "got " + saved.status);
+  const form = await request(`/sites/${handle}/title`, { jar });
+  check("the dashboard shows the saved title", form.body.includes(newTitle));
+  let published = false;
+  for (let i = 0; i < 20 && !published; i++) {
+    published = (await request("/", { headers: { Host: BLOG_HOST } })).body.includes(newTitle);
+    if (!published) await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  check("the saved title is on the published blog", published);
+
   // 7. Sign out, then the session no longer works (log-out is also a
   //    CSRF-protected mutation).
   const signOut = await once("/sites/account/log-out", {

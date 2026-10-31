@@ -730,6 +730,9 @@ function label(spec) {
   return spec.id;
 }
 
+// settleMs is the wait after each GET: a miss is published to the cache after
+// its response is sent, so the next request has to wait for that. Passes that
+// only serve hits (nothing is published) pass 0.
 async function runPass(name, specs, { settleMs = 40, only, skipSSE } = {}) {
   let count = 0;
   for (const spec of specs) {
@@ -808,9 +811,9 @@ async function main() {
     console.log("passes");
     await runPass("1-miss", specs);
     // the first hit of an entry queues its brotli copy
-    await runPass("2-hit", specs, { skipSSE: true });
+    await runPass("2-hit", specs, { skipSSE: true, settleMs: 0 });
     await sleep(6000);
-    await runPass("3-hit-precompressed", specs, { skipSSE: true });
+    await runPass("3-hit-precompressed", specs, { skipSSE: true, settleMs: 0 });
 
     for (const c of [M, B]) {
       const hosts = [...CACHED_HOSTS, "www.custom.example", "parity.localhost"];
@@ -834,13 +837,13 @@ async function main() {
       .filter((s) => (s.method || "GET") === "GET" && !s.raw && !s.sse && s.group !== "sse")
       .filter((s, i) => i % 3 === 0)
       .map((s) => ({ ...s, id: "fresh " + s.id, path: s.path.includes("?") ? s.path + "&fresh=1" : s.path + "?fresh=1" }));
-    await runPass("5-node-down-cached", downSpecs);
+    await runPass("5-node-down-cached", downSpecs, { settleMs: 0 });
     await runPass("5-node-down-uncached", fresh);
     docker("start", M.name + "-stub", B.name + "-stub");
     await Promise.all([waitStub(M), waitStub(B)]);
     await sleep(1000);
     await runPass("6-node-back", fresh);
-    await runPass("7-node-back-hit", fresh);
+    await runPass("7-node-back-hit", fresh, { settleMs: 0 });
 
     // counts
     const countDiffs = [];

@@ -533,10 +533,10 @@ async function main() {
 
 function runContainerScript(args) {
   return new Promise((resolve) => {
-    const compose = path.join(__dirname, "docker-compose.yml");
+    const compose = path.resolve(process.env.E2E_COMPOSE_FILE || path.join(__dirname, "docker-compose.yml"));
     const child = spawn(
       "docker",
-      ["compose", "-f", compose, "exec", "-T", "app", "node", "/tmp/seed-git.js", ...args],
+      ["compose", "-f", compose, "exec", "-T", "-u", "1000", "app", "node", "/tmp/seed-git.js", ...args],
       { env: process.env }
     );
     let out = "";
