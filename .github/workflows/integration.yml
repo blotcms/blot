@@ -90,6 +90,11 @@ jobs:
             docker exec proxy sh -c 'wget -qO- -T1 http://127.0.0.1:8090/ >/dev/null 2>&1' && break
             sleep 1
           done
+          # The loop above only proves the stub is up. OpenResty can take longer.
+          for i in $(seq 1 30); do
+            curl -s -o /dev/null --max-time 1 http://127.0.0.1:8080/health && break
+            sleep 1
+          done
 
       - name: Run behavioural checks
         env:
