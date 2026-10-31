@@ -44,6 +44,21 @@ local PAIR = "pair"
 -- (proxy/e2e/wildcard-cert-checks.sh, which repeats this value) to wait out.
 local INTERVAL = 10
 
+-- Connects red to host, which is a hostname or IP (TCP, on port) or, when it
+-- starts with "unix:", a socket path (PROXY_REDIS_HOST=unix:/run/blot/redis/redis.sock).
+-- resty.redis reads connect's second argument as the options table for a
+-- socket and raises an error for a port number, so the port is left out
+-- there. Failing to connect returns nil, err either way (a missing socket
+-- included), which the callers rely on to fall back or back off. Also used
+-- for auto-ssl's connection in init.conf, so both agree.
+function _M.connect(red, host, port, opts)
+  if string.sub(host, 1, 5) == "unix:" then
+    return red:connect(host, opts)
+  end
+
+  return red:connect(host, port, opts)
+end
+
 function _M.new(options)
   return setmetatable({
     dict = options.dict,
@@ -60,7 +75,7 @@ function _M:read_redis()
   local red = redis:new()
   red:set_timeouts(self.timeout, self.timeout, self.timeout)
 
-  local ok, err = red:connect(self.host, self.port)
+  local ok, err = _M.connect(red, self.host, self.port)
   if not ok then
     return nil, "cannot connect to redis: " .. tostring(err)
   end
