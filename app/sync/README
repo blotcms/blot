@@ -11,7 +11,7 @@ sync/
   index.js                  Primary export. Acquires the folder lock and yields the
                             folder interface to the caller.
   rebuild.js                Full-folder rebuild: walks every file in the blog directory
-                            and calls update on each path in series.
+                            and calls update on a few paths at a time.
   renames.js                Post-sync rename detection. Correlates recently created and
                             deleted entries by file size and title to infer moves.
   messenger.js              Factory for the log/status/syncID triple attached to every
@@ -119,7 +119,7 @@ Acquires the blog's Redis folder lock (`lock.js`), then calls `callback(err, fol
 
 **File:** `rebuild.js`
 
-Walks every file in the blog's local folder and calls `update(path, ...)` on each in series. Does not acquire the sync lock; intended to be called by the caller's own sync session or an administrative tool.
+Walks every file in the blog's local folder and calls `update(path, ...)` on a few at a time. Does not acquire the sync lock; intended to be called by the caller's own sync session or an administrative tool.
 
 - `options.thumbnails` — boolean. Flushes the thumbnail Transformer store and empties the `_thumbnails` static directory before rebuilding.
 - `options.imageCache` — boolean. Flushes the image-cache Transformer store and empties the `_image_cache` static directory before rebuilding.

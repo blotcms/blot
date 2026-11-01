@@ -18,18 +18,32 @@ var updateTagList = require("models/tags").set;
 var addToSchedule = require("./scheduled");
 var notifyDrafts = require("./_notifyDrafts");
 var assignToLists = require("./_assign");
+var serial = require("./_serial");
 var { DELETED_ENTRY_TTL_SECONDS } = require("../entries/sweepExpiredDeleted");
 
 // Set is a private method which takes any valid
 // properties in the updates param and then overwrites those.
 // Also updates entry properties which affect data stored
 // elsewhere such as created date, permalink etc..
+//
+// One at a time per blog: claiming a URL, updating the blog's menu and updating
+// backlinks all read then write, so two entries saved at once could claim the
+// same URL or lose each other's menu items and backlinks.
 module.exports = function set (blogID, path, updates, callback) {
   ensure(blogID, "string")
     .and(path, "string")
     .and(updates, "object")
     .and(callback, "function");
 
+  serial(blogID, function (finished) {
+    write(blogID, path, updates, function () {
+      finished();
+      callback.apply(this, arguments);
+    });
+  });
+};
+
+function write (blogID, path, updates, callback) {
   var entryKey = key.entry(blogID, path);
   var queue;
 
@@ -171,7 +185,11 @@ module.exports = function set (blogID, path, updates, callback) {
 
         // Ensures entry has all the
         // keys it should have and no more
-        ensure(entry, model, true);
+        try {
+          ensure(entry, model, true);
+        } catch (e) {
+          return callback(e);
+        }
 
         // Store the entry
         redis
@@ -228,7 +246,7 @@ module.exports = function set (blogID, path, updates, callback) {
                         "    - linked entry:",
                         linkedEntryPath
                       );
-                      set(blogID, linkedEntryPath, { backlinks }, function (err) {
+                      write(blogID, linkedEntryPath, { backlinks }, function (err) {
                         if (err) {
                           console.log(
                             clfdate(),
@@ -261,4 +279,4 @@ module.exports = function set (blogID, path, updates, callback) {
       });
     });
   });
-};
+}

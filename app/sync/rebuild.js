@@ -17,6 +17,10 @@ const { isRedisUnavailableError } = require("helper/redisUnavailable");
 // huge folder cannot open an unbounded number of them.
 const WALK_CONCURRENCY = 32;
 
+// How many paths a rebuild builds at once. Building is the slow part and
+// entries are still saved one at a time (models/entry/set.js).
+const BUILD_CONCURRENCY = 4;
+
 // Lists every file under dir. Directories are read one at a time and each is
 // stat'd with bounded concurrency. The order of the results is not
 // guaranteed. An error reading dir itself is returned; an error reading a
@@ -144,18 +148,25 @@ module.exports = function main(blogID, options, callback) {
       let failed = 0;
       let firstError = null;
 
-      // One at a time on purpose: Entry.set is not safe for two paths of a
-      // blog at once (URL claims in models/entry/_setUrl.js and the blog
-      // menu in models/entry/_assign.js are read-then-write), see #2258.
-      async.eachSeries(
+      let stopped = null;
+
+      async.eachLimit(
         updatePaths,
+        BUILD_CONCURRENCY,
         function (path, next) {
+          // Finish what is in flight rather than failing straight away, so
+          // nothing is still building once the caller hears about it.
+          if (stopped) return next();
+
           current += updatePathCounts.get(path);
           status(`(${current}/${total}) Rebuilding ${path}`);
           update(path, function (err, result) {
             // Redis is unavailable, so every path after this one would fail
             // the same way. Stop, and tell the caller.
-            if (err && isRedisUnavailableError(err)) return next(err);
+            if (err && isRedisUnavailableError(err)) {
+              stopped = stopped || err;
+              return next();
+            }
 
             // Any other error is about this one file (update reports some as
             // err, such as a symlink in the way, and others in result.error)
@@ -171,10 +182,10 @@ module.exports = function main(blogID, options, callback) {
             next();
           });
         },
-        (err) => {
-          if (err) {
-            log("Rebuild stopped, Redis is unavailable", err.message);
-            return callback(err);
+        () => {
+          if (stopped) {
+            log("Rebuild stopped, Redis is unavailable", stopped.message);
+            return callback(stopped);
           }
 
           if (failed) {

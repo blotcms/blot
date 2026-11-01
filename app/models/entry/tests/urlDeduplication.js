@@ -1,9 +1,79 @@
 const fs = require("fs-extra");
 const build = require("build");
 const setUrl = require("../_setUrl");
+const set = require("../set");
+const Blog = require("models/blog");
 
 describe("entry.urlDeduplication", function () {
   require("./setup")();
+
+  // A rebuild builds several entries at once, so these save them together
+  async function saveTogether(context, files) {
+    const paths = Object.keys(files);
+
+    for (const path of paths) {
+      await fs.outputFile(context.blogDirectory + path, files[path]);
+    }
+
+    const entries = await Promise.all(
+      paths.map(
+        (path) =>
+          new Promise((resolve, reject) => {
+            build(context.blog, path, (err, entry) =>
+              err ? reject(err) : resolve(entry)
+            );
+          })
+      )
+    );
+
+    await Promise.all(
+      entries.map(
+        (entry) =>
+          new Promise((resolve, reject) => {
+            set(context.blog.id, entry.path, entry, (err) =>
+              err ? reject(err) : resolve()
+            );
+          })
+      )
+    );
+  }
+
+  it("gives entries saved together their own urls", async function () {
+    const files = {};
+
+    for (let i = 0; i < 5; i++) files[`/same-${i}.txt`] = "Link: same\nHello";
+
+    await saveTogether(this, files);
+
+    const urls = [];
+
+    for (const path of Object.keys(files)) {
+      urls.push((await this.get(path)).url);
+    }
+
+    expect(new Set(urls).size).toEqual(5);
+    expect(urls).toContain("/same");
+  });
+
+  it("keeps every menu item of entries saved together", async function () {
+    const files = {};
+
+    for (let i = 0; i < 5; i++) {
+      files[`/page-${i}.txt`] = `Menu: yes\nPage: yes\n\nPage ${i}`;
+    }
+
+    await saveTogether(this, files);
+
+    const blog = await new Promise((resolve, reject) => {
+      Blog.get({ id: this.blog.id }, (err, blog) =>
+        err ? reject(err) : resolve(blog)
+      );
+    });
+
+    const ids = blog.menu.map((item) => item.id);
+
+    for (const path of Object.keys(files)) expect(ids).toContain(path);
+  });
 
   it("setUrl returns conflictingEntryPath when first candidate conflicts", async function () {
     await this.set("/original.txt", "Link: conflict\nHello, original!");
