@@ -142,6 +142,13 @@ test("broker: input over the job's limit is input-too-large", async () => {
   });
 });
 
+test("broker: a client still sending more than the socket holds gets the refusal", async () => {
+  await withBroker({ script: "cat > /dev/null; sleep 5" }, async (socket) => {
+    const reply = await request(socket, job, Buffer.alloc(16 * 1024 * 1024, 1));
+    assert.deepStrictEqual(reply.header, { ok: false, error: "input-too-large" });
+  });
+});
+
 test("broker: output over the job's limit is output-too-large", async () => {
   await withBroker({ script: "head -c 5000 /dev/zero; sleep 5" }, async (socket) => {
     const reply = await request(socket, job, "");

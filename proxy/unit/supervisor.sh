@@ -90,10 +90,12 @@ run_node() {
 # Keeps the sandbox broker running (app/sandbox, only when the host set
 # BLOT_SANDBOX_SOCKET). It is root, and the app can't rewrite its files (they
 # are root-owned under /usr/local/lib/blot-sandbox), so it starts with nothing
-# from this environment: no secrets, no NODE_OPTIONS. A broker that dies is
+# from this environment: no secrets, no NODE_OPTIONS, and not in the app's
+# directory. A broker that dies is
 # started again after a fixed delay and never stops the unit: while it is down
 # the app's jobs fail closed.
 run_broker() {
+  cd /
   child=
   stopping=
   trap 'stopping=1; [ -n "$child" ] && kill -TERM "$child" 2>/dev/null' TERM

@@ -22,6 +22,7 @@ const MAX_QUEUED = 32;
 const MAX_HEADER_BYTES = 4096;
 // nsjail enforces the job's time limit itself; this is for when it doesn't
 const KILL_GRACE_MS = 2000;
+const DRAIN_MS = 10 * 1000;
 
 // options: { socket, owner, spawnJail(name) -> child process, jobs, maxRunning,
 // maxQueued, log }. The defaults are the real ones; tests replace spawnJail.
@@ -53,6 +54,10 @@ function createBroker(options = {}) {
   function reply(socket, header, body) {
     if (socket.destroyed) return;
     socket.end(body ? Buffer.concat([Buffer.from(header + "\n"), body]) : header + "\n");
+    // A client still sending (we refused its input) only reads the reply once
+    // its writes finish, so throw the rest away, for a while
+    socket.resume();
+    setTimeout(() => socket.destroy(), DRAIN_MS).unref();
   }
 
   const fail = (socket, error) => reply(socket, JSON.stringify({ ok: false, error }));
@@ -186,12 +191,13 @@ function createBroker(options = {}) {
 
     child.stdin.on("error", () => {});
     const feed = (chunk) => {
+      if (failure) return;
       inputBytes += chunk.length;
       if (inputBytes > job.maxInputBytes) {
         socket.pause();
         return kill("input-too-large");
       }
-      if (failure || !child.stdin.writable) return;
+      if (!child.stdin.writable) return;
       if (!child.stdin.write(chunk)) {
         socket.pause();
         child.stdin.once("drain", () => socket.resume());
