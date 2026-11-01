@@ -2,7 +2,7 @@ const fs = require("fs-extra");
 const { extname, dirname, join, basename } = require("path");
 const titlify = require("build/prepare/titlify");
 const ensure = require("helper/ensure");
-const LocalPath = require("helper/localPath");
+const { withLocal } = require("build/converters/folderStat");
 const hash = require("helper/hash");
 const sharp = require("sharp");
 const assets = require("storage/assets");
@@ -32,12 +32,12 @@ function is(path) {
 async function read(blog, path, callback) {
   ensure(blog, "object").and(path, "string").and(callback, "function");
 
-  const localPath = LocalPath(blog.id, path);
   // If we need to convert the image to another format, store the converted
   // image in the asset directory for the blog.
 
   try {
-    const stat = await fs.stat(localPath);
+    // sharp and exiftool read from a real file
+    const { localPath, stat } = await withLocal(blog.id, path);
     const name = basename(path);
     const pathForTitle = join(dirname(path), name);
     const title = titlify(pathForTitle);

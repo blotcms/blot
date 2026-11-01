@@ -1,4 +1,3 @@
-const config = require("config");
 const fs = require("fs-extra");
 const async = require("async");
 const cheerio = require("cheerio");
@@ -84,7 +83,6 @@ async function bakeHTML(html, options) {
 
 function makeContext(options) {
   const blogID = options.blogID;
-  const blogFolder = join(config.blog_folder_dir, blogID);
   // Absolute URLs on one of the blog's own hosts (https://blog.example.com/
   // photo.jpg) are baked like relative links; see stripOwnHost.
   const hostPatterns = toHostPatterns(
@@ -97,7 +95,6 @@ function makeContext(options) {
   // several times in one entry (src and srcset) is only read and hashed once.
   return {
     blogID,
-    blogFolder,
     dependencies: new Set(),
     hostPatterns,
     entryPath: options.path,
@@ -275,7 +272,7 @@ async function rewriteSrcset(ctx, value) {
 // (ENOENT) if there's no matching file, in which case the link is left
 // untouched.
 async function resolveBuildFile(ctx, value) {
-  const { blogID, blogFolder } = ctx;
+  const { blogID } = ctx;
   const hashIndex = value.indexOf("#");
   const hash_ = hashIndex > -1 ? value.slice(hashIndex) : "";
   value = hashIndex > -1 ? value.slice(0, hashIndex) : value;
@@ -304,7 +301,7 @@ async function resolveBuildFile(ctx, value) {
   const cacheKey = resolve("/", pathFromValue);
 
   if (!ctx.files.has(cacheKey)) {
-    ctx.files.set(cacheKey, hashFolderFile(blogFolder, cacheKey));
+    ctx.files.set(cacheKey, hashFolderFile(blogID, cacheKey));
   }
 
   const file = await ctx.files.get(cacheKey);

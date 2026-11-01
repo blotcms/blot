@@ -9,14 +9,15 @@ var ownHost = require("./ownHost");
 var type = require("../type");
 var ensure = require("../ensure");
 var fs = require("fs-extra");
-var localPath = require("../localPath");
+var folder = require("storage/folder");
 var config = require("config");
 var assets = require("storage/assets");
 var join = require("path").join;
 var resolve = require("path").resolve;
 var callbackify = require("util").callbackify;
+var ensureLocal = callbackify(folder.ensureLocal);
+var resolveCaseInsensitive = callbackify(folder.resolveCaseInsensitive);
 var async = require("async");
-var caseSensitivePath = require("../caseSensitivePath");
 var he = require("he");
 var unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
 var decodeFolderPath = require("blog/render/replaceFolderLinks/shared").decodeFolderPath;
@@ -105,7 +106,6 @@ function Transformer(blogID, name) {
     var url = isURL(src);
     var path = src;
     var decodedURI;
-    var fullLocalPath;
     var tasks = [];
 
     debug(src);
@@ -184,21 +184,13 @@ function Transformer(blogID, name) {
     // First we check if this path matches a file in the blog folder exactly.
     tasks.push(function (next) {
       debug("attempting to resolve path exactly");
-      fullLocalPath = localPath(blogID, path);
-      fromPath(fullLocalPath, transform, next);
+      fromFolder(path, transform, next);
     });
 
     // Next we attempt to resolve the path case-insensitively
     tasks.push(function (next) {
       debug("attempting to resolve path case-insensitively");
-      caseSensitivePath(
-        localPath(blogID, "/"),
-        path,
-        function (err, fullLocalPath) {
-          if (err) return next(err);
-          fromPath(fullLocalPath, transform, next);
-        }
-      );
+      fromFolderIgnoringCase(path, transform, next);
     });
 
     // Finally we attempt to resolve the URI-decoded path case-insensitively
@@ -208,14 +200,7 @@ function Transformer(blogID, name) {
           "attempting to resolve URI-decoded path case-insensitively",
           decodedURI
         );
-        caseSensitivePath(
-          localPath(blogID, "/"),
-          decodedURI,
-          function (err, fullLocalPath) {
-            if (err) return next(err);
-            fromPath(fullLocalPath, transform, next);
-          }
-        );
+        fromFolderIgnoringCase(decodedURI, transform, next);
       });
 
     // If the path contains a backward slash, we try and resolve it as if
@@ -226,22 +211,14 @@ function Transformer(blogID, name) {
       tasks.push(function (next) {
         var backslashPath = path.split("\\").join("/");
         debug("attempting to resolve backslash path", backslashPath);
-        fullLocalPath = localPath(blogID, backslashPath);
-        fromPath(fullLocalPath, transform, next);
+        fromFolder(backslashPath, transform, next);
       });
 
       // then case-insensitively
       tasks.push(function (next) {
         var backslashPath = path.split("\\").join("/");
         debug("attempting backslash path case-insensitively", backslashPath);
-        caseSensitivePath(
-          localPath(blogID, "/"),
-          backslashPath,
-          function (err, fullLocalPath) {
-            if (err) return next(err);
-            fromPath(fullLocalPath, transform, next);
-          }
-        );
+        fromFolderIgnoringCase(backslashPath, transform, next);
       });
 
       // then URI-decoded and case-insensitively
@@ -252,14 +229,7 @@ function Transformer(blogID, name) {
             "attempting backslash URI-decoded path case-insensitively",
             backslashPath
           );
-          caseSensitivePath(
-            localPath(blogID, "/"),
-            backslashPath,
-            function (err, fullLocalPath) {
-              if (err) return next(err);
-              fromPath(fullLocalPath, transform, next);
-            }
-          );
+          fromFolderIgnoringCase(backslashPath, transform, next);
         });
     }
 
@@ -269,6 +239,22 @@ function Transformer(blogID, name) {
       if (err) return callback(err);
       debug(results);
       callback(null, results[0], results[1]);
+    });
+  }
+
+  // A file in the blog's folder, at exactly this path
+  function fromFolder(path, transform, callback) {
+    ensureLocal(blogID, path, function (err, fullLocalPath) {
+      if (err) return callback(err);
+      fromPath(fullLocalPath, transform, callback);
+    });
+  }
+
+  // The same, matching the path without regard to case
+  function fromFolderIgnoringCase(path, transform, callback) {
+    resolveCaseInsensitive(blogID, path, function (err, resolvedPath) {
+      if (err) return callback(err);
+      fromFolder(resolvedPath, transform, callback);
     });
   }
 
