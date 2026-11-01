@@ -11,6 +11,7 @@ var localPath = require("helper/localPath");
 var Git = require("./git");
 var dataDir = require("./dataDir");
 var checkGitRepoExists = require("./checkGitRepoExists");
+var database = require("./database");
 
 // Must come before pushover is used. Gives every Git request's duplex an
 // "error" listener so an aborted request can never be an unhandled error.
@@ -202,20 +203,45 @@ function commit(blogID, change, callback) {
 
             var message = (contents === null ? "Removed " : "Updated ") + path;
 
-            git.raw(["commit", "-m", message], function (err) {
-              if (err) return callback(err);
+            // Blot applies this change itself, so the commit counts as
+            // applied too, see advanceApplied below. A repository with no
+            // commit yet has no parent: the recorded commit is left alone.
+            git.raw(["rev-parse", "HEAD"], function (err, parent) {
+              parent = err ? "" : parent.trim();
 
-              // We push changes made to the bare repository
-              git.raw(["push"], function (err) {
+              git.raw(["commit", "-m", message], function (err) {
                 if (err) return callback(err);
 
-                debug("Blog:", blogID, "Committed", path);
-                callback(null);
+                // We push changes made to the bare repository
+                git.raw(["push"], function (err) {
+                  if (err) return callback(err);
+
+                  debug("Blog:", blogID, "Committed", path);
+                  advanceApplied(git, blogID, parent, callback);
+                });
               });
             });
           });
         });
       });
+    });
+  });
+}
+
+// Moves the blog's recorded applied commit to the commit just made, but only
+// if it is still the commit's parent. If it is something else, an earlier
+// push has not been applied, and Blot's change is left for the next sync to
+// apply again, which is harmless. Redis being unavailable is no reason to
+// fail a write that is already pushed, for the same reason.
+function advanceApplied(git, blogID, parent, callback) {
+  git.raw(["rev-parse", "HEAD"], function (err, head) {
+    head = err ? "" : head.trim();
+
+    if (!parent || !head || head === parent) return callback(null);
+
+    database.advanceApplied(blogID, parent, head, function (err) {
+      if (err) debug("Blog:", blogID, "Could not record applied commit", err);
+      callback(null);
     });
   });
 }
