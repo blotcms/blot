@@ -328,6 +328,26 @@ reset units; set_image blot-blue $UNIT_IMG; bluegreen
 check "blue already on the image (a deploy that stopped after blue): only green is replaced" \
   '[ $RC = 0 ] && ! called "docker stop --time 40 blot-blue" && called "docker stop --time 40 blot-green" && [ "$(cat "$FAKE/image/blot-green")" = $UNIT_IMG ]'
 
+reset units; set_image blot-blue $UNIT_IMG; set_image blot-green $UNIT_IMG; PROXY_DEPLOY_FORCE=1 bluegreen
+check "PROXY_DEPLOY_FORCE=1 replaces units that already run the image" \
+  '[ $RC = 0 ] && called "docker stop --time 40 blot-blue" && called "docker stop --time 40 blot-green" && called "docker create"'
+
+echo paused-for-a-test > "$T/deploy-paused"; export PROXY_DEPLOY_PAUSE_FILE="$T/deploy-paused"
+reset units; bluegreen
+check "deploys paused on the host: refused before anything happens, and it says why" \
+  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "paused-for-a-test"'
+reset units; PROXY_DEPLOY_IGNORE_PAUSE=1 bluegreen
+check "PROXY_DEPLOY_IGNORE_PAUSE=1 deploys anyway" '[ $RC = 0 ] && called "docker create"'
+rm -f "$T/deploy-paused"; unset PROXY_DEPLOY_PAUSE_FILE
+
+reset units; PROXY_VERIFY_SKIP_REDIS_WRITE=1 bluegreen
+check "PROXY_VERIFY_SKIP_REDIS_WRITE=1 tells verify-container" '[ $RC = 0 ] && called "index.js [^ ]* --skip-redis-write"'
+reset units; bluegreen
+check "and it stays off by default" '[ $RC = 0 ] && ! called "skip-redis-write"'
+
+reset units; bash "$DEPLOY/reset-cache.sh" "$UNIT_IMG" >"$T/out" 2>&1; RC=$?
+check "reset-cache.sh empties the cache with the units running" '[ $RC = 0 ] && called "docker run --rm --user 0 --entrypoint sh" && ! called "docker stop"'
+
 reset units; set_image blot-blue $UNIT_IMG; set_image blot-green $UNIT_IMG; FAKE_UNHEALTHY=blot-green bluegreen
 check "an unhealthy unit is replaced even on the right image (here the replacement is unhealthy too: rolled back); the healthy one is not touched" \
   '[ $RC != 0 ] && called "docker stop --time 40 blot-green" && ! called "docker stop --time 40 blot-blue"'

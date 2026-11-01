@@ -70,6 +70,19 @@ describe("deploy verify-container", function () {
     }
   });
 
+  it("writes to Redis unless told to skip that, for a read-only replica", async function () {
+    const check = checks.find((c) => c.name === "redis read/write");
+    const readOnly = {
+      ping: async () => "PONG",
+      set: async () => {
+        throw new Error("READONLY You can't write against a read only replica.");
+      },
+    };
+
+    expect((await rejection(check.run({ redis: readOnly }))).message).toContain("READONLY");
+    expect(await check.run({ redis: readOnly, skipRedisWrite: true })).toContain("write skipped");
+  });
+
   it("passes the storage bucket check against a reachable bucket and fails without one", async function () {
     const config = require("config");
     const check = checks.find((c) => c.name === "storage bucket reachable");

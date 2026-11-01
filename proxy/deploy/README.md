@@ -89,6 +89,9 @@ The way back from a bad unit image is an older unit image, `npm run deploy-units
    user an ACL rather than making it world-readable:
    `sudo setfacl -m u:deploy:r /etc/blot/proxy.env`
    ([`setup-deploy-user.sh`](../../scripts/deploy/setup-deploy-user.sh) does this if the file already exists).
+   A host cycle (`config/host/cycle.sh`) pauses deploys: while `/etc/blot/deploy-paused`
+   exists on a host, `blue-green.sh` refuses to run there, whether it came from
+   the Deploy workflow or `npm run deploy-units`. The file says why.
 3. **The wildcard certificate** is renewed by the app's scheduler
    (`app/scheduler/renew-wildcard-ssl.js`), not from the host. The proxy
    serves it from Redis (within seconds of a renewal, no reload needed; see

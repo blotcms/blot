@@ -13,6 +13,7 @@ mkdir "$T/bin"
 cat > "$T/bin/ssh" <<'F'
 #!/usr/bin/env bash
 echo "$1" >> "$SSH_LOG"
+echo "$*" >> "$SSH_LOG.full"
 # units.sh pipes a tar in, so keep reading; sshCommand.js leaves stdin open
 # (exec), which would block until its 60s abort, so js() skips the read.
 [ -n "${SSH_STUB_NO_STDIN:-}" ] || cat > /dev/null
@@ -35,6 +36,13 @@ check "units.sh default ssh target" "blot " "$(targets)"
 check "units.sh default prints no target line" 0 "$(grep -c 'ssh target' "$T/out")"
 check "sshCommand default exits 0" 0 "$(js)"
 check "sshCommand default ssh target" "blot " "$(targets)"
+
+# config/host/cycle.sh's settings reach blue-green.sh, on the host, only if set.
+remote() { grep -c "$1" "$SSH_LOG.full"; }
+: > "$SSH_LOG.full"; units > /dev/null
+check "units.sh passes nothing on by default" 0 "$(remote 'PROXY_')"
+: > "$SSH_LOG.full"; PROXY_DEPLOY_IGNORE_PAUSE=1 PROXY_DEPLOY_FORCE=1 PROXY_VERIFY_SKIP_REDIS_WRITE=1 PROXY_AIRLOCK_IMAGE=ghcr.io/x/y:z units > /dev/null
+check "units.sh passes the settings to blue-green.sh" 1 "$(remote 'PROXY_DEPLOY_IGNORE_PAUSE=1 PROXY_DEPLOY_FORCE=1 PROXY_VERIFY_SKIP_REDIS_WRITE=1 PROXY_AIRLOCK_IMAGE=ghcr.io/x/y:z .*blue-green.sh')"
 
 export BLOT_DEPLOY_TARGET=ec2-user@10.0.0.7
 check "units.sh custom exits 0" 0 "$(units)"

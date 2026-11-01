@@ -35,7 +35,8 @@
 #                1. refuse unless the OTHER unit is running and healthy (the
 #                   last healthy proxy is never stopped);
 #                2. skip the unit if it already runs this image and is healthy,
-#                   so running a deploy twice is safe;
+#                   so running a deploy twice is safe (PROXY_DEPLOY_FORCE=1 does
+#                   not skip it, for a host cycle's settle);
 #                3. stop it, rename it blot-<unit>-previous (kept, stopped, for
 #                   the rollback), create and start the new blot-<unit>, wait
 #                   for its health socket, check the site;
@@ -79,6 +80,13 @@ NEW_IMAGE="${1:?usage: blue-green.sh <commit-sha | image>}"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 . "$DIR/common.sh"
+
+# A host cycle pauses deploys on both hosts (config/host/cycle.sh). The check is
+# here, not in the workflow, because npm run deploy-units and the Deploy workflow
+# both end up here, and a rehearsal then only pauses its own drill hosts.
+if [ -e "$PAUSE_FILE" ] && [ "${PROXY_DEPLOY_IGNORE_PAUSE:-}" != 1 ]; then
+  die "deploys are paused on this host ($PAUSE_FILE: $(cat "$PAUSE_FILE" 2>/dev/null))"
+fi
 
 NEW_IMAGE="$(resolve_image "$NEW_IMAGE")"
 # on the host first: whether it is a unit is read from its label
@@ -267,7 +275,7 @@ canary() {
 replace_unit() {
   local u="$1" name other prev
   name="$(unit_name "$u")"; other="$(unit_name "$(other_unit "$u")")"; prev="$name-previous"
-  if running "$name" && [ "$(container_image_id "$name")" = "$NEW_IMAGE_ID" ] && healthy "$name"; then
+  if [ "${PROXY_DEPLOY_FORCE:-}" != 1 ] && running "$name" && [ "$(container_image_id "$name")" = "$NEW_IMAGE_ID" ] && healthy "$name"; then
     # The unit is current, but its airlock may not be (an earlier run found no
     # airlock image for this commit, or was cut off): bring it to the target.
     ensure_airlock "$u" || die "the airlock for $name did not come up"

@@ -258,7 +258,7 @@ gh workflow run deploy.yml
 
 ## Deploy-time container verification
 
-Once a unit (blot-blue, then blot-green) reports healthy, `proxy/deploy/common.sh` runs `scripts/deploy/verify-container` inside it (`docker exec`). Any failed check fails the deploy: that unit is rolled back and the other one is never touched. It checks the release ID, redis read/write, that `data/blogs` matches the blogs in redis, the data mount is writable with disk to spare, pandoc, git, sharp (with HEIC), required env vars, the airlock (browser and proxy), a render of the canary blog (`preview-of-wireframe-on-david`, straight to the container, not via the proxy) and the dashboard log-in page.
+Once a unit (blot-blue, then blot-green) reports healthy, `proxy/deploy/common.sh` runs `scripts/deploy/verify-container` inside it (`docker exec`). Any failed check fails the deploy: that unit is rolled back and the other one is never touched. `config/host/cycle.sh` starts units on a read-only replica, so it alone passes `--skip-redis-write` (through `PROXY_VERIFY_SKIP_REDIS_WRITE=1`), which leaves out the Redis write. It checks the release ID, redis read/write, that `data/blogs` matches the blogs in redis, the data mount is writable with disk to spare, pandoc, git, sharp (with HEIC), required env vars, the airlock (browser and proxy), a render of the canary blog (`preview-of-wireframe-on-david`, straight to the container, not via the proxy) and the dashboard log-in page.
 
 This is deliberately not part of `/health` or the Docker `HEALTHCHECK`, which also run after crash-restarts when we want to keep serving whatever we can. Rollbacks skip it for the same reason. To run it by hand:
 

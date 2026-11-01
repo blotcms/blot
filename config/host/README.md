@@ -241,6 +241,69 @@ The install paths are load-bearing: `mount-instance-store.service` hardcodes
 `/home/ec2-user/scripts/mount-instance-store.sh` (likewise
 `mount-data-volume.service` and `mount-data-volume.sh`).
 
+## Host cycle
+
+`cycle.sh` moves everything onto a fresh host, so upgrades and resizes mean
+building a new host rather than patching one. It wraps the scripts above,
+`data-volume/resize.sh`, `config/redis/promote.sh` and `scripts/deploy/units.sh`,
+and adds little of its own (see the usage at the top of the file). Rehearse it
+with `--drill` on hosts tagged `BlotDrill=true`.
+
+```
+config/host/cycle.sh --production --type m6gd.xlarge --cycle <name> launch <old>
+config/host/cycle.sh --production [--old-redis <host>] replicate <old> <new>
+config/host/cycle.sh --production data <old> <new>
+config/host/cycle.sh --production [--old-redis <host>] app <old> <new>
+config/host/cycle.sh --production --eip <id> --bans-file data/bans.txt --old-direct <host> [--old-redis <host>] switch <old> <new>
+config/host/cycle.sh --production --eip <id> --old-direct <host> settle <old> <new>
+config/host/cycle.sh --production --eip <id> --old-volume <vol> --old-instance <id> finish <old> <new>
+config/host/cycle.sh status <old> <new>
+```
+
+Each phase takes `--dry-run`, can be run alone, and works out what is left by
+looking at the hosts, so after a failure fix the cause and run it again. Check
+`status` first if you have lost track. Things to know:
+
+- **Names.** `<old>`, `<new>` and the others are ssh names that work with plain
+  `ssh`, as `ec2-user`. The old app host's only public address is the Elastic IP,
+  so from `switch` on it needs `--old-direct`: an alias of its private IP with
+  `ProxyJump <new>`. `switch` refuses an alias of the Elastic IP, and tries the
+  way in before it freezes anything.
+- **Two hosts.** With a separate Redis host pass `--old-redis`, also for later
+  phases that promote. Without it `<old>` is taken to run Redis too.
+- **Deploys pause** at `app` and resume at the end of `settle`: `/etc/blot/deploy-paused`
+  on both hosts stops `proxy/deploy/blue-green.sh`, however a deploy was started.
+  The cycle's own deploys pass `PROXY_DEPLOY_IGNORE_PAUSE=1`. If you abandon a
+  cycle, remove the file from both.
+- **`app`** copies `secrets.env` and `proxy.env` from the old host and writes the
+  socket settings into the new host's copy only. It deploys the image the old
+  units run, with `verify-container` skipping its Redis write, because the
+  replica refuses it. Other writes fail too until the switch: dashboard pages
+  may not work, and nothing on the new host should be judged by them yet.
+- **The freeze.** `switch` re-arms the freeze's TTL (`--freeze-ttl`, default 900
+  seconds) between steps, through whichever host has the Redis master, and
+  lifts it through the new host. It keeps the old host's disk read-only, the old
+  units stopped but not removed, and its Redis a replica of the new one.
+- **`settle`** forces a rolling deploy of the same image, because a plain one
+  skips units already on it, and that restart is what runs the steps that failed
+  on the replica. It then retags the volumes: a rollback is simplest before that.
+- **`finish`** terminates only the instances named with `--old-instance`, and
+  not within 3 days of `settle` (`--any-age`). It stops at termination
+  protection and prints the command that lifts it; that is your decision. The
+  old data volume is kept, for you to delete.
+- **Hours.** Every phase refuses from 15 minutes before the 01:00 and 05:00 UTC
+  hours until they end (wildcard renewal, file cleanup), unless `--any-time`.
+
+**Rollback** before the promotion: `resize.sh --host <old> move thaw`. After it,
+decide quickly, because whatever the new host has written has to come back too:
+
+1. `config/redis/promote.sh <new> <old-redis>`.
+2. Move the Elastic IP back to the old instance with `aws ec2 associate-address`.
+3. On the old host: `resize.sh --host <old> move thaw`, then `docker start` the
+   airlocks and the units.
+4. Copy back what changed, with the hosts swapped (`data-volume/README.md`,
+   "Moving to another host"). This needs `settle` not to have retagged yet.
+
 ### The wildcard certificate
 
 `blue-green.sh` will not start a unit in fresh mode until

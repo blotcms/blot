@@ -260,6 +260,10 @@ rsync, xfsprogs and the mount unit on it, for rehearsing `move`; it prints the
 `resize.sh move` commands. In a drill the new host has no `deploy.sh`, so
 `move prepare` prints the two commands that mount the volume instead.
 
+`resize.sh --app-freeze` freezes a drill host with `read-only.js`, as production
+does, instead of pausing its containers, for a drill that runs real units
+(`config/host/cycle.sh` passes it).
+
 `setup` fills a small data volume with tens of thousands of files and runs
 reader and writer containers (named `blot-blue` and `blot-green`, `rslave` binds). The drill host is marked by
 `/etc/blot/drill`, so `resize.sh` pauses the containers instead of calling

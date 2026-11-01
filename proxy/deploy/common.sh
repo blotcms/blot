@@ -39,6 +39,16 @@
 #   PROXY_SKIP_CERT_SWEEP  (unset)              1 skips the custom-domain certificate
 #                                               checks (see cert_baseline and
 #                                               certs_all_served)
+#   PROXY_DEPLOY_PAUSE_FILE /etc/blot/deploy-paused  while it exists blue-green.sh
+#                                               refuses to run. config/host/cycle.sh
+#                                               creates it on both hosts
+#   PROXY_DEPLOY_IGNORE_PAUSE (unset)           1 deploys anyway: cycle.sh's own deploys
+#   PROXY_DEPLOY_FORCE     (unset)              1 replaces units that already run this
+#                                               image, to re-run what happens at boot
+#                                               or pick up edited env files (cycle.sh)
+#   PROXY_VERIFY_SKIP_REDIS_WRITE (unset)       1 leaves out verify-container's Redis
+#                                               write, which a read-only replica refuses.
+#                                               Only cycle.sh's app phase sets it
 #   PROXY_NOFILE           65536                --ulimit nofile=N:N. Each proxied
 #                                               connection holds ~2 fds (client +
 #                                               upstream), so worker_connections
@@ -59,6 +69,7 @@ DRAIN_TIMEOUT="${PROXY_DRAIN_TIMEOUT:-30}"
 AIRLOCK_HEALTH_TIMEOUT="${PROXY_AIRLOCK_HEALTH_TIMEOUT:-60}"
 HEALTH_SOCK="/run/openresty/health.sock"
 LOCK_FILE="${PROXY_DEPLOY_LOCK:-/tmp/blot-proxy-deploy.lock}"
+PAUSE_FILE="${PROXY_DEPLOY_PAUSE_FILE:-/etc/blot/deploy-paused}"
 SITE_IP="127.0.0.1"
 PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
 # worker_connections is 10000 (proxy/config/initial.conf) and each
@@ -464,9 +475,12 @@ wait_healthy() { # wait_healthy <name> <timeout> [check function, default health
 # user, uid 1000 (the image ends USER root, for OpenResty's master): run as
 # root the writable checks would pass on root-owned directories.
 verify_unit() { # verify_unit <name>
-  local out
+  local out skip=""
   log "Verifying $1 (scripts/deploy/verify-container)"
-  if ! out="$(timeout 90 docker exec --user 1000:1000 -e HOME=/home/node "$1" node /usr/src/app/scripts/deploy/verify-container/index.js "$RELEASE_ID" 2>&1)"; then
+  [ "${PROXY_VERIFY_SKIP_REDIS_WRITE:-}" != 1 ] || skip=--skip-redis-write
+  # $skip unquoted: empty, it must not become an empty argument
+  # shellcheck disable=SC2086
+  if ! out="$(timeout 90 docker exec --user 1000:1000 -e HOME=/home/node "$1" node /usr/src/app/scripts/deploy/verify-container/index.js "$RELEASE_ID" $skip 2>&1)"; then
     printf '%s\n' "$out" >&2
     return 1
   fi

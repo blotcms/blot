@@ -1,7 +1,7 @@
 // Each check takes a context and resolves to a short detail string when it
 // passes, or throws when it doesn't. See ./index.js for how they are run.
 //
-// context: { config, redis, expectedRelease }
+// context: { config, redis, expectedRelease, skipRedisWrite }
 //   redis - a connected node-redis client (dedicated to this run)
 
 const fs = require("fs/promises");
@@ -69,9 +69,11 @@ function request({ url, host, headers = {}, timeout = 8000, options = {} }) {
   });
 }
 
-async function redisRoundTrip({ redis }) {
+async function redisRoundTrip({ redis, skipRedisWrite }) {
   await redis.ping();
-  // PING succeeds against a read-only replica; a write doesn't.
+  // PING succeeds against a read-only replica; a write doesn't. A host cycle
+  // starts units on a replica on purpose (config/host/cycle.sh app).
+  if (skipRedisWrite) return "ping succeeded, write skipped (--skip-redis-write)";
   const key = `deploy-verify:${process.pid}:${Date.now()}`;
   await redis.set(key, "ok", { EX: 30 });
   const value = await redis.get(key);

@@ -8,7 +8,10 @@
 // to keep serving whatever we can. Every check here is critical - one failure
 // fails the deploy.
 //
-// usage: node verify-container/index.js <expected BLOT_RELEASE_ID>
+// usage: node verify-container/index.js <expected BLOT_RELEASE_ID> [--skip-redis-write]
+//
+// --skip-redis-write is for a unit started on a read-only replica, which only
+// config/host/cycle.sh does. Every other deploy proves Redis takes writes.
 
 // The deploy script's ssh wrapper gives up after 60s and, when it does, loses
 // this script's output - so the whole run has its own deadline comfortably
@@ -73,6 +76,7 @@ async function main() {
       config,
       redis,
       expectedRelease: process.argv[2],
+      skipRedisWrite: process.argv.includes("--skip-redis-write"),
     });
   } catch (err) {
     // Without redis most checks can't say anything useful; report just this.
