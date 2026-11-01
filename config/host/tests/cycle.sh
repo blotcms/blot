@@ -90,7 +90,11 @@ case "$cmd" in
   *"sudo bash -c"*) script=${cmd#sudo bash -c }; eval "bash -c ${script//\/etc\/blot/$W/etc.$m}" ;;
   *"sed -n 's/^BLOT_HOST"*) echo blot.test ;;
   *"mountpoint -q"*) [ ! -e "$W/nomount.$m" ] ;;
-  *".blot-data-volume"*) echo vol-0e ;;
+  *".aws/credentials"*) cat > /dev/null; touch "$W/creds.$m" ;;
+  *"mkdir /tmp/blot-data-volume"*) cat > /dev/null ;;
+  *blockdev*) echo "268435456 bytes (268 MB, 256 MiB) copied, 1.0 s, 268 MB/s" ;;
+  *"host.sh prewarm"*) printf 'prewarm=%s\nprewarm_percent=10\nprewarm_duration_s=5\n' "$(cat "$W/prewarm" 2> /dev/null || echo running)" ;;
+  *".blot-data-volume"*) cat "$W/marker" 2> /dev/null || echo vol-0e ;;
   *"aws sts"*) [ -z "${STUB_NO_BACKUP_KEY:-}" ] ;;
   *"curl -sS"*) echo "${STUB_PROBE:-200}" ;;
   *"tar -C"*) cat > /dev/null ;;
@@ -102,6 +106,17 @@ cat > "$TMP/bin/aws" << 'EOF'
 a=$*
 echo "aws $a" >> "$W/calls"
 case "$a" in
+  # restore: the lost volume's snapshots, the volume made from one, the new host's tags
+  *describe-snapshots*) if [ -e "$W/nosnap" ]; then echo "None None None None"; else echo "snap-0a1 2026-11-01T03:00:00+00:00 vol-0a1b completed"; fi ;;
+  *describe-volumes*BlotRestoreCycle*) cat "$W/restore_volume" 2> /dev/null || true ;;
+  *describe-volumes*"Attachments[0].InstanceId"*) cat "$W/vol_attached" 2> /dev/null || echo None ;;
+  *describe-volumes*VolumeType*) echo "gp3 3000 125" ;;
+  *create-volume*) echo "vol-0c1 snap-0a1" > "$W/restore_volume"; echo vol-0c1 ;;
+  *attach-volume*) echo i-06e6577 > "$W/vol_attached" ;;
+  *"describe-instances --instance-ids"*BlotCycle*) cat "$W/cycle_tag" ;;
+  *"describe-instances --instance-ids"*Placement*) echo us-west-2a ;;
+  *"describe-instances --instance-ids"*BlockDeviceMappings*) echo /dev/xvda ;;
+  *describe-instance-status*) echo ok ;;
   *"describe-instances --filters"*) cat "$W/cycle_instance" 2> /dev/null || true ;;
   *"describe-instances --instance-ids"*"State.Name"*) echo running ;;
   *"describe-instances --instance-ids"*) cat "$W/tag" ;;
@@ -131,6 +146,17 @@ printf '#!/bin/bash\nexit 0\n' > "$TMP/bin/runuser"
 printf '#!/bin/bash\necho "$(basename "$0") $*" >> "$W/calls"\n' > "$TMP/tree/config/host/bootstrap.sh"
 cp "$TMP/tree/config/host/bootstrap.sh" "$TMP/tree/config/host/bans.sh"
 cp "$TMP/tree/config/host/bootstrap.sh" "$TMP/tree/config/host/wildcard-cert.sh"
+
+cat > "$TMP/tree/config/redis/restore.sh" << 'EOF'
+#!/bin/bash
+echo "restore.sh $*" >> "$W/calls"
+echo 100 > "$W/keys.new"
+EOF
+mkdir -p "$TMP/in"
+printf 'BLOT_HOST=blot.test\nexport BLOT_SESSION_SECRET=s\n' > "$TMP/in/secrets.env"
+printf 'BLOT_HOST=blot.test\nPROXY_PRIVATE_IP=127.0.0.1\n' > "$TMP/in/proxy.env"
+printf '[default]\naws_access_key_id = x\naws_secret_access_key = y\n' > "$TMP/in/credentials"
+touch "$TMP/tree/config/host/data-volume/host.sh"
 
 cat > "$TMP/tree/config/host/launch.sh" << 'EOF'
 #!/bin/bash
@@ -166,7 +192,7 @@ touch "$W/units.new"
 grep -q '^BLOT_REDIS_SOCKET=/run/blot/redis/redis.sock$' "$W/etc.new/secrets.env" && echo '["BLOT_REDIS_SOCKET=/run/blot/redis/redis.sock"]' > "$W/env.new"
 echo "ghcr.io/blotcms/blot:$1" > "$W/image.new"
 EOF
-chmod +x "$TMP"/bin/* "$CYCLE" "$TMP"/tree/config/host/*.sh "$TMP/tree/config/host/data-volume/resize.sh" "$TMP/tree/config/redis/promote.sh" "$TMP/tree/scripts/deploy/units.sh"
+chmod +x "$TMP"/bin/* "$CYCLE" "$TMP"/tree/config/host/*.sh "$TMP/tree/config/host/data-volume/resize.sh" "$TMP/tree/config/redis/promote.sh" "$TMP/tree/config/redis/restore.sh" "$TMP/tree/scripts/deploy/units.sh"
 
 # ---- the world -----------------------------------------------------------
 
@@ -179,6 +205,7 @@ world() {
   echo old > "$W/eip_on"
   echo i-06f6c64 > "$W/eip_id"
   echo False > "$W/protection"
+  echo t1 > "$W/cycle_tag"
   echo 2020-01-01T00:00:00Z > "$W/replaced_at"
   printf 'BLOT_HOST=blot.test\nBLOT_REDIS_HOST=10.0.0.200\nexport BLOT_SESSION_SECRET=s\n' > "$W/etc.old/secrets.env"
   printf 'BLOT_HOST=blot.test\nPROXY_REDIS_HOST=10.0.0.200\nPROXY_PRIVATE_IP=127.0.0.1\n' > "$W/etc.old/proxy.env"
@@ -237,9 +264,8 @@ run --drill --production replicate old new
 refused "both are refused"
 run --drill frobnicate old new
 refused "an unknown phase is refused"
-run --drill restore old new
-refused "restore does not run yet"
-has "and says so" "$OUT" "not written yet"
+run --drill restore old new extra
+refused "restore takes at most the new host's name"
 run --drill replicate old
 refused "a phase without <new> is refused"
 run --production replicate old new
@@ -614,6 +640,121 @@ touch "$W/paused.new"
 run "${FINISH[@]}" --old-instance i-0aaa --yes finish old new
 refused "before settle finish refuses"
 rm "$W/paused.new"
+
+# ---- restore -------------------------------------------------------------
+
+echo "# restore"
+COMMIT_SHA=2222222222222222222222222222222222222222
+INPUTS=(--type m6gd.xlarge --cycle t1 --old-volume vol-0a1b --eip eipalloc-0a --commit "$COMMIT_SHA"
+  --secrets-env "$TMP/in/secrets.env" --proxy-env "$TMP/in/proxy.env" --aws-credentials "$TMP/in/credentials")
+# restore_world: the lost host is gone, whose address the Elastic IP is still on.
+restore_world() { world; rm -rf "$W/units.old" "$W/etc.new"; mkdir -p "$W/etc.new"; echo vol-0c1 > "$W/marker"; }
+mutations() { # nothing that changes the lost volume, whatever else happens
+  lacks "$1: no detach" "$CALLS" "detach-volume"
+  lacks "$1: no modify-volume" "$CALLS" "modify-volume"
+  lacks "$1: no delete-volume" "$CALLS" "delete-volume"
+  lacks "$1: the lost volume is not attached" "$CALLS" "attach-volume --volume-id vol-0a1b"
+}
+
+restore_world
+run --drill "${INPUTS[@]}" --old-volume "" --dry-run restore
+refused "restore with no volume or snapshot is refused"
+run --drill "${INPUTS[@]}" --commit abc --dry-run restore
+refused "restore with a short commit is refused"
+run --drill "${INPUTS[@]}" --cycle "" --dry-run restore
+refused "restore without a cycle name is refused"
+run --drill "${INPUTS[@]}" --secrets-env "$TMP/in/missing" restore
+refused "restore without the env files is refused"
+has "and says what to supply" "$OUT" "--secrets-env FILE"
+run --drill "${INPUTS[@]}" --aws-credentials "$TMP/in/secrets.env" restore
+refused "credentials without a [default] profile are refused"
+run restore
+refused "restore with neither --drill nor --production is refused"
+touch "$W/nosnap"
+run --drill "${INPUTS[@]}" --yes restore
+refused "no completed snapshot is refused"
+has "and says so" "$OUT" "no completed snapshot"
+lacks "before launching anything" "$CALLS" "launch.sh"
+rm "$W/nosnap"
+run --production "${INPUTS[@]}" --yes restore new
+refused "--production against a drill-tagged host is refused"
+has "naming the tag" "$OUT" "tagged BlotDrill=true"
+mutations "restore on the wrong world"
+
+echo "# restore: first run launches"
+restore_world
+run --drill "${INPUTS[@]}" --yes restore
+status_is "restore without a name launches" 0
+has "launch.sh is told the cycle" "$CALLS" "BlotCycle=t1"
+has "the host is set up" "$CALLS" "deploy.sh PUBLIC_IP=192.0.2.20"
+lacks "no volume yet" "$CALLS" "create-volume"
+lacks "and no Redis restore" "$CALLS" "restore.sh"
+has "it says to run it again" "$OUT" "run the same restore command again"
+mutations "launch"
+
+echo "# restore: dry run"
+restore_world
+run --drill "${INPUTS[@]}" --dry-run restore new
+status_is "restore dry run works" 0
+lacks "restores no Redis" "$CALLS" "restore.sh"
+lacks "creates no volume" "$CALLS" "create-volume"
+lacks "starts no units" "$CALLS" "units.sh"
+lacks "moves no address" "$CALLS" "associate-address"
+has "but prints what it would do" "$OUT" "would run: aws ec2 create-volume"
+
+echo "# restore: a drill"
+restore_world
+run --drill "${INPUTS[@]}" --yes restore new
+status_is "restore works" 0
+before "Redis is restored first" "restore.sh --yes new latest" "create-volume"
+before "then the volume is attached" "create-volume" "attach-volume --volume-id vol-0c1 --instance-id i-06e6577"
+before "then adopted from the snapshot's volume" "attach-volume" "host.sh adopt vol-0c1 vol-0a1b"
+before "the pre-warm starts" "host.sh adopt" "host.sh prewarm vol-0c1"
+before "and the volume is mounted by deploy.sh" "host.sh prewarm" "DATA_VOLUME_ID=vol-0c1"
+before "the env files and certificate come before the units" "wildcard-cert.sh new" "units.sh $COMMIT_SHA"
+before "the units come before the address moves" "units.sh $COMMIT_SHA" "associate-address"
+has "the units target the new host" "$CALLS" "target=new"
+has "the volume is made from the newest snapshot" "$CALLS" "create-volume --snapshot-id snap-0a1 --availability-zone us-west-2a --volume-type gp3 --iops 3000 --throughput 125"
+has "tagged for this cycle" "$CALLS" "BlotRestoreCycle"
+has "a drill volume keeps its drill name" "$CALLS" "drill-data-volume"
+lacks "and never the production name" "$CALLS" "Blot /var/www/blot/data"
+lacks "no production tag" "$CALLS" "create-tags"
+has "the host is marked to back up" "$CALLS" "touch /etc/blot-redis/active"
+has "the credentials were installed" "$(ls "$W")" "creds.new"
+has "it prints cold read timings" "$OUT" "268 MB/s"
+has "and the time of each step" "$OUT" "timing: Redis from the backup took"
+has "and the snapshot's start for the reconcile" "$OUT" "reconcile.js --since 2026-11-01T03:00:00+00:00"
+mutations "restore"
+
+echo "# restore: again after it finished"
+run --drill "${INPUTS[@]}" --yes restore new
+status_is "restore can be run again" 0
+lacks "no second Redis restore" "$CALLS" "restore.sh"
+lacks "no second volume" "$CALLS" "create-volume"
+lacks "no second attach" "$CALLS" "attach-volume"
+lacks "the address is not moved again" "$CALLS" "associate-address"
+has "it says where it is" "$OUT" "is already on"
+mutations "second restore"
+
+echo "# restore: a volume from another snapshot"
+echo "vol-0c1 snap-9999" > "$W/restore_volume"
+run --drill "${INPUTS[@]}" --yes restore new
+refused "a volume made from another snapshot is refused"
+has "and says so" "$OUT" "snap-9999"
+
+echo "# restore: production"
+restore_world
+echo None > "$W/tag"
+run --production "${INPUTS[@]}" --yes restore new
+refused "the production address needs a person at the terminal, --yes or not"
+has "and says why" "$OUT" "person at the terminal"
+has "the units had come up" "$CALLS" "units.sh $COMMIT_SHA"
+lacks "the address did not move" "$CALLS" "associate-address"
+lacks "and the volume has no production name yet" "$CALLS" "create-tags"
+has "the volume has a name of its own" "$CALLS" "restored for t1"
+has "it names the host losing the address" "$OUT" "is on: i-06f6c64"
+mutations "production restore"
+echo true > "$W/tag"
 
 # ---- status --------------------------------------------------------------
 
