@@ -1,6 +1,5 @@
-const fs = require("fs-extra");
+const folder = require("storage/folder");
 const { join } = require("path");
-const localPath = require("helper/localPath");
 const clfdate = require("helper/clfdate");
 const database = require("../database");
 const { sameFingerprint } = require("../util/contentFingerprint");
@@ -68,7 +67,7 @@ module.exports = async (blogID, publish, options = {}) => {
 
     const [remoteContents, localContents] = await Promise.all([
       driveReaddir(drive, dirId),
-      localReaddir(localPath(blogID, dir)),
+      localReaddir(blogID, dir),
     ]);
 
     // Since we reset the database of file ids
@@ -142,7 +141,7 @@ module.exports = async (blogID, publish, options = {}) => {
             fileId: existsOnRemote.id,
             supportsAllDrives: true,
             media: {
-              body: fs.createReadStream(localPath(blogID, path)),
+              body: folder.createReadStream(blogID, path),
             },
           });
         } else if (!existsOnRemote) {
@@ -155,7 +154,7 @@ module.exports = async (blogID, publish, options = {}) => {
             },
             supportsAllDrives: true,
             media: {
-              body: fs.createReadStream(localPath(blogID, path)),
+              body: folder.createReadStream(blogID, path),
             },
             fields: "id",
           });
@@ -187,7 +186,7 @@ const countTransferItems = async (drive, blogID, dir, dirId, priorModifiedTimeBy
 
   const [remoteContents, localContents] = await Promise.all([
     driveReaddir(drive, dirId),
-    localReaddir(localPath(blogID, dir)),
+    localReaddir(blogID, dir),
   ]);
 
   for (const { name, isDirectory, modifiedTime, size, fingerprint } of localContents) {
@@ -239,7 +238,7 @@ const countTransferItems = async (drive, blogID, dir, dirId, priorModifiedTimeBy
 
 const countLocalItems = async (blogID, dir) => {
   let count = 0;
-  const localContents = await localReaddir(localPath(blogID, dir));
+  const localContents = await localReaddir(blogID, dir);
 
   for (const { name, isDirectory } of localContents) {
     const path = join(dir, name);
