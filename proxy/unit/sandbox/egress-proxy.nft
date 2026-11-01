@@ -1,7 +1,8 @@
 #!/usr/sbin/nft -f
 #
 # Added to ./egress.nft in the proxy jail only. pasta delivers the unit's
-# connections over the namespace's loopback, which the filter otherwise refuses.
+# connections over the namespace's loopback interface, which the filter otherwise
+# refuses.
 # Only the proxy's own port, so a URL still can't reach anything else in here.
 
 insert rule inet jail output oif "lo" tcp sport 8888 accept

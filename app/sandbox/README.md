@@ -96,9 +96,11 @@ It uses the same pasta network, `egress.nft` and capability drop as the browser
 job, and binds much less: no Node, app code or `/proc`. pasta forwards one port on
 the unit's loopback to it (`network-proxy-<unit>.cfg`, which must match
 `sandboxProxyPort` in `scripts/deploy/constants.js`), and `egress-proxy.nft`
-lets that port through the jail's loopback. pasta shares the job's uid outside the
-namespace, so the filter can't tell them apart, and a URL for `127.0.0.1:8888`
-reaches tinyproxy itself. That can only return its own error page.
+lets that port through the jail's loopback interface. pasta delivers connections
+from the jail's own address, `10.255.255.2`, which is the one client tinyproxy
+allows. A URL for `127.0.0.1:8888` gets a refusal from tinyproxy. pasta shares
+the job's uid outside the namespace, so the filter can't tell the two apart, and
+the most a URL can do is hold one of its 64 connections, as any slow server can.
 
 ## Why
 
