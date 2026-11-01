@@ -23,6 +23,8 @@ var { NotFoundError } = require("./errors");
 // All of this goes away with the filesystem when the folder moves to S3,
 // where there are no links.
 
+function noop() {}
+
 var DEFAULT_LIMIT = 1000;
 var STAT_BATCH = 64;
 
@@ -202,6 +204,10 @@ async function serve(req, res, blogID, relPath, options) {
 }
 
 async function write(blogID, relPath, data) {
+  // The stream can fail during the awaits below, before pipeline listens for
+  // it, and an "error" with no listener would take down the process
+  if (data instanceof Readable) data.on("error", noop);
+
   var { root, local } = locate(blogID, relPath);
 
   if (local === root) throw new Error("storage/folder: write needs a path inside the folder");
@@ -210,8 +216,11 @@ async function write(blogID, relPath, data) {
   await fs.ensureDir(dirname(local));
 
   if (data instanceof Readable) {
-    // A stream can fail part way, which must not cost the file already here
-    var tmp = local + ".tmp-" + uuid();
+    if (data.errored) throw mapError(data.errored);
+
+    // A stream can fail part way, which must not cost the file already here.
+    // The name is fixed length: local's own could be at the filesystem's limit.
+    var tmp = join(dirname(local), ".tmp-" + uuid());
 
     try {
       await pipeline(data, fs.createWriteStream(tmp));

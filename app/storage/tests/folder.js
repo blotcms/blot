@@ -1,4 +1,5 @@
 describe("storage/folder", function () {
+  var { Readable } = require("stream");
   global.test.blog();
 
   var folder = require("storage/folder");
@@ -217,6 +218,21 @@ describe("storage/folder", function () {
   });
 
   describe("write and writeFrom", function () {
+    it("rejects when a stream fails before writing starts", async function () {
+      var stream = fs.createReadStream(join(outside, "missing.txt"));
+
+      expect((await rejection(folder.write(this.blog.id, "/early.txt", stream))).code).toEqual("ENOENT");
+      expect(await folder.exists(this.blog.id, "/early.txt")).toBe(false);
+    });
+
+    it("writes a stream to a name near the filesystem's limit", async function () {
+      var name = "/" + "a".repeat(250) + ".txt";
+
+      await folder.write(this.blog.id, name, Readable.from([Buffer.from("long")]));
+
+      expect((await folder.read(this.blog.id, name)).toString()).toEqual("long");
+    });
+
     it("keeps the existing file when a stream fails part way", async function () {
       await folder.write(this.blog.id, "/keep.txt", "old");
 
