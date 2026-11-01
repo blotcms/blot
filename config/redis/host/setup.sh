@@ -72,8 +72,10 @@ echo "    redis.conf parses"
 # Settings to compare with the running server. Skip ones the scratch server
 # overrides or that cannot meaningfully differ.
 SETTINGS=$(awk '!/^[ \t]*(#|$)/ {print tolower($1)}' "$TMP/test.conf" | sort -u |
-  grep -vxE 'bind|port|dir|logfile|pidfile')
+  grep -vxE 'bind|port|dir|logfile|pidfile|unixsocket')
 for s in $SETTINGS; do printf '%s\t%s\n' "$s" "$(scratch CONFIG GET "$s" | sed -n 2p)"; done > "$TMP/wanted"
+# The scratch server's socket is overridden above; compare the real path.
+printf 'unixsocket\t%s\n' "$(awk '$1 == "unixsocket" {print $2}' "$ROOT/redis.conf" | tail -n1)" >> "$TMP/wanted"
 scratch SHUTDOWN NOSAVE > /dev/null 2>&1 || true
 
 say "Config files"
@@ -93,6 +95,16 @@ put /etc/redis6/blot-memory.conf 0640 root:redis6 < "$TMP/blot-memory.conf"
 # Keep the package's stock config (or the live host's old one) the first time.
 [ -f /etc/redis6/redis6.conf.dist ] || cp -p /etc/redis6/redis6.conf /etc/redis6/redis6.conf.dist
 put /etc/redis6/redis6.conf 0640 root:redis6 < "$ROOT/redis.conf"
+# The directory of redis.conf's unixsocket. /run is a tmpfs, so tmpfiles.d
+# recreates it at boot, before redis6 starts. On a combined host
+# tmpfiles.d/blot.conf also declares /run/blot (for the app); the two files
+# name different paths and neither changes the other's, whichever runs first.
+# Not the unit's RuntimeDirectory=, which is /run/redis6.
+put /etc/tmpfiles.d/blot-redis.conf 0644 root:root <<'EOF'
+# Installed by config/redis/host/setup.sh: where redis.conf puts its Unix socket.
+d /run/blot/redis 0755 redis6 redis6 -
+EOF
+systemd-tmpfiles --create /etc/tmpfiles.d/blot-redis.conf
 
 say "Scripts"
 install -m 0755 -o root -g root -t /usr/local/bin \
@@ -211,6 +223,13 @@ After=blot-instance-store.service blot-disable-thp.service
 
 [Service]
 LimitNOFILE=65536
+# Redis last in the kill order (redis.conf lifts its BGSAVE child to the front).
+# A unit that dies restarts in seconds; Redis dying loses writes since the last
+# save.
+OOMScoreAdjust=-900
+# Redis first when the CPU is contended. docker's --cpu-shares 2048 is weight 79
+# and airlock's 512 is about 20, so 1000 wins; it costs nothing when idle.
+CPUWeight=1000
 Restart=always
 # Loading or saving a multi-GB RDB outlasts systemd's 90s default.
 TimeoutStartSec=600
@@ -271,6 +290,11 @@ if redis_up; then
   if [ -z "$SKIP_SYSTEMD" ] && [ "$nofile" != 65536 ]; then
     echo "LimitNOFILE: running $nofile, unit 65536" >> "$TMP/restart"
   fi
+  # A running Redis only gets the unit's value at its next restart.
+  oomadj=$(cat "/proc/$pid/oom_score_adj")
+  if [ -z "$SKIP_SYSTEMD" ] && [ "$oomadj" != -900 ]; then
+    echo "OOMScoreAdjust: running $oomadj, unit -900" >> "$TMP/restart"
+  fi
   if [ -s "$TMP/restart" ]; then
     echo "    Need a restart (not done), differing from the new config:"
     sed 's/^/      /' "$TMP/restart"
@@ -299,3 +323,4 @@ for key in vm.overcommit_memory vm.swappiness net.core.somaxconn net.ipv4.tcp_ma
 done
 pid=$(redis6-cli INFO server | tr -d '\r' | awk -F: '$1 == "process_id" {print $2}')
 echo "LimitNOFILE of Redis (pid $pid): $(awk '/^Max open files/ {print $4}' "/proc/$pid/limits")"
+echo "oom_score_adj of Redis (pid $pid): $(cat "/proc/$pid/oom_score_adj")"

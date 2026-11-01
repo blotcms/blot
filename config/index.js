@@ -127,7 +127,13 @@ module.exports = {
   socket: BLOT_SOCKET,
   clients_port: 8888,
 
-  redis: { port: 6379, host: process.env.BLOT_REDIS_HOST || "127.0.0.1" },
+  redis: {
+    port: 6379,
+    host: process.env.BLOT_REDIS_HOST || "127.0.0.1",
+    // Path of a Unix socket. When set, clients use it instead of host and port
+    // and never fall back to TCP; when unset, TCP as before.
+    socket: process.env.BLOT_REDIS_SOCKET || undefined,
+  },
 
   admin: {
     uid: process.env.BLOT_ADMIN_UID,

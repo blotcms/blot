@@ -1,5 +1,6 @@
 #!/bin/bash
 # Usage: launch.sh --type <instance-type> --from latest|<backup-name>|replica:<host> [options]
+#        launch.sh --type <instance-type> --from latest|<backup-name> --offsite <read-profile> <s3://bucket> [options]
 #        launch.sh --list [--profile NAME] [--region NAME]
 # Launches a new Redis EC2 instance from the launch template on the newest
 # Amazon Linux 2023 arm64 AMI, waits for SSH, runs bootstrap.sh, then loads
@@ -19,10 +20,18 @@
 #                    tagged BlotDrill=true, and /etc/blot-redis/drill is written
 #                    before bootstrap so backup.sh never uploads from it, even
 #                    after a cutover marks it active
+#   --offsite PROFILE s3://BUCKET
+#                    restore from the Backblaze B2 offsite bucket instead of S3,
+#                    for when AWS is unavailable (not with --from replica:...).
+#                    PROFILE is an AWS CLI profile on this machine with the B2
+#                    read key; this machine downloads the backup and sends it to
+#                    the host, which needs no AWS or B2 credentials. See
+#                    restore.sh and the README's Offsite backups section.
 #   --list           list the backups in S3 (with this machine's AWS credentials)
 #   --dry-run        look up the AMI and print the launch command, nothing more
 # The host reaches S3 with an instance profile from the launch template or keys
-# in ~/.aws (you are prompted to add them before the restore step).
+# in ~/.aws (you are prompted to add them before the restore step, except with
+# --offsite).
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -32,9 +41,11 @@ AMI_PARAMETER=/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm
 TYPE=""; FROM=""; DRY_RUN=""; DRILL=""; LIST=""
 KEY=${REDIS_SSH_KEY:-}; SSH_USER=ec2-user; SSH_PORT=22
 AWS_REGION=${AWS_REGION:-us-west-2}; AWS_PROFILE_ARGS=""; EXTRA_TAGS=""
+OFFSITE_ARGS=""
 
 while [ $# -gt 0 ]; do
   case "$1" in --dry-run | --drill | --list) ;; *) [ $# -ge 2 ] || die "$1 needs a value" ;; esac
+  case "$1" in --offsite) [ $# -ge 3 ] || die "--offsite needs a read profile and an s3://bucket" ;; esac
   case "$1" in
     --type) TYPE=$2; shift 2 ;;
     --from) FROM=$2; shift 2 ;;
@@ -46,6 +57,7 @@ while [ $# -gt 0 ]; do
     --tag)
       case "$2" in [A-Za-z]*=*) ;; *) die "--tag needs KEY=VALUE" ;; esac
       EXTRA_TAGS="$EXTRA_TAGS,{Key=${2%%=*},Value=${2#*=}}"; shift 2 ;;
+    --offsite) OFFSITE_ARGS="$2 $3"; shift 3 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --drill) DRILL=1; shift ;;
     --list) LIST=1; shift ;;
@@ -62,6 +74,8 @@ fi
 
 [ -n "$TYPE" ] && [ -n "$FROM" ] || die "usage: launch.sh --type <instance-type> --from latest|<backup-name>|replica:<host>"
 [ -n "$KEY" ] || [ -n "$DRY_RUN" ] || die "need --key (or REDIS_SSH_KEY): the private key for the instance"
+case "$OFFSITE_ARGS" in "" | [A-Za-z0-9._-]*" s3://"*) ;; *) die "--offsite needs a read profile and an s3://bucket" ;; esac
+case "$FROM" in replica:*) [ -z "$OFFSITE_ARGS" ] || die "--offsite restores a backup; it cannot be used with --from $FROM" ;; esac
 [ -z "$KEY" ] || [ -f "$KEY" ] || die "no such key file: $KEY"
 
 AMI=$(aws_cli ssm get-parameter --name "$AMI_PARAMETER" --query Parameter.Value --output text)
@@ -134,12 +148,17 @@ case "$FROM" in
     echo "$status" | grep -qx 'master_link_status:up' || die "replica did not sync within two hours; $TARGET is still replicating"
     echo "Replica is in sync." ;;
   *)
-    until ssh_run "$TARGET" "aws s3 ls s3://blot-redis-backups/ > /dev/null 2>&1"; do
-      echo "$TARGET cannot read the backup bucket yet. Attach an instance profile or run 'aws configure' there:"
-      echo "  ssh $SSH_OPTS $TARGET"
-      read -r -p "Press Enter to retry, Ctrl-C to stop (the instance keeps running): " _
-    done
-    "$HERE/restore.sh" --yes "$TARGET" "$FROM" ;;
+    if [ -n "$OFFSITE_ARGS" ]; then
+      # shellcheck disable=SC2086
+      "$HERE/restore.sh" --yes --offsite $OFFSITE_ARGS "$TARGET" "$FROM"
+    else
+      until ssh_run "$TARGET" "aws s3 ls s3://blot-redis-backups/ > /dev/null 2>&1"; do
+        echo "$TARGET cannot read the backup bucket yet. Attach an instance profile or run 'aws configure' there:"
+        echo "  ssh $SSH_OPTS $TARGET"
+        read -r -p "Press Enter to retry, Ctrl-C to stop (the instance keeps running): " _
+      done
+      "$HERE/restore.sh" --yes "$TARGET" "$FROM"
+    fi ;;
 esac
 
 echo "Done: $ID ($NAME) at $IP"

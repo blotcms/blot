@@ -309,7 +309,7 @@ jobs:
           retention-days: 7
           # A re-run of this job (e.g. after a flaky failure) reuses the same
           # workflow run, so without this the previous attempt's artifact of
-          # the same name sticks around too. coverage-report then downloads
+          # the same name sticks around too. node-ok then downloads
           # both copies into one folder and nyc chokes on the stale/partial
           # one. Overwriting keeps only the latest attempt's coverage.
           overwrite: true
@@ -325,10 +325,19 @@ jobs:
           retention-days: 7
           overwrite: true
 
-  # Master only: pull requests run without coverage, and get no report.
-  coverage-report:
-    needs: test
-    if: always() && github.event_name == 'push'
+  # One stable check name for branch protection: the test matrix is named
+  # "test N" and N changes with the lane plan, so it can't be listed as a
+  # required check. The last step passes only if every job it needs succeeded.
+  #
+  # On master it first merges the coverage and timings the test jobs uploaded
+  # (pull requests run without coverage, and get no report, so every step
+  # until the last is skipped there). It runs even when a test job failed, as
+  # the coverage job did, and a coverage failure fails the run, as it did; the
+  # check on a master commit is red then too, which nothing reads.
+  node-ok:
+    name: node ok
+    needs: [lint, test]
+    if: always()
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
@@ -340,6 +349,7 @@ jobs:
       # nyc only needs the sources it reports on (for the HTML report) and the
       # comment script, so skip the ~300MB of templates, images and fixtures
       - name: Checkout code
+        if: github.event_name == 'push'
         uses: actions/checkout@v4
         with:
           filter: blob:none
@@ -350,17 +360,20 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Setup Node.js
+        if: github.event_name == 'push'
         uses: actions/setup-node@v4
         with:
           node-version: 24.22.1
 
       - name: Download coverage from every job
+        if: github.event_name == 'push'
         uses: actions/download-artifact@v4
         with:
           pattern: coverage-*
           path: coverage-raw
 
       - name: Download timings from every job
+        if: github.event_name == 'push'
         uses: actions/download-artifact@v4
         with:
           pattern: timings-*
@@ -369,12 +382,14 @@ jobs:
       # Every spec file's seconds from this run, as one JSON object: the
       # input for refreshing scripts/tests/ci/timings.json
       - name: Merge timings
+        if: github.event_name == 'push'
         run: |
           mkdir -p test-timings
           jq -S -s 'add // {} | with_entries(.value |= (. * 10 | round / 10))' timings-raw/*/*.json > test-timings/timings.json || echo '{}' > test-timings/timings.json
           echo "$(jq length test-timings/timings.json) spec files timed"
 
       - name: Upload merged timings
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: test-timings
@@ -385,6 +400,7 @@ jobs:
       # delta. Keyed by run so every push to master adds a fresh entry;
       # restore-keys picks up the most recent one.
       - name: Restore coverage baseline
+        if: github.event_name == 'push'
         uses: actions/cache/restore@v4
         with:
           path: .coverage/history
@@ -394,6 +410,7 @@ jobs:
 
       - name: Merge coverage and build report
         id: merge-coverage
+        if: github.event_name == 'push'
         run: |
           mkdir -p .nyc_output coverage
 
@@ -493,16 +510,10 @@ jobs:
             --sha "$HEAD_SHA" \
             --status failed
 
-  # One stable check name for branch protection: the test matrix is named
-  # "test N" and N changes with the lane plan, so it can't be listed as a
-  # required check. This job passes only if every job it needs succeeded.
-  node-ok:
-    name: node ok
-    needs: [lint, test]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
+      # Always last and always run: a failed, skipped or cancelled needed job
+      # fails the check, whatever the coverage steps did.
       - name: Require every job to have succeeded
+        if: always()
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |

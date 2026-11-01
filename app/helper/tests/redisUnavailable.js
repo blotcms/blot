@@ -75,6 +75,88 @@ describe("redisUnavailable", function () {
       expect(isRedisUnavailableError(err)).toBe(false);
     });
 
+    describe("with a Unix socket", function () {
+      const socket = "/run/blot/redis/redis.sock";
+      let original;
+
+      beforeEach(function () {
+        original = config.redis.socket;
+        config.redis.socket = socket;
+      });
+
+      afterEach(function () {
+        config.redis.socket = original;
+      });
+
+      function connectError(code, address) {
+        const err = new Error("connect " + code + " " + address);
+        err.code = code;
+        err.errno = -1;
+        err.syscall = "connect";
+        err.address = address;
+        return err;
+      }
+
+      it("recognises connect errors on the configured socket", function () {
+        for (const code of ["ENOENT", "EACCES", "ECONNREFUSED", "ECONNRESET", "EPIPE"]) {
+          expect(isRedisUnavailableError(connectError(code, socket))).toBe(true);
+        }
+      });
+
+      it("ignores connect errors on another socket", function () {
+        for (const code of ["ENOENT", "EACCES", "ECONNREFUSED"]) {
+          expect(
+            isRedisUnavailableError(connectError(code, "/run/other/other.sock"))
+          ).toBe(false);
+        }
+      });
+
+      it("never mistakes a filesystem error for an outage", function () {
+        const missing = new Error("ENOENT: no such file or directory, open '/x'");
+        missing.code = "ENOENT";
+        missing.errno = -2;
+        missing.syscall = "open";
+        missing.path = "/x";
+        expect(isRedisUnavailableError(missing)).toBe(false);
+
+        // Even one that names the socket as its path, as stat or unlink would
+        const stat = new Error("ENOENT: stat");
+        stat.code = "ENOENT";
+        stat.syscall = "stat";
+        stat.path = socket;
+        expect(isRedisUnavailableError(stat)).toBe(false);
+
+        const denied = new Error("EACCES: permission denied, open '/x'");
+        denied.code = "EACCES";
+        denied.path = "/x";
+        expect(isRedisUnavailableError(denied)).toBe(false);
+      });
+
+      it("no longer counts TCP errors to the redis host and port", function () {
+        const err = new Error("connect ECONNREFUSED");
+        err.code = "ECONNREFUSED";
+        err.address = config.redis.host;
+        err.port = config.redis.port;
+        expect(isRedisUnavailableError(err)).toBe(false);
+      });
+
+      it("recognises a reset reported by a redis client", function () {
+        const reset = new Error("read ECONNRESET");
+        reset.code = "ECONNRESET";
+        markRedisClientError(reset);
+        expect(isRedisUnavailableError(reset)).toBe(true);
+      });
+    });
+
+    it("ignores ENOENT and EACCES when no socket is configured", function () {
+      for (const code of ["ENOENT", "EACCES"]) {
+        const err = new Error("connect " + code);
+        err.code = code;
+        err.address = "/run/blot/redis/redis.sock";
+        expect(isRedisUnavailableError(err)).toBe(false);
+      }
+    });
+
     it("ignores socket errors that do not say where they were headed", function () {
       const err = new Error("read ECONNRESET");
       err.code = "ECONNRESET";
