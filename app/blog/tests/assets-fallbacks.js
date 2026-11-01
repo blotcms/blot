@@ -77,6 +77,18 @@ describe("blog asset fallbacks", function () {
     expect(readdirs).toBe(1);
   });
 
+  it("tries the lowercased path when the case-insensitive walk dead-ends", async function () {
+    await fs.mkdir(path.join(blog, "Docs"));
+    await write("docs/sub/page.txt", "lower");
+    expect(await text("/Docs/sub/page.txt")).toBe("lower");
+  });
+
+  it("answers a path which is not valid percent-encoding when decoded twice", async function () {
+    expect(await text("/100%25")).toBe(404);
+    await write("100%.html", "page");
+    expect(await text("/100%25")).toBe("page");
+  });
+
   it("prefers the exact name when two names differ only by case", async function () {
     await write("Foo.png", "upper");
     await write("foo.png", "lower");

@@ -227,11 +227,12 @@ assets.use(async (req, res, next) => {
   const exact = (names, name) => (names.includes(name) ? name : undefined);
   const caseInsensitive = caseSensitivePath.pick;
   const segments = normalize(decodedPath).split("/").filter(Boolean);
-  const parent = await walk(segments.slice(0, -1), caseInsensitive);
-
-  // Without the parent directory, under any casing, none of the candidates
-  // below can exist: this is where a scanner's request usually ends
-  if (parent.missing) return next();
+  let parent;
+  try {
+    parent = await walk(segments.slice(0, -1), caseInsensitive);
+  } catch (e) {
+    parent = {};
+  }
 
   const candidates = [
     // the whole path lowercased
@@ -249,8 +250,17 @@ assets.use(async (req, res, next) => {
 
   const tried = new Set([exactPath]);
 
-  for (const candidate of candidates) {
-    const path = await candidate();
+  // Without the parent directory under any casing, only the lowercased path
+  // can still exist (the walk prefers exact names, so it follows every other
+  // candidate if they exist): this is where a scanner's request usually ends
+  for (const candidate of parent.missing ? candidates.slice(0, 1) : candidates) {
+    let path;
+    try {
+      path = await candidate();
+    } catch (e) {
+      // e.g. a name which isn't valid percent-encoding when decoded again
+      continue;
+    }
     if (!path || tried.has(path)) continue;
     tried.add(path);
     if (await trySend(path)) return;
