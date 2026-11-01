@@ -29,6 +29,9 @@
 #   PROXY_CERT_DIR         /etc/ssl/private     wildcard cert + key (read-only)
 #   PROXY_GLOBAL_STATIC_DIR /var/www/blot/app/blog/static  the app's own static
 #                                               assets, read-only (see run_args())
+#   PROXY_SANDBOX_CGROUP_DIR /sys/fs/cgroup/blot-sandbox  where the host made
+#                                               each unit's cgroup subtree (only
+#                                               read with BLOT_SANDBOX=1)
 #   PROXY_AUTOSSL_VOLUME   blot-proxy-auto-ssl  dehydrated account state
 #   PROXY_PURGE_URLS       (read from the unit's environment)  comma separated
 #   PROXY_CANARY_HOST      preview-of-wireframe-on-david.<BLOT_HOST>
@@ -53,6 +56,7 @@ DISK_CACHE_DIR="${PROXY_DISK_CACHE_DIR:-/var/instance-ssd/disk-cache}"
 LOG_DIR="${PROXY_LOG_DIR:-/var/instance-ssd/logs}"
 CERT_DIR="${PROXY_CERT_DIR:-/etc/ssl/private}"
 GLOBAL_STATIC_DIR="${PROXY_GLOBAL_STATIC_DIR:-/var/www/blot/app/blog/static}"
+SANDBOX_CGROUP_DIR="${PROXY_SANDBOX_CGROUP_DIR:-/sys/fs/cgroup/blot-sandbox}"
 AUTOSSL_VOLUME="${PROXY_AUTOSSL_VOLUME:-blot-proxy-auto-ssl}"
 HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-60}"
 DRAIN_TIMEOUT="${PROXY_DRAIN_TIMEOUT:-30}"
@@ -171,6 +175,11 @@ env_conflicts() { # env_conflicts <first file> <second file>
   ' "$1" "$2" | sort -u
 }
 
+require_sandbox_cgroup() { # require_sandbox_cgroup <unit>
+  [ -d "$SANDBOX_CGROUP_DIR/$1" ] \
+    || die "BLOT_SANDBOX=1 is set in $ENV_FILE but $SANDBOX_CGROUP_DIR/$1 does not exist: run config/host/host/setup.sh on this host (Amazon Linux 2023, cgroup v2), which installs blot-sandbox-cgroup.service"
+}
+
 # The settings file (the numbers in scripts/deploy/constants.js), the two env
 # files, and the host directories the container mounts. Before anything is
 # stopped.
@@ -188,6 +197,9 @@ load_unit_settings() {
   for d in "$DATA_DIRECTORY_ON_SERVER" "$TMP_DIRECTORY" "$SOCKET_DIRECTORY"; do
     [ -d "$d" ] || die "$d does not exist on this host (a unit mounts it)"
   done
+  if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX)" = 1 ]; then
+    for d in $UNITS; do require_sandbox_cgroup "$d"; done
+  fi
   # the longer of the two defaults: Node has to start as well
   HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-180}"
   # and a unit drains OpenResty and then node-a, so it is given its stop
@@ -269,6 +281,11 @@ reset_cache_dir() { # reset_cache_dir <host dir> <image>
 #     the host's loopback) are reached directly
 #   - the container shares the host's loopback, so nothing else may bind the
 #     ports above
+#   - with BLOT_SANDBOX=1 in proxy.env, the flags the nsjail sandbox needs
+#     (app/sandbox): the host's cgroup namespace, a seccomp profile that is
+#     Docker's default plus five syscalls, and a cgroup subtree the host
+#     made for this unit (config/host/host/setup.sh). Without it, none of them;
+#     load_unit_settings has already refused if the subtree is missing.
 # The env files: secrets.env (what Node gets), then proxy.env,
 # then the -e settings below, each overriding the one before; load_unit_settings
 # refuses a key the two files set differently.
@@ -319,6 +336,17 @@ run_args() { # run_args <name>
     -v "$CERT_DIR":/etc/ssl/private:ro
     -v "$GLOBAL_STATIC_DIR":/var/www/blot/app/blog/static:ro
   )
+  if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX)" = 1 ]; then
+    require_sandbox_cgroup "$unit"
+    RUN_ARGS+=(
+      # nsjail puts each job in a cgroup of its own, which --cgroupns=private
+      # can't reach; the bind below is the host-made subtree for this unit
+      --cgroupns=host
+      --security-opt "seccomp=$COMMON_DIR/sandbox-seccomp.json"
+      --mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit,target=/sandbox-cgroup"
+      -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock
+    )
+  fi
 }
 
 # ---- the unit's airlock -----------------------------------------------------

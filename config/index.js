@@ -207,6 +207,13 @@ module.exports = {
     required: environment === "production",
   },
 
+  // The sandbox broker's Unix socket (proxy/unit/sandbox, app/sandbox). Unset,
+  // as in development and when the host has not turned the sandbox on,
+  // app/sandbox runs its jobs in-process.
+  sandbox: {
+    socket: process.env.BLOT_SANDBOX_SOCKET || "",
+  },
+
   paypal: {
     client_id: process.env.BLOT_PAYPAL_CLIENT_ID,
     secret: process.env.BLOT_PAYPAL_SECRET,

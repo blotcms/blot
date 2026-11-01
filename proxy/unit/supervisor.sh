@@ -11,10 +11,16 @@
 #              delay that doubles from 1s to 30s and resets once it has run
 #              for 60s. OpenResty is not touched.
 #
-# SIGTERM, SIGQUIT and SIGINT drain both, OpenResty first: `-s quit` lets it
+#   broker     only if BLOT_SANDBOX_SOCKET is set (the host turned the sandbox
+#              on): the root process that starts nsjail jails for the app
+#              (proxy/unit/sandbox/broker.js), under its own restart loop. It
+#              never stops the unit: while it is down, sandbox jobs fail closed.
+#
+# SIGTERM, SIGQUIT and SIGINT drain them, OpenResty first: `-s quit` lets it
 # finish what it has accepted (up to worker_shutdown_timeout), which may still
 # be waiting on node-a, and only once it has exited is node-a sent SIGTERM
-# (helper/drain), which stops node-b first. Then this exits 0.
+# (helper/drain), which stops node-b first, and then the broker. Then this
+# exits 0.
 #
 # Environment: BLOT_UNIT (blue or green) is required. Everything else defaults
 # from it: the sockets in /run/blot (<unit>-a.sock for node-a, <unit>-b.sock for
@@ -22,6 +28,7 @@
 # the backups (see "Runtime settings" in proxy/README.md).
 
 OPENRESTY=/usr/local/openresty/bin/openresty
+BROKER_BACKOFF=2
 MIN_BACKOFF=1
 MAX_BACKOFF=30
 STABLE=60
@@ -80,6 +87,33 @@ run_node() {
   exit 0
 }
 
+# Keeps the sandbox broker running (app/sandbox, only when the host set
+# BLOT_SANDBOX_SOCKET). It is root, and the app can't rewrite its files (they
+# are root-owned under /usr/local/lib/blot-sandbox), so it starts with nothing
+# from this environment: no secrets, no NODE_OPTIONS. A broker that dies is
+# started again after a fixed delay and never stops the unit: while it is down
+# the app's jobs fail closed.
+run_broker() {
+  child=
+  stopping=
+  trap 'stopping=1; [ -n "$child" ] && kill -TERM "$child" 2>/dev/null' TERM
+
+  while [ -z "$stopping" ]; do
+    env -i PATH=/usr/local/bin:/usr/bin:/bin BLOT_UNIT="$BLOT_UNIT" \
+      /usr/local/bin/node /usr/local/lib/blot-sandbox/broker.js &
+    child=$!
+    echo "supervisor: started the sandbox broker pid=$child"
+    reap "$child"
+    [ -n "$stopping" ] && break
+
+    echo "supervisor: the sandbox broker exited status=$status, restarting in ${BROKER_BACKOFF}s"
+    sleep "$BROKER_BACKOFF" &
+    child=$!
+    reap "$child"
+  done
+  exit 0
+}
+
 stopping=
 stop() {
   stopping=1
@@ -90,6 +124,12 @@ trap stop TERM QUIT INT
 
 run_node &
 node_loop=$!
+
+broker_loop=
+if [ -n "${BLOT_SANDBOX_SOCKET:-}" ]; then
+  run_broker &
+  broker_loop=$!
+fi
 
 # proxy-start (proxy/start.sh) prepares the container, then becomes OpenResty
 /usr/local/bin/proxy-start "$OPENRESTY" -g "daemon off;" &
@@ -108,4 +148,9 @@ fi
 # OpenResty has exited, so nothing is left to send node-a a request
 kill -TERM "$node_loop" 2>/dev/null
 reap "$node_loop"
+# and no job is running without the app that asked for it
+if [ -n "$broker_loop" ]; then
+  kill -TERM "$broker_loop" 2>/dev/null
+  reap "$broker_loop"
+fi
 exit "$exit_status"

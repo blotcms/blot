@@ -43,7 +43,7 @@ sums() {
     /etc/nftables/blot-redis.nft /etc/systemd/system/blot-redis-firewall.service \
     /etc/systemd/system/redis6.service.d/zz-blot-firewall.conf /etc/blot-redis/shared-instance-store \
     /etc/redis6/redis6.conf /etc/redis6/blot-memory.conf /etc/cron.d/blot-redis /usr/local/bin/mount-instance-store.sh \
-    /etc/tmpfiles.d/blot-redis.conf
+    /etc/tmpfiles.d/blot-redis.conf /usr/local/sbin/blot-sandbox-cgroup.sh /etc/systemd/system/blot-sandbox-cgroup.service
     stat -c "%n %U:%G %a" /var/www/blot /var/www/blot/data /var/www/blot/app/blog/static /run/blot/redis
     readlink /usr/local/bin/redis-cli; id -nG ec2-user deploy
     redis6-cli INFO server | grep process_id'
@@ -84,6 +84,14 @@ check "directories are owned by ec2-user" in_ct '
     [ "$(stat -c %U:%G "$d")" = ec2-user:ec2-user ] || exit 1
   done'
 check "nothing under /var/instance-ssd" in_ct '[ ! -e /var/instance-ssd ]'
+check "the sandbox cgroup service runs the script before docker, and the script sets the limits" in_ct '
+  u=/etc/systemd/system/blot-sandbox-cgroup.service
+  s=/usr/local/sbin/blot-sandbox-cgroup.sh
+  grep -qx "Type=oneshot" $u && grep -qx "RemainAfterExit=yes" $u && grep -qx "Before=docker.service" $u &&
+  grep -qx "ExecStart=$s" $u && [ -x $s ] && sh -n $s &&
+  grep -qF "echo 512M > \"\$dir/memory.max\"" $s && grep -qF "echo 0 > \"\$dir/memory.swap.max\"" $s &&
+  grep -qF "echo 256 > \"\$dir/pids.max\"" $s && grep -qF "echo 25 > \"\$dir/cpu.weight\"" $s &&
+  grep -qF "controllers=\"+memory +pids +cpu\"" $s'
 check "sysctl file" in_ct 'grep -qx "net.ipv4.tcp_migrate_req = 1" /etc/sysctl.d/91-blot-host.conf'
 check "the deploy rsyslog rule lets lines through to /var/log/secure" in_ct '! grep -q "^& stop" /etc/rsyslog.d/30-deploy-user.conf'
 check "sshd -t passes with the port drop-in" in_ct 'sshd -t && sshd -T | grep -qx "port 2222"'
