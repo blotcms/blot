@@ -5,6 +5,7 @@ var assertNoSymlinks = require("helper/assertNoSymlinks");
 var caseSensitivePath = require("helper/caseSensitivePath");
 var hashFile = require("helper/hashFile");
 var fs = require("fs-extra");
+var { randomUUID: uuid } = require("crypto");
 var { pipeline } = require("stream/promises");
 var { PassThrough, Readable } = require("stream");
 var { join, dirname, relative, sep } = require("path");
@@ -132,17 +133,20 @@ function createReadStream(blogID, relPath, options) {
   if (options && options.start !== undefined) range.start = options.start;
   if (options && options.end !== undefined) range.end = options.end;
 
-  guard(located.root, located.local).then(function () {
-    if (stream.destroyed) return;
+  guard(located.root, located.local)
+    .then(function () {
+      if (stream.destroyed) return;
 
-    source = fs.createReadStream(located.local, range);
-    source.on("error", function (err) {
+      // Throws straight away on an invalid range
+      source = fs.createReadStream(located.local, range);
+      source.on("error", function (err) {
+        stream.destroy(mapError(err));
+      });
+      source.pipe(stream);
+    })
+    .catch(function (err) {
       stream.destroy(mapError(err));
     });
-    source.pipe(stream);
-  }, function (err) {
-    stream.destroy(mapError(err));
-  });
 
   stream.on("close", function () {
     if (source) source.destroy();
@@ -206,7 +210,16 @@ async function write(blogID, relPath, data) {
   await fs.ensureDir(dirname(local));
 
   if (data instanceof Readable) {
-    await pipeline(data, fs.createWriteStream(local));
+    // A stream can fail part way, which must not cost the file already here
+    var tmp = local + ".tmp-" + uuid();
+
+    try {
+      await pipeline(data, fs.createWriteStream(tmp));
+      await fs.move(tmp, local, { overwrite: true });
+    } catch (err) {
+      await fs.remove(tmp);
+      throw err;
+    }
   } else {
     await fs.writeFile(local, data);
   }
@@ -226,9 +239,14 @@ async function writeFrom(blogID, relPath, srcPath, options) {
 
 // On this backend the path is the file's real place, so there is nothing to
 // upload. An S3 backend returns a staging path instead and uploads in commit.
-// What commit can do here is catch a tool which wrote through a symlink.
-function path(blogID, relPath) {
-  return locate(blogID, relPath).local;
+// The check is here and not only in commit because a tool following a symlink
+// would already have written outside the folder by then.
+async function path(blogID, relPath) {
+  var { root, local } = locate(blogID, relPath);
+
+  await guard(root, local);
+
+  return local;
 }
 
 async function commit(blogID, relPath) {
@@ -261,7 +279,13 @@ async function removeLocal(blogID, relPath, onlyDirectory) {
   // Emptying the folder is not a remove: removeAll deletes the blog
   if (local === root) throw new Error("storage/folder: remove needs a path inside the folder");
 
-  await guard(root, dirname(local));
+  try {
+    await guard(root, dirname(local));
+  } catch (err) {
+    // An ancestor is gone or is now a file, so this path is already missing
+    if (err instanceof NotFoundError) return;
+    throw err;
+  }
 
   if (onlyDirectory) {
     var stat;

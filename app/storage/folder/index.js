@@ -45,8 +45,8 @@ module.exports = {
   writeFrom: local.writeFrom,
 
   // For tools which insist on writing to a path themselves (pandoc, sharp's
-  // toFile): create the parent directory of path(blogID, p), write to it, then
-  // call commit(blogID, p) once the file is complete. commit is where an S3
+  // toFile): create the parent directory of await path(blogID, p), write to it,
+  // then call commit(blogID, p) once the file is complete. commit is where an S3
   // backend uploads, so a tool must not touch the path afterwards.
   path: local.path,
   commit: local.commit,

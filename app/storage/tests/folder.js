@@ -95,8 +95,8 @@ describe("storage/folder", function () {
       var err = await rejection(folder.read(this.blog.id, "/../escaped.txt"));
 
       expect(err.code).toEqual("ENOENT");
-      expect(folder.path(this.blog.id, "/../../escaped.txt").indexOf(this.blogDirectory + "/")).toEqual(0);
-      expect(folder.path(this.blog.id, "/a/../../../x")).toEqual(this.blogDirectory + "/x");
+      expect((await folder.path(this.blog.id, "/../../escaped.txt")).indexOf(this.blogDirectory + "/")).toEqual(0);
+      expect(await folder.path(this.blog.id, "/a/../../../x")).toEqual(this.blogDirectory + "/x");
 
       await fs.remove(join(this.blogDirectory, "../escaped.txt"));
     });
@@ -109,12 +109,8 @@ describe("storage/folder", function () {
     });
 
     it("rejects a blog ID which is a path", async function () {
-      expect(function () {
-        folder.path("../other", "/a.txt");
-      }).toThrow();
-      expect(function () {
-        folder.path("", "/a.txt");
-      }).toThrow();
+      expect(await rejection(folder.path("../other", "/a.txt"))).toBeDefined();
+      expect(await rejection(folder.path("", "/a.txt"))).toBeDefined();
     });
 
     it("rejects a null byte", async function () {
@@ -206,9 +202,36 @@ describe("storage/folder", function () {
       expect(err instanceof folder.NotFoundError).toBe(true);
       expect(err.code).toEqual("ENOENT");
     });
+
+    it("emits an invalid range as an error", async function () {
+      await folder.write(this.blog.id, "/range.txt", "0123456789");
+
+      var stream = folder.createReadStream(this.blog.id, "/range.txt", { start: 2, end: 1 });
+      var err = await new Promise(function (resolve) {
+        stream.on("error", resolve);
+        stream.resume();
+      });
+
+      expect(err).toBeDefined();
+    });
   });
 
   describe("write and writeFrom", function () {
+    it("keeps the existing file when a stream fails part way", async function () {
+      await folder.write(this.blog.id, "/keep.txt", "old");
+
+      var stream = new Readable({
+        read: function () {
+          this.push("par");
+          this.destroy(new Error("source failed"));
+        },
+      });
+
+      expect(await rejection(folder.write(this.blog.id, "/keep.txt", stream))).toBeDefined();
+      expect((await folder.read(this.blog.id, "/keep.txt")).toString()).toEqual("old");
+      expect(await fs.readdir(this.blogDirectory)).toEqual(["keep.txt"]);
+    });
+
     it("writes a buffer, a string and a stream, creating parents", async function () {
       var { Readable } = require("stream");
 
@@ -256,7 +279,7 @@ describe("storage/folder", function () {
 
   describe("path and commit", function () {
     it("gives a tool the file's place and commits it", async function () {
-      var place = folder.path(this.blog.id, "/tool/out.txt");
+      var place = await folder.path(this.blog.id, "/tool/out.txt");
 
       expect(place).toEqual(join(this.blogDirectory, "tool/out.txt"));
 
@@ -264,6 +287,27 @@ describe("storage/folder", function () {
       await folder.commit(this.blog.id, "/tool/out.txt");
 
       expect((await folder.read(this.blog.id, "/tool/out.txt")).toString()).toEqual("from a tool");
+    });
+
+    it("refuses a symlink before a tool can write through it", async function () {
+      var target = join(outside, "target.txt");
+
+      await fs.outputFile(target, "outside");
+      await fs.ensureDir(this.blogDirectory);
+      await fs.symlink(target, join(this.blogDirectory, "link.txt"));
+
+      expect((await rejection(folder.path(this.blog.id, "/link.txt"))).code).toEqual("ELOOP");
+    });
+  });
+
+  describe("removing below a file", function () {
+    it("treats it as already missing", async function () {
+      await folder.write(this.blog.id, "/former-directory", "now a file");
+
+      await folder.remove(this.blog.id, "/former-directory/sub/file.txt");
+      await folder.rmdir(this.blog.id, "/former-directory/sub");
+
+      expect(await folder.exists(this.blog.id, "/former-directory")).toBe(true);
     });
   });
 
