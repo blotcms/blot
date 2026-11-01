@@ -94,6 +94,7 @@ describe("git client writes and the live clone (implementation-specific)", funct
     var git = await liveClone(this);
 
     await write(this.blog.id, "/by-blot.txt", "From Blot");
+    await this.local.pull();
     await this.local.writeAndPush("/by-the-user.txt", "From the user");
     await write(this.blog.id, "/by-blot-again.txt", "From Blot again");
 
