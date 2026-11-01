@@ -1,6 +1,6 @@
 ---
 name: data-volume
-description: Grow or shrink the EBS volume that holds the app host's data directory (/var/www/blot/data), with config/host/data-volume/resize.sh (grow in place; shrink by live rsync passes, a brief read-only freeze and a mount swap the running containers follow without a restart), release and detach the old volume afterwards with `resize.sh finish`, or rehearse the whole flow on a throwaway instance with drill.sh. Holds the guardrails (ask before every production command, drill first, tear down only by explicit ID), what to expect at production scale, and an incident log. Use when asked to resize, grow or shrink the data volume, free disk on the app host by moving to a smaller or larger volume, detach or delete the old data volume, run a data-volume drill, or use the app's read-only freeze (scripts/read-only.js).
+description: Grow or shrink the EBS volume that holds the app host's data directory (/var/www/blot/data), or move its contents to another host, with config/host/data-volume/resize.sh (grow in place; shrink by live rsync passes, a brief read-only freeze and a mount swap the running containers follow without a restart; `move prepare/copy/freeze/thaw/retag/status` for a snapshot, a new volume on the other host and delta rsync, stopping frozen for the host switch), release and detach the old volume afterwards with `resize.sh finish`, or rehearse the whole flow on a throwaway instance (or two, for a move) with drill.sh. Holds the guardrails (ask before every production command, drill first, tear down only by explicit ID), what to expect at production scale, and an incident log. Use when asked to resize, grow or shrink the data volume, move the data volume to another host, free disk on the app host by moving to a smaller or larger volume, detach or delete the old data volume, run a data-volume drill, or use the app's read-only freeze (scripts/read-only.js).
 ---
 
 # Data volume
@@ -22,7 +22,8 @@ its own), `redis-host` (the same style of operation for the Redis host).
 ## Rules
 
 1. **Ask the operator before every production command**: `resize.sh` (even
-   `--dry-run`: it copies host.sh to the host), `ssh blot`, `docker exec`,
+   `--dry-run`: it copies host.sh to the host, and to the new host for
+   `move prepare`), `ssh blot`, `docker exec`,
    `read-only.js on/off`. State the exact command. Read-only AWS `describe-*`
    and CloudWatch calls (`--profile blot --region us-west-2`) are fine without
    asking; say what you ran.
@@ -31,15 +32,20 @@ its own), `redis-host` (the same style of operation for the Redis host).
    would skip it. Watch from the side (CloudWatch, plain HTTP requests) and
    read what they paste.
 3. **Drill before changing anything on the freeze, copy or swap path.**
-   `drill.sh launch/setup` on a throwaway from production's AMI, then
-   `resize.sh --host drill …`. Keep a subagent away from production
+   `drill.sh launch/setup` on a throwaway from production's AMI (and
+   `launch-target/setup-target` for a move), then `resize.sh --host drill …`. Keep a subagent away from production
    mechanically: an ssh config passed with `-F` (so the `blot` alias does not
    resolve) and `--host drill` on every call.
 4. **Tear down only by explicit ID**, re-checking `BlotDrill=true` on each
    resource immediately before deleting it, and never anything that is the
    app host or its volumes. Show the operator the list and get a yes first.
 5. **Never delete the old volume or its pre-resize snapshot without the
-   operator.** They are the rollback for about a week after a shrink.
+   operator.** They are the rollback for about a week after a shrink, and
+   after a move the old host with its volume is the rollback until the
+   cycle's finish.
+   **`move freeze` leaves the app frozen and the source read-only on
+   purpose.** Never walk away from it: the next step is the switch, or
+   `move thaw`, inside the freeze TTL.
 6. **No freeze within 10 minutes of 01:00 and 05:00 UTC** (host cron and the
    scheduler delete files then; the script refuses).
 7. **After `finish` released an old volume on the host, deploy the app before
