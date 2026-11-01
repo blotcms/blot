@@ -121,6 +121,70 @@ test("proxy: makes its cgroup, with limits, and clears what an old jail left", (
   assert.strictEqual(fs.readFileSync(directory + "/cgroup.kill", "utf8"), "1");
 });
 
+// ---- node-filter.js ----------------------------------------------------------
+
+// Runs the program as the kernel would, on one call
+function runFilter(lines, { nr, arch, arg0 = 0 }) {
+  let accumulator = 0;
+  for (let pc = 0; pc < lines.length; pc++) {
+    const { code, jt, jf, k } = lines[pc];
+    if (code === 0x20) accumulator = { 0: nr, 4: arch, 16: arg0 }[k];
+    else if (code === 0x06) return k;
+    else if (code === 0x15) pc += accumulator === k ? jt : jf;
+    else if (code === 0x35) pc += accumulator >= k ? jt : jf;
+    else if (code === 0x45) pc += (accumulator & k) !== 0 ? jt : jf;
+    else throw new Error("unknown instruction");
+  }
+  throw new Error("fell off the end");
+}
+
+const ALLOW = 0x7fff0000;
+const EPERM = 0x00050001;
+const ENOSYS = 0x00050026;
+
+for (const name of ["arm64", "x64"]) {
+  const { ARCHES, program } = require("../node-filter");
+  const { audit, refused, clone, clone3 } = ARCHES[name];
+  const lines = program(name);
+  const call = (nr, arg0) => runFilter(lines, { nr, arch: audit, arg0 });
+
+  test(`node filter ${name}: refuses the calls the sandbox added`, () => {
+    for (const nr of Object.values(refused)) assert.strictEqual(call(nr), EPERM);
+    assert.strictEqual(call(clone3), ENOSYS);
+  });
+
+  test(`node filter ${name}: refuses a clone with any namespace flag, allows a plain one`, () => {
+    const THREAD = 0x003d0f00;
+    const SIGCHLD = 17;
+    assert.strictEqual(call(clone, THREAD), ALLOW);
+    assert.strictEqual(call(clone, SIGCHLD), ALLOW);
+    for (const flag of [0x00020000, 0x02000000, 0x04000000, 0x08000000, 0x10000000, 0x20000000, 0x40000000]) {
+      assert.strictEqual(call(clone, flag | SIGCHLD), EPERM, flag.toString(16));
+    }
+  });
+
+  test(`node filter ${name}: allows ordinary calls, refuses every call from another arch`, () => {
+    for (const nr of [0, 1, 56 + 1000, 221, 63]) assert.strictEqual(call(nr), ALLOW);
+    assert.strictEqual(runFilter(lines, { nr: 1, arch: 0x40000028 }), EPERM);
+    assert.strictEqual(runFilter(lines, { nr: 1, arch: 0x40000003 }), EPERM);
+  });
+}
+
+test("node filter x64: refuses x32 calls", () => {
+  const { ARCHES, program } = require("../node-filter");
+  const lines = program("x64");
+  assert.strictEqual(runFilter(lines, { nr: 0x40000000 + 1, arch: ARCHES.x64.audit }), EPERM);
+});
+
+test("node filter: encodes to eight bytes a line, in order", () => {
+  const { program, encode } = require("../node-filter");
+  const lines = program("arm64");
+  const buffer = encode(lines);
+  assert.strictEqual(buffer.length, lines.length * 8);
+  assert.strictEqual(buffer.readUInt16LE(0), lines[0].code);
+  assert.strictEqual(buffer.readUInt32LE(4), lines[0].k);
+});
+
 test("jail: the filter refuses what the airlock refuses", () => {
   const filter = fs.readFileSync(path.join(__dirname, "../egress.nft"), "utf8");
   for (const range of ["10.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7", "fe80::/10", "::ffff:0:0/96"]) {
