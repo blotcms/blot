@@ -6,17 +6,37 @@ describe("write", function () {
   require("./setup")();
 
   var write = require("clients/git/write");
+  var repo = require("clients/git/repo");
   var Git = require("./setup/git");
   var fs = require("fs-extra");
   var localPath = require("helper/localPath");
 
-  it("should return an error if there is no git repo in blog folder", function (done) {
-    fs.removeSync(localPath(this.blog.id, ".git"));
+  it("should return an error if there is no bare repo, and leave the blog folder alone", function (done) {
+    var blogID = this.blog.id;
 
-    write(this.blog.id, "/path", "content", function (err) {
+    fs.removeSync(repo.directory(this.blog.handle));
+
+    write(blogID, "/path", "content", function (err) {
       expect(err.message).toContain("not");
+      expect(fs.existsSync(localPath(blogID, "/path"))).toBe(false);
 
       done();
+    });
+  });
+
+  it("should return an error for a path it cannot commit, and leave the blog folder alone", function (done) {
+    var blogID = this.blog.id;
+
+    repo.commit(blogID, { path: "/x/.Git/config", contents: "content" }, function (err) {
+      expect(err).toEqual(jasmine.any(Error));
+      expect(fs.existsSync(localPath(blogID, "/x"))).toBe(false);
+
+      write(blogID, "/a/../b", "content", function (err) {
+        expect(err).toEqual(jasmine.any(Error));
+        expect(fs.existsSync(localPath(blogID, "/b"))).toBe(false);
+
+        done();
+      });
     });
   });
 

@@ -22,7 +22,7 @@ describe("Git sync tree policy", function () {
     const stubs = {
       async: {}, debug:()=>()=>{}, "./git":()=>git,
       sync: (id, cb) => cb(null, {path:"/test-blog",log(){}}, (err, cb) => {released = true; cb(err);}),
-      "./checkGitRepoExists":(path, cb)=>cb(null), "./repo":{directory:handle=>"/test-data/"+handle+".git",pointOriginAtBareRepo:(git, handle, cb)=>git.remote(["set-url","origin","/test-data/"+handle+".git"], cb)},
+      "./checkGitRepoExists":(path, cb)=>cb(null), "./repo":{directory:handle=>"/test-data/"+handle+".git",followLiveClone:(git, handle, commit, cb)=>git.raw(["reset","--mixed","--quiet",commit], cb)},
       "./materialize":Object.assign((directory, folder, base, commit, cb)=>cb(null, []), {EMPTY_TREE:"empty"}),
       "models/blog":{}, "./validateTree":validateTree,
       "./database":{getApplied:(id, cb)=>cb(null, null), setApplied:(id, commit, cb)=>cb(null)},

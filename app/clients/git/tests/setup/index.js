@@ -103,9 +103,6 @@ module.exports = function setup(options) {
           context.gitBare = require("./git")(
             repo.directory(context.blog.handle)
           ).silent(true);
-          context.gitBlot = require("./git")(context.blogDirectory).silent(
-            true
-          );
           done(null);
         });
     });

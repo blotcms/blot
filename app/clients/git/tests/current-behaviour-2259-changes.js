@@ -41,6 +41,25 @@ describe("current behaviour that #2259 changes", function () {
     });
   });
 
+  describe("Blot's own writes and .gitattributes", function () {
+    // Changed by #2259 PR 8: Blot's writes are committed as the bytes it was
+    // given, not through the rules of a .gitattributes file in the blog
+    // folder, which `git add` in the live clone applied (here, text=auto
+    // turned CRLF line endings into LF in the commit).
+    it("commits the bytes it is given, ignoring text=auto", async function () {
+      var write = require("util").promisify(require("clients/git/write"));
+
+      await this.local.writeAndPush("/.gitattributes", "* text=auto\n");
+      await write(this.blog.id, "/lines.txt", "one\r\ntwo\r\n");
+      await this.local.git(["fetch", "origin"]);
+
+      expect(
+        (await this.local.git(["cat-file", "blob", "origin/master:lines.txt"])).stdout
+      ).toBe("one\r\ntwo\r\n");
+      expect(await helpers.blogFile(this, "/lines.txt")).toEqual(Buffer.from("one\r\ntwo\r\n"));
+    });
+  });
+
   describe("branches", function () {
     // Changed by #2259 PR 6: a push which includes any ref other than master
     // is rejected as a whole, whatever the order of its refs. Master is not
