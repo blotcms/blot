@@ -318,7 +318,11 @@ dual-write phase measure the latency and tune the cache size.
 **d. `app/sync/rebuild.js` processes files serially**
 (`async.eachSeries`) — a full rebuild of a large blog would turn into
 a long run of serial S3 round trips. Needs bounded concurrency (e.g.
-`async.eachLimit`) before `.folder` goes to S3.
+`async.eachLimit`) before `.folder` goes to S3, but `Entry.set` is not yet
+safe for two paths of one blog at once: the URL claim in
+`models/entry/_setUrl.js`, the blog menu in `models/entry/_assign.js` and
+backlinks in `models/entry/set.js` are all read-then-write. Those need
+fixing first.
 
 **e. About 40 `err.code === "ENOENT"` checks exist in `app/`**, in about
 45 files. The storage
