@@ -68,7 +68,42 @@ describe("rebuild when Redis is unavailable", function () {
     expect(summaries[0].join(" ")).toContain("this file is broken");
   });
 
-  it("carries on past a path update rejects outright, such as a symlink", async function () {
+  it("carries on past a path update rejects outright", async function () {
+    var storage = require("storage/folder");
+    var realStat = storage.stat;
+    var broken = "/Broken.txt";
+    var fine = "/Fine.txt";
+    var log = jasmine.createSpy("log");
+
+    spyOn(console, "error");
+
+    await this.blog.write({ path: broken, content: "Title: Broken" });
+    await this.blog.write({ path: fine, content: "Title: Fine" });
+
+    // update stats its path first, and a symlink in the way rejects there
+    spyOn(storage, "stat").and.callFake(function (blogID, path, options) {
+      if (path === broken) {
+        return Promise.reject(
+          Object.assign(new Error("Symbolic links are not supported"), {
+            code: "ELOOP",
+          })
+        );
+      }
+
+      return realStat(blogID, path, options);
+    });
+
+    await this.blog.rebuild({ log: log, status: function () {} });
+    await this.blog.check({ path: fine, title: "Fine" });
+
+    var summaries = log.calls.allArgs().filter(function (args) {
+      return /failed to build/.test(args.join(" "));
+    });
+
+    expect(summaries.length).toBe(1);
+  });
+
+  it("does not walk into a symlink or list it", async function () {
     var fs = require("fs-extra");
     var os = require("os");
     var path = require("path");
@@ -76,13 +111,12 @@ describe("rebuild when Redis is unavailable", function () {
     var log = jasmine.createSpy("log");
     var outside = fs.mkdtempSync(path.join(os.tmpdir(), "rebuild-link-"));
 
-    spyOn(console, "error");
-
     fs.outputFileSync(path.join(outside, "target.txt"), "Title: Linked");
     fs.symlinkSync(
       path.join(outside, "target.txt"),
       path.join(this.blogDirectory, "Link.txt")
     );
+    fs.symlinkSync(outside, path.join(this.blogDirectory, "LinkedFolder"));
     await this.blog.write({ path: fine, content: "Title: Fine" });
 
     try {
@@ -93,10 +127,21 @@ describe("rebuild when Redis is unavailable", function () {
 
     await this.blog.check({ path: fine, title: "Fine" });
 
-    var summaries = log.calls.allArgs().filter(function (args) {
-      return /failed to build/.test(args.join(" "));
-    });
+    var Entry = require("models/entry");
+    var blogID = this.blog.id;
 
-    expect(summaries.length).toBe(1);
+    for (var linked of ["/Link.txt", "/LinkedFolder/target.txt"]) {
+      var entry = await new Promise(function (resolve) {
+        Entry.get(blogID, linked, resolve);
+      });
+
+      expect(entry).toBeFalsy();
+    }
+
+    expect(
+      log.calls.allArgs().filter(function (args) {
+        return /failed to build/.test(args.join(" "));
+      }).length
+    ).toBe(0);
   });
 });
