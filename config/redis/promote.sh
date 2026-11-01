@@ -25,6 +25,7 @@ set -euo pipefail
 
 TIMEOUT_MS=2000; LOCK_WAIT=120; DRY_RUN=""; YES=""
 MAX_LAG_BYTES=16777216 # how far behind <new> may be when we start
+MAX_LAG_SECONDS=3 # how long since <new>'s last ack may be when we start
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -173,7 +174,8 @@ replica=$(echo "$OLD_INFO" | grep -E '^slave[0-9]+=' | grep "=ip=$NEW_IP,port=63
 r() { echo "$replica" | tr ',' '\n' | awk -F= -v k="$1" '$1 == k {print $2}'; }
 behind=$(($(field "$OLD_INFO" master_repl_offset) - $(r offset)))
 [ "$(r state)" = online ] || die "$NEW is '$(r state)' on $OLD, not online"
-[ "$(r lag)" -le 1 ] && [ "$behind" -le "$MAX_LAG_BYTES" ] || die "$NEW is too far behind ($behind bytes, last ack $(r lag)s ago)"
+# Replicas ack once a second, so one late ack reads as 2s on a healthy replica.
+[ "$(r lag)" -le "$MAX_LAG_SECONDS" ] && [ "$behind" -le "$MAX_LAG_BYTES" ] || die "$NEW is too far behind ($behind bytes, last ack $(r lag)s ago)"
 echo "Replication: $NEW is $behind bytes behind, last ack $(r lag)s ago"
 # Once promoted, min-replicas-to-write, more data than maxmemory allows
 # (noeviction: OOM on every write) or a failed background save (MISCONF on
