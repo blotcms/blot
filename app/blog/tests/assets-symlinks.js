@@ -66,6 +66,10 @@ describe("blog asset symlink policy", function () {
       expect(res.headers.get("etag")).toBeTruthy();
       expect(res.headers.get("last-modified")).toBeTruthy();
 
+      const unsatisfiable = await fetch(cdnURL("/range.txt"), { headers: { Range: "bytes=100-" } });
+      expect(unsatisfiable.status).toBe(416);
+      expect(unsatisfiable.headers.get("content-range")).toEqual("bytes */10");
+
       const partial = await fetch(cdnURL("/range.txt"), { headers: { Range: "bytes=2-4" } });
       expect(partial.status).toBe(206);
       expect(await partial.text()).toEqual("234");
@@ -83,6 +87,10 @@ describe("blog asset symlink policy", function () {
     it("redirects a directory to its trailing slash and serves its index.html there", async function () {
       await fs.mkdir(path.join(blog, "site"));
       await fs.writeFile(path.join(blog, "site/index.html"), "<p>index</p>");
+
+      const root = await fetch(cdnURL(""), { redirect: "manual" });
+      expect(root.status).toBe(301);
+      expect(new URL(root.headers.get("location"), url).pathname).toMatch(/\/$/);
 
       const redirect = await fetch(cdnURL("/site?a=b"), { redirect: "manual" });
       expect(redirect.status).toBe(301);

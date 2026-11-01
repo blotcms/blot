@@ -49,8 +49,10 @@ cdn.use("/documentation/v-:version", static(config.views_directory));
 // With the semantics express.static had here: a year of caching, dotfiles
 // ignored, a directory without its trailing slash redirected to it. Anything
 // missing or behind a symlink is a bare 404, which exposes no path and does
-// not fall through to another static root.
-cdn.use("/folder/v-:version", async (req, res) => {
+// not fall through to another static root. Any other HTTP error from sending
+// an existing file, such as a 416 for a bad range, goes on as it did from
+// express.static.
+cdn.use("/folder/v-:version", async (req, res, next) => {
   let pathname;
 
   try {
@@ -74,7 +76,7 @@ cdn.use("/folder/v-:version", async (req, res) => {
     const relPath = match[2] || "/";
     const stat = await folder.stat(match[1], relPath);
 
-    if (stat.isDirectory && relPath.slice(-1) !== "/") {
+    if (stat.isDirectory && pathname.slice(-1) !== "/") {
       return res.redirect(301, req.originalUrl.replace(/^[^?]*/, "$&/"));
     }
 
@@ -84,7 +86,9 @@ cdn.use("/folder/v-:version", async (req, res) => {
     await folder.serve(req, res, match[1], relPath, { maxAge: "1y" });
   } catch (err) {
     // The client went away after we started sending
-    if (!res.headersSent) res.sendStatus(404);
+    if (res.headersSent) return;
+    if (err.status && err.status !== 404) return next(err);
+    res.sendStatus(404);
   }
 });
 
