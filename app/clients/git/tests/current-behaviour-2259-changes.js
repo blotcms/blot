@@ -10,9 +10,9 @@ describe("current behaviour that #2259 changes", function () {
   var helpers = require("./setup/helpers");
 
   describe(".gitattributes", function () {
-    // New behaviour: files are written to the blog folder as the raw
-    // committed bytes, and the attributes below stop applying.
-    it("applies eol=crlf to the files written to the blog folder", async function () {
+    // Changed by #2259 PR 7: files are written to the blog folder as the raw
+    // committed bytes, and the attributes below no longer apply.
+    it("ignores eol=crlf in the files written to the blog folder", async function () {
       await this.local.commitFiles({
         "/.gitattributes": "* text=auto eol=crlf\n",
         "/lines.txt": "one\ntwo\nthree\n",
@@ -22,14 +22,14 @@ describe("current behaviour that #2259 changes", function () {
       // The clone has the line endings the user committed
       expect(await this.local.read("/lines.txt")).toEqual(Buffer.from("one\ntwo\nthree\n"));
 
-      // The blog folder was checked out with the attribute applied
+      // and so does the blog folder
       expect(await helpers.blogFile(this, "/lines.txt")).toEqual(
-        Buffer.from("one\r\ntwo\r\nthree\r\n")
+        Buffer.from("one\ntwo\nthree\n")
       );
     });
 
-    // New behaviour: the raw committed bytes, with $Id$ left as it is.
-    it("expands the ident attribute in the files written to the blog folder", async function () {
+    // Changed by #2259 PR 7: the raw committed bytes, with $Id$ left as it is.
+    it("does not expand the ident attribute in the files written to the blog folder", async function () {
       await this.local.commitFiles({
         "/.gitattributes": "*.txt ident\n",
         "/ident.txt": "$Id$\n",
@@ -37,9 +37,7 @@ describe("current behaviour that #2259 changes", function () {
       await this.local.push();
 
       expect(await this.local.read("/ident.txt")).toEqual(Buffer.from("$Id$\n"));
-      expect((await helpers.blogFile(this, "/ident.txt")).toString()).toMatch(
-        /^\$Id: [0-9a-f]{40} \$\n$/
-      );
+      expect(await helpers.blogFile(this, "/ident.txt")).toEqual(Buffer.from("$Id$\n"));
     });
   });
 

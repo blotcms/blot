@@ -20,6 +20,8 @@ describe("Git sync when Redis is unavailable", function () {
   let head;
   let emptyDiff;
   let crash;
+  let materialized;
+  let materializeError;
 
   const known = ["old", "new"];
   const unavailable = () =>
@@ -37,11 +39,14 @@ describe("Git sync when Redis is unavailable", function () {
     head = "old";
     emptyDiff = false;
     crash = null;
+    materialized = [];
+    materializeError = null;
   });
 
   // Runs sync.js with the git commands faked. A push moves the remote from
   // "old" to "new" and changes a.txt and b.txt; with no push the remote stays
   // where the clone is. Resetting moves the clone's HEAD, as it does for real.
+  // The repository has the commits in known, and no others.
   async function run({ push }) {
     const remote = push ? "new" : head;
     const git = {
@@ -54,9 +59,7 @@ describe("Git sync when Redis is unavailable", function () {
         else if (args[0] === "rev-parse" && args.includes("--verify")) value = remote;
         else if (args[0] === "rev-parse") value = head;
         else if (args[0] === "ls-tree") value = "100644 blob abc\tfile.txt\0";
-        else if (args[0] === "reset") head = args[2];
-        else if (args[0] === "diff")
-          value = emptyDiff ? "" : "M\0a.txt\0M\0b.txt\0";
+        else if (args[0] === "reset") head = args[3];
         return cb ? cb(null, value) : Promise.resolve(value);
       },
     };
@@ -85,7 +88,18 @@ describe("Git sync when Redis is unavailable", function () {
             }
           ),
         "./checkGitRepoExists": (path, cb) => cb(null),
-        "./repo": { pointOriginAtBareRepo: (git, handle, cb) => cb(null) },
+        "./repo": {
+          directory: (handle) => "/not-used/" + handle + ".git",
+          pointOriginAtBareRepo: (git, handle, cb) => cb(null),
+        },
+        "./materialize": Object.assign(
+          (directory, folder, base, commit, cb) => {
+            materialized.push([base, commit]);
+            if (materializeError) return cb(materializeError);
+            cb(null, emptyDiff ? [] : ["a.txt", "b.txt"]);
+          },
+          { EMPTY_TREE: "nothing" }
+        ),
         "./database": {
           getApplied: (id, cb) => cb(readError, applied),
           setApplied: (id, commit, cb) => {
@@ -213,6 +227,57 @@ describe("Git sync when Redis is unavailable", function () {
     updates = [];
 
     expect(await run({ push: false })).toBe(null);
+    expect(updates).toEqual(["a.txt", "b.txt"]);
+    expect(applied).toBe("new");
+  });
+
+  it("compares from nothing when the repository has lost the clone's commit", async function () {
+    applied = null;
+    head = "lost";
+
+    expect(await run({ push: true })).toBe(null);
+    expect(materialized).toEqual([["nothing", "new"]]);
+    expect(updates).toEqual(["a.txt", "b.txt"]);
+    expect(applied).toBe("new");
+    expect(logs.join("\n")).toContain("lost is not in the repo");
+  });
+
+  it("starts from nothing again if a sync from nothing was interrupted", async function () {
+    applied = null;
+    head = "lost";
+    failing["b.txt"] = unavailable();
+
+    expect(isRedisUnavailableError(await run({ push: true }))).toBe(true);
+
+    // The clone has moved on, but what was recorded has not
+    expect(head).toBe("new");
+    expect(applied).toBe("nothing");
+
+    failing = {};
+    updates = [];
+    materialized = [];
+
+    expect(await run({ push: false })).toBe(null);
+    expect(materialized).toEqual([["nothing", "new"]]);
+    expect(updates).toEqual(["a.txt", "b.txt"]);
+    expect(applied).toBe("new");
+  });
+
+  it("fails, and keeps the recorded commit, if the blog folder cannot be updated", async function () {
+    materializeError = new Error("disk full");
+
+    const error = await run({ push: true });
+
+    expect(error.message).toBe("disk full");
+    expect(released).toBe(1);
+    expect(updates).toEqual([]);
+    expect(applied).toBe("old");
+
+    materializeError = null;
+    materialized = [];
+
+    expect(await run({ push: false })).toBe(null);
+    expect(materialized).toEqual([["old", "new"]]);
     expect(updates).toEqual(["a.txt", "b.txt"]);
     expect(applied).toBe("new");
   });
