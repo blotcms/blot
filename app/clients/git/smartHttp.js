@@ -114,7 +114,6 @@ function fetch(req, res, directory) {
     fail(res, err);
   });
 
-  ps.stdin.on("error", noop);
   ps.stdout.on("error", noop);
 
   // Git does not always read the whole request. Drain the rest so the client
