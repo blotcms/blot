@@ -19,7 +19,7 @@ BUCKET=${BLOT_BACKUP_BUCKET:-s3://blot-redis-backups}
 ROOT=${BLOT_ROOT:-}
 RDB=$ROOT/var/lib/redis6/dump.rdb
 LOCAL=$ROOT/backups
-FLOATING_IP=$ROOT/etc/blot-redis/floating-ip
+ACTIVE=$ROOT/etc/blot-redis/active
 OFFSITE_FILE=$ROOT/etc/blot-redis/offsite-bucket
 # Save first unless a save finished in the last minute: the backup is then the
 # data as of now rather than as of the last scheduled save (up to ~5 minutes,
@@ -36,7 +36,7 @@ esac
 log() { echo "[$(date +%Y-%m-%d-%H-%M-%S)] $KIND backup: $*"; }
 
 # A drill host (launch.sh --drill) holds a copy of production data and may be
-# put through a real cutover, which marks it active below. It must never upload
+# put through a real promotion, which marks it active below. It must never upload
 # to (or prune) the production bucket.
 if [ -e "$ROOT/etc/blot-redis/drill" ]; then
   log "skipped: drill host (/etc/blot-redis/drill)"; exit 0
@@ -61,14 +61,9 @@ if [ "$min_replicas" -gt 0 ] && [ "$(field replication min_slaves_good_slaves)" 
   log "skipped: writes are refused (min-replicas-to-write)"; exit 0
 fi
 # A freshly launched or restored host is also a writable master, so being one
-# is not enough: the active host is marked with the floating IP clients use,
-# written at cutover, and must currently hold it.
-if [ ! -s "$FLOATING_IP" ]; then
-  log "skipped: not marked as the active host (/etc/blot-redis/floating-ip)"; exit 0
-fi
-ip=$(tr -d '[:space:]' < "$FLOATING_IP")
-if ! "$ROOT/usr/sbin/ip" -4 -o addr show | awk '{print $4}' | cut -d/ -f1 | grep -qx "$ip"; then
-  log "skipped: floating IP $ip is not on this host"; exit 0
+# is not enough: promote.sh marks the active host with this file.
+if [ ! -e "$ACTIVE" ]; then
+  log "skipped: not marked as the active host (/etc/blot-redis/active)"; exit 0
 fi
 
 # Make sure the snapshot is fresh. On a busy instance Redis saves every few

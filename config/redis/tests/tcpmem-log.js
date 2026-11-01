@@ -143,8 +143,8 @@ esac
     expect(parseSample(value).ramTotal).toBe(null);
   });
 
-  it("marks the host active once cutover has written the floating IP", function () {
-    write("etc/blot-redis/floating-ip", "10.0.0.50\n");
+  it("marks the host active once promote.sh has written the active marker", function () {
+    write("etc/blot-redis/active", "");
     run();
     expect(parseSample(cliArgs()[2]).active).toBe(true);
   });

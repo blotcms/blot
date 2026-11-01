@@ -109,7 +109,7 @@ systemd-tmpfiles --create /etc/tmpfiles.d/blot-redis.conf
 say "Scripts"
 install -m 0755 -o root -g root -t /usr/local/bin \
   "$ROOT"/bin/*.sh "$HERE/mount-instance-store.sh"
-mkdir -p /etc/blot-redis # holds floating-ip, which marks the active host for backup.sh
+mkdir -p /etc/blot-redis # holds active, which marks the active host for backup.sh
 # Explicit config, never detected from what is mounted. It is only ever written
 # here: a re-run without the variable must not switch a host back.
 if [ "${BLOT_REDIS_SHARED_INSTANCE_STORE:-}" = 1 ]; then
@@ -139,13 +139,13 @@ PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 */5 * * * * $BACKUP_USER /usr/local/bin/redis-mem-log.sh
 EOF
 if crontab -l -u "$BACKUP_USER" 2> /dev/null | grep -E 'backup\.sh|mem-log\.sh|stats\.sh'; then
-  if [ -s /etc/blot-redis/floating-ip ]; then
+  if [ -e /etc/blot-redis/active ]; then
     echo "    WARNING: the crontab entries above are now duplicated by /etc/cron.d/blot-redis; remove them"
   else
     # backup.sh skips until the host is marked active, so the old jobs are
     # still the only ones uploading.
-    echo "    WARNING: keep the old backup entries above until /etc/blot-redis/floating-ip"
-    echo "    is written (at cutover); until then the new backup job skips. The"
+    echo "    WARNING: keep the old backup entries above until /etc/blot-redis/active"
+    echo "    is written (at promotion); until then the new backup job skips. The"
     echo "    mem-log/tcpmem entries are duplicated and can go now."
   fi
 fi
