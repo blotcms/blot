@@ -87,7 +87,9 @@ test("jail: the proxy jail is its own uid, in its cgroup, behind the filter, wit
 
 test("jail: the proxy jail binds no app, data, keys or /proc", () => {
   const { args } = jail.proxyCommand("blue");
-  const binds = args.filter((a, i) => args[i - 1] === "-R");
+  // Its own scripts are a bind. In the image they are under /usr/local/lib.
+  const own = path.dirname(require.resolve("../jail"));
+  const binds = args.filter((a, i) => args[i - 1] === "-R" && a !== own);
   for (const bind of binds) {
     assert(!/^\/(proc|etc\/ssl|usr\/src|usr$|$)/.test(bind), bind);
   }
