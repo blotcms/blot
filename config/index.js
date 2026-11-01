@@ -212,6 +212,8 @@ module.exports = {
   // app/sandbox runs its jobs in-process.
   sandbox: {
     socket: process.env.BLOT_SANDBOX_SOCKET || "",
+    // Screenshots run as a sandbox job, not in the airlock. Only with a broker.
+    browser: !!process.env.BLOT_SANDBOX_SOCKET && process.env.BLOT_SANDBOX_BROWSER === "1",
   },
 
   paypal: {

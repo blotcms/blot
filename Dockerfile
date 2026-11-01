@@ -339,10 +339,18 @@ RUN mkdir -p /etc/resty-auto-ssl/storage /etc/resty-auto-ssl/letsencrypt/conf \
 # The sandbox (app/sandbox, off unless the host sets BLOT_SANDBOX). nsjail's
 # shared libraries come from the same Alpine edge it was built against.
 RUN apk add --no-cache --upgrade $ALPINE_EDGE protobuf libnl3
+# Chromium for the browser job, with the same rm as the dev stage (see there),
+# and what its jail's network needs. setpriv replaces busybox's, which can't
+# clear the bounding set.
+RUN apk add --no-cache chromium nss freetype harfbuzz ttf-freefont font-noto-emoji \
+    passt nftables setpriv \
+ && rm -rf /usr/lib/libLLVM* /usr/lib/libgallium-*.so /usr/lib/dri
 COPY --from=nsjail /nsjail/nsjail /usr/local/bin/nsjail
 # The broker runs as root, so its files are root-owned and read-only to the
 # app (uid 1000 rewrites /usr/src/app, so root must never load code from there)
-COPY proxy/unit/sandbox/broker.js proxy/unit/sandbox/jail.js proxy/unit/sandbox/policy.kafel /usr/local/lib/blot-sandbox/
+COPY proxy/unit/sandbox/broker.js proxy/unit/sandbox/jail.js proxy/unit/sandbox/policy.kafel \
+     proxy/unit/sandbox/policy-browser.kafel proxy/unit/sandbox/network.cfg \
+     proxy/unit/sandbox/egress.nft proxy/unit/sandbox/enter-network.sh /usr/local/lib/blot-sandbox/
 RUN chmod -R go-w /usr/local/lib/blot-sandbox \
  && nsjail --help >/dev/null
 

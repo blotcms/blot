@@ -1,6 +1,6 @@
 # Sandbox
 
-Runs jobs on untrusted bytes (image metadata so far) in an [nsjail](https://github.com/google/nsjail)
+Runs jobs on untrusted bytes (image metadata and web pages so far) in an [nsjail](https://github.com/google/nsjail)
 jail instead of in the app's Node process, which holds the secrets and the blog
 data mount. Design and phases: #2257.
 
@@ -40,7 +40,7 @@ One connection is one job, on `/run/blot-sandbox/broker.sock` (0660, root and gr
    bytes. The client checks it against N and the lengths; the broker never
    reads it.
 
-The broker runs at most 4 jails and queues 32 more, then answers `busy`. It
+The broker runs at most 4 jails, fewer of a job with its own `maxRunning`, and queues 32 more, then answers `busy`. It
 takes no paths, and logs one line per failed job with no input data. A client
 that vanishes after ending its input is not noticed until the jail finishes,
 which is at most its time limit.
@@ -54,6 +54,36 @@ which is at most its time limit.
 3. If it needs a binary or library the jail doesn't bind, add a read-only bind
    in `jail.js`. Never bind `/usr` or `/`.
 
+## The browser job
+
+`screenshot` runs Chromium on a URL. It is the one job with a network, and it is
+off until the host also sets `BLOT_SANDBOX_BROWSER=1`, when `helper/screenshot`
+uses it in place of the airlock. Every URL is treated as hostile, whoever asks:
+customer sites run their own template code. The job starts its own Chromium, driven
+over a pipe so there is no DevTools port, and all of it goes when the job ends.
+
+Its jail differs from the others (`networkArgs` in `proxy/unit/sandbox/jail.js`):
+
+- **The network is pasta, inside the jail's namespace,** and it is only safe with
+  the filter: alone it reaches the instance metadata service and the host's
+  loopback. `enter-network.sh` loads `egress.nft`, drops every capability and
+  sets no-new-privs before the job starts, and the job doesn't start if that fails.
+  The unit needs `/dev/net/tun`, and `setns` and `unshare` in its seccomp profile.
+- **It is started by uid 65001, not root,** because pasta won't start from a root
+  nsjail. So nsjail can't make cgroups: the broker's shell joins the job to
+  `/sandbox-browser-cgroup` first (`/sys/fs/cgroup/blot-sandbox/<unit>-browser`
+  on the host), whose limits are the job's, and the broker kills what is left in
+  it afterwards. That is why one job runs at a time per unit.
+- **`/proc` is the container's, read-only.** Chromium aborts without a real one.
+  A job can read the unit's process list and command lines, so no secret may
+  ever be on a command line. Other uids' `environ`, `maps` and `fd` are denied.
+- **Never bind `/etc/ssl`.** The unit's TLS private keys are at `/etc/ssl/private`.
+- **The seccomp policy** is `policy-browser.kafel`: the other jobs' policy with
+  `socket` allowed for Unix, IPv4, IPv6 and the two netlink protocols nft uses.
+
+A page that can't be screenshotted comes back as `meta.error`; only a broken job
+is a job failure.
+
 ## Why
 
 - **The broker is root-owned.** A jail with its own uid and cgroups has to be
@@ -62,7 +92,7 @@ which is at most its time limit.
   Dockerfile copies the broker to `/usr/local/lib/blot-sandbox`, root-owned and
   not writable by 1000, it requires only Node built-ins and its siblings, and
   the supervisor starts it with a clean environment (no secrets, no `NODE_OPTIONS`).
-- **No `/proc`.** `--disable_proc`. A fresh `/proc` can't be mounted under
+- **No `/proc`, except for the browser job.** `--disable_proc`. A fresh `/proc` can't be mounted under
   Docker's masked paths, and the alternative (`systempaths=unconfined`) would
   let root in the unit write host sysctls. sharp and exiftool don't need it.
 - **`-u 65000:65000:1`, not `--user`.** As root, `--user` leaves the job mapped
@@ -78,6 +108,6 @@ which is at most its time limit.
   can't move a job into it.
 - **The seccomp profile** (`proxy/deploy/sandbox-seccomp.json`) is Docker's
   default plus `clone`, `mount`, `umount2`, `pivot_root` and `sethostname`, so
-  nsjail can build the jail. Nothing else is added: not `--privileged`, not
+  nsjail can build the jail, and `setns` and `unshare` for pasta. Nothing else is added: not `--privileged`, not
   `seccomp=unconfined`, no capabilities. The jail's own policy
   (`proxy/unit/sandbox/policy.kafel`) is much tighter and blocks those calls.
