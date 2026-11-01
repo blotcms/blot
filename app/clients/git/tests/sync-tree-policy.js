@@ -20,9 +20,9 @@ describe("Git sync tree policy", function () {
       },
     };
     const stubs = {
-      async: {}, debug:()=>()=>{}, "simple-git":()=>git,
+      async: {}, debug:()=>()=>{}, "./git":()=>git,
       sync: (id, cb) => cb(null, {path:"/test-blog",log(){}}, (err, cb) => {released = true; cb(err);}),
-      "./checkGitRepoExists":(path, cb)=>cb(null), "./bareRepo":{pointOriginAtBareRepo:(git, handle, cb)=>git.remote(["set-url","origin","/test-data/"+handle+".git"], cb)},
+      "./checkGitRepoExists":(path, cb)=>cb(null), "./repo":{pointOriginAtBareRepo:(git, handle, cb)=>git.remote(["set-url","origin","/test-data/"+handle+".git"], cb)},
       "models/blog":{}, "./validateTree":validateTree,
     };
     const module = {exports:{}};

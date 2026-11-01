@@ -1,9 +1,9 @@
 var async = require("async");
 var Sync = require("sync");
 var debug = require("debug")("blot:clients:git:sync");
-var Git = require("simple-git");
+var Git = require("./git");
 var checkGitRepoExists = require("./checkGitRepoExists");
-var bareRepo = require("./bareRepo");
+var repo = require("./repo");
 var Blog = require("models/blog");
 var validateTree = require("./validateTree");
 var fs = require("fs-extra");
@@ -74,7 +74,7 @@ module.exports = function sync (blogID, gitHandle, callback) {
 
       // Throws an error if directory does not exist
       try {
-        git = Git(folder.path).silent(true);
+        git = Git(folder.path);
       } catch (err) {
         return done(err, callback);
       }
@@ -83,7 +83,7 @@ module.exports = function sync (blogID, gitHandle, callback) {
       git.raw(["rev-parse", "HEAD"], function (err, headBeforePull) {
         if (err) {
           debug(err);
-          return done(new Error(err), callback);
+          return done(err, callback);
         }
 
         if (!headBeforePull)
@@ -96,7 +96,7 @@ module.exports = function sync (blogID, gitHandle, callback) {
         // new handle is saved before its bare repository is renamed, so a
         // follow-up sync can see a handle with no repository yet: origin is
         // then left at the old path (see bareRepo).
-        bareRepo.pointOriginAtBareRepo(git, gitHandle, function (err) {
+        repo.pointOriginAtBareRepo(git, gitHandle, function (err) {
 
           if (err) {
             folder.log("Error adding remote: " + err.message);
@@ -110,11 +110,11 @@ module.exports = function sync (blogID, gitHandle, callback) {
           // took these two commands (fetch and then reset) from this answer:
           // https://stackoverflow.com/a/8888015
           folder.log("Syncing blog folder with git repo");
-          git.fetch({ "--all": true }, function (err) {
+          git.raw(["fetch", "--all"], function (err) {
             if (err) {
               folder.log("Error fetching git repo: " + err.message);
               debug(err);
-              return done(new Error(err), callback);
+              return done(err, callback);
             }
 
             validateTree(git, "origin/master").then(function (commit) {
@@ -122,13 +122,13 @@ module.exports = function sync (blogID, gitHandle, callback) {
                 if (err) {
                   folder.log("Error resetting git repo: " + err.message);
                   debug(err);
-                  return done(new Error(err), callback);
+                  return done(err, callback);
                 }
 
                 git.raw(["rev-parse", "HEAD"], function (err, headAfterPull) {
                   if (err) {
                     folder.log("Error getting git commit hash: " + err.message);
-                    return done(new Error(err), callback);
+                    return done(err, callback);
                   }
 
                   if (!headAfterPull) {
@@ -263,13 +263,12 @@ function changedPaths(git, folder, before, after, callback) {
       before + ".." + after
     ],
     function (err, res) {
-      if (err) return callback(new Error(err));
+      if (err) return callback(err);
 
-      // If you push an empty commit then res
-      // will be null, or perhaps a commit and
-      // then a subsequent commit which reverts
-      // the previous commit.
-      if (res === null) return callback(null, []);
+      // If you push an empty commit then res will be
+      // empty, or perhaps a commit and then a subsequent
+      // commit which reverts the previous commit.
+      if (!res) return callback(null, []);
 
       // The output for diff with -z and the other flags looks like:
       // A^@Hello copy.txt^@A^@Hello.txt^@A^@[アーカイブ]/Hello.txt^@

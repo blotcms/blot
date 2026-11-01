@@ -136,7 +136,7 @@ describe("git client process logging and limits", function () {
       await ctx.git.push();
       await waitForSync(ctx);
 
-      var clone = require("simple-git")(ctx.tmp).silent(true);
+      var clone = require("./setup/git")(ctx.tmp).silent(true);
 
       await clone.clone(ctx.repoUrl, ctx.tmp + "/second-clone");
 

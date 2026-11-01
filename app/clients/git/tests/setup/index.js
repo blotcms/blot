@@ -1,7 +1,7 @@
 module.exports = function setup(options) {
   options = options || {};
 
-  var dataDir = require("clients/git/dataDir");
+  var repo = require("clients/git/repo");
   var disconnect = require("clients/git/disconnect");
   var fs = require("fs-extra");
   var Express = require("express");
@@ -57,7 +57,7 @@ module.exports = function setup(options) {
     // In future it might be nice to pass a custom path to the
     // git client when initializing it? That way we could just
     // wipe the contents of this custom path at the end....
-    fs.remove(dataDir + "/" + this.blog.handle + ".git", done);
+    fs.remove(repo.directory(this.blog.handle), done);
   });
 
   after(function (done) {
@@ -80,7 +80,7 @@ module.exports = function setup(options) {
     });
 
   // { client: true } makes a clone with a real git client (./client.js)
-  // as this.local, instead of the simple-git clone below. Pass
+  // as this.local, instead of the clone below made with ./git. Pass
   // { clone: false } with it. Specs written with it never touch the bare
   // repository or the blog folder's .git directory.
   if (options.client)
@@ -92,18 +92,18 @@ module.exports = function setup(options) {
     before(function (done) {
       var context = this;
 
-      require("simple-git")(this.tmp)
+      require("./git")(this.tmp)
         .silent(true)
         .clone(this.repoUrl, function (err) {
           if (err) return done(new Error(err));
           context.repoDirectory = context.tmp + "/" + context.blog.handle;
-          context.git = require("simple-git")(context.repoDirectory).silent(
+          context.git = require("./git")(context.repoDirectory).silent(
             true
           );
-          context.gitBare = require("simple-git")(
-            dataDir + "/" + context.blog.handle + ".git"
+          context.gitBare = require("./git")(
+            repo.directory(context.blog.handle)
           ).silent(true);
-          context.gitBlot = require("simple-git")(context.blogDirectory).silent(
+          context.gitBlot = require("./git")(context.blogDirectory).silent(
             true
           );
           done(null);

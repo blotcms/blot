@@ -2,22 +2,10 @@ var authenticate = require("./authenticate");
 var create = require("./create");
 var database = require("./database");
 var disconnect = require("./disconnect");
-// Must come before pushover is used. Gives every Git request's duplex an
-// "error" listener so an aborted request can never be an unhandled error.
-require("./guardServices");
-var pushover = require("pushover");
+var repo = require("./repo");
 var sync = require("./sync");
-var dataDir = require("./dataDir");
 var Blog = require("models/blog");
 var debug = require("debug")("blot:clients:git:routes");
-var repos = pushover(dataDir, { autoCreate: false });
-repos.on("error", function (err) {
-  if (err && (err.code === "ECONNRESET" || err.code === "EPIPE")) {
-    return debug("Git repos connection error", err.message || err);
-  }
-
-  debug("Git repos error", err);
-});
 var Express = require("express");
 var dashboard = Express.Router();
 var site = Express.Router();
@@ -43,7 +31,7 @@ var followUps = followUpSync("git", function (blogID) {
 });
 
 dashboard.get("/", function (req, res, next) {
-  repos.exists(req.blog.handle + ".git", function (exists) {
+  repo.exists(req.blog.handle, function (exists) {
     if (exists) {
       res.locals.repo = true;
       return next();
@@ -198,63 +186,26 @@ site.get("/syncs-finished/:blogID", async function (req, res, next) {
   }
 });
 
-// Tags and fetches have no special handling: pushover accepts them when nobody
-// is listening, so keep doing exactly that, explicitly. Errors on these (and on
-// every other Git request) are handled for all requests in guardServices.js and
-// in the site.use handler below.
-["tag", "fetch"].forEach(function (eventName) {
-  repos.on(eventName, function (service) {
-    debug("Git " + eventName);
-    service.accept();
-  });
+repo.onPush(function (blogID) {
+  // Used for testing purposes only
+  started(blogID);
+
+  followUps.run(blogID).then(
+    function () {
+      // Used for testing purposes only
+      finished(blogID);
+      debug("Sync finished");
+    },
+    function (err) {
+      // Used for testing purposes only
+      finished(blogID);
+      debug(err);
+    }
+  );
 });
 
-repos.on("push", function (push) {
-  if (push && push.branch && push.branch !== "master") {
-    return push.reject(
-      400,
-      "Push rejected: only the master branch is allowed. Please push to master or open a PR."
-    );
-  }
-
-  push.accept();
-
-  // This might cause an interesting race condition. It happened for me during
-  // testing. If we invoke Blog.Sync right now, it should be fine but previously
-  // I had an additional asynchronous database lookup to fetch the full blog. I
-  // believe this triggered issues in testing, because the test checked to see
-  // if a sync had finished that had not actually yet begun. Perhaps we should
-  // begin the sync on the "send" event instead of the "finish" event? That
-  // might give us a firmer guarantee that the order of events is correct. This
-  // seems to be purely a problem for automated use of the git client, humans
-  // are unlikely to fire off multiple pushes immediately after the other.
-  push.response.on("finish", function () {
-    // I'm not sure what happens to lead to this being invoked
-    // without a request or blog but it do sometimes.
-    if (!push || !push.request || !push.request.blog)
-      return debug("No blog found for push", push);
-
-    // Used for testing purposes only
-    started(push.request.blog.id);
-
-    followUps.run(push.request.blog.id).then(
-      function () {
-        // Used for testing purposes only
-        finished(push.request.blog.id);
-        debug("Sync finished");
-      },
-      function (err) {
-        // Used for testing purposes only
-        finished(push.request.blog.id);
-        debug(err);
-      }
-    );
-  });
-});
-
-// We need to pause then resume for some strange reason. See Pushover issue #30.
-// Keep req.url untouched: Pushover uses the canonical repository path parsed
-// and authenticated above to select the repository.
+// Keep req.url untouched: the canonical repository path parsed and
+// authenticated above selects the repository.
 site.use(parseGitRequest, redirectRenamedGitHandle, authenticate, function (req, res) {
   function endResponse() {
     if (res && !res.headersSent && !res.finished && !res.writableEnded) {
@@ -289,9 +240,7 @@ site.use(parseGitRequest, redirectRenamedGitHandle, authenticate, function (req,
     debug("Git response error", err);
   });
 
-  req.pause();
-  repos.handle(req, res);
-  req.resume();
+  repo.handleSmartHttp(req, res, req.blog.id);
 });
 
-module.exports = { dashboard: dashboard, site: site, repos: repos };
+module.exports = { dashboard: dashboard, site: site };

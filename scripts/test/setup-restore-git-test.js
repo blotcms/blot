@@ -2,7 +2,7 @@ const Blog = require("models/blog");
 const Template = require("models/template");
 const localPath = require("helper/localPath");
 const writeToFolder = require("models/template").writeToFolder;
-const Git = require("simple-git");
+const Git = require("clients/git/git");
 const fs = require("fs-extra");
 const path = require("path");
 const { promisify } = require("util");
@@ -65,12 +65,7 @@ async function setup(blogHandle) {
     console.log("Initializing git repository...");
     const git = Git(templateDir);
 
-    await new Promise((resolve, reject) => {
-      git.init((err) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await git.raw(["init"]);
 
     // Create some files and commits
     console.log("Creating initial files and commits...");
@@ -80,29 +75,15 @@ async function setup(blogHandle) {
     await fs.outputFile(testFile, "Initial commit\n");
 
     // Add and commit
-    await new Promise((resolve, reject) => {
-      git.add(["test.txt"], (err) => {
-        if (err) return reject(err);
-        git.commit("Initial commit", (err) => {
-          if (err) return reject(err);
-          resolve();
-        });
-      });
-    });
+    await git.raw(["add", "test.txt"]);
+    await git.raw(["commit", "-m", "Initial commit"]);
 
     // Create another file and commit
     const testFile2 = path.join(templateDir, "test2.txt");
     await fs.outputFile(testFile2, "Second commit\n");
 
-    await new Promise((resolve, reject) => {
-      git.add(["test2.txt"], (err) => {
-        if (err) return reject(err);
-        git.commit("Second commit", (err) => {
-          if (err) return reject(err);
-          resolve();
-        });
-      });
-    });
+    await git.raw(["add", "test2.txt"]);
+    await git.raw(["commit", "-m", "Second commit"]);
 
     // Create a file in .git to ensure there are files to delete
     await fs.outputFile(

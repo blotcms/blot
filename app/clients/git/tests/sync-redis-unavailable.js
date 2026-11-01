@@ -42,7 +42,7 @@ describe("Git sync when Redis is unavailable", function () {
       },
     };
     const stubs = {
-      "simple-git": () => git,
+      "./git": () => git,
       debug: () => () => {},
       sync: (id, cb) =>
         cb(
@@ -61,7 +61,7 @@ describe("Git sync when Redis is unavailable", function () {
           }
         ),
       "./checkGitRepoExists": (path, cb) => cb(null),
-      "./bareRepo": {
+      "./repo": {
         pointOriginAtBareRepo: (git, handle, cb) =>
           git.remote(["set-url", "origin", "/test-data/" + handle + ".git"], cb),
       },
