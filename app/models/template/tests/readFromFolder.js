@@ -51,7 +51,7 @@ describe("template", function () {
 
   it("ignores view files which are too large", function (done) {
     // 3mb of random data should exceed the limit of 2.5mb
-    fs.writeFileSync(
+    fs.outputFileSync(
       this.tmp + "/style.css",
       require("crypto").randomBytes(3 * 1000 * 1000)
     );
