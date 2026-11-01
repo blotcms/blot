@@ -25,7 +25,7 @@ describe("redis.conf", function () {
   it("persists with RDB at most every five minutes", function () {
     expect(config.save).toEqual(["3600 1", "300 100"]);
     expect(only("appendonly")).toBe("no");
-    expect(only("stop-writes-on-bgsave-error")).toBe("yes");
+    expect(only("stop-writes-on-bgsave-error")).toBe("no");
   });
 
   it("errors on writes at maxmemory instead of evicting", function () {
