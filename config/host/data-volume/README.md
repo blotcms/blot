@@ -213,7 +213,9 @@ On a drill host the units are paused instead and stay paused.
 
 `move thaw` is the rollback when no switch happened: the data directory goes
 read-write and the freeze is lifted (the units unpaused on a drill). It also
-cleans up after a failed `move freeze`.
+cleans up after a failed `move freeze`. On a drill host it also lifts an app
+freeze left by `--app-freeze`, recognised by its reason, so the flag need not be
+repeated.
 
 `move retag`, after the switch: the new volume gets the production `Name` tag
 first, then the old one becomes `Blot data (replaced by <new id>)` with
@@ -259,6 +261,10 @@ with no data volume and `drill.sh setup-target ec2-user@<ip>` installs docker,
 rsync, xfsprogs and the mount unit on it, for rehearsing `move`; it prints the
 `resize.sh move` commands. In a drill the new host has no `deploy.sh`, so
 `move prepare` prints the two commands that mount the volume instead.
+
+`resize.sh --app-freeze` freezes a drill host with `read-only.js`, as production
+does, instead of pausing its containers, for a drill that runs real units
+(`config/host/cycle.sh` passes it).
 
 `setup` fills a small data volume with tens of thousands of files and runs
 reader and writer containers (named `blot-blue` and `blot-green`, `rslave` binds). The drill host is marked by

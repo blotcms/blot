@@ -152,6 +152,10 @@ it says so. `maxmemory` is about 70% of RAM, computed at bootstrap
 
 ## Disaster recovery
 
+This is for a Redis on a host of its own. Where Redis shares the app host, losing the host loses
+the app and its data volume too: use "Recovery" in `config/host/README.md` (`cycle.sh restore`),
+which restores Redis with `restore.sh` as one of its steps.
+
 For when the master is gone (instance lost, data unusable) and no replica can
 take over with `promote.sh`. Everything written since the newest backup's
 snapshot is lost (up to an hour), and the app's sync state can then disagree
