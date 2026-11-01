@@ -4,8 +4,10 @@
 //   pressure starts. A kernel bug once leaked this count upwards until bursts
 //   to Redis were dropped. Only the Redis host can read the count, so its
 //   5-minute cron (config/redis/bin/tcpmem-log.sh) stores each sample in Redis
-//   at SAMPLE_KEY, and this check reads it. A sample that stops arriving means
-//   that monitoring stopped, which is alerted too.
+//   at SAMPLE_KEY, and this check reads it. The count and the RAM and disk
+//   fields describe the whole host, which on a combined host the units share.
+//   A sample that stops arriving means that monitoring stopped, which is
+//   alerted too.
 // - A stale backup: backup.sh (config/redis/bin) records each upload at
 //   BACKUP_KEY, and the daily one's copy to Backblaze B2 at OFFSITE_KEY. Over
 //   BACKUP_STALE_MS (two missed hourly runs) or OFFSITE_STALE_MS (two missed
@@ -13,7 +15,7 @@
 //   (hosts without backups or offsite stay quiet); one that can't be read is.
 // - Redis's memory nearing maxmemory. With noeviction, writes fail at the
 //   limit. maxmemory being unset is alerted too, but only on a host that
-//   cutover.sh has marked active (/etc/blot-redis/floating-ip): a host still
+//   promote.sh has marked active (/etc/blot-redis/active): a host still
 //   being built or drilled has no marker and may not be bootstrapped yet.
 // - A failed background save. With stop-writes-on-bgsave-error yes Redis
 //   refuses every write until a save succeeds.
@@ -88,15 +90,16 @@ const unwritten = { state: null };
 
 const eventCooldown = (type) => EVENT_COOLDOWN[type] || EVENT_COOLDOWN.default;
 
-// Leaked or not, healthy use is a tiny fraction of tcp_mem[1] (dozens of
-// sockets with empty queues), and the leak drifted up over months, so half
-// leaves weeks of warning and is far above any real load.
+// Leaked or not, healthy use is a small fraction of tcp_mem[1] (sockets with
+// mostly empty queues), and the leak drifted up over months, so half leaves
+// weeks of warning. The proxy's sockets count too on a combined host, so check
+// this still holds after the move.
 const TCP_MEM_ALERT = 0.5;
 const TCP_MEM_CLEAR = 0.45;
 
 // Leaves room to raise maxmemory or move to a bigger instance before writes
-// fail. maxmemory is ~70% of RAM, so 80% of it is ~56% of RAM, still clear of
-// the copy-on-write a background save needs.
+// fail. maxmemory is set with room for the copy-on-write a background save
+// needs (and, on a combined host, for the units), so 80% of it still leaves that.
 const MAXMEMORY_ALERT = 0.8;
 const MAXMEMORY_CLEAR = 0.75;
 
@@ -445,12 +448,12 @@ function eventMessage(type, data, report) {
     case "errors-critical":
       return `new errors that mean Redis refused writes: ${counts(data.counts)}. OOM is the maxmemory limit (\`noeviction\`), MISCONF a failed background save (\`stop-writes-on-bgsave-error yes\`), NOREPLICAS fewer replicas than \`min-replicas-to-write\``;
     case "errors":
-      return `at least ${ERROR_ALERT_COUNT} new errors of a type within 5 minutes: ${counts(data.counts)}. READONLY is expected for a moment during a cutover; otherwise look for a bug in the app, whose logs show the failing commands`;
+      return `at least ${ERROR_ALERT_COUNT} new errors of a type within 5 minutes: ${counts(data.counts)}. READONLY is expected for a moment during a promotion; otherwise look for a bug in the app, whose logs show the failing commands`;
     case "rejected":
       return `Redis rejected ${commas(data.count)} connections: it was at \`maxclients\``;
     case "restart":
       return (
-        "Redis restarted or a different host/process is now serving (e.g. after a cutover):\n" +
+        "Redis restarted or a different host/process is now serving (e.g. after a promotion):\n" +
         data.incidents
           .map(
             (i) =>
@@ -505,7 +508,7 @@ function message(name, report) {
     case "maxmemory":
       return `${gb(memory.used)} of ${gb(memory.maxmemory)} (${percent(memory.fraction)})`;
     case "maxmemory-unset":
-      return `maxmemory is 0 on ${sample.host}, which cutover marked active`;
+      return `maxmemory is 0 on ${sample.host}, which is marked active`;
     case "bgsave-failed":
       return (
         `the last background save failed (\`rdb_last_bgsave_status:${redis.saveStatus}\`). ` +

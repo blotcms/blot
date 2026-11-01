@@ -6,7 +6,8 @@
 # Amazon Linux 2023 arm64 AMI, waits for SSH, runs bootstrap.sh, then loads
 # data: restore.sh from an S3 backup, or REPLICAOF a running Redis. For
 # replica:<host>, give the primary's own private IP, never the floating IP:
-# the replica would replicate from itself once cutover.sh moves the IP.
+# the replica would replicate from itself once the IP moves, and promote.sh
+# needs the primary IP for its checks.
 #
 # Try it with --dry-run first.
 #
@@ -19,7 +20,7 @@
 #   --drill          a throwaway (drill, rehearsal, DR test): named drill-redis-*,
 #                    tagged BlotDrill=true, and /etc/blot-redis/drill is written
 #                    before bootstrap so backup.sh never uploads from it, even
-#                    after a cutover marks it active
+#                    after a promotion marks it active
 #   --offsite PROFILE s3://BUCKET
 #                    restore from the Backblaze B2 offsite bucket instead of S3,
 #                    for when AWS is unavailable (not with --from replica:...).
