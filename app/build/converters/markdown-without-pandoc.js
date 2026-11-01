@@ -1,25 +1,27 @@
 // This is used when people are running the server
 // locally on a machine without pandoc – it's useful
 // for developers who want to contribute
-const fs = require("fs-extra");
+const folder = require("storage/folder");
+const { callbackify } = require("util");
 const { marked } = require("marked");
 const extname = require("path").extname;
-const localPath = require("helper/localPath");
 const cheerio = require("cheerio");
 const { normalizeLiteralDollarMath } = require("build/math/normalizeLiteralDollars");
 const postSourceSize = require("build/converters/post-source-size");
+const folderStat = callbackify(require("build/converters/folderStat"));
+const readFile = callbackify(folder.read);
 
 module.exports = {
   read: function (blog, path, callback) {
-    path = localPath(blog.id, path);
-
-    fs.stat(path, function (err, stat) {
+    folderStat(blog.id, path, function (err, stat) {
       if (err) return callback(err);
       if (stat.size > postSourceSize.MARKDOWN.bytes)
         return callback(postSourceSize.tooLargeError(postSourceSize.MARKDOWN));
 
-      fs.readFile(path, "utf-8", function (err, text) {
+      readFile(blog.id, path, function (err, buffer) {
         if (err) return callback(err);
+
+        const text = buffer.toString("utf-8");
         const $ = cheerio.load(
           marked.parse(text),
           { decodeEntities: false },

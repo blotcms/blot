@@ -133,6 +133,57 @@ describe("folderAssets plugin", function () {
     });
   });
 
+  // The version is the token helper/contentVersion gives the file at its
+  // local path, whatever its size, so moving the lookup onto storage/folder
+  // doesn't change a single folder link
+  [
+    ["a small file", 1024],
+    ["a file hashed as a stream", 300 * 1024],
+    ["a file above the hashing limit", 6 * 1024 * 1024],
+  ].forEach(function ([label, size]) {
+    it("bakes the version contentVersion gives " + label, async function () {
+      var contentVersion = require("helper/contentVersion");
+      var photoPath = this.blogDirectory + "/photo.jpg";
+
+      fs.outputFileSync(this.blogDirectory + "/Hello.txt", "![Image](photo.jpg)");
+      fs.outputFileSync(photoPath, Buffer.alloc(size, "x"));
+      fs.utimesSync(photoPath, 1700000000.123456, 1700000000.123456);
+
+      var expected = await contentVersion(photoPath, fs.statSync(photoPath));
+      var blog = this.blog;
+      var entry = await new Promise((resolve, reject) =>
+        build(blog, "/Hello.txt", (err, entry) => (err ? reject(err) : resolve(entry)))
+      );
+
+      expect(entry.html).toContain(
+        `${BLOT_CDN_TOKEN}/folder/v-${expected}/${blog.id}/photo.jpg`
+      );
+    });
+  });
+
+  it("finds a file ignoring case, preferring the exact name over a sibling differing only by case", function (done) {
+    var blog = this.blog;
+
+    fs.outputFileSync(this.blogDirectory + "/Hello.txt", "![A](pics/a.png) ![B](PICS/a.png) ![C](pics/B.PNG)");
+    fs.outputFileSync(this.blogDirectory + "/pics/a.png", "lowercase folder");
+    fs.outputFileSync(this.blogDirectory + "/Pics/a.png", "capitalised folder");
+    fs.outputFileSync(this.blogDirectory + "/pics/b.png", "found by its stored spelling");
+
+    build(blog, "/Hello.txt", function (err, entry) {
+      if (err) return done.fail(err);
+
+      var links = entry.html.match(/\/folder\/v-[a-f0-9]{8}\/[^"]*/g);
+
+      expect(links.length).toEqual(3);
+      expect(links[0]).toMatch(new RegExp("/" + blog.id + "/pics/a\\.png$"));
+      // Which of the two folders is first in the directory's listing
+      expect(links[1]).toMatch(/\/(Pics|pics)\/a\.png$/);
+      expect(links[2]).toMatch(new RegExp("/" + blog.id + "/pics/b\\.png$"));
+      expect(entry.dependencies).toContain("/pics/b.png");
+      done();
+    });
+  });
+
   it("bakes a reserved global-static file from the global static directory", function (done) {
     var path = "/Hello.txt";
     var contents =
