@@ -58,6 +58,7 @@ env:
     - config/redis
     - proxy
     - scripts/deploy
+    - scripts/storage
 
 jobs:
   # Static checks, folded into one job so they share a runner and checkout.
