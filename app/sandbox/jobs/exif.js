@@ -24,9 +24,9 @@ function command() {
 function exiftool(input) {
   return new Promise((resolve, reject) => {
     const [file, prefix] = command();
-    const child = spawn(file, prefix.concat(["-j", "-"]), {
-      stdio: ["pipe", "pipe", "ignore"],
-    });
+    // A pipe for stderr too: "ignore" opens /dev/null, which the jail doesn't have
+    const child = spawn(file, prefix.concat(["-j", "-"]), { stdio: "pipe" });
+    child.stderr.resume();
     const chunks = [];
     let size = 0;
     let failed = false;
