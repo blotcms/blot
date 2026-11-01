@@ -24,6 +24,11 @@ async function main() {
   const name = process.argv[2];
   if (!JOB.test(name || "") || !JOBS.includes(name)) throw new Error("unknown job");
 
+  // Here, not in the jobs: this is process-wide, and in-process that would be
+  // every other use of sharp in the app. One thread per jail keeps a jail's CPU
+  // and memory to what the broker's slots assume.
+  if (name !== "exif") require("sharp").concurrency(1);
+
   const stdin = await readStdin();
   const end = stdin.indexOf(10);
   if (end === -1) throw new Error("no arguments line");

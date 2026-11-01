@@ -6,6 +6,10 @@ const path = require("path");
 
 const MiB = 1024 * 1024;
 
+// Encoded images pass through /tmp (app/sandbox/jobs/encode.js). A tmpfs counts
+// toward the job's memory limit, so this is a ceiling, not a reservation.
+const TMPFS_BYTES = 128 * MiB;
+
 // Where the Dockerfile puts the nsjail binary, and the unit's cgroup subtree
 // that the host binds in (proxy/deploy/common.sh)
 const NSJAIL = "/usr/local/bin/nsjail";
@@ -89,7 +93,7 @@ function args(name) {
     "--disable_proc",
     "--hostname", "sandbox",
     "--cwd", "/",
-    "-T", "/tmp",
+    "-m", `none:/tmp:tmpfs:size=${TMPFS_BYTES}`,
     "--time_limit", String(j.timeSeconds),
     // uid 65000 inside and outside. Never --user: as root it leaves the job
     // mapped to root outside the namespace.

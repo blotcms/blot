@@ -7,21 +7,12 @@
 // meta is [{ width, height, format }] and outputs is [Buffer], one per size.
 
 const sharp = require("sharp");
+const { encode, isExtension } = require("./encode");
 
 // Sharp seems to cache files based on their path and not the contents
 // of the file at that path, so stale versions of a file in a blog's
 // folder could come back.
 sharp.cache(false);
-sharp.concurrency(1);
-
-// What toFile used to infer from the extension of the output path
-const FORMATS = {
-  ".jpg": "jpeg",
-  ".jpeg": "jpeg",
-  ".png": "png",
-  ".webp": "webp",
-  ".gif": "gif",
-};
 
 const MAX_SIZES = 16;
 const MAX_SIZE = 8192;
@@ -29,10 +20,7 @@ const MAX_SIZE = 8192;
 function check(args) {
   if (!args || typeof args !== "object") throw new Error("invalid arguments");
 
-  const format = Object.prototype.hasOwnProperty.call(FORMATS, args.extension)
-    ? FORMATS[args.extension]
-    : null;
-  if (!format) throw new Error("unsupported extension");
+  if (!isExtension(args.extension)) throw new Error("invalid extension");
 
   if (typeof args.animated !== "boolean") throw new Error("invalid animated");
 
@@ -48,11 +36,11 @@ function check(args) {
     return { size, crop: options.crop };
   });
 
-  return { format, animated: args.animated, sizes };
+  return { extension: args.extension, animated: args.animated, sizes };
 }
 
 async function run(args, input) {
-  const { format, animated, sizes } = check(args);
+  const { extension, animated, sizes } = check(args);
   const image = sharp(input, animated ? { animated: true } : undefined);
 
   const meta = [];
@@ -78,7 +66,7 @@ async function run(args, input) {
       transform.resize(size, size, { withoutEnlargement: true, fit: "inside" });
     }
 
-    const { data, info } = await transform.toFormat(format).toBuffer({ resolveWithObject: true });
+    const { data, info } = await encode(transform, extension);
     meta.push({ width: info.width, height: info.height, format: info.format });
     outputs.push(data);
   }

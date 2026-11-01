@@ -70,6 +70,26 @@ describe("sandbox image jobs", function () {
       expect((await sharp(outputs[0]).metadata()).format).toEqual("jpeg");
     });
 
+    it("takes the format from the extension, not the input", async function () {
+      const input = await sharp({
+        create: { width: 400, height: 200, channels: 3, background: "#808080" },
+      })
+        .png()
+        .toBuffer();
+      const { meta } = await sandbox.run("thumbnail", valid, input);
+      expect(meta[0].format).toEqual("jpeg");
+    });
+
+    it("keeps the input's format for an extension sharp doesn't know", async function () {
+      const input = await sharp({
+        create: { width: 400, height: 200, channels: 3, background: "#808080" },
+      })
+        .png()
+        .toBuffer();
+      const { meta } = await sandbox.run("thumbnail", { ...valid, extension: ".xyz" }, input);
+      expect(meta[0].format).toEqual("png");
+    });
+
     it("handles animated images", async function () {
       const { meta } = await sandbox.run(
         "thumbnail",
@@ -87,7 +107,7 @@ describe("sandbox image jobs", function () {
         null,
         "sizes",
         {},
-        { ...valid, extension: ".svg" },
+        { ...valid, extension: "/../x" },
         { ...valid, extension: "__proto__" },
         { ...valid, extension: undefined },
         { ...valid, animated: "yes" },
@@ -110,7 +130,7 @@ describe("sandbox image jobs", function () {
 
   describe("resize", function () {
     it("fits the image inside max and keeps its format", async function () {
-      const { meta, outputs } = await sandbox.run("resize", { max: 100 }, await image(400, 200, "jpeg"));
+      const { meta, outputs } = await sandbox.run("resize", { max: 100, extension: ".jpg" }, await image(400, 200, "jpeg"));
       expect(meta.width).toEqual(100);
       expect(meta.height).toEqual(50);
       expect(meta.format).toEqual("jpeg");
@@ -119,7 +139,7 @@ describe("sandbox image jobs", function () {
     });
 
     it("does not enlarge", async function () {
-      const { meta } = await sandbox.run("resize", { max: 3000 }, await image(40, 20));
+      const { meta } = await sandbox.run("resize", { max: 3000, extension: ".png" }, await image(40, 20));
       expect(meta.width).toEqual(40);
       expect(meta.height).toEqual(20);
     });
