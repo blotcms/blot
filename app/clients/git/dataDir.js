@@ -1,7 +1,7 @@
 const config = require("config");
-const { blot_directory } = config;
+const { data_directory } = config;
 const { join } = require("path");
-const git_data_directory = join(blot_directory, "data/git");
+const git_data_directory = join(data_directory, "git");
 const fs = require("fs-extra");
 
 fs.ensureDirSync(git_data_directory);
