@@ -1,12 +1,17 @@
 // IMPLEMENTATION-SPECIFIC. A sync brings the blog folder to a push by writing
 // the paths that changed, straight from the bare repository (materialize.js,
 // #2259 PR 7). The live clone in the blog folder's .git directory is no longer
-// how it finds changes, but Blot's own writes still commit in it, so it has to
-// keep up with every sync. And as nothing else in the folder is touched, a
-// file changed in the folder by hand stays changed. Delete the live clone
-// specs here when the live clones go (PR 9).
+// how it finds changes, and since PR 8 Blot's own writes are not made in it, but
+// a blog that has one keeps it at master, so that this code can be rolled back
+// (the specs here give the blog one, as older blogs have). And as nothing else
+// in the folder is touched, a file changed in the folder by hand stays changed.
+// Delete the live clone specs here when the live clones go (PR 9).
 describe("git client sync: materializing the blog folder", function () {
   require("./setup")({ clone: false, client: true });
+
+  beforeEach(async function () {
+    await require("./setup/liveClone")(this);
+  });
 
   var util = require("util");
   var fs = require("fs-extra");
@@ -21,7 +26,7 @@ describe("git client sync: materializing the blog folder", function () {
   var getApplied = util.promisify(database.getApplied);
   var setApplied = util.promisify(database.setApplied);
 
-  // The live clone, as Blot's own writes see it
+  // The live clone
   function live(ctx) {
     return Git(ctx.blogDirectory);
   }

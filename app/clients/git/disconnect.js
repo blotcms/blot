@@ -5,7 +5,6 @@ var User = require("models/user");
 var debug = require("debug")("blot:clients:git:disconnect");
 var database = require("./database");
 var repo = require("./repo");
-var Git = require("./git");
 
 // The git token is account-wide: every site the owner has connected to
 // git shares it, so it can only be flushed with the owner's last git site.
@@ -31,19 +30,10 @@ function flushTokenIfUnused(blog, callback) {
   });
 }
 
-// Called when the user disconnects the client
-// This may occur when the
+// Called when the user disconnects the client, and when the blog is deleted.
+// It needs nothing from the blog folder, so a blog whose folder is already
+// gone is disconnected, and its repository removed, all the same.
 module.exports = function disconnect(blogID, callback) {
-  var liveRepoDirectory = localPath(blogID, "/");
-  var liveRepo;
-
-  // Throws an error if directory does not exist
-  try {
-    liveRepo = Git(liveRepoDirectory);
-  } catch (err) {
-    return callback(err);
-  }
-
   // TODO, this shit should be handled at the next layer up
   // we shouldn't worry about setting blog.client to ""
   Blog.get({ id: blogID }, function (err, blog) {
@@ -56,13 +46,16 @@ module.exports = function disconnect(blogID, callback) {
 
       database.removeStatus(blog.id, function (err) {
         if (err) return callback(err);
-        // Remove the bare git repo in /repos
-        fs.remove(repo.directory(blog.handle), function (err) {
+        // Remove the bare git repo, at the blog's current handle. A repo at
+        // a former handle is not this blog's to remove: only a push to the
+        // current handle is served, and a repo left at an old one could be
+        // another blog's.
+        repo.remove(blog.handle, function (err) {
           if (err) return callback(err);
 
-          // Remove the .git directory in the user's blog folder?
-          // maybe don't do this... they might want it...
-          // what if there was a repo in their folder beforehand?
+          // Remove the live clone, the .git directory in the blog folder,
+          // which blogs made before Blot stopped committing in it have.
+          // Remove this with the live clones.
           fs.remove(localPath(blogID, "/.git"), function (err) {
             if (err) return callback(err);
 
