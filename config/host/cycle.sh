@@ -911,8 +911,9 @@ restore_inputs() {
   [ -n "${BLOT_HOST_SSH_KEY:-}" ] || [ -n "$DRY_RUN" ] || die "set BLOT_HOST_SSH_KEY: the private key for the new host"
   [ -f "$SECRETS_FILE" ] || need "--secrets-env FILE: secrets.env as it was on the lost host (it is not in the repo)"
   [ -f "$PROXY_FILE" ] || need "--proxy-env FILE: proxy.env as it was on the lost host (it is not in the repo)"
-  # Only a drill that restores Redis from the offsite copy goes without credentials on the host.
-  if [ -n "$AWS_CREDS" ] || [ "$MODE" = production ] || [ -z "$OFFSITE_BUCKET" ]; then
+  # Only a drill goes without credentials on the host: from the offsite copy, or
+  # with an instance profile that reads the backups (never a production key on a drill).
+  if [ -n "$AWS_CREDS" ] || [ "$MODE" = production ]; then
     { [ -f "$AWS_CREDS" ] && grep -q '^\[default\]' "$AWS_CREDS"; } ||
       need "--aws-credentials FILE: a credentials file with a [default] profile that can read the Redis backups and write new ones"
   fi

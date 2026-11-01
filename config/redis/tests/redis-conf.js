@@ -70,6 +70,8 @@ describe("redis.conf", function () {
     expect(only("oom-score-adj")).toBe("relative");
     expect(only("oom-score-adj-values")).toBe("0 0 1900");
     expect(setup).toContain("OOMScoreAdjust=-900");
+    // Without this systemd stops Redis when the kernel kills the child.
+    expect(setup).toContain("OOMPolicy=continue");
     expect(setup).toContain("CPUWeight=1000");
   });
 

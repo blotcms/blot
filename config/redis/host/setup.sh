@@ -227,6 +227,10 @@ LimitNOFILE=65536
 # A unit that dies restarts in seconds; Redis dying loses writes since the last
 # save.
 OOMScoreAdjust=-900
+# systemd's default, stop, ends the whole service when the kernel kills any of
+# its processes. So the BGSAVE child, which is meant to die first, would take
+# Redis down with it: a final save and a reload, over a minute on real data.
+OOMPolicy=continue
 # Redis first when the CPU is contended. docker's --cpu-shares 2048 is weight 79
 # and airlock's 512 is about 20, so 1000 wins; it costs nothing when idle.
 CPUWeight=1000
