@@ -30,7 +30,7 @@ describe("zip export", function () {
     await this.blog.write({ path: "/notes/nested/a.txt", content: "a" });
     await this.blog.write({ path: "/b.txt", content: "b" });
 
-    const res = await this.get(`/sites/${this.blog.handle}/export/download`);
+    const res = await this.fetch(`/sites/${this.blog.handle}/export/download`);
     expect(res.status).toBe(200);
 
     const zip = Buffer.from(await res.arrayBuffer());
