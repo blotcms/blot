@@ -1,10 +1,8 @@
-const fs = require("fs-extra");
 const ensure = require("helper/ensure");
 const type = require("helper/type");
 const Update = require("./update");
 const async = require("async");
-const { join, resolve, basename } = require("path");
-const localPath = require("helper/localPath");
+const storage = require("storage/folder");
 const messenger = require("./messenger");
 const assets = require("storage/assets");
 const { promisify } = require("util");
@@ -13,57 +11,47 @@ const Blog = require("models/blog");
 const build = require("build");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 
-// The most stats in flight at once while walking a folder, so a blog with a
-// huge folder cannot open an unbounded number of them.
-const WALK_CONCURRENCY = 32;
-
-// Lists every file under dir. Directories are read one at a time and each is
-// stat'd with bounded concurrency. The order of the results is not
-// guaranteed. An error reading dir itself is returned; an error reading a
+// Lists every file under the blog's folder as a blog-relative path. Directories
+// are read one at a time, and only their names are read: a directory's listing
+// says which entries are directories, so there is nothing to stat. Symlinks are
+// not listed (storage/folder skips them). The order of the results is not
+// guaranteed. An error reading the folder itself is thrown; an error reading a
 // subdirectory is skipped, so one unreadable folder does not lose the rest.
-function walk(dir, done) {
+async function walk(blogID) {
   const results = [];
-  const pending = [dir];
+  const pending = ["/"];
+  let isRoot = true;
 
-  function next(isRoot) {
+  while (pending.length) {
     const current = pending.pop();
+    const reading = isRoot;
+    let entries;
 
-    if (current === undefined) return done(null, results);
+    isRoot = false;
 
-    fs.readdir(current, function (err, list) {
-      if (err) {
-        if (isRoot) return done(err);
-        return next(false);
+    try {
+      entries = await storage.listNames(blogID, current);
+    } catch (err) {
+      if (reading) throw err;
+      continue;
+    }
+
+    for (const { name, isDirectory } of entries) {
+      const file = (current === "/" ? "" : current) + "/" + name;
+
+      if (isDirectory) {
+        // A "+" folder is a rebuild target in its own right. Once it has
+        // been emptied no file path surfaces it, but its stale aggregate
+        // entry still needs the EMPTY cleanup, so record the directory too.
+        if (name.endsWith("+")) results.push(file);
+        pending.push(file);
+      } else {
+        results.push(file);
       }
-
-      async.eachLimit(
-        list,
-        WALK_CONCURRENCY,
-        function (name, cb) {
-          const file = resolve(current, name);
-
-          fs.stat(file, function (err, stat) {
-            if (stat && stat.isDirectory()) {
-              // A "+" folder is a rebuild target in its own right. Once it has
-              // been emptied no file path surfaces it, but its stale aggregate
-              // entry still needs the EMPTY cleanup, so record the directory too.
-              if (basename(file).endsWith("+")) results.push(file);
-              pending.push(file);
-            } else {
-              results.push(file);
-            }
-
-            cb();
-          });
-        },
-        function () {
-          next(false);
-        }
-      );
-    });
+    }
   }
 
-  next(true);
+  return results;
 }
 
 module.exports = function main(blogID, options, callback) {
@@ -86,13 +74,7 @@ module.exports = function main(blogID, options, callback) {
     const updateStatus = function () {};
     const update = new Update(blog, log, updateStatus);
 
-    let blogDirectory = localPath(blog.id, "/");
-
-    if (blogDirectory.endsWith("/")) blogDirectory = blogDirectory.slice(0, -1);
-
-    walk(blogDirectory, async function (err, paths) {
-      if (err) return callback(err);
-
+    walk(blog.id).then(async function (paths) {
       try {
         if (options.thumbnails) {
           await wipeCache({
@@ -119,8 +101,7 @@ module.exports = function main(blogID, options, callback) {
       const updatePaths = [];
       const updatePathCounts = new Map();
 
-      paths.forEach(function (absPath) {
-        var path = absPath.slice(blogDirectory.length);
+      paths.forEach(function (path) {
         var multiInfo = build.findMultiFolder(path);
 
         if (multiInfo) {
@@ -195,7 +176,7 @@ module.exports = function main(blogID, options, callback) {
           });
         }
       );
-    });
+    }, callback);
   });
 };
 

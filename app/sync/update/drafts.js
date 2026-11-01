@@ -9,7 +9,8 @@ var injectionPath = __dirname + "/preview/injection.html";
 var draftContainer = __dirname + "/preview/wrapper.html";
 
 var ensure = require("helper/ensure");
-var local_path = require("helper/localPath");
+var storage = require("storage/folder");
+var callbackify = require("util").callbackify;
 
 var routePrefix = "/draft";
 var viewPrefix = "/view";
@@ -178,8 +179,10 @@ module.exports = (function () {
       return callback(err, is_preview);
     }
 
-    fs.readFile(local_path(blog_id, path), "utf-8", function (err, contents) {
+    callbackify(storage.read)(blog_id, path, function (err, buffer) {
       if (err) return callback(err);
+
+      var contents = buffer.toString("utf-8");
 
       if (contents.indexOf(PREVIEW_META_TAG) > -1) {
         // console.log(path, is_preview, 'is a preview file because it contains the preview tag');

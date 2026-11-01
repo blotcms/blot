@@ -1,8 +1,16 @@
 describe("sync/fix/entry-ghosts", function () {
-  var fs = require("fs");
+  var storage = require("storage/folder");
   var Entry = require("models/entry");
   var Entries = require("models/entries");
   var fixEntryGhosts = require("../entry-ghosts");
+
+  function missingError() {
+    return new storage.NotFoundError();
+  }
+
+  function fileStat() {
+    return { isDirectory: false, size: 1, modified: 1 };
+  }
 
   function folderPostHTML(folder) {
     return (
@@ -17,8 +25,8 @@ describe("sync/fix/entry-ghosts", function () {
         callback();
       });
     });
-    spyOn(fs, "access").and.callFake(function (path, callback) {
-      callback(null);
+    spyOn(storage, "stat").and.callFake(async function () {
+      return fileStat();
     });
     spyOn(Entry, "set");
     spyOn(Entry, "drop");
@@ -38,14 +46,14 @@ describe("sync/fix/entry-ghosts", function () {
         callback();
       });
     });
-    spyOn(fs, "access");
+    spyOn(storage, "stat");
     spyOn(Entry, "set");
     spyOn(Entry, "drop");
 
     fixEntryGhosts({ id: "blog-id" }, function (err, report) {
       expect(err).toBeUndefined();
       expect(report).toBeUndefined();
-      expect(fs.access).not.toHaveBeenCalled();
+      expect(storage.stat).not.toHaveBeenCalled();
       expect(Entry.set).not.toHaveBeenCalled();
       expect(Entry.drop).not.toHaveBeenCalled();
       done();
@@ -61,10 +69,10 @@ describe("sync/fix/entry-ghosts", function () {
       });
     });
 
-    spyOn(fs, "access").and.callFake(function (path, callback) {
+    spyOn(storage, "stat").and.callFake(async function (blogID, path) {
       // only the lowercased candidate exists on disk
-      if (path.toLowerCase() === path) return callback(null);
-      callback(new Error("ENOENT"));
+      if (path.toLowerCase() === path) return fileStat();
+      throw missingError();
     });
 
     spyOn(Entry, "set").and.callFake(function (blogID, path, updates, callback) {
@@ -95,8 +103,8 @@ describe("sync/fix/entry-ghosts", function () {
       });
     });
 
-    spyOn(fs, "access").and.callFake(function (path, callback) {
-      callback(new Error("ENOENT"));
+    spyOn(storage, "stat").and.callFake(async function () {
+      throw missingError();
     });
 
     spyOn(Entry, "set");
@@ -126,8 +134,8 @@ describe("sync/fix/entry-ghosts", function () {
       });
     });
 
-    spyOn(fs, "access").and.callFake(function (path, callback) {
-      callback(new Error("ENOENT"));
+    spyOn(storage, "stat").and.callFake(async function () {
+      throw missingError();
     });
 
     spyOn(Entry, "drop").and.callFake(function (blogID, id, callback) {
@@ -155,10 +163,9 @@ describe("sync/fix/entry-ghosts", function () {
       });
     });
 
-    spyOn(fs, "access");
-    spyOn(fs, "stat").and.callFake(function (path, callback) {
-      expect(path.endsWith("Album +")).toBe(true);
-      callback(null, { isDirectory: function () { return true; } });
+    spyOn(storage, "stat").and.callFake(async function (blogID, path) {
+      expect(path).toBe("/Album +");
+      return { isDirectory: true, size: 0, modified: 1 };
     });
 
     spyOn(Entry, "drop");
@@ -166,7 +173,7 @@ describe("sync/fix/entry-ghosts", function () {
     fixEntryGhosts({ id: "blog-id" }, function (err, report) {
       expect(err).toBeUndefined();
       expect(report).toBeUndefined();
-      expect(fs.access).not.toHaveBeenCalled();
+      expect(storage.stat.calls.count()).toBe(1);
       expect(Entry.drop).not.toHaveBeenCalled();
       done();
     });
@@ -185,8 +192,8 @@ describe("sync/fix/entry-ghosts", function () {
       });
     });
 
-    spyOn(fs, "stat").and.callFake(function (path, callback) {
-      callback(new Error("ENOENT"));
+    spyOn(storage, "stat").and.callFake(async function () {
+      throw missingError();
     });
 
     spyOn(Entry, "drop").and.callFake(function (blogID, id, callback) {
@@ -198,6 +205,75 @@ describe("sync/fix/entry-ghosts", function () {
       expect(err).toBeNull();
       expect(Entry.drop).toHaveBeenCalled();
       expect(report).toEqual([["MISSING", { id: "/album", path: "/album" }]]);
+      done();
+    });
+  });
+
+  it("does not drop an entry when checking its file fails for another reason", function (done) {
+    var readError = Object.assign(new Error("EIO"), { code: "EIO" });
+
+    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
+      iterator({ id: "/foo.txt", path: "/foo.txt" }, function (err) {
+        callback(err);
+      });
+    });
+    spyOn(storage, "stat").and.callFake(async function () {
+      throw readError;
+    });
+    spyOn(Entry, "set");
+    spyOn(Entry, "drop");
+
+    fixEntryGhosts({ id: "blog-id" }, function (err, report) {
+      expect(err).toBe(readError);
+      expect(report).toBeUndefined();
+      expect(Entry.set).not.toHaveBeenCalled();
+      expect(Entry.drop).not.toHaveBeenCalled();
+      done();
+    });
+  });
+
+  it("does not drop a folder post when checking its source folder fails for another reason", function (done) {
+    var readError = Object.assign(new Error("EIO"), { code: "EIO" });
+
+    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
+      iterator(
+        { id: "/album", path: "/album", html: folderPostHTML("/Album +") },
+        function (err) {
+          callback(err);
+        }
+      );
+    });
+    spyOn(storage, "stat").and.callFake(async function () {
+      throw readError;
+    });
+    spyOn(Entry, "drop");
+
+    fixEntryGhosts({ id: "blog-id" }, function (err) {
+      expect(err).toBe(readError);
+      expect(Entry.drop).not.toHaveBeenCalled();
+      done();
+    });
+  });
+
+  it("keeps an entry whose file has become a symlink", function (done) {
+    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
+      iterator({ id: "/foo.txt", path: "/foo.txt" }, function (err) {
+        callback(err);
+      });
+    });
+    spyOn(storage, "stat").and.callFake(async function () {
+      throw Object.assign(new Error("Symbolic links are not supported"), {
+        code: "ELOOP",
+      });
+    });
+    spyOn(Entry, "set");
+    spyOn(Entry, "drop");
+
+    fixEntryGhosts({ id: "blog-id" }, function (err, report) {
+      expect(err).toBeUndefined();
+      expect(report).toBeUndefined();
+      expect(Entry.set).not.toHaveBeenCalled();
+      expect(Entry.drop).not.toHaveBeenCalled();
       done();
     });
   });
@@ -235,8 +311,8 @@ describe("sync/fix/entry-ghosts", function () {
       })();
     });
 
-    spyOn(fs, "access").and.callFake(function (path, callback) {
-      callback(new Error("ENOENT"));
+    spyOn(storage, "stat").and.callFake(async function () {
+      throw missingError();
     });
 
     var dropCalls = 0;

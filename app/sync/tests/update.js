@@ -220,4 +220,57 @@ describe("update", function () {
       });
     });
   });
+
+  it("passes on a symlink in the way as an error, and builds nothing for it", function (testDone) {
+    const os = require("os");
+    const path = require("path");
+    const Entry = require("models/entry");
+    const blogID = this.blog.id;
+    const blogDirectory = this.blogDirectory;
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "update-link-"));
+
+    fs.outputFileSync(path.join(outside, "target.txt"), "Title: Linked");
+    fs.ensureDirSync(blogDirectory);
+    fs.symlinkSync(path.join(outside, "target.txt"), path.join(blogDirectory, "Link.txt"));
+
+    sync(blogID, function (err, folder, done) {
+      if (err) return testDone.fail(err);
+
+      folder.update("/Link.txt", function (updateErr) {
+        fs.removeSync(outside);
+        expect(updateErr && updateErr.code).toBe("ELOOP");
+
+        Entry.get(blogID, "/Link.txt", function (entry) {
+          expect(entry).toBeFalsy();
+          done(null, testDone);
+        });
+      });
+    });
+  });
+
+  it("drops the entry of a file which is gone", function (testDone) {
+    const Entry = require("models/entry");
+    const blogID = this.blog.id;
+    const entryPath = "/gone.txt";
+    const localPath = this.blogDirectory + entryPath;
+
+    sync(blogID, function (err, folder, done) {
+      if (err) return testDone.fail(err);
+      fs.outputFileSync(localPath, "Title: Gone");
+
+      folder.update(entryPath, function (err) {
+        if (err) return testDone.fail(err);
+        fs.removeSync(localPath);
+
+        folder.update(entryPath, function (err) {
+          if (err) return testDone.fail(err);
+
+          Entry.get(blogID, entryPath, function (entry) {
+            expect(!entry || entry.deleted).toBeTruthy();
+            done(null, testDone);
+          });
+        });
+      });
+    });
+  });
 });
