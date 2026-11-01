@@ -58,7 +58,9 @@ const CATEGORIES = [
   "case-collision",
 ];
 
-const decoder = new TextDecoder("utf-8", { fatal: true });
+// ignoreBOM keeps a leading U+FEFF in the text instead of stripping it, since
+// it is part of the name.
+const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 function decode(buffer) {
   try {
@@ -232,24 +234,53 @@ if (require.main === module) {
 
   const config = require("config");
   const Blog = require("models/blog");
-  const getBlog = require("../get/blog");
 
   const counts = {};
   let blogs = 0;
   let failed = 0;
 
-  function blogIDs() {
-    if (!identifier) {
-      return new Promise((resolve, reject) =>
-        Blog.getAllIDs((err, ids) => (err ? reject(err) : resolve(ids.sort())))
+  function get(by) {
+    return new Promise((resolve, reject) =>
+      Blog.get(by, (err, blog) => (err ? reject(err) : resolve(blog)))
+    );
+  }
+
+  // scripts/get/blog.js would also generate a login token, which writes to
+  // Redis. Look the blog up by ID, ID prefix, handle, then domain instead.
+  async function resolveBlog(identifier) {
+    const text = identifier.trim().replace(/\/+$/, "");
+    let blog = await get({ id: text });
+
+    if (!blog) {
+      const ids = await new Promise((resolve, reject) =>
+        Blog.getAllIDs((err, ids) => (err ? reject(err) : resolve(ids)))
       );
+      const id = ids.sort().find((id) => id.startsWith(text));
+      if (id) blog = await get({ id });
     }
 
+    if (!blog) blog = await get({ handle: text });
+
+    if (!blog) {
+      const host = text.toLowerCase().replace(/^[a-z][a-z\d+.-]*:\/\//, "").split("/")[0];
+      blog = await get({ domain: host });
+    }
+
+    if (!blog) throw new Error("No blog: " + identifier);
+
+    return blog.id;
+  }
+
+  async function blogIDs() {
+    if (identifier) return [await resolveBlog(identifier)];
+
     return new Promise((resolve, reject) =>
-      getBlog(identifier, (err, user, blog) =>
-        err || !blog ? reject(err || new Error("No blog: " + identifier)) : resolve([blog.id])
-      )
+      Blog.getAllIDs((err, ids) => (err ? reject(err) : resolve(ids.sort())))
     );
+  }
+
+  function write(text) {
+    return new Promise((resolve) => process.stdout.write(text, resolve));
   }
 
   async function main() {
@@ -267,23 +298,28 @@ if (require.main === module) {
       } catch (err) {
         if (err.code === "ENOENT") continue;
         failed++;
-        console.error(`${blogID}: failed:`, err.message || err);
+        // Not err.message: filesystem errors put the full path in it.
+        console.error(`${blogID}: failed: ${err.code || "unknown error"}`);
       }
     }
 
-    console.log(`\nScanned ${blogs} blog${blogs === 1 ? "" : "s"}.`);
+    let summary = `\nScanned ${blogs} blog${blogs === 1 ? "" : "s"}.\n`;
 
     for (const category of CATEGORIES) {
-      console.log(`${category}: ${counts[category] || 0}`);
+      summary += `${category}: ${counts[category] || 0}\n`;
     }
 
-    if (failed) console.log(`Blogs which could not be read: ${failed}.`);
+    if (failed) summary += `Blogs which could not be read: ${failed}.\n`;
+
+    // Wait for stdout to flush: exiting straight after a write can truncate
+    // a report piped to a file.
+    await write(summary);
   }
 
   main()
     .then(() => process.exit(0))
     .catch((err) => {
-      console.error(err);
+      console.error(err.code || err.message || "failed");
       process.exit(1);
     });
 }

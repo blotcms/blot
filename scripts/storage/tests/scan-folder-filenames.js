@@ -39,6 +39,12 @@ describe("scripts/storage/scan-folder-filenames", function () {
     expect(classify("a  b")).toEqual(["double-space"]);
   });
 
+  it("keeps a leading byte order mark rather than stripping it", function () {
+    expect(classifyName(Buffer.from([0xef, 0xbb, 0xbf, 0x61]), 20)).toEqual([
+      "edge-whitespace",
+    ]);
+  });
+
   it("flags dot-only names and slash lookalikes", function () {
     expect(classify("..")).toContain("dot-segment");
     expect(classify("...")).toContain("dot-segment");
