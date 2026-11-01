@@ -208,6 +208,120 @@ describe("dropbox delta relative path normalization", function () {
   });
 });
 
+describe("dropbox delta case-only renames", function () {
+  var Delta = require("../delta");
+  var fs = require("fs-extra");
+  var Path = require("path");
+  var blog_folder_dir = require("config").blog_folder_dir;
+
+  var blogID = "blog_deltacaseonly" + Date.now();
+  var blogDirectory = Path.join(blog_folder_dir, blogID);
+
+  afterEach(function () {
+    return fs.remove(blogDirectory);
+  });
+
+  // The Dropbox folder holds only what is listed in dropboxEntries, as
+  // both the delta and the listing which checks for the old name
+  function run(dropboxEntries) {
+    var client = {
+      filesListFolder: function () {
+        return Promise.resolve({
+          result: {
+            entries: dropboxEntries,
+            cursor: "cursor",
+            has_more: false,
+          },
+        });
+      },
+      filesGetMetadata: function () {
+        return Promise.resolve({ result: { path_display: "/Blog" } });
+      },
+    };
+
+    return new Promise(function (resolve, reject) {
+      Delta(client, "folder-id", blogID)(null, function (err, res) {
+        if (err) return reject(err);
+        resolve(res.entries);
+      });
+    });
+  }
+
+  it("deletes the old name of a file renamed only in case", async function () {
+    await fs.outputFile(Path.join(blogDirectory, "Photo.txt"), "x");
+
+    var entries = await run([
+      {
+        ".tag": "file",
+        name: "photo.txt",
+        path_display: "/Blog/photo.txt",
+      },
+    ]);
+
+    expect(
+      entries.map(function (entry) {
+        return entry[".tag"] + ":" + entry.relative_path;
+      })
+    ).toEqual(["deleted:Photo.txt", "file:photo.txt"]);
+  });
+
+  it("deletes everything inside a folder renamed only in case", async function () {
+    await fs.outputFile(Path.join(blogDirectory, "Sub", "a.txt"), "x");
+    await fs.outputFile(Path.join(blogDirectory, "Sub", "Inner", "b.txt"), "x");
+
+    var entries = await run([
+      {
+        ".tag": "folder",
+        name: "sub",
+        path_display: "/Blog/sub",
+      },
+    ]);
+
+    expect(
+      entries
+        .filter(function (entry) {
+          return entry[".tag"] === "deleted";
+        })
+        .map(function (entry) {
+          return entry.relative_path;
+        })
+        .sort()
+    ).toEqual(["Sub", "Sub/Inner", "Sub/Inner/b.txt", "Sub/a.txt"]);
+  });
+
+  it("finds a renamed file in a parent folder spelled differently", async function () {
+    await fs.outputFile(Path.join(blogDirectory, "Sub", "Photo.txt"), "x");
+
+    var entries = await run([
+      {
+        ".tag": "file",
+        name: "photo.txt",
+        path_display: "/Blog/sub/photo.txt",
+      },
+    ]);
+
+    expect(
+      entries.some(function (entry) {
+        return entry[".tag"] === "deleted" && entry.relative_path === "sub/Photo.txt";
+      })
+    ).toEqual(true);
+  });
+
+  it("injects nothing when the name is the same", async function () {
+    await fs.outputFile(Path.join(blogDirectory, "photo.txt"), "x");
+
+    var entries = await run([
+      {
+        ".tag": "file",
+        name: "photo.txt",
+        path_display: "/Blog/photo.txt",
+      },
+    ]);
+
+    expect(entries.length).toEqual(1);
+  });
+});
+
 function setupDelta(done) {
   var Delta = require("../delta");
 

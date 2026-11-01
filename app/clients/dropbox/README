@@ -74,7 +74,7 @@ The Dropbox client operates using a webhook-based event notification system comb
   - `INSUFFICIENT_SPACE_ERROR_CODE` / `isInsufficientSpaceError()`: The `507` account `error_code` sentinel for "ran out of Dropbox space", and a check for that error shape from the Dropbox SDK.
   - `transferIncomplete(account)`: True while the initial transfer to Dropbox hasn't finished - see "Handling an incomplete initial transfer" below.
 - **`util/createClient.js`**: Factory function that retrieves the Dropbox account from the database and instantiates a Dropbox SDK client. Handles token refresh if a refresh token is present.
-- **`util/download.js`**: Downloads a file from Dropbox and writes it to disk. Does not set the local file's mtime; change detection elsewhere in the client relies on Dropbox's `content_hash`/size, not local mtimes.
+- **`util/download.js`**: Downloads a file from Dropbox and writes it into the blog folder with `storage/folder` (`download(client, source, blogID, path, callback)`). Does not set the local file's mtime; change detection elsewhere in the client relies on Dropbox's `content_hash`/size, not local mtimes.
 - **`util/upload.js`**: Uploads a file from disk to Dropbox. Omits `client_modified` so Dropbox stamps the file with its own server time, since Blot no longer keeps a settable local mtime to send.
 - **`util/retry.js`**: Wraps a function to retry on transient errors.
 - **`util/classifyError.js`**: Classifies Dropbox SDK errors and stored account rows into the shared health codes. Used by sync, retry, getHealth, and the dashboard flags.
@@ -244,9 +244,8 @@ The client uses the official Dropbox JavaScript SDK (`dropbox` npm package) to i
 - **Entry model** (`require("sync")`): Updated after each sync to notify Blot about changes (via `folder.update(path)`).
 - **Client model** (`require("models/client")`): Redis-backed pubsub for publishing sync status updates.
 - **Helper modules**:
-  - `helper/hashFile`: Computes file content hashes for comparison.
-  - `helper/localPath`: Converts blog-relative paths to absolute file system paths.
-  - `helper/caseSensitivePath`: Resolves case-sensitive paths on case-insensitive file systems.
+  - `storage/folder`: Reads and writes the blog folder (listing, `stat` with `{ hash: true }` for the content hash, `write`, `remove`, `resolveCaseInsensitive`).
+  - `helper/localPath`: Still used by `sync/reset-to-blot.js` for the shared `localDescendants` and `countLocalFiles` helpers.
   - `helper/email`: Sends error notifications to users and admins.
   - `helper/ensure`: Runtime type validation.
 - **Configuration** (`config`): Reads Dropbox OAuth credentials and webhook configuration.

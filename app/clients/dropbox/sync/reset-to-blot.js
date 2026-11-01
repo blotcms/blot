@@ -1,13 +1,9 @@
-const fs = require("fs-extra");
+const storage = require("storage/folder");
 const { promisify } = require("util");
 const { join } = require("path");
 const clfdate = require("helper/clfdate");
+// Only for localDescendants and countLocalFiles, which walk an absolute path
 const localPath = require("helper/localPath");
-const hashFile = promisify((path, cb) => {
-  require("helper/hashFile")(path, (err, result) => {
-    cb(null, result);
-  });
-});
 const download = promisify(require("../util/download"));
 const {
   MAX_FILE_SIZE,
@@ -269,7 +265,7 @@ const walk = async (
   publish("Checking", dir);
   const [remoteContents, localContents] = await Promise.all([
     remoteReaddir(client, join(dropboxRoot, dir)),
-    localReaddir(blogID, localRoot, dir),
+    localReaddir(blogID, dir),
   ]);
 
   for (const { name, path_display, is_directory } of localContents) {
@@ -284,7 +280,7 @@ const walk = async (
     if (shouldIgnoreFile(pathOnBlot)) {
       progress.publish("Removing ignored", pathOnBlot, false, removedCount);
       try {
-        await fs.remove(pathOnDisk);
+        await storage.remove(blogID, pathOnBlot);
         summary.removed += 1;
         await updatePath(pathOnBlot);
       } catch (e) {
@@ -306,9 +302,9 @@ const walk = async (
           : [];
         // Before the removal, while there is something left to stat
         summary.removedFiles[pathOnBlot] = is_directory
-          ? await sampleFiles(localRoot, descendants)
+          ? await sampleFiles(blogID, descendants)
           : [pathOnBlot];
-        await fs.remove(pathOnDisk);
+        await storage.remove(blogID, pathOnBlot);
         summary.removed += 1;
         summary.changedPaths.push(pathOnBlot);
         await updatePath(pathOnBlot);
@@ -341,7 +337,6 @@ const walk = async (
     const { path_display, name } = remoteItem;
     const pathOnDropbox = path_display;
     const pathOnBlot = join(dir, name);
-    const pathOnDisk = join(localRoot, dir, name);
 
     if (isDotfileOrDotfolder(pathOnBlot)) continue;
 
@@ -350,13 +345,13 @@ const walk = async (
 
       if (localCounterpart && !localCounterpart.is_directory) {
         progress.publish("Removing", pathOnBlot);
-        await fs.remove(pathOnDisk);
+        await storage.remove(blogID, pathOnBlot);
         summary.removed += 1;
         summary.changedPaths.push(pathOnBlot);
         await updatePath(pathOnBlot);
-        publish("Creating directory", pathOnDisk);
+        publish("Creating directory", pathOnBlot);
         try {
-          await fs.mkdir(pathOnDisk);
+          await storage.mkdir(blogID, pathOnBlot);
           summary.createdDirs += 1;
           summary.changedPaths.push(pathOnBlot);
         } catch (e) {
@@ -367,7 +362,7 @@ const walk = async (
       } else if (!localCounterpart) {
         publish("Creating directory", pathOnBlot);
         try {
-          await fs.mkdir(pathOnDisk);
+          await storage.mkdir(blogID, pathOnBlot);
           summary.createdDirs += 1;
           summary.changedPaths.push(pathOnBlot);
           await updatePath(pathOnBlot);
@@ -403,7 +398,7 @@ const walk = async (
         );
         summary.skipped += 1;
         try {
-          await fs.outputFile(pathOnDisk, "");
+          await storage.write(blogID, pathOnBlot, "");
           await updatePath(pathOnBlot);
         } catch (err) {
           publish("Failed to create placeholder", pathOnBlot, err.message);
@@ -422,7 +417,7 @@ const walk = async (
         );
         summary.skipped += 1;
         try {
-          await fs.outputFile(pathOnDisk, "");
+          await storage.write(blogID, pathOnBlot, "");
           await updatePath(pathOnBlot);
         } catch (err) {
           publish("Failed to create placeholder", pathOnBlot, err.message);
@@ -441,7 +436,7 @@ const walk = async (
           localCounterpart.is_directory
         );
         try {
-          await download(client, pathOnDropbox, pathOnDisk);
+          await download(client, pathOnDropbox, blogID, pathOnBlot);
           summary.downloaded += 1;
           await updatePath(pathOnBlot);
           if (modifiedSince(remoteItem, summary.startedAt)) {
@@ -467,7 +462,7 @@ const walk = async (
         // Already added to total by the discover() pass above.
         progress.publish("Downloading", pathOnBlot, false);
         try {
-          await download(client, pathOnDropbox, pathOnDisk);
+          await download(client, pathOnDropbox, blogID, pathOnBlot);
           summary.downloaded += 1;
           await updatePath(pathOnBlot);
           if (modifiedSince(remoteItem, summary.startedAt)) {
@@ -538,12 +533,12 @@ const MAX_REVISION_LOOKUPS = 20;
 
 // The first few files (not folders) among the blog paths of a removed folder's
 // descendants, as returned by localDescendants. Call it before the removal.
-const sampleFiles = async (localRoot, descendants) => {
+const sampleFiles = async (blogID, descendants) => {
   const files = [];
   for (const path of descendants) {
     if (files.length >= MAX_REMOVED_SAMPLES) break;
     try {
-      if ((await fs.stat(join(localRoot, path))).isFile()) files.push(path);
+      if (!(await storage.stat(blogID, path)).isDirectory) files.push(path);
     } catch (err) {}
   }
   return files;
@@ -607,21 +602,28 @@ const excuseRecentChanges = async (client, cursor, dropboxRoot, summary) => {
   }
 };
 
-const localReaddir = async (blogID, localRoot, dir) => {
-  const contents = await fs.readdir(join(localRoot, dir));
+// A file's hash is undefined if it can't be read, which never matches Dropbox's
+const contentHash = async (blogID, path) => {
+  try {
+    return (await storage.stat(blogID, path, { hash: true })).hash;
+  } catch (e) {
+    return undefined;
+  }
+};
 
-  return mapLimit(contents, HASH_CONCURRENCY, async (name) => {
-    const pathOnDisk = join(localRoot, dir, name);
-    const [content_hash, stat] = await Promise.all([
-      hashFile(pathOnDisk),
-      fs.stat(pathOnDisk),
-    ]);
+const localReaddir = async (blogID, dir) => {
+  const contents = await storage.listNames(blogID, dir);
+
+  return mapLimit(contents, HASH_CONCURRENCY, async ({ name, isDirectory }) => {
+    const path_display = join(dir, name);
 
     return {
       name,
-      path_display: join(dir, name),
-      is_directory: stat.isDirectory(),
-      content_hash,
+      path_display,
+      is_directory: isDirectory,
+      content_hash: isDirectory
+        ? undefined
+        : await contentHash(blogID, path_display),
     };
   });
 };

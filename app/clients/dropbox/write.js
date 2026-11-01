@@ -1,8 +1,7 @@
 var join = require("path").join;
 var debug = require("debug")("blot:clients:dropbox:write");
 var createClient = require("./util/createClient");
-var fs = require("fs-extra");
-var localPath = require("helper/localPath");
+var folder = require("storage/folder");
 var retry = require("./util/retry");
 var persistError = require("./util/persistError");
 var database = require("./database");
@@ -14,7 +13,7 @@ const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 // Write should only ever be called inside the function returned
 // from Sync for a given blog, since it modifies the blog folder.
 function write(blogID, path, contents, callback) {
-  var pathInDropbox, pathOnBlot;
+  var pathInDropbox;
 
   debug("Blog:", blogID, "Writing", path);
 
@@ -35,11 +34,9 @@ function write(blogID, path, contents, callback) {
     // each write but it would double the requests needed
     pathInDropbox = join(account.folder || "/", path);
 
-    pathOnBlot = localPath(blogID, path);
-
     try {
-      await fs.outputFile(pathOnBlot, contents);
-      await upload(client, pathOnBlot, pathInDropbox);
+      await folder.write(blogID, path, contents);
+      await upload(client, await folder.ensureLocal(blogID, path), pathInDropbox);
     } catch (e) {
       return persistError(blogID, e, SOURCES.APPLY, function () {
         callback(e);

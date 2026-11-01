@@ -2,11 +2,8 @@ const debug = require("debug")("blot:clients:dropbox:delta");
 const retry = require("./util/retry");
 const waitForErrorTimeout = require("./util/waitForErrorTimeout");
 const isDotfileOrDotfolder = require("./util/constants").isDotfileOrDotfolder;
-const localPath = require("helper/localPath");
-const caseSensitivePath = require("util").promisify(
-  require("helper/caseSensitivePath")
-);
-const fs = require("fs-extra");
+const folder = require("storage/folder");
+const pathNormalizer = require("helper/pathNormalizer");
 const Path = require("path");
 const clfdate = require("helper/clfdate");
 
@@ -16,29 +13,19 @@ function normalizeRelativePath(path) {
   return (path || "").replace(/^\/+/, "");
 }
 
-async function listDescendantPaths(rootPath) {
+// The blog paths ("/a/b") of everything inside a local folder, parents before
+// their contents. A folder which can't be read has nothing listed.
+async function listDescendantPaths(blogID, relativePath) {
   const results = [];
 
-  async function walk(currentPath) {
-    let entries;
-
-    try {
-      entries = await fs.readdir(currentPath, { withFileTypes: true });
-    } catch (err) {
-      return;
+  try {
+    for await (const path of folder.walk(blogID, relativePath, {
+      directories: true,
+    })) {
+      results.push(path);
     }
+  } catch (err) {}
 
-    for (const entry of entries) {
-      const fullPath = Path.join(currentPath, entry.name);
-      results.push(fullPath);
-
-      if (entry.isDirectory()) {
-        await walk(fullPath);
-      }
-    }
-  }
-
-  await walk(rootPath);
   return results;
 }
 
@@ -89,22 +76,19 @@ async function injectCaseOnlyDeletes(entries, blogID, client) {
       continue;
     }
 
-    let absolutePath;
-
-    try {
-      absolutePath = localPath(blogID, entry.relative_path);
-    } catch (err) {
-      continue;
-    }
-
-    const parentDir = Path.dirname(absolutePath);
-    const targetName = Path.basename(absolutePath);
+    // The path as storage/folder resolves it: NFC, and ".." kept inside
+    const localRelativePath = Path.posix.resolve(
+      "/",
+      pathNormalizer(entry.relative_path)
+    );
+    const parentDir = Path.posix.dirname(localRelativePath);
+    const targetName = Path.posix.basename(localRelativePath);
     const targetLower = targetName.toLowerCase();
 
     let localEntries;
 
     try {
-      localEntries = await fs.readdir(parentDir);
+      localEntries = await folder.listNames(blogID, parentDir);
     } catch (err) {
       // Sometimes the case returned in path_display / relative_path
       // is inconsistent with the true path on Dropbox. So we
@@ -112,8 +96,8 @@ async function injectCaseOnlyDeletes(entries, blogID, client) {
       if (err.code === "ENOENT") {
         try {
           console.log("Parent directory does not exist, trying case-sensitive path");
-          const resolvedPath = await caseSensitivePath(localPath(blogID, '/'), Path.dirname(entry.relative_path));
-          localEntries = await fs.readdir(resolvedPath);
+          const resolvedPath = await folder.resolveCaseInsensitive(blogID, Path.dirname(entry.relative_path));
+          localEntries = await folder.listNames(blogID, resolvedPath);
         } catch (err2) {
           console.log(prefix(), "Error reading local directory with case-sensitive path:", err2);
           continue;
@@ -124,9 +108,13 @@ async function injectCaseOnlyDeletes(entries, blogID, client) {
       }
     }
 
-    const existingName = localEntries.find(function (name) {
-      return name.toLowerCase() === targetLower && name !== targetName;
-    });
+    const existingName = localEntries
+      .map(function (localEntry) {
+        return localEntry.name;
+      })
+      .find(function (name) {
+        return name.toLowerCase() === targetLower && name !== targetName;
+      });
 
     if (!existingName) {
       console.log(prefix(), "No case-only rename detected for entry");
@@ -211,30 +199,12 @@ async function injectCaseOnlyDeletes(entries, blogID, client) {
 
     if (entry[".tag"] === "folder") {
       const shouldPrefixSlash = entry.relative_path[0] === "/";
-      let oldFolderPath;
-      let blogRootPath;
 
-      try {
-        oldFolderPath = localPath(blogID, oldRelativePath);
-        blogRootPath = localPath(blogID, "/");
-      } catch (err) {
-        index++;
-        continue;
-      }
-
-      const descendantPaths = await listDescendantPaths(oldFolderPath);
+      const descendantPaths = await listDescendantPaths(blogID, oldRelativePath);
       const descendantDeletes = [];
 
       for (const descendantPath of descendantPaths) {
-        const relativeDiskPath = Path.relative(blogRootPath, descendantPath);
-
-        if (!relativeDiskPath || relativeDiskPath.startsWith("..")) {
-          continue;
-        }
-
-        const relativePathNoLeadingSlash = relativeDiskPath
-          .split(Path.sep)
-          .join(Path.posix.sep);
+        const relativePathNoLeadingSlash = descendantPath.slice(1);
 
         const relativePath = shouldPrefixSlash
           ? "/" + relativePathNoLeadingSlash
