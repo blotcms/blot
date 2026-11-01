@@ -1,3 +1,4 @@
+Git (#2259 PR 6 follow-ups): create.js's initial `git push` into the bare repo doesn't take the ref lock (repo.holdRefLock); a branch other than master that an earlier push got in (the bypass) can't be deleted by its owner, since every non-master branch ref is refused, deletions included; receivePack keeps each push as a pack where git's receive-pack unpacked small ones loose, so check `ls objects/pack | wc -l` on a busy repo a while after deploy
 Git sync (#2259 PR 4): a sync interrupted part way leaves already-applied paths ahead of the recorded commit, so a later push that restores such a file to the recorded commit's contents shows no diff and the entry stays stale until a resync. Needs a crash or Redis outage, no retry, and that exact revert; check whether the materializer (PR 7) should record the in-progress target too
 
 scripts/git/repair.js swaps the blog folder for a fresh clone of the bare repo, so files in the folder that aren't in the repo are lost: warn or copy them over before running it again, or retire the script once live clones go (#2259 PR 9)
@@ -342,7 +343,6 @@ Improve Dropbox sync
 - How do we make errors sticky? To make sure users click through to clients page to re-connect to Dropbox, etc...
 
 Improve git sync
-- Work out how to pipe custom error messages down to customer git clients
 - Create tests for large Git repo initialization
 - Make git client setup resumable / handle server restart
 - Fix bug with git client which let large pushes overwhelm the main server, leading to downtime

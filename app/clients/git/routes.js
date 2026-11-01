@@ -169,8 +169,9 @@ function finished(blogID) {
   activeSyncs[blogID]--;
 }
 
+// A push which is refused starts no sync, so there may never have been one
 function finishedAllSyncs(blogID) {
-  return activeSyncs[blogID] === 0;
+  return !activeSyncs[blogID];
 }
 
 // Used for testing purposes only to determine when a sync has finished
@@ -186,23 +187,36 @@ site.get("/syncs-finished/:blogID", async function (req, res, next) {
   }
 });
 
-repo.onPush(function (blogID) {
-  // Used for testing purposes only
-  started(blogID);
+// The follow-up is written before the push is acknowledged (prepare), so a
+// crash between the acknowledgement and the sync can't lose the push. Once
+// the sync has run it takes the follow-up back.
+repo.onPush(
+  function (blogID, old, current, armed) {
+    // Used for testing purposes only
+    started(blogID);
 
-  followUps.run(blogID).then(
-    function () {
-      // Used for testing purposes only
-      finished(blogID);
-      debug("Sync finished");
+    followUps.run(blogID, armed).then(
+      function () {
+        // Used for testing purposes only
+        finished(blogID);
+        debug("Sync finished");
+      },
+      function (err) {
+        // Used for testing purposes only
+        finished(blogID);
+        debug(err);
+      }
+    );
+  },
+  {
+    prepare: function (blogID) {
+      return followUps.arm(blogID);
     },
-    function (err) {
-      // Used for testing purposes only
-      finished(blogID);
-      debug(err);
-    }
-  );
-});
+    abandon: function (blogID, armed) {
+      if (armed !== undefined) return followUps.alarm.cancelIf(blogID, armed);
+    },
+  }
+);
 
 // Keep req.url untouched: the canonical repository path parsed and
 // authenticated above selects the repository.

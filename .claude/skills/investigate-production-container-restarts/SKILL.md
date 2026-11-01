@@ -293,25 +293,29 @@ request on that container in the same second (step 5), usually a 502 in the
 access log with a long request time.
 
 Example (green, 9 Oct 2026): `Error: aborted` (`ECONNRESET`) emitted "on
-Service instance", during a ~580 MB `git push`. Pushover wraps each git
-request in an http-duplex `Service` that re-emits the request's errors, and
-only some of those objects had a listener. Fixed by
-`app/clients/git/guardServices.js` (#2086), which gives every one a listener
-and stops its git process.
+Service instance", during a ~580 MB `git push`. Pushover wrapped each git
+request in an http-duplex `Service` that re-emitted the request's errors, and
+only some of those objects had a listener (#2086). Pushover is gone: pushes
+are received in Node (`app/clients/git/receivePack.js`), which reads the
+request as a stream and ends the push's `git index-pack` when the client goes.
 
 For the git client, also check:
 
-- every git child now logs one line when it exits:
+- every push and fetch logs one line when it ends:
   `Git: receive-pack|upload-pack <handle> exit=… duration=… rx=… tx=…
-  [stderr=…]`. A push that was cut off shows a non-zero exit, a signal or
-  git's own error.
-- stuck git processes (fetches run as `git upload-pack`, pushes as
-  `git-receive-pack`; before #2086 an aborted push left `git-receive-pack`
-  and `git index-pack` waiting forever, each `index-pack` holding hundreds of
+  [stderr=…]`. For a push, `exit` is `index-pack`'s status if it failed, 1 for
+  any other failure (a client that went away, an error), and 0 otherwise,
+  including a push the checks refused (its reasons are in `stderr=`). Each
+  push also logs `Git: push-client <handle> agent="…"`, the client's git
+  version.
+- stuck git processes (fetches run as `git upload-pack`; a push's pack is read
+  by `git index-pack --stdin --fix-thin`, then checked by `git rev-list` and
+  `git cat-file`, and no `git-receive-pack` process exists any more; before
+  #2086 an aborted push left `index-pack` waiting forever, holding hundreds of
   MB inside the container's memory limit):
 
   ```bash
-  ssh -n blot "docker exec blot-green sh -c 'ps -o pid,etime,rss,args | grep -E \"[g]it[ -](receive|upload|index)\"'"
+  ssh -n blot "docker exec blot-green sh -c 'ps -o pid,etime,rss,args | grep -E \"[g]it[ -](upload-pack|index-pack|rev-list)\"'"
   ```
 
 - leftover push staging directories (`objects/tmp_objdir-incoming-*` in the

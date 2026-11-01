@@ -1,96 +1,68 @@
 // The one place that knows where a blog's bare repository is and how it is
 // served, written to and watched, so the rest of the git client asks for what
 // it wants (serve this request, a push happened, commit this change) and does
-// not build paths or talk to pushover.
+// not build paths or talk to git's protocol.
 //
 // Repositories are keyed by the blog's handle for now, so the functions that
 // are not about one blog take the handle.
 var fs = require("fs-extra");
 var debug = require("debug")("blot:clients:git:repo");
 var localPath = require("helper/localPath");
+var lock = require("helper/lock");
+var clfdate = require("helper/clfdate");
 var Git = require("./git");
 var dataDir = require("./dataDir");
 var checkGitRepoExists = require("./checkGitRepoExists");
 var smartHttp = require("./smartHttp");
 var database = require("./database");
 
-// Must come before pushover is used. Gives every Git request's duplex an
-// "error" listener so an aborted request can never be an unhandled error.
-require("./guardServices");
-
-var pushover = require("pushover");
-
-var repos = pushover(dataDir, { autoCreate: false });
-
-repos.on("error", function (err) {
-  if (err && (err.code === "ECONNRESET" || err.code === "EPIPE")) {
-    return debug("Git repos connection error", err.message || err);
-  }
-
-  debug("Git repos error", err);
-});
-
-// Tags and fetches have no special handling: pushover accepts them when nobody
-// is listening, so keep doing exactly that, explicitly. Errors on these (and on
-// every other Git request) are handled for all requests in guardServices.js and
-// in routes.js.
-["tag", "fetch"].forEach(function (eventName) {
-  repos.on(eventName, function (service) {
-    debug("Git " + eventName);
-    service.accept();
-  });
-});
-
-// Called with (blogID, old, new) once a push has been accepted and finished.
-// Set with onPush.
+// Set with onPush
 var pushed = function () {};
+var prepare = null;
+var abandon = null;
 
-repos.on("push", function (push) {
-  if (push && push.branch && push.branch !== "master") {
-    return push.reject(
-      400,
-      "Push rejected: only the master branch is allowed. Please push to master or open a PR."
-    );
-  }
+// The short lock on a blog's refs. It is held to move refs, by a push which
+// has already been received and checked and by Blot's own commit, and never
+// while a push is being received, so it is nothing like the sync's folder
+// lock, which Blot's commits happen inside of. It expires by itself after a
+// few seconds if the process holding it dies.
+function refLockKey(blogID) {
+  return "blog:" + blogID + ":git:ref-lock";
+}
 
-  push.accept();
-
-  // This might cause an interesting race condition. It happened for me during
-  // testing. If we invoke Blog.Sync right now, it should be fine but previously
-  // I had an additional asynchronous database lookup to fetch the full blog. I
-  // believe this triggered issues in testing, because the test checked to see
-  // if a sync had finished that had not actually yet begun. Perhaps we should
-  // begin the sync on the "send" event instead of the "finish" event? That
-  // might give us a firmer guarantee that the order of events is correct. This
-  // seems to be purely a problem for automated use of the git client, humans
-  // are unlikely to fire off multiple pushes immediately after the other.
-  var notified = false;
-
-  function notify() {
-    if (notified) return;
-    notified = true;
-
-    // I'm not sure what happens to lead to this being invoked
-    // without a request or blog but it do sometimes.
-    if (!push || !push.request || !push.request.blogID)
-      return debug("No blog found for push", push);
-
-    pushed(push.request.blogID, push.last, push.commit);
-  }
-
-  push.response.on("finish", notify);
-
-  // "finish" never fires for a client which hangs up as soon as it has read
-  // the push's result, as libgit2 can, and the commit would then sit unsynced
-  // until the next push. git-receive-pack exiting cleanly means the refs are
-  // updated. An aborted push can exit cleanly too, having changed nothing,
-  // and then this is a sync with nothing to do.
-  push.on("service", function (ps) {
-    ps.once("exit", function (code) {
-      if (code === 0) notify();
-    });
+// Resolves to a function which releases the lock. Waits a few seconds for it,
+// then rejects with code ELOCKED.
+function holdRefLock(blogID) {
+  return lock(refLockKey(blogID), {
+    ttl: 10 * 1000,
+    heartbeat: 3 * 1000,
+    retries: 6,
+    minTimeout: 250,
+    onCompromised: function (err) {
+      console.error(clfdate(), "Git: lost the ref lock of", blogID, err.message);
+    },
+  }).then(function (held) {
+    return held.release;
   });
-});
+}
+
+// What a push needs from the rest of Blot, see receivePack.js
+function receiveHooks(blogID) {
+  return {
+    lock: function () {
+      return holdRefLock(blogID);
+    },
+    prepare: function (master) {
+      return prepare ? prepare(blogID, master.old, master.new) : undefined;
+    },
+    abandoned: function (master, prepared) {
+      return abandon ? abandon(blogID, prepared) : undefined;
+    },
+    accepted: function (master, prepared) {
+      pushed(blogID, master.old, master.new, prepared);
+    },
+  };
+}
 
 // Where a blog's bare repository lives, given its git handle
 function directory(handle) {
@@ -98,27 +70,34 @@ function directory(handle) {
 }
 
 function exists(handle, callback) {
-  repos.exists(handle + ".git", callback);
+  fs.access(directory(handle), function (err) {
+    callback(!err);
+  });
 }
 
 // Serves a smart HTTP request (ref advertisement, fetch, push) for the blog's
 // repository. The request has been authenticated as having access to the
-// blog, and its URL names the blog's current handle (req.gitHandle). Fetches
-// are served by smartHttp.js and anything else by pushover, which finds the
-// repository from the URL.
+// blog, and its URL names the blog's current handle (req.gitHandle).
 function handleSmartHttp(req, res, blogID) {
   req.blogID = blogID;
 
-  if (smartHttp.handle(req, res, directory(req.gitHandle))) return;
-
-  // We need to pause then resume for some strange reason. See Pushover issue #30.
-  req.pause();
-  repos.handle(req, res);
-  req.resume();
+  smartHttp.handle(req, res, directory(req.gitHandle), receiveHooks(blogID));
 }
 
-function onPush(callback) {
+// callback is called with (blogID, old, new, prepared) when a push has moved
+// master, as soon as it has and before the client is told, whether or not the
+// client is still there to be told. Blot's sync follows.
+//
+// options.prepare(blogID, old, new) runs just before a push moves master,
+// while the refs are locked. It is where the sync is recorded durably, so
+// that a push the client is told succeeded can't be lost to a crash; if it
+// rejects, the push fails and nothing moves. What it resolves to is passed to
+// callback. options.abandon(blogID, prepared) is called if the refs then did
+// not move.
+function onPush(callback, options) {
   pushed = callback;
+  prepare = (options && options.prepare) || null;
+  abandon = (options && options.abandon) || null;
 }
 
 // The live checkout in the blog folder pushes to and fetches from its
@@ -234,8 +213,10 @@ function commit(blogID, change, callback) {
               git.raw(["commit", "-m", message], function (err) {
                 if (err) return callback(err);
 
-                // We push changes made to the bare repository
-                git.raw(["push"], function (err) {
+                // We push changes made to the bare repository, holding the
+                // lock a user's push holds to move the refs, so the two
+                // never move them at once
+                pushUnderRefLock(git, blogID, function (err) {
                   if (err) return callback(err);
 
                   debug("Blog:", blogID, "Committed", path);
@@ -247,6 +228,25 @@ function commit(blogID, change, callback) {
         });
       });
     });
+  });
+}
+
+function pushUnderRefLock(git, blogID, callback) {
+  holdRefLock(blogID).then(function (release) {
+    git.raw(["push"], function (err) {
+      release().then(
+        function () {
+          process.nextTick(callback, err);
+        },
+        function (releaseErr) {
+          // The lock expires by itself; a push that worked still worked
+          console.error(clfdate(), "Git: could not release the ref lock of", blogID, releaseErr.message);
+          process.nextTick(callback, err);
+        }
+      );
+    });
+  }, function (err) {
+    process.nextTick(callback, err);
   });
 }
 

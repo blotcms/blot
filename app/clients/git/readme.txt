@@ -8,7 +8,6 @@ Dependencies
 Move these into this module when I start using git submodules or npm submodules properly.
 
     "http-auth": "^3.2.3",
-    "pushover": "^1.3.6",
     "uuid": "^3.2.1"
 
 Pitfalls
