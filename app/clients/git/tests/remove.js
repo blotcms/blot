@@ -7,7 +7,7 @@ describe("git client remove", function () {
 
   var remove = require("clients/git/remove");
   var write = require("clients/git/write");
-  var Git = require("simple-git");
+  var Git = require("./setup/git");
   var fs = require("fs-extra");
   var localPath = require("helper/localPath");
 

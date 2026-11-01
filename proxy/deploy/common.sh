@@ -74,6 +74,13 @@ PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
 # allows it.
 NOFILE="${PROXY_NOFILE:-65536}"
 
+# Memory limit for the short-lived helper containers (validate_image,
+# image_logs_to_file, reset_cache_dir). On a host shared with Redis and the
+# units nothing else bounds them. They run `openresty -t`, a grep, mv and
+# rm -rf, each well under 100MB; the page cache a big rm touches is
+# reclaimable, so it does not count against this.
+TRANSIENT_MEMORY="${PROXY_TRANSIENT_MEMORY:-256m}"
+
 RELEASE_ID="${RELEASE_ID:-unknown}"
 # The unit live_checks asks whether the purge endpoint is reachable from: the
 # one being checked
@@ -261,14 +268,14 @@ reset_cache_dir() { # reset_cache_dir <host dir> <image>
   local dir="$1" image="$2" trash
   trash=".trash/$(date -u +%Y%m%dT%H%M%SZ)-$$"
   log "Emptying $dir (moving its contents to $dir/$trash, deleted in the background)"
-  docker run --rm --user 0 --entrypoint sh -v "$dir":/cache "$image" -c '
+  docker run --rm --user 0 --entrypoint sh -v "$dir":/cache --memory "$TRANSIENT_MEMORY" "$image" -c '
     set -e; cd /cache; mkdir -p "$1"
     for e in .[!.]* ..?* *; do
       { [ -e "$e" ] || [ -L "$e" ]; } && [ "$e" != .trash ] && mv "$e" "$1/"
     done
     exit 0' sh "$trash" >/dev/null || return 1
   # all of .trash, so what an interrupted earlier reset left goes too
-  docker run -d --rm --user 0 --entrypoint sh -v "$dir":/cache "$image" -c 'rm -rf /cache/.trash' >/dev/null || true
+  docker run -d --rm --user 0 --entrypoint sh -v "$dir":/cache --memory "$TRANSIENT_MEMORY" "$image" -c 'rm -rf /cache/.trash' >/dev/null || true
 }
 
 # Arguments for a unit container, from the settings file. Host networking, so
@@ -443,7 +450,7 @@ ensure_airlock() { # ensure_airlock <unit>
 # local address (prod: "bind() ... failed (99: Address not available)"), so
 # allow non-local binds in the container's own network namespace.
 validate_image() { # validate_image <image>
-  docker run --rm --entrypoint bash \
+  docker run --rm --entrypoint bash --memory "$TRANSIENT_MEMORY" \
     --sysctl net.ipv4.ip_nonlocal_bind=1 \
     --env-file "$ENV_FILE" -e PROXY_FETCH_CDN_IPS=false -e PROXY_UPSTREAM_MODE=unit \
     -v "$CERT_DIR":/etc/ssl/private:ro \
@@ -455,7 +462,7 @@ validate_image() { # validate_image <image>
 # logging by default (LOG_TO_STDOUT=true); a production image needs
 # LOG_TO_STDOUT=false.
 image_logs_to_file() { # image_logs_to_file <image>
-  docker run --rm --entrypoint bash --env-file "$ENV_FILE" \
+  docker run --rm --entrypoint bash --memory "$TRANSIENT_MEMORY" --env-file "$ENV_FILE" \
     -e PROXY_FETCH_CDN_IPS=false "$1" \
     -c 'render-config >/dev/null && grep -Eq "^[[:space:]]*access_log /var/log/openresty/access.log" /usr/local/openresty/nginx/conf/nginx.conf'
 }

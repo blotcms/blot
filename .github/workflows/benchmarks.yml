@@ -2,17 +2,18 @@ name: benchmarks
 
 # What this workflow does
 # ----------------------
-# pull_request (once marked "ready for review", i.e. not draft)
+# pull_request touching render or build code (once marked "ready for review",
+# i.e. not draft)
 #   - runs the benchmark on arm64, a few times, and posts / updates a
 #     single sticky comment comparing the PR against the rolling master median
 #   - never fails the check: GitHub-hosted runners are too noisy to gate on
 #
-# push to master
+# schedule (daily, on master, skipped if master hasn't moved)
 #   - runs the benchmark on arm64, a few times
 #   - appends the result to a per-arch rolling history (Actions cache, backed
 #     up as an artifact)
-#   - if the SAME metric has regressed for the last N consecutive master
-#     commits, opens a `benchmark-regression` issue
+#   - if the SAME metric has regressed for the last N consecutive runs, opens a
+#     `benchmark-regression` issue
 #
 # workflow_dispatch
 #   - ad-hoc run with custom knobs; uploads an artifact, no comment, no issue
@@ -20,11 +21,22 @@ name: benchmarks
 # See scripts/benchmarks/README.md for the whole picture.
 
 on:
-  push:
-    branches: ["master"]
+  schedule:
+    - cron: "17 4 * * *"
   pull_request:
     branches: ["master"]
     types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - ".github/workflows/benchmarks.yml"
+      - "Dockerfile"
+      - "package.json"
+      - "scripts/benchmarks/**"
+      - "app/blog/**"
+      - "app/models/**"
+      - "app/templates/**"
+      - "app/build/**"
+      - "app/cdn/**"
+      - "app/helper/**"
   workflow_dispatch:
     inputs:
       sites:
@@ -69,22 +81,48 @@ permissions:
 
 concurrency:
   # Serialise master runs so history writes don't race; collapse superseded PR runs.
-  group: benchmarks-${{ github.event_name == 'push' && 'master' || github.ref }}
+  group: benchmarks-${{ github.event_name == 'schedule' && 'master' || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # The daily run measures the commits since the last one; with none, it would
+  # add a duplicate sample to the history.
+  master-moved:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    outputs:
+      moved: ${{ steps.compare.outputs.moved }}
+    steps:
+      - id: compare
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LAST=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/benchmarks.yml/runs?event=schedule&status=success&per_page=1" \
+            --jq '.workflow_runs[0].head_sha // ""')
+          if [ "$LAST" = "$GITHUB_SHA" ]; then
+            echo "moved=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "moved=true" >> "$GITHUB_OUTPUT"
+          fi
+
   benchmark:
+    needs: master-moved
     runs-on: ${{ matrix.runner }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    if: >-
+      !cancelled() && (
+        github.event_name == 'workflow_dispatch' ||
+        needs.master-moved.outputs.moved == 'true' ||
+        (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+      )
     timeout-minutes: 90
     strategy:
       fail-fast: false
-      # arm64 only, as production is; master runs raise regression alerts.
+      # arm64 only, as production is; daily runs raise regression alerts.
       matrix:
         include:
           - arch: arm64
             runner: ubuntu-24.04-arm
-            alert: ${{ github.event_name == 'push' && '--alert' || '' }}
+            alert: ${{ github.event_name == 'schedule' && '--alert' || '' }}
 
     services:
       redis:
@@ -94,7 +132,7 @@ jobs:
 
     env:
       ARCH: ${{ matrix.arch }}
-      ITERATIONS: ${{ github.event_name == 'push' && '3' || github.event_name == 'workflow_dispatch' && github.event.inputs.iterations || '2' }}
+      ITERATIONS: ${{ github.event_name == 'schedule' && '3' || github.event_name == 'workflow_dispatch' && github.event.inputs.iterations || '2' }}
       HISTORY_DIR: .benchmarks/history
       RESULT_FILE: .benchmarks/result-${{ matrix.arch }}.json
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -255,21 +293,21 @@ jobs:
             --status failed \
             --sha "$HEAD_SHA"
 
-      # --- master: update history + maybe open a regression issue ----------
+      # --- daily: update history + maybe open a regression issue ----------
       - name: Update rolling history
-        if: github.event_name == 'push'
+        if: github.event_name == 'schedule'
         run: |
           node scripts/benchmarks/update-history.js \
             --result "$RESULT_FILE" --arch "$ARCH" --history-dir "$HISTORY_DIR"
 
       - name: Detect sustained regression
-        if: github.event_name == 'push'
+        if: github.event_name == 'schedule'
         run: |
           node scripts/benchmarks/detect-regression.js \
             --history-dir "$HISTORY_DIR" --arch "$ARCH" ${{ matrix.alert }}
 
       - name: Save benchmark history
-        if: github.event_name == 'push'
+        if: github.event_name == 'schedule'
         uses: actions/cache/save@v4
         with:
           path: ${{ env.HISTORY_DIR }}
@@ -287,7 +325,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload benchmark history
-        if: always() && github.event_name == 'push'
+        if: always() && github.event_name == 'schedule'
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-history-${{ matrix.arch }}
