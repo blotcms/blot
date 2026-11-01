@@ -139,6 +139,16 @@ describe("sandbox screenshot job", function () {
       expect(await fs.pathExists(target)).toBe(false);
     });
 
+    ["SANDBOX_TIMEOUT", "SANDBOX_KILLED"].forEach(function (code) {
+      it("doesn't retry a page that ends in " + code, async function () {
+        const failure = Object.assign(new Error("sandbox: page"), { code });
+        const run = spyOn(sandbox, "run").and.returnValue(Promise.reject(failure));
+
+        await rejection(screenshot("https://example.com", target));
+        expect(run).toHaveBeenCalledTimes(1);
+      });
+    });
+
     it("writes nothing that isn't a PNG", async function () {
       spyOn(sandbox, "run").and.returnValue(Promise.resolve({
         meta: {},

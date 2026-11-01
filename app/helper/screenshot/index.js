@@ -495,11 +495,21 @@ async function takeScreenshotInSandbox(site, path, options) {
   const { width, height, mobile } = validateOptions(options);
   console.log(prefix(), "Taking screenshot of", site, "in the sandbox");
 
-  const result = await sandbox.run(
-    "screenshot",
-    { url: site, width, height, mobile: !!mobile },
-    Buffer.alloc(0)
-  );
+  let result;
+  try {
+    result = await sandbox.run(
+      "screenshot",
+      { url: site, width, height, mobile: !!mobile },
+      Buffer.alloc(0)
+    );
+  } catch (error) {
+    // The job ran out of time or memory, which is the page's doing. Trying
+    // again would hold the unit's one browser for as long again.
+    if (error.code === "SANDBOX_TIMEOUT" || error.code === "SANDBOX_KILLED") {
+      error.retryable = false;
+    }
+    throw error;
+  }
 
   if (result.meta && result.meta.error) {
     const error = new Error(result.meta.error);
