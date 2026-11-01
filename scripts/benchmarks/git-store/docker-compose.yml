@@ -1,0 +1,45 @@
+# A simulated S3 (MinIO) behind toxiproxy, for the git store spike (#2259).
+# Self-contained: its own project name, ports and data directory, so it can't
+# touch the development stack (scripts/development/docker-compose.yml) or
+# data/. Images are pinned as in the development stack and CI
+# (.github/actions/start-minio).
+#
+#   S3 directly          http://localhost:19000
+#   S3 through toxiproxy http://localhost:19100   (the benchmark profiles)
+#   toxiproxy API        http://localhost:18474
+#
+# MinIO's data is a bind mount of $GIT_STORE_SPIKE_DATA (default ./minio-data,
+# git-ignored), so a run's footprint on the host's disk is plain to see and
+# `run.sh down` removes it.
+name: blot-git-store-spike
+
+services:
+  minio:
+    image: alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4
+    user: root
+    command: server /data --address :9000
+    environment:
+      - MINIO_ROOT_USER=spike
+      - MINIO_ROOT_PASSWORD=spike-secret
+    ports:
+      - "127.0.0.1:19000:9000"
+    volumes:
+      - "${GIT_STORE_SPIKE_DATA:-./minio-data}:/data"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9000/minio/health/live"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.12.0
+    command: ["-host", "0.0.0.0", "-config", "/config/toxiproxy.json"]
+    ports:
+      - "127.0.0.1:18474:8474"
+      - "127.0.0.1:19100:8666"
+    volumes:
+      - "./toxiproxy.json:/config/toxiproxy.json:ro"
+    depends_on:
+      minio:
+        condition: service_healthy
