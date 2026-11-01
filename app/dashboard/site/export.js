@@ -3,6 +3,7 @@ const express = require("express");
 const Export = express.Router();
 const archiver = require('archiver');
 const path = require("path");
+const { finished } = require("stream/promises");
 const folder = require("storage/folder");
 const assets = require("storage/assets");
 const Template = require("models/template");
@@ -47,13 +48,23 @@ Export.get("/download", async function (req, res, next) {
 
       // iterate over all of the blog's templates and add them to the archive in a file called 'templates.json'
       
+      // If the client hangs up, the stream being added never finishes:
+      // destroying it makes finished() reject, into the catch below
+      let current = null;
+      const hangUp = () => { if (current) current.destroy(); };
+      res.once('close', hangUp);
+
       try {
           // walk the blog folder and add all the files to the archive
           // inside a subfolder called 'folder'
+          // one file at a time, since each stream opens its file and buffers
+          // ahead as soon as it is created
           for await (const relPath of folder.walk(req.blog.id, '/')) {
-              archive.append(folder.createReadStream(req.blog.id, relPath), {
-                  name: path.join('folder', relPath)
-              });
+              if (res.destroyed) break;
+              current = folder.createReadStream(req.blog.id, relPath);
+              archive.append(current, { name: path.join('folder', relPath) });
+              await finished(current);
+              current = null;
           }
 
           // add all of the blog's generated assets to the archive
@@ -67,11 +78,12 @@ Export.get("/download", async function (req, res, next) {
           console.log('error', err);
           if (res.headersSent) {
               console.log('Error while sending zip file to the user', err);
-          } else {
+          } else if (!res.destroyed) {
               res.status(400).send({error: err.message});
           }
       }
 
+      res.removeListener('close', hangUp);
 
       for (const template of templates) {
           await addTemplate(template.id, archive);
