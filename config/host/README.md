@@ -46,7 +46,10 @@ samples 15 seconds apart. Per sample there is one line per container
 (`blot-blue`, `blot-green` and their airlocks) with `anon`, `file`, `shmem`,
 `limit` and `oom_kill` from the container's cgroup (v1 or v2), `node_max` (the
 biggest node process) and `top=comm:bytes` (the biggest non-node process, i.e. a
-pandoc/git/exiftool spike), and one `name=host` line with `mem_available`.
+pandoc/git/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), and
+one `name=host` line with `mem_available`. Where the host has a sandbox subtree
+(#2257) there is also a `name=blot-sandbox-<unit>` line: jobs last under a
+second, so read its `peak` and `oom_kill`.
 `anon+shmem` is the memory that can't be reclaimed; the cgroup limit also counts
 page cache. Summarise it with:
 
