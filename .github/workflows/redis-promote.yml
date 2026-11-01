@@ -1,25 +1,25 @@
-name: redis-cutover
+name: redis-promote
 
-# Runs config/redis/cutover.sh against Redis 6.2 containers (old on 6.2.12,
-# the production version), with ssh and the AWS CLI stubbed: see
-# config/redis/tests/cutover.sh. It needs Docker on the runner, so it cannot
+# Runs config/redis/promote.sh against Redis 6.2 containers (old on 6.2.12,
+# the production version), with ssh and sudo stubbed: see
+# config/redis/tests/promote.sh. It needs Docker on the runner, so it cannot
 # run inside the test image like the rest of config/redis.
 
 on:
   push:
     branches: [master]
     paths:
-      - ".github/workflows/redis-cutover.yml"
-      - "config/redis/cutover.sh"
+      - ".github/workflows/redis-promote.yml"
+      - "config/redis/promote.sh"
       - "config/redis/lib.sh"
-      - "config/redis/tests/cutover.sh"
+      - "config/redis/tests/promote.sh"
   pull_request:
     branches: [master]
     paths:
-      - ".github/workflows/redis-cutover.yml"
-      - "config/redis/cutover.sh"
+      - ".github/workflows/redis-promote.yml"
+      - "config/redis/promote.sh"
       - "config/redis/lib.sh"
-      - "config/redis/tests/cutover.sh"
+      - "config/redis/tests/promote.sh"
 
 permissions:
   contents: read
@@ -27,14 +27,14 @@ permissions:
 # Superseded PR pushes are cancelled. Each master push gets its own group, so
 # a master run is never cancelled.
 concurrency:
-  group: redis-cutover-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  group: redis-promote-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  cutover:
+  promote:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Cutover, failure paths and rollback
-        run: config/redis/tests/cutover.sh
+      - name: Promotion, failure paths and rollback
+        run: config/redis/tests/promote.sh

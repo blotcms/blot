@@ -28,13 +28,13 @@ const SLOWLOG_ALERT_US = 50 * 1000;
 // asks for (hourly). Those are reported only when the fork itself is long
 // enough to stall clients noticeably. A replica attaching for a full sync
 // (PSYNC, or SYNC from an old replica) is logged with the fork time too, e.g.
-// during a restore drill or cutover.
+// during a restore drill or promotion.
 const FORK_COMMANDS = ["BGSAVE", "BGREWRITEAOF", "PSYNC", "SYNC"];
 const FORK_ALERT_US = 500 * 1000;
 
 // Errors that mean Redis is refusing writes or running out of room are
-// alerted on any occurrence. Other errors (READONLY while a cutover is under
-// way, WRONGTYPE, ERR from an app bug) happen in small numbers all the time:
+// alerted on any occurrence. Other errors (READONLY during a promotion,
+// WRONGTYPE, ERR from an app bug) happen in small numbers all the time:
 // only a type with at least this many new errors since the last check (5
 // minutes) is reported.
 const CRITICAL_ERRORS = ["OOM", "MISCONF", "NOREPLICAS"];
@@ -159,7 +159,7 @@ function detect(previous, current, { sample = null, now = Date.now() } = {}) {
           uptime: current.uptime,
           version: current.version,
           // The sample is from the host that was writing it a few minutes
-          // ago: after a cutover it may still be the old one.
+          // ago: after a promotion it may still be the old one.
           host: sample ? sample.host : null,
         },
       ],
