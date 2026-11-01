@@ -112,4 +112,18 @@ describe("contentVersion", function () {
       expect(byCtimeOnly).toEqual(contentVersion.fromStat(base));
     });
   });
+
+  describe("fromFolderStat", function () {
+    it("gives the token fromStat gives for the same real file", async function () {
+      const filePath = path.join(dir, "a.txt");
+      fs.writeFileSync(filePath, "hello");
+      // A fractional mtimeMs, which the token must keep exactly
+      fs.utimesSync(filePath, 1700000000.123456, 1700000000.123456);
+
+      const stat = fs.statSync(filePath);
+      const folderStat = { isDirectory: false, size: stat.size, modified: stat.mtimeMs };
+
+      expect(contentVersion.fromFolderStat(folderStat)).toEqual(contentVersion.fromStat(stat));
+    });
+  });
 });

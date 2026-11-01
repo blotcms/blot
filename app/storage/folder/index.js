@@ -90,6 +90,10 @@ module.exports = {
   // which also yields each directory before its contents.
   walk: local.walk,
 
+  // [{ name, isDirectory }] for every entry of a directory, sorted by name,
+  // without sizes or times: one read of the directory and no stat per entry
+  listNames: local.listNames,
+
   // Every entry of a directory, for callers which can afford the whole thing
   listAll: local.listAll,
 
