@@ -7,8 +7,7 @@ describe("git client write and remove with a stale origin", function () {
 
   var write = require("clients/git/write");
   var remove = require("clients/git/remove");
-  var dataDir = require("clients/git/dataDir");
-  var bareRepo = require("clients/git/bareRepo");
+  var repo = require("clients/git/repo");
   var Blog = require("models/blog");
   var localPath = require("helper/localPath");
   var fs = require("fs-extra");
@@ -31,7 +30,7 @@ describe("git client write and remove with a stale origin", function () {
     var gitBlot = this.gitBlot;
     var gitBare = this.gitBare;
     var blogID = this.blog.id;
-    var bareDirectory = dataDir + "/" + this.blog.handle + ".git";
+    var bareDirectory = repo.directory(this.blog.handle);
     var path = "/Stale origin.txt";
 
     gitBlot.raw(
@@ -89,7 +88,7 @@ describe("git client write and remove with a stale origin", function () {
     gitBlot.raw(["remote", "set-url", "origin", oldURL], function (err) {
       if (err) return done.fail(new Error(err));
 
-      bareRepo.pointOriginAtBareRepo(
+      repo.pointOriginAtBareRepo(
         gitBlot,
         "handle-without-a-bare-repo",
         function (err) {

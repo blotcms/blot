@@ -20,9 +20,9 @@ describe("git client authenticate (malformed paths with credentials)", function 
     repository,
     withCredentials,
   ) {
-    var dataDir = require("clients/git/dataDir");
-    var repos = require("clients/git/routes").repos;
-    var handleSpy = spyOn(repos, "handle").and.callThrough();
+    var repo = require("clients/git/repo");
+    var repo = require("clients/git/repo");
+    var handleSpy = spyOn(repo, "handleSmartHttp").and.callThrough();
     var requestOptions = {
       hostname: "127.0.0.1",
       port: context.server.port,
@@ -39,7 +39,7 @@ describe("git client authenticate (malformed paths with credentials)", function 
         expect(res.statusCode).toBe(404, path);
         expect(handleSpy).not.toHaveBeenCalled();
         if (repository) {
-          expect(fs.existsSync(dataDir + "/" + repository + ".git")).toBe(
+          expect(fs.existsSync(repo.directory(repository))).toBe(
             false,
             path,
           );

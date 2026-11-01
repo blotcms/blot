@@ -12,7 +12,7 @@ describe("git client aborted requests", function () {
   var crypto = require("crypto");
   var childProcess = require("child_process");
   var spawn = childProcess.spawn;
-  var dataDir = require("clients/git/dataDir");
+  var repo = require("clients/git/repo");
 
   // Pushover wraps every Git request in an http-duplex object that re-emits
   // the request's errors. A client dropping its connection part way through a
@@ -329,7 +329,7 @@ describe("git client aborted requests", function () {
   // and the git index-pack it started hold hundreds of MB between them) or its
   // quarantine directory on disk, so wait for git to finish cleaning up.
   async function expectGitToCleanUp(ctx) {
-    var repoPath = dataDir + "/" + ctx.blog.handle + ".git";
+    var repoPath = repo.directory(ctx.blog.handle);
     var deadline = Date.now() + CLEANUP_MS;
     var processes, quarantines;
 
@@ -434,7 +434,7 @@ describe("git client aborted requests", function () {
     // Put the data straight into the bare repo so the server has something
     // large to send, without waiting for Blot to sync it as a real push would.
     await ctx.git.push(
-      dataDir + "/" + ctx.blog.handle + ".git",
+      repo.directory(ctx.blog.handle),
       "HEAD:refs/heads/master"
     );
 

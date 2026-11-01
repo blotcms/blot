@@ -1,6 +1,23 @@
 var fs = require("fs");
 var Path = require("path");
 
+// Picks which entry of a directory listing a name refers to: the exact name
+// if present, otherwise the first entry (in listing order) which matches
+// ignoring case. Shared so callers which already hold a listing choose the
+// same entry caseSensitivePath would.
+function pick(contents, name) {
+  var folded = name.normalize().toLowerCase();
+  var similar;
+
+  for (var i = 0; i < contents.length; i++) {
+    if (contents[i] === name) return name;
+    if (similar === undefined && contents[i].normalize().toLowerCase() === folded)
+      similar = contents[i];
+  }
+
+  return similar;
+}
+
 function caseSensitivePath(cwd, path, callback) {
   // Will do many things, importantly it will
   // replace double slashes, e.g. /a/b//c -> /a/b/c
@@ -23,28 +40,15 @@ function caseSensitivePath(cwd, path, callback) {
 
   fs.readdir(cwd, function guess(err, contents) {
     if (err) return callback(err);
-    var exactMatch;
+    var match = pick(contents, name);
 
-    contents = contents.filter(function (item) {
-      if (item === name) {
-        exactMatch = item;
-        return false;
-      }
-
-      return item.normalize().toLowerCase() === name.normalize().toLowerCase();
-    });
-
-    if (!exactMatch && !contents.length) {
+    if (match === undefined) {
       err = new Error("No path matches: " + path);
       err.code = "ENOENT";
       return callback(err);
     }
 
-    if (exactMatch) {
-      cwd += "/" + exactMatch;
-    } else {
-      cwd += "/" + contents.shift();
-    }
+    cwd += "/" + match;
 
     if (dirs.length) {
       name = dirs.shift();
@@ -56,3 +60,4 @@ function caseSensitivePath(cwd, path, callback) {
 }
 
 module.exports = caseSensitivePath;
+module.exports.pick = pick;

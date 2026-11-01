@@ -1,9 +1,9 @@
 const { promisify } = require("util");
 const fs = require("fs-extra");
-const Git = require("simple-git");
+const Git = require("./git");
 const database = require("./database");
 const localPath = require("helper/localPath");
-const dataDir = require("./dataDir");
+const repos = require("./repo");
 const clfdate = require("helper/clfdate");
 const sync = require("sync");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
@@ -24,6 +24,7 @@ const TEMPORARY_GIT_GC_CONFIG = [
   ["maintenance.autoDetach", "false"],
 ];
 const setStatus = promisify(database.setStatus.bind(database));
+const setApplied = promisify(database.setApplied.bind(database));
 const createToken = promisify(database.createToken.bind(database));
 
 // Stops git from searching above the blog's folder for a repository, so a
@@ -31,9 +32,8 @@ const createToken = promisify(database.createToken.bind(database));
 // fails instead of acting on some enclosing repo, e.g. a stray .git in the
 // data directory, which once picked up this module's "Add N files" commits.
 function liveGit(liveDirectory) {
-  return Git(liveDirectory, { maxConcurrentProcesses: 1 }).env({
-    ...process.env,
-    GIT_CEILING_DIRECTORIES: path.dirname(path.resolve(liveDirectory)),
+  return Git(liveDirectory, {
+    env: { GIT_CEILING_DIRECTORIES: path.dirname(path.resolve(liveDirectory)) },
   });
 }
 
@@ -52,7 +52,7 @@ function isTransientCommitError(err) {
 }
 
 async function createEmptyCommit(repo, message) {
-  await repo.commit(message, { "--allow-empty": true });
+  await repo.raw(["commit", "-m", message, "--allow-empty"]);
 }
 
 async function pushMaster(repo, message) {
@@ -62,7 +62,7 @@ async function pushMaster(repo, message) {
       (message || "Pushing commits to repository")
   );
 
-  await repo.push(["-u", "origin", "master"]);
+  await repo.raw(["push", "-u", "origin", "master"]);
 }
 
 async function configureTemporaryGitGc(repo) {
@@ -141,7 +141,7 @@ module.exports = function create(blog, callback) {
     if (err) return callback(err);
 
     const liveDirectory = localPath(blog.id, "/");
-    const bareDirectory = `${dataDir}/${blog.handle}.git`;
+    const bareDirectory = repos.directory(blog.handle);
 
     try {
       await createRepository(blog, folder);
@@ -155,19 +155,19 @@ module.exports = function create(blog, callback) {
 
 async function createRepository(blog, folder) {
   const liveDirectory = localPath(blog.id, "/");
-  const bareDirectory = `${dataDir}/${blog.handle}.git`;
+  const bareDirectory = repos.directory(blog.handle);
 
   report(folder, "Making bare repository directory and creating token");
   await prepareDirectoriesAndMetadata(blog, liveDirectory, bareDirectory);
 
-  const bareRepo = Git(bareDirectory, { maxConcurrentProcesses: 1 });
+  const bareRepo = Git(bareDirectory);
   const liveRepo = liveGit(liveDirectory);
 
   report(folder, "Creating bare repository", "initing bareRepo");
-  await bareRepo.init(true);
+  await bareRepo.raw(["init", "--bare"]);
 
   report(folder, "Creating live repository", "initing liveRepo");
-  await liveRepo.init();
+  await liveRepo.raw(["init"]);
 
   try {
     report(folder, "Configuring temporary Git GC settings");
@@ -179,7 +179,7 @@ async function createRepository(blog, folder) {
       "Adding remote to live repository",
       "adding remote to liveRepo"
     );
-    await liveRepo.addRemote("origin", bareDirectory);
+    await liveRepo.raw(["remote", "add", "origin", bareDirectory]);
 
     const progress = {
       filesAdded: 0,
@@ -194,6 +194,12 @@ async function createRepository(blog, folder) {
       unsetTemporaryGitGc(liveRepo),
     ]);
   }
+
+  // Everything in the folder is already in the repository, and Blot already
+  // has the folder's entries, so the first sync starts from this commit.
+  // An old value would be from an earlier connection: this replaces it.
+  const head = await liveRepo.raw(["rev-parse", "HEAD"]).catch(() => "");
+  if (head.trim()) await setApplied(blog.id, head.trim());
 
   await setStatus(blog.owner, "createComplete");
 
@@ -248,7 +254,7 @@ function report(folder, message, logMessage = message) {
 
 // git add exits non-zero for paths matched by a .gitignore rule; rather than
 // spawning a separate `git check-ignore` per entry (slow: one subprocess per
-// file, and this repo runs git with maxConcurrentProcesses: 1), we just try
+// file, and this repo runs one git command at a time), we just try
 // to add the file and skip it if git refuses it as ignored.
 function isGitIgnoreAddError(err) {
   return /ignored by one of your \.gitignore files/i.test(
@@ -357,7 +363,7 @@ async function stageFile(folder, liveRepo, bareRepo, progress, filePath) {
   folder.status("(" + current + "/" + progress.total + ") Adding " + relativePath);
 
   try {
-    await liveRepo.add(filePath);
+    await liveRepo.raw(["add", "--", filePath]);
   } catch (err) {
     if (isGitIgnoreAddError(err)) {
       console.log(

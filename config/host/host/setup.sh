@@ -325,6 +325,32 @@ say "Redis host setup"
 env BLOT_REDIS_SHARED_INSTANCE_STORE=1 REDIS_MAXMEMORY="$REDIS_MAXMEMORY" \
   BLOT_REDIS_SKIP_SYSTEMD="$SKIP_SYSTEMD" bash "$REDIS_SETUP"
 
+say "Memory caps"
+# After the Redis setup, which writes journald.conf.d/blot.conf (SystemMaxUse=100M,
+# right for a Redis-only host). Drop-ins apply in name order, so the zz- file wins
+# here and the journal gets more room next to the units' logs. Journald's default
+# cap is 10% of the filesystem, which is unbounded in practice on a big root.
+put /etc/systemd/journald.conf.d/zz-blot-host.conf 0644 root:root <<'EOF2'
+[Journal]
+SystemMaxUse=500M
+EOF2
+[ -n "$SKIP_SYSTEMD" ] || [ "$CHANGED" = 0 ] || systemctl restart systemd-journald
+# fail2ban keeps its ban lists in memory and reads the sshd, recidive and nginx
+# logs; its sqlite database is on disk. Past this it is OOM-killed on its own
+# instead of taking the units with it, and Restart= brings it back (the ban
+# lists reload from the database). Applied at its next start if it is stopped.
+put /etc/systemd/system/fail2ban.service.d/20-memory.conf 0644 root:root <<'EOF2'
+[Service]
+MemoryMax=256M
+Restart=on-failure
+RestartSec=5
+EOF2
+if [ -z "$SKIP_SYSTEMD" ] && [ "$CHANGED" = 1 ]; then
+  systemctl daemon-reload
+  # deploy.sh starts fail2ban on a new host; only a running one is restarted.
+  ! systemctl is-active --quiet fail2ban || systemctl restart fail2ban
+fi
+
 say "Verification"
 [ -n "$SKIP_SYSTEMD" ] || echo "docker: $(systemctl is-enabled docker) ($(systemctl is-active docker || true))"
 echo "redis-cli -> $(readlink -f "$(command -v redis-cli)")"

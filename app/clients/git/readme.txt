@@ -9,16 +9,12 @@ Move these into this module when I start using git submodules or npm submodules 
 
     "http-auth": "^3.2.3",
     "pushover": "^1.3.6",
-    "simple-git": "^1.92.0",
     "uuid": "^3.2.1"
 
 Pitfalls
 --------
-* are all of simple-git's error strings turned into error objects? ran into issues with tests and this
 * is authentication failing? are the pushes getting through?
-* are you passing arguments to simple-git correctly? silently ignoring flags tripped me up.
-* is a simple-git command propagating up to blot's git repo? this might cause strange behaviour.
-* is simple-git's PullSummary not containing the files it should?
+* is a git command propagating up to blot's git repo? this might cause strange behaviour.
 * I ran into a race condition when some tests were failing on my test server, but not locally. Basically, my tests were checking to see if a sync had finished, before the sync had even started. 
 * pushes are only accepted from the master branch. Other branches will be rejected by the git endpoint.
 

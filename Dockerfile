@@ -55,7 +55,7 @@ RUN apk add --no-cache git tini curl ca-certificates \
  && git config --system pack.window 5 \
  && git config --system receive.maxInputSize 1900m
 
-# Use tini as the init process so simple-git child processes are reaped instead of becoming zombies.
+# Use tini as the init process so git child processes are reaped instead of becoming zombies.
 ENTRYPOINT ["/sbin/tini", "--"]
 
 # Install Pandoc. Version is pinned (build arg) for reproducible document

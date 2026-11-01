@@ -115,8 +115,8 @@ const BENCHMARK_DEFAULTS = Object.freeze({
   minBaselineSamples: 8,
   // How many trailing master samples feed the robust baseline.
   baselineWindow: 20,
-  // Consecutive master commits that must all regress before an issue opens.
-  regressionConsecutive: 3,
+  // Consecutive daily master runs that must all regress before an issue opens.
+  regressionConsecutive: 2,
   // Bump this whenever a change meaningfully redefines what a tracked metric
   // means (new/removed metric, changed workload shape that shifts totals,
   // etc). Records written under an older version are kept in history for
