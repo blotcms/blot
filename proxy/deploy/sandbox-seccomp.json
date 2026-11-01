@@ -59,9 +59,11 @@
 			"names": [
 				"clone",
 				"mount",
-				"umount2",
 				"pivot_root",
-				"sethostname"
+				"sethostname",
+				"setns",
+				"umount2",
+				"unshare"
 			],
 			"action": "SCMP_ACT_ALLOW"
 		},

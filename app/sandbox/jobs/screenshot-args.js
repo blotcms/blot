@@ -41,4 +41,9 @@ module.exports = [
     "--deterministic-fetch",
     "--hide-scrollbars",
     "--font-render-hinting=none",
+    // A page runaway crashes its own tab. Site isolation gives every cross-site
+    // iframe its own renderer, and with --no-sandbox it isolates nothing.
+    "--js-flags=--max-old-space-size=128",
+    "--disable-features=IsolateOrigins,site-per-process",
+    "--disable-site-isolation-trials",
   ];

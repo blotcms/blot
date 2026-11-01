@@ -1,0 +1,69 @@
+#!/usr/sbin/nft -f
+#
+# The browser jail's egress filter, loaded inside the jail's own network
+# namespace by ./enter-network.sh before the job starts. Every packet the jail
+# sends is matched against its real destination IP, in the kernel, so this also
+# covers DNS rebinding, redirects and sub-resources that URL checks miss.
+#
+# pasta (user_net in ./network.cfg) gives the namespace internet access and on
+# its own would reach the instance metadata service and the host's loopback, so
+# this filter is what makes the jail safe. Refused destinations are rejected,
+# not dropped, so they fail at once rather than costing a timeout.
+#
+# __RESOLVER__ is the nameserver from the jail's /etc/resolv.conf.
+
+table inet jail {
+    chain output {
+        type filter hook output priority 0; policy accept;
+
+        ct state established,related accept
+
+        # The job drives Chromium over a pipe, so nothing in the jail needs
+        # loopback, and nothing should reach pasta's mapping of the host's.
+        oif "lo" reject
+
+        # The resolver is usually a private address, which the rules below
+        # would refuse. Only DNS, and any name it answers with is still checked
+        # by real destination IP.
+        ip daddr __RESOLVER__ udp dport 53 accept
+        ip daddr __RESOLVER__ tcp dport 53 accept
+
+        # --- IPv4: drop every non-public destination ---
+        ip daddr {
+            0.0.0.0/8,
+            10.0.0.0/8,
+            100.64.0.0/10,
+            127.0.0.0/8,
+            169.254.0.0/16,
+            172.16.0.0/12,
+            192.0.0.0/24,
+            192.0.2.0/24,
+            192.88.99.0/24,
+            192.168.0.0/16,
+            192.175.48.0/24,
+            198.18.0.0/15,
+            198.51.100.0/24,
+            203.0.113.0/24,
+            224.0.0.0/4,
+            240.0.0.0/4,
+            255.255.255.255/32
+        } reject
+
+        # --- IPv6: drop every non-public destination ---
+        ip6 daddr {
+            ::1/128,
+            ::/128,
+            ::/96,
+            ::ffff:0:0/96,
+            64:ff9b::/96,
+            64:ff9b:1::/48,
+            100::/64,
+            2001::/32,
+            2001:db8::/32,
+            2002::/16,
+            fc00::/7,
+            fe80::/10,
+            ff00::/8
+        } reject
+    }
+}
