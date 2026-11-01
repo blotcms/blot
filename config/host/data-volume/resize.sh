@@ -3,7 +3,10 @@
 #        resize.sh [options] grow <size-GiB>
 #        resize.sh [options] shrink <size-GiB> [--type gp3] [--iops N] [--throughput MiBps]
 #        resize.sh [options] finish
-# Resizes the EBS volume mounted at /var/www/blot/data on the app host.
+#        resize.sh [options] move prepare --to <new-ssh-host> [--existing]
+#        resize.sh [options] move copy|freeze|thaw|retag|status
+# Resizes the EBS volume mounted at /var/www/blot/data on the app host, or moves
+# its contents to another host.
 #
 #   status   what the host and the volume look like, and any resize in progress
 #   grow     online: modify-volume, then xfs_growfs. No freeze, nothing stops.
@@ -16,6 +19,21 @@
 #            holds the old volume any more: release the host's own mount of it
 #            (no reboot, no downtime; asks first), then detach it. Never
 #            deletes.
+#   move     the data goes to ANOTHER host, with --host as the source. The new
+#            host gets a volume made from a snapshot and filled with rsync
+#            while the old host keeps serving; writes stop only for the final
+#            pass. In order:
+#              prepare  snapshot, new volume in the new host's zone, attach,
+#                       stage it, start a pre-warm, set up the copy's ssh key
+#                       (--existing: the new host already has its volume, a
+#                       move back)
+#              copy     live passes, as in a shrink
+#              freeze   read-only, final pass, then STOP with the app frozen
+#                       and the source read-only: the switch (cycle.sh) goes on
+#              thaw     undo the freeze if there is no switch
+#              retag    after the switch: production tags on the new volume
+#            status shows where it is. Nothing is swapped or detached; the old
+#            host and its volume stay as the rollback.
 #
 # Read config/host/data-volume/README.md first, and rehearse with drill.sh.
 # Needs the read-only freeze (scripts/read-only.js) and the rslave data bind
@@ -33,11 +51,15 @@
 #   --freeze-ttl SECONDS     how long the read-only freeze lasts if this script
 #                            dies (default 900); the frozen copy must fit in it
 #   --any-time               allow the freeze within 10 minutes of 01:00 and 05:00 UTC
+#   --to SSH_HOST            move prepare: the new host (as ssh reaches it from here)
+#   --existing               move prepare: the new host already has its data volume mounted
+#   --no-prewarm-check       move freeze: do not require the pre-warm to have finished
 #   --yes                    do not ask for confirmation
 #   --dry-run                run every read-only check and print every step;
 #                            change nothing (only /tmp/blot-data-volume/host.sh
-#                            is copied to the host, which the checks need)
-# shrink only: --type gp3|gp2 (default gp3), --iops N, --throughput MiBps (gp3).
+#                            is copied to the host, which the checks need; a move
+#                            prepare copies it to the new host too)
+# shrink and move prepare: --type gp3|gp2 (default gp3), --iops N, --throughput MiBps (gp3).
 # Without --iops and --throughput a gp3 volume gets the included 3000 IOPS and
 # 125 MiB/s, which is enough (README, "Cost").
 set -euo pipefail
@@ -56,17 +78,19 @@ MAX_FINAL=300
 FREEZE_TTL=900
 ANY_TIME=""; YES=""; DRY_RUN=""
 VTYPE=gp3; IOPS=""; THROUGHPUT=""
-CMD=""; SIZE=""
+CMD=""; SIZE=""; MSUB=""
+TO=""; EXISTING=""; NO_PREWARM_CHECK=""
 
 REMOTE=/tmp/blot-data-volume/host.sh
 DATA_NAME="Blot /var/www/blot/data" # the Name tag the DLM snapshot policy targets
+FREEZE_REASON="data volume resize"  # what read-only.js on shows; a move says so in its own
 PASS_LIMIT=5                        # live passes before we ask
 STALE_PASS_SECONDS=1800             # a finished pass older than this does not count on a resume
 PLACEHOLDER_VOLUME=vol-00000000000000000
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --host | --profile | --region | --container | --lock-wait | --grace | --max-final-seconds | --freeze-ttl | --type | --iops | --throughput)
+    --host | --profile | --region | --container | --to | --lock-wait | --grace | --max-final-seconds | --freeze-ttl | --type | --iops | --throughput)
       [ $# -ge 2 ] || die "$1 needs a value" ;;
   esac
   case "$1" in
@@ -82,6 +106,9 @@ while [ $# -gt 0 ]; do
     --iops) IOPS=$2; shift 2 ;;
     --throughput) THROUGHPUT=$2; shift 2 ;;
     --any-time) ANY_TIME=1; shift ;;
+    --to) TO=$2; shift 2 ;;
+    --existing) EXISTING=1; shift ;;
+    --no-prewarm-check) NO_PREWARM_CHECK=1; shift ;;
     --yes) YES=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     -*) die "unknown option $1" ;;
@@ -92,7 +119,7 @@ while [ $# -gt 0 ]; do
       shift ;;
   esac
 done
-case "$CMD" in status | grow | shrink | finish) ;; *) die "usage: resize.sh [options] status|grow <GiB>|shrink <GiB>|finish" ;; esac
+case "$CMD" in status | grow | shrink | finish | move) ;; *) die "usage: resize.sh [options] status|grow <GiB>|shrink <GiB>|finish|move prepare|copy|freeze|thaw|retag|status" ;; esac
 case "$LOCK_WAIT$GRACE$MAX_FINAL$FREEZE_TTL$IOPS$THROUGHPUT" in *[!0-9]*) die "--lock-wait, --grace, --max-final-seconds, --freeze-ttl, --iops and --throughput take numbers" ;; esac
 case "$VTYPE" in gp2 | gp3) ;; *) die "--type must be gp3 or gp2" ;; esac
 # The final copy gets FREEZE_TTL minus 90 seconds (for the snapshot, the swap
@@ -100,9 +127,15 @@ case "$VTYPE" in gp2 | gp3) ;; *) die "--type must be gp3 or gp2" ;; esac
 [ "$FREEZE_TTL" -ge 300 ] || die "--freeze-ttl must be at least 300 seconds (the final copy gets the TTL minus 90 s as its time limit)"
 if [ "$CMD" = grow ] || [ "$CMD" = shrink ]; then
   case "$SIZE" in "" | *[!0-9]*) die "$CMD needs a size in GiB, e.g. resize.sh $CMD 600" ;; esac
+elif [ "$CMD" = move ]; then
+  case "$SIZE" in prepare | copy | freeze | thaw | retag | status) MSUB=$SIZE ;; *) die "usage: resize.sh [options] move prepare --to <new-ssh-host> [--existing] | copy | freeze | thaw | retag | status" ;; esac
 elif [ -n "$SIZE" ]; then
   die "unexpected argument $SIZE"
 fi
+[ -z "$TO$EXISTING" ] || { [ "$CMD" = move ] && [ "$MSUB" = prepare ]; } || die "--to and --existing are for move prepare"
+[ -z "$NO_PREWARM_CHECK" ] || { [ "$CMD" = move ] && [ "$MSUB" = freeze ]; } || die "--no-prewarm-check is for move freeze"
+[ "$CMD" != move ] || [ "$MSUB" != prepare ] || [ -n "$TO" ] || die "move prepare needs --to <the new host, as ssh reaches it>"
+[ -z "$TO" ] || [ "$TO" != "$HOST" ] || die "--to is the same as --host"
 [ "$VTYPE" = gp3 ] || [ -z "$IOPS$THROUGHPUT" ] || die "--iops and --throughput are for gp3"
 
 # One ssh connection for the whole run: the freeze is timed and each new
@@ -121,7 +154,7 @@ FREEZE_STAGE=none
 PAUSED=""
 cleanup() {
   undo_freeze
-  for h in $HOST; do ssh -o ControlPath="$CTL/%C" -O exit "$h" > /dev/null 2>&1 || true; done
+  for h in $HOST $TO; do ssh -o ControlPath="$CTL/%C" -O exit "$h" > /dev/null 2>&1 || true; done
   rm -rf "$CTL"
 }
 trap cleanup EXIT
@@ -163,6 +196,8 @@ gather_facts() {
   SIZE_B=$(field "$FACTS" size_bytes); USED_B=$(field "$FACTS" used_bytes)
   DRILL=$(field "$FACTS" drill)
   PHASE=$(field "$FACTS" resize_phase); R_OLD=$(field "$FACTS" resize_old); R_NEW=$(field "$FACTS" resize_new)
+  TARGET=$(field "$FACTS" resize_target); R_EXIST=$(field "$FACTS" resize_existing)
+  SRC_IP=$(field "$FACTS" private_ip)
 }
 
 # describe_volume <id>: sets V_SIZE V_TYPE V_IOPS V_TPUT V_AZ V_ENC V_KMS V_STATE V_INST V_NAME
@@ -226,7 +261,7 @@ cmd_status() {
 # An online grow needs no freeze: EBS grows the device under the mounted
 # filesystem, and XFS grows while mounted. Nothing stops, nothing is copied.
 cmd_grow() {
-  case "$PHASE" in prepared | copied) die "a shrink is in progress ($R_NEW); finish or abandon it first" ;; esac
+  case "$PHASE" in prepared | copied) die "a $([ -n "$TARGET" ] && echo move || echo shrink) is in progress ($R_NEW); finish or abandon it first" ;; esac
   # After a shrink the old volume is still mounted underneath until `finish`.
   # xfs_growfs takes its target size from the first mount listed there, the old
   # volume, and exits 0 at that size. Refuse before spending the 6-hour EBS change.
@@ -501,41 +536,26 @@ refuse_near_cron() {
   done
 }
 
-# step 4: freeze, final copy, snapshot, swap, unfreeze.
-step_freeze_and_swap() {
-  local t_on t_off out deadline budget snap_tags
-  say "4. Freeze, final copy and swap"
-  if [ "$DRILL" = yes ]; then
-    echo "Drill host: the units (blot-blue and blot-green) are paused instead of using read-only.js."
-  fi
-  echo "The app will refuse writes (dashboard and client edits get a 503) for about $(fmt_duration "${LAST_DUR:-0}") or less:"
-  echo "the last live pass took that long, and the frozen pass runs in parallel."
-  confirm "Freeze now?"
-  refuse_near_cron
-  aws_cli sts get-caller-identity --query Arn --output text > /dev/null 2>&1 ||
-    die "the AWS session expired during the passes; run: aws sso login --profile $AWS_PROFILE_NAME"
-  gather_facts
+# The freeze, shared by a shrink and a move. freeze_dry_run prints it; freeze_app
+# stops the app writing (FREEZE_STAGE=app); freeze_and_copy makes the disk
+# read-only (disk) and runs the frozen copy (copying). The caller decides what
+# happens next, and undo_freeze puts things back from whatever stage was reached.
+freeze_dry_run() {
+  if [ "$DRILL" = yes ]; then echo "would run: docker pause (blot-blue and blot-green)"; else echo "would run: docker exec $CONTAINER node scripts/read-only.js on --ttl $FREEZE_TTL --reason '$FREEZE_REASON'"; fi
+  if [ "$DRILL" != yes ]; then echo "would wait ${GRACE}s, then until lockedBlogs is empty (up to ${LOCK_WAIT}s)"; fi
+  host_do freeze-disk 30
+  host_do final-copy $((FREEZE_TTL - 90))
+}
 
-  # Everything from here until the swap is undone by undo_freeze on any
-  # failure, die or Ctrl-C.
-  t_on=$(date +%s)
-  if [ -n "$DRY_RUN" ]; then
-    if [ "$DRILL" = yes ]; then echo "would run: docker pause (blot-blue and blot-green)"; else echo "would run: docker exec $CONTAINER node scripts/read-only.js on --ttl $FREEZE_TTL --reason 'data volume resize'"; fi
-    if [ "$DRILL" != yes ]; then echo "would wait ${GRACE}s, then until lockedBlogs is empty (up to ${LOCK_WAIT}s)"; fi
-    host_do freeze-disk 30
-    host_do final-copy $((FREEZE_TTL - 90))
-    aws_mut ec2 create-snapshot --volume-id "$CUR_VOL" --description "before resize to $NEW_VOL"
-    host_do swap
-    echo "would lift the freeze and print how long it lasted"
-    return 0
-  fi
+freeze_app() {
+  local out deadline
   FREEZE_STAGE=app
   if [ "$DRILL" = yes ]; then
     PAUSED=$(echo "$FACTS" | sed -n 's/^container\.\([^=]*\)=.*/\1/p' | tr '\n' ' ')
     # (a container left paused by an interrupted run counts as paused)
     ssh_run "$HOST" 'for c in '"$PAUSED"'; do sudo docker pause "$c" > /dev/null 2>&1 || [ "$(sudo docker inspect -f "{{.State.Paused}}" "$c")" = true ] || exit 1; done' < /dev/null || die "docker pause failed"
   else
-    out=$(ro on --ttl "$FREEZE_TTL" --reason "'data volume resize'") || die "read-only.js on failed"
+    out=$(ro on --ttl "$FREEZE_TTL" --reason "'$FREEZE_REASON'") || die "read-only.js on failed"
     echo "$out" | grep -q '"readOnly":null' && die "the freeze did not take effect: $out"
     echo "Read-only freeze on"
     # The freeze only gates new requests. A dashboard save or a git push that
@@ -554,7 +574,10 @@ step_freeze_and_swap() {
     done
     echo "No folder locks held"
   fi
+}
 
+freeze_and_copy() {
+  local out budget
   FREEZE_STAGE=disk
   out=$(host_do freeze-disk 30) || die "the data volume would not go read-only: something is still writing (see above)"
   echo "Old volume read-only ($(field "$out" waited_s)s)"
@@ -562,7 +585,8 @@ step_freeze_and_swap() {
   FREEZE_STAGE=copying
   if [ "$DRILL" != yes ]; then
     # Restart the TTL clock so the copy gets all of it.
-    ro on --ttl "$FREEZE_TTL" --reason "'data volume resize'" > /dev/null || die "could not extend the freeze"
+    ro on --ttl "$FREEZE_TTL" --reason "'$FREEZE_REASON'" > /dev/null || die "could not extend the freeze"
+    T_REARM=$(date +%s)
   fi
   budget=$((FREEZE_TTL - 90))
   # The budget leaves 90s of the TTL for the snapshot, the swap and lifting the
@@ -571,6 +595,35 @@ step_freeze_and_swap() {
   echo "Final copy (parallel)..."
   out=$(host_do final-copy "$budget") || die "the final copy failed (see above)"
   echo "Final copy: $(field "$out" shards) shards in $(fmt_duration "$(field "$out" duration_s)"), $(gib "$(field "$out" new_used_bytes)") GiB on the new volume, inodes $(field "$out" inodes_old) -> $(field "$out" inodes_new) (logs/ and tmp/ contents are not copied)"
+}
+
+# step 4: freeze, final copy, snapshot, swap, unfreeze.
+step_freeze_and_swap() {
+  local t_on t_off out snap_tags
+  say "4. Freeze, final copy and swap"
+  if [ "$DRILL" = yes ]; then
+    echo "Drill host: the units (blot-blue and blot-green) are paused instead of using read-only.js."
+  fi
+  echo "The app will refuse writes (dashboard and client edits get a 503) for about $(fmt_duration "${LAST_DUR:-0}") or less:"
+  echo "the last live pass took that long, and the frozen pass runs in parallel."
+  confirm "Freeze now?"
+  refuse_near_cron
+  aws_cli sts get-caller-identity --query Arn --output text > /dev/null 2>&1 ||
+    die "the AWS session expired during the passes; run: aws sso login --profile $AWS_PROFILE_NAME"
+  gather_facts
+
+  # Everything from here until the swap is undone by undo_freeze on any
+  # failure, die or Ctrl-C.
+  t_on=$(date +%s)
+  if [ -n "$DRY_RUN" ]; then
+    freeze_dry_run
+    aws_mut ec2 create-snapshot --volume-id "$CUR_VOL" --description "before resize to $NEW_VOL"
+    host_do swap
+    echo "would lift the freeze and print how long it lasted"
+    return 0
+  fi
+  freeze_app
+  freeze_and_copy
 
   # Taken now, with the old volume at rest and final: this is the rollback.
   snap_tags='{"Key":"Name","Value":"Blot data before resize"},{"Key":"BlotDataVolumeResizeFrom","Value":"'$CUR_VOL'"}'
@@ -621,6 +674,7 @@ EOF
 cmd_shrink() {
   local need
   REPLACED_VOL=""; NEW_VOL=""; LAST_DUR=0; REP=""
+  case "$PHASE" in prepared | copied) [ -z "$TARGET" ] || die "a move to $TARGET is in progress ($R_NEW); finish it (move retag) or undo it (move thaw) first" ;; esac
 
   # An earlier run that swapped but did not finish tagging.
   # (Not retagged: the new volume still has its copy-in-progress name, or the old
