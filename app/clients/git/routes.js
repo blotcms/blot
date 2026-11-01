@@ -74,15 +74,28 @@ dashboard.post("/create", function (req, res, next) {
     return disconnect(req.blog.id, next);
   }
 
-  Blog.set(req.blog.id, { client: "git" }, function (err) {
-    if (err) return next(err);
+  // A repository here wasn't made by this blog, or is still being made. If
+  // create failed on it the owner would get a token for it, and could clone
+  // whatever it holds.
+  repo.exists(req.blog.handle, function (exists) {
+    if (exists) {
+      console.log(clfdate() + " Git: Refused to create over repo for blog", req.blog.id);
+      return res.message(
+        req.baseUrl + "/create",
+        new Error("A Git repository already exists for this username. Please contact us.")
+      );
+    }
 
-    res.redirect(req.baseUrl);
+    Blog.set(req.blog.id, { client: "git" }, function (err) {
+      if (err) return next(err);
 
-    create(req.blog, function (err) {
-      if (err) {
-        console.log(clfdate() + " Git: Error creating repo", err);
-      }
+      res.redirect(req.baseUrl);
+
+      create(req.blog, function (err) {
+        if (err) {
+          console.log(clfdate() + " Git: Error creating repo", err);
+        }
+      });
     });
   });
 });

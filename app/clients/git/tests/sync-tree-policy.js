@@ -14,7 +14,7 @@ describe("Git sync tree policy", function () {
         let value = "previous";
         if (args[0] === "rev-parse" && args.includes("--verify")) value = "validated";
         if (args[0] === "ls-tree") value = tree;
-        if (args[0] === "reset") resets.push(args[2]);
+        if (args[0] === "reset") resets.push(args[3]);
         if (cb) return cb(null, value);
         return Promise.resolve(value);
       },
@@ -22,7 +22,8 @@ describe("Git sync tree policy", function () {
     const stubs = {
       async: {}, debug:()=>()=>{}, "./git":()=>git,
       sync: (id, cb) => cb(null, {path:"/test-blog",log(){}}, (err, cb) => {released = true; cb(err);}),
-      "./checkGitRepoExists":(path, cb)=>cb(null), "./repo":{pointOriginAtBareRepo:(git, handle, cb)=>git.remote(["set-url","origin","/test-data/"+handle+".git"], cb)},
+      "./checkGitRepoExists":(path, cb)=>cb(null), "./repo":{directory:handle=>"/test-data/"+handle+".git",pointOriginAtBareRepo:(git, handle, cb)=>git.remote(["set-url","origin","/test-data/"+handle+".git"], cb)},
+      "./materialize":Object.assign((directory, folder, base, commit, cb)=>cb(null, []), {EMPTY_TREE:"empty"}),
       "models/blog":{}, "./validateTree":validateTree,
       "./database":{getApplied:(id, cb)=>cb(null, null), setApplied:(id, commit, cb)=>cb(null)},
     };
@@ -40,7 +41,7 @@ describe("Git sync tree policy", function () {
     expect(result.resets).toEqual([]);
     expect(result.released).toBe(true);
   });
-  it("resets the validated commit ID instead of the mutable branch", async function () {
+  it("moves the live clone to the validated commit ID instead of the mutable branch", async function () {
     const result = await run("100644 blob abc\tfile.txt\0");
     expect(result.error).toBe(null);
     expect(result.resets).toEqual(["validated"]);

@@ -1,4 +1,7 @@
 const folder = require("../folder");
+const fs = require("fs-extra");
+const config = require("config");
+const contentVersion = require("helper/contentVersion");
 
 describe("folder", function () {
   require("blog/tests/util/setup")();
@@ -110,5 +113,45 @@ describe("folder", function () {
     );
     expect(html).toContain('<a href="/sub">sub</a>');
     expect(html).not.toContain("%%BLOT_CDN%%");
+  });
+
+  it("versions a file's CDN url exactly as contentVersion.fromStat does", async function () {
+    await this.write({ path: "/photo.jpg", content: "img" });
+
+    const file = config.blog_folder_dir + "/" + this.blog.id + "/photo.jpg";
+    // A fractional mtimeMs, as a real file has (seconds, so not rounded to ms)
+    await fs.utimes(file, 1700000000.123456, 1700000000.123456);
+
+    const stat = await fs.stat(file);
+    const result = await run(this, {});
+    const item = result.contents.find((item) => item.name === "photo.jpg");
+
+    expect(item.url).toEqual(
+      "%%BLOT_CDN%%/folder/v-" + contentVersion.fromStat(stat) + "/" + this.blog.id + "/photo.jpg"
+    );
+    expect(item.updated).toEqual(stat.mtime);
+    expect(item.updated instanceof Date).toBe(true);
+  });
+
+  it("skips symlinks", async function () {
+    await this.write({ path: "/a.txt", content: "Hello" });
+
+    const dir = config.blog_folder_dir + "/" + this.blog.id;
+    await fs.symlink(dir + "/a.txt", dir + "/link.txt");
+    await fs.symlink(dir + "/nowhere", dir + "/dangling.txt");
+
+    const result = await run(this, {});
+
+    expect(result.contents.map((item) => item.name)).toEqual(["a.txt"]);
+    expect(await run(this, { path: "/link.txt" })).toEqual([]);
+  });
+
+  it("returns an empty list for a file, an array or a traversal", async function () {
+    await this.write({ path: "/a.txt", content: "Hello" });
+
+    expect(await run(this, { path: "/a.txt" })).toEqual([]);
+    expect(await run(this, { path: ["/a", "/b"] })).toEqual([]);
+    expect(await run(this, { path: { a: "b" } })).toEqual([]);
+    expect(await run(this, { path: "/../../../../etc" })).toEqual([]);
   });
 });

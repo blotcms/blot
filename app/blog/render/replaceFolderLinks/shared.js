@@ -78,10 +78,10 @@ const encodeFolderPath = (path) =>
     .join("/");
 
 // The part of a folder CDN URL after /folder/: v-<version>/<blogID><path>,
-// for a path relative to the blog folder. Used by the routes which
-// redirect large files to the CDN.
+// for a path relative to the blog folder, given its storage/folder stat.
+// Used by the routes which redirect large files to the CDN.
 const versionedFolderPath = (blogID, path, stat) =>
-  `v-${contentVersion.fromStat(stat)}/${blogID}${encodeFolderPath(path)}`;
+  `v-${contentVersion.fromFolderStat(stat)}/${blogID}${encodeFolderPath(path)}`;
 
 // Decodes the path portion of a folder link. Split off any ?query and
 // #hash first, so an encoded '#' or '?' in a file name isn't mistaken for

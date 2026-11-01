@@ -547,6 +547,29 @@ describe("storage/folder", function () {
       expect(await folder.list(this.blog.id, "/d")).toEqual({ entries: [], cursor: null });
     });
 
+    it("listNames gives sorted names and kinds, without symlinks", async function () {
+      await folder.write(this.blog.id, "/d/b.txt", "bb");
+      await folder.write(this.blog.id, "/d/a.txt", "a");
+      await folder.mkdir(this.blog.id, "/d/c");
+      await fs.symlink(join(outside, "secret.txt"), join(this.blogDirectory, "d", "link.txt"));
+
+      expect(await folder.listNames(this.blog.id, "/d")).toEqual([
+        { name: "a.txt", isDirectory: false },
+        { name: "b.txt", isDirectory: false },
+        { name: "c", isDirectory: true },
+      ]);
+    });
+
+    it("listNames rejects a missing directory and a symlinked one", async function () {
+      await fs.symlink(outside, join(this.blogDirectory, "dir"));
+
+      var missing = await rejection(folder.listNames(this.blog.id, "/nope"));
+      var linked = await rejection(folder.listNames(this.blog.id, "/dir"));
+
+      expect(missing instanceof folder.NotFoundError).toBe(true);
+      expect(linked.code).toEqual("ELOOP");
+    });
+
     it("listAll collects every page", async function () {
       for (var i = 0; i < 5; i++) await folder.write(this.blog.id, "/d/" + i, "x");
 
