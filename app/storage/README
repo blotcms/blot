@@ -24,12 +24,15 @@ at sync/build time instead.
   assets are in the storage bucket (`config.storage`).
 - [`app/helper/localPath.js`](app/helper/localPath.js) resolves
   `(blogID, relativePath)` to an absolute path but does no IO — every caller
-  does its own raw `fs`/`fs-extra` call. About 65 files in `app/` call
-  `localPath`, 28 of them in sync clients (`app/clients/*`), and about 8 more
-  read `blog_folder_dir` directly (e.g. `app/blog/routes/assets.js`,
+  does its own raw `fs`/`fs-extra` call. About 65 files in `app/` require
+  `localPath`, 28 of them in sync clients (`app/clients/*`), and 7 more
+  read `blog_folder_dir` directly (`app/blog/routes/assets.js`,
   `app/cdn/index.js`, `app/models/blog/remove.js`,
-  `app/dashboard/site/export.js`, `build/plugins/folderAssets`). Add about 10
-  scripts and the test helpers (`scripts/tests/util/createBlog.js`).
+  `app/models/redirects/conflicts.js`,
+  `app/models/template/util/updateCdnManifest.js`,
+  `app/dashboard/site/export.js`, `build/plugins/folderAssets`). Add about 20
+  scripts and the test helpers (`scripts/tests/util/createBlog.js`), which
+  most specs that need a blog folder go through.
 - Per-blog asset IO all goes through `app/storage/assets.js`: `path`, `url`,
   `commit`, `write`, `writeFrom`, `read`, `exists`, `list`, `walk`,
   `createReadStream`, `ensureLocal`, `serve`, `remove`, `removeAll`, and a
@@ -47,8 +50,9 @@ at sync/build time instead.
   `reset --hard` there; iCloud renames whole directory trees to resolve case
   conflicts; Google Drive's local fingerprint reads `dev`, `ino`, `ctimeNs`
   and `mtimeNs`; the local client watches the folder with chokidar.
-- Rendered pages are cached in-process (`app/blog/render/full-view-cache.js`,
-  an LRU), and rendered template CSS/JS in Redis (`app/cdn/index.js`
+- Rendered template views are cached in-process
+  (`app/blog/render/full-view-cache.js`, an LRU bounded by count and bytes,
+  not Redis), and rendered template CSS/JS in Redis (`app/cdn/index.js`
   `/template`), so neither is read from disk per request.
 - Generated assets (thumbnails, doc conversions, image optimization) are
   built asynchronously at sync/build time and written before any visitor
@@ -247,8 +251,8 @@ with `Last-Modified`.
 
 - `entry.updated` moves only when the entry's `contentHash` changes, so a
   reconnect, a full resync or the copy to S3 leaves it alone.
-- CDN version tokens hash content (`helper/contentVersion`; the index's
-  hash on S3). Large files (the `routes/assets.js` redirect to the CDN) use size+mtime, which
+- CDN version tokens hash content (`helper/contentVersion`, SHA-1 through
+  `helper/transformer/hash`; on S3, probably the index's hash). Large files (the `routes/assets.js` redirect to the CDN) use size+mtime, which
   still changes whenever the file is rewritten.
 - Google Drive compares Drive's `modifiedTime` with an "applied" record in
   its client DB. iCloud and Dropbox compare content or provider hashes.
@@ -279,10 +283,13 @@ the copy to S3:
 
 The storage layer's `stat()` returns `size`, `modified` (local mtime now,
 the upload time on S3) and `hash`, with no ctime, no atime and no way to set
-`modified`. `hash` is Dropbox's `content_hash` algorithm (`helper/hashFile`,
-which entry `contentHash` is already built from), computed as a file is
-written and kept in the Redis index, so it never depends on S3 or B2 ETags;
-Google Drive blogs also keep an MD5. Accepted trade-offs:
+`modified`. `hash` is planned to be Dropbox's `content_hash` algorithm
+(`helper/hashFile`), computed as a file is written and kept in the Redis
+index, so it never depends on S3 or B2 ETags; Google Drive blogs also keep an
+MD5. Entry `contentHash` is not built from it today: `app/build/index.js`
+hashes each source with `helper/transformer/hash` (SHA-1 of the file) and
+`contentHash` is a SHA-1 over `path:sha1|path:sha1`. See §7. Accepted
+trade-offs:
 
 - `updated` means when Blot received a change, not when the user saved it.
 - Non-post files in folder listings show the migration date, once.
@@ -310,10 +317,15 @@ dual-write phase measure the latency and tune the cache size.
 
 **d. `app/sync/rebuild.js` processes files serially**
 (`async.eachSeries`) — a full rebuild of a large blog would turn into
-thousands of serial S3 round trips. Needs bounded concurrency (e.g.
-`async.eachLimit`) before `.folder` goes to S3.
+a long run of serial S3 round trips. Needs bounded concurrency (e.g.
+`async.eachLimit`) before `.folder` goes to S3, but `Entry.set` is not yet
+safe for two paths of one blog at once: the URL claim in
+`models/entry/_setUrl.js`, the blog menu in `models/entry/_assign.js` and
+backlinks in `models/entry/set.js` are all read-then-write. Those need
+fixing first.
 
-**e. ~53 `err.code === "ENOENT"` checks exist in `app/`.** The storage
+**e. About 40 `err.code === "ENOENT"` checks exist in `app/`**, in about
+45 files. The storage
 layer needs one backend-agnostic not-found signal (e.g. a `NotFoundError`
 class) that means the same thing on local disk (`ENOENT`) and S3
 (`404`/`NoSuchKey`).
@@ -374,26 +386,44 @@ should consolidate into one storage-layer method, exposed explicitly
     pruned with the rest of the tmp directory); a read cache on ephemeral SSD
     would be bounded in size.
 - **Phase 2 — `.folder`** ([#2258](https://github.com/blotcms/blot/issues/2258)
-  has the plan and checklist). S3 becomes the source of truth for folder
-  content, under `{blogID}/folder/{path}` in the same bucket (§3), outside
-  the assets scope; blog deletion removes it separately from `removeAll`.
-  - Every folder read and write goes through `app/storage/folder`, first on
-    a local-disk backend (call sites move one behaviour-neutral PR at a
-    time while EBS is still the store), then on S3 behind the same
-    functions. Nothing else builds a path into a blog folder.
-  - Metadata lives in a Redis index (type, size, modified, hash per file or
-    directory, pageable per directory, with a lowercased lookup), derived
-    from S3 and rebuildable from a listing. It is updated after the S3 write
-    in one `multi()`, under the folder lock, so it is never ahead of S3.
-  - Bytes are cached per file on the instance SSD (§4c). A blog folder can be
-    larger than the SSD.
-  - Writes finish in S3 before they return; a sync is done when S3 has the
-    bytes.
-  - Empty directories are zero-byte `{dir}/` marker objects.
-  - Rollout: groundwork on disk (§4 caveats, hash once, parallel
-    `rebuild.js`, the §4a backfills), the API on a local backend, dual
-    writes with a backfill, reconcile and shadow reads, then S3 blog by blog
-    behind a flag, then no `data/blogs`.
+  has the plan, the checklists and the performance gates). S3 becomes the
+  source of truth for folder content, under `{blogID}/folder/{path}` in the
+  same bucket (§3), outside the assets scope; blog deletion removes it
+  separately from `removeAll`. Each phase ships on its own and is reversible.
+  - Design in brief: every folder read and write goes through
+    `app/storage/folder`; metadata lives in a Redis index (type, size,
+    modified, hash per file or directory, pageable per directory, with a
+    lowercased lookup), derived from S3, rebuildable from a listing, and
+    updated after the S3 write in one `multi()` under the folder lock so it
+    is never ahead of S3; bytes are cached per file on the instance SSD (§4c),
+    so a blog folder can be larger than the SSD; writes finish in S3 before
+    they return; empty directories are zero-byte `{dir}/` marker objects.
+  - **A, groundwork on disk.** Things worth doing anyway that remove what
+    would make S3 slow: hash each changed file once per build (today
+    `sync/update` and `hashEntrySource` each read it, and the build reads it
+    again), bounded concurrency in `sync/rebuild.js`, cheaper misses in
+    `blog/routes/assets.js` (one directory read instead of up to seven
+    candidates), Google Drive's local fingerprint off `ino`/`ctime`/`dev`, the
+    two §4a backfills, the filename scan (§7,
+    `scripts/storage/scan-folder-filenames.js`), and this README.
+  - **B, `app/storage/folder` on a local-disk backend.** Call sites move area
+    by area (request-time readers, build, sync core, dashboard, models and
+    templates, then each sync client), each PR behaviour-neutral. It ends with
+    a lint check that nothing outside `app/storage` uses `localPath` or
+    `blog_folder_dir`, and the deletion of `helper/localPath`. Git blogs stop
+    holding a live `.git` in the folder here.
+  - **C, S3 backend, index and cache, with disk still authoritative.**
+    Dual writes (disk first), a backfill (`scripts/storage/backfill-folder.js`,
+    like `backfill-assets.js`), a reconcile job reporting drift, and shadow
+    reads on a sample of requests and builds to size the cache and see where
+    S3 is too slow.
+  - **D, S3 authoritative, blog by blog**, behind a per-blog flag: the test
+    blogs first, then cohorts, then everyone, watching the performance gates
+    at each step. Rolling back a blog is a reconcile from S3 to disk and a
+    flag flip.
+  - **E, remove the disk.** Stop writing blog folders to EBS, delete
+    `data/blogs`, and shrink the data volume to git client data until
+    Phase 3.
 - **Phase 3 — git client repos.** Planned in
   [#2259](https://github.com/blotcms/blot/issues/2259). Bare repos live in
   `{blot_directory}/data/git/{handle}.git` (`app/clients/git/dataDir.js`)
@@ -441,6 +471,23 @@ or uses `.listAll()` for small directories.
   size the Redis host.
 - Whether B2 becomes the primary store rather than only the backup —
   decide after measuring time to first byte from `us-west-2`.
-- A one-time scan of existing filenames for anything that's safe on POSIX
-  but odd as a raw S3 key (leading/trailing whitespace, control
-  characters), before `.folder` migrates.
+- The one-time scan of existing filenames for anything that's safe on POSIX
+  but odd as a raw S3 key (leading/trailing whitespace, control characters,
+  invalid UTF-8, keys over 1024 bytes, names which differ only by Unicode
+  normalisation or case) is `scripts/storage/scan-folder-filenames.js`.
+  Read-only; run it before `.folder` migrates and decide what to do with
+  what it finds (rename, or encode the key).
+- **What the index hash is, given entry `contentHash` (Phase C).** The plan
+  is a Dropbox `content_hash` in the index, so the build and Dropbox can
+  compare without reading the file. But entry `contentHash` is SHA-1 based
+  (§4a), so an index of Dropbox hashes cannot feed `hashEntrySource`
+  directly without changing every stored `contentHash`. Two options, not yet
+  chosen:
+  - Keep a SHA-1 alongside the Dropbox hash in the index, computed in the
+    same pass as the upload. `contentHash` and the CDN version tokens stay
+    as they are; the index costs more memory per file.
+  - Move `contentHash` to the Dropbox hash, with a conversion in the style of
+    `scripts/entry/backfill-content-hash.js` which rewrites each stored
+    `contentHash` without moving `updated`. One hash per file, but a
+    conversion across every entry that must complete before anything compares
+    the new values, and the CDN version tokens would still need a decision.

@@ -24,35 +24,36 @@ describe("Drive verified content on disk", function () {
     });
   });
 
-  it("invalidates same-size edits even when the old modification time is restored", async function () {
+  it("invalidates same-size edits through the changed modification time", async function () {
     const original = await verify(filename, digest("aaaa"));
-    const stat = await fs.stat(filename);
     await fs.writeFile(filename, "bbbb");
-    await fs.utimes(filename, stat.atime, stat.mtime);
     expect(await verify(filename, digest("aaaa"))).toBeNull();
     const changed = await verify(filename, digest("bbbb"));
     expect(changed.fingerprint).not.toBe(original.fingerprint);
   });
 
-  it("invalidates replacement by a different inode with identical bytes", async function () {
-    const original = await verify(filename, digest("aaaa"));
-    const stat = await fs.stat(filename);
-    const replacement = join(directory, "replacement.txt");
-    await fs.writeFile(replacement, "aaaa");
-    await fs.utimes(replacement, stat.atime, stat.mtime);
-    await fs.rename(replacement, filename);
-    const replaced = await verify(filename, digest("aaaa"));
-    expect(replaced.checksum).toBe(original.checksum);
-    expect(replaced.fingerprint).not.toBe(original.fingerprint);
+  it("is size and nanosecond mtime only, with no inode, device or ctime", async function () {
+    const stat = await fs.stat(filename, { bigint: true });
+    expect(fingerprint(stat)).toBe(stat.size + ":" + stat.mtimeNs);
+  });
+
+  it("accepts stored five-field fingerprints only while size and mtime match", function () {
+    const same = fingerprint.sameFingerprint;
+    expect(same("1:2:4:1000:3000", "4:1000")).toBe(true);
+    expect(same("1:2:4:1000:3000", "4:1001")).toBe(false);
+    expect(same("1:2:4:1000:3000", "5:1000")).toBe(false);
+    expect(same("4:1000", "4:1000")).toBe(true);
+    expect(same("4:1000", "4:1001")).toBe(false);
+    expect(same(null, "4:1000")).toBe(false);
+    expect(same("4:1000", null)).toBe(false);
+    expect(same("", "")).toBe(false);
   });
 
   it("declines verification if the file changes while its checksum is being established", async function () {
     const module = { exports: {} };
     const racingChecksum = async path => {
       const result = await checksum(path);
-      const stat = await fs.stat(path);
       await fs.writeFile(path, "bbbb");
-      await fs.utimes(path, stat.atime, stat.mtime);
       return result;
     };
     vm.runInNewContext(fs.readFileSync(require.resolve("../util/verifyContent"), "utf8"), {

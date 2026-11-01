@@ -250,7 +250,7 @@ sync(blogID, cb)
   └─ folderLock.lock(blogID)        Acquire Redis folder lock
   └─ callback(null, folder, done)    Yield control to caller
        └─ folder.update(path, ...)   [zero or more times]
-            └─ hashFile (before)
+            └─ fs.stat fingerprint (before)
             └─ fs.stat
                  ├─ ENOENT → drop
                  ├─ directory → maybeEnableInjectTitle
@@ -260,7 +260,7 @@ sync(blogID, cb)
                       ├─ Entry.set
                       ├─ rebuildDependents (wikilink keys)
                       └─ Preview.write (if visible draft)
-            └─ hashFile (after) → retry if changed
+            └─ fs.stat fingerprint (after) → retry if changed
             └─ flushCache
   └─ done(syncError, finalCallback)
        └─ renames(blogID)            Detect file moves by size/title correlation
@@ -282,7 +282,7 @@ sync(blogID, cb)
 | `models/client` (Redis) | Publishes `sync:status:{blogID}` messages; reads dependency sets. |
 | `build` | Converts a file at a path into an entry object. |
 | `helper/localPath` | Resolves blog-relative paths to absolute paths on disk. |
-| `helper/hashFile` | Detects mid-update file changes. |
+| `fs.stat` (size and mtime) | Detects mid-update file changes. Directories and missing paths have no fingerprint, so they never trigger a re-sync. |
 | `helper/pathNormalizer` | Normalises path separators and casing before dispatch. |
 | `models/client` (Redis) | Backs the mutual exclusion lock in `lock.js`. |
 | `clients/*` | Dropbox, Git, and local clients all call `sync(blogID, ...)` to acquire the lock before processing their change lists. |

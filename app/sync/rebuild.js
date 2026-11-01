@@ -13,31 +13,57 @@ const Blog = require("models/blog");
 const build = require("build");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 
+// The most stats in flight at once while walking a folder, so a blog with a
+// huge folder cannot open an unbounded number of them.
+const WALK_CONCURRENCY = 32;
+
+// Lists every file under dir. Directories are read one at a time and each is
+// stat'd with bounded concurrency. The order of the results is not
+// guaranteed. An error reading dir itself is returned; an error reading a
+// subdirectory is skipped, so one unreadable folder does not lose the rest.
 function walk(dir, done) {
-  var results = [];
-  fs.readdir(dir, function (err, list) {
-    if (err) return done(err);
-    var pending = list.length;
-    if (!pending) return done(null, results);
-    list.forEach(function (file) {
-      file = resolve(dir, file);
-      fs.stat(file, function (err, stat) {
-        if (stat && stat.isDirectory()) {
-          // A "+" folder is a rebuild target in its own right. Once it has
-          // been emptied no file path surfaces it, but its stale aggregate
-          // entry still needs the EMPTY cleanup, so record the directory too.
-          if (basename(file).endsWith("+")) results.push(file);
-          walk(file, function (err, res) {
-            results = results.concat(res);
-            if (!--pending) done(null, results);
+  const results = [];
+  const pending = [dir];
+
+  function next(isRoot) {
+    const current = pending.pop();
+
+    if (current === undefined) return done(null, results);
+
+    fs.readdir(current, function (err, list) {
+      if (err) {
+        if (isRoot) return done(err);
+        return next(false);
+      }
+
+      async.eachLimit(
+        list,
+        WALK_CONCURRENCY,
+        function (name, cb) {
+          const file = resolve(current, name);
+
+          fs.stat(file, function (err, stat) {
+            if (stat && stat.isDirectory()) {
+              // A "+" folder is a rebuild target in its own right. Once it has
+              // been emptied no file path surfaces it, but its stale aggregate
+              // entry still needs the EMPTY cleanup, so record the directory too.
+              if (basename(file).endsWith("+")) results.push(file);
+              pending.push(file);
+            } else {
+              results.push(file);
+            }
+
+            cb();
           });
-        } else {
-          results.push(file);
-          if (!--pending) done(null, results);
+        },
+        function () {
+          next(false);
         }
-      });
+      );
     });
-  });
+  }
+
+  next(true);
 }
 
 module.exports = function main(blogID, options, callback) {
@@ -118,6 +144,9 @@ module.exports = function main(blogID, options, callback) {
       let failed = 0;
       let firstError = null;
 
+      // One at a time on purpose: Entry.set is not safe for two paths of a
+      // blog at once (URL claims in models/entry/_setUrl.js and the blog
+      // menu in models/entry/_assign.js are read-then-write), see #2258.
       async.eachSeries(
         updatePaths,
         function (path, next) {
