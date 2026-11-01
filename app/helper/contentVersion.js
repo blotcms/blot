@@ -48,6 +48,11 @@ module.exports = async function contentVersion(filePath, stat) {
 // (the large-file redirect in blog/routes/assets.js runs during a request).
 module.exports.fromStat = statToken;
 
+// The same token from a storage/folder stat, which says `modified` where
+// fs.Stats says mtimeMs: the same number, so the same token for the same file.
+module.exports.fromFolderStat = (stat) =>
+  statToken({ size: stat.size, mtimeMs: stat.modified });
+
 function statToken(stat) {
   return crypto
     .createHash("sha1")
