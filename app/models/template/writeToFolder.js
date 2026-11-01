@@ -174,7 +174,7 @@ function writeTemplateContents(
 }
 
 function listLocalFiles(blogID, dir, callback) {
-  callbackify(folder.listAll)(blogID, dir, function (err, entries) {
+  callbackify(folder.listNames)(blogID, dir, function (err, entries) {
     if (err) {
       if (err.code === "ENOENT" || err.code === "ENOTDIR") return callback(null, []);
       return callback(err);

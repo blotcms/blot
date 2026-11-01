@@ -44,7 +44,7 @@ module.exports = function (blogID, callback) {
   async.eachSeries(
     templateDirs,
     function (templateDir, next) {
-      callbackify(folder.listAll)(blogID, templateDir, function (err, entries) {
+      callbackify(folder.listNames)(blogID, templateDir, function (err, entries) {
         if (err || !entries) return next();
 
         var templates = entries.map(function (entry) {

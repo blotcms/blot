@@ -18,7 +18,7 @@ function removeEnabledFromAllTemplates(blogID, callback) {
 }
 
 function removeEnabledFromAllTemplatesInFolder(blogID, folderName, callback) {
-  callbackify(folder.listAll)(blogID, folderName, function (err, listing) {
+  callbackify(folder.listNames)(blogID, folderName, function (err, listing) {
     if (err) {
       if (err.code === "ENOENT" || err.code === "ENOTDIR") return callback(null, []);
       return callback(err);

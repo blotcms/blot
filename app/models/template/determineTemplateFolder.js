@@ -2,7 +2,7 @@ var folder = require("storage/folder");
 var callbackify = require("util").callbackify;
 
 function determineTemplateFolder(blogID, callback) {
-  callbackify(folder.listAll)(blogID, "/", function (err, listing) {
+  callbackify(folder.listNames)(blogID, "/", function (err, listing) {
     if (err || !Array.isArray(listing)) {
       return callback(null, "Templates");
     }

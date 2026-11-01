@@ -22,7 +22,7 @@ const improveMustacheErrorMessage = require("./util/improveMustacheErrorMessage"
 // dir is the template's directory in the blog's folder, e.g. "/Templates/blog"
 module.exports = function readFromFolder (blogID, dir, callback) {
   // check the directory exists
-  callbackify(folder.listAll)(blogID, dir, function (err, entries) {
+  callbackify(folder.listNames)(blogID, dir, function (err, entries) {
     if (err) return callback(err);
 
     var contents = entries.map(function (entry) {
