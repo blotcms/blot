@@ -758,8 +758,25 @@ async function receive(req, res, options) {
     if (gunzip) gunzip.destroy(new Error("aborted"));
   });
 
-  function send(buffer) {
+  // Ends what is still running, deletes the quarantine and logs the exit line,
+  // once. The client is told only after this, so it never hears of a push
+  // which has left anything behind.
+  var finished = null;
+
+  function finish() {
+    if (!finished) {
+      finished = cleanUp(context).then(function () {
+        exitLine(req, context, started, tx);
+      });
+    }
+
+    return finished;
+  }
+
+  async function send(buffer) {
     tx = buffer.length;
+
+    await finish();
 
     if (res.destroyed || res.writableEnded) return;
 
@@ -773,7 +790,7 @@ async function receive(req, res, options) {
     parsed = parseCommands(packets.lines);
 
     // Git's 0000 probe, sent before a request larger than http.postBuffer
-    if (!parsed.commands.length) return send(Buffer.alloc(0));
+    if (!parsed.commands.length) return await send(Buffer.alloc(0));
 
     var commands = parsed.commands;
     var capabilities = parsed.capabilities;
@@ -850,7 +867,7 @@ async function receive(req, res, options) {
       messages.push("Nothing was pushed.");
     }
 
-    send(
+    await send(
       formatResponse(
         capabilities,
         status,
@@ -877,10 +894,10 @@ async function receive(req, res, options) {
         res.setHeader("content-type", "text/plain");
       }
 
-      send(Buffer.from("bad request body"));
+      await send(Buffer.from("bad request body"));
     } else if (parsed && parsed.commands.length && !res.destroyed && req.complete) {
       console.error(clfdate(), "Git: error receiving push", options.handle, err);
-      send(
+      await send(
         formatResponse(
           parsed.capabilities,
           "internal error",
@@ -896,8 +913,7 @@ async function receive(req, res, options) {
       if (!res.writableEnded) res.destroy();
     }
   } finally {
-    await cleanUp(context);
-    exitLine(req, context, started, tx);
+    await finish();
   }
 }
 
