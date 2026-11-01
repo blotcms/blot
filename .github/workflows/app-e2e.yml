@@ -24,14 +24,13 @@ env:
   PROXY_IMAGE_CACHE: ghcr.io/blotcms/blot:cache-proxy-arm64
   # The unit image's proxy config is generated for blot.im when the image is built, so
   # the unit serves the site as blot.im; the proxy image built here is for localhost.
-  BLOT_HOST: ${{ (github.event_name == 'push' || github.head_ref == 'claude/ci-smoke-deployed-image') && 'blot.im' || 'localhost' }}
+  BLOT_HOST: ${{ github.event_name == 'push' && 'blot.im' || 'localhost' }}
   BLOT_REPO: ${{ github.workspace }}
   # Skip the BunnyCDN edge-IP fetch so image builds stay hermetic. Local and
   # deploy generates still fetch by default (see proxy/build/index.js).
   FETCH_CDN_IPS: "false"
-  # TEMPORARY: also on this PR's branch, to test the master path before merge
-  E2E_UNIT: ${{ github.event_name == 'push' || github.head_ref == 'claude/ci-smoke-deployed-image' }}
-  E2E_COMPOSE_FILE: ${{ (github.event_name == 'push' || github.head_ref == 'claude/ci-smoke-deployed-image') && 'proxy/e2e/docker-compose.unit.yml' || 'proxy/e2e/docker-compose.yml' }}
+  E2E_UNIT: ${{ github.event_name == 'push' }}
+  E2E_COMPOSE_FILE: ${{ github.event_name == 'push' && 'proxy/e2e/docker-compose.unit.yml' || 'proxy/e2e/docker-compose.yml' }}
 
 # Superseded PR pushes are cancelled; each master push keeps its own run
 concurrency:
