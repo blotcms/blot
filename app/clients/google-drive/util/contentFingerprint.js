@@ -15,9 +15,9 @@ module.exports = function contentFingerprint(stat) {
 // Records already in Redis hold the old dev:ino:size:mtimeNs:ctimeNs form.
 // Treating those as mismatches would re-download every file of every Drive
 // blog, so an old-form record matches when its size and mtime still match;
-// it is rewritten in the new form the next time its file is confirmed or
-// downloaded. Falsy values never match. Drop the old-form branch once
-// #2258's index replaces the fingerprint.
+// it is rewritten in the new form when its file is next downloaded. Falsy
+// values never match. Drop the old-form branch once #2258's index replaces
+// the fingerprint.
 module.exports.sameFingerprint = function sameFingerprint(stored, current) {
   if (!stored || !current) return false;
   if (stored === current) return true;
