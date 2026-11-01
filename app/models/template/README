@@ -221,7 +221,7 @@ Reads all template subdirectories under the blog's `templates/` or `Templates/` 
 ```js
 readFromFolder(blogID, dir, callback)
 ```
-Syncs a single on-disk template directory to Redis. Creates the template if absent, parses `package.json`, removes views for deleted files, and calls `setView` for each file. If `package.json` sets `enabled: true`, installs the template as the blog's active template.
+Syncs a single template directory in the blog's folder (`dir`, e.g. `/Templates/blog`) to Redis. Creates the template if absent, parses `package.json`, removes views for deleted files, and calls `setView` for each file. If `package.json` sets `enabled: true`, installs the template as the blog's active template.
 
 ```js
 writeToFolder(blogID, templateID, callback)
@@ -333,7 +333,7 @@ Every folder path a template's manifest looked at - including files that don't e
 | `models/entry` | Fetching entry HTML for path-referenced partials in `getPartials` |
 | `helper/ensure` | Runtime type and schema validation |
 | `helper/makeSlug` | Slug generation for template IDs |
-| `helper/localPath` | Resolving absolute paths in the blog's local file system |
+| `storage/folder` | Reading and writing the blog's folder |
 | `helper/hash` | Content hashing for CDN manifest entries |
 | `helper/minify` | CSS and JS minification for CDN assets |
 | `helper/purgeCdnUrls` | Purging stale CDN cache entries |

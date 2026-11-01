@@ -1,13 +1,15 @@
-var localPath = require("helper/localPath");
-var fs = require("fs-extra");
+var folder = require("storage/folder");
+var callbackify = require("util").callbackify;
 
 function determineTemplateFolder(blogID, callback) {
-  var root = localPath(blogID, "/");
-
-  fs.readdir(root, function (err, entries) {
-    if (err || !Array.isArray(entries)) {
+  callbackify(folder.listAll)(blogID, "/", function (err, listing) {
+    if (err || !Array.isArray(listing)) {
       return callback(null, "Templates");
     }
+
+    var entries = listing.map(function (entry) {
+      return entry.name;
+    });
 
     if (entries.indexOf("Templates") > -1) return callback(null, "Templates");
     if (entries.indexOf("templates") > -1) return callback(null, "templates");

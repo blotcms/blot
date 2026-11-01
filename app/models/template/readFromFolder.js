@@ -1,4 +1,5 @@
-var fs = require("fs-extra");
+var folder = require("storage/folder");
+var callbackify = require("util").callbackify;
 var basename = require("path").basename;
 var getMetadata = require("./getMetadata");
 var setMetadata = require("./setMetadata");
@@ -18,12 +19,17 @@ const create = require("./create");
 const improveJSONErrorMessage = require("./util/improveJSONErrorMessage");
 const improveMustacheErrorMessage = require("./util/improveMustacheErrorMessage");
 
+// dir is the template's directory in the blog's folder, e.g. "/Templates/blog"
 module.exports = function readFromFolder (blogID, dir, callback) {
   // check the directory exists
-  fs.readdir(dir, function (err, contents) {
+  callbackify(folder.listAll)(blogID, dir, function (err, entries) {
     if (err) return callback(err);
 
-    if (!contents || !contents.length)
+    var contents = entries.map(function (entry) {
+      return entry.name;
+    });
+
+    if (!contents.length)
       return callback(new Error("No files found in " + dir));
 
     var id = makeID(blogID, basename(dir));
@@ -42,7 +48,7 @@ module.exports = function readFromFolder (blogID, dir, callback) {
     });
 
     function readTemplate () {
-      loadPackage(id, dir, function (err, views, enabled) {
+      loadPackage(blogID, id, dir, function (err, views, enabled) {
         const errors = {};
 
         if (err) {
@@ -60,13 +66,15 @@ module.exports = function readFromFolder (blogID, dir, callback) {
               // Skip ignored files or Package.json or dotfiles
               if (name === PACKAGE || shouldIgnoreFile(name) || name.startsWith('.')) return next();
 
-              fs.stat(dir + "/" + name, function (err, stat) {
+              callbackify(folder.stat)(blogID, dir + "/" + name, function (err, stat) {
                 // Skip folders, or files which are too large
-                if (err || !stat || stat.size > MAX_SIZE || stat.isDirectory())
+                if (err || !stat || stat.size > MAX_SIZE || stat.isDirectory)
                   return next();
 
-                fs.readFile(dir + "/" + name, "utf-8", function (err, content) {
+                callbackify(folder.read)(blogID, dir + "/" + name, function (err, buffer) {
                   if (err) return next();
+
+                  var content = buffer.toString("utf-8");
 
                   // We look up this view file to merge any existing properties
                   // Should this really be handled by setView? It looks like
@@ -133,8 +141,8 @@ module.exports = function readFromFolder (blogID, dir, callback) {
   });
 };
 
-function loadPackage (id, dir, callback) {
-  fs.readFile(dir + "/" + PACKAGE, "utf-8", function (err, contents) {
+function loadPackage (blogID, id, dir, callback) {
+  callbackify(folder.read)(blogID, dir + "/" + PACKAGE, function (err, buffer) {
     // Package.json is optional
     if (err && err.code === "ENOENT") {
       return callback(null, {});
@@ -143,6 +151,8 @@ function loadPackage (id, dir, callback) {
     if (err) {
       return callback(new Error("Invalid package.json file: " + err.code));
     }
+
+    var contents = buffer.toString("utf-8");
 
     try {
       const metadata = JSON.parse(contents);

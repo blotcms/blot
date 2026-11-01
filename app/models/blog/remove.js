@@ -1,7 +1,8 @@
 var async = require("async");
 var client = require("models/client");
 var config = require("config");
-var fs = require("fs-extra");
+var folder = require("storage/folder");
+var callbackify = require("util").callbackify;
 var assets = require("storage/assets");
 var get = require("./get");
 var set = require("./set");
@@ -54,11 +55,15 @@ function wipeFolders(blog, callback) {
   if (!blog.id || typeof blog.id !== "string")
     return callback(new Error("Invalid blog id"));
 
-  var blogFolder = config.blog_folder_dir + "/" + blog.id;
-
+  // removeAll only ever deletes the one folder named for the blog (blog IDs
+  // must be a single path segment), never anything above or beside it
   async.parallel(
     [
-      safelyRemove.bind(null, blogFolder, config.blog_folder_dir),
+      function (callback) {
+        callbackify(folder.removeAll)(blog.id, function (err) {
+          callback(err);
+        });
+      },
       function (callback) {
         assets.removeAll(blog.id).then(function () {
           callback();
@@ -69,30 +74,6 @@ function wipeFolders(blog, callback) {
       callback(err);
     }
   );
-
-  // This could get messy if the blog.id is an empty
-  // string or if it somehow resolves to the blog folder
-  // so we do a few more steps to ensure we're only ever deleting
-  // a folder inside the particular directory and nothing else
-  function safelyRemove(folder, root, callback) {
-    fs.realpath(folder, function (err, realpathToFolder) {
-      // This folder does not exist, so no need to do anything
-      if (err && err.code === "ENOENT") return callback();
-
-      if (err) return callback(err);
-
-      fs.realpath(root, function (err, realpathToRoot) {
-        if (err) return callback(err);
-
-        if (realpathToFolder.indexOf(realpathToRoot + "/") !== 0)
-          return callback(
-            new Error("Could not safely remove directory:" + folder)
-          );
-
-        fs.remove(realpathToFolder, callback);
-      });
-    });
-  }
 }
 
 function deleteKeys(blog, callback) {
