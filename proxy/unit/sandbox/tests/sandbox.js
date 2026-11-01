@@ -269,6 +269,8 @@ test("broker: at most maxRunning jails at once, then a queue, then busy", async 
   });
 });
 
+const line = (name) => JSON.stringify({ job: name }) + "\n";
+
 test("broker: a job with its own maxRunning waits for that, and doesn't hold up others", async () => {
   const jobs = {
     ...JOBS(),
@@ -276,13 +278,13 @@ test("broker: a job with its own maxRunning waits for that, and doesn't hold up 
   };
   const { script, release } = hold();
   await withBroker({ jobs, maxRunning: 4, script }, async (socket, broker) => {
-    const first = request(socket, { job: "only" }, "");
+    const first = request(socket, line("only"), "");
     await until(() => broker.running.size === 1);
-    const second = request(socket, { job: "only" }, "");
+    const second = request(socket, line("only"), "");
     await until(() => broker.queue.length === 1);
     assert.strictEqual(broker.running.size, 1);
 
-    const other = request(socket, { job: "echo" }, "");
+    const other = request(socket, job, "");
     await until(() => broker.running.size === 2);
     assert.strictEqual(broker.queue.length, 1);
 
@@ -299,7 +301,7 @@ test("broker: what a job leaves in its cgroup is cleared when it ends, and faili
   await withBroker(
     { jobs, clearCgroup: (directory) => cleared.push(directory) },
     async (socket) => {
-      const { header } = await request(socket, { job: "echo" }, "x");
+      const { header } = await request(socket, job, "x");
       assert.strictEqual(header.ok, true);
     }
   );
@@ -313,7 +315,7 @@ test("broker: what a job leaves in its cgroup is cleared when it ends, and faili
       },
     },
     async (socket) => {
-      const { header } = await request(socket, { job: "echo" }, "x");
+      const { header } = await request(socket, job, "x");
       assert.strictEqual(header.ok, true);
     }
   );
