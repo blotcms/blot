@@ -97,7 +97,9 @@ check "the sandbox cgroup service runs the script before docker, and the script 
   grep -qx "ExecStart=$s" $u && [ -x $s ] && sh -n $s &&
   grep -qF "echo 512M > \"\$dir/memory.max\"" $s && grep -qF "echo 0 > \"\$dir/memory.swap.max\"" $s &&
   grep -qF "echo 256 > \"\$dir/pids.max\"" $s && grep -qF "echo 25 > \"\$dir/cpu.weight\"" $s &&
-  grep -qF "controllers=\"+memory +pids +cpu\"" $s'
+  grep -qF "controllers=\"+memory +pids +cpu\"" $s &&
+  grep -qF "dir=\$tree/\$unit-browser" $s && grep -qF "echo 1G > \"\$dir/memory.max\"" $s &&
+  grep -qF "echo 1 > \"\$dir/memory.oom.group\"" $s'
 check "sysctl file" in_ct 'grep -qx "net.ipv4.tcp_migrate_req = 1" /etc/sysctl.d/91-blot-host.conf'
 check "the deploy rsyslog rule lets lines through to /var/log/secure" in_ct '! grep -q "^& stop" /etc/rsyslog.d/30-deploy-user.conf'
 check "sshd -t passes with the port drop-in" in_ct 'sshd -t && sshd -T | grep -qx "port 2222"'

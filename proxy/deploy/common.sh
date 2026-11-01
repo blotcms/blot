@@ -219,7 +219,10 @@ load_unit_settings() {
     [ -d "$d" ] || die "$d does not exist on this host (a unit mounts it)"
   done
   if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX)" = 1 ]; then
-    for d in $UNITS; do require_sandbox_cgroup "$d"; done
+    for d in $UNITS; do
+      require_sandbox_cgroup "$d"
+      [ "$(env_value "$ENV_FILE" BLOT_SANDBOX_BROWSER)" != 1 ] || require_sandbox_cgroup "$d-browser"
+    done
   fi
   # the longer of the two defaults: Node has to start as well
   HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-180}"
@@ -322,6 +325,8 @@ sync_static() { # sync_static <image>
 #     Docker's default plus five syscalls, and a cgroup subtree the host
 #     made for this unit (config/host/host/setup.sh). Without it, none of them;
 #     load_unit_settings has already refused if the subtree is missing.
+#   - with BLOT_SANDBOX_BROWSER=1 as well, what the browser jail needs: /dev/net/tun
+#     for pasta, and the unit's browser cgroup
 # The env files: secrets.env (what Node gets), then proxy.env,
 # then the -e settings below, each overriding the one before; load_unit_settings
 # refuses a key the two files set differently.
@@ -382,6 +387,12 @@ run_args() { # run_args <name>
       --mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit,target=/sandbox-cgroup"
       -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock
     )
+    if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX_BROWSER)" = 1 ]; then
+      RUN_ARGS+=(
+        --device /dev/net/tun
+        --mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit-browser,target=/sandbox-browser-cgroup"
+      )
+    fi
   fi
 }
 

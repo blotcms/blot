@@ -70,6 +70,8 @@ done
 for unit in blue green; do
   dir="$CGROUP_ROOT/blot-sandbox/$unit"
   [ -r "$dir/memory.stat" ] && targets="$targets blot-sandbox-$unit=$dir"
+  dir="$CGROUP_ROOT/blot-sandbox/$unit-browser"
+  [ -r "$dir/memory.stat" ] && targets="$targets blot-sandbox-$unit-browser=$dir"
 done
 
 # Prints the VmRSS of a pid in bytes; nothing if it has gone.

@@ -48,8 +48,9 @@ samples 15 seconds apart. Per sample there is one line per container
 biggest node process) and `top=comm:bytes` (the biggest non-node process, i.e. a
 pandoc/git/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), and
 one `name=host` line with `mem_available`. Where the host has a sandbox subtree
-(#2257) there is also a `name=blot-sandbox-<unit>` line: jobs last under a
-second, so read its `peak` and `oom_kill`.
+(#2257) there are also `name=blot-sandbox-<unit>` and
+`name=blot-sandbox-<unit>-browser` lines: jobs are short, so read their `peak`
+and `oom_kill`.
 `anon+shmem` is the memory that can't be reclaimed; the cgroup limit also counts
 page cache. Summarise it with:
 
@@ -145,7 +146,10 @@ upgrades a package. It:
   `/sys/fs/cgroup/blot-sandbox/{blue,green}` for the units' nsjail sandbox
   (`app/sandbox`). Each is capped at 512M of memory (no swap), 256 pids and a
   `cpu.weight` of 25. Nothing uses them until `BLOT_SANDBOX=1` is set in the
-  proxy env file (`proxy/deploy/proxy.env.example`);
+  proxy env file (`proxy/deploy/proxy.env.example`). It also makes
+  `{blue,green}-browser` for the browser job, one Chromium at a time, capped at
+  1G (no swap, the whole job killed at the limit), 512 pids, a `cpu.weight` of
+  25 and 1.5 CPUs. Those wait for `BLOT_SANDBOX_BROWSER=1`;
 - creates the `deploy` user (`scripts/deploy/setup-deploy-user.sh`);
 - with `BLOT_SSH_PORT`, sets sshd's port in `/etc/ssh/sshd_config.d/11-blot-port.conf`
   (sshd then listens on that port only);
