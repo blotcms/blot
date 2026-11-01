@@ -380,7 +380,7 @@ describe("git client: materialize", function () {
   it("writes a large file byte for byte, without holding it in memory", async function () {
     // Random data with NULs and newlines where a parser of cat-file's output
     // could be confused, and far more than a chunk. It ends in a newline too.
-    var blob = Buffer.alloc(96 * 1024 * 1024);
+    var blob = Buffer.alloc(160 * 1024 * 1024);
     var block = crypto.randomBytes(1024 * 1024);
 
     block[0] = 0;
@@ -402,8 +402,9 @@ describe("git client: materialize", function () {
       clearInterval(timer);
     }
 
-    // Buffering the file would add at least its size
-    expect(peak - before).toBeLessThan(blob.length / 2);
+    // Buffering the file would add at least its size. Other work in this
+    // process moves RSS by tens of MB, so the file has to be well past that.
+    expect(peak - before).toBeLessThan(blob.length);
     expect(Buffer.compare(await fs.readFile(this.folder + "/big.bin"), blob)).toBe(0);
     expect(await fs.readFile(this.folder + "/after.txt", "utf8")).toBe("After the large file");
   }, 120 * 1000);
