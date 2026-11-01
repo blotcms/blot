@@ -56,6 +56,8 @@ describe("git client: materialize", function () {
         }
       );
 
+      // git may exit without reading its input
+      child.stdin.on("error", function () {});
       child.stdin.end(input);
     });
   }
