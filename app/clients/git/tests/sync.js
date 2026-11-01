@@ -33,6 +33,24 @@ describe("git client sync", function () {
     expect(await helpers.blogFile(this, path)).toEqual(Buffer.from(text));
   });
 
+  it("syncs a push when the response never reports finish", async function () {
+    var http = require("http");
+    var emit = http.ServerResponse.prototype.emit;
+    var path = helpers.randomPath(this.fake);
+    var text = content(this);
+
+    // What a client which hangs up on reading the push's result looks like
+    spyOn(http.ServerResponse.prototype, "emit").and.callFake(function (event) {
+      var isPush = this.req && /git-receive-pack$/.test(this.req.url);
+      if (event === "finish" && isPush) return false;
+      return emit.apply(this, arguments);
+    });
+
+    await this.local.writeAndPush(path, text);
+
+    expect(await helpers.blogFile(this, path)).toEqual(Buffer.from(text));
+  });
+
   it("handles updates to a file", async function () {
     var path = helpers.randomPath(this.fake);
     var changed = content(this) + "\nAn extra line";
