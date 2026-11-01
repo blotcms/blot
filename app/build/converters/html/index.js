@@ -1,11 +1,13 @@
-var fs = require("fs");
+var folder = require("storage/folder");
+var callbackify = require("util").callbackify;
 var ensure = require("helper/ensure");
-var LocalPath = require("helper/localPath");
 var extname = require("path").extname;
 var cheerio = require("cheerio");
 var Metadata = require("build/metadata");
 var normalizeLiteralDollarMath = require("build/math/normalizeLiteralDollars").normalizeLiteralDollarMath;
 var postSourceSize = require("build/converters/post-source-size");
+var folderStat = callbackify(require("build/converters/folderStat"));
+var readFile = callbackify(folder.read);
 
 function is(path) {
   return [".html", ".htm"].indexOf(extname(path).toLowerCase()) > -1;
@@ -16,15 +18,15 @@ function read(blog, path, callback) {
     .and(path, "string")
     .and(callback, "function");
 
-  var localPath = LocalPath(blog.id, path);
-
-  fs.stat(localPath, function (err, stat) {
+  folderStat(blog.id, path, function (err, stat) {
     if (err) return callback(err);
     if (stat.size > postSourceSize.HTML.bytes)
       return callback(postSourceSize.tooLargeError(postSourceSize.HTML));
 
-    fs.readFile(localPath, "utf-8", function (err, contents) {
+    readFile(blog.id, path, function (err, buffer) {
       if (err) return callback(err);
+
+      var contents = buffer.toString("utf-8");
 
       // Metadata must be extracted from the source, rather than from Cheerio's
       // serialization. In particular, serialization can encode characters in

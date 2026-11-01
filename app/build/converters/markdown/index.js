@@ -1,6 +1,6 @@
-var fs = require("fs");
+var folder = require("storage/folder");
+var callbackify = require("util").callbackify;
 var ensure = require("helper/ensure");
-var LocalPath = require("helper/localPath");
 var time = require("helper/time");
 var extname = require("path").extname;
 
@@ -11,6 +11,8 @@ var yaml = require("yaml");
 var extractBibAndCSL = require("./extractBibAndCSL");
 var linebreaks = require("./linebreaks");
 var postSourceSize = require("build/converters/post-source-size");
+var folderStat = callbackify(require("build/converters/folderStat"));
+var readFile = callbackify(folder.read);
 
 function is (path) {
   return (
@@ -24,11 +26,9 @@ function read (blog, path, callback) {
     .and(path, "string")
     .and(callback, "function");
 
-  var localPath = LocalPath(blog.id, path);
-
   time("stat");
 
-  fs.stat(localPath, function (err, stat) {
+  folderStat(blog.id, path, function (err, stat) {
     time.end("stat");
 
     if (err) return callback(err);
@@ -37,10 +37,12 @@ function read (blog, path, callback) {
 
     time("readFile");
 
-    fs.readFile(localPath, "utf-8", function (err, text) {
+    readFile(blog.id, path, function (err, buffer) {
       time.end("readFile");
 
       if (err) return callback(err);
+
+      var text = buffer.toString("utf-8");
 
       // Normalize newlines. Windows does \r\n
       // Some strange text editor does \r\r.

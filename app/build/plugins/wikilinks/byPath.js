@@ -1,9 +1,14 @@
-const caseSensitivePath = require("helper/caseSensitivePath");
-const { join, resolve, basename, dirname } = require("path");
-const localPath = require("helper/localPath");
+const folder = require("storage/folder");
+const { callbackify } = require("util");
+const {
+  join,
+  resolve,
+  basename,
+  dirname,
+  normalize: normalizePath,
+} = require("path");
 const makeSlug = require("helper/makeSlug");
 const { tryEach } = require("async");
-const fs = require("fs-extra");
 
 // We want to think about the specific kinds of wikilinks we want to
 // support here. The first should be a relative path, e.g.
@@ -29,7 +34,6 @@ const fs = require("fs-extra");
 // target: /Posts/target.txt
 
 module.exports = function byPath(blogID, pathOfPost, href, isLink, callback) {
-  const root = localPath(blogID, "/");
   const getEntry = require("models/entry").get;
 
   // if pathOfPost is '/Posts/foo.txt' then dirOfPost is '/Posts'
@@ -87,10 +91,8 @@ module.exports = function byPath(blogID, pathOfPost, href, isLink, callback) {
   }
 
   function caseInsensitive(blogID, path, done) {
-    caseSensitivePath(root, path, function (err, absolutePath) {
-      if (err || !absolutePath) return done(err || new Error("No path"));
-
-      const correctPath = join("/", absolutePath.slice(root.length));
+    resolveCase(blogID, path, function (err, correctPath) {
+      if (err || !correctPath) return done(err || new Error("No path"));
 
       getEntry(blogID, correctPath, (entry) => {
         if (!entry || !entry.url || entry.deleted)
@@ -105,18 +107,13 @@ module.exports = function byPath(blogID, pathOfPost, href, isLink, callback) {
     const dir = dirname(path);
     const base = basename(path);
 
-    caseSensitivePath(root, dir, function (err, absoluteDir) {
-      // doesn't work for the root blog folder
-      if (!absoluteDir && (dir === "/" || dir === ".")) {
-        err = null;
-        absoluteDir = localPath(blogID, "/");
-      }
+    resolveCase(blogID, dir, function (err, correctDir) {
+      if (err || !correctDir) return done(err || new Error("No dir"));
 
-      if (err || !absoluteDir) return done(err || new Error("No dir"));
-
-      fs.readdir(absoluteDir, function (err, contents) {
+      listNames(blogID, correctDir, function (err, entries) {
         if (err) return done(err);
-        const correctDir = join("/", absoluteDir.slice(root.length));
+
+        const contents = entries.map((entry) => entry.name);
 
         const perfectMatch = contents.find((item) => item.startsWith(base));
 
@@ -139,6 +136,20 @@ module.exports = function byPath(blogID, pathOfPost, href, isLink, callback) {
     callback(new Error("No entry found by path"));
   });
 };
+
+const listNames = callbackify(folder.listNames);
+
+// The stored spelling of a path, ignoring case. A relative path which climbs
+// out of the folder matches nothing, rather than being held inside it.
+const resolveCase = callbackify(async function (blogID, path) {
+  const normalized = normalizePath(path);
+
+  if (normalized === ".." || normalized.startsWith("../")) {
+    throw new Error("No path matches: " + path);
+  }
+
+  return folder.resolveCaseInsensitive(blogID, normalized);
+});
 
 function normalize(str) {
   return stripNonAlphaNumeric(makeSlug(str));

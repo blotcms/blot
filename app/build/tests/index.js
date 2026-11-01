@@ -510,6 +510,45 @@ describe("build", function () {
     var Entry = require("models/entry");
     var moment = require("moment");
 
+    // Builds a file already in the blog's folder, leaving its mtime alone
+    var buildExisting = (blog, path) =>
+      new Promise((resolve, reject) =>
+        build(blog, path, (err, entry) => (err ? reject(err) : resolve(entry)))
+      );
+
+    it("takes 'updated' from the file's mtime to the millisecond", async function () {
+      var path = "/updated-precise.txt";
+      var fullPath = this.blogDirectory + path;
+
+      fs.outputFileSync(fullPath, "Some content");
+      // Halfway between two milliseconds, which fs.Stats rounds
+      fs.utimesSync(fullPath, 1700000000.1235, 1700000000.1235);
+
+      var entry = await buildExisting(this.blog, path);
+
+      expect(entry.updated).toEqual(moment.utc(fs.statSync(fullPath).mtime).valueOf());
+    });
+
+    it("hashes the SHA-1 of the source's bytes, reading it once", async function () {
+      var crypto = require("crypto");
+      var path = "/hash-once.txt";
+      var fullPath = this.blogDirectory + path;
+      var contents = "Hash me";
+
+      fs.outputFileSync(fullPath, contents);
+
+      var read = spyOn(fs, "createReadStream").and.callThrough();
+      var entry = await buildExisting(this.blog, path);
+      var sourceHash = crypto.createHash("sha1").update(contents).digest("hex");
+
+      expect(entry.contentHash).toEqual(
+        crypto.createHash("sha1").update(path + ":" + sourceHash).digest("hex")
+      );
+      expect(
+        read.calls.allArgs().filter((args) => args[0] === fullPath).length
+      ).toEqual(1);
+    });
+
     it("keeps 'updated' unchanged when only the file's mtime changes", function (done) {
       var path = "/updated-mtime-only.txt";
       var blog = this.blog;

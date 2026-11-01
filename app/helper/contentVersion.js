@@ -1,6 +1,7 @@
 const fs = require("fs-extra");
 const crypto = require("crypto");
 const { promisify } = require("util");
+const folder = require("storage/folder");
 const hashFileAsync = promisify(require("./transformer/hash"));
 
 // Below this, read the whole file into memory and hash it synchronously
@@ -23,18 +24,38 @@ const MAX_CONTENT_HASH_SIZE = 5 * 1024 * 1024;
 // Returns an 8-character hex digest identifying a file's contents, given
 // its path and an already-fetched fs.Stats. Used to build CDN version
 // tokens that only change when a file's content changes.
-module.exports = async function contentVersion(filePath, stat) {
+module.exports = function contentVersion(filePath, stat) {
+  return version(
+    stat,
+    () => fs.readFile(filePath),
+    () => hashFileAsync(filePath)
+  );
+};
+
+// The same token for a file in a blog's folder, given its storage/folder
+// stat: the file is only read when it is under the size cap, and only
+// materialised locally when it is too big to read whole.
+module.exports.fromFolder = function fromFolder(blogID, path, stat) {
+  return version(
+    { size: stat.size, mtimeMs: stat.modified },
+    () => folder.read(blogID, path),
+    async () => hashFileAsync(await folder.ensureLocal(blogID, path))
+  );
+};
+
+// read resolves to the file's bytes, hash to its SHA-1 as hex
+async function version(stat, read, hash) {
   if (stat.size > MAX_CONTENT_HASH_SIZE) {
     return statToken(stat);
   }
 
   try {
     if (stat.size <= SMALL_FILE_HASH_SIZE) {
-      const buffer = await fs.readFile(filePath);
+      const buffer = await read();
       return crypto.createHash("sha1").update(buffer).digest("hex").slice(0, 8);
     }
 
-    const digest = await hashFileAsync(filePath);
+    const digest = await hash();
     return digest.slice(0, 8);
   } catch (err) {
     // The file existed a moment ago (the caller already stat'd it) but

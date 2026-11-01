@@ -516,8 +516,10 @@ What it does not do yet:
 - Call sites move onto it one area at a time (issue #2258, Phase B). The
   request-time readers have (`blog/routes/assets.js`, the CDN's
   `/folder/v-` route and `retrieve/folder.js`), and so has the dashboard
-  (`dashboard/site/folder`, upload, download and export);
-  `helper/localPath` and `blog_folder_dir` are still used directly
+  (`dashboard/site/folder`, upload, download and export), and so has the
+  build (`build/` with its converters and wikilinks, `folderAssets`,
+  `helper/transformer`, and `helper/contentVersion.fromFolder` for the
+  folder-link version tokens); `helper/localPath` and `blog_folder_dir` are still used directly
   everywhere else.
 - There is no S3 backend, no Redis index and no content cache. `stat` with
   `{ hash: true }` reads the whole file here; on S3 the hash comes from the

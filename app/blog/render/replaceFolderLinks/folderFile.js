@@ -1,8 +1,5 @@
-const fs = require("fs-extra");
-const { join } = require("path");
-const { promisify } = require("util");
+const folder = require("storage/folder");
 const contentVersion = require("helper/contentVersion");
-const caseSensitivePath = promisify(require("helper/caseSensitivePath"));
 const BLOT_CDN_TOKEN = require("./cdnToken");
 const { encodeFolderPath } = require("./shared");
 
@@ -19,33 +16,30 @@ const { encodeFolderPath } = require("./shared");
 // content-derived ETag for free on every PUT. Until storage reads switch
 // over, local disk pays the cost of hashing on each build (contentVersion
 // falls back to a size+mtime token above its size cap instead).
-async function hashFolderFile(blogFolder, path) {
+async function hashFolderFile(blogID, path) {
   let stat, resolvedPath;
 
   try {
-    ({ stat, path: resolvedPath } = await getStat(blogFolder, path));
+    ({ stat, path: resolvedPath } = await getStat(blogID, path));
   } catch (err) {
     return null;
   }
 
   return {
     path: resolvedPath,
-    version: await contentVersion(join(blogFolder, resolvedPath), stat),
+    version: await contentVersion.fromFolder(blogID, resolvedPath, stat),
   };
 }
 
-async function getStat(blogFolder, path) {
-  const filePath = join(blogFolder, path);
-
+async function getStat(blogID, path) {
   try {
-    const stat = await fs.stat(filePath);
+    const stat = await folder.stat(blogID, path);
     return { stat, path };
   } catch (e) {}
 
-  const resolvedPath = await caseSensitivePath(blogFolder, path);
-  const resolvedRelativePath = resolvedPath.slice(blogFolder.length);
-  const stat = await fs.stat(resolvedPath);
-  return { stat, path: resolvedRelativePath };
+  const resolvedPath = await folder.resolveCaseInsensitive(blogID, path);
+  const stat = await folder.stat(blogID, resolvedPath);
+  return { stat, path: resolvedPath };
 }
 
 // path is the decoded path on disk, percent-encoded here (see
