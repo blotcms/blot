@@ -1,8 +1,15 @@
 describe("git client's git wrapper", function () {
   var fs = require("fs-extra");
   var Git = require("clients/git/git");
+  var os = require("os");
 
-  global.test.tmp();
+  beforeEach(async function () {
+    this.tmp = await fs.mkdtemp(os.tmpdir() + "/git-wrapper-");
+  });
+
+  afterEach(async function () {
+    await fs.remove(this.tmp);
+  });
 
   var identity = ["-c", "user.name=Test", "-c", "user.email=test@example.com"];
 
