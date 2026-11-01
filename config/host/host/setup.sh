@@ -179,8 +179,9 @@ WantedBy=multi-user.target
 EOF2
 sd daemon-reload
 sd enable blot-sandbox-cgroup.service
-# started again on a re-run, so a changed limit is applied; it only writes files
-sd restart blot-sandbox-cgroup.service
+# started again on a re-run, so a changed limit is applied; it only writes files.
+# Not fatal: nothing needs it until BLOT_SANDBOX=1, and the deploy refuses then
+sd restart blot-sandbox-cgroup.service || echo "    WARNING: blot-sandbox-cgroup.service failed"
 
 say "Deploy user"
 # With a key the script rewrites authorized_keys only if the key is missing;
