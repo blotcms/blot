@@ -17,6 +17,19 @@
 #   release-old <id>           unmount the old volume from the host, no reboot
 #   grow-fs <size-bytes>       xfs_growfs after an online EBS grow
 #
+# A move to another host (resize.sh move) uses the same copy and freeze
+# subcommands with the target's data directory as the destination, and these:
+#
+#   adopt <volume-id> [old-id] on the NEW host: stage a volume made from a snapshot and
+#                              put its own ID in its marker (never formats)
+#   prewarm <volume-id>        on the NEW host: read the whole device once, in the background
+#   authorize-key <ip> <type> <key>   on the NEW host: let the source's move key in
+#   deauthorize-key            on the NEW host: take it out again
+#   move-prepare <ip> <port> <volume-id> <host-key> [existing]
+#                              on the SOURCE: make the move key and record the move
+#   move-status                on the SOURCE: the move's state, and what the target says
+#   move-done                  on the SOURCE: after the switch, forget the target and the key
+#
 # Every subcommand prints key=value lines on stdout (resize.sh parses them with
 # field(), like config/redis/promote.sh's gather) and anything else on stderr.
 # A non-zero exit is a failure. --dry-run runs the checks that only read and
@@ -39,6 +52,12 @@ STATE=/etc/blot/data-volume-resize.state
 # systemd host.
 STAGING=/mnt/blot-data-staging
 NEW_MNT=$STAGING/new
+# A move to another host: the source's key for the target, and the target's host
+# key. resize.sh move prepare creates them, move retag removes them.
+MOVE_KEY=/etc/blot/data-move-key
+MOVE_KNOWN_HOSTS=/etc/blot/data-move-known-hosts
+MOVE_KEY_COMMENT=blot-data-move
+PREWARM_UNIT=blot-data-prewarm
 MARKER=.blot-data-volume
 LINK_PREFIX=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_vol
 UNIT_PREFIX=blot-data-copy-
@@ -49,6 +68,8 @@ MOUNT_SCRIPT=/home/ec2-user/scripts/mount-data-volume.sh
 # The top-level directories whose children are copied by separate rsyncs in the
 # frozen pass (final-copy). Everything else at the top level is one rsync.
 SHARD_PARENTS=${SHARD_PARENTS:-"static blogs git"}
+# For a move all the frozen rsyncs share one ssh connection, and sshd allows 10
+# sessions per connection by default, so this has to stay below 10.
 FINAL_COPY_JOBS=${FINAL_COPY_JOBS:-8}
 
 DRY_RUN=""
@@ -64,9 +85,10 @@ plan() { echo "would: $*"; }
 # propagates deletions, so a blog deleted between passes is gone from the new
 # volume too (without it the new volume would only ever grow). Not
 # --delete-excluded: what is excluded below is simply never copied, and
-# anything already there is none of rsync's business. Not --inplace: it cannot
-# be combined with -S, and sparse files must stay sparse or the used size
-# would balloon on a smaller volume.
+# anything already there is none of rsync's business. That matters most for a
+# move: the target's own marker and its logs/ and tmp/ must survive every pass.
+# Not --inplace: it cannot be combined with -S, and sparse files must stay
+# sparse or the used size would balloon on a smaller volume.
 #
 # The contents of logs/ and tmp/ are skipped (the directories are kept: cron
 # appends to logs/expiring-certs.log; the app's own tmp is on the instance
@@ -80,6 +102,7 @@ RSYNC_EXCLUDES=('--exclude=/.blot-data-volume' '--exclude=/logs/*' '--exclude=/t
 ##########################################################
 
 is_volume_id() { [[ "${1:-}" =~ ^vol-[0-9a-f]{8,17}$ ]]; }
+is_ip() { local re='^[0-9]+(\.[0-9]+){3}$'; [[ "${1:-}" =~ $re ]]; }
 valid_volume() { is_volume_id "${1:-}" || die "not a volume ID: '${1:-}'"; }
 volume_link() { echo "${LINK_PREFIX}${1#vol-}"; }
 current_volume() { tr -d '[:space:]' < "$ID_FILE" 2> /dev/null || true; }
@@ -174,15 +197,20 @@ containers() { command -v docker > /dev/null && docker ps --format '{{.Names}}' 
 
 state_get() { awk -F= -v k="$1" '$1 == k {print substr($0, length(k) + 2)}' "$STATE" 2> /dev/null || true; }
 # Written to a temp file and renamed so a crash never leaves half a file.
+# A move adds a target line (<user>@<ip>:<port>, where the data goes) and, when the
+# target already had its volume, existing=yes. A shrink writes neither.
 state_write() {
   mkdir -p "$(dirname "$STATE")"
   printf 'old_volume=%s\nnew_volume=%s\nphase=%s\n' "$1" "$2" "$3" > "$STATE.tmp"
+  [ -z "${4:-}" ] || printf 'target=%s\n' "$4" >> "$STATE.tmp"
+  [ -z "${5:-}" ] || printf 'existing=%s\n' "$5" >> "$STATE.tmp"
   mv "$STATE.tmp" "$STATE"
 }
 have() { command -v "$1" > /dev/null; }
 # phase_in <phase>...: is the recorded phase one of these?
 phase_in() { local p x; p=$(state_get phase); for x in "$@"; do [ "$p" != "$x" ] || return 0; done; return 1; }
-set_phase() { state_write "$(state_get old_volume)" "$(state_get new_volume)" "$1"; }
+set_phase() { state_write "$(state_get old_volume)" "$(state_get new_volume)" "$1" "$(state_get target)" "$(state_get existing)"; }
+is_move() { [ -n "$(state_get target)" ]; }
 
 # One run at a time that touches the data or the staging mount. The lock file
 # descriptor is inherited by the rsyncs, so an orphaned rsync keeps the lock
@@ -203,7 +231,58 @@ precondition() {
   if [ -n "$DRY_RUN" ]; then echo "note: a real run would stop here: $msg" >&2; else die "$msg"; fi
 }
 
-stop_rsyncs() { pkill -TERM -f "rsync .*$NEW_MNT" || true; }
+# Where a copy writes and how it gets there. A shrink writes to the staging
+# mount. A move writes over ssh to the target's data directory, with the key
+# move-prepare made, as ec2-user and `sudo rsync` on the other side (root login
+# is off, and files must keep their owners). Sets COPY_DEST (ends in a slash),
+# XFER_HOST, XFER_SSH (the ssh command, also used for rsync -e) and XFER_RSYNC;
+# the last three are empty for a shrink. Exported for the xargs children.
+#
+# The host key is checked against the one resize.sh read from the target over
+# its own ssh (move-prepare), not accepted on first use: Amazon Linux 2's ssh
+# 7.4 has no StrictHostKeyChecking=accept-new anyway.
+set_dest() {
+  local t hostport ip port
+  t=$(state_get target)
+  if [ -z "$t" ]; then
+    COPY_DEST=$NEW_MNT/; XFER_HOST=""; XFER_SSH=""; XFER_RSYNC=""
+  else
+    hostport=${t#*@}; ip=${hostport%:*}; port=${hostport##*:}
+    COPY_DEST="${t%:*}:$DATA/"
+    XFER_HOST=${t%:*}
+    XFER_SSH="ssh -i $MOVE_KEY -p $port -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$MOVE_KNOWN_HOSTS -o HostKeyAlgorithms=ssh-ed25519 -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6"
+    XFER_RSYNC="sudo rsync"
+  fi
+  export COPY_DEST XFER_HOST XFER_SSH XFER_RSYNC
+}
+# xfer_opts: rsync's transport options in XFER, empty for a shrink. (Callers
+# expand it as ${XFER[@]+"${XFER[@]}"}: Amazon Linux 2's bash 4.2 fails on an
+# empty array under set -u.) Exported for the xargs children.
+xfer_opts() {
+  XFER=()
+  [ -z "${XFER_SSH:-}" ] || XFER=(-e "$XFER_SSH" --rsync-path="$XFER_RSYNC")
+}
+# tssh <command>: run a command on the move target over XFER_SSH (call set_dest first).
+tssh() { $XFER_SSH "$XFER_HOST" "$@"; }
+# on_target <subcommand> [args]: run one of THIS script's subcommands on the move
+# target, as root there, without it being installed: the script is sent on stdin
+# and run from a temp file (not `bash -s`: a command that reads stdin would eat
+# the rest of the script).
+on_target() {
+  set_dest
+  # shellcheck disable=SC2086
+  $XFER_SSH "$XFER_HOST" 'f=$(mktemp /tmp/blot-host.XXXXXX) && cat > "$f" && sudo bash "$f" '"$*"'; rc=$?; rm -f "$f"; exit $rc' < "${BASH_SOURCE[0]}"
+}
+
+# Kills the rsyncs of a shrink (they write to NEW_MNT) and of a move (they write
+# to the target's data directory).
+stop_rsyncs() {
+  pkill -TERM -f "rsync .*$NEW_MNT" || true
+  if is_move; then
+    set_dest
+    pkill -TERM -f "rsync .*$COPY_DEST" || true
+  fi
+}
 
 # sd <unit> <property>: one property of a systemd unit. systemd 219 (Amazon
 # Linux 2) has no "systemctl show --value".
@@ -224,6 +303,45 @@ copy_units() { systemctl list-units --all --plain --no-legend "${UNIT_PREFIX}*" 
 
 # facts
 ##########################################################
+
+# The port sshd listens on (the app host's is not 22).
+sshd_port() {
+  local p
+  p=$({ sshd -T 2> /dev/null || true; } | awk '$1 == "port" {print $2; exit}')
+  [ -n "$p" ] || p=$(awk '$1 == "Port" {print $2; exit}' /etc/ssh/sshd_config 2> /dev/null || true)
+  echo "${p:-22}"
+}
+
+# prewarm_report: the state of the pre-warm unit as key=value. A volume made from
+# a snapshot loads from S3 on first read, so one dd over the whole device
+# (started by prewarm) makes the first real read fast. The device is in the
+# unit's description; progress is the bytes dd has read so far.
+prewarm_report() {
+  local st pid dev size rchar="" pct="" start_us exit_us now dur=""
+  st=$(unit_state "$PREWARM_UNIT.service")
+  echo "prewarm=$st"
+  [ "$st" != none ] || return 0
+  dev=$(sd "$PREWARM_UNIT.service" Description)
+  dev=${dev##* of }
+  size=$(blockdev --getsize64 "$dev" 2> /dev/null || true)
+  if [ "$st" = ok ]; then
+    pct=100
+  elif [ "$st" = running ]; then
+    pid=$(sd "$PREWARM_UNIT.service" MainPID)
+    [ "${pid:-0}" -gt 0 ] && rchar=$(awk '$1 == "rchar:" {print $2}' "/proc/$pid/io" 2> /dev/null || true)
+    [ -z "$rchar" ] || [ -z "$size" ] || pct=$((rchar * 100 / size))
+  fi
+  echo "prewarm_percent=$pct"
+  start_us=$(sd "$PREWARM_UNIT.service" ExecMainStartTimestampMonotonic)
+  exit_us=$(sd "$PREWARM_UNIT.service" ExecMainExitTimestampMonotonic)
+  now=$(now_mono)
+  if [ "$st" = running ]; then
+    [ "${start_us:-0}" -gt 0 ] && dur=$((now - start_us / 1000000))
+  elif [ "${start_us:-0}" -gt 0 ] && [ "${exit_us:-0}" -gt 0 ]; then
+    dur=$(((exit_us - start_us) / 1000000))
+  fi
+  echo "prewarm_duration_s=$dur"
+}
 
 cmd_facts() {
   local token size used avail
@@ -262,6 +380,15 @@ cmd_facts() {
   echo "resize_phase=$(state_get phase)"
   echo "resize_old=$(state_get old_volume)"
   echo "resize_new=$(state_get new_volume)"
+  echo "resize_target=$(state_get target)"
+  echo "resize_existing=$(state_get existing)"
+  # For a move: what resize.sh needs to know about the host, whichever end it is.
+  echo "private_ip=$(imds local-ipv4)"
+  echo "ssh_port=$(sshd_port)"
+  echo "ssh_hostkey=$(awk '{print $2}' /etc/ssh/ssh_host_ed25519_key.pub 2> /dev/null || true)"
+  if [ -d /etc/blot ]; then echo etc_blot=yes; else echo etc_blot=no; fi
+  if [ -x "$MOUNT_SCRIPT" ]; then echo mount_script=yes; else echo mount_script=no; fi
+  prewarm_report
   echo "copy_labels=$(copy_units | sed "s/^$UNIT_PREFIX//; s/\.service$//" | tr '\n' ' ')"
   if command -v rsync > /dev/null; then echo rsync=yes; else echo rsync=no; fi
   if command -v mkfs.xfs > /dev/null && command -v xfs_growfs > /dev/null; then echo xfsprogs=yes; else echo xfsprogs=no; fi
@@ -278,6 +405,7 @@ cmd_prepare() {
   phase=$(state_get phase)
   case "$phase" in
     prepared | copied)
+      ! is_move || die "a move to $(state_get target) is in progress (state file $STATE); finish or abandon it first"
       [ "$(state_get new_volume)" = "$new" ] ||
         die "a resize to $(state_get new_volume) is already in progress (state file $STATE)"
       [ "$(state_get old_volume)" = "$cur" ] || die "$STATE says the old volume is $(state_get old_volume), the current one is $cur"
@@ -373,7 +501,7 @@ cmd_prepare() {
 
 # unit_report <label>: the state of a pass and its timing, as key=value.
 unit_report() {
-  local unit=${UNIT_PREFIX}$1.service st start_us exit_us now dur="" age=""
+  local unit=${UNIT_PREFIX}$1.service st start_us exit_us now dur="" age="" used=""
   st=$(unit_state "$unit")
   echo "unit=$unit"
   echo "state=$st"
@@ -395,15 +523,25 @@ unit_report() {
     echo "duration_s=$dur"
     echo "age_s=$age"
   fi
-  if mountpoint -q "$NEW_MNT"; then echo "new_used_bytes=$(df -B1 --output=used "$NEW_MNT" | tail -n 1 | tr -d ' ')"; fi
+  set_dest
+  if is_move; then
+    # (a failed ssh just leaves the number out)
+    used=$(tssh "df -B1 --output=used $DATA | tail -n 1 | tr -d ' '" 2> /dev/null < /dev/null || true)
+    [ -z "$used" ] || echo "new_used_bytes=$used"
+  elif mountpoint -q "$NEW_MNT"; then echo "new_used_bytes=$(df -B1 --output=used "$NEW_MNT" | tail -n 1 | tr -d ' ')"; fi
 }
 
 cmd_copy() {
   local label=${1:-} unit st other
   [[ "$label" =~ ^[a-z0-9]+$ ]] || die "pass label must be lowercase letters and digits"
   unit=${UNIT_PREFIX}$label.service
+  set_dest
   precondition "phase is '$(state_get phase)', not prepared (see $STATE)" [ "$(state_get phase)" = prepared ]
-  precondition "$NEW_MNT is not mounted: run prepare first" mountpoint -q "$NEW_MNT"
+  if is_move; then
+    precondition "$MOVE_KEY is missing: run move prepare first" [ -f "$MOVE_KEY" ]
+  else
+    precondition "$NEW_MNT is not mounted: run prepare first" mountpoint -q "$NEW_MNT"
+  fi
   precondition "rsync is not installed" have rsync
   st=$(unit_state "$unit")
   if [ "$st" = running ] || [ "$st" = ok ]; then unit_report "$label"; return 0; fi
@@ -411,9 +549,10 @@ cmd_copy() {
     [ "$other" = "$unit" ] || [ "$(unit_state "$other")" != running ] || die "$other is still running"
   done
   if [ -n "$DRY_RUN" ]; then
-    plan "systemd-run --unit=${unit%.service} --remain-after-exit --property=Nice=10 ionice -c 3 rsync (exit 24 counts as success) ${RSYNC_OPTS[*]} --stats ${RSYNC_EXCLUDES[*]} $DATA/ $NEW_MNT/"
+    plan "systemd-run --unit=${unit%.service} --remain-after-exit --property=Nice=10 ionice -c 3 rsync (exit 24 counts as success) ${RSYNC_OPTS[*]} --stats ${RSYNC_EXCLUDES[*]}${XFER_SSH:+ -e '$XFER_SSH' --rsync-path='$XFER_RSYNC'} $DATA/ $COPY_DEST"
     return 0
   fi
+  xfer_opts
   # A failed pass is retried by calling copy again with the same label.
   [ "$st" != failed ] || systemctl reset-failed "$unit"
   # A transient unit, so the copy survives the operator's ssh session (and
@@ -433,7 +572,7 @@ cmd_copy() {
     --description="Blot data volume copy ($label)" \
     --remain-after-exit --property=Nice=10 \
     ionice -c 3 bash -c 'rsync "$@"; rc=$?; [ "$rc" = 24 ] && rc=0; exit $rc' _ \
-    "${RSYNC_OPTS[@]}" --stats "${RSYNC_EXCLUDES[@]}" "$DATA/" "$NEW_MNT/" > /dev/null
+    "${RSYNC_OPTS[@]}" --stats "${RSYNC_EXCLUDES[@]}" ${XFER[@]+"${XFER[@]}"} "$DATA/" "$COPY_DEST" > /dev/null
   unit_report "$label"
 }
 
@@ -466,10 +605,16 @@ cmd_copy_status() { [[ "${1:-}" =~ ^[a-z0-9]+$ ]] || die "pass label must be low
 # change in this pass (-H only sees one shard); unchanged ones keep the links
 # the single-rsync live passes made.
 cmd_final_copy() {
-  local budget=${1:-0} ex p shards=0 start rc=0 wd="" i_old
+  local budget=${1:-0} ex p shards=0 start rc=0 wd="" i_old n_used n_inodes
+  set_dest
   precondition "rsync is not installed" have rsync
   precondition "phase is '$(state_get phase)', not prepared" phase_in prepared copied
-  precondition "$NEW_MNT is not mounted: run prepare first" mountpoint -q "$NEW_MNT"
+  if is_move; then
+    precondition "$MOVE_KEY is missing: run move prepare first" [ -f "$MOVE_KEY" ]
+    precondition "FINAL_COPY_JOBS is $FINAL_COPY_JOBS: it must stay below 10, sshd's default MaxSessions, since all the rsyncs share one ssh connection" [ "$FINAL_COPY_JOBS" -lt 10 ]
+  else
+    precondition "$NEW_MNT is not mounted: run prepare first" mountpoint -q "$NEW_MNT"
+  fi
   case ",$(data_mount OPTIONS)," in
     *,ro,*) ;;
     *) if [ -n "$DRY_RUN" ]; then echo "note: $DATA is not read-only (it will be by then)" >&2; else die "$DATA is not read-only: freeze-disk first"; fi ;;
@@ -482,15 +627,25 @@ cmd_final_copy() {
     for p in $SHARD_PARENTS; do
       [ -d "$DATA/$p" ] && shards=$((shards + $(find "$DATA/$p" -mindepth 1 -maxdepth 1 -type d | wc -l)))
     done
-    plan "rsync ${RSYNC_OPTS[*]} ${ex[*]} $DATA/ $NEW_MNT/"
+    if is_move; then plan "open one ssh connection to $XFER_HOST (ssh -M -N -f -S) for every rsync below to reuse, and close it at the end"; fi
+    plan "rsync ${RSYNC_OPTS[*]} ${ex[*]}${XFER_SSH:+ -e '$XFER_SSH -S <connection>' --rsync-path='$XFER_RSYNC'} $DATA/ $COPY_DEST"
     plan "per shard parent ($SHARD_PARENTS): rsync -dlptgoD -AXS --numeric-ids --delete"
     plan "$shards rsyncs of the child directories, $FINAL_COPY_JOBS at a time, then sync; phase=copied"
     return 0
   fi
   take_lock
   work=$(mktemp -d /tmp/blot-final-copy.XXXXXX)
-  trap 'stop_rsyncs; rm -rf "$work"' EXIT
+  trap 'stop_rsyncs; close_master; rm -rf "$work"' EXIT
   trap 'exit 143' INT TERM HUP
+  if is_move; then
+    # One connection for the whole frozen pass: each rsync would otherwise pay a
+    # handshake inside the freeze, and sshd rate-limits new connections. Live
+    # passes do not use this: they must outlive it.
+    $XFER_SSH -M -N -f -S "$work/ctl" "$XFER_HOST" < /dev/null || die "cannot open an ssh connection to $XFER_HOST"
+    XFER_SSH="$XFER_SSH -S $work/ctl"
+    export XFER_SSH
+  fi
+  xfer_opts
   start=$(date +%s)
   # A budget lets the caller keep the copy inside the read-only freeze's TTL.
   if [ "$budget" -gt 0 ]; then
@@ -499,18 +654,18 @@ cmd_final_copy() {
     wd=$!
   fi
 
-  rsync "${RSYNC_OPTS[@]}" "${ex[@]}" "$DATA/" "$NEW_MNT/" || rc=$?
+  rsync "${RSYNC_OPTS[@]}" "${ex[@]}" ${XFER[@]+"${XFER[@]}"} "$DATA/" "$COPY_DEST" || rc=$?
   if [ "$rc" = 0 ]; then
     for p in $SHARD_PARENTS; do
       [ -d "$DATA/$p" ] || continue
-      rsync -dlptgoD -HAXS --numeric-ids --delete "$DATA/$p/" "$NEW_MNT/$p/" || { rc=$?; break; }
+      rsync -dlptgoD -HAXS --numeric-ids --delete ${XFER[@]+"${XFER[@]}"} "$DATA/$p/" "$COPY_DEST$p/" || { rc=$?; break; }
       find "$DATA/$p" -mindepth 1 -maxdepth 1 -type d -printf "$p/%f\\0" >> "$work/list"
     done
   fi
   if [ "$rc" = 0 ] && [ -s "$work/list" ]; then
     shards=$(tr -cd '\0' < "$work/list" | wc -c)
-    export DATA NEW_MNT work
-    export -f shard_copy
+    export DATA work
+    export -f shard_copy xfer_opts
     # xargs keeps going when one shard fails and exits 123; each failure is
     # recorded in $work/failed so the summary can name it.
     xargs -0 -n 1 -P "$FINAL_COPY_JOBS" -a "$work/list" bash -c 'shard_copy "$1"' _ || rc=$?
@@ -529,21 +684,36 @@ cmd_final_copy() {
   if [ -s "$work/failed" ]; then echo "failed shards:" >&2; cat "$work/failed" >&2; fi
   [ "$rc" = 0 ] || die "the final copy failed (rsync exit $rc)"
   sync
+  # The new numbers come from the target, over the same connection.
+  if is_move; then
+    tssh sync < /dev/null || die "could not sync the target's disk"
+    n_used=$(tssh "df -B1 --output=used $DATA | tail -n 1 | tr -d ' '" < /dev/null)
+    n_inodes=$(tssh "df --output=iused $DATA | tail -n 1 | tr -d ' '" < /dev/null)
+  else
+    n_used=$(df -B1 --output=used "$NEW_MNT" | tail -n 1 | tr -d ' ')
+    n_inodes=$(df --output=iused "$NEW_MNT" | tail -n 1 | tr -d ' ')
+  fi
   set_phase copied
   i_old=$(df --output=iused "$DATA" | tail -n 1 | tr -d ' ')
   echo "final_copy=ok"
   echo "shards=$shards"
   echo "duration_s=$(($(date +%s) - start))"
-  echo "new_used_bytes=$(df -B1 --output=used "$NEW_MNT" | tail -n 1 | tr -d ' ')"
+  echo "new_used_bytes=$n_used"
   echo "inodes_old=$i_old"
-  echo "inodes_new=$(df --output=iused "$NEW_MNT" | tail -n 1 | tr -d ' ')"
+  echo "inodes_new=$n_inodes"
+}
+
+# close_master: end the frozen pass's shared ssh connection (a move only).
+close_master() {
+  [ -z "$work" ] || [ ! -S "$work/ctl" ] || $XFER_SSH -O exit "$XFER_HOST" > /dev/null 2>&1 || true
 }
 
 # shard_copy <path relative to the data directory>: one child directory.
 # Exported for xargs; it recreates the path under the same parent on the target.
 shard_copy() {
   local rc=0
-  rsync -aHAXS --numeric-ids --delete "$DATA/$1" "$NEW_MNT/${1%/*}/" || rc=$?
+  xfer_opts
+  rsync -aHAXS --numeric-ids --delete ${XFER[@]+"${XFER[@]}"} "$DATA/$1" "$COPY_DEST${1%/*}/" || rc=$?
   [ "$rc" = 0 ] || { echo "$1 (rsync exit $rc)" >> "$work/failed"; return "$rc"; }
 }
 
@@ -595,6 +765,7 @@ cmd_thaw_disk() {
 
 cmd_swap() {
   local old new dev_new got c pid bad="" containers_list
+  shrink_only swap
   old=$(state_get old_volume); new=$(state_get new_volume)
   precondition "phase is '$(state_get phase)', not copied: run final-copy first" phase_in copied
   precondition "$ID_FILE says $(current_volume), the resize started from $old" [ "$(current_volume)" = "$old" ]
@@ -690,6 +861,246 @@ cmd_stop_copy() {
   echo "stopped=yes"
 }
 
+# Moving to another host
+##########################################################
+
+# The swap, release-old and old-volume-status belong to a shrink on one host. A
+# move leaves the source's mount alone and the target mounts its own volume at
+# boot (mount-data-volume.service), so there is nothing to swap.
+shrink_only() {
+  precondition "this host's state file is for a move to $(state_get target), not a shrink: $1 is only for a shrink" [ -z "$(state_get target)" ]
+}
+
+# adopt <new-volume-id> [old-volume-id]: run on the NEW host. A volume made from
+# a snapshot of the source carries the source's ID in .blot-data-volume, and
+# mount-data-volume.sh refuses a volume whose marker is not its own ID. This
+# mounts it at a staging directory, writes the right ID and unmounts it. It
+# never formats: the filesystem must already be XFS with a marker that names
+# the new volume (done) or the old one (the snapshot's).
+cmd_adopt() {
+  local new=${1:-} old=${2:-} link dev no others fstype marker i mnt=$STAGING/adopt
+  valid_volume "$new"
+  [ -z "$old" ] || valid_volume "$old"
+  link=$(volume_link "$new")
+  if [ -n "$DRY_RUN" ]; then
+    if [ -e "$link" ]; then echo "device=$(readlink -f "$link")"; else echo "device=absent"; fi
+    plan "wait up to 120s for $link; refuse if it is mounted anywhere (unless already at $DATA with the right marker)"
+    plan "refuse anything but XFS (this never runs mkfs); mount -o noatime it at $mnt"
+    plan "check $MARKER says the old volume's ID or $new, write $new to it, unmount"
+    return 0
+  fi
+  take_lock
+  for ((i = 0; i < 120; i++)); do
+    [ -e "$link" ] && break
+    sleep 1
+  done
+  [ -e "$link" ] || die "$link did not appear within 120s: is $new attached to this instance?"
+  dev=$(readlink -f "$link")
+  no=$(devno "$dev")
+  others=$(mounts_of "$no" | grep -vx "$mnt" || true)
+  if [ "$others" = "$DATA" ] && [ "$(read_marker "$DATA")" = "$new" ]; then
+    echo "adopted=yes"
+    echo "note=already mounted at $DATA with the right marker"
+    return 0
+  fi
+  [ -z "$others" ] || die "$new ($dev) is mounted at: $(echo "$others" | tr '\n' ' ')"
+  fstype=$(blkid -p -o value -s TYPE "$dev" 2> /dev/null || true)
+  [ "$fstype" = xfs ] || die "$dev has ${fstype:-no} filesystem, not XFS: adopt only takes a volume made from a snapshot of the data volume, and never formats"
+
+  mkdir -p "$STAGING"
+  mountpoint -q "$STAGING" || mount --bind "$STAGING" "$STAGING"
+  mount --make-private "$STAGING"
+  mkdir -p "$mnt"
+  mountpoint -q "$mnt" || mount -o noatime "$dev" "$mnt"
+  trap 'umount "$mnt" 2> /dev/null || true' EXIT
+  marker=$(read_marker "$mnt")
+  if [ "$marker" != "$new" ] && { [ -z "$old" ] || [ "$marker" != "$old" ]; }; then
+    die "$dev's $MARKER says '$marker', expected $new${old:+ or $old}; refusing to adopt it"
+  fi
+  echo "$new" > "$mnt/$MARKER"
+  sync
+  umount "$mnt"
+  trap - EXIT
+  echo "adopted=yes"
+  echo "device=$dev"
+}
+
+# prewarm <volume-id>: run on the NEW host. Reads the whole device once, in the
+# background, at a low priority. A volume made from a snapshot loads its blocks
+# from S3 the first time they are read; the switch must not be the first read.
+cmd_prewarm() {
+  local new=${1:-} link dev st
+  valid_volume "$new"
+  link=$(volume_link "$new")
+  if [ -n "$DRY_RUN" ]; then
+    plan "systemd-run --unit=$PREWARM_UNIT --remain-after-exit --property=Nice=10 dd if=<$link> of=/dev/null bs=1M"
+    return 0
+  fi
+  [ -e "$link" ] || die "$link is absent: is $new attached to this instance?"
+  dev=$(readlink -f "$link")
+  st=$(unit_state "$PREWARM_UNIT.service")
+  if [ "$st" = running ] || [ "$st" = ok ]; then
+    # One for another device (an earlier move) is forgotten.
+    if [ "$(sd "$PREWARM_UNIT.service" Description)" = "Blot data volume pre-warm of $dev" ]; then prewarm_report; return 0; fi
+    systemctl stop "$PREWARM_UNIT.service" 2> /dev/null || true
+  fi
+  [ "$st" = none ] || systemctl reset-failed "$PREWARM_UNIT.service" 2> /dev/null || true
+  systemd-run --unit="$PREWARM_UNIT" \
+    --description="Blot data volume pre-warm of $dev" \
+    --remain-after-exit --property=Nice=10 \
+    dd if="$dev" of=/dev/null bs=1M > /dev/null 2>&1
+  prewarm_report
+}
+
+# authorize-key <source-private-ip> <key-type> <key>: run on the NEW host. Lets
+# the source's move key in as ec2-user, from that address only and for nothing
+# but a command (no forwarding), marked with a comment so deauthorize-key can
+# find it. Replaces an earlier line of ours, so it is safe to repeat.
+cmd_authorize_key() {
+  local ip=${1:-} type=${2:-} key=${3:-} home file line tmp
+  is_ip "$ip" || die "usage: authorize-key <source-private-ip> ssh-ed25519 <key>"
+  [ "$type" = ssh-ed25519 ] && [[ "$key" =~ ^[A-Za-z0-9+/=]+$ ]] || die "usage: authorize-key <source-private-ip> ssh-ed25519 <key>"
+  home=$(getent passwd ec2-user | cut -d: -f6)
+  [ -n "$home" ] || die "no ec2-user on this host"
+  file=$home/.ssh/authorized_keys
+  line="from=\"$ip\",no-agent-forwarding,no-X11-forwarding,no-port-forwarding $type $key $MOVE_KEY_COMMENT"
+  if [ -n "$DRY_RUN" ]; then plan "replace any '$MOVE_KEY_COMMENT' line in $file with the source's key, from $ip only"; return 0; fi
+  install -d -m 700 -o ec2-user -g ec2-user "$home/.ssh"
+  touch "$file"
+  tmp=$(mktemp)
+  { grep -v " $MOVE_KEY_COMMENT\$" "$file" || true; } > "$tmp"
+  echo "$line" >> "$tmp"
+  cat "$tmp" > "$file"
+  rm -f "$tmp"
+  chown ec2-user:ec2-user "$file"
+  chmod 600 "$file"
+  echo "authorized=yes"
+}
+
+cmd_deauthorize_key() {
+  local home file tmp
+  home=$(getent passwd ec2-user | cut -d: -f6)
+  file=$home/.ssh/authorized_keys
+  if [ -n "$DRY_RUN" ]; then plan "remove the '$MOVE_KEY_COMMENT' line from $file"; return 0; fi
+  if [ -f "$file" ]; then
+    tmp=$(mktemp)
+    { grep -v " $MOVE_KEY_COMMENT\$" "$file" || true; } > "$tmp"
+    cat "$tmp" > "$file"
+    rm -f "$tmp"
+  fi
+  echo "deauthorized=yes"
+}
+
+# move-prepare <target-private-ip> <ssh-port> <new-volume-id> <target-host-key> [existing]:
+# run on the SOURCE. Makes the key the copy uses to reach the target (the hosts
+# have no key for each other, and root login is off), records the target's host
+# key (the base64 of its ed25519 key, read by resize.sh over its own ssh), and
+# writes the state file: phase=prepared, the volume the data is going to and
+# where. `existing` says the target already had its volume (a move back), so
+# nothing was made or needs warming.
+cmd_move_prepare() {
+  local ip=${1:-} port=${2:-} new=${3:-} hostkey=${4:-} existing=${5:-} cur phase resumed="" u keyed
+  is_ip "$ip" || die "usage: move-prepare <target-private-ip> <ssh-port> <new-volume-id> <target-host-key> [existing]"
+  [[ "$port" =~ ^[0-9]+$ ]] || die "the ssh port must be a number"
+  valid_volume "$new"
+  [[ "$hostkey" =~ ^[A-Za-z0-9+/=]+$ ]] || die "the target's host key must be the base64 part of its ssh-ed25519 key"
+  [ -z "$existing" ] || [ "$existing" = existing ] || die "the fifth argument is 'existing' or nothing"
+  cur=$(current_volume)
+  [ "$new" != "$cur" ] || die "$new is the current data volume"
+  phase=$(state_get phase)
+  case "$phase" in
+    prepared | copied)
+      is_move || die "a resize to $(state_get new_volume) is in progress (state file $STATE)"
+      [ "$(state_get new_volume)" = "$new" ] || die "a move to $(state_get new_volume) is already in progress (state file $STATE)"
+      [ "$(state_get old_volume)" = "$cur" ] || die "$STATE says the old volume is $(state_get old_volume), the current one is $cur"
+      resumed=1 ;;
+    swapped) die "a shrink swapped and was not finished (state file $STATE): run resize.sh finish first" ;;
+  esac
+  if [ -n "$DRY_RUN" ]; then
+    plan "ssh-keygen -t ed25519 -N '' -C $MOVE_KEY_COMMENT $MOVE_KEY (kept if it exists)"
+    plan "write the target's host key for [$ip]:$port to $MOVE_KNOWN_HOSTS"
+    plan "record old=$cur new=$new target=ec2-user@$ip:$port${existing:+ existing=yes} phase=prepared in $STATE"
+    return 0
+  fi
+  take_lock
+  have ssh-keygen || die "ssh-keygen is not installed"
+  mkdir -p "$(dirname "$MOVE_KEY")"
+  if [ ! -f "$MOVE_KEY" ]; then
+    rm -f "$MOVE_KEY.pub"
+    ssh-keygen -q -t ed25519 -N '' -C "$MOVE_KEY_COMMENT" -f "$MOVE_KEY"
+  fi
+  chmod 600 "$MOVE_KEY"
+  if [ "$port" = 22 ]; then keyed=$ip; else keyed="[$ip]:$port"; fi
+  echo "$keyed ssh-ed25519 $hostkey" > "$MOVE_KNOWN_HOSTS.tmp"
+  chmod 600 "$MOVE_KNOWN_HOSTS.tmp"
+  mv "$MOVE_KNOWN_HOSTS.tmp" "$MOVE_KNOWN_HOSTS"
+
+  if [ -z "$resumed" ]; then
+    # A fresh move: forget passes of an earlier one (their labels would collide).
+    for u in $(copy_units); do systemctl stop "$u" 2> /dev/null || true; systemctl reset-failed "$u" 2> /dev/null || true; done
+    state_write "$cur" "$new" prepared "ec2-user@$ip:$port" "${existing:+yes}"
+  else
+    # As prepare does: a final copy is only good while the source is still read-only.
+    if [ "$phase" = copied ]; then
+      case ",$(data_mount OPTIONS)," in *,ro,*) ;; *) phase=prepared ;; esac
+    fi
+    state_write "$cur" "$new" "$phase" "ec2-user@$ip:$port" "${existing:+yes}"
+  fi
+  echo "prepared=yes"
+  echo "public_key=$(cat "$MOVE_KEY.pub" 2> /dev/null || ssh-keygen -y -f "$MOVE_KEY")"
+}
+
+# move-status: run on the SOURCE. The state of a move and what the target says
+# when this host reaches it with its move key.
+cmd_move_status() {
+  local err out
+  echo "phase=$(state_get phase)"
+  echo "old_volume=$(state_get old_volume)"
+  echo "new_volume=$(state_get new_volume)"
+  echo "target=$(state_get target)"
+  echo "existing=$(state_get existing)"
+  if ! is_move; then echo "move=no"; return 0; fi
+  echo "move=yes"
+  if [ ! -f "$MOVE_KEY" ]; then echo "ssh=nokey"; return 0; fi
+  set_dest
+  if err=$(tssh true 2>&1 < /dev/null); then
+    echo "ssh=ok"
+  else
+    echo "ssh=failed"
+    echo "ssh_error=$(echo "$err" | tail -n 1)"
+    return 0
+  fi
+  # facts runs as root there, so it also proves passwordless sudo.
+  if out=$(on_target facts 2> /dev/null); then
+    echo "sudo=ok"
+    echo "$out" | sed 's/^/target_/'
+  else
+    echo "sudo=failed"
+  fi
+  if tssh 'sudo -n rsync --version > /dev/null 2>&1' < /dev/null; then echo "rsync=ok"; else echo "rsync=failed"; fi
+}
+
+# move-done: run on the SOURCE after the switch (resize.sh move retag). Takes
+# the key out of the target's authorized_keys, deletes it and the known-hosts
+# file here, and sets phase=moved. The source's own mount is not touched: the
+# old host is the rollback until the cycle's finish.
+cmd_move_done() {
+  precondition "this host has no move recorded" is_move
+  precondition "phase is '$(state_get phase)', not copied or moved" phase_in copied moved
+  if [ -n "$DRY_RUN" ]; then
+    plan "remove the '$MOVE_KEY_COMMENT' line from ec2-user's authorized_keys on $(state_get target)"
+    plan "delete $MOVE_KEY, $MOVE_KEY.pub and $MOVE_KNOWN_HOSTS; set phase=moved in $STATE"
+    return 0
+  fi
+  if [ -f "$MOVE_KEY" ]; then
+    on_target deauthorize-key < /dev/null > /dev/null 2>&1 ||
+      echo "WARNING: could not reach $(state_get target) to remove the key; delete the '$MOVE_KEY_COMMENT' line from ec2-user's authorized_keys there by hand" >&2
+  fi
+  rm -f "$MOVE_KEY" "$MOVE_KEY.pub" "$MOVE_KNOWN_HOSTS"
+  set_phase moved
+  echo "moved=yes"
+}
+
 # old-volume-status
 ##########################################################
 
@@ -745,6 +1156,7 @@ cmd_old_volume_status() {
 cmd_release_old() {
   local old=${1:-} cur link dev_old no_old u c pid got bad="" err
   valid_volume "$old"
+  shrink_only release-old
   cur=$(current_volume)
   link=$(volume_link "$old")
 
@@ -888,5 +1300,12 @@ case "$sub" in
   old-volume-status) cmd_old_volume_status "$@" ;;
   release-old) cmd_release_old "$@" ;;
   grow-fs) cmd_grow_fs "$@" ;;
-  *) die "usage: host.sh [--dry-run] facts|prepare|copy|copy-status|final-copy|freeze-disk|thaw-disk|swap|stop-copy|old-volume-status|release-old|grow-fs" ;;
+  adopt) cmd_adopt "$@" ;;
+  prewarm) cmd_prewarm "$@" ;;
+  authorize-key) cmd_authorize_key "$@" ;;
+  deauthorize-key) cmd_deauthorize_key ;;
+  move-prepare) cmd_move_prepare "$@" ;;
+  move-status) cmd_move_status ;;
+  move-done) cmd_move_done ;;
+  *) die "usage: host.sh [--dry-run] facts|prepare|copy|copy-status|final-copy|freeze-disk|thaw-disk|swap|stop-copy|old-volume-status|release-old|grow-fs|adopt|prewarm|authorize-key|deauthorize-key|move-prepare|move-status|move-done" ;;
 esac
