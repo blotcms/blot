@@ -17,6 +17,12 @@
 //   limit. maxmemory being unset is alerted too, but only on a host that
 //   promote.sh has marked active (/etc/blot-redis/active): a host still
 //   being built or drilled has no marker and may not be bootstrapped yet.
+// - The memory available on the machine this check runs on staying under
+//   HOST_MEMORY_ALERT of its total (blotcms/blot#2261). It is read from
+//   /proc/meminfo by whichever process wins the scheduled run (host-memory.js),
+//   so it describes the app host, which also runs Redis once they share one.
+//   A reading under the limit must hold for HOST_MEMORY_CHECKS runs in a row
+//   before it is emailed.
 // - A failed background save. With stop-writes-on-bgsave-error yes Redis
 //   refuses every write until a save succeeds.
 // - Events since the last check (redis-host-events.js): errors that mean Redis
@@ -112,7 +118,16 @@ const STALE_MS = 20 * MINUTE;
 // outage over 20 minutes would end with a false stale alert.
 const CONTINUOUS_MS = 11 * MINUTE;
 
+// MemAvailable under this fraction of MemTotal, for HOST_MEMORY_CHECKS checks
+// in a row (10 minutes: a page cache blip is not a shortage), is memory the
+// host is about to run out of. It leaves room to act before the kernel's OOM
+// killer picks a container or Redis.
+const HOST_MEMORY_ALERT = 0.1;
+const HOST_MEMORY_CLEAR = 0.12;
+const HOST_MEMORY_CHECKS = 2;
+
 const TITLES = {
+  "host-memory": "Host memory low",
   "tcp-mem": "TCP memory nearing tcp_mem[1]",
   "tcp-pressure": "TCP memory pressure",
   "sample-stale": "TCP memory sample stale",
@@ -261,19 +276,24 @@ async function check(deps = {}) {
     client = require("models/client"),
     lastCheckAt = null,
     keep = unwritten,
+    // async () => { total, available } in bytes or null (host-memory.js). Not
+    // read unless the caller passes it, so a run elsewhere (tests) says nothing
+    // about the machine it happens to be on.
+    hostMemory = null,
   } = deps;
 
   // sendCommand keeps these off the client-side cache: the sample changes
   // every 5 minutes, written by another client. One INFO (the default
   // sections hold memory, persistence, stats, errorstats and keyspace) and one
   // SLOWLOG GET: both are cheap.
-  const [sampleValue, backupValue, offsiteValue, stateValue, infoText, slowlogReply] = await Promise.all([
+  const [sampleValue, backupValue, offsiteValue, stateValue, infoText, slowlogReply, machine] = await Promise.all([
     client.sendCommand(["GET", SAMPLE_KEY]),
     client.sendCommand(["GET", BACKUP_KEY]),
     client.sendCommand(["GET", OFFSITE_KEY]),
     client.sendCommand(["GET", STATE_KEY]),
     client.sendCommand(["INFO"]),
     client.sendCommand(["SLOWLOG", "GET", String(SLOWLOG_ENTRIES)]),
+    hostMemory ? hostMemory().catch(() => null) : null,
   ]);
 
   let state;
@@ -288,6 +308,8 @@ async function check(deps = {}) {
     updatedAt: state.updatedAt || 0,
     alerts: state.alerts || {},
     pressures: state.pressures || null,
+    // Checks in a row with host memory under HOST_MEMORY_ALERT
+    lowMemory: state.lowMemory || 0,
     // { name: { at, flaps } }: when the last email about a condition or event
     // type was sent, and how often a condition changed state since
     mail: state.mail || {},
@@ -352,6 +374,16 @@ async function check(deps = {}) {
       }
       pressures = { host: sample.host, count: sample.pressures };
     }
+  }
+
+  // Unreadable leaves the condition and the count alone
+  let lowMemory = state.lowMemory;
+  if (machine) {
+    machine.fraction = machine.available / machine.total;
+    lowMemory = machine.fraction < HOST_MEMORY_ALERT ? lowMemory + 1 : 0;
+    conditions["host-memory"] = was("host-memory")
+      ? machine.fraction < HOST_MEMORY_CLEAR
+      : lowMemory >= HOST_MEMORY_CHECKS;
   }
 
   if (memory.maxmemory > 0) {
@@ -426,6 +458,7 @@ async function check(deps = {}) {
     sample,
     age,
     memory,
+    machine,
     redis,
     conditions,
     staleBackups,
@@ -437,7 +470,7 @@ async function check(deps = {}) {
     held,
     send: started.length > 0 || cleared.length > 0 || Object.keys(due).length > 0,
     state,
-    nextState: { updatedAt: now, alerts, pressures, mail, seen, pending, observed },
+    nextState: { updatedAt: now, alerts, pressures, lowMemory, mail, seen, pending, observed },
   };
 }
 
@@ -505,6 +538,12 @@ function message(name, report) {
         `see [config/redis/README.md](${README_URL})`
       );
     }
+    case "host-memory":
+      return (
+        `${gb(report.machine.available)} of ${gb(report.machine.total)} available (${percent(report.machine.fraction)}) ` +
+        `on the machine this check ran on, for ${HOST_MEMORY_CHECKS * 5} minutes. Past this the kernel's OOM killer ` +
+        "picks a process: a unit, Redis or the proxy"
+      );
     case "maxmemory":
       return `${gb(memory.used)} of ${gb(memory.maxmemory)} (${percent(memory.fraction)})`;
     case "maxmemory-unset":
@@ -525,7 +564,7 @@ function message(name, report) {
 
 // What the email template renders
 function view(report) {
-  const { sample, memory, age, redis } = report;
+  const { sample, memory, machine, age, redis } = report;
   const names = report.started.concat(Object.keys(report.due));
 
   const item = (name) => {
@@ -560,6 +599,11 @@ function view(report) {
         `${sample.sockets} sockets, pressures=${sample.pressures}, sampled ${minutes(age)} ago`
     );
   }
+  if (machine) {
+    readings.push(
+      `Host memory (where this check ran): ${gb(machine.available)} available of ${gb(machine.total)} (${percent(machine.fraction)})`
+    );
+  }
   readings.push(
     memory.maxmemory
       ? `Redis memory: ${gb(memory.used)} of maxmemory ${gb(memory.maxmemory)} (${percent(memory.used / memory.maxmemory)})`
@@ -583,6 +627,8 @@ function view(report) {
     thresholds: {
       tcpMem: percent(TCP_MEM_ALERT),
       maxmemory: percent(MAXMEMORY_ALERT),
+      hostMemory: percent(HOST_MEMORY_ALERT),
+      hostMemoryMinutes: HOST_MEMORY_CHECKS * 5,
       stale: minutes(STALE_MS),
       backup: duration(BACKUP_STALE_MS),
       offsite: duration(OFFSITE_STALE_MS),
@@ -635,12 +681,15 @@ module.exports.SAMPLE_KEY = SAMPLE_KEY;
 module.exports.BACKUP_KEY = BACKUP_KEY;
 module.exports.OFFSITE_KEY = OFFSITE_KEY;
 module.exports.STATE_KEY = STATE_KEY;
+module.exports.HOST_MEMORY_ALERT = HOST_MEMORY_ALERT;
+module.exports.HOST_MEMORY_CLEAR = HOST_MEMORY_CLEAR;
+module.exports.HOST_MEMORY_CHECKS = HOST_MEMORY_CHECKS;
 module.exports.CONDITION_MIN_INTERVAL = CONDITION_MIN_INTERVAL;
 module.exports.EVENT_COOLDOWN = EVENT_COOLDOWN;
 
 if (require.main === module) {
   // As if the previous check ran just now, so a stale sample is reported
-  check({ lastCheckAt: Date.now() })
+  check({ lastCheckAt: Date.now(), hostMemory: require("./host-memory") })
     .then((report) => {
       console.log(JSON.stringify({ ...report, view: view(report) }, null, 2));
       process.exit();

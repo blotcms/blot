@@ -1,9 +1,9 @@
 // The Redis server line of the daily email (blotcms/blot#2041), one line:
 //
-//   Redis server: memory 27% (resize in ~47 days, 8 GB free), disk 21% (stable, 19 GB free), saved 3m ago, backed up 30m ago
+//   Redis server: memory 27% (resize in ~47 days, 8 GB free), disk 21% (stable, 19 GB free), host RAM 75% available (12 GB), saved 3m ago, backed up 30m ago
 //
 // Redis tells us its own memory and last save, but only the Redis host can
-// read its disk: config/redis/bin/tcpmem-log.sh stores that in its 5-minute
+// read its disk and its RAM: config/redis/bin/tcpmem-log.sh stores that in its 5-minute
 // sample (SAMPLE_KEY), and config/redis/bin/backup.sh stores each upload in
 // BACKUP_KEY (and each daily offsite one in OFFSITE_KEY). The trends come from the last week of daily readings of each
 // (daily/trend.js), stored at MEMORY_HISTORY_KEY and DISK_HISTORY_KEY. Anything that needs attention is bold;
@@ -33,6 +33,10 @@ const DAY = 24 * HOUR;
 const MEMORY_WARNING = 0.7;
 const RESIZE_URL =
   "https://github.com/blotcms/blot/blob/master/config/redis/README.md#increasing-the-redis-server-size";
+
+// The host's available RAM, as a fraction of its total, below which the line
+// calls it out (check-redis-host.js emails at HOST_MEMORY_ALERT).
+const HOST_RAM_WARNING = 0.15;
 
 // The host samples every 5 minutes (see check-redis-host.js's STALE_MS).
 const SAMPLE_STALE_MS = 20 * MINUTE;
@@ -147,6 +151,17 @@ function diskPart({ now, sample, diskHistory }) {
   return text;
 }
 
+// Available RAM of the host that took the sample (the Redis host, which is the
+// app host once they share one), not of the machine running this email.
+function ramPart({ now, sample }) {
+  if (!sample || now - sample.time > SAMPLE_STALE_MS) return null;
+  if (!sample.ramTotal || sample.ramAvailable === null) return "host RAM not reported";
+
+  const fraction = sample.ramAvailable / sample.ramTotal;
+  const text = `host RAM ${percent(fraction)} available (${size(sample.ramAvailable)})`;
+  return fraction < HOST_RAM_WARNING ? `**${text}**` : text;
+}
+
 function savePart({ now, save }) {
   if (!save) return "save not reported";
   if (save.status !== "ok") return "**last save failed**";
@@ -177,7 +192,7 @@ function offsitePart({ now, offsite }) {
 function line(data) {
   return (
     "Redis server: " +
-    [memoryPart(data), diskPart(data), savePart(data), backupPart(data), offsitePart(data)]
+    [memoryPart(data), diskPart(data), ramPart(data), savePart(data), backupPart(data), offsitePart(data)]
       .filter(Boolean)
       .join(", ")
   );

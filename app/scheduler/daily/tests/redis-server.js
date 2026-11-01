@@ -92,13 +92,13 @@ describe("scheduler/daily/redis-server", function () {
 
   it("is one line: memory with the days to a resize, disk, last save and last backup", async function () {
     expect(await render(withSnapshot)).toBe(
-      "Redis server: memory 27% (resize in ~47 days, 8 GB free), disk 21% (19 GB free), saved 3m ago, backed up 30m ago"
+      "Redis server: memory 27% (resize in ~47 days, 8 GB free), disk 21% (19 GB free), host RAM 75% available (12 GB), saved 3m ago, backed up 30m ago"
     );
   });
 
   describe("memory", function () {
     it("leaves out the projection with no previous snapshot or one that is too recent", async function () {
-      const expected = "Redis server: memory 27% (8 GB free), disk 21% (19 GB free), saved 3m ago, backed up 30m ago";
+      const expected = "Redis server: memory 27% (8 GB free), disk 21% (19 GB free), host RAM 75% available (12 GB), saved 3m ago, backed up 30m ago";
 
       expect(await render()).toBe(expected);
       expect(await render({ snapshot: snapshotLine({ age: 10 * MINUTE }) })).toBe(expected);
@@ -134,7 +134,7 @@ describe("scheduler/daily/redis-server", function () {
 
       const at = await render({ memory: info({ used: 7.7 * GB }), snapshot: snapshotLine({ memory: 7.6 * GB }) });
       expect(at).toBe(
-        `Redis server: memory 70% (**[resize now](${RESIZE_URL})**, 3.3 GB free), disk 21% (19 GB free), saved 3m ago, backed up 30m ago`
+        `Redis server: memory 70% (**[resize now](${RESIZE_URL})**, 3.3 GB free), disk 21% (19 GB free), host RAM 75% available (12 GB), saved 3m ago, backed up 30m ago`
       );
       expect(RESIZE_URL).toBe(
         "https://github.com/blotcms/blot/blob/master/config/redis/README.md#increasing-the-redis-server-size"
@@ -156,10 +156,35 @@ describe("scheduler/daily/redis-server", function () {
     });
   });
 
+  describe("host RAM", function () {
+    const ram = (available) => ` ram_total=${16 * GB} ram_avail=${available * GB}`;
+    const disk = ` disk_root=${5 * GB}/${24 * GB}/${19 * GB}`;
+
+    it("shows the host's available RAM, after the disk", async function () {
+      expect(await render()).toContain("disk 21% (19 GB free), host RAM 75% available (12 GB), saved");
+    });
+
+    it("is bold below 15%", async function () {
+      const extra = (available) => ram(available) + disk;
+
+      expect(await render({ sample: sampleLine({ extra: extra(2.5) }) })).toContain("host RAM 16% available (2.5 GB)");
+      expect(await render({ sample: sampleLine({ extra: extra(2) }) })).toContain("**host RAM 13% available (2 GB)**");
+    });
+
+    it("says when the host did not report it", async function () {
+      expect(await render({ sample: sampleLine({ extra: disk }) })).toContain(", host RAM not reported, saved");
+    });
+
+    it("is left out with no sample or a stale one, which the disk part already says", async function () {
+      expect(await render({ sample: null })).not.toContain("host RAM");
+      expect(await render({ sample: sampleLine({ age: 25 * MINUTE }) })).not.toContain("host RAM");
+    });
+  });
+
   describe("disk", function () {
     it("shows only the root disk normally", async function () {
       const result = await render();
-      expect(result).toContain("disk 21% (19 GB free), saved");
+      expect(result).toContain("disk 21% (19 GB free), host RAM");
       expect(result).not.toContain("backup disk");
       expect(result).not.toContain("/backups");
     });
@@ -189,7 +214,7 @@ describe("scheduler/daily/redis-server", function () {
 
       const full = ` disk_root=${5 * GB}/${24 * GB} disk_backups=${85 * GB}/${100 * GB}`;
       expect(await render({ sample: sampleLine({ extra: full }) })).toContain(
-        "disk 21% (19 GB free), **backup disk 85% full**, saved"
+        "disk 21% (19 GB free), **backup disk 85% full**, host RAM"
       );
     });
 
@@ -198,20 +223,20 @@ describe("scheduler/daily/redis-server", function () {
       const extra = ` disk_root=${5 * GB}/${24 * GB}/${17 * GB} disk_backups=${78 * GB}/${100 * GB}/${17 * GB}`;
       const result = await render({ sample: sampleLine({ extra }) });
 
-      expect(result).toContain("disk 23% (17 GB free), **backup disk 82% full**, saved");
+      expect(result).toContain("disk 23% (17 GB free), **backup disk 82% full**, host RAM");
     });
 
     it("works out the disk from used and total for a sample without the available figure", async function () {
       const extra = ` disk_root=${5 * GB}/${24 * GB} disk_backups=${85 * GB}/${100 * GB}`;
       expect(await render({ sample: sampleLine({ extra }) })).toContain(
-        "disk 21% (19 GB free), **backup disk 85% full**, saved"
+        "disk 21% (19 GB free), **backup disk 85% full**, host RAM"
       );
     });
 
     it("says when /backups is not mounted", async function () {
       const extra = ` disk_root=${5 * GB}/${24 * GB}`;
       expect(await render({ sample: sampleLine({ extra }) })).toContain(
-        "disk 21% (19 GB free), **/backups not mounted**, saved"
+        "disk 21% (19 GB free), **/backups not mounted**, host RAM"
       );
     });
 
