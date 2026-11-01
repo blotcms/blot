@@ -5,8 +5,9 @@
 //   to Redis were dropped. Only the Redis host can read the count, so its
 //   5-minute cron (config/redis/bin/tcpmem-log.sh) stores each sample in Redis
 //   at SAMPLE_KEY, and this check reads it. The count and the RAM and disk
-//   fields describe the whole host, which on a combined host the units share. A sample that stops arriving means
-//   that monitoring stopped, which is alerted too.
+//   fields describe the whole host, which on a combined host the units share.
+//   A sample that stops arriving means that monitoring stopped, which is
+//   alerted too.
 // - A stale backup: backup.sh (config/redis/bin) records each upload at
 //   BACKUP_KEY, and the daily one's copy to Backblaze B2 at OFFSITE_KEY. Over
 //   BACKUP_STALE_MS (two missed hourly runs) or OFFSITE_STALE_MS (two missed
@@ -89,10 +90,10 @@ const unwritten = { state: null };
 
 const eventCooldown = (type) => EVENT_COOLDOWN[type] || EVENT_COOLDOWN.default;
 
-// Leaked or not, healthy use is a small fraction of tcp_mem[1] (a few hundred
-// sockets with empty queues, more where the proxy shares the host), and the
-// leak drifted up over months, so half leaves weeks of warning and is far
-// above any real load.
+// Leaked or not, healthy use is a small fraction of tcp_mem[1] (sockets with
+// mostly empty queues), and the leak drifted up over months, so half leaves
+// weeks of warning. The proxy's sockets count too on a combined host, so check
+// this still holds after the move.
 const TCP_MEM_ALERT = 0.5;
 const TCP_MEM_CLEAR = 0.45;
 
