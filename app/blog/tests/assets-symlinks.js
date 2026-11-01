@@ -105,7 +105,6 @@ describe("blog asset symlink policy", function () {
         "/missing.txt",
         "/%E0%A4%A",
         "/%00",
-        "/%2e%2e/%2e%2e/etc/passwd",
         "/..%2f..%2fetc/passwd",
         "/folder/%2e%2e/%2e%2e/file.txt",
         "/%EF%BC%8F..%EF%BC%8Fetc",
@@ -115,6 +114,8 @@ describe("blog asset symlink policy", function () {
         expect(await res.text()).toBe("Not Found");
       }
 
+      // fetch resolves %2e%2e itself, so this leaves the folder route
+      expect((await fetch(cdnURL("/%2e%2e/%2e%2e/etc/passwd"))).status).toBe(404);
       expect((await fetch(url + "/cdn/folder/v-1/notablog/folder/file.txt")).status).toBe(404);
       expect((await fetch(url + "/cdn/folder/v-1/")).status).toBe(404);
     });
