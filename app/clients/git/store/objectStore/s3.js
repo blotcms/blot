@@ -3,7 +3,8 @@
 // The host passes in a configured S3Client, the bucket, and the prefix every
 // key sits under (git/{blogID}/). Only the S3 API subset Backblaze B2 also
 // supports is used: plain and multipart PUT, ranged GET, HEAD, DELETE and
-// LIST. No conditional writes, tagging or storage classes.
+// LIST, and one conditional write: a PUT with If-None-Match: * (putIfAbsent),
+// which is what makes a manifest swap safe. No tagging or storage classes.
 const {
   GetObjectCommand,
   HeadObjectCommand,
@@ -39,12 +40,26 @@ function isPastEnd(err) {
   return err.name === "InvalidRange" || (err.$metadata && err.$metadata.httpStatusCode === 416);
 }
 
+function isPreconditionFailed(err) {
+  return err.name === "PreconditionFailed" || (err.$metadata && err.$metadata.httpStatusCode === 412);
+}
+
+// S3 answers 409 ConditionalRequestConflict when writers to a key are racing
+// and it can't yet say which wins; the request is simply sent again
+function isConflict(err) {
+  return err.name === "ConditionalRequestConflict" || (err.$metadata && err.$metadata.httpStatusCode === 409);
+}
+
+const CONFLICT_ATTEMPTS = 4;
+const CONFLICT_DELAY = 50;
+
 function createS3Store({
   client,
   bucket,
   prefix = "",
   partSize = PART_SIZE,
   partConcurrency = PART_CONCURRENCY,
+  conflictDelay = CONFLICT_DELAY,
 }) {
   if (!client || !bucket) throw new Error("createS3Store needs a client and a bucket");
   if (partSize < 5 * 1024 * 1024) throw new Error("S3 parts must be at least 5 MiB");
@@ -236,6 +251,29 @@ function createS3Store({
     return putMultipart(key, [first.value, second.value], iterator);
   }
 
+  // Creates the key unless it exists. The condition is checked by S3 itself,
+  // atomically with the write, so of several writers exactly one is told true.
+  async function putIfAbsent(key, buffer) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await client.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: full(key),
+            Body: buffer,
+            ContentType: "application/octet-stream",
+            IfNoneMatch: "*",
+          })
+        );
+        return true;
+      } catch (err) {
+        if (isPreconditionFailed(err)) return false;
+        if (!isConflict(err) || attempt === CONFLICT_ATTEMPTS) throw err;
+        await new Promise((resolve) => setTimeout(resolve, conflictDelay * attempt));
+      }
+    }
+  }
+
   async function remove(key) {
     await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: full(key) }));
   }
@@ -257,7 +295,7 @@ function createS3Store({
     } while (token);
   }
 
-  return { id, head, read, get, stream, put, delete: remove, list };
+  return { id, head, read, get, stream, put, putIfAbsent, delete: remove, list };
 }
 
 module.exports = createS3Store;

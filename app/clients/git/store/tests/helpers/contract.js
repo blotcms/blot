@@ -177,6 +177,38 @@ module.exports = [
     },
   ],
   [
+    "creates an object only if it is absent",
+    async (store) => {
+      expect(await store.putIfAbsent("m/1.json", Buffer.from("one"))).toBe(true);
+      expect((await store.get("m/1.json")).toString()).toBe("one");
+
+      expect(await store.putIfAbsent("m/1.json", Buffer.from("two!"))).toBe(false);
+      expect((await store.get("m/1.json")).toString()).toBe("one");
+
+      await store.put("m/2.json", Buffer.from("put"));
+      expect(await store.putIfAbsent("m/2.json", Buffer.from("again"))).toBe(false);
+      expect((await store.get("m/2.json")).toString()).toBe("put");
+    },
+  ],
+  [
+    "creates an empty object if it is absent",
+    async (store) => {
+      expect(await store.putIfAbsent("empty", Buffer.alloc(0))).toBe(true);
+      expect(await store.head("empty")).toEqual({ size: 0 });
+      expect(await store.putIfAbsent("empty", Buffer.from("x"))).toBe(false);
+    },
+  ],
+  [
+    "lets exactly one of several racing writers create an object",
+    async (store) => {
+      const bodies = Array.from({ length: 8 }, (_, i) => Buffer.from("writer " + i));
+      const results = await Promise.all(bodies.map((body) => store.putIfAbsent("race", body)));
+
+      expect(results.filter(Boolean).length).toBe(1);
+      expect((await store.get("race")).equals(bodies[results.indexOf(true)])).toBe(true);
+    },
+  ],
+  [
     "deletes an object, and doesn't mind if it's gone",
     async (store) => {
       await store.put("k", Buffer.from("x"));

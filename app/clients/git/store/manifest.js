@@ -1,7 +1,8 @@
-// The manifest: the one small document per repository which says what the
-// repository is. Everything else in the bucket is immutable packs; the
-// manifest is rewritten on every push, after the packs it names are uploaded,
-// and a repository's state is whatever its manifest says.
+// The manifest: the small document which says what a repository is.
+// Everything else in the bucket is immutable packs. Every push writes a new
+// manifest, after the packs it names are uploaded, as its own object
+// (manifests/<seq>.json) which is never overwritten; a repository's state is
+// whatever its newest manifest says.
 //
 //   {
 //     "version": 1,
@@ -17,16 +18,40 @@
 //                                    the pack holding the history up to a swap
 //   }
 //
-// There are no conditional writes in the S3 subset we use, so a swap is made
-// safe by the host's lock instead: swap() takes it, checks under it that the
-// manifest is still the one the caller built on, and writes.
-const { CorruptError, StaleManifestError } = require("./errors");
-const { MANIFEST_KEY, PACK_NAME, packKey, idxKey } = require("./layout");
+// What makes a swap safe is the conditional create of manifests/<seq + 1>.json
+// (the store's putIfAbsent): exactly one writer can create a given number, so
+// of two pushes built on the same manifest one fails, however long either has
+// stalled and whatever the lock did. The host's lock is not what makes it safe.
+// swap() still takes it, because it stops two pushes from the same base doing
+// wasted work and gives the loser its answer early, but a swap which lost the
+// lock, or never had it, is stopped all the same by the create.
+//
+// Finding the newest manifest costs no LIST in the usual case: manifests/latest.json
+// holds { "seq": N }, written after each swap and overwritten each time. It is
+// only a hint, and nothing trusts it: read() starts at the seq it names, looks
+// forward for a later manifest, and falls back to LISTing manifests/ if the
+// hint is missing, damaged or names something which doesn't exist.
+//
+// Old manifests are not deleted here; that belongs with compaction.
+const { CorruptError, NotFoundError, TooLargeError, StaleManifestError } = require("./errors");
+const { MANIFEST_PREFIX, LATEST_KEY, PACK_NAME, manifestKey, manifestSeq, packKey, idxKey } = require("./layout");
 
 const VERSION = 1;
 
 // A manifest is small; this is only a guard against reading something else
 const MAX_BYTES = 64 * 1024 * 1024;
+
+// The hint is a few bytes; this is only a guard against reading something else
+const MAX_HINT_BYTES = 1024;
+
+// How many manifests past the hint read() will look for before it gives up on
+// the hint as stale and LISTs instead
+const WALK_LIMIT = 8;
+
+// A manifest with a given number never changes, so its bytes can be kept for
+// good, by store. Only which number is the newest is ever asked of the store.
+const KEPT = 8;
+const kept = new WeakMap();
 
 const OID = /^[0-9a-f]{40}$/;
 
@@ -122,12 +147,88 @@ function parse(buffer) {
   return validate(m);
 }
 
-// The repository's manifest, read from the store (never from the cache: only
-// the store knows whether it is the current one). A repository nothing has
-// been pushed to has none, which reads as an empty one with seq 0.
+function remember(store, seq, bytes) {
+  let bySeq = kept.get(store);
+  if (!bySeq) kept.set(store, (bySeq = new Map()));
+  bySeq.delete(seq);
+  bySeq.set(seq, bytes);
+  if (bySeq.size > KEPT) bySeq.delete(bySeq.keys().next().value);
+}
+
+// The manifest with this number. Throws NotFoundError if there isn't one.
+async function load(store, seq) {
+  const bySeq = kept.get(store);
+  let bytes = bySeq && bySeq.get(seq);
+  if (!bytes) {
+    bytes = await store.get(manifestKey(seq), { maxBytes: MAX_BYTES });
+    remember(store, seq, bytes);
+  }
+  const m = parse(bytes);
+  if (m.seq !== seq) fail(manifestKey(seq) + " says it is seq " + m.seq);
+  return m;
+}
+
+// The seq latest.json names, or null if it is missing or isn't a seq
+async function readHint(store) {
+  let bytes;
+  try {
+    bytes = await store.get(LATEST_KEY, { maxBytes: MAX_HINT_BYTES });
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof TooLargeError) return null;
+    throw err;
+  }
+  try {
+    const hint = JSON.parse(bytes.toString("utf8"));
+    return hint && Number.isSafeInteger(hint.seq) && hint.seq >= 1 ? hint.seq : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// The seq of the newest manifest found by starting at the hint and looking
+// forward, or null if there is no usable hint or it is too far behind
+async function walkFromHint(store) {
+  let seq = await readHint(store);
+  if (seq === null) return null;
+
+  for (let steps = 0; steps < WALK_LIMIT; steps++) {
+    if (!(await store.head(manifestKey(seq + 1)))) return seq;
+    seq++;
+  }
+  return null;
+}
+
+// The seq of the newest manifest, by listing them; 0 if there are none
+async function listNewest(store) {
+  let newest = 0;
+  for await (const { key } of store.list(MANIFEST_PREFIX)) {
+    const seq = manifestSeq(key);
+    if (seq !== null && seq > newest) newest = seq;
+  }
+  return newest;
+}
+
+// The repository's newest manifest, read from the store (never from the cache
+// of packs: only the store knows which manifest is the newest). A repository
+// nothing has been pushed to has none, which reads as an empty one with seq 0.
+//
+// In the usual case that is a GET of the hint, a HEAD for the manifest after
+// the one it names (which isn't there), and a GET of the manifest, unless this
+// process already holds its bytes. The hint can only make read() look in the
+// wrong place, never return the wrong manifest: whatever it names, read() looks
+// forward for newer ones, and if what it names isn't there, LISTs instead.
 async function read(store) {
-  if (!(await store.head(MANIFEST_KEY))) return empty();
-  return parse(await store.get(MANIFEST_KEY, { maxBytes: MAX_BYTES }));
+  const hinted = await walkFromHint(store);
+  if (hinted !== null) {
+    try {
+      return await load(store, hinted);
+    } catch (err) {
+      if (!(err instanceof NotFoundError)) throw err;
+    }
+  }
+
+  const newest = await listNewest(store);
+  return newest === 0 ? empty() : load(store, newest);
 }
 
 // The manifest which follows `base` after a push: `refs` are all the refs now,
@@ -165,11 +266,16 @@ async function assertUploaded(store, base, next) {
 
 // Replaces `base`, the manifest the caller built `next` from, with `next`.
 //
+// Creating manifests/<next.seq>.json is the commit: if it is already there
+// someone swapped first, and the caller starts again from the new manifest.
+// Throws StaleManifestError, writing nothing, if so, if next is not the
+// manifest after base, or if a pack it names isn't uploaded.
+//
 // `lock(fn)` is the host's per-repository lock: it runs fn while holding the
-// lock and resolves with fn's result. It need only be held for this call.
-// Throws StaleManifestError, writing nothing, if the manifest is no longer
-// `base` (someone swapped first, so the caller starts again from the new one),
-// if next is not the manifest after base, or if a pack it names isn't uploaded.
+// lock and resolves with fn's result. It need only be held for this call. It
+// is not what makes the swap safe (a lock can expire under a process which
+// has stalled); it keeps pushes from the same base from all doing the work,
+// and lets a push whose base has moved find out before it writes.
 async function swap({ store, lock, base, next }) {
   if (typeof lock !== "function") throw new Error("swap needs the host's lock function");
   validate(base);
@@ -179,11 +285,29 @@ async function swap({ store, lock, base, next }) {
   await assertUploaded(store, base, next);
 
   return lock(async () => {
-    const current = await read(store);
-    if (current.seq !== base.seq) {
-      throw new StaleManifestError("The manifest moved from seq " + base.seq + " to " + current.seq);
+    // Early exit for a base which has already moved on (or never was the
+    // newest): the manifest after it exists, or it doesn't. Only advice; a
+    // swap which passes this is still decided by the create below.
+    const [hasBase, hasNext] = await Promise.all([
+      base.seq === 0 ? true : store.head(manifestKey(base.seq)),
+      store.head(manifestKey(next.seq)),
+    ]);
+    if (!hasBase || hasNext) {
+      throw new StaleManifestError("The manifest moved on from seq " + base.seq);
     }
-    await store.put(MANIFEST_KEY, serialize(next));
+
+    const bytes = serialize(next);
+    if (!(await store.putIfAbsent(manifestKey(next.seq), bytes))) {
+      throw new StaleManifestError("The manifest moved on from seq " + base.seq);
+    }
+    remember(store, next.seq, bytes);
+
+    // The swap has happened. The hint only saves the next reader some looking,
+    // so a failure to write it is not a failure to swap.
+    try {
+      await store.put(LATEST_KEY, Buffer.from(JSON.stringify({ seq: next.seq }) + "\n"));
+    } catch (err) {}
+
     return next;
   });
 }

@@ -101,6 +101,40 @@ const MIB = 1024 * 1024;
     expect(keys).toEqual(["manifest.json"]);
   });
 
+  describe("conditional create", function () {
+    it("sends If-None-Match: * and MinIO enforces it", async function () {
+      const store = newStore();
+      const before = sent.calls.length;
+      expect(await store.putIfAbsent("manifests/0000000001.json", Buffer.from("first"))).toBe(true);
+      expect(await store.putIfAbsent("manifests/0000000001.json", Buffer.from("second"))).toBe(false);
+      expect(sent.calls.slice(before)).toEqual(["PutObjectCommand", "PutObjectCommand"]);
+      expect((await store.get("manifests/0000000001.json")).toString()).toBe("first");
+    });
+
+    it("lets only one of two swaps from the same base win, with no lock to help", async function () {
+      const store = newStore();
+      const none = (fn) => fn();
+      const pack = (n) => {
+        const name = "pack-" + String(n).repeat(40);
+        return { name, size: 100, idxSize: 50, objects: 1 };
+      };
+      const first = manifest.advance(manifest.empty(), { refs: {}, packs: [pack(1)] });
+      for (const entry of first.packs) {
+        await store.put("packs/" + entry.name + ".pack", Buffer.alloc(entry.size));
+        await store.put("packs/" + entry.name + ".idx", Buffer.alloc(entry.idxSize));
+      }
+      await manifest.swap({ store, lock: none, base: manifest.empty(), next: first });
+
+      const rivals = [2, 3, 4, 5].map((n) => manifest.advance(first, { refs: { "refs/heads/master": String(n).repeat(40) }, head: "refs/heads/master" }));
+      const results = await Promise.all(rivals.map((next) => manifest.swap({ store, lock: none, base: first, next }).then(() => null, (err) => err)));
+
+      expect(results.filter((r) => !r).length).toBe(1);
+      for (const err of results.filter(Boolean)) expect(err.code).toBe("STALE_MANIFEST");
+      const winner = rivals[results.findIndex((r) => !r)];
+      expect(await manifest.read(store)).toEqual(winner);
+    });
+  });
+
   it("uploads a large stream in parts without reading far ahead of what has been sent", async function () {
     const store = newStore();
     const total = 40 * MIB;
@@ -201,5 +235,85 @@ const MIB = 1024 * 1024;
       expect(got.map((b) => b.length)).toEqual([12, 50, 10]);
       expect(sent.calls.length - before).toBe(1);
     });
+  });
+});
+
+// putIfAbsent's handling of S3's answers, against a client which gives them, so
+// it needs no MinIO (MinIO can't be made to answer 409 on demand)
+const hasSdk = (function () {
+  try {
+    require.resolve("@aws-sdk/client-s3");
+    return true;
+  } catch (err) {
+    return false;
+  }
+})();
+
+(hasSdk ? describe : xdescribe)("git store S3 putIfAbsent answers", function () {
+  function answer(status, name) {
+    const err = new Error(name);
+    err.name = name;
+    err.$metadata = { httpStatusCode: status };
+    return err;
+  }
+
+  // A store whose client replies to each PutObject with the next of `replies`
+  // (an error to throw, or anything else to succeed with)
+  function storeReplying(...replies) {
+    const sentInputs = [];
+    const client = {
+      send: async (command) => {
+        sentInputs.push(command.input);
+        const reply = replies.shift();
+        if (reply instanceof Error) throw reply;
+        return {};
+      },
+    };
+    const store = require("../objectStore/s3")({ client, bucket: "b", prefix: "p/", conflictDelay: 0 });
+    return { store, sentInputs };
+  }
+
+  const body = Buffer.from("{}");
+  const conflict = () => answer(409, "ConditionalRequestConflict");
+
+  it("creates the key with If-None-Match: *", async function () {
+    const { store, sentInputs } = storeReplying(null);
+    expect(await store.putIfAbsent("k", body)).toBe(true);
+    expect(sentInputs.length).toBe(1);
+    expect(sentInputs[0]).toEqual(jasmine.objectContaining({ Bucket: "b", Key: "p/k", IfNoneMatch: "*" }));
+  });
+
+  it("is false on a 412", async function () {
+    const { store, sentInputs } = storeReplying(answer(412, "PreconditionFailed"));
+    expect(await store.putIfAbsent("k", body)).toBe(false);
+    expect(sentInputs.length).toBe(1);
+  });
+
+  it("tries again on a 409, and succeeds", async function () {
+    const { store, sentInputs } = storeReplying(conflict(), conflict(), null);
+    expect(await store.putIfAbsent("k", body)).toBe(true);
+    expect(sentInputs.length).toBe(3);
+  });
+
+  it("is false when a retry after a 409 finds the key there", async function () {
+    const { store } = storeReplying(conflict(), answer(412, "PreconditionFailed"));
+    expect(await store.putIfAbsent("k", body)).toBe(false);
+  });
+
+  it("throws if it still gets 409 after a few tries", async function () {
+    const { store, sentInputs } = storeReplying(conflict(), conflict(), conflict(), conflict(), conflict());
+    let error;
+    await store.putIfAbsent("k", body).catch((err) => (error = err));
+    expect(error && error.$metadata.httpStatusCode).toBe(409);
+    expect(sentInputs.length).toBeLessThan(6);
+    expect(sentInputs.length).toBeGreaterThan(1);
+  });
+
+  it("passes on any other error without trying again", async function () {
+    const { store, sentInputs } = storeReplying(answer(500, "InternalError"), null);
+    let error;
+    await store.putIfAbsent("k", body).catch((err) => (error = err));
+    expect(error && error.name).toBe("InternalError");
+    expect(sentInputs.length).toBe(1);
   });
 });

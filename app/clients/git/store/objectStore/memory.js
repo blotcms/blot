@@ -13,6 +13,10 @@
 //                                      a missing key is the stream's error
 //   put(key, body)                  -> body is a Buffer, or a Readable /
 //                                      async iterable of Buffers of any size
+//   putIfAbsent(key, buffer)        -> true if this call created the key, false
+//                                      if it already existed (and is left as
+//                                      it was). Of several racing writers of
+//                                      one key, exactly one gets true.
 //   delete(key)                     -> nothing if it was already gone
 //   list(prefix)                    -> async iterable of { key, size }
 //   id                              -> a string naming this store, which
@@ -34,7 +38,7 @@ async function collect(body) {
 function createMemoryStore() {
   const objects = new Map();
   const id = "memory:" + ++created;
-  const stats = { heads: 0, reads: 0, bytesRead: 0, gets: 0, puts: 0, deletes: 0, lists: 0 };
+  const stats = { heads: 0, reads: 0, bytesRead: 0, gets: 0, puts: 0, putIfAbsents: 0, deletes: 0, lists: 0 };
 
   function find(key) {
     const object = objects.get(key);
@@ -80,6 +84,14 @@ function createMemoryStore() {
     stats.puts++;
   }
 
+  // No await between the check and the set, so racing writers can't both win
+  async function putIfAbsent(key, buffer) {
+    stats.putIfAbsents++;
+    if (objects.has(key)) return false;
+    objects.set(key, Buffer.from(buffer));
+    return true;
+  }
+
   async function remove(key) {
     stats.deletes++;
     objects.delete(key);
@@ -92,7 +104,7 @@ function createMemoryStore() {
     }
   }
 
-  return { id, stats, head, read, get, stream, put, delete: remove, list, objects };
+  return { id, stats, head, read, get, stream, put, putIfAbsent, delete: remove, list, objects };
 }
 
 module.exports = createMemoryStore;

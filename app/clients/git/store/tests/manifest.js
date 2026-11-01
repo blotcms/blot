@@ -1,7 +1,7 @@
 const manifest = require("../manifest");
 const createMemoryStore = require("../objectStore/memory");
 const { CorruptError, StaleManifestError } = require("../errors");
-const { MANIFEST_KEY } = require("../layout");
+const { LATEST_KEY, manifestKey, manifestSeq } = require("../layout");
 
 const oid = (n) => String(n).repeat(40).slice(0, 40);
 const packName = (n) => "pack-" + oid(n);
@@ -168,6 +168,19 @@ describe("git store manifest", function () {
       expect((await manifest.read(store)).seq).toBe(2);
     });
 
+    it("writes each swap as a manifest of its own and never overwrites one", async function () {
+      const first = await push(manifest.empty(), 1);
+      await manifest.swap({ store, lock, base: manifest.empty(), next: first });
+      const before = await store.get(manifestKey(1));
+      const second = await push(first, 2);
+      await manifest.swap({ store, lock, base: first, next: second });
+
+      expect((await store.get(manifestKey(1))).equals(before)).toBe(true);
+      expect(manifest.parse(await store.get(manifestKey(2)))).toEqual(second);
+      expect(store.stats.puts).toBe(4 + 2); // 2 packs x 2 files uploaded by push(), and one hint per swap
+      expect(store.stats.putIfAbsents).toBe(2);
+    });
+
     it("takes the host's lock for the swap", async function () {
       let held = false;
       let during;
@@ -180,7 +193,7 @@ describe("git store manifest", function () {
         }
       };
       const next = await push(manifest.empty(), 1);
-      const spy = spyOn(store, "put").and.callFake(async (...args) => {
+      const spy = spyOn(store, "putIfAbsent").and.callFake(async (...args) => {
         during = held;
         return spy.and.callThrough()(...args);
       });
@@ -230,7 +243,7 @@ describe("git store manifest", function () {
       const error = await fails(manifest.swap({ store, lock, base: manifest.empty(), next }));
       expect(error).toEqual(jasmine.any(StaleManifestError));
       expect(error.message).toMatch(/not uploaded/);
-      expect(await store.head(MANIFEST_KEY)).toBeNull();
+      expect(await store.head(manifestKey(1))).toBeNull();
       expect(lock.calls).toBe(0);
     });
 
@@ -276,12 +289,245 @@ describe("git store manifest", function () {
       };
       const error = await fails(manifest.swap({ store, lock: broken, base: manifest.empty(), next }));
       expect(error.message).toBe("could not get the lock");
-      expect(await store.head(MANIFEST_KEY)).toBeNull();
+      expect(await store.head(manifestKey(1))).toBeNull();
     });
 
     it("reads a damaged manifest as an error, not an empty repository", async function () {
-      await store.put(MANIFEST_KEY, Buffer.from("{"));
+      await store.put(manifestKey(1), Buffer.from("{"));
       expect(await fails(manifest.read(store))).toEqual(jasmine.any(CorruptError));
+    });
+
+    it("reads a manifest which says it is some other seq as an error", async function () {
+      const first = await push(manifest.empty(), 1);
+      await store.put(manifestKey(2), manifest.serialize(first));
+      await store.put(LATEST_KEY, Buffer.from('{"seq":2}'));
+      expect(await fails(manifest.read(store))).toEqual(jasmine.any(CorruptError));
+    });
+  });
+
+  describe("what makes a swap safe", function () {
+    let store;
+    let lock;
+
+    beforeEach(function () {
+      store = createMemoryStore();
+      lock = createLock();
+    });
+
+    async function push(base, n) {
+      const pack = packEntry(n);
+      await uploaded(store, pack);
+      return manifest.advance(base, { refs: { "refs/heads/master": oid(n) }, packs: [pack] });
+    }
+
+    it("stops a writer which stalled with its lock expired while another swap landed", async function () {
+      const first = await push(manifest.empty(), 1);
+      await manifest.swap({ store, lock, base: manifest.empty(), next: first });
+      const stalled = await push(first, 2);
+      const winner = await push(first, 3);
+
+      // The stalled writer passes every check, then stops just before its
+      // write; its lock runs out, so the other writer takes it and swaps
+      const real = store.putIfAbsent;
+      let stalledOnce = false;
+      spyOn(store, "putIfAbsent").and.callFake(async (...args) => {
+        if (!stalledOnce) {
+          stalledOnce = true;
+          await manifest.swap({ store, lock: (fn) => fn(), base: first, next: winner });
+        }
+        return real(...args);
+      });
+
+      const error = await fails(manifest.swap({ store, lock: (fn) => fn(), base: first, next: stalled }));
+      expect(error).toEqual(jasmine.any(StaleManifestError));
+      expect(await manifest.read(store)).toEqual(winner);
+      expect(manifest.parse(await store.get(manifestKey(2)))).toEqual(winner);
+    });
+
+    it("lets only one of two swaps from the same base win with no lock at all", async function () {
+      const base = await push(manifest.empty(), 1);
+      await manifest.swap({ store, lock, base: manifest.empty(), next: base });
+      const a = await push(base, 2);
+      const b = await push(base, 3);
+      const none = (fn) => fn();
+
+      const results = await Promise.all([
+        fails(manifest.swap({ store, lock: none, base, next: a })),
+        fails(manifest.swap({ store, lock: none, base, next: b })),
+      ]);
+
+      expect(results.filter(Boolean).length).toBe(1);
+      expect(results.find(Boolean)).toEqual(jasmine.any(StaleManifestError));
+      expect([a, b]).toContain(await manifest.read(store));
+    });
+
+    it("rejects a base which is not the newest manifest, without writing", async function () {
+      const ahead = await push(await push(manifest.empty(), 1), 2);
+      const error = await fails(manifest.swap({ store, lock, base: await push(manifest.empty(), 1), next: ahead }));
+      expect(error).toEqual(jasmine.any(StaleManifestError));
+      expect(store.stats.putIfAbsents).toBe(0);
+    });
+  });
+
+  describe("finding the newest manifest", function () {
+    let store;
+    let lock;
+    let chain;
+
+    // The manifests for seq 1 to n, without any written
+    async function build(n) {
+      const out = [manifest.empty()];
+      for (let i = 1; i <= n; i++) {
+        const pack = packEntry(i);
+        await uploaded(store, pack);
+        out.push(manifest.advance(out[i - 1], { refs: { "refs/heads/master": oid(i) }, packs: [pack] }));
+      }
+      return out;
+    }
+
+    // Writes manifests 1 to n as another process would have: this one's cache doesn't know them
+    async function writeAll(n) {
+      chain = await build(n);
+      for (let i = 1; i <= n; i++) await store.putIfAbsent(manifestKey(i), manifest.serialize(chain[i]));
+    }
+
+    const hint = (value) => store.put(LATEST_KEY, Buffer.from(typeof value === "string" ? value : JSON.stringify({ seq: value })));
+
+    function reset() {
+      for (const key of Object.keys(store.stats)) store.stats[key] = 0;
+    }
+
+    beforeEach(function () {
+      store = createMemoryStore();
+      lock = createLock();
+    });
+
+    it("names its keys so that they sort in order", function () {
+      expect(manifestKey(2) < manifestKey(10)).toBe(true);
+      expect(manifestSeq(manifestKey(42))).toBe(42);
+      expect(manifestSeq(LATEST_KEY)).toBeNull();
+      expect(() => manifestKey(0)).toThrow();
+    });
+
+    it("writes the hint after a swap, and overwrites it each time", async function () {
+      const chain = await build(2);
+      await manifest.swap({ store, lock, base: chain[0], next: chain[1] });
+      expect(JSON.parse(await store.get(LATEST_KEY))).toEqual({ seq: 1 });
+      await manifest.swap({ store, lock, base: chain[1], next: chain[2] });
+      expect(JSON.parse(await store.get(LATEST_KEY))).toEqual({ seq: 2 });
+    });
+
+    it("reads with the hint, one look forward and one GET, and no LIST", async function () {
+      await writeAll(3);
+      await hint(3);
+      reset();
+      expect(await manifest.read(store)).toEqual(chain[3]);
+      expect(store.stats.gets).toBe(2);
+      expect(store.stats.heads).toBe(1);
+      expect(store.stats.lists).toBe(0);
+    });
+
+    it("does not fetch a manifest again once it has it", async function () {
+      await writeAll(3);
+      await hint(3);
+      await manifest.read(store);
+      reset();
+      expect(await manifest.read(store)).toEqual(chain[3]);
+      expect(store.stats.gets).toBe(1); // just the hint
+      expect(store.stats.heads).toBe(1);
+    });
+
+    it("reads the manifest it just swapped in without fetching it", async function () {
+      const chain = await build(1);
+      await manifest.swap({ store, lock, base: chain[0], next: chain[1] });
+      reset();
+      expect(await manifest.read(store)).toEqual(chain[1]);
+      expect(store.stats.gets).toBe(1);
+    });
+
+    it("hands out a manifest which is its caller's to change", async function () {
+      await writeAll(1);
+      await hint(1);
+      (await manifest.read(store)).refs["refs/heads/other"] = oid(9);
+      expect((await manifest.read(store)).refs).toEqual({ "refs/heads/master": oid(1) });
+    });
+
+    it("looks forward from a stale hint", async function () {
+      await writeAll(4);
+      await hint(1);
+      reset();
+      expect(await manifest.read(store)).toEqual(chain[4]);
+      expect(store.stats.lists).toBe(0);
+      expect(store.stats.heads).toBe(4);
+    });
+
+    it("lists instead when the hint is a long way behind", async function () {
+      await writeAll(10);
+      await hint(1);
+      reset();
+      expect(await manifest.read(store)).toEqual(chain[10]);
+      expect(store.stats.lists).toBe(1);
+    });
+
+    it("lists when there is no hint", async function () {
+      await writeAll(3);
+      reset();
+      expect(await manifest.read(store)).toEqual(chain[3]);
+      expect(store.stats.lists).toBe(1);
+    });
+
+    for (const [name, bytes] of [
+      ["not JSON", "{"],
+      ["null", "null"],
+      ["a seq which is not a number", '{"seq":"3"}'],
+      ["a seq of zero", '{"seq":0}'],
+      ["a negative seq", '{"seq":-2}'],
+      ["a fractional seq", '{"seq":1.5}'],
+      ["no seq", "{}"],
+    ]) {
+      it("lists when the hint is " + name, async function () {
+        await writeAll(3);
+        await hint(bytes);
+        reset();
+        expect(await manifest.read(store)).toEqual(chain[3]);
+        expect(store.stats.lists).toBe(1);
+      });
+    }
+
+    it("lists, rather than reading as empty, when the hint is ahead of what exists", async function () {
+      await writeAll(3);
+      await hint(9);
+      expect(await manifest.read(store)).toEqual(chain[3]);
+    });
+
+    it("reads as empty when the hint is ahead and nothing exists", async function () {
+      await hint(5);
+      expect(await manifest.read(store)).toEqual(manifest.empty());
+    });
+
+    it("finds the newest by listing when the hint is missing and manifests are many", async function () {
+      await writeAll(10); // keys 1 to 10 sort as numbers, not as strings
+      expect((await manifest.read(store)).seq).toBe(10);
+    });
+
+    it("swaps successfully when the hint can't be written, and still reads the new manifest", async function () {
+      const chain = await build(2);
+      await manifest.swap({ store, lock, base: chain[0], next: chain[1] });
+
+      const real = store.put;
+      spyOn(store, "put").and.callFake(async (key, body) => {
+        if (key === LATEST_KEY) throw new Error("the hint could not be written");
+        return real(key, body);
+      });
+      await manifest.swap({ store, lock, base: chain[1], next: chain[2] });
+
+      expect(JSON.parse(await store.get(LATEST_KEY))).toEqual({ seq: 1 });
+      expect(await manifest.read(store)).toEqual(chain[2]);
+    });
+
+    it("does not read the hint as a manifest when it is the only thing there", async function () {
+      await hint(1);
+      expect(await manifest.read(store)).toEqual(manifest.empty());
     });
   });
 });
