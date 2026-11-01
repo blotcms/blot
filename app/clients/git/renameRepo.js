@@ -1,11 +1,11 @@
 var fs = require("fs-extra");
-var dataDir = require("./dataDir");
+var repo = require("./repo");
 
 module.exports = async function renameRepo(formerHandle, latestHandle) {
   if (!formerHandle || !latestHandle || formerHandle === latestHandle) return;
 
-  var formerPath = dataDir + "/" + formerHandle + ".git";
-  var latestPath = dataDir + "/" + latestHandle + ".git";
+  var formerPath = repo.directory(formerHandle);
+  var latestPath = repo.directory(latestHandle);
 
   var formerExists = await fs.pathExists(formerPath);
   if (!formerExists) return;

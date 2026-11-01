@@ -29,6 +29,9 @@
 #   PROXY_CERT_DIR         /etc/ssl/private     wildcard cert + key (read-only)
 #   PROXY_GLOBAL_STATIC_DIR /var/www/blot/app/blog/static  the app's own static
 #                                               assets, read-only (see run_args())
+#   PROXY_SANDBOX_CGROUP_DIR /sys/fs/cgroup/blot-sandbox  where the host made
+#                                               each unit's cgroup subtree (only
+#                                               read with BLOT_SANDBOX=1)
 #   PROXY_AUTOSSL_VOLUME   blot-proxy-auto-ssl  dehydrated account state
 #   PROXY_PURGE_URLS       (read from the unit's environment)  comma separated
 #   PROXY_CANARY_HOST      preview-of-wireframe-on-david.<BLOT_HOST>
@@ -63,6 +66,7 @@ DISK_CACHE_DIR="${PROXY_DISK_CACHE_DIR:-/var/instance-ssd/disk-cache}"
 LOG_DIR="${PROXY_LOG_DIR:-/var/instance-ssd/logs}"
 CERT_DIR="${PROXY_CERT_DIR:-/etc/ssl/private}"
 GLOBAL_STATIC_DIR="${PROXY_GLOBAL_STATIC_DIR:-/var/www/blot/app/blog/static}"
+SANDBOX_CGROUP_DIR="${PROXY_SANDBOX_CGROUP_DIR:-/sys/fs/cgroup/blot-sandbox}"
 AUTOSSL_VOLUME="${PROXY_AUTOSSL_VOLUME:-blot-proxy-auto-ssl}"
 HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-60}"
 DRAIN_TIMEOUT="${PROXY_DRAIN_TIMEOUT:-30}"
@@ -80,6 +84,13 @@ PRODUCTION_ACME_CA="https://acme-v02.api.letsencrypt.org/directory"
 # the same reason. 65536 leaves real headroom above both - a root dockerd
 # allows it.
 NOFILE="${PROXY_NOFILE:-65536}"
+
+# Memory limit for the short-lived helper containers (validate_image,
+# image_logs_to_file, reset_cache_dir). On a host shared with Redis and the
+# units nothing else bounds them. They run `openresty -t`, a grep, mv and
+# rm -rf, each well under 100MB; the page cache a big rm touches is
+# reclaimable, so it does not count against this.
+TRANSIENT_MEMORY="${PROXY_TRANSIENT_MEMORY:-256m}"
 
 RELEASE_ID="${RELEASE_ID:-unknown}"
 # The unit live_checks asks whether the purge endpoint is reachable from: the
@@ -182,6 +193,11 @@ env_conflicts() { # env_conflicts <first file> <second file>
   ' "$1" "$2" | sort -u
 }
 
+require_sandbox_cgroup() { # require_sandbox_cgroup <unit>
+  [ -d "$SANDBOX_CGROUP_DIR/$1" ] \
+    || die "BLOT_SANDBOX=1 is set in $ENV_FILE but $SANDBOX_CGROUP_DIR/$1 does not exist: run config/host/host/setup.sh on this host (Amazon Linux 2023, cgroup v2), which installs blot-sandbox-cgroup.service"
+}
+
 # The settings file (the numbers in scripts/deploy/constants.js), the two env
 # files, and the host directories the container mounts. Before anything is
 # stopped.
@@ -199,6 +215,9 @@ load_unit_settings() {
   for d in "$DATA_DIRECTORY_ON_SERVER" "$TMP_DIRECTORY" "$SOCKET_DIRECTORY"; do
     [ -d "$d" ] || die "$d does not exist on this host (a unit mounts it)"
   done
+  if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX)" = 1 ]; then
+    for d in $UNITS; do require_sandbox_cgroup "$d"; done
+  fi
   # the longer of the two defaults: Node has to start as well
   HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-180}"
   # and a unit drains OpenResty and then node-a, so it is given its stop
@@ -260,14 +279,14 @@ reset_cache_dir() { # reset_cache_dir <host dir> <image>
   local dir="$1" image="$2" trash
   trash=".trash/$(date -u +%Y%m%dT%H%M%SZ)-$$"
   log "Emptying $dir (moving its contents to $dir/$trash, deleted in the background)"
-  docker run --rm --user 0 --entrypoint sh -v "$dir":/cache "$image" -c '
+  docker run --rm --user 0 --entrypoint sh -v "$dir":/cache --memory "$TRANSIENT_MEMORY" "$image" -c '
     set -e; cd /cache; mkdir -p "$1"
     for e in .[!.]* ..?* *; do
       { [ -e "$e" ] || [ -L "$e" ]; } && [ "$e" != .trash ] && mv "$e" "$1/"
     done
     exit 0' sh "$trash" >/dev/null || return 1
   # all of .trash, so what an interrupted earlier reset left goes too
-  docker run -d --rm --user 0 --entrypoint sh -v "$dir":/cache "$image" -c 'rm -rf /cache/.trash' >/dev/null || true
+  docker run -d --rm --user 0 --entrypoint sh -v "$dir":/cache --memory "$TRANSIENT_MEMORY" "$image" -c 'rm -rf /cache/.trash' >/dev/null || true
 }
 
 # Arguments for a unit container, from the settings file. Host networking, so
@@ -280,6 +299,11 @@ reset_cache_dir() { # reset_cache_dir <host dir> <image>
 #     the host's loopback) are reached directly
 #   - the container shares the host's loopback, so nothing else may bind the
 #     ports above
+#   - with BLOT_SANDBOX=1 in proxy.env, the flags the nsjail sandbox needs
+#     (app/sandbox): the host's cgroup namespace, a seccomp profile that is
+#     Docker's default plus five syscalls, and a cgroup subtree the host
+#     made for this unit (config/host/host/setup.sh). Without it, none of them;
+#     load_unit_settings has already refused if the subtree is missing.
 # The env files: secrets.env (what Node gets), then proxy.env,
 # then the -e settings below, each overriding the one before; load_unit_settings
 # refuses a key the two files set differently.
@@ -330,6 +354,17 @@ run_args() { # run_args <name>
     -v "$CERT_DIR":/etc/ssl/private:ro
     -v "$GLOBAL_STATIC_DIR":/var/www/blot/app/blog/static:ro
   )
+  if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX)" = 1 ]; then
+    require_sandbox_cgroup "$unit"
+    RUN_ARGS+=(
+      # nsjail puts each job in a cgroup of its own, which --cgroupns=private
+      # can't reach; the bind below is the host-made subtree for this unit
+      --cgroupns=host
+      --security-opt "seccomp=$COMMON_DIR/sandbox-seccomp.json"
+      --mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit,target=/sandbox-cgroup"
+      -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock
+    )
+  fi
 }
 
 # ---- the unit's airlock -----------------------------------------------------
@@ -426,7 +461,7 @@ ensure_airlock() { # ensure_airlock <unit>
 # local address (prod: "bind() ... failed (99: Address not available)"), so
 # allow non-local binds in the container's own network namespace.
 validate_image() { # validate_image <image>
-  docker run --rm --entrypoint bash \
+  docker run --rm --entrypoint bash --memory "$TRANSIENT_MEMORY" \
     --sysctl net.ipv4.ip_nonlocal_bind=1 \
     --env-file "$ENV_FILE" -e PROXY_FETCH_CDN_IPS=false -e PROXY_UPSTREAM_MODE=unit \
     -v "$CERT_DIR":/etc/ssl/private:ro \
@@ -438,7 +473,7 @@ validate_image() { # validate_image <image>
 # logging by default (LOG_TO_STDOUT=true); a production image needs
 # LOG_TO_STDOUT=false.
 image_logs_to_file() { # image_logs_to_file <image>
-  docker run --rm --entrypoint bash --env-file "$ENV_FILE" \
+  docker run --rm --entrypoint bash --memory "$TRANSIENT_MEMORY" --env-file "$ENV_FILE" \
     -e PROXY_FETCH_CDN_IPS=false "$1" \
     -c 'render-config >/dev/null && grep -Eq "^[[:space:]]*access_log /var/log/openresty/access.log" /usr/local/openresty/nginx/conf/nginx.conf'
 }

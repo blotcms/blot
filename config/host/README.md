@@ -46,7 +46,10 @@ samples 15 seconds apart. Per sample there is one line per container
 (`blot-blue`, `blot-green` and their airlocks) with `anon`, `file`, `shmem`,
 `limit` and `oom_kill` from the container's cgroup (v1 or v2), `node_max` (the
 biggest node process) and `top=comm:bytes` (the biggest non-node process, i.e. a
-pandoc/git/exiftool spike), and one `name=host` line with `mem_available`.
+pandoc/git/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), and
+one `name=host` line with `mem_available`. Where the host has a sandbox subtree
+(#2257) there is also a `name=blot-sandbox-<unit>` line: jobs last under a
+second, so read its `peak` and `oom_kill`.
 `anon+shmem` is the memory that can't be reclaimed; the cgroup limit also counts
 page cache. Summarise it with:
 
@@ -138,6 +141,11 @@ upgrades a package. It:
   `redis6-cli` as `/usr/local/bin/redis-cli`;
 - enables docker without starting it, checks cgroup v2, and adds a drop-in that
   orders docker after `redis6.service`; `ec2-user` joins the `docker` group;
+- installs `blot-sandbox-cgroup.service`, ordered before docker, which makes
+  `/sys/fs/cgroup/blot-sandbox/{blue,green}` for the units' nsjail sandbox
+  (`app/sandbox`). Each is capped at 512M of memory (no swap), 256 pids and a
+  `cpu.weight` of 25. Nothing uses them until `BLOT_SANDBOX=1` is set in the
+  proxy env file (`proxy/deploy/proxy.env.example`);
 - creates the `deploy` user (`scripts/deploy/setup-deploy-user.sh`);
 - with `BLOT_SSH_PORT`, sets sshd's port in `/etc/ssh/sshd_config.d/11-blot-port.conf`
   (sshd then listens on that port only);

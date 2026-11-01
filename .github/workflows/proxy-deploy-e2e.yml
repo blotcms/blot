@@ -166,7 +166,7 @@ jobs:
             [ "$(docker inspect -f '{{.State.Running}}' blot-$u)" = true ]
             [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-$u)" = unless-stopped ]
             [ "$(docker inspect -f '{{.HostConfig.NetworkMode}}' blot-$u)" = host ]
-            [ "$(docker inspect -f '{{.HostConfig.Memory}}' blot-$u)" = 4026531840 ]
+            [ "$(docker inspect -f '{{.HostConfig.Memory}}' blot-$u)" = 3460300800 ]
             [ "$(docker inspect -f '{{len .HostConfig.PortBindings}}' blot-$u)" = 0 ]
             docker exec blot-$u printenv PROXY_UNIT | grep -qx "$u"
             docker exec blot-$u printenv BLOT_UNIT | grep -qx "$u"

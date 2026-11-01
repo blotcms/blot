@@ -1,3 +1,7 @@
+Git sync (#2259 PR 4): a sync interrupted part way leaves already-applied paths ahead of the recorded commit, so a later push that restores such a file to the recorded commit's contents shows no diff and the entry stays stale until a resync. Needs a crash or Redis outage, no retry, and that exact revert; check whether the materializer (PR 7) should record the in-progress target too
+
+scripts/git/repair.js swaps the blog folder for a fresh clone of the bare repo, so files in the folder that aren't in the repo are lost: warn or copy them over before running it again, or retire the script once live clones go (#2259 PR 9)
+
 Speed up ci / simplify proxy and e2e testing slightly
 
 - PR 8 (#2119): production proxy in local dev. Local docker-compose runs the unit image with the real OpenResty config instead of `scripts/development/proxy`.
@@ -86,8 +90,9 @@ Harden app against S3 being unavailable (generated assets today, blog folders on
 
 Implement folder storage limits (include generated files in this amount?). #2258's Redis index keeps the per-blog byte totals to enforce them from.
 
-Bump katex to >= 0.18.2 (low, prototype pollution Dependabot alert). The simple-git alert is covered by #2259 (git repos to S3), which replaces simple-git.
+Bump katex to >= 0.18.2 (low, prototype pollution Dependabot alert).
 
+A few days after turning the sandbox on (BLOT_SANDBOX=1, #2257): is 512 MiB per unit enough, given four jobs share it? There is no data before then: Amazon Linux 2 can't run it. Run unit-mem-summary.sh on the host and read blot-sandbox-blue/green: cgroup peak against the limit, and oom_kill above 0 means jobs were killed. Then `grep "broker: job="` in the unit logs for what failed. If it's tight, raise memory.max in blot-sandbox-cgroup.sh (config/host/host/setup.sh), within #2261's budget, or lower MAX_RUNNING in proxy/unit/sandbox/broker.js.
 ---
 
 Turn the airlock into a sandbox: run Node inside it so the whole "fetch or receive untrusted bytes -> decode/parse -> safe output" pipeline happens in a container with no secrets, no data mount and kernel-filtered egress, and the app only ever gets back a normalised result. Today the airlock only constrains where a fetch connects; the app containers (which hold every secret in /etc/blot/secrets.env and mount all blog folders read-write) still decompress (node-fetch gzip/br), sharp/libvips/libheif-decode, exiftool, pandoc, yauzl-unzip and cheerio-parse the hostile bytes - CVE-2026-111497 was reachable this way. Shape: rename airlock -> sandbox; add a Node worker under its own uid (own egress.nft rules, loopback still confined) exposing a small internal API that returns only simple re-encoded outputs - e.g. screenshot(url) -> re-encoded PNG/WebP, asset(url) -> metadata-stripped resized image variants, json(url) -> size-capped validated JSON, verify(domain) -> {status, match}; read-only rootfs, tmpfs scratch, per-job time/size limits. Phase it: (1) remote assets in posts (helper/transformer/download + the sharp resize/thumbnail after it), (2) bookmark screenshots (re-encode the PNG instead of committing Chromium's bytes), (3) importer downloads, (4) the bigger surface - converting synced blog-folder files (img/HEIC + exiftool, docx/odt/rtf via pandoc, gdoc/zip, template zip and image uploads) by posting bytes to a no-egress convert endpoint. Watch: the 512m memory budget and throughput (one container today), latency of shipping bytes both ways, and keeping the output formats boring enough that the app's own decode of them is low-risk. Also fix config/airlock/README.md, which still says the importer downloaders aren't routed (they are) and links a "Known sinks not covered" section that doesn't exist.
@@ -147,7 +152,7 @@ Open source as content marketing
 Add rebuild button to each file on dashboard
 - Add json viewer to files on dashboard
 
-Render benchmark skips with "No cached corpus": run benchmarks-corpus.yml (workflow_dispatch) once, probably needed since #2111 dropped data/static from the corpus
+benchmarks-render.yml is manual only because benchmarks-corpus.yml fails, leaving no corpus: fix the corpus build (probably needed since #2111 dropped data/static from the corpus), then give the render benchmark a daily schedule
 
 Back up blot-storage-prod off AWS (Backblaze B2, hourly, no --delete): _avatars and _template_assets can't be regenerated
 

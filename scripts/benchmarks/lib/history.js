@@ -9,7 +9,7 @@ const { BENCHMARK_DEFAULTS } = require("../spec/util/defaults");
 
 // History is one append-only NDJSON file per architecture:
 //   <dir>/history-<arch>.ndjson
-// Each line is a compact record for one master commit.
+// Each line is a compact record for one benchmarked master commit.
 
 function historyPath(dir, arch) {
   return path.join(dir, `history-${arch}.ndjson`);

@@ -22,9 +22,15 @@ When a user pushes changes from their local repository to the bare repository, B
 
 - **`routes.js`**: Defines Express routes for both the dashboard UI and the Git push endpoint. Includes:
   - Dashboard routes for create, index, disconnect, and token reset
-  - Site routes for push handling via pushover
+  - Site routes, which hand authenticated requests to `repo.js`
   - Authentication middleware application
   - Sync triggering on post-push
+
+- **`repo.js`**: The one internal interface to a blog's bare repository. Everything else asks it rather than building paths or talking to pushover: `directory(handle)` (where the repository is), `exists(handle, callback)`, `handleSmartHttp(req, res, blogID)` (serves an authenticated fetch or push), `onPush(callback)` (registers the `(blogID, old, new)` function called after an accepted push, which routes.js uses to start a sync), `commit(blogID, { path, contents }, callback)` (writes or, with `contents: null`, removes a file, then commits and pushes; backs `write.js` and `remove.js`) and `pointOriginAtBareRepo` (resets the live checkout's `origin`). Repositories are keyed by handle on disk. Later steps of #2259 change what is behind this interface.
+
+- **`smartHttp.js`**: Serves ref advertisement and upload-pack (clones and fetches) by running `git upload-pack` and streaming it to the response, for `repo.handleSmartHttp`. Stays on protocol v0, answers git's `0000` probe, accepts gzipped bodies and stops git if the client goes away. Everything else, including pushes, is left to pushover.
+
+- **`git.js`**: A thin wrapper around `execFile("git", args)` for running git in one directory.`Git(directory).raw(args, [callback])`. Commands on one instance run one at a time; a command fails only if git exits non-zero and writes to stderr (so `git commit` with nothing to commit is a success); the error message is git's output.
 
 - **`authenticate.js`**: HTTP Basic Auth middleware using http-auth. Validates user credentials (email and token) against the blog and user models before allowing access to the push endpoint.
 
@@ -32,15 +38,15 @@ When a user pushes changes from their local repository to the bare repository, B
 
 - **`create.js`**: Repository initialization. Creates both the bare repository and live repository, copies existing blog files into the live repository with initial commits, and generates authentication tokens.
 
-- **`write.js`**: Writes a file to the blog folder and pushes changes to the bare repository. Used by Blot to persist preview files and other content changes.
+- **`write.js`**: Writes a file to the blog folder and pushes changes to the bare repository (through `repo.commit`). Used by Blot to persist preview files and other content changes.
 
-- **`remove.js`**: Removes a file from the blog folder and commits/pushes the deletion to the bare repository.
+- **`remove.js`**: Removes a file from the blog folder and commits/pushes the deletion to the bare repository (through `repo.commit`).
 
 - **`disconnect.js`**: Cleans up when a user disconnects the Git client. Removes tokens, status records, bare repository directory, and the `.git` directory from the blog folder.
 
 - **`database.js`**: Redis-based token and status storage. Handles token creation, validation, refresh, and deletion. Also manages creation status tracking (e.g., `createInProgress`, `createFailed`, `createComplete`).
 
-- **`dataDir.js`**: Centralized reference to the bare repository data directory (`<blot_directory>/data/git`). Ensures the directory exists on require.
+- **`dataDir.js`**: The bare repository data directory (`<data_directory>/git`). Ensures the directory exists on require. Only `repo.js` (and the quarantine sweep, which lists every repository) use it.
 
 - **`checkGitRepoExists.js`**: Validates that a Git repository exists in a given directory by using `git rev-parse --show-toplevel` and comparing the repository root with the expected blog folder path. Accounts for nested Git repositories (the entire Blot codebase is itself a Git repo).
 
@@ -201,7 +207,6 @@ Symbolic links (including links within the blog) and submodules are not supporte
 
 ### External (NPM)
 
-- **`simple-git`** (v1.92.0+): Interface to Git command-line operations
 - **`pushover`** (v1.3.6+): HTTP git push endpoint server
 - **`http-auth`** (v3.2.3+): HTTP Basic Authentication middleware
 - **`uuid`** (v3.2.1+): Token generation

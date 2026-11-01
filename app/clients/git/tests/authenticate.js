@@ -8,13 +8,13 @@ describe("git client authenticate", function () {
   });
 
   var fs = require("fs-extra");
-  var Git = require("simple-git");
+  var Git = require("./setup/git");
   var http = require("http");
   var url = require("url");
   var async = require("async");
   var Blog = require("models/blog");
   var User = require("models/user");
-  var dataDir = require("clients/git/dataDir");
+  var repo = require("clients/git/repo");
   var createRepository = require("clients/git/create");
 
   var otherBlog;
@@ -25,7 +25,7 @@ describe("git client authenticate", function () {
       [
         function (next) {
           if (!otherBlog) return next();
-          fs.remove(dataDir + "/" + otherBlog.handle + ".git", next);
+          fs.remove(repo.directory(otherBlog.handle), next);
         },
         function (next) {
           if (!otherBlog) return next();
@@ -45,8 +45,8 @@ describe("git client authenticate", function () {
   });
 
   function requestGitEndpoint(context, options, done) {
-    var repos = require("clients/git/routes").repos;
-    var handleSpy = spyOn(repos, "handle").and.callThrough();
+    var repo = require("clients/git/repo");
+    var handleSpy = spyOn(repo, "handleSmartHttp").and.callThrough();
     var requestOptions = {
       hostname: "127.0.0.1",
       port: context.server.port,
@@ -76,9 +76,9 @@ describe("git client authenticate", function () {
   }
 
   it("rejects unauthenticated canonical Git endpoints before Pushover", function (done) {
-    var repos = require("clients/git/routes").repos;
+    var repo = require("clients/git/repo");
     var handle = this.blog.handle;
-    var handleSpy = spyOn(repos, "handle").and.callThrough();
+    var handleSpy = spyOn(repo, "handleSmartHttp").and.callThrough();
     var paths = [
       "/clients/git/end/" + handle + ".git/info/refs?service=git-upload-pack",
       "/clients/git/end/" + handle + ".git/git-receive-pack",

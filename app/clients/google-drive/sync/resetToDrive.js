@@ -3,6 +3,7 @@ const { join } = require("path");
 const localPath = require("helper/localPath");
 const clfdate = require("helper/clfdate");
 const database = require("../database");
+const { sameFingerprint } = require("../util/contentFingerprint");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
 const driveReaddir = require("./util/driveReaddir");
@@ -24,7 +25,7 @@ const isRemoteModifiedTimeCurrent = (
   localFingerprint
 ) => {
   const applied = priorModifiedTimeById.get(id);
-  return applied && applied.fingerprint && applied.fingerprint === localFingerprint
+  return applied && sameFingerprint(applied.fingerprint, localFingerprint)
     ? truncateToSecond(applied.modifiedTime) === truncateToSecond(remoteModifiedTime)
     : truncateToSecond(localModifiedTime) === truncateToSecond(remoteModifiedTime);
 };

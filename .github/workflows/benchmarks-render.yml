@@ -7,7 +7,11 @@ name: benchmarks-render
 # benchmarks-corpus.yml, instead of a freshly generated small workload. This
 # gives deeper signal specifically for changes to render-critical code -
 # the existing benchmarks.yml smoke check (5 sites / 1000 files, built fresh
-# every run) is unaffected and keeps running on every PR/push as before.
+# every run) is unaffected.
+#
+# Manual only for now: benchmarks-corpus.yml is failing, so there is no corpus
+# and every run would skip. Once it works, give this a daily schedule like
+# benchmarks.yml's, and change the `push` conditions below to `schedule`.
 #
 # Read-only with respect to the corpus cache: this workflow never saves back
 # an amended corpus - only benchmarks-corpus.yml writes that cache. History/
@@ -18,25 +22,6 @@ name: benchmarks-render
 # See scripts/benchmarks/README.md for the whole picture.
 
 on:
-  pull_request:
-    branches: ["master"]
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - "app/blog/**"
-      - "app/models/**"
-      - "app/templates/**"
-      - "app/build/**"
-      - "app/cdn/**"
-      - "app/helper/**"
-  push:
-    branches: ["master"]
-    paths:
-      - "app/blog/**"
-      - "app/models/**"
-      - "app/templates/**"
-      - "app/build/**"
-      - "app/cdn/**"
-      - "app/helper/**"
   workflow_dispatch:
 
 permissions:

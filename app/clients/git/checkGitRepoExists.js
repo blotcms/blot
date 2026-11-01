@@ -1,4 +1,4 @@
-const Git = require("simple-git");
+const Git = require("./git");
 const debug = require("debug")("blot:clients:git:checkGitRepoExists");
 const fs = require("fs-extra");
 const { basename } = require("path");
@@ -8,21 +8,21 @@ module.exports = function (blogDirectory, callback) {
 
   // Throws an error if folder does not exist
   try {
-    git = Git(blogDirectory).silent(true);
+    git = Git(blogDirectory);
   } catch (err) {
     return callback(err);
   }
 
   // We want to compare the path to the blog folder with the path
-  // to the repository that simple-git is operating on. It is not
-  // as simple as just checking Git.checkIsRepo() because all of the
-  // blogs git repos are inside the Blot codebase git repo. This means
-  // that Git.checkIsRepo() ALWAYS returns true even if there is no
+  // to the repository that git is operating on. It is not
+  // as simple as just checking `git rev-parse --is-inside-work-tree`
+  // because all of the blogs git repos are inside the Blot codebase git
+  // repo. This means that would ALWAYS be true even if there is no
   // repo in the user's blog's folder. So we use this git command which
   // tells us the top level of the current git repository:
-  git.revparse(["--show-toplevel"], function (err, pathToGitRepository) {
+  git.raw(["rev-parse", "--show-toplevel"], function (err, pathToGitRepository) {
     if (err) {
-      return callback(new Error(err));
+      return callback(err);
     }
 
     // Has a space at the start, in my testing at least
