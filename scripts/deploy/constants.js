@@ -108,8 +108,8 @@ module.exports = {
     // is in the airlock's own network namespace, so it does not depend on
     // how its clients reach it. See config/airlock/README.md.
     units: {
-      blue: { name: "blot-blue-airlock", browserPort: 19222, proxyPort: 18888 },
-      green: { name: "blot-green-airlock", browserPort: 19223, proxyPort: 18889 },
+      blue: { name: "blot-blue-airlock", browserPort: 19222, proxyPort: 18888, sandboxProxyPort: 18988 },
+      green: { name: "blot-green-airlock", browserPort: 19223, proxyPort: 18889, sandboxProxyPort: 18989 },
     },
   },
 };

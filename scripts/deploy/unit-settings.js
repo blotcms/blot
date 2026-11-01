@@ -39,6 +39,7 @@ function settings() {
     values[`AIRLOCK_${key}_NAME`] = airlock.name;
     values[`AIRLOCK_${key}_BROWSER_PORT`] = airlock.browserPort;
     values[`AIRLOCK_${key}_PROXY_PORT`] = airlock.proxyPort;
+    values[`SANDBOX_${key}_PROXY_PORT`] = airlock.sandboxProxyPort;
   }
 
   for (const [key, value] of Object.entries(values)) {

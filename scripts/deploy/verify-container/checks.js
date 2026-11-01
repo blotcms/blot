@@ -240,6 +240,23 @@ async function sandboxBrowserWorks() {
   return `Chromium started and ${metadata.meta.error}`;
 }
 
+// The proxy jail, only when the host turned it on. A forward-proxy request for
+// the metadata address must not get through: tinyproxy answers 500 when the
+// filter refuses it. The airlock check proves the proxy itself answers.
+async function sandboxProxyWorks({ config }) {
+  if (process.env.BLOT_SANDBOX_PROXY !== "1") return "skipped, BLOT_SANDBOX_PROXY is not set";
+
+  const { hostname, port } = new URL(config.airlock.proxy);
+  const metadata = "http://169.254.169.254/latest/meta-data/";
+  const res = await request({
+    url: metadata,
+    host: "169.254.169.254",
+    options: { hostname, port, path: metadata },
+  });
+  if (res.status !== 500) throw new Error(`the metadata address answered ${res.status} through the proxy`);
+  return `the metadata address was refused through ${config.airlock.proxy}`;
+}
+
 async function requiredEnv() {
   const missing = REQUIRED_ENV.filter((name) => !process.env[name]);
   if (missing.length) throw new Error(`unset: ${missing.join(", ")}`);
@@ -325,6 +342,7 @@ module.exports = [
   { name: "sandbox browser", run: sandboxBrowserWorks },
   { name: "required environment", run: requiredEnv },
   { name: "airlock", run: airlock },
+  { name: "sandbox proxy", run: sandboxProxyWorks },
   { name: "canary blog render", run: canaryBlog },
   { name: "dashboard log-in render", run: loginPage },
 ];

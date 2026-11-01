@@ -12,6 +12,7 @@ resolver=$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf)
 sed "s/__RESOLVER__/$resolver/g" "$DIRECTORY/egress.nft" > /tmp/egress.nft
 nft -f /tmp/egress.nft
 rm /tmp/egress.nft
+[ -z "${BLOT_PROXY_JAIL:-}" ] || nft -f "$DIRECTORY/egress-proxy.nft"
 
 # --ambient-caps and --inh-caps matter as well: nsjail's --keep_caps leaves
 # ambient capabilities that would otherwise survive this exec

@@ -204,6 +204,10 @@ of `/sys/fs/cgroup/blot-sandbox/<unit>-browser` at `/sandbox-browser-cgroup`, an
 runs screenshots in the browser jail, with the same check before anything is
 touched. Without it screenshots stay in the airlock.
 
+`BLOT_SANDBOX_PROXY=1` as well gives the unit `--device /dev/net/tun`, starts
+the proxy jail, and points `BLOT_AIRLOCK_PROXY_URL` at it on the unit's own port.
+Without it fetches stay on the airlock's proxy.
+
 `sandbox-seccomp.json` is moby's `profiles/seccomp/default.json` at v25.0.14
 (Docker on Amazon Linux 2023 is 25) with one entry added first in `syscalls`,
 allowing `clone`, `mount`, `pivot_root`, `setns`, `sethostname`, `umount2` and
