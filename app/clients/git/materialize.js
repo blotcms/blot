@@ -23,6 +23,8 @@ const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 const MODES = { "100644": 0o644, "100755": 0o755 };
 
+const SYMLINK = "120000";
+
 // A line of `cat-file --batch` output (an object ID, its type and size) is
 // about 60 bytes, so this much without a newline is not one
 const MAX_HEADER_BYTES = 256;
@@ -296,8 +298,9 @@ async function materialize(directory, folder, from, to) {
 
     if (change.newMode in MODES) {
       writes.push({ parts: parts, mode: MODES[change.newMode], oid: change.oid });
-    } else if (change.oldMode in MODES) {
-      // Gone, or something we do not write (a link or submodule) in its place
+    } else if (change.oldMode in MODES || change.oldMode === SYMLINK) {
+      // Gone, or something we do not write (a link or submodule) in its place.
+      // A link can only be here from before pushes refused them.
       removals.push(parts);
     } else {
       continue;

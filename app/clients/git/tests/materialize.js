@@ -235,6 +235,21 @@ describe("git client: materialize", function () {
     });
   });
 
+  it("removes a symbolic link which was deleted from the repository", async function () {
+    var first = await commit(this, {
+      "kept.txt": "Kept",
+      "link.txt": { contents: "kept.txt", mode: "120000" },
+    });
+
+    await apply(this, EMPTY_TREE, first);
+    await fs.symlink("kept.txt", this.folder + "/link.txt");
+
+    var second = await commit(this, { "link.txt": null });
+
+    expect(await apply(this, first, second)).toEqual(["link.txt"]);
+    expect(await list(this.folder)).toEqual({ "kept.txt": Buffer.from("Kept") });
+  });
+
   it("applies a rename as a removal and a write", async function () {
     var first = await commit(this, { "old/name.txt": "Contents", "other.txt": "Other" });
 
