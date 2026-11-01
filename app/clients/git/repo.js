@@ -39,8 +39,8 @@ repos.on("error", function (err) {
   });
 });
 
-// Called with (blogID, old, new) once a push has been accepted and its
-// response sent. Set with onPush.
+// Called with (blogID, old, new) once a push has been accepted and finished.
+// Set with onPush.
 var pushed = function () {};
 
 repos.on("push", function (push) {
@@ -62,13 +62,31 @@ repos.on("push", function (push) {
   // might give us a firmer guarantee that the order of events is correct. This
   // seems to be purely a problem for automated use of the git client, humans
   // are unlikely to fire off multiple pushes immediately after the other.
-  push.response.on("finish", function () {
+  var notified = false;
+
+  function notify() {
+    if (notified) return;
+    notified = true;
+
     // I'm not sure what happens to lead to this being invoked
     // without a request or blog but it do sometimes.
     if (!push || !push.request || !push.request.blogID)
       return debug("No blog found for push", push);
 
     pushed(push.request.blogID, push.last, push.commit);
+  }
+
+  push.response.on("finish", notify);
+
+  // "finish" never fires for a client which hangs up as soon as it has read
+  // the push's result, as libgit2 can, and the commit would then sit unsynced
+  // until the next push. git-receive-pack exiting cleanly means the refs are
+  // updated. An aborted push can exit cleanly too, having changed nothing,
+  // and then this is a sync with nothing to do.
+  push.on("service", function (ps) {
+    ps.once("exit", function (code) {
+      if (code === 0) notify();
+    });
   });
 });
 
