@@ -187,9 +187,33 @@ module.exports = function (blogID, blog, callback) {
 
       multi.hSet(key.info(blogID), serializeRedisHashValues(serial(latest)));
 
+      // The repository moves before the handle is saved. The former handle
+      // is recorded nowhere else, so if the move fails the blog must still
+      // be on it, with its repository, for the user to try again.
+      var movesGitRepo =
+        changes.handle &&
+        former.handle &&
+        (former.client === "git" || latest.client === "git");
+
+      if (movesGitRepo) {
+        try {
+          await renameGitRepo(former.handle, latest.handle);
+        } catch (renameError) {
+          return callback(renameError, []);
+        }
+      }
+
       try {
         await multi.exec();
       } catch (err) {
+        if (movesGitRepo) {
+          try {
+            await renameGitRepo(latest.handle, former.handle);
+          } catch (renameError) {
+            console.log('Blog.set', blogID, 'Error moving git repository back', renameError);
+          }
+        }
+
         // We didn't manage to apply any changes
         // to this blog, so empty the list of changes
         return callback(err, []);
@@ -208,18 +232,6 @@ module.exports = function (blogID, blog, callback) {
           } catch (updateError) {
             // for now, do nothing
             console.log('Blog.set', blogID, 'Error updating template CDN manifest', updateError);
-          }
-        }
-
-        if (former.handle && latest.handle) {
-          var usesGit = former.client === "git" || latest.client === "git";
-
-          if (usesGit) {
-            try {
-              await renameGitRepo(former.handle, latest.handle);
-            } catch (renameError) {
-              return callback(renameError);
-            }
           }
         }
 

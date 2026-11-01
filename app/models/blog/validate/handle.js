@@ -13,6 +13,7 @@ var ONLY_ALPA_NUM = /^[a-zA-Z0-9]+$/;
 
 module.exports = function (blogID, handle, callback) {
   var get = require("../get");
+  var repo = require("clients/git/repo");
 
   ensure(blogID, "string").and(handle, "string").and(callback, "function");
 
@@ -39,6 +40,21 @@ module.exports = function (blogID, handle, callback) {
       return callback(err);
     }
 
-    return callback(null, handle);
+    // This blog holds the handle, or held it last, so any repository there
+    // is its own.
+    if (blog && blog.id === blogID) return callback(null, handle);
+
+    // Repositories are keyed by handle and can outlive it: one left here may
+    // be a deleted blog's history, or the only copy of another blog's repo.
+    // Taking the handle would serve that repository to this blog's owner,
+    // whichever client the blog uses now, since they can connect git later.
+    repo.exists(handle, function (exists) {
+      if (!exists) return callback(null, handle);
+
+      console.log("Blog:", blogID, "refused handle", handle, "which has a git repository");
+      err = new Error(IN_USE);
+      err.code = "EEXISTS";
+      callback(err);
+    });
   });
 };

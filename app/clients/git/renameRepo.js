@@ -1,6 +1,9 @@
 var fs = require("fs-extra");
 var repo = require("./repo");
 
+// Rejects, moving nothing, if a repository is already at the new handle: it
+// could be a stranded repository of another blog, so it is neither served to
+// this blog nor replaced.
 module.exports = async function renameRepo(formerHandle, latestHandle) {
   if (!formerHandle || !latestHandle || formerHandle === latestHandle) return;
 
@@ -9,9 +12,6 @@ module.exports = async function renameRepo(formerHandle, latestHandle) {
 
   var formerExists = await fs.pathExists(formerPath);
   if (!formerExists) return;
-
-  var latestExists = await fs.pathExists(latestPath);
-  if (latestExists) return;
 
   try {
     await fs.move(formerPath, latestPath);
