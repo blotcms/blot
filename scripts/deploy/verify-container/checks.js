@@ -197,6 +197,24 @@ async function sharpWorks() {
   return `sharp decoded a HEIC to a ${width}x${height} JPEG`;
 }
 
+// The nsjail sandbox (app/sandbox), only when the host turned it on: the
+// deploy must prove the broker, the jail, the seccomp profile and the cgroups
+// work in this container before it is live. The same photo as above; the HEIC
+// is 4032x3024 whether or not the 270 degree rotation is applied, so the check
+// does not depend on which way round the jail reports it.
+async function sandboxWorks() {
+  if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
+
+  const sandbox = require("../../../app/sandbox");
+  const fixture = path.join(__dirname, "fixtures", "car.heic");
+  const { meta } = await sandbox.run("metadata", {}, { path: fixture });
+  const sides = [meta.width, meta.height].sort((a, b) => a - b);
+  if (sides.join("x") !== "3024x4032") {
+    throw new Error(`the jail read a ${meta.width}x${meta.height} ${meta.format}, expected 4032x3024`);
+  }
+  return `the jail read a ${meta.width}x${meta.height} ${meta.format}`;
+}
+
 async function requiredEnv() {
   const missing = REQUIRED_ENV.filter((name) => !process.env[name]);
   if (missing.length) throw new Error(`unset: ${missing.join(", ")}`);
@@ -278,6 +296,7 @@ module.exports = [
   { name: "pandoc", run: pandoc },
   { name: "git", run: git },
   { name: "sharp", run: sharpWorks },
+  { name: "sandbox", run: sandboxWorks },
   { name: "required environment", run: requiredEnv },
   { name: "airlock", run: airlock },
   { name: "canary blog render", run: canaryBlog },

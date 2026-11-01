@@ -7,6 +7,7 @@
     "app/clients/icloud/macserver/index.js",
     "app/config.js",
     "app/helper/eventLoopMonitorWorker.js",
+    "app/sandbox/jobs/*.js",
     "app/templates/source/**/*.js",
     "app/build/plugins/*/public.js",
     "app/views/js/documentation.js",
