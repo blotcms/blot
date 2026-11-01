@@ -293,7 +293,9 @@ looking at the hosts, so after a failure fix the cause and run it again. Check
   socket settings into the new host's copy only. It deploys the image the old
   units run, with `verify-container` skipping its Redis write, because the
   replica refuses it. Other writes fail too until the switch: dashboard pages
-  may not work, and nothing on the new host should be judged by them yet.
+  may not work, and nothing on the new host should be judged by them yet. The
+  deploy also fills the host's static directory from the image; `app` and the
+  checks before `switch` fetch `/layout.css` from the `cdn.` host to prove it.
 - **The freeze.** `switch` re-arms the freeze's TTL (`--freeze-ttl`, default 900
   seconds) between steps, through whichever host has the Redis master, and
   lifts it through the new host. It keeps the old host's disk read-only, the old
@@ -322,13 +324,20 @@ Redis or moving the Elastic IP first would send traffic to stale files. Follow
 the order in `data-volume/README.md` ("Rollback", after the switch) and decide
 quickly:
 
-1. Keep the new host primary. Copy back what changed, with the hosts swapped:
+1. On the old host: `resize.sh --host <old> move thaw`. The switch left its
+   data directory read-only, and `move prepare --to <old> --existing` refuses a
+   read-only target. Its units stay stopped, so nothing writes to it yet; the
+   new host stays primary with the Elastic IP.
+2. Copy back what changed, with the hosts swapped:
    `resize.sh --host <new> move prepare --to <old> --existing`, then `copy` and
    `freeze` (this needs `settle` not to have retagged yet). The freeze stops
-   writes on the new host once the final copy is done.
-2. Then `config/redis/promote.sh <new> <old-redis>`.
-3. Then the Elastic IP back to the old instance.
-4. Start the old units and thaw as in `data-volume/README.md`.
+   writes on the new host once the final copy is done; leave it frozen.
+3. Then `config/redis/promote.sh <new> <old-redis>`.
+4. Then the Elastic IP back to the old instance.
+5. On the old host: `docker start` the airlocks and the units, then lift the
+   app freeze with `read-only.js off` in `blot-blue`. Its disk was thawed in
+   step 1, so there is no second thaw; do not thaw the new host either, and
+   stop its units.
 
 ### The wildcard certificate
 

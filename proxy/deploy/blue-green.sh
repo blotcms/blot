@@ -169,6 +169,10 @@ if [ "$MODE" != fresh ]; then
   cert_baseline || die "cannot record the custom-domain certificates the running proxy serves: not deploying"
 fi
 
+# A unit mounts this directory read-only and OpenResty serves cdn. files from it,
+# so it must match the image before any unit starts or is replaced.
+sync_static "$NEW_IMAGE" || die "cannot copy the static files of $NEW_IMAGE into $GLOBAL_STATIC_DIR"
+
 # With nothing running the cache directory missed every purge since it was last
 # used. Emptying it needs no undo if the deploy fails: nothing used it.
 if [ "$MODE" = fresh ]; then

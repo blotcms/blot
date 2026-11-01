@@ -203,17 +203,22 @@ check_world() {
 # the hosts themselves, because an alias of the Elastic IP changes host mid-cycle.
 OLD_ID=""; NEW_ID=""; REDIS_ID=""
 guard() {
+  local eip_address
+  # After the move the launch address is gone, so <new> may reach nothing until
+  # the alias is edited, and --old-direct jumps through <new>: follow the
+  # Elastic IP, as phase_switch does, before the first probe of either host.
+  if [ -n "$NEW" ] && [ -n "$EIP" ] && { [ "$PHASE" = switch ] || [ "$PHASE" = settle ]; }; then
+    NEW_ID=$(instance_id "$NEW")
+    if [ -z "$NEW_ID" ]; then
+      eip_address=$(aws_cli ec2 describe-addresses --allocation-ids "$EIP" --query 'Addresses[0].PublicIp' --output text)
+      follow_eip "$eip_address"
+    fi
+  fi
   OLD_ID=$(instance_id "$OLD_NOW")
   [ -n "$OLD_ID" ] || die "cannot reach $OLD_NOW"
   check_world "$OLD_ID"
   if [ -n "$NEW" ]; then
     NEW_ID=$(instance_id "$NEW")
-    # After the move the launch address is gone, so <new> may reach nothing
-    # until the alias is edited: follow the Elastic IP, as phase_switch does.
-    if [ -z "$NEW_ID" ] && [ -n "$EIP" ] && { [ "$PHASE" = switch ] || [ "$PHASE" = settle ]; }; then
-      follow_eip "$(aws_cli ec2 describe-addresses --allocation-ids "$EIP" --query 'Addresses[0].PublicIp' --output text)"
-      NEW_ID=$(instance_id "$NEW")
-    fi
     if [ -z "$NEW_ID" ]; then
       need "cannot reach $NEW"
     else
@@ -523,6 +528,11 @@ phase_app() {
     [ "$code" = 200 ] || die "https://$host/ through $address answered $code"
     echo "$host answers 200 through $address"
   done
+  # A file from the host's static directory, which every deploy fills from the
+  # image: the cdn. server block serves it from disk and sends a miss to Node.
+  host=$(env_value "$NEW" BLOT_HOST)
+  code=$(probe "$address" "cdn.$host" /layout.css)
+  [ "$code" = 200 ] || die "https://cdn.$host/layout.css through $address answered $code: the static directory on $NEW is not filled"
   act on "$NEW" "sudo rm -f /etc/blot/cycle-env-pending"
   echo "The units on $NEW are up. Dashboard pages may fail until the switch: sessions need writes."
 }
@@ -590,8 +600,9 @@ explain() {
         echo "writes that land after that fail until the switch finishes, so be quick."
         echo "On: run switch again; it skips what is done."
         echo "Back: README.md, \"Rollback\". Only if $NEW has accepted no writes: promote.sh $NEW $OLD_REDIS, the Elastic IP"
-        echo "back to $OLD_ID, start the old units, then resize.sh --host $OLD_NOW move thaw. After writes, keep $NEW"
-        echo "primary until the reverse copy and freeze are done (data-volume/README.md), then Redis, then the Elastic IP." ;;
+        echo "back to $OLD_ID, start the old units, then resize.sh --host $OLD_NOW move thaw. After writes, first thaw"
+        echo "$OLD_NOW (resize.sh --host $OLD_NOW move thaw) and keep $NEW primary until the reverse copy and freeze are"
+        echo "done (data-volume/README.md), then Redis, then the Elastic IP, then start the old units." ;;
     esac
   } >&2
   return "$status"
@@ -624,6 +635,8 @@ phase_switch() {
   on "$NEW" "test -e $PAUSE_FILE" || need "deploys are not paused on $NEW: run app"
   host=$(env_value "$NEW" BLOT_HOST)
   [ -n "$host" ] || need "no BLOT_HOST in $NEW's proxy.env"
+  code=$(probe "$(primary_ip "$NEW")" "cdn.$host" /layout.css)
+  [ "$code" = 200 ] || need "https://cdn.$host/layout.css through $NEW answered $code: run app again"
 
   role=$(info_field "$(redis_info "$NEW")" role)
   # Running it again after it finished must not freeze the live site.
