@@ -107,7 +107,8 @@ function onPush(callback, options) {
 //
 // We only do so if the bare repository exists at the path. When a blog's
 // handle changes, the bare repository is renamed just before the new handle is
-// saved, so for a moment the handle we look up has no repository. In that case
+// saved, so for a moment the blog's saved handle, which we look up, has no
+// repository (it is at the new handle). In that case
 // 'origin' is left alone: the next sync or commit fixes it.
 function pointOriginAtBareRepo(git, handle, callback) {
   var bareRepoDirectory = directory(handle);
